@@ -5,7 +5,6 @@
 use crate::function::layers::register::data_location;
 use crate::function::layers::upload::upload_function_write_to_storage;
 use td_authz::{Authz, AuthzContext};
-use td_error::TdError;
 use td_objects::crudl::CreateRequest;
 use td_objects::crudl::RequestContext;
 use td_objects::rest_urls::CollectionParam;
@@ -26,10 +25,9 @@ use td_objects::types::function::{
 use td_storage::Storage;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::IntoServiceProvider;
-use td_tower::{layers, provider};
+use td_tower::{layers, service_factory};
 
-#[provider(
+#[service_factory(
     name = UploadFunctionService,
     request = CreateRequest<CollectionParam, FunctionUpload>,
     response = Bundle,
@@ -38,7 +36,7 @@ use td_tower::{layers, provider};
     context = AuthzContext,
     context = Storage,
 )]
-fn provider() {
+fn service() {
     layers!(
         from_fn(With::<CreateRequest<CollectionParam, FunctionUpload>>::extract::<RequestContext>),
         from_fn(
@@ -77,17 +75,20 @@ fn provider() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::service_default::ServiceDefault;
+    use crate::Context;
     use axum::body::Body;
     use axum::extract::Request;
     use sha2::{Digest, Sha256};
     use td_database::sql::DbPool;
+    use td_error::TdError;
     use td_objects::crudl::handle_sql_err;
     use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::types::basic::{AccessTokenId, CollectionName, DataLocation, RoleId, UserId};
     use td_storage::location::StorageLocation;
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::factory::ServiceFactory;
+    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
@@ -96,7 +97,6 @@ mod tests {
         use td_tower::metadata::type_of_val;
 
         UploadFunctionService::with_defaults(db)
-            .await
             .metadata()
             .await
             .assert_service::<CreateRequest<CollectionParam, FunctionUpload>, Bundle>(&[
@@ -163,15 +163,8 @@ mod tests {
                 function_upload,
             );
 
-        let storage = Storage::service_default().await;
-        let service = UploadFunctionService::new(
-            db.clone(),
-            DaoQueries::service_default().await,
-            AuthzContext::service_default().await,
-            storage.clone(),
-        )
-        .service()
-        .await;
+        let context = Context::with_defaults(db.clone());
+        let service = UploadFunctionService::build(&context).service().await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
@@ -199,7 +192,7 @@ mod tests {
             .collection(collection.id())
             .function(bundle.id())
             .build();
-        let content = storage.read(&bundle_location).await?;
+        let content = context.storage.read(&bundle_location).await?;
         let content = String::from_utf8(content).unwrap();
         assert_eq!(content, payload);
 

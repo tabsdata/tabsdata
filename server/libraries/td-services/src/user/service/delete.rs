@@ -4,7 +4,6 @@
 
 use crate::user::layers::delete::delete_user_validate;
 use td_authz::{Authz, AuthzContext};
-use td_error::TdError;
 use td_objects::crudl::{DeleteRequest, RequestContext};
 use td_objects::rest_urls::UserParam;
 use td_objects::sql::DaoQueries;
@@ -16,10 +15,9 @@ use td_objects::types::role::UserRoleDB;
 use td_objects::types::user::UserDB;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::IntoServiceProvider;
-use td_tower::{layers, provider};
+use td_tower::{layers, service_factory};
 
-#[provider(
+#[service_factory(
     name = DeleteUserService,
     request = DeleteRequest<UserParam>,
     response = (),
@@ -27,7 +25,7 @@ use td_tower::{layers, provider};
     context = DaoQueries,
     context = AuthzContext,
 )]
-fn provider() {
+fn service() {
     layers!(
         from_fn(With::<DeleteRequest<UserParam>>::extract::<RequestContext>),
         from_fn(AuthzOn::<System>::set),
@@ -54,6 +52,7 @@ mod tests {
     use td_objects::types::basic::{AccessTokenId, RoleId, UserEnabled, UserId, UserName};
     use td_objects::types::user::UserDB;
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
@@ -62,7 +61,6 @@ mod tests {
         use td_tower::metadata::type_of_val;
 
         DeleteUserService::with_defaults(db)
-            .await
             .metadata()
             .await
             .assert_service::<DeleteRequest<UserParam>, ()>(&[
@@ -90,10 +88,7 @@ mod tests {
         )
         .await;
 
-        let service = DeleteUserService::with_defaults(db.clone())
-            .await
-            .service()
-            .await;
+        let service = DeleteUserService::with_defaults(db.clone()).service().await;
 
         let request = RequestContext::with(
             AccessTokenId::default(),

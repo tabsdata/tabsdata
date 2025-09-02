@@ -4,14 +4,12 @@
 
 use crate::scheduler::layers::schedule::unlock_workers;
 use td_common::server::{FileWorkerMessageQueue, WorkerMessageQueue};
-use td_error::TdError;
 use td_objects::sql::DaoQueries;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::IntoServiceProvider;
-use td_tower::{layer, layers, provider};
+use td_tower::{layer, layers, service_factory};
 
-#[provider(
+#[service_factory(
     name = ScheduleCommitService,
     request = (),
     response = (),
@@ -19,7 +17,7 @@ use td_tower::{layer, layers, provider};
     context = DaoQueries,
     context = FileWorkerMessageQueue,
 )]
-fn provider() {
+fn service() {
     layers!(commit::<_, FileWorkerMessageQueue>())
 }
 
@@ -38,13 +36,13 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::SchedulerContext;
     use crate::execution::services::execute::ExecuteFunctionService;
     use crate::scheduler::services::request::ScheduleRequestService;
-    use crate::service_default::ServiceDefault;
-    use std::net::SocketAddr;
     use td_common::files::{YAML_EXTENSION, get_files_in_folder_sorted_by_name};
-    use td_common::server::{FileWorkerMessageQueue, PayloadType, SupervisorMessage};
+    use td_common::server::{PayloadType, SupervisorMessage};
     use td_database::sql::DbPool;
+    use td_error::TdError;
     use td_objects::crudl::{RequestContext, handle_sql_err};
     use td_objects::rest_urls::FunctionParam;
     use td_objects::sql::SelectBy;
@@ -57,8 +55,9 @@ mod tests {
     use td_objects::types::execution::{ExecutionRequest, WorkerDB, WorkerMessageStatus};
     use td_objects::types::function::FunctionRegister;
     use td_objects::types::worker::FunctionInput;
-    use td_storage::Storage;
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::factory::ServiceFactory;
+    use td_tower::td_service::TdService;
     use tower::ServiceExt;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -68,7 +67,6 @@ mod tests {
         use td_tower::metadata::type_of_val;
 
         ScheduleCommitService::with_defaults(db)
-            .await
             .metadata()
             .await
             .assert_service::<(), ()>(&[type_of_val(&unlock_workers::<FileWorkerMessageQueue>)]);
@@ -112,45 +110,42 @@ mod tests {
             );
 
         let service = ExecuteFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let _ = service.raw_oneshot(request).await?;
 
-        let message_queue = FileWorkerMessageQueue::service_default().await;
-        ScheduleRequestService::new(
-            db.clone(),
-            DaoQueries::service_default().await,
-            Storage::service_default().await,
-            message_queue.clone(),
-            SocketAddr::service_default().await,
-        )
-        .service()
-        .await
-        .oneshot(())
-        .await?;
+        let context = SchedulerContext::with_defaults(db.clone());
+        ScheduleRequestService::build(&context)
+            .service()
+            .await
+            .oneshot(())
+            .await?;
 
-        let created_messages = message_queue.locked_messages::<FunctionInput>().await;
+        let created_messages = context
+            .worker_queue
+            .locked_messages::<FunctionInput>()
+            .await;
         assert_eq!(created_messages.len(), 1);
         let created_message = &created_messages[0];
 
         // Actual test
-        ScheduleCommitService::new(
-            db.clone(),
-            DaoQueries::service_default().await,
-            message_queue.clone(),
-        )
-        .service()
-        .await
-        .oneshot(())
-        .await?;
+        ScheduleCommitService::build(&context)
+            .service()
+            .await
+            .oneshot(())
+            .await?;
 
-        let locked_messages = message_queue.locked_messages::<FunctionInput>().await;
+        let locked_messages = context
+            .worker_queue
+            .locked_messages::<FunctionInput>()
+            .await;
         assert_eq!(locked_messages.len(), 0);
 
-        let files =
-            get_files_in_folder_sorted_by_name(message_queue.location(), Some(YAML_EXTENSION))
-                .unwrap();
+        let files = get_files_in_folder_sorted_by_name(
+            context.worker_queue.location(),
+            Some(YAML_EXTENSION),
+        )
+        .unwrap();
         assert_eq!(files.len(), 1);
         let unlocked_file = &files[0];
 

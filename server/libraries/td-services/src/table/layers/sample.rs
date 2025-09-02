@@ -161,7 +161,7 @@ mod tests {
                 test_dir.to_str().unwrap()
             ))
             .build()?;
-        let storage = td_storage::Storage::from(vec![mount_def]).await?;
+        let storage = td_storage::Storage::from(vec![mount_def])?;
         let table_path = SPath::parse("/my_table.parquet")?;
         let (uri, _) = storage.to_external_uri(&table_path)?;
         let raw_path = uri.path();
@@ -391,7 +391,7 @@ mod tests {
                 test_dir.to_str().unwrap()
             ))
             .build()?;
-        let storage = td_storage::Storage::from(vec![mount_def]).await?;
+        let storage = td_storage::Storage::from(vec![mount_def])?;
 
         let stream = get_table_sample(
             SrvCtx::new(storage),

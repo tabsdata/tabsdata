@@ -10,6 +10,7 @@ use td_objects::test_utils::seed_collection::seed_collection;
 use td_objects::tower_service::sql::SqlError;
 use td_objects::types::basic::{AccessTokenId, CollectionName, Description, RoleId, UserId};
 use td_objects::types::collection::CollectionCreate;
+use td_tower::td_service::TdService;
 
 #[td_test::test(sqlx)]
 #[tokio::test]
@@ -18,7 +19,6 @@ async fn test_create_already_existing(db: DbPool) {
     let _ = seed_collection(&db, &name, &UserId::admin()).await;
 
     let service = CreateCollectionService::with_defaults(db.clone())
-        .await
         .service()
         .await;
 

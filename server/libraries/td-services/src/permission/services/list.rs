@@ -3,7 +3,6 @@
 //
 
 use td_authz::{Authz, AuthzContext};
-use td_error::TdError;
 use td_objects::crudl::{ListRequest, ListResponse, RequestContext};
 use td_objects::rest_urls::RoleParam;
 use td_objects::sql::{DaoQueries, NoListFilter};
@@ -15,10 +14,9 @@ use td_objects::types::permission::Permission;
 use td_objects::types::role::RoleDB;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::IntoServiceProvider;
-use td_tower::{layers, provider};
+use td_tower::{layers, service_factory};
 
-#[provider(
+#[service_factory(
     name = ListPermissionService,
     request = ListRequest<RoleParam>,
     response = ListResponse<Permission>,
@@ -26,7 +24,7 @@ use td_tower::{layers, provider};
     context = DaoQueries,
     context = AuthzContext,
 )]
-fn provider() {
+fn service() {
     layers!(
         from_fn(With::<ListRequest<RoleParam>>::extract::<RequestContext>),
         from_fn(With::<ListRequest<RoleParam>>::extract_name::<RoleParam>),
@@ -43,6 +41,7 @@ fn provider() {
 mod tests {
     use super::*;
     use td_database::sql::DbPool;
+    use td_error::TdError;
     use td_objects::crudl::{ListParams, RequestContext};
     use td_objects::test_utils::seed_permission::seed_permission;
     use td_objects::test_utils::seed_role::seed_role;
@@ -50,6 +49,7 @@ mod tests {
         AccessTokenId, Description, EntityId, PermissionType, RoleName, UserId,
     };
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
@@ -58,7 +58,6 @@ mod tests {
         use td_tower::metadata::type_of_val;
 
         ListPermissionService::with_defaults(db)
-            .await
             .metadata()
             .await
             .assert_service::<ListRequest<RoleParam>, ListResponse<Permission>>(&[
@@ -97,7 +96,6 @@ mod tests {
         );
 
         let service = ListPermissionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;

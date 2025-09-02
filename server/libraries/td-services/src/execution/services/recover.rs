@@ -4,7 +4,6 @@
 
 use crate::execution::layers::update_status::update_function_run_status;
 use td_authz::{Authz, AuthzContext};
-use td_error::TdError;
 use td_objects::crudl::{RequestContext, UpdateRequest};
 use td_objects::rest_urls::ExecutionParam;
 use td_objects::sql::DaoQueries;
@@ -15,10 +14,9 @@ use td_objects::types::basic::{CollectionId, ExecutionId, ExecutionIdName};
 use td_objects::types::execution::{ExecutionDB, FunctionRunDB, UpdateFunctionRunDB};
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::IntoServiceProvider;
-use td_tower::{layers, provider};
+use td_tower::{layers, service_factory};
 
-#[provider(
+#[service_factory(
     name = ExecutionRecoverService,
     request = UpdateRequest<ExecutionParam, ()>,
     response = (),
@@ -26,7 +24,7 @@ use td_tower::{layers, provider};
     context = DaoQueries,
     context = AuthzContext,
 )]
-fn provider() {
+fn service() {
     layers!(
         // Extract from request.
         from_fn(With::<UpdateRequest<ExecutionParam, ()>>::extract::<RequestContext>),
@@ -62,6 +60,7 @@ mod tests {
     };
     use td_objects::types::basic::{ExecutionStatus, FunctionRunStatus, RoleId, TransactionStatus};
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
@@ -70,7 +69,6 @@ mod tests {
         use td_tower::metadata::type_of_val;
 
         ExecutionRecoverService::with_defaults(db)
-            .await
             .metadata()
             .await
             .assert_service::<UpdateRequest<ExecutionParam, ()>, ()>(&[
@@ -117,7 +115,6 @@ mod tests {
                         );
 
                 ExecutionRecoverService::with_defaults(db.clone())
-                    .await
                     .service()
                     .await
                     .raw_oneshot(request)

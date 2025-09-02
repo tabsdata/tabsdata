@@ -4,19 +4,17 @@
 
 use crate::auth::layers::cert_download::get_certificate_pem_file;
 use std::path::PathBuf;
-use td_error::TdError;
 use td_objects::types::stream::BoxedSyncStream;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::IntoServiceProvider;
-use td_tower::{layers, provider};
+use td_tower::{layers, service_factory};
 
-#[provider(
+#[service_factory(
     name = CertDownloadService,
     request = (),
     response = BoxedSyncStream,
     context = PathBuf,
 )]
-fn provider() {
+fn service() {
     layers!(from_fn(get_certificate_pem_file))
 }
 
@@ -26,7 +24,9 @@ mod tests {
     use futures_util::StreamExt;
     use std::sync::Arc;
     use td_common::server::SSL_CERT_PEM_FILE;
+    use td_error::TdError;
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::td_service::TdService;
     use testdir::testdir;
     use tokio::fs;
     use tokio::io::AsyncWriteExt;
@@ -37,7 +37,6 @@ mod tests {
         use td_tower::metadata::type_of_val;
 
         CertDownloadService::with_defaults()
-            .await
             .metadata()
             .await
             .assert_service::<(), BoxedSyncStream>(&[type_of_val(&get_certificate_pem_file)]);

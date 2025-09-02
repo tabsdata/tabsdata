@@ -1,7 +1,6 @@
 //
 // Copyright 2025. Tabs Data Inc.
 //
-use td_error::TdError;
 use td_objects::crudl::ReadRequest;
 use td_objects::crudl::RequestContext;
 use td_objects::sql::DaoQueries;
@@ -18,17 +17,16 @@ use td_objects::types::permission::{Permission, PermissionBuilder, PermissionDBW
 use td_objects::types::user::UserDBWithNames;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::IntoServiceProvider;
-use td_tower::{layers, provider};
+use td_tower::{layers, service_factory};
 
-#[provider(
+#[service_factory(
     name = UserInfoService,
     request = ReadRequest<()>,
     response = UserInfo,
     connection = ConnectionProvider,
     context = DaoQueries,
 )]
-fn provider() {
+fn service() {
     layers!(
         from_fn(With::<ReadRequest<()>>::extract::<RequestContext>),
         // extract user id and role id from request context
@@ -60,13 +58,17 @@ fn provider() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::auth::decode_token;
+    use crate::Context;
+    use crate::auth::jwt::decode_token;
     use crate::auth::services::AuthServices;
     use td_database::sql::DbPool;
+    use td_error::TdError;
     use td_objects::crudl::RequestContext;
     use td_objects::types::auth::Login;
     use td_objects::types::basic::{Password, RoleName, UserName};
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::factory::ServiceFactory;
+    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
@@ -75,7 +77,6 @@ mod tests {
         use td_tower::metadata::type_of_val;
 
         UserInfoService::with_defaults(db)
-            .await
             .metadata()
             .await
             .assert_service::<ReadRequest<()>, UserInfo>(&[
@@ -111,8 +112,9 @@ mod tests {
     #[td_test::test(sqlx)]
     #[tokio::test]
     async fn test_user_info_ok(db: DbPool) -> Result<(), TdError> {
-        let auth_services = AuthServices::with_defaults(db.clone()).await;
-        let service = auth_services.login_service().await;
+        let context = Context::with_defaults(db.clone());
+        let auth_services = AuthServices::build(&context);
+        let service = auth_services.login.service().await;
 
         let request = Login::builder()
             .name(UserName::try_from("admin")?)
@@ -123,9 +125,9 @@ mod tests {
         assert!(res.is_ok());
         let token_response = res?;
         let access_token = token_response.access_token();
-        let access_token_id = decode_token(auth_services.jwt_settings(), access_token)?.jti;
+        let access_token_id = *decode_token(&context.jwt_config, access_token)?.jti();
 
-        let service = auth_services.user_info_service().await;
+        let service = auth_services.user_info.service().await;
 
         let request =
             RequestContext::with(access_token_id, UserId::admin(), RoleId::user()).read(());

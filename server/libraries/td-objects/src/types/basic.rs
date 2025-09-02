@@ -284,8 +284,7 @@ impl From<WorkerCallbackStatus> for FunctionRunStatus {
     }
 }
 
-#[td_apiforge::apiserver_schema]
-#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(utoipa::ToSchema, Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct FunctionRunStatusCount(HashMap<FunctionRunStatus, StatusCount>);
 
 impl FunctionRunStatusCount {

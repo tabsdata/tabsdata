@@ -3,20 +3,18 @@
 //
 
 use crate::system::layers::status::database_status;
-use td_error::TdError;
 use td_objects::types::system::ApiStatus;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::IntoServiceProvider;
-use td_tower::{layers, provider};
+use td_tower::{layers, service_factory};
 
-#[provider(
+#[service_factory(
     name = StatusService,
     request = (),
     response = ApiStatus,
     connection = ConnectionProvider,
 )]
-fn provider() {
+fn service() {
     layers!(from_fn(database_status))
 }
 
@@ -25,6 +23,7 @@ mod tests {
     use super::*;
     use td_database::sql::DbPool;
     use td_objects::types::system::HealthStatus;
+    use td_tower::td_service::TdService;
     use tower::ServiceExt;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -34,7 +33,6 @@ mod tests {
         use td_tower::metadata::type_of_val;
 
         StatusService::with_defaults(db)
-            .await
             .metadata()
             .await
             .assert_service::<(), ApiStatus>(&[type_of_val(&database_status)]);
@@ -43,7 +41,7 @@ mod tests {
     #[td_test::test(sqlx)]
     #[tokio::test]
     async fn test_database_status_service(db: DbPool) {
-        let service = StatusService::with_defaults(db).await.service().await;
+        let service = StatusService::with_defaults(db).service().await;
         let response = service.oneshot(()).await.unwrap();
 
         assert!(matches!(response.status(), HealthStatus::OK));

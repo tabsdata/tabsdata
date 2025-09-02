@@ -2,14 +2,21 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-pub use ta_apiserver::RouterExtension;
+use ta_apiserver::router::RouterExtension;
+use utoipa_axum::router::OpenApiRouter;
 
-use axum::Router;
+pub struct AuthenticatedExtendedRouter;
 
-pub struct ExtendedRouter;
+impl<S> RouterExtension<S> for AuthenticatedExtendedRouter {
+    fn router(_state: S) -> OpenApiRouter {
+        OpenApiRouter::default()
+    }
+}
 
-impl RouterExtension for ExtendedRouter {
-    fn router() -> Router {
-        Router::new()
+pub struct UnauthenticatedExtendedRouter;
+
+impl<S> RouterExtension<S> for UnauthenticatedExtendedRouter {
+    fn router(_state: S) -> OpenApiRouter {
+        OpenApiRouter::default()
     }
 }

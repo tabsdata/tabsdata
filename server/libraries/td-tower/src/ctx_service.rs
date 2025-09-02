@@ -5,11 +5,9 @@
 use async_trait::async_trait;
 use derive_builder::Builder;
 use getset::Getters;
-use http::StatusCode;
 use serde::Serialize;
 use std::ops::Deref;
 use std::sync::Arc;
-use td_apiforge::apiserver_schema;
 use td_error::TdError;
 use tokio::sync::Mutex;
 use tower::ServiceExt;
@@ -18,8 +16,7 @@ use tower_service::Service;
 const API_VERSION: &str = "1";
 
 /// Response in given Context.
-#[td_apiforge::apiserver_schema]
-#[derive(Debug, Clone, Serialize, Getters, Builder)]
+#[derive(utoipa::ToSchema, Debug, Clone, Serialize, Getters, Builder)]
 #[builder(pattern = "owned")]
 #[getset(get = "pub")]
 pub struct CtxResponse<U> {
@@ -49,18 +46,7 @@ impl<U> Deref for CtxResponse<U> {
     }
 }
 
-impl<U> axum::response::IntoResponse for CtxResponse<(StatusCode, U)>
-where
-    U: Serialize,
-{
-    fn into_response(self) -> axum::response::Response {
-        let (status_code, data) = self.data;
-        (status_code, axum::Json(serde_json::json!(data))).into_response()
-    }
-}
-
-#[apiserver_schema]
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Builder)]
+#[derive(utoipa::ToSchema, Debug, Clone, Eq, PartialEq, Serialize, Builder)]
 #[builder(setter(into))]
 pub struct Message {
     code: String,
@@ -98,8 +84,7 @@ pub type Error = Message;
 pub type Warning = Message;
 pub type Notification = Message;
 
-#[apiserver_schema]
-#[derive(Debug, Clone, Default, Eq, PartialEq, Serialize)]
+#[derive(utoipa::ToSchema, Debug, Clone, Default, Eq, PartialEq, Serialize)]
 pub struct CtxMap {
     errors: Vec<Error>,
     warnings: Vec<Warning>,

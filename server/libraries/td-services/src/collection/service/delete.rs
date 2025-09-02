@@ -7,7 +7,6 @@ use crate::table::layers::delete::{
     build_deleted_dependencies, build_deleted_triggers, build_frozen_functions,
 };
 use td_authz::{Authz, AuthzContext};
-use td_error::TdError;
 use td_objects::crudl::{DeleteRequest, RequestContext};
 use td_objects::rest_urls::CollectionParam;
 use td_objects::sql::DaoQueries;
@@ -30,10 +29,9 @@ use td_objects::types::table::TableDB;
 use td_objects::types::trigger::TriggerDB;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::IntoServiceProvider;
-use td_tower::{layers, provider};
+use td_tower::{layers, service_factory};
 
-#[provider(
+#[service_factory(
     name = DeleteCollectionService,
     request = DeleteRequest<CollectionParam>,
     response = (),
@@ -41,7 +39,7 @@ use td_tower::{layers, provider};
     context = DaoQueries,
     context = AuthzContext,
 )]
-fn provider() {
+fn service() {
     layers!(
         from_fn(With::<DeleteRequest<CollectionParam>>::extract::<RequestContext>),
         from_fn(AuthzOn::<System>::set),
@@ -98,6 +96,7 @@ fn provider() {
 mod tests {
     use super::*;
     use td_database::sql::DbPool;
+    use td_error::TdError;
     use td_objects::crudl::RequestContext;
     use td_objects::rest_urls::CollectionParam;
     use td_objects::sql::cte::CteQueries;
@@ -114,6 +113,7 @@ mod tests {
     use td_objects::types::table::TableDBWithNames;
     use td_objects::types::trigger::TriggerDBWithNames;
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
@@ -122,7 +122,6 @@ mod tests {
         use td_tower::metadata::type_of_val;
 
         DeleteCollectionService::with_defaults(db)
-            .await
             .metadata()
             .await
             .assert_service::<DeleteRequest<CollectionParam>, ()>(&[
@@ -231,7 +230,6 @@ mod tests {
         );
 
         DeleteCollectionService::with_defaults(db.clone())
-            .await
             .service()
             .await
             .raw_oneshot(request)
@@ -355,7 +353,6 @@ mod tests {
         );
 
         DeleteCollectionService::with_defaults(db.clone())
-            .await
             .service()
             .await
             .raw_oneshot(request)

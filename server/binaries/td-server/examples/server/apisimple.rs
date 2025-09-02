@@ -3,7 +3,9 @@
 //
 
 use crate::counter::Counter;
+use crate::endpoint::CounterRouter;
 use std::net::{Ipv4Addr, SocketAddr};
+use ta_apiserver::router::RouterExtension;
 use td_apiserver::{Server, ServerBuilder};
 use td_process::launcher::hooks;
 
@@ -22,7 +24,7 @@ async fn init_server() -> Box<dyn Server> {
     let counter = Counter::create();
     ServerBuilder::new(
         vec![SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 0)],
-        endpoint::router(counter).into(),
+        CounterRouter::router(counter).into(),
     )
     .build()
     .await
@@ -30,21 +32,26 @@ async fn init_server() -> Box<dyn Server> {
 }
 
 mod endpoint {
-    use crate::counter::CounterState;
-    use axum::extract::State;
-    use axum::response::IntoResponse;
-    use http::StatusCode;
-    use td_apiserver::router;
+    use td_apiforge::router_ext;
 
-    router! {
-        state => { CounterState },
-        routes => { counter }
-    }
+    #[router_ext(CounterRouter)]
+    mod routes {
+        use crate::counter::CounterState;
+        use axum::extract::State;
+        use ta_apiserver::status::error_status::ErrorStatus;
+        use ta_apiserver::status::ok_status::RawStatus;
+        use td_apiforge::apiserver_path;
 
-    #[utoipa::path(get, path = "/count")]
-    pub async fn counter(State(state): State<CounterState>) -> impl IntoResponse {
-        let count = state.lock().await.add();
-        (StatusCode::OK, axum::Json(count))
+        const PATH: &str = "/count";
+        const TEST_TAG: &str = "Test";
+
+        #[apiserver_path(method = get, path = PATH, tag = TEST_TAG)]
+        pub async fn counter(
+            State(state): State<CounterState>,
+        ) -> Result<RawStatus<usize>, ErrorStatus> {
+            let count = state.lock().await.add();
+            Ok(RawStatus::OK(count))
+        }
     }
 }
 

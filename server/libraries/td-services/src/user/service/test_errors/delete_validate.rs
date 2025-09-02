@@ -8,12 +8,13 @@ use td_error::assert_service_error;
 use td_objects::crudl::RequestContext;
 use td_objects::rest_urls::UserParam;
 use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
+use td_tower::td_service::TdService;
 
 #[tokio::test]
 async fn test_not_allowed_to_delete_themselves() {
     let db = td_database::test_utils::db().await.unwrap();
 
-    let service = DeleteUserService::with_defaults(db).await.service().await;
+    let service = DeleteUserService::with_defaults(db).service().await;
 
     let ctx = RequestContext::with(
         AccessTokenId::default(),

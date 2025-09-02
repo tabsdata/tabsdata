@@ -4,16 +4,19 @@
 
 use std::env;
 use std::sync::Arc;
+use td_apiserver::apiserver::ApiServerInstanceBuilder;
 use td_apiserver::config::{Config, DbSchema, Params};
-use td_apiserver::router::scheduler_server::SchedulerBuilder;
-use td_apiserver::router::{ApiServerInstanceBuilder, RuntimeContext};
+use td_apiserver::scheduler_server::SchedulerBuilder;
 use td_common::attach::attach;
 use td_common::logging;
 use td_common::server::FileWorkerMessageQueue;
 use td_common::status::ExitStatus;
 use td_database::sql::DbError;
+use td_objects::sql::DaoQueries;
 use td_process::launcher::cli::Cli;
 use td_process::launcher::hooks;
+use td_services::execution::services::runtime_info::RuntimeContext;
+use td_services::scheduler::ServerUrl;
 use td_storage::Storage;
 use tracing::{Level, error, info};
 
@@ -157,7 +160,7 @@ fn main() {
                     return ExitStatus::GeneralError;
                 }
             };
-            let storage = match Storage::from(mount_defs).await {
+            let storage = match Storage::from(mount_defs) {
                 Ok(storage) => storage,
                 Err(e) => {
                     error!("Error creating storage: {}", e);
@@ -183,10 +186,14 @@ fn main() {
                 }
             };
 
+            // Create queries
+            let queries = Arc::new(DaoQueries::default());
+
             // Create and run the API server
             let api_server = match ApiServerInstanceBuilder::new(
                 config,
                 db.clone(),
+                queries.clone(),
                 storage.clone(),
                 runtime_context,
             )
@@ -202,7 +209,7 @@ fn main() {
 
             // Create execution server
             let loopback_address = match api_server.internal_addresses().await {
-                Ok(address) => Arc::new(address[0]),
+                Ok(address) => Arc::new(ServerUrl(address[0])),
                 Err(e) => {
                     error!("Error getting loopback address: {}", e);
                     return ExitStatus::GeneralError;
@@ -211,6 +218,7 @@ fn main() {
 
             let execution_server = SchedulerBuilder::new(
                 db.clone(),
+                queries.clone(),
                 storage.clone(),
                 worker_message_queue.clone(),
                 loopback_address,

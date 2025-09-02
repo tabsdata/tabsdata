@@ -54,7 +54,7 @@ ta-apiserver = { workspace = true }
 
 # External dependencies
 
-axum = { workspace = true }
+utoipa-axum = { workspace = true }
 
 [dev-dependencies]
 

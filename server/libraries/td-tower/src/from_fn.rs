@@ -158,7 +158,7 @@ macro_rules! impl_service {
                     {
                         // Extract values from handler
                         $(
-                            let $ty = $ty::from_handler(&handler).await?;
+                            let $ty = $ty::from_handler(&handler)?;
                         )*
 
                         // Execute function and add result to handler
@@ -172,7 +172,7 @@ macro_rules! impl_service {
                         use $crate::metadata::{type_of, type_of_val, MetadataMutex};
 
                         // Add fn metadata, and skip actual execution
-                        let Input(metadata) = MetadataMutex::from_handler(&handler).await?;
+                        let Input(metadata) = MetadataMutex::from_handler(&handler)?;
                         let fn_name = type_of_val(&f);
                         metadata.add_fn_name(fn_name.clone()).await;
 

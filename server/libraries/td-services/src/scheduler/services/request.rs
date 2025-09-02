@@ -2,10 +2,9 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use crate::scheduler::ServerUrl;
 use crate::scheduler::layers::schedule::create_locked_workers;
-use std::net::SocketAddr;
 use td_common::server::{FileWorkerMessageQueue, WorkerMessageQueue};
-use td_error::TdError;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::from::{ExtractVecService, With};
 use td_objects::tower_service::sql::{By, SqlSelectAllService, SqlUpdateService, insert_vec};
@@ -16,11 +15,10 @@ use td_objects::types::execution::{
 use td_storage::Storage;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::IntoServiceProvider;
-use td_tower::{layer, layers, provider};
+use td_tower::{layer, layers, service_factory};
 
 // TODO make provider accept generics so scheduler services can be used with different message queues.
-#[provider(
+#[service_factory(
     name = ScheduleRequestService,
     request = (),
     response = (),
@@ -28,9 +26,9 @@ use td_tower::{layer, layers, provider};
     context = DaoQueries,
     context = Storage,
     context = FileWorkerMessageQueue,
-    context = SocketAddr,
+    context = ServerUrl,
 )]
-fn provider() {
+fn service() {
     layers!(request::<_, FileWorkerMessageQueue>())
 }
 
@@ -39,7 +37,7 @@ fn provider() {
 // - DaoQueries
 // - Storage
 // - T(MessageQueue)
-// - SocketAddr server URL
+// - ServerUrl
 #[layer]
 pub fn request<T>()
 where
@@ -63,11 +61,11 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::SchedulerContext;
     use crate::execution::services::execute::ExecuteFunctionService;
-    use std::sync::Arc;
-    use td_authz::AuthzContext;
-    use td_common::server::{FileWorkerMessageQueue, SupervisorMessagePayload};
+    use td_common::server::SupervisorMessagePayload;
     use td_database::sql::DbPool;
+    use td_error::TdError;
     use td_objects::crudl::{RequestContext, handle_sql_err};
     use td_objects::rest_urls::FunctionParam;
     use td_objects::sql::SelectBy;
@@ -83,11 +81,10 @@ mod tests {
     use td_objects::types::function::FunctionRegister;
     use td_objects::types::worker::v2::{InputTable, OutputTable};
     use td_objects::types::worker::{EnvPrefix, FunctionInput};
-    use td_storage::{MountDef, SPath};
-    use td_test::file::mount_uri;
+    use td_storage::SPath;
     use td_tower::ctx_service::RawOneshot;
-    use te_execution::transaction::TransactionBy;
-    use testdir::testdir;
+    use td_tower::factory::ServiceFactory;
+    use td_tower::td_service::TdService;
     use tower::ServiceExt;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -97,7 +94,6 @@ mod tests {
         use td_tower::metadata::type_of_val;
 
         ScheduleRequestService::with_defaults(db)
-            .await
             .metadata()
             .await
             .assert_service::<(), ()>(&[
@@ -152,38 +148,20 @@ mod tests {
                     .build()?,
             );
 
-        let queries = Arc::new(DaoQueries::default());
-        let authz_context = Arc::new(AuthzContext::default());
-        let transaction_by = Arc::new(TransactionBy::default());
-        let service =
-            ExecuteFunctionService::new(db.clone(), queries.clone(), authz_context, transaction_by)
-                .service()
-                .await;
+        let service = ExecuteFunctionService::with_defaults(db.clone())
+            .service()
+            .await;
         let execution = service.raw_oneshot(request).await?;
 
         // Actual test
-        let test_dir = testdir!();
-        let mount_def = MountDef::builder()
-            .id("id")
-            .path("/")
-            .uri(mount_uri(&test_dir))
-            .build()?;
-        let storage = Arc::new(Storage::from(vec![mount_def]).await?);
-        let message_queue = Arc::new(FileWorkerMessageQueue::with_location(&test_dir)?);
-        let server_url = Arc::new(SocketAddr::from(([127, 0, 0, 1], 8080)));
-        ScheduleRequestService::new(
-            db.clone(),
-            queries.clone(),
-            storage.clone(),
-            message_queue.clone(),
-            server_url,
-        )
-        .service()
-        .await
-        .oneshot(())
-        .await?;
+        let context = SchedulerContext::with_defaults(db.clone());
+        ScheduleRequestService::build(&context)
+            .service()
+            .await
+            .oneshot(())
+            .await?;
 
-        let created_message = message_queue.locked_messages().await;
+        let created_message = context.worker_queue.locked_messages().await;
         assert_eq!(created_message.len(), 1);
 
         let created_message = created_message[0].payload();
@@ -225,7 +203,7 @@ mod tests {
             collection.id(),
             create.bundle_id()
         ))?;
-        let (uri, mount_def) = storage.to_external_uri(&function_path)?;
+        let (uri, mount_def) = context.storage.to_external_uri(&function_path)?;
         assert_eq!(*info.function_bundle().uri(), uri);
         assert_eq!(
             *info.function_bundle().env_prefix(),
@@ -248,7 +226,7 @@ mod tests {
             function_run.transaction_id(),
             function_run.function_version_id()
         ))?;
-        let (uri, mount_def) = storage.to_external_uri(&function_data_path)?;
+        let (uri, mount_def) = context.storage.to_external_uri(&function_data_path)?;
         assert_eq!(*info.function_data().uri(), uri);
         assert_eq!(
             *info.function_data().env_prefix(),
@@ -302,7 +280,7 @@ mod tests {
                         table_data_version.table_id(),
                         table_data_version.table_version_id(),
                     ))?;
-                    let (uri, mount_def) = storage.to_external_uri(&table_path)?;
+                    let (uri, mount_def) = context.storage.to_external_uri(&table_path)?;
 
                     assert_eq!(*output.location().uri(), uri);
                     assert_eq!(

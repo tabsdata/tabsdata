@@ -13,6 +13,7 @@ use td_objects::types::basic::{
     AccessTokenId, Email, FullName, Password, RoleId, UserEnabled, UserName,
 };
 use td_objects::types::user::UserUpdate;
+use td_tower::td_service::TdService;
 
 #[td_test::test(sqlx)]
 #[tokio::test]
@@ -24,10 +25,7 @@ async fn test_update_user_self(db: DbPool) {
     )
     .await;
 
-    let service = UpdateUserService::with_defaults(db.clone())
-        .await
-        .service()
-        .await;
+    let service = UpdateUserService::with_defaults(db.clone()).service().await;
 
     let user_update = UserUpdate::builder()
         .full_name(Some(FullName::try_from("U0 Update").unwrap()))

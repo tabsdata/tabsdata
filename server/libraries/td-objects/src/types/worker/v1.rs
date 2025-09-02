@@ -7,7 +7,6 @@ use derive_builder::Builder;
 use getset::Getters;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use td_apiforge::apiserver_schema;
 
 // Aliases used for yaml serde of the different entities (for example, serialize TdUri as a string)
 mod yaml_repr {
@@ -202,8 +201,7 @@ impl Locations for FunctionInputV1 {
     }
 }
 
-#[apiserver_schema]
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(utoipa::ToSchema, Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum WrittenTableV1 {
     NoData {
         name: yaml_repr::TableName,
@@ -217,8 +215,7 @@ pub enum WrittenTableV1 {
     },
 }
 
-#[apiserver_schema]
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(utoipa::ToSchema, Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct FunctionOutputV1 {
     output: Vec<WrittenTableV1>,
 }

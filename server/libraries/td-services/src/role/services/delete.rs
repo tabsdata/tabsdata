@@ -4,7 +4,6 @@
 
 use crate::role::layers::assert_not_fixed;
 use td_authz::{Authz, AuthzContext};
-use td_error::TdError;
 use td_objects::crudl::{DeleteRequest, RequestContext};
 use td_objects::rest_urls::RoleParam;
 use td_objects::sql::DaoQueries;
@@ -16,10 +15,9 @@ use td_objects::types::permission::PermissionDB;
 use td_objects::types::role::{RoleDB, RoleDBWithNames, UserRoleDB};
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::IntoServiceProvider;
-use td_tower::{layers, provider};
+use td_tower::{layers, service_factory};
 
-#[provider(
+#[service_factory(
     name = DeleteRoleService,
     request = DeleteRequest<RoleParam>,
     response = (),
@@ -27,7 +25,7 @@ use td_tower::{layers, provider};
     context = DaoQueries,
     context = AuthzContext,
 )]
-fn provider() {
+fn service() {
     layers!(
         from_fn(With::<DeleteRequest<RoleParam>>::extract::<RequestContext>),
         from_fn(AuthzOn::<System>::set),
@@ -53,6 +51,7 @@ mod tests {
     use super::*;
     use crate::role::RoleError;
     use td_database::sql::DbPool;
+    use td_error::TdError;
     use td_objects::crudl::RequestContext;
     use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_permission::seed_permission;
@@ -66,6 +65,7 @@ mod tests {
     use td_objects::types::role::UserRoleDBWithNames;
     use td_objects::types::{IdOrName, SqlEntity};
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
@@ -74,7 +74,6 @@ mod tests {
         use td_tower::metadata::type_of_val;
 
         DeleteRoleService::with_defaults(db)
-            .await
             .metadata()
             .await
             .assert_service::<DeleteRequest<RoleParam>, ()>(&[
@@ -166,10 +165,7 @@ mod tests {
             RoleId::sec_admin(),
         )
         .delete(RoleParam::builder().role(role_id_name.clone()).build()?);
-        let service = DeleteRoleService::with_defaults(db.clone())
-            .await
-            .service()
-            .await;
+        let service = DeleteRoleService::with_defaults(db.clone()).service().await;
         service.raw_oneshot(request).await?;
 
         if let Some(role_id) = role_id_name.id() {
@@ -248,10 +244,7 @@ mod tests {
                 .try_role(RoleName::sys_admin().to_string())?
                 .build()?,
         );
-        let service = DeleteRoleService::with_defaults(db.clone())
-            .await
-            .service()
-            .await;
+        let service = DeleteRoleService::with_defaults(db.clone()).service().await;
         let res = service.raw_oneshot(request).await;
         assert!(res.is_err());
         let err = res.err().unwrap();

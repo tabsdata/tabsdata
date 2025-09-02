@@ -5,7 +5,6 @@
 use crate::table::layers::find_data_version_location_at;
 use crate::table::layers::sample::get_table_sample;
 use td_authz::{Authz, AuthzContext};
-use td_error::TdError;
 use td_objects::crudl::{ReadRequest, RequestContext};
 use td_objects::rest_urls::FileFormat;
 use td_objects::sql::DaoQueries;
@@ -24,10 +23,9 @@ use td_storage::Storage;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
-use td_tower::provider;
-use td_tower::service_provider::IntoServiceProvider;
+use td_tower::service_factory;
 
-#[provider(
+#[service_factory(
     name = TableSampleService,
     request = ReadRequest<TableSampleAtName>,
     response = BoxedSyncStream,
@@ -36,7 +34,7 @@ use td_tower::service_provider::IntoServiceProvider;
     context = AuthzContext,
     context = Storage,
 )]
-fn provider() {
+fn service() {
     layers!(
         // Extract parameters
         from_fn(With::<ReadRequest<TableSampleAtName>>::extract::<RequestContext>),
@@ -76,6 +74,7 @@ mod tests {
     use std::sync::Arc;
     use td_common::absolute_path::AbsolutePath;
     use td_database::sql::DbPool;
+    use td_error::TdError;
     use td_objects::crudl::RequestContext;
     use td_objects::rest_urls::{
         AtTimeParam, FileFormatParam, SampleOffsetLenParam, SqlParam, TableParam,
@@ -98,6 +97,7 @@ mod tests {
     use td_storage::location::StorageLocation;
     use td_storage::{MountDef, Storage};
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::td_service::TdService;
     use testdir::testdir;
     use url::Url;
 
@@ -128,7 +128,7 @@ mod tests {
             .uri(dummy_file())
             .build()
             .unwrap();
-        let storage = Storage::from(vec![mound_def]).await.unwrap();
+        let storage = Storage::from(vec![mound_def]).unwrap();
         TableSampleService::new(
             db,
             Arc::new(DaoQueries::default()),
@@ -185,8 +185,7 @@ mod tests {
         let url = Url::from_directory_path(test_dir).unwrap();
         let storage = Storage::from(vec![
             MountDef::builder().id("id").uri(url).path("/").build()?,
-        ])
-        .await?;
+        ])?;
         let storage = Arc::new(storage);
 
         let collection = seed_collection(

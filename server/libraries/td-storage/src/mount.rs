@@ -5,6 +5,7 @@
 use super::{Result, SPath, StorageError};
 use bytes::Bytes;
 use derive_builder::Builder;
+use futures_util::TryStreamExt;
 use futures_util::stream::BoxStream;
 use getset::Getters;
 use lazy_static::lazy_static;
@@ -377,13 +378,13 @@ impl Mount {
         }
     }
 
-    pub async fn read_stream(
-        &self,
-        path: &SPath,
-    ) -> Result<BoxStream<'static, object_store::Result<Bytes>>> {
+    pub async fn read_stream(&self, path: &SPath) -> Result<BoxStream<'static, Result<Bytes>>> {
         let external_path = self.to_external_path(&path.0)?;
         match self.store.get(&external_path).await {
-            Ok(res) => Ok(res.into_stream()),
+            Ok(res) => {
+                let stream = res.into_stream().map_err(StorageError::StreamError);
+                Ok(Box::pin(stream))
+            }
             Err(object_store::Error::NotFound { .. }) => {
                 Err(StorageError::NotFound(path.to_string()))
             }

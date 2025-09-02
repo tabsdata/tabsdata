@@ -8,7 +8,6 @@ use crate::function::layers::{
     DO_AUTHZ, check_private_tables, register_dependencies, register_tables, register_triggers,
 };
 use td_authz::{Authz, AuthzContext};
-use td_error::TdError;
 use td_objects::crudl::{RequestContext, UpdateRequest};
 use td_objects::rest_urls::FunctionParam;
 use td_objects::sql::DaoQueries;
@@ -35,10 +34,9 @@ use td_objects::types::table::TableDB;
 use td_objects::types::trigger::TriggerDBWithNames;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::IntoServiceProvider;
-use td_tower::{layers, provider};
+use td_tower::{layers, service_factory};
 
-#[provider(
+#[service_factory(
     name = UpdateFunctionService,
     request = UpdateRequest<FunctionParam, FunctionUpdate>,
     response = Function,
@@ -46,7 +44,7 @@ use td_tower::{layers, provider};
     context = DaoQueries,
     context = AuthzContext,
 )]
-fn provider() {
+fn service() {
     layers!(
         from_fn(With::<UpdateRequest<FunctionParam, FunctionUpdate>>::extract::<RequestContext>),
         from_fn(
@@ -133,6 +131,7 @@ mod tests {
     use std::collections::HashMap;
     use std::ops::Deref;
     use td_database::sql::DbPool;
+    use td_error::TdError;
     use td_objects::crudl::handle_sql_err;
     use td_objects::rest_urls::CollectionParam;
     use td_objects::sql::SelectBy;
@@ -149,6 +148,7 @@ mod tests {
     use td_objects::types::table::TableDB;
     use td_objects::types::trigger::TriggerDB;
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
@@ -170,7 +170,6 @@ mod tests {
         use td_tower::metadata::type_of_val;
 
         UpdateFunctionService::with_defaults(db)
-            .await
             .metadata()
             .await
             .assert_service::<UpdateRequest<FunctionParam, FunctionUpdate>, Function>(
@@ -322,7 +321,6 @@ mod tests {
             );
 
         let service = UpdateFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -384,7 +382,6 @@ mod tests {
             );
 
         let service = UpdateFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -450,7 +447,6 @@ mod tests {
         );
 
         let service = UpdateFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -512,7 +508,6 @@ mod tests {
             );
 
         let service = UpdateFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -574,7 +569,6 @@ mod tests {
             );
 
         let service = UpdateFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -636,7 +630,6 @@ mod tests {
             );
 
         let service = UpdateFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -698,7 +691,6 @@ mod tests {
             );
 
         let service = UpdateFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -776,7 +768,6 @@ mod tests {
             );
 
         let service = UpdateFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -858,7 +849,6 @@ mod tests {
         );
 
         let service = UpdateFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -936,7 +926,6 @@ mod tests {
             );
 
         let service = UpdateFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -1026,7 +1015,6 @@ mod tests {
             );
 
         let service = UpdateFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -1088,7 +1076,6 @@ mod tests {
             );
 
         let service = UpdateFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -1125,7 +1112,6 @@ mod tests {
             );
 
         let service = UpdateFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -1162,7 +1148,6 @@ mod tests {
             );
 
         let service = UpdateFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -1232,7 +1217,6 @@ mod tests {
             );
 
         let service = UpdateFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let response = service.raw_oneshot(update_request).await;
@@ -1246,7 +1230,6 @@ mod tests {
                 create.clone(),
             );
         let service = RegisterFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -1405,7 +1388,6 @@ mod tests {
             );
 
         let service = UpdateFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let res = service.raw_oneshot(request).await;
@@ -1470,7 +1452,6 @@ mod tests {
             );
 
         let service = UpdateFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let res = service.raw_oneshot(request).await;
@@ -1552,7 +1533,6 @@ mod tests {
             );
 
         let service = UpdateFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -1676,7 +1656,6 @@ mod tests {
             );
 
         let service = UpdateFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;

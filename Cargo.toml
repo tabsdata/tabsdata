@@ -55,6 +55,7 @@ members = [
     "server/libraries/td-tower",
     "extensions/rust/te-apiserver",
     "extensions/rust/te-execution",
+    "extensions/rust/te-services",
     "extensions/rust/te-tableframe",
     "server/binaries/td-server",
 ]
@@ -192,6 +193,9 @@ path = "server/libraries/td-error"
 
 [workspace.dependencies.td-execution]
 path = "server/libraries/td-execution"
+
+[workspace.dependencies.te-services]
+path = "extensions/rust/te-services"
 
 [workspace.dependencies.te-tableframe]
 path = "extensions/rust/te-tableframe"
@@ -486,6 +490,9 @@ version = "0.27.2"
 
 [workspace.dependencies.supports-color]
 version = "3.0.2"
+
+[workspace.dependencies.sync_wrapper]
+version = "1.0.2"
 
 [workspace.dependencies.sysinfo]
 version = "0.37.0"

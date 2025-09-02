@@ -4,7 +4,6 @@
 
 use crate::user_role::layers::assert_not_fixed;
 use td_authz::{Authz, AuthzContext};
-use td_error::TdError;
 use td_objects::crudl::{DeleteRequest, RequestContext};
 use td_objects::rest_urls::UserRoleParam;
 use td_objects::sql::DaoQueries;
@@ -16,10 +15,9 @@ use td_objects::types::role::{RoleDB, UserRoleDB, UserRoleDBWithNames};
 use td_objects::types::user::UserDB;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::IntoServiceProvider;
-use td_tower::{layers, provider};
+use td_tower::{layers, service_factory};
 
-#[provider(
+#[service_factory(
     name = DeleteUserRoleService,
     request = DeleteRequest<UserRoleParam>,
     response = (),
@@ -27,7 +25,7 @@ use td_tower::{layers, provider};
     context = DaoQueries,
     context = AuthzContext,
 )]
-fn provider() {
+fn service() {
     layers!(
         from_fn(With::<DeleteRequest<UserRoleParam>>::extract::<RequestContext>),
         from_fn(AuthzOn::<System>::set),
@@ -51,12 +49,14 @@ mod tests {
     use super::*;
     use crate::user_role::UserRoleError;
     use td_database::sql::DbPool;
+    use td_error::TdError;
     use td_objects::crudl::RequestContext;
     use td_objects::test_utils::seed_role::seed_role;
     use td_objects::test_utils::seed_user::seed_user;
     use td_objects::test_utils::seed_user_role::{get_user_role, seed_user_role};
     use td_objects::types::basic::{AccessTokenId, Description, RoleName, UserEnabled, UserName};
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
@@ -65,7 +65,6 @@ mod tests {
         use td_tower::metadata::type_of_val;
 
         DeleteUserRoleService::with_defaults(db)
-            .await
             .metadata()
             .await
             .assert_service::<DeleteRequest<UserRoleParam>, ()>(&[
@@ -116,7 +115,6 @@ mod tests {
         );
 
         let service = DeleteUserRoleService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         service.raw_oneshot(request).await?;
@@ -142,7 +140,6 @@ mod tests {
         );
 
         let service = DeleteUserRoleService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let res = service.raw_oneshot(request).await;

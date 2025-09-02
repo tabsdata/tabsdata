@@ -2,7 +2,7 @@
 // Copyright 2025. Tabs Data Inc.
 //
 
-use crate::auth::services::JwtConfig;
+use crate::auth::jwt::JwtConfig;
 use std::ops::Deref;
 use std::time::Duration;
 use td_common::time::UniqueUtc;

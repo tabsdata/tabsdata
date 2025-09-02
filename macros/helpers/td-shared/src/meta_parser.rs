@@ -2,9 +2,9 @@
 //  Copyright 2024 Tabs Data Inc.
 //
 
-use darling::FromMeta;
 use darling::ast::NestedMeta;
-use quote::{ToTokens, quote};
+use darling::FromMeta;
+use quote::{quote, ToTokens};
 use std::any::Any;
 
 /// A macro to parse meta attributes using the `darling` crate.
@@ -20,7 +20,7 @@ use std::any::Any;
 /// * `$args` - The `TokenStream` of attribute arguments to be parsed.
 #[macro_export]
 macro_rules! parse_meta {
-    ($meta_struct:ident, $args:expr_2021) => {
+    ($meta_struct:ident, $args:expr) => {
         || -> Result<$meta_struct, proc_macro::TokenStream> {
             let attr_args = match darling::ast::NestedMeta::parse_meta_list($args.into()) {
                 Ok(v) => Ok(v),

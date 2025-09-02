@@ -11,6 +11,7 @@ use td_objects::rest_urls::UserParam;
 use td_objects::test_utils::seed_user::seed_user;
 use td_objects::types::basic::{AccessTokenId, RoleId, UserEnabled, UserId, UserName};
 use td_objects::types::user::UserUpdate;
+use td_tower::td_service::TdService;
 
 #[td_test::test(sqlx)]
 #[tokio::test]
@@ -22,10 +23,7 @@ async fn test_update_request_has_nothing_to_update(db: DbPool) {
     )
     .await;
 
-    let service = UpdateUserService::with_defaults(db.clone())
-        .await
-        .service()
-        .await;
+    let service = UpdateUserService::with_defaults(db.clone()).service().await;
 
     let ctx = RequestContext::with(
         AccessTokenId::default(),

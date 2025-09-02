@@ -72,7 +72,6 @@ mod tests {
     use super::*;
     use crate::function::services::update::UpdateFunctionService;
     use std::sync::Arc;
-    use td_authz::AuthzContext;
     use td_database::sql::DbPool;
     use td_objects::crudl::RequestContext;
     use td_objects::rest_urls::FunctionParam;
@@ -96,6 +95,7 @@ mod tests {
     use td_objects::types::table::TableDB;
     use td_tower::ctx_service::RawOneshot;
     use td_tower::extractors::ConnectionType;
+    use td_tower::td_service::TdService;
 
     #[td_test::test(sqlx)]
     #[tokio::test]
@@ -329,9 +329,6 @@ mod tests {
         db: DbPool,
         collection: &CollectionDB,
     ) -> Result<(ExecutionDB, TransactionDB, FunctionRunDB, TableDB), TdError> {
-        let queries = Arc::new(DaoQueries::default());
-        let authz_context = Arc::new(AuthzContext::default());
-
         // Update the function to change the table version (TODO make this a seed function)
         let update = FunctionRegister::builder()
             .try_name("joaquin_2")?
@@ -354,14 +351,13 @@ mod tests {
                     .build()?,
                 update.clone(),
             );
-        let service =
-            UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
-                .service()
-                .await;
+        let service = UpdateFunctionService::with_defaults(db.clone())
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
-        let function = queries
+        let function = DaoQueries::default()
             .select_by::<FunctionDB>(&(response.id()))?
             .build_query_as()
             .fetch_one(&db)
@@ -381,7 +377,7 @@ mod tests {
         )
         .await;
 
-        let table = queries
+        let table = DaoQueries::default()
             .select_by::<TableDB>(&(function.id(), &TableName::try_from("table_1")?))?
             .build_query_as()
             .fetch_one(&db)

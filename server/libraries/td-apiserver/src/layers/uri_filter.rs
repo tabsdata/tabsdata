@@ -2,12 +2,12 @@
 //  Copyright 2024 Tabs Data Inc.
 //
 
-use crate::status::error_status::ErrorStatus;
 use axum::extract::Request;
 use axum::middleware::Next;
 use axum::response::Response;
 use axum_extra::extract::Host;
 use std::net::ToSocketAddrs;
+use ta_apiserver::status::error_status::ErrorStatus;
 use td_error::TdError;
 use td_error::td_error;
 use td_objects::crudl::RequestContext;

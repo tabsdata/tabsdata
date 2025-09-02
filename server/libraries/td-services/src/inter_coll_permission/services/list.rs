@@ -3,7 +3,6 @@
 //
 
 use td_authz::{Authz, AuthzContext};
-use td_error::TdError;
 use td_objects::crudl::{ListRequest, ListResponse, RequestContext};
 use td_objects::rest_urls::CollectionParam;
 use td_objects::sql::{DaoQueries, NoListFilter};
@@ -15,10 +14,9 @@ use td_objects::types::collection::CollectionDB;
 use td_objects::types::permission::InterCollectionPermission;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::IntoServiceProvider;
-use td_tower::{layers, provider};
+use td_tower::{layers, service_factory};
 
-#[provider(
+#[service_factory(
     name = ListInterCollectionPermissionService,
     request = ListRequest<CollectionParam>,
     response = ListResponse<InterCollectionPermission>,
@@ -26,7 +24,7 @@ use td_tower::{layers, provider};
     context = DaoQueries,
     context = AuthzContext,
 )]
-fn provider() {
+fn service() {
     layers!(
         from_fn(With::<ListRequest<CollectionParam>>::extract::<RequestContext>),
         from_fn(With::<ListRequest<CollectionParam>>::extract_name::<CollectionParam>),
@@ -58,6 +56,7 @@ mod tests {
         AccessTokenId, CollectionIdName, CollectionName, RoleId, UserId,
     };
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
@@ -66,7 +65,6 @@ mod tests {
         use td_tower::metadata::type_of_val;
 
         ListInterCollectionPermissionService::with_defaults(db)
-            .await
             .metadata()
             .await
             .assert_service::<ListRequest<CollectionParam>, ListResponse<InterCollectionPermission>>(&[
@@ -91,7 +89,6 @@ mod tests {
     #[tokio::test]
     async fn test_list_permission_ok(db: DbPool) -> Result<(), TdError> {
         let service = ListInterCollectionPermissionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
 
@@ -122,7 +119,6 @@ mod tests {
     #[tokio::test]
     async fn test_list_permission_authz_err(db: DbPool) -> Result<(), TdError> {
         let service = ListInterCollectionPermissionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
 

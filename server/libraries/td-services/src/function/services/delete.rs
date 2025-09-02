@@ -7,7 +7,6 @@ use crate::function::layers::{
     SKIP_AUTHZ, register_dependencies, register_tables, register_triggers,
 };
 use td_authz::{Authz, AuthzContext};
-use td_error::TdError;
 use td_objects::crudl::{DeleteRequest, RequestContext};
 use td_objects::rest_urls::FunctionParam;
 use td_objects::sql::DaoQueries;
@@ -29,10 +28,9 @@ use td_objects::types::table::TableDB;
 use td_objects::types::trigger::TriggerDBWithNames;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::IntoServiceProvider;
-use td_tower::{layers, provider};
+use td_tower::{layers, service_factory};
 
-#[provider(
+#[service_factory(
     name = DeleteFunctionService,
     request = DeleteRequest<FunctionParam>,
     response = (),
@@ -40,7 +38,7 @@ use td_tower::{layers, provider};
     context = DaoQueries,
     context = AuthzContext,
 )]
-fn provider() {
+fn service() {
     layers!(
         from_fn(With::<DeleteRequest<FunctionParam>>::extract::<RequestContext>),
         from_fn(With::<DeleteRequest<FunctionParam>>::extract_name::<FunctionParam>),
@@ -94,6 +92,7 @@ mod tests {
     use crate::function::services::register::RegisterFunctionService;
     use crate::function::services::tests::{assert_delete, assert_register};
     use td_database::sql::DbPool;
+    use td_error::TdError;
     use td_objects::crudl::{RequestContext, handle_sql_err};
     use td_objects::rest_urls::CollectionParam;
     use td_objects::sql::SelectBy;
@@ -105,6 +104,7 @@ mod tests {
     };
     use td_objects::types::function::{FunctionBuilder, FunctionDBWithNames, FunctionRegister};
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
@@ -124,7 +124,6 @@ mod tests {
         use td_objects::types::trigger::{TriggerDB, TriggerDBBuilder, TriggerDBWithNames};
 
         DeleteFunctionService::with_defaults(db)
-            .await
             .metadata()
             .await
             .assert_service::<DeleteRequest<FunctionParam>, ()>(&[
@@ -222,7 +221,6 @@ mod tests {
             );
 
         let service = DeleteFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         service.raw_oneshot(request).await?;
@@ -270,7 +268,6 @@ mod tests {
             );
 
         let service = DeleteFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         service.raw_oneshot(request).await?;
@@ -330,7 +327,6 @@ mod tests {
             );
 
         let service = DeleteFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         service.raw_oneshot(request).await?;
@@ -390,7 +386,6 @@ mod tests {
             );
 
         let service = DeleteFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         service.raw_oneshot(request).await?;
@@ -448,7 +443,6 @@ mod tests {
             );
 
         let service = RegisterFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -478,7 +472,6 @@ mod tests {
             );
 
         let service = DeleteFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         service.raw_oneshot(request).await?;

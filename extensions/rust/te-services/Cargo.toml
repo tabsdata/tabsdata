@@ -1,0 +1,62 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[package]
+description = "Tabsdata Services Extension Implementation - Standard"
+name = "te-services"
+build = "build.rs"
+
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+publish = { workspace = true }
+readme = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+version = { workspace = true }
+
+[lib]
+
+[features]
+api-docs = []
+enterprise = []
+td-test = ["dummy", "mock-env", "test-utils"]
+dummy = []
+mock-env = []
+sqlx_log = []
+test_logging = []
+test-utils = []
+
+[package.metadata.cargo-machete]
+ignored = ["openssl", "td-build"]
+
+# Build dependencies
+
+[build-dependencies]
+
+# Internal dependencies
+
+td-build = { workspace = true }
+
+# External dependencies
+
+[dependencies]
+
+# Internal dependencies
+
+td-tower = { workspace = true }
+
+## Macros
+
+## Libraries
+
+# External dependencies
+
+axum = { workspace = true }
+
+[dev-dependencies]
+
+[target.'cfg(target_os = "linux")'.dependencies]
+openssl = { workspace = true, features = ["vendored"] }

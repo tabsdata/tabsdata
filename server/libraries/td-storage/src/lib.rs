@@ -48,6 +48,9 @@ pub enum StorageError {
     AlreadyExists(String) = 8,
     #[error("Not found {0}")]
     NotFound(String) = 9,
+
+    #[error("Error reading object store stream: {0}")]
+    StreamError(#[source] object_store::Error) = 5000,
 }
 
 impl From<UninitializedFieldError> for StorageError {
@@ -185,8 +188,8 @@ pub struct Storage {
 }
 
 impl Storage {
-    pub async fn from(mount_defs: Vec<MountDef>) -> Result<Self> {
-        let storage = MountsStorage::from(mount_defs).await?;
+    pub fn from(mount_defs: Vec<MountDef>) -> Result<Self> {
+        let storage = MountsStorage::from(mount_defs)?;
         Ok(Self { storage })
     }
 
@@ -235,10 +238,7 @@ impl Storage {
         res
     }
 
-    pub async fn read_stream(
-        &self,
-        path: &SPath,
-    ) -> Result<BoxStream<'static, object_store::Result<Bytes>>> {
+    pub async fn read_stream(&self, path: &SPath) -> Result<BoxStream<'static, Result<Bytes>>> {
         let res = self.storage.read_stream(path).await;
         match &res {
             Ok(_) => trace!("read_stream({}) -> ok", path),
@@ -254,6 +254,20 @@ impl Storage {
             Err(e) => warn!("list({}) error: {}", path, e),
         }
         res
+    }
+}
+
+#[cfg(feature = "test-utils")]
+impl Default for Storage {
+    fn default() -> Self {
+        let test_dir = testdir::testdir!();
+        let mount_def = MountDef::builder()
+            .id("id")
+            .path("/")
+            .uri(td_test::file::mount_uri(&test_dir))
+            .build()
+            .unwrap();
+        Storage::from(vec![mount_def]).unwrap()
     }
 }
 
@@ -342,7 +356,7 @@ mod tests {
             .uri(uri2)
             .build()
             .unwrap();
-        let storage = Storage::from(vec![mount1, mount2]).await.unwrap();
+        let storage = Storage::from(vec![mount1, mount2]).unwrap();
 
         #[cfg(target_os = "windows")]
         let match1 = format!("file:///{}", mount1_dir.to_string_lossy());

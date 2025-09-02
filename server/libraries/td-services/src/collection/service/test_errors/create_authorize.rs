@@ -8,6 +8,7 @@ use td_error::assert_service_error;
 use td_objects::crudl::RequestContext;
 use td_objects::types::basic::{AccessTokenId, CollectionName, Description, RoleId, UserId};
 use td_objects::types::collection::CollectionCreate;
+use td_tower::td_service::TdService;
 
 #[td_test::test(sqlx)]
 #[tokio::test]
@@ -25,7 +26,6 @@ async fn test_not_allowed_to_create_collection(db: DbPool) {
         .create((), create);
 
     let service = CreateCollectionService::with_defaults(db.clone())
-        .await
         .service()
         .await;
 

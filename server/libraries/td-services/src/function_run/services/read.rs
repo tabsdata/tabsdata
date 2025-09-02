@@ -3,7 +3,6 @@
 //
 
 use td_authz::{Authz, AuthzContext};
-use td_error::TdError;
 use td_objects::crudl::{ReadRequest, RequestContext};
 use td_objects::rest_urls::FunctionRunParam;
 use td_objects::sql::DaoQueries;
@@ -23,10 +22,9 @@ use td_objects::types::execution::{
 use td_objects::types::function::FunctionDBWithNames;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::IntoServiceProvider;
-use td_tower::{layers, provider};
+use td_tower::{layers, service_factory};
 
-#[provider(
+#[service_factory(
     name = FunctionRunReadService,
     request = ReadRequest<FunctionRunParam>,
     response = FunctionRun,
@@ -34,7 +32,7 @@ use td_tower::{layers, provider};
     context = DaoQueries,
     context = AuthzContext,
 )]
-fn provider() {
+fn service() {
     layers!(
         from_fn(With::<ReadRequest<FunctionRunParam>>::extract::<RequestContext>),
         from_fn(With::<ReadRequest<FunctionRunParam>>::extract_name::<FunctionRunParam>),
@@ -69,6 +67,7 @@ fn provider() {
 mod tests {
     use super::*;
     use td_database::sql::DbPool;
+    use td_error::TdError;
     use td_objects::crudl::RequestContext;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_execution::seed_execution;
@@ -81,6 +80,7 @@ mod tests {
     };
     use td_objects::types::function::FunctionRegister;
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
@@ -89,7 +89,6 @@ mod tests {
         use td_tower::metadata::type_of_val;
 
         FunctionRunReadService::with_defaults(db)
-            .await
             .metadata()
             .await
             .assert_service::<ReadRequest<FunctionRunParam>, FunctionRun>(&[
@@ -175,7 +174,6 @@ mod tests {
             );
 
         let service = FunctionRunReadService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;

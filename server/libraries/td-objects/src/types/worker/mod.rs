@@ -7,7 +7,6 @@ use crate::types::worker::v2::{FunctionInputV2, FunctionOutputV2};
 use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
 use std::collections::HashSet;
-use td_apiforge::apiserver_schema;
 use url::Url;
 
 pub mod v1;
@@ -68,8 +67,7 @@ impl FunctionInput {
     }
 }
 
-#[apiserver_schema]
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(utoipa::ToSchema, Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum FunctionOutput {
     V1(FunctionOutputV1),
     V2(FunctionOutputV2),

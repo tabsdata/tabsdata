@@ -2,129 +2,126 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-//! Users API Service for API Server.
+use td_apiforge::router_ext;
 
-#![allow(clippy::upper_case_acronyms)]
+#[router_ext(UsersRouter)]
+mod routes {
+    use axum::Extension;
+    use axum::extract::{Path, State};
+    use axum_extra::extract::Query;
+    use std::sync::Arc;
+    use ta_apiserver::status::error_status::ErrorStatus;
+    use ta_apiserver::status::extractors::Json;
+    use ta_apiserver::status::ok_status::{
+        CreateStatus, DeleteStatus, GetStatus, ListStatus, NoContent, UpdateStatus,
+    };
+    use td_apiforge::apiserver_path;
+    use td_objects::crudl::{ListParams, RequestContext};
+    use td_objects::rest_urls::{
+        CREATE_USER, DELETE_USER, GET_USER, LIST_USERS, UPDATE_USER, UserParam,
+    };
+    use td_objects::types::user::{UserCreate, UserRead, UserUpdate};
+    use td_services::user::service::UserServices;
+    use td_tower::td_service::TdService;
+    use tower::ServiceExt;
 
-use crate::router;
-use crate::router::state::Users;
-use crate::status::error_status::ErrorStatus;
-use crate::status::extractors::Json;
-use crate::status::ok_status::{
-    CreateStatus, DeleteStatus, GetStatus, ListStatus, NoContent, UpdateStatus,
-};
-use axum::Extension;
-use axum::extract::{Path, State};
-use axum_extra::extract::Query;
-use td_apiforge::{apiserver_path, apiserver_tag};
-use td_objects::crudl::{ListParams, RequestContext};
-use td_objects::rest_urls::UserParam;
-use td_objects::types::user::{UserCreate, UserRead, UserUpdate};
-use tower::ServiceExt;
+    const USERS_TAG: &str = "Users";
 
-pub const USERS: &str = "/users";
-pub const USER: &str = "/users/{user}";
+    #[apiserver_path(method = get, path = LIST_USERS, tag = USERS_TAG)]
+    #[doc = "Lists users"]
+    async fn list(
+        State(users_state): State<Arc<UserServices>>,
+        Extension(context): Extension<RequestContext>,
+        Query(query_params): Query<ListParams>,
+    ) -> Result<ListStatus<UserRead>, ErrorStatus> {
+        let request = context.list((), query_params);
+        let response = users_state.list().service().await.oneshot(request).await?;
+        Ok(ListStatus::OK(response))
+    }
 
-apiserver_tag!(name = "Users", description = "Users API");
+    #[apiserver_path(method = get, path = GET_USER, tag = USERS_TAG)]
+    #[doc = "Get a user"]
+    pub async fn get(
+        State(users_state): State<Arc<UserServices>>,
+        Extension(context): Extension<RequestContext>,
+        Path(path_params): Path<UserParam>,
+    ) -> Result<GetStatus<UserRead>, ErrorStatus> {
+        let request = context.read(path_params);
+        let response = users_state.read().service().await.oneshot(request).await?;
+        Ok(GetStatus::OK(response))
+    }
 
-router! {
-    state => { Users },
-    routes => { list_users, get_user, create_user, update_user, delete_user }
-}
+    #[apiserver_path(method = post, path = CREATE_USER, tag = USERS_TAG)]
+    #[doc = "Create a user"]
+    pub async fn create(
+        State(users_state): State<Arc<UserServices>>,
+        Extension(context): Extension<RequestContext>,
+        Json(request): Json<UserCreate>,
+    ) -> Result<CreateStatus<UserRead>, ErrorStatus> {
+        let request = context.create((), request);
+        let response = users_state
+            .create()
+            .service()
+            .await
+            .oneshot(request)
+            .await?;
+        Ok(CreateStatus::CREATED(response))
+    }
 
-const LIST_USERS: &str = USERS;
-#[apiserver_path(method = get, path = LIST_USERS, tag = USERS_TAG)]
-#[doc = "Lists users"]
-async fn list_users(
-    State(users_state): State<Users>,
-    Extension(context): Extension<RequestContext>,
-    Query(query_params): Query<ListParams>,
-) -> Result<ListStatus<UserRead>, ErrorStatus> {
-    let request = context.list((), query_params);
-    let response = users_state.list_users().await.oneshot(request).await?;
-    Ok(ListStatus::OK(response))
-}
+    #[apiserver_path(method = post, path = UPDATE_USER, tag = USERS_TAG)]
+    #[doc = "Update a user"]
+    pub async fn update(
+        State(users_state): State<Arc<UserServices>>,
+        Extension(context): Extension<RequestContext>,
+        Path(path_params): Path<UserParam>,
+        Json(request): Json<UserUpdate>,
+    ) -> Result<UpdateStatus<UserRead>, ErrorStatus> {
+        let request = context.update(path_params, request);
+        let response = users_state
+            .update()
+            .service()
+            .await
+            .oneshot(request)
+            .await?;
+        Ok(UpdateStatus::OK(response))
+    }
 
-const GET_USER: &str = USER;
-#[apiserver_path(method = get, path = GET_USER, tag = USERS_TAG)]
-#[doc = "Get a user"]
-pub async fn get_user(
-    State(users_state): State<Users>,
-    Extension(context): Extension<RequestContext>,
-    Path(path_params): Path<UserParam>,
-) -> Result<GetStatus<UserRead>, ErrorStatus> {
-    let request = context.read(path_params);
-    let response = users_state.read_user().await.oneshot(request).await?;
-    Ok(GetStatus::OK(response))
-}
-
-const CREATE_USER: &str = USERS;
-#[apiserver_path(method = post, path = CREATE_USER, tag = USERS_TAG)]
-#[doc = "Create a user"]
-pub async fn create_user(
-    State(users_state): State<Users>,
-    Extension(context): Extension<RequestContext>,
-    Json(request): Json<UserCreate>,
-) -> Result<CreateStatus<UserRead>, ErrorStatus> {
-    let request = context.create((), request);
-    let response = users_state.create_user().await.oneshot(request).await?;
-    Ok(CreateStatus::CREATED(response))
-}
-
-const UPDATE_USER: &str = USER;
-#[apiserver_path(method = post, path = UPDATE_USER, tag = USERS_TAG)]
-#[doc = "Update a user"]
-pub async fn update_user(
-    State(users_state): State<Users>,
-    Extension(context): Extension<RequestContext>,
-    Path(path_params): Path<UserParam>,
-    Json(request): Json<UserUpdate>,
-) -> Result<UpdateStatus<UserRead>, ErrorStatus> {
-    let request = context.update(path_params, request);
-    let response = users_state.update_user().await.oneshot(request).await?;
-    Ok(UpdateStatus::OK(response))
-}
-
-const DELETE_USER: &str = USER;
-#[apiserver_path(method = delete, path = DELETE_USER, tag = USERS_TAG)]
-#[doc = "Delete a user"]
-pub async fn delete_user(
-    State(users_state): State<Users>,
-    Extension(context): Extension<RequestContext>,
-    Path(path_params): Path<UserParam>,
-) -> Result<DeleteStatus<NoContent>, ErrorStatus> {
-    let request = context.delete(path_params);
-    let response = users_state.delete_user().await.oneshot(request).await?;
-    Ok(DeleteStatus::OK(response))
+    #[apiserver_path(method = delete, path = DELETE_USER, tag = USERS_TAG)]
+    #[doc = "Delete a user"]
+    pub async fn delete(
+        State(users_state): State<Arc<UserServices>>,
+        Extension(context): Extension<RequestContext>,
+        Path(path_params): Path<UserParam>,
+    ) -> Result<DeleteStatus<NoContent>, ErrorStatus> {
+        let request = context.delete(path_params);
+        let response = users_state
+            .delete()
+            .service()
+            .await
+            .oneshot(request)
+            .await?;
+        Ok(DeleteStatus::OK(response))
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::Router;
     use axum::body::{Body, to_bytes};
     use axum::http::{Request, StatusCode};
+    use axum::{Extension, Router};
     use http::method::Method;
     use serde_json::json;
-    use std::sync::Arc;
-    use td_authz::AuthzContext;
+    use ta_apiserver::router::RouterExtension;
     use td_database::sql::DbPool;
+    use td_objects::crudl::RequestContext;
+    use td_objects::rest_urls::{CREATE_USER, DELETE_USER, GET_USER, LIST_USERS, UPDATE_USER};
     use td_objects::types::basic::AccessTokenId;
     use td_objects::types::basic::RoleId;
     use td_objects::types::basic::UserId;
-    use td_security::config::PasswordHashingConfig;
-    use td_services::user::service::UserServices;
+    use td_services::{Context, Services};
+    use td_tower::factory::ServiceFactory;
     use tower::ServiceExt;
-
-    async fn users_state() -> Users {
-        let db: &'static DbPool = Box::leak(Box::new(td_database::test_utils::db().await.unwrap()));
-        let logic = UserServices::new(
-            db.clone(),
-            Arc::new(PasswordHashingConfig::default()),
-            Arc::new(AuthzContext::default()),
-        );
-        Arc::new(logic)
-    }
 
     async fn to_route<R: Into<Router> + Clone>(router: &R) -> Router {
         let context = RequestContext::with(
@@ -136,10 +133,10 @@ mod tests {
         router.layer(Extension(context.clone()))
     }
 
+    #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_users_lifecycle() {
-        let users_state = users_state().await;
-        let router = super::router(users_state);
+    async fn test_users_lifecycle(db: DbPool) {
+        let router = UsersRouter::router(Services::build(&Context::with_defaults(db)));
 
         // List empty users (only sysadmin will be there)
         let response = to_route(&router)

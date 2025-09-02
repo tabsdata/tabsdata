@@ -6,7 +6,7 @@ extern crate proc_macro;
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{ItemFn, ReturnType, parse_macro_input, parse_quote};
+use syn::{parse_macro_input, parse_quote, ItemFn, ReturnType};
 
 pub fn layer(_args: TokenStream, item: TokenStream) -> TokenStream {
     let mut func = parse_macro_input!(item as ItemFn);
@@ -22,14 +22,14 @@ pub fn layer(_args: TokenStream, item: TokenStream) -> TokenStream {
             Response = td_tower::handler::Handler,
             Error = td_error::TdError,
             Future: Send
-        > + Clone + td_tower::default_services::Share
+        > + Clone + Send + Sync + 'static
     });
 
     // Override return type
     func.sig.output = ReturnType::Type(
         syn::token::RArrow::default(),
         Box::new(parse_quote! {
-            td_tower::box_sync_clone_layer::BoxSyncCloneLayer<
+            tower::util::BoxCloneSyncServiceLayer<
                 In,
                 td_tower::handler::Handler,
                 td_tower::handler::Handler,

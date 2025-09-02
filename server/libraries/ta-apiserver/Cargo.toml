@@ -29,7 +29,7 @@ test_logging = []
 test-utils = []
 
 [package.metadata.cargo-machete]
-ignored = ["openssl"]
+ignored = ["openssl", "strum", "thiserror"]
 
 # Build dependencies
 
@@ -43,13 +43,29 @@ ignored = ["openssl"]
 
 # Internal dependencies
 
+td-error = { workspace = true }
+td-objects = { workspace = true }
+td-tower = { workspace = true }
+
 ## Macros
 
 ## Libraries
 
 # External dependencies
 
-axum = { workspace = true }
+axum = { workspace = true, features = ["macros"] }
+derive_builder = { workspace = true }
+getset = { workspace = true }
+http = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+strum = { workspace = true, features = ["derive"] }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+tower = { workspace = true }
+tracing = { workspace = true }
+utoipa = { workspace = true }
+utoipa-axum = { workspace = true }
 
 [dev-dependencies]
 

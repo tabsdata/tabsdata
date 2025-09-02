@@ -4,7 +4,6 @@
 
 use crate::worker::layers::logs::{get_worker_logs, resolve_worker_log_path};
 use td_authz::{Authz, AuthzContext};
-use td_error::TdError;
 use td_objects::crudl::{ReadRequest, RequestContext};
 use td_objects::rest_urls::{LogsExtension, WorkerLogsParams};
 use td_objects::sql::DaoQueries;
@@ -16,10 +15,9 @@ use td_objects::types::execution::WorkerDB;
 use td_objects::types::stream::BoxedSyncStream;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::IntoServiceProvider;
-use td_tower::{layers, provider};
+use td_tower::{layers, service_factory};
 
-#[provider(
+#[service_factory(
     name = WorkerLogService,
     request = ReadRequest<WorkerLogsParams>,
     response = BoxedSyncStream,
@@ -27,7 +25,7 @@ use td_tower::{layers, provider};
     context = DaoQueries,
     context = AuthzContext,
 )]
-fn provider() {
+fn service() {
     layers!(
         // Extract parameters
         from_fn(With::<ReadRequest<WorkerLogsParams>>::extract::<RequestContext>),
@@ -72,6 +70,7 @@ mod tests {
     use td_objects::types::execution::WorkerMessageStatus;
     use td_objects::types::function::FunctionRegister;
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::td_service::TdService;
     use testdir::testdir;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -81,7 +80,6 @@ mod tests {
         use td_tower::metadata::type_of_val;
 
         WorkerLogService::with_defaults(db)
-            .await
             .metadata()
             .await
             .assert_service::<ReadRequest<WorkerLogsParams>, BoxedSyncStream>(&[
@@ -175,10 +173,7 @@ mod tests {
                     // as the content.
                     create_log_files(workers[0].id(), 1, 1).await;
 
-                    let service = WorkerLogService::with_defaults(db.clone())
-                        .await
-                        .service()
-                        .await;
+                    let service = WorkerLogService::with_defaults(db.clone()).service().await;
 
                     let request = RequestContext::with(
                         AccessTokenId::default(),

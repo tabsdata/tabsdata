@@ -85,7 +85,7 @@ test_tower_metadata = ["td-tower/test_tower_metadata"]
 test-utils = []
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "paste", "toml", "utoipa-axum", "windows"]
+ignored = ["openssl", "paste", "toml", "utoipa", "utoipa-axum", "windows"]
 
 # Build dependencies
 
@@ -111,12 +111,16 @@ tm-workspace = { workspace = true }
 
 ## Libraries
 
+ta-apiserver = { workspace = true }
+td-apiforge = { workspace = true }
 td-apiserver = { workspace = true }
 td-common = { workspace = true }
 td-database = { workspace = true }
 te-tableframe = { workspace = true }
 ta-tableframe = { workspace = true }
+td-objects = { workspace = true }
 td-process = { workspace = true }
+td-services = { workspace = true }
 td-shuttle = { workspace = true }
 td-storage = { workspace = true }
 td-supervisor = { workspace = true }
@@ -130,7 +134,6 @@ axum = { workspace = true, features = ["macros"] }
 clap = { workspace = true, features = ["derive"] }
 clap_derive = { workspace = true }
 getset = { workspace = true }
-http = { workspace = true }
 paste = { workspace = true }
 path-slash = { workspace = true }
 reqwest = { workspace = true }

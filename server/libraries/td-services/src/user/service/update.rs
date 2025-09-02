@@ -7,7 +7,6 @@ use crate::user::layers::update::{
     update_user_validate_password_change,
 };
 use td_authz::{Authz, AuthzContext};
-use td_error::TdError;
 use td_objects::crudl::{RequestContext, UpdateRequest};
 use td_objects::rest_urls::UserParam;
 use td_objects::sql::DaoQueries;
@@ -25,10 +24,9 @@ use td_objects::types::user::{
 use td_security::config::PasswordHashingConfig;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::IntoServiceProvider;
-use td_tower::{layers, provider};
+use td_tower::{layers, service_factory};
 
-#[provider(
+#[service_factory(
     name = UpdateUserService,
     request = UpdateRequest<UserParam, UserUpdate>,
     response = UserRead,
@@ -37,7 +35,7 @@ use td_tower::{layers, provider};
     context = AuthzContext,
     context = PasswordHashingConfig,
 )]
-fn provider() {
+fn service() {
     layers!(
         from_fn(With::<UpdateRequest<UserParam, UserUpdate>>::extract::<RequestContext>),
         from_fn(With::<RequestContext>::extract::<AtTime>),
@@ -76,6 +74,7 @@ mod tests {
     };
     use td_objects::types::user::{UserDB, UserUpdate};
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
@@ -84,7 +83,6 @@ mod tests {
         use td_tower::metadata::type_of_val;
 
         UpdateUserService::with_defaults(db)
-            .await
             .metadata()
             .await
             .assert_service::<UpdateRequest<UserParam, UserUpdate>, UserRead>(&[
@@ -128,10 +126,7 @@ mod tests {
         )
         .await;
 
-        let service = UpdateUserService::with_defaults(db.clone())
-            .await
-            .service()
-            .await;
+        let service = UpdateUserService::with_defaults(db.clone()).service().await;
 
         let user_update = UserUpdate::builder()
             .full_name(Some(FullName::try_from("U0 Update").unwrap()))
@@ -201,10 +196,7 @@ mod tests {
         )
         .await;
 
-        let service = UpdateUserService::with_defaults(db.clone())
-            .await
-            .service()
-            .await;
+        let service = UpdateUserService::with_defaults(db.clone()).service().await;
 
         let user_update = UserUpdate::builder()
             .full_name(Some(FullName::try_from("U0 Update").unwrap()))

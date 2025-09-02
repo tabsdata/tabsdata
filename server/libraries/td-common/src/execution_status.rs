@@ -3,10 +3,8 @@
 //
 
 use serde::{Deserialize, Serialize};
-use td_apiforge::apiserver_schema;
 
-#[apiserver_schema]
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(utoipa::ToSchema, Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum WorkerCallbackStatus {
     Running,
     Done,
@@ -14,8 +12,7 @@ pub enum WorkerCallbackStatus {
     Failed,
 }
 
-#[apiserver_schema]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(utoipa::ToSchema, Debug, Clone, Serialize, Deserialize)]
 pub enum RecoverStatus {
     Cancel,
     Reschedule,

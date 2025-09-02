@@ -189,8 +189,8 @@ impl MetadataMutex {
 
     // This is different from the other FromHandler implementations because it's not sync, as we
     // do not allow random fns to get it. It's only used for testing.
-    pub async fn from_handler(handler: &Handler) -> Result<Input<MetadataMutex>, FromHandlerError> {
-        Input::<MetadataMutex>::from_handler(handler).await
+    pub fn from_handler(handler: &Handler) -> Result<Input<MetadataMutex>, FromHandlerError> {
+        Input::<MetadataMutex>::from_handler(handler)
     }
 
     /// Consumes the `Metadata` instance and returns the inner `MetadataFields`.

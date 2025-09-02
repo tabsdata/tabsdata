@@ -11,7 +11,6 @@ use crate::execution::layers::template::{
     build_execution_template, find_all_input_tables, find_trigger_graph,
 };
 use td_authz::{Authz, AuthzContext};
-use td_error::TdError;
 use td_objects::crudl::{CreateRequest, RequestContext};
 use td_objects::rest_urls::FunctionParam;
 use td_objects::sql::DaoQueries;
@@ -34,11 +33,10 @@ use td_objects::types::permission::{InterCollectionAccess, InterCollectionAccess
 use td_objects::types::trigger::TriggerDBWithNames;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::IntoServiceProvider;
-use td_tower::{layers, provider};
+use td_tower::{layers, service_factory};
 use te_execution::transaction::TransactionBy;
 
-#[provider(
+#[service_factory(
     name = ExecuteFunctionService,
     request = CreateRequest<FunctionParam, ExecutionRequest>,
     response = ExecutionResponse,
@@ -47,7 +45,7 @@ use te_execution::transaction::TransactionBy;
     context = AuthzContext,
     context = TransactionBy,
 )]
-fn provider() {
+fn service() {
     layers!(
         // Extract from request.
         from_fn(With::<CreateRequest<FunctionParam, ExecutionRequest>>::extract::<RequestContext>),
@@ -140,6 +138,7 @@ pub(crate) mod tests {
     };
     use td_objects::types::function::{FunctionDBWithNames, FunctionRegister};
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
@@ -152,7 +151,6 @@ pub(crate) mod tests {
         use td_tower::metadata::type_of_val;
 
         ExecuteFunctionService::with_defaults(db)
-            .await
             .metadata()
             .await
             .assert_service::<CreateRequest<FunctionParam, ExecutionRequest>, ExecutionResponse>(
@@ -395,7 +393,6 @@ pub(crate) mod tests {
             );
 
         let service = ExecuteFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;

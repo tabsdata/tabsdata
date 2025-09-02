@@ -11,8 +11,9 @@ use constcat::concat;
 use td_common::logging::LOG_EXTENSION;
 use td_common::server::{ERR_LOG_FILE_NAME, FN_LOG_FILE_NAME, OUT_LOG_FILE_NAME, TD_LOG_FILE_NAME};
 
+#[macro_export]
 macro_rules! url {
-    ($( $path:expr_2021 $(,)? )*) => {
+    ($( $path:expr $(,)? )*) => {
         concat!($( $path, )*)
     };
 }
@@ -43,14 +44,14 @@ pub struct FunctionRunIdParam {
 
 // Auth
 pub const AUTH: &str = "/auth";
-pub const AUTH_LOGIN: &str = concat!(AUTH, "/login");
-pub const AUTH_REFRESH: &str = concat!(AUTH, "/refresh");
-pub const AUTH_ROLE_CHANGE: &str = concat!(AUTH, "/role_change");
-pub const AUTH_LOGOUT: &str = concat!(AUTH, "/logout");
-pub const AUTH_USER_INFO: &str = concat!(AUTH, "/info");
-pub const AUTH_PASSWORD_CHANGE: &str = concat!(AUTH, "/password_change");
+pub const AUTH_LOGIN: &str = url!(AUTH, "/login");
+pub const AUTH_REFRESH: &str = url!(AUTH, "/refresh");
+pub const AUTH_ROLE_CHANGE: &str = url!(AUTH, "/role_change");
+pub const AUTH_LOGOUT: &str = url!(AUTH, "/logout");
+pub const AUTH_USER_INFO: &str = url!(AUTH, "/info");
+pub const AUTH_PASSWORD_CHANGE: &str = url!(AUTH, "/password_change");
 
-pub const CERT_DOWNLOAD: &str = concat!("/ssl-cert");
+pub const CERT_DOWNLOAD: &str = url!("/ssl-cert");
 
 // Users
 pub const USERS: &str = url!("/users");
@@ -61,6 +62,12 @@ pub struct UserParam {
     #[td_type(extractor)]
     user: UserIdName,
 }
+
+pub const LIST_USERS: &str = url!(USERS);
+pub const GET_USER: &str = url!(USER);
+pub const CREATE_USER: &str = url!(USERS);
+pub const UPDATE_USER: &str = url!(USER);
+pub const DELETE_USER: &str = url!(USER);
 
 // Roles
 pub const ROLES: &str = url!("/roles");
@@ -227,7 +234,8 @@ pub const DOWNLOAD_TABLE: &str = url!(TABLE, "/download");
 
 pub const TABLE_DELETE: &str = url!(TABLE);
 
-// Runtime info
+// Server status
+pub const SERVER_STATUS: &str = url!("/status");
 pub const RUNTIME_INFO: &str = url!("/runtime-info");
 
 // Executions

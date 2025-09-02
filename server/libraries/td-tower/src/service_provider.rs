@@ -1,11 +1,10 @@
 //
-//  Copyright 2024 Tabs Data Inc.
+// Copyright 2025 Tabs Data Inc.
 //
 
-use crate::box_sync_clone_service::BoxSyncCloneService;
 use crate::ctx_service::CtxResponse;
 use std::convert::Infallible;
-use tower::util::BoxService;
+use tower::util::{BoxCloneSyncService, BoxService};
 use tower::{MakeService, ServiceExt, service_fn};
 use tower_service::Service;
 
@@ -18,7 +17,7 @@ pub type TdBoxService<T, U, E> = BoxService<T, CtxResponse<U>, E>;
 /// for easy use in multiple generic contexts. It has always a wrapped return type in a
 /// [`CtxResponse`].
 pub struct ServiceProvider<Req, Res, Err>(
-    BoxSyncCloneService<(), TdBoxService<Req, Res, Err>, Infallible>,
+    BoxCloneSyncService<(), TdBoxService<Req, Res, Err>, Infallible>,
 );
 
 impl<Req, Res, Err> ServiceProvider<Req, Res, Err> {
@@ -27,7 +26,7 @@ impl<Req, Res, Err> ServiceProvider<Req, Res, Err> {
         S: Service<Req, Response = CtxResponse<Res>, Error = Err> + Clone + Send + Sync + 'static,
         S::Future: Send + 'static,
     {
-        let inner = BoxSyncCloneService::new(service_fn(move |_: ()| {
+        let inner = BoxCloneSyncService::new(service_fn(move |_: ()| {
             let inner = inner.clone();
             async move { Ok::<_, Infallible>(inner.boxed()) }
         }));

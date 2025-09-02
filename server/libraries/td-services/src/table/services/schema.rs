@@ -5,7 +5,6 @@
 use crate::table::layers::find_data_version_location_at;
 use crate::table::layers::schema::get_table_schema;
 use td_authz::{Authz, AuthzContext};
-use td_error::TdError;
 use td_objects::crudl::{ReadRequest, RequestContext};
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{
@@ -19,10 +18,9 @@ use td_objects::types::table::{TableAtIdName, TableSchema};
 use td_storage::Storage;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::IntoServiceProvider;
-use td_tower::{layers, provider};
+use td_tower::{layers, service_factory};
 
-#[provider(
+#[service_factory(
     name = TableSchemaService,
     request = ReadRequest<TableAtIdName>,
     response = TableSchema,
@@ -31,7 +29,7 @@ use td_tower::{layers, provider};
     context = AuthzContext,
     context = Storage,
 )]
-fn provider() {
+fn service() {
     layers!(
         // Extract parameters
         from_fn(With::<ReadRequest<TableAtIdName>>::extract::<RequestContext>),
@@ -63,6 +61,7 @@ mod tests {
     use std::sync::Arc;
     use td_common::absolute_path::AbsolutePath;
     use td_database::sql::DbPool;
+    use td_error::TdError;
     use td_objects::crudl::RequestContext;
     use td_objects::rest_urls::{AtTimeParam, TableParam};
     use td_objects::sql::SelectBy;
@@ -83,6 +82,7 @@ mod tests {
     use td_storage::location::StorageLocation;
     use td_storage::{MountDef, Storage};
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::td_service::TdService;
     use testdir::testdir;
     use url::Url;
 
@@ -99,61 +99,43 @@ mod tests {
 
         use td_tower::metadata::type_of_val;
 
-        fn dummy_file() -> String {
-            if cfg!(target_os = "windows") {
-                "file:///c:/dummy".to_string()
-            } else {
-                "file:///dummy".to_string()
-            }
-        }
-
-        let mound_def = MountDef::builder()
-            .id("id")
-            .path("/")
-            .uri(dummy_file())
-            .build()
-            .unwrap();
-        let storage = Storage::from(vec![mound_def]).await.unwrap();
-        TableSchemaService::new(
-            db,
-            Arc::new(DaoQueries::default()),
-            Arc::new(AuthzContext::default()),
-            Arc::new(storage),
-        )
-        .metadata()
-        .await
-        .assert_service::<ReadRequest<TableAtIdName>, TableSchema>(&[
-            type_of_val(&With::<ReadRequest<TableAtIdName>>::extract::<RequestContext>),
-            type_of_val(&With::<ReadRequest<TableAtIdName>>::extract_name::<TableAtIdName>),
-            type_of_val(&With::<TableAtIdName>::extract::<CollectionIdName>),
-            // find collection ID
-            type_of_val(&By::<CollectionIdName>::select::<CollectionDB>),
-            type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
-            // check requester has collection permissions
-            type_of_val(&AuthzOn::<CollectionId>::set),
-            type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead, InterCollRead>::check),
-            // Find table data version location.
-            // Extract parameters
-            type_of_val(&With::<TableAtIdName>::extract::<CollectionIdName>),
-            type_of_val(&With::<TableAtIdName>::extract::<TableIdName>),
-            type_of_val(&With::<TableAtIdName>::extract::<AtTime>),
-            // Only active or frozen tables
-            type_of_val(&TableStatus::active_or_frozen),
-            // Find Table ID, looking at the version at the time
-            type_of_val(&combine::<CollectionIdName, TableIdName>),
-            type_of_val(&By::<(CollectionIdName, TableIdName)>::select_version::<TableDBWithNames>),
-            type_of_val(&With::<TableDBWithNames>::extract::<TableId>),
-            // Only committed transactions, at the triggered on time
-            type_of_val(&FunctionRunStatus::committed),
-            type_of_val(&With::<AtTime>::convert_to::<TriggeredOn, _>),
-            // Find the latest data version of the table ID, at that time
-            type_of_val(&By::<TableId>::select_version_optional::<TableDataVersionDBWithNames>),
-            // Resolve the location of the data version. This takes into account versions without
-            // data changes (in which the previous version is resolved)
-            type_of_val(&resolve_table_location),
-            // get schema
-            type_of_val(&get_table_schema),
-        ]);
+        TableSchemaService::with_defaults(db)
+            .metadata()
+            .await
+            .assert_service::<ReadRequest<TableAtIdName>, TableSchema>(&[
+                type_of_val(&With::<ReadRequest<TableAtIdName>>::extract::<RequestContext>),
+                type_of_val(&With::<ReadRequest<TableAtIdName>>::extract_name::<TableAtIdName>),
+                type_of_val(&With::<TableAtIdName>::extract::<CollectionIdName>),
+                // find collection ID
+                type_of_val(&By::<CollectionIdName>::select::<CollectionDB>),
+                type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
+                // check requester has collection permissions
+                type_of_val(&AuthzOn::<CollectionId>::set),
+                type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead, InterCollRead>::check),
+                // Find table data version location.
+                // Extract parameters
+                type_of_val(&With::<TableAtIdName>::extract::<CollectionIdName>),
+                type_of_val(&With::<TableAtIdName>::extract::<TableIdName>),
+                type_of_val(&With::<TableAtIdName>::extract::<AtTime>),
+                // Only active or frozen tables
+                type_of_val(&TableStatus::active_or_frozen),
+                // Find Table ID, looking at the version at the time
+                type_of_val(&combine::<CollectionIdName, TableIdName>),
+                type_of_val(
+                    &By::<(CollectionIdName, TableIdName)>::select_version::<TableDBWithNames>,
+                ),
+                type_of_val(&With::<TableDBWithNames>::extract::<TableId>),
+                // Only committed transactions, at the triggered on time
+                type_of_val(&FunctionRunStatus::committed),
+                type_of_val(&With::<AtTime>::convert_to::<TriggeredOn, _>),
+                // Find the latest data version of the table ID, at that time
+                type_of_val(&By::<TableId>::select_version_optional::<TableDataVersionDBWithNames>),
+                // Resolve the location of the data version. This takes into account versions without
+                // data changes (in which the previous version is resolved)
+                type_of_val(&resolve_table_location),
+                // get schema
+                type_of_val(&get_table_schema),
+            ]);
     }
 
     //noinspection DuplicatedCode
@@ -164,8 +146,7 @@ mod tests {
         let url = Url::from_directory_path(test_dir).unwrap();
         let storage = Storage::from(vec![
             MountDef::builder().id("id").uri(url).path("/").build()?,
-        ])
-        .await?;
+        ])?;
         let storage = Arc::new(storage);
 
         let collection = seed_collection(

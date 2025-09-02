@@ -207,8 +207,7 @@ pub fn typed_string(input: &ItemStruct, typed: Option<TypedString>) -> proc_macr
 
     let expanded = quote! {
         #(#attrs)*
-        #[td_apiforge::apiserver_schema]
-        #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, sqlx::Type)]
+        #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, sqlx::Type, utoipa::ToSchema)]
         #[sqlx(transparent)]
         pub struct #name(String);
 
@@ -368,8 +367,7 @@ pub fn typed_int<T: FromStr + ToTokens + PartialOrd>(
     let expanded = typed_numeric(input, typed, quote! { std::num::ParseIntError });
 
     let expanded = quote! {
-        #[td_apiforge::apiserver_schema]
-        #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, sqlx::Type)]
+        #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, sqlx::Type, utoipa::ToSchema)]
         #[sqlx(transparent)]
         #expanded
     };
@@ -384,8 +382,7 @@ pub fn typed_float<T: FromStr + ToTokens + PartialOrd>(
     let expanded = typed_numeric(input, typed, quote! { std::num::ParseFloatError });
 
     let expanded = quote! {
-        #[td_apiforge::apiserver_schema]
-        #[derive(Debug, Clone, PartialEq, PartialOrd, sqlx::Type)]
+        #[derive(Debug, Clone, PartialEq, PartialOrd, sqlx::Type, utoipa::ToSchema)]
         #[sqlx(transparent)]
         #expanded
     };
@@ -580,8 +577,7 @@ pub fn typed_bool(input: &ItemStruct, typed: Option<TypedBool>) -> proc_macro2::
 
     let expanded = quote! {
         #(#attrs)*
-        #[td_apiforge::apiserver_schema]
-        #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, sqlx::Type)]
+        #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, sqlx::Type, utoipa::ToSchema)]
         #[sqlx(transparent)]
         pub struct #name(bool);
 
@@ -1386,12 +1382,11 @@ pub fn typed_enum(args: TokenStream, item: TokenStream) -> TokenStream {
     }
 
     let expanded = quote! {
-        #[td_apiforge::apiserver_schema]
         #[derive(
             Debug, Clone,
             PartialEq, Eq, Hash, PartialOrd, Ord,
             strum::EnumString, strum::Display, strum::EnumIter,
-            serde::Serialize, serde::Deserialize,
+            serde::Serialize, serde::Deserialize, utoipa::ToSchema
         )]
         #[strum(
             parse_err_fn = Self::parse_error,

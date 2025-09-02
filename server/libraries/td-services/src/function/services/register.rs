@@ -7,7 +7,6 @@ use crate::function::layers::{
     DO_AUTHZ, check_private_tables, register_dependencies, register_tables, register_triggers,
 };
 use td_authz::{Authz, AuthzContext};
-use td_error::TdError;
 use td_objects::crudl::{CreateRequest, RequestContext};
 use td_objects::rest_urls::CollectionParam;
 use td_objects::sql::DaoQueries;
@@ -33,10 +32,9 @@ use td_objects::types::table::TableDB;
 use td_objects::types::trigger::TriggerDBWithNames;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::IntoServiceProvider;
-use td_tower::{layers, provider};
+use td_tower::{layers, service_factory};
 
-#[provider(
+#[service_factory(
     name = RegisterFunctionService,
     request = CreateRequest<CollectionParam, FunctionRegister>,
     response = Function,
@@ -44,7 +42,7 @@ use td_tower::{layers, provider};
     context = DaoQueries,
     context = AuthzContext,
 )]
-fn provider() {
+fn service() {
     layers!(
         from_fn(
             With::<CreateRequest<CollectionParam, FunctionRegister>>::extract::<RequestContext>
@@ -126,6 +124,7 @@ mod tests {
     use std::collections::HashMap;
     use std::ops::Deref;
     use td_database::sql::DbPool;
+    use td_error::TdError;
     use td_objects::crudl::handle_sql_err;
     use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_collection::seed_collection;
@@ -137,6 +136,7 @@ mod tests {
         AccessTokenId, BundleId, Decorator, FunctionRuntimeValues, RoleId, ToCollectionId, UserId,
     };
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
@@ -159,7 +159,6 @@ mod tests {
         use td_tower::metadata::type_of_val;
 
         RegisterFunctionService::with_defaults(db)
-            .await
             .metadata()
             .await
             .assert_service::<CreateRequest<CollectionParam, FunctionRegister>, Function>(&[
@@ -302,7 +301,6 @@ mod tests {
             );
 
         let service = RegisterFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -344,7 +342,6 @@ mod tests {
             );
 
         let service = RegisterFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -386,7 +383,6 @@ mod tests {
             );
 
         let service = RegisterFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -428,7 +424,6 @@ mod tests {
             );
 
         let service = RegisterFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -497,7 +492,6 @@ mod tests {
             );
 
         let service = RegisterFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let _response = service.raw_oneshot(request).await?;
@@ -535,7 +529,6 @@ mod tests {
             );
 
         let service = RegisterFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -580,7 +573,6 @@ mod tests {
             );
 
         let service = RegisterFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let _response = service.raw_oneshot(request).await?;
@@ -622,7 +614,6 @@ mod tests {
             );
 
         let service = RegisterFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -717,7 +708,6 @@ mod tests {
             );
 
         let service = RegisterFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let _response = service.raw_oneshot(request).await?;
@@ -752,7 +742,6 @@ mod tests {
             );
 
         let service = RegisterFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let _ = service.raw_oneshot(request).await?;
@@ -808,7 +797,6 @@ mod tests {
             );
 
         let service = RegisterFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let res = service.raw_oneshot(request).await;
@@ -858,14 +846,12 @@ mod tests {
             );
 
         let service = RegisterFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let response = service.raw_oneshot(request.clone()).await;
         let _ = response?;
 
         let service = RegisterFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -985,7 +971,6 @@ mod tests {
             );
 
         let service = RegisterFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let res = service.raw_oneshot(request).await;
@@ -1033,7 +1018,6 @@ mod tests {
             );
 
         let service = RegisterFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let res = service.raw_oneshot(request).await;

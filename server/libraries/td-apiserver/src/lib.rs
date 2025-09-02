@@ -2,12 +2,11 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+pub mod apiserver;
 pub mod config;
-pub mod router;
-
 mod layers;
-mod macros;
-mod status;
+pub mod router;
+pub mod scheduler_server;
 
 use async_trait::async_trait;
 use axum::Router;
@@ -275,9 +274,10 @@ impl Server for TlsServer {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::router;
     use reqwest::Client;
     use std::net::{Ipv4Addr, SocketAddr};
+    use ta_apiserver::router::RouterExtension;
+    use td_apiforge::router_ext;
     use td_common::constants::TD_CROSS_BUILD;
     use td_common::env::check_flag_env;
     use testdir::testdir;
@@ -285,13 +285,19 @@ pub(crate) mod tests {
     use tokio::io::AsyncWriteExt;
     use tokio::net::TcpStream;
 
-    #[utoipa::path(get, path = "/test")]
-    async fn test() -> String {
-        String::from("test")
-    }
+    #[router_ext(TestRouter)]
+    mod routes {
+        use ta_apiserver::status::error_status::ErrorStatus;
+        use ta_apiserver::status::ok_status::RawStatus;
+        use td_apiforge::apiserver_path;
 
-    router! {
-        routes => { test }
+        const PATH: &str = "/test";
+        const TEST_TAG: &str = "Test";
+
+        #[apiserver_path(method = get, path = PATH, tag = TEST_TAG)]
+        async fn test() -> Result<RawStatus<String>, ErrorStatus> {
+            Ok(RawStatus::OK("test".to_string()))
+        }
     }
 
     pub(crate) async fn wait_for_server(
@@ -318,7 +324,7 @@ pub(crate) mod tests {
     async fn test_server_run() {
         let server = ServerBuilder::new(
             vec![SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 0)],
-            router().into(),
+            TestRouter::router(()).into(),
         )
         .build()
         .await
@@ -341,7 +347,7 @@ pub(crate) mod tests {
         assert_eq!(response.status(), 200);
 
         let body = response.text().await.expect("Failed to read response body");
-        assert_eq!(body, "test");
+        assert_eq!(body, "\"test\"");
     }
 
     #[tokio::test]
@@ -359,9 +365,6 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn test_tls_config_success() {
         let tls_path = testdir!();
-        eprintln!("The tls path is {tls_path:?}");
-        fs::create_dir_all(&tls_path).await.unwrap();
-        eprintln!("Created tls path is {tls_path:?}");
 
         // Write dummy PEM files (obviously, completely invalid for real use)
         let key_path = tls_path.join(SSL_KEY_PEM_FILE);

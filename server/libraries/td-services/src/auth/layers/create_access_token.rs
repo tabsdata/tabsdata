@@ -2,8 +2,7 @@
 // Copyright 2025. Tabs Data Inc.
 //
 
-use crate::auth::services::JwtConfig;
-use crate::auth::{TokenClaims, encode_token};
+use crate::auth::jwt::{JwtConfig, TokenClaims, encode_token};
 use td_common::id::Id;
 use td_error::TdError;
 use td_objects::types::auth::{SessionDB, TokenResponseX};

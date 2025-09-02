@@ -10,14 +10,12 @@ use td_objects::crudl::RequestContext;
 use td_objects::rest_urls::UserParam;
 use td_objects::types::basic::{AccessTokenId, RoleId, UserEnabled, UserId};
 use td_objects::types::user::UserUpdate;
+use td_tower::td_service::TdService;
 
 #[td_test::test(sqlx)]
 #[tokio::test]
 async fn test_user_cannot_enable_disable_themselves(db: DbPool) {
-    let service = UpdateUserService::with_defaults(db.clone())
-        .await
-        .service()
-        .await;
+    let service = UpdateUserService::with_defaults(db.clone()).service().await;
 
     let ctx = RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user());
 

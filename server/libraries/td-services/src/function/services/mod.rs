@@ -10,21 +10,8 @@ use crate::function::services::read::ReadFunctionService;
 use crate::function::services::register::RegisterFunctionService;
 use crate::function::services::update::UpdateFunctionService;
 use crate::function::services::upload::UploadFunctionService;
-use std::sync::Arc;
-use td_authz::AuthzContext;
-use td_database::sql::DbPool;
-use td_error::TdError;
-use td_objects::crudl::{
-    CreateRequest, DeleteRequest, ListRequest, ListResponse, ReadRequest, UpdateRequest,
-};
-use td_objects::rest_urls::{AtTimeParam, CollectionParam, FunctionParam};
-use td_objects::sql::DaoQueries;
-use td_objects::types::function::{
-    Bundle, Function, FunctionRegister, FunctionUpdate, FunctionUpload, FunctionWithTables,
-};
-use td_objects::types::table::{CollectionAtName, FunctionAtIdName};
-use td_storage::Storage;
-use td_tower::service_provider::TdBoxService;
+use getset::Getters;
+use td_tower::ServiceFactory;
 
 pub(crate) mod delete;
 pub(crate) mod history;
@@ -35,6 +22,8 @@ pub(crate) mod register;
 pub(crate) mod update;
 pub(crate) mod upload;
 
+#[derive(ServiceFactory, Getters)]
+#[getset(get = "pub")]
 pub struct FunctionServices {
     register: RegisterFunctionService,
     upload: UploadFunctionService,
@@ -44,89 +33,6 @@ pub struct FunctionServices {
     update: UpdateFunctionService,
     delete: DeleteFunctionService,
     history: FunctionHistoryService,
-}
-
-impl FunctionServices {
-    pub fn new(db: DbPool, authz_context: Arc<AuthzContext>, storage: Arc<Storage>) -> Self {
-        let queries = Arc::new(DaoQueries::default());
-        Self {
-            register: RegisterFunctionService::new(
-                db.clone(),
-                queries.clone(),
-                authz_context.clone(),
-            ),
-            upload: UploadFunctionService::new(
-                db.clone(),
-                queries.clone(),
-                authz_context.clone(),
-                storage.clone(),
-            ),
-            read_version: ReadFunctionService::new(
-                db.clone(),
-                queries.clone(),
-                authz_context.clone(),
-            ),
-            list_by_collection: FunctionListByCollectionService::new(
-                db.clone(),
-                queries.clone(),
-                authz_context.clone(),
-            ),
-            list: FunctionListService::new(db.clone(), queries.clone(), authz_context.clone()),
-            update: UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone()),
-            delete: DeleteFunctionService::new(db.clone(), queries.clone(), authz_context.clone()),
-            history: FunctionHistoryService::new(
-                db.clone(),
-                queries.clone(),
-                authz_context.clone(),
-            ),
-        }
-    }
-
-    pub async fn register(
-        &self,
-    ) -> TdBoxService<CreateRequest<CollectionParam, FunctionRegister>, Function, TdError> {
-        self.register.service().await
-    }
-
-    pub async fn upload(
-        &self,
-    ) -> TdBoxService<CreateRequest<CollectionParam, FunctionUpload>, Bundle, TdError> {
-        self.upload.service().await
-    }
-
-    pub async fn read_version(
-        &self,
-    ) -> TdBoxService<ReadRequest<FunctionParam>, FunctionWithTables, TdError> {
-        self.read_version.service().await
-    }
-
-    pub async fn list_by_collection(
-        &self,
-    ) -> TdBoxService<ListRequest<CollectionAtName>, ListResponse<Function>, TdError> {
-        self.list_by_collection.service().await
-    }
-
-    pub async fn list(
-        &self,
-    ) -> TdBoxService<ListRequest<AtTimeParam>, ListResponse<Function>, TdError> {
-        self.list.service().await
-    }
-
-    pub async fn update(
-        &self,
-    ) -> TdBoxService<UpdateRequest<FunctionParam, FunctionUpdate>, Function, TdError> {
-        self.update.service().await
-    }
-
-    pub async fn delete(&self) -> TdBoxService<DeleteRequest<FunctionParam>, (), TdError> {
-        self.delete.service().await
-    }
-
-    pub async fn history(
-        &self,
-    ) -> TdBoxService<ListRequest<FunctionAtIdName>, ListResponse<Function>, TdError> {
-        self.history.service().await
-    }
 }
 
 #[cfg(test)]

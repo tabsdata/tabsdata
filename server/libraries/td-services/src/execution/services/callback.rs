@@ -5,7 +5,6 @@
 use crate::execution::layers::update_status::{
     update_function_run_status, update_table_data_version_status, update_worker_status,
 };
-use td_error::TdError;
 use td_objects::crudl::UpdateRequest;
 use td_objects::rest_urls::FunctionRunIdParam;
 use td_objects::sql::DaoQueries;
@@ -20,17 +19,16 @@ use td_objects::types::execution::{
 };
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::IntoServiceProvider;
-use td_tower::{layers, provider};
+use td_tower::{layers, service_factory};
 
-#[provider(
+#[service_factory(
     name = ExecutionCallbackService,
     request = UpdateRequest<FunctionRunIdParam, CallbackRequest>,
     response = (),
     connection = TransactionProvider,
     context = DaoQueries,
 )]
-fn provider() {
+fn service() {
     layers!(
         // Extract from request.
         from_fn(
@@ -87,6 +85,7 @@ mod tests {
     use td_objects::types::worker::FunctionOutput;
     use td_objects::types::worker::v2::{FunctionOutputV2, TableInfo, WrittenTableV2};
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
@@ -95,7 +94,6 @@ mod tests {
         use td_tower::metadata::type_of_val;
 
         ExecutionCallbackService::with_defaults(db)
-            .await
             .metadata()
             .await
             .assert_service::<UpdateRequest<FunctionRunIdParam, CallbackRequest>, ()>(&[
@@ -180,7 +178,6 @@ mod tests {
                         );
 
                 let service = ExecutionCallbackService::with_defaults(db.clone())
-                    .await
                     .service()
                     .await;
                 service.raw_oneshot(request).await

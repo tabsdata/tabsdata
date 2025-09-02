@@ -722,10 +722,11 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.2.34"
+version = "1.2.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "42bc4aea80032b7bf409b0bc7ccad88853858911b7713a8062fdc0623867bedc"
+checksum = "590f9024a68a8c40351881787f1934dc11afd69090f5edb6831464694d836ea3"
 dependencies = [
+ "find-msvc-tools",
  "jobserver",
  "libc",
  "shlex",
@@ -1262,9 +1263,9 @@ dependencies = [
 
 [[package]]
 name = "deranged"
-version = "0.4.0"
+version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c9e6a11ca8224451684bc0d7d5a7adbf8f2fd6887261a1cfc3c0432f9d4068e"
+checksum = "d630bccd429a5bb5a64b5e94f693bfc48c9f8566418fda4c494cc94f911f87cc"
 dependencies = [
  "powerfmt",
 ]
@@ -1540,6 +1541,12 @@ dependencies = [
  "libredox",
  "windows-sys 0.60.2",
 ]
+
+[[package]]
+name = "find-msvc-tools"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e178e4fba8a2726903f6ba98a6d221e76f9c12c650d5dc0e6afdc50677b49650"
 
 [[package]]
 name = "fixedbitset"
@@ -5363,7 +5370,22 @@ name = "ta-apiserver"
 version = "1.3.0"
 dependencies = [
  "axum 0.8.4",
+ "derive_builder",
+ "getset",
+ "http",
  "openssl",
+ "serde",
+ "serde_json",
+ "strum",
+ "td-error",
+ "td-objects",
+ "td-tower",
+ "thiserror 2.0.16",
+ "tokio",
+ "tower 0.5.2",
+ "tracing",
+ "utoipa",
+ "utoipa-axum",
 ]
 
 [[package]]
@@ -5430,18 +5452,12 @@ dependencies = [
 name = "td-apiforge"
 version = "1.3.0"
 dependencies = [
- "axum 0.8.4",
  "darling 0.21.3",
- "derive_builder",
- "getset",
  "openssl",
- "proc-macro2",
  "quote",
- "serde",
  "syn",
  "td-shared",
  "utoipa",
- "walkdir",
 ]
 
 [[package]]
@@ -5454,18 +5470,16 @@ dependencies = [
  "axum-server",
  "chrono",
  "clap",
- "clap_derive",
- "derive_builder",
  "getset",
  "http",
  "openssl",
- "paste",
  "reqwest",
  "ring",
  "rustls",
  "serde",
  "serde_json",
  "strum",
+ "ta-apiserver",
  "td-apiforge",
  "td-authz",
  "td-build",
@@ -5481,6 +5495,7 @@ dependencies = [
  "td-tower",
  "te-apiserver",
  "te-execution",
+ "te-services",
  "testdir",
  "thiserror 2.0.16",
  "tokio",
@@ -5567,7 +5582,6 @@ dependencies = [
  "sqlx",
  "strum",
  "sysinfo 0.37.0",
- "td-apiforge",
  "td-attach",
  "td-build",
  "td-error",
@@ -5675,7 +5689,6 @@ dependencies = [
  "serde_yaml",
  "sqlx",
  "strum",
- "td-apiforge",
  "td-common",
  "td-database",
  "td-error",
@@ -5769,18 +5782,21 @@ dependencies = [
  "clap",
  "clap_derive",
  "getset",
- "http",
  "openssl",
  "paste",
  "path-slash",
  "reqwest",
  "serde",
+ "ta-apiserver",
  "ta-tableframe",
+ "td-apiforge",
  "td-apiserver",
  "td-build",
  "td-common",
  "td-database",
+ "td-objects",
  "td-process",
+ "td-services",
  "td-shuttle",
  "td-storage",
  "td-supervisor",
@@ -5823,6 +5839,7 @@ dependencies = [
  "sha2",
  "sqlx",
  "strum",
+ "sync_wrapper",
  "ta-execution",
  "td-authz",
  "td-common",
@@ -5831,6 +5848,7 @@ dependencies = [
  "td-execution",
  "td-objects",
  "td-security",
+ "td-services",
  "td-storage",
  "td-tableframe",
  "td-test",
@@ -6023,18 +6041,15 @@ name = "td-tower"
 version = "1.3.0"
 dependencies = [
  "async-trait",
- "axum 0.8.4",
  "derive_builder",
  "futures",
  "futures-util",
  "getset",
- "http",
  "openssl",
  "serde",
  "serde_json",
  "sqlx",
  "strum",
- "td-apiforge",
  "td-database",
  "td-error",
  "thiserror 2.0.16",
@@ -6072,10 +6087,10 @@ dependencies = [
 name = "te-apiserver"
 version = "1.3.0"
 dependencies = [
- "axum 0.8.4",
  "openssl",
  "ta-apiserver",
  "td-build",
+ "utoipa-axum",
 ]
 
 [[package]]
@@ -6090,6 +6105,16 @@ dependencies = [
  "ta-execution",
  "td-error",
  "td-objects",
+]
+
+[[package]]
+name = "te-services"
+version = "1.3.0"
+dependencies = [
+ "axum 0.8.4",
+ "openssl",
+ "td-build",
+ "td-tower",
 ]
 
 [[package]]
@@ -6219,12 +6244,11 @@ dependencies = [
 
 [[package]]
 name = "time"
-version = "0.3.41"
+version = "0.3.42"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a7619e19bc266e0f9c5e6686659d394bc57973859340060a69221e57dbc0c40"
+checksum = "8ca967379f9d8eb8058d86ed467d81d03e81acd45757e4ca341c24affbe8e8e3"
 dependencies = [
  "deranged",
- "itoa",
  "num-conv",
  "powerfmt",
  "serde",
@@ -6234,15 +6258,15 @@ dependencies = [
 
 [[package]]
 name = "time-core"
-version = "0.1.4"
+version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c9e9a38711f559d9e3ce1cdb06dd7c5b8ea546bc90052da6d06bb76da74bb07c"
+checksum = "a9108bb380861b07264b950ded55a44a14a4adc68b9f5efd85aafc3aa4d40a68"
 
 [[package]]
 name = "time-macros"
-version = "0.2.22"
+version = "0.2.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3526739392ec93fd8b359c8e98514cb3e8e021beb4e5f597b00a0221f8ed8a49"
+checksum = "7182799245a7264ce590b349d90338f1c1affad93d2639aed5f8f69c090b334c"
 dependencies = [
  "num-conv",
  "time-core",

@@ -10,14 +10,12 @@ use td_objects::crudl::RequestContext;
 use td_objects::rest_urls::UserParam;
 use td_objects::types::basic::{AccessTokenId, Password, RoleId, UserId};
 use td_objects::types::user::UserUpdate;
+use td_tower::td_service::TdService;
 
 #[td_test::test(sqlx)]
 #[tokio::test]
 async fn test_cannot_change_self_password(db: DbPool) {
-    let service = UpdateUserService::with_defaults(db.clone())
-        .await
-        .service()
-        .await;
+    let service = UpdateUserService::with_defaults(db.clone()).service().await;
 
     let ctx = RequestContext::with(
         AccessTokenId::default(),

@@ -17,112 +17,19 @@ use crate::table::services::list_by_collection::TableListByCollectionService;
 use crate::table::services::list_data_versions::TableListDataVersionsService;
 use crate::table::services::sample::TableSampleService;
 use crate::table::services::schema::TableSchemaService;
-use std::sync::Arc;
-use td_authz::AuthzContext;
-use td_database::sql::DbPool;
-use td_error::TdError;
-use td_objects::crudl::{DeleteRequest, ListRequest, ListResponse, ReadRequest};
-use td_objects::rest_urls::{AtTimeParam, TableParam};
-use td_objects::sql::DaoQueries;
-use td_objects::types::execution::TableDataVersion;
-use td_objects::types::stream::BoxedSyncStream;
-use td_objects::types::table::{
-    CollectionAtName, Table, TableAtIdName, TableSampleAtName, TableSchema,
-};
-use td_storage::{SPath, Storage};
-use td_tower::service_provider::TdBoxService;
+use getset::Getters;
+use td_tower::ServiceFactory;
 
+#[derive(ServiceFactory, Getters)]
+#[getset(get = "pub")]
 pub struct TableServices {
-    list_table_by_collection: TableListByCollectionService,
-    list_table: TableListService,
-    list_table_data_versions: TableListDataVersionsService,
-    table_schema: TableSchemaService,
-    table_download: TableDownloadService,
-    table_sample: TableSampleService,
-    table_delete: TableDeleteService,
-}
-
-impl TableServices {
-    pub fn new(db: DbPool, authz_context: Arc<AuthzContext>, storage: Arc<Storage>) -> Self {
-        let queries = Arc::new(DaoQueries::default());
-        Self {
-            list_table_by_collection: TableListByCollectionService::new(
-                db.clone(),
-                queries.clone(),
-                authz_context.clone(),
-            ),
-            list_table: TableListService::new(db.clone(), queries.clone(), authz_context.clone()),
-            list_table_data_versions: TableListDataVersionsService::new(
-                db.clone(),
-                queries.clone(),
-                authz_context.clone(),
-            ),
-            table_schema: TableSchemaService::new(
-                db.clone(),
-                queries.clone(),
-                authz_context.clone(),
-                storage.clone(),
-            ),
-            table_download: TableDownloadService::new(
-                db.clone(),
-                queries.clone(),
-                authz_context.clone(),
-            ),
-            table_sample: TableSampleService::new(
-                db.clone(),
-                queries.clone(),
-                authz_context.clone(),
-                storage.clone(),
-            ),
-            table_delete: TableDeleteService::new(
-                db.clone(),
-                queries.clone(),
-                authz_context.clone(),
-            ),
-        }
-    }
-
-    pub async fn list_table_by_collection_service(
-        &self,
-    ) -> TdBoxService<ListRequest<CollectionAtName>, ListResponse<Table>, TdError> {
-        self.list_table_by_collection.service().await
-    }
-
-    pub async fn list_table_service(
-        &self,
-    ) -> TdBoxService<ListRequest<AtTimeParam>, ListResponse<Table>, TdError> {
-        self.list_table.service().await
-    }
-
-    pub async fn list_table_data_versions_service(
-        &self,
-    ) -> TdBoxService<ListRequest<TableAtIdName>, ListResponse<TableDataVersion>, TdError> {
-        self.list_table_data_versions.service().await
-    }
-
-    pub async fn table_schema_service(
-        &self,
-    ) -> TdBoxService<ReadRequest<TableAtIdName>, TableSchema, TdError> {
-        self.table_schema.service().await
-    }
-
-    pub async fn table_download_service(
-        &self,
-    ) -> TdBoxService<ReadRequest<TableAtIdName>, Option<SPath>, TdError> {
-        self.table_download.service().await
-    }
-
-    pub async fn table_sample_service(
-        &self,
-    ) -> TdBoxService<ReadRequest<TableSampleAtName>, BoxedSyncStream, TdError> {
-        self.table_sample.service().await
-    }
-
-    pub async fn table_delete_service(
-        &self,
-    ) -> TdBoxService<DeleteRequest<TableParam>, (), TdError> {
-        self.table_delete.service().await
-    }
+    list_by_collection: TableListByCollectionService,
+    list: TableListService,
+    list_data_versions: TableListDataVersionsService,
+    schema: TableSchemaService,
+    download: TableDownloadService,
+    sample: TableSampleService,
+    delete: TableDeleteService,
 }
 
 #[cfg(test)]

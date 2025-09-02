@@ -11,6 +11,7 @@ use td_objects::test_utils::seed_collection::seed_collection;
 use td_objects::tower_service::authz::AuthzError;
 use td_objects::types::basic::{AccessTokenId, CollectionName, RoleId, UserId};
 use td_objects::types::collection::CollectionUpdate;
+use td_tower::td_service::TdService;
 
 #[td_test::test(sqlx)]
 #[tokio::test]
@@ -18,10 +19,7 @@ async fn test_not_allowed_to_update_collection(db: DbPool) {
     let name = CollectionName::try_from("ds0").unwrap();
     let _ = seed_collection(&db, &name, &UserId::admin()).await;
 
-    let service = UpdateCollectionService::with_defaults(db)
-        .await
-        .service()
-        .await;
+    let service = UpdateCollectionService::with_defaults(db).service().await;
 
     let name = CollectionName::try_from("ds00").unwrap();
 

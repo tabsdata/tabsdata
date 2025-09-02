@@ -11,6 +11,7 @@ use td_objects::rest_urls::CollectionParam;
 use td_objects::test_utils::seed_collection::seed_collection;
 use td_objects::types::basic::{AccessTokenId, CollectionName, RoleId, UserId};
 use td_objects::types::collection::CollectionUpdate;
+use td_tower::td_service::TdService;
 
 #[td_test::test(sqlx)]
 #[tokio::test]
@@ -38,10 +39,7 @@ async fn test_update_collection_validate(db: DbPool) {
         update,
     );
 
-    let service = UpdateCollectionService::with_defaults(db)
-        .await
-        .service()
-        .await;
+    let service = UpdateCollectionService::with_defaults(db).service().await;
     assert_service_error(service, request, |err| {
         #[allow(unreachable_patterns)]
         match err {

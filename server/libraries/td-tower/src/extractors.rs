@@ -1,11 +1,10 @@
 //
-//  Copyright 2024 Tabs Data Inc.
+// Copyright 2024 Tabs Data Inc.
 //
 
 use crate::ctx_service::{CtxMap, InnerContext};
 use crate::error::{ConnectionError, FromHandlerError};
 use crate::handler::Handler;
-use async_trait::async_trait;
 use sqlx::pool::PoolConnection;
 use sqlx::{Sqlite, SqliteConnection, Transaction};
 use std::any::type_name;
@@ -14,10 +13,9 @@ use std::sync::Arc;
 use tokio::sync::{Mutex, MutexGuard};
 
 /// Trait for extracting an instance of a type from a `Handler`.
-#[async_trait]
 pub trait FromHandler: Sized {
     /// Extracts an instance of the type from the given `Handler`.
-    async fn from_handler(handler: &Handler) -> Result<Self, FromHandlerError>;
+    fn from_handler(handler: &Handler) -> Result<Self, FromHandlerError>;
 }
 
 /// Wrapper for an input value. Input values can also be generated in inner services.
@@ -35,12 +33,11 @@ impl<T> Clone for Input<T> {
     }
 }
 
-#[async_trait]
 impl<T> FromHandler for Input<T>
 where
     T: Send + Sync + 'static,
 {
-    async fn from_handler(handler: &Handler) -> Result<Self, FromHandlerError> {
+    fn from_handler(handler: &Handler) -> Result<Self, FromHandlerError> {
         let value = match handler.get::<Input<T>>() {
             // Note that this just clones the Arc, not T itself
             Some(value) => Ok(value.clone()),
@@ -65,12 +62,11 @@ impl<T> Clone for SrvCtx<T> {
     }
 }
 
-#[async_trait]
 impl<T> FromHandler for SrvCtx<T>
 where
     T: Send + Sync + 'static,
 {
-    async fn from_handler(handler: &Handler) -> Result<Self, FromHandlerError> {
+    fn from_handler(handler: &Handler) -> Result<Self, FromHandlerError> {
         let value = match handler.get::<SrvCtx<T>>() {
             // Note that this just clones the Arc, not T itself
             Some(value) => Ok(value.clone()),
@@ -150,9 +146,8 @@ impl Clone for Connection {
     }
 }
 
-#[async_trait]
 impl FromHandler for Connection {
-    async fn from_handler(handler: &Handler) -> Result<Self, FromHandlerError> {
+    fn from_handler(handler: &Handler) -> Result<Self, FromHandlerError> {
         if let Some(conn) = handler.get::<Connection>() {
             // Note that this just clones the Arc, not the connection itself
             Ok(conn.clone())
@@ -172,9 +167,8 @@ impl ReqCtx {
     }
 }
 
-#[async_trait]
 impl FromHandler for ReqCtx {
-    async fn from_handler(handler: &Handler) -> Result<Self, FromHandlerError> {
+    fn from_handler(handler: &Handler) -> Result<Self, FromHandlerError> {
         let value = match handler.get::<ReqCtx>() {
             Some(value) => Ok(value.clone()),
             None => Err(FromHandlerError::NotFound(String::from(
@@ -197,7 +191,7 @@ mod tests {
         let mut handler = Handler::new();
         handler.insert(input.clone());
 
-        let retrieved_input: Input<i32> = Input::from_handler(&handler).await.unwrap();
+        let retrieved_input: Input<i32> = Input::from_handler(&handler).unwrap();
         assert_eq!(*retrieved_input.0, 42);
     }
 
@@ -207,7 +201,7 @@ mod tests {
         let mut handler = Handler::new();
         handler.insert(context.clone());
 
-        let retrieved_context: SrvCtx<String> = SrvCtx::from_handler(&handler).await.unwrap();
+        let retrieved_context: SrvCtx<String> = SrvCtx::from_handler(&handler).unwrap();
         assert_eq!(*retrieved_context.0, "test");
     }
 
@@ -221,9 +215,7 @@ mod tests {
         let mut handler = Handler::new();
         handler.insert(connection.clone());
 
-        let retrieved_connection = extractors::Connection::from_handler(&handler)
-            .await
-            .unwrap();
+        let retrieved_connection = extractors::Connection::from_handler(&handler).unwrap();
         assert!(Arc::ptr_eq(&retrieved_connection.0, &connection.0));
 
         let mut conn = retrieved_connection.0.lock().await;
@@ -241,9 +233,7 @@ mod tests {
         let mut handler = Handler::new();
         handler.insert(connection.clone());
 
-        let retrieved_connection = extractors::Connection::from_handler(&handler)
-            .await
-            .unwrap();
+        let retrieved_connection = extractors::Connection::from_handler(&handler).unwrap();
         assert!(Arc::ptr_eq(&retrieved_connection.0, &connection.0));
 
         let mut conn = retrieved_connection.0.lock().await;
@@ -257,7 +247,7 @@ mod tests {
         let mut handler = Handler::new();
         handler.insert(context.clone());
 
-        let retrieved_context: ReqCtx = ReqCtx::from_handler(&handler).await.unwrap();
+        let retrieved_context: ReqCtx = ReqCtx::from_handler(&handler).unwrap();
         assert_eq!(retrieved_context.0.error_count().await, 0);
         assert_eq!(retrieved_context.0.warning_count().await, 0);
         assert_eq!(retrieved_context.0.notification_count().await, 0);

@@ -4,7 +4,7 @@
 
 use crate::auth::layers::refresh_sessions::refresh_sessions;
 use crate::auth::session::Sessions;
-use td_error::TdError;
+
 use td_objects::crudl::{RequestContext, UpdateRequest};
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::from::{
@@ -15,10 +15,9 @@ use td_objects::types::auth::{SessionDB, SessionLogoutDB, SessionLogoutDBBuilder
 use td_objects::types::basic::{AccessTokenId, AtTime};
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::IntoServiceProvider;
-use td_tower::{layers, provider};
+use td_tower::{layers, service_factory};
 
-#[provider(
+#[service_factory(
     name = LogoutService,
     request = UpdateRequest<(), ()>,
     response = (),
@@ -26,7 +25,7 @@ use td_tower::{layers, provider};
     context = DaoQueries,
     context = Sessions,
 )]
-fn provider() {
+fn service() {
     layers!(
         // extract access token id and request time from request context
         from_fn(With::<UpdateRequest<(), ()>>::extract::<RequestContext>),
@@ -45,13 +44,17 @@ fn provider() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::auth::decode_token;
+    use crate::Context;
+    use crate::auth::jwt::decode_token;
     use crate::auth::services::AuthServices;
     use crate::auth::services::tests::get_session;
     use td_database::sql::DbPool;
+    use td_error::TdError;
     use td_objects::types::auth::Login;
     use td_objects::types::basic::{Password, RoleId, RoleName, SessionStatus, UserId, UserName};
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::factory::ServiceFactory;
+    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
@@ -60,7 +63,6 @@ mod tests {
         use td_tower::metadata::type_of_val;
 
         LogoutService::with_defaults(db.clone())
-            .await
             .metadata()
             .await
             .assert_service::<UpdateRequest<(), ()>, ()>(&[
@@ -81,8 +83,9 @@ mod tests {
     #[td_test::test(sqlx)]
     #[tokio::test]
     async fn test_logout_ok(db: DbPool) -> Result<(), TdError> {
-        let auth_services = AuthServices::with_defaults(db.clone()).await;
-        let service = auth_services.login_service().await;
+        let context = Context::with_defaults(db.clone());
+        let auth_services = AuthServices::build(&context);
+        let service = auth_services.login.service().await;
 
         let request = Login::builder()
             .name(UserName::try_from("admin")?)
@@ -93,9 +96,9 @@ mod tests {
         assert!(res.is_ok());
         let token_response = res?;
         let access_token = token_response.access_token();
-        let access_token_id = decode_token(auth_services.jwt_settings(), access_token)?.jti;
+        let access_token_id = *decode_token(&context.jwt_config, access_token)?.jti();
 
-        let service = auth_services.logout_service().await;
+        let service = auth_services.logout.service().await;
 
         let request =
             RequestContext::with(access_token_id, UserId::admin(), RoleId::user()).update((), ());

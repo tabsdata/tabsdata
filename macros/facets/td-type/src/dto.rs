@@ -2,13 +2,13 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::type_builder::{TdTypeFields, parse_input_item_struct, td_type};
+use crate::type_builder::{parse_input_item_struct, td_type, TdTypeFields};
 use darling::{FromDeriveInput, FromField, FromMeta};
 use proc_macro::TokenStream;
 use proc_macro2::Ident;
 use quote::{format_ident, quote};
 use std::collections::HashMap;
-use syn::{DeriveInput, ItemStruct, parse_macro_input};
+use syn::{parse_macro_input, DeriveInput, ItemStruct};
 
 pub fn dto(_args: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as ItemStruct);
@@ -54,8 +54,7 @@ pub fn dto(_args: TokenStream, item: TokenStream) -> TokenStream {
     });
 
     let expanded = quote! {
-        #[derive(Debug, Clone, Eq, PartialEq, td_type::DtoType, derive_builder::Builder, getset::Getters, serde::Serialize, serde::Deserialize)]
-        #[td_apiforge::apiserver_schema]
+        #[derive(Debug, Clone, Eq, PartialEq, td_type::DtoType, derive_builder::Builder, getset::Getters, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
         #[builder(try_setter, setter(into))]
         #[getset(get = "pub")]
         #(#attrs)*

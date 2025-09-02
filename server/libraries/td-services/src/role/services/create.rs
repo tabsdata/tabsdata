@@ -3,7 +3,6 @@
 //
 
 use td_authz::{Authz, AuthzContext};
-use td_error::TdError;
 use td_objects::crudl::{CreateRequest, RequestContext};
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, SecAdmin, System};
@@ -17,10 +16,9 @@ use td_objects::types::role::{
 };
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::IntoServiceProvider;
-use td_tower::{layers, provider};
+use td_tower::{layers, service_factory};
 
-#[provider(
+#[service_factory(
     name = CreateRoleService,
     request = CreateRequest<(), RoleCreate>,
     response = Role,
@@ -28,7 +26,7 @@ use td_tower::{layers, provider};
     context = DaoQueries,
     context = AuthzContext,
 )]
-fn provider() {
+fn service() {
     layers!(
         from_fn(With::<CreateRequest<(), RoleCreate>>::extract::<RequestContext>),
         from_fn(AuthzOn::<System>::set),
@@ -49,10 +47,12 @@ fn provider() {
 mod tests {
     use super::*;
     use td_database::sql::DbPool;
+    use td_error::TdError;
     use td_objects::crudl::RequestContext;
     use td_objects::test_utils::seed_role::get_role;
     use td_objects::types::basic::{AccessTokenId, RoleName, UserId};
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
@@ -62,7 +62,6 @@ mod tests {
         use td_tower::metadata::type_of_val;
 
         CreateRoleService::with_defaults(db)
-            .await
             .metadata()
             .await
             .assert_service::<CreateRequest<(), RoleCreate>, Role>(&[
@@ -96,10 +95,7 @@ mod tests {
         )
         .create((), create);
 
-        let service = CreateRoleService::with_defaults(db.clone())
-            .await
-            .service()
-            .await;
+        let service = CreateRoleService::with_defaults(db.clone()).service().await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
 

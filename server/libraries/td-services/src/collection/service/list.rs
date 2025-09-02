@@ -3,7 +3,6 @@
 //
 
 use td_authz::{Authz, AuthzContext};
-use td_error::TdError;
 use td_objects::crudl::{ListRequest, ListResponse, RequestContext};
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::NoPermissions;
@@ -13,10 +12,9 @@ use td_objects::types::basic::VisibleCollections;
 use td_objects::types::collection::CollectionRead;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::IntoServiceProvider;
-use td_tower::{layers, provider};
+use td_tower::{layers, service_factory};
 
-#[provider(
+#[service_factory(
     name = ListCollectionsService,
     request = ListRequest<()>,
     response = ListResponse<CollectionRead>,
@@ -24,7 +22,7 @@ use td_tower::{layers, provider};
     context = DaoQueries,
     context = AuthzContext,
 )]
-fn provider() {
+fn service() {
     layers!(
         from_fn(With::<ListRequest<()>>::extract::<RequestContext>),
         from_fn(Authz::<NoPermissions>::visible_collections),
@@ -38,6 +36,7 @@ mod tests {
     use std::sync::Arc;
     use td_authz::AuthzContext;
     use td_database::sql::DbPool;
+    use td_error::TdError;
     use td_objects::crudl::{ListParams, RequestContext};
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_role::seed_role;
@@ -47,6 +46,7 @@ mod tests {
         AccessTokenId, CollectionName, Description, RoleId, RoleName, UserEnabled, UserId, UserName,
     };
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
@@ -55,7 +55,6 @@ mod tests {
         use td_tower::metadata::type_of_val;
 
         ListCollectionsService::with_defaults(db)
-            .await
             .metadata()
             .await
             .assert_service::<ListRequest<()>, ListResponse<CollectionRead>>(&[
@@ -117,7 +116,6 @@ mod tests {
                 .list((), ListParams::default());
 
         let service = ListCollectionsService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -131,7 +129,6 @@ mod tests {
             .list((), ListParams::default());
 
         let service = ListCollectionsService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;

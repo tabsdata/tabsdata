@@ -1,10 +1,10 @@
 //
-//  Copyright 2024 Tabs Data Inc.
+// Copyright 2025 Tabs Data Inc.
 //
 
 //! API Server CLI configuration and parameters.
 
-use clap_derive::{Args, ValueEnum};
+use clap::{Args, ValueEnum};
 use getset::Getters;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
@@ -14,7 +14,7 @@ use strum::{Display, EnumString, ParseError};
 use td_database::sql::SqliteConfig;
 use td_error::td_error;
 use td_security::config::PasswordHashingConfig;
-use td_services::auth::services::JwtConfig;
+use td_services::auth::jwt::JwtConfig;
 use td_storage::MountDef;
 use te_execution::transaction::TransactionBy;
 

@@ -3,7 +3,6 @@
 //
 
 use td_authz::{Authz, AuthzContext};
-use td_error::TdError;
 use td_objects::crudl::{ListRequest, ListResponse, RequestContext};
 use td_objects::sql::{DaoQueries, NoListFilter};
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead};
@@ -17,10 +16,9 @@ use td_objects::types::function::{Function, FunctionDBWithNames};
 use td_objects::types::table::FunctionAtIdName;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::IntoServiceProvider;
-use td_tower::{layers, provider};
+use td_tower::{layers, service_factory};
 
-#[provider(
+#[service_factory(
     name = FunctionHistoryService,
     request = ListRequest<FunctionAtIdName>,
     response = ListResponse<Function>,
@@ -28,7 +26,7 @@ use td_tower::{layers, provider};
     context = DaoQueries,
     context = AuthzContext,
 )]
-fn provider() {
+fn service() {
     layers!(
         from_fn(With::<ListRequest<FunctionAtIdName>>::extract::<RequestContext>),
         from_fn(With::<ListRequest<FunctionAtIdName>>::extract_name::<FunctionAtIdName>),
@@ -59,6 +57,7 @@ mod tests {
     use crate::function::services::delete::DeleteFunctionService;
     use crate::function::services::update::UpdateFunctionService;
     use td_database::sql::DbPool;
+    use td_error::TdError;
     use td_objects::crudl::{ListParams, ListParamsBuilder};
     use td_objects::rest_urls::FunctionParam;
     use td_objects::test_utils::seed_collection::seed_collection;
@@ -68,6 +67,7 @@ mod tests {
     };
     use td_objects::types::function::{FunctionRegister, FunctionUpdate};
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
@@ -76,7 +76,6 @@ mod tests {
         use td_tower::metadata::type_of_val;
 
         FunctionHistoryService::with_defaults(db)
-            .await
             .metadata()
             .await
             .assert_service::<ListRequest<FunctionAtIdName>, ListResponse<Function>>(&[
@@ -159,7 +158,6 @@ mod tests {
             );
 
         let service = UpdateFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -176,7 +174,6 @@ mod tests {
                     .build()?,
             );
         let service = DeleteFunctionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         service.raw_oneshot(request).await?;
@@ -213,7 +210,6 @@ mod tests {
             );
 
         let service = FunctionHistoryService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -234,7 +230,6 @@ mod tests {
             );
 
         let service = FunctionHistoryService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -256,7 +251,6 @@ mod tests {
             );
 
         let service = FunctionHistoryService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -278,7 +272,6 @@ mod tests {
             );
 
         let service = FunctionHistoryService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -299,7 +292,6 @@ mod tests {
             );
 
         let service = FunctionHistoryService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;

@@ -6,7 +6,6 @@ use crate::collection::service::layer::update::{
     UpdateCollectionDBBuilderUpdate, update_collection_validate,
 };
 use td_authz::{Authz, AuthzContext};
-use td_error::TdError;
 use td_objects::crudl::{RequestContext, UpdateRequest};
 use td_objects::rest_urls::CollectionParam;
 use td_objects::sql::DaoQueries;
@@ -23,10 +22,9 @@ use td_objects::types::collection::{
 };
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::IntoServiceProvider;
-use td_tower::{layers, provider};
+use td_tower::{layers, service_factory};
 
-#[provider(
+#[service_factory(
     name = UpdateCollectionService,
     request = UpdateRequest<CollectionParam, CollectionUpdate>,
     response = CollectionRead,
@@ -34,7 +32,7 @@ use td_tower::{layers, provider};
     context = DaoQueries,
     context = AuthzContext,
 )]
-fn provider() {
+fn service() {
     layers!(
         from_fn(
             With::<UpdateRequest<CollectionParam, CollectionUpdate>>::extract::<RequestContext>
@@ -76,6 +74,7 @@ mod tests {
     };
     use td_objects::types::collection::CollectionUpdate;
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
@@ -84,7 +83,6 @@ mod tests {
         use td_tower::metadata::type_of_val;
 
         UpdateCollectionService::with_defaults(db)
-            .await
             .metadata()
             .await
             .assert_service::<UpdateRequest<CollectionParam, CollectionUpdate>, CollectionRead>(&[
@@ -151,10 +149,7 @@ mod tests {
             update,
         );
 
-        let service = UpdateCollectionService::with_defaults(db)
-            .await
-            .service()
-            .await;
+        let service = UpdateCollectionService::with_defaults(db).service().await;
         let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
         let updated = response.unwrap();

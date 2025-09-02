@@ -2,11 +2,11 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use crate::scheduler::ServerUrl;
 use http::Method;
 use itertools::{Either, Itertools};
 use sqlx::SqliteConnection;
 use std::collections::{HashMap, HashSet};
-use std::net::SocketAddr;
 use std::ops::Deref;
 use td_common::server::WorkerName::FUNCTION;
 use td_common::server::{
@@ -48,7 +48,7 @@ pub async fn create_locked_workers<T: WorkerMessageQueue>(
     SrvCtx(message_queue): SrvCtx<T>,
     SrvCtx(queries): SrvCtx<DaoQueries>,
     SrvCtx(storage): SrvCtx<Storage>,
-    SrvCtx(server_url): SrvCtx<SocketAddr>,
+    SrvCtx(server_url): SrvCtx<ServerUrl>,
     Connection(connection): Connection,
     Input(function_runs): Input<Vec<FunctionRunToExecuteDB>>,
 ) -> Result<Vec<WorkerDB>, TdError> {

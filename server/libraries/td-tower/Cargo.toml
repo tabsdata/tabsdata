@@ -28,7 +28,7 @@ test_tower_metadata = []
 test-utils = []
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "serde_json", "td-build", "thiserror", "utoipa", "strum", "toml"]
+ignored = ["openssl", "serde_json", "td-build", "strum", "toml"]
 
 # Build dependencies
 
@@ -44,7 +44,6 @@ ignored = ["openssl", "serde_json", "td-build", "thiserror", "utoipa", "strum", 
 
 ## Macros
 
-td-apiforge = { workspace = true }
 tm-tower = { workspace = true }
 
 ## Libraries
@@ -55,12 +54,10 @@ td-error = { workspace = true }
 # External dependencies
 
 async-trait = { workspace = true }
-axum = { workspace = true }
 derive_builder = { workspace = true }
 futures = { workspace = true }
 futures-util = { workspace = true }
 getset = { workspace = true }
-http = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sqlx = { workspace = true }

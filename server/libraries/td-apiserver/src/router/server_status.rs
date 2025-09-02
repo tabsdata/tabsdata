@@ -2,49 +2,63 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-//! Users API Service for API Server.
+use td_apiforge::router_ext;
 
-#![allow(clippy::upper_case_acronyms)]
+#[router_ext(ServerStatusRouter)]
+mod routes {
+    use axum::Extension;
+    use axum::extract::State;
+    use std::sync::Arc;
+    use ta_apiserver::status::error_status::ErrorStatus;
+    use ta_apiserver::status::ok_status::GetStatus;
+    use td_apiforge::apiserver_path;
+    use td_objects::crudl::RequestContext;
+    use td_objects::rest_urls::{RUNTIME_INFO, SERVER_STATUS};
+    use td_objects::types::runtime_info::RuntimeInfo;
+    use td_objects::types::system::ApiStatus;
+    use td_services::execution::services::ExecutionServices;
+    use td_services::system::services::SystemServices;
+    use td_tower::td_service::TdService;
+    use tower::ServiceExt;
 
-use crate::router;
-use crate::router::state::System;
-use crate::status::error_status::ErrorStatus;
-use crate::status::ok_status::GetStatus;
-use axum::extract::State;
-use td_apiforge::{apiserver_path, apiserver_tag};
-use td_objects::types::system::ApiStatus;
-use tower::ServiceExt;
+    const STATUS_TAG: &str = "Status";
 
-pub const STATUS: &str = "/status";
+    #[apiserver_path(method = get, path = SERVER_STATUS, tag = STATUS_TAG)]
+    #[doc = "API Server Status"]
+    pub async fn status(
+        State(status_state): State<Arc<SystemServices>>,
+    ) -> Result<GetStatus<ApiStatus>, ErrorStatus> {
+        let response = status_state.status().service().await.oneshot(()).await?;
+        Ok(GetStatus::OK(response))
+    }
 
-apiserver_tag!(name = "Status", description = "Server Status API");
-
-router! {
-    state => { System },
-    routes => { status }
-}
-
-#[apiserver_path(method = get, path = STATUS, tag = STATUS_TAG)]
-#[doc = "API Server Status"]
-async fn status(State(status_state): State<System>) -> Result<GetStatus<ApiStatus>, ErrorStatus> {
-    let response = status_state.status().await.oneshot(()).await?;
-    Ok(GetStatus::OK(response))
+    #[apiserver_path(method = get, path = RUNTIME_INFO, tag = STATUS_TAG)]
+    #[doc = "Runtime information"]
+    pub async fn info(
+        State(executions): State<Arc<ExecutionServices>>,
+        Extension(context): Extension<RequestContext>,
+    ) -> Result<GetStatus<RuntimeInfo>, ErrorStatus> {
+        let request = context.read(());
+        let response = executions.info().service().await.oneshot(request).await?;
+        Ok(GetStatus::OK(response))
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::router::server_status::ApiStatus;
     use axum::body::{Body, to_bytes};
     use axum::extract::Request;
     use axum::{Extension, Router};
     use http::{Method, StatusCode};
-    use std::sync::Arc;
+    use ta_apiserver::router::RouterExtension;
     use td_database::sql::DbPool;
     use td_objects::crudl::RequestContext;
+    use td_objects::rest_urls::SERVER_STATUS;
     use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
-    use td_objects::types::system::HealthStatus;
-    use td_services::system::services::SystemServices;
+    use td_objects::types::system::{ApiStatus, HealthStatus};
+    use td_services::{Context, Services};
+    use td_tower::factory::ServiceFactory;
     use tower::ServiceExt;
 
     async fn to_route<R: Into<Router> + Clone>(router: &R) -> Router {
@@ -57,7 +71,7 @@ mod tests {
     #[td_test::test(sqlx)]
     #[tokio::test]
     async fn test_status(db: DbPool) {
-        let router = super::router(Arc::new(SystemServices::new(db)));
+        let router = ServerStatusRouter::router(Services::build(&Context::with_defaults(db)));
 
         // Retrieve the status
         let response = to_route(&router)
@@ -65,7 +79,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method(Method::GET)
-                    .uri(STATUS)
+                    .uri(SERVER_STATUS)
                     .body(Body::empty())
                     .unwrap(),
             )

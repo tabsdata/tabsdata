@@ -30,7 +30,7 @@ test-utils = []
 tokio_console = ["console-subscriber"]
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "strum", "td-build", "toml", "utoipa", "windows", "windows-sys"]
+ignored = ["openssl", "td-build", "toml"]
 
 # Build dependencies
 
@@ -53,7 +53,6 @@ td-security = { workspace = true }
 
 ## Macros
 
-td-apiforge = { workspace = true }
 td-attach = { workspace = true }
 
 # External dependencies

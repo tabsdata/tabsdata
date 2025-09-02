@@ -10,6 +10,7 @@ use td_objects::rest_urls::CollectionParam;
 use td_objects::test_utils::seed_collection::seed_collection;
 use td_objects::tower_service::authz::AuthzError;
 use td_objects::types::basic::{AccessTokenId, CollectionName, RoleId, UserId};
+use td_tower::td_service::TdService;
 
 #[td_test::test(sqlx)]
 #[tokio::test]
@@ -18,7 +19,6 @@ async fn test_not_allowed_to_delete_collection(db: DbPool) {
     let _ = seed_collection(&db, &name, &UserId::admin()).await;
 
     let service = DeleteCollectionService::with_defaults(db.clone())
-        .await
         .service()
         .await;
 

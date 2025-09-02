@@ -11,7 +11,6 @@ use crate::types::basic::{
 use crate::types::worker::{Location, Locations};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use td_apiforge::apiserver_schema;
 
 #[td_type::typed(string)]
 pub struct PartitionName;
@@ -193,8 +192,7 @@ pub struct TableInfo {
     schema_hash: SchemaHash,
 }
 
-#[apiserver_schema]
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(utoipa::ToSchema, Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum WrittenTableV2 {
     NoData {
         table: TableName,

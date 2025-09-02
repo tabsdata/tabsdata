@@ -1,11 +1,11 @@
 //
-//  Copyright 2024 Tabs Data Inc.
+// Copyright 2025 Tabs Data Inc.
 //
 
 #[macro_export]
 macro_rules! layers {
-    ($($layer:expr_2021),* $(,)?) => {
-        $crate::box_sync_clone_layer::BoxedSyncCloneServiceLayer::boxed_layer(
+    ($($layer:expr),* $(,)?) => {
+        tower::util::BoxCloneSyncServiceLayer::new(
             tower::builder::ServiceBuilder::new()
                 $(
                     .layer($layer)
@@ -16,7 +16,7 @@ macro_rules! layers {
 
 #[macro_export]
 macro_rules! service {
-    ($($layers:expr_2021),* $(,)?) => {
+    ($($layers:expr),* $(,)?) => {
         tower::builder::ServiceBuilder::new()
             $(.layer($layers))*
             .map_err(td_error::TdError::from)

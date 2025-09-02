@@ -3,11 +3,11 @@
 //
 
 use crate::auth::AuthError;
+use crate::auth::jwt::JwtConfig;
 use crate::auth::layers::assert_user_enabled::assert_user_enabled;
 use crate::auth::layers::create_access_token::create_access_token;
 use crate::auth::layers::refresh_sessions::refresh_sessions;
 use crate::auth::layers::set_session_expiration::set_session_expiration;
-use crate::auth::services::JwtConfig;
 use crate::auth::session::Sessions;
 use td_error::TdError;
 use td_objects::crudl::{RequestContext, UpdateRequest};
@@ -27,11 +27,10 @@ use td_objects::types::role::UserRoleDBWithNames;
 use td_objects::types::user::UserDB;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::IntoServiceProvider;
-use td_tower::{layers, provider};
+use td_tower::{layers, service_factory};
 use tower::util::MapErrLayer;
 
-#[provider(
+#[service_factory(
     name = RoleChangeService,
     request = UpdateRequest<(), RoleChange>,
     response = TokenResponseX,
@@ -40,7 +39,7 @@ use tower::util::MapErrLayer;
     context = JwtConfig,
     context = Sessions,
 )]
-fn provider() {
+fn service() {
     layers!(
         layers!(
             // return this type of error for this layer group
@@ -86,15 +85,19 @@ fn provider() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Context;
+    use crate::auth::AuthError;
+    use crate::auth::jwt::decode_token;
     use crate::auth::services::AuthServices;
     use crate::auth::services::tests::{assert_session, get_session};
-    use crate::auth::{AuthError, decode_token};
     use td_database::sql::DbPool;
     use td_error::assert_service_error;
     use td_objects::crudl::RequestContext;
     use td_objects::types::auth::Login;
     use td_objects::types::basic::{Password, SessionStatus, UserId, UserName};
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::factory::ServiceFactory;
+    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
@@ -103,7 +106,6 @@ mod tests {
         use td_tower::metadata::type_of_val;
 
         RoleChangeService::with_defaults(db)
-            .await
             .metadata()
             .await
             .assert_service::<UpdateRequest<(), RoleChange>, TokenResponseX>(&[
@@ -145,8 +147,9 @@ mod tests {
     #[td_test::test(sqlx)]
     #[tokio::test]
     async fn test_role_change_ok(db: DbPool) -> Result<(), TdError> {
-        let auth_services = AuthServices::with_defaults(db.clone()).await;
-        let service = auth_services.login_service().await;
+        let context = Context::with_defaults(db.clone());
+        let auth_services = AuthServices::build(&context);
+        let service = auth_services.login.service().await;
 
         let request = Login::builder()
             .name(UserName::try_from("admin")?)
@@ -157,10 +160,9 @@ mod tests {
         assert!(res.is_ok());
         let token_response = res.unwrap();
         let access_token = token_response.access_token();
-        let original_access_token_id =
-            decode_token(auth_services.jwt_settings(), access_token)?.jti;
+        let original_access_token_id = *decode_token(&context.jwt_config, access_token)?.jti();
 
-        let service = auth_services.role_change_service().await;
+        let service = auth_services.role_change.service().await;
 
         let request = RoleChange::builder()
             .role(RoleName::try_from("sys_admin")?)
@@ -173,7 +175,7 @@ mod tests {
         assert!(res.is_ok());
         let token_response = res?;
         let access_token = token_response.access_token();
-        let access_token_id = decode_token(auth_services.jwt_settings(), access_token)?.jti;
+        let access_token_id = *decode_token(&context.jwt_config, access_token)?.jti();
 
         assert_session(&db, &Some(access_token_id.into())).await;
 
@@ -193,8 +195,9 @@ mod tests {
     #[td_test::test(sqlx)]
     #[tokio::test]
     async fn test_role_change_user_not_in_given_role(db: DbPool) -> Result<(), TdError> {
-        let auth_services = AuthServices::with_defaults(db.clone()).await;
-        let service = auth_services.login_service().await;
+        let context = Context::with_defaults(db.clone());
+        let auth_services = AuthServices::build(&context);
+        let service = auth_services.login.service().await;
 
         let request = Login::builder()
             .name(UserName::try_from("admin")?)
@@ -205,9 +208,9 @@ mod tests {
         assert!(res.is_ok());
         let token_response = res.unwrap();
         let access_token = token_response.access_token();
-        let access_token_id = decode_token(auth_services.jwt_settings(), access_token)?.jti;
+        let access_token_id = *decode_token(&context.jwt_config, access_token)?.jti();
 
-        let service = auth_services.role_change_service().await;
+        let service = auth_services.role_change.service().await;
 
         let request = RoleChange::builder()
             .role(RoleName::try_from("invalid_role")?)

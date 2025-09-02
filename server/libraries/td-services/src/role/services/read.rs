@@ -3,7 +3,6 @@
 //
 
 use td_authz::{Authz, AuthzContext};
-use td_error::TdError;
 use td_objects::crudl::{ReadRequest, RequestContext};
 use td_objects::rest_urls::RoleParam;
 use td_objects::sql::DaoQueries;
@@ -16,10 +15,9 @@ use td_objects::types::basic::RoleIdName;
 use td_objects::types::role::{Role, RoleBuilder, RoleDBWithNames};
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::IntoServiceProvider;
-use td_tower::{layers, provider};
+use td_tower::{layers, service_factory};
 
-#[provider(
+#[service_factory(
     name = ReadRoleService,
     request = ReadRequest<RoleParam>,
     response = Role,
@@ -27,7 +25,7 @@ use td_tower::{layers, provider};
     context = DaoQueries,
     context = AuthzContext,
 )]
-fn provider() {
+fn service() {
     layers!(
         from_fn(With::<ReadRequest<RoleParam>>::extract::<RequestContext>),
         from_fn(AuthzOn::<System>::set),
@@ -44,12 +42,14 @@ fn provider() {
 mod tests {
     use super::*;
     use td_database::sql::DbPool;
+    use td_error::TdError;
     use td_objects::crudl::RequestContext;
     use td_objects::test_utils::seed_role::{get_role, seed_role};
     use td_objects::types::basic::{
         AccessTokenId, Description, RoleId, RoleIdName, RoleName, UserId,
     };
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
@@ -58,7 +58,6 @@ mod tests {
         use td_tower::metadata::type_of_val;
 
         ReadRoleService::with_defaults(db)
-            .await
             .metadata()
             .await
             .assert_service::<ReadRequest<RoleParam>, Role>(&[
@@ -94,10 +93,7 @@ mod tests {
                 .build()?,
         );
 
-        let service = ReadRoleService::with_defaults(db.clone())
-            .await
-            .service()
-            .await;
+        let service = ReadRoleService::with_defaults(db.clone()).service().await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
         let found = get_role(&db, &RoleName::try_from("joaquin").unwrap()).await?;
@@ -133,10 +129,7 @@ mod tests {
                 .build()?,
         );
 
-        let service = ReadRoleService::with_defaults(db.clone())
-            .await
-            .service()
-            .await;
+        let service = ReadRoleService::with_defaults(db.clone()).service().await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
         let found = get_role(&db, &RoleName::try_from("joaquin").unwrap()).await?;

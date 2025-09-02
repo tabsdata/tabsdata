@@ -4,7 +4,6 @@
 
 use crate::inter_coll_permission::layers::assert_collection_in_permission;
 use td_authz::{Authz, AuthzContext, refresh_authz_context};
-use td_error::TdError;
 use td_objects::crudl::{DeleteRequest, RequestContext};
 use td_objects::rest_urls::InterCollectionPermissionParam;
 use td_objects::sql::DaoQueries;
@@ -19,10 +18,9 @@ use td_objects::types::permission::{
 };
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::IntoServiceProvider;
-use td_tower::{layers, provider};
+use td_tower::{layers, service_factory};
 
-#[provider(
+#[service_factory(
     name = DeleteInterCollectionPermissionService,
     request = DeleteRequest<InterCollectionPermissionParam>,
     response = (),
@@ -30,7 +28,7 @@ use td_tower::{layers, provider};
     context = DaoQueries,
     context = AuthzContext,
 )]
-fn provider() {
+fn service() {
     layers!(
         from_fn(With::<DeleteRequest<InterCollectionPermissionParam>>::extract::<RequestContext>),
         from_fn(
@@ -81,6 +79,7 @@ mod tests {
         UserId,
     };
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
@@ -89,7 +88,6 @@ mod tests {
         use td_tower::metadata::type_of_val;
 
         DeleteInterCollectionPermissionService::with_defaults(db)
-            .await
             .metadata()
             .await
             .assert_service::<DeleteRequest<InterCollectionPermissionParam>, ()>(&[
@@ -146,7 +144,6 @@ mod tests {
     #[tokio::test]
     async fn test_delete_permission_ok(db: DbPool) -> Result<(), TdError> {
         let service = DeleteInterCollectionPermissionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
 
@@ -178,7 +175,6 @@ mod tests {
     #[tokio::test]
     async fn test_delete_permission_unauthz_err(db: DbPool) -> Result<(), TdError> {
         let service = DeleteInterCollectionPermissionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
 

@@ -236,7 +236,7 @@ where
                 use crate::metadata::{MetadataMutex, type_of};
 
                 // Add types to metadata
-                let Input(metadata) = MetadataMutex::from_handler(&handler).await.unwrap();
+                let Input(metadata) = MetadataMutex::from_handler(&handler).unwrap();
                 let res_type_name = type_of::<SrvCtx<T>>();
                 metadata
                     .created_type("ContextProviderService", res_type_name)
@@ -320,7 +320,7 @@ where
                 use crate::metadata::{MetadataMutex, type_of_val};
 
                 // Add types to metadata
-                let Input(metadata) = MetadataMutex::from_handler(&handler).await.unwrap();
+                let Input(metadata) = MetadataMutex::from_handler(&handler).unwrap();
                 let res_type_name = type_of_val(&connection);
                 metadata
                     .created_type("ConnectionProviderService", res_type_name)
@@ -404,7 +404,7 @@ where
                 use crate::metadata::{MetadataMutex, type_of_val};
 
                 // Add types to metadata
-                let Input(metadata) = MetadataMutex::from_handler(&handler).await.unwrap();
+                let Input(metadata) = MetadataMutex::from_handler(&handler).unwrap();
                 let res_type_name = type_of_val(&connection);
                 metadata
                     .created_type("TransactionProviderService", res_type_name)
@@ -423,7 +423,7 @@ where
 
                 // Add types to metadata
                 let handler = result.as_ref().unwrap();
-                let Input(metadata) = MetadataMutex::from_handler(handler).await.unwrap();
+                let Input(metadata) = MetadataMutex::from_handler(handler).unwrap();
                 let res_type_name = type_of_val(&connection);
                 metadata
                     .remove_created("TransactionProviderService", res_type_name)
@@ -673,7 +673,7 @@ where
                 use crate::extractors::FromHandler;
 
                 // Conditional service should always return a Condition
-                let condition = Input::<Condition>::from_handler(&handler).await?;
+                let condition = Input::<Condition>::from_handler(&handler)?;
 
                 let Input(condition) = condition;
                 // Remove it so there are no other false positives
@@ -692,7 +692,7 @@ where
                 use crate::metadata::{MetadataMutex, type_of};
 
                 // This services uses the Condition
-                let Input(metadata) = MetadataMutex::from_handler(&handler).await?;
+                let Input(metadata) = MetadataMutex::from_handler(&handler)?;
                 metadata
                     .used_type("ConditionalService", type_of::<Input<Condition>>())
                     .await;

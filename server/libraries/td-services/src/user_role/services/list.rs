@@ -3,7 +3,6 @@
 //
 
 use td_authz::{Authz, AuthzContext};
-use td_error::TdError;
 use td_objects::crudl::{ListRequest, ListResponse, RequestContext};
 use td_objects::rest_urls::RoleParam;
 use td_objects::sql::{DaoQueries, NoListFilter};
@@ -15,10 +14,9 @@ use td_objects::types::role::RoleDB;
 use td_objects::types::role::UserRole;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::IntoServiceProvider;
-use td_tower::{layers, provider};
+use td_tower::{layers, service_factory};
 
-#[provider(
+#[service_factory(
     name = ListUserRoleService,
     request = ListRequest<RoleParam>,
     response = ListResponse<UserRole>,
@@ -26,7 +24,7 @@ use td_tower::{layers, provider};
     context = DaoQueries,
     context = AuthzContext,
 )]
-fn provider() {
+fn service() {
     layers!(
         from_fn(With::<ListRequest<RoleParam>>::extract::<RequestContext>),
         from_fn(AuthzOn::<System>::set),
@@ -43,6 +41,7 @@ fn provider() {
 mod tests {
     use super::*;
     use td_database::sql::DbPool;
+    use td_error::TdError;
     use td_objects::crudl::{ListParams, RequestContext};
     use td_objects::test_utils::seed_role::seed_role;
     use td_objects::test_utils::seed_user::seed_user;
@@ -51,6 +50,7 @@ mod tests {
         AccessTokenId, Description, RoleName, UserEnabled, UserId, UserName,
     };
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
@@ -59,7 +59,6 @@ mod tests {
         use td_tower::metadata::type_of_val;
 
         ListUserRoleService::with_defaults(db)
-            .await
             .metadata()
             .await
             .assert_service::<ListRequest<RoleParam>, ListResponse<UserRole>>(&[
@@ -104,7 +103,6 @@ mod tests {
         );
 
         let service = ListUserRoleService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;

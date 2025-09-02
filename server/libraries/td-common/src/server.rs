@@ -41,12 +41,12 @@ use std::option::Option;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use strum::{AsRefStr, Display, EnumString};
-use td_apiforge::apiserver_schema;
 use td_error::td_error;
 use tokio::fs;
 use tokio::io;
 use tracing::{error, warn};
 use url::Url;
+use utoipa::ToSchema;
 
 pub const AVAILABLE_ENVIRONMENTS_FOLDER: &str = "available_environments";
 pub const ENVIRONMENTS_FOLDER: &str = "environments";
@@ -166,8 +166,9 @@ pub enum QueueError {
     IOError(#[from] Error),
 }
 
-#[apiserver_schema]
-#[derive(Default, Debug, Clone, Eq, PartialEq, Serialize, Deserialize, EnumString, AsRefStr)]
+#[derive(
+    ToSchema, Default, Debug, Clone, Eq, PartialEq, Serialize, Deserialize, EnumString, AsRefStr,
+)]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum WorkerClass {
@@ -184,9 +185,18 @@ pub enum WorkerName {
     FUNCTION,
 }
 
-#[apiserver_schema]
 #[derive(
-    Default, Debug, Clone, Eq, PartialEq, Serialize, Deserialize, EnumString, Display, AsRefStr,
+    ToSchema,
+    Default,
+    Debug,
+    Clone,
+    Eq,
+    PartialEq,
+    Serialize,
+    Deserialize,
+    EnumString,
+    Display,
+    AsRefStr,
 )]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
@@ -287,8 +297,9 @@ where
     }
 }
 
-#[apiserver_schema]
-#[derive(Debug, Clone, Eq, PartialEq, Getters, Setters, Builder, Serialize, Deserialize)]
+#[derive(
+    ToSchema, Debug, Clone, Eq, PartialEq, Getters, Setters, Builder, Serialize, Deserialize,
+)]
 #[getset(get = "pub", set = "pub")]
 pub struct ResponseMessagePayload<T = Value>
 where
@@ -590,13 +601,6 @@ impl FileWorkerMessageQueue {
         Ok(Self { location })
     }
 
-    #[cfg(feature = "td-test")]
-    pub fn with_location(location: impl Into<PathBuf>) -> Result<Self, QueueError> {
-        Ok(Self {
-            location: location.into(),
-        })
-    }
-
     // Check if some message is already existing, in any of its possible modalities.
     fn check(&self, id: &str) -> bool {
         let pattern = format!(
@@ -616,10 +620,21 @@ impl FileWorkerMessageQueue {
         }
         false
     }
+
+    #[cfg(feature = "test-utils")]
+    pub fn with_location(location: impl Into<PathBuf>) -> Result<Self, QueueError> {
+        Ok(Self {
+            location: location.into(),
+        })
+    }
 }
 
-pub async fn queue_service() -> Result<FileWorkerMessageQueue, QueueError> {
-    FileWorkerMessageQueue::new().await
+#[cfg(feature = "test-utils")]
+impl Default for FileWorkerMessageQueue {
+    fn default() -> Self {
+        let test_dir = testdir::testdir!();
+        Self::with_location(test_dir).unwrap()
+    }
 }
 
 #[async_trait]

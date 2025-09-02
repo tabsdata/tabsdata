@@ -21,7 +21,7 @@ pub struct MountsStorage {
 
 impl MountsStorage {
     /// Create a new Store from a list of MountDefs. There must be definition for the root mount `/`.
-    pub async fn from(mount_defs: Vec<MountDef>) -> Result<Self> {
+    pub fn from(mount_defs: Vec<MountDef>) -> Result<Self> {
         let mut has_root = false;
         static ROOT: &str = "/";
         for mount_def in mount_defs.iter() {
@@ -100,10 +100,7 @@ impl MountsStorage {
         mount.read(path).await
     }
 
-    pub async fn read_stream(
-        &self,
-        path: &SPath,
-    ) -> Result<BoxStream<'static, object_store::Result<Bytes>>> {
+    pub async fn read_stream(&self, path: &SPath) -> Result<BoxStream<'static, Result<Bytes>>> {
         let mount = self.find_mount(path);
         mount.read_stream(path).await
     }
@@ -153,7 +150,7 @@ mod tests {
             .build()
             .unwrap();
         assert!(matches!(
-            super::MountsStorage::from(vec![mount1, mount2]).await,
+            super::MountsStorage::from(vec![mount1, mount2]),
             Err(super::StorageError::ConfigurationError(_))
         ));
     }
@@ -189,9 +186,7 @@ mod tests {
             .uri(uri2)
             .build()
             .unwrap();
-        let store = super::MountsStorage::from(vec![mount1, mount2])
-            .await
-            .unwrap();
+        let store = super::MountsStorage::from(vec![mount1, mount2]).unwrap();
 
         store
             .write(&SPath::parse("/a.txt").unwrap(), vec![1])

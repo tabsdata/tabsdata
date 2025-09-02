@@ -7,7 +7,6 @@ use crate::permission::layers::{
     is_permission_with_names_on_a_single_collection,
 };
 use td_authz::{Authz, AuthzContext, refresh_authz_context};
-use td_error::TdError;
 use td_objects::crudl::{DeleteRequest, RequestContext};
 use td_objects::rest_urls::RolePermissionParam;
 use td_objects::sql::DaoQueries;
@@ -22,10 +21,9 @@ use td_objects::types::basic::{
 use td_objects::types::permission::{PermissionDB, PermissionDBWithNames};
 use td_tower::default_services::{Do, Else, If, TransactionProvider, conditional};
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::IntoServiceProvider;
-use td_tower::{layers, provider, service};
+use td_tower::{layers, service, service_factory};
 
-#[provider(
+#[service_factory(
     name = DeletePermissionService,
     request = DeleteRequest<RolePermissionParam>,
     response = (),
@@ -33,7 +31,7 @@ use td_tower::{layers, provider, service};
     context = DaoQueries,
     context = AuthzContext,
 )]
-fn provider() {
+fn service() {
     layers!(
         from_fn(With::<DeleteRequest<RolePermissionParam>>::extract::<RequestContext>),
         from_fn(AuthzOn::<System>::set),
@@ -77,7 +75,7 @@ mod tests {
     use crate::permission::services::create::CreatePermissionService;
     use std::collections::HashSet;
     use td_database::sql::DbPool;
-    use td_error::assert_service_error;
+    use td_error::{TdError, assert_service_error};
     use td_objects::crudl::RequestContext;
     use td_objects::rest_urls::RoleParam;
     use td_objects::test_utils::seed_collection::seed_collection;
@@ -94,6 +92,7 @@ mod tests {
         ENCODED_ID_CA_ALL_SEC_ADMIN, ENCODED_ID_SA_SYS_ADMIN, ENCODED_ID_SS_SEC_ADMIN,
     };
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::td_service::TdService;
     use tower::ServiceExt;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -102,12 +101,7 @@ mod tests {
     async fn test_tower_metadata_delete_permission(db: DbPool) {
         use td_tower::metadata::type_of_val;
 
-        DeletePermissionService::with_defaults(db).await.
-
-
-
-
-        metadata().await.assert_service::<DeleteRequest<RolePermissionParam>, ()>(&[
+        DeletePermissionService::with_defaults(db).metadata().await.assert_service::<DeleteRequest<RolePermissionParam>, ()>(&[
             type_of_val(&With::<DeleteRequest<RolePermissionParam>>::extract::<RequestContext>),
             type_of_val(&AuthzOn::<System>::set),
             type_of_val(&Authz::<SecAdmin, CollAdmin>::check),
@@ -157,7 +151,6 @@ mod tests {
         );
 
         let service = DeletePermissionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         service.raw_oneshot(request).await?;
@@ -203,7 +196,6 @@ mod tests {
         );
 
         let service = CreatePermissionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         assert!(service.raw_oneshot(request).await.is_ok());
@@ -247,7 +239,6 @@ mod tests {
         );
 
         let service = CreatePermissionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         assert_service_error(service, request, |err| match err {
@@ -293,7 +284,6 @@ mod tests {
         );
 
         let service = CreatePermissionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         assert_service_error(service, request, |err| match err {
@@ -338,7 +328,6 @@ mod tests {
             );
 
         let service = DeletePermissionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         assert!(service.raw_oneshot(request).await.is_ok());
@@ -380,7 +369,6 @@ mod tests {
             );
 
         let service = DeletePermissionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
 
@@ -427,7 +415,6 @@ mod tests {
             );
 
         let service = DeletePermissionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
 
@@ -464,7 +451,6 @@ mod tests {
             );
 
         let service = DeletePermissionService::with_defaults(db.clone())
-            .await
             .service()
             .await;
 
@@ -492,7 +478,6 @@ mod tests {
 
         for permission in permissions {
             let service = DeletePermissionService::with_defaults(db.clone())
-                .await
                 .service()
                 .await;
 

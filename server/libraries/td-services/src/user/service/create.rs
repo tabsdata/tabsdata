@@ -4,7 +4,6 @@
 
 use crate::user::layers::create::UpdateCreateUserDBBuilder;
 use td_authz::{Authz, AuthzContext};
-use td_error::TdError;
 use td_objects::crudl::{CreateRequest, RequestContext};
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, SecAdmin, System};
@@ -21,10 +20,9 @@ use td_objects::types::user::{
 use td_security::config::PasswordHashingConfig;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::IntoServiceProvider;
-use td_tower::{layers, provider};
+use td_tower::{layers, service_factory};
 
-#[provider(
+#[service_factory(
     name = CreateUserService,
     request = CreateRequest<(), UserCreate>,
     response = UserRead,
@@ -33,7 +31,7 @@ use td_tower::{layers, provider};
     context = AuthzContext,
     context = PasswordHashingConfig,
 )]
-fn provider() {
+fn service() {
     layers!(
         from_fn(With::<CreateRequest<(), UserCreate>>::extract::<RequestContext>),
         from_fn(AuthzOn::<System>::set),
@@ -72,6 +70,7 @@ mod tests {
         AccessTokenId, AtTime, Email, FullName, RoleId, UserEnabled, UserId, UserName,
     };
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
@@ -80,7 +79,6 @@ mod tests {
         use td_tower::metadata::type_of_val;
 
         CreateUserService::with_defaults(db)
-            .await
             .metadata()
             .await
             .assert_service::<CreateRequest<(), UserCreate>, UserRead>(&[
@@ -117,10 +115,7 @@ mod tests {
         expected_enabled: bool,
         with_email: bool,
     ) {
-        let service = CreateUserService::with_defaults(db.clone())
-            .await
-            .service()
-            .await;
+        let service = CreateUserService::with_defaults(db.clone()).service().await;
 
         let create = UserCreate::builder()
             .try_name("u1".to_string())

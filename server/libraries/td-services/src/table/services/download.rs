@@ -2,9 +2,9 @@
 // Copyright 2025. Tabs Data Inc.
 //
 
+use crate::table::layers::download::get_table_download;
 use crate::table::layers::find_data_version_location_at;
 use td_authz::{Authz, AuthzContext};
-use td_error::TdError;
 use td_objects::crudl::{ReadRequest, RequestContext};
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{
@@ -14,23 +14,24 @@ use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlSelectService};
 use td_objects::types::basic::{CollectionId, CollectionIdName};
 use td_objects::types::collection::CollectionDB;
+use td_objects::types::stream::BoxedSyncStream;
 use td_objects::types::table::TableAtIdName;
-use td_storage::SPath;
+use td_storage::Storage;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
-use td_tower::provider;
-use td_tower::service_provider::IntoServiceProvider;
+use td_tower::service_factory;
 
-#[provider(
+#[service_factory(
     name = TableDownloadService,
     request = ReadRequest<TableAtIdName>,
-    response = Option<SPath>,
+    response = BoxedSyncStream,
     connection = ConnectionProvider,
     context = DaoQueries,
     context = AuthzContext,
+    context = Storage,
 )]
-fn provider() {
+fn service() {
     layers!(
         // Extract parameters
         from_fn(With::<ReadRequest<TableAtIdName>>::extract::<RequestContext>),
@@ -44,12 +45,14 @@ fn provider() {
         from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead, InterCollRead>::check),
         // Find table data version location.
         find_data_version_location_at::<_, TableAtIdName>(),
+        from_fn(get_table_download),
     )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Context;
     use bytes::Bytes;
     use futures::StreamExt;
     use polars::datatypes::{Int64Chunked, StringChunked};
@@ -60,9 +63,8 @@ mod tests {
     };
     use std::io::Cursor;
     use std::path::Path;
-    use std::sync::Arc;
     use td_common::absolute_path::AbsolutePath;
-    use td_database::sql::DbPool;
+    use td_error::TdError;
     use td_objects::crudl::RequestContext;
     use td_objects::rest_urls::{AtTimeParam, TableParam};
     use td_objects::sql::SelectBy;
@@ -81,15 +83,14 @@ mod tests {
     use td_objects::types::function::FunctionRegister;
     use td_objects::types::table::TableDB;
     use td_storage::location::StorageLocation;
-    use td_storage::{MountDef, Storage};
     use td_tower::ctx_service::RawOneshot;
-    use testdir::testdir;
-    use url::Url;
+    use td_tower::factory::ServiceFactory;
+    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_tower_metadata_download_service(db: DbPool) {
+    async fn test_tower_metadata_download_service(db: td_database::sql::DbPool) {
         use crate::table::layers::storage::resolve_table_location;
         use td_objects::tower_service::from::TryIntoService;
         use td_objects::tower_service::from::combine;
@@ -100,10 +101,9 @@ mod tests {
         use td_tower::metadata::type_of_val;
 
         TableDownloadService::with_defaults(db)
-            .await
             .metadata()
             .await
-            .assert_service::<ReadRequest<TableAtIdName>, Option<SPath>>(&[
+            .assert_service::<ReadRequest<TableAtIdName>, BoxedSyncStream>(&[
                 // Extract parameters
                 type_of_val(&With::<ReadRequest<TableAtIdName>>::extract::<RequestContext>),
                 type_of_val(&With::<ReadRequest<TableAtIdName>>::extract_name::<TableAtIdName>),
@@ -135,6 +135,7 @@ mod tests {
                 // Resolve the location of the data version. This takes into account versions without
                 // data changes (in which the previous version is resolved)
                 type_of_val(&resolve_table_location),
+                type_of_val(&get_table_download),
             ]);
     }
 
@@ -142,16 +143,10 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_download() -> Result<(), TdError> {
         let db = td_database::test_utils::db().await?;
-        let test_dir = testdir!();
-        let url = Url::from_directory_path(test_dir).unwrap();
-        let storage = Storage::from(vec![
-            MountDef::builder().id("id").uri(url).path("/").build()?,
-        ])
-        .await?;
-        let storage = Arc::new(storage);
+        let context = Context::with_defaults(db);
 
         let collection = seed_collection(
-            &db,
+            &context.db,
             &CollectionName::try_from("collection")?,
             &UserId::admin(),
         )
@@ -173,20 +168,20 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let function_version = seed_function(&db, &collection, &create).await;
+        let function_version = seed_function(&context.db, &collection, &create).await;
 
         let storage_location = StorageVersion::default();
 
         // 3 function runs, 2 with data and 1 without, per table
         let mut at_times = vec![AtTime::now().await];
         for i in 0..3 {
-            let execution = seed_execution(&db, &function_version).await;
+            let execution = seed_execution(&context.db, &function_version).await;
             let transaction_key = TransactionKey::try_from("ANY")?;
-            let transaction = seed_transaction(&db, &execution, &transaction_key).await;
+            let transaction = seed_transaction(&context.db, &execution, &transaction_key).await;
 
             at_times.push(AtTime::now().await);
             let function_run = seed_function_run(
-                &db,
+                &context.db,
                 &collection,
                 &function_version,
                 &execution,
@@ -200,13 +195,13 @@ mod tests {
                 let table_version = DaoQueries::default()
                     .select_by::<TableDB>(&(collection.id(), &table))?
                     .build_query_as()
-                    .fetch_one(&db)
+                    .fetch_one(&context.db)
                     .await
                     .unwrap();
 
                 if i % 2 == 0 {
                     let table_data_version = seed_table_data_version_with_data(
-                        &db,
+                        &context.db,
                         &collection,
                         &execution,
                         &transaction,
@@ -226,7 +221,7 @@ mod tests {
                         )
                         .build();
 
-                    let url = storage.to_external_uri(&path)?.0;
+                    let url = context.storage.to_external_uri(&path)?.0;
                     let path = url.abs_path();
                     std::fs::create_dir_all(Path::new(&path).parent().unwrap()).unwrap();
                     let a = Int64Chunked::new("i".into(), &[i, 1]).into_column();
@@ -263,7 +258,7 @@ mod tests {
                     .unwrap();
                 } else {
                     seed_table_data_version(
-                        &db,
+                        &context.db,
                         &collection,
                         &execution,
                         &transaction,
@@ -276,17 +271,11 @@ mod tests {
         }
 
         async fn get_download(
-            db: DbPool,
-            storage: Arc<Storage>,
+            service: &TableDownloadService,
             collection: &str,
             table: &str,
             at_time: &AtTime,
         ) -> Result<Bytes, TdError> {
-            let service = TableDownloadService::with_defaults(db)
-                .await
-                .service()
-                .await;
-
             let request =
                 RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
                     .read(TableAtIdName::new(
@@ -296,25 +285,21 @@ mod tests {
                             .build()?,
                         AtTimeParam::builder().at(at_time).build()?,
                     ));
-            let response = service.raw_oneshot(request).await;
-            match response {
-                Ok(path) => match path {
-                    Some(path) => {
-                        let mut stream = storage.read_stream(&path).await.map_err(TdError::from)?;
-                        let bytes = stream.next().await.unwrap();
-                        Ok(bytes.unwrap())
-                    }
-                    None => Ok(Bytes::new()),
-                },
-                Err(err) => Err(err),
-            }
+            let response = service.service().await.raw_oneshot(request).await?;
+            let mut stream = response.into_inner();
+            let bytes = match stream.next().await {
+                Some(res) => res?,
+                None => Bytes::new(),
+            };
+            Ok(bytes)
         }
+
+        let service = TableDownloadService::build(&context);
 
         // No data before the first function run
         // With IDs
         let bytes_with_ids = get_download(
-            db.clone(),
-            storage.clone(),
+            &service,
             format!("~{}", collection.id()).as_str(),
             created_tables[0].as_str(),
             &at_times[0],
@@ -324,8 +309,7 @@ mod tests {
 
         // With names
         let bytes_with_names = get_download(
-            db.clone(),
-            storage.clone(),
+            &service,
             collection.name(),
             created_tables[0].as_str(),
             &at_times[0],
@@ -336,8 +320,7 @@ mod tests {
         // Download named 0 at first function run
         // With IDs
         let bytes_with_ids = get_download(
-            db.clone(),
-            storage.clone(),
+            &service,
             format!("~{}", collection.id()).as_str(),
             created_tables[0].as_str(),
             &at_times[1],
@@ -346,8 +329,7 @@ mod tests {
 
         // With names
         let bytes_with_names = get_download(
-            db.clone(),
-            storage.clone(),
+            &service,
             collection.name(),
             created_tables[0].as_str(),
             &at_times[1],
@@ -368,8 +350,7 @@ mod tests {
         // Download named 0 at second function run (as it has no data, it doesn't change)
         // With IDs
         let bytes_with_ids = get_download(
-            db.clone(),
-            storage.clone(),
+            &service,
             format!("~{}", collection.id()).as_str(),
             created_tables[0].as_str(),
             &at_times[2],
@@ -378,8 +359,7 @@ mod tests {
 
         // With names
         let bytes_with_names = get_download(
-            db.clone(),
-            storage.clone(),
+            &service,
             collection.name(),
             created_tables[0].as_str(),
             &at_times[2],
@@ -400,8 +380,7 @@ mod tests {
         // Download named 2 at third function run (skip 1 as second run had no data)
         // With IDs
         let bytes_with_ids = get_download(
-            db.clone(),
-            storage.clone(),
+            &service,
             format!("~{}", collection.id()).as_str(),
             created_tables[0].as_str(),
             &at_times[3],
@@ -410,8 +389,7 @@ mod tests {
 
         // With names
         let bytes_with_names = get_download(
-            db.clone(),
-            storage.clone(),
+            &service,
             collection.name(),
             created_tables[0].as_str(),
             &at_times[3],

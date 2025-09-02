@@ -2,7 +2,7 @@
 // Copyright 2025. Tabs Data Inc.
 //
 
-use crate::execution::RuntimeContext;
+use crate::execution::services::runtime_info::RuntimeContext;
 use td_error::TdError;
 use td_objects::types::runtime_info::RuntimeInfo;
 use td_tower::extractors::SrvCtx;

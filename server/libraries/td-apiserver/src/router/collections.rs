@@ -2,130 +2,138 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-//! Collections API Service for API Server.
+use td_apiforge::router_ext;
 
-#![allow(clippy::upper_case_acronyms)]
+#[router_ext(CollectionsRouter)]
+mod routes {
+    use axum::Extension;
+    use axum::extract::{Path, State};
+    use axum_extra::extract::Query;
+    use std::sync::Arc;
+    use ta_apiserver::status::error_status::ErrorStatus;
+    use ta_apiserver::status::extractors::Json;
+    use ta_apiserver::status::ok_status::{
+        CreateStatus, DeleteStatus, GetStatus, ListStatus, NoContent, UpdateStatus,
+    };
+    use td_apiforge::apiserver_path;
+    use td_objects::crudl::{ListParams, RequestContext};
+    use td_objects::rest_urls::{
+        CREATE_COLLECTION, CollectionParam, DELETE_COLLECTION, GET_COLLECTION, LIST_COLLECTIONS,
+        UPDATE_COLLECTION,
+    };
+    use td_objects::types::collection::{CollectionCreate, CollectionRead, CollectionUpdate};
+    use td_services::collection::service::CollectionServices;
+    use td_tower::td_service::TdService;
+    use tower::ServiceExt;
 
-use crate::router;
-use crate::router::state::Collections;
-use crate::status::error_status::ErrorStatus;
-use crate::status::extractors::Json;
-use crate::status::ok_status::{
-    CreateStatus, DeleteStatus, GetStatus, ListStatus, NoContent, UpdateStatus,
-};
-use axum::Extension;
-use axum::extract::{Path, State};
-use axum_extra::extract::Query;
-use td_apiforge::{apiserver_path, apiserver_tag};
-use td_objects::crudl::{ListParams, RequestContext};
-use td_objects::rest_urls::{
-    CREATE_COLLECTION, CollectionParam, DELETE_COLLECTION, GET_COLLECTION, LIST_COLLECTIONS,
-    UPDATE_COLLECTION,
-};
-use td_objects::types::collection::{CollectionCreate, CollectionRead, CollectionUpdate};
-use tower::ServiceExt;
+    const COLLECTIONS_TAG: &str = "Collections";
 
-apiserver_tag!(name = "Collections", description = "Collections API");
+    #[apiserver_path(method = get, path = LIST_COLLECTIONS, tag = COLLECTIONS_TAG)]
+    #[doc = "Lists collections"]
+    pub async fn list_collections(
+        State(collection_state): State<Arc<CollectionServices>>,
+        Extension(context): Extension<RequestContext>,
+        Query(query_params): Query<ListParams>,
+    ) -> Result<ListStatus<CollectionRead>, ErrorStatus> {
+        let request = context.list((), query_params);
+        let response = collection_state
+            .list()
+            .service()
+            .await
+            .oneshot(request)
+            .await?;
+        Ok(ListStatus::OK(response))
+    }
 
-router! {
-    state => { Collections },
-    routes => { list_collections, get_collection, create_collection, update_collection, delete_collection }
-}
+    #[apiserver_path(method = get, path = GET_COLLECTION, tag = COLLECTIONS_TAG)]
+    #[doc = "Get a collection"]
+    pub async fn get_collection(
+        State(collection_state): State<Arc<CollectionServices>>,
+        Extension(context): Extension<RequestContext>,
+        Path(collection_param): Path<CollectionParam>,
+    ) -> Result<GetStatus<CollectionRead>, ErrorStatus> {
+        let request = context.read(collection_param);
+        let response = collection_state
+            .read()
+            .service()
+            .await
+            .oneshot(request)
+            .await?;
+        Ok(GetStatus::OK(response))
+    }
 
-#[apiserver_path(method = get, path = LIST_COLLECTIONS, tag = COLLECTIONS_TAG)]
-#[doc = "Lists collections"]
-pub async fn list_collections(
-    State(collection_state): State<Collections>,
-    Extension(context): Extension<RequestContext>,
-    Query(query_params): Query<ListParams>,
-) -> Result<ListStatus<CollectionRead>, ErrorStatus> {
-    let request = context.list((), query_params);
-    let response = collection_state
-        .list_collections()
-        .await
-        .oneshot(request)
-        .await?;
-    Ok(ListStatus::OK(response))
-}
+    #[apiserver_path(method = post, path = CREATE_COLLECTION, tag = COLLECTIONS_TAG)]
+    #[doc = "Create a collection"]
+    pub async fn create_collection(
+        State(collection_state): State<Arc<CollectionServices>>,
+        Extension(context): Extension<RequestContext>,
+        Json(request): Json<CollectionCreate>,
+    ) -> Result<CreateStatus<CollectionRead>, ErrorStatus> {
+        let request = context.create((), request);
+        let response = collection_state
+            .create()
+            .service()
+            .await
+            .oneshot(request)
+            .await?;
+        Ok(CreateStatus::CREATED(response))
+    }
 
-#[apiserver_path(method = get, path = GET_COLLECTION, tag = COLLECTIONS_TAG)]
-#[doc = "Get a collection"]
-pub async fn get_collection(
-    State(collection_state): State<Collections>,
-    Extension(context): Extension<RequestContext>,
-    Path(collection_param): Path<CollectionParam>,
-) -> Result<GetStatus<CollectionRead>, ErrorStatus> {
-    let request = context.read(collection_param);
-    let response = collection_state
-        .read_collection()
-        .await
-        .oneshot(request)
-        .await?;
-    Ok(GetStatus::OK(response))
-}
+    #[apiserver_path(method = post, path = UPDATE_COLLECTION, tag = COLLECTIONS_TAG)]
+    #[doc = "Update a collection"]
+    pub async fn update_collection(
+        State(collection_state): State<Arc<CollectionServices>>,
+        Extension(context): Extension<RequestContext>,
+        Path(collection_param): Path<CollectionParam>,
+        Json(request): Json<CollectionUpdate>,
+    ) -> Result<UpdateStatus<CollectionRead>, ErrorStatus> {
+        let request = context.update(collection_param, request);
+        let response = collection_state
+            .update()
+            .service()
+            .await
+            .oneshot(request)
+            .await?;
+        Ok(UpdateStatus::OK(response))
+    }
 
-#[apiserver_path(method = post, path = CREATE_COLLECTION, tag = COLLECTIONS_TAG)]
-#[doc = "Create a collection"]
-pub async fn create_collection(
-    State(collection_state): State<Collections>,
-    Extension(context): Extension<RequestContext>,
-    Json(request): Json<CollectionCreate>,
-) -> Result<CreateStatus<CollectionRead>, ErrorStatus> {
-    let request = context.create((), request);
-    let response = collection_state
-        .create_collection()
-        .await
-        .oneshot(request)
-        .await?;
-    Ok(CreateStatus::CREATED(response))
-}
-
-#[apiserver_path(method = post, path = UPDATE_COLLECTION, tag = COLLECTIONS_TAG)]
-#[doc = "Update a collection"]
-pub async fn update_collection(
-    State(collection_state): State<Collections>,
-    Extension(context): Extension<RequestContext>,
-    Path(collection_param): Path<CollectionParam>,
-    Json(request): Json<CollectionUpdate>,
-) -> Result<UpdateStatus<CollectionRead>, ErrorStatus> {
-    let request = context.update(collection_param, request);
-    let response = collection_state
-        .update_collection()
-        .await
-        .oneshot(request)
-        .await?;
-    Ok(UpdateStatus::OK(response))
-}
-
-#[apiserver_path(method = delete, path = DELETE_COLLECTION, tag = COLLECTIONS_TAG)]
-#[doc = "Delete a collection"]
-pub async fn delete_collection(
-    State(collections_state): State<Collections>,
-    Extension(context): Extension<RequestContext>,
-    Path(collection_param): Path<CollectionParam>,
-) -> Result<DeleteStatus<NoContent>, ErrorStatus> {
-    let request = context.delete(collection_param);
-    let response = collections_state
-        .delete_collection()
-        .await
-        .oneshot(request)
-        .await?;
-    Ok(DeleteStatus::OK(response))
+    #[apiserver_path(method = delete, path = DELETE_COLLECTION, tag = COLLECTIONS_TAG)]
+    #[doc = "Delete a collection"]
+    pub async fn delete_collection(
+        State(collection_state): State<Arc<CollectionServices>>,
+        Extension(context): Extension<RequestContext>,
+        Path(collection_param): Path<CollectionParam>,
+    ) -> Result<DeleteStatus<NoContent>, ErrorStatus> {
+        let request = context.delete(collection_param);
+        let response = collection_state
+            .delete()
+            .service()
+            .await
+            .oneshot(request)
+            .await?;
+        Ok(DeleteStatus::OK(response))
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use axum::Router;
+    use crate::router::collections::CollectionsRouter;
     use axum::body::{Body, to_bytes};
     use axum::http::{Request, StatusCode};
+    use axum::{Extension, Router};
     use http::method::Method;
     use serde_json::json;
     use std::sync::Arc;
-    use td_authz::AuthzContext;
+    use ta_apiserver::router::RouterExtension;
     use td_database::sql::DbPool;
+    use td_objects::crudl::RequestContext;
+    use td_objects::rest_urls::{
+        CREATE_COLLECTION, DELETE_COLLECTION, GET_COLLECTION, LIST_COLLECTIONS, UPDATE_COLLECTION,
+    };
     use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
+    use td_services::Context;
     use td_services::collection::service::CollectionServices;
+    use td_tower::factory::ServiceFactory;
     use tower::ServiceExt;
 
     async fn to_route<R: Into<Router> + Clone>(router: &R) -> Router {
@@ -141,11 +149,9 @@ mod tests {
     #[td_test::test(sqlx)]
     #[tokio::test]
     async fn test_collections_lifecycle(db: DbPool) {
-        let collections_state = Arc::new(CollectionServices::new(
-            db.clone(),
-            Arc::new(AuthzContext::default()),
-        ));
-        let router = super::router(collections_state);
+        let router = CollectionsRouter::router(Arc::new(CollectionServices::build(
+            &Context::with_defaults(db),
+        )));
 
         // List empty collections
         let response = to_route(&router)

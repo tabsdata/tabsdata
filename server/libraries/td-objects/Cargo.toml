@@ -29,7 +29,7 @@ test_tower_metadata = []
 test-utils = []
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "td-build", "td-objects", "td-schema", "thiserror", "toml", "utoipa"]
+ignored = ["openssl", "td-build", "td-objects", "td-schema", "thiserror", "toml"]
 
 # Build dependencies
 
@@ -45,7 +45,6 @@ ignored = ["openssl", "td-build", "td-objects", "td-schema", "thiserror", "toml"
 
 ## Macros
 
-td-apiforge = { workspace = true }
 td-type = { workspace = true }
 
 ## Libraries

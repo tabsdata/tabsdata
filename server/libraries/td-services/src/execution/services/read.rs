@@ -7,7 +7,6 @@ use crate::execution::layers::read::build_existing_transaction_map;
 use crate::execution::layers::template::{
     build_execution_template, find_all_input_tables, find_trigger_graph,
 };
-use td_error::TdError;
 use td_objects::crudl::ReadRequest;
 use td_objects::rest_urls::ExecutionParam;
 use td_objects::sql::DaoQueries;
@@ -20,12 +19,11 @@ use td_objects::types::execution::{ExecutionDB, ExecutionResponse, TransactionDB
 use td_objects::types::function::FunctionDBWithNames;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::IntoServiceProvider;
-use td_tower::{layers, provider};
+use td_tower::{layers, service_factory};
 use te_execution::transaction::TransactionBy;
 
 // Very similar to trigger, but without triggering. It selects entities needed to build an execution plan.
-#[provider(
+#[service_factory(
     name = ExecutionReadService,
     request = ReadRequest<ExecutionParam>,
     response = ExecutionResponse,
@@ -33,7 +31,7 @@ use te_execution::transaction::TransactionBy;
     context = DaoQueries,
     context = TransactionBy,
 )]
-fn provider() {
+fn service() {
     layers!(
         // Extract from request.
         from_fn(With::<ReadRequest<ExecutionParam>>::extract_name::<ExecutionParam>),
@@ -72,6 +70,7 @@ mod tests {
     use td_objects::crudl::RequestContext;
     use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
@@ -80,7 +79,6 @@ mod tests {
         use td_tower::metadata::type_of_val;
 
         ExecutionReadService::with_defaults(db)
-            .await
             .metadata()
             .await
             .assert_service::<ReadRequest<ExecutionParam>, ExecutionResponse>(&[
@@ -119,7 +117,6 @@ mod tests {
         let execution = test_execute(db.clone(), false, false, true).await?;
 
         let service = ExecutionReadService::with_defaults(db.clone())
-            .await
             .service()
             .await;
         let request =
