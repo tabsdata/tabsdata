@@ -37,6 +37,7 @@ TARGET_DIR = os.path.join("target", "audit")
 TARGET_FILE = os.path.join(TARGET_DIR, "licenses_ts.txt")
 
 # fmt: off
+# noinspection DuplicatedCode
 normalized_licenses = {
     "": "Unspecified License",                                                                                                                                                                 # noqa: E231,E241,E501
     "(Apache-2.0 OR ISC) AND ISC AND OpenSSL": "Apache License Version 2.0 or Internet Systems Consortium License, and Internet Systems Consortium License, and OpenSSL License",              # noqa: E231,E241,E501
@@ -74,6 +75,7 @@ normalized_licenses = {
     "BSD-2-Clause": "BSD Simplified License (BSD-2-Clause)",                                                                                                                                   # noqa: E231,E241,E501
     "BSD-3-Clause AND MIT": "BSD Revised License (BSD-3-Clause), and MIT License",                                                                                                             # noqa: E231,E241,E501
     "BSD-3-Clause OR MIT": "BSD Revised License (BSD-3-Clause) or MIT License",                                                                                                                # noqa: E231,E241,E501
+    "BSD-3-CLAUSE;; ISC": "BSD Revised License (BSD-3-Clause) or Internet Systems Consortium License",                                                                                         # noqa: E231,E241,E501
     "BSD-3-Clause": "BSD Revised License (BSD-3-Clause)",                                                                                                                                      # noqa: E231,E241,E501
     "BSD-3-CLAUSE": "BSD Revised License (BSD-3-Clause)",                                                                                                                                      # noqa: E231,E241,E501
     "BSL-1.0": "Boost Software License Version 1.0",                                                                                                                                           # noqa: E231,E241,E501
@@ -123,15 +125,15 @@ def ignore_package(name):
     return name == "tdui"
 
 
-def parse_package_name_version(package_key):
-    if "@" in package_key and not package_key.startswith("@"):
-        parts = package_key.rsplit("@", 1)
+def parse_package_name_version(node_package_key):
+    if "@" in node_package_key and not node_package_key.startswith("@"):
+        parts = node_package_key.rsplit("@", 1)
         return parts[0], parts[1] if len(parts) > 1 else "Unknown"
-    elif package_key.startswith("@"):
-        parts = package_key.rsplit("@", 1)
+    elif node_package_key.startswith("@"):
+        parts = node_package_key.rsplit("@", 1)
         return parts[0], parts[1] if len(parts) > 1 else "Unknown"
     else:
-        return package_key, "Unknown"
+        return node_package_key, "Unknown"
 
 
 os.makedirs(TARGET_DIR, exist_ok=True)

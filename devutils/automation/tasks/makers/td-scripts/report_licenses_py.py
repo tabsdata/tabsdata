@@ -36,6 +36,7 @@ TARGET_DIR = os.path.join("..", "target", "audit")
 TARGET_FILE = os.path.join(TARGET_DIR, "licenses_py.txt")
 
 # fmt: off
+# noinspection DuplicatedCode
 normalized_licenses = {
     "": "Unspecified License",                                                                                                                                                                 # noqa: E231,E241,E501
     "(Apache-2.0 OR ISC) AND ISC AND OpenSSL": "Apache License Version 2.0 or Internet Systems Consortium License, and Internet Systems Consortium License, and OpenSSL License",              # noqa: E231,E241,E501
@@ -73,6 +74,7 @@ normalized_licenses = {
     "BSD-2-Clause": "BSD Simplified License (BSD-2-Clause)",                                                                                                                                   # noqa: E231,E241,E501
     "BSD-3-Clause AND MIT": "BSD Revised License (BSD-3-Clause), and MIT License",                                                                                                             # noqa: E231,E241,E501
     "BSD-3-Clause OR MIT": "BSD Revised License (BSD-3-Clause) or MIT License",                                                                                                                # noqa: E231,E241,E501
+    "BSD-3-CLAUSE;; ISC": "BSD Revised License (BSD-3-Clause) or Internet Systems Consortium License",                                                                                         # noqa: E231,E241,E501
     "BSD-3-Clause": "BSD Revised License (BSD-3-Clause)",                                                                                                                                      # noqa: E231,E241,E501
     "BSD-3-CLAUSE": "BSD Revised License (BSD-3-Clause)",                                                                                                                                      # noqa: E231,E241,E501
     "BSL-1.0": "Boost Software License Version 1.0",                                                                                                                                           # noqa: E231,E241,E501

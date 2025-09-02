@@ -98,7 +98,7 @@ from tabsdata.tableframe.lazyframe.frame import TableFrame
 from tabsdata_databricks._connector import DatabricksDestination
 from tabsdata_mongodb._connector import MongoDBDestination
 from tabsdata_mssql._connector import MSSQLDestination, MSSQLSource
-from tabsdata_salesforce._connector import SalesforceSource
+from tabsdata_salesforce._connector import SalesforceReportSource, SalesforceSource
 from tabsdata_snowflake._connector import SnowflakeDestination
 
 logging.basicConfig(
@@ -206,6 +206,7 @@ __all__ = [
     "MSSQLDestination",
     "MSSQLSource",
     # From tabsdata_salesforce.connector
+    "SalesforceReportSource",
     "SalesforceSource",
     # From tabsdata_snowflake.connector
     "SnowflakeDestination",

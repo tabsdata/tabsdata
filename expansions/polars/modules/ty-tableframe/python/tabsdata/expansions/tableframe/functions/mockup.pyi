@@ -3,4 +3,5 @@
 
 import builtins
 
-def dummy_fn(input: builtins.str) -> builtins.str: ...
+def dummy_fn(input:builtins.str) -> builtins.str: ...
+

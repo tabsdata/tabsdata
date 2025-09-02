@@ -169,13 +169,6 @@ def test_input_salesforce_initial_values(tmp_path):
     # Check initial values properly stored
     assert os.path.isfile(path_to_output_initial_values)
     initial_values = pl.read_parquet(path_to_output_initial_values)
-    initial_values.write_parquet(
-        os.path.join(
-            TESTING_RESOURCES_FOLDER,
-            "test_input_salesforce_initial_values",
-            "expected_initial_values.parquet",
-        )
-    )
     expected_initial_values = pl.read_parquet(
         os.path.join(
             TESTING_RESOURCES_FOLDER,
@@ -213,15 +206,6 @@ def test_input_salesforce_initial_values(tmp_path):
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
     assert not os.path.isfile(first_output_file)
     assert not os.path.isfile(second_output_file)
-
-    # assert os.path.isfile(first_output_file)
-    # output = pl.read_parquet(first_output_file)
-    # output = clean_polars_df(output)
-    # assert output.is_empty()
-    # assert os.path.isfile(second_output_file)
-    # output = pl.read_parquet(second_output_file)
-    # output = clean_polars_df(output)
-    # assert output.is_empty()
 
     # In this second iteration, nothing has changed, so the initial values stayed the
     # same. Therefore, we will send a "NoData" for the initial values, and the file
@@ -398,38 +382,34 @@ def test_replace_last_modified_token():
 
 @pytest.mark.salesforce
 def test_maximum_date():
-    source = td.SalesforceSource(
-        username="username",
-        password="password",
-        security_token="security_token",
-        query="SELECT Name FROM Contact",
-    )
+    from tabsdata_salesforce._connector import _maximum_date
+
     date1 = "2098-02-05T11:27:47.000000+0000"
     date2 = "2068-06-16T18:47:39.000000-0400"
     date3 = "2061-02-19T23:50:07.000000+0100"
     date4 = "2004-04-27T07:04:56.000000-0400"
     date5 = "1934-04-16T14:10:02.000000+0000"
-    assert source._maximum_date(date1, date2) == date1
-    assert source._maximum_date(date2, date1) == date1
-    assert source._maximum_date(date1, date1) == date1
-    assert source._maximum_date(date1, date3) == date1
-    assert source._maximum_date(date3, date1) == date1
-    assert source._maximum_date(date1, date4) == date1
-    assert source._maximum_date(date4, date1) == date1
-    assert source._maximum_date(date1, date5) == date1
-    assert source._maximum_date(date5, date1) == date1
-    assert source._maximum_date(date2, date3) == date2
-    assert source._maximum_date(date3, date2) == date2
-    assert source._maximum_date(date2, date4) == date2
-    assert source._maximum_date(date4, date2) == date2
-    assert source._maximum_date(date2, date5) == date2
-    assert source._maximum_date(date5, date2) == date2
-    assert source._maximum_date(date3, date4) == date3
-    assert source._maximum_date(date4, date3) == date3
-    assert source._maximum_date(date3, date5) == date3
-    assert source._maximum_date(date5, date3) == date3
-    assert source._maximum_date(date4, date5) == date4
-    assert source._maximum_date(date5, date4) == date4
+    assert _maximum_date(date1, date2) == date1
+    assert _maximum_date(date2, date1) == date1
+    assert _maximum_date(date1, date1) == date1
+    assert _maximum_date(date1, date3) == date1
+    assert _maximum_date(date3, date1) == date1
+    assert _maximum_date(date1, date4) == date1
+    assert _maximum_date(date4, date1) == date1
+    assert _maximum_date(date1, date5) == date1
+    assert _maximum_date(date5, date1) == date1
+    assert _maximum_date(date2, date3) == date2
+    assert _maximum_date(date3, date2) == date2
+    assert _maximum_date(date2, date4) == date2
+    assert _maximum_date(date4, date2) == date2
+    assert _maximum_date(date2, date5) == date2
+    assert _maximum_date(date5, date2) == date2
+    assert _maximum_date(date3, date4) == date3
+    assert _maximum_date(date4, date3) == date3
+    assert _maximum_date(date3, date5) == date3
+    assert _maximum_date(date5, date3) == date3
+    assert _maximum_date(date4, date5) == date4
+    assert _maximum_date(date5, date4) == date4
 
 
 @pytest.mark.salesforce
@@ -470,6 +450,8 @@ def test_chunk(tmp_path):
 @pytest.mark.salesforce
 @pytest.mark.requires_internet
 def test_login():
+    from tabsdata_salesforce._connector import _log_into_salesforce
+
     date5 = "1934-04-16T14:10:02.000000+0000"
     source = td.SalesforceSource(
         username=td.EnvironmentSecret("SALESFORCE_USERNAME"),
@@ -480,7 +462,7 @@ def test_login():
             f" WHERE {td.SalesforceSource.LAST_MODIFIED_COLUMN} > {date5}"
         ),
     )
-    source._log_into_salesforce()
+    _log_into_salesforce(source)
 
 
 @pytest.mark.salesforce

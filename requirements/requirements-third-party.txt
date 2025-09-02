@@ -13,6 +13,7 @@ fastparquet==2024.11.0
 filelock==3.19.1
 humanize==4.12.3
 hvac==2.3.0
+ijson==3.4.0
 importlib_metadata==8.7.0
 numpy==2.3.2
 packaging==25.0
