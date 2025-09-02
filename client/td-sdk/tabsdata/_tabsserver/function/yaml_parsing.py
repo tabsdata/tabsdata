@@ -407,7 +407,8 @@ class V1ImportFormat(ImportYaml):
         self,
         source: TransporterAzure | TransporterS3 | TransporterLocalFile,
         format: (
-            TransporterLogFormat
+            TransporterAvroFormat
+            | TransporterLogFormat
             | TransporterCSVFormat
             | TransporterParquetFormat
             | TransporterJsonFormat
@@ -429,6 +430,11 @@ class V1ImportFormat(ImportYaml):
 
     def __repr__(self):
         return f"{self.__class__.__name__}(content={self.content})"
+
+
+class TransporterAvroFormat:
+    def __init__(self):
+        self.content = {}
 
 
 class TransporterCSVFormat:
@@ -619,11 +625,19 @@ def v1_import_format_representer(
     dumper.add_representer(TransporterLocalFile, v1_local_file_representer)
     dumper.add_representer(TransporterAzure, v1_azure_representer)
     dumper.add_representer(TransporterS3, v1_s3_representer)
+    dumper.add_representer(TransporterAvroFormat, v1_avro_format_representer)
     dumper.add_representer(TransporterCSVFormat, v1_csv_format_representer)
     dumper.add_representer(TransporterLogFormat, v1_log_format_representer)
     dumper.add_representer(TransporterParquetFormat, v1_parquet_format_representer)
     dumper.add_representer(TransporterJsonFormat, v1_ndjson_format_representer)
     return dumper.represent_mapping("!ImportV1", v1_copy_format.content)
+
+
+def v1_avro_format_representer(
+    dumper: yaml.SafeDumper, avro_format: TransporterAvroFormat
+) -> yaml.nodes.ScalarNode:
+    """Represent an S3 instance as a YAML mapping node."""
+    return dumper.represent_str("Binary")
 
 
 def v1_csv_format_representer(

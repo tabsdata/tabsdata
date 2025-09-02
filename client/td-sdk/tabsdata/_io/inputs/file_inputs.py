@@ -17,7 +17,7 @@ from tabsdata._credentials import (
     build_credentials,
 )
 from tabsdata._format import (
-    AVROFormat,
+    AvroFormat,
     CSVFormat,
     FileFormat,
     LogFormat,
@@ -52,6 +52,7 @@ from tabsdata._tabsserver.function.offset_utils import (
     OFFSET_LAST_MODIFIED_VARIABLE_NAME,
 )
 from tabsdata._tabsserver.function.yaml_parsing import (
+    TransporterAvroFormat,
     TransporterAzure,
     TransporterCSVFormat,
     TransporterEnv,
@@ -64,6 +65,7 @@ from tabsdata._tabsserver.function.yaml_parsing import (
     parse_import_report_yaml,
     store_import_as_yaml,
 )
+from tabsdata._tabsserver.utils import convert_uri_to_path
 from tabsdata.exceptions import (
     ErrorCode,
     SourceConfigurationError,
@@ -92,7 +94,7 @@ class AzureSource(SourcePlugin):
         Enum for the supported formats for the AzureSource.
         """
 
-        avro = AVROFormat
+        avro = AvroFormat
         csv = CSVFormat
         ndjson = NDJSONFormat
         log = LogFormat
@@ -120,7 +122,7 @@ class AzureSource(SourcePlugin):
                 Can be either a string with the format, a FileFormat object or a
                 dictionary with the format as the 'type' key and any additional
                 format-specific information. Currently supported formats are 'csv',
-                'parquet', 'ndjson', 'jsonl' and 'log'.
+                'parquet', 'avro', 'ndjson', 'jsonl' and 'log'.
             initial_last_modified (str | datetime, optional): If provided,
                 only the files modified after this date and time will be considered.
                 The date and time can be provided as a string in
@@ -195,7 +197,7 @@ class AzureSource(SourcePlugin):
                 Can be either a string with the format, a FileFormat object or a
                 dictionary with the format as the 'type' key and any additional
                 format-specific information. Currently supported formats are 'csv',
-                'parquet', 'ndjson', 'jsonl' and 'log'.
+                'parquet', 'avro', 'ndjson', 'jsonl' and 'log'.
         """
         if format is None:
             self._format = None
@@ -343,7 +345,7 @@ class LocalFileSource(SourcePlugin):
         Enum for the supported formats for the LocalFileSource.
         """
 
-        avro = AVROFormat
+        avro = AvroFormat
         csv = CSVFormat
         ndjson = NDJSONFormat
         log = LogFormat
@@ -367,7 +369,7 @@ class LocalFileSource(SourcePlugin):
                 Can be either a string with the format, a FileFormat object or a
                 dictionary with the format as the 'type' key and any additional
                 format-specific information. Currently supported formats are 'csv',
-                'parquet', 'ndjson', 'jsonl' and 'log'.
+                'parquet', 'avro', 'ndjson', 'jsonl' and 'log'.
             initial_last_modified (str | datetime, optional): If provided,
                 only the files modified after this date and time will be considered.
                 The date and time can be provided as a string in
@@ -450,7 +452,7 @@ class LocalFileSource(SourcePlugin):
                 Can be either a string with the format, a FileFormat object or a
                 dictionary with the format as the 'type' key and any additional
                 format-specific information. Currently supported formats are 'csv',
-                'parquet', 'ndjson', 'jsonl' and 'log'.
+                'parquet', 'avro', 'ndjson', 'jsonl' and 'log'.
         """
         if format is None:
             self._format = None
@@ -578,7 +580,7 @@ class S3Source(SourcePlugin):
         Enum for the supported formats for the S3Source.
         """
 
-        avro = AVROFormat
+        avro = AvroFormat
         csv = CSVFormat
         ndjson = NDJSONFormat
         log = LogFormat
@@ -607,7 +609,7 @@ class S3Source(SourcePlugin):
                 Can be either a string with the format, a FileFormat object or a
                 dictionary with the format as the 'type' key and any additional
                 format-specific information. Currently supported formats are 'csv',
-                'parquet', 'ndjson', 'jsonl' and 'log'.
+                'parquet', 'avro', 'ndjson', 'jsonl' and 'log'.
             initial_last_modified (str | datetime, optional): If provided,
                 only the files modified after this date and time will be considered.
                 The date and time can be provided as a string in
@@ -719,7 +721,7 @@ class S3Source(SourcePlugin):
                 Can be either a string with the format, a FileFormat object or a
                 dictionary with the format as the 'type' key and any additional
                 format-specific information. Currently supported formats are 'csv',
-                'parquet', 'ndjson', 'jsonl' and 'log'.
+                'parquet', 'avro', 'ndjson', 'jsonl' and 'log'.
         """
         if format is None:
             self._format = None
@@ -993,7 +995,7 @@ def _execute_single_file_import(
             for dictionary in files:
                 source_list.append(dictionary.get("to"))
             logger.info(f"Imported files to: '{source_list}'")
-            if isinstance(file_format, AVROFormat):
+            if isinstance(file_format, AvroFormat):
                 logger.debug("Converting AVRO files to Parquet format")
                 new_source_list = []
                 for source in source_list:
@@ -1015,7 +1017,7 @@ def _execute_single_file_import(
         # If the data is not a wildcard pattern, the result is a single file
         else:
             logger.info(f"Imported file to: '{source_list}'")
-            if isinstance(file_format, AVROFormat):
+            if isinstance(file_format, AvroFormat):
                 logger.debug("Converting AVRO file to Parquet format")
                 source_list = _convert_avro_to_parquet(
                     source_list, destination_folder, file_format
@@ -1026,7 +1028,7 @@ def _execute_single_file_import(
 
 
 def _convert_avro_to_parquet(
-    avro_file: str, destination_folder: str, file_format: AVROFormat
+    avro_file: str, destination_folder: str, file_format: AvroFormat
 ) -> str:
     import pandas as pd
 
@@ -1039,6 +1041,8 @@ def _convert_avro_to_parquet(
     uuid_string = uuid.uuid4().hex[:16]
     intermediate_file_name = f"from_avro_{uuid_string}.parquet"
     intermediate_file = os.path.join(destination_folder, intermediate_file_name)
+    avro_file = convert_uri_to_path(avro_file)
+    logger.debug(f"Using path for AVRO file '{avro_file}'")
     for chunk in _read_avro_in_chunks(avro_file, chunk_size):
         df = pd.DataFrame(chunk)
         df.to_parquet(
@@ -1110,10 +1114,8 @@ def _obtain_transporter_import(
         transporter_format = TransporterJsonFormat()
     elif isinstance(file_format, ParquetFormat):
         transporter_format = TransporterParquetFormat()
-    elif isinstance(file_format, AVROFormat):
-        pass
-        # transporter_format = TransporterAvroFormat() # TODO: Implement
-        # TransporterAvroFormat
+    elif isinstance(file_format, AvroFormat):
+        transporter_format = TransporterAvroFormat()
     else:
         logger.error(f"Invalid file format: {type(file_format)}. No data imported.")
         raise TypeError(f"Invalid file format: {type(file_format)}. No data imported.")

@@ -6,7 +6,7 @@ import copy
 
 import pytest
 
-from tabsdata import AVROFormat, CSVFormat, LogFormat, NDJSONFormat, ParquetFormat
+from tabsdata import AvroFormat, CSVFormat, LogFormat, NDJSONFormat, ParquetFormat
 from tabsdata._format import build_file_format, get_implicit_format_from_list
 from tabsdata.exceptions import ErrorCode, FormatConfigurationError
 from tests_tabsdata.conftest import FORMAT_TYPE_TO_CONFIG
@@ -131,16 +131,16 @@ def test_parquet_format_all_parameters():
 
 
 def test_avro_format_to_dict():
-    avro_format = AVROFormat()
+    avro_format = AvroFormat()
     assert avro_format._to_dict() == {
-        AVROFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["avro"]
+        AvroFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["avro"]
     }
-    assert isinstance(build_file_format(avro_format._to_dict()), AVROFormat)
+    assert isinstance(build_file_format(avro_format._to_dict()), AvroFormat)
     assert avro_format.__repr__()
 
 
 def test_avro_format_all_parameters():
-    avro_format = AVROFormat()
+    avro_format = AvroFormat()
     assert avro_format.__repr__()
     assert build_file_format(avro_format._to_dict()) == avro_format
 

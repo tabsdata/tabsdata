@@ -2,6 +2,7 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
+import copy
 import inspect
 import logging
 import os
@@ -64,9 +65,10 @@ LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
 def test_output_file_parquet(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_file = os.path.join(tmp_path, "test_output_file_parquet.parquet")
-    output_file_format_testing.output = td.LocalFileDestination(output_file)
+    output_file_format_testing_parquet = copy.deepcopy(output_file_format_testing)
+    output_file_format_testing_parquet.output = td.LocalFileDestination(output_file)
     context_archive = create_bundle_archive(
-        output_file_format_testing,
+        output_file_format_testing_parquet,
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
@@ -112,7 +114,7 @@ def test_output_file_parquet(tmp_path):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_file_multiple_files(tmp_path):
+def test_output_file_multiple_files_parquet(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     first_output_file = os.path.join(
         tmp_path, "test_output_file_multiple_files1.parquet"
@@ -120,11 +122,12 @@ def test_output_file_multiple_files(tmp_path):
     second_output_file = os.path.join(
         tmp_path, "test_output_file_multiple_files2.parquet"
     )
-    output_file_multiple_files.output = td.LocalFileDestination(
+    output_file_multiple_files_parquet = copy.deepcopy(output_file_multiple_files)
+    output_file_multiple_files_parquet.output = td.LocalFileDestination(
         [first_output_file, second_output_file]
     )
     context_archive = create_bundle_archive(
-        output_file_multiple_files,
+        output_file_multiple_files_parquet,
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
@@ -184,13 +187,14 @@ def test_output_file_multiple_files(tmp_path):
 def test_output_file_csv(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_file = os.path.join(tmp_path, "test_output_file_csv.csv")
-    output_file_format_testing.output = td.LocalFileDestination(
+    output_file_format_testing_csv = copy.deepcopy(output_file_format_testing)
+    output_file_format_testing_csv.output = td.LocalFileDestination(
         output_file,
         # ToDo: Undo when https://github.com/pola-rs/polars/issues/21802 fix is available
         td.CSVFormat(eol_char="\n", separator=",", output_float_precision=4),
     )
     context_archive = create_bundle_archive(
-        output_file_format_testing,
+        output_file_format_testing_csv,
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
@@ -240,9 +244,10 @@ def test_output_file_csv(tmp_path):
 def test_output_file_ndjson(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_file = os.path.join(tmp_path, "test_output_file_ndjson.ndjson")
-    output_file_format_testing.output = td.LocalFileDestination(output_file)
+    output_file_format_testing_ndjson = copy.deepcopy(output_file_format_testing)
+    output_file_format_testing_ndjson.output = td.LocalFileDestination(output_file)
     context_archive = create_bundle_archive(
-        output_file_format_testing,
+        output_file_format_testing_ndjson,
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
@@ -479,6 +484,124 @@ def test_output_file_frame_list(tmp_path):
         TESTING_RESOURCES_FOLDER,
         "test_output_file_frame_list",
         "expected_result_1.json",
+    )
+    expected_output = read_json_and_clean(expected_output_file)
+    assert output.equals(expected_output)
+
+
+@pytest.mark.requires_internet
+@pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
+def test_output_file_avro(tmp_path):
+    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    output_file = os.path.join(tmp_path, "test_output_file_avro.avro")
+    output_file_format_testing_avro = copy.deepcopy(output_file_format_testing)
+    output_file_format_testing_avro.output = td.LocalFileDestination(output_file)
+    context_archive = create_bundle_archive(
+        output_file_format_testing_avro,
+        local_packages=LOCAL_PACKAGES_LIST,
+        save_location=tmp_path,
+    )
+
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
+    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
+    os.makedirs(response_folder, exist_ok=True)
+    mock_parquet_table = os.path.join(
+        TESTING_RESOURCES_FOLDER, "test_output_file", "mock_table.parquet"
+    )
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
+    write_v2_yaml_file(
+        input_yaml_file,
+        context_archive,
+        [mock_parquet_table],
+        function_data_path=function_data_folder,
+    )
+    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
+    environment_name, result = tabsserver_main(
+        tmp_path,
+        response_folder,
+        tabsserver_output_folder,
+        environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+        logs_folder=logs_folder,
+        temp_cwd=True,
+    )
+    assert result == 0
+    assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
+
+    assert os.path.isfile(output_file)
+    output = pl.read_avro(output_file)
+    output = clean_polars_df(output)
+    expected_output_file = os.path.join(
+        TESTING_RESOURCES_FOLDER,
+        "test_output_file",
+        "expected_result.json",
+    )
+    expected_output = read_json_and_clean(expected_output_file)
+    assert output.equals(expected_output)
+
+
+@pytest.mark.requires_internet
+@pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
+def test_output_file_multiple_files_avro(tmp_path):
+    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    first_output_file = os.path.join(tmp_path, "test_output_file_multiple_files1.avro")
+    second_output_file = os.path.join(tmp_path, "test_output_file_multiple_files2.avro")
+    output_file_multiple_files_avro = copy.deepcopy(output_file_multiple_files)
+    output_file_multiple_files_avro.output = td.LocalFileDestination(
+        [first_output_file, second_output_file]
+    )
+    context_archive = create_bundle_archive(
+        output_file_multiple_files_avro,
+        local_packages=LOCAL_PACKAGES_LIST,
+        save_location=tmp_path,
+    )
+
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
+    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
+    os.makedirs(response_folder, exist_ok=True)
+    mock_parquet_table = os.path.join(
+        TESTING_RESOURCES_FOLDER, "test_output_file", "mock_table.parquet"
+    )
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
+    write_v2_yaml_file(
+        input_yaml_file,
+        context_archive,
+        [mock_parquet_table],
+        function_data_path=function_data_folder,
+    )
+    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
+    environment_name, result = tabsserver_main(
+        tmp_path,
+        response_folder,
+        tabsserver_output_folder,
+        environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+        logs_folder=logs_folder,
+        temp_cwd=True,
+    )
+    assert result == 0
+    assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
+
+    assert os.path.isfile(first_output_file)
+    output = pl.read_avro(first_output_file)
+    output = clean_polars_df(output)
+    expected_output_file = os.path.join(
+        TESTING_RESOURCES_FOLDER,
+        "test_output_file_multiple_files",
+        "expected_result.json",
+    )
+    expected_output = read_json_and_clean(expected_output_file)
+    assert output.equals(expected_output)
+
+    assert os.path.isfile(second_output_file)
+    output = pl.read_avro(second_output_file)
+    output = clean_polars_df(output)
+    expected_output_file = os.path.join(
+        TESTING_RESOURCES_FOLDER,
+        "test_output_file_multiple_files",
+        "expected_result.json",
     )
     expected_output = read_json_and_clean(expected_output_file)
     assert output.equals(expected_output)

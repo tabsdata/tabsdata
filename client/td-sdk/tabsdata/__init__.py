@@ -60,7 +60,7 @@ from tabsdata._credentials import (
 )
 from tabsdata._decorators import ALL_DEPS, publisher, subscriber, transformer
 from tabsdata._format import (
-    AVROFormat,
+    AvroFormat,
     CSVFormat,
     LogFormat,
     NDJSONFormat,
@@ -135,7 +135,7 @@ __all__ = [
     "subscriber",
     "transformer",
     # from format.py
-    "AVROFormat",
+    "AvroFormat",
     "CSVFormat",
     "LogFormat",
     "NDJSONFormat",

@@ -89,7 +89,7 @@ def convert_uri_to_path(uri: str) -> str:
     parsed = urlparse(uri)
     host = "{0}{0}{mnt}{0}".format(os.path.sep, mnt=parsed.netloc)
     path = os.path.normpath(os.path.join(host, url2pathname(parsed.path)))
-    logger.debug(f"Converted URI {uri} to path: {path}")
+    logger.debug(f"Converted URI '{uri}' to path '{path}'")
     return path
 
 

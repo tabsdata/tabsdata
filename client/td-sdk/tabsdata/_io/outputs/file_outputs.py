@@ -28,7 +28,7 @@ from tabsdata._format import (
     NDJSON_EXTENSION,
     PARQUET_EXTENSION,
     TABSDATA_EXTENSION,
-    AVROFormat,
+    AvroFormat,
     CSVFormat,
     FileFormat,
     NDJSONFormat,
@@ -421,7 +421,7 @@ class AzureDestination(DestinationPlugin):
         Enum for the supported formats for the AzureDestination.
         """
 
-        avro = AVROFormat
+        avro = AvroFormat
         csv = CSVFormat
         ndjson = NDJSONFormat
         parquet = ParquetFormat
@@ -524,7 +524,7 @@ class AzureDestination(DestinationPlugin):
                 Can be either a string with the format, a FileFormat object or a
                 dictionary with the format as the 'type' key and any additional
                 format-specific information. Currently supported formats are 'csv',
-                'parquet', 'ndjson' and 'jsonl'.
+                'parquet', 'ndjson', 'jsonl' and 'avro'.
         """
         if format is None:
             self._format = None
@@ -625,7 +625,7 @@ class LocalFileDestination(DestinationPlugin):
         Enum for the supported formats for the LocalFileDestination.
         """
 
-        avro = AVROFormat
+        avro = AvroFormat
         csv = CSVFormat
         ndjson = NDJSONFormat
         parquet = ParquetFormat
@@ -717,7 +717,7 @@ class LocalFileDestination(DestinationPlugin):
                 Can be either a string with the format, a FileFormat object or a
                 dictionary with the format as the 'type' key and any additional
                 format-specific information. Currently supported formats are 'csv',
-                'parquet', 'ndjson', 'jsonl' and 'log'.
+                'parquet', 'ndjson', 'jsonl' and 'avro'.
         """
         if format is None:
             self._format = None
@@ -807,7 +807,7 @@ class S3Destination(DestinationPlugin):
         Enum for the supported formats for the S3Destination.
         """
 
-        avro = AVROFormat
+        avro = AvroFormat
         csv = CSVFormat
         ndjson = NDJSONFormat
         parquet = ParquetFormat
@@ -942,7 +942,7 @@ class S3Destination(DestinationPlugin):
                 Can be either a string with the format, a FileFormat object or a
                 dictionary with the format as the 'type' key and any additional
                 format-specific information. Currently supported formats are 'csv',
-                'parquet', 'ndjson', 'jsonl' and 'log'.
+                'parquet', 'ndjson', 'jsonl' and 'avro'.
         """
         if format is None:
             self._format = None
@@ -1257,7 +1257,7 @@ def _obtain_destination_path_list(destination):
 def _pair_result_with_intermediate_file(
     output_folder: str,
     result: pl.LazyFrame | list[pl.LazyFrame | None] | None,
-    format: AVROFormat | CSVFormat | ParquetFormat | NDJSONFormat | FileFormat,
+    format: AvroFormat | CSVFormat | ParquetFormat | NDJSONFormat | FileFormat,
 ):
     format_extension = "." + INPUT_FORMAT_CLASS_TO_EXTENSION[type(format)]
     if result is None:
@@ -1291,7 +1291,7 @@ def _pair_result_with_intermediate_file(
 
 
 INPUT_FORMAT_CLASS_TO_EXTENSION = {
-    AVROFormat: AVRO_EXTENSION,
+    AvroFormat: AVRO_EXTENSION,
     CSVFormat: CSV_EXTENSION,
     NDJSONFormat: NDJSON_EXTENSION,
     ParquetFormat: PARQUET_EXTENSION,
@@ -1368,7 +1368,7 @@ def _store_result_using_transporter(
 def _sink_result_to_intermediate_file(
     result: pl.LazyFrame,
     intermediate_file: str,
-    format: AVROFormat | CSVFormat | ParquetFormat | NDJSONFormat | FileFormat,
+    format: AvroFormat | CSVFormat | ParquetFormat | NDJSONFormat | FileFormat,
 ):
     logger.debug(f"Storing result in intermediate file '{intermediate_file}'")
     _store_polars_lf_in_file(result, intermediate_file, format)
@@ -1540,7 +1540,7 @@ FORMAT_TO_POLARS_WRITE_FUNCTION = {
 def _store_polars_lf_in_file(
     result: pl.LazyFrame,
     result_file: str | os.PathLike,
-    format: AVROFormat | FileFormat | CSVFormat | ParquetFormat | NDJSONFormat = None,
+    format: AvroFormat | FileFormat | CSVFormat | ParquetFormat | NDJSONFormat = None,
 ):
 
     file_ending = result_file.split(".")[-1]
@@ -1577,7 +1577,7 @@ def _store_polars_lf_in_file(
         return FORMAT_TO_POLARS_WRITE_FUNCTION[file_ending](
             result, result_file, **write_format
         )
-    elif isinstance(format, AVROFormat):
+    elif isinstance(format, AvroFormat):
         logger.debug(f"Writing result to file '{result_file}' using AVRO format")
         _store_polars_lf_to_avro(result, result_file, format)
         return
@@ -1593,7 +1593,7 @@ def _store_polars_lf_in_file(
 
 
 def _store_polars_lf_to_avro(
-    result: pl.LazyFrame, result_file: str, format: AVROFormat
+    result: pl.LazyFrame, result_file: str, format: AvroFormat
 ):
     """
     Stores a Polars LazyFrame in an AVRO file.
@@ -1601,14 +1601,14 @@ def _store_polars_lf_to_avro(
     Args:
         result (pl.LazyFrame): The Polars LazyFrame to store.
         result_file (str): The path to the AVRO file.
-        format (AVROFormat): The AVRO format to use for storing the file.
+        format (AvroFormat): The AVRO format to use for storing the file.
     """
 
     import pyarrow.parquet as pq
     from fastavro import reader, writer
 
     logger.debug(f"Storing result in AVRO file '{result_file}'")
-    if not isinstance(format, AVROFormat):
+    if not isinstance(format, AvroFormat):
         raise TypeError("The format must be an instance of AVROFormat.")
     working_folder = os.path.dirname(result_file)
     aux_file = os.path.join(working_folder, f"aux_{uuid.uuid4().hex[:8]}.parquet")

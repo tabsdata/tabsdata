@@ -67,7 +67,7 @@ class FileFormatIdentifier(Enum):
     PARQUET = "parquet-format"
 
 
-class AVROFormat(FileFormat):
+class AvroFormat(FileFormat):
     """The class of the Parquet file format."""
 
     IDENTIFIER = FileFormatIdentifier.AVRO.value
@@ -527,7 +527,7 @@ def _verify_type_or_raise_exception(value, tuple_of_types, variable_name, class_
 
 
 STR_TO_FILE_FORMAT = {
-    AVRO_EXTENSION: AVROFormat,
+    AVRO_EXTENSION: AvroFormat,
     CSV_EXTENSION: CSVFormat,
     JSON_LINES_EXTENSION: NDJSONFormat,
     LOG_EXTENSION: LogFormat,
@@ -577,7 +577,7 @@ def build_file_format_from_dict(configuration: dict) -> FileFormat:
             ErrorCode.FOCE2, identifier, type(format_configuration)
         )
     if identifier == FileFormatIdentifier.AVRO.value:
-        return AVROFormat(**format_configuration)
+        return AvroFormat(**format_configuration)
     if identifier == FileFormatIdentifier.CSV.value:
         return CSVFormat(**format_configuration)
     elif identifier == FileFormatIdentifier.LOG.value:
