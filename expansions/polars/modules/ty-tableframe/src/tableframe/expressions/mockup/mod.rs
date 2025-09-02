@@ -1,3 +1,4 @@
+
 //
 // Copyright 2025 Tabs Data Inc.
 //
@@ -5,19 +6,39 @@
 use polars::prelude::*;
 use pyo3_polars::derive::polars_expr;
 
+const DUMMY_COLUMN: &str = "$tdx._dummy_column";
+
+/*
+Functions marked as 'polars_expr' cannot be easily tested. To allow having test, we use the pattern 
+function (polars expr) + function-impl (actual implementation).   
+ */
+
 #[polars_expr(output_type=String)]
-pub fn dummy_expr(inputs: &[Series]) -> PolarsResult<Series> {
-    dummy_expr_impl(inputs)
+pub fn dummy_expr(batch: &[Series]) -> PolarsResult<Series> {
+    dummy_expr_impl(batch)
 }
 
-pub fn dummy_expr_impl(inputs: &[Series]) -> PolarsResult<Series> {
-    let length = inputs[0].len();
-    let result: Vec<String> = vec!["dummy string".to_string(); length];
-    Ok(Series::new("dummy_column".into(), result))
+pub fn dummy_expr_impl(batch: &[Series]) -> PolarsResult<Series> {
+    if batch.len() != 1 {
+        return Err(PolarsError::InvalidOperation(
+            format!("Expected exactly 1 input series, got {}", batch.len()).into(),
+        ));
+    }
+
+    let n = batch[0].len();
+
+    if n == 0 {
+        return Ok(Series::new(DUMMY_COLUMN.into(), Vec::<String>::new()));
+    }
+    
+    let column: Vec<String> = vec!["dummy string".to_string(); n];
+    
+    Ok(Series::new(DUMMY_COLUMN.into(), column))
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::tableframe::expressions::mockup::DUMMY_COLUMN;
     use polars::prelude::{NamedFrom, PlSmallStr, Series};
 
     #[test]
@@ -26,7 +47,7 @@ mod tests {
         let result =
             super::dummy_expr_impl(&[input]).expect("Error running the 'dummy' expression");
         let expected = Series::new(
-            PlSmallStr::from("dummy_column"),
+            PlSmallStr::from(DUMMY_COLUMN),
             &["dummy string", "dummy string", "dummy string"],
         );
         assert_eq!(result, expected);

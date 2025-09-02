@@ -95,9 +95,10 @@ def add_system_columns(
         if column in current_columns:
             continue
 
-        dtype, default, generator = (
+        dtype, default, language, generator = (
             metadata[td_constants.TD_COL_DTYPE],
             metadata[td_constants.TD_COL_DEFAULT],
+            metadata[td_constants.TD_COL_LANGUAGE],
             metadata[td_constants.TD_COL_GENERATOR],
         )
         if isinstance(generator, str):
@@ -107,7 +108,6 @@ def add_system_columns(
                 generator,
             )
         else:
-            generator_ = generator(idx)
             # If a lazy frame has 0 rows and 0 columns, polars will create a new
             # single row when assigning a literal to a new column. This tweak
             # creates a lazy frame with the correct schema through a data frane,
@@ -116,9 +116,24 @@ def add_system_columns(
                 lf = pl.DataFrame(schema=[(column, dtype)]).lazy()
             else:
                 lf = lf.with_columns(default().alias(column))
-            lf = lf.with_columns_seq(
-                pl.col(column).map_batches(generator_, return_dtype=dtype).alias(column)
-            )
+            match language:
+                case td_constants.Language.PYTHON:
+                    generator_ = generator(idx)
+                    lf = lf.with_columns_seq(
+                        pl.col(column)
+                        .map_batches(
+                            generator_,
+                            return_dtype=dtype,
+                        )
+                        .alias(column)
+                    )
+                case td_constants.Language.RUST:
+                    lf = lf.with_columns_seq(generator(pl.col(column)).alias(column))
+                case _:
+                    raise ValueError(
+                        "Unsupported function language to generate a new system"
+                        f" column: {language}"
+                    )
         is_void = False
     return lf
 

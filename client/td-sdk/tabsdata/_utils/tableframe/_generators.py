@@ -20,7 +20,12 @@ class IdGenerator:
         self._temp_column = f"__tmp_{uuid.uuid4().hex}"
         self._index = index
 
-    def __call__(self, batch: pl.DataFrame | pl.Series, *args, **kwargs,) -> pl.DataFrame | pl.Series:
+    def __call__(
+        self,
+        batch: pl.DataFrame | pl.Series,
+        *args,
+        **kwargs,
+    ) -> pl.DataFrame | pl.Series:
         n = batch.len() if isinstance(batch, pl.Series) else batch.height
 
         if n == 0:
@@ -49,7 +54,11 @@ class IdxGenerator:
     def __init__(self):
         self._index = 0
 
-    def __call__(self, *args, **kwargs,) -> int:
+    def __call__(
+        self,
+        *args,
+        **kwargs,
+    ) -> int:
         idx = self._index
         self._index += 1
         return idx

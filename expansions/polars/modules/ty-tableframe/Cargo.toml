@@ -20,6 +20,10 @@ version = { workspace = true }
 name = "pystubs"
 path = "src/pystubs.rs"
 
+[[bin]]
+name = "polars"
+path = "src/polars.rs"
+
 [lib]
 name = "ty_tableframe"
 crate-type = ["cdylib", "rlib"]
@@ -62,15 +66,18 @@ ta-tableframe = { workspace = true }
 # External dependencies
 
 arrow = { workspace = true }
+chrono = { workspace = true }
+data-encoding = { workspace = true }
 polars = { workspace = true, features = ["default", "fmt", "dtype-date", "timezones"] }
 polars-plan = { workspace = true, features = ["python"] }
 polars-mem-engine = { workspace = true, features = ["python"] }
 pyo3 = { workspace = true, features = ["abi3-py312", "anyhow", "macros", "multiple-pymethods", "num-bigint", "num-complex", "num-rational", "rust_decimal", "serde", "smallvec"] }
 pyo3-polars = { workspace = true, features = ["derive"] }
 pyo3-stub-gen = { workspace = true }
-
 rayon = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
+uuid7 = { workspace = true }
+
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }

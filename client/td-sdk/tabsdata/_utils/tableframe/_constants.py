@@ -10,6 +10,9 @@ import polars as pl
 
 import tabsdata._utils.tableframe._generators as td_generators
 
+# noinspection PyProtectedMember
+from tabsdata.expansions.tableframe.expressions import _identifier_generator
+
 PYTEST_CONTEXT_ACTIVE = "PYTEST_VERSION"
 
 DUPLICATE_METHODS = ["collect_schema"]
@@ -84,6 +87,11 @@ UNSTABLE_METHODS = [
 ]
 
 
+class Language(Enum):
+    PYTHON = "python"
+    RUST = "rust"
+
+
 class Inception(Enum):
     # When the system column is kept as is when storing the table.
     PROPAGATE = "propagate"
@@ -96,6 +104,7 @@ TD_COLUMN_PREFIX_REGEXP = "^\\$td\\..*$"
 
 TD_COL_DEFAULT = "default"
 TD_COL_DTYPE = "dtype"
+TD_COL_LANGUAGE = "language"
 TD_COL_GENERATOR = "generator"
 TD_COL_INCEPTION = "inception"
 TD_COL_AGGREGATION = "aggregation"
@@ -118,7 +127,10 @@ class StandardSystemColumnsMetadata(Enum):
     TD_IDENTIFIER = {
         TD_COL_DEFAULT: td_generators._id_default,
         TD_COL_DTYPE: pl.String,
-        TD_COL_GENERATOR: td_generators.IdGenerator,
+        # TD_COL_LANGUAGE: Language.PYTHON,
+        # TD_COL_GENERATOR: td_generators.IdGenerator,
+        TD_COL_LANGUAGE: Language.RUST,
+        TD_COL_GENERATOR: _identifier_generator,
         TD_COL_INCEPTION: Inception.REGENERATE,
         TD_COL_AGGREGATION: None,
     }

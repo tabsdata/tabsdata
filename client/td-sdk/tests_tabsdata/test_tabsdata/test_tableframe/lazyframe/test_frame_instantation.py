@@ -18,9 +18,15 @@ from tabsdata._utils.tableframe._helpers import REQUIRED_COLUMNS
 
 # noinspection PyProtectedMember
 from tabsdata._utils.tableframe._translator import _wrap_polars_frame
+
+# noinspection PyProtectedMember
 from tabsdata._utils.tableframe.builders import from_dict, from_pandas, from_polars
 from tabsdata.exceptions import ErrorCode, TabsDataException
+
+# noinspection PyProtectedMember
 from tabsdata.extensions._features.api.features import Feature, FeaturesManager
+
+# noinspection PyProtectedMember
 from tabsdata.extensions._tableframe.extension import TableFrameExtension
 
 # noinspection PyProtectedMember

@@ -2,9 +2,9 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-mod expressions;
-mod features;
-mod functions;
+pub mod expressions;
+pub mod features;
+pub mod functions;
 
 use pyo3::prelude::PyModuleMethods;
 use pyo3::types::PyAnyMethods;

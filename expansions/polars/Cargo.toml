@@ -105,6 +105,12 @@ path = "../../extensions/rust/te-tableframe"
 package = "polars-arrow"
 version = "0.50.0"
 
+[workspace.dependencies.chrono]
+version = "0.4.41"
+
+[workspace.dependencies.data-encoding]
+version = "2.9.0"
+
 [workspace.dependencies.openssl]
 version = "0.10.73"
 features = ["vendored"]
@@ -147,6 +153,13 @@ features = ["derive"]
 
 [workspace.dependencies.toml]
 version = "0.9.5"
+
+[workspace.dependencies.uuid]
+version = "1.18.0"
+features = ["v7"]
+
+[workspace.dependencies.uuid7]
+version = "1.1.0"
 
 [build-dependencies]
 
