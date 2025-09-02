@@ -545,7 +545,7 @@ version = "0.2.5"
 version = "0.1.2"
 
 [workspace.dependencies.tracing-subscriber]
-version = "0.3.19"
+version = "0.3.20"
 features = ["env-filter"]
 
 [workspace.dependencies.utoipa]

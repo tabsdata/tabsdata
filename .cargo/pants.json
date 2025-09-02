@@ -31,6 +31,10 @@
     {
       "id": "CVE-2024-47609",
       "reason": "When using tonic::transport::Server there is a remote DoS attack that can cause the server to exit cleanly on accepting a TCP/TLS stream"
+    },
+    {
+      "id": "CVE-2025-58160",
+      "reason": "Affects crate tracing-subscriber. CWE-150: Improper Neutralization of Escape, Meta, or Control Sequences."
     }
   ]
 }
