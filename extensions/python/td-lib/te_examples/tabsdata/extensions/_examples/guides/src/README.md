@@ -26,12 +26,6 @@ td examples --dir=<path>
 This will create a new directory at the location you specify, populated with all the available 
 example use cases. The folder must not already exist as it will be created by the CLI.
 
-If you prefer a more explicit variant, you can also use the subcommand form:
-
-```bash
-td examples generate --dir=<path>
-```
-
 Here, *`<path>`* should be replaced with the target directory where you want the examples to be 
 created.
 
@@ -46,9 +40,3 @@ td examples --dir=<path> --guide
 
 This is particularly useful if you are generating the examples for the first time and want to 
 immediately start exploring them with the help of this documentation.
-
-You can also open this guide at any time later by running:
-
-```bash
-td examples guide
-```

@@ -4,8 +4,8 @@ import tabsdata as td
 
 
 @td.subscriber(
-    ["spanish", "french"],
-    td.LocalFileDestination(
+    tables=["spanish", "french"],
+    destination=td.LocalFileDestination(
         [
             os.path.join(os.getcwd(), "output", "spanish.jsonl"),
             os.path.join(os.getcwd(), "output", "french.jsonl"),
