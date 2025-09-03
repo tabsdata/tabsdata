@@ -7,7 +7,7 @@ use proc_macro::TokenStream;
 use darling::FromMeta;
 use quote::quote;
 use syn::{
-    parse_macro_input, FnArg, GenericArgument, Ident, ItemFn, PathArguments, ReturnType, Type,
+    FnArg, GenericArgument, Ident, ItemFn, PathArguments, ReturnType, Type, parse_macro_input,
 };
 
 use td_shared::parse_meta;

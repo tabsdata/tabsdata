@@ -55,7 +55,7 @@ pub const CERT_DOWNLOAD: &str = url!("/ssl-cert");
 
 // Users
 pub const USERS: &str = url!("/users");
-pub const USER: &str = url!("/{user}");
+pub const USER: &str = url!(USERS, "/{user}");
 
 #[td_type::UrlParam]
 pub struct UserParam {

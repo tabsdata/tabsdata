@@ -2,9 +2,9 @@
 //  Copyright 2024 Tabs Data Inc.
 //
 
-use darling::ast::NestedMeta;
 use darling::FromMeta;
-use quote::{quote, ToTokens};
+use darling::ast::NestedMeta;
+use quote::{ToTokens, quote};
 use std::any::Any;
 
 /// A macro to parse meta attributes using the `darling` crate.

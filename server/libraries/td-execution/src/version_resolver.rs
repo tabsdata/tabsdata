@@ -268,7 +268,8 @@ impl<'a> VersionResolver<'a> {
                 };
 
                 // Check relative versions are always older to newer.
-                let found = if relative_from > relative_to {
+
+                if relative_from > relative_to {
                     vec![None; 0]
                 } else {
                     // And fetch the versions.
@@ -289,14 +290,12 @@ impl<'a> VersionResolver<'a> {
 
                     // In we didn't find enough versions, we fill with None the empty spots.
                     let found_size = found.len();
-                    let range_size = (relative_to - relative_from).abs() as usize + 1;
+                    let range_size = (relative_to - relative_from).unsigned_abs() as usize + 1;
                     found.resize(range_size, None);
                     found.rotate_right(range_size - found_size);
 
                     found
-                };
-
-                found
+                }
             }
         };
 
@@ -667,9 +666,7 @@ mod tests {
             version_error,
             VersionResolverError::FixedTableDataVersionsNotFound(_),
         ));
-        let not_found = match version_error {
-            VersionResolverError::FixedTableDataVersionsNotFound(not_found) => not_found,
-        };
+        let VersionResolverError::FixedTableDataVersionsNotFound(not_found) = version_error;
         assert_eq!(not_found.len(), 1);
         assert_eq!(not_found[0], not_found_id);
         Ok(())
@@ -844,9 +841,7 @@ mod tests {
             version_error,
             VersionResolverError::FixedTableDataVersionsNotFound(_),
         ));
-        let not_found = match version_error {
-            VersionResolverError::FixedTableDataVersionsNotFound(not_found) => not_found,
-        };
+        let VersionResolverError::FixedTableDataVersionsNotFound(not_found) = version_error;
         assert_eq!(not_found.len(), 2);
         let not_found_ids = [not_found_id_1, not_found_id_2];
         assert!(not_found_ids.contains(&not_found[0]));

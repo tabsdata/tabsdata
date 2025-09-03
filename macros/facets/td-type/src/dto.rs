@@ -2,13 +2,13 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::type_builder::{parse_input_item_struct, td_type, TdTypeFields};
+use crate::type_builder::{TdTypeFields, parse_input_item_struct, td_type};
 use darling::{FromDeriveInput, FromField, FromMeta};
 use proc_macro::TokenStream;
 use proc_macro2::Ident;
 use quote::{format_ident, quote};
 use std::collections::HashMap;
-use syn::{parse_macro_input, DeriveInput, ItemStruct};
+use syn::{DeriveInput, ItemStruct, parse_macro_input};
 
 pub fn dto(_args: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as ItemStruct);

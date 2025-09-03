@@ -24,7 +24,7 @@ pub fn _identifier_generator(batch: &[Series], kwargs: IdentifierKwargs) -> Pola
     _identifier_generator_impl(batch, &kwargs.temp_column, &kwargs.index)
 }
 
-pub fn _identifier_generator_impl(batch: &[Series], temp_column: &str, index: &Option<i64>) -> PolarsResult<Series> {
+pub fn _identifier_generator_impl(batch: &[Series], temp_column: &str, _index: &Option<i64>) -> PolarsResult<Series> {
     if batch.len() != 1 {
         return Err(PolarsError::InvalidOperation(
             format!("Expected exactly 1 input series, got {}", batch.len()).into(),
