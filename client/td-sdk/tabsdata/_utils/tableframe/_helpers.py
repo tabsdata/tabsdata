@@ -4,9 +4,9 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable
-
 import tabsdata._utils.tableframe._constants as td_constants
+
+# noinspection PyProtectedMember
 import tabsdata.extensions._tableframe.extension as te_tableframe
 
 
@@ -18,19 +18,21 @@ def extended_system_columns() -> list[str]:
     return [member.value for member in te_tableframe.ExtendedSystemColumns]
 
 
-def system_columns() -> list[Callable[[], str]]:
+def system_columns() -> list[str]:
+    # noinspection PyTypeChecker
     return [member.value for member in te_tableframe.SystemColumns]
 
 
-def system_columns_metadata() -> dict[str, Any]:
+def system_columns_metadata() -> dict[str, td_constants.SystemColumn]:
     return te_tableframe.SYSTEM_COLUMNS_METADATA
 
 
-def required_columns() -> list[Callable[[], str]]:
+def required_columns() -> list[str]:
+    # noinspection PyTypeChecker
     return [member.value for member in te_tableframe.RequiredColumns]
 
 
-def required_columns_metadata() -> dict[str, Any]:
+def required_columns_metadata() -> dict[str, td_constants.SystemColumn]:
     return te_tableframe.REQUIRED_COLUMNS_METADATA
 
 

@@ -2,6 +2,7 @@
 # Copyright 2024 Tabs Data Inc.
 #
 import itertools
+import sys
 from typing import Any, Sequence
 
 import pandas as pd

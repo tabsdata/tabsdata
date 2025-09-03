@@ -10,9 +10,6 @@ import polars as pl
 from tabsdata._utils.tableframe._common import add_system_columns, drop_system_columns
 
 # noinspection PyProtectedMember
-from tabsdata._utils.tableframe._constants import TD_COL_DTYPE
-
-# noinspection PyProtectedMember
 from tabsdata._utils.tableframe._helpers import SYSTEM_COLUMNS_METADATA
 
 # noinspection PyProtectedMember
@@ -44,7 +41,7 @@ def test_add_and_drop_system_columns():
     missing_columns = set(system_columns.keys()) - existing_columns
     assert not missing_columns, f"Missing system columns after add: {missing_columns}"
     for column, metadata in system_columns.items():
-        expected_dtype = metadata[TD_COL_DTYPE]
+        expected_dtype = metadata.dtype
         actual_dtype = df.schema[column]
         assert (
             actual_dtype == expected_dtype

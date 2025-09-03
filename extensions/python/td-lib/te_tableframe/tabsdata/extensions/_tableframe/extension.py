@@ -10,6 +10,8 @@ import polars as pl
 
 # noinspection PyProtectedMember
 import tabsdata._utils.tableframe._constants as td_constants
+
+# noinspection PyProtectedMember
 from tabsdata.extensions._features.api.features import Feature, FeaturesManager
 from tabsdata.extensions._tableframe.api.api import Extension
 from tabsdata.extensions._tableframe.version import version

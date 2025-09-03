@@ -9,8 +9,13 @@ import unittest
 
 import polars as pl
 
+# noinspection PyProtectedMember
 from tabsdata._utils.tableframe._common import drop_inception_regenerate_system_columns
-from tabsdata._utils.tableframe._constants import TD_COL_INCEPTION, Inception
+
+# noinspection PyProtectedMember
+from tabsdata._utils.tableframe._constants import Inception
+
+# noinspection PyProtectedMember
 from tabsdata._utils.tableframe._helpers import SYSTEM_COLUMNS_METADATA
 
 # noinspection PyProtectedMember
@@ -85,13 +90,14 @@ class TestTableFrame(unittest.TestCase):
         expected_drop = [
             column
             for column, metadata in SYSTEM_COLUMNS_METADATA.items()
-            if metadata.get(TD_COL_INCEPTION) == Inception.REGENERATE
+            if metadata.inception == Inception.REGENERATE
         ]
 
+        # noinspection PyUnreachableCode
         expected_kept = [
             column
             for column, metadata in SYSTEM_COLUMNS_METADATA.items()
-            if metadata.get(TD_COL_INCEPTION) != Inception.REGENERATE
+            if metadata.inception != Inception.REGENERATE
         ]
 
         i_lf = self.table_frame._lf

@@ -6,10 +6,16 @@ from __future__ import annotations
 
 import logging
 import uuid
+from typing import Iterable, Union
 
 import polars as pl
 
+# noinspection PyProtectedMember
+from polars._typing import IntoExpr
+from polars.plugins import register_plugin_function
+
 from tabsdata._utils.id import encode_id
+from tabsdata.expansions.tableframe.expressions import PLUGIN_PATH
 
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
@@ -20,11 +26,9 @@ class IdGenerator:
         self._temp_column = f"__tmp_{uuid.uuid4().hex}"
         self._index = index
 
-    def __call__(
+    def python(
         self,
         batch: pl.DataFrame | pl.Series,
-        *args,
-        **kwargs,
     ) -> pl.DataFrame | pl.Series:
         n = batch.len() if isinstance(batch, pl.Series) else batch.height
 
@@ -41,6 +45,18 @@ class IdGenerator:
             return output
         return batch.with_columns(output)
 
+    def rust(self, expression: Union[IntoExpr, Iterable[IntoExpr]]) -> pl.Expr:
+        return register_plugin_function(
+            plugin_path=PLUGIN_PATH,
+            function_name="_identifier_generator",
+            args=expression,
+            kwargs={
+                "temp_column": self._temp_column,
+                "index": self._index,
+            },
+            is_elementwise=True,
+        )
+
 
 def _id_default() -> pl.Expr:
     return pl.lit("", pl.String)
@@ -56,8 +72,6 @@ class IdxGenerator:
 
     def __call__(
         self,
-        *args,
-        **kwargs,
     ) -> int:
         idx = self._index
         self._index += 1

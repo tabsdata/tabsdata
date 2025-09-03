@@ -107,9 +107,9 @@ class TableFrameGroupBy:
 
         system_agg = []
         for column, metadata in td_helpers.REQUIRED_COLUMNS_METADATA.items():
-            if metadata[td_constants.TD_COL_AGGREGATION] is not None:
-                aggregation_function = metadata[td_constants.TD_COL_AGGREGATION]
-                aggregation_function_instance = aggregation_function(
+            if metadata.aggregation is not None:
+                aggregation = metadata.aggregation
+                aggregation_instance = aggregation(
                     column,
                     self._state,
                 )
@@ -129,8 +129,8 @@ class TableFrameGroupBy:
                     pl.col(column)
                     .implode()
                     .map_batches(
-                        aggregation_function_instance,
-                        return_dtype=metadata[td_constants.TD_COL_DTYPE],
+                        aggregation_instance.python,
+                        return_dtype=metadata.dtype,
                         returns_scalar=True,
                     )
                     .alias(column)
@@ -575,5 +575,5 @@ def system_agg_columns() -> list[str]:
     return [
         column
         for column, metadata in td_helpers.REQUIRED_COLUMNS_METADATA.items()
-        if metadata[td_constants.TD_COL_AGGREGATION] is not None
+        if metadata.aggregation is not None
     ]

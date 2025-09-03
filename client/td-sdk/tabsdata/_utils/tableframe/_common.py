@@ -13,6 +13,8 @@ import polars as pl
 import tabsdata._utils.tableframe._constants as td_constants
 import tabsdata._utils.tableframe._helpers as td_helpers
 from tabsdata.exceptions import ErrorCode, TableFrameError
+
+# noinspection PyProtectedMember
 from tabsdata.extensions._tableframe.extension import TableFrameExtension
 
 logger = logging.getLogger(__name__)
@@ -95,17 +97,11 @@ def add_system_columns(
         if column in current_columns:
             continue
 
-        dtype, default, language, generator = (
-            metadata[td_constants.TD_COL_DTYPE],
-            metadata[td_constants.TD_COL_DEFAULT],
-            metadata[td_constants.TD_COL_LANGUAGE],
-            metadata[td_constants.TD_COL_GENERATOR],
-        )
-        if isinstance(generator, str):
+        if isinstance(metadata.generator, str):
             lf = TableFrameExtension.instance().apply_system_column(
                 lf,
                 column,
-                generator,
+                metadata.generator,
             )
         else:
             # If a lazy frame has 0 rows and 0 columns, polars will create a new
@@ -113,26 +109,28 @@ def add_system_columns(
             # creates a lazy frame with the correct schema through a data frane,
             # Which does not have this undesired behavior
             if is_void:
-                lf = pl.DataFrame(schema=[(column, dtype)]).lazy()
+                lf = pl.DataFrame(schema=[(column, metadata.dtype)]).lazy()
             else:
-                lf = lf.with_columns(default().alias(column))
-            match language:
+                lf = lf.with_columns(metadata.default().alias(column))
+            generator_instance = metadata.generator(idx)
+            match metadata.language:
                 case td_constants.Language.PYTHON:
-                    generator_ = generator(idx)
                     lf = lf.with_columns_seq(
                         pl.col(column)
                         .map_batches(
-                            generator_,
-                            return_dtype=dtype,
+                            generator_instance.python,
+                            return_dtype=metadata.dtype,
                         )
                         .alias(column)
                     )
                 case td_constants.Language.RUST:
-                    lf = lf.with_columns_seq(generator(pl.col(column)).alias(column))
+                    lf = lf.with_columns_seq(
+                        generator_instance.rust(pl.col(column)).alias(column)
+                    )
                 case _:
                     raise ValueError(
                         "Unsupported function language to generate a new system"
-                        f" column: {language}"
+                        f" column: {metadata.language}"
                     )
         is_void = False
     return lf
@@ -161,8 +159,7 @@ def drop_inception_regenerate_system_columns(
     columns_to_remove = [
         column
         for column, metadata in td_helpers.SYSTEM_COLUMNS_METADATA.items()
-        if metadata.get(td_constants.TD_COL_INCEPTION)
-        == td_constants.Inception.REGENERATE
+        if metadata.inception == td_constants.Inception.REGENERATE
     ]
 
     if ignore_missing:

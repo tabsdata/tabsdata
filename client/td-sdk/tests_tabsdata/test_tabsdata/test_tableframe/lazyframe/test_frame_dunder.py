@@ -63,7 +63,7 @@ class TestTableFrame(unittest.TestCase):
     def test_dtypes(self):
         expected_dtypes = [pl.Int64, pl.Utf8]
         for column, metadata in _helpers.SYSTEM_COLUMNS_METADATA.items():
-            expected_dtypes.append(metadata[_constants.TD_COL_DTYPE])
+            expected_dtypes.append(metadata.dtype)
         dtypes = self.table_frame.dtypes
         self.assertCountEqual(dtypes, expected_dtypes)
 

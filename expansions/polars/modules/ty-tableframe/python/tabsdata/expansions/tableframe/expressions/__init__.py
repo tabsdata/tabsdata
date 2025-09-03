@@ -27,13 +27,3 @@ def dummy_expr(expression: Union[IntoExpr, Iterable[IntoExpr]]) -> pl.Expr:
         args=expression,
         is_elementwise=True,
     )
-
-
-def _identifier_generator(expression: Union[IntoExpr, Iterable[IntoExpr]]) -> pl.Expr:
-    return register_plugin_function(
-        plugin_path=PLUGIN_PATH,
-        function_name="_identifier_generator",
-        args=expression,
-        # kwargs={"temp_column": temp_column, "index": index,},
-        is_elementwise=True,
-    )

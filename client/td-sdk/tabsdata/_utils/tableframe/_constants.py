@@ -4,14 +4,13 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from enum import Enum
+from typing import Any
 
 import polars as pl
 
 import tabsdata._utils.tableframe._generators as td_generators
-
-# noinspection PyProtectedMember
-from tabsdata.expansions.tableframe.expressions import _identifier_generator
 
 PYTEST_CONTEXT_ACTIVE = "PYTEST_VERSION"
 
@@ -102,12 +101,33 @@ class Inception(Enum):
 TD_COLUMN_PREFIX = "$td."
 TD_COLUMN_PREFIX_REGEXP = "^\\$td\\..*$"
 
-TD_COL_DEFAULT = "default"
-TD_COL_DTYPE = "dtype"
-TD_COL_LANGUAGE = "language"
-TD_COL_GENERATOR = "generator"
-TD_COL_INCEPTION = "inception"
-TD_COL_AGGREGATION = "aggregation"
+
+@dataclass(slots=True, eq=True, frozen=True)
+class SystemColumn:
+    default: Any
+    dtype: Any
+    language: Language
+    generator: Any
+    inception: Inception
+    aggregation: Any
+
+    def __str__(self) -> str:
+        generator_ = getattr(self.generator, "__name__", None) or (
+            "None" if self.generator is None else "<callable>"
+        )
+        aggregation_ = getattr(self.aggregation, "__name__", None) or (
+            "None" if self.aggregation is None else "<callable>"
+        )
+        return (
+            "SystemColumn("
+            f"default={self.default} - "
+            f"dtype={self.dtype} - "
+            f"language={self.language} - "
+            f"generator={generator_} - "
+            f"inception={self.inception} - "
+            f"aggregation={aggregation_}"
+            ")"
+        )
 
 
 class StandardSystemColumns(Enum):
@@ -124,16 +144,14 @@ class StandardVolatileSystemColumns(Enum):
 
 class StandardSystemColumnsMetadata(Enum):
     # noinspection PyProtectedMember
-    TD_IDENTIFIER = {
-        TD_COL_DEFAULT: td_generators._id_default,
-        TD_COL_DTYPE: pl.String,
-        # TD_COL_LANGUAGE: Language.PYTHON,
-        # TD_COL_GENERATOR: td_generators.IdGenerator,
-        TD_COL_LANGUAGE: Language.RUST,
-        TD_COL_GENERATOR: _identifier_generator,
-        TD_COL_INCEPTION: Inception.REGENERATE,
-        TD_COL_AGGREGATION: None,
-    }
+    TD_IDENTIFIER = SystemColumn(
+        dtype=pl.String,
+        default=td_generators._id_default,
+        language=Language.RUST,
+        generator=td_generators.IdGenerator,
+        inception=Inception.REGENERATE,
+        aggregation=None,
+    )
 
 
 REGEXP_ANCHOR_START = "^"
