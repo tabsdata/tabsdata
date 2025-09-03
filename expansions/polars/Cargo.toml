@@ -64,7 +64,7 @@ panic = "abort"
 strip = "debuginfo"
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "toml"]
+ignored = ["openssl", "toml", "ta-tableframe", "td-build", "te-tableframe"]
 
 [features]
 
