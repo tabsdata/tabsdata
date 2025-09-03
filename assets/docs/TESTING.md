@@ -42,10 +42,10 @@ Python fixture or Rust macro.
 
 ## AWS S3 with Access Key and Secret Key Credentials
 
-* `<PREFIX>_S3_URI`: The URI of the S3 bucket.
-* `<PREFIX>_S3_REGION`: The region of the S3 bucket.
-* `<PREFIX>_S3_ACCESS_KEY`: The access key for the S3 bucket.
-* `<PREFIX>_S3_SECRET_KEY`: The secret key for the S3 bucket.
+* `<PREFIX>__S3_URI`: The URI of the S3 bucket.
+* `<PREFIX>__S3_REGION`: The region of the S3 bucket.
+* `<PREFIX>__S3_ACCESS_KEY`: The access key for the S3 bucket.
+* `<PREFIX>__S3_SECRET_KEY`: The secret key for the S3 bucket.
 
 Rust:
 ```rust
@@ -63,9 +63,9 @@ TBD
 
 ## Azure storage with Account Name and Account Key
 
-* `<PREFIX>_AZ_URI`: The name of the Azure storage account.
-* `<PREFIX>_AZ_ACCOUNT_NAME`: The account name for the Azure storage account.
-* `<PREFIX>_AZ_ACCOUNT_KEY`: The account key for the Azure storage account.
+* `<PREFIX>__AZ_URI`: The URI of the Azure container.
+* `<PREFIX>__AZ_ACCOUNT_NAME`: The account name for the Azure storage account.
+* `<PREFIX>__AZ_ACCOUNT_KEY`: The account key for the Azure storage account.
 
 Rust:
 ```rust
@@ -83,7 +83,22 @@ TBD
 
 ## Google Cloud Storage with Service Account Credentials
 
+* `<PREFIX>__GCP_URI`: The URI of the GCP Storage bucket.
+* `<PREFIX>__GCP_SERVICE_ACCOUNT_KEY`: The service account key, JSON blob.
+
+Rust:
+```rust
+    #[td_test::test(when(reqs = GcpStorageWithServiceAccountKeyReqs, env_prefix= "MY_GCP"))]
+    #[tokio::test]
+    async fn my_test(gcp: GcpStorageWithServiceAccountKeyReqs) {
+        ...
+    }
+```
+
+Python:
+```python
 TBD
+```
 
 ## MySQL
 
