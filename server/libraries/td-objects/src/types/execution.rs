@@ -23,6 +23,7 @@ use td_common::datetime::IntoDateTimeUtc;
 use td_common::execution_status::WorkerCallbackStatus;
 use td_common::server::ResponseMessagePayload;
 use td_error::TdError;
+use utoipa::ToSchema;
 
 #[td_type::Dao]
 #[dao(sql_table = "global_status_summary")]
@@ -821,6 +822,12 @@ pub struct ExecutionResponse {
     created_tables: HashSet<TableVersionId>,
     system_tables: HashSet<TableVersionId>,
     user_tables: HashSet<TableVersionId>,
+    // relations info
+    relations: Vec<(
+        FunctionVersionId,
+        TableVersionId,
+        GraphEdge<ResolvedVersionResponse>,
+    )>,
 }
 
 #[td_type::Dto]
@@ -876,7 +883,7 @@ pub struct TableVersionNode {
 
 /// Adds contextual information to dependency graph edges.
 #[td_type::Dlo]
-#[derive(Hash)]
+#[derive(Hash, ToSchema)]
 pub struct GraphDependency {
     dep_pos: DependencyPos,
     self_dependency: SelfDependency,
@@ -884,13 +891,13 @@ pub struct GraphDependency {
 
 /// Adds contextual information to dependency graph edges.
 #[td_type::Dlo]
-#[derive(Hash)]
+#[derive(Hash, ToSchema)]
 pub struct GraphOutput {
     output_pos: Option<TableFunctionParamPos>,
 }
 
 /// Graph versions, which will always hold the versions of the table, either input or output.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
 pub enum GraphEdge<V> {
     // Table create
     Output {
@@ -989,6 +996,26 @@ pub struct ResolvedVersion {
 impl Display for ResolvedVersion {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.original)
+    }
+}
+
+/// Represents the versions of a table to be included in the response.
+#[td_type::Dto]
+pub struct ResolvedVersionResponse {
+    inner: Vec<Option<TableDataVersionId>>,
+    original: TableVersions,
+}
+
+impl From<&ResolvedVersion> for ResolvedVersionResponse {
+    fn from(value: &ResolvedVersion) -> Self {
+        Self {
+            inner: value
+                .inner
+                .iter()
+                .map(|v| v.as_ref().map(|t| t.id))
+                .collect(),
+            original: value.original.clone(),
+        }
     }
 }
 

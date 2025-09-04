@@ -15,8 +15,8 @@ use td_objects::sql::DaoQueries;
 use td_objects::types::basic::{Dot, InputIdx, Trigger, VersionPos};
 use td_objects::types::execution::{
     ExecutionDB, ExecutionResponse, FunctionRequirementDB, FunctionRunDB, FunctionRunDBBuilder,
-    FunctionVersionResponseBuilder, ResolvedVersion, TableDataVersionDB,
-    TableVersionResponseBuilder, TransactionDB, TransactionDBBuilder,
+    FunctionVersionResponseBuilder, GraphEdge, ResolvedVersion, ResolvedVersionResponse,
+    TableDataVersionDB, TableVersionResponseBuilder, TransactionDB, TransactionDBBuilder,
 };
 use td_objects::types::table_ref::Versions;
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
@@ -298,6 +298,39 @@ pub async fn build_response(
             }
         });
 
+    // Relations info
+    let relations = plan
+        .function_version_requirements()
+        .into_iter()
+        .chain(plan.output_tables().into_iter())
+        .map(|(f, t, e)| {
+            let edge = match e {
+                GraphEdge::Output { versions, output } => {
+                    let versions = ResolvedVersionResponse::from(versions);
+                    GraphEdge::Output {
+                        versions,
+                        output: output.clone(),
+                    }
+                }
+                GraphEdge::Trigger { versions } => {
+                    let versions = ResolvedVersionResponse::from(versions);
+                    GraphEdge::Trigger { versions }
+                }
+                GraphEdge::Dependency {
+                    versions,
+                    dependency,
+                } => {
+                    let versions = ResolvedVersionResponse::from(versions);
+                    GraphEdge::Dependency {
+                        versions,
+                        dependency: dependency.clone(),
+                    }
+                }
+            };
+            (*f.function_version_id(), *t.table_version_id(), edge)
+        })
+        .collect::<Vec<_>>();
+
     let triggered_on = execution.triggered_on();
     let dot = Dot::try_from(plan.dot().to_string())?;
     let response = ExecutionResponse::builder()
@@ -313,6 +346,7 @@ pub async fn build_response(
         .created_tables(created_tables)
         .system_tables(system_tables)
         .user_tables(user_tables)
+        .relations(relations)
         .build()?;
     Ok(response)
 }
