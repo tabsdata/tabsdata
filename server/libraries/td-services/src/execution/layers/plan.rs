@@ -189,15 +189,15 @@ pub async fn build_function_requirements(
 
     let mut input_idx = 0;
     for (function, table, edge) in plan.function_version_requirements() {
-        let versions = edge.versions().inner();
-        let single_version = versions.len() == 1;
+        let is_multiple_versions = edge.versions().original().is_multiple();
 
-        for (version_pos, version) in versions.iter().enumerate() {
+        for (version_pos, version) in edge.versions().inner().iter().enumerate() {
             // If single version, we set version_pos to -1 to indicate so.
-            let version_pos = if single_version {
-                -1
-            } else {
+            // There should always be a single inner version in that case.
+            let version_pos = if is_multiple_versions {
                 version_pos as i32
+            } else {
+                -1
             };
 
             let (transaction_id, _) = transaction_map.get(&transaction_by.key(function)?)?;

@@ -78,6 +78,10 @@ impl Versions {
             }
         }
     }
+
+    pub fn is_multiple(&self) -> bool {
+        matches!(self, Versions::List(_) | Versions::Range(_, _))
+    }
 }
 
 impl ComposedString for Versions {
