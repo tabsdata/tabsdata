@@ -143,11 +143,14 @@ def examples(ctx: click.Context, dir: str, guide: bool):
                 dirs_exist_ok=True,
                 ignore=ignored_files,
             )
-            click.echo(
-                f"Examples generated in '{dir}'. "
-                "Follow the instructions in the 'README.md' file found in the newly "
-                "created directory to run them."
-            )
+            click.echo(f"Examples generated in '{dir}'")
+            if not guide:
+                show_hint(
+                    ctx,
+                    "If you want instructions on how to run the "
+                    "examples, use 'td examples --guide' to open a "
+                    "detailed walkthrough in your browser.",
+                )
             show_hint(
                 ctx,
                 "Remember that in order to run the examples, tdserver must be "

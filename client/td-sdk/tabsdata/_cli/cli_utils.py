@@ -6,12 +6,9 @@ import json
 import os
 import platform
 import re
-import shutil
-from datetime import datetime
 
 import requests
 import rich_click as click
-from PIL import Image
 from rich_click import Option, UsageError
 
 from tabsdata.api.apiserver import (
@@ -24,9 +21,6 @@ from tabsdata.api.apiserver import (
 from tabsdata.api.tabsdata_server import TabsdataServer
 
 CONNECTION_FILE = "connection.json"
-
-DOT_FOLDER = os.path.join(DEFAULT_TABSDATA_DIRECTORY, "dot")
-DOT_FORMAT = "-Tjpg -Gdpi=300 -Nfontsize=10 -Nmargin=0.4 -Efontsize=10"
 
 
 def is_valid_id(possible_id: str) -> bool:
@@ -221,48 +215,7 @@ class CurrentPlatform:
         return self.is_linux() or self.is_mac()
 
 
-def cleanup_dot_files():
-    try:
-        for file in os.listdir(DOT_FOLDER):
-            file_path = os.path.join(DOT_FOLDER, file)
-            if os.path.isfile(file_path):
-                if os.stat(file_path).st_mtime < datetime.now().timestamp() - 1800:
-                    os.remove(file_path)
-    except Exception:
-        pass
-
-
 CURRENT_CLI_PLATFORM = CurrentPlatform()
-
-
-def generate_dot_image(
-    full_path: str, open_image: bool = False, ctx: click.Context = None
-):
-    if os.environ.get("TD_CLI_SHOW") in ["0", "False", "false", "no", "NO"]:
-        click.echo("Skipping DOT file opening")
-        return
-    dot_binary = "dot"
-    if CURRENT_CLI_PLATFORM.is_windows():
-        dot_binary = "dot.exe"
-    if not shutil.which(dot_binary):
-        click.echo("Cannot generate DOT image file, dot binary not found")
-        if ctx:
-            show_hint(
-                ctx,
-                "If you want to be able to convert DOT files to images, please install "
-                "the dot binary from Graphviz (https://graphviz.org/)",
-            )
-        return
-    try:
-        jpg_full_path = full_path[: -len(".dot")] + ".jpg"
-        os.system(f"{dot_binary} {DOT_FORMAT} -o {jpg_full_path} {full_path}")
-        click.echo(f"Plan DOT jpg at path: {jpg_full_path}")
-        if open_image:
-            click.echo("Opening DOT file")
-            img = Image.open(jpg_full_path)
-            img.show()
-    except Exception as e:
-        click.echo(f"Failed to open DOT file: {e}")
 
 
 def get_credentials_file_path(ctx: click.Context) -> str:

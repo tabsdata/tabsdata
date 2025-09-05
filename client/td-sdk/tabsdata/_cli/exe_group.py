@@ -3,10 +3,12 @@
 #
 
 import os
+from time import sleep
 from typing import List
 
 import rich_click as click
 from rich.console import Console
+from rich.live import Live
 from rich.table import Table
 
 from tabsdata._cli.cli_utils import (
@@ -21,6 +23,8 @@ from tabsdata._cli.cli_utils import (
 )
 from tabsdata._cli.fn_group import _monitor_execution_or_transaction
 from tabsdata.api.status_utils.execution import (
+    EXECUTION_FINAL_STATUSES,
+    EXECUTION_SUCCESSFUL_FINAL_STATUSES,
     EXECUTION_VALID_USER_PROVIDED_STATUSES,
     user_execution_status_to_api,
 )
@@ -29,6 +33,8 @@ from tabsdata.api.status_utils.function_run import (
     user_function_run_status_to_api,
 )
 from tabsdata.api.status_utils.transaction import (
+    TRANSACTION_FINAL_STATUSES,
+    TRANSACTION_SUCCESSFUL_FINAL_STATUSES,
     TRANSACTION_VALID_USER_PROVIDED_STATUSES,
     user_transaction_status_to_api,
 )
@@ -290,6 +296,14 @@ def obtain_list_fn_run_filters(
     ),
     type=str,
 )
+@click.option(
+    "--monitor",
+    is_flag=True,
+    help=(
+        "If set, the command will monitor the listed plans until they all reach "
+        "a final state."
+    ),
+)
 @click.pass_context
 def list_plan(
     ctx: click.Context,
@@ -299,6 +313,7 @@ def list_plan(
     coll: str,
     last: bool,
     at: str,
+    monitor: bool,
 ):
     """List all plans"""
     verify_login_or_prompt(ctx)
@@ -312,45 +327,86 @@ def list_plan(
     )
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
-        list_of_executions = server.list_executions(
-            filter=request_filter,
-            order_by="triggered_on-",
-        )
-        if last:
-            list_of_executions = list_of_executions[:1]
+        list_of_executions = obtain_execution_list(server, request_filter, last)
 
-        table = Table(title="Plans")
-        table.add_column("ID", style="cyan", no_wrap=True)
-        table.add_column("Name")
-        table.add_column("Collection")
-        table.add_column("Function")
-        table.add_column("Triggered on")
-        table.add_column("Status", no_wrap=True)
+        def build_table() -> Table:
+            """Generate and show table for transactions"""
 
-        for execution in list_of_executions:
-            table.add_row(
-                execution.id,
-                execution.name,
-                execution.collection.name,
-                execution.function.name,
-                beautify_time(execution.triggered_on_str),
-                execution.status,
+            table = Table(title=f"Plans: {len(list_of_executions)}")
+            table.add_column("ID", style="cyan", no_wrap=True)
+            table.add_column("Name")
+            table.add_column("Collection")
+            table.add_column("Function")
+            table.add_column("Triggered on")
+            table.add_column("Status", no_wrap=True)
+
+            for execution in list_of_executions:
+                table.add_row(
+                    execution.id,
+                    execution.name,
+                    execution.collection.name,
+                    execution.function.name,
+                    beautify_time(execution.triggered_on_str),
+                    execution.status,
+                )
+
+            return table
+
+        if monitor:
+            click.echo("Waiting for the plans to finish...")
+
+            refresh_rate = 1  # seconds
+            with Live(
+                build_table(), refresh_per_second=refresh_rate, console=Console()
+            ) as live:
+                while True:
+                    if all(
+                        [
+                            aux_exe.status in EXECUTION_FINAL_STATUSES
+                            for aux_exe in list_of_executions
+                        ]
+                    ):
+                        break
+                    list_of_executions = obtain_execution_list(
+                        server, request_filter, last
+                    )
+                    live.update(build_table())
+                    sleep(1 / refresh_rate)
+                list_of_executions = obtain_execution_list(server, request_filter, last)
+                live.update(build_table())
+
+            click.echo("Plans finished.")
+        else:
+            table = build_table()
+            click.echo()
+            console = Console()
+            console.print(table)
+        click.echo()
+        if not all(
+            [
+                aux_exe.status in EXECUTION_SUCCESSFUL_FINAL_STATUSES
+                for aux_exe in list_of_executions
+            ]
+        ):
+            show_hint(
+                ctx,
+                "If you want to explore why a plan failed, you can "
+                "use the 'td exe logs' command with the '--plan "
+                "<PLAN-ID>' option to see the logs.",
             )
-
-        click.echo()
-        console = Console()
-        console.print(table)
-        click.echo(f"Number of plans: {len(list_of_executions)}")
-        click.echo()
-        show_hint(
-            ctx,
-            "If you want to explore why a plan failed, you can "
-            "use the 'td exe logs' command with the '--plan "
-            "<PLAN-ID>' option to see the logs.",
-        )
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to list plans: {e}")
+
+
+def obtain_execution_list(server: TabsdataServer, request_filter, last: bool):
+    list_of_executions = server.list_executions(
+        filter=request_filter,
+        order_by="triggered_on-",
+    )
+    if last:
+        list_of_executions = list_of_executions[:1]
+    return list_of_executions
 
 
 def obtain_list_exec_filters(
@@ -437,6 +493,14 @@ def obtain_list_exec_filters(
     ),
     type=str,
 )
+@click.option(
+    "--monitor",
+    is_flag=True,
+    help=(
+        "If set, the command will monitor the listed transactions until they all reach "
+        "a final state."
+    ),
+)
 @click.pass_context
 def list_trx(
     ctx: click.Context,
@@ -446,6 +510,7 @@ def list_trx(
     plan: str,
     last: bool,
     at: str,
+    monitor: bool,
 ):
     """List all transactions"""
     verify_login_or_prompt(ctx)
@@ -459,44 +524,87 @@ def list_trx(
             at=at,
         )
         server: TabsdataServer = ctx.obj["tabsdataserver"]
-        list_of_transactions = server.list_transactions(
-            filter=request_filter, order_by="triggered_on-"
-        )
-        if last:
-            list_of_transactions = list_of_transactions[:1]
+        list_of_transactions = obtain_transaction_list(server, request_filter, last)
 
-        table = Table(title="Transactions")
-        table.add_column("ID", style="cyan", no_wrap=True)
-        table.add_column("Plan ID")
-        table.add_column("Collection")
-        table.add_column("Triggered on")
-        table.add_column("Triggered by")
-        table.add_column("Status", no_wrap=True)
+        def build_table() -> Table:
+            """Generate and show table for transactions"""
 
-        for transaction in list_of_transactions:
-            table.add_row(
-                transaction.id,
-                transaction.execution.id,
-                transaction.collection.name,
-                beautify_time(transaction.triggered_on_str),
-                transaction.triggered_by,
-                transaction.status,
+            table = Table(title=f"Transactions: {len(list_of_transactions)}")
+            table.add_column("ID", style="cyan", no_wrap=True)
+            table.add_column("Plan ID")
+            table.add_column("Collection")
+            table.add_column("Triggered on")
+            table.add_column("Triggered by")
+            table.add_column("Status", no_wrap=True)
+
+            for transaction in list_of_transactions:
+                table.add_row(
+                    transaction.id,
+                    transaction.execution.id,
+                    transaction.collection.name,
+                    beautify_time(transaction.triggered_on_str),
+                    transaction.triggered_by,
+                    transaction.status,
+                )
+
+            return table
+
+        if monitor:
+            click.echo("Waiting for the transactions to finish...")
+
+            refresh_rate = 1  # seconds
+            with Live(
+                build_table(), refresh_per_second=refresh_rate, console=Console()
+            ) as live:
+                while True:
+                    if all(
+                        [
+                            aux_trx.status in TRANSACTION_FINAL_STATUSES
+                            for aux_trx in list_of_transactions
+                        ]
+                    ):
+                        break
+                    list_of_transactions = obtain_transaction_list(
+                        server, request_filter, last
+                    )
+                    live.update(build_table())
+                    sleep(1 / refresh_rate)
+                list_of_transactions = obtain_transaction_list(
+                    server, request_filter, last
+                )
+                live.update(build_table())
+
+            click.echo("Transactions finished.")
+        else:
+            table = build_table()
+            click.echo()
+            console = Console()
+            console.print(table)
+        click.echo()
+        if not all(
+            [
+                trx.status in TRANSACTION_SUCCESSFUL_FINAL_STATUSES
+                for trx in list_of_transactions
+            ]
+        ):
+            show_hint(
+                ctx,
+                "If you want to explore why a transaction failed, you can "
+                "use the 'td exe logs' command with the '--trx "
+                "<TRANSACTION-ID>' option to see the logs.",
             )
-
-        click.echo()
-        console = Console()
-        console.print(table)
-        click.echo(f"Number of transactions: {len(list_of_transactions)}")
-        click.echo()
-        show_hint(
-            ctx,
-            "If you want to explore why a transaction failed, you can "
-            "use the 'td exe logs' command with the '--trx "
-            "<TRANSACTION-ID>' option to see the logs.",
-        )
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to list transactions: {e}")
+
+
+def obtain_transaction_list(server: TabsdataServer, request_filter, last: bool):
+    list_of_transactions = server.list_transactions(
+        filter=request_filter, order_by="triggered_on-"
+    )
+    if last:
+        list_of_transactions = list_of_transactions[:1]
+    return list_of_transactions
 
 
 def obtain_list_trx_filters(

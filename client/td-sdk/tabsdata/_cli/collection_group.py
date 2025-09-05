@@ -310,6 +310,7 @@ def list_perm(ctx: click.Context, name: str):
 @click.pass_context
 def pin(ctx: click.Context, name: str):
     """Pin a collection by name"""
+    name = name or logical_prompt(ctx, "Name of the collection to be pinned")
     click.echo(f"Pinning collection: {name}")
     click.echo("-" * 10)
     try:

@@ -70,6 +70,48 @@ def test_function_register_no_prompt(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+def test_function_register_with_update(
+    testing_collection, function_path, tabsserver_connection
+):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "--no-prompt",
+            "fn",
+            "register",
+            "--coll",
+            testing_collection,
+            "--path",
+            function_path,
+            "--update",
+        ],
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+    functions = tabsserver_connection.list_functions(testing_collection)
+    assert len(functions) == 1
+    result = runner.invoke(
+        cli,
+        [
+            "--no-prompt",
+            "fn",
+            "register",
+            "--coll",
+            testing_collection,
+            "--path",
+            function_path,
+            "--update",
+        ],
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+    functions = tabsserver_connection.list_functions(testing_collection)
+    assert len(functions) == 1
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
 def test_function_register_no_prompt_multiple_local_packages(
     testing_collection, function_path, tabsserver_connection
 ):

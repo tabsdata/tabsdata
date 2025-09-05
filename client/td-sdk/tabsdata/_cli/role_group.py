@@ -550,6 +550,7 @@ def list_user(ctx: click.Context, name: str):
 @click.pass_context
 def pin(ctx: click.Context, name: str):
     """Pin a role by name"""
+    name = name or logical_prompt(ctx, "Name of the role to be pinned")
     click.echo(f"Pinning role: {name}")
     click.echo("-" * 10)
     try:
