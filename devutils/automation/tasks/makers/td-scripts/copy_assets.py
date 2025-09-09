@@ -35,10 +35,18 @@ def copy_assets():
         "y",
         "on",
     )
+    require_pydoc_csv = os.getenv("REQUIRE_PYDOC_CSV", "False").lower() in (
+        "1",
+        "true",
+        "yes",
+        "y",
+        "on",
+    )
     logger.debug(f"✅ Current path in copy assets is {Path.cwd()}")
     # noinspection DuplicatedCode
-    variant_assets_folder = os.path.join("variant", "assets")
     client_assets_folder = os.path.join("client", "td-sdk", "tabsdata", "assets")
+
+    variant_assets_folder = os.path.join("variant", "assets")
     logger.debug(
         f"✏️ Copying contents of {variant_assets_folder} to {client_assets_folder}"
     )
@@ -57,6 +65,38 @@ def copy_assets():
         dirs_exist_ok=True,
         symlinks=False,
     )
+
+    pydoc_csv_source = Path(os.path.join("target", "pydoc", "PYDOC.csv"))
+    if not pydoc_csv_source.exists() and require_pydoc_csv:
+        raise FileNotFoundError(
+            f"The PYDOC.csv file is missing in {client_assets_folder}."
+        )
+
+    pydoc_csv_target = Path(os.path.join(variant_assets_folder, "manifest"))
+    logger.debug(f"✏️ Copying contents of {pydoc_csv_source} to {pydoc_csv_target}")
+    if pydoc_csv_source.exists():
+        pydoc_csv_target.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+        shutil.copy(
+            pydoc_csv_source,
+            pydoc_csv_target,
+            follow_symlinks=True,
+        )
+
+    pydoc_csv_target = Path(os.path.join(client_assets_folder, "manifest"))
+    logger.debug(f"✏️ Copying contents of {pydoc_csv_source} to {pydoc_csv_target}")
+    if pydoc_csv_source.exists():
+        pydoc_csv_target.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+        shutil.copy(
+            pydoc_csv_source,
+            pydoc_csv_target,
+            follow_symlinks=True,
+        )
 
 
 copy_assets()

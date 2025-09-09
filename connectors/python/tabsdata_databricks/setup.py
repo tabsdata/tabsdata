@@ -68,6 +68,7 @@ TABSDATA_PACKAGES_PREFIX = "tabsdata_"
 
 REQUIRE_SERVER_BINARIES = "REQUIRE_SERVER_BINARIES"
 REQUIRE_THIRD_PARTY = "REQUIRE_THIRD_PARTY"
+REQUIRE_PYDOC_CSV = "REQUIRE_PYDOC_CSV"
 TD_IGNORE_CONNECTOR_REQUIREMENTS = "TD_IGNORE_CONNECTOR_REQUIREMENTS"
 TD_SKIP_NON_EXISTING_ASSETS = "TD_SKIP_NON_EXISTING_ASSETS"
 TD_USE_MUSLLINUX = "TD_USE_MUSLLINUX"
@@ -84,6 +85,13 @@ require_server_binaries = (
 require_third_party = (
     os.getenv(
         REQUIRE_THIRD_PARTY,
+        "False",
+    ).lower()
+    in TRUE_VALUES
+)
+require_pydoc_csv = (
+    os.getenv(
+        REQUIRE_PYDOC_CSV,
         "False",
     ).lower()
     in TRUE_VALUES

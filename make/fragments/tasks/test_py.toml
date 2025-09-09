@@ -460,6 +460,9 @@ script = [
     '''
     !include_files ./make/libraries/log.ds
 
+    debug "🔷 _____ Feberate pydoc csv..."
+    cm_run_task generate_pydoc_csv
+
     debug "🔷 _____ Copying assets..."
     cm_run_task copy_assets
 
@@ -493,19 +496,6 @@ script = [
         cm_run_task start_pytest_tabsdata
         cm_run_task status_pytest_tabsdata
     end
-    ''']
-
-[tasks.copy_assets]
-category = "05 - Test"
-private = true
-dependencies = ["set_mode_test_py"]
-script_runner = "@duckscript"
-script = [
-    '''
-    !include_files ./make/libraries/log.ds
-
-    debug "🚀 python ${COPY_ASSETS_PY}"
-    exec --fail-on-error python ${COPY_ASSETS_PY}
     ''']
 
 [tasks.setup_pytest_tabsdata]

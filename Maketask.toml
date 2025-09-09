@@ -149,6 +149,7 @@ script = [
     set_env TD_DISABLE_OPENAPI_DOCS_ENDPOINT "false"
     set_env REQUIRE_SERVER_BINARIE "true"
     set_env REQUIRE_THIRD_PARTY "false"
+    set_env REQUIRE_PYDOC_CSV "false"
     set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "false"
     set_env TD_SKIP_NON_EXISTING_ASSETS "false"
     set_env PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES "true"
@@ -1048,6 +1049,28 @@ script = [
     end
     ''']
 
+[tasks.generate_pydoc_csv]
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    debug "🚀 python ${GENERATE_PYDOC_CSV}"
+    exec --fail-on-error python ${GENERATE_PYDOC_CSV}
+    ''']
+
+[tasks.copy_assets]
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    debug "🚀 python ${COPY_ASSETS_PY}"
+    exec --fail-on-error python ${COPY_ASSETS_PY}
+    ''']
+
 [tasks.assembly]
 run_task = [
     { name = [
@@ -1112,7 +1135,7 @@ run_task = [
 ]
 
 [tasks.assembly_py_tabsdata]
-dependencies = ["license", "copy_assets"]
+dependencies = ["license", "generate_pydoc_csv", "copy_assets"]
 script_runner = "@duckscript"
 script = [
     '''
@@ -1130,11 +1153,13 @@ script = [
     if eq ${td_pypi_linked} "true"
         set_env REQUIRE_SERVER_BINARIES "true"
         set_env REQUIRE_THIRD_PARTY "true"
+        set_env REQUIRE_PYDOC_CSV "true"
         set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "false"
         set_env TD_SKIP_NON_EXISTING_ASSETS "false"
     else
         set_env REQUIRE_SERVER_BINARIES "false"
         set_env REQUIRE_THIRD_PARTY "false"
+        set_env REQUIRE_PYDOC_CSV "false"
         set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "true"
         set_env TD_SKIP_NON_EXISTING_ASSETS "true"
     end
@@ -1168,11 +1193,13 @@ script = [
             if eq ${td_pypi_linked} "true"
                 set_env REQUIRE_SERVER_BINARIES "true"
                 set_env REQUIRE_THIRD_PARTY "true"
+                set_env REQUIRE_PYDOC_CSV "true"
                 set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "false"
                 set_env TD_SKIP_NON_EXISTING_ASSETS "false"
             else
                 set_env REQUIRE_SERVER_BINARIES "false"
                 set_env REQUIRE_THIRD_PARTY "false"
+                set_env REQUIRE_PYDOC_CSV "false"
                 set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "true"
                 set_env TD_SKIP_NON_EXISTING_ASSETS "true"
             end
@@ -1207,6 +1234,7 @@ script = [
 
     set_env REQUIRE_SERVER_BINARIES "true"
     set_env REQUIRE_THIRD_PARTY "true"
+    set_env REQUIRE_PYDOC_CSV "true"
     set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "false"
     set_env TD_SKIP_NON_EXISTING_ASSETS "false"
 
@@ -1250,6 +1278,7 @@ script = [
     array_push ${lines} "unset PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES"
     array_push ${lines} "unset REQUIRE_SERVER_BINARIES"
     array_push ${lines} "unset REQUIRE_THIRD_PARTY"
+    array_push ${lines} "unset REQUIRE_PYDOC_CSV"
     array_push ${lines} "unset TD_CLI_SHOW"
     array_push ${lines} "unset TD_IGNORE_CONNECTOR_REQUIREMENTS"
     array_push ${lines} "unset TD_INHERIT_TABSDATA_PACKAGES"
@@ -1289,6 +1318,7 @@ script = [
 
     set_env REQUIRE_SERVER_BINARIES "true"
     set_env REQUIRE_THIRD_PARTY "true"
+    set_env REQUIRE_PYDOC_CSV "true"
     set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "false"
     set_env TD_SKIP_NON_EXISTING_ASSETS "false"
 
@@ -1327,6 +1357,7 @@ script = [
     array_push ${lines} "export PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES=true"
     array_push ${lines} "export REQUIRE_SERVER_BINARIES=false"
     array_push ${lines} "export REQUIRE_THIRD_PARTY=false"
+    array_push ${lines} "export REQUIRE_PYDOC_CSV=false"
     array_push ${lines} "export TD_CLI_SHOW=true"
     array_push ${lines} "export TD_IGNORE_CONNECTOR_REQUIREMENTS=true"
     array_push ${lines} "export TD_INHERIT_TABSDATA_PACKAGES=true"
@@ -1438,11 +1469,13 @@ script = [
             if eq ${td_pypi_linked} "true"
                 set_env REQUIRE_SERVER_BINARIES "true"
                 set_env REQUIRE_THIRD_PARTY "true"
+                set_env REQUIRE_PYDOC_CSV "true"
                 set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "false"
                 set_env TD_SKIP_NON_EXISTING_ASSETS "false"
             else
                 set_env REQUIRE_SERVER_BINARIES "false"
                 set_env REQUIRE_THIRD_PARTY "false"
+                set_env REQUIRE_PYDOC_CSV "false"
                 set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "true"
                 set_env TD_SKIP_NON_EXISTING_ASSETS "true"
             end
@@ -1487,11 +1520,13 @@ script = [
     if eq ${td_pypi_linked} "true"
         set_env REQUIRE_SERVER_BINARIES "true"
         set_env REQUIRE_THIRD_PARTY "true"
+        set_env REQUIRE_PYDOC_CSV "true"
         set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "false"
         set_env TD_SKIP_NON_EXISTING_ASSETS "false"
     else
         set_env REQUIRE_SERVER_BINARIES "false"
         set_env REQUIRE_THIRD_PARTY "false"
+        set_env REQUIRE_PYDOC_CSV "false"
         set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "true"
         set_env TD_SKIP_NON_EXISTING_ASSETS "true"
     end

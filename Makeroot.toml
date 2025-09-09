@@ -70,6 +70,7 @@ MAKE_LIBRARIES_PATH = { value = "${ROOT_PROJECT_TABSDATA_FOLDER}/make/libraries"
 
 BUMP_VERSION_PY = { value = "${ROOT_PROJECT_TABSDATA_FOLDER}/devutils/automation/tasks/makers/td-scripts/bump_version.py", normalize = true }
 CLEAN_PY = { value = "${ROOT_PROJECT_TABSDATA_FOLDER}/devutils/automation/tasks/makers/td-scripts/clean.py", normalize = true }
+GENERATE_PYDOC_CSV = { value = "${ROOT_PROJECT_TABSDATA_FOLDER}/devutils/automation/tasks/makers/td-scripts/generate_pydoc_csv.py", normalize = true }
 COPY_ASSETS_PY = { value = "${ROOT_PROJECT_TABSDATA_FOLDER}/devutils/automation/tasks/makers/td-scripts/copy_assets.py", normalize = true }
 LOCK_REQUIREMENTS_PY = { value = "${ROOT_PROJECT_TABSDATA_FOLDER}/devutils/automation/tasks/makers/td-scripts/lock_requirements.py", normalize = true }
 
