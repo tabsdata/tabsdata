@@ -232,8 +232,7 @@ class TableFrame:
     # tables, An IdxGenerator is a stateful callable class that ensures a unique
     # sequential id is generated in each invocation.
     @classmethod
-    # flake8: noqa: C901
-    def __build__(
+    def __build__(  # noqa: C901
         cls,
         *,
         origin: TableFrameOrigin | None = None,
@@ -2259,7 +2258,8 @@ class TableFrame:
         """
         Extract a slice of rows from the table as a column-oriented dictionary.
 
-        The result is a mapping of column names to lists of values from the selected rows.
+        The result is a mapping of column names to lists of values from the selected
+        rows.
 
         Parameters:
             offset (int): The starting row index of the slice.

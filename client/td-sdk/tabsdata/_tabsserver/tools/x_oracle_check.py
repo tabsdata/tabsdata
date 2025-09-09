@@ -40,7 +40,7 @@ def print_dpi1047(message: str) -> bool:
 
 
 # noinspection DuplicatedCode
-def check_package_oracledb() -> bool:
+def check_package_oracledb() -> bool:  # noqa: C901
     console.print("")
     console.print("2.- Testing oracledb Python package...")
 
@@ -58,7 +58,7 @@ def check_package_oracledb() -> bool:
                 f" {'.'.join(map(str, oracle_instant_client_version))}"
             )
         except Exception as e:
-            console.print(f"    - Oracle Instant Client version check failed")
+            console.print("    - Oracle Instant Client version check failed")
             if not print_dpi1047(str(e)):
                 console.print(f"      {e}")
             return False
@@ -93,7 +93,7 @@ def check_package_cx_oracle() -> bool:
                 f" {'.'.join(map(str, oracle_instant_client_version))}"
             )
         except Exception as e:
-            console.print(f"    - Oracle Instant Client version check failed")
+            console.print("    - Oracle Instant Client version check failed")
             if not print_dpi1047(str(e)):
                 console.print(f"      {e}")
             return False
@@ -154,8 +154,7 @@ def check_oracle_envs() -> bool:
     return True
 
 
-# flake8: noqa: C901
-def check_oracle_libraries() -> bool:
+def check_oracle_libraries() -> bool:  # noqa: C901
     console.print("")
     console.print("4.- Checking Oracle libraries...")
 
@@ -371,17 +370,41 @@ def cli():
         if system == "linux":
             machine = platform.machine().lower()
             if "x86_64" in machine or "amd64" in machine:
-                permalink = "https://www.oracle.com/database/technologies/instant-client/linux-x86-64-downloads.html"
+                permalink = (
+                    "https://www.oracle.com/"
+                    "database/"
+                    "technologies/"
+                    "instant-client/"
+                    "linux-x86-64-downloads.html"
+                )
         elif system == "darwin":
             machine = platform.machine().lower()
             if "arm" in machine or "aarch" in machine:
-                permalink = "https://www.oracle.com/database/technologies/instant-client/macos-arm64-downloads.html"
+                permalink = (
+                    "https://www.oracle.com/"
+                    "database/"
+                    "technologies/"
+                    "instant-client/"
+                    "macos-arm64-downloads.html"
+                )
             elif "x86_64" in machine or "amd64" in machine:
-                permalink = "https://www.oracle.com/database/technologies/instant-client/macos-intel-x86-downloads.html"
+                permalink = (
+                    "https://www.oracle.com/"
+                    "database/"
+                    "technologies/"
+                    "instant-client/"
+                    "macos-intel-x86-downloads.html"
+                )
         elif system == "windows":
             machine = platform.machine().lower()
             if "x86_64" in machine or "amd64" in machine:
-                permalink = "https://www.oracle.com/database/technologies/instant-client/winx64-64-downloads.html"
+                permalink = (
+                    "https://www.oracle.com/"
+                    "database/"
+                    "technologies/"
+                    "instant-client/"
+                    "winx64-64-downloads.html"
+                )
         console.print(
             Text(
                 "\nVisit the link below to download the Oracle Instant Client "

@@ -497,8 +497,7 @@ def inject_tabsdata_version(required_modules: list[str]) -> list[str]:
     return required_modules
 
 
-# flake8: noqa: C901
-def create_virtual_environment(
+def create_virtual_environment(  # noqa: C901
     requirements_description_file: str,
     locks_folder: str,
     current_instance: str | None = None,
@@ -1080,7 +1079,7 @@ PackageProvider: TypeAlias = Literal[
 ]
 
 
-def get_tabsdata_package_metadata(
+def get_tabsdata_package_metadata(  # noqa: C901
     module: str,
     variable: str | None,
 ) -> tuple[str | None, PackageProvider | None]:
@@ -1165,7 +1164,7 @@ def get_tabsdata_package_metadata(
     return provider, location
 
 
-def main():
+def main():  # noqa: C901
     logger.setLevel(logging.INFO)
 
     _packages = sorted(
