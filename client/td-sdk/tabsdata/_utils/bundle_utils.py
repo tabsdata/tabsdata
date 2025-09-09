@@ -43,6 +43,7 @@ CONFIG_INPUTS_KEY = "inputs"
 CONFIG_OUTPUT_KEY = "output"
 IGNORED_FOLDERS = (
     ".cargo",
+    ".coverage",
     ".git",
     ".github",
     ".idea",
