@@ -68,6 +68,7 @@ ta-tableframe = { workspace = true }
 arrow = { workspace = true }
 chrono = { workspace = true }
 data-encoding = { workspace = true }
+grok = { workspace = true }
 polars = { workspace = true, features = ["default", "fmt", "dtype-date", "timezones"] }
 polars-plan = { workspace = true, features = ["python"] }
 polars-mem-engine = { workspace = true, features = ["python"] }

@@ -111,6 +111,9 @@ version = "0.4.41"
 [workspace.dependencies.data-encoding]
 version = "2.9.0"
 
+[workspace.dependencies.grok]
+version = "2.4.0"
+
 [workspace.dependencies.openssl]
 version = "0.10.73"
 features = ["vendored"]
