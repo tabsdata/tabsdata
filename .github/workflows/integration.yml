@@ -5,8 +5,11 @@
 name: Integration Workflow (Standard)
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name == 'schedule' && 'weekly' || (inputs.runner_action == 'build' && 'build' || format('run-{0}', github.run_id))}}
-  cancel-in-progress: true
+  group: >-
+    ${{ github.workflow }}-
+    ${{ github.event.pull_request.number || github.ref }}-
+    ${{ github.event_name == 'schedule' && 'weekly' || 'build' }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
 defaults:
   run:
