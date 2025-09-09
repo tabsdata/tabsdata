@@ -1,8 +1,8 @@
 #
 # Copyright 2025 Tabs Data Inc.
 #
-
 from tests_tabsdata_mssql.bootest import TESTING_RESOURCES_PATH
+from xdist.workermanage import WorkerController
 
 from tabsdata._utils.logging import setup_tests_logging
 from tests_tabsdata.bootest import enrich_sys_path
@@ -26,9 +26,23 @@ from tests_tabsdata.conftest import (
     clean_python_virtual_environments,
     pytest_addoption,
     remove_docker_containers,
+    setup_temp_folder,
+    setup_temp_folder_node,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def pytest_configure(config: pytest.Config):
+    setup_tests_logging()
+    if not hasattr(config, "workerinput"):
+        setup_temp_folder(config)
+    clean_everything()
+
+
+def pytest_configure_node(node: WorkerController):
+    setup_temp_folder_node(node)
+
 
 DEFAULT_PYTEST_MSSQL_2019_DOCKER_CONTAINER_NAME = (
     "pytest_exclusive_mssql_2019_container"
@@ -230,11 +244,6 @@ def mssql_version(mssql_connection):
         return "2022"
     else:
         raise ValueError("Unknown MSSQL version in connection string")
-
-
-def pytest_configure():
-    setup_tests_logging()
-    clean_everything()
 
 
 # noinspection PyUnusedLocal

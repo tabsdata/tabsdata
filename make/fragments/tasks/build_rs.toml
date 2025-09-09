@@ -92,101 +92,11 @@ run_task = [
 [tasks.link_all_ty-tableframe]
 category = "03 - Build"
 private = true
-cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-script_runner = "@duckscript"
-script = [
-    '''
-    !include_files ./make/libraries/log.ds
-
-    cd "${PROJECT_RS_TY_EXPANSIONS_FOLDER}/modules/ty-tableframe"
-
-    td_target = get_env TD_TARGET
-    is_x86_64-unknown-linux-musl = eq ${td_target} "x86_64-unknown-linux-musl"
-    if ${is_x86_64-unknown-linux-musl}
-        info "🚀 cd ${PROJECT_TABSDATA_ROOT_FOLDER}"
-        cd ${PROJECT_TABSDATA_ROOT_FOLDER}
-
-        info "🚀 docker build -f expansions/docker/linux_x86_64/Dockerfile -t tabsdata/x86_64-unknown-linux-musl:main ."
-        exec --fail-on-error docker build -f expansions/docker/linux_x86_64/Dockerfile -t tabsdata/x86_64-unknown-linux-musl:main .
-
-        info "🚀 docker run --rm --mount=type=bind,src=${PROJECT_TABSDATA_ROOT_FOLDER},target=/tabsdata -w /tabsdata tabsdata/x86_64-unknown-linux-musl:main maturin build --locked %{td-target-token} %{td-target} --profile ${td-profile} --manifest-path /tabsdata/expansions/polars/modules/ty-tableframe/Cargo.toml --features extension-module"
-        exec --fail-on-error docker run --rm --mount=type=bind,src=${PROJECT_TABSDATA_ROOT_FOLDER},target=/tabsdata -w /tabsdata tabsdata/x86_64-unknown-linux-musl:main maturin build --locked %{td-target-token} %{td-target} --profile ${td-profile} --manifest-path /tabsdata/expansions/polars/modules/ty-tableframe/Cargo.toml --features extension-module
-
-        info "🚀 sudo chown -R ${USER}:${USER} ${PROJECT_TABSDATA_ROOT_FOLDER}/expansions/polars/target"
-        exec --fail-on-error sudo chown -R ${USER}:${USER} ${PROJECT_TABSDATA_ROOT_FOLDER}/expansions/polars/target
-
-        info "🚀 cd ${PROJECT_RS_TY_EXPANSIONS_FOLDER}/modules/ty-tableframe"
-        cd "${PROJECT_RS_TY_EXPANSIONS_FOLDER}/modules/ty-tableframe"
-    else
-        info "🚀 maturin build --locked %{td-target-token} %{td-target} --profile ${td-profile} --features extension-module"
-        exec --fail-on-error maturin build --locked %{td-target-token} %{td-target} --profile ${td-profile} --features extension-module
-    end
-
-    info "⏳ Extracting maturin wheel to python source folder..."
-    wheels = glob_array ../../target/wheels/*.whl
-    q_wheels = array_length ${wheels}
-    if eq ${q_wheels} 0
-        error "⚠️ No maturin wheels found in ../../target/wheels/"
-        exit 1
-    else
-        if eq ${q_wheels} 1
-            for wheel in ${wheels}
-                info "📦 Found wheel: ${wheel}"
-                # exec --fail-on-error wheel2json ${wheel}
-                if is_directory ../../target/wheels/wheel.tmp
-                    trace "🧹 Removing existing ../../target/wheels/wheel.tmp directory..."
-                    rm -r ../../target/wheels/wheel.tmp
-                end
-                exec --fail-on-error python -m zipfile -e ${wheel} ../../target/wheels/wheel.tmp
-
-                trace "📂 Listing of wheel.tmp:"
-                wheel_items = glob_array ../../target/wheels/wheel.tmp/**/*
-                for wheel_item in ${wheel_items}
-                    trace "   - ${wheel_item}"
-                end
-                for wheel_item in ${wheel_items}
-                    if is_directory ${wheel_item}
-                        if ends_with ${wheel_item} ".dist-info"
-                            wheel_files = glob_array ${wheel_item}/**/*
-                            for wheel_file in ${wheel_files}
-                                if is_file ${wheel_file}
-                                    trace "📝 Contents of .dist-info file ${wheel_file}..."
-                                    trace ">>>>> >>>>> >>>>> >>>>> >>>>>"
-                                    # cat ${wheel_file}
-                                    trace "<<<<< <<<<< <<<<< <<<<< <<<<<"
-                                end
-                            end
-                        end
-                    end
-                end
-
-                if is_directory "../../target/wheels/wheel.tmp/tabsdata"
-                    trace "📁 Copying tabsdata module to python/"
-                    exec --fail-on-error cp -r ../../target/wheels/wheel.tmp/tabsdata python/
-                else
-                    error "⚠️ tabsdata module not found in wheel extraction: ${wheel}"
-                    exit 1
-                end
-
-                if is_directory "../../target/wheels/wheel.tmp/tabsdata.libs"
-                    trace "📁 Copying tabsdata.libs folder to python/"
-                    exec --fail-on-error cp -r ../../target/wheels/wheel.tmp/tabsdata.libs python/
-                else
-                    warn "📌 tabsdata.libs folder not found in wheel extraction: ${wheel}"
-                end
-
-                rm -r ../../target/wheels/wheel.tmp
-                trace "🐍 Successfully extracted wheel contents!"
-            end
-        else
-            error "⚠️ More than one maturin wheel found in ../../target/wheels/"
-            for wheel in ${wheels}
-                error "⚠️ 📦 Found wheel: ${wheel}"
-            end
-            exit 1
-        end
-    end
-    ''']
+run_task = [
+    { name = [
+        "link_ty-tableframe",
+    ] }
+]
 
 [tasks.build_none_rs]
 category = "03 - Build"
@@ -266,6 +176,15 @@ run_task = [
 [tasks.link_none_ty-tableframe]
 category = "03 - Build"
 private = true
+run_task = [
+    { name = [
+        "link_ty-tableframe",
+    ] }
+]
+
+[tasks.link_ty-tableframe]
+category = "03 - Build"
+private = true
 cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
 script_runner = "@duckscript"
 script = [
@@ -277,6 +196,63 @@ script = [
     td_target = get_env TD_TARGET
     is_x86_64-unknown-linux-musl = eq ${td_target} "x86_64-unknown-linux-musl"
     if ${is_x86_64-unknown-linux-musl}
+
+        ## ⭕️ Former Implementation (Container Based)
+
+        ## info "🚀 cd ${PROJECT_TABSDATA_ROOT_FOLDER}"
+        ## cd ${PROJECT_TABSDATA_ROOT_FOLDER}
+
+        ## td_profile = set ${td-profile}
+
+        ## td_script = set "apk add --no-cache perl"
+        ## td_script = set "${td_script} && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.89.0"
+        ## td_script = set "${td_script} && . $HOME/.cargo/env"
+        ## td_script = set "${td_script} && rustup target add x86_64-unknown-linux-musl"
+        ## td_script = set "${td_script} && python3.12 -m pip install --upgrade pip"
+        ## td_script = set "${td_script} && python3.12 -m pip install maturin[patchelf]==1.9.3 --root-user-action=ignore"
+        ## td_script = set "${td_script} && python3.12 -m pip --version"
+        ## td_script = set "${td_script} && export OPENSSL_STATIC=1"
+        ## td_script = set "${td_script} && export PKG_CONFIG_ALL_STATIC=1"
+        ## td_script = set "${td_script} && export ZLIB_STATIC=1"
+        ## td_script = set "${td_script} && export RUSTFLAGS='-C link-arg=-static-libgcc -C link-arg=-static-libstdc++'"
+        ## td_script = set "${td_script} && python3.12 --version"
+        ## td_script = set "${td_script} && python3.12 -m pip --version"
+        ## td_script = set "${td_script} && rustc --version"
+        ## td_script = set "${td_script} && cargo --version"
+        ## td_script = set "${td_script} && python3.12 -m maturin --version"
+        ## td_script = set "${td_script} && patchelf --version"
+        ## td_script = set "${td_script} && python3.12 -m maturin build --locked --compatibility musllinux_1_1 --target x86_64-unknown-linux-musl --profile ${TD_PROFILE} --manifest-path /tabsdata/expansions/polars/modules/ty-tableframe/Cargo.toml --features extension-module"
+        ## exec --fail-on-error docker run --platform linux/amd64 --rm -v --mount=type=bind,src=${PROJECT_TABSDATA_ROOT_FOLDER},target=/tabsdata -w /tabsdata --env TD_PROFILE=${td_profile} quay.io/pypa/musllinux_1_1_x86_64 bash -lc "${td_script}"
+
+        ## info "🚀 sudo chown -R ${USER}:${USER} ${PROJECT_TABSDATA_ROOT_FOLDER}/expansions/polars/target"
+        ## exec --fail-on-error sudo chown -R ${USER}:${USER} ${PROJECT_TABSDATA_ROOT_FOLDER}/expansions/polars/target
+
+        ## info "🚀 cd ${PROJECT_RS_TY_EXPANSIONS_FOLDER}/modules/ty-tableframe"
+        ## cd "${PROJECT_RS_TY_EXPANSIONS_FOLDER}/modules/ty-tableframe"
+
+
+        ## ❌ Former Implementation (Image Based)
+
+        ## info "🚀 cd ${PROJECT_TABSDATA_ROOT_FOLDER}"
+        ## cd ${PROJECT_TABSDATA_ROOT_FOLDER}
+
+        ## td_profile = set ${td-profile}
+
+        ## info "🚀 docker build -f expansions/docker/linux_x86_64/Dockerfile -t tabsdata/x86_64-unknown-linux-musl:main ."
+        ## exec --fail-on-error docker build -f expansions/docker/linux_x86_64/Dockerfile -t tabsdata/x86_64-unknown-linux-musl:main .
+
+        ## info "🚀 docker run --rm --mount=type=bind,src=${PROJECT_TABSDATA_ROOT_FOLDER},target=/tabsdata -w /tabsdata tabsdata/x86_64-unknown-linux-musl:main maturin build --locked %{td-target-token} %{td-target} --profile ${td-profile} --manifest-path /tabsdata/expansions/polars/modules/ty-tableframe/Cargo.toml --features extension-module"
+        ## exec --fail-on-error docker run --rm --mount=type=bind,src=${PROJECT_TABSDATA_ROOT_FOLDER},target=/tabsdata -w /tabsdata tabsdata/x86_64-unknown-linux-musl:main maturin build --locked %{td-target-token} %{td-target} --profile ${td-profile} --manifest-path /tabsdata/expansions/polars/modules/ty-tableframe/Cargo.toml --features extension-module
+
+        ## info "🚀 sudo chown -R ${USER}:${USER} ${PROJECT_TABSDATA_ROOT_FOLDER}/expansions/polars/target"
+        ## exec --fail-on-error sudo chown -R ${USER}:${USER} ${PROJECT_TABSDATA_ROOT_FOLDER}/expansions/polars/target
+
+        ## info "🚀 cd ${PROJECT_RS_TY_EXPANSIONS_FOLDER}/modules/ty-tableframe"
+        ## cd "${PROJECT_RS_TY_EXPANSIONS_FOLDER}/modules/ty-tableframe"
+
+
+        ## ✅ Current Implementation
+
         info "🚀 cd ${PROJECT_TABSDATA_ROOT_FOLDER}"
         cd ${PROJECT_TABSDATA_ROOT_FOLDER}
 
@@ -306,41 +282,6 @@ script = [
 
         info "🚀 cd ${PROJECT_RS_TY_EXPANSIONS_FOLDER}/modules/ty-tableframe"
         cd "${PROJECT_RS_TY_EXPANSIONS_FOLDER}/modules/ty-tableframe"
-
-        # td_script = set "apk add --no-cache perl"
-        # td_script = set "${td_script} && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.89.0"
-        # td_script = set "${td_script} && . $HOME/.cargo/env"
-        # td_script = set "${td_script} && rustup target add x86_64-unknown-linux-musl"
-        # td_script = set "${td_script} && python3.12 -m pip install --upgrade pip"
-        # td_script = set "${td_script} && python3.12 -m pip install maturin[patchelf]==1.9.3 --root-user-action=ignore"
-        # td_script = set "${td_script} && python3.12 -m pip --version"
-        # td_script = set "${td_script} && export OPENSSL_STATIC=1"
-        # td_script = set "${td_script} && export PKG_CONFIG_ALL_STATIC=1"
-        # td_script = set "${td_script} && export ZLIB_STATIC=1"
-        # td_script = set "${td_script} && export RUSTFLAGS='-C link-arg=-static-libgcc -C link-arg=-static-libstdc++'"
-        # td_script = set "${td_script} && python3.12 --version"
-        # td_script = set "${td_script} && python3.12 -m pip --version"
-        # td_script = set "${td_script} && rustc --version"
-        # td_script = set "${td_script} && cargo --version"
-        # td_script = set "${td_script} && python3.12 -m maturin --version"
-        # td_script = set "${td_script} && patchelf --version"
-        # td_script = set "${td_script} && python3.12 -m maturin build --locked --compatibility musllinux_1_1 --target x86_64-unknown-linux-musl --profile ${TD_PROFILE} --manifest-path /tabsdata/expansions/polars/modules/ty-tableframe/Cargo.toml --features extension-module"
-        # exec --fail-on-error docker run --platform linux/amd64 --rm -v --mount=type=bind,src=${PROJECT_TABSDATA_ROOT_FOLDER},target=/tabsdata -w /tabsdata --env TD_PROFILE=${td_profile} quay.io/pypa/musllinux_1_1_x86_64 bash -lc "${td_script}"
-
-        ## info "🚀 cd ${PROJECT_TABSDATA_ROOT_FOLDER}"
-        ## cd ${PROJECT_TABSDATA_ROOT_FOLDER}
-
-        ## info "🚀 docker build -f expansions/docker/linux_x86_64/Dockerfile -t tabsdata/x86_64-unknown-linux-musl:main ."
-        ## exec --fail-on-error docker build -f expansions/docker/linux_x86_64/Dockerfile -t tabsdata/x86_64-unknown-linux-musl:main .
-
-        ## info "🚀 docker run --rm --mount=type=bind,src=${PROJECT_TABSDATA_ROOT_FOLDER},target=/tabsdata -w /tabsdata tabsdata/x86_64-unknown-linux-musl:main maturin build --locked %{td-target-token} %{td-target} --profile ${td-profile} --manifest-path /tabsdata/expansions/polars/modules/ty-tableframe/Cargo.toml --features extension-module"
-        ## exec --fail-on-error docker run --rm --mount=type=bind,src=${PROJECT_TABSDATA_ROOT_FOLDER},target=/tabsdata -w /tabsdata tabsdata/x86_64-unknown-linux-musl:main maturin build --locked %{td-target-token} %{td-target} --profile ${td-profile} --manifest-path /tabsdata/expansions/polars/modules/ty-tableframe/Cargo.toml --features extension-module
-
-        ## info "🚀 sudo chown -R ${USER}:${USER} ${PROJECT_TABSDATA_ROOT_FOLDER}/expansions/polars/target"
-        ## exec --fail-on-error sudo chown -R ${USER}:${USER} ${PROJECT_TABSDATA_ROOT_FOLDER}/expansions/polars/target
-
-        ## info "🚀 cd ${PROJECT_RS_TY_EXPANSIONS_FOLDER}/modules/ty-tableframe"
-        ## cd "${PROJECT_RS_TY_EXPANSIONS_FOLDER}/modules/ty-tableframe"
     else
         info "🚀 maturin build --locked %{td-target-token} %{td-target} --profile ${td-profile} --features extension-module"
         exec --fail-on-error maturin build --locked %{td-target-token} %{td-target} --profile ${td-profile} --features extension-module
@@ -386,7 +327,23 @@ script = [
 
                 if is_directory "../../target/wheels/wheel.tmp/tabsdata"
                     trace "📁 Copying tabsdata module to python/"
-                    exec --fail-on-error cp -r ../../target/wheels/wheel.tmp/tabsdata python/
+                    td_symlink_polars_libs_pytest = get_env TD_SYMLINK_POLARS_LIBS_PYTEST
+                    os = os_family
+                    if eq ${os} "mac"
+                        if eq ${td_symlink_polars_libs_pytest} "true"
+                            info "🍄 macOS + TD_SYMLINK_POLARS_LIBS=true → Using symbolic links to reduce space of local packages"
+                            info "🚀 python ${SYMLINK_SO_PY} ../../target/wheels/wheel.tmp/tabsdata python/ true"
+                            exec --fail-on-error python ${SYMLINK_SO_PY} ../../target/wheels/wheel.tmp/tabsdata python/tabsdata true
+                        else
+                            info "👀 macOS + TD_SYMLINK_POLARS_LIBS=false → Using regular copy"
+                            info "🚀 python ${SYMLINK_SO_PY} ../../target/wheels/wheel.tmp/tabsdata python/ false"
+                            exec --fail-on-error python ${SYMLINK_SO_PY} ../../target/wheels/wheel.tmp/tabsdata python/tabsdata false
+                        end
+                    else
+                        info "🧩 Non macOS → Using regular copy"
+                        info "🚀 python ${SYMLINK_SO_PY} ../../target/wheels/wheel.tmp/tabsdata python/ false"
+                        exec --fail-on-error python ${SYMLINK_SO_PY} ../../target/wheels/wheel.tmp/tabsdata python/tabsdata false
+                    end
                 else
                     error "⚠️ tabsdata module not found in wheel extraction: ${wheel}"
                     exit 1
@@ -396,10 +353,10 @@ script = [
                     trace "📁 Copying tabsdata.libs folder to python/"
                     exec --fail-on-error cp -r ../../target/wheels/wheel.tmp/tabsdata.libs python/
                 else
-                    warn "📌 tabsdata.libs folder not found in wheel extraction: ${wheel}"
+                    trace "📌 tabsdata.libs folder not found in wheel extraction: ${wheel}"
                 end
 
-                rm -r ../../target/wheels/wheel.tmp
+                # rm -r ../../target/wheels/wheel.tmp
                 trace "🐍 Successfully extracted wheel contents!"
             end
         else

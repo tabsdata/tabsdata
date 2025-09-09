@@ -12,6 +12,7 @@ import polars as pl
 import pytest
 
 import tabsdata as td
+from tabsdata._utils.constants import tabsdata_temp_folder
 
 # noinspection PyProtectedMember
 from tabsdata._utils.tableframe._helpers import required_columns
@@ -293,7 +294,7 @@ class TestTableFrame(unittest.TestCase):
             idx=None,
         )
         _unwrap_table_frame(tf).sink_csv(
-            os.path.join(tempfile.gettempdir(), "delete.sink_csv.csv")
+            os.path.join(tabsdata_temp_folder(), "delete.sink_csv.csv")
         )
 
     def test_sink_ndjson(self):
@@ -309,7 +310,7 @@ class TestTableFrame(unittest.TestCase):
             idx=None,
         )
         _unwrap_table_frame(tf).sink_ndjson(
-            os.path.join(tempfile.gettempdir(), "delete.sink.ndjson")
+            os.path.join(tabsdata_temp_folder(), "delete.sink.ndjson")
         )
 
     def test_sink_parquet(self):
@@ -325,10 +326,10 @@ class TestTableFrame(unittest.TestCase):
             idx=None,
         )
         tf._lf.sink_parquet(
-            os.path.join(tempfile.gettempdir(), "delete.sink_parquet_1.parquet")
+            os.path.join(tabsdata_temp_folder(), "delete.sink_parquet_1.parquet")
         )
         _unwrap_table_frame(tf).sink_parquet(
-            os.path.join(tempfile.gettempdir(), "delete.sink_parquet_2.parquet")
+            os.path.join(tabsdata_temp_folder(), "delete.sink_parquet_2.parquet")
         )
 
     def test_item_empty(self):

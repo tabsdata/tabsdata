@@ -7,17 +7,25 @@ import os
 import tarfile
 import tempfile
 from timeit import default_timer as timer
+from typing import Literal
 
 from tabsdata._tabsserver.function.global_utils import (
     CURRENT_PLATFORM,
     convert_uri_to_path,
 )
+from tabsdata._utils.constants import env_enabled, tabsdata_temp_folder
 
 logger = logging.getLogger(__name__)
 
 
 ABSOLUTE_LOCATION = os.path.dirname(os.path.abspath(__file__))
 UNCOMPRESSED_FUNCTION_BUNDLE_FOLDER = "uncompressed_function_bundle"
+
+FilterType = Literal[
+    "data",
+    "tar",
+    "fully_trusted",
+]
 
 
 class TimeBlock:
@@ -39,7 +47,10 @@ def extract_tarfile_to_folder(tarfile_uri, destination_folder):
     logger.info(f"URI '{tarfile_uri}' converted to path '{tarfile_path}'")
     try:
         with tarfile.open(tarfile_path, "r:gz") as tar:
-            tar.extractall(destination_folder, filter="data")
+            filter_mode: FilterType = (
+                "tar" if env_enabled("TD_SYMLINK_POLARS_LIBS_PYTEST") else "data"
+            )
+            tar.extractall(destination_folder, filter=filter_mode)
     except FileNotFoundError as e:
         logger.error(
             f"Error extracting tarfile {tarfile_uri}, file does not exist: {e}"
@@ -52,8 +63,9 @@ def extract_bundle_folder(bin_folder, compressed_context_folder):
     if bin_folder:
         context_folder = os.path.join(bin_folder, UNCOMPRESSED_FUNCTION_BUNDLE_FOLDER)
     else:
-        temporary_directory = tempfile.TemporaryDirectory()
+        temporary_directory = tempfile.TemporaryDirectory(dir=tabsdata_temp_folder())
         if CURRENT_PLATFORM.is_windows():
+            # noinspection PyUnresolvedReferences
             import win32api
 
             logger.debug(f"Short temp path: '{temporary_directory}")

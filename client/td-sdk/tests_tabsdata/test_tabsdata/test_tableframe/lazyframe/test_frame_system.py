@@ -9,6 +9,8 @@ import unittest
 
 import polars as pl
 
+from tabsdata._utils.constants import tabsdata_temp_folder
+
 # noinspection PyProtectedMember
 from tabsdata._utils.tableframe._common import drop_inception_regenerate_system_columns
 
@@ -71,7 +73,7 @@ class TestTableFrame(unittest.TestCase):
         self.assertEqual(lf_row_count, tf_len, "TableFrame len (2.2) mismatch.")
         self.assertEqual(lf_row_count, tf_count, "TableFrame count (2) mismatch.")
 
-        parquet = os.path.join(tempfile.gettempdir(), "my.parquet")
+        parquet = os.path.join(tabsdata_temp_folder(), "my.parquet")
 
         lf.sink_parquet(parquet)
         lf = pl.scan_parquet(parquet)

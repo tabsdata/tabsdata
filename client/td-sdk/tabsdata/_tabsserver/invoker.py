@@ -29,6 +29,7 @@ from tabsdata._tabsserver.utils import (
     extract_bundle_folder,
 )
 from tabsdata._utils.bundle_utils import REQUIREMENTS_FILE_NAME
+from tabsdata._utils.constants import tabsdata_temp_folder
 
 # noinspection PyProtectedMember
 from tabsdata._utils.tableframe._constants import PYTEST_CONTEXT_ACTIVE
@@ -185,7 +186,7 @@ def invoke(
         with time_block:
             # See explanation on parameter temp_cwd
             if temp_cwd:
-                cwd = tempfile.mkdtemp()
+                cwd = tempfile.mkdtemp(dir=tabsdata_temp_folder())
                 logger.info(f"Using cwd for the running function: {cwd}")
             else:
                 cwd = None

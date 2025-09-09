@@ -2,6 +2,7 @@
 # Copyright 2025 Tabs Data Inc.
 #
 from tests_tabsdata_mongodb.bootest import TESTING_RESOURCES_PATH
+from xdist.workermanage import WorkerController
 
 from tabsdata._utils.logging import setup_tests_logging
 from tests_tabsdata.bootest import enrich_sys_path
@@ -29,13 +30,21 @@ from tests_tabsdata.conftest import (
     pytest_addoption,
     pytest_generate_tests,
     remove_docker_containers,
+    setup_temp_folder,
+    setup_temp_folder_node,
 )
 
 logger = logging.getLogger(__name__)
 
 
-def pytest_configure():
+def pytest_configure(config: pytest.Config):
     setup_tests_logging()
+    if not hasattr(config, "workerinput"):
+        setup_temp_folder(config)
+
+
+def pytest_configure_node(node: WorkerController):
+    setup_temp_folder_node(node)
 
 
 DEFAULT_PYTEST_MONGODB_DOCKER_CONTAINER_NAME = "pytest_exclusive_mongodb_container"

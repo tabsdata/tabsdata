@@ -2,7 +2,7 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
-# How to use othe reporting plugins:
+# How to use other reporting plugins:
 
 # pytest-html-reporter
 #    --html-report=?/pytest.html
@@ -77,6 +77,12 @@ script = [
         end
     end
     set_env TD_TESTS_CODE_PY 0
+
+    td_symlink_polars_libs = get_env TD_SYMLINK_POLARS_LIBS
+    if eq ${td_symlink_polars_libs} "true"
+        set_env TD_SYMLINK_POLARS_LIBS_PYTEST true
+        info "🔗 Setting TD_SYMLINK_POLARS_LIBS_PYTEST to true as TD_SYMLINK_POLARS_LIBS is also set to true"
+    end
     ''']
 
 [tasks.test_py_ta_features]

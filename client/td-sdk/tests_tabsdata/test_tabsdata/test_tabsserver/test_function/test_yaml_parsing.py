@@ -1,7 +1,7 @@
 #
 # Copyright 2025 Tabs Data Inc.
 #
-
+import os
 import tempfile
 from pathlib import Path
 
@@ -12,6 +12,7 @@ from tabsdata._tabsserver.function.yaml_parsing import (
     NoData,
     store_response_as_yaml,
 )
+from tabsdata._utils.constants import tabsdata_temp_folder
 
 # noinspection PyUnresolvedReferences
 from .. import pytestmark  # noqa: F401
@@ -25,7 +26,7 @@ def test_store_response_as_yaml_generates_correct_yaml():
         NoData("nod02"),
     ]
 
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with tempfile.TemporaryDirectory(dir=tabsdata_temp_folder()) as tmpdir:
         response_file = Path(tmpdir) / "response.yaml"
 
         store_response_as_yaml(tables, response_file)

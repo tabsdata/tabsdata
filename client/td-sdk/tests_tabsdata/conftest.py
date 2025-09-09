@@ -35,7 +35,9 @@ import yaml
 # noinspection PyPackageRequirements
 from azure.storage.blob import BlobServiceClient
 from filelock import FileLock
+from xdist.workermanage import WorkerController
 
+from tabsdata._utils.constants import tabsdata_temp_folder
 from tabsdata._utils.logging import setup_tests_logging
 from tabsdata.api.status_utils.data_version import (
     DataVersionStatus,
@@ -50,9 +52,28 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-def pytest_configure():
+def pytest_configure(config: pytest.Config):
     setup_tests_logging()
+    if not hasattr(config, "workerinput"):
+        setup_temp_folder(config)
     clean_everything()
+
+
+def pytest_configure_node(node: WorkerController):
+    setup_temp_folder_node(node)
+
+
+def setup_temp_folder(config: pytest.Config) -> None:
+    if getattr(config.option, "basetemp", None):
+        return
+    config.option.basetemp = tabsdata_temp_folder()
+
+
+def setup_temp_folder_node(node: WorkerController) -> None:
+    if not getattr(node.config.option, "basetemp", None):
+        base_temp = tabsdata_temp_folder()
+        worker_temp = os.path.join(base_temp, f"pyw_{node.workerinput['workerid']}")
+        node.config.option.basetemp = worker_temp
 
 
 TABSDATA_OS = "tabsdata-os"

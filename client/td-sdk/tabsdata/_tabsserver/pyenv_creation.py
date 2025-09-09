@@ -58,6 +58,7 @@ from tabsdata._utils.constants import (
     TABSDATA_PACKAGES,
     TD_TABSDATA_DEV_PKG,
     TRUE_VALUES,
+    tabsdata_temp_folder,
 )
 
 # noinspection PyProtectedMember
@@ -1198,6 +1199,7 @@ def main():  # noqa: C901
         suffix=".yaml",
         mode="w",
         delete=False,
+        dir=tabsdata_temp_folder(),
     ) as requirements_file:
         development_packages = []
 

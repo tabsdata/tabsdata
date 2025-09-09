@@ -2,6 +2,7 @@
 # Copyright 2025 Tabs Data Inc.
 #
 from tests_tabsdata_snowflake.bootest import TESTING_RESOURCES_PATH
+from xdist.workermanage import WorkerController
 
 import tabsdata as td
 from tabsdata._secret import _recursively_evaluate_secret
@@ -18,9 +19,22 @@ from snowflake.connector import connect
 
 from tests_tabsdata.conftest import (
     clean_python_virtual_environments,
+    setup_temp_folder,
+    setup_temp_folder_node,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def pytest_configure(config: pytest.Config):
+    setup_tests_logging()
+    if not hasattr(config, "workerinput"):
+        setup_temp_folder(config)
+
+
+def pytest_configure_node(node: WorkerController):
+    setup_temp_folder_node(node)
+
 
 REAL_CONNECTION_PARAMETERS = {
     "account": td.EnvironmentSecret("TD_SNOWFLAKE_ACCOUNT"),
@@ -31,10 +45,6 @@ REAL_CONNECTION_PARAMETERS = {
     "schema": td.EnvironmentSecret("TD_SNOWFLAKE_SCHEMA"),
     "warehouse": td.EnvironmentSecret("TD_SNOWFLAKE_WAREHOUSE"),
 }
-
-
-def pytest_configure():
-    setup_tests_logging()
 
 
 # noinspection PyUnusedLocal

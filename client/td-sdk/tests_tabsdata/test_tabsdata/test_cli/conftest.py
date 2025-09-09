@@ -8,17 +8,29 @@ import os
 import pytest
 from click.testing import CliRunner
 from filelock import FileLock
+from xdist.workermanage import WorkerController
 
 from tabsdata._cli.cli import cli
 from tabsdata._utils.logging import setup_tests_logging
 from tabsdata._utils.tableframe._generators import _id
-from tests_tabsdata.conftest import ABSOLUTE_TEST_FOLDER_LOCATION, APISERVER_URL
+from tests_tabsdata.conftest import (
+    ABSOLUTE_TEST_FOLDER_LOCATION,
+    APISERVER_URL,
+    setup_temp_folder,
+    setup_temp_folder_node,
+)
 
 logger = logging.getLogger(__name__)
 
 
-def pytest_configure():
+def pytest_configure(config: pytest.Config):
     setup_tests_logging()
+    if not hasattr(config, "workerinput"):
+        setup_temp_folder(config)
+
+
+def pytest_configure_node(node: WorkerController):
+    setup_temp_folder_node(node)
 
 
 @pytest.fixture(scope="module")

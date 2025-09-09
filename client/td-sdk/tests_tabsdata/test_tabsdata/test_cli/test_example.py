@@ -14,6 +14,7 @@ from click.testing import CliRunner
 
 from tabsdata._cli.cli import cli
 from tabsdata._tabsdatafunction import TabsdataFunction
+from tabsdata._utils.constants import tabsdata_temp_folder
 from tabsdata.extensions._tableframe.extension_test import instance as checker
 from tests_tabsdata.conftest import LOCAL_PACKAGES_LIST, MAXIMUM_RETRY_COUNT
 
@@ -64,7 +65,10 @@ def test_examples(login, tabsserver_connection):
         f"{tabsdata.extensions._tableframe.extension_test.__file__}"
     )
 
-    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as working_folder:
+    with tempfile.TemporaryDirectory(
+        ignore_cleanup_errors=True,
+        dir=tabsdata_temp_folder(),
+    ) as working_folder:
         assert working_folder
         logger.debug(f"Temporary working folder: {working_folder}")
         working_folder = os.path.join(working_folder, "example")

@@ -19,7 +19,7 @@ script = [
     info "🐢 Runnning task: ${CARGO_MAKE_TASK}"
 
     os = os_family
-    info "🏈 Current os: ${os}"
+    debug "🏈 Current os: ${os}"
     if eq ${os} "windows"
         temp = temp_dir
         marker = join_path ${temp} .td.make
@@ -34,22 +34,22 @@ script = [
         ok = touch ${marker}
     else
         pid = pid
-        info "🏀 Current proces id: ${pid}"
+        debug "🏀 Current proces id: ${pid}"
         output = exec ps -o ppid= -p ${pid}
         ppid = trim ${output.stdout}
-        info "🥎 Parent process id: ${ppid}"
+        debug "🥎 Parent process id: ${ppid}"
         temp = temp_dir
         pid_marker = join_path ${temp} .td.pid.${pid}
         ppid_marker = join_path ${temp} .td.pid.${ppid}
-        info "🍊 The pid temp file is ${pid_marker}"
-        info "🍋 The ppid temp file is ${ppid_marker}"
+        debug "🍊 The pid temp file is ${pid_marker}"
+        debug "🍋 The ppid temp file is ${ppid_marker}"
         exists = is_path_exists ${pid_marker}
         if ${exists}
             info "🍅 Marker for pid exsits. Skipping setup."
             ok = rm ${marker}
             exit 0
         end
-        info "🍏 Marker for pid does not exist. Resuming setup."
+        debug "🍏 Marker for pid does not exist. Resuming setup."
         ok = touch ${ppid_marker}
     end
 

@@ -19,8 +19,11 @@ import yaml
 
 from tabsdata._io.plugin import DestinationPlugin, SourcePlugin
 from tabsdata._tabsdatafunction import TabsdataFunction
-from tabsdata._utils.constants import TABSDATA_MODULE_NAME, TRUE_VALUES
-from tabsdata._utils.tableframe._constants import PYTEST_CONTEXT_ACTIVE
+from tabsdata._utils.constants import TABSDATA_MODULE_NAME, TRUE_VALUES, env_enabled
+from tabsdata._utils.tableframe._constants import (
+    PYTEST_CONTEXT_ACTIVE,
+    TD_SYMLINK_POLARS_LIBS_PYTEST,
+)
 from tabsdata.exceptions import ErrorCode, RegistrationError
 
 # Importing like this to ensure backwards compatibility with Python 3.7 and prior
@@ -270,6 +273,18 @@ def store_file_contents(path_to_persist: str, save_location: str):
     )
 
 
+def copy_mixed_symlinks(src: str, dst: str) -> str:
+    if os.path.islink(src):
+        target = os.readlink(src)
+        if os.path.isabs(target):
+            os.symlink(target, dst)
+            return dst
+        else:
+            return shutil.copy2(src, dst, follow_symlinks=True)
+    else:
+        return shutil.copy2(src, dst, follow_symlinks=True)
+
+
 def store_folder_contents(path_to_persist: str, save_location: str):
     os.makedirs(save_location, exist_ok=True)
 
@@ -293,13 +308,23 @@ def store_folder_contents(path_to_persist: str, save_location: str):
     os.makedirs(save_location, exist_ok=True)
 
     # Step 1: Regular copy, excluding unwanted folders.
-    shutil.copytree(
-        path_to_persist,
-        save_location,
-        ignore=ignorePath(save_location),
-        dirs_exist_ok=True,
-        symlinks=False,
-    )
+    symlinks = env_enabled(TD_SYMLINK_POLARS_LIBS_PYTEST)
+    if symlinks:
+        shutil.copytree(
+            path_to_persist,
+            save_location,
+            ignore=ignorePath(save_location),
+            dirs_exist_ok=True,
+            copy_function=copy_mixed_symlinks,
+        )
+    else:
+        shutil.copytree(
+            path_to_persist,
+            save_location,
+            ignore=ignorePath(save_location),
+            dirs_exist_ok=True,
+            symlinks=False,
+        )
 
     # Step 2: Extra pass to find binaries under ignored folder "target".
     # This is only allowed when running pytest tests, in order to simplify

@@ -14,6 +14,8 @@ import tabsdata._utils.tableframe._generators as td_generators
 
 PYTEST_CONTEXT_ACTIVE = "PYTEST_VERSION"
 
+TD_SYMLINK_POLARS_LIBS_PYTEST = "TD_SYMLINK_POLARS_LIBS_PYTEST"
+
 DUPLICATE_METHODS = ["collect_schema"]
 FUNCTION_METHODS = ["pipe"]
 INTERNAL_METHODS = [

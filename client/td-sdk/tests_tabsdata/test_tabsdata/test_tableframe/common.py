@@ -11,6 +11,7 @@ import polars as pl
 import requests
 
 import tabsdata as td
+from tabsdata._utils.constants import tabsdata_temp_folder
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -62,7 +63,10 @@ def load_complex_dataframe(
         "python-polars-the-definitive-guide/main/data/penguins.csv"
     )
     with tempfile.NamedTemporaryFile(
-        mode="w+b", suffix=".csv", delete=False
+        mode="w+b",
+        suffix=".csv",
+        delete=False,
+        dir=tabsdata_temp_folder(),
     ) as penguins:
         response = requests.get(data)
         response.raise_for_status()
