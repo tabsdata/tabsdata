@@ -12,7 +12,7 @@ import sys
 import tarfile
 from enum import Enum
 from pathlib import Path
-from typing import Callable, List, Literal, LiteralString
+from typing import Callable, List, Literal, LiteralString, Tuple
 
 import cloudpickle
 import yaml
@@ -28,6 +28,7 @@ from tabsdata._utils.tableframe._constants import (
 from tabsdata.exceptions import ErrorCode, RegistrationError
 
 # Importing like this to ensure backwards compatibility with Python 3.7 and prior
+# noinspection PyUnreachableCode
 if sys.version_info >= (3, 8):
     from importlib import metadata as importlib_metadata
 else:
@@ -57,12 +58,14 @@ IGNORED_FOLDERS = (
     "devutils",
     "macros",
     "make",
+    "node_modules",
     "server",
     "target",
     "__pycache__",
     "test",
     "testing_resources",
     "tests",
+    "tests_*",
     "venv",
 )
 BASE_BINARIES = [
@@ -156,7 +159,7 @@ def create_tarball(source_dir: str, output_filename: str):
 
 def create_requirements(
     save_location: str | os.PathLike, local_packages: List[str] | str | None = None
-) -> (List[str], str):
+) -> Tuple[List[str], str]:
     """Infers the requirements of the current environment and saves them to a YAML
     file. Furthermore, it saves the local packages to the save location if provided."""
     os.makedirs(save_location, exist_ok=True)
@@ -202,7 +205,7 @@ def bundle_local_packages(local_packages, save_location):
 
 def copy_and_verify_requirements_file(
     save_location: str | os.PathLike, requirements_file: str
-) -> (List[str], str):
+) -> Tuple[List[str], str]:
     try:
         with open(requirements_file, "r") as file:
             data = yaml.safe_load(file)
@@ -214,7 +217,8 @@ def copy_and_verify_requirements_file(
         )
     try:
         requirements = sorted(
-            list(set(data[PYTHON_PUBLIC_PACKAGES_KEY])), key=str.casefold
+            list(set(data[PYTHON_PUBLIC_PACKAGES_KEY])),
+            key=lambda package: package.casefold(),
         )
     except KeyError:
         raise RegistrationError(
@@ -254,7 +258,7 @@ def obtain_ordered_dists() -> List[str]:
                 continue
     return sorted(
         list(set(dists)),
-        key=str.casefold,
+        key=lambda package: package.casefold(),
     )
 
 
@@ -287,26 +291,26 @@ def copy_mixed_symlinks(src: str, dst: str) -> str:
         return shutil.copy2(src, dst, follow_symlinks=True)
 
 
+def ignore_path(path):
+    # We ignore folders that:
+    # - Their name begins with a . (since those should generally be ignored.)
+    # - Are generated folders byproducts of a build or test process.
+    # If facing issues regarding folders or files not being properly loaded,
+    # this might be the place to look.
+    ignore_patterns_func = shutil.ignore_patterns(*IGNORED_FOLDERS)
+
+    def ignore_files(directory, contents):
+        ignored_by_patterns = ignore_patterns_func(directory, contents)
+        result = set(ignored_by_patterns)
+        for f in contents:
+            if os.path.abspath(str(os.path.join(directory, f))) == path:
+                result.add(f)
+        return result
+
+    return ignore_files
+
+
 def store_folder_contents(path_to_persist: str, save_location: str):
-    os.makedirs(save_location, exist_ok=True)
-
-    def ignorePath(path):
-        # We ignore folders that:
-        # - Their name begins with a . (since those should generally be ignored.)
-        # - Are generated folders byproducts of a build or test process.
-        # If facing issues regarding folders or files not being properly loaded,
-        # this might be the place to look.
-        def ignoref(directory, contents):
-            result = [
-                f
-                for f in contents
-                if os.path.abspath(os.path.join(directory, f)) == path
-                or f in IGNORED_FOLDERS
-            ]
-            return result
-
-        return ignoref
-
     os.makedirs(save_location, exist_ok=True)
 
     # Step 1: Regular copy, excluding unwanted folders.
@@ -315,7 +319,7 @@ def store_folder_contents(path_to_persist: str, save_location: str):
         shutil.copytree(
             path_to_persist,
             save_location,
-            ignore=ignorePath(save_location),
+            ignore=ignore_path(save_location),
             dirs_exist_ok=True,
             copy_function=copy_mixed_symlinks,
         )
@@ -323,7 +327,7 @@ def store_folder_contents(path_to_persist: str, save_location: str):
         shutil.copytree(
             path_to_persist,
             save_location,
-            ignore=ignorePath(save_location),
+            ignore=ignore_path(save_location),
             dirs_exist_ok=True,
             symlinks=False,
         )
@@ -407,9 +411,11 @@ def create_bundle_archive(
         save_target ('file' | 'folder' | None): Whether to save only the 'file'
             where the function is defined or the whole 'folder'. If None,
             and path_to_code is None, 'folder' will be used.
+        valid_python_versions (list[str] | None): List of valid Python versions
+            that the function can run on. If None, no version validation is performed.
 
     Returns:
-        TabsetsHandle: The handle to the registered function.
+        FunctionHandle: The handle to the registered function.
 
     Raises:
         ValueError: If the input function is not a TabsDataFunction.
@@ -423,7 +429,9 @@ def create_bundle_archive(
     if not os.path.isdir(save_location):
         raise RegistrationError(ErrorCode.RE4, save_location)
 
-    path_to_persist = _obtain_path_to_persist(function, path_to_code, save_target)
+    path_to_persist = _obtain_path_to_persist(
+        function, str(path_to_code) if path_to_code else None, save_target
+    )
 
     # Keep track of where context of each function is stored
     uncompressed_context_location = os.path.join(
