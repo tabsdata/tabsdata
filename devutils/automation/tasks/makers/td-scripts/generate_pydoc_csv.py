@@ -75,8 +75,7 @@ class PydocVisitor(ast.NodeVisitor):
 
     def visit_ClassDef(self, node: ast.ClassDef):
         self.scope_stack.append(node.name)
-        for body in node.body:
-            self.visit(body)
+        self.generic_visit(node)
         self.scope_stack.pop()
 
     def visit_FunctionDef(self, node: ast.FunctionDef):
@@ -90,14 +89,12 @@ def process_module(path, root):
     try:
         with open(path, "r", encoding="utf-8") as f:
             tree = ast.parse(f.read(), filename=path)
-    except (SyntaxError, UnicodeDecodeError) as error:
-        logger.error(f"Skipping {path} due to parsing error: {error}")
-        return []
+    except (SyntaxError, UnicodeDecodeError):
+        raise ValueError(f"Failed to parse file {path}")
 
     module_path = format_module_path(path, root)
     visitor = PydocVisitor(module_path)
-    for node in tree.body:
-        visitor.visit(node)
+    visitor.visit(tree)
     return visitor.report
 
 
