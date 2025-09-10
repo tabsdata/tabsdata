@@ -68,13 +68,6 @@ class ErrorCode(Enum):
             "'DestinationPlugin' object (except 'TableOutput'), got '{}' instead."
         ),
     }
-    DECE1 = {
-        "code": "DECE-001",
-        "message": (
-            "Scheme '{}' not currently supported. The supported schemes are "
-            "{}. Try using class {} instead."
-        ),
-    }
     DECE2 = {
         "code": "DECE-002",
         "message": (
@@ -82,43 +75,6 @@ class ErrorCode(Enum):
             "with {}. The scheme is inferred from the URI, which should be of the form"
             " 'scheme<+driver>://path' (the driver is optional). The URI provided was "
             "'{}'."
-        ),
-    }
-    DECE3 = {
-        "code": "DECE-003",
-        "message": (
-            "The 'output' dictionary to build a destination must contain exactly one"
-            " key, which must be one of the following: {}. Instead, got the following"
-            " key(s) in the dictionary: {}."
-        ),
-    }
-    DECE4 = {
-        "code": "DECE-004",
-        "message": (
-            "The '{}' key in the dictionary to build a "
-            "destination must have an object of type 'dict' as its value. "
-            "Instead, got an object of type '{}'."
-        ),
-    }
-    DECE5 = {
-        "code": "DECE-005",
-        "message": (
-            "The '{}' dictionary to build a destination must contain the key "
-            "'{}', but it is not present."
-        ),
-    }
-    DECE6 = {
-        "code": "DECE-006",
-        "message": (
-            "The '{}' dictionary to build a destination must contain the key "
-            "'{}', but it is not present."
-        ),
-    }
-    DECE7 = {
-        "code": "DECE-007",
-        "message": (
-            "The 'output' parameter to build a destination must be "
-            "a DestinationPlugin object or 'None', got '{}' instead."
         ),
     }
     DECE8 = {
@@ -691,26 +647,12 @@ class ErrorCode(Enum):
             "start with a number; got {} instead."
         ),
     }
-    SOCE1 = {
-        "code": "SOCE-001",
-        "message": (
-            "Scheme '{}' not currently supported. The supported schemes are "
-            "{}. Try using class {} instead."
-        ),
-    }
     SOCE2 = {
         "code": "SOCE-002",
         "message": (
             "Scheme '{}' not supported. The supported schemes are {}."
             " The scheme is inferred from the URI, which should be of the form"
             " 'scheme://path'. The URI provided was '{}'."
-        ),
-    }
-    SOCE3 = {
-        "code": "SOCE-003",
-        "message": (
-            "The 'format' parameter in a file source must be a 'str' or "
-            "a 'FileFormat' object, got '{}' instead"
         ),
     }
     SOCE4 = {
@@ -739,43 +681,6 @@ class ErrorCode(Enum):
             " type '{}'."
         ),
     }
-    SOCE7 = {
-        "code": "SOCE-007",
-        "message": (
-            "The 'input' dictionary to build a source must contain exactly one "
-            "key, which must be one of the following: {}. Instead, got the following "
-            "key(s) in the dictionary: {}."
-        ),
-    }
-    SOCE8 = {
-        "code": "SOCE-008",
-        "message": (
-            "The '{}' key in the dictionary to build a "
-            "source must have an object of type 'dict' as its value. "
-            "Instead, got an object of type '{}'."
-        ),
-    }
-    SOCE9 = {
-        "code": "SOCE-009",
-        "message": (
-            "The '{}' dictionary to build a source must contain the key "
-            "'{}', but it is not present."
-        ),
-    }
-    SOCE10 = {
-        "code": "SOCE-010",
-        "message": (
-            "The '{}' dictionary to build a source must contain the key "
-            "'{}', but it is not present."
-        ),
-    }
-    SOCE11 = {
-        "code": "SOCE-011",
-        "message": (
-            "The 'input' parameter to build a source must be a 'SourcePlugin' "
-            "or 'None', got '{}' instead."
-        ),
-    }
     SOCE12 = {
         "code": "SOCE-012",
         "message": (
@@ -798,15 +703,6 @@ class ErrorCode(Enum):
             " 'scheme://path' or '/path'. The provided path was '{}'."
         ),
     }
-    SOCE15 = {
-        "code": "SOCE-015",
-        "message": (
-            "The 'format' parameter for the LocalFileSource was not provided, "
-            "and we were unable to infer it from the extension of the files in the "
-            "path parameter. The supported formats are '{}' and the obtained path was "
-            "'{}'."
-        ),
-    }
     SOCE16 = {
         "code": "SOCE-016",
         "message": (
@@ -822,14 +718,6 @@ class ErrorCode(Enum):
             " 'scheme://path'. The URI provided was '{}'."
         ),
     }
-    SOCE18 = {
-        "code": "SOCE-018",
-        "message": (
-            "The 'format' parameter for the S3Source was not provided, and we were "
-            "unable to infer it from the extension of the files in the URI parameter. "
-            "The supported formats are '{}' and the obtained URI was '{}'."
-        ),
-    }
     SOCE19 = {
         "code": "SOCE-019",
         "message": (
@@ -842,13 +730,6 @@ class ErrorCode(Enum):
         "message": (
             "The 'credentials' parameter in a S3Source must be a "
             "'S3Credentials' object, got '{}' instead"
-        ),
-    }
-    SOCE21 = {
-        "code": "SOCE-021",
-        "message": (
-            "The 'configs' parameter in a MySQLSource must be a 'dict' or None, "
-            "got '{}' instead"
         ),
     }
     SOCE22 = {
