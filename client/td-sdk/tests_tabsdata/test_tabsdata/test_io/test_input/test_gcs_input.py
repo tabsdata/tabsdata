@@ -1,0 +1,361 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+import copy
+import datetime
+from urllib.parse import urlparse
+
+import pytest
+
+from tabsdata import CSVFormat, ParquetFormat, SourcePlugin
+from tabsdata._credentials import (
+    GCPServiceAccountKeyCredentials,
+    UserPasswordCredentials,
+)
+from tabsdata._io.inputs.file_inputs import GCSSource
+from tabsdata.exceptions import (
+    ErrorCode,
+    FormatConfigurationError,
+    SourceConfigurationError,
+)
+from tests_tabsdata.conftest import FORMAT_TYPE_TO_CONFIG
+
+TEST_ACCOUNT_KEY = "test_account_key"
+GCS_CREDENTIALS = GCPServiceAccountKeyCredentials(service_account_key=TEST_ACCOUNT_KEY)
+
+
+def test_all_correct_implicit_format():
+    uri = "gs://path/to/data/data.csv"
+    input = GCSSource(uri, GCS_CREDENTIALS)
+    assert input.uri == uri
+    assert isinstance(input.format, CSVFormat)
+    assert isinstance(input, GCSSource)
+    assert isinstance(input, SourcePlugin)
+    assert input.credentials == GCS_CREDENTIALS
+    assert input.__repr__()
+
+
+def test_all_correct_uri_list():
+    uri = ["gs://path/to/data/data.csv", "gs://path/to/data/data2.csv"]
+    input = GCSSource(uri, GCS_CREDENTIALS)
+    assert input.uri == uri
+    assert isinstance(input.format, CSVFormat)
+    assert isinstance(input, GCSSource)
+    assert isinstance(input, SourcePlugin)
+    assert input.credentials == GCS_CREDENTIALS
+    assert input.__repr__()
+
+
+def test_uri_list_update_to_string():
+    uri = [
+        "gs://path/to/data/invoice-headers.csv",
+        "gs://path/to/data/invoice-items-*.csv",
+    ]
+    input = GCSSource(uri, GCS_CREDENTIALS)
+    assert input.uri == uri
+    assert input._uri_list == uri
+    input = GCSSource("gs://path/to/data/invoice-headers.csv", GCS_CREDENTIALS)
+    assert input._uri_list == ["gs://path/to/data/invoice-headers.csv"]
+
+
+def test_parsed_uri_list():
+    uri = [
+        "gs://path/to/data/invoice-headers.csv",
+        "gs://path/to/data/invoice-items-*.csv",
+    ]
+    input = GCSSource(uri, GCS_CREDENTIALS)
+    assert input.uri == uri
+    assert input._uri_list == uri
+    assert input._parsed_uri_list == [urlparse(uri[0]), urlparse(uri[1])]
+    uri = "gs://path/to/data/invoice-headers.csv"
+    input = GCSSource(uri, GCS_CREDENTIALS)
+    assert input.uri == uri
+    assert input._uri_list == [uri]
+    assert input._parsed_uri_list == [urlparse(uri)]
+
+
+def test_update_uri():
+    uri = ["gs://path/to/data/data.csv", "gs://path/to/data/data2.csv"]
+    input = GCSSource(uri, GCS_CREDENTIALS)
+    assert input.uri == uri
+    assert input._uri_list == uri
+    assert input._parsed_uri_list == [urlparse(uri[0]), urlparse(uri[1])]
+    uri2 = ["gs://path/to/data/data.csv", "gs://path/to/data/data3.csv"]
+    input.uri = uri2
+    assert input.uri == uri2
+    assert input._uri_list == uri2
+    assert input._parsed_uri_list == [urlparse(uri2[0]), urlparse(uri2[1])]
+
+
+def test_update_uri_implicit_format():
+    uri = ["gs://path/to/data/data.csv", "gs://path/to/data/data2.csv"]
+    input = GCSSource(uri, GCS_CREDENTIALS)
+    assert input.uri == uri
+    assert isinstance(input.format, CSVFormat)
+    uri2 = ["gs://path/to/data/data.parquet", "gs://path/to/data/data3.parquet"]
+    input.uri = uri2
+    assert input.uri == uri2
+    assert isinstance(input.format, ParquetFormat)
+
+
+def test_update_uri_explicit_format():
+    uri = ["gs://path/to/data/data.csv", "gs://path/to/data/data2.csv"]
+    input = GCSSource(uri, GCS_CREDENTIALS, format="csv")
+    assert input.uri == uri
+    assert isinstance(input.format, CSVFormat)
+    uri2 = ["gs://path/to/data/data.parquet", "gs://path/to/data/data3.parquet"]
+    input.uri = uri2
+    assert input.uri == uri2
+    assert isinstance(input.format, CSVFormat)
+
+
+def test_uri_path_mixed_format():
+    uri = ["gs://path/to/data/data.csv", "gs://path/to/data/data2.csv"]
+    input = GCSSource(uri, GCS_CREDENTIALS)
+    assert input.uri == uri
+    assert isinstance(input.format, CSVFormat)
+    assert input._format is None
+    uri2 = ["gs://path/to/data/data.parquet", "gs://path/to/data/data3.parquet"]
+    input.uri = uri2
+    assert input.uri == uri2
+    assert isinstance(input.format, ParquetFormat)
+    assert input._format is None
+    input.format = CSVFormat()
+    assert input.format == CSVFormat()
+    assert input._format == CSVFormat()
+    input.uri = uri2
+    assert input.uri == uri2
+    assert isinstance(input.format, CSVFormat)
+    assert input._format == CSVFormat()
+    input.format = ParquetFormat()
+    assert isinstance(input.format, ParquetFormat)
+    assert input._format == ParquetFormat()
+
+
+def test_update_format():
+    uri = ["gs://path/to/data/data.csv", "gs://path/to/data/data2.csv"]
+    input = GCSSource(uri, GCS_CREDENTIALS)
+    assert input.format == CSVFormat()
+    format = CSVFormat(separator=";", input_has_header=False)
+    input.format = format
+    assert input.format == format
+
+
+def test_update_credentials():
+    uri = ["gs://path/to/data/data.csv", "gs://path/to/data/data2.csv"]
+    input = GCSSource(uri, GCS_CREDENTIALS)
+    assert input.credentials == GCS_CREDENTIALS
+    credentials = GCPServiceAccountKeyCredentials(
+        service_account_key="new_account_key",
+    )
+    input.credentials = credentials
+    assert input.credentials == credentials
+
+
+def test_wrong_type_credentials_raises_error():
+    uri = ["gs://path/to/data/data.csv", "gs://path/to/data/data2.csv"]
+    credentials = UserPasswordCredentials("username", "password")
+    with pytest.raises(SourceConfigurationError) as e:
+        GCSSource(uri, credentials)
+    assert e.value.error_code == ErrorCode.SOCE45
+
+
+def test_different_input_not_eq():
+    uri = ["gs://path/to/data/data.csv", "gs://path/to/data/data2.csv"]
+    input = GCSSource(uri, GCS_CREDENTIALS)
+    uri2 = ["gs://path/to/data/data.csv", "gs://path/to/data/data3.csv"]
+    input2 = GCSSource(uri2, GCS_CREDENTIALS)
+    assert input != input2
+
+
+def test_all_correct_explicit_format():
+    uri = "gs://path/to/data/data"
+    format = "csv"
+    input = GCSSource(uri, GCS_CREDENTIALS, format=format)
+    assert input.uri == uri
+    assert isinstance(input.format, CSVFormat)
+    assert isinstance(input, GCSSource)
+    assert isinstance(input, SourcePlugin)
+
+
+def test_wrong_scheme_raises_value_error():
+    uri = "wrongscheme://path/to/data/data.csv"
+    with pytest.raises(SourceConfigurationError) as e:
+        GCSSource(uri, GCS_CREDENTIALS)
+    assert e.value.error_code == ErrorCode.SOCE44
+
+
+def test_empty_scheme_raises_value_error():
+    uri = "path/to/data/data.csv"
+    with pytest.raises(SourceConfigurationError) as e:
+        GCSSource(uri, GCS_CREDENTIALS)
+    assert e.value.error_code == ErrorCode.SOCE44
+
+
+def test_list_of_integers_raises_exception():
+    uri = [1, 2, "hi"]
+    with pytest.raises(SourceConfigurationError) as e:
+        GCSSource(uri, GCS_CREDENTIALS)
+    assert e.value.error_code == ErrorCode.SOCE43
+
+
+def test_uri_list():
+    uri = [
+        "gs://path/to/data/invoice-headers.csv",
+        "gs://path/to/data/invoice-items-*.csv",
+    ]
+    input = GCSSource(uri, GCS_CREDENTIALS)
+    assert input.uri == uri
+
+
+def test_uri_wrong_type_raises_type_error():
+    uri = 42
+    with pytest.raises(SourceConfigurationError) as e:
+        GCSSource(uri, GCS_CREDENTIALS)
+    assert e.value.error_code == ErrorCode.SOCE43
+
+
+def test_format_from_uri_list():
+    uri = [
+        "gs://path/to/data/invoice-headers.csv",
+        "gs://path/to/data/invoice-items-*.csv",
+    ]
+    input = GCSSource(uri, GCS_CREDENTIALS)
+    assert isinstance(input.format, CSVFormat)
+
+
+def test_no_implicit_format_raises_value_error():
+    uri = "gs://path/to/data/data"
+    with pytest.raises(FormatConfigurationError) as e:
+        GCSSource(uri, GCS_CREDENTIALS)
+    assert e.value.error_code == ErrorCode.FOCE6
+
+
+def test_correct_format_object():
+    uri = "gs://path/to/data/data"
+    format = CSVFormat(separator=".", input_has_header=False)
+    expected_format = copy.deepcopy(FORMAT_TYPE_TO_CONFIG["csv"])
+    expected_format["separator"] = "."
+    expected_format["input_has_header"] = False
+
+    input = GCSSource(uri, GCS_CREDENTIALS, format=format)
+    assert isinstance(input, GCSSource)
+    assert isinstance(input, SourcePlugin)
+
+
+def test_incorrect_data_format_raises_value_error():
+    uri = "gs://path/to/data/data.wrongformat"
+    with pytest.raises(FormatConfigurationError) as e:
+        GCSSource(uri, GCS_CREDENTIALS)
+    assert e.value.error_code == ErrorCode.FOCE4
+
+
+def test_wrong_implicit_format_raises_value_error():
+    uri = "gs://path/to/data/data.wrong"
+    with pytest.raises(FormatConfigurationError) as e:
+        GCSSource(uri, GCS_CREDENTIALS)
+    assert e.value.error_code == ErrorCode.FOCE4
+
+
+def test_wrong_explicit_format_raises_value_error():
+    uri = "gs://path/to/data/data.csv"
+    format = "wrong"
+    with pytest.raises(FormatConfigurationError) as e:
+        GCSSource(uri, GCS_CREDENTIALS, format=format)
+    assert e.value.error_code == ErrorCode.FOCE4
+
+
+def test_empty_format():
+    uri = "gs://path/to/data/data"
+    format = ""
+    with pytest.raises(FormatConfigurationError) as e:
+        GCSSource(uri, GCS_CREDENTIALS, format=format)
+    assert e.value.error_code == ErrorCode.FOCE4
+
+
+def test_wrong_type_format_raises_type_error():
+    uri = "gs://path/to/data/data.csv"
+    format = 42
+    with pytest.raises(FormatConfigurationError) as e:
+        GCSSource(uri, GCS_CREDENTIALS, format=format)
+    assert e.value.error_code == ErrorCode.FOCE5
+
+
+def test_initial_last_modified_none():
+    uri = "gs://path/to/data/data"
+    format = "csv"
+    input = GCSSource(uri, GCS_CREDENTIALS, format=format, initial_last_modified=None)
+    assert input.initial_last_modified is None
+    assert isinstance(input, GCSSource)
+    assert isinstance(input, SourcePlugin)
+
+
+def test_initial_last_modified_valid_string():
+    uri = "gs://path/to/data/data"
+    format = "csv"
+    time = "2024-09-05T01:01:00.01Z"
+    input = GCSSource(uri, GCS_CREDENTIALS, format=format, initial_last_modified=time)
+    assert input.initial_last_modified == datetime.datetime.fromisoformat(
+        time
+    ).isoformat(timespec="microseconds")
+    assert isinstance(input, GCSSource)
+    assert isinstance(input, SourcePlugin)
+
+
+def test_initial_last_modified_valid_string_minus_timezone():
+    uri = "gs://path/to/data/data"
+    format = "csv"
+    time = "2024-09-05T01:01:00.01-02:00"
+    input = GCSSource(uri, GCS_CREDENTIALS, format=format, initial_last_modified=time)
+    assert input.initial_last_modified == datetime.datetime.fromisoformat(
+        time
+    ).isoformat(timespec="microseconds")
+    assert isinstance(input, GCSSource)
+    assert isinstance(input, SourcePlugin)
+
+
+def test_initial_last_modified_invalid_string():
+    uri = "gs://path/to/data/data"
+    format = "csv"
+    time = "wrong_time"
+    with pytest.raises(SourceConfigurationError) as e:
+        GCSSource(uri, GCS_CREDENTIALS, format=format, initial_last_modified=time)
+    assert e.value.error_code == ErrorCode.SOCE5
+
+
+def test_initial_last_modified_invalid_string_no_timezone():
+    uri = "gs://path/to/data/data"
+    format = "csv"
+    time = "2024-09-05T01:01:00.01"
+    with pytest.raises(SourceConfigurationError) as e:
+        GCSSource(uri, GCS_CREDENTIALS, format=format, initial_last_modified=time)
+    assert e.value.error_code == ErrorCode.SOCE41
+
+
+def test_initial_last_modified_valid_datetime():
+    uri = "gs://path/to/data/data"
+    format = "csv"
+    time = datetime.datetime(2024, 9, 5, 1, 1, 0, 10000, tzinfo=datetime.timezone.utc)
+    input = GCSSource(uri, GCS_CREDENTIALS, format=format, initial_last_modified=time)
+    assert input.initial_last_modified == time.isoformat(timespec="microseconds")
+    assert isinstance(input, GCSSource)
+    assert isinstance(input, SourcePlugin)
+
+
+def test_initial_last_modified_invalid_datetime():
+    uri = "gs://path/to/data/data"
+    format = "csv"
+    time = datetime.datetime(2024, 9, 5, 1, 1, 0, 10000)
+    with pytest.raises(SourceConfigurationError) as e:
+        GCSSource(uri, GCS_CREDENTIALS, format=format, initial_last_modified=time)
+    assert e.value.error_code == ErrorCode.SOCE41
+
+
+def test_initial_last_modified_invalid_type():
+    uri = "gs://path/to/data/data"
+    format = "csv"
+    time = 123
+    with pytest.raises(SourceConfigurationError) as e:
+        GCSSource(uri, GCS_CREDENTIALS, format=format, initial_last_modified=time)
+    assert e.value.error_code == ErrorCode.SOCE6

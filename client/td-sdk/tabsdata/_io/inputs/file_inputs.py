@@ -8,11 +8,11 @@ import subprocess
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
-from typing import List
 from urllib.parse import unquote, urlparse, urlunparse
 
 from tabsdata._credentials import (
     AzureCredentials,
+    GCPCredentials,
     S3Credentials,
     build_credentials,
 )
@@ -29,6 +29,7 @@ from tabsdata._format import (
 from tabsdata._io.constants import (
     AZURE_SCHEME,
     FILE_SCHEME,
+    GCS_SCHEME,
     S3_SCHEME,
     URI_INDICATOR,
     SupportedAWSS3Regions,
@@ -40,7 +41,9 @@ from tabsdata._tabsserver.function.cloud_connectivity_utils import (
     SERVER_SIDE_AWS_SECRET_ACCESS_KEY,
     SERVER_SIDE_AZURE_ACCOUNT_KEY,
     SERVER_SIDE_AZURE_ACCOUNT_NAME,
+    SERVER_SIDE_GCP_SERVICE_ACCOUNT_JSON,
     obtain_and_set_azure_credentials,
+    obtain_and_set_gcp_credentials,
     obtain_and_set_s3_credentials,
     set_s3_region,
 )
@@ -56,6 +59,7 @@ from tabsdata._tabsserver.function.yaml_parsing import (
     TransporterAzure,
     TransporterCSVFormat,
     TransporterEnv,
+    TransporterGCS,
     TransporterJsonFormat,
     TransporterLocalFile,
     TransporterLogFormat,
@@ -81,7 +85,7 @@ class AzureSource(SourcePlugin):
     Attributes:
         format (FileFormat): The format of the file. If not provided, it will be
             inferred from the file extension of the data.
-        uri (str | List[str]): The URI of the files with format: 'az://path/to/files'.
+        uri (str | list[str]): The URI of the files with format: 'az://path/to/files'.
             It can be a single URI or a list of URIs.
         credentials (AzureCredentials): The credentials required to access Azure.
         initial_last_modified (str | datetime): If provided, only the files
@@ -102,7 +106,7 @@ class AzureSource(SourcePlugin):
 
     def __init__(
         self,
-        uri: str | List[str],
+        uri: str | list[str],
         credentials: dict | AzureCredentials,
         format: str | dict | FileFormat = None,
         initial_last_modified: str | datetime = None,
@@ -113,7 +117,7 @@ class AzureSource(SourcePlugin):
             time after which the files were modified.
 
         Args:
-            uri (str | List[str]): The URI of the files with format:
+            uri (str | list[str]): The URI of the files with format:
                 'az://path/to/files'. It can be a single URI or a list of URIs.
             credentials (dict | AzureCredentials): The credentials required to access
                 Azure. Can be a dictionary or a AzureCredentials object.
@@ -139,19 +143,19 @@ class AzureSource(SourcePlugin):
         self.credentials = credentials
 
     @property
-    def uri(self) -> str | List[str]:
+    def uri(self) -> str | list[str]:
         """
-        str | List[str]: The URI of the files with format: 'az://path/to/files'.
+        str | list[str]: The URI of the files with format: 'az://path/to/files'.
         """
         return self._uri
 
     @uri.setter
-    def uri(self, uri: str | List[str]):
+    def uri(self, uri: str | list[str]):
         """
         Sets the URI of the files with format: 'az://path/to/files'.
 
         Args:
-            uri (str | List[str]): The URI of the files with format:
+            uri (str | list[str]): The URI of the files with format:
                 'az://path/to/files'. It can be a single URI or a list of URIs.
         """
         self._uri = uri
@@ -326,6 +330,255 @@ class AzureSource(SourcePlugin):
         return f"{self.__class__.__name__}({self.uri})"
 
 
+class GCSSource(SourcePlugin):
+    """
+    Class for managing the configuration of GCS-file-based data inputs.
+
+    Attributes:
+        format (FileFormat): The format of the file. If not provided, it will be
+            inferred from the file extension of the data.
+        uri (str | list[str]): The URI of the files with format: 'gs://path/to/files'.
+            It can be a single URI or a list of URIs.
+        credentials (GCPCredentials): The credentials required to access GCS.
+        initial_last_modified (str | datetime): If provided, only the files
+            modified after this date and time will be considered.
+
+    """
+
+    class SupportedFormats(Enum):
+        """
+        Enum for the supported formats for the GCSSource.
+        """
+
+        avro = AvroFormat
+        csv = CSVFormat
+        ndjson = NDJSONFormat
+        log = LogFormat
+        parquet = ParquetFormat
+
+    def __init__(
+        self,
+        uri: str | list[str],
+        credentials: GCPCredentials,
+        format: str | FileFormat = None,
+        initial_last_modified: str | datetime = None,
+    ):
+        """
+        Initializes the GCSSource with the given URI and the credentials required to
+            access GCS, and optionally a format and date and
+            time after which the files were modified.
+
+        Args:
+            uri (str | list[str]): The URI of the files with format:
+                'az://path/to/files'. It can be a single URI or a list of URIs.
+            credentials (GCPCredentials): The credentials required to access
+                GCS. Must be a GCPCredentials object.
+            format (str | FileFormat, optional): The format of the file. If not
+                provided, it will be inferred from the file extension of the data.
+                Can be either a string with the format or a FileFormat object.
+                Currently supported formats are 'csv',
+                'parquet', 'avro', 'ndjson', 'jsonl' and 'log'.
+            initial_last_modified (str | datetime, optional): If provided,
+                only the files modified after this date and time will be considered.
+                The date and time can be provided as a string in
+                [ISO 8601 format](https://en.wikipedia.org/wiki/ISO_8601) or as
+                a datetime object. If no timezone is provided, UTC will be assumed.
+
+        Raises:
+            InputConfigurationError
+            FormatConfigurationError
+        """
+        self.uri = uri
+        self.format = format
+        self.initial_last_modified = initial_last_modified
+        self.credentials = credentials
+
+    @property
+    def uri(self) -> str | list[str]:
+        """
+        str | list[str]: The URI of the files with format: 'gs://path/to/files'.
+        """
+        return self._uri
+
+    @uri.setter
+    def uri(self, uri: str | list[str]):
+        """
+        Sets the URI of the files with format: 'gs://path/to/files'.
+
+        Args:
+            uri (str | list[str]): The URI of the files with format:
+                'gs://path/to/files'. It can be a single URI or a list of URIs.
+        """
+        self._uri = uri
+        if isinstance(uri, str):
+            self._uri_list = [uri]
+        elif isinstance(uri, list):
+            self._uri_list = uri
+            if not all(isinstance(single_uri, str) for single_uri in self._uri_list):
+                raise SourceConfigurationError(ErrorCode.SOCE43, type(uri))
+        else:
+            raise SourceConfigurationError(ErrorCode.SOCE43, type(uri))
+
+        self._parsed_uri_list = [urlparse(single_uri) for single_uri in self._uri_list]
+        for parsed_uri in self._parsed_uri_list:
+            if parsed_uri.scheme != GCS_SCHEME:
+                raise SourceConfigurationError(
+                    ErrorCode.SOCE44,
+                    parsed_uri.scheme,
+                    GCS_SCHEME,
+                    urlunparse(parsed_uri),
+                )
+
+        self._implicit_format = get_implicit_format_from_list(self._uri_list)
+        if hasattr(self, "_format") and self._format is None:
+            self._verify_valid_format(build_file_format(self._implicit_format))
+
+    @property
+    def format(self) -> FileFormat:
+        """
+        FileFormat: The format of the file. If not provided, it will be inferred from
+            the file extension of the data.
+        """
+        return self._format or build_file_format(self._implicit_format)
+
+    @format.setter
+    def format(self, format: str | FileFormat):
+        """
+        Sets the format of the file.
+
+        Args:
+            format (str | FileFormat): The format of the file. If not
+                provided, it will be inferred from the file extension of the data.
+                Can be either a string with the format or a FileFormat object.
+                Currently supported formats are 'csv',
+                'parquet', 'avro', 'ndjson', 'jsonl' and 'log'.
+        """
+        if format is None:
+            self._format = None
+            # No format was provided, so we validate that self._implicit_format is valid
+            self._verify_valid_format(build_file_format(self._implicit_format))
+        else:
+            format = build_file_format(format)
+            self._verify_valid_format(format)
+            self._format = format
+
+    def _verify_valid_format(self, format: FileFormat):
+        """
+        Verifies that the provided format is valid for the GCSSource
+
+        Args:
+            format (FileFormat): The format to verify.
+        """
+        valid_input_formats = tuple(element.value for element in self.SupportedFormats)
+        if not (isinstance(format, valid_input_formats)):
+            raise SourceConfigurationError(
+                ErrorCode.SOCE4, type(format), valid_input_formats
+            )
+
+    @property
+    def initial_last_modified(self) -> str:
+        """
+        str: The date and time after which the files were modified.
+        """
+        return (
+            self._initial_last_modified.isoformat(timespec="microseconds")
+            if self._initial_last_modified
+            else None
+        )
+
+    @initial_last_modified.setter
+    def initial_last_modified(self, initial_last_modified: str | datetime):
+        """
+        Sets the date and time after which the files were modified.
+
+        Args:
+            initial_last_modified (str | datetime): The date and time after
+                which the files were modified. The date and time can be provided as a
+                string in [ISO 8601 format](https://en.wikipedia.org/wiki/ISO_8601)
+                or as a datetime object. If no timezone is
+                provided, UTC will be assumed.
+        """
+        if initial_last_modified:
+            if isinstance(initial_last_modified, datetime):
+                processed_initial_last_modified = initial_last_modified
+            else:
+                try:
+                    processed_initial_last_modified = datetime.fromisoformat(
+                        initial_last_modified
+                    )
+                except ValueError:
+                    raise SourceConfigurationError(
+                        ErrorCode.SOCE5, initial_last_modified
+                    )
+                except TypeError:
+                    raise SourceConfigurationError(
+                        ErrorCode.SOCE6, type(initial_last_modified)
+                    )
+            _raise_exception_if_no_tzinfo(processed_initial_last_modified)
+            self._initial_last_modified = processed_initial_last_modified
+        else:
+            self._initial_last_modified = None
+
+    @property
+    def initial_values(self) -> dict:
+        if hasattr(self, "_initial_values"):
+            return self._initial_values
+
+        if self.initial_last_modified:
+            return {
+                OFFSET_LAST_MODIFIED_VARIABLE_NAME: None,
+            }
+        else:
+            return {}
+
+    @initial_values.setter
+    def initial_values(self, new_values: dict | None):
+        if not isinstance(new_values, dict) and new_values is not None:
+            raise TypeError(
+                "'initial_values' must be set to a dictionary or None, got"
+                f" {type(new_values)} instead"
+            )
+        self._initial_values = new_values
+        logger.info(f"Initial values updated to '{new_values}' successfully.")
+
+    @property
+    def credentials(self) -> GCPCredentials:
+        """
+        GCPCredentials: The credentials required to access GCS.
+        """
+        return self._credentials
+
+    @credentials.setter
+    def credentials(self, credentials: GCPCredentials):
+        """
+        Sets the credentials required to access GCS.
+
+        Args:
+            credentials (GCPCredentials): The credentials required to access
+                GCS. Must be a GCPCredentials object.
+        """
+        if not (isinstance(credentials, GCPCredentials)):
+            raise SourceConfigurationError(ErrorCode.SOCE45, type(credentials))
+        self._credentials = credentials
+
+    def chunk(self, working_dir: str) -> list[str | None | list[str | None]]:
+        logger.debug(f"Triggering {self}")
+        obtain_and_set_gcp_credentials(self.credentials)
+        local_sources = _execute_file_importer(self, working_dir)
+        logger.debug(f"Obtained local sources: '{local_sources}'")
+        self._stream_ignore_working_dir = True
+        return local_sources
+
+    def __repr__(self) -> str:
+        """
+        Returns a string representation of the Input.
+
+        Returns:
+            str: A string representation of the Input.
+        """
+        return f"{self.__class__.__name__}({self.uri})"
+
+
 class LocalFileSource(SourcePlugin):
     """
     Class for managing the configuration of local-file-based data inputs.
@@ -333,7 +586,7 @@ class LocalFileSource(SourcePlugin):
     Attributes:
         format (FileFormat): The format of the file. If not provided, it will be
             inferred from the file extension of the data.
-        path (str | List[str]): The path where the files can be found. It can be a
+        path (str | list[str]): The path where the files can be found. It can be a
             single path or a list of paths.
         initial_last_modified (str | None): If not None, only the files modified after
             this date and time will be considered.
@@ -353,7 +606,7 @@ class LocalFileSource(SourcePlugin):
 
     def __init__(
         self,
-        path: str | List[str],
+        path: str | list[str],
         format: str | dict | FileFormat = None,
         initial_last_modified: str | datetime = None,
     ):
@@ -362,7 +615,7 @@ class LocalFileSource(SourcePlugin):
             a date and time after which the files were modified.
 
         Args:
-            path (str | List[str]): The path where the files can be found. It can be a
+            path (str | list[str]): The path where the files can be found. It can be a
                 single path or a list of paths.
             format (str | dict | FileFormat, optional): The format of the file. If not
                 provided, it will be inferred from the file extension of the data.
@@ -385,26 +638,26 @@ class LocalFileSource(SourcePlugin):
         self.initial_last_modified = initial_last_modified
 
     @property
-    def path(self) -> str | List[str]:
+    def path(self) -> str | list[str]:
         """
-        str | List[str]: The path or paths to the files to load.
+        str | list[str]: The path or paths to the files to load.
         """
         return self._path
 
     @property
-    def _uri_list(self) -> List[str]:
+    def _uri_list(self) -> list[str]:
         """
-        List[str]: The list of paths to the files to load.
+        list[str]: The list of paths to the files to load.
         """
         return [unquote(convert_path_to_uri(path)) for path in self._path_list]
 
     @path.setter
-    def path(self, path: str | List[str]):
+    def path(self, path: str | list[str]):
         """
         Sets the path or paths to the files to load.
 
         Args:
-            path (str | List[str]): The path or paths to the files to load.
+            path (str | list[str]): The path or paths to the files to load.
         """
         self._path = path
         if isinstance(path, str):
@@ -567,7 +820,7 @@ class S3Source(SourcePlugin):
     Attributes:
         format (FileFormat): The format of the file. If not provided, it will be
             inferred from the file extension of the data.
-        uri (str | List[str]): The URI of the files with format: 's3://path/to/files'.
+        uri (str | list[str]): The URI of the files with format: 's3://path/to/files'.
             It can be a single URI or a list of URIs.
         credentials (S3Credentials): The credentials required to access the S3 bucket.
         initial_last_modified (str | datetime): If provided, only the files
@@ -588,7 +841,7 @@ class S3Source(SourcePlugin):
 
     def __init__(
         self,
-        uri: str | List[str],
+        uri: str | list[str],
         credentials: dict | S3Credentials,
         format: str | dict | FileFormat = None,
         initial_last_modified: str | datetime = None,
@@ -600,7 +853,7 @@ class S3Source(SourcePlugin):
             time after which the files were modified.
 
         Args:
-            uri (str | List[str]): The URI of the files with format:
+            uri (str | list[str]): The URI of the files with format:
                 's3://path/to/files'. It can be a single URI or a list of URIs.
             credentials (dict | S3Credentials): The credentials required to access the
                 S3 bucket. Can be a dictionary or a S3Credentials object.
@@ -629,19 +882,19 @@ class S3Source(SourcePlugin):
         self.region = region
 
     @property
-    def uri(self) -> str | List[str]:
+    def uri(self) -> str | list[str]:
         """
-        str | List[str]: The URI of the files with format: 's3://path/to/files'.
+        str | list[str]: The URI of the files with format: 's3://path/to/files'.
         """
         return self._uri
 
     @uri.setter
-    def uri(self, uri: str | List[str]):
+    def uri(self, uri: str | list[str]):
         """
         Sets the URI of the files with format: 's3://path/to/files'.
 
         Args:
-            uri (str | List[str]): The URI of the files with format:
+            uri (str | list[str]): The URI of the files with format:
                 's3://path/to/files'. It can be a single URI or a list of URIs.
         """
         self._uri = uri
@@ -852,7 +1105,7 @@ class S3Source(SourcePlugin):
 
 
 def _execute_file_importer(
-    source: AzureSource | LocalFileSource | S3Source,
+    source: AzureSource | GCSSource | LocalFileSource | S3Source,
     destination_folder: str,
 ) -> list:
     """
@@ -938,7 +1191,7 @@ def _execute_single_file_import(
     destination_folder: str,
     file_format: FileFormat,
     initial_last_modified: str | None,
-    user_source: LocalFileSource | S3Source | AzureSource,
+    user_source: AzureSource | GCSSource | LocalFileSource | S3Source,
     lastmod_info: str = None,
 ) -> (list[str] | str, str | None):
     """
@@ -1079,7 +1332,7 @@ def _obtain_transporter_import(
     destination_folder: str,
     file_format: FileFormat,
     initial_last_modified: str | None,
-    user_source: LocalFileSource | S3Source | AzureSource,
+    user_source: AzureSource | GCSSource | LocalFileSource | S3Source,
     lastmod_info: str = None,
 ):
     # Create the transporter source object
@@ -1091,6 +1344,11 @@ def _obtain_transporter_import(
             region=(
                 TransporterEnv(SERVER_SIDE_AWS_REGION) if user_source.region else None
             ),
+        )
+    elif isinstance(user_source, GCSSource):
+        transporter_source = TransporterGCS(
+            origin_location_uri,
+            service_account_key=TransporterEnv(SERVER_SIDE_GCP_SERVICE_ACCOUNT_JSON),
         )
     elif isinstance(user_source, AzureSource):
         transporter_source = TransporterAzure(

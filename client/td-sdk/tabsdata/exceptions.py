@@ -980,6 +980,28 @@ class ErrorCode(Enum):
             "'UserPasswordCredentials' object or None, got '{}' instead"
         ),
     }
+    SOCE43 = {
+        "code": "SOCE-043",
+        "message": (
+            "The 'uri' parameter in a GCSSource must be a 'str' or "
+            "a 'list[str]', got '{}' instead"
+        ),
+    }
+    SOCE44 = {
+        "code": "SOCE-044",
+        "message": (
+            "Scheme '{}' not supported for GCSSource. The supported scheme is '{}'."
+            " The scheme is inferred from the URI, which should be of the form"
+            " 'scheme://path'. The URI provided was '{}'."
+        ),
+    }
+    SOCE45 = {
+        "code": "SOCE-045",
+        "message": (
+            "The 'credentials' parameter in a GCSSource must be a "
+            "'GCPCredentials' object, got '{}' instead"
+        ),
+    }
     TF1 = {
         "code": "TF-001",
         "message": "The input DataFrame is missing the required column(s) '{}'.",

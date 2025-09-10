@@ -67,7 +67,12 @@ from tabsdata._format import (
     NDJSONFormat,
     ParquetFormat,
 )
-from tabsdata._io.inputs.file_inputs import AzureSource, LocalFileSource, S3Source
+from tabsdata._io.inputs.file_inputs import (
+    AzureSource,
+    GCSSource,
+    LocalFileSource,
+    S3Source,
+)
 from tabsdata._io.inputs.sql_inputs import (
     MariaDBSource,
     MySQLSource,
@@ -115,6 +120,7 @@ logging.basicConfig(
 __all__ = [
     # from tabsdatafunction.py Inputs
     "AzureSource",
+    "GCSSource",
     "LocalFileSource",
     "MariaDBSource",
     "MySQLSource",
