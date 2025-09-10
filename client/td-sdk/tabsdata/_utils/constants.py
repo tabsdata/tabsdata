@@ -2,8 +2,6 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
-import os
-
 TABSDATA_MODULE_NAME = "tabsdata"
 TD_TABSDATA_DEV_PKG = "TD_TABSDATA_DEV_PKG"
 
@@ -25,7 +23,3 @@ TABSDATA_PACKAGES = [TABSDATA_MODULE_NAME] + list(TABSDATA_CONNECTORS.keys())
 TRUE_VALUES = {"1", "true", "yes", "y", "on"}
 
 NO_VERSION = "♾️"
-
-
-def env_enabled(env: str) -> bool:
-    return os.getenv(env, "False").lower() in TRUE_VALUES

@@ -19,7 +19,8 @@ import yaml
 
 from tabsdata._io.plugin import DestinationPlugin, SourcePlugin
 from tabsdata._tabsdatafunction import TabsdataFunction
-from tabsdata._utils.constants import TABSDATA_MODULE_NAME, TRUE_VALUES, env_enabled
+from tabsdata._utils.constants import TABSDATA_MODULE_NAME, TRUE_VALUES
+from tabsdata._utils.envs import is_env_enabled
 from tabsdata._utils.tableframe._constants import (
     PYTEST_CONTEXT_ACTIVE,
     TD_SYMLINK_POLARS_LIBS_PYTEST,
@@ -309,7 +310,7 @@ def store_folder_contents(path_to_persist: str, save_location: str):
     os.makedirs(save_location, exist_ok=True)
 
     # Step 1: Regular copy, excluding unwanted folders.
-    symlinks = env_enabled(TD_SYMLINK_POLARS_LIBS_PYTEST)
+    symlinks = is_env_enabled(TD_SYMLINK_POLARS_LIBS_PYTEST)
     if symlinks:
         shutil.copytree(
             path_to_persist,

@@ -13,7 +13,7 @@ from tabsdata._tabsserver.function.global_utils import (
     CURRENT_PLATFORM,
     convert_uri_to_path,
 )
-from tabsdata._utils.constants import env_enabled
+from tabsdata._utils.envs import is_env_enabled
 from tabsdata._utils.temps import tabsdata_temp_folder
 
 logger = logging.getLogger(__name__)
@@ -49,7 +49,7 @@ def extract_tarfile_to_folder(tarfile_uri, destination_folder):
     try:
         with tarfile.open(tarfile_path, "r:gz") as tar:
             filter_mode: FilterType = (
-                "tar" if env_enabled("TD_SYMLINK_POLARS_LIBS_PYTEST") else "data"
+                "tar" if is_env_enabled("TD_SYMLINK_POLARS_LIBS_PYTEST") else "data"
             )
             tar.extractall(destination_folder, filter=filter_mode)
     except FileNotFoundError as e:
