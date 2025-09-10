@@ -13,7 +13,11 @@ import polars as pl
 
 # noinspection PyPackageRequirements
 import pytest
-from tests_tabsdata_salesforce.conftest import TESTING_RESOURCES_FOLDER
+from tests_tabsdata_salesforce.conftest import (
+    CORRECT_CREDENTIALS,
+    FAKE_CREDENTIALS,
+    TESTING_RESOURCES_FOLDER,
+)
 from tests_tabsdata_salesforce.testing_resources.test_input_salesforce_report.example import (
     input_salesforce_report,
 )
@@ -27,6 +31,7 @@ from tabsdata._tabsserver.function.response_utils import RESPONSE_FILE_NAME
 from tabsdata._tabsserver.invoker import REQUEST_FILE_NAME
 from tabsdata._tabsserver.invoker import invoke as tabsserver_main
 from tabsdata._utils.bundle_utils import create_bundle_archive
+from tabsdata.exceptions import SecretConfigurationError
 from tests_tabsdata.bootest import ROOT_FOLDER, TDLOCAL_FOLDER
 from tests_tabsdata.conftest import (
     FUNCTION_DATA_FOLDER,
@@ -237,7 +242,7 @@ def test_input_salesforce_report_initial_values_by_label(tmp_path):
     )
     input_sfr_initial_values_by_label.input.report = SFR_INITIAL_VALUES_TESTING_REPORT
     input_sfr_initial_values_by_label.input.last_modified_column = "Last Modified Date"
-    input_sfr_initial_values_by_label.input.column_by = "label"
+    input_sfr_initial_values_by_label.input.column_name_strategy = "label"
     input_sfr_initial_values_by_label.input.initial_last_modified = (
         "2024-03-10T11:03:08.000+0000"
     )
@@ -345,7 +350,7 @@ def test_input_salesforce_report_initial_values_by_name(tmp_path):
     )
     input_sfr_initial_values_by_name.input.report = SFR_INITIAL_VALUES_TESTING_REPORT
     input_sfr_initial_values_by_name.input.last_modified_column = "LAST_UPDATE"
-    input_sfr_initial_values_by_name.input.column_by = "columnName"
+    input_sfr_initial_values_by_name.input.column_name_strategy = "columnName"
     input_sfr_initial_values_by_name.input.initial_last_modified = (
         "2024-03-10T11:03:08.000+0000"
     )
@@ -444,68 +449,72 @@ def test_input_salesforce_report_initial_values_by_name(tmp_path):
 @pytest.mark.salesforce
 def test_username_password_security_token():
     source = td.SalesforceReportSource(
-        username="username",
-        password="password",
-        security_token="security_token",
+        FAKE_CREDENTIALS,
         report="FAKE_ID",
-        column_by="columnName",
+        column_name_strategy="columnName",
     )
-    assert source.username == DirectSecret("username")
-    assert source.password == DirectSecret("password")
-    assert source.security_token == DirectSecret("security_token")
+    assert source.credentials.username == DirectSecret("username")
+    assert source.credentials.password == DirectSecret("password")
+    assert source.credentials.security_token == DirectSecret("security_token")
     source = td.SalesforceReportSource(
-        username=td.EnvironmentSecret("username"),
-        password=td.EnvironmentSecret("password"),
-        security_token=td.EnvironmentSecret("security_token"),
+        td.SalesforceTokenCredentials(
+            username=td.EnvironmentSecret("username"),
+            password=td.EnvironmentSecret("password"),
+            security_token=td.EnvironmentSecret("security_token"),
+        ),
         report="FAKE_ID",
-        column_by="columnName",
+        column_name_strategy="columnName",
     )
-    assert source.username == td.EnvironmentSecret("username")
-    assert source.password == td.EnvironmentSecret("password")
-    assert source.security_token == td.EnvironmentSecret("security_token")
+    assert source.credentials.username == td.EnvironmentSecret("username")
+    assert source.credentials.password == td.EnvironmentSecret("password")
+    assert source.credentials.security_token == td.EnvironmentSecret("security_token")
 
 
 @pytest.mark.salesforce
 def test_wrong_type_username_password_security_token():
-    with pytest.raises(TypeError):
+    with pytest.raises(SecretConfigurationError):
         # noinspection PyTypeChecker
         td.SalesforceReportSource(
-            username=1,
-            password="password",
-            security_token="security_token",
+            td.SalesforceTokenCredentials(
+                username=1,
+                password="password",
+                security_token="security_token",
+            ),
             report="report",
-            column_by="columnName",
+            column_name_strategy="columnName",
         )
-    with pytest.raises(TypeError):
+    with pytest.raises(SecretConfigurationError):
         # noinspection PyTypeChecker
         td.SalesforceReportSource(
-            username="user",
-            password=1,
-            security_token="security_token",
+            td.SalesforceTokenCredentials(
+                username="user",
+                password=1,
+                security_token="security_token",
+            ),
             report="report",
-            column_by="columnName",
+            column_name_strategy="columnName",
         )
-    with pytest.raises(TypeError):
+    with pytest.raises(SecretConfigurationError):
         # noinspection PyTypeChecker
         td.SalesforceReportSource(
-            username="user",
-            password="password",
-            security_token=1,
+            td.SalesforceTokenCredentials(
+                username="user",
+                password="password",
+                security_token=1,
+            ),
             report="report",
-            column_by="columnName",
+            column_name_strategy="columnName",
         )
 
 
 @pytest.mark.salesforce
 def test_initial_last_modified():
     source = td.SalesforceReportSource(
-        username="username",
-        password="password",
-        security_token="security_token",
+        FAKE_CREDENTIALS,
         report="FAKE REPORT",
         last_modified_column="fakeColumn",
         initial_last_modified="2024-03-10T11:03:08.000+0000",
-        column_by="columnName",
+        column_name_strategy="columnName",
     )
     assert source.initial_values == {
         "initial_last_modified": "2024-03-10T11:03:08.000000+0000"
@@ -513,13 +522,11 @@ def test_initial_last_modified():
     assert source.report == ["FAKE REPORT"]
 
     source = td.SalesforceReportSource(
-        username="username",
-        password="password",
-        security_token="security_token",
+        FAKE_CREDENTIALS,
         report="FAKE REPORT",
         initial_last_modified="2025-03-12T05:24:32.543437-0400",
         last_modified_column="fakeColumn",
-        column_by="columnName",
+        column_name_strategy="columnName",
     )
     assert source.initial_values == {
         "initial_last_modified": "2025-03-12T05:24:32.543437-0400"
@@ -529,11 +536,9 @@ def test_initial_last_modified():
 @pytest.mark.salesforce
 def test_report():
     source = td.SalesforceReportSource(
-        username="username",
-        password="password",
-        security_token="security_token",
+        FAKE_CREDENTIALS,
         report="FAKE_ID",
-        column_by="columnName",
+        column_name_strategy="columnName",
     )
     assert source.report == ["FAKE_ID"]
 
@@ -543,11 +548,9 @@ def test_report_wrong_type():
     with pytest.raises(TypeError):
         # noinspection PyTypeChecker
         td.SalesforceReportSource(
-            username="username",
-            password="password",
-            security_token="security_token",
+            FAKE_CREDENTIALS,
             report=1,
-            column_by="columnName",
+            column_name_strategy="columnName",
         )
 
 
@@ -555,11 +558,9 @@ def test_report_wrong_type():
 def test_initial_last_modified_missing():
     with pytest.raises(ValueError):
         td.SalesforceReportSource(
-            username="username",
-            password="password",
-            security_token="security_token",
+            FAKE_CREDENTIALS,
             report="FAKE REPORT",
-            column_by="columnName",
+            column_name_strategy="columnName",
             last_modified_column="LastModifiedDate",
         )
 
@@ -568,11 +569,9 @@ def test_initial_last_modified_missing():
 def test_initial_last_modified_column_missing():
     with pytest.raises(ValueError):
         td.SalesforceReportSource(
-            username="username",
-            password="password",
-            security_token="security_token",
+            FAKE_CREDENTIALS,
             report="FAKE REPORT",
-            column_by="columnName",
+            column_name_strategy="columnName",
             initial_last_modified="2024-03-10T11:03:08.000+0000",
         )
 
@@ -581,26 +580,22 @@ def test_initial_last_modified_column_missing():
 def test_initial_last_modified_no_timezone():
     with pytest.raises(ValueError):
         td.SalesforceReportSource(
-            username="username",
-            password="password",
-            security_token="security_token",
+            FAKE_CREDENTIALS,
             report="FAKE REPORT",
             initial_last_modified="2098-02-05T11:27:47.000000",
             last_modified_column="LastModifiedDate",
-            column_by="columnName",
+            column_name_strategy="columnName",
         )
 
 
 @pytest.mark.salesforce
 def test_optional_parameters():
     source = td.SalesforceReportSource(
-        username="username",
-        password="password",
-        security_token="security_token",
+        FAKE_CREDENTIALS,
         report="FAKE_ID",
         api_version="50.0",
         instance_url="fake_url",
-        column_by="columnName",
+        column_name_strategy="columnName",
     )
     assert source.api_version == "50.0"
     assert source.instance_url == "fake_url"
@@ -643,21 +638,17 @@ def test_maximum_date():
 @pytest.mark.slow
 def test_chunk(tmp_path):
     source = td.SalesforceReportSource(
-        username=td.EnvironmentSecret("SALESFORCE_USERNAME"),
-        password=td.EnvironmentSecret("SALESFORCE_PASSWORD"),
-        security_token=td.EnvironmentSecret("SALESFORCE_SECURITY_TOKEN"),
+        CORRECT_CREDENTIALS,
         report="DOES NOT EXIST",
-        column_by="columnName",
+        column_name_strategy="columnName",
     )
     with pytest.raises(Exception):
         source.chunk(str(tmp_path))
 
     source = td.SalesforceReportSource(
-        username=td.EnvironmentSecret("SALESFORCE_USERNAME"),
-        password=td.EnvironmentSecret("SALESFORCE_PASSWORD"),
-        security_token=td.EnvironmentSecret("SALESFORCE_SECURITY_TOKEN"),
+        CORRECT_CREDENTIALS,
         report=SFR_TESTING_REPORT["long_id"],
-        column_by="columnName",
+        column_name_strategy="columnName",
     )
     [result] = source.chunk(str(tmp_path))
     result = os.path.join(tmp_path, result)
@@ -667,11 +658,9 @@ def test_chunk(tmp_path):
     assert not first_output.is_empty()
 
     source = td.SalesforceReportSource(
-        username=td.EnvironmentSecret("SALESFORCE_USERNAME"),
-        password=td.EnvironmentSecret("SALESFORCE_PASSWORD"),
-        security_token=td.EnvironmentSecret("SALESFORCE_SECURITY_TOKEN"),
+        CORRECT_CREDENTIALS,
         report=SFR_TESTING_REPORT["long_id"],
-        column_by="columnName",
+        column_name_strategy="columnName",
     )
     [result] = source.chunk(str(tmp_path))
     result = os.path.join(tmp_path, result)
@@ -689,11 +678,9 @@ def test_chunk(tmp_path):
 def test_chunk_with_filter_by_column_name(tmp_path):
     for value, number in SFR_TESTING_ALIASES_AND_ROWS.items():
         source = td.SalesforceReportSource(
-            username=td.EnvironmentSecret("SALESFORCE_USERNAME"),
-            password=td.EnvironmentSecret("SALESFORCE_PASSWORD"),
-            security_token=td.EnvironmentSecret("SALESFORCE_SECURITY_TOKEN"),
+            CORRECT_CREDENTIALS,
             report=SFR_TESTING_REPORT["long_id"],
-            column_by="columnName",
+            column_name_strategy="columnName",
             filter=("CREATED_ALIAS", "equals", value),
         )
         [result] = source.chunk(str(tmp_path))
@@ -713,11 +700,9 @@ def test_chunk_with_filter_by_column_name(tmp_path):
 
     # Since we will and different values, the result should be empty
     source = td.SalesforceReportSource(
-        username=td.EnvironmentSecret("SALESFORCE_USERNAME"),
-        password=td.EnvironmentSecret("SALESFORCE_PASSWORD"),
-        security_token=td.EnvironmentSecret("SALESFORCE_SECURITY_TOKEN"),
+        CORRECT_CREDENTIALS,
         report=SFR_TESTING_REPORT["long_id"],
-        column_by="columnName",
+        column_name_strategy="columnName",
         filter=filter,
     )
     [result] = source.chunk(str(tmp_path))
@@ -726,11 +711,9 @@ def test_chunk_with_filter_by_column_name(tmp_path):
     # Since we will or different values, the result should be the sum
     logic = " OR ".join([f"{i+1}" for i in range(len(filter))])
     source = td.SalesforceReportSource(
-        username=td.EnvironmentSecret("SALESFORCE_USERNAME"),
-        password=td.EnvironmentSecret("SALESFORCE_PASSWORD"),
-        security_token=td.EnvironmentSecret("SALESFORCE_SECURITY_TOKEN"),
+        CORRECT_CREDENTIALS,
         report=SFR_TESTING_REPORT["long_id"],
-        column_by="columnName",
+        column_name_strategy="columnName",
         filter=filter,
         filter_logic=logic,
     )
@@ -751,11 +734,9 @@ def test_chunk_with_filter_by_column_name(tmp_path):
 def test_chunk_with_filter_by_label(tmp_path):
     for value, number in SFR_TESTING_ALIASES_AND_ROWS.items():
         source = td.SalesforceReportSource(
-            username=td.EnvironmentSecret("SALESFORCE_USERNAME"),
-            password=td.EnvironmentSecret("SALESFORCE_PASSWORD"),
-            security_token=td.EnvironmentSecret("SALESFORCE_SECURITY_TOKEN"),
+            CORRECT_CREDENTIALS,
             report=SFR_TESTING_REPORT["long_id"],
-            column_by="label",
+            column_name_strategy="label",
             filter=("Created Alias", "equals", value),
         )
         [result] = source.chunk(str(tmp_path))
@@ -775,11 +756,9 @@ def test_chunk_with_filter_by_label(tmp_path):
 
     # Since we will and different values, the result should be empty
     source = td.SalesforceReportSource(
-        username=td.EnvironmentSecret("SALESFORCE_USERNAME"),
-        password=td.EnvironmentSecret("SALESFORCE_PASSWORD"),
-        security_token=td.EnvironmentSecret("SALESFORCE_SECURITY_TOKEN"),
+        CORRECT_CREDENTIALS,
         report=SFR_TESTING_REPORT["long_id"],
-        column_by="label",
+        column_name_strategy="label",
         filter=filter,
     )
     [result] = source.chunk(str(tmp_path))
@@ -788,11 +767,9 @@ def test_chunk_with_filter_by_label(tmp_path):
     # Since we will or different values, the result should be the sum
     logic = " OR ".join([f"{i+1}" for i in range(len(filter))])
     source = td.SalesforceReportSource(
-        username=td.EnvironmentSecret("SALESFORCE_USERNAME"),
-        password=td.EnvironmentSecret("SALESFORCE_PASSWORD"),
-        security_token=td.EnvironmentSecret("SALESFORCE_SECURITY_TOKEN"),
+        CORRECT_CREDENTIALS,
         report=SFR_TESTING_REPORT["long_id"],
-        column_by="label",
+        column_name_strategy="label",
         filter=filter,
         filter_logic=logic,
     )
@@ -813,11 +790,9 @@ def test_chunk_with_filter_by_label(tmp_path):
 def test_chunk_with_filter_and_offset_by_column_name(tmp_path):
     for value, number in SFR_INITIAL_VALUES_TESTING_ALIASES_AND_ROWS.items():
         source = td.SalesforceReportSource(
-            username=td.EnvironmentSecret("SALESFORCE_USERNAME"),
-            password=td.EnvironmentSecret("SALESFORCE_PASSWORD"),
-            security_token=td.EnvironmentSecret("SALESFORCE_SECURITY_TOKEN"),
+            CORRECT_CREDENTIALS,
             report=SFR_INITIAL_VALUES_TESTING_REPORT,
-            column_by="columnName",
+            column_name_strategy="columnName",
             last_modified_column="LAST_UPDATE",
             initial_last_modified="2024-03-10T11:03:08.000+0000",
             filter=("LAST_NAME", "equals", value),
@@ -839,11 +814,9 @@ def test_chunk_with_filter_and_offset_by_column_name(tmp_path):
 
     # Since we will and different values, the result should be empty
     source = td.SalesforceReportSource(
-        username=td.EnvironmentSecret("SALESFORCE_USERNAME"),
-        password=td.EnvironmentSecret("SALESFORCE_PASSWORD"),
-        security_token=td.EnvironmentSecret("SALESFORCE_SECURITY_TOKEN"),
+        CORRECT_CREDENTIALS,
         report=SFR_INITIAL_VALUES_TESTING_REPORT,
-        column_by="columnName",
+        column_name_strategy="columnName",
         last_modified_column="LAST_UPDATE",
         initial_last_modified="2024-03-10T11:03:08.000+0000",
         filter=filter,
@@ -854,11 +827,9 @@ def test_chunk_with_filter_and_offset_by_column_name(tmp_path):
     # Since we will or different values, the result should be the sum
     logic = " OR ".join([f"{i+1}" for i in range(len(filter))])
     source = td.SalesforceReportSource(
-        username=td.EnvironmentSecret("SALESFORCE_USERNAME"),
-        password=td.EnvironmentSecret("SALESFORCE_PASSWORD"),
-        security_token=td.EnvironmentSecret("SALESFORCE_SECURITY_TOKEN"),
+        CORRECT_CREDENTIALS,
         report=SFR_INITIAL_VALUES_TESTING_REPORT,
-        column_by="columnName",
+        column_name_strategy="columnName",
         filter=filter,
         last_modified_column="LAST_UPDATE",
         initial_last_modified="2024-03-10T11:03:08.000+0000",
@@ -883,11 +854,9 @@ def test_chunk_with_filter_and_offset_by_column_name(tmp_path):
 def test_chunk_with_filter_and_offset_by_label(tmp_path):
     for value, number in SFR_INITIAL_VALUES_TESTING_ALIASES_AND_ROWS.items():
         source = td.SalesforceReportSource(
-            username=td.EnvironmentSecret("SALESFORCE_USERNAME"),
-            password=td.EnvironmentSecret("SALESFORCE_PASSWORD"),
-            security_token=td.EnvironmentSecret("SALESFORCE_SECURITY_TOKEN"),
+            CORRECT_CREDENTIALS,
             report=SFR_INITIAL_VALUES_TESTING_REPORT,
-            column_by="label",
+            column_name_strategy="label",
             last_modified_column="Last Modified Date",
             initial_last_modified="2024-03-10T11:03:08.000+0000",
             filter=("Last Name", "equals", value),
@@ -909,11 +878,9 @@ def test_chunk_with_filter_and_offset_by_label(tmp_path):
 
     # Since we will and different values, the result should be empty
     source = td.SalesforceReportSource(
-        username=td.EnvironmentSecret("SALESFORCE_USERNAME"),
-        password=td.EnvironmentSecret("SALESFORCE_PASSWORD"),
-        security_token=td.EnvironmentSecret("SALESFORCE_SECURITY_TOKEN"),
+        CORRECT_CREDENTIALS,
         report=SFR_INITIAL_VALUES_TESTING_REPORT,
-        column_by="label",
+        column_name_strategy="label",
         last_modified_column="Last Modified Date",
         initial_last_modified="2024-03-10T11:03:08.000+0000",
         filter=filter,
@@ -924,11 +891,9 @@ def test_chunk_with_filter_and_offset_by_label(tmp_path):
     # Since we will or different values, the result should be the sum
     logic = " OR ".join([f"{i+1}" for i in range(len(filter))])
     source = td.SalesforceReportSource(
-        username=td.EnvironmentSecret("SALESFORCE_USERNAME"),
-        password=td.EnvironmentSecret("SALESFORCE_PASSWORD"),
-        security_token=td.EnvironmentSecret("SALESFORCE_SECURITY_TOKEN"),
+        CORRECT_CREDENTIALS,
         report=SFR_INITIAL_VALUES_TESTING_REPORT,
-        column_by="label",
+        column_name_strategy="label",
         filter=filter,
         last_modified_column="Last Modified Date",
         initial_last_modified="2024-03-10T11:03:08.000+0000",
@@ -950,13 +915,11 @@ def test_chunk_with_filter_and_offset_by_label(tmp_path):
 @pytest.mark.salesforce
 @pytest.mark.requires_internet
 @pytest.mark.slow
-def test_column_by(tmp_path):
+def test_column_name_strategy(tmp_path):
     source = td.SalesforceReportSource(
-        username=td.EnvironmentSecret("SALESFORCE_USERNAME"),
-        password=td.EnvironmentSecret("SALESFORCE_PASSWORD"),
-        security_token=td.EnvironmentSecret("SALESFORCE_SECURITY_TOKEN"),
+        CORRECT_CREDENTIALS,
         report=SFR_TESTING_REPORT["long_id"],
-        column_by="columnName",
+        column_name_strategy="columnName",
     )
     [result] = source.chunk(str(tmp_path))
     result = os.path.join(tmp_path, result)
@@ -966,11 +929,9 @@ def test_column_by(tmp_path):
     assert not first_output.is_empty()
 
     source = td.SalesforceReportSource(
-        username=td.EnvironmentSecret("SALESFORCE_USERNAME"),
-        password=td.EnvironmentSecret("SALESFORCE_PASSWORD"),
-        security_token=td.EnvironmentSecret("SALESFORCE_SECURITY_TOKEN"),
+        CORRECT_CREDENTIALS,
         report=SFR_TESTING_REPORT["long_id"],
-        column_by="label",
+        column_name_strategy="label",
     )
     [result] = source.chunk(str(tmp_path))
     result = os.path.join(tmp_path, result)
@@ -993,11 +954,9 @@ def test_column_by(tmp_path):
 def test_chunk_with_filter_and_late_offset_by_column_name(tmp_path):
     for value, number in SFR_INITIAL_VALUES_TESTING_ALIASES_AND_ROWS.items():
         source = td.SalesforceReportSource(
-            username=td.EnvironmentSecret("SALESFORCE_USERNAME"),
-            password=td.EnvironmentSecret("SALESFORCE_PASSWORD"),
-            security_token=td.EnvironmentSecret("SALESFORCE_SECURITY_TOKEN"),
+            CORRECT_CREDENTIALS,
             report=SFR_INITIAL_VALUES_TESTING_REPORT,
-            column_by="columnName",
+            column_name_strategy="columnName",
             last_modified_column="LAST_UPDATE",
             initial_last_modified="2034-03-10T11:03:08.000+0000",
             filter=("LAST_NAME", "equals", value),
@@ -1012,11 +971,9 @@ def test_chunk_with_filter_and_late_offset_by_column_name(tmp_path):
 
     # Since we will and different values, the result should be empty
     source = td.SalesforceReportSource(
-        username=td.EnvironmentSecret("SALESFORCE_USERNAME"),
-        password=td.EnvironmentSecret("SALESFORCE_PASSWORD"),
-        security_token=td.EnvironmentSecret("SALESFORCE_SECURITY_TOKEN"),
+        CORRECT_CREDENTIALS,
         report=SFR_INITIAL_VALUES_TESTING_REPORT,
-        column_by="columnName",
+        column_name_strategy="columnName",
         last_modified_column="LAST_UPDATE",
         initial_last_modified="2034-03-10T11:03:08.000+0000",
         filter=filter,
@@ -1027,11 +984,9 @@ def test_chunk_with_filter_and_late_offset_by_column_name(tmp_path):
     # Since we will or different values, the result should be the sum
     logic = " OR ".join([f"{i+1}" for i in range(len(filter))])
     source = td.SalesforceReportSource(
-        username=td.EnvironmentSecret("SALESFORCE_USERNAME"),
-        password=td.EnvironmentSecret("SALESFORCE_PASSWORD"),
-        security_token=td.EnvironmentSecret("SALESFORCE_SECURITY_TOKEN"),
+        CORRECT_CREDENTIALS,
         report=SFR_INITIAL_VALUES_TESTING_REPORT,
-        column_by="columnName",
+        column_name_strategy="columnName",
         filter=filter,
         last_modified_column="LAST_UPDATE",
         initial_last_modified="2034-03-10T11:03:08.000+0000",
@@ -1047,11 +1002,9 @@ def test_chunk_with_filter_and_late_offset_by_column_name(tmp_path):
 def test_chunk_with_filter_and_late_offset_by_label(tmp_path):
     for value, number in SFR_INITIAL_VALUES_TESTING_ALIASES_AND_ROWS.items():
         source = td.SalesforceReportSource(
-            username=td.EnvironmentSecret("SALESFORCE_USERNAME"),
-            password=td.EnvironmentSecret("SALESFORCE_PASSWORD"),
-            security_token=td.EnvironmentSecret("SALESFORCE_SECURITY_TOKEN"),
+            CORRECT_CREDENTIALS,
             report=SFR_INITIAL_VALUES_TESTING_REPORT,
-            column_by="label",
+            column_name_strategy="label",
             last_modified_column="Last Modified Date",
             initial_last_modified="2034-03-10T11:03:08.000+0000",
             filter=("Last Name", "equals", value),
@@ -1066,11 +1019,9 @@ def test_chunk_with_filter_and_late_offset_by_label(tmp_path):
 
     # Since we will and different values, the result should be empty
     source = td.SalesforceReportSource(
-        username=td.EnvironmentSecret("SALESFORCE_USERNAME"),
-        password=td.EnvironmentSecret("SALESFORCE_PASSWORD"),
-        security_token=td.EnvironmentSecret("SALESFORCE_SECURITY_TOKEN"),
+        CORRECT_CREDENTIALS,
         report=SFR_INITIAL_VALUES_TESTING_REPORT,
-        column_by="label",
+        column_name_strategy="label",
         last_modified_column="Last Modified Date",
         initial_last_modified="2034-03-10T11:03:08.000+0000",
         filter=filter,
@@ -1081,11 +1032,9 @@ def test_chunk_with_filter_and_late_offset_by_label(tmp_path):
     # Since we will or different values, the result should be the sum
     logic = " OR ".join([f"{i+1}" for i in range(len(filter))])
     source = td.SalesforceReportSource(
-        username=td.EnvironmentSecret("SALESFORCE_USERNAME"),
-        password=td.EnvironmentSecret("SALESFORCE_PASSWORD"),
-        security_token=td.EnvironmentSecret("SALESFORCE_SECURITY_TOKEN"),
+        CORRECT_CREDENTIALS,
         report=SFR_INITIAL_VALUES_TESTING_REPORT,
-        column_by="label",
+        column_name_strategy="label",
         filter=filter,
         last_modified_column="Last Modified Date",
         initial_last_modified="2034-03-10T11:03:08.000+0000",
@@ -1101,11 +1050,9 @@ def test_login():
     from tabsdata_salesforce._connector import _log_into_salesforce
 
     source = td.SalesforceReportSource(
-        username=td.EnvironmentSecret("SALESFORCE_USERNAME"),
-        password=td.EnvironmentSecret("SALESFORCE_PASSWORD"),
-        security_token=td.EnvironmentSecret("SALESFORCE_SECURITY_TOKEN"),
+        CORRECT_CREDENTIALS,
         report="FAKE_ID",
-        column_by="columnName",
+        column_name_strategy="columnName",
     )
     _log_into_salesforce(source)
 
@@ -1113,12 +1060,10 @@ def test_login():
 @pytest.mark.salesforce
 def test_filter_logic_inferred():
     source = td.SalesforceReportSource(
-        username="username",
-        password="password",
-        security_token="security_token",
+        FAKE_CREDENTIALS,
         report="FAKE_ID",
         filter=[("column", "operator", "value")],
-        column_by="columnName",
+        column_name_strategy="columnName",
     )
     assert source.filter_logic == "(1)"
     source.filter = [
@@ -1131,16 +1076,14 @@ def test_filter_logic_inferred():
 @pytest.mark.salesforce
 def test_filter_logic_declared():
     source = td.SalesforceReportSource(
-        username="username",
-        password="password",
-        security_token="security_token",
+        FAKE_CREDENTIALS,
         report="FAKE_ID",
         filter=[
             ("column2", "operator2", "value2"),
             ("column3", "operator3", "value3"),
         ],
         filter_logic="(1 OR NOT 2)",
-        column_by="columnName",
+        column_name_strategy="columnName",
     )
     assert source.filter_logic == "(1 OR NOT 2)"
 
@@ -1149,13 +1092,11 @@ def test_filter_logic_declared():
 def test_filter_logic_wrong_type():
     with pytest.raises(TypeError):
         td.SalesforceReportSource(
-            username="username",
-            password="password",
-            security_token="security_token",
+            FAKE_CREDENTIALS,
             report="FAKE_ID",
             filter=[("column", "operator", "value")],
             filter_logic=42,
-            column_by="columnName",
+            column_name_strategy="columnName",
         )
 
 
@@ -1163,12 +1104,10 @@ def test_filter_logic_wrong_type():
 def test_filter_logic_no_filter():
     with pytest.raises(ValueError):
         td.SalesforceReportSource(
-            username="username",
-            password="password",
-            security_token="security_token",
+            FAKE_CREDENTIALS,
             report="FAKE_ID",
             filter_logic="(1 OR NOT 2)",
-            column_by="columnName",
+            column_name_strategy="columnName",
         )
 
 
@@ -1178,80 +1117,68 @@ def test_login_fails():
     from tabsdata_salesforce._connector import _log_into_salesforce
 
     source = td.SalesforceReportSource(
-        username="WRONG_USERNAME",
-        password="WRONG_PASSWORD",
-        security_token="WRONG_TOKEN",
+        FAKE_CREDENTIALS,
         report="FAKE_ID",
-        column_by="columnName",
+        column_name_strategy="columnName",
     )
     with pytest.raises(Exception):
         _log_into_salesforce(source)
 
 
 @pytest.mark.salesforce
-def test_report_identifier_wrong_value():
+def test_find_report_by_wrong_value():
     with pytest.raises(ValueError):
         td.SalesforceReportSource(
-            username="username",
-            password="password",
-            security_token="security_token",
+            FAKE_CREDENTIALS,
             report="FAKE_ID",
-            report_identifier="MyFilter",
-            column_by="columnName",
+            find_report_by="MyFilter",
+            column_name_strategy="columnName",
         )
 
 
 @pytest.mark.salesforce
-def test_report_identifier_wrong_type():
+def test_find_report_by_wrong_type():
     with pytest.raises(ValueError):
         td.SalesforceReportSource(
-            username="username",
-            password="password",
-            security_token="security_token",
+            FAKE_CREDENTIALS,
             report="FAKE_ID",
-            report_identifier=42,
-            column_by="columnName",
+            find_report_by=42,
+            column_name_strategy="columnName",
         )
 
 
 @pytest.mark.salesforce
-def test_report_identifier_declared():
+def test_find_report_by_declared():
     source = td.SalesforceReportSource(
-        username="username",
-        password="password",
-        security_token="security_token",
+        FAKE_CREDENTIALS,
         report="FAKE_ID",
-        report_identifier="id",
-        column_by="columnName",
+        find_report_by="id",
+        column_name_strategy="columnName",
     )
-    assert source.report_identifier == "id"
-    source.report_identifier = "name"
-    assert source.report_identifier == "name"
+    assert source.find_report_by == "id"
+    source.find_report_by = "name"
+    assert source.find_report_by == "name"
 
 
 @pytest.mark.salesforce
-def test_report_identifier_inferred():
+def test_find_report_by_inferred():
     source = td.SalesforceReportSource(
-        username="username",
-        password="password",
-        security_token="security_token",
+        FAKE_CREDENTIALS,
         report="FAKE_ID",
-        column_by="columnName",
+        column_name_strategy="columnName",
     )
-    assert source.report_identifier == "name"
+    assert source.find_report_by == "name"
     source.report = SFR_TESTING_REPORT["long_id"]
-    assert source.report_identifier == "id"
+    assert source.find_report_by == "id"
 
 
 @pytest.mark.salesforce
 def test_filter_parameter():
     source = td.SalesforceReportSource(
-        username="username",
-        password="password",
-        security_token="security_token",
+        FAKE_CREDENTIALS,
         report="FAKE_ID",
         filter=("column", "operator", "value"),
-        column_by="columnName",
+        column_name_strategy="columnName",
     )
     assert source.filter == [("column", "operator", "value")]
     source.filter = [
@@ -1268,21 +1195,17 @@ def test_filter_parameter():
 def test_filter_wrong_tuple_len():
     with pytest.raises(ValueError):
         td.SalesforceReportSource(
-            username="username",
-            password="password",
-            security_token="security_token",
+            FAKE_CREDENTIALS,
             report="FAKE_ID",
             filter=("column", "operator"),
-            column_by="columnName",
+            column_name_strategy="columnName",
         )
     with pytest.raises(ValueError):
         td.SalesforceReportSource(
-            username="username",
-            password="password",
-            security_token="security_token",
+            FAKE_CREDENTIALS,
             report="FAKE_ID",
             filter=("column", "operator", "value", "extra"),
-            column_by="columnName",
+            column_name_strategy="columnName",
         )
 
 
@@ -1290,12 +1213,10 @@ def test_filter_wrong_tuple_len():
 def test_filter_wrong_tuple_type():
     with pytest.raises(ValueError):
         td.SalesforceReportSource(
-            username="username",
-            password="password",
-            security_token="security_token",
+            FAKE_CREDENTIALS,
             report="FAKE_ID",
             filter=("column", "operator", 42),
-            column_by="columnName",
+            column_name_strategy="columnName",
         )
 
 
@@ -1303,19 +1224,15 @@ def test_filter_wrong_tuple_type():
 def test_filter_wrong_tuple_list():
     with pytest.raises(ValueError):
         td.SalesforceReportSource(
-            username="username",
-            password="password",
-            security_token="security_token",
+            FAKE_CREDENTIALS,
             report="FAKE_ID",
             filter=[("column", "operator")],
-            column_by="columnName",
+            column_name_strategy="columnName",
         )
     with pytest.raises(ValueError):
         td.SalesforceReportSource(
-            username="username",
-            password="password",
-            security_token="security_token",
+            FAKE_CREDENTIALS,
             report="FAKE_ID",
             filter=[("column", "operator", "value", "extra")],
-            column_by="columnName",
+            column_name_strategy="columnName",
         )

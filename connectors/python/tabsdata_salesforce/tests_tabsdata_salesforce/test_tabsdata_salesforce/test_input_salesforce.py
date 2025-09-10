@@ -12,7 +12,11 @@ import polars as pl
 
 # noinspection PyPackageRequirements
 import pytest
-from tests_tabsdata_salesforce.conftest import TESTING_RESOURCES_FOLDER
+from tests_tabsdata_salesforce.conftest import (
+    CORRECT_CREDENTIALS,
+    FAKE_CREDENTIALS,
+    TESTING_RESOURCES_FOLDER,
+)
 from tests_tabsdata_salesforce.testing_resources.test_input_salesforce.example import (
     input_salesforce,
 )
@@ -32,6 +36,7 @@ from tabsdata._tabsserver.function.response_utils import RESPONSE_FILE_NAME
 from tabsdata._tabsserver.invoker import REQUEST_FILE_NAME
 from tabsdata._tabsserver.invoker import invoke as tabsserver_main
 from tabsdata._utils.bundle_utils import create_bundle_archive
+from tabsdata.exceptions import SecretConfigurationError
 from tests_tabsdata.bootest import ROOT_FOLDER, TDLOCAL_FOLDER
 from tests_tabsdata.conftest import (
     FUNCTION_DATA_FOLDER,
@@ -216,53 +221,63 @@ def test_input_salesforce_initial_values(tmp_path):
 @pytest.mark.salesforce
 def test_username_password_security_token():
     source = td.SalesforceSource(
-        username="username",
-        password="password",
-        security_token="security_token",
+        FAKE_CREDENTIALS,
         query="SELECT Name FROM Contact",
     )
-    assert source.username == DirectSecret("username")
-    assert source.password == DirectSecret("password")
-    assert source.security_token == DirectSecret("security_token")
+    assert source.credentials.username == DirectSecret("username")
+    assert source.credentials.password == DirectSecret("password")
+    assert source.credentials.security_token == DirectSecret("security_token")
     source = td.SalesforceSource(
-        username=td.EnvironmentSecret("username"),
-        password=td.EnvironmentSecret("password"),
-        security_token=td.EnvironmentSecret("security_token"),
+        td.SalesforceTokenCredentials(
+            username=td.EnvironmentSecret("username"),
+            password=td.EnvironmentSecret("password"),
+            security_token=td.EnvironmentSecret("security_token"),
+        ),
         query="SELECT Name FROM Contact",
     )
-    assert source.username == td.EnvironmentSecret("username")
-    assert source.password == td.EnvironmentSecret("password")
-    assert source.security_token == td.EnvironmentSecret("security_token")
+    assert source.credentials.username == td.EnvironmentSecret("username")
+    assert source.credentials.password == td.EnvironmentSecret("password")
+    assert source.credentials.security_token == td.EnvironmentSecret("security_token")
 
 
 @pytest.mark.salesforce
 def test_wrong_type_username_password_security_token():
-    with pytest.raises(TypeError):
+    with pytest.raises(SecretConfigurationError):
         # noinspection PyTypeChecker
         td.SalesforceSource(
-            username=1,
-            password="password",
-            security_token="security_token",
+            td.SalesforceTokenCredentials(
+                username=1,
+                password="password",
+                security_token="security_token",
+            ),
             query="query",
         )
-    with pytest.raises(TypeError):
+    with pytest.raises(SecretConfigurationError):
         # noinspection PyTypeChecker
         td.SalesforceSource(
-            username="user", password=1, security_token="security_token", query="query"
+            td.SalesforceTokenCredentials(
+                username="user",
+                password=1,
+                security_token="security_token",
+            ),
+            query="query",
         )
-    with pytest.raises(TypeError):
+    with pytest.raises(SecretConfigurationError):
         # noinspection PyTypeChecker
         td.SalesforceSource(
-            username="user", password="password", security_token=1, query="query"
+            td.SalesforceTokenCredentials(
+                username="user",
+                password="password",
+                security_token=1,
+            ),
+            query="query",
         )
 
 
 @pytest.mark.salesforce
 def test_initial_last_modified():
     source = td.SalesforceSource(
-        username="username",
-        password="password",
-        security_token="security_token",
+        FAKE_CREDENTIALS,
         query=(
             f"SELECT Name,{td.SalesforceSource.LAST_MODIFIED_COLUMN} FROM Contact WHERE"
             f" {td.SalesforceSource.LAST_MODIFIED_COLUMN} >"
@@ -280,9 +295,7 @@ def test_initial_last_modified():
     ]
 
     source = td.SalesforceSource(
-        username="username",
-        password="password",
-        security_token="security_token",
+        FAKE_CREDENTIALS,
         query=(
             f"SELECT Name,{td.SalesforceSource.LAST_MODIFIED_COLUMN} FROM Contact WHERE"
             f" {td.SalesforceSource.LAST_MODIFIED_COLUMN} >"
@@ -298,9 +311,7 @@ def test_initial_last_modified():
 @pytest.mark.salesforce
 def test_query():
     source = td.SalesforceSource(
-        username="username",
-        password="password",
-        security_token="security_token",
+        FAKE_CREDENTIALS,
         query="SELECT Name FROM Contact",
     )
     assert source.query == ["SELECT Name FROM Contact"]
@@ -311,9 +322,7 @@ def test_query_wrong_type():
     with pytest.raises(TypeError):
         # noinspection PyTypeChecker
         td.SalesforceSource(
-            username="username",
-            password="password",
-            security_token="security_token",
+            FAKE_CREDENTIALS,
             query=1,
         )
 
@@ -322,9 +331,7 @@ def test_query_wrong_type():
 def test_initial_last_modified_missing():
     with pytest.raises(ValueError):
         td.SalesforceSource(
-            username="username",
-            password="password",
-            security_token="security_token",
+            FAKE_CREDENTIALS,
             query=(
                 f"SELECT Name,{td.SalesforceSource.LAST_MODIFIED_COLUMN} FROM Contact"
                 f" WHERE {td.SalesforceSource.LAST_MODIFIED_COLUMN} >"
@@ -337,9 +344,7 @@ def test_initial_last_modified_missing():
 def test_initial_last_modified_no_timezone():
     with pytest.raises(ValueError):
         td.SalesforceSource(
-            username="username",
-            password="password",
-            security_token="security_token",
+            FAKE_CREDENTIALS,
             query=(
                 f"SELECT Name,{td.SalesforceSource.LAST_MODIFIED_COLUMN} FROM Contact"
                 f" WHERE {td.SalesforceSource.LAST_MODIFIED_COLUMN} >"
@@ -352,9 +357,7 @@ def test_initial_last_modified_no_timezone():
 @pytest.mark.salesforce
 def test_optional_parameters():
     source = td.SalesforceSource(
-        username="username",
-        password="password",
-        security_token="security_token",
+        FAKE_CREDENTIALS,
         query="SELECT Name FROM Contact",
         api_version="50.0",
         instance_url="fake_url",
@@ -368,9 +371,7 @@ def test_optional_parameters():
 @pytest.mark.salesforce
 def test_replace_last_modified_token():
     source = td.SalesforceSource(
-        username="username",
-        password="password",
-        security_token="security_token",
+        FAKE_CREDENTIALS,
         query="SELECT Name FROM Contact",
     )
     last_modified_token = source.LAST_MODIFIED_TOKEN
@@ -419,9 +420,7 @@ def test_chunk(tmp_path):
     date1 = "2098-02-05T11:27:47.000000+0000"
     date5 = "1934-04-16T14:10:02.000000+0000"
     source = td.SalesforceSource(
-        username=td.EnvironmentSecret("SALESFORCE_USERNAME"),
-        password=td.EnvironmentSecret("SALESFORCE_PASSWORD"),
-        security_token=td.EnvironmentSecret("SALESFORCE_SECURITY_TOKEN"),
+        CORRECT_CREDENTIALS,
         query=(
             f"SELECT Name,{td.SalesforceSource.LAST_MODIFIED_COLUMN} FROM Contact"
             f" WHERE {td.SalesforceSource.LAST_MODIFIED_COLUMN} > {date1}"
@@ -431,9 +430,7 @@ def test_chunk(tmp_path):
     assert result is None
 
     source = td.SalesforceSource(
-        username=td.EnvironmentSecret("SALESFORCE_USERNAME"),
-        password=td.EnvironmentSecret("SALESFORCE_PASSWORD"),
-        security_token=td.EnvironmentSecret("SALESFORCE_SECURITY_TOKEN"),
+        CORRECT_CREDENTIALS,
         query=(
             f"SELECT Name,{td.SalesforceSource.LAST_MODIFIED_COLUMN} FROM Contact"
             f" WHERE {td.SalesforceSource.LAST_MODIFIED_COLUMN} > {date5}"
@@ -454,9 +451,7 @@ def test_login():
 
     date5 = "1934-04-16T14:10:02.000000+0000"
     source = td.SalesforceSource(
-        username=td.EnvironmentSecret("SALESFORCE_USERNAME"),
-        password=td.EnvironmentSecret("SALESFORCE_PASSWORD"),
-        security_token=td.EnvironmentSecret("SALESFORCE_SECURITY_TOKEN"),
+        CORRECT_CREDENTIALS,
         query=(
             f"SELECT Name,{td.SalesforceSource.LAST_MODIFIED_COLUMN} FROM Contact"
             f" WHERE {td.SalesforceSource.LAST_MODIFIED_COLUMN} > {date5}"
@@ -468,18 +463,19 @@ def test_login():
 @pytest.mark.salesforce
 @pytest.mark.requires_internet
 def test_login_fails():
+
+    from tabsdata_salesforce._connector import _log_into_salesforce
+
     date5 = "1934-04-16T14:10:02.000000+0000"
     source = td.SalesforceSource(
-        username="WRONG_USERNAME",
-        password="WRONG_PASSWORD",
-        security_token="WRONG_TOKEN",
+        FAKE_CREDENTIALS,
         query=(
             f"SELECT Name,{td.SalesforceSource.LAST_MODIFIED_COLUMN} FROM Contact"
             f" WHERE {td.SalesforceSource.LAST_MODIFIED_COLUMN} > {date5}"
         ),
     )
     with pytest.raises(Exception):
-        source._log_into_salesforce()
+        _log_into_salesforce(source)
 
 
 @pytest.mark.requires_internet

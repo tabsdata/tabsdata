@@ -14,6 +14,7 @@ from tests_tabsdata.bootest import enrich_sys_path
 TESTING_RESOURCES_FOLDER = TESTING_RESOURCES_PATH
 enrich_sys_path()
 
+import tabsdata as td
 from tests_tabsdata.conftest import (
     clean_python_virtual_environments,
     setup_temp_folder,
@@ -21,6 +22,18 @@ from tests_tabsdata.conftest import (
 )
 
 logger = logging.getLogger(__name__)
+
+FAKE_CREDENTIALS = td.SalesforceTokenCredentials(
+    username="username",
+    password="password",
+    security_token="security_token",
+)
+
+CORRECT_CREDENTIALS = td.SalesforceTokenCredentials(
+    username=td.EnvironmentSecret("SALESFORCE_USERNAME"),
+    password=td.EnvironmentSecret("SALESFORCE_PASSWORD"),
+    security_token=td.EnvironmentSecret("SALESFORCE_SECURITY_TOKEN"),
+)
 
 
 def pytest_configure(config: pytest.Config):

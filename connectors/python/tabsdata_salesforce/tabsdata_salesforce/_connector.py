@@ -9,20 +9,146 @@ import gzip
 import logging
 import os
 import time
+from abc import ABC
 from typing import Literal
 
 import ijson
 import polars as pl
 import requests
 
+from tabsdata._credentials import Credentials
 from tabsdata._io.plugin import SourcePlugin
-from tabsdata._secret import DirectSecret, EnvironmentSecret, HashiCorpSecret, Secret
+from tabsdata._secret import (
+    Secret,
+    build_secret,
+)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
 SF_DATE_FORMAT = "%Y-%m-%dT%H:%M:%S.%f%z"
+
+
+class SalesforceCredentials(Credentials, ABC):
+    """Credentials class to store the credentials needed to access Salesforce."""
+
+
+class SalesforceTokenCredentials(SalesforceCredentials):
+    """Credentials class to store the credentials needed to access a Salesforce
+    using a username, a password and a token.
+
+    Attributes:
+        username (Secret): The username to access Salesforce.
+        password (Secret): The password to access Salesforce.
+        security_token (Secret): The security token to access Salesforce.
+
+    Methods:
+        to_dict() -> dict: Convert the AzureAccountNameKeyCredentials object to a
+            dictionary
+    """
+
+    IDENTIFIER = "salesforce_token-credentials"
+
+    USERNAME_KEY = "username"
+    PASSWORD_KEY = "password"
+    SECURITY_TOKEN_KEY = "security_token"
+
+    def __init__(
+        self,
+        username: str | Secret,
+        password: str | Secret,
+        security_token: str | Secret,
+    ):
+        """
+        Initialize the SalesforceTokenCredentials object.
+
+        Args:
+            username (str | DirectSecret | EnvironmentSecret | HashiCorpSecret): The
+                username to access Salesforce.
+            password (str | DirectSecret | EnvironmentSecret | HashiCorpSecret): The
+                password to access Salesforce.
+            security_token (str | DirectSecret | EnvironmentSecret | HashiCorpSecret):
+                The security token to access Salesforce.
+        """
+        self.username = username
+        self.password = password
+        self.security_token = security_token
+
+    def _to_dict(self) -> dict:
+        """
+        Convert the SalesforceTokenCredentials object to a dictionary.
+
+        Returns:
+            dict: A dictionary representation of the SalesforceTokenCredentials object.
+        """
+        return {
+            self.IDENTIFIER: {
+                self.USERNAME_KEY: self.username._to_dict(),
+                self.PASSWORD_KEY: self.password._to_dict(),
+                self.SECURITY_TOKEN_KEY: self.security_token._to_dict(),
+            }
+        }
+
+    @property
+    def username(self) -> Secret:
+        """
+        Secret: The username to access Salesforce.
+        """
+        return self._username
+
+    @username.setter
+    def username(self, username: str | Secret):
+        """
+        Set the username to access Salesforce.
+
+        Args:
+            username (str | Secret): The username to access Salesforce.
+        """
+        self._username = build_secret(username)
+
+    @property
+    def password(self) -> Secret:
+        """
+        Secret: The password to access Salesforce.
+        """
+        return self._password
+
+    @password.setter
+    def password(self, password: str | Secret):
+        """
+        Set the password to access Salesforce.
+
+        Args:
+            password (str | Secret): The password to access Salesforce.
+        """
+        self._password = build_secret(password)
+
+    @property
+    def security_token(self) -> Secret:
+        """
+        Secret: The security token to access Salesforce.
+        """
+        return self._security_token
+
+    @security_token.setter
+    def security_token(self, security_token: str | Secret):
+        """
+        Set the security token to access Salesforce.
+
+        Args:
+            security_token (str | Secret): The security token to access Salesforce.
+        """
+        self._security_token = build_secret(security_token)
+
+    def __repr__(self) -> str:
+        """
+        Returns a string representation of the S3AccessKeyCredentials.
+
+        Returns:
+            str: A string representation of the S3AccessKeyCredentials.
+        """
+        return f"{self.__class__.__name__}({self._to_dict()[self.IDENTIFIER]})"
 
 
 class SalesforceSource(SourcePlugin):
@@ -32,26 +158,19 @@ class SalesforceSource(SourcePlugin):
 
     def __init__(
         self,
-        username: str | HashiCorpSecret | DirectSecret | EnvironmentSecret,
-        password: str | HashiCorpSecret | DirectSecret | EnvironmentSecret,
-        security_token: str | HashiCorpSecret | DirectSecret | EnvironmentSecret,
+        credentials: SalesforceCredentials,
         query: str | list[str],
         instance_url: str = None,
         include_deleted: bool = False,
         initial_last_modified: str = None,
-        api_version: str = None,
+        **kwargs,
     ):
         """
         Initializes the SalesforceSource with the given query(s) and the credentials
             required to access Salesforce.
 
         Args:
-            username (str | HashiCorpSecret | DirectSecret | EnvironmentSecret): The
-                username to access Salesforce.
-            password (str | HashiCorpSecret | DirectSecret | EnvironmentSecret): The
-                password to access Salesforce.
-            security_token (str | HashiCorpSecret | DirectSecret | EnvironmentSecret):
-                The security token to access Salesforce.
+            credentials (SalesforceCredentials): The credentials to access Salesforce.
             query (str | list[str]): The query or queries to execute in Salesforce.
                 It can be a single string or a list of strings.
             instance_url (str, optional): The URL of the instance to which we want to
@@ -66,9 +185,6 @@ class SalesforceSource(SourcePlugin):
                 informed timezone) and the query must contain the token
                 $lastModified, which will be replaced by the latest 'last_modified'
                 value in each execution.
-            api_version (str, optional): The Salesforce API version to use. Defaults to
-                None, which will default to the latest version supported by
-                simple_salesforce.
 
         """
         try:
@@ -79,9 +195,7 @@ class SalesforceSource(SourcePlugin):
                 "The 'tabsdata_salesforce' package is missing some dependencies. You "
                 "can get them by installing 'tabsdata['salesforce']'"
             )
-        self.username = username
-        self.password = password
-        self.security_token = security_token
+        self.credentials = credentials
         self.query = query
         self.include_deleted = include_deleted
         self.instance_url = instance_url
@@ -105,7 +219,7 @@ class SalesforceSource(SourcePlugin):
                     f"Query '{query}' contains the token '{self.LAST_MODIFIED_TOKEN}' "
                     "but no 'initial_last_modified' was provided"
                 )
-        self.api_version = api_version or api.DEFAULT_API_VERSION
+        self.api_version = kwargs.get("api_version") or api.DEFAULT_API_VERSION
 
     @property
     def query(self) -> list[str]:
@@ -124,66 +238,23 @@ class SalesforceSource(SourcePlugin):
             )
 
     @property
-    def username(
+    def credentials(
         self,
-    ) -> HashiCorpSecret | DirectSecret | EnvironmentSecret:
-        return self._username
+    ) -> SalesforceCredentials | SalesforceTokenCredentials:
+        return self._credentials
 
-    @username.setter
-    def username(
+    @credentials.setter
+    def credentials(
         self,
-        username: str | HashiCorpSecret | DirectSecret | EnvironmentSecret,
+        credentials: SalesforceCredentials | SalesforceTokenCredentials,
     ):
-        if isinstance(username, Secret):
-            self._username = username
-        elif isinstance(username, str):
-            self._username = DirectSecret(username)
+        if isinstance(credentials, SalesforceCredentials):
+            self._credentials = credentials
         else:
             raise TypeError(
-                "The 'username' parameter must be either a string or a "
-                f"tabsdata secret object, got '{type(username)}' instead"
-            )
-
-    @property
-    def password(
-        self,
-    ) -> HashiCorpSecret | DirectSecret | EnvironmentSecret:
-        return self._password
-
-    @password.setter
-    def password(
-        self,
-        password: str | HashiCorpSecret | DirectSecret | EnvironmentSecret,
-    ):
-        if isinstance(password, Secret):
-            self._password = password
-        elif isinstance(password, str):
-            self._password = DirectSecret(password)
-        else:
-            raise TypeError(
-                "The 'password' parameter must be either a string or a "
-                f"tabsdata secret object, got '{type(password)}' instead"
-            )
-
-    @property
-    def security_token(
-        self,
-    ) -> HashiCorpSecret | DirectSecret | EnvironmentSecret:
-        return self._security_token
-
-    @security_token.setter
-    def security_token(
-        self,
-        security_token: str | HashiCorpSecret | DirectSecret | EnvironmentSecret,
-    ):
-        if isinstance(security_token, Secret):
-            self._security_token = security_token
-        elif isinstance(security_token, str):
-            self._security_token = DirectSecret(security_token)
-        else:
-            raise TypeError(
-                "The 'security_token' parameter must be either a string or a "
-                f"tabsdata secret object, got '{type(security_token)}' instead"
+                "The 'credentials' parameter must be a "
+                f"tabsdata SalesforceCredentials object, got '{type(credentials)}' "
+                "instead"
             )
 
     def chunk(self, working_dir: str) -> list[str]:
@@ -271,19 +342,13 @@ def _maximum_date(date1: str, date2: str):
 class SalesforceReportSource(SourcePlugin):
     def __init__(
         self,
-        username: str | HashiCorpSecret | DirectSecret | EnvironmentSecret,
-        password: str | HashiCorpSecret | DirectSecret | EnvironmentSecret,
-        security_token: str | HashiCorpSecret | DirectSecret | EnvironmentSecret,
+        credentials: SalesforceCredentials,
         report: str | list[str],
-        column_by: Literal["columnName", "label"],
-        report_identifier: Literal["id", "name"] = None,
+        column_name_strategy: Literal["columnName", "label"],
+        find_report_by: Literal["id", "name"] = None,
         filter: tuple[str, str, str] | list[tuple[str, str, str]] = None,
         filter_logic: str = None,
         instance_url: str = None,
-        api_version: str = None,
-        maximum_wait_time: int = 600,
-        poll_interval: int = 5,
-        chunk_size: int = 50000,
         last_modified_column: str = None,
         initial_last_modified: str = None,
         **kwargs,
@@ -293,27 +358,36 @@ class SalesforceReportSource(SourcePlugin):
             credentials required to access Salesforce.
 
         Args:
-            username (str | HashiCorpSecret | DirectSecret | EnvironmentSecret): The
-                username to access Salesforce.
-            password (str | HashiCorpSecret | DirectSecret | EnvironmentSecret): The
-                password to access Salesforce.
-            security_token (str | HashiCorpSecret | DirectSecret | EnvironmentSecret):
-                The security token to access Salesforce.
+            credentials (SalesforceCredentials): The credentials to access Salesforce.
             report (str | list[str]): The report or reports to execute in Salesforce.
                 It can be a single string or a list of strings. The string must be
                 either the report ID or the name of the report.
-            column_by (Literal["columnName", "label"]): Indicates which column
-                attribute to use as the
+            column_name_strategy (Literal["columnName", "label"]): Indicates which
+                column attribute to use as the
                 column name in the output data. It can be one of the following:
                 - "columnName": The API name of the column (e.g., "ACCOUNT.NAME").
                 - "label": The label of the column (e.g., "Account Name").
-            report_identifier (Literal["id", "name"], optional): Indicates whether the
+            find_report_by (Literal["id", "name"], optional): Indicates whether the
                 'report' parameter contains report IDs or report names. If not
                 provided, it will be inferred from the value of the 'report' parameter.
             filter (tuple[str, str, str] | list[tuple[str, str, str]], optional):
                 A filter or list of filters to apply to the report. Each filter is a
                 tuple of three strings: (field, operator, value). For example:
                 [("CreatedDate", "greaterThan", "2023-01-01T00:00:00.000Z")].
+                The possible operators are:
+                    - equals
+                    - notEqual
+                    - lessThan
+                    - greaterThan
+                    - lessOrEqual
+                    - greaterOrEqual
+                    - contains
+                    - notContain
+                    - startsWith
+                    - includes
+                    - excludes
+                    - within
+                    - between
                 Defaults to None.
             filter_logic (str, optional): A string representing the logic to apply to
                 the filters. For example: "(1 AND 2) OR 3". The numbers correspond to
@@ -322,15 +396,6 @@ class SalesforceReportSource(SourcePlugin):
             instance_url (str, optional): The URL of the instance to which we want to
                 connect. Only necessary when the username and password are associated
                 to more than one instance. Defaults to None.
-            api_version (str, optional): The Salesforce API version to use. Defaults to
-                None, which will default to the latest version supported by
-                simple_salesforce.
-            maximum_wait_time (int, optional): The maximum time to wait for a report
-                to be generated, in seconds. Defaults to 600 seconds (10 minutes).
-            poll_interval (int, optional): The interval between each poll to check if
-                the report is ready, in seconds. Defaults to 5 seconds.
-            chunk_size (int, optional): The number of rows to process in each chunk
-                when reading the report data. Defaults to 50000 rows.
             last_modified_column (str, optional): The name of the column to use for
                 incremental loading based on the last modified date. If provided,
                 the report must contain this column. Defaults to None.
@@ -348,19 +413,17 @@ class SalesforceReportSource(SourcePlugin):
                 "The 'tabsdata_salesforce' package is missing some dependencies. You "
                 "can get them by installing 'tabsdata['salesforce']'"
             )
-        self.username = username
-        self.password = password
-        self.security_token = security_token
+        self.credentials = credentials
         self.instance_url = instance_url
-        self.api_version = api_version or api.DEFAULT_API_VERSION
+        self.api_version = kwargs.get("api_version") or api.DEFAULT_API_VERSION
         self.report = report
-        self.column_by = column_by
-        self.report_identifier = report_identifier
+        self.column_name_strategy = column_name_strategy
+        self.find_report_by = find_report_by
         self.filter = filter
         self.filter_logic = filter_logic
-        self.maximum_wait_time = int(maximum_wait_time)
-        self.poll_interval = int(poll_interval)
-        self.chunk_size = int(chunk_size)
+        self.maximum_wait_time = int(kwargs.get("maximum_wait_time", 600))
+        self.poll_interval = int(kwargs.get("poll_interval", 5))
+        self.chunk_size = int(kwargs.get("chunk_size", 50000))
         self.last_modified_column = last_modified_column
         self.initial_last_modified = initial_last_modified
         self.kwargs = kwargs
@@ -404,31 +467,32 @@ class SalesforceReportSource(SourcePlugin):
             self.initial_values = {}
 
     @property
-    def column_by(
+    def column_name_strategy(
         self,
     ) -> Literal["columnName", "label"]:
-        return self._column_by
+        return self._column_name_strategy
 
-    @column_by.setter
-    def column_by(
+    @column_name_strategy.setter
+    def column_name_strategy(
         self,
-        column_by: Literal["columnName", "label"],
+        column_name_strategy: Literal["columnName", "label"],
     ):
-        valid_column_by = [
+        valid_column_name_strategy = [
             SFR_COLUMN_NAME_KEY,
             SFR_LABEL_KEY,
         ]
-        if column_by not in valid_column_by:
+        if column_name_strategy not in valid_column_name_strategy:
             raise ValueError(
-                "The 'column_by' parameter must be one of"
-                f" {', '.join(valid_column_by)}, got '{column_by}' instead"
+                "The 'column_name_strategy' parameter must be one of"
+                f" {', '.join(valid_column_name_strategy)}, got"
+                f" '{column_name_strategy}' instead"
             )
         else:
-            self._column_by = column_by
+            self._column_name_strategy = column_name_strategy
 
     @property
-    def report_identifier(self) -> Literal["id", "name"]:
-        if not self._report_identifier:
+    def find_report_by(self) -> Literal["id", "name"]:
+        if not self._find_report_by:
             import re
 
             try:
@@ -436,85 +500,42 @@ class SalesforceReportSource(SourcePlugin):
                 return "id" if re.match(SFR_ID_PATTERN, first_report) else "name"
             except IndexError:
                 raise ValueError(
-                    "The 'report' parameter is empty, so the "
-                    "report_identifier cannot be inferred. Please provide a value for "
-                    "'report' or 'report_identifier'."
+                    "The 'report' parameter is empty, so "
+                    "'find_report_by' cannot be inferred. Please provide a value for "
+                    "'report' or 'find_report_by'."
                 )
-        return self._report_identifier
+        return self._find_report_by
 
-    @report_identifier.setter
-    def report_identifier(self, report_identifier: Literal["id", "name"] | None):
-        if report_identifier is None:
-            self._report_identifier = None
-        elif report_identifier not in ["id", "name"]:
+    @find_report_by.setter
+    def find_report_by(self, find_report_by: Literal["id", "name"] | None):
+        if find_report_by is None:
+            self._find_report_by = None
+        elif find_report_by not in ["id", "name"]:
             raise ValueError(
-                "The 'report_identifier' parameter must be either 'id' or 'name', "
-                f"got '{report_identifier}' instead"
+                "The 'find_report_by' parameter must be either 'id' or 'name', "
+                f"got '{find_report_by}' instead"
             )
         else:
-            self._report_identifier = report_identifier
+            self._find_report_by = find_report_by
 
     @property
-    def username(
+    def credentials(
         self,
-    ) -> HashiCorpSecret | DirectSecret | EnvironmentSecret:
-        return self._username
+    ) -> SalesforceCredentials | SalesforceTokenCredentials:
+        return self._credentials
 
-    @username.setter
-    def username(
+    @credentials.setter
+    def credentials(
         self,
-        username: str | HashiCorpSecret | DirectSecret | EnvironmentSecret,
+        credentials: SalesforceCredentials | SalesforceTokenCredentials,
     ):
-        if isinstance(username, Secret):
-            self._username = username
-        elif isinstance(username, str):
-            self._username = DirectSecret(username)
+        if isinstance(credentials, SalesforceCredentials):
+            self._credentials = credentials
         else:
             raise TypeError(
-                "The 'username' parameter must be either a string or a "
-                f"tabsdata secret object, got '{type(username)}' instead"
-            )
-
-    @property
-    def password(
-        self,
-    ) -> HashiCorpSecret | DirectSecret | EnvironmentSecret:
-        return self._password
-
-    @password.setter
-    def password(
-        self,
-        password: str | HashiCorpSecret | DirectSecret | EnvironmentSecret,
-    ):
-        if isinstance(password, Secret):
-            self._password = password
-        elif isinstance(password, str):
-            self._password = DirectSecret(password)
-        else:
-            raise TypeError(
-                "The 'password' parameter must be either a string or a "
-                f"tabsdata secret object, got '{type(password)}' instead"
-            )
-
-    @property
-    def security_token(
-        self,
-    ) -> HashiCorpSecret | DirectSecret | EnvironmentSecret:
-        return self._security_token
-
-    @security_token.setter
-    def security_token(
-        self,
-        security_token: str | HashiCorpSecret | DirectSecret | EnvironmentSecret,
-    ):
-        if isinstance(security_token, Secret):
-            self._security_token = security_token
-        elif isinstance(security_token, str):
-            self._security_token = DirectSecret(security_token)
-        else:
-            raise TypeError(
-                "The 'security_token' parameter must be either a string or a "
-                f"tabsdata secret object, got '{type(security_token)}' instead"
+                "The 'credentials' parameter must be a "
+                f"tabsdata SalesforceCredentials object, got '{type(credentials)}' "
+                "instead"
             )
 
     @property
@@ -607,11 +628,11 @@ class SalesforceReportSource(SourcePlugin):
         return resulting_files
 
     def _obtain_report_id(self, sf, report) -> str:
-        if self._report_identifier is None:
+        if self._find_report_by is None:
             # We will try both name and ID (if it is a valid ID) and see if any of
             # them returns a single value.
             report_id_from_id = None
-            if self.report_identifier == "id":
+            if self.find_report_by == "id":
                 try:
                     report_id_from_id = _obtain_report_id_and_verify_format(
                         sf, report, "id"
@@ -627,30 +648,30 @@ class SalesforceReportSource(SourcePlugin):
             if report_id_from_id and report_id_from_name:
                 logger.error(
                     f"Report '{report}' was found using both 'id' and 'name' as "
-                    "identifier. Please provide the 'report_identifier' parameter to "
+                    "identifier. Please provide the 'find_report_by' parameter to "
                     "disambiguate."
                 )
                 raise Exception(
                     f"Report '{report}' was found using both 'id' and 'name' as "
-                    "identifier. Please provide the 'report_identifier' parameter to "
+                    "identifier. Please provide the 'find_report_by' parameter to "
                     "disambiguate."
                 )
             report_id = report_id_from_id or report_id_from_name
         else:
-            # User provided report_identifier, use the one that he provided.
+            # User provided find_report_by, use the one that he provided.
             report_id = _obtain_report_id_and_verify_format(
-                sf, report, self.report_identifier
+                sf, report, self.find_report_by
             )
         if not report_id:
             logger.error(
                 f"Report '{report}' with identifier type "
-                f"'{self.report_identifier}' not found. Please ensure the ID "
+                f"'{self.find_report_by}' not found. Please ensure the ID "
                 "or name is correct, and that the identifier type is set "
                 "appropriately."
             )
             raise Exception(
                 f"Report '{report}' with identifier type "
-                f"'{self.report_identifier}' not found. Please ensure the ID "
+                f"'{self.find_report_by}' not found. Please ensure the ID "
                 "or name is correct, and that the identifier type is set "
                 "appropriately."
             )
@@ -658,7 +679,7 @@ class SalesforceReportSource(SourcePlugin):
 
     def _obtain_max_date_and_filter(self, reverse_lookup_dict, number):
         if self.initial_values:
-            column_name = reverse_lookup_dict[self.column_by].get(
+            column_name = reverse_lookup_dict[self.column_name_strategy].get(
                 self.last_modified_column
             )
             max_date, new_filter = self._obtain_new_filter_for_offset(
@@ -679,12 +700,16 @@ class SalesforceReportSource(SourcePlugin):
             col_sys_to_other_and_type,
         ) = _obtain_report_metadata(sf, report_id)
         col_sys_name_and_order = [
-            col_sys_to_other_and_type[col][self.column_by]
+            col_sys_to_other_and_type[col][self.column_name_strategy]
             for col in col_sys_name_and_order
         ]
         self.filter = (
             [
-                (reverse_lookup_dict[self.column_by][column], operator, value)
+                (
+                    reverse_lookup_dict[self.column_name_strategy][column],
+                    operator,
+                    value,
+                )
                 for column, operator, value in self.filter
             ]
             if self.filter
@@ -695,7 +720,7 @@ class SalesforceReportSource(SourcePlugin):
         )
         logger.debug(f"Column order: {col_sys_name_and_order}")
         logger.debug(f"Filter: {self.filter}")
-        logger.debug(f"Using column type: {self.column_by}")
+        logger.debug(f"Using column type: {self.column_name_strategy}")
         instance_id = _launch_report_instance(
             sf,
             report_id,
@@ -1125,10 +1150,17 @@ def _log_into_salesforce(
 
     from simple_salesforce import Salesforce
 
-    return Salesforce(
-        username=plugin.username.secret_value,
-        password=plugin.password.secret_value,
-        security_token=plugin.security_token.secret_value,
-        instance_url=plugin.instance_url,
-        version=plugin.api_version,
-    )
+    credentials = plugin.credentials
+    if isinstance(credentials, SalesforceTokenCredentials):
+        return Salesforce(
+            username=credentials.username.secret_value,
+            password=credentials.password.secret_value,
+            security_token=credentials.security_token.secret_value,
+            instance_url=plugin.instance_url,
+            version=plugin.api_version,
+        )
+    else:
+        raise TypeError(
+            "The 'credentials' parameter must be an instance of "
+            f"SalesforceTokenCredentials, got '{type(credentials)}' instead"
+        )

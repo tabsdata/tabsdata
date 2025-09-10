@@ -16,9 +16,11 @@ ABSOLUTE_LOCATION = os.path.dirname(os.path.abspath(__file__))
 @td.publisher(
     name="test_input_salesforce_initial_values",
     source=td.SalesforceSource(
-        username=td.EnvironmentSecret("SALESFORCE_USERNAME"),
-        password=td.EnvironmentSecret("SALESFORCE_PASSWORD"),
-        security_token=td.EnvironmentSecret("SALESFORCE_SECURITY_TOKEN"),
+        td.SalesforceTokenCredentials(
+            username=td.EnvironmentSecret("SALESFORCE_USERNAME"),
+            password=td.EnvironmentSecret("SALESFORCE_PASSWORD"),
+            security_token=td.EnvironmentSecret("SALESFORCE_SECURITY_TOKEN"),
+        ),
         query=[
             (
                 "SELECT Name,SystemModstamp FROM Contact "
