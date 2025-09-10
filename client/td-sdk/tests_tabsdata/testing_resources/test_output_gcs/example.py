@@ -1,0 +1,52 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+import os
+
+import tabsdata as td
+from tabsdata._utils.bundle_utils import create_bundle_archive
+from tests_tabsdata.bootest import TDLOCAL_FOLDER
+from tests_tabsdata.conftest import LOCAL_PACKAGES_LIST
+
+ABSOLUTE_LOCATION = os.path.dirname(os.path.abspath(__file__))
+ROOT_PROJECT_DIR = os.path.dirname(
+    os.path.dirname(
+        os.path.dirname(
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        )
+    )
+)
+DEFAULT_SAVE_LOCATION = TDLOCAL_FOLDER
+
+gcs_credentials = td.GCPServiceAccountKeyCredentials(
+    os.environ.get("S30__GCP_SERVICE_ACCOUNT_KEY", "FAKE_KEY"),
+)
+
+
+# In this example, we are obtaining the data from the file mock_table.parquet and then
+# dropping the null values. The output is saved in output_gcs_parquet.parquet,
+# and expected_result.json
+# contains the expected output of applying the function to the input data.
+# The URI provided is just a Mock, what will happen is we will inject the URI of
+# data.parquet into the input.yaml sent to the tabsserver.
+@td.subscriber(
+    name="output_gcs",
+    tables="collection/table",
+    destination=td.GCSDestination(
+        "gs://tabsdata-dev-ci-bucket/output_gcs_parquet.parquet",
+        gcs_credentials,
+    ),
+)
+def output_gcs(df: td.TableFrame):
+    new_df = df.drop_nulls()
+    return new_df
+
+
+if __name__ == "__main__":
+    os.makedirs(DEFAULT_SAVE_LOCATION, exist_ok=True)
+    create_bundle_archive(
+        output_gcs,
+        local_packages=LOCAL_PACKAGES_LIST,
+        save_location=DEFAULT_SAVE_LOCATION,
+    )

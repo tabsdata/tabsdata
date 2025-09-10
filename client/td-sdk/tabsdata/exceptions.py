@@ -424,6 +424,28 @@ class ErrorCode(Enum):
             "'UserPasswordCredentials' object or None, got '{}' instead"
         ),
     }
+    DECE50 = {
+        "code": "DECE-050",
+        "message": (
+            "The 'uri' parameter in a GCSDestination must be a 'str' or "
+            "a 'list[str]', got '{}' instead"
+        ),
+    }
+    DECE51 = {
+        "code": "DECE-051",
+        "message": (
+            "Scheme '{}' not supported for GCSDestination. The supported scheme is"
+            " '{}'. The scheme is inferred from the URI, which should be of the form"
+            " 'scheme://path'. The URI provided was '{}'."
+        ),
+    }
+    DECE52 = {
+        "code": "DECE-052",
+        "message": (
+            "The 'credentials' parameter in a GCSDestination must be a "
+            "'GCPCredentials' object, got '{}' instead"
+        ),
+    }
     FCE1 = {
         "code": "FCE-001",
         "message": (

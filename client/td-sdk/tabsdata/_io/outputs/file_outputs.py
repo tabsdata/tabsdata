@@ -11,13 +11,14 @@ import subprocess
 import time
 import uuid
 from enum import Enum
-from typing import List, Literal
+from typing import Literal
 from urllib.parse import urlparse, urlunparse
 
 import polars as pl
 
 from tabsdata._credentials import (
     AzureCredentials,
+    GCPCredentials,
     S3AccessKeyCredentials,
     S3Credentials,
     build_credentials,
@@ -39,6 +40,7 @@ from tabsdata._format import (
 from tabsdata._io.constants import (
     AZURE_SCHEME,
     FILE_SCHEME,
+    GCS_SCHEME,
     S3_SCHEME,
     URI_INDICATOR,
     SupportedAWSS3Regions,
@@ -52,7 +54,9 @@ from tabsdata._tabsserver.function.cloud_connectivity_utils import (
     SERVER_SIDE_AWS_SECRET_ACCESS_KEY,
     SERVER_SIDE_AZURE_ACCOUNT_KEY,
     SERVER_SIDE_AZURE_ACCOUNT_NAME,
+    SERVER_SIDE_GCP_SERVICE_ACCOUNT_JSON,
     obtain_and_set_azure_credentials,
+    obtain_and_set_gcp_credentials,
     obtain_and_set_s3_credentials,
     set_s3_region,
 )
@@ -64,6 +68,7 @@ from tabsdata._tabsserver.function.yaml_parsing import (
     InputYaml,
     TransporterAzure,
     TransporterEnv,
+    TransporterGCS,
     TransporterLocalFile,
     TransporterS3,
     V1CopyFormat,
@@ -104,8 +109,8 @@ class AWSGlue(Catalog):
     def __init__(
         self,
         definition: dict,
-        tables: str | List[str],
-        auto_create_at: List[str | None] | str | None = None,
+        tables: str | list[str],
+        auto_create_at: list[str | None] | str | None = None,
         if_table_exists: Literal["append", "replace"] = "append",
         partitioned_table: bool = False,
         schema_strategy: Literal["update", "strict"] = "update",
@@ -290,11 +295,11 @@ class AWSGlue(Catalog):
         self._verify_duplicate_s3_region()
 
     @property
-    def tables(self) -> List[str]:
+    def tables(self) -> list[str]:
         return self._tables
 
     @tables.setter
-    def tables(self, tables: str | List[str]):
+    def tables(self, tables: str | list[str]):
         if isinstance(tables, str):
             self._tables = [tables]
         elif isinstance(tables, list):
@@ -311,11 +316,11 @@ class AWSGlue(Catalog):
             )
 
     @property
-    def auto_create_at(self) -> List[str | None]:
+    def auto_create_at(self) -> list[str | None]:
         return self._auto_create_at
 
     @auto_create_at.setter
-    def auto_create_at(self, auto_create_at: List[str | None]):
+    def auto_create_at(self, auto_create_at: list[str | None]):
         if auto_create_at is None:
             self._auto_create_at = [None] * len(self._tables)
         elif isinstance(auto_create_at, str):
@@ -411,7 +416,7 @@ class AzureDestination(DestinationPlugin):
     Attributes:
         format (FileFormat): The format of the file to be created. If not provided,
             it will be inferred from the file extension.
-        uri (str | List[str]): The URI of the files with format: 'az://path/to/files'.
+        uri (str | list[str]): The URI of the files with format: 'az://path/to/files'.
             It can be a single URI or a list of URIs.
         credentials (AzureCredentials): The credentials required to access Azure.
     """
@@ -428,7 +433,7 @@ class AzureDestination(DestinationPlugin):
 
     def __init__(
         self,
-        uri: str | List[str],
+        uri: str | list[str],
         credentials: dict | AzureCredentials,
         format: str | dict | FileFormat = None,
     ):
@@ -437,7 +442,7 @@ class AzureDestination(DestinationPlugin):
             required to access Azure; and optionally a format.
 
         Args:
-            uri (str | List[str]): The URI of the files to export with format:
+            uri (str | list[str]): The URI of the files to export with format:
                 'az://path/to/files'. It can be a single URI or a list of URIs.
             credentials (dict | AzureCredentials): The credentials required to access
                 Azure. Can be a dictionary or a AzureCredentials object.
@@ -457,19 +462,19 @@ class AzureDestination(DestinationPlugin):
         self.credentials = credentials
 
     @property
-    def uri(self) -> str | List[str]:
+    def uri(self) -> str | list[str]:
         """
-        str | List[str]: The URI of the files with format: 'az://path/to/files'.
+        str | list[str]: The URI of the files with format: 'az://path/to/files'.
         """
         return self._uri
 
     @uri.setter
-    def uri(self, uri: str | List[str]):
+    def uri(self, uri: str | list[str]):
         """
         Sets the URI of the files with format: 'az://path/to/files'.
 
         Args:
-            uri (str | List[str]): The URI of the files with format:
+            uri (str | list[str]): The URI of the files with format:
                 'az://path/to/files'. It can be a single URI or a list of URIs.
         """
         self._uri = uri
@@ -618,6 +623,216 @@ class AzureDestination(DestinationPlugin):
         return f"{self.__class__.__name__}({self.uri})"
 
 
+class GCSDestination(DestinationPlugin):
+    """
+    Class for managing the configuration of GCS-file-based data outputs.
+
+    Attributes:
+        format (FileFormat): The format of the file to be created. If not provided,
+            it will be inferred from the file extension.
+        uri (str | list[str]): The URI of the files with format: 'gs://path/to/files'.
+            It can be a single URI or a list of URIs.
+        credentials (GCPCredentials): The credentials required to access GCS.
+    """
+
+    class SupportedFormats(Enum):
+        """
+        Enum for the supported formats for the GCSDestination.
+        """
+
+        avro = AvroFormat
+        csv = CSVFormat
+        ndjson = NDJSONFormat
+        parquet = ParquetFormat
+
+    def __init__(
+        self,
+        uri: str | list[str],
+        credentials: GCPCredentials,
+        format: str | dict | FileFormat = None,
+    ):
+        """
+        Initializes the GCSDestination with the given URI and the credentials
+            required to access GCS; and optionally a format.
+
+        Args:
+            uri (str | list[str]): The URI of the files to export with format:
+                'gs://path/to/files'. It can be a single URI or a list of URIs.
+            credentials (GCPCredentials): The credentials required to access
+                GCS. Can be a dictionary or a GCPCredentials object.
+            format (str | dict | FileFormat, optional): The format of the file. If not
+                provided, it will be inferred from the file extension.
+                Can be either a string with the format, a FileFormat object or a
+                dictionary with the format as the 'type' key and any additional
+                format-specific information. Currently supported formats are 'csv',
+                'parquet', 'ndjson' and 'jsonl'.
+
+        Raises:
+            OutputConfigurationError
+            FormatConfigurationError
+        """
+        self.uri = uri
+        self.format = format
+        self.credentials = credentials
+
+    @property
+    def uri(self) -> str | list[str]:
+        """
+        str | list[str]: The URI of the files with format: 'gs://path/to/files'.
+        """
+        return self._uri
+
+    @uri.setter
+    def uri(self, uri: str | list[str]):
+        """
+        Sets the URI of the files with format: 'gs://path/to/files'.
+
+        Args:
+            uri (str | list[str]): The URI of the files with format:
+                'gs://path/to/files'. It can be a single URI or a list of URIs.
+        """
+        self._uri = uri
+        if isinstance(uri, str):
+            self._uri_list = [uri]
+        elif isinstance(uri, list):
+            self._uri_list = uri
+            if not all(isinstance(single_uri, str) for single_uri in self._uri_list):
+                raise DestinationConfigurationError(ErrorCode.DECE50, type(uri))
+        else:
+            raise DestinationConfigurationError(ErrorCode.DECE50, type(uri))
+
+        self._parsed_uri_list = [urlparse(single_uri) for single_uri in self._uri_list]
+        for parsed_uri in self._parsed_uri_list:
+            if parsed_uri.scheme != GCS_SCHEME:
+                raise DestinationConfigurationError(
+                    ErrorCode.DECE51,
+                    parsed_uri.scheme,
+                    GCS_SCHEME,
+                    urlunparse(parsed_uri),
+                )
+
+        self._implicit_format = get_implicit_format_from_list(self._uri_list)
+        if hasattr(self, "_format") and self._format is None:
+            self._verify_valid_format(build_file_format(self._implicit_format))
+
+        if not self.allow_fragments:
+            for uri in self._uri_list:
+                if FRAGMENT_INDEX_PLACEHOLDER in uri:
+                    raise DestinationConfigurationError(
+                        ErrorCode.DECE38,
+                        FRAGMENT_INDEX_PLACEHOLDER,
+                        uri,
+                    )
+
+    @property
+    def format(self) -> FileFormat:
+        """
+        FileFormat: The format of the file. If not provided, it will be inferred from
+            the file extension of the URI.
+        """
+        return self._format or build_file_format(self._implicit_format)
+
+    @format.setter
+    def format(self, format: str | dict | FileFormat):
+        """
+        Sets the format of the file.
+
+        Args:
+            format (str | dict | FileFormat): The format of the file. If not
+                provided, it will be inferred from the file extension of the data.
+                Can be either a string with the format, a FileFormat object or a
+                dictionary with the format as the 'type' key and any additional
+                format-specific information. Currently supported formats are 'csv',
+                'parquet', 'ndjson', 'jsonl' and 'avro'.
+        """
+        if format is None:
+            self._format = None
+            # No format was provided, so we validate that self._implicit_format is valid
+            self._verify_valid_format(build_file_format(self._implicit_format))
+        else:
+            format = build_file_format(format)
+            self._verify_valid_format(format)
+            self._format = format
+
+    def _verify_valid_format(self, format: FileFormat):
+        """
+        Verifies that the provided format is valid for the GCSDestination
+
+        Args:
+            format (FileFormat): The format to verify.
+        """
+        valid_output_formats = tuple(element.value for element in self.SupportedFormats)
+        if not (isinstance(format, valid_output_formats)):
+            raise DestinationConfigurationError(
+                ErrorCode.DECE13, type(format), valid_output_formats
+            )
+
+    @property
+    def credentials(self) -> GCPCredentials:
+        """
+        GCPCredentials: The credentials required to access GCS.
+        """
+        return self._credentials
+
+    @credentials.setter
+    def credentials(self, credentials: GCPCredentials):
+        """
+        Sets the credentials required to access GCS.
+
+        Args:
+            credentials (GCPCredentials): The credentials required to access
+                GCS. Must be a dictionary or an GCPCredentials object.
+        """
+        if not (isinstance(credentials, GCPCredentials)):
+            raise DestinationConfigurationError(ErrorCode.DECE52, type(credentials))
+        self._credentials = credentials
+
+    @property
+    def allow_fragments(self) -> bool:
+        """
+        bool: Whether to allow fragments in the output.
+        """
+        return False
+
+    @property
+    def _stream_require_ec(self) -> bool:
+        """
+        Indicates whether the stream method requires an execution context.
+
+        Returns:
+            bool: True if the stream method requires an execution context,
+            False otherwise.
+        """
+        return True
+
+    def stream(self, working_dir: str, *results):
+        logger.debug(
+            f"Beginning streaming for {self.__class__.__name__} with results"
+            f" '{results}'"
+        )
+        intermediate_files = self.chunk(working_dir, *results)
+        obtain_and_set_gcp_credentials(self.credentials),
+        _write_results_in_final_files(
+            results, intermediate_files, self, working_dir, self._ec.request
+        )
+
+    def chunk(self, working_dir: str, *results):
+        logger.debug(
+            f"Beginning chunking for {self.__class__.__name__} with results '{results}'"
+        )
+        intermediate_files = _store_results_in_intermediate_files(
+            results, self, working_dir
+        )
+        logger.debug(
+            f"Chunking completed for {self.__class__.__name__} with results '"
+            f"{results}' and intermediate files '{intermediate_files}'"
+        )
+        return intermediate_files
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}({self.uri})"
+
+
 class LocalFileDestination(DestinationPlugin):
 
     class SupportedFormats(Enum):
@@ -632,7 +847,7 @@ class LocalFileDestination(DestinationPlugin):
 
     def __init__(
         self,
-        path: str | List[str],
+        path: str | list[str],
         format: str | dict | FileFormat = None,
     ):
         """
@@ -640,7 +855,7 @@ class LocalFileDestination(DestinationPlugin):
         format.
 
         Args:
-            path (str | List[str]): The path where the files must be stored. It can be a
+            path (str | list[str]): The path where the files must be stored. It can be a
                 single path or a list of paths.
             format (str | dict | FileFormat, optional): The format of the file. If not
                 provided, it will be inferred from the file extension of the data.
@@ -657,19 +872,19 @@ class LocalFileDestination(DestinationPlugin):
         self.format = format
 
     @property
-    def path(self) -> str | List[str]:
+    def path(self) -> str | list[str]:
         """
-        str | List[str]: The path or paths to store the files.
+        str | list[str]: The path or paths to store the files.
         """
         return self._path
 
     @path.setter
-    def path(self, path: str | List[str]):
+    def path(self, path: str | list[str]):
         """
         Sets the path or paths to store the files.
 
         Args:
-            path (str | List[str]): The path or paths to store the files.
+            path (str | list[str]): The path or paths to store the files.
         """
         self._path = path
         if isinstance(path, str):
@@ -797,7 +1012,7 @@ class S3Destination(DestinationPlugin):
     Attributes:
         format (FileFormat): The format of the file. If not provided, it will be
             inferred from the file extension.
-        uri (str | List[str]): The URI of the files with format: 's3://path/to/files'.
+        uri (str | list[str]): The URI of the files with format: 's3://path/to/files'.
             It can be a single URI or a list of URIs.
         credentials (S3Credentials): The credentials required to access the S3 bucket.
     """
@@ -814,7 +1029,7 @@ class S3Destination(DestinationPlugin):
 
     def __init__(
         self,
-        uri: str | List[str],
+        uri: str | list[str],
         credentials: dict | S3Credentials,
         format: str | dict | FileFormat = None,
         region: str = None,
@@ -826,7 +1041,7 @@ class S3Destination(DestinationPlugin):
             time after which the files were modified.
 
         Args:
-            uri (str | List[str]): The URI of the files with format:
+            uri (str | list[str]): The URI of the files with format:
                 's3://path/to/files'. It can be a single URI or a list of URIs.
             credentials (dict | S3Credentials): The credentials required to access the
                 S3 bucket. Can be a dictionary or a S3Credentials object.
@@ -850,19 +1065,19 @@ class S3Destination(DestinationPlugin):
         self.catalog = catalog
 
     @property
-    def uri(self) -> str | List[str]:
+    def uri(self) -> str | list[str]:
         """
-        str | List[str]: The URI of the files with format: 's3://path/to/files'.
+        str | list[str]: The URI of the files with format: 's3://path/to/files'.
         """
         return self._uri
 
     @uri.setter
-    def uri(self, uri: str | List[str]):
+    def uri(self, uri: str | list[str]):
         """
         Sets the URI of the files with format: 's3://path/to/files'.
 
         Args:
-            uri (str | List[str]): The URI of the files with format:
+            uri (str | list[str]): The URI of the files with format:
                 's3://path/to/files'. It can be a single URI or a list of URIs.
         """
         self._uri = uri
@@ -1073,7 +1288,9 @@ class S3Destination(DestinationPlugin):
 def _write_results_in_final_files(
     results: tuple[pl.LazyFrame | None | list[pl.LazyFrame | None]],
     intermediate_files: list[str | None | list[str | None]],
-    destination: LocalFileDestination | AzureDestination | S3Destination,
+    destination: (
+        AzureDestination | GCSDestination | LocalFileDestination | S3Destination
+    ),
     output_folder: str,
     request: InputYaml,
 ):
@@ -1166,7 +1383,9 @@ def _write_results_in_final_files(
 
 def _store_results_in_intermediate_files(
     results: tuple[pl.LazyFrame | None | list[pl.LazyFrame | None]],
-    destination: LocalFileDestination | AzureDestination | S3Destination,
+    destination: (
+        AzureDestination | GCSDestination | LocalFileDestination | S3Destination
+    ),
     output_folder: str,
 ) -> list[str | None | list[str | None]]:
     logger.info(
@@ -1231,7 +1450,7 @@ def _store_results_in_intermediate_files(
 def _obtain_destination_path_list(destination):
     if isinstance(destination, LocalFileDestination):
         destination_path = destination.path
-    elif isinstance(destination, (AzureDestination, S3Destination)):
+    elif isinstance(destination, (AzureDestination, GCSDestination, S3Destination)):
         destination_path = destination.uri
     else:
         logger.error(f"Storing results in destination '{destination}' not supported.")
@@ -1301,7 +1520,9 @@ INPUT_FORMAT_CLASS_TO_EXTENSION = {
 def _store_result_using_transporter(
     destination_path: str,
     intermediate_file: str,
-    destination: LocalFileDestination | AzureDestination | S3Destination,
+    destination: (
+        AzureDestination | GCSDestination | LocalFileDestination | S3Destination
+    ),
     output_folder: str,
     request: InputYaml,
 ) -> str:
@@ -1327,6 +1548,11 @@ def _store_result_using_transporter(
             destination_path,
             account_name=TransporterEnv(SERVER_SIDE_AZURE_ACCOUNT_NAME),
             account_key=TransporterEnv(SERVER_SIDE_AZURE_ACCOUNT_KEY),
+        )
+    elif isinstance(destination, GCSDestination):
+        destination = TransporterGCS(
+            destination_path,
+            service_account_key=TransporterEnv(SERVER_SIDE_GCP_SERVICE_ACCOUNT_JSON),
         )
     elif isinstance(destination, LocalFileDestination):
         destination = TransporterLocalFile(convert_path_to_uri(destination_path))
@@ -1380,9 +1606,9 @@ def _sink_result_to_intermediate_file(
 
 def _store_file_in_catalog(
     catalog: AWSGlue,
-    path_to_table_files: List[str],
+    path_to_table_files: list[str],
     destination_table: str,
-    lf_list: List[pl.LazyFrame],
+    lf_list: list[pl.LazyFrame],
     index: int,
 ):
 
@@ -1474,7 +1700,9 @@ def _store_file_in_catalog(
 
 
 def _verify_fragment_destination(
-    destination: LocalFileDestination | AzureDestination | S3Destination,
+    destination: (
+        AzureDestination | GCSDestination | LocalFileDestination | S3Destination
+    ),
     destination_file: str,
 ):
     if not destination.allow_fragments:

@@ -21,6 +21,7 @@ devpi-web==5.0.1
 docker==7.1.0
 fastapi==0.116.1
 flake8==7.3.0
+google-cloud-storage==3.3.1
 GitPython==3.1.45
 gTTS
 isort==6.0.1

@@ -2489,7 +2489,7 @@ class Expr:
         │ null ┆ null │
         └──────┴──────┘
         >>>
-        >>> tf.group_by(td.col("a")).agg(td.col("b")).mean())
+        >>> tf.group_by(td.col("a")).agg(td.col("b").mean())
         >>>
         ┌──────┬──────────┐
         │ ss   ┆ i        │

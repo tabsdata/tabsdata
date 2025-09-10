@@ -6,6 +6,7 @@ import pytest
 
 from tabsdata import (
     AzureAccountKeyCredentials,
+    GCPServiceAccountKeyCredentials,
     HashiCorpSecret,
     S3AccessKeyCredentials,
     UserPasswordCredentials,
@@ -262,6 +263,61 @@ def test_s3_credentials_object_and_dict_not_equal():
         S3AccessKeyCredentials.IDENTIFIER: {
             S3AccessKeyCredentials.AWS_ACCESS_KEY_ID_KEY: "test_access_key_id",
             S3AccessKeyCredentials.AWS_SECRET_ACCESS_KEY_KEY: "test_secret_access_key",
+        }
+    }
+    assert credentials != credentials_dict
+
+
+def test_gcs_account_key_credentials_initialization():
+    credentials = GCPServiceAccountKeyCredentials(
+        service_account_key="test_password",
+    )
+    assert credentials.service_account_key == DirectSecret("test_password")
+    assert credentials._to_dict() == {
+        GCPServiceAccountKeyCredentials.IDENTIFIER: {
+            GCPServiceAccountKeyCredentials.SERVICE_ACCOUNT_KEY_KEY: (
+                DirectSecret("test_password")._to_dict()
+            ),
+        }
+    }
+    assert build_credentials(credentials) == credentials
+    assert build_credentials(credentials._to_dict()) == credentials
+    assert credentials.__repr__()
+
+
+def test_gcs_account_key_credentials_update():
+    credentials = GCPServiceAccountKeyCredentials(
+        service_account_key="test_password",
+    )
+    assert credentials.service_account_key == DirectSecret("test_password")
+    credentials.service_account_key = "new_test_password"
+    assert credentials.service_account_key == DirectSecret("new_test_password")
+    credentials.service_account_key = HashiCorpSecret(
+        "secret_path", "new_test_password"
+    )
+    assert credentials.service_account_key == HashiCorpSecret(
+        "secret_path", "new_test_password"
+    )
+
+
+def test_gcs_account_key_credentials_from_dictionary():
+    credentials = {
+        GCPServiceAccountKeyCredentials.IDENTIFIER: {
+            GCPServiceAccountKeyCredentials.SERVICE_ACCOUNT_KEY_KEY: "test_password",
+        }
+    }
+    built_credentials = build_credentials(credentials)
+    assert isinstance(built_credentials, GCPServiceAccountKeyCredentials)
+    assert built_credentials.service_account_key == DirectSecret("test_password")
+
+
+def test_gcs_account_key_credentials_object_and_dict_not_equal():
+    credentials = GCPServiceAccountKeyCredentials(
+        service_account_key="test_password",
+    )
+    credentials_dict = {
+        GCPServiceAccountKeyCredentials.IDENTIFIER: {
+            GCPServiceAccountKeyCredentials.SERVICE_ACCOUNT_KEY_KEY: "test_password",
         }
     }
     assert credentials != credentials_dict

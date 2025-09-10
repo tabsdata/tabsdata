@@ -8,6 +8,8 @@ import os
 from tabsdata._credentials import (
     AzureAccountKeyCredentials,
     AzureCredentials,
+    GCPCredentials,
+    GCPServiceAccountKeyCredentials,
     S3AccessKeyCredentials,
     S3Credentials,
 )
@@ -19,6 +21,7 @@ SERVER_SIDE_AWS_REGION = "LOCATION_AWS_REGION"
 SERVER_SIDE_AWS_SECRET_ACCESS_KEY = "LOCATION_AWS_SECRET_ACCESS_KEY"
 SERVER_SIDE_AZURE_ACCOUNT_NAME = "LOCATION_ACCOUNT_NAME"
 SERVER_SIDE_AZURE_ACCOUNT_KEY = "LOCATION_ACCOUNT_KEY"
+SERVER_SIDE_GCP_SERVICE_ACCOUNT_JSON = "LOCATION_GCS_SERVICE_ACCOUNT_JSON"
 
 
 def obtain_and_set_azure_credentials(credentials: AzureCredentials):
@@ -39,6 +42,22 @@ def obtain_and_set_azure_credentials(credentials: AzureCredentials):
         raise TypeError(
             f"Invalid credentials type for Azure: {type(credentials)}. No data"
             " imported."
+        )
+
+
+def obtain_and_set_gcp_credentials(credentials: GCPCredentials):
+    logger.info("Setting GCP credentials.")
+    if isinstance(credentials, GCPServiceAccountKeyCredentials):
+        os.environ[SERVER_SIDE_GCP_SERVICE_ACCOUNT_JSON] = (
+            credentials.service_account_key.secret_value
+        )
+        logger.info("GCP credentials set successfully.")
+    else:
+        logger.error(
+            f"Invalid credentials type for GCP: {type(credentials)}. No data imported."
+        )
+        raise TypeError(
+            f"Invalid credentials type for GCP: {type(credentials)}. No data imported."
         )
 
 

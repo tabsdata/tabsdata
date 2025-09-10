@@ -55,6 +55,7 @@ from polars.datatypes.group import (
 
 from tabsdata._credentials import (
     AzureAccountKeyCredentials,
+    GCPServiceAccountKeyCredentials,
     S3AccessKeyCredentials,
     UserPasswordCredentials,
 )
@@ -77,6 +78,7 @@ from tabsdata._io.inputs.table_inputs import TableInput
 from tabsdata._io.outputs.file_outputs import (
     AWSGlue,
     AzureDestination,
+    GCSDestination,
     LocalFileDestination,
     S3Destination,
 )
@@ -119,6 +121,7 @@ __all__ = [
     # from tabsdatafunction.py Outputs
     "AWSGlue",
     "AzureDestination",
+    "GCSDestination",
     "LocalFileDestination",
     "MariaDBDestination",
     "MySQLDestination",
@@ -142,6 +145,7 @@ __all__ = [
     "ParquetFormat",
     # from credentials.py
     "AzureAccountKeyCredentials",
+    "GCPServiceAccountKeyCredentials",
     "S3AccessKeyCredentials",
     "UserPasswordCredentials",
     # from secret.py

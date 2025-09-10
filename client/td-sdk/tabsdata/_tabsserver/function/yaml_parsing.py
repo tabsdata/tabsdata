@@ -405,7 +405,9 @@ class V1ImportFormat(ImportYaml):
 
     def __init__(
         self,
-        source: TransporterAzure | TransporterS3 | TransporterLocalFile,
+        source: (
+            TransporterAzure | TransporterGCS | TransporterLocalFile | TransporterS3
+        ),
         format: (
             TransporterAvroFormat
             | TransporterLogFormat
@@ -413,7 +415,9 @@ class V1ImportFormat(ImportYaml):
             | TransporterParquetFormat
             | TransporterJsonFormat
         ),
-        target: TransporterAzure | TransporterS3 | TransporterLocalFile,
+        target: (
+            TransporterAzure | TransporterGCS | TransporterLocalFile | TransporterS3
+        ),
         initial_lastmod=None,
         lastmod_info=None,
     ):
@@ -505,6 +509,42 @@ class TransporterLiteral:
         return f"{self.__class__.__name__}(value={self.value})"
 
 
+class TransporterAzure:
+    def __init__(
+        self,
+        url: str,
+        account_name: TransporterEnv | TransporterLiteral,
+        account_key: TransporterEnv | TransporterLiteral,
+        extra_configs: dict = None,
+    ):
+        configs = {
+            "account_name": account_name,
+            "account_key": account_key,
+            "extra_configs": extra_configs or {},
+        }
+        self.content = {"url": url, "configs": configs}
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}(content={self.content})"
+
+
+class TransporterGCS:
+    def __init__(
+        self,
+        url: str,
+        service_account_key: TransporterEnv | TransporterLiteral,
+        extra_configs: dict = None,
+    ):
+        configs = {
+            "service_account_key": service_account_key,
+            "extra_configs": extra_configs or {},
+        }
+        self.content = {"url": url, "configs": configs}
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}(content={self.content})"
+
+
 class TransporterLocalFile:
     def __init__(self, url: str):
         self.content = {"url": url}
@@ -534,33 +574,15 @@ class TransporterS3:
         return f"{self.__class__.__name__}(content={self.content})"
 
 
-class TransporterAzure:
-    def __init__(
-        self,
-        url: str,
-        account_name: TransporterEnv | TransporterLiteral,
-        account_key: TransporterEnv | TransporterLiteral,
-        extra_configs: dict = None,
-    ):
-        configs = {
-            "account_name": account_name,
-            "account_key": account_key,
-            "extra_configs": extra_configs or {},
-        }
-        self.content = {"url": url, "configs": configs}
-
-    def __repr__(self):
-        return f"{self.__class__.__name__}(content={self.content})"
-
-
 def v1_copy_format_representer(
     dumper: yaml.SafeDumper, v1_copy_format: V1CopyFormat
 ) -> yaml.nodes.MappingNode:
     """Represent a V1_yaml instance as a YAML mapping node."""
     dumper.add_representer(TransporterEnv, v1_env_representer)
     dumper.add_representer(TransporterLiteral, v1_literal_representer)
-    dumper.add_representer(TransporterLocalFile, v1_local_file_representer)
     dumper.add_representer(TransporterAzure, v1_azure_representer)
+    dumper.add_representer(TransporterGCS, v1_gcs_representer)
+    dumper.add_representer(TransporterLocalFile, v1_local_file_representer)
     dumper.add_representer(TransporterS3, v1_s3_representer)
     return dumper.represent_mapping("!CopyV1", v1_copy_format.content)
 
@@ -579,18 +601,25 @@ def v1_env_representer(
     return dumper.represent_scalar("!Env", env.name)
 
 
-def v1_local_file_representer(
-    dumper: yaml.SafeDumper, local_file: TransporterLocalFile
-) -> yaml.nodes.MappingNode:
-    """Represent a LocalFile instance as a YAML mapping node."""
-    return dumper.represent_mapping("!LocalFile", local_file.content)
-
-
 def v1_azure_representer(
     dumper: yaml.SafeDumper, azure_file: TransporterAzure
 ) -> yaml.nodes.MappingNode:
     """Represent an Azure instance as a YAML mapping node."""
     return dumper.represent_mapping("!Azure", azure_file.content)
+
+
+def v1_gcs_representer(
+    dumper: yaml.SafeDumper, gcs_file: TransporterGCS
+) -> yaml.nodes.MappingNode:
+    """Represent an GCS instance as a YAML mapping node."""
+    return dumper.represent_mapping("!GCS", gcs_file.content)
+
+
+def v1_local_file_representer(
+    dumper: yaml.SafeDumper, local_file: TransporterLocalFile
+) -> yaml.nodes.MappingNode:
+    """Represent a LocalFile instance as a YAML mapping node."""
+    return dumper.represent_mapping("!LocalFile", local_file.content)
 
 
 def v1_s3_representer(
@@ -622,8 +651,9 @@ def v1_import_format_representer(
 ) -> yaml.nodes.MappingNode:
     dumper.add_representer(TransporterEnv, v1_env_representer)
     dumper.add_representer(TransporterLiteral, v1_literal_representer)
-    dumper.add_representer(TransporterLocalFile, v1_local_file_representer)
     dumper.add_representer(TransporterAzure, v1_azure_representer)
+    dumper.add_representer(TransporterGCS, v1_gcs_representer)
+    dumper.add_representer(TransporterLocalFile, v1_local_file_representer)
     dumper.add_representer(TransporterS3, v1_s3_representer)
     dumper.add_representer(TransporterAvroFormat, v1_avro_format_representer)
     dumper.add_representer(TransporterCSVFormat, v1_csv_format_representer)

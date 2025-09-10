@@ -6,6 +6,7 @@ from enum import Enum
 
 AZURE_SCHEME = "az"
 FILE_SCHEME = "file"
+GCS_SCHEME = "gs"
 MARIADB_SCHEME = "mariadb"
 MYSQL_SCHEME = "mysql"
 ORACLE_SCHEME = "oracle"

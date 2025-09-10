@@ -11,6 +11,7 @@ from tabsdata.exceptions import CredentialsConfigurationError, ErrorCode
 
 class CredentialIdentifier(Enum):
     AZURE_ACCOUNT_KEY_CREDENTIALS = "account_key-credentials"
+    GCP_SERVICE_ACCOUNT_KEY_CREDENTIALS = "gcs_service_account_key-credentials"
     S3_ACCESS_KEY_CREDENTIALS = "s3_access_key-credentials"
     USER_PASSWORD_CREDENTIALS = "user_password-credentials"
 
@@ -120,6 +121,79 @@ class AzureAccountKeyCredentials(AzureCredentials):
 
         Returns:
             str: A string representation of the S3AccessKeyCredentials.
+        """
+        return f"{self.__class__.__name__}({self._to_dict()[self.IDENTIFIER]})"
+
+
+class GCPCredentials(Credentials, ABC):
+    """Credentials class to store the credentials needed to access GCS."""
+
+
+class GCPServiceAccountKeyCredentials(GCPCredentials):
+    """Credentials class to store the credentials needed to access GCS
+    using account key credentials (service account key).
+
+    Attributes:
+        service_account_key (Secret): The GCS service account key.
+
+    Methods:
+        to_dict() -> dict: Convert the GCPServiceAccountKeyCredentials object to a
+            dictionary
+    """
+
+    IDENTIFIER = CredentialIdentifier.GCP_SERVICE_ACCOUNT_KEY_CREDENTIALS.value
+
+    SERVICE_ACCOUNT_KEY_KEY = "service_account_key"
+
+    def __init__(
+        self,
+        service_account_key: str | Secret,
+    ):
+        """
+        Initialize the GCPServiceAccountKeyCredentials object.
+
+        Args:
+            service_account_key (str | Secret): The GCS service account key.
+        """
+        self.service_account_key = service_account_key
+
+    def _to_dict(self) -> dict:
+        """
+        Convert the GCPServiceAccountKeyCredentials object to a dictionary.
+
+        Returns:
+            dict: A dictionary representation of the GCPServiceAccountKeyCredentials
+                object.
+        """
+        return {
+            self.IDENTIFIER: {
+                self.SERVICE_ACCOUNT_KEY_KEY: self.service_account_key._to_dict(),
+            }
+        }
+
+    @property
+    def service_account_key(self) -> Secret:
+        """
+        Secret: The GCS service account key.
+        """
+        return self._service_account_key
+
+    @service_account_key.setter
+    def service_account_key(self, service_account_key: str | Secret):
+        """
+        Set the GCS service account key.
+
+        Args:
+            service_account_key (str | dict | Secret): The GCS service account key.
+        """
+        self._service_account_key = build_secret(service_account_key)
+
+    def __repr__(self) -> str:
+        """
+        Returns a string representation of the GCPServiceAccountKeyCredentials.
+
+        Returns:
+            str: A string representation of the GCPServiceAccountKeyCredentials.
         """
         return f"{self.__class__.__name__}({self._to_dict()[self.IDENTIFIER]})"
 
@@ -338,6 +412,10 @@ def build_credentials(configuration: dict | Credentials) -> Credentials:
             return UserPasswordCredentials(**credentials_configuration)
         elif identifier == CredentialIdentifier.AZURE_ACCOUNT_KEY_CREDENTIALS.value:
             return AzureAccountKeyCredentials(**credentials_configuration)
+        elif (
+            identifier == CredentialIdentifier.GCP_SERVICE_ACCOUNT_KEY_CREDENTIALS.value
+        ):
+            return GCPServiceAccountKeyCredentials(**credentials_configuration)
     else:
         raise CredentialsConfigurationError(
             ErrorCode.CCE3, [dict, Credentials], type(configuration)
