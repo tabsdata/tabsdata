@@ -3,8 +3,8 @@
 //
 
 use data_encoding::BASE32HEX_NOPAD;
-use std::time::{Duration, Instant, UNIX_EPOCH};
 use std::hint::black_box;
+use std::time::{Duration, Instant, UNIX_EPOCH};
 
 fn main() {
     let n = 1_000_000_000;

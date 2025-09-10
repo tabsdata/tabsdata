@@ -7,10 +7,10 @@ import polars.expr.datetime as pl_datetime
 
 # noinspection PyProtectedMember
 import tabsdata._utils.tableframe._translator as td_translator
+import tabsdata.tableframe.expr.expr as td_expr
 
 # noinspection PyProtectedMember
-import tabsdata.tableframe._typing as td_typing
-import tabsdata.tableframe.expr.expr as td_expr
+import tabsdata.tableframe.typing as td_typing
 from tabsdata._utils.annotations import pydoc
 
 
@@ -21,7 +21,7 @@ class ExprDateTimeNameSpace:
     @pydoc(categories="date")
     def add_business_days(
         self,
-        n: int | td_expr.IntoExpr,
+        n: int | td_typing.IntoExpr,
         week_mask: Iterable[bool] = (True, True, True, True, True, False, False),
         holidays: Iterable[dt.date] = (),
         roll: td_typing.Roll = "raise",
@@ -46,13 +46,13 @@ class ExprDateTimeNameSpace:
     def replace(
         self,
         *,
-        year: int | td_expr.IntoExpr | None = None,
-        month: int | td_expr.IntoExpr | None = None,
-        day: int | td_expr.IntoExpr | None = None,
-        hour: int | td_expr.IntoExpr | None = None,
-        minute: int | td_expr.IntoExpr | None = None,
-        second: int | td_expr.IntoExpr | None = None,
-        microsecond: int | td_expr.IntoExpr | None = None,
+        year: int | td_typing.IntoExpr | None = None,
+        month: int | td_typing.IntoExpr | None = None,
+        day: int | td_typing.IntoExpr | None = None,
+        hour: int | td_typing.IntoExpr | None = None,
+        minute: int | td_typing.IntoExpr | None = None,
+        second: int | td_typing.IntoExpr | None = None,
+        microsecond: int | td_typing.IntoExpr | None = None,
         ambiguous: td_typing.Ambiguous | td_expr.Expr = "raise",
     ) -> td_expr.Expr:
         # noinspection PyProtectedMember

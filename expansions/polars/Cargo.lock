@@ -726,6 +726,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "dashmap"
+version = "6.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5041cc499144891f3790297212f32a74fb938e5136a14943f338ef9e0ae276cf"
+dependencies = [
+ "cfg-if",
+ "crossbeam-utils",
+ "hashbrown 0.14.5",
+ "lock_api",
+ "once_cell",
+ "parking_lot_core",
+]
+
+[[package]]
 name = "data-encoding"
 version = "2.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4395,9 +4409,9 @@ dependencies = [
 
 [[package]]
 name = "target-lexicon"
-version = "0.13.3"
+version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df7f62577c25e07834649fc3b39fafdc597c0a3527dc1c60129201ccfcbaa50c"
+checksum = "e502f78cdbb8ba4718f566c418c52bc729126ffd16baee5baa718cf25dd5a69a"
 
 [[package]]
 name = "td-attach"
@@ -4913,8 +4927,11 @@ name = "ty-tableframe"
 version = "1.3.0"
 dependencies = [
  "chrono",
+ "dashmap",
  "data-encoding",
  "grok",
+ "indexmap",
+ "once_cell",
  "openssl",
  "polars",
  "polars-arrow",
@@ -4930,6 +4947,9 @@ dependencies = [
  "td-common",
  "td-error",
  "te-tableframe",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
  "uuid7",
 ]
 

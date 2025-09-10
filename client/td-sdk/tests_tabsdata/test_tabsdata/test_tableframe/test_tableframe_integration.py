@@ -99,7 +99,6 @@ POLARS_TABLE_FRAME = pl.DataFrame(
     }
 ).lazy()
 
-
 for i in range(POLARS_TABLE_FRAME_DUPLICATION_TIMES):
     POLARS_TABLE_FRAME = pl.concat([POLARS_TABLE_FRAME, POLARS_TABLE_FRAME])
 POLARS_TABLE_FRAME = POLARS_TABLE_FRAME.collect().lazy()
@@ -107,6 +106,17 @@ POLARS_TABLE_FRAME = POLARS_TABLE_FRAME.collect().lazy()
 POLARS_TABLE_FRAME_DATETIME = POLARS_TABLE_FRAME.with_columns(
     pl.col("d").str.to_date(), pl.col("dt").str.to_datetime()
 )
+
+POLARS_TABLE_FRAME_STRUCT = pl.DataFrame(
+    {
+        "id": [1, 2],
+        "info": [
+            {"name": "Alice", "age": 30},
+            {"name": "Bob", "age": None},
+        ],
+        "status": ["active", "inactive"],
+    }
+).lazy()
 
 
 def log_frame(f: td.TableFrame | pl.LazyFrame):
@@ -982,6 +992,13 @@ def test_frame_drop():
         return frame.drop(library.col("i"))
 
     api_tester(fn)
+
+
+def test_frame_unnest():
+    def fn(library: pk, frame: ft):
+        return frame.unnest(library.col("info"))
+
+    api_tester(fn, polars_frame=POLARS_TABLE_FRAME_STRUCT)
 
 
 def test_frame_fill_null():

@@ -108,11 +108,17 @@ version = "0.50.0"
 [workspace.dependencies.chrono]
 version = "0.4.41"
 
+[workspace.dependencies.dashmap]
+version = "6.1.0"
+
 [workspace.dependencies.data-encoding]
 version = "2.9.0"
 
 [workspace.dependencies.grok]
 version = "2.4.0"
+
+[workspace.dependencies.indexmap]
+version = "2.11.0"
 
 [workspace.dependencies.openssl]
 version = "0.10.73"
@@ -120,7 +126,7 @@ features = ["vendored"]
 
 [workspace.dependencies.polars]
 version = "0.50.0"
-features = ["default", "fmt", "dtype-date", "timezones"]
+features = ["default", "fmt", "dtype-date", "dtype-struct", "timezones"]
 
 [workspace.dependencies.polars-plan]
 version = "0.50.0"
@@ -156,6 +162,12 @@ features = ["derive"]
 
 [workspace.dependencies.toml]
 version = "0.9.5"
+
+[workspace.dependencies.tracing]
+version = "0.1.41"
+
+[workspace.dependencies.tracing-subscriber]
+version = "0.3.20"
 
 [workspace.dependencies.uuid]
 version = "1.18.0"

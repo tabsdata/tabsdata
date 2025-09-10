@@ -8,9 +8,10 @@ from typing import TYPE_CHECKING, Any
 
 import polars as pl
 
-# noinspection PyProtectedMember
-import tabsdata.tableframe._typing as td_typing
 import tabsdata.tableframe.lazyframe.frame as td_frame
+
+# noinspection PyProtectedMember
+import tabsdata.tableframe.typing as td_typing
 
 if TYPE_CHECKING:
     import pandas as pd

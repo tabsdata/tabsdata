@@ -55,13 +55,16 @@ from tabsdata._utils.tableframe.builders import (
     to_polars_lf,
 )
 from tabsdata.tableframe import selectors
-from tabsdata.tableframe.functions.col import col
+from tabsdata.tableframe.functions.col import Column, col
 from tabsdata.tableframe.functions.eager import concat
 from tabsdata.tableframe.functions.lit import lit
 from tabsdata.tableframe.lazyframe.frame import TableFrame
+from tabsdata.tableframe.schema import Schema
 
 __all__ = [
     # from tabsdata.tableframe...
+    "Column",
+    "Schema",
     "col",
     "concat",
     "lit",

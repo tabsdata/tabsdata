@@ -6,15 +6,16 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterable
+from dataclasses import dataclass, field
 
 import polars as pl
 
 # noinspection PyProtectedMember
 import tabsdata._utils.tableframe._common as td_common
+import tabsdata.tableframe.expr.expr as td_expr
 
 # noinspection PyProtectedMember
-import tabsdata.tableframe._typing as td_typing
-import tabsdata.tableframe.expr.expr as td_expr
+import tabsdata.tableframe.typing as td_typing
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -121,6 +122,58 @@ class Col:
         if name.startswith("__wrapped__"):
             return getattr(type(self), name)
         return _new_col(True, name)
+
+
+@dataclass(frozen=True, slots=True)
+class Column:
+    # noinspection PyProtectedMember
+    """
+    Represents a single column definition in a :class:`TableFrame`.
+
+    A `Column` defines both the **name** and the **data type** of a column,
+    along with other relevant metadata in the future. This abstraction provides
+    a consistent way to declare and validate schema definitions for `TableFrame`
+    objects.
+
+    Parameters
+    ----------
+    name : str | None, optional
+        The name of the column. Must be a valid string identifier for the
+        `TableFrame` schema, or None if no name is provided. Defaults to None.
+    dtype : td_typing.DataType
+        The expected data type for the column. This determines how values
+        in the column will be interpreted, validated, and serialized.
+
+    Attributes
+    ----------
+    name : str | None
+        The name of the column, or None if no name was provided.
+    dtype : td_typing.DataType
+        The declared data type of the column.
+
+    Examples
+    --------
+    Create a column with a name and type:
+
+    >>> import tabsdata as td
+    >>> Column("customer_id", td.Int64)
+    <Column name='customer_id' dtype=Int64>
+
+    Use columns to define a TableFrame schema:
+
+    >>> import tabsdata as td
+    >>> schema = [
+    ...     Column("customer_id", td.Int64),
+    ...     Column("signup_date", td.Datetime),
+    ... ]
+    >>> for column in schema:
+    ...     print(column.name, column.dtype)
+    customer_id Int64
+    signup_date Datetime
+    """
+
+    name: str | None = field(default=None)
+    dtype: td_typing.DataType = field(default=pl.String)
 
 
 col: Col = Col()

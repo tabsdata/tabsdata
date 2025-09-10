@@ -6,23 +6,29 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
+import polars as pl
 import polars.expr.string as pl_string
-from polars import Expr
 
 # noinspection PyProtectedMember
 from polars._utils.various import NoDefault, no_default
 
 # noinspection PyProtectedMember
 import tabsdata._utils.tableframe._translator as td_translator
+import tabsdata.tableframe.expr.expr as td_expr
+import tabsdata.tableframe.functions.col as td_col
 
 # noinspection PyProtectedMember
-import tabsdata.tableframe._typing as td_typing
-import tabsdata.tableframe.expr.expr as td_expr
+import tabsdata.tableframe.typing as td_typing
+
+# noinspection PyProtectedMember
 from tabsdata._utils.annotations import pydoc
+
+# noinspection PyProtectedMember
+from tabsdata.expansions.tableframe.features.grok.api._handler import GrokParser
 
 
 # ToDo: This requires some refactoring to unify transformer methods
-def _to_tdexpr(expr: Expr) -> td_expr.Expr:
+def _to_tdexpr(expr: pl.Expr) -> td_expr.Expr:
     return td_expr.Expr(expr)
 
 
@@ -283,7 +289,7 @@ class ExprStringNameSpace:
         return _to_tdexpr(self._expr.to_titlecase())
 
     @pydoc(categories="string")
-    def strip_chars(self, characters: td_expr.IntoExpr = None) -> td_expr.Expr:
+    def strip_chars(self, characters: td_typing.IntoExpr = None) -> td_expr.Expr:
         """
         Trim string values.
 
@@ -319,7 +325,7 @@ class ExprStringNameSpace:
         )
 
     @pydoc(categories="string")
-    def strip_chars_start(self, characters: td_expr.IntoExpr = None) -> td_expr.Expr:
+    def strip_chars_start(self, characters: td_typing.IntoExpr = None) -> td_expr.Expr:
         """
         Trim string values from the start of the string.
 
@@ -355,7 +361,7 @@ class ExprStringNameSpace:
         )
 
     @pydoc(categories="string")
-    def strip_chars_end(self, characters: td_expr.IntoExpr = None) -> td_expr.Expr:
+    def strip_chars_end(self, characters: td_typing.IntoExpr = None) -> td_expr.Expr:
         """
         Trim string values from the end of the string.
 
@@ -391,7 +397,7 @@ class ExprStringNameSpace:
         )
 
     @pydoc(categories="string")
-    def strip_prefix(self, prefix: td_expr.IntoExpr) -> td_expr.Expr:
+    def strip_prefix(self, prefix: td_typing.IntoExpr) -> td_expr.Expr:
         """
         Trim string values removing the given prefix
 
@@ -420,7 +426,7 @@ class ExprStringNameSpace:
         return _to_tdexpr(self._expr.strip_prefix(prefix=prefix))
 
     @pydoc(categories="string")
-    def strip_suffix(self, suffix: td_expr.IntoExpr) -> td_expr.Expr:
+    def strip_suffix(self, suffix: td_typing.IntoExpr) -> td_expr.Expr:
         """
         Trim string values removing the given suffix
 
@@ -509,7 +515,7 @@ class ExprStringNameSpace:
         return _to_tdexpr(self._expr.pad_end(length=length, fill_char=fill_char))
 
     @pydoc(categories="string")
-    def zfill(self, length: int | td_expr.IntoExprColumn) -> td_expr.Expr:
+    def zfill(self, length: int | td_typing.IntoExprColumn) -> td_expr.Expr:
         """
         Pad numeric string values at the start to the given length using zeros.
 
@@ -692,7 +698,7 @@ class ExprStringNameSpace:
 
     @pydoc(categories="string")
     def extract(
-        self, pattern: td_expr.IntoExprColumn, group_index: int = 1
+        self, pattern: td_typing.IntoExprColumn, group_index: int = 1
     ) -> td_expr.Expr:
         """
         Extract a pattern from the string.
@@ -890,8 +896,8 @@ class ExprStringNameSpace:
     @pydoc(categories="string")
     def slice(
         self,
-        offset: int | td_expr.IntoExprColumn,
-        length: int | td_expr.IntoExprColumn | None = None,
+        offset: int | td_typing.IntoExprColumn,
+        length: int | td_typing.IntoExprColumn | None = None,
     ) -> td_expr.Expr:
         """
         Extract the substring at the given offset for the given length.
@@ -927,7 +933,7 @@ class ExprStringNameSpace:
         )
 
     @pydoc(categories="string")
-    def head(self, n: int | td_expr.IntoExprColumn) -> td_expr.Expr:
+    def head(self, n: int | td_typing.IntoExprColumn) -> td_expr.Expr:
         """
         Extract the start of the string up to the given length.
 
@@ -958,7 +964,7 @@ class ExprStringNameSpace:
         )
 
     @pydoc(categories="string")
-    def tail(self, n: int | td_expr.IntoExprColumn) -> td_expr.Expr:
+    def tail(self, n: int | td_typing.IntoExprColumn) -> td_expr.Expr:
         """
         Extract the end of the string up to the given length.
 
@@ -990,7 +996,7 @@ class ExprStringNameSpace:
 
     @pydoc(categories="type_casting")
     def to_integer(
-        self, *, base: int | td_expr.IntoExprColumn = 10, strict: bool = True
+        self, *, base: int | td_typing.IntoExprColumn = 10, strict: bool = True
     ) -> td_expr.Expr:
         """
         Covert a string to integer.
@@ -1028,7 +1034,7 @@ class ExprStringNameSpace:
 
     @pydoc(categories="string")
     def contains_any(
-        self, patterns: td_expr.IntoExpr, *, ascii_case_insensitive: bool = False
+        self, patterns: td_typing.IntoExpr, *, ascii_case_insensitive: bool = False
     ) -> td_expr.Expr:
         """
         Evaluate if the string contains any of the given patterns.
@@ -1068,8 +1074,8 @@ class ExprStringNameSpace:
     @pydoc(categories="string")
     def replace_many(
         self,
-        patterns: td_expr.IntoExpr | Mapping[str, str],
-        replace_with: td_expr.IntoExpr | NoDefault = no_default,
+        patterns: td_typing.IntoExpr | Mapping[str, str],
+        replace_with: td_typing.IntoExpr | NoDefault = no_default,
         *,
         ascii_case_insensitive: bool = False,
     ) -> td_expr.Expr:
@@ -1109,4 +1115,60 @@ class ExprStringNameSpace:
                 replace_with=td_translator._unwrap_into_tdexpr(replace_with),
                 ascii_case_insensitive=ascii_case_insensitive,
             )
+        )
+
+    @pydoc(categories="string")
+    def grok(self, pattern: str, schema: dict[str, td_col.Column]) -> td_expr.Expr:
+        """
+        Parse log text into structured fields using a Grok pattern.
+
+        Applies the given Grok pattern to the values in the current string expression.
+        Each **named capture group** in the pattern becomes a new output column.
+        Rows that do not match the pattern will return `null` for the extracted fields.
+
+        Args:
+            pattern (str): Grok pattern with named captures (e.g., `%{WORD:user}`).
+            schema (dict[str, td_col.Column]): A mapping where each capture name
+                is associated with its corresponding column definition, specifying
+                both the column name and its data type.
+        Example:
+
+        >>> import tabsdata as td
+        >>> tf = td.TableFrame({"logs": [
+        ...     "alice-login-2023",
+        ...     "bob-logout-2024",
+        ... ]})
+        >>>
+        >>> log_pattern = r"%{WORD:user}-%{WORD:action}-%{INT:year}"
+        >>> log_schema = {
+        >>>     "word": td_col.Column("user", td.String),
+        >>>     "action": td_col.Column("action", td.String),
+        >>>     "year": td_col.Column("year", td.Int8),
+        >>> }
+        >>> out = tf.grok("logs", log_pattern, log_schema)
+        >>> tf.select(
+        ...     td.col("logs"),
+        ...     td.col("logs").str.grok(log_pattern, log_schema)
+        ... )
+        >>>
+        ┌──────────────────┬───────┬────────┬──────┐
+        │ logs             ┆ user  ┆ action ┆ year │
+        │ ---              ┆ ---   ┆ ---    ┆ ---  │
+        │ str              ┆ str   ┆ str    ┆ i64  │
+        ╞══════════════════╪═══════╪════════╪══════╡
+        │ alice-login-2023 ┆ alice ┆ login  ┆ 2023 │
+        │ bob-logout-2024  ┆ bob   ┆ logout ┆ 2024 │
+        └──────────────────┴───────┴────────┴──────┘
+
+        Notes:
+            - The function automatically expands the Grok captures into separate
+              columns.
+            - Non-matching rows will show `null` for the extracted columns.
+            - If a pattern defines duplicate capture names, numeric suffixes like
+              `field`, `field[1]` will be used to disambiguate them.
+        """
+
+        # noinspection PyProtectedMember
+        return _to_tdexpr(
+            GrokParser(pattern, schema).rust(pl.Expr._from_pyexpr(self._expr._pyexpr))
         )

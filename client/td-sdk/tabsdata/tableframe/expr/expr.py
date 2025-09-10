@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import builtins
 import math
 from typing import (
     Any,
@@ -11,7 +12,6 @@ from typing import (
     Iterable,
     NoReturn,
     ParamSpec,
-    TypeAlias,
     TypeVar,
     Union,
 )
@@ -24,7 +24,6 @@ from polars._typing import (
     ClosedInterval,
     FillNullStrategy,
     NumericLiteral,
-    PythonLiteral,
     RankMethod,
     TemporalLiteral,
 )
@@ -34,11 +33,13 @@ import tabsdata._utils.tableframe._common as td_common
 
 # noinspection PyProtectedMember
 import tabsdata._utils.tableframe._translator as td_translator
-
-# noinspection PyProtectedMember
-import tabsdata.tableframe._typing as td_typing
 import tabsdata.tableframe.expr.string as td_string
 import tabsdata.tableframe.functions.datetime as td_datetime
+
+# noinspection PyProtectedMember
+import tabsdata.tableframe.typing as td_typing
+
+# noinspection PyProtectedMember
 from tabsdata._utils.annotations import pydoc
 from tabsdata.exceptions import ErrorCode, TableFrameError
 
@@ -48,7 +49,7 @@ P = ParamSpec("P")
 
 @accessify
 class Expr:
-    def __init__(self, expr: pl.Expr | Expr) -> None:
+    def __init__(self, expr: Union[pl.Expr | Expr]) -> None:
         if isinstance(expr, pl.Expr):
             self._expr = expr
         elif isinstance(expr, Expr):
@@ -58,10 +59,10 @@ class Expr:
 
     """ Dunder Operations """
 
-    def __repr__(self) -> str:
+    def __repr__(self) -> builtins.str:
         return self._expr.__repr__()
 
-    def __str__(self) -> str:
+    def __str__(self) -> builtins.str:
         return self._expr.__str__()
 
     def __bool__(self) -> NoReturn:
@@ -70,116 +71,116 @@ class Expr:
     def __abs__(self) -> Expr:
         return Expr(self._expr.__abs__())
 
-    def __add__(self, other: IntoExpr) -> Expr:
+    def __add__(self, other: td_typing.IntoExpr) -> Expr:
         # noinspection PyProtectedMember
         return Expr(self._expr.__add__(td_translator._unwrap_into_tdexpr(other)))
 
-    def __radd__(self, other: IntoExpr) -> Expr:
+    def __radd__(self, other: td_typing.IntoExpr) -> Expr:
         # noinspection PyProtectedMember
         return Expr(self._expr.__add__(td_translator._unwrap_into_tdexpr(other)))
 
-    def __and__(self, other: IntoExprColumn | int | bool) -> Expr:
+    def __and__(self, other: td_typing.IntoExprColumn | int | bool) -> Expr:
         # noinspection PyProtectedMember
         return Expr(self._expr.__and__(td_translator._unwrap_into_tdexpr(other)))
 
-    def __rand__(self, other: IntoExprColumn | int | bool) -> Expr:
+    def __rand__(self, other: td_typing.IntoExprColumn | int | bool) -> Expr:
         # noinspection PyProtectedMember
         return Expr(self._expr.__and__(td_translator._unwrap_into_tdexpr(other)))
 
-    def __eq__(self, other: IntoExpr) -> Expr:  # type: ignore[override]
+    def __eq__(self, other: td_typing.IntoExpr) -> Expr:  # type: ignore[override]
         # noinspection PyProtectedMember
         return Expr(self._expr.__eq__(td_translator._unwrap_into_tdexpr(other)))
 
-    def __floordiv__(self, other: IntoExpr) -> Expr:
+    def __floordiv__(self, other: td_typing.IntoExpr) -> Expr:
         # noinspection PyProtectedMember
         return Expr(self._expr.__floordiv__(td_translator._unwrap_into_tdexpr(other)))
 
-    def __rfloordiv__(self, other: IntoExpr) -> Expr:
+    def __rfloordiv__(self, other: td_typing.IntoExpr) -> Expr:
         # noinspection PyProtectedMember
         return Expr(self._expr.__rfloordiv__(td_translator._unwrap_into_tdexpr(other)))
 
-    def __ge__(self, other: IntoExpr) -> Expr:
+    def __ge__(self, other: td_typing.IntoExpr) -> Expr:
         # noinspection PyProtectedMember
         return Expr(self._expr.__ge__(td_translator._unwrap_into_tdexpr(other)))
 
-    def __gt__(self, other: IntoExpr) -> Expr:
+    def __gt__(self, other: td_typing.IntoExpr) -> Expr:
         # noinspection PyProtectedMember
         return Expr(self._expr.__gt__(td_translator._unwrap_into_tdexpr(other)))
 
     def __invert__(self) -> Expr:
         return Expr(self._expr.__invert__())
 
-    def __le__(self, other: IntoExpr) -> Expr:
+    def __le__(self, other: td_typing.IntoExpr) -> Expr:
         # noinspection PyProtectedMember
         return Expr(self._expr.__le__(td_translator._unwrap_into_tdexpr(other)))
 
-    def __lt__(self, other: IntoExpr) -> Expr:
+    def __lt__(self, other: td_typing.IntoExpr) -> Expr:
         # noinspection PyProtectedMember
         return Expr(self._expr.__lt__(td_translator._unwrap_into_tdexpr(other)))
 
-    def __mod__(self, other: IntoExpr) -> Expr:
+    def __mod__(self, other: td_typing.IntoExpr) -> Expr:
         # noinspection PyProtectedMember
         return Expr(self._expr.__mod__(td_translator._unwrap_into_tdexpr(other)))
 
-    def __rmod__(self, other: IntoExpr) -> Expr:
+    def __rmod__(self, other: td_typing.IntoExpr) -> Expr:
         # noinspection PyProtectedMember
         return Expr(self._expr.__mod__(td_translator._unwrap_into_tdexpr(other)))
 
-    def __mul__(self, other: IntoExpr) -> Expr:
+    def __mul__(self, other: td_typing.IntoExpr) -> Expr:
         # noinspection PyProtectedMember
         return Expr(self._expr.__mul__(td_translator._unwrap_into_tdexpr(other)))
 
-    def __rmul__(self, other: IntoExpr) -> Expr:
+    def __rmul__(self, other: td_typing.IntoExpr) -> Expr:
         # noinspection PyProtectedMember
         return Expr(self._expr.__mul__(td_translator._unwrap_into_tdexpr(other)))
 
-    def __ne__(self, other: IntoExpr) -> Expr:  # type: ignore[override]
+    def __ne__(self, other: td_typing.IntoExpr) -> Expr:  # type: ignore[override]
         # noinspection PyProtectedMember
         return Expr(self._expr.__ne__(td_translator._unwrap_into_tdexpr(other)))
 
     def __neg__(self) -> Expr:
         return Expr(-self._expr)
 
-    def __or__(self, other: IntoExprColumn | int | bool) -> Expr:
+    def __or__(self, other: td_typing.IntoExprColumn | int | bool) -> Expr:
         # noinspection PyProtectedMember
         return Expr(self._expr.__or__(td_translator._unwrap_into_tdexpr(other)))
 
-    def __ror__(self, other: IntoExprColumn | int | bool) -> Expr:
+    def __ror__(self, other: td_typing.IntoExprColumn | int | bool) -> Expr:
         # noinspection PyProtectedMember
         return Expr(self._expr.__or__(td_translator._unwrap_into_tdexpr(other)))
 
     def __pos__(self) -> Expr:
         return Expr(self._expr + self._expr)
 
-    def __pow__(self, exponent: IntoExprColumn | int | float) -> Expr:
+    def __pow__(self, exponent: td_typing.IntoExprColumn | int | float) -> Expr:
         # noinspection PyProtectedMember
         return Expr(self._expr ** td_translator._unwrap_into_tdexpr(exponent))
 
-    def __rpow__(self, base: IntoExprColumn | int | float) -> Expr:
+    def __rpow__(self, base: td_typing.IntoExprColumn | int | float) -> Expr:
         # noinspection PyProtectedMember
         return Expr(self._expr ** td_translator._unwrap_into_tdexpr(base))
 
-    def __sub__(self, other: IntoExpr) -> Expr:
+    def __sub__(self, other: td_typing.IntoExpr) -> Expr:
         # noinspection PyProtectedMember
         return Expr(self._expr.__sub__(td_translator._unwrap_into_tdexpr(other)))
 
-    def __rsub__(self, other: IntoExpr) -> Expr:
+    def __rsub__(self, other: td_typing.IntoExpr) -> Expr:
         # noinspection PyProtectedMember
         return Expr(self._expr.__sub__(td_translator._unwrap_into_tdexpr(other)))
 
-    def __truediv__(self, other: IntoExpr) -> Expr:
+    def __truediv__(self, other: td_typing.IntoExpr) -> Expr:
         # noinspection PyProtectedMember
         return Expr(self._expr.__truediv__(td_translator._unwrap_into_tdexpr(other)))
 
-    def __rtruediv__(self, other: IntoExpr) -> Expr:
+    def __rtruediv__(self, other: td_typing.IntoExpr) -> Expr:
         # noinspection PyProtectedMember
         return Expr(self._expr.__truediv__(td_translator._unwrap_into_tdexpr(other)))
 
-    def __xor__(self, other: IntoExprColumn | int | bool) -> Expr:
+    def __xor__(self, other: td_typing.IntoExprColumn | int | bool) -> Expr:
         # noinspection PyProtectedMember
         return Expr(self._expr.__xor__(td_translator._unwrap_into_tdexpr(other)))
 
-    def __rxor__(self, other: IntoExprColumn | int | bool) -> Expr:
+    def __rxor__(self, other: td_typing.IntoExprColumn | int | bool) -> Expr:
         # noinspection PyProtectedMember
         return Expr(self._expr.__xor__(td_translator._unwrap_into_tdexpr(other)))
 
@@ -235,7 +236,7 @@ class Expr:
         return Expr(self._expr.add(td_translator._unwrap_into_tdexpr(other)))
 
     @pydoc(categories="manipulation")
-    def alias(self, name: str) -> Expr:
+    def alias(self, name: builtins.str) -> Expr:
         """
         Set the name for a column or expression.
 
@@ -579,8 +580,12 @@ class Expr:
     @pydoc(categories="numeric")
     def clip(
         self,
-        lower_bound: NumericLiteral | TemporalLiteral | IntoExprColumn | None = None,
-        upper_bound: NumericLiteral | TemporalLiteral | IntoExprColumn | None = None,
+        lower_bound: (
+            NumericLiteral | TemporalLiteral | td_typing.IntoExprColumn | None
+        ) = None,
+        upper_bound: (
+            NumericLiteral | TemporalLiteral | td_typing.IntoExprColumn | None
+        ) = None,
     ) -> Expr:
         """
         For element values outside the lower and upper bounds, lower values are
@@ -909,7 +914,7 @@ class Expr:
     @pydoc(categories="filters")
     def filter(
         self,
-        *predicates: IntoExprColumn | Iterable[IntoExprColumn],
+        *predicates: td_typing.IntoExprColumn | Iterable[td_typing.IntoExprColumn],
     ) -> Expr:
         """
         Apply a filter predicate to an expression.
@@ -1134,8 +1139,8 @@ class Expr:
     @pydoc(categories="logic")
     def is_between(
         self,
-        lower_bound: IntoExpr,
-        upper_bound: IntoExpr,
+        lower_bound: td_typing.IntoExpr,
+        upper_bound: td_typing.IntoExpr,
         closed: ClosedInterval = "both",
     ) -> Expr:
         """
@@ -1203,7 +1208,7 @@ class Expr:
         return Expr(self._expr.is_finite())
 
     @pydoc(categories="logic")
-    def is_in(self, other: Expr | Collection[Any]) -> Expr:
+    def is_in(self, other: Union[Expr | Collection[Any]]) -> Expr:
         """
         If an element value is in the given collection.
 
@@ -1779,7 +1784,7 @@ class Expr:
         return Expr(self._expr.or_(td_translator._unwrap_into_tdexpr(*others)))
 
     @pydoc(categories="numeric")
-    def pow(self, exponent: IntoExprColumn | int | float) -> Expr:
+    def pow(self, exponent: td_typing.IntoExprColumn | int | float) -> Expr:
         """
         Exponentiation operator.
 
@@ -2718,7 +2723,7 @@ class Expr:
         # noinspection PyProtectedMember
         return Expr(self._expr.xor(td_translator._unwrap_into_tdexpr(other)))
 
-    """ Object Properties"""
+    """ Object Properties - NameSpaces """
 
     @pydoc(categories="type_casting")
     @property
@@ -2735,8 +2740,3 @@ class Expr:
         Return an object namespace with all string methods for a string value.
         """
         return td_string.ExprStringNameSpace(self._expr.str)
-
-
-IntoExprColumn: TypeAlias = Union[Expr, td_typing.Series, str]
-
-IntoExpr: TypeAlias = Union[PythonLiteral, IntoExprColumn, None]

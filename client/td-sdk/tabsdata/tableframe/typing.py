@@ -12,7 +12,10 @@ import polars as pl
 import polars._typing as pl_typing
 import polars.datatypes as pl_data_types
 
+import tabsdata.tableframe.schema as td_schema
+
 if TYPE_CHECKING:
+    from tabsdata.tableframe.expr.expr import Expr
     from tabsdata.tableframe.selectors import SelectorProxy
 
 TableDictionary = Mapping[
@@ -56,12 +59,15 @@ JoinStrategy: TypeAlias = Literal[
     "outer",
 ]
 
-Schema: TypeAlias = pl.Schema
+Schema: TypeAlias = td_schema.Schema
 
 Series: TypeAlias = pl.Series
 
 # noinspection PyProtectedMember
 Ambiguous: TypeAlias = pl_typing.Ambiguous
+
+# noinspection PyProtectedMember
+ArrowSchemaExportable: TypeAlias = pl_typing.ArrowSchemaExportable
 
 # noinspection PyProtectedMember
 EpochTimeUnit: TypeAlias = pl_typing.EpochTimeUnit
@@ -77,3 +83,11 @@ Roll: TypeAlias = pl_typing.Roll
 
 # noinspection PyProtectedMember
 TimeUnit: TypeAlias = pl_typing.TimeUnit
+
+DataTypeClass: TypeAlias = pl_data_types.DataTypeClass
+
+SchemaInitDataType: TypeAlias = Union[DataType, DataTypeClass, PythonDataType]
+
+IntoExprColumn: TypeAlias = Union["Expr", Series, str]
+
+IntoExpr: TypeAlias = Union[pl_typing.PythonLiteral, IntoExprColumn, None]

@@ -570,8 +570,8 @@ cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
 script_runner = "@duckscript"
 script = [
     '''
-    echo "Running command: ${ENV_PREFIX}flake8 --select=E9,F63,F7,F82 --ignore=E203,W503 --show-source --statistics . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,venv,test_*,tests_*"
-    exec --fail-on-error ${ENV_PREFIX}flake8 --select=E9,F63,F7,F82 --ignore=E203,W503 --show-source --statistics . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,venv,test_*,tests_*
+    echo "Running command: ${ENV_PREFIX}flake8 --select=E9,F63,F7,F82 --ignore=E203,W503 --show-source --statistics . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*"
+    exec --fail-on-error ${ENV_PREFIX}flake8 --select=E9,F63,F7,F82 --ignore=E203,W503 --show-source --statistics . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*
     ''']
 
 [tasks.fmt_py_flake8_complexity]
@@ -580,8 +580,8 @@ cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
 script_runner = "@duckscript"
 script = [
     '''
-    echo "Running command: ${ENV_PREFIX}flake8 --max-complexity=10 --ignore=E203,W503 --max-line-length=88 --statistics  . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,venv,test_*,tests_*"
-    exec --fail-on-error ${ENV_PREFIX}flake8 --max-complexity=10 --ignore=E203,W503 --max-line-length=88 --statistics  . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,venv,test_*,tests_*
+    echo "Running command: ${ENV_PREFIX}flake8 --max-complexity=10 --ignore=E203,W503 --max-line-length=88 --statistics  . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*"
+    exec --fail-on-error ${ENV_PREFIX}flake8 --max-complexity=10 --ignore=E203,W503 --max-line-length=88 --statistics  . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*
     ''']
 
 [tasks.fmt_py_black]
@@ -590,8 +590,8 @@ cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
 script_runner = "@duckscript"
 script = [
     '''
-    echo "Running command: ${ENV_PREFIX}black --preview --enable-unstable-feature string_processing --check . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,venv,test_*,tests_* --force-exclude \\.pyi$"
-    exec --fail-on-error ${ENV_PREFIX}black --preview --enable-unstable-feature string_processing --check . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,venv,test_*,tests_* --force-exclude \\.pyi$
+    echo "Running command: ${ENV_PREFIX}black --preview --enable-unstable-feature string_processing --check . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_* --force-exclude \\.pyi$"
+    exec --fail-on-error ${ENV_PREFIX}black --preview --enable-unstable-feature string_processing --check . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_* --force-exclude \\.pyi$
     ''']
 
 [tasks.fmt_py_isort]
@@ -600,8 +600,8 @@ cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
 script_runner = "@duckscript"
 script = [
     '''
-    echo "Running command: ${ENV_PREFIX}isort --check . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_*"
-    exec --fail-on-error ${ENV_PREFIX}isort --check . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_*"
+    echo "Running command: ${ENV_PREFIX}isort --check . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_*"
+    exec --fail-on-error ${ENV_PREFIX}isort --check . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_*"
     ''']
 
 [tasks.format]
@@ -638,8 +638,8 @@ cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
 script_runner = "@duckscript"
 script = [
     '''
-    echo "Running command: ${ENV_PREFIX}isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_*"
-    exec --fail-on-error ${ENV_PREFIX}isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_*
+    echo "Running command: ${ENV_PREFIX}isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_*"
+    exec --fail-on-error ${ENV_PREFIX}isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_*
     ''']
 
 [tasks.sourcetrack]

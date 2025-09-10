@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from collections.abc import Collection, Iterable, Sequence
 from datetime import timezone
+from typing import Union
 
 import polars as pl
 
@@ -20,13 +21,13 @@ from tabsdata._utils.tableframe import _constants as td_constants
 from tabsdata.extensions._tableframe.extension import SystemColumns
 
 # noinspection PyProtectedMember
-from tabsdata.tableframe import _typing as td_typing
+from tabsdata.tableframe import typing as td_typing
 
 
 # noinspection PyPep8Naming
 class SelectorProxy(td_expr.Expr):
     # noinspection PyProtectedMember
-    def __init__(self, expr: pl.selectors._selector_proxy_):
+    def __init__(self, expr: Union[pl.Expr, td_expr.Expr]):
         super().__init__(expr)
 
 

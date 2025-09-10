@@ -1,4 +1,3 @@
-
 //
 // Copyright 2025 Tabs Data Inc.
 //
@@ -9,30 +8,33 @@ use pyo3_polars::derive::polars_expr;
 const DUMMY_COLUMN: &str = "$tdx._dummy_column";
 
 /*
-Functions marked as 'polars_expr' cannot be easily tested. To allow having test, we use the pattern 
-function (polars expr) + function-impl (actual implementation).   
+Functions marked as 'polars_expr' cannot be easily tested. To allow having test, we use the pattern
+function (polars expr) + function-impl (actual implementation).
  */
 
+#[inline]
 #[polars_expr(output_type=String)]
 pub fn dummy_expr(batch: &[Series]) -> PolarsResult<Series> {
     dummy_expr_impl(batch)
 }
 
+#[inline]
 pub fn dummy_expr_impl(batch: &[Series]) -> PolarsResult<Series> {
     if batch.len() != 1 {
         return Err(PolarsError::InvalidOperation(
-            format!("Expected exactly 1 input series, got {}", batch.len()).into(),
+            format!("Expected exactly one input series; got {}", batch.len()).into(),
         ));
     }
 
-    let n = batch[0].len();
+    let series = &batch[0];
+    let rows = series.len();
 
-    if n == 0 {
+    if rows == 0 {
         return Ok(Series::new(DUMMY_COLUMN.into(), Vec::<String>::new()));
     }
-    
-    let column: Vec<String> = vec!["dummy string".to_string(); n];
-    
+
+    let column: Vec<String> = vec!["dummy string".to_string(); rows];
+
     Ok(Series::new(DUMMY_COLUMN.into(), column))
 }
 

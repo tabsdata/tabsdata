@@ -42,7 +42,7 @@ def _unwrap_table_frame(tf: td_frame.TableFrame) -> pl.LazyFrame:
 
 
 # noinspection PyProtectedMember
-def _unwrap_tdexpr(expr: Any) -> pl.Expr | List[pl.Expr] | Any:
+def _unwrap_tdexpr(expr: Any) -> Union[pl.Expr | List[pl.Expr] | Any]:
     if isinstance(expr, td_expr.Expr):
         return expr._expr
     elif isinstance(expr, dict):
@@ -58,7 +58,7 @@ def _unwrap_tdexpr(expr: Any) -> pl.Expr | List[pl.Expr] | Any:
 
 def _unwrap_into_tdexpr_column(
     expr: Any,
-) -> pl.IntoExprColumn | List[pl.IntoExprColumn] | Any:
+) -> Union[pl.IntoExprColumn | List[pl.IntoExprColumn] | Any]:
     if isinstance(expr, td_expr.Expr):
         # noinspection PyProtectedMember
         return expr._expr
@@ -71,10 +71,10 @@ def _unwrap_into_tdexpr_column(
         return expr
 
 
-def _unwrap_into_tdexpr(expr: Any) -> pl.IntoExpr | List[pl.IntoExpr] | Any:
+def _unwrap_into_tdexpr(expr: Any) -> Union[pl.IntoExpr | List[pl.IntoExpr] | Any]:
     if expr is None:
         return None
-    if _is_instance_of_union(expr, td_expr.IntoExprColumn):
+    if isinstance(expr, (td_expr.Expr, pl.Series, str)):
         # noinspection PyProtectedMember
         return _unwrap_into_tdexpr_column(expr)
     elif isinstance(expr, dict):

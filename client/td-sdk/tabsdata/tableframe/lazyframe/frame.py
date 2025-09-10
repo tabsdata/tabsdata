@@ -9,7 +9,17 @@ import logging
 import os
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from enum import auto
-from typing import TYPE_CHECKING, Any, List, Literal, NoReturn, TypeVar, Union, cast
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    List,
+    Literal,
+    NoReturn,
+    Tuple,
+    TypeVar,
+    Union,
+    cast,
+)
 
 import polars as pl
 from accessify import accessify, private
@@ -34,16 +44,24 @@ import tabsdata._utils.tableframe._reflection as td_reflection
 
 # noinspection PyProtectedMember
 import tabsdata._utils.tableframe._translator as td_translator
-
-# noinspection PyProtectedMember
-import tabsdata.tableframe._typing as td_typing
 import tabsdata.tableframe.dataframe.frame as td_frame
 
 # noinspection PyProtectedMember
 import tabsdata.tableframe.expr.expr as td_expr
+import tabsdata.tableframe.functions.col as td_col
 import tabsdata.tableframe.lazyframe.group_by as td_group_by
+
+# noinspection PyProtectedMember
+import tabsdata.tableframe.typing as td_typing
+
+# noinspection PyProtectedMember
 from tabsdata._utils.annotations import pydoc
 from tabsdata.exceptions import ErrorCode, TableFrameError
+
+# noinspection PyProtectedMember
+from tabsdata.expansions.tableframe.features.grok.api._handler import GrokParser
+
+# noinspection PyProtectedMember
 from tabsdata.extensions._tableframe.extension import TableFrameExtension
 
 if TYPE_CHECKING:
@@ -111,6 +129,7 @@ class TableFrame:
             idx=None,
         )
 
+    # noinspection PyUnreachableCode
     @classmethod
     @pydoc(categories="tableframe")
     def from_polars(
@@ -141,7 +160,7 @@ class TableFrame:
     @pydoc(categories="tableframe")
     def from_pandas(
         cls,
-        data: pd.DataFrame | None = None,
+        data: Union[pd.DataFrame | None] = None,
     ) -> TableFrame:
         """
         Creates tableframe from a pandas dataframe, or None.
@@ -151,6 +170,7 @@ class TableFrame:
             data: Input data.
         """
 
+        # noinspection PyShadowingNames
         import pandas as pd
 
         # noinspection PyProtectedMember
@@ -231,6 +251,7 @@ class TableFrame:
     # Passing a IdxGenerator for idx is meant to be used only when populating pub
     # tables, An IdxGenerator is a stateful callable class that ensures a unique
     # sequential id is generated in each invocation.
+    # noinspection PyUnreachableCode
     @classmethod
     def __build__(  # noqa: C901
         cls,
@@ -286,6 +307,7 @@ class TableFrame:
         instance._lf = _arrange_columns(df)
         return instance
 
+    # noinspection PyUnreachableCode
     def __init__(
         self,
         df: td_typing.TableDictionary | TableFrame | None = None,
@@ -386,7 +408,7 @@ class TableFrame:
             f"'{type(self).__name__}' object has no attribute '{name}'"
         )
 
-    def __bool__(self) -> NoReturn:
+    def __bool__(self) -> bool:
         return not self.is_empty()
 
     def __eq__(self, other: object) -> bool:
@@ -621,7 +643,7 @@ class TableFrame:
     @pydoc(categories="tableframe")
     def has_cols(
         self, cols: str | list[str], exact: bool | None = False
-    ) -> (bool, set[str], set[str]):
+    ) -> Tuple[bool, set[str], set[str]]:
         """
         Verifies the presence of (non-system) columns in the TableFrame.
 
@@ -742,8 +764,8 @@ class TableFrame:
     @pydoc(categories="tableframe")
     def sort(
         self,
-        by: td_expr.IntoExpr | Iterable[td_expr.IntoExpr],
-        *more_by: td_expr.IntoExpr,
+        by: td_typing.IntoExpr | Iterable[td_typing.IntoExpr],
+        *more_by: td_typing.IntoExpr,
         descending: bool | Sequence[bool] = False,
         nulls_last: bool | Sequence[bool] = False,
         maintain_order: bool = False,
@@ -803,7 +825,6 @@ class TableFrame:
         return TableFrame.__build__(
             df=self._lf.sort(
                 by=td_translator._unwrap_into_tdexpr([by] + list(more_by)),
-                *more_by,
                 descending=descending,
                 nulls_last=nulls_last,
                 maintain_order=maintain_order,
@@ -1100,8 +1121,8 @@ class TableFrame:
     @pydoc(categories="projection")
     def with_columns(
         self,
-        *exprs: td_expr.IntoExpr | Iterable[td_expr.IntoExpr],
-        **named_exprs: td_expr.IntoExpr,
+        *exprs: td_typing.IntoExpr | Iterable[td_typing.IntoExpr],
+        **named_exprs: td_typing.IntoExpr,
     ) -> TableFrame:
         # noinspection PyShadowingNames
         """
@@ -1155,6 +1176,7 @@ class TableFrame:
             idx=self._idx,
         )
 
+    # noinspection PyUnreachableCode
     @pydoc(categories="projection")
     def rename(self, mapping: dict[str, str]) -> TableFrame:
         # noinspection PyShadowingNames
@@ -1279,6 +1301,76 @@ class TableFrame:
         # noinspection PyProtectedMember
         return TableFrame.__build__(
             df=self._lf.drop(td_translator._unwrap_tdexpr(*columns), strict=strict),
+            mode="tab",
+            idx=self._idx,
+        )
+
+    # ToDo: allways attach system td columns.
+    # ToDo: dedicated algorithm for proper provenance handling.
+    # ToDo: check for undesired operations of system td columns.
+    # ToDo: proper expressions handling.
+    @pydoc(categories="projection")
+    def unnest(
+        self,
+        columns: Union[
+            td_typing.ColumnNameOrSelector, Collection[td_typing.ColumnNameOrSelector]
+        ],
+        *more_columns: td_typing.ColumnNameOrSelector,
+    ) -> TableFrame:
+        """
+        Expand one or more struct columns so that each field within the struct becomes
+        a separate column in the `TableFrame`.
+
+        The resulting `TableFrame` will place these new columns in the same position
+        as the original struct column, effectively replacing it. This makes it easier
+        to work directly with the inner fields as standard columns.
+
+        Args:
+            columns: Name of the struct column(s) to expand.
+            more_columns: Additional struct columns to expand, provided as positional
+                arguments.
+
+        Example:
+
+        >>> import tabsdata as td
+        >>>
+        >>> tf = td.TableFrame({
+        ...     "id": [1, 2],
+        ...     "info": [
+        ...         {"name": "Alice", "age": 30},
+        ...         {"name": "Bob", "age": None},
+        ...     ],
+        ...     "status": ["active", "inactive"],
+        ... })
+        >>>
+        >>> tf
+        >>>
+        ┌─────┬───────────────┬───────────┐
+        │ id  ┆ info          ┆ status    │
+        │ --- ┆ ---           ┆ ---       │
+        │ i64 ┆ struct[2]     ┆ str       │
+        ╞═════╪═══════════════╪═══════════╡
+        │ 1   ┆ {"Alice",30}  ┆ active    │
+        │ 2   ┆ {"Bob",null}  ┆ inactive  │
+        └─────┴───────────────┴───────────┘
+        >>>
+        >>> tf.unnest("info")
+        >>>
+        ┌─────┬───────┬──────┬───────────┐
+        │ id  ┆ name  ┆ age  ┆ status    │
+        │ --- ┆ ---   ┆ ---  ┆ ---       │
+        │ i64 ┆ str   ┆ i64  ┆ str       │
+        ╞═════╪═══════╪══════╪═══════════╡
+        │ 1   ┆ Alice ┆ 30   ┆ active    │
+        │ 2   ┆ Bob   ┆ null ┆ inactive  │
+        └─────┴───────┴──────┴───────────┘
+        """
+        return TableFrame.__build__(
+            df=self._lf.unnest(
+                columns=td_translator._unwrap_into_tdexpr(
+                    [columns] + list(more_columns)
+                ),
+            ),
             mode="tab",
             idx=self._idx,
         )
@@ -1620,15 +1712,15 @@ class TableFrame:
     @pydoc(categories="filters")
     def filter(
         self,
-        *predicates: (
-            td_expr.IntoExprColumn
-            | Iterable[td_expr.IntoExprColumn]
+        *predicates: Union[
+            td_typing.IntoExprColumn
+            | Iterable[td_typing.IntoExprColumn]
             | bool
             | list[bool]
             | np.ndarray[Any, Any]
-        ),
+        ],
     ) -> TableFrame:
-        # noinspection PyShadowingNames
+        # noinspection PyShadowingNames,PyTypeChecker
         """
         Filter the `TableFrame` based on the given predicates.
 
@@ -1686,8 +1778,8 @@ class TableFrame:
     @pydoc(categories="projection")
     def select(
         self,
-        *exprs: td_expr.IntoExpr | Iterable[td_expr.IntoExpr],
-        **named_exprs: td_expr.IntoExpr,
+        *exprs: td_typing.IntoExpr | Iterable[td_typing.IntoExpr],
+        **named_exprs: td_typing.IntoExpr,
     ) -> TableFrame:
         # noinspection PyShadowingNames
         """
@@ -1773,7 +1865,7 @@ class TableFrame:
     @pydoc(categories="aggregation")
     def group_by(
         self,
-        *by: td_expr.IntoExpr | Iterable[td_expr.IntoExpr],
+        *by: td_typing.IntoExpr | Iterable[td_typing.IntoExpr],
     ) -> td_group_by.TableFrameGroupBy:
         # noinspection PyShadowingNames
         """
@@ -2301,12 +2393,116 @@ class TableFrame:
             .to_dict(as_series=False)
         )
 
+    """> Expansion Functions """
+
+    @pydoc(categories="string")
+    def grok(
+        self,
+        expr: td_typing.IntoExpr,
+        pattern: str,
+        schema: dict[str, td_col.Column],
+    ) -> TableFrame:
+        """
+        Parse log text into structured fields using a Grok pattern.
+
+        Applies a Grok pattern to the given column or expression and directly appends
+        **one new column per named capture** in the pattern to the output TableFrame.
+        Rows that do not match the pattern will contain `null` values for the
+        extracted columns.
+
+        Parameters:
+            expr (IntoExpr): Column name or expression that resolves to a single
+                string column containing log lines.
+            pattern (str): Grok pattern with named captures (e.g., `%{WORD:user}`).
+            schema (dict[str, td_col.Column]): A mapping where each capture name
+                is associated with its corresponding column definition, specifying
+                both the column name and its data type.
+
+        Returns:
+            TableFrame: A new TableFrame with one column per Grok capture added.
+
+        Example:
+
+            >>> import tabsdata as td
+            >>> tf = td.TableFrame({"logs": [
+            ...     "alice-login-2023",
+            ...     "bob-logout-2024",
+            ... ]})
+            >>>
+            >>> # Capture 3 fields: user, action, year
+            >>> log_pattern = r"%{WORD:user}-%{WORD:action}-%{INT:year}"
+            >>> log_schema = {
+            >>>     "word": td_col.Column("user", td.String),
+            >>>     "action": td_col.Column("action", td.String),
+            >>>     "year": td_col.Column("year", td.Int8),
+            >>> }
+            >>> out = tf.grok("logs", log_pattern, log_schema)
+            >>> out.collect()
+            ┌──────────────────┬───────┬────────┬──────┐
+            │ logs             ┆ user  ┆ action ┆ year │
+            │ ---              ┆ ---   ┆ ---    ┆ ---  │
+            │ str              ┆ str   ┆ str    ┆ i64  │
+            ╞══════════════════╪═══════╪════════╪══════╡
+            │ alice-login-2023 ┆ alice ┆ login  ┆ 2023 │
+            │ bob-logout-2024  ┆ bob   ┆ logout ┆ 2024 │
+            └──────────────────┴───────┴────────┴──────┘
+
+        Notes:
+            - The function automatically expands the Grok captures into separate
+              columns.
+            - Non-matching rows will show `null` for the extracted columns.
+            - If a pattern defines duplicate capture names, numeric suffixes like
+              `field`, `field[1]` will be used to disambiguate them.
+        """
+
+        def group_by_dtype(
+            dmap: dict[str, pl.DataType],
+        ) -> dict[pl.DataType, list[str]]:
+            groups: dict[pl.DataType, list[str]] = {}
+            for name, dt in dmap.items():
+                groups.setdefault(dt, []).append(name)
+            return groups
+
+        if isinstance(expr, str):
+            expr = td_expr.Expr(pl.col(expr))
+        elif not isinstance(expr, td_expr.Expr):
+            expr = td_expr.Expr(expr)
+
+        parser = GrokParser(pattern, schema)
+        grok = expr.str.grok(pattern, schema)
+
+        lf = self.with_columns(grok.alias(parser.temp_column))._lf
+
+        fields = [schema[capture].name or capture for capture in schema.keys()]
+        dtypes = {
+            schema[capture].name or capture: schema[capture].dtype or pl.String
+            for capture in schema.keys()
+        }
+
+        lf = (
+            lf.with_columns(
+                pl.col(parser.temp_column).list.to_struct(fields=fields).alias("grok")
+            )
+            .unnest("grok")
+            .with_columns(
+                *[
+                    pl.col(column).cast(dtype)
+                    for dtype, column in group_by_dtype(dtypes).items()
+                    if column
+                ]
+            )
+            .drop(parser.temp_column)
+        )
+
+        return TableFrame.__build__(df=lf, mode="tab", idx=self._idx)
+
 
 TdType = TypeVar("TdType", "TableFrame", "td_typing.Series", "td_expr.Expr")
 
 """> Internal Private Functions """
 
 
+# noinspection PyUnreachableCode
 def _assemble_system_columns(f: TableFrame | pl.LazyFrame) -> TableFrame:
     if isinstance(f, pl.LazyFrame):
         return TableFrame.__build__(
@@ -2328,7 +2524,7 @@ def _assemble_system_columns(f: TableFrame | pl.LazyFrame) -> TableFrame:
         )
 
 
-def _split_columns(columns: list[str]) -> (list[str], list[str]):
+def _split_columns(columns: list[str]) -> Tuple[list[str], list[str]]:
     user_columns = [
         column
         for column in columns

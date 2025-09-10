@@ -2,9 +2,10 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use pyo3::{PyResult, pyfunction};
+use pyo3::{pyfunction, PyResult};
 use pyo3_stub_gen::derive::gen_stub_pyfunction;
 
+#[inline]
 #[gen_stub_pyfunction(module = "tabsdata.expansions.tableframe.functions.mockup")]
 #[pyfunction]
 pub fn dummy_fn(input: String) -> PyResult<String> {

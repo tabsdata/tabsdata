@@ -13,3 +13,6 @@ __path__ = pkgutil.extend_path(__path__, __name__)
 # Required import to ensure dynamic library with native components is loaded.
 # noinspection PyProtectedMember
 import tabsdata.expansions.tableframe._expressions  # noqa: F401
+
+# Required to register the 'logs' namespace.
+import tabsdata.expansions.tableframe.features.grok  # noqa: F401

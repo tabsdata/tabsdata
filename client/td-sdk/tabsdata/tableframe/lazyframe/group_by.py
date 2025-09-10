@@ -19,8 +19,10 @@ import tabsdata._utils.tableframe._helpers as td_helpers
 
 # noinspection PyProtectedMember
 import tabsdata._utils.tableframe._translator as td_translator
-import tabsdata.tableframe.expr.expr as td_expr
 import tabsdata.tableframe.lazyframe.frame as td_frame
+
+# noinspection PyProtectedMember
+import tabsdata.tableframe.typing as td_typing
 
 # noinspection PyProtectedMember
 from tabsdata._utils.annotations import pydoc
@@ -51,8 +53,8 @@ class TableFrameGroupBy:
 
     def agg(
         self,
-        *aggs: td_expr.IntoExpr | Iterable[td_expr.IntoExpr],
-        **named_aggs: td_expr.IntoExpr,
+        *aggs: td_typing.IntoExpr | Iterable[td_typing.IntoExpr],
+        **named_aggs: td_typing.IntoExpr,
     ) -> td_frame.TableFrame:
         """
         Aggregation expressions for the group by column(s).

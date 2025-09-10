@@ -79,7 +79,11 @@ from tabsdata._io.inputs.sql_inputs import (
     OracleSource,
     PostgresSource,
 )
+
+# noinspection PyProtectedMember
 from tabsdata._io.inputs.table_inputs import TableInput
+
+# noinspection PyProtectedMember
 from tabsdata._io.outputs.file_outputs import (
     AWSGlue,
     AzureDestination,
@@ -87,23 +91,37 @@ from tabsdata._io.outputs.file_outputs import (
     LocalFileDestination,
     S3Destination,
 )
+
+# noinspection PyProtectedMember
 from tabsdata._io.outputs.sql_outputs import (
     MariaDBDestination,
     MySQLDestination,
     OracleDestination,
     PostgresDestination,
 )
+
+# noinspection PyProtectedMember
 from tabsdata._io.outputs.table_outputs import TableOutput
+
+# noinspection PyProtectedMember
 from tabsdata._io.plugin import DestinationPlugin, SourcePlugin
 from tabsdata._secret import EnvironmentSecret, HashiCorpSecret
 from tabsdata._tabsdatafunction import TabsdataFunction
+
+# noinspection PyProtectedMember
 from tabsdata._tabsserver.function.execution_exceptions import CustomException
 from tabsdata.tableframe.functions.col import col as col
 from tabsdata.tableframe.functions.eager import concat
 from tabsdata.tableframe.functions.lit import lit
 from tabsdata.tableframe.lazyframe.frame import TableFrame
+
+# noinspection PyProtectedMember
 from tabsdata_databricks._connector import DatabricksDestination
+
+# noinspection PyProtectedMember
 from tabsdata_mongodb._connector import MongoDBDestination
+
+# noinspection PyProtectedMember
 from tabsdata_mssql._connector import MSSQLDestination, MSSQLSource
 from tabsdata_salesforce._connector import (
     SalesforceReportSource,

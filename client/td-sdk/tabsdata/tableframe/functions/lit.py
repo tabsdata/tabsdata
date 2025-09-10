@@ -8,9 +8,10 @@ from typing import Any
 
 import polars as pl
 
-# noinspection PyProtectedMember
-import tabsdata.tableframe._typing as td_typing
 import tabsdata.tableframe.expr.expr as td_expr
+
+# noinspection PyProtectedMember
+import tabsdata.tableframe.typing as td_typing
 from tabsdata._utils.annotations import pydoc
 
 
