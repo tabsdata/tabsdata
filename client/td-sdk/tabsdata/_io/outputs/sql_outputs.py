@@ -59,7 +59,7 @@ class MariaDBDestination(DestinationPlugin):
         self,
         uri: str,
         destination_table: List[str] | str,
-        credentials: dict | UserPasswordCredentials = None,
+        credentials: UserPasswordCredentials = None,
         if_table_exists: Literal["append", "replace"] = "append",
     ):
         """
@@ -70,8 +70,8 @@ class MariaDBDestination(DestinationPlugin):
             uri (str): The URI of the database where the data is going to be stored.
             destination_table (List[str] | str): The tables to create. If multiple
                 tables are provided, they must be provided as a list.
-            credentials (dict | UserPasswordCredentials, optional): The credentials
-                required to access the MariaDB database. Can be a dictionary or a
+            credentials (UserPasswordCredentials, optional): The credentials
+                required to access the MariaDB database. Must be a
                 UserPasswordCredentials object.
             if_table_exists ({'append', 'replace'}, optional): The strategy to
                 follow when the table already exists. Defaults to 'append'.
@@ -171,15 +171,14 @@ class MariaDBDestination(DestinationPlugin):
         return self._credentials
 
     @credentials.setter
-    def credentials(self, credentials: dict | UserPasswordCredentials | None):
+    def credentials(self, credentials: UserPasswordCredentials | None):
         """
         Sets the credentials to access the MariaDB database.
 
         Args:
-            credentials (dict | UserPasswordCredentials | None): The credentials
+            credentials (UserPasswordCredentials | None): The credentials
                 required to access the MariaDB database. Can be a
-                UserPasswordCredentials object, a dictionary or None if no
-                credentials are needed.
+                UserPasswordCredentials object or None.
         """
         if not credentials:
             self._credentials = None
@@ -238,7 +237,7 @@ class MySQLDestination(DestinationPlugin):
         self,
         uri: str,
         destination_table: List[str] | str,
-        credentials: dict | UserPasswordCredentials = None,
+        credentials: UserPasswordCredentials = None,
         if_table_exists: Literal["append", "replace"] = "append",
     ):
         """
@@ -249,8 +248,8 @@ class MySQLDestination(DestinationPlugin):
             uri (str): The URI of the database where the data is going to be stored.
             destination_table (List[str] | str): The tables to create. If multiple
                 tables are provided, they must be provided as a list.
-            credentials (dict | UserPasswordCredentials, optional): The credentials
-                required to access the MySQL database. Can be a dictionary or a
+            credentials (UserPasswordCredentials, optional): The credentials
+                required to access the MySQL database. Must be a
                 UserPasswordCredentials object.
 
         Raises:
@@ -344,15 +343,14 @@ class MySQLDestination(DestinationPlugin):
         return self._credentials
 
     @credentials.setter
-    def credentials(self, credentials: dict | UserPasswordCredentials | None):
+    def credentials(self, credentials: UserPasswordCredentials | None):
         """
         Sets the credentials to access the MySQLDatabase.
 
         Args:
-            credentials (dict | UserPasswordCredentials | None): The credentials
+            credentials (UserPasswordCredentials | None): The credentials
                 required to access the MySQLDatabase. Can be a
-                UserPasswordCredentials object, a dictionary or None if no
-                credentials are needed.
+                UserPasswordCredentials object or None.
         """
         if not credentials:
             self._credentials = None
@@ -411,7 +409,7 @@ class OracleDestination(DestinationPlugin):
         self,
         uri: str,
         destination_table: List[str] | str,
-        credentials: dict | UserPasswordCredentials = None,
+        credentials: UserPasswordCredentials = None,
         if_table_exists: Literal["append", "replace"] = "append",
     ):
         """
@@ -422,8 +420,8 @@ class OracleDestination(DestinationPlugin):
             uri (str): The URI of the database where the data is going to be stored.
             destination_table (List[str] | str): The tables to create. If multiple
                 tables are provided, they must be provided as a list.
-            credentials (dict | UserPasswordCredentials, optional): The credentials
-                required to access the Oracle database. Can be a dictionary or a
+            credentials (UserPasswordCredentials, optional): The credentials
+                required to access the Oracle database. Must be a
                 UserPasswordCredentials object.
 
         Raises:
@@ -518,15 +516,14 @@ class OracleDestination(DestinationPlugin):
         return self._credentials
 
     @credentials.setter
-    def credentials(self, credentials: dict | UserPasswordCredentials | None):
+    def credentials(self, credentials: UserPasswordCredentials | None):
         """
         Sets the credentials to access the Oracle database.
 
         Args:
-            credentials (dict | UserPasswordCredentials | None): The credentials
+            credentials (UserPasswordCredentials | None): The credentials
                 required to access the Oracle database. Can be a
-                UserPasswordCredentials object, a dictionary or None if no
-                credentials are needed.
+                UserPasswordCredentials object or None.
         """
         if not credentials:
             self._credentials = None
@@ -585,7 +582,7 @@ class PostgresDestination(DestinationPlugin):
         self,
         uri: str,
         destination_table: List[str] | str,
-        credentials: dict | UserPasswordCredentials = None,
+        credentials: UserPasswordCredentials = None,
         if_table_exists: Literal["append", "replace"] = "append",
     ):
         """
@@ -596,8 +593,8 @@ class PostgresDestination(DestinationPlugin):
             uri (str): The URI of the database where the data is going to be stored.
             destination_table (List[str] | str): The tables to create. If multiple
                 tables are provided, they must be provided as a list.
-            credentials (dict | UserPasswordCredentials, optional): The credentials
-                required to access the Postgres database. Can be a dictionary or a
+            credentials (UserPasswordCredentials, optional): The credentials
+                required to access the Postgres database. Must be a
                 UserPasswordCredentials object.
 
         Raises:
@@ -694,15 +691,14 @@ class PostgresDestination(DestinationPlugin):
         return self._credentials
 
     @credentials.setter
-    def credentials(self, credentials: dict | UserPasswordCredentials | None):
+    def credentials(self, credentials: UserPasswordCredentials | None):
         """
         Sets the credentials to access the PostgresDatabase.
 
         Args:
-            credentials (dict | UserPasswordCredentials | None): The credentials
+            credentials (UserPasswordCredentials | None): The credentials
                 required to access the PostgresDatabase. Can be a
-                UserPasswordCredentials object, a dictionary or None if no
-                credentials are needed.
+                UserPasswordCredentials object or None.
         """
         if not credentials:
             self._credentials = None

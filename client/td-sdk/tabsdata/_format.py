@@ -554,10 +554,10 @@ def build_file_format(configuration: dict | str | FileFormat) -> FileFormat:
     elif isinstance(configuration, dict):
         return build_file_format_from_dict(configuration)
     elif configuration is None:
-        raise FormatConfigurationError(ErrorCode.FOCE6, [dict, str, FileFormat])
+        raise FormatConfigurationError(ErrorCode.FOCE6, [str, FileFormat])
     else:
         raise FormatConfigurationError(
-            ErrorCode.FOCE5, [dict, str, FileFormat], type(configuration)
+            ErrorCode.FOCE5, [str, FileFormat], type(configuration)
         )
 
 

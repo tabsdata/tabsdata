@@ -107,8 +107,8 @@ class AzureSource(SourcePlugin):
     def __init__(
         self,
         uri: str | list[str],
-        credentials: dict | AzureCredentials,
-        format: str | dict | FileFormat = None,
+        credentials: AzureCredentials,
+        format: str | FileFormat = None,
         initial_last_modified: str | datetime = None,
     ):
         """
@@ -119,13 +119,12 @@ class AzureSource(SourcePlugin):
         Args:
             uri (str | list[str]): The URI of the files with format:
                 'az://path/to/files'. It can be a single URI or a list of URIs.
-            credentials (dict | AzureCredentials): The credentials required to access
-                Azure. Can be a dictionary or a AzureCredentials object.
-            format (str | dict | FileFormat, optional): The format of the file. If not
+            credentials (AzureCredentials): The credentials required to access
+                Azure. Must be an AzureCredentials object.
+            format (str | FileFormat, optional): The format of the file. If not
                 provided, it will be inferred from the file extension of the data.
-                Can be either a string with the format, a FileFormat object or a
-                dictionary with the format as the 'type' key and any additional
-                format-specific information. Currently supported formats are 'csv',
+                Can be either a string with the format or a FileFormat object .
+                Currently supported formats are 'csv',
                 'parquet', 'avro', 'ndjson', 'jsonl' and 'log'.
             initial_last_modified (str | datetime, optional): If provided,
                 only the files modified after this date and time will be considered.
@@ -191,16 +190,15 @@ class AzureSource(SourcePlugin):
         return self._format or build_file_format(self._implicit_format)
 
     @format.setter
-    def format(self, format: str | dict | FileFormat):
+    def format(self, format: str | FileFormat):
         """
         Sets the format of the file.
 
         Args:
-            format (str | dict | FileFormat): The format of the file. If not
+            format (str | FileFormat): The format of the file. If not
                 provided, it will be inferred from the file extension of the data.
-                Can be either a string with the format, a FileFormat object or a
-                dictionary with the format as the 'type' key and any additional
-                format-specific information. Currently supported formats are 'csv',
+                Can be either a string with the format or a FileFormat object.
+                Currently supported formats are 'csv',
                 'parquet', 'avro', 'ndjson', 'jsonl' and 'log'.
         """
         if format is None:
@@ -299,13 +297,13 @@ class AzureSource(SourcePlugin):
         return self._credentials
 
     @credentials.setter
-    def credentials(self, credentials: dict | AzureCredentials):
+    def credentials(self, credentials: AzureCredentials):
         """
         Sets the credentials required to access Azure.
 
         Args:
-            credentials (dict | AzureCredentials): The credentials required to access
-                Azure. Can be a dictionary or an AzureCredentials object.
+            credentials (AzureCredentials): The credentials required to access
+                Azure. Must be an AzureCredentials object.
         """
         credentials = build_credentials(credentials)
         if not (isinstance(credentials, AzureCredentials)):
@@ -607,7 +605,7 @@ class LocalFileSource(SourcePlugin):
     def __init__(
         self,
         path: str | list[str],
-        format: str | dict | FileFormat = None,
+        format: str | FileFormat = None,
         initial_last_modified: str | datetime = None,
     ):
         """
@@ -617,11 +615,10 @@ class LocalFileSource(SourcePlugin):
         Args:
             path (str | list[str]): The path where the files can be found. It can be a
                 single path or a list of paths.
-            format (str | dict | FileFormat, optional): The format of the file. If not
+            format (str | FileFormat, optional): The format of the file. If not
                 provided, it will be inferred from the file extension of the data.
-                Can be either a string with the format, a FileFormat object or a
-                dictionary with the format as the 'type' key and any additional
-                format-specific information. Currently supported formats are 'csv',
+                Can be either a string with the format or a FileFormat object.
+                Currently supported formats are 'csv',
                 'parquet', 'avro', 'ndjson', 'jsonl' and 'log'.
             initial_last_modified (str | datetime, optional): If provided,
                 only the files modified after this date and time will be considered.
@@ -695,16 +692,15 @@ class LocalFileSource(SourcePlugin):
         return self._format or build_file_format(self._implicit_format_string)
 
     @format.setter
-    def format(self, format: str | dict | FileFormat):
+    def format(self, format: str | FileFormat):
         """
         Sets the format of the file.
 
         Args:
             format (str): The format of the file. If not
                 provided, it will be inferred from the file extension.
-                Can be either a string with the format, a FileFormat object or a
-                dictionary with the format as the 'type' key and any additional
-                format-specific information. Currently supported formats are 'csv',
+                Can be either a string with the format or a FileFormat object.
+                Currently supported formats are 'csv',
                 'parquet', 'avro', 'ndjson', 'jsonl' and 'log'.
         """
         if format is None:
@@ -842,8 +838,8 @@ class S3Source(SourcePlugin):
     def __init__(
         self,
         uri: str | list[str],
-        credentials: dict | S3Credentials,
-        format: str | dict | FileFormat = None,
+        credentials: S3Credentials,
+        format: str | FileFormat = None,
         initial_last_modified: str | datetime = None,
         region: str = None,
     ):
@@ -855,13 +851,12 @@ class S3Source(SourcePlugin):
         Args:
             uri (str | list[str]): The URI of the files with format:
                 's3://path/to/files'. It can be a single URI or a list of URIs.
-            credentials (dict | S3Credentials): The credentials required to access the
-                S3 bucket. Can be a dictionary or a S3Credentials object.
-            format (str | dict | FileFormat, optional): The format of the file. If not
+            credentials (S3Credentials): The credentials required to access the
+                S3 bucket. Must be a S3Credentials object.
+            format (str | FileFormat, optional): The format of the file. If not
                 provided, it will be inferred from the file extension of the data.
-                Can be either a string with the format, a FileFormat object or a
-                dictionary with the format as the 'type' key and any additional
-                format-specific information. Currently supported formats are 'csv',
+                Can be either a string with the format or a FileFormat object.
+                Currently supported formats are 'csv',
                 'parquet', 'avro', 'ndjson', 'jsonl' and 'log'.
             initial_last_modified (str | datetime, optional): If provided,
                 only the files modified after this date and time will be considered.
@@ -964,16 +959,15 @@ class S3Source(SourcePlugin):
         return self._format or build_file_format(self._implicit_format)
 
     @format.setter
-    def format(self, format: str | dict | FileFormat):
+    def format(self, format: str | FileFormat):
         """
         Sets the format of the file.
 
         Args:
-            format (str | dict | FileFormat): The format of the file. If not
+            format (str | FileFormat): The format of the file. If not
                 provided, it will be inferred from the file extension of the data.
-                Can be either a string with the format, a FileFormat object or a
-                dictionary with the format as the 'type' key and any additional
-                format-specific information. Currently supported formats are 'csv',
+                Can be either a string with the format or a FileFormat object.
+                Currently supported formats are 'csv',
                 'parquet', 'avro', 'ndjson', 'jsonl' and 'log'.
         """
         if format is None:
@@ -1072,13 +1066,13 @@ class S3Source(SourcePlugin):
         return self._credentials
 
     @credentials.setter
-    def credentials(self, credentials: dict | S3Credentials):
+    def credentials(self, credentials: S3Credentials):
         """
         Sets the credentials required to access the S3 bucket.
 
         Args:
-            credentials (dict | S3Credentials): The credentials required to access the
-                S3 bucket. Can be a dictionary or a S3Credentials object.
+            credentials (S3Credentials): The credentials required to access the
+                S3 bucket. Must be a S3Credentials object.
         """
         credentials = build_credentials(credentials)
         if not (isinstance(credentials, S3Credentials)):

@@ -47,7 +47,7 @@ class TabsdataFunction:
         self,
         func: Callable,
         name: str | None,
-        input: dict | SourcePlugin = None,
+        input: SourcePlugin = None,
         output: DestinationPlugin = None,
         trigger_by: str | List[str] | None = None,
     ):
@@ -59,11 +59,11 @@ class TabsdataFunction:
             func (Callable): The function to decorate.
             name (str): The name with which the function will
                 be registered. If None, the original_function name will be used.
-            input (dict | Input | SourcePlugin, optional): The data to be used when
-                running the function. Can be a dictionary or an instance of Input or
-                SourcePlugin.
+            input (SourcePlugin, optional): The data to be used when
+                running the function. Must be an instance of SourcePlugin.
             output (DestinationPlugin, optional): The location where the
-                function results will be saved when run.
+                function results will be saved when run. Must be an instance of
+                DestinationPlugin.
             trigger_by (str | List[str], optional): The trigger(s) that will cause the
                 function to execute. It can be a table in the system, a list of
                 tables or None (in which case it will be inferred from the
@@ -147,13 +147,13 @@ class TabsdataFunction:
         return self._input
 
     @input.setter
-    def input(self, input: dict | SourcePlugin | None):
+    def input(self, input: SourcePlugin | None):
         """
         Sets the input data for the function.
 
         Args:
-            input (dict | SourcePlugin | None): The data to be used when running the
-                function. Can be a dictionary, an instance of
+            input (SourcePlugin | None): The data to be used when running the
+                function. Can be an instance of
                 SourcePlugin or None.
         """
         if isinstance(input, SourcePlugin):
@@ -203,7 +203,8 @@ class TabsdataFunction:
     @property
     def output(self) -> DestinationPlugin | None:
         """
-        dict: The location where the function results will be saved when run.
+        DestinationPlugin: The location where the function results will be saved when
+            run.
         """
         return self._output
 
@@ -213,7 +214,7 @@ class TabsdataFunction:
         Sets the output location for the function.
 
         Args:
-            output (dict | Output | DestinationPlugin | None): The location where the
+            output (DestinationPlugin | None): The location where the
                 function results will be saved when run.
         """
         if isinstance(output, DestinationPlugin):

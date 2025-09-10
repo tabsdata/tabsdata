@@ -114,7 +114,7 @@ class AWSGlue(Catalog):
         if_table_exists: Literal["append", "replace"] = "append",
         partitioned_table: bool = False,
         schema_strategy: Literal["update", "strict"] = "update",
-        s3_credentials: dict | S3Credentials = None,
+        s3_credentials: S3Credentials = None,
         s3_region: str = None,
         **kwargs,
     ):
@@ -249,7 +249,7 @@ class AWSGlue(Catalog):
         return self._s3_credentials
 
     @s3_credentials.setter
-    def s3_credentials(self, s3_credentials: dict | S3Credentials | None):
+    def s3_credentials(self, s3_credentials: S3Credentials | None):
         if s3_credentials is None:
             self._s3_credentials = None
         else:
@@ -434,8 +434,8 @@ class AzureDestination(DestinationPlugin):
     def __init__(
         self,
         uri: str | list[str],
-        credentials: dict | AzureCredentials,
-        format: str | dict | FileFormat = None,
+        credentials: AzureCredentials,
+        format: str | FileFormat = None,
     ):
         """
         Initializes the AzureDestination with the given URI and the credentials
@@ -444,13 +444,12 @@ class AzureDestination(DestinationPlugin):
         Args:
             uri (str | list[str]): The URI of the files to export with format:
                 'az://path/to/files'. It can be a single URI or a list of URIs.
-            credentials (dict | AzureCredentials): The credentials required to access
-                Azure. Can be a dictionary or a AzureCredentials object.
-            format (str | dict | FileFormat, optional): The format of the file. If not
+            credentials (AzureCredentials): The credentials required to access
+                Azure. Must be an AzureCredentials object.
+            format (str | FileFormat, optional): The format of the file. If not
                 provided, it will be inferred from the file extension.
-                Can be either a string with the format, a FileFormat object or a
-                dictionary with the format as the 'type' key and any additional
-                format-specific information. Currently supported formats are 'csv',
+                Can be either a string with the format or a FileFormat object.
+                Currently supported formats are 'csv',
                 'parquet', 'ndjson' and 'jsonl'.
 
         Raises:
@@ -519,16 +518,15 @@ class AzureDestination(DestinationPlugin):
         return self._format or build_file_format(self._implicit_format)
 
     @format.setter
-    def format(self, format: str | dict | FileFormat):
+    def format(self, format: str | FileFormat):
         """
         Sets the format of the file.
 
         Args:
-            format (str | dict | FileFormat): The format of the file. If not
+            format (str | FileFormat): The format of the file. If not
                 provided, it will be inferred from the file extension of the data.
-                Can be either a string with the format, a FileFormat object or a
-                dictionary with the format as the 'type' key and any additional
-                format-specific information. Currently supported formats are 'csv',
+                Can be either a string with the format or a FileFormat.
+                Currently supported formats are 'csv',
                 'parquet', 'ndjson', 'jsonl' and 'avro'.
         """
         if format is None:
@@ -561,13 +559,13 @@ class AzureDestination(DestinationPlugin):
         return self._credentials
 
     @credentials.setter
-    def credentials(self, credentials: dict | AzureCredentials):
+    def credentials(self, credentials: AzureCredentials):
         """
         Sets the credentials required to access Azure.
 
         Args:
-            credentials (dict | AzureCredentials): The credentials required to access
-                Azure. Can be a dictionary or an AzureCredentials object.
+            credentials (AzureCredentials): The credentials required to access
+                Azure. Must be an AzureCredentials object.
         """
         credentials = build_credentials(credentials)
         if not (isinstance(credentials, AzureCredentials)):
@@ -649,7 +647,7 @@ class GCSDestination(DestinationPlugin):
         self,
         uri: str | list[str],
         credentials: GCPCredentials,
-        format: str | dict | FileFormat = None,
+        format: str | FileFormat = None,
     ):
         """
         Initializes the GCSDestination with the given URI and the credentials
@@ -659,12 +657,11 @@ class GCSDestination(DestinationPlugin):
             uri (str | list[str]): The URI of the files to export with format:
                 'gs://path/to/files'. It can be a single URI or a list of URIs.
             credentials (GCPCredentials): The credentials required to access
-                GCS. Can be a dictionary or a GCPCredentials object.
-            format (str | dict | FileFormat, optional): The format of the file. If not
+                GCS. Must be a GCPCredentials object.
+            format (str | FileFormat, optional): The format of the file. If not
                 provided, it will be inferred from the file extension.
-                Can be either a string with the format, a FileFormat object or a
-                dictionary with the format as the 'type' key and any additional
-                format-specific information. Currently supported formats are 'csv',
+                Can be either a string with the format or a FileFormat object.
+                Currently supported formats are 'csv',
                 'parquet', 'ndjson' and 'jsonl'.
 
         Raises:
@@ -733,16 +730,15 @@ class GCSDestination(DestinationPlugin):
         return self._format or build_file_format(self._implicit_format)
 
     @format.setter
-    def format(self, format: str | dict | FileFormat):
+    def format(self, format: str | FileFormat):
         """
         Sets the format of the file.
 
         Args:
-            format (str | dict | FileFormat): The format of the file. If not
+            format (str | FileFormat): The format of the file. If not
                 provided, it will be inferred from the file extension of the data.
-                Can be either a string with the format, a FileFormat object or a
-                dictionary with the format as the 'type' key and any additional
-                format-specific information. Currently supported formats are 'csv',
+                Can be either a string with the format or a FileFormat object.
+                Currently supported formats are 'csv',
                 'parquet', 'ndjson', 'jsonl' and 'avro'.
         """
         if format is None:
@@ -781,7 +777,7 @@ class GCSDestination(DestinationPlugin):
 
         Args:
             credentials (GCPCredentials): The credentials required to access
-                GCS. Must be a dictionary or an GCPCredentials object.
+                GCS. Must be a GCPCredentials object.
         """
         if not (isinstance(credentials, GCPCredentials)):
             raise DestinationConfigurationError(ErrorCode.DECE52, type(credentials))
@@ -848,7 +844,7 @@ class LocalFileDestination(DestinationPlugin):
     def __init__(
         self,
         path: str | list[str],
-        format: str | dict | FileFormat = None,
+        format: str | FileFormat = None,
     ):
         """
         Initializes the LocalFileDestination with the given path; and optionally a
@@ -857,11 +853,10 @@ class LocalFileDestination(DestinationPlugin):
         Args:
             path (str | list[str]): The path where the files must be stored. It can be a
                 single path or a list of paths.
-            format (str | dict | FileFormat, optional): The format of the file. If not
+            format (str | FileFormat, optional): The format of the file. If not
                 provided, it will be inferred from the file extension of the data.
-                Can be either a string with the format, a FileFormat object or a
-                dictionary with the format as the 'type' key and any additional
-                format-specific information. Currently supported formats are 'csv',
+                Can be either a string with the format or a FileFormat object.
+                Currently supported formats are 'csv',
                 'parquet', 'ndjson' and 'jsonl'.
 
         Raises:
@@ -922,16 +917,15 @@ class LocalFileDestination(DestinationPlugin):
         return self._format or build_file_format(self._implicit_format_string)
 
     @format.setter
-    def format(self, format: str | dict | FileFormat):
+    def format(self, format: str | FileFormat):
         """
         Sets the format of the file.
 
         Args:
             format (str): The format of the file. If not
                 provided, it will be inferred from the file extension.
-                Can be either a string with the format, a FileFormat object or a
-                dictionary with the format as the 'type' key and any additional
-                format-specific information. Currently supported formats are 'csv',
+                Can be either a string with the format or a FileFormat object.
+                Currently supported formats are 'csv',
                 'parquet', 'ndjson', 'jsonl' and 'avro'.
         """
         if format is None:
@@ -1030,10 +1024,10 @@ class S3Destination(DestinationPlugin):
     def __init__(
         self,
         uri: str | list[str],
-        credentials: dict | S3Credentials,
-        format: str | dict | FileFormat = None,
+        credentials: S3Credentials,
+        format: str | FileFormat = None,
         region: str = None,
-        catalog: dict | AWSGlue = None,
+        catalog: AWSGlue = None,
     ):
         """
         Initializes the S3Destination with the given URI and the credentials required to
@@ -1043,13 +1037,12 @@ class S3Destination(DestinationPlugin):
         Args:
             uri (str | list[str]): The URI of the files with format:
                 's3://path/to/files'. It can be a single URI or a list of URIs.
-            credentials (dict | S3Credentials): The credentials required to access the
-                S3 bucket. Can be a dictionary or a S3Credentials object.
-            format (str | dict | FileFormat, optional): The format of the file. If not
+            credentials (S3Credentials): The credentials required to access the
+                S3 bucket. Must be a S3Credentials object.
+            format (str | FileFormat, optional): The format of the file. If not
                 provided, it will be inferred from the file extension of the data.
-                Can be either a string with the format, a FileFormat object or a
-                dictionary with the format as the 'type' key and any additional
-                format-specific information. Currently supported formats are 'csv',
+                Can be either a string with the format or a FileFormat object.
+                Currently supported formats are 'csv',
                 'parquet', 'ndjson' and 'jsonl'.
             region (str, optional): The region where the S3 bucket is located. If not
                 provided, the default AWS region will be used.
@@ -1147,16 +1140,15 @@ class S3Destination(DestinationPlugin):
         return self._format or build_file_format(self._implicit_format)
 
     @format.setter
-    def format(self, format: str | dict | FileFormat):
+    def format(self, format: str | FileFormat):
         """
         Sets the format of the file.
 
         Args:
-            format (str | dict | FileFormat): The format of the file. If not
+            format (str | FileFormat): The format of the file. If not
                 provided, it will be inferred from the file extension of the data.
-                Can be either a string with the format, a FileFormat object or a
-                dictionary with the format as the 'type' key and any additional
-                format-specific information. Currently supported formats are 'csv',
+                Can be either a string with the format or a FileFormat object.
+                Currently supported formats are 'csv',
                 'parquet', 'ndjson', 'jsonl' and 'avro'.
         """
         if format is None:
@@ -1184,12 +1176,12 @@ class S3Destination(DestinationPlugin):
         return self._catalog
 
     @catalog.setter
-    def catalog(self, catalog: dict | AWSGlue):
+    def catalog(self, catalog: AWSGlue):
         """
         Sets the catalog to store the data in.
 
         Args:
-            catalog (dict | AWSGlue): The catalog to store the data in.
+            catalog (AWSGlue): The catalog to store the data in.
         """
         if catalog is None:
             self._catalog = None
@@ -1229,13 +1221,13 @@ class S3Destination(DestinationPlugin):
         return self._credentials
 
     @credentials.setter
-    def credentials(self, credentials: dict | S3Credentials):
+    def credentials(self, credentials: S3Credentials):
         """
         Sets the credentials required to access the S3 bucket.
 
         Args:
-            credentials (dict | S3Credentials): The credentials required to access the
-                S3 bucket. Can be a dictionary or a S3Credentials object.
+            credentials (S3Credentials): The credentials required to access the
+                S3 bucket. Must be a S3Credentials object.
         """
         credentials = build_credentials(credentials)
         if not (isinstance(credentials, S3Credentials)):

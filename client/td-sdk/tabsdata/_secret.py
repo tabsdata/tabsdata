@@ -314,7 +314,7 @@ def build_secret(
             return EnvironmentSecret(**secret_configuration)
     else:
         raise SecretConfigurationError(
-            ErrorCode.SCE3, [dict, str, Secret], type(configuration)
+            ErrorCode.SCE3, [str, Secret], type(configuration)
         )
 
 

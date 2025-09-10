@@ -54,15 +54,15 @@ class AzureAccountKeyCredentials(AzureCredentials):
 
     def __init__(
         self,
-        account_name: str | dict | Secret,
-        account_key: str | dict | Secret,
+        account_name: str | Secret,
+        account_key: str | Secret,
     ):
         """
         Initialize the AzureAccountNameKeyCredentials object.
 
         Args:
-            account_name (str | dict | Secret): The Azure account name.
-            account_key (str | dict | Secret): The Azure account key.
+            account_name (str | Secret): The Azure account name.
+            account_key (str | Secret): The Azure account key.
         """
         self.account_name = account_name
         self.account_key = account_key
@@ -89,12 +89,12 @@ class AzureAccountKeyCredentials(AzureCredentials):
         return self._account_name
 
     @account_name.setter
-    def account_name(self, account_name: str | dict | Secret):
+    def account_name(self, account_name: str | Secret):
         """
         Set the Azure account name.
 
         Args:
-            account_name (str | dict | Secret): The Azure account name.
+            account_name (str | Secret): The Azure account name.
         """
         self._account_name = build_secret(account_name)
 
@@ -106,12 +106,12 @@ class AzureAccountKeyCredentials(AzureCredentials):
         return self._account_key
 
     @account_key.setter
-    def account_key(self, account_key: str | dict | Secret):
+    def account_key(self, account_key: str | Secret):
         """
         Set the Azure account key.
 
         Args:
-            account_key (str | dict | Secret): The Azure account key.
+            account_key (str | Secret): The Azure account key.
         """
         self._account_key = build_secret(account_key)
 
@@ -184,7 +184,7 @@ class GCPServiceAccountKeyCredentials(GCPCredentials):
         Set the GCS service account key.
 
         Args:
-            service_account_key (str | dict | Secret): The GCS service account key.
+            service_account_key (str | Secret): The GCS service account key.
         """
         self._service_account_key = build_secret(service_account_key)
 
@@ -221,15 +221,15 @@ class S3AccessKeyCredentials(S3Credentials):
 
     def __init__(
         self,
-        aws_access_key_id: str | dict | Secret,
-        aws_secret_access_key: str | dict | Secret,
+        aws_access_key_id: str | Secret,
+        aws_secret_access_key: str | Secret,
     ):
         """
         Initialize the S3AccessKeyCredentials object.
 
         Args:
-            aws_access_key_id (str | dict | Secret): The AWS access key id.
-            aws_secret_access_key (str | dict | Secret): The AWS secret access key.
+            aws_access_key_id (str | Secret): The AWS access key id.
+            aws_secret_access_key (str | Secret): The AWS secret access key.
         """
         self.aws_access_key_id = aws_access_key_id
         self.aws_secret_access_key = aws_secret_access_key
@@ -256,12 +256,12 @@ class S3AccessKeyCredentials(S3Credentials):
         return self._aws_access_key_id
 
     @aws_access_key_id.setter
-    def aws_access_key_id(self, aws_access_key_id: str | dict | Secret):
+    def aws_access_key_id(self, aws_access_key_id: str | Secret):
         """
         Set the AWS access key id.
 
         Args:
-            aws_access_key_id (str | dict | Secret): The AWS access key id.
+            aws_access_key_id (str | Secret): The AWS access key id.
         """
         self._aws_access_key_id = build_secret(aws_access_key_id)
 
@@ -273,12 +273,12 @@ class S3AccessKeyCredentials(S3Credentials):
         return self._aws_secret_access_key
 
     @aws_secret_access_key.setter
-    def aws_secret_access_key(self, aws_secret_access_key: str | dict | Secret):
+    def aws_secret_access_key(self, aws_secret_access_key: str | Secret):
         """
         Set the AWS secret access key.
 
         Args:
-            aws_secret_access_key (str | dict | Secret): The AWS secret access key.
+            aws_secret_access_key (str | Secret): The AWS secret access key.
         """
         self._aws_secret_access_key = build_secret(aws_secret_access_key)
 
@@ -310,15 +310,15 @@ class UserPasswordCredentials(Credentials):
 
     def __init__(
         self,
-        user: str | dict | Secret,
-        password: str | dict | Secret,
+        user: str | Secret,
+        password: str | Secret,
     ):
         """
         Initialize the UserPasswordCredentials object.
 
         Args:
-            user (str | dict | Secret): The user.
-            password (str | dict | Secret): The password
+            user (str | Secret): The user.
+            password (str | Secret): The password
         """
         self.user = user
         self.password = password
@@ -345,12 +345,12 @@ class UserPasswordCredentials(Credentials):
         return self._user
 
     @user.setter
-    def user(self, user: str | dict | Secret):
+    def user(self, user: str | Secret):
         """
         Set the user.
 
         Args:
-            user (str | dict | Secret): The user.
+            user (str | Secret): The user.
         """
         self._user = build_secret(user)
 
@@ -362,12 +362,12 @@ class UserPasswordCredentials(Credentials):
         return self._password
 
     @password.setter
-    def password(self, password: str | dict | Secret):
+    def password(self, password: str | Secret):
         """
         Set the password.
 
         Args:
-            password (str | dict | Secret): The password.
+            password (str | Secret): The password.
         """
         self._password = build_secret(password)
 
@@ -418,5 +418,5 @@ def build_credentials(configuration: dict | Credentials) -> Credentials:
             return GCPServiceAccountKeyCredentials(**credentials_configuration)
     else:
         raise CredentialsConfigurationError(
-            ErrorCode.CCE3, [dict, Credentials], type(configuration)
+            ErrorCode.CCE3, [Credentials], type(configuration)
         )

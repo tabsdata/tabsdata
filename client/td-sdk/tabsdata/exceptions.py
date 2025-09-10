@@ -117,7 +117,7 @@ class ErrorCode(Enum):
     DECE7 = {
         "code": "DECE-007",
         "message": (
-            "The 'output' parameter to build a destination must be a 'dict', "
+            "The 'output' parameter to build a destination must be "
             "a DestinationPlugin object or 'None', got '{}' instead."
         ),
     }
@@ -131,7 +131,7 @@ class ErrorCode(Enum):
     DECE9 = {
         "code": "DECE-009",
         "message": (
-            "The 'credentials' parameter in a MySQLDestination must be a 'dict', a "
+            "The 'credentials' parameter in a MySQLDestination must be a "
             "'UserPasswordCredentials' object or None; got '{}' instead."
         ),
     }
@@ -183,7 +183,7 @@ class ErrorCode(Enum):
     DECE16 = {
         "code": "DECE-016",
         "message": (
-            "The 'credentials' parameter in a AzureDestination must be a 'dict' or a "
+            "The 'credentials' parameter in an AzureDestination must be an "
             "'AzureCredentials' object, got '{}' instead"
         ),
     }
@@ -204,7 +204,7 @@ class ErrorCode(Enum):
     DECE19 = {
         "code": "DECE-019",
         "message": (
-            "The 'credentials' parameter in a S3Destination must be a 'dict' or a "
+            "The 'credentials' parameter in a S3Destination must be a "
             "'S3Credentials' object, got '{}' instead"
         ),
     }
@@ -218,7 +218,7 @@ class ErrorCode(Enum):
     DECE21 = {
         "code": "DECE-021",
         "message": (
-            "The 'credentials' parameter in a PostgresDestination must be a 'dict', a "
+            "The 'credentials' parameter in a PostgresDestination must be a "
             "'UserPasswordCredentials' object or None; got '{}' instead."
         ),
     }
@@ -232,7 +232,7 @@ class ErrorCode(Enum):
     DECE23 = {
         "code": "DECE-023",
         "message": (
-            "The 'credentials' parameter in a MariaDBDestination must be a 'dict', a "
+            "The 'credentials' parameter in a MariaDBDestination must be a "
             "'UserPasswordCredentials' object or None; got '{}' instead."
         ),
     }
@@ -246,7 +246,7 @@ class ErrorCode(Enum):
     DECE25 = {
         "code": "DECE-025",
         "message": (
-            "The 'credentials' parameter in a OracleDestination must be a 'dict', a "
+            "The 'credentials' parameter in a OracleDestination must be a "
             "'UserPasswordCredentials' object or None; got '{}' instead."
         ),
     }
@@ -309,8 +309,7 @@ class ErrorCode(Enum):
     DECE34 = {
         "code": "DECE-034",
         "message": (
-            "The 'catalog' parameter must be either a dictionary or a Catalog object, "
-            "got '{}' instead."
+            "The 'catalog' parameter must be a Catalog object, got '{}' instead."
         ),
     }
     DECE35 = {
@@ -407,7 +406,7 @@ class ErrorCode(Enum):
     DECE47 = {
         "code": "DECE-047",
         "message": (
-            "The 's3_credentials' parameter in an AWSGlue must be None, a 'dict' or a "
+            "The 's3_credentials' parameter in an AWSGlue must be None or a "
             "'S3Credentials' object, got '{}' instead"
         ),
     }
@@ -420,7 +419,7 @@ class ErrorCode(Enum):
     DECE49 = {
         "code": "DECE-049",
         "message": (
-            "The 'credentials' parameter in a MSSQLDestination must be a 'dict', a "
+            "The 'credentials' parameter in a MSSQLDestination must be a "
             "'UserPasswordCredentials' object or None, got '{}' instead"
         ),
     }
@@ -711,7 +710,7 @@ class ErrorCode(Enum):
         "code": "SOCE-003",
         "message": (
             "The 'format' parameter in a file source must be a 'str' or "
-            "a 'dict', got '{}' instead"
+            "a 'FileFormat' object, got '{}' instead"
         ),
     }
     SOCE4 = {
@@ -773,8 +772,8 @@ class ErrorCode(Enum):
     SOCE11 = {
         "code": "SOCE-011",
         "message": (
-            "The 'input' parameter to build a source must be a 'dict', "
-            "a source object or 'None', got '{}' instead."
+            "The 'input' parameter to build a source must be a 'SourcePlugin' "
+            "or 'None', got '{}' instead."
         ),
     }
     SOCE12 = {
@@ -841,7 +840,7 @@ class ErrorCode(Enum):
     SOCE20 = {
         "code": "SOCE-020",
         "message": (
-            "The 'credentials' parameter in a S3Source must be a 'dict' or a "
+            "The 'credentials' parameter in a S3Source must be a "
             "'S3Credentials' object, got '{}' instead"
         ),
     }
@@ -855,7 +854,7 @@ class ErrorCode(Enum):
     SOCE22 = {
         "code": "SOCE-022",
         "message": (
-            "The 'credentials' parameter in a MySQLSource must be a 'dict', a "
+            "The 'credentials' parameter in a MySQLSource must be a "
             "'UserPasswordCredentials' object or None, got '{}' instead"
         ),
     }
@@ -890,7 +889,7 @@ class ErrorCode(Enum):
     SOCE30 = {
         "code": "SOCE-030",
         "message": (
-            "The 'credentials' parameter in a AzureSource must be a 'dict' or a "
+            "The 'credentials' parameter in a AzureSource must be an "
             "'AzureCredentials' object, got '{}' instead"
         ),
     }
@@ -911,7 +910,7 @@ class ErrorCode(Enum):
     SOCE33 = {
         "code": "SOCE-033",
         "message": (
-            "The 'credentials' parameter in a PostgresSource must be a 'dict', a "
+            "The 'credentials' parameter in a PostgresSource must be a "
             "'UserPasswordCredentials' object or None, got '{}' instead"
         ),
     }
@@ -932,7 +931,7 @@ class ErrorCode(Enum):
     SOCE36 = {
         "code": "SOCE-036",
         "message": (
-            "The 'credentials' parameter in a MariaDBSource must be a 'dict', a "
+            "The 'credentials' parameter in a MariaDBSource must be a "
             "'UserPasswordCredentials' object or None, got '{}' instead"
         ),
     }
@@ -953,7 +952,7 @@ class ErrorCode(Enum):
     SOCE39 = {
         "code": "SOCE-039",
         "message": (
-            "The 'credentials' parameter in a MariaDBSource must be a 'dict', a "
+            "The 'credentials' parameter in a MariaDBSource must be a "
             "'UserPasswordCredentials' object or None, got '{}' instead"
         ),
     }
@@ -976,7 +975,7 @@ class ErrorCode(Enum):
     SOCE42 = {
         "code": "SOCE-042",
         "message": (
-            "The 'credentials' parameter in a MSSQLSource must be a 'dict', a "
+            "The 'credentials' parameter in a MSSQLSource must be a "
             "'UserPasswordCredentials' object or None, got '{}' instead"
         ),
     }

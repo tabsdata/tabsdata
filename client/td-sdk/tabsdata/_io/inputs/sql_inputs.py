@@ -65,7 +65,7 @@ class MariaDBSource(SourcePlugin):
         self,
         uri: str,
         query: str | List[str],
-        credentials: dict | UserPasswordCredentials | None = None,
+        credentials: UserPasswordCredentials | None = None,
         initial_values: dict | None = None,
     ):
         """
@@ -78,8 +78,8 @@ class MariaDBSource(SourcePlugin):
             query (str | List[str]): The SQL query(s) to execute. If multiple queries
                 are provided, they must be provided as a list, and they will be
                 mapped to the function inputs in the same order as they are defined.
-            credentials (dict | UserPasswordCredentials, optional): The credentials
-                required to access the MariaDB database. Can be a dictionary or a
+            credentials (UserPasswordCredentials, optional): The credentials
+                required to access the MariaDB database. Must be a
                 UserPasswordCredentials object.
             initial_values (dict, optional): The initial values for the parameters in
                 the SQL queries.
@@ -173,14 +173,14 @@ class MariaDBSource(SourcePlugin):
         return self._credentials
 
     @credentials.setter
-    def credentials(self, credentials: dict | UserPasswordCredentials | None):
+    def credentials(self, credentials: UserPasswordCredentials | None):
         """
         Sets the credentials to access MariaDB.
 
         Args:
-            credentials (dict | UserPasswordCredentials | None): The credentials
+            credentials (UserPasswordCredentials | None): The credentials
                 required to access MariaDB. Can be a UserPasswordCredentials
-                object, a dictionary or None
+                object or None
         """
         if not credentials:
             self._credentials = None
@@ -233,7 +233,7 @@ class MySQLSource(SourcePlugin):
         self,
         uri: str,
         query: str | List[str],
-        credentials: dict | UserPasswordCredentials | None = None,
+        credentials: UserPasswordCredentials | None = None,
         initial_values: dict | None = None,
     ):
         """
@@ -246,8 +246,8 @@ class MySQLSource(SourcePlugin):
             query (str | List[str]): The SQL query(s) to execute. If multiple queries
                 are provided, they must be provided as a list, and they will be
                 mapped to the function inputs in the same order as they are defined.
-            credentials (dict | UserPasswordCredentials, optional): The credentials
-                required to access the MySQL database. Can be a dictionary or a
+            credentials (UserPasswordCredentials, optional): The credentials
+                required to access the MySQL database. Must be a
                 UserPasswordCredentials object.
             initial_values (dict, optional): The initial values for the parameters in
                 the SQL queries.
@@ -341,14 +341,14 @@ class MySQLSource(SourcePlugin):
         return self._credentials
 
     @credentials.setter
-    def credentials(self, credentials: dict | UserPasswordCredentials | None):
+    def credentials(self, credentials: UserPasswordCredentials | None):
         """
         Sets the credentials to access the MySQLDatabase.
 
         Args:
-            credentials (dict | UserPasswordCredentials | None): The credentials
+            credentials (UserPasswordCredentials | None): The credentials
                 required to access the MySQLDatabase. Can be a UserPasswordCredentials
-                object, a dictionary or None
+                object or None
         """
         if not credentials:
             self._credentials = None
@@ -401,7 +401,7 @@ class OracleSource(SourcePlugin):
         self,
         uri: str,
         query: str | List[str],
-        credentials: dict | UserPasswordCredentials | None = None,
+        credentials: UserPasswordCredentials | None = None,
         initial_values: dict | None = None,
     ):
         """
@@ -414,8 +414,8 @@ class OracleSource(SourcePlugin):
             query (str | List[str]): The SQL query(s) to execute. If multiple queries
                 are provided, they must be provided as a list, and they will be
                 mapped to the function inputs in the same order as they are defined.
-            credentials (dict | UserPasswordCredentials, optional): The credentials
-                required to access the Oracle database. Can be a dictionary or a
+            credentials (UserPasswordCredentials, optional): The credentials
+                required to access the Oracle database. Must be a
                 UserPasswordCredentials object.
             initial_values (dict, optional): The initial values for the parameters in
                 the SQL queries.
@@ -509,14 +509,14 @@ class OracleSource(SourcePlugin):
         return self._credentials
 
     @credentials.setter
-    def credentials(self, credentials: dict | UserPasswordCredentials | None):
+    def credentials(self, credentials: UserPasswordCredentials | None):
         """
         Sets the credentials to access Oracle.
 
         Args:
-            credentials (dict | UserPasswordCredentials | None): The credentials
+            credentials (UserPasswordCredentials | None): The credentials
                 required to access Oracle. Can be a UserPasswordCredentials
-                object, a dictionary or None
+                object or None
         """
         if not credentials:
             self._credentials = None
@@ -568,7 +568,7 @@ class PostgresSource(SourcePlugin):
         self,
         uri: str,
         query: str | List[str],
-        credentials: dict | UserPasswordCredentials | None = None,
+        credentials: UserPasswordCredentials | None = None,
         initial_values: dict | None = None,
     ):
         """
@@ -581,8 +581,8 @@ class PostgresSource(SourcePlugin):
             query (str | List[str]): The SQL query(s) to execute. If multiple queries
                 are provided, they must be provided as a list, and they will be
                 mapped to the function inputs in the same order as they are defined.
-            credentials (dict | UserPasswordCredentials, optional): The credentials
-                required to access the Postgres database. Can be a dictionary or a
+            credentials (UserPasswordCredentials, optional): The credentials
+                required to access the Postgres database. Must be a
                 UserPasswordCredentials object.
             initial_values (dict, optional): The initial values for the parameters in
                 the SQL queries.
@@ -677,14 +677,14 @@ class PostgresSource(SourcePlugin):
         return self._credentials
 
     @credentials.setter
-    def credentials(self, credentials: dict | UserPasswordCredentials | None):
+    def credentials(self, credentials: UserPasswordCredentials | None):
         """
         Sets the credentials to access the PostgresDatabase.
 
         Args:
-            credentials (dict | UserPasswordCredentials | None): The credentials
+            credentials (UserPasswordCredentials | None): The credentials
                 required to access the Postgres database. Can be a
-                UserPasswordCredentials object, a dictionary or None
+                UserPasswordCredentials object or None
         """
         if not credentials:
             self._credentials = None
@@ -721,7 +721,7 @@ class PostgresSource(SourcePlugin):
 def _execute_sql_importer(
     source: MariaDBSource | MySQLSource | OracleSource | PostgresSource,
     destination: str,
-) -> list | dict:
+) -> list:
     if isinstance(source.query, str):
         source_list = [_execute_sql_query(source, destination, source.query)]
     elif isinstance(source.query, list):

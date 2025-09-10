@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
 from tabsdata._io.plugin import DestinationPlugin
 from tabsdata._tabsserver.function.native_tables_utils import sink_lf_to_location
@@ -31,35 +31,35 @@ class TableOutput(DestinationPlugin):
     Class for managing the configuration of table-based data outputs.
 
     Attributes:
-        table (str | List[str]): The table(s) to create. If multiple tables are
+        table (str | list[str]): The table(s) to create. If multiple tables are
             provided, they must be provided as a list.
     """
 
-    def __init__(self, table: str | List[str]):
+    def __init__(self, table: str | list[str]):
         """
         Initializes the TableOutput with the given table(s) to create.
 
         Args:
-            table (str | List[str]): The table(s) to create. If multiple tables are
+            table (str | list[str]): The table(s) to create. If multiple tables are
                 provided, they must be provided as a list.
         """
         self.table = table
 
     @property
-    def table(self) -> str | List[str]:
+    def table(self) -> str | list[str]:
         """
-        str | List[str]: The table(s) to create. If multiple tables are provided,
+        str | list[str]: The table(s) to create. If multiple tables are provided,
             they must be provided as a list.
         """
         return self._table
 
     @table.setter
-    def table(self, table: str | List[str]):
+    def table(self, table: str | list[str]):
         """
         Sets the table(s) to create.
 
         Args:
-            table (str | List[str]): The table(s) to create. If multiple tables are
+            table (str | list[str]): The table(s) to create. If multiple tables are
                 provided, they must be provided as a list.
         """
         self._table = table
@@ -88,7 +88,7 @@ def _store_results_in_table(
     results: ResultsCollection,
     destination: TableOutput,
     execution_context: ExecutionContext,
-) -> List[dict]:
+) -> list[dict]:
     results.normalize_frame()
     # Right now, source provides very little information, but we use it to do a small
     # sanity check and to ensure that everything is running properly
