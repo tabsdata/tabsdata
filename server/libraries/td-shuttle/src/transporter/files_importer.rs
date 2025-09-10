@@ -31,7 +31,7 @@ pub trait Importer {
 
 fn extract_from_url<T>(url: &Url, extractor: impl Fn(&Url) -> T) -> T {
     match url.scheme() {
-        "file" | "s3" | "az" => extractor(url),
+        "file" | "s3" | "az" | "gs" => extractor(url),
         _ => panic!("Unsupported scheme: {}", url.scheme()),
     }
 }
@@ -42,12 +42,17 @@ fn extract_from_url<T>(url: &Url, extractor: impl Fn(&Url) -> T) -> T {
 ///
 /// For s3:// schemes, it returns s3://<bucket>
 ///
+/// For az:// schemes, it returns az://<bucket>
+///
+/// For gs:// schemes, it returns gs://<bucket>
+///
 fn base_url(source: &ImportSource) -> Url {
     let url = source.location().url();
     extract_from_url(&url, |url| match url.scheme() {
         "file" => Url::parse(&crate::transporter::args::root_folder()).unwrap(),
         "s3" => Url::parse(&format!("s3://{}", url.authority())).unwrap(),
         "az" => Url::parse(&format!("az://{}", url.authority())).unwrap(),
+        "gs" => Url::parse(&format!("gs://{}", url.authority())).unwrap(),
         _ => unreachable!(),
     })
 }
@@ -235,7 +240,7 @@ fn convert_copy_report_to_import_reports(
 #[cfg(test)]
 mod tests {
     use crate::transporter::api::{
-        AwsConfigs, AzureConfigs, BaseImportUrl, ImportCsvOptions, ImportFormat,
+        AwsConfigs, AzureConfigs, BaseImportUrl, GcpConfigs, ImportCsvOptions, ImportFormat,
         ImportRequestBuilder, ImportSourceBuilder, ImportTargetBuilder, Location, Value,
         WildcardUrl,
     };
@@ -255,7 +260,10 @@ mod tests {
     use polars_io::utils::sync_on_close::SyncOnCloseType;
     use std::collections::HashMap;
     use td_common::id::id;
-    use td_test::reqs::{AzureStorageWithAccountKeyReqs, S3WithAccessKeySecretKeyReqs};
+    use td_test::reqs::{
+        AzureStorageWithAccountKeyReqs, GcpStorageWithServiceAccountKeyReqs,
+        S3WithAccessKeySecretKeyReqs,
+    };
     use testdir::testdir;
     use url::Url;
 
@@ -469,6 +477,119 @@ mod tests {
             "azure_storage_account_key".to_string(),
             az.account_key.to_string(),
         );
+        let cloud_options = CloudOptions::from_untyped_config(url_tf.as_str(), config).unwrap();
+
+        let lf = LazyFrame::scan_parquet(
+            PlPath::new(url_tf.to_string().as_str()),
+            ScanArgsParquet {
+                cloud_options: Some(cloud_options),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        let df_in = tokio::task::spawn_blocking(move || lf.collect())
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert!(df_out.equals(&df_in));
+    }
+
+    //noinspection DuplicatedCode
+    #[td_test::test(when(reqs = GcpStorageWithServiceAccountKeyReqs, env_prefix= "gcp0"))]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_import_from_local_to_gcp(gcp: GcpStorageWithServiceAccountKeyReqs) {
+        let col_int = Int64Chunked::from_iter((0i64..1000i64).map(Some))
+            .into_series()
+            .with_name(PlSmallStr::from("col_int"));
+        let col_float = Float64Chunked::from_iter((0..1000).map(|i| Some(i as f64)))
+            .into_series()
+            .with_name(PlSmallStr::from("col_float"));
+        let col_string = StringChunked::from_iter((0..1000).map(|i| Some(i.to_string())))
+            .into_series()
+            .with_name(PlSmallStr::from("col_string"));
+        let df_out = DataFrame::new(vec![
+            Column::from(col_int),
+            Column::from(col_float),
+            Column::from(col_string),
+        ])
+        .unwrap();
+        let lf = df_out.clone().lazy();
+
+        let folder = testdir!();
+        let id = id();
+        let file_r = format!("{id}.parquet");
+        let path_r = folder.join(file_r.clone());
+        let url_r = Url::from_file_path(path_r.clone()).unwrap();
+
+        lf.sink_parquet(
+            SinkTarget::Path(PlPath::new(path_r.to_string_lossy().to_string().as_str())),
+            ParquetWriteOptions::default(),
+            None,
+            SinkOptions {
+                sync_on_close: SyncOnCloseType::All,
+                maintain_order: true,
+                mkdir: true,
+            },
+        )
+        .unwrap()
+        .collect()
+        .unwrap();
+
+        let url_w = Url::parse(&format!("{}/unit_test/{}", gcp.uri, file_r.clone())).unwrap();
+
+        let request = ImportRequestBuilder::default()
+            .source(
+                ImportSourceBuilder::default()
+                    .location(Location::LocalFile {
+                        url: WildcardUrl(url_r.clone()),
+                    })
+                    .initial_lastmod(None)
+                    .lastmod_info(None)
+                    .build()
+                    .unwrap(),
+            )
+            .format(ImportFormat::Parquet)
+            .target(
+                ImportTargetBuilder::default()
+                    .location(Location::GCS {
+                        url: BaseImportUrl(url_w.clone()),
+                        configs: GcpConfigs {
+                            service_account_key: Value::Literal(
+                                gcp.service_account_key.to_string(),
+                            ),
+                            extra_configs: None,
+                        },
+                    })
+                    .build()
+                    .unwrap(),
+            )
+            .parallelism(None)
+            .build()
+            .unwrap();
+
+        let meta = ObjectMeta {
+            location: ObjectStorePath::from(path_r.clone().to_string_lossy().as_ref()),
+            last_modified: Utc::now(),
+            size: 1024,
+            e_tag: Some(id.to_string()),
+            version: Some("v1".to_string()),
+        };
+        let files: Vec<(Url, ObjectMeta)> = vec![(url_r.clone(), meta)];
+
+        let response = FilesImporter::import(&request, files).await.unwrap();
+        assert!(!response.is_empty());
+        assert_eq!(response.len(), 1);
+
+        let url_tf = response.first().unwrap().to.clone();
+
+        let mut config = HashMap::new();
+        config.insert(
+            "google_service_account_key".to_string(),
+            gcp.service_account_key.to_string(),
+        );
+
         let cloud_options = CloudOptions::from_untyped_config(url_tf.as_str(), config).unwrap();
 
         let lf = LazyFrame::scan_parquet(
@@ -874,6 +995,29 @@ mod tests {
             configs: AzureConfigs {
                 account_name: Value::Literal(az.account_name.to_string()),
                 account_key: Value::Literal(az.account_key.to_string()),
+                extra_configs: None,
+            },
+        };
+
+        let test_dir = testdir!();
+        let base_url = Url::from_directory_path(&test_dir).unwrap();
+        test_import(
+            &from_base,
+            &Location::LocalFile {
+                url: BaseImportUrl(base_url.clone()),
+            },
+            &ImportFormat::Binary,
+        )
+        .await;
+    }
+
+    #[td_test::test(when(reqs = GcpStorageWithServiceAccountKeyReqs, env_prefix= "gcp0"))]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_import_gcp_binary(gcp: GcpStorageWithServiceAccountKeyReqs) {
+        let from_base = Location::GCS {
+            url: Url::parse(&format!("{}/{}", gcp.uri, id())).unwrap(),
+            configs: GcpConfigs {
+                service_account_key: Value::Literal(gcp.service_account_key.to_string()),
                 extra_configs: None,
             },
         };

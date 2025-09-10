@@ -129,6 +129,7 @@ impl MountDefBuilder {
                 }
                 "s3" => {}
                 "az" => {}
+                "gs" => {}
                 _ => {
                     return Err(StorageError::ConfigurationError(format!(
                         "Unsupported schema {}",
@@ -247,7 +248,7 @@ impl Mount {
     /// Create an object store from the URI and configs.
     fn create_store(uri: &Url, configs: &HashMap<String, String>) -> Result<Box<dyn ObjectStore>> {
         match uri.scheme() {
-            "file" | "s3" | "az" => {
+            "file" | "s3" | "az" | "gs" => {
                 let store = object_store::parse_url_opts(uri, configs)
                     .map_err(StorageError::CouldNotCreateObjectStore)?
                     .0;
@@ -422,12 +423,11 @@ mod tests {
     use bytes::Bytes;
     use futures_util::StreamExt;
     use object_store::path::Path;
-    use serde::{Deserialize, Serialize};
     use std::collections::HashMap;
     use td_common::absolute_path::AbsolutePath;
-    use td_process::launcher::config::Config;
     use td_test::reqs::{
-        AzureStorageWithAccountKeyReqs, S3WithAccessKeySecretKeyReqs, TestRequirements,
+        AzureStorageWithAccountKeyReqs, GcpStorageWithServiceAccountKeyReqs,
+        S3WithAccessKeySecretKeyReqs, TestRequirements,
     };
     use testdir::testdir;
     use url::Url;
@@ -794,25 +794,42 @@ mod tests {
         test_azure_mount("/foo", &reqs).await;
     }
 
-    #[test]
-    fn test_x() {
-        #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-        struct C {
-            mounts: Vec<MountDef>,
-        }
-        impl Config for C {}
+    async fn test_gcp_mount(path: &str, gcp_info: &GcpStorageWithServiceAccountKeyReqs) {
+        let configs = HashMap::from([(
+            "google_service_account_key".to_string(),
+            gcp_info.service_account_key.to_string(),
+        )]);
 
-        let _c = C {
-            mounts: vec![
-                MountDef::builder()
-                    .id("id")
-                    .path("/foo")
-                    .uri(bar_file())
-                    .options(HashMap::from([("key".to_string(), "value".to_string())]))
-                    .build()
-                    .unwrap(),
-            ],
-        };
-        println!("{}", C::default().as_yaml());
+        let uri = format!(
+            "{}/{}",
+            gcp_info.uri,
+            gcp_info.test_path().to_str().unwrap()
+        );
+        let uri = Url::parse(&uri).unwrap();
+
+        let object_store = object_store::parse_url_opts(&uri, &configs);
+        let object_store = object_store.unwrap().0;
+
+        let mount_def = MountDef::builder()
+            .id("id")
+            .path(path)
+            .uri(uri.to_string())
+            .options(configs)
+            .build()
+            .unwrap();
+
+        test_mount(&uri, path, object_store, Mount::new(mount_def).unwrap()).await;
+    }
+
+    #[td_test::test(when(reqs = GcpStorageWithServiceAccountKeyReqs, env_prefix= "gcp0"))]
+    #[tokio::test]
+    async fn test_gcp_root_mount(reqs: GcpStorageWithServiceAccountKeyReqs) {
+        test_gcp_mount("/", &reqs).await;
+    }
+
+    #[td_test::test(when(reqs = GcpStorageWithServiceAccountKeyReqs, env_prefix= "gcp0"))]
+    #[tokio::test]
+    async fn test_gcp_non_root_mount(reqs: GcpStorageWithServiceAccountKeyReqs) {
+        test_gcp_mount("/foo", &reqs).await;
     }
 }

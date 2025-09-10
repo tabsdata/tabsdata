@@ -84,6 +84,10 @@ impl ImportSource {
                 url: source_url.clone(),
                 configs: configs.clone(),
             },
+            Location::GCS { url: _, configs } => Location::GCS {
+                url: source_url.clone(),
+                configs: configs.clone(),
+            },
         }
     }
 }
@@ -379,6 +383,13 @@ impl ImportTarget {
                 url: url.join(file_name.as_str()).unwrap(),
                 configs: configs.clone(),
             },
+            Location::GCS {
+                url: BaseImportUrl(url),
+                configs,
+            } => Location::GCS {
+                url: url.join(file_name.as_str()).unwrap(),
+                configs: configs.clone(),
+            },
         }
     }
 }
@@ -406,6 +417,7 @@ pub enum Location<L> {
     LocalFile { url: L },
     S3 { url: L, configs: AwsConfigs },
     Azure { url: L, configs: AzureConfigs },
+    GCS { url: L, configs: GcpConfigs },
 }
 
 impl<L> Location<L> {
@@ -414,6 +426,7 @@ impl<L> Location<L> {
             Location::LocalFile { .. } => 1024 * 1024,
             Location::S3 { .. } => 1024 * 1024 * 5,
             Location::Azure { .. } => 1024 * 1024 * 4,
+            Location::GCS { .. } => 1024 * 1024 * 8,
         }
     }
 }
@@ -443,6 +456,10 @@ impl Location<Url> {
                 url: joined_url,
                 configs: configs.clone(),
             },
+            Location::GCS { configs, .. } => Location::GCS {
+                url: joined_url,
+                configs: configs.clone(),
+            },
         };
         Ok(joined_url)
     }
@@ -462,6 +479,10 @@ impl From<&Location<Url>> for Location<WildcardUrl> {
                 url: WildcardUrl(url.clone()),
                 configs: configs.clone(),
             },
+            Location::GCS { url, configs } => Location::GCS {
+                url: WildcardUrl(url.clone()),
+                configs: configs.clone(),
+            },
         }
     }
 }
@@ -472,6 +493,7 @@ impl<L: Display> Display for Location<L> {
             Location::LocalFile { url } => write!(f, "LocalFile({url})"),
             Location::S3 { url, .. } => write!(f, "S3({url})"),
             Location::Azure { url, .. } => write!(f, "Azure({url})"),
+            Location::GCS { url, .. } => write!(f, "GCS({url})"),
         }
     }
 }
@@ -525,6 +547,7 @@ impl<L: AsUrl> Location<L> {
             Location::LocalFile { url } => url.as_url(),
             Location::S3 { url, .. } => url.as_url(),
             Location::Azure { url, .. } => url.as_url(),
+            Location::GCS { url, .. } => url.as_url(),
         }
     }
 
@@ -586,6 +609,38 @@ impl<L: AsUrl> Location<L> {
                 }
                 options
             }
+            Location::GCS { configs, .. } => {
+                // keys defined at object_store::gcp::builder::AzureConfigKey
+                let mut options = HashMap::new();
+                options.insert(
+                    "google_service_account_key".into(),
+                    configs.service_account_key.value().unwrap(),
+                );
+
+                // const ACCOUNT_NAME_ENV: &str = "AZURE_STORAGE_ACCOUNT_NAME";
+                // const ACCOUNT_KEY_ENV: &str = "AZURE_STORAGE_ACCOUNT_KEY";
+                //
+                // // We need to do this for Polars JSON reader to work with Azure.
+                // // polars: crates/polars-plan/src/plans/conversion/dsl_to_ir.rs:165 does not propagate cloud_options
+                // // Setting env vars is not thread-safe, it is OK to do it here because this is a single-threaded operation
+                // //
+                // // TD-534 is there to remove this once we upgrade to a newer version of Polars.
+                // unsafe {
+                //     std::env::set_var(
+                //         ACCOUNT_NAME_ENV,
+                //         options.get("azure_storage_account_name").unwrap(),
+                //     );
+                //     std::env::set_var(
+                //         ACCOUNT_KEY_ENV,
+                //         options.get("azure_storage_account_key").unwrap(),
+                //     );
+                // }
+
+                if let Some(configs) = &configs.extra_configs {
+                    options.extend(configs.clone());
+                }
+                options
+            }
         }
     }
 }
@@ -636,6 +691,12 @@ pub struct AwsConfigs {
 pub struct AzureConfigs {
     pub account_name: Value,
     pub account_key: Value,
+    pub extra_configs: Option<HashMap<String, String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GcpConfigs {
+    pub service_account_key: Value,
     pub extra_configs: Option<HashMap<String, String>>,
 }
 
@@ -877,6 +938,7 @@ impl TransporterRequest {
         samples.push_str(&Self::import_from_local().sample_yaml("# Import from local files"));
         samples.push_str(&Self::import_from_aws().sample_yaml("# Import from AWS files"));
         samples.push_str(&Self::import_from_azure().sample_yaml("# Import from Azure files"));
+        samples.push_str(&Self::import_from_gcp().sample_yaml("# Import from GCP files"));
         samples.push_str(&Self::copy_local_to_local().sample_yaml("# Copy local to local"));
         samples.push_str(
             &Self::copy_local_to_s3_literal()
@@ -892,6 +954,13 @@ impl TransporterRequest {
         samples.push_str(
             &Self::copy_local_to_azure_env()
                 .sample_yaml("# Copy local to Azure with env credentials"),
+        );
+        samples.push_str(
+            &Self::copy_local_to_gcp_literal()
+                .sample_yaml("# Copy local to GCP with literal credentials"),
+        );
+        samples.push_str(
+            &Self::copy_local_to_gcp_env().sample_yaml("# Copy local to GCP with env credentials"),
         );
         samples
     }
@@ -965,6 +1034,34 @@ impl TransporterRequest {
                     configs: AzureConfigs {
                         account_name: Value::Env("IMPORT_AZURE_ACCOUNT_NAME".into()),
                         account_key: Value::Env("IMPORT_AZURE_ACCOUNT_KEY".into()),
+                        extra_configs: None,
+                    },
+                },
+                initial_lastmod: None,
+                lastmod_info: None,
+            },
+            format: ImportFormat::Csv(ImportCsvOptions::default()),
+            target: ImportTarget {
+                location: Location::LocalFile {
+                    #[cfg(not(target_os = "windows"))]
+                    url: BaseImportUrl(Url::parse("file:///export-dir").unwrap()),
+                    #[cfg(target_os = "windows")]
+                    url: crate::transporter::api::BaseImportUrl(
+                        Url::parse("file:///c:/export-dir").unwrap(),
+                    ),
+                },
+            },
+            parallelism: None,
+        })
+    }
+
+    fn import_from_gcp() -> TransporterRequest {
+        TransporterRequest::ImportV1(ImportRequest {
+            source: ImportSource {
+                location: Location::GCS {
+                    url: WildcardUrl(Url::parse("gs://bucket/import-dir/file*.csv").unwrap()),
+                    configs: GcpConfigs {
+                        service_account_key: Value::Env("IMPORT_GCP_SERVICE_ACCOUNT_KEY".into()),
                         extra_configs: None,
                     },
                 },
@@ -1178,6 +1275,86 @@ impl TransporterRequest {
                             account_name: Value::Env("IMPORT_AZURE_ACCOUNT_NAME".into()),
                             account_key: Value::Env("IMPORT_AZURE_ACCOUNT_KEY".into()),
                             extra_configs: None,
+                        },
+                    },
+                ),
+            ],
+            parallelism: None,
+        })
+    }
+
+    fn copy_local_to_gcp_literal() -> TransporterRequest {
+        TransporterRequest::CopyV1(CopyRequest {
+            source_target_pairs: vec![
+                (
+                    Location::LocalFile {
+                        #[cfg(not(target_os = "windows"))]
+                        url: Url::parse("file:///import-dir/file0.csv").unwrap(),
+                        #[cfg(target_os = "windows")]
+                        url: Url::parse("file:///c:/import-dir/file0.csv").unwrap(),
+                    },
+                    Location::GCS {
+                        url: Url::parse("gs://bucket/import-dir/file0.csv").unwrap(),
+                        configs: GcpConfigs {
+                            service_account_key: Value::Literal("service_account_key".into()),
+                            extra_configs: Some(HashMap::new()),
+                        },
+                    },
+                ),
+                (
+                    Location::LocalFile {
+                        #[cfg(not(target_os = "windows"))]
+                        url: Url::parse("file:///import-dir/file1.csv").unwrap(),
+                        #[cfg(target_os = "windows")]
+                        url: Url::parse("file:///c:/import-dir/file1.csv").unwrap(),
+                    },
+                    Location::GCS {
+                        url: Url::parse("gs://bucket/import-dir/file1.csv").unwrap(),
+                        configs: GcpConfigs {
+                            service_account_key: Value::Literal("service_account_key".into()),
+                            extra_configs: None,
+                        },
+                    },
+                ),
+            ],
+            parallelism: None,
+        })
+    }
+
+    fn copy_local_to_gcp_env() -> TransporterRequest {
+        TransporterRequest::CopyV1(CopyRequest {
+            source_target_pairs: vec![
+                (
+                    Location::LocalFile {
+                        #[cfg(not(target_os = "windows"))]
+                        url: Url::parse("file:///import-dir/file0.csv").unwrap(),
+                        #[cfg(target_os = "windows")]
+                        url: Url::parse("file:///c:/import-dir/file0.csv").unwrap(),
+                    },
+                    Location::GCS {
+                        url: Url::parse("gs://bucket/import-dir/file0.csv").unwrap(),
+                        configs: GcpConfigs {
+                            service_account_key: Value::Env(
+                                "IMPORT_GCP_SERVICE_ACCOUNT_KEY".into(),
+                            ),
+                            extra_configs: Some(HashMap::new()),
+                        },
+                    },
+                ),
+                (
+                    Location::LocalFile {
+                        #[cfg(not(target_os = "windows"))]
+                        url: Url::parse("file:///import-dir/file1.csv").unwrap(),
+                        #[cfg(target_os = "windows")]
+                        url: Url::parse("file:///c:/import-dir/file1.csv").unwrap(),
+                    },
+                    Location::GCS {
+                        url: Url::parse("gs://bucket/import-dir/file1.csv").unwrap(),
+                        configs: GcpConfigs {
+                            service_account_key: Value::Env(
+                                "IMPORT_GCP_SERVICE_ACCOUNT_KEY".into(),
+                            ),
+                            extra_configs: Some(HashMap::new()),
                         },
                     },
                 ),

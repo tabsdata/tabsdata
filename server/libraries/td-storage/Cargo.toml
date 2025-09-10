@@ -49,7 +49,6 @@ ignored = ["openssl", "td-build", "thiserror", "toml"]
 td-common = { workspace = true }
 td-error = { workspace = true }
 td-objects = { workspace = true }
-td-process = { workspace = true }
 td-test = { workspace = true }
 
 # External dependencies

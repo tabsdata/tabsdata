@@ -9,31 +9,26 @@ use lazy_static::lazy_static;
 use sha2::{Digest, Sha256};
 use std::any::type_name;
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::Read;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use testdir::testdir;
 
 pub mod aws_s3;
 pub mod azure_storage;
+
+pub mod gcp_storage;
 pub mod mysql;
 pub mod oracle;
 pub mod postgres;
 
 pub use aws_s3::S3WithAccessKeySecretKeyReqs;
 pub use azure_storage::AzureStorageWithAccountKeyReqs;
+pub use gcp_storage::GcpStorageWithServiceAccountKeyReqs;
 pub use mysql::MySqlReqs;
 pub use oracle::OracleReqs;
 pub use postgres::PostgresReqs;
 
 const TEST_SKIP_IF_NO_REQS: &str = "TD_TEST_SKIP_IF_NO_REQS";
-
-/// Directory where to look for the the [`TEST_ENV_FILE`] file.
-const DEV_DIR: &str = ".tabsdata-dev";
-
-/// File containing external requirements for `td_test::test(when(reqs = ...))` tests.
-const TEST_ENV_FILE: &str = "test.env";
 
 const TEST_DIR_KEY: &str = "TEST_DIR";
 
@@ -204,42 +199,6 @@ impl TestRequirementsInEnv {
         Ok(R::new(vars))
     }
 
-    fn _merge_vars_with_file_vars(
-        vars: &HashMap<String, String>,
-        path: &Path,
-    ) -> HashMap<String, String> {
-        let mut vars = vars.clone();
-        if path.exists() {
-            let mut envs = String::new();
-            File::open(path)
-                .unwrap()
-                .read_to_string(&mut envs)
-                .unwrap_or_else(|_| panic!("Failed to read {}", path.display()));
-            let envs = envs.lines();
-            for env in envs {
-                let env = env.trim();
-                if !env.is_empty()
-                    && !env.starts_with("#")
-                    && let Some((name, value)) = env.split_once('=')
-                {
-                    let name = name.trim().to_string();
-                    let value = value.trim().to_string();
-                    vars.entry(name).or_insert(value);
-                }
-            }
-        }
-        vars
-    }
-
-    /// Return the build environment variables file `~/.tabsdata-dev/make.env` that is seeded by `cargo make`
-    fn get_build_env_file() -> PathBuf {
-        homedir::my_home()
-            .expect("Failed to get user home directory")
-            .expect("Failed to get user home directory")
-            .join(DEV_DIR)
-            .join(TEST_ENV_FILE)
-    }
-
     /// Resolve the environment variables available for the test run. This code is effective
     /// only when running tests from the IDE.
     ///
@@ -258,7 +217,7 @@ impl TestRequirementsInEnv {
         vars: &HashMap<String, String>,
         do_not_fail: bool,
     ) -> Option<R> {
-        let mut vars = Self::_merge_vars_with_file_vars(vars, &Self::get_build_env_file());
+        let mut vars = vars.clone();
         vars.insert(
             TEST_DIR_KEY.to_string(),
             test_dir.to_str().unwrap().to_string(),
@@ -322,8 +281,6 @@ mod tests {
     use path_slash::PathBufExt;
     use sha2::Digest;
     use std::collections::HashMap;
-    use std::fs::File;
-    use std::io::Write;
     use std::path::PathBuf;
     use testdir::testdir;
 
@@ -457,52 +414,5 @@ mod tests {
             &vars,
             false,
         );
-    }
-
-    #[test]
-    fn test_merge_vars_with_test_env_vars() {
-        let vars = HashMap::from([("A".to_string(), "a".to_string())]);
-
-        let test_env = testdir!();
-        let test_env = test_env.join("test.env");
-
-        // does not exist
-        let got = TestRequirementsInEnv::_merge_vars_with_file_vars(&vars, &test_env);
-        assert_eq!(got.len(), 1);
-        assert_eq!(got["A"], "a");
-
-        // exists with no overlap
-        File::create(&test_env)
-            .unwrap()
-            .write_all(b"_TEST__FOO=foo\n# comment\n#_TEST__BAR=bar")
-            .unwrap();
-
-        let got = TestRequirementsInEnv::_merge_vars_with_file_vars(&vars, &test_env);
-        assert_eq!(got.len(), 2);
-        assert_eq!(got["A"], "a");
-        assert_eq!(got["_TEST__FOO"], "foo");
-
-        // exists with overlap
-
-        let vars = HashMap::from([
-            ("A".to_string(), "a".to_string()),
-            ("_TEST__FOO".to_string(), "predefined".to_string()),
-        ]);
-        let got = TestRequirementsInEnv::_merge_vars_with_file_vars(&vars, &test_env);
-        assert_eq!(got.len(), 2);
-        assert_eq!(got["A"], "a");
-        assert_eq!(got["_TEST__FOO"], "predefined");
-    }
-
-    #[test]
-    fn test_get_test_env_file() {
-        let expected = homedir::my_home()
-            .expect("Failed to get user home directory")
-            .expect("Failed to get user home directory")
-            .join(".tabsdata-dev")
-            .join("test.env");
-
-        let test_env = TestRequirementsInEnv::get_build_env_file();
-        assert_eq!(test_env, expected);
     }
 }

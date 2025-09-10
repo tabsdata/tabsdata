@@ -157,8 +157,8 @@ async fn run_impl(
 #[cfg(test)]
 pub(crate) mod tests {
     use crate::transporter::api::{
-        AwsConfigs, AzureConfigs, CopyRequest, Location, TransporterReport, TransporterRequest,
-        Value,
+        AwsConfigs, AzureConfigs, CopyRequest, GcpConfigs, Location, TransporterReport,
+        TransporterRequest, Value,
     };
     use crate::transporter::cli::{TransporterParams, run_impl, run_impl_report_to_file};
     use crate::transporter::common::create_store;
@@ -166,7 +166,10 @@ pub(crate) mod tests {
     use std::fs::File;
     use std::io::Write;
     use td_common::id::id;
-    use td_test::reqs::{AzureStorageWithAccountKeyReqs, S3WithAccessKeySecretKeyReqs};
+    use td_test::reqs::{
+        AzureStorageWithAccountKeyReqs, GcpStorageWithServiceAccountKeyReqs,
+        S3WithAccessKeySecretKeyReqs,
+    };
     use testdir::testdir;
     use url::Url;
 
@@ -286,6 +289,19 @@ pub(crate) mod tests {
             configs: AzureConfigs {
                 account_name: Value::Literal(az.account_name.to_string()),
                 account_key: Value::Literal(az.account_key.to_string()),
+                extra_configs: None,
+            },
+        };
+        test_run_impl_copy(target).await;
+    }
+
+    #[td_test::test(when(reqs = GcpStorageWithServiceAccountKeyReqs, env_prefix= "gcp0"))]
+    #[tokio::test]
+    async fn test_copy_local_to_gcp(gcp: GcpStorageWithServiceAccountKeyReqs) {
+        let target = Location::GCS {
+            url: build_uuid_v7_url(gcp.uri.to_string()),
+            configs: GcpConfigs {
+                service_account_key: Value::Literal(gcp.service_account_key.to_string()),
                 extra_configs: None,
             },
         };

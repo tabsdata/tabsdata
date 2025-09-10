@@ -28,7 +28,7 @@ test_tower_metadata = []
 test-utils = []
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "td-build", "thiserror", "tokio", "toml"]
+ignored = ["openssl", "td-build", "thiserror", "toml"]
 
 # Build dependencies
 
@@ -56,7 +56,6 @@ td-schema = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }
 hex = { workspace = true }
-homedir = { workspace = true }
 lazy_static = { workspace = true }
 path-slash = { workspace = true }
 sha2 = { workspace = true }
