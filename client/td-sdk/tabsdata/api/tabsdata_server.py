@@ -21,7 +21,7 @@ from tabsdata._io.outputs.sql_outputs import verify_output_sql_drivers
 from tabsdata._io.outputs.table_outputs import TableOutput
 from tabsdata._tabsdatafunction import TabsdataFunction
 from tabsdata._utils.bundle_utils import create_bundle_archive
-from tabsdata._utils.constants import tabsdata_temp_folder
+from tabsdata._utils.temps import tabsdata_temp_folder
 from tabsdata.api.apiserver import APIServer, obtain_connection
 from tabsdata.api.status_utils.data_version import data_version_status_to_mapping
 from tabsdata.api.status_utils.execution import execution_status_to_mapping

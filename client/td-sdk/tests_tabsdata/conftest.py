@@ -39,8 +39,8 @@ from filelock import FileLock
 from google.cloud import storage
 from xdist.workermanage import WorkerController
 
-from tabsdata._utils.constants import tabsdata_temp_folder
 from tabsdata._utils.logging import setup_tests_logging
+from tabsdata._utils.temps import tabsdata_temp_folder
 from tabsdata.api.status_utils.data_version import (
     DataVersionStatus,
     data_version_status_to_mapping,

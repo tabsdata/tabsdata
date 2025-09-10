@@ -29,10 +29,10 @@ from tabsdata._tabsserver.utils import (
     extract_bundle_folder,
 )
 from tabsdata._utils.bundle_utils import REQUIREMENTS_FILE_NAME
-from tabsdata._utils.constants import tabsdata_temp_folder
 
 # noinspection PyProtectedMember
 from tabsdata._utils.tableframe._constants import PYTEST_CONTEXT_ACTIVE
+from tabsdata._utils.temps import tabsdata_temp_folder
 
 logger = logging.getLogger(__name__)
 time_block = TimeBlock()

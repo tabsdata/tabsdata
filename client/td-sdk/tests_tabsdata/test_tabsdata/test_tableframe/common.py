@@ -11,7 +11,7 @@ import polars as pl
 import requests
 
 import tabsdata as td
-from tabsdata._utils.constants import tabsdata_temp_folder
+from tabsdata._utils.temps import tabsdata_temp_folder
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

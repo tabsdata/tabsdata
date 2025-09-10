@@ -11,7 +11,7 @@ import pytest
 
 import tabsdata as td
 import tabsdata.tableframe.functions.col as td_col
-from tabsdata._utils.constants import tabsdata_temp_folder
+from tabsdata._utils.temps import tabsdata_temp_folder
 
 logger = logging.getLogger(__name__)
 
@@ -555,10 +555,7 @@ class TestGrokPerformance:
         result._lf.sink_parquet(temp_path)
         end = timer()
         time_taken = end - start
-        print(
-            f"Data sinking to parquet took {time_taken:.2f} seconds"
-            f" ({temp_path})"
-        )
+        print(f"Data sinking to parquet took {time_taken:.2f} seconds ({temp_path})")
         rows_per_second = num_rows / time_taken
         print(f"Performance: {rows_per_second:,.0f} rows sinked to parquet per second")
 
@@ -696,10 +693,7 @@ class TestGrokPerformance:
         result._lf.sink_parquet(temp_path)
         end = timer()
         time_taken = end - start
-        print(
-            f"Data sinking to parquet took {time_taken:.2f} seconds"
-            f" ({temp_path})"
-        )
+        print(f"Data sinking to parquet took {time_taken:.2f} seconds ({temp_path})")
         rows_per_second = num_rows / time_taken
         print(f"Performance: {rows_per_second:,.0f} rows sinked to parquet per second")
 

@@ -58,7 +58,6 @@ from tabsdata._utils.constants import (
     TABSDATA_PACKAGES,
     TD_TABSDATA_DEV_PKG,
     TRUE_VALUES,
-    tabsdata_temp_folder,
 )
 
 # noinspection PyProtectedMember
@@ -69,6 +68,7 @@ from tabsdata._utils.id import encode_id
 
 # noinspection PyProtectedMember
 from tabsdata._utils.tableframe._constants import PYTEST_CONTEXT_ACTIVE
+from tabsdata._utils.temps import tabsdata_temp_folder
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)

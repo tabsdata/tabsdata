@@ -12,7 +12,7 @@ from tabsdata._tabsserver.function.yaml_parsing import (
     NoData,
     store_response_as_yaml,
 )
-from tabsdata._utils.constants import tabsdata_temp_folder
+from tabsdata._utils.temps import tabsdata_temp_folder
 
 # noinspection PyUnresolvedReferences
 from .. import pytestmark  # noqa: F401

@@ -13,7 +13,8 @@ from tabsdata._tabsserver.function.global_utils import (
     CURRENT_PLATFORM,
     convert_uri_to_path,
 )
-from tabsdata._utils.constants import env_enabled, tabsdata_temp_folder
+from tabsdata._utils.constants import env_enabled
+from tabsdata._utils.temps import tabsdata_temp_folder
 
 logger = logging.getLogger(__name__)
 

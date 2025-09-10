@@ -12,7 +12,6 @@ import polars as pl
 import pytest
 
 import tabsdata.tableframe as tdf
-from tabsdata._utils.constants import tabsdata_temp_folder
 
 # noinspection PyProtectedMember
 from tabsdata._utils.tableframe._helpers import required_columns
@@ -22,6 +21,7 @@ from tabsdata._utils.tableframe._translator import (
     _unwrap_table_frame,
     _wrap_polars_frame,
 )
+from tabsdata._utils.temps import tabsdata_temp_folder
 from tabsdata.exceptions import TableFrameError
 
 # noinspection PyProtectedMember

@@ -9,8 +9,6 @@ import unittest
 
 import polars as pl
 
-from tabsdata._utils.constants import tabsdata_temp_folder
-
 # noinspection PyProtectedMember
 from tabsdata._utils.tableframe._common import drop_inception_regenerate_system_columns
 
@@ -25,6 +23,7 @@ from tabsdata._utils.tableframe._translator import (
     _unwrap_table_frame,
     _wrap_polars_frame,
 )
+from tabsdata._utils.temps import tabsdata_temp_folder
 
 # noinspection PyUnresolvedReferences
 from .. import pytestmark  # noqa: F401
