@@ -559,10 +559,11 @@ def test_sequential_runs_no_error(tmp_path):
         tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
         environment_name, result = tabsserver_main(
             tmp_path,
+            response_folder=response_folder,
             output_folder=tabsserver_output_folder,
             environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
             logs_folder=logs_folder,
-            response_folder=response_folder,
+            temp_cwd=True,
         )
         assert result == 0
         assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
@@ -622,6 +623,7 @@ def test_sequential_registers_no_error(tmp_path):
         tabsserver_output_folder,
         environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
         logs_folder=logs_folder,
+        temp_cwd=True,
     )
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
@@ -682,6 +684,7 @@ def test_custom_bin_folder(tmp_path):
         tabsserver_output_folder,
         environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
         logs_folder=logs_folder,
+        temp_cwd=True,
         bin_folder=custom_bin_folder,
     )
     assert result == 0
@@ -742,6 +745,7 @@ def test_relative_import(tmp_path):
         tabsserver_output_folder,
         environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
         logs_folder=logs_folder,
+        temp_cwd=True,
     )
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
@@ -786,6 +790,7 @@ def test_failing_file_in_folder(tmp_path):
         tabsserver_output_folder,
         environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
         logs_folder=logs_folder,
+        temp_cwd=True,
     )
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
@@ -836,6 +841,7 @@ def test_initial_values_freeze(testing_mariadb, tmp_path):
         tabsserver_output_folder,
         environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
         logs_folder=logs_folder,
+        temp_cwd=True,
     )
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
@@ -898,6 +904,7 @@ def test_initial_values_wrong_key_type(testing_postgres, tmp_path):
         tabsserver_output_folder,
         environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
         logs_folder=logs_folder,
+        temp_cwd=True,
     )
     assert result != 0
 
@@ -977,6 +984,7 @@ def test_custom_execution_exception(tmp_path):
         tabsserver_output_folder,
         environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
         logs_folder=logs_folder,
+        temp_cwd=True,
     )
     assert result == TABSDATA_ERROR_EXIT_STATUS
     exception_yaml = os.path.join(response_folder, EXCEPTION_YAML_FILE_NAME)
@@ -1017,6 +1025,7 @@ def test_general_execution_exception(tmp_path):
         tabsserver_output_folder,
         environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
         logs_folder=logs_folder,
+        temp_cwd=True,
     )
     assert result == GENERAL_ERROR_EXIT_STATUS
     exception_yaml = os.path.join(response_folder, EXCEPTION_YAML_FILE_NAME)
