@@ -233,9 +233,11 @@ def get_existing_virtual_environments():
     return existing_virtual_environments
 
 
-def verify_package_installable_for_environment(
-    package: str, real_environment_name: str
+def verify_single_package_installable_for_environment(
+    package: str,
+    real_environment_name: str,
 ) -> bool:
+    """Test if a single package can be installed."""
     logger.debug(f"Verifying if package {package} is installable with pip")
     pip_install_dry_run = add_python_target_and_join_commands(
         [
@@ -256,12 +258,55 @@ def verify_package_installable_for_environment(
             pip_install_dry_run,
             shell=True,
         )
-    if result.returncode != 0:
-        logger.warning(f"Package {package} is not installable with pip")
-        return False
-    else:
+    if result.returncode == 0:
         logger.debug(f"Package {package} is installable with pip")
         return True
+    else:
+        logger.warning(f"Package {package} is not installable with pip")
+        return False
+
+
+def verify_batch_of_packages_installable_for_environment(
+    packages: list[str],
+    real_environment_name: str,
+) -> bool:
+    """Test if a batch of packages can all be installed."""
+    logger.debug(f"Batch verifying {len(packages)} packages")
+    if not packages:
+        return True
+    pip_install_dry_run = add_python_target_and_join_commands(
+        [
+            UV_EXECUTABLE,
+            "pip",
+            "install",
+            "--link-mode",
+            "hardlink",
+            "--dry-run",
+            "--no-deps",
+        ]
+        + packages,
+        real_environment_name,
+    )
+    logger.info(f"Running batch command: '{pip_install_dry_run}'")
+    with time_block:
+        result = subprocess.run(
+            pip_install_dry_run,
+            shell=True,
+            capture_output=True,
+            text=True,
+        )
+    if result.returncode == 0:
+        logger.debug(
+            f"All {len(packages)} packages in batch are installable with uv pip:"
+            f" ({packages}) "
+        )
+        return True
+    else:
+        logger.debug(
+            f"Some of the {len(packages)} packages are not installable with uv pip:"
+            f" ({packages}) "
+        )
+        return False
 
 
 def found_requirements(
@@ -279,53 +324,151 @@ def found_requirements(
         in TRUE_VALUES
     )
 
-    available_packages = []
+    # Split requirements into tabsdata and non-tabsdata packages.
+    tabsdata_packages = []
+    non_tabsdata_packages = []
+
     for package in requirements:
-        if verify_package_installable_for_environment(package, real_environment_name):
-            logger.info(f"Package {package} marked as: available")
-            available_packages.append(package)
+        module = extract_package_name(package)
+        if module.startswith(TABSDATA_MODULE_NAME):
+            tabsdata_packages.append(package)
         else:
-            module = extract_package_name(package)
-            if module in TABSDATA_PACKAGES:
-                if inherit_tabsdata_packages:
-                    td_provider, td_location = get_tabsdata_package_metadata(
-                        module,
-                        None,
-                    )
-                    logger.info(
-                        f"Package {package} determined as: "
-                        f"provider: {td_provider} - "
-                        f"location: {td_location}"
-                    )
-                    if td_provider in (
-                        "Archive (Project)",
-                        "Archive (Folder)",
-                        "Archive (Wheel)",
-                        "Folder (Editable)",
-                        "Folder (Frozen)",
-                    ):
-                        # This feature is only meant to be used for development.
-                        # Environment hash has already been computed. Therefore,
-                        # any changes in the inherited packages will not be reflected
-                        # in a new environment hash.
-                        development_packages.append(str(td_location))
-                        logger.info(f"Package {package} marked as: td-available")
-                        logger.info(
-                            f"Adding package {package} to the development packages"
-                            " specification"
-                        )
-                    else:
-                        logger.info(f"Package {package} marked as: td-non-available")
-                else:
-                    logger.info(f"Package {package} marked as: td-unavailable")
-            else:
-                logger.info(f"Package {package} marked as: unavailable")
+            non_tabsdata_packages.append(package)
+
+    logger.info(
+        "Split requirements into "
+        f"{len(non_tabsdata_packages)} non-tabsdata and "
+        f"{len(tabsdata_packages)} tabsdata packages"
+    )
+
+    available_packages = []
+
+    # First we make an optimistic validation of all packages, that is fast and
+    # can be assumed to be correct most times. If it fails, we fall back to
+    # individual checks for proper reporting; it is irrelevant speed here, as
+    # environment will not be created and function will not be run, if any.
+
+    # Process non-tabsdata packages
+    if non_tabsdata_packages:
+        found_requirements_non_tabsdata(
+            non_tabsdata_packages,
+            available_packages,
+            real_environment_name,
+        )
+
+    # Process tabsdata packages
+    if tabsdata_packages:
+        found_requirements_tabsdata(
+            tabsdata_packages,
+            available_packages,
+            real_environment_name,
+            inherit_tabsdata_packages,
+            development_packages,
+        )
 
     logger.info(f"Available packages: {available_packages}")
     if set(available_packages) != set(requirements):
         missing_packages = set(requirements) - set(available_packages)
         logger.warning(f"Missing packages: {missing_packages}")
     return available_packages
+
+
+def found_requirements_non_tabsdata(
+    non_tabsdata_packages: list[str],
+    available_packages: list[str],
+    real_environment_name: str,
+):
+    if non_tabsdata_packages:
+        logger.info(
+            f"Batch checking {len(non_tabsdata_packages)} non-tabsdata packages"
+        )
+        if verify_batch_of_packages_installable_for_environment(
+            non_tabsdata_packages,
+            real_environment_name,
+        ):
+            logger.info("All non-tabsdata packages are available")
+            available_packages.extend(non_tabsdata_packages)
+        else:
+            logger.info(
+                "Batch check failed for non-tabsdata packages, checking individually"
+            )
+            for package in non_tabsdata_packages:
+                if verify_single_package_installable_for_environment(
+                    package,
+                    real_environment_name,
+                ):
+                    logger.info(f"Package {package} marked as: available")
+                    available_packages.append(package)
+                else:
+                    logger.info(f"Package {package} marked as: unavailable")
+
+
+def found_requirements_tabsdata(
+    tabsdata_packages: list[str],
+    available_packages: list[str],
+    real_environment_name: str,
+    inherit_tabsdata_packages: bool,
+    development_packages: list[str],
+):
+    if tabsdata_packages:
+        logger.info(f"Batch checking {len(tabsdata_packages)} tabsdata packages")
+        if verify_batch_of_packages_installable_for_environment(
+            tabsdata_packages,
+            real_environment_name,
+        ):
+            logger.info("All tabsdata packages are available")
+            available_packages.extend(tabsdata_packages)
+        else:
+            logger.info(
+                "Batch check failed for tabsdata packages, checking individually"
+            )
+            for package in tabsdata_packages:
+                if verify_single_package_installable_for_environment(
+                    package,
+                    real_environment_name,
+                ):
+                    logger.info(f"Package {package} marked as: available")
+                    available_packages.append(package)
+                else:
+                    module = extract_package_name(package)
+                    if module in TABSDATA_PACKAGES:
+                        if inherit_tabsdata_packages:
+                            td_provider, td_location = get_tabsdata_package_metadata(
+                                module,
+                                None,
+                            )
+                            logger.info(
+                                f"Package {package} determined as: "
+                                f"provider: {td_provider} - "
+                                f"location: {td_location}"
+                            )
+                            if td_provider in (
+                                "Archive (Project)",
+                                "Archive (Folder)",
+                                "Archive (Wheel)",
+                                "Folder (Editable)",
+                                "Folder (Frozen)",
+                            ):
+                                # This feature is only meant to be used for development.
+                                # Environment hash has already been computed. Therefore,
+                                # any changes in the inherited packages will not be
+                                # reflected in a new environment hash.
+                                development_packages.append(str(td_location))
+                                logger.info(
+                                    f"Package {package} marked as: td-available"
+                                )
+                                logger.info(
+                                    f"Adding package {package} to the development"
+                                    " packages specification"
+                                )
+                            else:
+                                logger.info(
+                                    f"Package {package} marked as: td-non-available"
+                                )
+                        else:
+                            logger.info(f"Package {package} marked as: td-unavailable")
+                    else:
+                        logger.info(f"Package {package} marked as: unavailable")
 
 
 def get_dict_hash(data):

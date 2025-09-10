@@ -596,6 +596,7 @@ def test_sequential_runs_no_error(tmp_path):
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_sequential_registers_no_error(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    context_archive = None
     for _ in range(2):
         context_archive = create_bundle_archive(
             multiple_inputs_multiple_outputs,
@@ -931,8 +932,10 @@ class V1:
 
     def __repr__(self):
         return (
-            f"V1(type={self.type}, message={self.message},"
-            f" error_code={self.error_code})"
+            f"V1(type={self.kind}, "
+            f"message={self.message}, "
+            f"error_code={self.error_code}), "
+            f"exit_status={self.exit_status}"
         )
 
 
