@@ -20,7 +20,7 @@ import subprocess
 import sysconfig
 import tempfile
 from pathlib import Path
-from typing import List, Literal, TypeAlias
+from typing import List, Literal, Tuple, TypeAlias
 
 import importlib_metadata
 import yaml
@@ -1080,89 +1080,107 @@ PackageProvider: TypeAlias = Literal[
 ]
 
 
-def get_tabsdata_package_metadata(  # noqa: C901
+def get_tabsdata_package_metadata(
     module: str,
     variable: str | None,
-) -> tuple[str | None, PackageProvider | None]:
-    if variable is not None:
-        td_tabsdata_dev_pkg = os.getenv(variable)
-    else:
-        td_tabsdata_dev_pkg = None
+) -> Tuple[
+    PackageProvider | None,
+    str | None,
+]:
+    td_tabsdata_dev_pkg = os.getenv(variable) if variable is not None else None
     if td_tabsdata_dev_pkg:
-        provider = "Archive (Project)"
-        location = pathlib.Path(td_tabsdata_dev_pkg)
-    else:
-        try:
-            packages = {
-                dist.metadata["Name"]: dist.version
-                for dist in importlib.metadata.distributions()
-            }
-            if module in packages:
-                distribution = importlib.metadata.distribution(module)
-                site_packages = pathlib.Path(sysconfig.get_paths()["purelib"])
-                direct_url_file = pathlib.Path(
-                    os.path.join(
-                        site_packages,
-                        f"{module}-{distribution.version}.dist-info",
-                        "direct_url.json",
-                    )
-                )
-                if direct_url_file.exists():
-                    with direct_url_file.open() as f:
-                        direct_url_data = json.load(f)
-                        if "url" in direct_url_data and direct_url_data[
-                            "url"
-                        ].startswith(FILE_PROTOCOL):
-                            url_string = direct_url_data["url"][len(FILE_PROTOCOL) :]
-                            if os.name == WINDOWS_OS_NAME and url_string.startswith(
-                                WINDOWS_URL_PREFIX
-                            ):
-                                url_string = url_string[len(WINDOWS_URL_PREFIX) :]
-                            url = pathlib.Path(url_string)
-                            if url.suffix == WHEEL_EXTENSION:
-                                if url.exists():
-                                    provider = "Archive (Wheel)"
-                                    location = url
-                                else:
-                                    provider = "Archive (Folder)"
-                                    while (
-                                        url.name != TARGET_FOLDER and url.parent != url
-                                    ):
-                                        url = url.parent
-                                    if url.name == TARGET_FOLDER:
-                                        url = url.parent
-                                    location = url
-                            else:
-                                if "dir_info" in direct_url_data and direct_url_data[
-                                    "dir_info"
-                                ].get("editable", False):
-                                    provider = "Folder (Editable)"
-                                    location = url
-                                else:
-                                    provider = "Folder (Frozen)"
-                                    location = url
-                        else:
-                            provider = None
-                            location = None
-                else:
-                    provider = "Package"
-                    location = None
-            else:
-                provider = None
-                location = None
-        except importlib.metadata.PackageNotFoundError:
-            provider = None
-            location = None
+        return (
+            "Archive (Project)",
+            normalize_location(pathlib.Path(td_tabsdata_dev_pkg)),
+        )
+    try:
+        packages = {
+            dist.metadata["Name"]: dist.version
+            for dist in importlib.metadata.distributions()
+        }
+        if module not in packages:
+            return (
+                None,
+                None,
+            )
+        distribution = importlib.metadata.distribution(module)
+        site_packages = pathlib.Path(sysconfig.get_paths()["purelib"])
+        direct_url_file = pathlib.Path(
+            os.path.join(
+                site_packages,
+                f"{module}-{distribution.version}.dist-info",
+                "direct_url.json",
+            )
+        )
+        if not direct_url_file.exists():
+            return (
+                "Package",
+                None,
+            )
+        with direct_url_file.open() as f:
+            direct_url_data = json.load(f)
+        provider, location = extract_from_direct_url_data(direct_url_data)
+        return (
+            provider,
+            normalize_location(location),
+        )
+    except importlib.metadata.PackageNotFoundError:
+        return (
+            None,
+            None,
+        )
 
-    # On Windows, Python can add a leading backslash to the location path, which has
-    # the side effect of path being unable to be 'installed'. If present, we remove this
-    # leading backslash to produce a regular file path.
-    if location is not None:
-        location_string = str(location)
-        if location_string.startswith(BACK_SLASH):
-            location = Path(location_string[len(BACK_SLASH) :])
-            logger.info(f"Normalized location from '{location_string}' to '{location}'")
-    return provider, location
+
+def extract_from_direct_url_data(
+    direct_url_data: dict,
+) -> tuple[PackageProvider | None, str | None]:
+    url = direct_url_data.get("url", "")
+    if not url.startswith(FILE_PROTOCOL):
+        return (
+            None,
+            None,
+        )
+    url_string = url[len(FILE_PROTOCOL) :]
+    if os.name == WINDOWS_OS_NAME and url_string.startswith(WINDOWS_URL_PREFIX):
+        url_string = url_string[len(WINDOWS_URL_PREFIX) :]
+    url_path = Path(url_string)
+    if url_path.suffix == WHEEL_EXTENSION:
+        if url_path.exists():
+            return (
+                "Archive (Wheel)",
+                str(url_path),
+            )
+        while url_path.name != TARGET_FOLDER and url_path.parent != url_path:
+            url_path = url_path.parent
+        if url_path.name == TARGET_FOLDER:
+            url_path = url_path.parent
+        return (
+            "Archive (Folder)",
+            url_path,
+        )
+    is_editable = direct_url_data.get("dir_info", {}).get("editable", False)
+    if is_editable:
+        return (
+            "Folder (Editable)",
+            str(url_path),
+        )
+    return (
+        "Folder (Frozen)",
+        str(url_path),
+    )
+
+
+def normalize_location(
+    location: pathlib.Path | None,
+) -> pathlib.Path | None:
+    if location is None:
+        return None
+    location_string = str(location)
+    if location_string.startswith(BACK_SLASH):
+        normalized = Path(location_string[len(BACK_SLASH) :])
+        logger.info(f"Normalized location from '{location_string}' to '{normalized}'")
+        return normalized
+    return location
 
 
 def main():  # noqa: C901

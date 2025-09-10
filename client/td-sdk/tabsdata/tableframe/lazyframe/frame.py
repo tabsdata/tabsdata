@@ -248,12 +248,59 @@ class TableFrame:
             .to_dict(as_series=False)
         )
 
-    # Passing a IdxGenerator for idx is meant to be used only when populating pub
-    # tables, An IdxGenerator is a stateful callable class that ensures a unique
-    # sequential id is generated in each invocation.
+    @classmethod
+    def _compute_origin(
+        cls,
+        origin: TableFrameOrigin | None,
+        df: td_typing.TableDictionary | pl.LazyFrame | pl.DataFrame | TableFrame | None,
+    ) -> TableFrameOrigin:
+        if isinstance(df, TableFrame):
+            if df._origin.value == TableFrameOrigin.IMPORT.value:
+                return TableFrameOrigin.IMPORT
+            else:
+                return TableFrameOrigin.TRANSFORM
+        elif origin is None:
+            return TableFrameOrigin.BUILD
+        elif isinstance(origin, TableFrameOrigin):
+            return origin
+        else:
+            raise ValueError(f"Invalid origin: {origin}")
+
+    @classmethod
+    def _compute_idx(cls, idx: IndexInput) -> int | None:
+        if isinstance(idx, td_generators.IdxGenerator):
+            return idx()
+        elif idx is None:
+            return None
+        elif isinstance(idx, int):
+            return idx
+        else:
+            raise ValueError(f"Invalid idx: {idx}")
+
+    @classmethod
+    def _compute_dataframe(
+        cls,
+        df: td_typing.TableDictionary | pl.LazyFrame | pl.DataFrame | TableFrame | None,
+    ) -> pl.LazyFrame:
+        if df is None:
+            return pl.LazyFrame(None)
+        elif isinstance(df, dict):
+            return pl.LazyFrame(df)
+        elif isinstance(df, pl.LazyFrame):
+            return df
+        elif isinstance(df, pl.DataFrame):
+            return df.lazy()
+        elif isinstance(df, TableFrame):
+            return df._lf
+        else:
+            raise TableFrameError(ErrorCode.TF2, type(df))
+
+    # Passing a IdxGenerator for idx is meant to be used only when populating
+    # pub tables, An IdxGenerator is a stateful callable class that ensures a
+    # unique sequential id is generated in each invocation.
     # noinspection PyUnreachableCode
     @classmethod
-    def __build__(  # noqa: C901
+    def __build__(
         cls,
         *,
         origin: TableFrameOrigin | None = None,
@@ -261,50 +308,20 @@ class TableFrame:
         mode: td_common.AddSystemColumnsMode,
         idx: IndexInput,
     ) -> TableFrame:
-        if isinstance(df, TableFrame):
-            if df._origin.value == TableFrameOrigin.IMPORT.value:
-                origin = TableFrameOrigin.IMPORT
-            else:
-                origin = TableFrameOrigin.TRANSFORM
-        elif origin is None:
-            origin = TableFrameOrigin.BUILD
-        elif isinstance(origin, TableFrameOrigin):
-            pass
-        else:
-            raise ValueError(f"Invalid origin: {origin}")
+        computed_origin = cls._compute_origin(origin, df)
+        computed_idx = cls._compute_idx(idx)
+        computed_df = cls._compute_dataframe(df)
 
-        if isinstance(idx, td_generators.IdxGenerator):
-            # noinspection PyProtectedMember
-            idx = idx()
-        elif idx is None:
-            idx = None
-        elif isinstance(idx, int):
-            idx = idx
-        else:
-            raise ValueError(f"Invalid idx: {idx}")
-
-        # noinspection PyProtectedMember
-        if df is None:
-            df = pl.LazyFrame(None)
-        elif isinstance(df, dict):
-            df = pl.LazyFrame(df)
-        elif isinstance(df, pl.LazyFrame):
-            pass
-        elif isinstance(df, pl.DataFrame):
-            df = df.lazy()
-        elif isinstance(df, TableFrame):
-            df = df._lf
-        else:
-            raise TableFrameError(ErrorCode.TF2, type(df))
-        df = td_common.add_system_columns(lf=df, mode=mode, idx=idx)
-        td_reflection.check_required_columns(df)
+        df_with_columns = td_common.add_system_columns(
+            lf=computed_df, mode=mode, idx=computed_idx
+        )
+        td_reflection.check_required_columns(df_with_columns)
 
         instance = cls.__new__(cls)
-        instance._origin = origin
-        # noinspection PyProtectedMember
+        instance._origin = computed_origin
         instance._id = td_generators._id()
-        instance._idx = idx
-        instance._lf = _arrange_columns(df)
+        instance._idx = computed_idx
+        instance._lf = _arrange_columns(df_with_columns)
         return instance
 
     # noinspection PyUnreachableCode
