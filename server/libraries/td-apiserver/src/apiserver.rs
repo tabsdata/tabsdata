@@ -60,10 +60,8 @@ use std::time::Duration;
 use ta_apiserver::router::RouterExtension;
 use ta_apiserver::status::error_status::ErrorStatus;
 use td_authz::AuthzContext;
-use td_build::version::TABSDATA_VERSION;
 use td_database::sql::DbPool;
 use td_error::{ApiError, api_error};
-use td_objects::rest_urls::{DOCS_URL, OPENAPI_JSON_URL};
 use td_objects::sql::DaoQueries;
 use td_services::auth::session::Sessions;
 use td_services::execution::services::runtime_info::RuntimeContext;
@@ -73,7 +71,6 @@ use td_tower::factory::ServiceFactory;
 use te_apiserver::{AuthenticatedExtendedRouter, UnauthenticatedExtendedRouter};
 use te_services::ExtendedServices;
 use tower_http::timeout::TimeoutLayer;
-use utoipa_swagger_ui::{SwaggerUi, Url};
 
 pub struct ApiServerInstance {
     internal: Box<dyn Server>,
@@ -209,6 +206,11 @@ impl ApiServerInstanceBuilder {
 
             #[cfg(feature = "api-docs")]
             {
+                use td_build::version::TABSDATA_VERSION;
+                use td_objects::rest_urls::{DOCS_URL, OPENAPI_JSON_URL};
+
+                use utoipa_swagger_ui::{SwaggerUi, Url};
+
                 let mut openapi = openapi;
                 openapi.info.title = "Tabsdata API".to_string();
                 openapi.info.version = TABSDATA_VERSION.to_string();

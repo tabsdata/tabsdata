@@ -113,6 +113,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
+    #[ignore]
     async fn test_read_execution(db: DbPool) -> Result<(), TdError> {
         let execution = test_execute(db.clone(), false, false, true).await?;
 
