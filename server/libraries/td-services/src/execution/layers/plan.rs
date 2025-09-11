@@ -333,6 +333,14 @@ pub async fn build_response(
 
     let triggered_on = execution.triggered_on();
     let dot = Dot::try_from(plan.dot().to_string())?;
+
+    // we need to sort it for testing purposes only
+    let relations = relations
+        .iter()
+        .sorted_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)))
+        .cloned()
+        .collect::<Vec<_>>();
+
     let response = ExecutionResponse::builder()
         .id(execution.id())
         .name(execution.name().clone())
