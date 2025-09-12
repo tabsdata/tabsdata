@@ -128,9 +128,10 @@ async fn run_impl_report_to_file(params: TransporterParams) -> ExitStatus {
     let report = res.unwrap_or_else(Some);
     if let Some(report) = report
         && let Some(report_path) = report_file
-            && let Err(e) = write_to_file(&report_path, &report) {
-                eprintln!("Failed to write report file: {}", e);
-            }
+        && let Err(e) = write_to_file(&report_path, &report)
+    {
+        eprintln!("Failed to write report file: {}", e);
+    }
     status
 }
 

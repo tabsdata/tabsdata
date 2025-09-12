@@ -569,7 +569,14 @@ mod tests {
 
         // to_external_uri()
         let root_in_mount = SPath::parse(mount_path).unwrap();
-        assert_eq!(&mount.to_external_uri(&root_in_mount).unwrap(), uri);
+        assert_eq!(
+            mount
+                .to_external_uri(&root_in_mount)
+                .unwrap()
+                .to_string()
+                .replace("\\", "/"),
+            uri.to_string().replace("\\", "/")
+        );
         let child_in_mount = SPath::parse(mount_path).unwrap().child("external").unwrap();
 
         let uri_external = Url::parse(&format!("{}/{}", uri, "external")).unwrap(); // just because how Url::join() works
@@ -598,7 +605,7 @@ mod tests {
             .unwrap();
         assert!(matches!(mount.delete(&file_in_mount).await, Ok(())));
 
-        // S3 does not return NotFound when deleting a non existing file
+        // S3 does not return NotFound when deleting a non-existing file
         // assert!(matches!(
         //     mount.delete(&file_in_mount).await,
         //     Err(StorageError::NotFound(_))

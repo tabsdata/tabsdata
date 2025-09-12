@@ -492,8 +492,9 @@ where
 {
     match config_json {
         None => Ok(T::default()),
-        Some(config_yaml) => serde_yaml::from_str(config_yaml)
-            .map_err(TransporterError::CouldNotParseFormatConfig),
+        Some(config_yaml) => {
+            serde_yaml::from_str(config_yaml).map_err(TransporterError::CouldNotParseFormatConfig)
+        }
     }
 }
 
