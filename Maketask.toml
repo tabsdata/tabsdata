@@ -1290,7 +1290,7 @@ script = [
     array_push ${lines} ""
     array_push ${lines} "conda create -y --name td4repo python=3.12; conda activate td4repo"
     array_push ${lines} "cd ./target/wheels"
-    array_push ${lines} "../../../tabsdata-ee/contents/docker/devpi/install.sh"
+    array_push ${lines} "../../../tabsdata-ee/docker/devpi/install.sh"
     array_push ${lines} ""
     message = array_join ${lines} "\n"
     info ${message}
