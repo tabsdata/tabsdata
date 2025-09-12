@@ -361,12 +361,13 @@ mod tests {
         };
         let files: Vec<(Url, ObjectMeta)> = vec![(url_r.clone(), meta)];
 
+        let e_files = files.clone();
         let response = FilesImporter::import(&request, files)
             .await
             .map_err(|e| {
                 eprintln!("FilesImporter::import failed:");
                 eprintln!("  Request: {:?}", request);
-                eprintln!("  Files: {:?}", files);
+                eprintln!("  Files: {:?}", e_files);
                 eprintln!("  Error: {:?}", e);
                 e
             })
@@ -383,11 +384,12 @@ mod tests {
             s3.secret_key.to_string(),
         );
         config.insert("AWS_REGION".to_string(), s3.region.to_string());
+        let e_config = config.clone();
         let cloud_options = CloudOptions::from_untyped_config(url_tf.as_str(), config)
             .map_err(|e| {
                 eprintln!("CloudOptions::from_untyped_config failed:");
                 eprintln!("  URL: {}", url_tf.as_str());
-                eprintln!("  Config: {:?}", config);
+                eprintln!("  Config: {:?}", e_config);
                 eprintln!("  Error: {:?}", e);
                 e
             })
@@ -491,12 +493,13 @@ mod tests {
         };
         let files: Vec<(Url, ObjectMeta)> = vec![(url_r.clone(), meta)];
 
+        let e_files = files.clone();
         let response = FilesImporter::import(&request, files)
             .await
             .map_err(|e| {
                 eprintln!("FilesImporter::import failed:");
                 eprintln!("  Request: {:?}", request);
-                eprintln!("  Files: {:?}", files);
+                eprintln!("  Files: {:?}", e_files);
                 eprintln!("  Error: {:?}", e);
                 e
             })
@@ -515,11 +518,12 @@ mod tests {
             "azure_storage_account_key".to_string(),
             az.account_key.to_string(),
         );
+        let e_config = config.clone();
         let cloud_options = CloudOptions::from_untyped_config(url_tf.as_str(), config)
             .map_err(|e| {
                 eprintln!("CloudOptions::from_untyped_config failed:");
                 eprintln!("  URL: {}", url_tf.as_str());
-                eprintln!("  Config: {:?}", config);
+                eprintln!("  Config: {:?}", e_config);
                 eprintln!("  Error: {:?}", e);
                 e
             })
@@ -624,12 +628,13 @@ mod tests {
         };
         let files: Vec<(Url, ObjectMeta)> = vec![(url_r.clone(), meta)];
 
+        let e_files = files.clone();
         let response = FilesImporter::import(&request, files)
             .await
             .map_err(|e| {
                 eprintln!("FilesImporter::import failed:");
                 eprintln!("  Request: {:?}", request);
-                eprintln!("  Files: {:?}", files);
+                eprintln!("  Files: {:?}", e_files);
                 eprintln!("  Error: {:?}", e);
                 e
             })
@@ -645,11 +650,12 @@ mod tests {
             gcp.service_account_key.to_string(),
         );
 
+        let e_config = config.clone();
         let cloud_options = CloudOptions::from_untyped_config(url_tf.as_str(), config)
             .map_err(|e| {
                 eprintln!("CloudOptions::from_untyped_config failed:");
                 eprintln!("  URL: {}", url_tf.as_str());
-                eprintln!("  Config: {:?}", config);
+                eprintln!("  Config: {:?}", e_config);
                 eprintln!("  Error: {:?}", e);
                 e
             })
@@ -752,12 +758,13 @@ mod tests {
         };
         let files: Vec<(Url, ObjectMeta)> = vec![(url_r.clone(), meta)];
 
+        let e_files = files.clone();
         let response = FilesImporter::import(&request, files)
             .await
             .map_err(|e| {
                 eprintln!("FilesImporter::import failed:");
                 eprintln!("  Request: {:?}", request);
-                eprintln!("  Files: {:?}", files);
+                eprintln!("  Files: {:?}", e_files);
                 eprintln!("  Error: {:?}", e);
                 e
             })
@@ -915,12 +922,13 @@ mod tests {
         };
         let files: Vec<(Url, ObjectMeta)> = vec![(from_file.url().clone(), meta)];
 
+        let e_files = files.clone();
         let response = FilesImporter::import(&request, files)
             .await
             .map_err(|e| {
                 eprintln!("FilesImporter::import failed:");
                 eprintln!("  Request: {:?}", request);
-                eprintln!("  Files: {:?}", files);
+                eprintln!("  Files: {:?}", e_files);
                 eprintln!("  Error: {:?}", e);
                 e
             })
@@ -930,12 +938,13 @@ mod tests {
         assert_eq!(response.len(), 1);
 
         let url_to = response.first().unwrap().to.clone();
+        let e_cloud_configs = to_base.cloud_configs();
         let cloud_options = Some(
             CloudOptions::from_untyped_config(url_to.as_str(), to_base.cloud_configs())
                 .map_err(|e| {
                     eprintln!("CloudOptions::from_untyped_config failed in import function:");
                     eprintln!("  URL: {}", url_to.as_str());
-                    eprintln!("  Config: {:?}", to_base.cloud_configs());
+                    eprintln!("  Config: {:?}", e_cloud_configs);
                     eprintln!("  Error: {:?}", e);
                     e
                 })
@@ -1051,6 +1060,7 @@ mod tests {
         .await;
     }
 
+    //noinspection DuplicatedCode
     #[td_test::test(when(reqs = S3WithAccessKeySecretKeyReqs, env_prefix= "s30"))]
     #[tokio::test(flavor = "multi_thread")]
     async fn test_import_s3_binary(s3: S3WithAccessKeySecretKeyReqs) {
