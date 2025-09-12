@@ -823,11 +823,44 @@ pub struct ExecutionResponse {
     system_tables: HashSet<TableVersionId>,
     user_tables: HashSet<TableVersionId>,
     // relations info
+    #[builder(setter(custom))]
     relations: Vec<(
         FunctionVersionId,
         TableVersionId,
         GraphEdge<ResolvedVersionResponse>,
     )>,
+}
+
+impl ExecutionResponseBuilder {
+    // Override the relations setter to ensure consistent ordering for reliable comparisons.
+    pub fn relations<
+        VALUE: Into<
+            Vec<(
+                FunctionVersionId,
+                TableVersionId,
+                GraphEdge<ResolvedVersionResponse>,
+            )>,
+        >,
+    >(
+        &mut self,
+        value: VALUE,
+    ) -> &mut Self {
+        let mut relations = value.into();
+        relations.sort_by(|a, b| {
+            let edge_order = |edge: &GraphEdge<ResolvedVersionResponse>| -> u8 {
+                match edge {
+                    GraphEdge::Trigger { .. } => 0,
+                    GraphEdge::Dependency { .. } => 1,
+                    GraphEdge::Output { .. } => 2,
+                }
+            };
+            a.0.cmp(&b.0)
+                .then(a.1.cmp(&b.1))
+                .then_with(|| edge_order(&a.2).cmp(&edge_order(&b.2)))
+        });
+        self.relations = Some(relations);
+        self
+    }
 }
 
 #[td_type::Dto]
@@ -1008,12 +1041,17 @@ pub struct ResolvedVersionResponse {
 
 impl From<&ResolvedVersion> for ResolvedVersionResponse {
     fn from(value: &ResolvedVersion) -> Self {
+        let mut inner: Vec<_> = value
+            .inner
+            .iter()
+            .map(|v| v.as_ref().map(|t| t.id))
+            .collect();
+
+        // Sort to ensure consistent ordering for reliable comparisons.
+        inner.sort();
+
         Self {
-            inner: value
-                .inner
-                .iter()
-                .map(|v| v.as_ref().map(|t| t.id))
-                .collect(),
+            inner,
             original: value.original.clone(),
         }
     }
