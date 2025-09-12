@@ -119,7 +119,8 @@ def testing_mongodb(tmp_path_factory, worker_id):
         fn = root_tmp_dir / "docker_mongodb_creation"
         with FileLock(str(fn) + ".lock"):
             # only one worker will be able to create the database
-            yield create_docker_mongodb_database()
+            create_docker_mongodb_database()
+        yield
 
 
 def create_docker_mongodb_database_with_replica_set():
@@ -186,7 +187,8 @@ def testing_mongodb_with_replica_set(tmp_path_factory, worker_id):
         fn = root_tmp_dir / "docker_mongodb_with_replica_set_creation"
         with FileLock(str(fn) + ".lock"):
             # only one worker will be able to create the database
-            yield create_docker_mongodb_database_with_replica_set()
+            create_docker_mongodb_database_with_replica_set()
+        yield
 
 
 # noinspection PyUnusedLocal

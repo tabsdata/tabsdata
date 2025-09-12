@@ -24,7 +24,6 @@ from tests_tabsdata.conftest import (
     MAXIMUM_RETRY_COUNT,
     clean_polars_df,
     clean_python_virtual_environments,
-    pytest_addoption,
     remove_docker_containers,
     setup_temp_folder,
     setup_temp_folder_node,
@@ -78,7 +77,7 @@ def testing_mssql_2019(tmp_path_factory, worker_id):
     if worker_id == "master":
         # not executing in with multiple workers, just produce the data and let
         # pytest's fixture caching do its job
-        return create_docker_mssql_database(
+        yield create_docker_mssql_database(
             DEFAULT_PYTEST_MSSQL_2019_DOCKER_CONTAINER_NAME, MSSQL_2019_PORT, 2019
         )
     else:
@@ -88,16 +87,17 @@ def testing_mssql_2019(tmp_path_factory, worker_id):
         fn = root_tmp_dir / "docker_mssql_2019_creation"
         with FileLock(str(fn) + ".lock"):
             # only one worker will be able to create the database
-            return create_docker_mssql_database(
+            result = create_docker_mssql_database(
                 DEFAULT_PYTEST_MSSQL_2019_DOCKER_CONTAINER_NAME, MSSQL_2019_PORT, 2019
             )
+        yield result
 
 
 def testing_mssql_2022(tmp_path_factory, worker_id):
     if worker_id == "master":
         # not executing in with multiple workers, just produce the data and let
         # pytest's fixture caching do its job
-        return create_docker_mssql_database(
+        yield create_docker_mssql_database(
             DEFAULT_PYTEST_MSSQL_2022_DOCKER_CONTAINER_NAME, MSSQL_2022_PORT, 2022
         )
     else:
@@ -107,9 +107,10 @@ def testing_mssql_2022(tmp_path_factory, worker_id):
         fn = root_tmp_dir / "docker_mssql_2022_creation"
         with FileLock(str(fn) + ".lock"):
             # only one worker will be able to create the database
-            return create_docker_mssql_database(
+            result = create_docker_mssql_database(
                 DEFAULT_PYTEST_MSSQL_2022_DOCKER_CONTAINER_NAME, MSSQL_2022_PORT, 2022
             )
+        yield result
 
 
 def create_docker_mssql_database(name: str, port: int, version: int):
