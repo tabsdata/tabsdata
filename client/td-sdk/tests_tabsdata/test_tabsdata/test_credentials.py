@@ -15,6 +15,9 @@ from tabsdata._credentials import build_credentials
 from tabsdata._secret import DirectSecret
 from tabsdata.exceptions import CredentialsConfigurationError, ErrorCode
 
+# noinspection PyUnresolvedReferences
+from . import pytestmark  # noqa: F401
+
 
 def test_account_key_credentials_initialization():
     credentials = AzureAccountKeyCredentials(

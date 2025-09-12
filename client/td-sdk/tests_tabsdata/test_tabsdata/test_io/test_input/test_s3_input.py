@@ -19,6 +19,9 @@ from tabsdata.exceptions import (
 )
 from tests_tabsdata.conftest import FORMAT_TYPE_TO_CONFIG
 
+# noinspection PyUnresolvedReferences
+from . import pytestmark  # noqa: F401
+
 TEST_ACCESS_KEY_ID = "test_access_key_id"
 TEST_SECRET_ACCESS_KEY = "test_secret_access_key"
 S3_CREDENTIALS = S3AccessKeyCredentials(

@@ -8,6 +8,9 @@ from tabsdata._io.inputs.table_inputs import TableInput
 from tabsdata._io.plugin import SourcePlugin
 from tabsdata.exceptions import TableURIConfigurationError, TabsDataException
 
+# noinspection PyUnresolvedReferences
+from . import pytestmark  # noqa: F401
+
 
 def test_all_correct_string():
     table = "collection/table@HEAD^"

@@ -18,6 +18,9 @@ from tabsdata.exceptions import (
 )
 from tests_tabsdata.conftest import FORMAT_TYPE_TO_CONFIG
 
+# noinspection PyUnresolvedReferences
+from . import pytestmark  # noqa: F401
+
 TEST_ACCOUNT_NAME = "test_account_name"
 TEST_ACCOUNT_KEY = "test_account_key"
 AZURE_CREDENTIALS = AzureAccountKeyCredentials(

@@ -72,6 +72,7 @@ DATABRICKS_BUDGET_SAFETY_TIMEOUT = 600
 
 @pytest.mark.databricks
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
+@pytest.mark.unit
 def test_class_initialization_default_options():
     tables = ["catalog.schema.table1", "catalog.schema.table2"]
     output = td.DatabricksDestination(
@@ -95,6 +96,7 @@ def test_class_initialization_default_options():
 
 @pytest.mark.databricks
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
+@pytest.mark.unit
 def test_class_initialization_single_table():
     table = "catalog.schema.table1"
     output = td.DatabricksDestination(
@@ -109,6 +111,7 @@ def test_class_initialization_single_table():
 
 @pytest.mark.databricks
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
+@pytest.mark.unit
 def test_class_initialization_single_table_no_catalog_fails():
     table = "schema.table1"
     with pytest.raises(ValueError):
@@ -123,6 +126,7 @@ def test_class_initialization_single_table_no_catalog_fails():
 
 @pytest.mark.databricks
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
+@pytest.mark.unit
 def test_class_initialization_single_table_no_schema_fails():
     table = "table1"
     with pytest.raises(ValueError):
@@ -137,6 +141,7 @@ def test_class_initialization_single_table_no_schema_fails():
 
 @pytest.mark.databricks
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
+@pytest.mark.unit
 def test_class_initialization_tables_no_catalog_fails():
     tables = ["catalog.schema.table1", "catalog.schema.table2", "schema.table3"]
     with pytest.raises(ValueError):
@@ -151,6 +156,7 @@ def test_class_initialization_tables_no_catalog_fails():
 
 @pytest.mark.databricks
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
+@pytest.mark.unit
 def test_class_initialization_tables_no_schema_fails():
     tables = ["catalog.schema.table1", "catalog.schema.table2", "table3"]
     with pytest.raises(ValueError):
@@ -165,6 +171,7 @@ def test_class_initialization_tables_no_schema_fails():
 
 @pytest.mark.databricks
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
+@pytest.mark.unit
 def test_class_initialization_tables_catalog():
     tables = ["catalog.schema.table1", "catalog.schema.table2", "schema.table3"]
     expected_tables = [
@@ -185,6 +192,7 @@ def test_class_initialization_tables_catalog():
 
 @pytest.mark.databricks
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
+@pytest.mark.unit
 def test_class_initialization_tables_catalog_and_schema():
     tables = ["catalog.schema.table1", "catalog.schema.table2", "table3"]
     expected_tables = [
@@ -206,6 +214,7 @@ def test_class_initialization_tables_catalog_and_schema():
 
 @pytest.mark.databricks
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
+@pytest.mark.unit
 def test_class_initialization_all_options():
     tables = ["table1", "table2"]
     output = td.DatabricksDestination(
@@ -235,6 +244,7 @@ def test_class_initialization_all_options():
 
 @pytest.mark.databricks
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
+@pytest.mark.unit
 def test_class_initialization_support_options():
     tables = ["catalog.schema.table1", "catalog.schema.table2"]
     output = td.DatabricksDestination(
@@ -251,6 +261,7 @@ def test_class_initialization_support_options():
 
 @pytest.mark.databricks
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
+@pytest.mark.unit
 def test_no_warehouse():
     tables = ["catalog.schema.table1", "catalog.schema.table2"]
     with pytest.raises(ValueError):
@@ -264,6 +275,7 @@ def test_no_warehouse():
 
 @pytest.mark.databricks
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
+@pytest.mark.unit
 def test_both_warehouse():
     tables = ["catalog.schema.table1", "catalog.schema.table2"]
     with pytest.raises(ValueError):
@@ -301,10 +313,10 @@ def test_databricks_chunk(tmp_path):
     assert df2.collect().equals(result2)
 
 
-@pytest.mark.slow
+@pytest.mark.databricks
 @pytest.mark.performance
 @pytest.mark.requires_internet
-@pytest.mark.databricks
+@pytest.mark.slow
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
 def test_stream(tmp_path, size, databricks_client, sql_conn):
     lf = get_lf(size)
@@ -338,9 +350,9 @@ def test_stream(tmp_path, size, databricks_client, sql_conn):
             pass
 
 
-@pytest.mark.slow
-@pytest.mark.requires_internet
 @pytest.mark.databricks
+@pytest.mark.requires_internet
+@pytest.mark.slow
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
 def test_stream_append(tmp_path, size, databricks_client, sql_conn):
     lf = get_lf(size)
@@ -377,9 +389,9 @@ def test_stream_append(tmp_path, size, databricks_client, sql_conn):
             pass
 
 
-@pytest.mark.slow
-@pytest.mark.requires_internet
 @pytest.mark.databricks
+@pytest.mark.requires_internet
+@pytest.mark.slow
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
 def test_stream_replace(tmp_path, size, databricks_client, sql_conn):
     lf = get_lf(size)
@@ -417,9 +429,9 @@ def test_stream_replace(tmp_path, size, databricks_client, sql_conn):
             pass
 
 
-@pytest.mark.slow
-@pytest.mark.requires_internet
 @pytest.mark.databricks
+@pytest.mark.requires_internet
+@pytest.mark.slow
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
 def test_stream_multiple_lf(tmp_path, size, databricks_client, sql_conn):
     lf = get_lf(size)
@@ -463,9 +475,9 @@ def test_stream_multiple_lf(tmp_path, size, databricks_client, sql_conn):
             pass
 
 
-@pytest.mark.slow
-@pytest.mark.requires_internet
 @pytest.mark.databricks
+@pytest.mark.requires_internet
+@pytest.mark.slow
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
 def test_stream_different_len_raises_error(tmp_path, databricks_client):
     size = 25000
@@ -502,9 +514,9 @@ def test_stream_different_len_raises_error(tmp_path, databricks_client):
             pass
 
 
-@pytest.mark.slow
-@pytest.mark.requires_internet
 @pytest.mark.databricks
+@pytest.mark.requires_internet
+@pytest.mark.slow
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
 def test_single_element_table_list(tmp_path, size, databricks_client, sql_conn):
     lf = get_lf(size)
@@ -540,10 +552,10 @@ def test_single_element_table_list(tmp_path, size, databricks_client, sql_conn):
             pass
 
 
+@pytest.mark.databricks
+@pytest.mark.requires_internet
 @pytest.mark.slow
 @pytest.mark.tabsserver
-@pytest.mark.requires_internet
-@pytest.mark.databricks
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_databricks(tmp_path, databricks_client, sql_conn):
@@ -604,10 +616,10 @@ def test_output_databricks(tmp_path, databricks_client, sql_conn):
             pass
 
 
+@pytest.mark.databricks
+@pytest.mark.requires_internet
 @pytest.mark.slow
 @pytest.mark.tabsserver
-@pytest.mark.requires_internet
-@pytest.mark.databricks
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_multiple_outputs_databricks(tmp_path, databricks_client, sql_conn):
@@ -689,10 +701,10 @@ def test_multiple_outputs_databricks(tmp_path, databricks_client, sql_conn):
             pass
 
 
+@pytest.mark.databricks
+@pytest.mark.requires_internet
 @pytest.mark.slow
 @pytest.mark.tabsserver
-@pytest.mark.requires_internet
-@pytest.mark.databricks
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_databricks_with_none(tmp_path, databricks_client, sql_conn):
@@ -753,10 +765,10 @@ def test_output_databricks_with_none(tmp_path, databricks_client, sql_conn):
             pass
 
 
+@pytest.mark.databricks
+@pytest.mark.requires_internet
 @pytest.mark.slow
 @pytest.mark.tabsserver
-@pytest.mark.requires_internet
-@pytest.mark.databricks
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_databricks_with_list_none(tmp_path, databricks_client, sql_conn):

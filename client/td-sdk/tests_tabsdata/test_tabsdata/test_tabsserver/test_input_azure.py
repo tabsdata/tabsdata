@@ -54,6 +54,7 @@ RESPONSE_FOLDER = "response_folder"
 LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
 
 
+@pytest.mark.azure
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.slow
@@ -102,6 +103,7 @@ def test_input_azure_csv(tmp_path):
     assert not os.path.isfile(path_to_output_initial_values)
 
 
+@pytest.mark.azure
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.slow
@@ -150,6 +152,7 @@ def test_input_azure_log(tmp_path):
     assert not os.path.isfile(path_to_output_initial_values)
 
 
+@pytest.mark.azure
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.slow
@@ -198,6 +201,7 @@ def test_input_azure_parquet(tmp_path):
     assert not os.path.isfile(path_to_output_initial_values)
 
 
+@pytest.mark.azure
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.slow

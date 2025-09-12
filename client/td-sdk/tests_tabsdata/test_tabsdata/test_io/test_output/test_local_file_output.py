@@ -19,6 +19,9 @@ from tabsdata.exceptions import (
 )
 from tests_tabsdata.conftest import FORMAT_TYPE_TO_CONFIG
 
+# noinspection PyUnresolvedReferences
+from . import pytestmark  # noqa: F401
+
 
 def test_all_correct_single_parameter():
     path = "/path/to/data/data.csv"

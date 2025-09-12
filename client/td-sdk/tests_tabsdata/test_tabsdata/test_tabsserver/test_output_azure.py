@@ -49,8 +49,9 @@ RESPONSE_FOLDER = "response_folder"
 LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
 
 
-@pytest.mark.requires_internet
+@pytest.mark.azure
 @pytest.mark.integration
+@pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_azure_parquet(tmp_path, azure_client):
@@ -122,8 +123,9 @@ def test_output_azure_parquet(tmp_path, azure_client):
                 )
 
 
-@pytest.mark.requires_internet
+@pytest.mark.azure
 @pytest.mark.integration
+@pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_azure_csv(tmp_path, azure_client):
@@ -201,8 +203,9 @@ def test_output_azure_csv(tmp_path, azure_client):
                 )
 
 
-@pytest.mark.requires_internet
+@pytest.mark.azure
 @pytest.mark.integration
+@pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_azure_ndjson(tmp_path, azure_client):

@@ -219,6 +219,7 @@ def test_input_salesforce_initial_values(tmp_path):
 
 
 @pytest.mark.salesforce
+@pytest.mark.unit
 def test_username_password_security_token():
     source = td.SalesforceSource(
         FAKE_CREDENTIALS,
@@ -241,6 +242,7 @@ def test_username_password_security_token():
 
 
 @pytest.mark.salesforce
+@pytest.mark.unit
 def test_wrong_type_username_password_security_token():
     with pytest.raises(SecretConfigurationError):
         # noinspection PyTypeChecker
@@ -275,6 +277,7 @@ def test_wrong_type_username_password_security_token():
 
 
 @pytest.mark.salesforce
+@pytest.mark.unit
 def test_initial_last_modified():
     source = td.SalesforceSource(
         FAKE_CREDENTIALS,
@@ -309,6 +312,7 @@ def test_initial_last_modified():
 
 
 @pytest.mark.salesforce
+@pytest.mark.unit
 def test_query():
     source = td.SalesforceSource(
         FAKE_CREDENTIALS,
@@ -318,6 +322,7 @@ def test_query():
 
 
 @pytest.mark.salesforce
+@pytest.mark.unit
 def test_query_wrong_type():
     with pytest.raises(TypeError):
         # noinspection PyTypeChecker
@@ -328,6 +333,7 @@ def test_query_wrong_type():
 
 
 @pytest.mark.salesforce
+@pytest.mark.unit
 def test_initial_last_modified_missing():
     with pytest.raises(ValueError):
         td.SalesforceSource(
@@ -341,6 +347,7 @@ def test_initial_last_modified_missing():
 
 
 @pytest.mark.salesforce
+@pytest.mark.unit
 def test_initial_last_modified_no_timezone():
     with pytest.raises(ValueError):
         td.SalesforceSource(
@@ -355,6 +362,7 @@ def test_initial_last_modified_no_timezone():
 
 
 @pytest.mark.salesforce
+@pytest.mark.unit
 def test_optional_parameters():
     source = td.SalesforceSource(
         FAKE_CREDENTIALS,
@@ -369,6 +377,7 @@ def test_optional_parameters():
 
 
 @pytest.mark.salesforce
+@pytest.mark.unit
 def test_replace_last_modified_token():
     source = td.SalesforceSource(
         FAKE_CREDENTIALS,
@@ -382,6 +391,7 @@ def test_replace_last_modified_token():
 
 
 @pytest.mark.salesforce
+@pytest.mark.unit
 def test_maximum_date():
     from tabsdata_salesforce._connector import _maximum_date
 
@@ -413,8 +423,8 @@ def test_maximum_date():
     assert _maximum_date(date5, date4) == date4
 
 
-@pytest.mark.salesforce
 @pytest.mark.requires_internet
+@pytest.mark.salesforce
 @pytest.mark.slow
 def test_chunk(tmp_path):
     date1 = "2098-02-05T11:27:47.000000+0000"
@@ -444,8 +454,8 @@ def test_chunk(tmp_path):
     assert not output.is_empty()
 
 
-@pytest.mark.salesforce
 @pytest.mark.requires_internet
+@pytest.mark.salesforce
 def test_login():
     from tabsdata_salesforce._connector import _log_into_salesforce
 
@@ -460,8 +470,8 @@ def test_login():
     _log_into_salesforce(source)
 
 
-@pytest.mark.salesforce
 @pytest.mark.requires_internet
+@pytest.mark.salesforce
 def test_login_fails():
 
     from tabsdata_salesforce._connector import _log_into_salesforce

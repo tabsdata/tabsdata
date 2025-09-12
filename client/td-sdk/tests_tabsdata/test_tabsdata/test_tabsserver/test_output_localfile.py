@@ -59,6 +59,7 @@ RESPONSE_FOLDER = "response_folder"
 LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
 
 
+@pytest.mark.localfile
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
@@ -111,6 +112,7 @@ def test_output_file_parquet(tmp_path):
     assert output.equals(expected_output)
 
 
+@pytest.mark.localfile
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
@@ -181,6 +183,7 @@ def test_output_file_multiple_files_parquet(tmp_path):
     assert output.equals(expected_output)
 
 
+@pytest.mark.localfile
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
@@ -238,6 +241,7 @@ def test_output_file_csv(tmp_path):
     assert output.equals(expected_output)
 
 
+@pytest.mark.localfile
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
@@ -290,6 +294,7 @@ def test_output_file_ndjson(tmp_path):
     assert output.equals(expected_output)
 
 
+@pytest.mark.localfile
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
@@ -383,6 +388,7 @@ def test_output_file_multiple_files_with_none(tmp_path):
     # assert output.equals(expected_output)
 
 
+@pytest.mark.localfile
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
@@ -425,6 +431,7 @@ def test_output_file_with_none(tmp_path):
     assert not os.path.isfile(output_file)
 
 
+@pytest.mark.localfile
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
@@ -489,6 +496,7 @@ def test_output_file_frame_list(tmp_path):
     assert output.equals(expected_output)
 
 
+@pytest.mark.localfile
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
@@ -541,6 +549,7 @@ def test_output_file_avro(tmp_path):
     assert output.equals(expected_output)
 
 
+@pytest.mark.localfile
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))

@@ -72,6 +72,7 @@ pytestmark = pytest.mark.catalog
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_s3_catalog(tmp_path, s3_client):
@@ -186,6 +187,7 @@ def test_output_s3_catalog(tmp_path, s3_client):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_s3_catalog_replace(tmp_path, s3_client):
@@ -292,6 +294,7 @@ def test_output_s3_catalog_replace(tmp_path, s3_client):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_s3_catalog_append(tmp_path, s3_client):
@@ -398,6 +401,7 @@ def test_output_s3_catalog_append(tmp_path, s3_client):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_s3_catalog_no_auto_create_at_fails(tmp_path, s3_client):
@@ -480,6 +484,7 @@ def test_output_s3_catalog_no_auto_create_at_fails(tmp_path, s3_client):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_s3_catalog_schema_update(tmp_path, s3_client):
@@ -589,6 +594,7 @@ def test_output_s3_catalog_schema_update(tmp_path, s3_client):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_s3_catalog_schema_strict(tmp_path, s3_client):
@@ -673,6 +679,7 @@ def test_output_s3_catalog_schema_strict(tmp_path, s3_client):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_s3_catalog_partition(tmp_path, s3_client):
@@ -797,6 +804,7 @@ def test_output_s3_catalog_partition(tmp_path, s3_client):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_s3_catalog_region_creds(tmp_path, s3_client):

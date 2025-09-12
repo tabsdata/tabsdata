@@ -14,6 +14,9 @@ from tabsdata.exceptions import (
     SourceConfigurationError,
 )
 
+# noinspection PyUnresolvedReferences
+from . import pytestmark  # noqa: F401
+
 
 def test_function_configuration_error():
     with pytest.raises(FunctionConfigurationError) as e:

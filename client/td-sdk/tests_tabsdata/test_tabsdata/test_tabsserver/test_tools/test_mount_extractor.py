@@ -16,6 +16,7 @@ from .. import pytestmark  # noqa: F401
 
 
 @pytest.mark.mount_extractor
+@pytest.mark.unit
 def test_resolve_example_yaml():
     destination_path = os.path.join(
         TESTING_RESOURCES_FOLDER,

@@ -50,6 +50,7 @@ FAKE_CONNECTION_PARAMETERS = "fake_connection_parameters"
 
 
 @pytest.mark.mssql
+@pytest.mark.unit
 def test_mssql_class_parameters():
     source = td.MSSQLSource(FAKE_CONNECTION_PARAMETERS, "fake query")
     assert source.connection_string == FAKE_CONNECTION_PARAMETERS + ";"
@@ -76,6 +77,7 @@ def test_mssql_class_parameters():
 
 
 @pytest.mark.mssql
+@pytest.mark.unit
 def test_mssql_wrong_query_type():
     with pytest.raises(TypeError):
         # noinspection PyTypeChecker
@@ -83,6 +85,7 @@ def test_mssql_wrong_query_type():
 
 
 @pytest.mark.mssql
+@pytest.mark.unit
 def test_mssql_wrong_query_list_type():
     with pytest.raises(TypeError):
         # noinspection PyTypeChecker
@@ -179,9 +182,9 @@ def test_chunk_initial_values_no_result(tmp_path, mssql_connection):
     assert output.is_empty()
 
 
+@pytest.mark.mssql
 @pytest.mark.requires_internet
 @pytest.mark.slow
-@pytest.mark.mssql
 @pytest.mark.tabsserver
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_mssql(mssql_connection, tmp_path, mssql_version):
@@ -257,9 +260,9 @@ def test_input_mssql(mssql_connection, tmp_path, mssql_version):
     assert not os.path.isfile(path_to_output_initial_values)
 
 
+@pytest.mark.mssql
 @pytest.mark.requires_internet
 @pytest.mark.slow
-@pytest.mark.mssql
 @pytest.mark.tabsserver
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_mssql_initial_values(mssql_connection, tmp_path, mssql_version):
@@ -342,9 +345,9 @@ def test_input_mssql_initial_values(mssql_connection, tmp_path, mssql_version):
     assert output_initial_values.equals(pl.DataFrame({"number": 3}))
 
 
+@pytest.mark.mssql
 @pytest.mark.requires_internet
 @pytest.mark.slow
-@pytest.mark.mssql
 @pytest.mark.tabsserver
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_mssql_initial_values_stored_number_0(
@@ -433,9 +436,9 @@ def test_input_mssql_initial_values_stored_number_0(
     assert output_initial_values.equals(pl.DataFrame({"number": 3}))
 
 
+@pytest.mark.mssql
 @pytest.mark.requires_internet
 @pytest.mark.slow
-@pytest.mark.mssql
 @pytest.mark.tabsserver
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_mssql_initial_values_stored_number_2(

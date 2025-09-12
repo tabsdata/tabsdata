@@ -24,6 +24,7 @@ HASHICORP_RESOLVER = ConfigResolver(
 
 
 @pytest.mark.config_resolver
+@pytest.mark.unit
 def test_class_attributes():
     resolver = ConfigResolver()
     assert resolver.strategy_to_function
@@ -41,6 +42,7 @@ def test_class_attributes():
 
 
 @pytest.mark.config_resolver
+@pytest.mark.unit
 def test_resolve_env_token_single_value(monkeypatch):
     monkeypatch.setenv("ENV_VAR_NAME", "env_var_value")
     assert os.getenv("ENV_VAR_NAME") == "env_var_value"
@@ -50,6 +52,7 @@ def test_resolve_env_token_single_value(monkeypatch):
 
 
 @pytest.mark.config_resolver
+@pytest.mark.unit
 def test_resolve_env_token_multiple_values(monkeypatch):
     monkeypatch.setenv("ENV_VAR_NAME", "env_var_value")
     monkeypatch.setenv("ANOTHER_ENV_VAR_NAME", "another_env_var_value")
@@ -61,6 +64,7 @@ def test_resolve_env_token_multiple_values(monkeypatch):
 
 
 @pytest.mark.config_resolver
+@pytest.mark.unit
 def test_resolve_env_token_no_env_var(monkeypatch):
     monkeypatch.setenv("ENV_VAR_NAME", "env_var_value")
     monkeypatch.setenv("ANOTHER_ENV_VAR_NAME", "another_env_var_value")
@@ -73,6 +77,7 @@ def test_resolve_env_token_no_env_var(monkeypatch):
 
 
 @pytest.mark.config_resolver
+@pytest.mark.unit
 def test_resolve_env_other_token(monkeypatch):
     monkeypatch.setenv("ENV_VAR_NAME", "env_var_value")
     monkeypatch.setenv("ANOTHER_ENV_VAR_NAME", "another_env_var_value")
@@ -83,6 +88,7 @@ def test_resolve_env_other_token(monkeypatch):
 
 
 @pytest.mark.config_resolver
+@pytest.mark.unit
 def test_resolve_leaf_env_strategy(monkeypatch):
     monkeypatch.setenv("ENV_VAR_NAME", "env_var_value")
     assert os.getenv("ENV_VAR_NAME") == "env_var_value"
@@ -92,6 +98,7 @@ def test_resolve_leaf_env_strategy(monkeypatch):
 
 
 @pytest.mark.config_resolver
+@pytest.mark.unit
 def test_resolve_leaf_wrong_strategy():
     leaf = "${env:ENV_VAR_NAME}"
     with pytest.raises(ValueError):

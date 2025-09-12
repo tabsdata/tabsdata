@@ -1,6 +1,7 @@
 #
 # Copyright 2025 Tabs Data Inc.
 #
+
 import os
 import tempfile
 from pathlib import Path
@@ -16,6 +17,9 @@ from tabsdata._utils.temps import tabsdata_temp_folder
 
 # noinspection PyUnresolvedReferences
 from .. import pytestmark  # noqa: F401
+
+# noinspection PyUnresolvedReferences
+from . import pytestmark  # noqa: F401
 
 
 def test_store_response_as_yaml_generates_correct_yaml():

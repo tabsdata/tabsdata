@@ -8,6 +8,9 @@ from tabsdata._io.outputs.table_outputs import TableOutput
 from tabsdata._io.plugin import DestinationPlugin
 from tabsdata.exceptions import DestinationConfigurationError, ErrorCode
 
+# noinspection PyUnresolvedReferences
+from . import pytestmark  # noqa: F401
+
 
 def test_all_correct_destination_table_list():
     destination_table = ["headers_table", "invoices_table"]

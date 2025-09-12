@@ -60,10 +60,9 @@ RESPONSE_FOLDER = "response_folder"
 LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
 
 
+@pytest.mark.mysql
 @pytest.mark.requires_internet
 @pytest.mark.slow
-@pytest.mark.mysql
-@pytest.mark.tabsserver
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_sql(testing_mysql, tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
@@ -122,10 +121,9 @@ def test_input_sql(testing_mysql, tmp_path):
     assert not os.path.isfile(path_to_output_initial_values)
 
 
+@pytest.mark.mysql
 @pytest.mark.requires_internet
 @pytest.mark.slow
-@pytest.mark.mysql
-@pytest.mark.tabsserver
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_sql_initial_values(testing_mysql, tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
@@ -188,10 +186,9 @@ def test_input_sql_initial_values(testing_mysql, tmp_path):
     assert output_initial_values.equals(pl.DataFrame({"number": 3}))
 
 
+@pytest.mark.mysql
 @pytest.mark.requires_internet
 @pytest.mark.slow
-@pytest.mark.mysql
-@pytest.mark.tabsserver
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_sql_initial_values_stored_number_0(testing_mysql, tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
@@ -260,10 +257,9 @@ def test_input_sql_initial_values_stored_number_0(testing_mysql, tmp_path):
     assert output_initial_values.equals(pl.DataFrame({"number": 3}))
 
 
+@pytest.mark.mysql
 @pytest.mark.requires_internet
 @pytest.mark.slow
-@pytest.mark.mysql
-@pytest.mark.tabsserver
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_sql_initial_values_stored_number_2(testing_mysql, tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
@@ -332,10 +328,9 @@ def test_input_sql_initial_values_stored_number_2(testing_mysql, tmp_path):
     assert output_initial_values.equals(pl.DataFrame({"number": 3}))
 
 
+@pytest.mark.mysql
 @pytest.mark.requires_internet
 @pytest.mark.slow
-@pytest.mark.mysql
-@pytest.mark.tabsserver
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_sql_modified_params(testing_mysql, tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)

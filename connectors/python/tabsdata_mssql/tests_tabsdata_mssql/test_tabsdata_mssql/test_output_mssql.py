@@ -70,6 +70,7 @@ def get_df_from_connection(partial_connection_string: str, table: str):
 
 
 @pytest.mark.mssql
+@pytest.mark.unit
 def test_mssql_class_parameters():
     mssql_destination = td.MSSQLDestination(FAKE_CONNECTION_PARAMETERS, "table")
     assert mssql_destination.connection_string == FAKE_CONNECTION_PARAMETERS + ";"
@@ -96,6 +97,7 @@ def test_mssql_class_parameters():
 
 
 @pytest.mark.mssql
+@pytest.mark.unit
 def test_mssql_wrong_value_if_table_exists():
     with pytest.raises(ValueError):
         # noinspection PyTypeChecker
@@ -107,6 +109,7 @@ def test_mssql_wrong_value_if_table_exists():
 
 
 @pytest.mark.mssql
+@pytest.mark.unit
 def test_mssql_wrong_table_type():
     with pytest.raises(TypeError):
         # noinspection PyTypeChecker
@@ -114,6 +117,7 @@ def test_mssql_wrong_table_type():
 
 
 @pytest.mark.mssql
+@pytest.mark.unit
 def test_mssql_wrong_table_list_type():
     with pytest.raises(TypeError):
         # noinspection PyTypeChecker
@@ -121,6 +125,7 @@ def test_mssql_wrong_table_list_type():
 
 
 @pytest.mark.mssql
+@pytest.mark.slow
 def test_mssql_chunk(tmp_path):
     mssql_destination = td.MSSQLDestination(FAKE_CONNECTION_PARAMETERS, "table")
     mssql_destination._tabsdata_internal_logger = logger
@@ -136,9 +141,9 @@ def test_mssql_chunk(tmp_path):
     assert df2.collect().equals(result2)
 
 
+@pytest.mark.mssql
 @pytest.mark.requires_internet
 @pytest.mark.slow
-@pytest.mark.mssql
 def test_write_mssql(tmp_path, mssql_connection):
     table_name = f"write_mssql_table_{uuid.uuid4().hex[:8]}".replace("-", "_")
     destination = td.MSSQLDestination(
@@ -159,9 +164,9 @@ def test_write_mssql(tmp_path, mssql_connection):
     assert output.equals(expected_output)
 
 
+@pytest.mark.mssql
 @pytest.mark.requires_internet
 @pytest.mark.slow
-@pytest.mark.mssql
 def test_write_mssql_multiple_files(tmp_path, mssql_connection):
     table_name_0 = f"write_mssql_multiple_files_table_0_{uuid.uuid4().hex[:8]}".replace(
         "-", "_"
@@ -198,10 +203,10 @@ def test_write_mssql_multiple_files(tmp_path, mssql_connection):
     assert output.equals(expected_output)
 
 
-@pytest.mark.slow
+@pytest.mark.mssql
 @pytest.mark.performance
 @pytest.mark.requires_internet
-@pytest.mark.mssql
+@pytest.mark.slow
 def test_stream(tmp_path, size, mssql_connection):
     lf = get_lf(size)
     table_name = f"test_stream_table_{uuid.uuid4().hex[:8]}".replace("-", "_")
@@ -218,9 +223,9 @@ def test_stream(tmp_path, size, mssql_connection):
     assert created_table.equals(lf.collect())
 
 
-@pytest.mark.slow
-@pytest.mark.requires_internet
 @pytest.mark.mssql
+@pytest.mark.requires_internet
+@pytest.mark.slow
 def test_stream_append(tmp_path, size, mssql_connection):
     lf = get_lf(size)
     table_name = f"test_stream_table_append_{uuid.uuid4().hex[:8]}".replace("-", "_")
@@ -239,9 +244,9 @@ def test_stream_append(tmp_path, size, mssql_connection):
         assert created_table.height == (i + 1) * size
 
 
-@pytest.mark.slow
-@pytest.mark.requires_internet
 @pytest.mark.mssql
+@pytest.mark.requires_internet
+@pytest.mark.slow
 def test_stream_replace(tmp_path, size, mssql_connection):
     lf = get_lf(size)
     table_name = f"test_stream_table_replace_{uuid.uuid4().hex[:8]}".replace("-", "_")
@@ -260,9 +265,9 @@ def test_stream_replace(tmp_path, size, mssql_connection):
         assert created_table.height == size
 
 
-@pytest.mark.slow
-@pytest.mark.requires_internet
 @pytest.mark.mssql
+@pytest.mark.requires_internet
+@pytest.mark.slow
 def test_stream_multiple_lf(tmp_path, size, mssql_connection):
     lf = get_lf(size)
     table_name_1 = f"test_stream_multiple_lf_table_1_{uuid.uuid4().hex[:8]}".replace(
@@ -288,9 +293,9 @@ def test_stream_multiple_lf(tmp_path, size, mssql_connection):
     assert created_table_2.equals(lf.collect())
 
 
-@pytest.mark.slow
-@pytest.mark.requires_internet
 @pytest.mark.mssql
+@pytest.mark.requires_internet
+@pytest.mark.slow
 def test_stream_different_len_raises_error(size, tmp_path, mssql_connection):
     lf = get_lf(size)
     chunk_size = int(size / 3) + 1
@@ -308,9 +313,9 @@ def test_stream_different_len_raises_error(size, tmp_path, mssql_connection):
         mssql_destination.stream(str(tmp_path), lf, lf, lf)
 
 
-@pytest.mark.slow
-@pytest.mark.requires_internet
 @pytest.mark.mssql
+@pytest.mark.requires_internet
+@pytest.mark.slow
 def test_single_element_table_list(tmp_path, size, mssql_connection):
     lf = get_lf(size)
     table_name = f"test_single_element_table_list_table_{uuid.uuid4().hex[:8]}".replace(

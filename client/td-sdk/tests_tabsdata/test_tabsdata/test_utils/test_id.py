@@ -4,11 +4,13 @@
 
 import datetime
 
+import pytest
 import uuid6
 
 from tabsdata._utils.id import decode_id, encode_id, extract_time_from_uuidv7
 
 
+@pytest.mark.slow
 def test_encode_decode_id():
     q_checks = 4_000_000
 

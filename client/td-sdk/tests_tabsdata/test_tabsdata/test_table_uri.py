@@ -14,6 +14,9 @@ from tabsdata._tableuri import (
 )
 from tabsdata.exceptions import ErrorCode, TableURIConfigurationError
 
+# noinspection PyUnresolvedReferences
+from . import pytestmark  # noqa: F401
+
 
 def test_version_all_correct():
     version_string = "HEAD~1"

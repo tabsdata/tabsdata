@@ -17,6 +17,9 @@ from tabsdata._tabsdatafunction import (
 from tabsdata._utils.tableframe._common import add_system_columns
 from tabsdata._utils.tableframe._helpers import SYSTEM_COLUMNS
 
+# noinspection PyUnresolvedReferences
+from . import pytestmark  # noqa: F401
+
 BASE_DATA = {"a": [1, 2, 3], "b": [4, 5, 6]}
 VALID_PD_DATAFRAME = pd.DataFrame(BASE_DATA)
 VALID_PL_DATAFRAME = pl.DataFrame(BASE_DATA)

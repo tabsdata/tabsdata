@@ -9,6 +9,9 @@ from tabsdata._io.outputs.sql_outputs import PostgresDestination
 from tabsdata._io.plugin import DestinationPlugin
 from tabsdata.exceptions import DestinationConfigurationError, ErrorCode
 
+# noinspection PyUnresolvedReferences
+from . import pytestmark  # noqa: F401
+
 
 def test_all_correct_destination_table_list():
     uri = "postgres://DATABASE_IP:DATABASE_PORT/testing"

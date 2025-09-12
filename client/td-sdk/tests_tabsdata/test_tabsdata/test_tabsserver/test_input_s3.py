@@ -77,6 +77,7 @@ LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_s3(tmp_path):
@@ -125,6 +126,7 @@ def test_input_s3(tmp_path):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_s3_eu_north_region(tmp_path):
@@ -175,6 +177,7 @@ def test_input_s3_eu_north_region(tmp_path):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_s3_environment_secret(tmp_path):
@@ -222,6 +225,7 @@ def test_input_s3_environment_secret(tmp_path):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_s3_modified_uri(tmp_path):
@@ -269,6 +273,7 @@ def test_input_s3_modified_uri(tmp_path):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_s3_explicit_format(tmp_path):
@@ -316,6 +321,7 @@ def test_input_s3_explicit_format(tmp_path):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_s3_wildcard(tmp_path):
@@ -361,6 +367,7 @@ def test_input_s3_wildcard(tmp_path):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_s3_select_datetime(tmp_path):
@@ -414,6 +421,7 @@ def test_input_s3_select_datetime(tmp_path):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_s3_select_datetime_sequential_runs(tmp_path):
@@ -511,6 +519,7 @@ def test_input_s3_select_datetime_sequential_runs(tmp_path):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_s3_uri_list(tmp_path):
@@ -570,6 +579,7 @@ def test_input_s3_uri_list(tmp_path):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_s3_explicit_format_object(tmp_path):
@@ -614,10 +624,11 @@ def test_input_s3_explicit_format_object(tmp_path):
     assert output.equals(expected_output)
 
 
+@pytest.mark.hashicorp
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.s3
 @pytest.mark.slow
-@pytest.mark.hashicorp
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_s3_hashicorp_secret(tmp_path, testing_hashicorp_vault):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
@@ -661,10 +672,11 @@ def test_input_s3_hashicorp_secret(tmp_path, testing_hashicorp_vault):
     assert output.equals(expected_output)
 
 
+@pytest.mark.hashicorp
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.s3
 @pytest.mark.slow
-@pytest.mark.hashicorp
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_s3_hashicorp_secret_vault_name(tmp_path, testing_hashicorp_vault):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
@@ -710,6 +722,7 @@ def test_input_s3_hashicorp_secret_vault_name(tmp_path, testing_hashicorp_vault)
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_s3_select_datetime_timezone(tmp_path):

@@ -15,6 +15,9 @@ from tabsdata import (
 )
 from tabsdata._utils.sql_utils import obtain_uri
 
+# noinspection PyUnresolvedReferences
+from . import pytestmark  # noqa: F401
+
 
 def test_obtain_uri_postgres_source():
     uri = "postgres://user:password@localhost:5432/postgres_postgresql"

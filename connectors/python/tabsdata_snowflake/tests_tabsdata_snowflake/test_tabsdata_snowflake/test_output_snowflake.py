@@ -62,6 +62,7 @@ PREEXISTING_STAGE = "PREEXISTING_STAGE"
 
 
 @pytest.mark.snowflake
+@pytest.mark.unit
 def test_snowflake_class_parameters():
     snowflake_destination = td.SnowflakeDestination(FAKE_CONNECTION_PARAMETERS, "table")
     assert snowflake_destination.connection_parameters == FAKE_CONNECTION_PARAMETERS
@@ -82,6 +83,7 @@ def test_snowflake_class_parameters():
 
 
 @pytest.mark.snowflake
+@pytest.mark.unit
 def test_snowflake_wrong_value_if_table_exists():
     with pytest.raises(ValueError):
         # noinspection PyTypeChecker
@@ -89,6 +91,7 @@ def test_snowflake_wrong_value_if_table_exists():
 
 
 @pytest.mark.snowflake
+@pytest.mark.unit
 def test_snowflake_wrong_table_type():
     with pytest.raises(TypeError):
         # noinspection PyTypeChecker
@@ -96,6 +99,7 @@ def test_snowflake_wrong_table_type():
 
 
 @pytest.mark.snowflake
+@pytest.mark.unit
 def test_snowflake_wrong_table_list_type():
     with pytest.raises(TypeError):
         # noinspection PyTypeChecker
@@ -302,9 +306,9 @@ def test_write_snowflake_replace(tmp_path, snowflake_connection):
         cursor.close()
 
 
-@pytest.mark.snowflake
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@pytest.mark.snowflake
 @pytest.mark.tabsserver
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_snowflake(tmp_path, snowflake_connection):
@@ -365,9 +369,9 @@ def test_output_snowflake(tmp_path, snowflake_connection):
         cursor.close()
 
 
-@pytest.mark.snowflake
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@pytest.mark.snowflake
 @pytest.mark.tabsserver
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_multiple_outputs_snowflake(tmp_path, snowflake_connection):
@@ -466,9 +470,9 @@ def test_multiple_outputs_snowflake(tmp_path, snowflake_connection):
             pass
 
 
-@pytest.mark.snowflake
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@pytest.mark.snowflake
 @pytest.mark.tabsserver
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_snowflake_with_none(tmp_path, snowflake_connection):
@@ -525,9 +529,9 @@ def test_output_snowflake_with_none(tmp_path, snowflake_connection):
         cursor.close()
 
 
-@pytest.mark.snowflake
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@pytest.mark.snowflake
 @pytest.mark.tabsserver
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_snowflake_with_list_none(tmp_path, snowflake_connection):

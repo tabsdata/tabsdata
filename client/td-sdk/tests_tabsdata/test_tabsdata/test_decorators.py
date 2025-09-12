@@ -8,6 +8,9 @@ from tabsdata import LocalFileDestination, LocalFileSource, TableInput, TableOut
 from tabsdata._decorators import ALL_DEPS, publisher, subscriber, transformer
 from tabsdata.exceptions import DecoratorConfigurationError, ErrorCode
 
+# noinspection PyUnresolvedReferences
+from . import pytestmark  # noqa: F401
+
 
 def test_transformer_wrong_data_type_raises_exception():
     with pytest.raises(DecoratorConfigurationError) as e:

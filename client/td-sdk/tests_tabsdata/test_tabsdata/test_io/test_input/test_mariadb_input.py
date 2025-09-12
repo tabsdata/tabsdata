@@ -9,6 +9,9 @@ from tabsdata._io.inputs.sql_inputs import MariaDBSource
 from tabsdata._io.plugin import SourcePlugin
 from tabsdata.exceptions import ErrorCode, SourceConfigurationError
 
+# noinspection PyUnresolvedReferences
+from . import pytestmark  # noqa: F401
+
 
 def test_all_correct_query_list():
     uri = "mariadb://DATABASE_IP:DATABASE_PORT/testing"

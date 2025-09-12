@@ -86,6 +86,7 @@ RESPONSE_FOLDER = "response_folder"
 LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
 
 
+@pytest.mark.localfile
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
@@ -130,6 +131,7 @@ def test_input_file_wildcard(tmp_path):
     assert output.equals(expected_output)
 
 
+@pytest.mark.localfile
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
@@ -176,6 +178,7 @@ def test_input_file_csv_string_format(tmp_path):
     assert output.equals(expected_output)
 
 
+@pytest.mark.localfile
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
@@ -223,6 +226,7 @@ def test_input_file_parquet_string_format(tmp_path):
     assert output.equals(expected_output)
 
 
+@pytest.mark.localfile
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
@@ -269,6 +273,7 @@ def test_input_file_parquet_wildcard(tmp_path):
     assert output.equals(expected_output)
 
 
+@pytest.mark.localfile
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
@@ -316,6 +321,7 @@ def test_input_file_csv_separator(tmp_path):
     assert output.equals(expected_output)
 
 
+@pytest.mark.localfile
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
@@ -363,6 +369,7 @@ def test_input_file_csv_modified_path(tmp_path):
     assert output.equals(expected_output)
 
 
+@pytest.mark.localfile
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
@@ -410,6 +417,7 @@ def test_input_file_csv_modified_format(tmp_path):
     assert output.equals(expected_output)
 
 
+@pytest.mark.localfile
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
@@ -457,6 +465,7 @@ def test_input_file_log_string_format(tmp_path):
     assert output.equals(expected_output)
 
 
+@pytest.mark.localfile
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
@@ -503,6 +512,7 @@ def test_input_file_log_wildcard(tmp_path):
     assert output.equals(expected_output)
 
 
+@pytest.mark.localfile
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
@@ -550,6 +560,7 @@ def test_input_file_ndjson_string_format(tmp_path):
     assert output.equals(expected_output)
 
 
+@pytest.mark.localfile
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
@@ -596,6 +607,7 @@ def test_input_file_ndjson_wildcard(tmp_path):
     assert output.equals(expected_output)
 
 
+@pytest.mark.localfile
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
@@ -631,6 +643,7 @@ def test_input_file_csv_dtype_inference(tmp_path):
     assert result == 0
 
 
+@pytest.mark.localfile
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
@@ -667,6 +680,7 @@ def test_input_file_ndjson_dtype_inference(tmp_path):
     assert result == 0
 
 
+@pytest.mark.localfile
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
@@ -719,6 +733,7 @@ def test_input_file_not_found(tmp_path):
     # )
 
 
+@pytest.mark.localfile
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
@@ -766,6 +781,7 @@ def test_input_file_avro_string_format(tmp_path):
     assert output.equals(expected_output)
 
 
+@pytest.mark.localfile
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))

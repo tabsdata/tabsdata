@@ -447,6 +447,7 @@ def test_input_salesforce_report_initial_values_by_name(tmp_path):
 
 
 @pytest.mark.salesforce
+@pytest.mark.unit
 def test_username_password_security_token():
     source = td.SalesforceReportSource(
         FAKE_CREDENTIALS,
@@ -471,6 +472,7 @@ def test_username_password_security_token():
 
 
 @pytest.mark.salesforce
+@pytest.mark.unit
 def test_wrong_type_username_password_security_token():
     with pytest.raises(SecretConfigurationError):
         # noinspection PyTypeChecker
@@ -508,6 +510,7 @@ def test_wrong_type_username_password_security_token():
 
 
 @pytest.mark.salesforce
+@pytest.mark.unit
 def test_initial_last_modified():
     source = td.SalesforceReportSource(
         FAKE_CREDENTIALS,
@@ -534,6 +537,7 @@ def test_initial_last_modified():
 
 
 @pytest.mark.salesforce
+@pytest.mark.unit
 def test_report():
     source = td.SalesforceReportSource(
         FAKE_CREDENTIALS,
@@ -544,6 +548,7 @@ def test_report():
 
 
 @pytest.mark.salesforce
+@pytest.mark.unit
 def test_report_wrong_type():
     with pytest.raises(TypeError):
         # noinspection PyTypeChecker
@@ -555,6 +560,7 @@ def test_report_wrong_type():
 
 
 @pytest.mark.salesforce
+@pytest.mark.unit
 def test_initial_last_modified_missing():
     with pytest.raises(ValueError):
         td.SalesforceReportSource(
@@ -566,6 +572,7 @@ def test_initial_last_modified_missing():
 
 
 @pytest.mark.salesforce
+@pytest.mark.unit
 def test_initial_last_modified_column_missing():
     with pytest.raises(ValueError):
         td.SalesforceReportSource(
@@ -577,6 +584,7 @@ def test_initial_last_modified_column_missing():
 
 
 @pytest.mark.salesforce
+@pytest.mark.unit
 def test_initial_last_modified_no_timezone():
     with pytest.raises(ValueError):
         td.SalesforceReportSource(
@@ -589,6 +597,7 @@ def test_initial_last_modified_no_timezone():
 
 
 @pytest.mark.salesforce
+@pytest.mark.unit
 def test_optional_parameters():
     source = td.SalesforceReportSource(
         FAKE_CREDENTIALS,
@@ -602,6 +611,7 @@ def test_optional_parameters():
 
 
 @pytest.mark.salesforce
+@pytest.mark.unit
 def test_maximum_date():
     from tabsdata_salesforce._connector import _maximum_date
 
@@ -633,8 +643,8 @@ def test_maximum_date():
     assert _maximum_date(date5, date4) == date4
 
 
-@pytest.mark.salesforce
 @pytest.mark.requires_internet
+@pytest.mark.salesforce
 @pytest.mark.slow
 def test_chunk(tmp_path):
     source = td.SalesforceReportSource(
@@ -672,8 +682,8 @@ def test_chunk(tmp_path):
     assert first_output.equals(second_output)
 
 
-@pytest.mark.salesforce
 @pytest.mark.requires_internet
+@pytest.mark.salesforce
 @pytest.mark.slow
 def test_chunk_with_filter_by_column_name(tmp_path):
     for value, number in SFR_TESTING_ALIASES_AND_ROWS.items():
@@ -728,8 +738,8 @@ def test_chunk_with_filter_by_column_name(tmp_path):
     os.remove(result)
 
 
-@pytest.mark.salesforce
 @pytest.mark.requires_internet
+@pytest.mark.salesforce
 @pytest.mark.slow
 def test_chunk_with_filter_by_label(tmp_path):
     for value, number in SFR_TESTING_ALIASES_AND_ROWS.items():
@@ -784,8 +794,8 @@ def test_chunk_with_filter_by_label(tmp_path):
     os.remove(result)
 
 
-@pytest.mark.salesforce
 @pytest.mark.requires_internet
+@pytest.mark.salesforce
 @pytest.mark.slow
 def test_chunk_with_filter_and_offset_by_column_name(tmp_path):
     for value, number in SFR_INITIAL_VALUES_TESTING_ALIASES_AND_ROWS.items():
@@ -848,8 +858,8 @@ def test_chunk_with_filter_and_offset_by_column_name(tmp_path):
     os.remove(result)
 
 
-@pytest.mark.salesforce
 @pytest.mark.requires_internet
+@pytest.mark.salesforce
 @pytest.mark.slow
 def test_chunk_with_filter_and_offset_by_label(tmp_path):
     for value, number in SFR_INITIAL_VALUES_TESTING_ALIASES_AND_ROWS.items():
@@ -912,8 +922,8 @@ def test_chunk_with_filter_and_offset_by_label(tmp_path):
     os.remove(result)
 
 
-@pytest.mark.salesforce
 @pytest.mark.requires_internet
+@pytest.mark.salesforce
 @pytest.mark.slow
 def test_column_name_strategy(tmp_path):
     source = td.SalesforceReportSource(
@@ -948,8 +958,8 @@ def test_column_name_strategy(tmp_path):
     assert "ACCOUNT_ID" not in second_output.columns
 
 
-@pytest.mark.salesforce
 @pytest.mark.requires_internet
+@pytest.mark.salesforce
 @pytest.mark.slow
 def test_chunk_with_filter_and_late_offset_by_column_name(tmp_path):
     for value, number in SFR_INITIAL_VALUES_TESTING_ALIASES_AND_ROWS.items():
@@ -996,8 +1006,8 @@ def test_chunk_with_filter_and_late_offset_by_column_name(tmp_path):
     assert result is None
 
 
-@pytest.mark.salesforce
 @pytest.mark.requires_internet
+@pytest.mark.salesforce
 @pytest.mark.slow
 def test_chunk_with_filter_and_late_offset_by_label(tmp_path):
     for value, number in SFR_INITIAL_VALUES_TESTING_ALIASES_AND_ROWS.items():
@@ -1044,8 +1054,8 @@ def test_chunk_with_filter_and_late_offset_by_label(tmp_path):
     assert result is None
 
 
-@pytest.mark.salesforce
 @pytest.mark.requires_internet
+@pytest.mark.salesforce
 def test_login():
     from tabsdata_salesforce._connector import _log_into_salesforce
 
@@ -1058,6 +1068,7 @@ def test_login():
 
 
 @pytest.mark.salesforce
+@pytest.mark.unit
 def test_filter_logic_inferred():
     source = td.SalesforceReportSource(
         FAKE_CREDENTIALS,
@@ -1074,6 +1085,7 @@ def test_filter_logic_inferred():
 
 
 @pytest.mark.salesforce
+@pytest.mark.unit
 def test_filter_logic_declared():
     source = td.SalesforceReportSource(
         FAKE_CREDENTIALS,
@@ -1089,6 +1101,7 @@ def test_filter_logic_declared():
 
 
 @pytest.mark.salesforce
+@pytest.mark.unit
 def test_filter_logic_wrong_type():
     with pytest.raises(TypeError):
         td.SalesforceReportSource(
@@ -1101,6 +1114,7 @@ def test_filter_logic_wrong_type():
 
 
 @pytest.mark.salesforce
+@pytest.mark.unit
 def test_filter_logic_no_filter():
     with pytest.raises(ValueError):
         td.SalesforceReportSource(
@@ -1111,8 +1125,8 @@ def test_filter_logic_no_filter():
         )
 
 
-@pytest.mark.salesforce
 @pytest.mark.requires_internet
+@pytest.mark.salesforce
 def test_login_fails():
     from tabsdata_salesforce._connector import _log_into_salesforce
 
@@ -1126,6 +1140,7 @@ def test_login_fails():
 
 
 @pytest.mark.salesforce
+@pytest.mark.unit
 def test_find_report_by_wrong_value():
     with pytest.raises(ValueError):
         td.SalesforceReportSource(
@@ -1137,6 +1152,7 @@ def test_find_report_by_wrong_value():
 
 
 @pytest.mark.salesforce
+@pytest.mark.unit
 def test_find_report_by_wrong_type():
     with pytest.raises(ValueError):
         td.SalesforceReportSource(
@@ -1148,6 +1164,7 @@ def test_find_report_by_wrong_type():
 
 
 @pytest.mark.salesforce
+@pytest.mark.unit
 def test_find_report_by_declared():
     source = td.SalesforceReportSource(
         FAKE_CREDENTIALS,
@@ -1161,6 +1178,7 @@ def test_find_report_by_declared():
 
 
 @pytest.mark.salesforce
+@pytest.mark.unit
 def test_find_report_by_inferred():
     source = td.SalesforceReportSource(
         FAKE_CREDENTIALS,
@@ -1173,6 +1191,7 @@ def test_find_report_by_inferred():
 
 
 @pytest.mark.salesforce
+@pytest.mark.unit
 def test_filter_parameter():
     source = td.SalesforceReportSource(
         FAKE_CREDENTIALS,
@@ -1192,6 +1211,7 @@ def test_filter_parameter():
 
 
 @pytest.mark.salesforce
+@pytest.mark.unit
 def test_filter_wrong_tuple_len():
     with pytest.raises(ValueError):
         td.SalesforceReportSource(
@@ -1210,6 +1230,7 @@ def test_filter_wrong_tuple_len():
 
 
 @pytest.mark.salesforce
+@pytest.mark.unit
 def test_filter_wrong_tuple_type():
     with pytest.raises(ValueError):
         td.SalesforceReportSource(
@@ -1221,6 +1242,7 @@ def test_filter_wrong_tuple_type():
 
 
 @pytest.mark.salesforce
+@pytest.mark.unit
 def test_filter_wrong_tuple_list():
     with pytest.raises(ValueError):
         td.SalesforceReportSource(

@@ -25,6 +25,7 @@ from tests_tabsdata.conftest import (
 )
 
 
+@pytest.mark.unit
 def test_direct_secret_initialization():
     secret = DirectSecret(
         "secret_thing",
@@ -41,6 +42,7 @@ def test_direct_secret_initialization():
     assert secret.secret_value == "secret_thing"
 
 
+@pytest.mark.unit
 def test_update_direct_secret():
     secret = DirectSecret(
         "secret_thing",
@@ -52,6 +54,7 @@ def test_update_direct_secret():
     assert secret.secret_direct_value == "new_secret_thing"
 
 
+@pytest.mark.unit
 def test_build_secret_from_dictionary():
     secret = {
         DirectSecret.IDENTIFIER: {
@@ -64,6 +67,7 @@ def test_build_secret_from_dictionary():
     assert built_secret.secret_value == "secret_thing"
 
 
+@pytest.mark.unit
 def test_build_secret_with_string_returns_direct_secret():
     secret = "secret_thing"
     built_secret = build_secret(secret)
@@ -71,6 +75,7 @@ def test_build_secret_with_string_returns_direct_secret():
     assert built_secret.secret_value == "secret_thing"
 
 
+@pytest.mark.unit
 def test_build_secret_wrong_type_raises_exception():
     secret = 42
     with pytest.raises(SecretConfigurationError) as e:
@@ -78,6 +83,7 @@ def test_build_secret_wrong_type_raises_exception():
     assert e.value.error_code == ErrorCode.SCE3
 
 
+@pytest.mark.unit
 def test_build_secret_from_wrong_dictionary_id_raises_exception():
     secret = {
         "wrong-id": {
@@ -89,6 +95,7 @@ def test_build_secret_from_wrong_dictionary_id_raises_exception():
     assert e.value.error_code == ErrorCode.SCE1
 
 
+@pytest.mark.unit
 def test_build_secret_from_multiple_dictionary_id_raises_exception():
     secret = {
         DirectSecret.IDENTIFIER: {
@@ -104,6 +111,7 @@ def test_build_secret_from_multiple_dictionary_id_raises_exception():
     assert e.value.error_code == ErrorCode.SCE1
 
 
+@pytest.mark.unit
 def test_build_secret_from_wrong_dictionary_content_raises_exception():
     secret = {DirectSecret.IDENTIFIER: 42}
     with pytest.raises(SecretConfigurationError) as e:
@@ -111,12 +119,14 @@ def test_build_secret_from_wrong_dictionary_content_raises_exception():
     assert e.value.error_code == ErrorCode.SCE2
 
 
+@pytest.mark.unit
 def test_secret_object_and_dict_not_equal():
     secret = DirectSecret("secret_thing")
     secret_dict = secret._to_dict()
     assert secret != secret_dict
 
 
+@pytest.mark.unit
 def test_build_hashicorp_secret():
     hashicorp_secret = HashiCorpSecret("secret_thing_path", "secret_thing_name")
     assert hashicorp_secret.name == "secret_thing_name"
@@ -134,6 +144,7 @@ def test_build_hashicorp_secret():
     assert hashicorp_secret.__repr__()
 
 
+@pytest.mark.unit
 def test_build_hashicorp_secret_with_vault_name():
     hashicorp_secret = HashiCorpSecret(
         "secret_thing_path", "secret_thing_name", vault="TESTING_VAULT_NAME"
@@ -216,12 +227,14 @@ def test_hashicorp_secret_token_env_var_not_exist(testing_hashicorp_vault):
             _ = hashicorp_secret.secret_value
 
 
+@pytest.mark.unit
 def test_hashicorp_secret_vault_wrong_type():
     with pytest.raises(SecretConfigurationError) as e:
         HashiCorpSecret("secret_thing_path", "secret_thing_name", vault=42)
     assert e.value.error_code == ErrorCode.SCE4
 
 
+@pytest.mark.unit
 def test_hashicorp_secret_vault_wrong_value():
     with pytest.raises(SecretConfigurationError) as e:
         HashiCorpSecret("secret_thing_path", "secret_thing_name", vault="a")
@@ -243,6 +256,7 @@ def test_hashicorp_secret_vault_wrong_value():
     assert e.value.error_code == ErrorCode.SCE5
 
 
+@pytest.mark.unit
 def test_secret_repr():
     secret = DirectSecret("secret_thing")
     assert secret.__repr__()
@@ -252,6 +266,7 @@ def test_secret_repr():
     assert environment_secret.__repr__()
 
 
+@pytest.mark.unit
 def test_build_environment_secret():
     environment_secret = EnvironmentSecret("environment_variable_name")
     assert environment_secret.environment_variable_name == "environment_variable_name"
@@ -267,18 +282,21 @@ def test_build_environment_secret():
     assert environment_secret.__repr__()
 
 
+@pytest.mark.unit
 def test_environment_secret_value():
     environment_secret = EnvironmentSecret("testing_environment_variable")
     os.environ["testing_environment_variable"] = "testing_value"
     assert environment_secret.secret_value == "testing_value"
 
 
+@pytest.mark.unit
 def test_environment_secret_value_not_exist():
     environment_secret = EnvironmentSecret("does_not_exist")
     with pytest.raises(ValueError):
         _ = environment_secret.secret_value
 
 
+@pytest.mark.unit
 def test_recursively_load_secret():
     secret_dict = EnvironmentSecret("does_not_exist")._to_dict()
     assert _recursively_load_secret(secret_dict) == EnvironmentSecret("does_not_exist")
@@ -320,6 +338,7 @@ def test_recursively_load_secret():
     }
 
 
+@pytest.mark.unit
 def test_recursively_evaluate_secret():
     secret = DirectSecret("evaluated_secret_value")
     secret_dict = secret._to_dict()

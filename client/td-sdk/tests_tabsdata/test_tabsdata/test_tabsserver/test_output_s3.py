@@ -55,7 +55,9 @@ RESPONSE_FOLDER = "response_folder"
 LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
 
 
+@pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_s3_parquet(tmp_path, s3_client):
@@ -116,7 +118,9 @@ def test_output_s3_parquet(tmp_path, s3_client):
         s3_client.delete_object(Bucket=bucket_name, Key=file_name)
 
 
+@pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_s3_parquet_with_transaction_id(tmp_path, s3_client):
@@ -178,7 +182,9 @@ def test_output_s3_parquet_with_transaction_id(tmp_path, s3_client):
         s3_client.delete_object(Bucket=bucket_name, Key=file_name)
 
 
+@pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_s3_parquet_with_function_run_id(tmp_path, s3_client):
@@ -240,7 +246,9 @@ def test_output_s3_parquet_with_function_run_id(tmp_path, s3_client):
         s3_client.delete_object(Bucket=bucket_name, Key=file_name)
 
 
+@pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_s3_parquet_with_execution_id(tmp_path, s3_client):
@@ -301,7 +309,9 @@ def test_output_s3_parquet_with_execution_id(tmp_path, s3_client):
         s3_client.delete_object(Bucket=bucket_name, Key=file_name)
 
 
+@pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_s3_parquet_with_export_timestamp(tmp_path, s3_client):
@@ -373,7 +383,9 @@ def test_output_s3_parquet_with_export_timestamp(tmp_path, s3_client):
             s3_client.delete_object(Bucket=bucket_name, Key=file_name)
 
 
+@pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_s3_parquet_with_trigger_timestamp(tmp_path, s3_client):
@@ -446,7 +458,9 @@ def test_output_s3_parquet_with_trigger_timestamp(tmp_path, s3_client):
             s3_client.delete_object(Bucket=bucket_name, Key=file_name)
 
 
+@pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_s3_parquet_with_scheduler_timestamp(tmp_path, s3_client):
@@ -519,7 +533,9 @@ def test_output_s3_parquet_with_scheduler_timestamp(tmp_path, s3_client):
             s3_client.delete_object(Bucket=bucket_name, Key=file_name)
 
 
+@pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_s3_csv(tmp_path, s3_client):
@@ -586,7 +602,9 @@ def test_output_s3_csv(tmp_path, s3_client):
         s3_client.delete_object(Bucket=bucket_name, Key=file_name)
 
 
+@pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_s3_ndjson(tmp_path, s3_client):
@@ -646,7 +664,9 @@ def test_output_s3_ndjson(tmp_path, s3_client):
         s3_client.delete_object(Bucket=bucket_name, Key=file_name)
 
 
+@pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_s3_frame_list(tmp_path, s3_client):

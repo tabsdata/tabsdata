@@ -16,6 +16,7 @@ from tabsdata.exceptions import (
 pytestmark = pytest.mark.catalog
 
 
+@pytest.mark.unit
 def test_catalog_class():
     definition = {
         "name": "default",
@@ -40,6 +41,7 @@ def test_catalog_class():
     assert build_catalog(catalog._to_dict()) == catalog
 
 
+@pytest.mark.unit
 def test_catalog_class_if_table_exists():
     definition = {
         "name": "default",
@@ -64,6 +66,7 @@ def test_catalog_class_if_table_exists():
     assert build_catalog(catalog._to_dict()) == catalog
 
 
+@pytest.mark.unit
 def test_catalog_class_allow_incompatible_changes():
     definition = {
         "name": "default",
@@ -90,6 +93,7 @@ def test_catalog_class_allow_incompatible_changes():
     assert build_catalog(catalog._to_dict()) == catalog
 
 
+@pytest.mark.unit
 def test_catalog_class_auto_create_at():
     definition = {
         "name": "default",
@@ -116,6 +120,7 @@ def test_catalog_class_auto_create_at():
     assert build_catalog(catalog._to_dict()) == catalog
 
 
+@pytest.mark.unit
 def test_catalog_class_partitioned_table():
     definition = {
         "name": "default",
@@ -144,6 +149,7 @@ def test_catalog_class_partitioned_table():
     assert build_catalog(catalog._to_dict()) == catalog
 
 
+@pytest.mark.unit
 def test_catalog_class_schema_strategy():
     definition = {
         "name": "default",
@@ -172,6 +178,7 @@ def test_catalog_class_schema_strategy():
     assert build_catalog(catalog._to_dict()) == catalog
 
 
+@pytest.mark.unit
 def test_wrong_if_table_exists():
     definition = {
         "name": "default",
@@ -184,6 +191,7 @@ def test_wrong_if_table_exists():
     assert e.value.error_code == ErrorCode.DECE33
 
 
+@pytest.mark.unit
 def test_catalog_class_with_secrets():
     definition = {
         "name": "default",
@@ -210,6 +218,7 @@ def test_catalog_class_with_secrets():
     assert build_catalog(catalog._to_dict()) == catalog
 
 
+@pytest.mark.unit
 def test_catalog_class_with_secrets_definition():
     definition = {
         "name": "default",
@@ -248,12 +257,14 @@ def test_catalog_class_with_secrets_definition():
     assert build_catalog(catalog._to_dict()) == catalog
 
 
+@pytest.mark.unit
 def test_catalog_wrong_definition_type():
     with pytest.raises(DestinationConfigurationError) as e:
         AWSGlue(definition="wrong", tables=["output1", "output2"])
     assert e.value.error_code == ErrorCode.DECE30
 
 
+@pytest.mark.unit
 def test_catalog_wrong_table_type():
     definition = {
         "name": "default",
@@ -265,6 +276,7 @@ def test_catalog_wrong_table_type():
     assert e.value.error_code == ErrorCode.DECE32
 
 
+@pytest.mark.unit
 def test_catalog_wrong_table_list_type():
     definition = {
         "name": "default",
@@ -276,6 +288,7 @@ def test_catalog_wrong_table_list_type():
     assert e.value.error_code == ErrorCode.DECE31
 
 
+@pytest.mark.unit
 def test_build_catalog():
     definition = {
         "name": "default",
@@ -288,18 +301,21 @@ def test_build_catalog():
     assert build_catalog(catalog) == catalog
 
 
+@pytest.mark.unit
 def test_build_catalog_wrong_type():
     with pytest.raises(DestinationConfigurationError) as e:
         build_catalog("wrong")
     assert e.value.error_code == ErrorCode.DECE34
 
 
+@pytest.mark.unit
 def test_build_catalog_wrong_dictionary_key():
     with pytest.raises(DestinationConfigurationError) as e:
         build_catalog({"wrong": "key"})
     assert e.value.error_code == ErrorCode.DECE35
 
 
+@pytest.mark.unit
 def test_build_catalog_wrong_dictionary_multiple_keys():
     definition = {
         "name": "default",
@@ -315,12 +331,14 @@ def test_build_catalog_wrong_dictionary_multiple_keys():
     assert e.value.error_code == ErrorCode.DECE35
 
 
+@pytest.mark.unit
 def test_build_catalog_wrong_dictionary_value_type():
     with pytest.raises(DestinationConfigurationError) as e:
         build_catalog({AWSGlue.IDENTIFIER: "wrong"})
     assert e.value.error_code == ErrorCode.DECE36
 
 
+@pytest.mark.unit
 def test_catalog_partitioned_and_replace():
     definition = {
         "name": "default",
@@ -346,6 +364,7 @@ def test_catalog_partitioned_and_replace():
     assert e.value.error_code == ErrorCode.DECE39
 
 
+@pytest.mark.unit
 def test_catalog_wrong_auto_create_at():
     definition = {
         "name": "default",
@@ -384,6 +403,7 @@ def test_catalog_wrong_auto_create_at():
     assert e.value.error_code == ErrorCode.DECE43
 
 
+@pytest.mark.unit
 def test_catalog_class_s3_credentials():
     definition = {
         "name": "default",
@@ -418,6 +438,7 @@ def test_catalog_class_s3_credentials():
     assert build_catalog(catalog._to_dict()) == catalog
 
 
+@pytest.mark.unit
 def test_catalog_class_duplicate_access_key_id():
     definition = {
         "name": "default",
@@ -498,6 +519,7 @@ def test_catalog_class_duplicate_access_key_id():
     }
 
 
+@pytest.mark.unit
 def test_catalog_class_duplicate_secret_access_key():
     definition = {
         "name": "default",
@@ -578,6 +600,7 @@ def test_catalog_class_duplicate_secret_access_key():
     }
 
 
+@pytest.mark.unit
 def test_s3_credentials_wrong_type():
     definition = {
         "name": "default",
@@ -598,6 +621,7 @@ def test_s3_credentials_wrong_type():
     assert e.value.error_code == ErrorCode.DECE47
 
 
+@pytest.mark.unit
 def test_catalog_class_s3_region():
     definition = {
         "name": "default",
@@ -623,6 +647,7 @@ def test_catalog_class_s3_region():
     assert build_catalog(catalog._to_dict()) == catalog
 
 
+@pytest.mark.unit
 def test_catalog_class_duplicate_region():
     definition = {
         "name": "default",
@@ -691,6 +716,7 @@ def test_catalog_class_duplicate_region():
     }
 
 
+@pytest.mark.unit
 def test_catalog_class_s3_region_wrong_type():
     definition = {
         "name": "default",

@@ -45,6 +45,9 @@ from tests_tabsdata.testing_resources.test_custom_requirements.example import (
     custom_requirements,
 )
 
+# noinspection PyUnresolvedReferences
+from . import pytestmark  # noqa: F401
+
 
 class BaseDummyFunction:
     def __init__(self, name, module):

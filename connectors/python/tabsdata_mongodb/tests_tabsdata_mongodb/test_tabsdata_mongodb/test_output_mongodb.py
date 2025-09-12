@@ -61,6 +61,7 @@ LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
 
 
 @pytest.mark.mongodb
+@pytest.mark.unit
 def test_class_initialization_default_options():
     uri = "mongodb://localhost:27017"
     output = td.MongoDBDestination(uri, ("collection.id", None))
@@ -74,6 +75,7 @@ def test_class_initialization_default_options():
 
 
 @pytest.mark.mongodb
+@pytest.mark.unit
 def test_class_initialization_all_options():
     uri = "mongodb://localhost:27017"
     output = td.MongoDBDestination(
@@ -95,6 +97,7 @@ def test_class_initialization_all_options():
 
 
 @pytest.mark.mongodb
+@pytest.mark.unit
 def test_class_initialization_support_options():
     uri = "mongodb://localhost:27017"
     output = td.MongoDBDestination(
@@ -118,6 +121,7 @@ def test_class_initialization_support_options():
 
 
 @pytest.mark.mongodb
+@pytest.mark.unit
 def test_invalid_class_types():
     uri = "mongodb://localhost:27017"
     with pytest.raises(TypeError):
@@ -197,8 +201,8 @@ def test_stream_with_replica_set(
 
 
 @pytest.mark.mongodb
-@pytest.mark.slow
 @pytest.mark.requires_internet
+@pytest.mark.slow
 def test_stream_with_id_none(tmp_path, testing_mongodb):
     size = 25000
     lf = get_lf(size)
@@ -218,8 +222,8 @@ def test_stream_with_id_none(tmp_path, testing_mongodb):
 
 
 @pytest.mark.mongodb
-@pytest.mark.slow
 @pytest.mark.requires_internet
+@pytest.mark.slow
 def test_stream_multiple_lf(tmp_path, testing_mongodb):
     size = 25000
     lf = get_lf(size)
@@ -244,8 +248,8 @@ def test_stream_multiple_lf(tmp_path, testing_mongodb):
 
 
 @pytest.mark.mongodb
-@pytest.mark.slow
 @pytest.mark.requires_internet
+@pytest.mark.slow
 def test_stream_different_len_raises_error(tmp_path, testing_mongodb):
     size = 25000
     lf = get_lf(size)
@@ -268,8 +272,8 @@ def test_stream_different_len_raises_error(tmp_path, testing_mongodb):
 
 
 @pytest.mark.mongodb
-@pytest.mark.slow
 @pytest.mark.requires_internet
+@pytest.mark.slow
 def test_single_element_collection_list(tmp_path, testing_mongodb):
     size = 25000
     lf = get_lf(size)
@@ -289,8 +293,8 @@ def test_single_element_collection_list(tmp_path, testing_mongodb):
 
 
 @pytest.mark.mongodb
-@pytest.mark.slow
 @pytest.mark.requires_internet
+@pytest.mark.slow
 def test_if_collection_exists_replace(tmp_path, testing_mongodb):
     size = 25000
     lf = get_lf(size)
@@ -311,8 +315,8 @@ def test_if_collection_exists_replace(tmp_path, testing_mongodb):
 
 
 @pytest.mark.mongodb
-@pytest.mark.slow
 @pytest.mark.requires_internet
+@pytest.mark.slow
 def test_if_collection_exists_append(tmp_path, testing_mongodb):
     size = 25000
     lf = get_lf(size)
@@ -333,8 +337,8 @@ def test_if_collection_exists_append(tmp_path, testing_mongodb):
 
 
 @pytest.mark.mongodb
-@pytest.mark.slow
 @pytest.mark.requires_internet
+@pytest.mark.slow
 def test_use_trxs_true(tmp_path, testing_mongodb_with_replica_set):
     size = 2
     id_column = [1 for _ in range(size)]
@@ -363,8 +367,8 @@ def test_use_trxs_true(tmp_path, testing_mongodb_with_replica_set):
 
 
 @pytest.mark.mongodb
-@pytest.mark.slow
 @pytest.mark.requires_internet
+@pytest.mark.slow
 def test_use_trxs_false(tmp_path, testing_mongodb):
     size = 2
     id_column = [1 for _ in range(size)]
@@ -394,8 +398,8 @@ def test_use_trxs_false(tmp_path, testing_mongodb):
 
 
 @pytest.mark.mongodb
-@pytest.mark.slow
 @pytest.mark.requires_internet
+@pytest.mark.slow
 def test_fail_on_duplicate_key_false_with_trx(
     tmp_path, testing_mongodb_with_replica_set
 ):
@@ -426,8 +430,8 @@ def test_fail_on_duplicate_key_false_with_trx(
 
 
 @pytest.mark.mongodb
-@pytest.mark.slow
 @pytest.mark.requires_internet
+@pytest.mark.slow
 def test_fail_on_duplicate_key_false(tmp_path, testing_mongodb):
     size = 2
     id_column = [1 for _ in range(size)]
@@ -457,8 +461,8 @@ def test_fail_on_duplicate_key_false(tmp_path, testing_mongodb):
 
 
 @pytest.mark.mongodb
-@pytest.mark.slow
 @pytest.mark.requires_internet
+@pytest.mark.slow
 def test_fail_on_duplicate_key_false(tmp_path, testing_mongodb):
     size = 2
     id_column = [1 for _ in range(size)]
@@ -487,8 +491,8 @@ def test_fail_on_duplicate_key_false(tmp_path, testing_mongodb):
 
 
 @pytest.mark.mongodb
-@pytest.mark.slow
 @pytest.mark.requires_internet
+@pytest.mark.slow
 def test_update_existing_true(tmp_path, testing_mongodb):
     size = 2
     id_column = [1 for _ in range(size)]
@@ -517,8 +521,8 @@ def test_update_existing_true(tmp_path, testing_mongodb):
 
 
 @pytest.mark.mongodb
-@pytest.mark.slow
 @pytest.mark.requires_internet
+@pytest.mark.slow
 def test_lf_is_none(tmp_path, testing_mongodb):
     size = 200
     lf = get_lf(size)
@@ -547,8 +551,8 @@ def test_lf_is_none(tmp_path, testing_mongodb):
 
 
 @pytest.mark.mongodb
-@pytest.mark.slow
 @pytest.mark.requires_internet
+@pytest.mark.slow
 def test_update_existing_false(tmp_path, testing_mongodb):
     size = 2
     id_column = [1 for _ in range(size)]
@@ -578,8 +582,8 @@ def test_update_existing_false(tmp_path, testing_mongodb):
 
 
 @pytest.mark.mongodb
-@pytest.mark.slow
 @pytest.mark.requires_internet
+@pytest.mark.slow
 def test_docs_per_trx(tmp_path, testing_mongodb):
     size = 200
     lf = get_lf(size)
@@ -738,9 +742,10 @@ def test_multiple_outputs_mongodb(tmp_path, testing_mongodb):
     assert len(expected_output) == collection.count_documents({})
 
 
+@pytest.mark.mongodb
 @pytest.mark.requires_internet
 @pytest.mark.slow
-@pytest.mark.mongodb
+@pytest.mark.tabsserver
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_mongodb_with_none(tmp_path, testing_mongodb):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
@@ -786,9 +791,10 @@ def test_output_mongodb_with_none(tmp_path, testing_mongodb):
     assert collection.count_documents({}) == 0
 
 
+@pytest.mark.mongodb
 @pytest.mark.requires_internet
 @pytest.mark.slow
-@pytest.mark.mongodb
+@pytest.mark.tabsserver
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_mongodb_with_list_none(tmp_path, testing_mongodb):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)

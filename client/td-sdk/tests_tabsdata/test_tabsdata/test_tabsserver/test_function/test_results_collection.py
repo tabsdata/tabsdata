@@ -11,6 +11,9 @@ from tests_tabsdata.conftest import clean_polars_df
 # noinspection PyUnresolvedReferences
 from .. import pytestmark  # noqa: F401
 
+# noinspection PyUnresolvedReferences
+from . import pytestmark  # noqa: F401
+
 CORRECT_TF = td.TableFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
 
 

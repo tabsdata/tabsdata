@@ -21,6 +21,9 @@ from tabsdata.exceptions import (
 )
 from tests_tabsdata.conftest import FORMAT_TYPE_TO_CONFIG
 
+# noinspection PyUnresolvedReferences
+from . import pytestmark  # noqa: F401
+
 TEST_ACCOUNT_KEY = "test_account_key"
 GCS_CREDENTIALS = GCPServiceAccountKeyCredentials(service_account_key=TEST_ACCOUNT_KEY)
 

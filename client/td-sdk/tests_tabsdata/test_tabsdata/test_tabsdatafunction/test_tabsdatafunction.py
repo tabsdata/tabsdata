@@ -14,6 +14,9 @@ from tabsdata.exceptions import (
     FunctionConfigurationError,
 )
 
+# noinspection PyUnresolvedReferences
+from . import pytestmark  # noqa: F401
+
 
 def dummy_function(number):
     return number
