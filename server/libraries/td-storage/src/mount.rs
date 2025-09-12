@@ -581,10 +581,13 @@ mod tests {
 
         let uri_external = Url::parse(&format!("{}/{}", uri, "external")).unwrap(); // just because how Url::join() works
         assert_eq!(
-            mount.to_external_uri(&child_in_mount).unwrap(),
-            uri_external
+            mount
+                .to_external_uri(&child_in_mount)
+                .unwrap()
+                .to_string()
+                .replace("\\", "/"),
+            uri_external.to_string().replace("\\", "/")
         );
-
         // exits()
         let file_in_mount = SPath::parse(mount_path).unwrap().child("exists").unwrap();
         let res = mount.exists(&file_in_mount).await;

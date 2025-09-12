@@ -361,7 +361,16 @@ mod tests {
         };
         let files: Vec<(Url, ObjectMeta)> = vec![(url_r.clone(), meta)];
 
-        let response = FilesImporter::import(&request, files).await.unwrap();
+        let response = FilesImporter::import(&request, files)
+            .await
+            .map_err(|e| {
+                eprintln!("FilesImporter::import failed:");
+                eprintln!("  Request: {:?}", request);
+                eprintln!("  Files: {:?}", files);
+                eprintln!("  Error: {:?}", e);
+                e
+            })
+            .unwrap();
         assert!(!response.is_empty());
         assert_eq!(response.len(), 1);
 
@@ -374,7 +383,15 @@ mod tests {
             s3.secret_key.to_string(),
         );
         config.insert("AWS_REGION".to_string(), s3.region.to_string());
-        let cloud_options = CloudOptions::from_untyped_config(url_tf.as_str(), config).unwrap();
+        let cloud_options = CloudOptions::from_untyped_config(url_tf.as_str(), config)
+            .map_err(|e| {
+                eprintln!("CloudOptions::from_untyped_config failed:");
+                eprintln!("  URL: {}", url_tf.as_str());
+                eprintln!("  Config: {:?}", config);
+                eprintln!("  Error: {:?}", e);
+                e
+            })
+            .unwrap();
 
         let lf = LazyFrame::scan_parquet(
             PlPath::new(url_tf.to_string().as_str()),
@@ -474,7 +491,16 @@ mod tests {
         };
         let files: Vec<(Url, ObjectMeta)> = vec![(url_r.clone(), meta)];
 
-        let response = FilesImporter::import(&request, files).await.unwrap();
+        let response = FilesImporter::import(&request, files)
+            .await
+            .map_err(|e| {
+                eprintln!("FilesImporter::import failed:");
+                eprintln!("  Request: {:?}", request);
+                eprintln!("  Files: {:?}", files);
+                eprintln!("  Error: {:?}", e);
+                e
+            })
+            .unwrap();
         assert!(!response.is_empty());
         assert_eq!(response.len(), 1);
 
@@ -489,7 +515,15 @@ mod tests {
             "azure_storage_account_key".to_string(),
             az.account_key.to_string(),
         );
-        let cloud_options = CloudOptions::from_untyped_config(url_tf.as_str(), config).unwrap();
+        let cloud_options = CloudOptions::from_untyped_config(url_tf.as_str(), config)
+            .map_err(|e| {
+                eprintln!("CloudOptions::from_untyped_config failed:");
+                eprintln!("  URL: {}", url_tf.as_str());
+                eprintln!("  Config: {:?}", config);
+                eprintln!("  Error: {:?}", e);
+                e
+            })
+            .unwrap();
 
         let lf = LazyFrame::scan_parquet(
             PlPath::new(url_tf.to_string().as_str()),
@@ -590,7 +624,16 @@ mod tests {
         };
         let files: Vec<(Url, ObjectMeta)> = vec![(url_r.clone(), meta)];
 
-        let response = FilesImporter::import(&request, files).await.unwrap();
+        let response = FilesImporter::import(&request, files)
+            .await
+            .map_err(|e| {
+                eprintln!("FilesImporter::import failed:");
+                eprintln!("  Request: {:?}", request);
+                eprintln!("  Files: {:?}", files);
+                eprintln!("  Error: {:?}", e);
+                e
+            })
+            .unwrap();
         assert!(!response.is_empty());
         assert_eq!(response.len(), 1);
 
@@ -602,7 +645,15 @@ mod tests {
             gcp.service_account_key.to_string(),
         );
 
-        let cloud_options = CloudOptions::from_untyped_config(url_tf.as_str(), config).unwrap();
+        let cloud_options = CloudOptions::from_untyped_config(url_tf.as_str(), config)
+            .map_err(|e| {
+                eprintln!("CloudOptions::from_untyped_config failed:");
+                eprintln!("  URL: {}", url_tf.as_str());
+                eprintln!("  Config: {:?}", config);
+                eprintln!("  Error: {:?}", e);
+                e
+            })
+            .unwrap();
 
         let lf = LazyFrame::scan_parquet(
             PlPath::new(url_tf.to_string().as_str()),
@@ -701,7 +752,16 @@ mod tests {
         };
         let files: Vec<(Url, ObjectMeta)> = vec![(url_r.clone(), meta)];
 
-        let response = FilesImporter::import(&request, files).await.unwrap();
+        let response = FilesImporter::import(&request, files)
+            .await
+            .map_err(|e| {
+                eprintln!("FilesImporter::import failed:");
+                eprintln!("  Request: {:?}", request);
+                eprintln!("  Files: {:?}", files);
+                eprintln!("  Error: {:?}", e);
+                e
+            })
+            .unwrap();
 
         assert!(!response.is_empty());
         assert_eq!(response.len(), 1);
@@ -855,14 +915,31 @@ mod tests {
         };
         let files: Vec<(Url, ObjectMeta)> = vec![(from_file.url().clone(), meta)];
 
-        let response = FilesImporter::import(&request, files).await.unwrap();
+        let response = FilesImporter::import(&request, files)
+            .await
+            .map_err(|e| {
+                eprintln!("FilesImporter::import failed:");
+                eprintln!("  Request: {:?}", request);
+                eprintln!("  Files: {:?}", files);
+                eprintln!("  Error: {:?}", e);
+                e
+            })
+            .unwrap();
 
         assert!(!response.is_empty());
         assert_eq!(response.len(), 1);
 
         let url_to = response.first().unwrap().to.clone();
         let cloud_options = Some(
-            CloudOptions::from_untyped_config(url_to.as_str(), to_base.cloud_configs()).unwrap(),
+            CloudOptions::from_untyped_config(url_to.as_str(), to_base.cloud_configs())
+                .map_err(|e| {
+                    eprintln!("CloudOptions::from_untyped_config failed in import function:");
+                    eprintln!("  URL: {}", url_to.as_str());
+                    eprintln!("  Config: {:?}", to_base.cloud_configs());
+                    eprintln!("  Error: {:?}", e);
+                    e
+                })
+                .unwrap(),
         );
         let lf = match format {
             ImportFormat::Binary => {
