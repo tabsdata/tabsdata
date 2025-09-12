@@ -8,8 +8,12 @@ import socket
 def get():
     try:
         hostname = socket.gethostname()
-        address = socket.gethostbyname(hostname)
-        if address.startswith("127."):
+        address = None
+        try:
+            address = socket.gethostbyname(hostname)
+        except socket.gaierror:
+            pass
+        if address is None or address.startswith("127."):
             with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
                 s.connect(("8.8.8.8", 80))
                 address = s.getsockname()[0]
