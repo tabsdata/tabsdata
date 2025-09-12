@@ -353,7 +353,9 @@ mod tests {
             .unwrap();
 
         let meta = ObjectMeta {
-            location: ObjectStorePath::from(path_r.clone().to_string_lossy().as_ref()),
+            location: ObjectStorePath::from(
+                path_r.clone().to_string_lossy().replace('\\', "/").as_ref(),
+            ),
             last_modified: Utc::now(),
             size: 1024,
             e_tag: Some(id.to_string()),
@@ -485,7 +487,9 @@ mod tests {
             .unwrap();
 
         let meta = ObjectMeta {
-            location: ObjectStorePath::from(path_r.clone().to_string_lossy().as_ref()),
+            location: ObjectStorePath::from(
+                path_r.clone().to_string_lossy().replace('\\', "/").as_ref(),
+            ),
             last_modified: Utc::now(),
             size: 1024,
             e_tag: Some(id.to_string()),
@@ -620,7 +624,9 @@ mod tests {
             .unwrap();
 
         let meta = ObjectMeta {
-            location: ObjectStorePath::from(path_r.clone().to_string_lossy().as_ref()),
+            location: ObjectStorePath::from(
+                path_r.clone().to_string_lossy().replace('\\', "/").as_ref(),
+            ),
             last_modified: Utc::now(),
             size: 1024,
             e_tag: Some(id.to_string()),
