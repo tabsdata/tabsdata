@@ -29,7 +29,6 @@ pub enum TransporterError {
     CouldNotWriteReport(String, serde_yaml::Error) = 6,
     #[error("The environment variable '{0}' is not set")]
     EnvironmentVariableNotFound(String) = 7,
-
     #[error("Could not encode '{0}' info: {0}")]
     CouldNotEncodeInfo(String, String) = 8,
     #[error("Could not decode '{0}' info: {0}")]
@@ -38,13 +37,10 @@ pub enum TransporterError {
     InvalidImporterFileUrl(String) = 10,
     #[error("The URL patter '{0}' and the File '{1}' have different base paths")]
     UrlPatternAndFileHaveDifferentBasePaths(String, String) = 11,
-
     #[error("Could not list files at '{0}' to import, error: {1}")]
     CouldListFilesToImport(String, object_store::Error) = 12,
-
     #[error("Could not create import instructions: {0}")]
     CouldNotCreateImportInstructions(String) = 13,
-
     #[error("Could not create object store for '{0}', error: {1}")]
     CouldNotCreateObjectStore(String, object_store::Error) = 5000,
     #[error("Could not get file metadata for '{0}', error: {1}")]
@@ -57,4 +53,28 @@ pub enum TransporterError {
     CouldNotCompleteMultipartUpload(String, Box<object_store::Error>) = 5004,
     #[error("Could not send data block for '{0}', error: {1}")]
     CouldNotSendBlock(String, String, SendError<Message>) = 5005,
+    #[error("Invalid URL: '{0}', error: {1}")]
+    InvalidUrl(String, url::ParseError) = 5006,
+    #[error("Cannot modify path segments for URL: '{0}'")]
+    CannotModifyUrlPathSegments(String) = 5007,
+    #[error("URL '{0}' has no parent path")]
+    UrlHasNoPath(String) = 5008,
+    #[error("Cannot convert path to String for URL: '{0}'")]
+    CannotConvertPathToString(String) = 5009,
+    #[error("URL '{0}' has no file name or pattern")]
+    UrlHasNoFileName(String) = 5010,
+    #[error("Cannot convert file name to String for URL: '{0}'")]
+    CannotConvertFileNameToString(String) = 5011,
+    #[error("Could not parse format config: {0}")]
+    CouldNotParseFormatConfig(serde_yaml::Error) = 5012,
+    #[error("Could not build ImporterOptions: {0}")]
+    CouldNotBuildImporterOptions(String) = 5013,
+    #[error("Could not build FileImportReport: {0}")]
+    CouldNotBuildFileImportReport(String) = 5014,
+    #[error("Could not run import files task: {0}")]
+    CouldNotRunImportFiles(String) = 5015,
+    #[error("Import files task failed: {0}")]
+    ImportFilesTaskFailed(String) = 5016,
+    #[error("Could not decode last modified info: {0}")]
+    CouldNotDecodeLastModifiedInfo(String) = 5017,
 }

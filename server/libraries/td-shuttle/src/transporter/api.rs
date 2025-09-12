@@ -55,18 +55,20 @@ pub struct ImportSource {
 const LAST_MODIFIED_INFO_TYPE: &str = "last_modified_info";
 
 impl ImportSource {
-    pub fn lastmod_info(&self) -> Option<LastModifiedInfoState> {
+    pub fn lastmod_info(&self) -> Result<Option<LastModifiedInfoState>, TransporterError> {
         match &self.initial_lastmod {
-            None => None,
+            None => Ok(None),
             Some(initial_lastmod) => {
                 let lastmod_info = match &self.lastmod_info {
                     None => LastModifiedInfoState::new(*initial_lastmod),
                     Some(info) => {
                         decode_info::<LastModifiedInfoState>(info, LAST_MODIFIED_INFO_TYPE)
-                            .expect("Could not decode last modified info")
+                            .map_err(|e| {
+                                TransporterError::CouldNotDecodeLastModifiedInfo(e.to_string())
+                            })?
                     }
                 };
-                Some(lastmod_info)
+                Ok(Some(lastmod_info))
             }
         }
     }

@@ -251,12 +251,10 @@ async fn find_and_import<I: Importer>(
         "Initial last modified: {:?}",
         request.source().initial_lastmod()
     );
-    tracing::trace!(
-        "Received last modified state: {:?}",
-        request.source().lastmod_info()
-    );
+    let received_lastmod_info = request.source().lastmod_info()?;
+    tracing::trace!("Received last modified state: {:?}", received_lastmod_info);
 
-    let lastmod_info = match request.source().lastmod_info() {
+    let lastmod_info = match received_lastmod_info {
         Some(info) => Some(info),
         None => match request.source().initial_lastmod() {
             Some(initial_lastmod) => {

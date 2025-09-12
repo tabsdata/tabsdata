@@ -331,8 +331,9 @@ impl Mount {
         match self.store.delete(&external_path).await {
             Ok(_) => Ok(()),
             Err(object_store::Error::NotFound { .. }) => {
-                Ok(()) // S3 impl does not return NotFound when deleting a non existing file.
-                //                Err(StorageError::NotFound(path.to_string()))
+                Ok(())
+                // S3 impl does not return NotFound when deleting a non existing file.
+                // Err(StorageError::NotFound(path.to_string()))
             }
             Err(e) => Err(StorageError::CouldNotDeleteFromObjectStore(
                 path.to_string(),

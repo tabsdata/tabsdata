@@ -490,14 +490,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_create_object_store() {
+    async fn test_create_object_store() -> Result<(), Box<dyn std::error::Error>> {
         let test_dir = testdir!();
         File::create(test_dir.join("test_file"))
             .unwrap()
             .write_all(b"test")
             .unwrap();
 
-        let importer_options = Params::default().importer_options().await;
+        let importer_options = Params::default().importer_options().await?;
         let object_store = super::create_object_store(&importer_options).await.unwrap();
         let res = object_store
             .list_with_delimiter(Some(
@@ -507,17 +507,18 @@ mod tests {
             .unwrap();
         assert_eq!(res.objects.len(), 1);
         assert_eq!(res.objects[0].location.filename().unwrap(), "test_file");
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_get_files_from_object_store() {
+    async fn test_get_files_from_object_store() -> Result<(), Box<dyn std::error::Error>> {
         let test_dir = testdir!();
         File::create(test_dir.join("test_file"))
             .unwrap()
             .write_all(b"test")
             .unwrap();
 
-        let mut importer_options = Params::default().importer_options().await;
+        let mut importer_options = Params::default().importer_options().await?;
         importer_options.set_base_path(&normalize_path(test_dir.to_str().unwrap()));
         let object_store = super::create_object_store(&importer_options).await.unwrap();
         let files = get_files_from_object_store(object_store, &importer_options)
@@ -526,11 +527,12 @@ mod tests {
         let files = files.collect::<Vec<_>>();
         assert_eq!(files.len(), 1);
         assert_eq!(files[0].location.filename().unwrap(), "test_file");
+        Ok(())
     }
 
     //noinspection DuplicatedCode
     #[tokio::test]
-    async fn test_filter_matching_files_pattern() {
+    async fn test_filter_matching_files_pattern() -> Result<(), Box<dyn std::error::Error>> {
         let now = chrono::Utc::now();
 
         let file1 = object_store::ObjectMeta {
@@ -548,7 +550,7 @@ mod tests {
             version: None,
         };
 
-        let mut importer_options = Params::default().importer_options().await;
+        let mut importer_options = Params::default().importer_options().await?;
 
         importer_options.set_file_pattern("a1b");
         assert!(super::filter_matching_files(&importer_options)(&file1));
@@ -594,6 +596,7 @@ mod tests {
         );
         assert!(super::filter_matching_files(&importer_options)(&file1));
         assert!(super::filter_matching_files(&importer_options)(&file2));
+        Ok(())
     }
 
     #[tokio::test]
@@ -638,8 +641,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_to_file_import_instructions() {
-        let importer_options = Arc::new(Params::default().importer_options().await);
+    async fn test_to_file_import_instructions() -> Result<(), Box<dyn std::error::Error>> {
+        let importer_options = Arc::new(Params::default().importer_options().await?);
 
         let file1 = object_store::ObjectMeta {
             location: object_store::path::Path::from("a1b"),
@@ -668,6 +671,7 @@ mod tests {
             &instructions.importer_options,
             &importer_options
         ));
+        Ok(())
     }
 
     #[test]

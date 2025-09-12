@@ -60,27 +60,31 @@ fn base_url(source: &ImportSource) -> Url {
 /// Return the base path of the source location.
 ///
 /// This is where files will be searched for.
-pub fn base_path(source: &ImportSource) -> String {
+pub fn base_path(source: &ImportSource) -> Result<String, TransporterError> {
     let url = source.location().url();
     extract_from_url(&url, |url| {
         let path = Path::new(url.path());
-        path.parent()
-            .expect("Url has not path")
+        let parent = path
+            .parent()
+            .ok_or_else(|| TransporterError::UrlHasNoPath(url.to_string()))?;
+        let path_str = parent
             .to_str()
-            .expect("Cannot convert path to String")
-            .to_string()
+            .ok_or_else(|| TransporterError::CannotConvertPathToString(url.to_string()))?;
+        Ok(path_str.to_string())
     })
 }
 
-pub fn file_pattern(source: &ImportSource) -> String {
+pub fn file_pattern(source: &ImportSource) -> Result<String, TransporterError> {
     let url = source.location().url();
     extract_from_url(&url, |url| {
         let path = Path::new(url.path());
-        path.file_name()
-            .expect("Url has not file name or pattern")
+        let file_name = path
+            .file_name()
+            .ok_or_else(|| TransporterError::UrlHasNoFileName(url.to_string()))?;
+        let file_name_str = file_name
             .to_str()
-            .expect("Cannot convert file name or pattern to String")
-            .to_string()
+            .ok_or_else(|| TransporterError::CannotConvertFileNameToString(url.to_string()))?;
+        Ok(file_name_str.to_string())
     })
 }
 
@@ -96,12 +100,14 @@ impl From<&ImportFormat> for Format {
     }
 }
 
-impl From<&ImportRequest> for ImporterOptions {
-    fn from(req: &ImportRequest) -> Self {
+impl TryFrom<&ImportRequest> for ImporterOptions {
+    type Error = TransporterError;
+
+    fn try_from(req: &ImportRequest) -> Result<Self, Self::Error> {
         ImporterOptionsBuilder::default()
             .base_url(base_url(req.source())) // not used, for ref only
-            .base_path(base_path(req.source())) // not used, for ref only
-            .file_pattern(file_pattern(req.source())) // not used, for ref only
+            .base_path(base_path(req.source())?) // not used, for ref only
+            .file_pattern(file_pattern(req.source())?) // not used, for ref only
             .format(req.format())
             .modified_since(None) // not used, for ref only
             .location_configs(req.source().location().cloud_configs())
@@ -114,7 +120,7 @@ impl From<&ImportRequest> for ImporterOptions {
             .parallel(req.parallelism().unwrap_or(4)) // not used, for ref only
             .out(None) // not used, for ref only
             .build()
-            .expect("Could not build ImporterOptions")
+            .map_err(|e| TransporterError::CouldNotBuildImporterOptions(e.to_string()))
     }
 }
 
@@ -122,7 +128,7 @@ fn create_file_import_instructions(
     import_request: &ImportRequest,
     files_to_import: Vec<(Url, ObjectMeta)>,
 ) -> Result<Vec<crate::transporter::logic::FileImportInstructions>, TransporterError> {
-    let importer_options: Arc<ImporterOptions> = Arc::new(import_request.into());
+    let importer_options: Arc<ImporterOptions> = Arc::new(import_request.try_into()?);
 
     files_to_import
         .into_iter()
@@ -137,19 +143,28 @@ fn create_file_import_instructions(
         .collect()
 }
 
-impl From<crate::transporter::logic::FileImportReport> for FileImportReport {
-    fn from(file_import_report: crate::transporter::logic::FileImportReport) -> Self {
+impl TryFrom<crate::transporter::logic::FileImportReport> for FileImportReport {
+    type Error = TransporterError;
+
+    fn try_from(
+        file_import_report: crate::transporter::logic::FileImportReport,
+    ) -> Result<Self, Self::Error> {
+        let from_url = Url::parse(file_import_report.from())
+            .map_err(|e| TransporterError::InvalidUrl(file_import_report.from().to_string(), e))?;
+        let to_url = Url::parse(file_import_report.to())
+            .map_err(|e| TransporterError::InvalidUrl(file_import_report.to().to_string(), e))?;
+
         FileImportReportBuilder::default()
             .idx(*file_import_report.idx())
-            .from(Url::parse(file_import_report.from()).unwrap())
+            .from(from_url)
             .size(*file_import_report.size())
             .rows(*file_import_report.rows())
             .last_modified(*file_import_report.last_modified())
-            .to(Url::parse(file_import_report.to()).unwrap())
+            .to(to_url)
             .imported_at(*file_import_report.imported_at())
             .import_millis(*file_import_report.import_millis())
             .build()
-            .expect("Could not build FileImportReport")
+            .map_err(|e| TransporterError::CouldNotBuildFileImportReport(e.to_string()))
     }
 }
 
@@ -171,22 +186,22 @@ impl Importer for FilesImporter {
                     .collect::<Vec<_>>()
             })
             .await
-            .expect("Could not run import files")
+            .map_err(|e| TransporterError::CouldNotRunImportFiles(e.to_string()))?
             .into_iter()
             .collect::<Result<_, crate::transporter::logic::ImportError>>()
-            .expect("Could not import files");
+            .map_err(|e| TransporterError::ImportFilesTaskFailed(e.to_string()))?;
 
             import_reports
                 .into_iter()
-                .map(FileImportReport::from)
-                .collect::<Vec<_>>()
+                .map(FileImportReport::try_from)
+                .collect::<Result<Vec<_>, _>>()?
         } else if files_to_import.is_empty() {
             return Ok(vec![]);
         } else {
             let copy_request =
                 convert_import_instructions_to_copy_request(import_request, &files_to_import);
             let copy_report = copy(copy_request).await?;
-            convert_copy_report_to_import_reports(&files_to_import, copy_report)
+            convert_copy_report_to_import_reports(&files_to_import, copy_report)?
         };
         Ok(import_reports)
     }
@@ -211,14 +226,13 @@ fn convert_import_instructions_to_copy_request(
 fn convert_copy_report_to_import_reports(
     files_to_import: &[(Url, ObjectMeta)],
     copy_report: CopyReport,
-) -> Vec<FileImportReport> {
-    #[allow(clippy::let_and_return)]
-    let file_import_reports = copy_report
+) -> Result<Vec<FileImportReport>, TransporterError> {
+    copy_report
         .files()
         .iter()
         .zip(files_to_import.iter().map(|(_, meta)| meta))
         .map(|(file_report, meta)| {
-            let file_import_report = FileImportReportBuilder::default()
+            FileImportReportBuilder::default()
                 .idx(file_report.idx)
                 .from(file_report.from.clone())
                 .size(file_report.size as usize)
@@ -230,11 +244,9 @@ fn convert_copy_report_to_import_reports(
                     (file_report.ended_at - file_report.started_at).num_milliseconds() as usize,
                 )
                 .build()
-                .expect("Could not build FileImportReport");
-            file_import_report
+                .map_err(|e| TransporterError::CouldNotBuildFileImportReport(e.to_string()))
         })
-        .collect::<Vec<_>>();
-    file_import_reports
+        .collect()
 }
 
 #[cfg(test)]

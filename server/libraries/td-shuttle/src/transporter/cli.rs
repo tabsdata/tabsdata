@@ -51,7 +51,10 @@ fn full_path(path: &str) -> PathBuf {
 }
 fn open_file(path: &PathBuf) -> Result<File, TransporterError> {
     File::open(path).map_err(|e| {
-        TransporterError::RequestFileCannotBeOpened(path.to_str().unwrap().to_string(), e)
+        TransporterError::RequestFileCannotBeOpened(
+            path.to_str().unwrap_or("<invalid path>").to_string(),
+            e,
+        )
     })
 }
 fn existing_file(s: &str) -> Result<PathBuf, TransporterError> {
@@ -66,7 +69,10 @@ fn load_request(s: &str) -> Result<TransporterRequest, TransporterError> {
     let path = existing_file(s)?;
     let file = open_file(&path)?;
     serde_yaml::from_reader(file).map_err(|err| {
-        TransporterError::CouldNotReadRequest(path.to_str().unwrap().to_string(), err)
+        TransporterError::CouldNotReadRequest(
+            path.to_str().unwrap_or("<invalid path>").to_string(),
+            err,
+        )
     })
 }
 
@@ -87,10 +93,16 @@ fn non_existing_file(s: &str) -> Result<PathBuf, TransporterError> {
 
 fn write_to_file(path: &Path, data: &impl Serialize) -> Result<(), TransporterError> {
     let file = File::create(path).map_err(|e| {
-        TransporterError::ReportFileCannotBeCreated(path.to_str().unwrap().to_string(), e)
+        TransporterError::ReportFileCannotBeCreated(
+            path.to_str().unwrap_or("<invalid path>").to_string(),
+            e,
+        )
     })?;
     serde_yaml::to_writer(file, &data).map_err(|e| {
-        TransporterError::CouldNotWriteReport(path.to_str().unwrap().to_string(), e)
+        TransporterError::CouldNotWriteReport(
+            path.to_str().unwrap_or("<invalid path>").to_string(),
+            e,
+        )
     })?;
     Ok(())
 }
@@ -114,9 +126,11 @@ async fn run_impl_report_to_file(params: TransporterParams) -> ExitStatus {
         ExitStatus::GeneralError
     };
     let report = res.unwrap_or_else(Some);
-    if let Some(report) = report {
-        write_to_file(&report_file.unwrap(), &report).unwrap();
-    }
+    if let Some(report) = report
+        && let Some(report_path) = report_file
+            && let Err(e) = write_to_file(&report_path, &report) {
+                eprintln!("Failed to write report file: {}", e);
+            }
     status
 }
 
@@ -138,7 +152,11 @@ async fn run_impl(
     // Initialize logging
     logging::start(Level::INFO, None, false);
 
-    let request = params.request.unwrap();
+    let request = params.request.ok_or_else(|| {
+        TransporterReport::ErrorV1(ErrorReport::new(
+            "Request parameter is required".to_string(),
+        ))
+    })?;
 
     let res = match request {
         TransporterRequest::ImportV1(request) => import(request)
@@ -162,6 +180,7 @@ pub(crate) mod tests {
     };
     use crate::transporter::cli::{TransporterParams, run_impl, run_impl_report_to_file};
     use crate::transporter::common::create_store;
+    use crate::transporter::error::TransporterError;
     use clap::Parser;
     use std::fs::File;
     use std::io::Write;
@@ -268,9 +287,11 @@ pub(crate) mod tests {
 
     #[td_test::test(when(reqs = S3WithAccessKeySecretKeyReqs, env_prefix= "s30"))]
     #[tokio::test]
-    async fn test_copy_local_to_aws(s3: S3WithAccessKeySecretKeyReqs) {
+    async fn test_copy_local_to_aws(
+        s3: S3WithAccessKeySecretKeyReqs,
+    ) -> Result<(), TransporterError> {
         let target = Location::S3 {
-            url: build_uuid_v7_url(s3.uri.to_string()),
+            url: build_uuid_v7_url(s3.uri.to_string())?,
             configs: AwsConfigs {
                 region: Some(Value::Literal(s3.region.to_string())),
                 access_key: Value::Literal(s3.access_key.to_string()),
@@ -279,13 +300,16 @@ pub(crate) mod tests {
             },
         };
         test_run_impl_copy(target).await;
+        Ok(())
     }
 
     #[td_test::test(when(reqs = AzureStorageWithAccountKeyReqs, env_prefix= "az0"))]
     #[tokio::test]
-    async fn test_copy_local_to_azure(az: AzureStorageWithAccountKeyReqs) {
+    async fn test_copy_local_to_azure(
+        az: AzureStorageWithAccountKeyReqs,
+    ) -> Result<(), TransporterError> {
         let target = Location::Azure {
-            url: build_uuid_v7_url(az.uri.to_string()),
+            url: build_uuid_v7_url(az.uri.to_string())?,
             configs: AzureConfigs {
                 account_name: Value::Literal(az.account_name.to_string()),
                 account_key: Value::Literal(az.account_key.to_string()),
@@ -293,30 +317,38 @@ pub(crate) mod tests {
             },
         };
         test_run_impl_copy(target).await;
+        Ok(())
     }
 
     #[td_test::test(when(reqs = GcpStorageWithServiceAccountKeyReqs, env_prefix= "gcp0"))]
     #[tokio::test]
-    async fn test_copy_local_to_gcp(gcp: GcpStorageWithServiceAccountKeyReqs) {
+    async fn test_copy_local_to_gcp(
+        gcp: GcpStorageWithServiceAccountKeyReqs,
+    ) -> Result<(), TransporterError> {
         let target = Location::GCS {
-            url: build_uuid_v7_url(gcp.uri.to_string()),
+            url: build_uuid_v7_url(gcp.uri.to_string())?,
             configs: GcpConfigs {
                 service_account_key: Value::Literal(gcp.service_account_key.to_string()),
                 extra_configs: None,
             },
         };
         test_run_impl_copy(target).await;
+        Ok(())
     }
 
-    pub(crate) fn build_uuid_v7_url(url: String) -> Url {
-        let mut url = Url::parse(&url).expect("Invalid base URL");
+    pub(crate) fn build_uuid_v7_url(url: String) -> Result<Url, TransporterError> {
+        let mut url = Url::parse(&url).map_err(|e| TransporterError::InvalidUrl(url.clone(), e))?;
         if !url.path().ends_with('/') {
             url.set_path(&format!("{}/", url.path()));
         }
         let file = format!("{}.parquet", id());
-        url.path_segments_mut()
-            .expect("Cannot modify path segments for URL")
-            .push(&file);
-        url
+        let url_str = url.as_str().to_string();
+        {
+            let mut path_segments = url
+                .path_segments_mut()
+                .map_err(|_| TransporterError::CannotModifyUrlPathSegments(url_str))?;
+            path_segments.push(&file);
+        }
+        Ok(url)
     }
 }

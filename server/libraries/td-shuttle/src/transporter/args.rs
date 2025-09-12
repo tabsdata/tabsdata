@@ -2,6 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use crate::transporter::error::TransporterError;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use clap_derive::{Args, ValueEnum};
 use derive_builder::Builder;
@@ -442,14 +443,14 @@ impl Params {
     }
 
     /// Return the format of the files to import with the format configuration.
-    pub fn format(&self) -> Format {
+    pub fn format(&self) -> Result<Format, TransporterError> {
         Format::from_args(self.format.clone(), &self.format_configs)
     }
 
     /// Return the format configuration for the imported files (saved in the internal format).
-    pub fn to_format(&self) -> ToFormat {
-        let write_options = load_format_config(&self.to_format_configs);
-        ToFormat::new(write_options)
+    pub fn to_format(&self) -> Result<ToFormat, TransporterError> {
+        let write_options = load_format_config(&self.to_format_configs)?;
+        Ok(ToFormat::new(write_options))
     }
 
     pub fn out(&self) -> &Option<String> {
@@ -457,20 +458,20 @@ impl Params {
     }
 
     /// Converts the command line parameters into an ImporterOptions struct.
-    pub async fn importer_options(&self) -> ImporterOptions {
-        ImporterOptions {
+    pub async fn importer_options(&self) -> Result<ImporterOptions, TransporterError> {
+        Ok(ImporterOptions {
             base_url: self.base_url(),
             base_path: self.base_path(),
             file_pattern: self.file_pattern().to_string(),
-            format: self.format(),
+            format: self.format()?,
             modified_since: *self.modified_since(),
             location_configs: self.location_configs().await,
             to: self.to().clone(),
             to_configs: self.to_configs().await,
-            to_format: self.to_format(),
+            to_format: self.to_format()?,
             parallel: self.parallel.unwrap_or(4),
             out: self.out().clone(),
-        }
+        })
     }
 }
 
@@ -485,25 +486,27 @@ pub enum Format {
 }
 
 /// Load a format configuration from a JSON string into the specified generic type.
-fn load_format_config<T>(config_json: &Option<String>) -> T
+fn load_format_config<T>(config_json: &Option<String>) -> Result<T, TransporterError>
 where
     T: serde::de::DeserializeOwned + Default,
 {
     match config_json {
-        None => T::default(),
-        Some(config_yaml) => {
-            serde_yaml::from_str(config_yaml).expect("Could not parse format config")
-        }
+        None => Ok(T::default()),
+        Some(config_yaml) => serde_yaml::from_str(config_yaml)
+            .map_err(TransporterError::CouldNotParseFormatConfig),
     }
 }
 
 impl Format {
-    fn from_args(format: FormatArg, format_configs: &Option<String>) -> Self {
+    fn from_args(
+        format: FormatArg,
+        format_configs: &Option<String>,
+    ) -> Result<Self, TransporterError> {
         match format {
-            FormatArg::Parquet => Format::Parquet(load_format_config(format_configs)),
-            FormatArg::Csv => Format::Csv(load_format_config(format_configs)),
-            FormatArg::NdJson => Format::NdJson(load_format_config(format_configs)),
-            FormatArg::Log => Format::Log(load_format_config(format_configs)),
+            FormatArg::Parquet => Ok(Format::Parquet(load_format_config(format_configs)?)),
+            FormatArg::Csv => Ok(Format::Csv(load_format_config(format_configs)?)),
+            FormatArg::NdJson => Ok(Format::NdJson(load_format_config(format_configs)?)),
+            FormatArg::Log => Ok(Format::Log(load_format_config(format_configs)?)),
         }
     }
 }
@@ -671,6 +674,7 @@ impl ToFormat {
 #[cfg(test)]
 mod tests {
     use crate::transporter::args::{ToFormat, root_folder, slashed_tmp_file, tmp_file, tmp_path};
+    use crate::transporter::error::TransporterError;
     use polars::prelude::{
         ChildFieldOverwrites, KeyValueMetadata, MetadataKeyValue, ParquetCompression,
         ParquetFieldOverwrites, ParquetWriteOptions, PlSmallStr, StatisticsOptions,
@@ -789,7 +793,7 @@ mod tests {
         assert_eq!(params.file_pattern(), "test");
         assert_eq!(params.modified_since(), &None);
         assert_eq!(params.to().as_str(), tmp_file());
-        assert!(matches!(params.to_format(), ToFormat::Parquet(_)));
+        assert!(matches!(params.to_format(), Ok(ToFormat::Parquet(_))));
         assert_eq!(params.out(), &None);
     }
 
@@ -921,9 +925,10 @@ mod tests {
         assert_eq!(params.to().as_str(), tmp_file());
         assert_eq!(params.to_configs().await["y"], "Y".to_string());
         match params.to_format() {
-            ToFormat::Parquet(write_options) => {
+            Ok(ToFormat::Parquet(write_options)) => {
                 assert_eq!(write_options.data_page_size.unwrap(), 64000);
             }
+            Err(e) => panic!("Expected Ok(ToFormat::Parquet), got Err: {}", e),
         }
         assert_eq!(params.out().as_ref().unwrap(), "out");
     }
@@ -1003,16 +1008,17 @@ mod tests {
         };
 
         match params.format() {
-            super::Format::Csv(csv) => {
+            Ok(super::Format::Csv(csv)) => {
                 assert!(csv.has_header.unwrap());
             }
-            _ => panic!("Expected CSV format"),
+            Ok(format) => panic!("Expected CSV format, but got {:?} instead", format),
+            Err(e) => panic!("Expected Ok(CSV format), got Err: {}", e),
         }
     }
 
     //noinspection DuplicatedCode
     #[tokio::test]
-    async fn test_importer_options() {
+    async fn test_importer_options() -> Result<(), TransporterError> {
         let options = ParquetWriteOptions {
             compression: ParquetCompression::Uncompressed,
             statistics: StatisticsOptions {
@@ -1129,7 +1135,7 @@ mod tests {
             out: None,
         };
 
-        let importer_options = params.importer_options().await;
+        let importer_options = params.importer_options().await?;
         assert_eq!(importer_options.base_url().as_str(), "s3://test");
         assert_eq!(importer_options.base_path(), "");
         assert_eq!(importer_options.file_pattern(), "test");
@@ -1148,5 +1154,6 @@ mod tests {
         }
         assert_eq!(*importer_options.parallel(), 4);
         assert_eq!(importer_options.out(), &None);
+        Ok(())
     }
 }
