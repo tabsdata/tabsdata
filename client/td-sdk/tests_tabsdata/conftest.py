@@ -292,7 +292,8 @@ def testing_mariadb(tmp_path_factory, worker_id):
         fn = root_tmp_dir / "docker_mariadb_creation"
         with FileLock(str(fn) + ".lock"):
             # only one worker will be able to create the database
-            yield create_docker_mariadb_database()
+            create_docker_mariadb_database()
+        yield
 
 
 @pytest.fixture(scope="session")
@@ -317,7 +318,8 @@ def testing_hashicorp_vault(tmp_path_factory, worker_id):
         fn = root_tmp_dir / "docker_hashicorp_vault_creation"
         with FileLock(str(fn) + ".lock"):
             # only one worker will be able to create the database
-            yield create_docker_hashicorp_vault()
+            create_docker_hashicorp_vault()
+        yield
 
 
 @pytest.fixture(scope="session")
@@ -333,7 +335,8 @@ def testing_oracle(tmp_path_factory, worker_id):
         fn = root_tmp_dir / "docker_oracle_creation"
         with FileLock(str(fn) + ".lock"):
             # only one worker will be able to create the database
-            yield create_docker_oracle_database()
+            create_docker_oracle_database()
+        yield
 
 
 @pytest.fixture(scope="session")
@@ -349,7 +352,8 @@ def testing_mysql(tmp_path_factory, worker_id):
         fn = root_tmp_dir / "docker_mysql_creation"
         with FileLock(str(fn) + ".lock"):
             # only one worker will be able to create the database
-            yield create_docker_mysql_database()
+            create_docker_mysql_database()
+        yield
 
 
 def create_docker_postgres_database():
@@ -451,7 +455,8 @@ def testing_postgres(tmp_path_factory, worker_id):
         fn = root_tmp_dir / "docker_postgresql_creation"
         with FileLock(str(fn) + ".lock"):
             # only one worker will be able to create the database
-            yield create_docker_postgres_database()
+            create_docker_postgres_database()
+        yield
 
 
 @pytest.fixture(scope="session")

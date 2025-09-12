@@ -46,7 +46,8 @@ def login(tmp_path_factory, worker_id):
         fn = root_tmp_dir / "cli_login"
         with FileLock(str(fn) + ".lock"):
             # only one worker will be able to create the database
-            yield atomic_login()
+            atomic_login()
+        yield
 
 
 def atomic_login():
