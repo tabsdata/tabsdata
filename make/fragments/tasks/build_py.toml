@@ -117,6 +117,7 @@ script = [
 
     set_env PYTHONWARNINGS ignore
 
+    debug "🔷 🔷 _____ Setting up tabsdata pytest context (tabsdata)..."
     cd ${PROJECT_TABSDATA_ROOT_FOLDER}
     debug "🚀 python setup.py --quiet develop --script-dir target/pytest/build"
     exec --fail-on-error python setup.py --quiet develop --script-dir target/pytest/build
@@ -149,6 +150,7 @@ script = [
         if ${is_connector}
             connector_name = basename ${connector}
 
+            debug "🔷 🔷 _____ Setting up tabsdata pytest context (${connector_name})..."
             cd ${connector}
             debug "🚀 python setup.py --quiet develop --script-dir target/pytest/build"
             exec --fail-on-error python setup.py --quiet develop --script-dir target/pytest/build

@@ -514,6 +514,7 @@ script = [
 
     debug "🔷 _____ Setting up tabsdata pytest context (tabsdata & connectors)..."
 
+    cd ${PROJECT_TABSDATA_ROOT_FOLDER}
     cm_run_task egg_py
 
     debug "🔷 _____ Setting up tabsdata pytest python path..."
@@ -542,6 +543,7 @@ script = [
     set_td_tabsdata_dev_pkg = get_env TD_TABSDATA_DEV_PKG
     debug "🔅 tabsdata development python package location set to: ${set_td_tabsdata_dev_pkg}"
 
+    connectors = glob_array ${CONNECTORS_PY_ROOT_FOLDER}/tabsdata_*
     for connector in ${connectors}
         is_connector = is_dir ${connector}
         if ${is_connector}
