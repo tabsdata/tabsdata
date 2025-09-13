@@ -106,6 +106,26 @@ run_task = [
     ] }
 ]
 
+[tasks.link]
+category = "03 - Build"
+description = "Generate dynamic libraries from source code"
+run_task = [
+    { name = [
+        "link_rs",
+        "link_py",
+    ] }
+]
+
+[tasks.egg]
+category = "03 - Build"
+description = "Generate editablue builds from source code"
+run_task = [
+    { name = [
+        "egg_rs",
+        "egg_py",
+    ] }
+]
+
 [tasks.outdated]
 category = "04 - Check"
 description = "Find outdated dependencies"

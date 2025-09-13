@@ -14,6 +14,19 @@ run_task = [
     ] }
 ]
 
+[tasks.build_expnasions_rs]
+category = "03 - Build"
+private = true
+description = "Build and link the PyO3-Polars projects"
+run_task = [
+    { name = [
+        "build_all_rs_expansions",
+        "build_none_rs_expansions"], condition = { env = { "TD_BUILD_ALL" = "true" } } },
+    { name = [
+        "build_none_rs_expansions"
+    ] }
+]
+
 [tasks.build_all_rs]
 category = "03 - Build"
 private = true
@@ -369,18 +382,6 @@ script = [
     end
     ''']
 
-[tasks.build_expnasions_rs]
-category = "03 - Build"
-description = "Build and link the PyO3-Polars projects"
-run_task = [
-    { name = [
-        "build_all_rs_expansions",
-        "build_none_rs_expansions"], condition = { env = { "TD_BUILD_ALL" = "true" } } },
-    { name = [
-        "build_none_rs_expansions"
-    ] }
-]
-
 [tasks.link_rs]
 category = "03 - Build"
 description = "Task 'link' for Rust projects"
@@ -410,3 +411,7 @@ run_task = [
         "link_none_rs_expansions"
     ] }
 ]
+
+[tasks.egg_rs]
+category = "03 - Build"
+description = "Task 'egg' for Rust projects"
