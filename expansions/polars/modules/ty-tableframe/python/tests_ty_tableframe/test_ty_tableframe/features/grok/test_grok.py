@@ -616,7 +616,7 @@ class TestGrokPerformance:
             count = (i % 100) + 1
             user = f"user{i % 1000}"
             ip = f"10.{(i % 255)}.{(i % 255)}.{(i % 255)}"
-            duration = ((i % 5000) + 10) / 10.0  # 1.0 to 500.0 ms
+            duration = ((i % 5000) + 10) / 10.0
             status = [200, 400, 404, 500][i % 4]
             size = (i % 100000) + 1000
 
@@ -750,7 +750,7 @@ class TestGrokErrorHandling:
         }
 
         data = [
-            "hello world",  # both captured
+            "hello world",
             "hello",
         ]
 
