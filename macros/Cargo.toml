@@ -94,7 +94,7 @@ path = "helpers/td-shared"
 version = "0.8.4"
 
 [workspace.dependencies.darling]
-version = "0.21.2"
+version = "0.21.3"
 
 [workspace.dependencies.derive_builder]
 version = "0.20.2"
@@ -110,7 +110,7 @@ version = "0.10.73"
 features = ["vendored"]
 
 [workspace.dependencies.proc-macro-crate]
-version = "3.3.0"
+version = "3.4.0"
 
 [workspace.dependencies.proc-macro2]
 version = "1.0.101"
@@ -122,7 +122,7 @@ version = "1.0.40"
 version = "0.9.2"
 
 [workspace.dependencies.serde]
-version = "1.0.219"
+version = "1.0.225"
 features = ["derive"]
 
 [workspace.dependencies.syn]
@@ -130,7 +130,7 @@ version = "2.0.106"
 features = ["full"]
 
 [workspace.dependencies.toml]
-version = "0.9.5"
+version = "0.9.6"
 
 [workspace.dependencies.utoipa]
 version = "5.4.0"

@@ -103,10 +103,10 @@ path = "../../extensions/rust/te-tableframe"
 
 [workspace.dependencies.arrow]
 package = "polars-arrow"
-version = "0.50.0"
+version = "0.51.0"
 
 [workspace.dependencies.chrono]
-version = "0.4.41"
+version = "0.4.42"
 
 [workspace.dependencies.dashmap]
 version = "6.1.0"
@@ -118,22 +118,22 @@ version = "2.9.0"
 version = "2.4.0"
 
 [workspace.dependencies.indexmap]
-version = "2.11.0"
+version = "2.11.3"
 
 [workspace.dependencies.openssl]
 version = "0.10.73"
 features = ["vendored"]
 
 [workspace.dependencies.polars]
-version = "0.50.0"
+version = "0.51.0"
 features = ["default", "fmt", "dtype-date", "dtype-struct", "timezones"]
 
 [workspace.dependencies.polars-plan]
-version = "0.50.0"
+version = "0.51.0"
 features = ["python"]
 
 [workspace.dependencies.polars-mem-engine]
-version = "0.50.0"
+version = "0.51.0"
 features = ["python"]
 
 # Note: Each pyo3-polars is tightly tied to a specific version of pyo3.
@@ -157,11 +157,11 @@ version = "0.13.1"
 version = "1.11.0"
 
 [workspace.dependencies.serde]
-version = "1.0.219"
+version = "1.0.225"
 features = ["derive"]
 
 [workspace.dependencies.toml]
-version = "0.9.5"
+version = "0.9.6"
 
 [workspace.dependencies.tracing]
 version = "0.1.41"
@@ -170,7 +170,7 @@ version = "0.1.41"
 version = "0.3.20"
 
 [workspace.dependencies.uuid]
-version = "1.18.0"
+version = "1.18.1"
 features = ["v7"]
 
 [workspace.dependencies.uuid7]
