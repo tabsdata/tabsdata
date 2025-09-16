@@ -21,6 +21,9 @@ extend = [
     { path = "./make/fragments/tasks/outdated_rs.toml" },
     { path = "./make/fragments/tasks/outdated_py.toml" },
 
+    { path = "./make/fragments/tasks/shield_rs.toml" },
+    { path = "./make/fragments/tasks/shield_py.toml" },
+
     { path = "./make/fragments/tasks/test_rs.toml" },
     { path = "./make/fragments/tasks/test_py.toml" },
 
@@ -29,13 +32,86 @@ extend = [
     { path = "./make/fragments/aliases/custom.toml" },
 ]
 
+[tasks.make]
+run_task = [
+    { name = [
+        "make_rs",
+        "make_py"
+    ] }
+]
+
+[tasks.make_rs]
+run_task = [
+    { name = [
+        "clean_rs",
+        "compose_rs"], condition = { env = { "CLEAN" = "true" } } },
+    { name = [
+        "compose_rs"
+    ] }
+]
+
+[tasks.make_py]
+run_task = [
+    { name = [
+        "clean_py",
+        "compose_py"], condition = { env = { "CLEAN" = "true" } } },
+    { name = [
+        "compose_py"
+    ] }
+]
+
+[tasks.compose]
+private = true
+run_task = [
+    { name = [
+        "compose_rs",
+        "compose_py",
+    ] }
+]
+
+[tasks.compose_rs]
+private = true
+run_task = [
+    { name = [
+        "build_rs",
+        "test_rs",
+        "check_rs",
+        "fmt_rs",
+        "license_rs",
+        "outdated_rs",
+        "deny_rs",
+        "audit_rs",
+        "pants_rs",
+        "machete_rs",
+        "clippy_rs"
+    ] }
+]
+
+[tasks.compose_py]
+private = true
+run_task = [
+    { name = [
+        "build_py",
+        "test_py",
+        "check_py",
+        "fmt_py",
+        "license_py",
+        "outdated_py",
+        "deny_py",
+        "audit_py",
+        "pants_py",
+        "machete_py",
+        "clippy_py"
+    ] }
+]
+
 [tasks.permit]
 category = "00 - Verify"
 description = "Verify that all essential language tools are available"
 run_task = [
     { name = [
         "permit_py",
-        "permit_rs",
+        "permit_rs"
     ] }
 ]
 
@@ -45,7 +121,67 @@ description = "Remove temporary, build, and target folders"
 run_task = [
     { name = [
         "clean_rs",
-        "clean_py",
+        "clean_py"
+    ] }
+]
+
+[tasks.lock]
+category = "02 - Tidy"
+description = "Generate the dependencies lock files"
+run_task = [
+    { name = [
+        "lock_rs",
+        "lock_py"
+    ] }
+]
+
+[tasks.build]
+category = "03 - Build"
+description = "Compile and build from source code"
+run_task = [
+    { name = [
+        "build_rs",
+        "build_py"
+    ] }
+]
+
+[tasks.link]
+category = "03 - Build"
+description = "Generate dynamic libraries from source code"
+run_task = [
+    { name = [
+        "link_rs",
+        "link_py"
+    ] }
+]
+
+[tasks.egg]
+category = "03 - Build"
+description = "Generate editablue builds from source code"
+run_task = [
+    { name = [
+        "egg_rs",
+        "egg_py"
+    ] }
+]
+
+[tasks.test]
+category = "04 - Test"
+description = "Run unit tests"
+run_task = [
+    { name = [
+        "test_rs",
+        "test_py"
+    ] }
+]
+
+[tasks.outdated]
+category = "05 - Inspect"
+description = "Find outdated dependencies"
+run_task = [
+    { name = [
+        "outdated_rs",
+        "outdated_py"
     ] }
 ]
 
@@ -57,6 +193,8 @@ dependencies = ["set_mode_license"]
 script_runner = "@duckscript"
 script = [
     '''
+    !include_files ./make/libraries/log.ds
+
     license = get_env TD_LICENSE
     if eq ${license} "true"
         cm_run_task license_rs
@@ -86,65 +224,124 @@ script = [
     debug "🔅 Using td license: '${TD_LICENSE}'"
     ''']
 
-[tasks.lock]
-category = "02 - Tidy"
-description = "Generate the dependencies lock files"
+[tasks.duck]
+category = "🦆🦆 - Diagnosis"
+description = "Placeholder for duckscript scripts tests"
+cwd = "${ROOT_PROJECT_TABSDATA_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    info "🦆 Running duckscript..."
+    info "🦆️ If it looks like a duck, swims like a duck, and quacks like a duck, then it probably is a duck."
+    ''']
+
+[tasks.deny]
+category = "07 - Shield"
+description = "Validate code and dependencies for compliance with security and coding conventions"
 run_task = [
     { name = [
-        "lock_rs",
-        "lock_py",
+        "deny_rs",
+        "deny_py"
     ] }
 ]
 
-[tasks.build]
-category = "03 - Build"
-description = "Compile and build from source code"
+[tasks.audit]
+category = "07 - Shield"
+description = "Scan peroject for dependencies with known security vulnerabilities"
 run_task = [
     { name = [
-        "build_rs",
-        "build_py",
+        "audit_rs",
+        "audit_py"
     ] }
 ]
 
-[tasks.link]
-category = "03 - Build"
-description = "Generate dynamic libraries from source code"
+[tasks.pants]
+category = "07 - Shield"
+description = "Scan peroject for dependencies with known security vulnerabilities (cross-language)"
 run_task = [
     { name = [
-        "link_rs",
-        "link_py",
+        "pants_rs",
+        "pants_py"
     ] }
 ]
 
-[tasks.egg]
-category = "03 - Build"
-description = "Generate editablue builds from source code"
-run_task = [
-    { name = [
-        "egg_rs",
-        "egg_py",
-    ] }
-]
+[tasks.env]
+category = "🦆🦆 - Diagnosis"
+description = "SHow all environment variables available to cargo-make"
+cwd = "${ROOT_PROJECT_TABSDATA_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
 
-[tasks.outdated]
-category = "04 - Check"
-description = "Find outdated dependencies"
-run_task = [
-    { name = [
-        "outdated_rs",
-        "outdated_py",
-    ] }
-]
+    env_keys = array
+    array_push ${env_keys} CARGO_MAKE
+    array_push ${env_keys} CARGO_MAKE_TASK
+    array_push ${env_keys} CARGO_MAKE_TASK_ARGS
+    array_push ${env_keys} CARGO_MAKE_CURRENT_TASK_NAME
+    array_push ${env_keys} CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE
+    array_push ${env_keys} CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE_DIRECTORY
+    array_push ${env_keys} CARGO_MAKE_COMMAND
+    array_push ${env_keys} CARGO_MAKE_WORKING_DIRECTORY
+    array_push ${env_keys} CARGO_MAKE_WORKSPACE_WORKING_DIRECTORY
+    array_push ${env_keys} CARGO_MAKE_PROFILE
+    array_push ${env_keys} CARGO_MAKE_ADDITIONAL_PROFILES
+    array_push ${env_keys} CARGO_MAKE_PROJECT_NAME
+    array_push ${env_keys} CARGO_MAKE_PROJECT_VERSION
+    array_push ${env_keys} CARGO_MAKE_CARGO_HOME
+    array_push ${env_keys} CARGO_MAKE_CARGO_PROFILE
+    array_push ${env_keys} CARGO_MAKE_RUST_VERSION
+    array_push ${env_keys} CARGO_MAKE_RUST_CHANNEL
+    array_push ${env_keys} CARGO_MAKE_RUST_TARGET_ARCH
+    array_push ${env_keys} CARGO_MAKE_RUST_TARGET_ENV
+    array_push ${env_keys} CARGO_MAKE_RUST_TARGET_OS
+    array_push ${env_keys} CARGO_MAKE_RUST_TARGET_POINTER_WIDTH
+    array_push ${env_keys} CARGO_MAKE_RUST_TARGET_VENDOR
+    array_push ${env_keys} CARGO_MAKE_RUST_TARGET_TRIPLE
+    array_push ${env_keys} CARGO_MAKE_CRATE_TARGET_DIRECTORY
+    array_push ${env_keys} CARGO_MAKE_CRATE_CUSTOM_TRIPLE_TARGET_DIRECTORY
+    array_push ${env_keys} CARGO_MAKE_CRATE_HAS_DEPENDENCIES
+    array_push ${env_keys} CARGO_MAKE_CRATE_IS_WORKSPACE
+    array_push ${env_keys} CARGO_MAKE_CRATE_WORKSPACE_MEMBERS
+    array_push ${env_keys} CARGO_MAKE_CRATE_CURRENT_WORKSPACE_MEMBER
+    array_push ${env_keys} CARGO_MAKE_CRATE_LOCK_FILE_EXISTS
+    array_push ${env_keys} CARGO_MAKE_CRATE_TARGET_TRIPLE
+    array_push ${env_keys} CARGO_MAKE_WORKSPACE_PACKAGE_NAME
+    array_push ${env_keys} CARGO_MAKE_WORKSPACE_PACKAGE_VERSION
+    array_push ${env_keys} CARGO_MAKE_WORKSPACE_PACKAGE_DESCRIPTION
+    array_push ${env_keys} CARGO_MAKE_WORKSPACE_PACKAGE_LICENSE
+    array_push ${env_keys} CARGO_MAKE_WORKSPACE_PACKAGE_DOCUMENTATION
+    array_push ${env_keys} CARGO_MAKE_WORKSPACE_PACKAGE_HOMEPAGE
+    array_push ${env_keys} CARGO_MAKE_WORKSPACE_PACKAGE_REPOSITORY
+    array_push ${env_keys} CARGO_MAKE_CI
+    array_push ${env_keys} CARGO_MAKE_PR
+    array_push ${env_keys} CARGO_MAKE_CI_BRANCH_NAME
+    array_push ${env_keys} CARGO_MAKE_CI_VENDOR
+    array_push ${env_keys} CARGO_MAKE_DUCKSCRIPT_VERSION
+    array_push ${env_keys} CARGO_MAKE_DUCKSCRIPT_SDK_VERSION
+    array_push ${env_keys} CARGO_MAKE_CRATE_NAME
+    array_push ${env_keys} CARGO_MAKE_CRATE_FS_NAME
+    array_push ${env_keys} CARGO_MAKE_CRATE_VERSION
+    array_push ${env_keys} CARGO_MAKE_CRATE_DESCRIPTION
+    array_push ${env_keys} CARGO_MAKE_CRATE_LICENSE
+    array_push ${env_keys} CARGO_MAKE_CRATE_DOCUMENTATION
+    array_push ${env_keys} CARGO_MAKE_CRATE_HOMEPAGE
+    array_push ${env_keys} CARGO_MAKE_CRATE_REPOSITORY
+    array_push ${env_keys} CARGO_MAKE_GIT_BRANCH
+    array_push ${env_keys} CARGO_MAKE_GIT_USER_NAME
+    array_push ${env_keys} CARGO_MAKE_GIT_USER_EMAIL
+    array_push ${env_keys} CARGO_MAKE_GIT_HEAD_LAST_COMMIT_HASH
+    array_push ${env_keys} CARGO_MAKE_GIT_HEAD_LAST_COMMIT_HASH_PREFIX
 
-[tasks.test]
-category = "05 - Test"
-description = "Run unit tests"
-run_task = [
-    { name = [
-        "test_rs",
-        "test_py",
-    ] }
-]
+    for env_key in ${env_keys}
+        env_value = get_env ${env_key}
+        debug "☘️ ${env_key} :: ${env_value}"
+    end
+    ''']
+
+## wip...
 
 [tasks.deploy]
 category = "80 - Install"
@@ -238,163 +435,6 @@ script = [
     message = array_join ${lines} "\n"
     info ${message}
     ''']
-
-## wip...
-
-#####
-
-[tasks.duck]
-cwd = "${ROOT_PROJECT_TABSDATA_FOLDER}"
-script_runner = "@duckscript"
-script = [
-    '''
-    !include_files ./make/libraries/log.ds
-    ''']
-
-[tasks.env]
-cwd = "${ROOT_PROJECT_TABSDATA_FOLDER}"
-script_runner = "@duckscript"
-script = [
-    '''
-    !include_files ./make/libraries/log.ds
-
-    env_keys = array
-    array_push ${env_keys} CARGO_MAKE
-    array_push ${env_keys} CARGO_MAKE_TASK
-    array_push ${env_keys} CARGO_MAKE_TASK_ARGS
-    array_push ${env_keys} CARGO_MAKE_CURRENT_TASK_NAME
-    array_push ${env_keys} CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE
-    array_push ${env_keys} CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE_DIRECTORY
-    array_push ${env_keys} CARGO_MAKE_COMMAND
-    array_push ${env_keys} CARGO_MAKE_WORKING_DIRECTORY
-    array_push ${env_keys} CARGO_MAKE_WORKSPACE_WORKING_DIRECTORY
-    array_push ${env_keys} CARGO_MAKE_PROFILE
-    array_push ${env_keys} CARGO_MAKE_ADDITIONAL_PROFILES
-    array_push ${env_keys} CARGO_MAKE_PROJECT_NAME
-    array_push ${env_keys} CARGO_MAKE_PROJECT_VERSION
-    array_push ${env_keys} CARGO_MAKE_CARGO_HOME
-    array_push ${env_keys} CARGO_MAKE_CARGO_PROFILE
-    array_push ${env_keys} CARGO_MAKE_RUST_VERSION
-    array_push ${env_keys} CARGO_MAKE_RUST_CHANNEL
-    array_push ${env_keys} CARGO_MAKE_RUST_TARGET_ARCH
-    array_push ${env_keys} CARGO_MAKE_RUST_TARGET_ENV
-    array_push ${env_keys} CARGO_MAKE_RUST_TARGET_OS
-    array_push ${env_keys} CARGO_MAKE_RUST_TARGET_POINTER_WIDTH
-    array_push ${env_keys} CARGO_MAKE_RUST_TARGET_VENDOR
-    array_push ${env_keys} CARGO_MAKE_RUST_TARGET_TRIPLE
-    array_push ${env_keys} CARGO_MAKE_CRATE_TARGET_DIRECTORY
-    array_push ${env_keys} CARGO_MAKE_CRATE_CUSTOM_TRIPLE_TARGET_DIRECTORY
-    array_push ${env_keys} CARGO_MAKE_CRATE_HAS_DEPENDENCIES
-    array_push ${env_keys} CARGO_MAKE_CRATE_IS_WORKSPACE
-    array_push ${env_keys} CARGO_MAKE_CRATE_WORKSPACE_MEMBERS
-    array_push ${env_keys} CARGO_MAKE_CRATE_CURRENT_WORKSPACE_MEMBER
-    array_push ${env_keys} CARGO_MAKE_CRATE_LOCK_FILE_EXISTS
-    array_push ${env_keys} CARGO_MAKE_CRATE_TARGET_TRIPLE
-    array_push ${env_keys} CARGO_MAKE_WORKSPACE_PACKAGE_NAME
-    array_push ${env_keys} CARGO_MAKE_WORKSPACE_PACKAGE_VERSION
-    array_push ${env_keys} CARGO_MAKE_WORKSPACE_PACKAGE_DESCRIPTION
-    array_push ${env_keys} CARGO_MAKE_WORKSPACE_PACKAGE_LICENSE
-    array_push ${env_keys} CARGO_MAKE_WORKSPACE_PACKAGE_DOCUMENTATION
-    array_push ${env_keys} CARGO_MAKE_WORKSPACE_PACKAGE_HOMEPAGE
-    array_push ${env_keys} CARGO_MAKE_WORKSPACE_PACKAGE_REPOSITORY
-    array_push ${env_keys} CARGO_MAKE_CI
-    array_push ${env_keys} CARGO_MAKE_PR
-    array_push ${env_keys} CARGO_MAKE_CI_BRANCH_NAME
-    array_push ${env_keys} CARGO_MAKE_CI_VENDOR
-    array_push ${env_keys} CARGO_MAKE_DUCKSCRIPT_VERSION
-    array_push ${env_keys} CARGO_MAKE_DUCKSCRIPT_SDK_VERSION
-    array_push ${env_keys} CARGO_MAKE_CRATE_NAME
-    array_push ${env_keys} CARGO_MAKE_CRATE_FS_NAME
-    array_push ${env_keys} CARGO_MAKE_CRATE_VERSION
-    array_push ${env_keys} CARGO_MAKE_CRATE_DESCRIPTION
-    array_push ${env_keys} CARGO_MAKE_CRATE_LICENSE
-    array_push ${env_keys} CARGO_MAKE_CRATE_DOCUMENTATION
-    array_push ${env_keys} CARGO_MAKE_CRATE_HOMEPAGE
-    array_push ${env_keys} CARGO_MAKE_CRATE_REPOSITORY
-    array_push ${env_keys} CARGO_MAKE_GIT_BRANCH
-    array_push ${env_keys} CARGO_MAKE_GIT_USER_NAME
-    array_push ${env_keys} CARGO_MAKE_GIT_USER_EMAIL
-    array_push ${env_keys} CARGO_MAKE_GIT_HEAD_LAST_COMMIT_HASH
-    array_push ${env_keys} CARGO_MAKE_GIT_HEAD_LAST_COMMIT_HASH_PREFIX
-
-    for env_key in ${env_keys}
-        env_value = get_env ${env_key}
-        debug "☘️ ${env_key} :: ${env_value}"
-    end
-    ''']
-
-[tasks.make]
-run_task = [
-    { name = [
-        "make_rs",
-        "make_py"
-    ] }
-]
-
-[tasks.make_rs]
-run_task = [
-    { name = [
-        "clean_rs",
-        "compose_rs"], condition = { env = { "CLEAN" = "true" } } },
-    { name = [
-        "compose_rs"
-    ] }
-]
-
-[tasks.make_py]
-run_task = [
-    { name = [
-        "clean_py",
-        "compose_py"], condition = { env = { "CLEAN" = "true" } } },
-    { name = [
-        "compose_py"
-    ] }
-]
-
-[tasks.compose]
-private = true
-run_task = [
-    { name = [
-        "compose_rs",
-        "compose_py",
-    ] }
-]
-
-[tasks.compose_rs]
-private = true
-run_task = [
-    { name = [
-        "build_rs",
-        "test_rs",
-        "check_rs",
-        "fmt_rs",
-        "license_rs",
-        "outdated_rs",
-        "deny_rs",
-        "audit_rs",
-        "pants_rs",
-        "machete_rs",
-        "clippy_rs",
-    ] }
-]
-
-[tasks.compose_py]
-private = true
-run_task = [
-    { name = [
-        "build_py",
-        "test_py",
-        "check_py",
-        "fmt_py",
-        "license_py",
-        "outdated_py",
-        "deny_py",
-        "audit_py",
-        "pants_py",
-        "machete_py",
-        "clippy_py",
-    ] }
-]
 
 [tasks.rstest]
 alias = "rstest_modules"
@@ -676,118 +716,6 @@ script = [
         warn "Generating the source track metadata file does not apply for this project"
     end
     ''']
-
-[tasks.deny_rs]
-run_task = [
-    { name = [
-        "deny_rs_macros",
-        "deny_rs_modules"
-    ] }
-]
-
-[tasks.deny_py]
-
-[tasks.deny_rs_macros]
-private = true
-cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-script_runner = "@duckscript"
-script = [
-    '''
-    if is_empty ${td-target}
-        if is_empty ${td-toolchain}
-            exec --fail-on-error cargo deny --locked --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} check --config ${DENY_TOML} bans advisories sources
-        else
-            exec --fail-on-error cargo +${td-toolchain} deny --locked --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} check --config ${DENY_TOML} bans advisories sources
-       end
-    else
-        if is_empty ${td-toolchain}
-            exec --fail-on-error cargo deny --locked --target ${td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} check --config ${DENY_TOML} bans advisories sources
-        else
-            exec --fail-on-error cargo +${td-toolchain} deny --locked --target ${td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} check --config ${DENY_TOML} bans advisories sources
-        end
-    end
-    ''']
-
-[tasks.deny_rs_modules]
-private = true
-cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-script_runner = "@duckscript"
-script = [
-    '''
-    if is_empty ${td-target}
-        if is_empty ${td-toolchain}
-            exec --fail-on-error cargo deny --locked --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} check --config ${DENY_TOML} bans advisories sources
-        else
-            exec --fail-on-error cargo +${td-toolchain} deny --locked --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} check --config ${DENY_TOML} bans advisories sources
-       end
-    else
-        if is_empty ${td-toolchain}
-            exec --fail-on-error cargo deny --locked --target ${td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} check --config ${DENY_TOML} bans advisories sources
-        else
-            exec --fail-on-error cargo +${td-toolchain} deny --locked --target ${td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} check --config ${DENY_TOML} bans advisories sources
-        end
-    end
-    ''']
-
-[tasks.audit]
-run_task = [
-    { name = [
-        "audit_rs",
-        "audit_py"
-    ] }
-]
-
-[tasks.audit_rs]
-run_task = [
-    { name = [
-        "audit_rs_macros",
-        "audit_rs_modules"
-    ] }
-]
-
-[tasks.audit_py]
-
-[tasks.audit_rs_macros]
-private = true
-cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-command = "cargo"
-args = ["audit", "--file", "${AUDIT_TOML}"]
-
-[tasks.audit_rs_modules]
-private = true
-cwd = "${ROOT_PROJECT_TABSDATA_FOLDER}"
-command = "cargo"
-args = ["audit", "--file", "${AUDIT_TOML}"]
-
-[tasks.pants]
-run_task = [
-    { name = [
-        "pants_rs",
-        "pants_py"
-    ] }
-]
-
-[tasks.pants_rs]
-run_task = [
-    { name = [
-        "pants_rs_macros",
-        "pants_rs_modules"
-    ] }
-]
-
-[tasks.pants_py]
-
-[tasks.pants_rs_macros]
-private = true
-cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-command = "cargo"
-args = ["pants", "--ignore-file", "${PANTS_JSON}", "--tomlfile", "${PROJECT_RS_TD_MACROS_CARGO_TOML}"]
-
-[tasks.pants_rs_modules]
-private = true
-cwd = "${ROOT_PROJECT_TABSDATA_FOLDER}"
-command = "cargo"
-args = ["pants", "--ignore-file", "${PANTS_JSON}", "--tomlfile", "${PROJECT_RS_TABSDATA_CARGO_TOML}"]
 
 [tasks.machete]
 run_task = [

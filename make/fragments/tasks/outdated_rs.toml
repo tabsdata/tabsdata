@@ -3,7 +3,7 @@
 #
 
 [tasks.outdated_rs]
-category = "04 - Check"
+category = "05 - Inspect"
 description = "Task 'outdated' for Rust projects"
 run_task = [
     { name = [
@@ -15,7 +15,7 @@ run_task = [
 
 
 [tasks.outdated_rs_macros]
-category = "04 - Check"
+category = "05 - Inspect"
 private = true
 cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
 script_runner = "@duckscript"
@@ -28,7 +28,7 @@ script = [
     ''']
 
 [tasks.outdated_rs_modules]
-category = "04 - Check"
+category = "05 - Inspect"
 private = true
 cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
 script_runner = "@duckscript"
@@ -41,7 +41,7 @@ script = [
     ''']
 
 [tasks.outdated_rs_expansions]
-category = "04 - Check"
+category = "05 - Inspect"
 private = true
 cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
 script_runner = "@duckscript"

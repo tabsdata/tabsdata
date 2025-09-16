@@ -1,0 +1,146 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[tasks.deny_rs]
+category = "07 - Shield"
+description = "Task 'deny' for Rust projects"
+run_task = [
+    { name = [
+        "deny_rs_macros",
+        "deny_rs_modules",
+        "deny_rs_expansions"
+    ] }
+]
+
+[tasks.deny_rs_macros]
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} deny --locked %{td-target-token} %{td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} check --config ${DENY_TOML} bans advisories sources"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} deny --locked %{td-target-token} %{td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} check --config ${DENY_TOML} bans advisories sources
+    ''']
+
+[tasks.deny_rs_modules]
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} deny --locked %{td-target-token} %{td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} check --config ${DENY_TOML} bans advisories sources"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} deny --locked %{td-target-token} %{td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} check --config ${DENY_TOML} bans advisories sources
+    ''']
+
+[tasks.deny_rs_expansions]
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} deny --locked %{td-target-token} %{td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} check --config ${DENY_TOML} bans advisories sources"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} deny --locked %{td-target-token} %{td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} check --config ${DENY_TOML} bans advisories sources
+    ''']
+
+[tasks.audit_rs]
+category = "07 - Shield"
+description = "Task 'audit' for Rust projects"
+run_task = [
+    { name = [
+        "audit_rs_macros",
+        "audit_rs_modules",
+        "audit_rs_expansions"
+    ] }
+]
+
+[tasks.audit_rs_macros]
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    debug "🚀 cargo audit --deny warnings --file ${PROJECT_RS_TD_MACROS_CARGO_LOCK}"
+    exec --fail-on-error cargo audit --deny warnings --file "${PROJECT_RS_TD_MACROS_CARGO_LOCK}"
+    ''']
+
+[tasks.audit_rs_modules]
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    debug "🚀 cargo audit --deny warnings --file ${PROJECT_RS_TABSDATA_CARGO_LOCK}"
+    exec --fail-on-error cargo audit --deny warnings --file "${PROJECT_RS_TABSDATA_CARGO_LOCK}"
+    ''']
+
+[tasks.audit_rs_expansions]
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    debug "🚀 cargo audit --deny warnings --file ${PROJECT_RS_TY_EXPANSIONS_CARGO_LOCK}"
+    exec --fail-on-error cargo audit --deny warnings --file "${PROJECT_RS_TY_EXPANSIONS_CARGO_LOCK}"
+    ''']
+
+
+[tasks.pants_rs]
+category = "07 - Shield"
+description = "Task 'pants' for TypeScript projects"
+run_task = [
+    { name = [
+        "pants_rs_macros",
+        "pants_rs_modules",
+        "pants_rs_expansions"
+    ] }
+]
+
+[tasks.pants_rs_macros]
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    debug "🚀 cargo pants --ignore-file ${PANTS_JSON} --tomlfile ${PROJECT_RS_TD_MACROS_CARGO_TOML}"
+    exec --fail-on-error cargo pants --ignore-file ${PANTS_JSON} --tomlfile ${PROJECT_RS_TD_MACROS_CARGO_TOML}
+    ''']
+
+
+[tasks.pants_rs_modules]
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    debug "🚀 cargo pants --ignore-file ${PANTS_JSON} --tomlfile ${PROJECT_RS_TABSDATA_CARGO_TOML}"
+    exec --fail-on-error cargo pants --ignore-file ${PANTS_JSON} --tomlfile ${PROJECT_RS_TABSDATA_CARGO_TOML}
+    ''']
+
+[tasks.pants_rs_expansions]
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    debug "🚀 cargo pants --ignore-file ${PANTS_JSON} --tomlfile ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML}"
+    exec --fail-on-error cargo pants --ignore-file ${PANTS_JSON} --tomlfile ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML}
+    ''']

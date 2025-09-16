@@ -3,7 +3,7 @@
 #
 
 [tasks.outdated_py]
-category = "04 - Check"
+category = "05 - Inspect"
 description = "Task 'outdated' for Python projects"
 script_runner = "@duckscript"
 env.PIP_EXTRA_INDEX_URL = { unset = true }

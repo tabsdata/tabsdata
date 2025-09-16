@@ -47,6 +47,10 @@ PROJECT_RS_TABSDATA_CARGO_TOML = { value = "${ROOT_PROJECT_TABSDATA_FOLDER}/Carg
 PROJECT_RS_TD_MACROS_CARGO_TOML = { value = "${ROOT_PROJECT_TABSDATA_FOLDER}/macros/Cargo.toml", normalize = true }
 PROJECT_RS_TY_EXPANSIONS_CARGO_TOML = { value = "${ROOT_PROJECT_TABSDATA_FOLDER}/expansions/polars/Cargo.toml", normalize = true }
 
+PROJECT_RS_TABSDATA_CARGO_LOCK = { value = "${ROOT_PROJECT_TABSDATA_FOLDER}/Cargo.lock", normalize = true }
+PROJECT_RS_TD_MACROS_CARGO_LOCK = { value = "${ROOT_PROJECT_TABSDATA_FOLDER}/macros/Cargo.lock", normalize = true }
+PROJECT_RS_TY_EXPANSIONS_CARGO_LOCK = { value = "${ROOT_PROJECT_TABSDATA_FOLDER}/expansions/polars/Cargo.lock", normalize = true }
+
 BOOK_DEVELOPER_GUIDE_FOLDER = { value = "${ROOT_PROJECT_TABSDATA_FOLDER}/books/dguide", normalize = true }
 
 TESTS_PY_TA_FEATURES_FOLDER = { value = "tests_ta_features/", normalize = true }
@@ -130,3 +134,4 @@ reduce_output = false
 init_task = "setup"
 end_task = "teardown"
 on_error_task = "failure"
+# time_summary = true

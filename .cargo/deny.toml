@@ -10,20 +10,7 @@
 # Warning: These ignored advisories are also specified in .cargo/audit.toml.
 
 ignore = [
-    # These are obsolescencese vulnerabilities. Eventually, we should be moving to alternative crates.
-    "RUSTSEC-2019-0036",
-    "RUSTSEC-2020-0036",
-    "RUSTSEC-2024-0320",
-    "RUSTSEC-2024-0370",
-    # These are real vulnerabilities! We should be observing if updated crates remove them.
-    "RUSTSEC-2023-0086",
-    "RUSTSEC-2024-0376",
-    "RUSTSEC-2024-0379",
-    "RUSTSEC-2024-0399",
-    "RUSTSEC-2024-0402",
-    "RUSTSEC-2024-0436",
-    "RUSTSEC-2025-0003",
-    "RUSTSEC-2025-0014"
+    "RUSTSEC-2024-0436"
 ]
 
 [bans]
@@ -37,6 +24,7 @@ deny = [{ crate = "log", reason = "We use 'tracing' crate instead, which has equ
     "mio",
     "native-tls",
     "opentelemetry-appender-log",
+    "pyo3-stub-gen",
     "reqwest",
     "rustls",
     "sqlparser",
