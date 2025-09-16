@@ -673,11 +673,11 @@ dependencies = [
 
 [[package]]
 name = "camino"
-version = "1.1.12"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd0b03af37dad7a14518b7691d81acb0f8222604ad3d1b02f6b4bed5188c0cd5"
+checksum = "e1de8bc0aa9e9385ceb3bf0c152e3a9b9544f6c4a912c8ae504e80c1f0368603"
 dependencies = [
- "serde",
+ "serde_core",
 ]
 
 [[package]]
@@ -880,9 +880,9 @@ dependencies = [
 
 [[package]]
 name = "config"
-version = "0.15.15"
+version = "0.15.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0faa974509d38b33ff89282db9c3295707ccf031727c0de9772038ec526852ba"
+checksum = "cef036f0ecf99baef11555578630e2cca559909b4c50822dbba828c252d21c49"
 dependencies = [
  "async-trait",
  "convert_case",
@@ -890,8 +890,8 @@ dependencies = [
  "pathdiff",
  "ron",
  "rust-ini",
- "serde",
  "serde-untagged",
+ "serde_core",
  "serde_json",
  "toml",
  "winnow",
@@ -1446,11 +1446,12 @@ checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 
 [[package]]
 name = "erased-serde"
-version = "0.4.6"
+version = "0.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e004d887f51fcb9fef17317a2f3525c887d8aa3f4f50fed920816a688284a5b7"
+checksum = "259d404d09818dec19332e31d94558aeb442fea04c817006456c24b5460bbd4b"
 dependencies = [
  "serde",
+ "serde_core",
  "typeid",
 ]
 
@@ -1613,9 +1614,9 @@ dependencies = [
 
 [[package]]
 name = "fs-err"
-version = "3.1.1"
+version = "3.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "88d7be93788013f265201256d58f04936a8079ad5dc898743aa20525f503b683"
+checksum = "44f150ffc8782f35521cec2b23727707cb4045706ba3c854e86bef66b3a8cdbd"
 dependencies = [
  "autocfg",
  "tokio",
@@ -1770,7 +1771,7 @@ dependencies = [
  "js-sys",
  "libc",
  "r-efi",
- "wasi 0.14.5+wasi-0.2.4",
+ "wasi 0.14.7+wasi-0.2.4",
  "wasm-bindgen",
 ]
 
@@ -1823,7 +1824,7 @@ dependencies = [
  "futures-core",
  "futures-sink",
  "http",
- "indexmap 2.11.1",
+ "indexmap 2.11.3",
  "slab",
  "tokio",
  "tokio-util",
@@ -2062,9 +2063,9 @@ dependencies = [
 
 [[package]]
 name = "hyper-util"
-version = "0.1.16"
+version = "0.1.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d9b05277c7e8da2c93a568989bb6207bef0112e8d17df7a6eda4a3cf143bc5e"
+checksum = "3c6995591a8f1380fcb4ba966a252a4b29188d51d2b89e3a252f5305be65aea8"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -2270,13 +2271,14 @@ dependencies = [
 
 [[package]]
 name = "indexmap"
-version = "2.11.1"
+version = "2.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "206a8042aec68fa4a62e8d3f7aa4ceb508177d9324faf261e1959e495b7a1921"
+checksum = "92119844f513ffa41556430369ab02c295a3578af21cf945caa3e9e0c2481ac3"
 dependencies = [
  "equivalent",
  "hashbrown 0.15.5",
  "serde",
+ "serde_core",
 ]
 
 [[package]]
@@ -2495,9 +2497,9 @@ checksum = "f9fbbcab51052fe104eb5e5d351cf728d30a5be1fe14d9be8a3b097481fb97de"
 
 [[package]]
 name = "libredox"
-version = "0.1.9"
+version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "391290121bad3d37fbddad76d8f5d1c1c314cfc646d143d7e07a3086ddff0ce3"
+checksum = "416f7e718bdb06000964960ffa43b4335ad4012ae8b99060261aa4a8088d5ccb"
 dependencies = [
  "bitflags 2.9.4",
  "libc",
@@ -3196,7 +3198,7 @@ checksum = "54acf3a685220b533e437e264e4d932cfbdc4cc7ec0cd232ed73c08d03b8a7ca"
 dependencies = [
  "fixedbitset",
  "hashbrown 0.15.5",
- "indexmap 2.11.1",
+ "indexmap 2.11.3",
  "serde",
  "serde_derive",
 ]
@@ -3397,7 +3399,7 @@ dependencies = [
  "comfy-table",
  "either",
  "hashbrown 0.15.5",
- "indexmap 2.11.1",
+ "indexmap 2.11.3",
  "itoa",
  "num-traits",
  "polars-arrow",
@@ -3526,7 +3528,7 @@ dependencies = [
  "chrono",
  "fallible-streaming-iterator",
  "hashbrown 0.15.5",
- "indexmap 2.11.1",
+ "indexmap 2.11.3",
  "itoa",
  "num-traits",
  "polars-arrow",
@@ -3603,7 +3605,7 @@ dependencies = [
  "either",
  "hashbrown 0.15.5",
  "hex",
- "indexmap 2.11.1",
+ "indexmap 2.11.3",
  "jsonpath_lib_polars_vendor",
  "libm",
  "memchr",
@@ -3719,7 +3721,7 @@ version = "0.50.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4b2daa5d628c4aa56deed967cc64fd24c9f62a919c8aaaf2b77b1457f8684f98"
 dependencies = [
- "indexmap 2.11.1",
+ "indexmap 2.11.3",
  "polars-error",
  "polars-utils",
  "serde",
@@ -3820,7 +3822,7 @@ dependencies = [
  "flate2",
  "foldhash",
  "hashbrown 0.15.5",
- "indexmap 2.11.1",
+ "indexmap 2.11.3",
  "libc",
  "memmap2",
  "num-traits",
@@ -3881,9 +3883,9 @@ dependencies = [
 
 [[package]]
 name = "proc-macro-crate"
-version = "3.3.0"
+version = "3.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "edce586971a4dfaa28950c6f18ed55e0406c1ab88bbce2c6f6293a7aaba73d35"
+checksum = "219cb19e96be00ab2e37d6e299658a0cfa83e52429179969b0f0121b4ac46983"
 dependencies = [
  "toml_edit",
 ]
@@ -4462,9 +4464,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-webpki"
-version = "0.103.5"
+version = "0.103.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b5a37813727b78798e53c2bec3f5e8fe12a6d6f8389bf9ca7802add4c9905ad8"
+checksum = "8572f3c2cb9934231157b45499fc41e1f58c589fdfb81a844ba873265e80f8eb"
 dependencies = [
  "aws-lc-rs",
  "ring",
@@ -4546,38 +4548,50 @@ dependencies = [
 
 [[package]]
 name = "semver"
-version = "1.0.26"
+version = "1.0.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "56e6fa9c48d24d85fb3de5ad847117517440f6beceb7798af16b4a87d616b8d0"
+checksum = "d767eb0aabc880b29956c35734170f26ed551a859dbd361d140cdbeca61ab1e2"
 dependencies = [
  "serde",
+ "serde_core",
 ]
 
 [[package]]
 name = "serde"
-version = "1.0.219"
+version = "1.0.225"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f0e2c6ed6606019b4e29e69dbaba95b11854410e5347d525002456dbbb786b6"
+checksum = "fd6c24dee235d0da097043389623fb913daddf92c76e9f5a1db88607a0bcbd1d"
 dependencies = [
+ "serde_core",
  "serde_derive",
 ]
 
 [[package]]
 name = "serde-untagged"
-version = "0.1.8"
+version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "34836a629bcbc6f1afdf0907a744870039b1e14c0561cb26094fa683b158eff3"
+checksum = "f9faf48a4a2d2693be24c6289dbe26552776eb7737074e6722891fadbe6c5058"
 dependencies = [
  "erased-serde",
  "serde",
+ "serde_core",
  "typeid",
 ]
 
 [[package]]
-name = "serde_derive"
-version = "1.0.219"
+name = "serde_core"
+version = "1.0.225"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b0276cf7f2c73365f7157c8123c21cd9a50fbbd844757af28ca1f5925fc2a00"
+checksum = "659356f9a0cb1e529b24c01e43ad2bdf520ec4ceaf83047b83ddcc2251f96383"
+dependencies = [
+ "serde_derive",
+]
+
+[[package]]
+name = "serde_derive"
+version = "1.0.225"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0ea936adf78b1f766949a4977b91d2f5595825bd6ec079aa9543ad2685fc4516"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4586,56 +4600,59 @@ dependencies = [
 
 [[package]]
 name = "serde_html_form"
-version = "0.2.7"
+version = "0.2.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9d2de91cf02bbc07cde38891769ccd5d4f073d22a40683aa4bc7a95781aaa2c4"
+checksum = "b2f2d7ff8a2140333718bb329f5c40fc5f0865b84c426183ce14c97d2ab8154f"
 dependencies = [
  "form_urlencoded",
- "indexmap 2.11.1",
+ "indexmap 2.11.3",
  "itoa",
  "ryu",
- "serde",
+ "serde_core",
 ]
 
 [[package]]
 name = "serde_json"
-version = "1.0.143"
+version = "1.0.145"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d401abef1d108fbd9cbaebc3e46611f4b1021f714a0597a71f41ee463f5f4a5a"
+checksum = "402a6f66d8c709116cf22f558eab210f5a50187f702eb4d7e5ef38d9a7f1c79c"
 dependencies = [
- "indexmap 2.11.1",
+ "indexmap 2.11.3",
  "itoa",
  "memchr",
  "ryu",
  "serde",
+ "serde_core",
 ]
 
 [[package]]
 name = "serde_path_to_error"
-version = "0.1.17"
+version = "0.1.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "59fab13f937fa393d08645bf3a84bdfe86e296747b506ada67bb15f10f218b2a"
+checksum = "10a9ff822e371bb5403e391ecd83e182e0e77ba7f6fe0160b795797109d1b457"
 dependencies = [
  "itoa",
  "serde",
+ "serde_core",
 ]
 
 [[package]]
 name = "serde_spanned"
-version = "1.0.0"
+version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "40734c41988f7306bb04f0ecf60ec0f3f1caa34290e4e8ea471dcd3346483b83"
+checksum = "2789234a13a53fc4be1b51ea1bab45a3c338bdb884862a257d10e5a74ae009e6"
 dependencies = [
- "serde",
+ "serde_core",
 ]
 
 [[package]]
 name = "serde_stacker"
-version = "0.1.12"
+version = "0.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69c8defe6c780725cce4ec6ad3bd91e321baf6fa4e255df1f31e345d507ef01a"
+checksum = "d4936375d50c4be7eff22293a9344f8e46f323ed2b3c243e52f89138d9bb0f4a"
 dependencies = [
  "serde",
+ "serde_core",
  "stacker",
 ]
 
@@ -4657,7 +4674,7 @@ version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3b615bed66931a7a9809b273937adc8a402d038b1e509d027fcaf62f084d33d1"
 dependencies = [
- "indexmap 2.11.1",
+ "indexmap 2.11.3",
  "itertools 0.13.0",
  "num-traits",
  "once_cell",
@@ -4702,7 +4719,7 @@ version = "0.9.34+deprecated"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a8b1a1a2ebf674015cc02edccce75287f1a0130d394307b36743c2f5d504b47"
 dependencies = [
- "indexmap 2.11.1",
+ "indexmap 2.11.3",
  "itoa",
  "ryu",
  "serde",
@@ -4976,7 +4993,7 @@ dependencies = [
  "futures-util",
  "hashbrown 0.15.5",
  "hashlink",
- "indexmap 2.11.1",
+ "indexmap 2.11.3",
  "log",
  "memchr",
  "once_cell",
@@ -5317,7 +5334,7 @@ dependencies = [
 
 [[package]]
 name = "ta-apiserver"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "axum 0.8.4",
  "derive_builder",
@@ -5340,7 +5357,7 @@ dependencies = [
 
 [[package]]
 name = "ta-execution"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "getset",
  "openssl",
@@ -5355,7 +5372,7 @@ dependencies = [
 
 [[package]]
 name = "ta-tableframe"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "openssl",
  "td-build",
@@ -5389,7 +5406,7 @@ dependencies = [
 
 [[package]]
 name = "tabsdata"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "openssl",
  "ta-tableframe",
@@ -5400,7 +5417,7 @@ dependencies = [
 
 [[package]]
 name = "td-apiforge"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "darling 0.21.3",
  "openssl",
@@ -5412,7 +5429,7 @@ dependencies = [
 
 [[package]]
 name = "td-apiserver"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "async-trait",
  "axum 0.8.4",
@@ -5460,7 +5477,7 @@ dependencies = [
 
 [[package]]
 name = "td-attach"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "darling 0.21.3",
  "openssl",
@@ -5472,7 +5489,7 @@ dependencies = [
 
 [[package]]
 name = "td-authz"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "async-trait",
  "itertools 0.14.0",
@@ -5490,7 +5507,7 @@ dependencies = [
 
 [[package]]
 name = "td-build"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "duct",
  "openssl",
@@ -5502,7 +5519,7 @@ dependencies = [
 
 [[package]]
 name = "td-common"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -5553,7 +5570,7 @@ dependencies = [
 
 [[package]]
 name = "td-database"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "derive_builder",
  "futures-util",
@@ -5578,7 +5595,7 @@ dependencies = [
 
 [[package]]
 name = "td-error"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "anyhow",
  "itertools 0.14.0",
@@ -5593,7 +5610,7 @@ dependencies = [
 
 [[package]]
 name = "td-execution"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "async-trait",
  "futures",
@@ -5615,7 +5632,7 @@ dependencies = [
 
 [[package]]
 name = "td-objects"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "aquamarine",
  "async-trait",
@@ -5657,7 +5674,7 @@ dependencies = [
 
 [[package]]
 name = "td-process"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "clap",
  "clap_derive",
@@ -5666,7 +5683,7 @@ dependencies = [
  "dunce",
  "getset",
  "ignore",
- "indexmap 2.11.1",
+ "indexmap 2.11.3",
  "num-format",
  "openssl",
  "serde",
@@ -5686,7 +5703,7 @@ dependencies = [
 
 [[package]]
 name = "td-python"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "openssl",
  "rand 0.9.2",
@@ -5703,7 +5720,7 @@ dependencies = [
 
 [[package]]
 name = "td-schema"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "openssl",
  "sqlx",
@@ -5712,7 +5729,7 @@ dependencies = [
 
 [[package]]
 name = "td-security"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "argon2",
  "derive_builder",
@@ -5726,7 +5743,7 @@ dependencies = [
 
 [[package]]
 name = "td-server"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "axum 0.8.4",
  "clap",
@@ -5767,7 +5784,7 @@ dependencies = [
 
 [[package]]
 name = "td-services"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "argon2",
  "async-trait",
@@ -5816,7 +5833,7 @@ dependencies = [
 
 [[package]]
 name = "td-shared"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "darling 0.21.3",
  "duct",
@@ -5828,7 +5845,7 @@ dependencies = [
 
 [[package]]
 name = "td-shuttle"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -5868,7 +5885,7 @@ dependencies = [
 
 [[package]]
 name = "td-storage"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "bytes",
  "derive_builder",
@@ -5895,7 +5912,7 @@ dependencies = [
 
 [[package]]
 name = "td-supervisor"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "async-trait",
  "atomic_enum",
@@ -5913,7 +5930,7 @@ dependencies = [
  "humantime",
  "ignore",
  "include_dir",
- "indexmap 2.11.1",
+ "indexmap 2.11.3",
  "indicatif",
  "linemux",
  "num-format",
@@ -5952,7 +5969,7 @@ dependencies = [
 
 [[package]]
 name = "td-tableframe"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "openssl",
  "polars",
@@ -5966,7 +5983,7 @@ dependencies = [
 
 [[package]]
 name = "td-test"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -5986,7 +6003,7 @@ dependencies = [
 
 [[package]]
 name = "td-tower"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "async-trait",
  "derive_builder",
@@ -6012,7 +6029,7 @@ dependencies = [
 
 [[package]]
 name = "td-type"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "darling 0.21.3",
  "openssl",
@@ -6024,7 +6041,7 @@ dependencies = [
 
 [[package]]
 name = "td-xtask"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "clap",
  "clap_derive",
@@ -6033,7 +6050,7 @@ dependencies = [
 
 [[package]]
 name = "te-apiserver"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "openssl",
  "ta-apiserver",
@@ -6043,7 +6060,7 @@ dependencies = [
 
 [[package]]
 name = "te-execution"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "async-trait",
  "openssl",
@@ -6057,7 +6074,7 @@ dependencies = [
 
 [[package]]
 name = "te-services"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "axum 0.8.4",
  "openssl",
@@ -6067,7 +6084,7 @@ dependencies = [
 
 [[package]]
 name = "te-tableframe"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "openssl",
  "ta-tableframe",
@@ -6256,7 +6273,7 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tm-error"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "openssl",
  "quote",
@@ -6265,7 +6282,7 @@ dependencies = [
 
 [[package]]
 name = "tm-test"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "darling 0.21.3",
  "openssl",
@@ -6277,7 +6294,7 @@ dependencies = [
 
 [[package]]
 name = "tm-tower"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "openssl",
  "quote",
@@ -6286,7 +6303,7 @@ dependencies = [
 
 [[package]]
 name = "tm-workspace"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "openssl",
  "quote",
@@ -6371,14 +6388,14 @@ dependencies = [
 
 [[package]]
 name = "toml"
-version = "0.9.5"
+version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "75129e1dc5000bfbaa9fee9d1b21f974f9fbad9daec557a521ee6e080825f6e8"
+checksum = "ae2a4cf385da23d1d53bc15cdfa5c2109e93d8d362393c801e87da2f72f0e201"
 dependencies = [
- "indexmap 2.11.1",
- "serde",
+ "indexmap 2.11.3",
+ "serde_core",
  "serde_spanned",
- "toml_datetime 0.7.0",
+ "toml_datetime",
  "toml_parser",
  "toml_writer",
  "winnow",
@@ -6386,27 +6403,22 @@ dependencies = [
 
 [[package]]
 name = "toml_datetime"
-version = "0.6.11"
+version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22cddaf88f4fbc13c51aebbf5f8eceb5c7c5a9da2ac40a13519eb5b0a0e8f11c"
-
-[[package]]
-name = "toml_datetime"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bade1c3e902f58d73d3f294cd7f20391c1cb2fbcb643b73566bc773971df91e3"
+checksum = "a197c0ec7d131bfc6f7e82c8442ba1595aeab35da7adbf05b6b73cd06a16b6be"
 dependencies = [
- "serde",
+ "serde_core",
 ]
 
 [[package]]
 name = "toml_edit"
-version = "0.22.27"
+version = "0.23.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "41fe8c660ae4257887cf66394862d21dbca4a6ddd26f04a3560410406a2f819a"
+checksum = "c2ad0b7ae9cfeef5605163839cb9221f453399f15cfb5c10be9885fcf56611f9"
 dependencies = [
- "indexmap 2.11.1",
- "toml_datetime 0.6.11",
+ "indexmap 2.11.3",
+ "toml_datetime",
+ "toml_parser",
  "winnow",
 ]
 
@@ -6750,7 +6762,7 @@ version = "5.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2fcc29c80c21c31608227e0912b2d7fddba57ad76b606890627ba8ee7964e993"
 dependencies = [
- "indexmap 2.11.1",
+ "indexmap 2.11.3",
  "serde",
  "serde_json",
  "utoipa-gen",
@@ -6876,18 +6888,18 @@ checksum = "ccf3ec651a847eb01de73ccad15eb7d99f80485de043efb2f370cd654f4ea44b"
 
 [[package]]
 name = "wasi"
-version = "0.14.5+wasi-0.2.4"
+version = "0.14.7+wasi-0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a4494f6290a82f5fe584817a676a34b9d6763e8d9d18204009fb31dceca98fd4"
+checksum = "883478de20367e224c0090af9cf5f9fa85bed63a95c1abf3afc5c083ebc06e8c"
 dependencies = [
  "wasip2",
 ]
 
 [[package]]
 name = "wasip2"
-version = "1.0.0+wasi-0.2.4"
+version = "1.0.1+wasi-0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "03fa2761397e5bd52002cd7e73110c71af2109aca4e521a9f40473fe685b0a24"
+checksum = "0562428422c63773dad2c345a1882263bbf4d65cf3f42e90921f787ef5ad58e7"
 dependencies = [
  "wit-bindgen",
 ]
@@ -7608,9 +7620,9 @@ dependencies = [
 
 [[package]]
 name = "wit-bindgen"
-version = "0.45.1"
+version = "0.46.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c573471f125075647d03df72e026074b7203790d41351cd6edc96f46bcccd36"
+checksum = "f17a85883d4e6d00e8a97c586de764dabcc06133f7f1d55dce5cdc070ad7fe59"
 
 [[package]]
 name = "writeable"
@@ -7626,9 +7638,9 @@ checksum = "fdd20c5420375476fbd4394763288da7eb0cc0b8c11deed431a91562af7335d3"
 
 [[package]]
 name = "yaml-rust2"
-version = "0.10.3"
+version = "0.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ce2a4ff45552406d02501cea6c18d8a7e50228e7736a872951fe2fe75c91be7"
+checksum = "2462ea039c445496d8793d052e13787f2b90e750b833afee748e601c17621ed9"
 dependencies = [
  "arraydeque",
  "encoding_rs",
@@ -7748,7 +7760,7 @@ dependencies = [
  "arbitrary",
  "crc32fast",
  "flate2",
- "indexmap 2.11.1",
+ "indexmap 2.11.3",
  "memchr",
  "zopfli",
 ]

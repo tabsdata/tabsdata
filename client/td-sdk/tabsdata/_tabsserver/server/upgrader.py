@@ -44,6 +44,10 @@ from tabsdata._tabsserver.server.upgraders.v1.v1_1.v1_1_0.upgrade import (
 from tabsdata._tabsserver.server.upgraders.v1.v1_2.v1_2_0.upgrade import (
     Upgrade_1_1_0_to_1_2_0,
 )
+from tabsdata._tabsserver.server.upgraders.v1.v1_3.v1_3_0.upgrade import \
+    Upgrade_1_2_0_to_1_3_0
+from tabsdata._tabsserver.server.upgraders.v1.v1_4.v1_4_0.upgrade import \
+    Upgrade_1_3_0_to_1_4_0
 from tabsdata._tabsserver.utils import TimeBlock
 
 logger = logging.getLogger(__name__)
@@ -62,6 +66,8 @@ UPGRADE_PLAN: Dict[Version, Type[Upgrade]] = {
     Upgrade_0_9_6_to_1_0_0.source_version: Upgrade_0_9_6_to_1_0_0,
     Upgrade_1_0_0_to_1_1_0.source_version: Upgrade_1_0_0_to_1_1_0,
     Upgrade_1_1_0_to_1_2_0.source_version: Upgrade_1_1_0_to_1_2_0,
+    Upgrade_1_2_0_to_1_3_0.source_version: Upgrade_1_2_0_to_1_3_0,
+    Upgrade_1_3_0_to_1_4_0.source_version: Upgrade_1_3_0_to_1_4_0,
 }
 
 
