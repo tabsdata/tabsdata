@@ -44,10 +44,12 @@ from tabsdata._tabsserver.server.upgraders.v1.v1_1.v1_1_0.upgrade import (
 from tabsdata._tabsserver.server.upgraders.v1.v1_2.v1_2_0.upgrade import (
     Upgrade_1_1_0_to_1_2_0,
 )
-from tabsdata._tabsserver.server.upgraders.v1.v1_3.v1_3_0.upgrade import \
-    Upgrade_1_2_0_to_1_3_0
-from tabsdata._tabsserver.server.upgraders.v1.v1_4.v1_4_0.upgrade import \
-    Upgrade_1_3_0_to_1_4_0
+from tabsdata._tabsserver.server.upgraders.v1.v1_3.v1_3_0.upgrade import (
+    Upgrade_1_2_0_to_1_3_0,
+)
+from tabsdata._tabsserver.server.upgraders.v1.v1_4.v1_4_0.upgrade import (
+    Upgrade_1_3_0_to_1_4_0,
+)
 from tabsdata._tabsserver.utils import TimeBlock
 
 logger = logging.getLogger(__name__)

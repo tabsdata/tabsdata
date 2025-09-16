@@ -604,27 +604,26 @@ pub fn show_information() {
         80
     };
 
-    if edition == ENTERPRISE {
-        if UI_MODE == ENV_VALUE_TD_UI_MODE_EXTERNAL {
-            width = 100;
-            let ui_dir = fs::canonicalize(Path::new(UI_DIR))
-                .map(|path| path.to_string_lossy().into_owned())
-                .unwrap_or_else(|_| UI_DIR.to_string());
-            let ui_index = Path::new(UI_INDEX)
-                .is_absolute()
-                .then(|| {
-                    fs::canonicalize(UI_INDEX)
-                        .map(|path| path.to_string_lossy().into_owned())
-                        .unwrap_or_else(|_| UI_INDEX.to_string())
-                })
-                .unwrap_or_else(|| UI_INDEX.to_string());
-            information.push("".to_string());
-            information.push("The web application will be served externally:".to_string());
-            information.push("".to_string());
-            information.push(format!("TD_UI_MODE: {}", UI_MODE));
-            information.push(format!("TD_UI_DIR: {}", ui_dir));
-            information.push(format!("TD_UI_INDEX: {}", ui_index));
-        }
+    if edition == ENTERPRISE && UI_MODE == ENV_VALUE_TD_UI_MODE_EXTERNAL {
+        width = 100;
+        let ui_dir = fs::canonicalize(Path::new(UI_DIR))
+            .map(|path| path.to_string_lossy().into_owned())
+            .unwrap_or_else(|_| UI_DIR.to_string());
+        let ui_index = if Path::new(UI_INDEX).is_absolute() {
+            {
+                fs::canonicalize(UI_INDEX)
+                    .map(|path| path.to_string_lossy().into_owned())
+                    .unwrap_or_else(|_| UI_INDEX.to_string())
+            }
+        } else {
+            UI_INDEX.to_string()
+        };
+        information.push("".to_string());
+        information.push("The web application will be served externally:".to_string());
+        information.push("".to_string());
+        information.push(format!("TD_UI_MODE: {}", UI_MODE));
+        information.push(format!("TD_UI_DIR: {}", ui_dir));
+        information.push(format!("TD_UI_INDEX: {}", ui_index));
     }
 
     let information = information.join("\n");

@@ -74,10 +74,11 @@ class ExprStringNameSpace:
             self._expr.to_date(format=fmt, strict=strict, exact=True, cache=True)
         )
 
+    # noinspection PyShadowingBuiltins
     @pydoc(categories="type_casting")
     def to_datetime(
         self,
-        fmt: str | None = None,
+        format: str | None = None,
         *,
         time_unit: td_typing.TimeUnit | None = None,
         time_zone: str | None = None,
@@ -88,7 +89,7 @@ class ExprStringNameSpace:
         Convert the string to a datetime.
 
         Args:
-            fmt: The datetime format string (default %Y-%m-%d %H:%M:%S)
+            format: The datetime format string (default %Y-%m-%d %H:%M:%S)
                  [formats]
                 (https://docs.rs/chrono/0.4.19/chrono/format/strftime/index.html).
             time_unit: {None, ‘us’, ‘ns’, ‘ms’}
@@ -120,7 +121,7 @@ class ExprStringNameSpace:
         # noinspection PyProtectedMember
         return _to_tdexpr(
             self._expr.to_datetime(
-                format=fmt,
+                format=format,
                 time_unit=time_unit,
                 time_zone=time_zone,
                 strict=strict,

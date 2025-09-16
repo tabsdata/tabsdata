@@ -104,7 +104,8 @@ for i in range(POLARS_TABLE_FRAME_DUPLICATION_TIMES):
 POLARS_TABLE_FRAME = POLARS_TABLE_FRAME.collect().lazy()
 
 POLARS_TABLE_FRAME_DATETIME = POLARS_TABLE_FRAME.with_columns(
-    pl.col("d").str.to_date(), pl.col("dt").str.to_datetime()
+    pl.col("d").str.to_date(),
+    pl.col("dt").str.to_datetime(format="%Y-%m-%d %H:%M:%SZ", time_zone="UTC"),
 )
 
 POLARS_TABLE_FRAME_STRUCT = pl.DataFrame(
@@ -1109,7 +1110,11 @@ def test_str_to_date():
 
 def test_str_to_datetime():
     def fn(library: pk, frame: ft):
-        return frame.select(library.col("dt").str.to_datetime())
+        return frame.select(
+            library.col("dt").str.to_datetime(
+                format="%Y-%m-%d %H:%M:%SZ", time_zone="UTC"
+            )
+        )
 
     api_tester(fn)
 

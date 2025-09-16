@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use ta_tableframe::api::{Extension, OPEN_SOURCE};
+use ta_tableframe::api::Extension;
 use te_tableframe::engine::TableFrameExtension;
 
 fn main() {
@@ -15,11 +15,13 @@ fn main() {
 
 #[cfg(not(feature = "enterprise"))]
 fn edition() -> String {
+    use ta_tableframe::api::OPEN_SOURCE;
     OPEN_SOURCE.to_string()
 }
 
 #[cfg(feature = "enterprise")]
 fn edition() -> String {
+    use ta_tableframe::api::ENTERPRISE;
     ENTERPRISE.to_string()
 }
 

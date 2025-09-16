@@ -431,11 +431,11 @@ features = ["serde", "serde_derive"]
 version = "0.5.0"
 
 [workspace.dependencies.polars]
-version = "0.51.0"
+version = "0.50.0"
 features = ["lazy", "polars-lazy", "async", "csv", "json", "parquet", "cloud", "aws", "azure", "gcp", "sql"]
 
 [workspace.dependencies.polars-io]
-version = "0.51.0"
+version = "0.50.0"
 features = ["cloud"]
 
 [workspace.dependencies.polars-parquet-format]

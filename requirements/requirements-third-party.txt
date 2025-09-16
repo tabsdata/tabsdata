@@ -4,7 +4,7 @@
 
 accessify==0.3.1
 base32hex==1.0.2
-click==8.2.1
+click==8.2.2
 cloudpickle==3.1.1
 colorama==0.4.6
 connectorx==0.4.4
@@ -27,8 +27,8 @@ pyarrow==21.0.0
 pyiceberg[glue]==0.10.0
 pywin32==308; platform_system == "Windows"
 requests==2.32.5
-rich==13.9.4
-rich-click==1.8.9
+rich==14.1.0
+rich-click==1.9.0
 sqlalchemy==2.0.43
 typing_extensions==4.15.0
 uuid6==2025.0.1
