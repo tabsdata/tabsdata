@@ -2,7 +2,6 @@
 # Copyright 2024 Tabs Data Inc.
 #
 import itertools
-import sys
 from typing import Any, Sequence
 
 import pandas as pd
@@ -48,7 +47,7 @@ def test_feature():
     if enterprise:
         assert summary == "Enterprise"
     else:
-        assert summary == "Standard"
+        assert summary == "Open Source"
 
 
 def test_init_with_dataframe_with_required_columns():

@@ -3,13 +3,13 @@
 //
 
 use std::io::Error;
-use ta_tableframe::api::Extension;
+use ta_tableframe::api::{Extension, OPEN_SOURCE};
 
 pub struct TableFrameExtension;
 
 impl Extension for TableFrameExtension {
     fn edition(&self) -> String {
-        "Open Source".to_string()
+        OPEN_SOURCE.to_string()
     }
 
     fn summary(&self) -> Result<String, Error> {

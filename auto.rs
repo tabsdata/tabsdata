@@ -3,7 +3,7 @@
 //
 
 use std::env;
-use ta_tableframe::api::Extension;
+use ta_tableframe::api::{Extension, OPEN_SOURCE};
 use te_tableframe::engine::TableFrameExtension;
 
 fn main() {
@@ -16,12 +16,12 @@ fn main() {
 
 #[cfg(not(feature = "enterprise"))]
 fn edition() -> String {
-    "Open Source".to_string()
+    OPEN_SOURCE.to_string()
 }
 
 #[cfg(feature = "enterprise")]
 fn edition() -> String {
-    "Enterprise".to_string()
+    ENTERPRISE.to_string()
 }
 
 fn summary() -> String {

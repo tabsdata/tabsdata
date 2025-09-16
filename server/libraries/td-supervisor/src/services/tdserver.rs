@@ -34,7 +34,7 @@ use std::process::{Command, Output, exit};
 use std::thread::sleep;
 use std::{env, fs, io};
 use sysinfo::Signal;
-use ta_tableframe::api::Extension;
+use ta_tableframe::api::{ENTERPRISE, Extension};
 use tabled::{
     Table, Tabled,
     settings::{
@@ -44,6 +44,7 @@ use tabled::{
     },
 };
 use td_apiserver::config::DbSchema;
+use td_build::environment::ENV_VALUE_TD_UI_MODE_EXTERNAL;
 use td_build::version::TABSDATA_VERSION;
 use td_common::env::{TABSDATA_HOME_DIR, check_flag_env, get_home_dir, to_absolute};
 use td_common::logging::set_log_level;
@@ -100,6 +101,10 @@ const LICENSE: &str = include_str!(concat!(
     workspace_root!(),
     "/variant/assets/manifest/LICENSE"
 ));
+
+const UI_MODE: &str = env!("TD_UI_MODE");
+const UI_DIR: &str = env!("TD_UI_DIR");
+const UI_INDEX: &str = env!("TD_UI_INDEX");
 
 #[derive(Debug, Error)]
 pub enum TabsCliError {
@@ -593,13 +598,37 @@ pub fn show_information() {
         );
     }
 
-    let information = information.join("\n");
-
-    let width = if pip_uv_repository_envs.is_empty() {
+    let mut width = if pip_uv_repository_envs.is_empty() {
         40
     } else {
         80
     };
+
+    if edition == ENTERPRISE {
+        if UI_MODE == ENV_VALUE_TD_UI_MODE_EXTERNAL {
+            width = 100;
+            let ui_dir = fs::canonicalize(Path::new(UI_DIR))
+                .map(|path| path.to_string_lossy().into_owned())
+                .unwrap_or_else(|_| UI_DIR.to_string());
+            let ui_index = Path::new(UI_INDEX)
+                .is_absolute()
+                .then(|| {
+                    fs::canonicalize(UI_INDEX)
+                        .map(|path| path.to_string_lossy().into_owned())
+                        .unwrap_or_else(|_| UI_INDEX.to_string())
+                })
+                .unwrap_or_else(|| UI_INDEX.to_string());
+            information.push("".to_string());
+            information.push("The web application will be served externally:".to_string());
+            information.push("".to_string());
+            information.push(format!("TD_UI_MODE: {}", UI_MODE));
+            information.push(format!("TD_UI_DIR: {}", ui_dir));
+            information.push(format!("TD_UI_INDEX: {}", ui_index));
+        }
+    }
+
+    let information = information.join("\n");
+
     show_box(&information, width).unwrap()
 }
 

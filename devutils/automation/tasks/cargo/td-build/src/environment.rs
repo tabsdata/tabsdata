@@ -8,9 +8,9 @@ use std::{env, fs};
 
 const ENV_TD_UI_MODE: &str = "TD_UI_MODE";
 
-const ENV_VALUE_TD_UI_MODE_INTERNAL: &str = "internal";
-const ENV_VALUE_TD_UI_MODE_ADOPTED: &str = "adopted";
-const ENV_VALUE_TD_UI_MODE_EXTERNAL: &str = "external";
+pub const ENV_VALUE_TD_UI_MODE_INTERNAL: &str = "internal";
+pub const ENV_VALUE_TD_UI_MODE_ADOPTED: &str = "adopted";
+pub const ENV_VALUE_TD_UI_MODE_EXTERNAL: &str = "external";
 
 const ENV_TD_UI_DIR: &str = "TD_UI_DIR";
 const ENV_TD_UI_INDEX: &str = "TD_UI_INDEX";

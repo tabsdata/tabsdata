@@ -70,7 +70,7 @@ class TableFrameExtension(Extension):
 
     @property
     def summary(self) -> str:
-        return "Standard"
+        return "Open Source"
 
     @property
     def standard_system_columns(self) -> Type[Enum]:
