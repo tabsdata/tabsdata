@@ -4,8 +4,6 @@
 
 import os
 
-from tests_tabsdata_snowflake.conftest import REAL_CONNECTION_PARAMETERS
-
 import tabsdata as td
 from tabsdata._utils.bundle_utils import create_bundle_archive
 from tests_tabsdata.bootest import TDLOCAL_FOLDER
@@ -20,12 +18,22 @@ ROOT_PROJECT_DIR = os.path.dirname(
 )
 DEFAULT_SAVE_LOCATION = TDLOCAL_FOLDER
 
+connection_parameters = {
+    "account": td.EnvironmentSecret("TD_SNOWFLAKE_ACCOUNT"),
+    "user": td.EnvironmentSecret("TD_SNOWFLAKE_USER"),
+    "password": td.EnvironmentSecret("TD_SNOWFLAKE_PAT"),
+    "role": td.EnvironmentSecret("TD_SNOWFLAKE_ROLE"),
+    "database": td.EnvironmentSecret("TD_SNOWFLAKE_DATABASE"),
+    "schema": td.EnvironmentSecret("TD_SNOWFLAKE_SCHEMA"),
+    "warehouse": td.EnvironmentSecret("TD_SNOWFLAKE_WAREHOUSE"),
+}
+
 
 @td.subscriber(
     name="output_snowflake",
     tables="collection/table",
     destination=td.SnowflakeDestination(
-        REAL_CONNECTION_PARAMETERS, "output_snowflake_table"
+        connection_parameters, "output_snowflake_table"
     ),
 )
 def output_snowflake_none(df: td.TableFrame) -> td.TableFrame | None:

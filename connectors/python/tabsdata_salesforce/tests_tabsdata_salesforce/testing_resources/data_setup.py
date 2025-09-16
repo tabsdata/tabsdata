@@ -15,10 +15,10 @@ logger = logging.getLogger(__name__)
 
 def sf_connection():
     # Connect to Salesforce
-    username = os.getenv("SALESFORCE_USERNAME")
-    password = os.getenv("SALESFORCE_PASSWORD")
-    security_token = os.getenv("SALESFORCE_SECURITY_TOKEN")
-    domain = os.getenv("SALESFORCE_INSTANCE_URL")  # Default to 'login' if not set
+    username = os.getenv("SF0__USERNAME")
+    password = os.getenv("SF0__PASSWORD")
+    security_token = os.getenv("SF0__SECURITY_TOKEN")
+    domain = os.getenv("SF0__INSTANCE_URL")  # Default to 'login' if not set
     return Salesforce(
         username=username,
         password=password,

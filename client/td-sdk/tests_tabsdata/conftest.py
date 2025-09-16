@@ -39,6 +39,7 @@ from filelock import FileLock
 from google.cloud import storage
 from xdist.workermanage import WorkerController
 
+import tabsdata as td
 from tabsdata._utils.logging import setup_tests_logging
 from tabsdata._utils.temps import tabsdata_temp_folder
 from tabsdata.api.status_utils.data_version import (
@@ -297,7 +298,7 @@ def testing_mariadb(tmp_path_factory, worker_id):
 
 
 @pytest.fixture(scope="session")
-def testing_hashicorp_vault(tmp_path_factory, worker_id):
+def testing_hashicorp_vault(tmp_path_factory, worker_id, s3_config):
     os.environ[HashiCorpSecret.VAULT_URL_ENV_VAR] = HASHICORP_TESTING_URL
     os.environ[HashiCorpSecret.VAULT_TOKEN_ENV_VAR] = HASHICORP_TESTING_TOKEN
     # Needed for test_input_s3_hashicorp_secret_vault_name to work
@@ -310,7 +311,7 @@ def testing_hashicorp_vault(tmp_path_factory, worker_id):
     if worker_id == "master":
         # not executing in with multiple workers, just produce the data and let
         # pytest's fixture caching do its job
-        yield create_docker_hashicorp_vault()
+        yield create_docker_hashicorp_vault(s3_config)
     else:
         # get the temp directory shared by all workers
         root_tmp_dir = tmp_path_factory.getbasetemp().parent
@@ -318,7 +319,7 @@ def testing_hashicorp_vault(tmp_path_factory, worker_id):
         fn = root_tmp_dir / "docker_hashicorp_vault_creation"
         with FileLock(str(fn) + ".lock"):
             # only one worker will be able to create the database
-            create_docker_hashicorp_vault()
+            create_docker_hashicorp_vault(s3_config)
         yield
 
 
@@ -469,19 +470,89 @@ def tabsserver_connection() -> TabsdataServer:
     return TabsdataServer(APISERVER_URL, "admin", "tabsdata", "sys_admin")
 
 
-@pytest.fixture
-def s3_client():
+@pytest.fixture(scope="session")
+def s3_config():
+
+    config = {
+        "ACCESS_KEY_ENV": "S30__S3_ACCESS_KEY",
+        "SECRET_KEY_ENV": "S30__S3_SECRET_KEY",
+        "URI_ENV": "S30__S3_URI",
+        "REGION_ENV": "S30__S3_REGION",
+    }
+    access_key_id = os.environ.get(config["ACCESS_KEY_ENV"])
+    secret_key = os.environ.get(config["SECRET_KEY_ENV"])
+    if not access_key_id or not secret_key:
+        raise Exception(
+            f"The environment variables {config['ACCESS_KEY_ENV']} and/or "
+            f"{config['SECRET_KEY_ENV']} are not set. Unable to run tests "
+            "using the 's3_config' fixture."
+        )
+    credentials = td.S3AccessKeyCredentials(
+        td.EnvironmentSecret(config["ACCESS_KEY_ENV"]),
+        td.EnvironmentSecret(config["SECRET_KEY_ENV"]),
+    )
+    config["CREDENTIALS"] = credentials
+    # uri = os.environ.get(config["URI_ENV"])
+    # TODO: Align with the URI used for other s3 tests, as it is not the same as the
+    #  one used for Python s3 tests
+    uri = "s3://tabsdata-testing-bucket"
+    if not uri:
+        raise Exception(
+            f"The environment variable {config['URI_ENV']} is not set. Unable to run "
+            "tests using the 'azure_config' fixture."
+        )
+    config["URI"] = uri
+    bucket_name = uri.replace("s3://", "").split("/", 1)[0]
+    config["BUCKET_NAME"] = bucket_name
+    yield config
+
+
+@pytest.fixture(scope="session")
+def s3_client(s3_config):
     session = boto3.Session(
-        aws_access_key_id=os.environ.get(TESTING_AWS_ACCESS_KEY_ID, "FAKE_ID"),
-        aws_secret_access_key=os.environ.get(TESTING_AWS_SECRET_ACCESS_KEY, "FAKE_KEY"),
+        aws_access_key_id=os.environ.get(s3_config["ACCESS_KEY_ENV"]),
+        aws_secret_access_key=os.environ.get(s3_config["SECRET_KEY_ENV"]),
     )
     yield session.client("s3")
 
 
-@pytest.fixture
-def azure_client():
-    account_name = os.environ.get(TESTING_AZURE_ACCOUNT_NAME, "FAKE_NAME")
-    account_key = os.environ.get(TESTING_AZURE_ACCOUNT_KEY, "FAKE_KEY")
+@pytest.fixture(scope="session")
+def azure_config():
+
+    config = {
+        "ACCOUNT_NAME_ENV": "AZ0__AZ_ACCOUNT_NAME",
+        "ACCOUNT_KEY_ENV": "AZ0__AZ_ACCOUNT_KEY",
+        "URI_ENV": "AZ0__AZ_URI",
+    }
+    account_name = os.environ.get(config["ACCOUNT_NAME_ENV"])
+    account_key = os.environ.get(config["ACCOUNT_KEY_ENV"])
+    if not account_name or not account_key:
+        raise Exception(
+            f"The environment variables {config['ACCOUNT_NAME_ENV']} and/or "
+            f"{config['ACCOUNT_KEY_ENV']} are not set. Unable to run tests "
+            "using the 'azure_config' fixture."
+        )
+    credentials = td.AzureAccountKeyCredentials(
+        td.EnvironmentSecret(config["ACCOUNT_NAME_ENV"]),
+        td.EnvironmentSecret(config["ACCOUNT_KEY_ENV"]),
+    )
+    config["CREDENTIALS"] = credentials
+    uri = os.environ.get(config["URI_ENV"])
+    if not uri:
+        raise Exception(
+            f"The environment variable {config['URI_ENV']} is not set. Unable to run "
+            "tests using the 'azure_config' fixture."
+        )
+    config["URI"] = uri
+    container_name = uri.replace("az://", "").split("/", 1)[0]
+    config["CONTAINER_NAME"] = container_name
+    yield config
+
+
+@pytest.fixture(scope="session")
+def azure_client(azure_config):
+    account_name = os.environ.get(azure_config["ACCOUNT_NAME_ENV"])
+    account_key = os.environ.get(azure_config["ACCOUNT_KEY_ENV"])
     service = BlobServiceClient(
         account_url=f"https://{account_name}.blob.core.windows.net",
         credential=account_key,
@@ -614,7 +685,7 @@ def create_docker_mysql_database():
         return
 
 
-def create_docker_hashicorp_vault():
+def create_docker_hashicorp_vault(s3_config: dict):
     logger.info("Starting HashiCorp vault container")
     client = docker.from_env()
     if client.containers.list(
@@ -651,9 +722,7 @@ def create_docker_hashicorp_vault():
                 hashicorp_client.secrets.kv.v2.create_or_update_secret(
                     path="aws/s3creds",
                     secret={
-                        "access_key_id": os.environ.get(
-                            TESTING_AWS_ACCESS_KEY_ID, "FAKE_ID"
-                        )
+                        "access_key_id": os.environ.get(s3_config["ACCESS_KEY_ENV"])
                     },
                 )
                 # Needed for the config_resolver tests to work

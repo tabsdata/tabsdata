@@ -54,17 +54,18 @@ LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_azure_parquet(tmp_path, azure_client):
+def test_output_azure_parquet(tmp_path, azure_client, azure_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_azure_parquet = copy.deepcopy(output_azure_format_testing)
-    container_name = "tabsdataci"
+    container_name = azure_config["CONTAINER_NAME"]
     blob_name = (
         "test_output/test_output_azure_parquet_"
         f"{int(datetime.datetime.now().timestamp())}.parquet"
     )
     blob_client = None
-    output_file = f"az://{container_name}/{blob_name}"
+    output_file = f"{azure_config["URI"]}/{blob_name}"
     output_azure_parquet.output.uri = output_file
+    output_azure_parquet.output.credentials = azure_config["CREDENTIALS"]
     context_archive = create_bundle_archive(
         output_azure_parquet,
         local_packages=LOCAL_PACKAGES_LIST,
@@ -128,17 +129,18 @@ def test_output_azure_parquet(tmp_path, azure_client):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_azure_csv(tmp_path, azure_client):
+def test_output_azure_csv(tmp_path, azure_client, azure_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_azure_csv = copy.deepcopy(output_azure_format_testing)
-    container_name = "tabsdataci"
+    container_name = azure_config["CONTAINER_NAME"]
     blob_name = (
         "test_output/test_output_azure_csv_"
         f"{int(datetime.datetime.now().timestamp())}.csv"
     )
     blob_client = None
-    output_file = f"az://{container_name}/{blob_name}"
+    output_file = f"{azure_config["URI"]}/{blob_name}"
     output_azure_csv.output.uri = output_file
+    output_azure_csv.output.credentials = azure_config["CREDENTIALS"]
     # ToDo: Undo when https://github.com/pola-rs/polars/issues/21802 fix is available
     output_azure_csv.output.format = td.CSVFormat(
         eol_char="\n", separator=",", output_float_precision=4
@@ -208,16 +210,17 @@ def test_output_azure_csv(tmp_path, azure_client):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_azure_ndjson(tmp_path, azure_client):
+def test_output_azure_ndjson(tmp_path, azure_client, azure_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_azure_ndjson = copy.deepcopy(output_azure_format_testing)
-    container_name = "tabsdataci"
+    container_name = azure_config["CONTAINER_NAME"]
     blob_name = (
         "test_output/test_output_azure_ndjson_"
         f"{int(datetime.datetime.now().timestamp())}.ndjson"
     )
     blob_client = None
-    output_file = f"az://{container_name}/{blob_name}"
+    output_file = f"{azure_config["URI"]}/{blob_name}"
+    output_azure_ndjson.output.credentials = azure_config["CREDENTIALS"]
     output_azure_ndjson.output.uri = output_file
     context_archive = create_bundle_archive(
         output_azure_ndjson,

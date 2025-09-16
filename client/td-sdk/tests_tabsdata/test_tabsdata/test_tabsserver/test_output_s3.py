@@ -60,14 +60,15 @@ LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
 @pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_s3_parquet(tmp_path, s3_client):
+def test_output_s3_parquet(tmp_path, s3_client, s3_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_s3_parquet = copy.deepcopy(output_s3_format_testing)
     output_file = (
-        "s3://tabsdata-testing-bucket/testing_output/test_output_s3_parquet_"
+        f"{s3_config['URI']}/testing_output/test_output_s3_parquet_"
         f"{int(datetime.datetime.now().timestamp())}.parquet"
     )
     output_s3_parquet.output.uri = output_file
+    output_s3_parquet.output.credentials = s3_config["CREDENTIALS"]
     context_archive = create_bundle_archive(
         output_s3_parquet,
         local_packages=LOCAL_PACKAGES_LIST,
@@ -123,14 +124,15 @@ def test_output_s3_parquet(tmp_path, s3_client):
 @pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_s3_parquet_with_transaction_id(tmp_path, s3_client):
+def test_output_s3_parquet_with_transaction_id(tmp_path, s3_client, s3_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_s3_parquet_with_data_version = copy.deepcopy(output_s3_format_testing)
     output_file = (
-        "s3://tabsdata-testing-bucket/testing_output/test_output_s3_parquet_with_data_"
+        f"{s3_config['URI']}/testing_output/test_output_s3_parquet_with_data_"
         f"version_{int(datetime.datetime.now().timestamp())}_$TRANSACTION_ID.parquet"
     )
     output_s3_parquet_with_data_version.output.uri = output_file
+    output_s3_parquet_with_data_version.output.credentials = s3_config["CREDENTIALS"]
     context_archive = create_bundle_archive(
         output_s3_parquet_with_data_version,
         local_packages=LOCAL_PACKAGES_LIST,
@@ -187,16 +189,17 @@ def test_output_s3_parquet_with_transaction_id(tmp_path, s3_client):
 @pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_s3_parquet_with_function_run_id(tmp_path, s3_client):
+def test_output_s3_parquet_with_function_run_id(tmp_path, s3_client, s3_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
-    output_s3_parquet_with_data_version = copy.deepcopy(output_s3_format_testing)
+    output_s3_parquet_with_function_run_id = copy.deepcopy(output_s3_format_testing)
     output_file = (
-        "s3://tabsdata-testing-bucket/testing_output/test_output_s3_parquet_with_data_"
+        f"{s3_config['URI']}/testing_output/test_output_s3_parquet_with_data_"
         f"version_{int(datetime.datetime.now().timestamp())}_$FUNCTION_RUN_ID.parquet"
     )
-    output_s3_parquet_with_data_version.output.uri = output_file
+    output_s3_parquet_with_function_run_id.output.uri = output_file
+    output_s3_parquet_with_function_run_id.output.credentials = s3_config["CREDENTIALS"]
     context_archive = create_bundle_archive(
-        output_s3_parquet_with_data_version,
+        output_s3_parquet_with_function_run_id,
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
@@ -251,16 +254,17 @@ def test_output_s3_parquet_with_function_run_id(tmp_path, s3_client):
 @pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_s3_parquet_with_execution_id(tmp_path, s3_client):
+def test_output_s3_parquet_with_execution_id(tmp_path, s3_client, s3_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
-    output_s3_parquet_with_data_version = copy.deepcopy(output_s3_format_testing)
+    output_s3_parquet_with_execution_id = copy.deepcopy(output_s3_format_testing)
     output_file = (
-        "s3://tabsdata-testing-bucket/testing_output/test_output_s3_parquet_with_data_"
+        f"{s3_config['URI']}/testing_output/test_output_s3_parquet_with_data_"
         f"version_{int(datetime.datetime.now().timestamp())}_$EXECUTION_ID.parquet"
     )
-    output_s3_parquet_with_data_version.output.uri = output_file
+    output_s3_parquet_with_execution_id.output.uri = output_file
+    output_s3_parquet_with_execution_id.output.credentials = s3_config["CREDENTIALS"]
     context_archive = create_bundle_archive(
-        output_s3_parquet_with_data_version,
+        output_s3_parquet_with_execution_id,
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
@@ -314,15 +318,18 @@ def test_output_s3_parquet_with_execution_id(tmp_path, s3_client):
 @pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_s3_parquet_with_export_timestamp(tmp_path, s3_client):
+def test_output_s3_parquet_with_export_timestamp(tmp_path, s3_client, s3_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_s3_parquet_with_export_timestamp = copy.deepcopy(output_s3_format_testing)
     output_file = (
-        "s3://tabsdata-testing-bucket/testing_output"
+        f"{s3_config['URI']}/testing_output"
         "/test_output_s3_parquet_with_export_timestamp_"
         f"{int(datetime.datetime.now().timestamp())}_$EXPORT_TIMESTAMP.parquet"
     )
     output_s3_parquet_with_export_timestamp.output.uri = output_file
+    output_s3_parquet_with_export_timestamp.output.credentials = s3_config[
+        "CREDENTIALS"
+    ]
     context_archive = create_bundle_archive(
         output_s3_parquet_with_export_timestamp,
         local_packages=LOCAL_PACKAGES_LIST,
@@ -388,15 +395,18 @@ def test_output_s3_parquet_with_export_timestamp(tmp_path, s3_client):
 @pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_s3_parquet_with_trigger_timestamp(tmp_path, s3_client):
+def test_output_s3_parquet_with_trigger_timestamp(tmp_path, s3_client, s3_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_s3_parquet_with_trigger_timestamp = copy.deepcopy(output_s3_format_testing)
     output_file = (
-        "s3://tabsdata-testing-bucket/testing_output"
+        f"{s3_config['URI']}/testing_output"
         "/test_output_s3_parquet_with_trigger_timestamp_"
         f"{int(datetime.datetime.now().timestamp())}_$TRIGGER_TIMESTAMP.parquet"
     )
     output_s3_parquet_with_trigger_timestamp.output.uri = output_file
+    output_s3_parquet_with_trigger_timestamp.output.credentials = s3_config[
+        "CREDENTIALS"
+    ]
     context_archive = create_bundle_archive(
         output_s3_parquet_with_trigger_timestamp,
         local_packages=LOCAL_PACKAGES_LIST,
@@ -463,15 +473,18 @@ def test_output_s3_parquet_with_trigger_timestamp(tmp_path, s3_client):
 @pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_s3_parquet_with_scheduler_timestamp(tmp_path, s3_client):
+def test_output_s3_parquet_with_scheduler_timestamp(tmp_path, s3_client, s3_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_s3_parquet_with_scheduler_timestamp = copy.deepcopy(output_s3_format_testing)
     output_file = (
-        "s3://tabsdata-testing-bucket/testing_output"
+        f"{s3_config['URI']}/testing_output"
         "/test_output_s3_parquet_with_scheduler_timestamp_"
         f"{int(datetime.datetime.now().timestamp())}_$SCHEDULER_TIMESTAMP.parquet"
     )
     output_s3_parquet_with_scheduler_timestamp.output.uri = output_file
+    output_s3_parquet_with_scheduler_timestamp.output.credentials = s3_config[
+        "CREDENTIALS"
+    ]
     context_archive = create_bundle_archive(
         output_s3_parquet_with_scheduler_timestamp,
         local_packages=LOCAL_PACKAGES_LIST,
@@ -538,11 +551,11 @@ def test_output_s3_parquet_with_scheduler_timestamp(tmp_path, s3_client):
 @pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_s3_csv(tmp_path, s3_client):
+def test_output_s3_csv(tmp_path, s3_client, s3_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_s3_csv = copy.deepcopy(output_s3_format_testing)
     output_file = (
-        "s3://tabsdata-testing-bucket/testing_output/test_output_s3_csv_"
+        f"{s3_config['URI']}/testing_output/test_output_s3_csv_"
         f"{int(datetime.datetime.now().timestamp())}.csv"
     )
     output_s3_csv.output.uri = output_file
@@ -552,6 +565,7 @@ def test_output_s3_csv(tmp_path, s3_client):
         separator=",",
         output_float_precision=4,
     )
+    output_s3_csv.output.credentials = s3_config["CREDENTIALS"]
     context_archive = create_bundle_archive(
         output_s3_csv,
         local_packages=LOCAL_PACKAGES_LIST,
@@ -607,14 +621,15 @@ def test_output_s3_csv(tmp_path, s3_client):
 @pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_s3_ndjson(tmp_path, s3_client):
+def test_output_s3_ndjson(tmp_path, s3_client, s3_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_s3_ndjson = copy.deepcopy(output_s3_format_testing)
     output_file = (
-        "s3://tabsdata-testing-bucket/testing_output/test_output_s3_ndjson_"
+        f"{s3_config['URI']}/testing_output/test_output_s3_ndjson_"
         f"{int(datetime.datetime.now().timestamp())}.ndjson"
     )
     output_s3_ndjson.output.uri = output_file
+    output_s3_ndjson.output.credentials = s3_config["CREDENTIALS"]
     context_archive = create_bundle_archive(
         output_s3_ndjson,
         local_packages=LOCAL_PACKAGES_LIST,
@@ -669,13 +684,14 @@ def test_output_s3_ndjson(tmp_path, s3_client):
 @pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_s3_frame_list(tmp_path, s3_client):
+def test_output_s3_frame_list(tmp_path, s3_client, s3_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_file = (
-        "s3://tabsdata-testing-bucket/testing_output/test_output_s3_frame_list_"
+        f"{s3_config['URI']}/testing_output/test_output_s3_frame_list_"
         f"{int(datetime.datetime.now().timestamp())}_$FRAGMENT_IDX.parquet"
     )
     output_s3_frame_list.output.uri = output_file
+    output_s3_frame_list.output.credentials = s3_config["CREDENTIALS"]
     context_archive = create_bundle_archive(
         output_s3_frame_list,
         local_packages=LOCAL_PACKAGES_LIST,

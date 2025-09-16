@@ -28,13 +28,6 @@ from tests_tabsdata.conftest import (
 
 logger = logging.getLogger(__name__)
 
-DATABRICKS_CATALOG = os.environ.get("TD_DATABRICKS_CATALOG")
-DATABRICKS_HOST = os.environ.get("TD_DATABRICKS_HOST")
-DATABRICKS_SCHEMA = os.environ.get("TD_DATABRICKS_SCHEMA")
-DATABRICKS_TOKEN = os.environ.get("TD_DATABRICKS_TOKEN")
-DATABRICKS_VOLUME = os.environ.get("TD_DATABRICKS_VOLUME")
-DATABRICKS_WAREHOUSE_NAME = os.environ.get("TD_DATABRICKS_WAREHOUSE_NAME")
-
 
 def pytest_configure(config: pytest.Config):
     setup_tests_logging()
@@ -57,36 +50,88 @@ def pytest_sessionfinish(session, exitstatus):
 
 
 @pytest.fixture(scope="session")
-def databricks_client() -> dbsdk.WorkspaceClient:
+def databricks_client(databricks_config) -> dbsdk.WorkspaceClient:
+    host = databricks_config["HOST"]
+    token = databricks_config["TOKEN"]
     ws_client = dbsdk.WorkspaceClient(
-        host=DATABRICKS_HOST,
-        token=DATABRICKS_TOKEN,
+        host=host,
+        token=token,
     )
     yield ws_client
 
 
 @pytest.fixture(scope="session")
-def sql_conn(databricks_client):
+def databricks_config():
+    config = {
+        "CATALOG_ENV": "DBX0__CATALOG",
+        "HOST_ENV": "DBX0__HOST",
+        "SCHEMA_ENV": "DBX0__SCHEMA",
+        "TOKEN_ENV": "DBX0__TOKEN",
+        "VOLUME_ENV": "DBX0__VOLUME",
+        "WAREHOUSE_NAME_ENV": "DBX0__WAREHOUSE_NAME",
+    }
+    host = os.environ.get(config["HOST_ENV"])
+    token = os.environ.get(config["TOKEN_ENV"])
+    if not host or not token:
+        raise Exception(
+            f"The environment variables {config['HOST_ENV']} and/or "
+            f"{config['TOKEN_ENV']} are not set. Unable to run tests "
+            "using the 'databricks_config' fixture."
+        )
+    config["HOST"] = host
+    config["TOKEN"] = token
+    if not os.environ.get(config["CATALOG_ENV"]):
+        raise Exception(
+            f"The environment variable {config['CATALOG_ENV']} is not set. "
+            "Unable to run tests using the 'databricks_config' fixture."
+        )
+    config["CATALOG"] = os.environ.get(config["CATALOG_ENV"])
+    if not os.environ.get(config["SCHEMA_ENV"]):
+        raise Exception(
+            f"The environment variable {config['SCHEMA_ENV']} is not set. "
+            "Unable to run tests using the 'databricks_config' fixture."
+        )
+    config["SCHEMA"] = os.environ.get(config["SCHEMA_ENV"])
+    if not os.environ.get(config["VOLUME_ENV"]):
+        raise Exception(
+            f"The environment variable {config['VOLUME_ENV']} is not set. "
+            "Unable to run tests using the 'databricks_config' fixture."
+        )
+    config["VOLUME"] = os.environ.get(config["VOLUME_ENV"])
+    if not os.environ.get(config["WAREHOUSE_NAME_ENV"]):
+        raise Exception(
+            f"The environment variable {config['WAREHOUSE_NAME_ENV']} is not set. "
+            "Unable to run tests using the 'databricks_config' fixture."
+        )
+    config["WAREHOUSE_NAME"] = os.environ.get(config["WAREHOUSE_NAME_ENV"])
+    yield config
+
+
+@pytest.fixture(scope="session")
+def sql_conn(databricks_client, databricks_config):
     warehouse_id = None
+    warehouse_name = databricks_config["WAREHOUSE_NAME"]
     for warehouse in databricks_client.warehouses.list():
-        if warehouse.name == DATABRICKS_WAREHOUSE_NAME:
+        if warehouse.name == warehouse_name:
             warehouse_id = warehouse.id
             break
     if warehouse_id is None:
         raise ValueError(
-            f"Warehouse '{DATABRICKS_WAREHOUSE_NAME}' not found in Databricks"
-            " workspace."
+            f"Warehouse '{warehouse_name}' not found in Databricks workspace."
         )
+
+    host = databricks_config["HOST"]
+    token = databricks_config["TOKEN"]
 
     def credentials_provider():
         config = Config(
-            host=DATABRICKS_HOST,
-            token=DATABRICKS_TOKEN,
+            host=host,
+            token=token,
         )
         return pat_auth(config)
 
     sql_conn = dbsql.connect(
-        server_hostname=DATABRICKS_HOST,
+        server_hostname=host,
         http_path=f"/sql/1.0/warehouses/{warehouse_id}",
         credentials_provider=credentials_provider,
     )

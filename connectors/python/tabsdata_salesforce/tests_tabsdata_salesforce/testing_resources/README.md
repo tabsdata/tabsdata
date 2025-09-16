@@ -5,10 +5,10 @@ Copyright 2025 Tabs Data Inc.
 # Seeding Data for Salesforce Tests
 
 Set the following environment variables:
-    * SALESFORCE_USERNAME
-    * SALESFORCE_PASSWORD
-    * SALESFORCE_SECURITY_TOKEN
-    * SALESFORCE_INSTANCE_URL
+    * SF0__USERNAME
+    * SF0__PASSWORD
+    * SF0__SECURITY_TOKEN
+    * SF0__INSTANCE_URL
 
 Run the `data-setup.py` script.The script will first delete previously seeded Contact data and then
 it will upload the Contact data from the `data.csv` file (5000 contacts).

@@ -14,7 +14,6 @@ import polars as pl
 # noinspection PyPackageRequirements
 import pytest
 from tests_tabsdata_salesforce.conftest import (
-    CORRECT_CREDENTIALS,
     FAKE_CREDENTIALS,
     TESTING_RESOURCES_FOLDER,
 )
@@ -73,10 +72,11 @@ SFR_INITIAL_VALUES_TESTING_ALIASES_AND_ROWS = {
 @pytest.mark.slow
 @pytest.mark.tabsserver
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_input_salesforce_report_by_long_id(tmp_path):
+def test_input_salesforce_report_by_long_id(tmp_path, sf_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     input_salesforce_report_long_id = copy.deepcopy(input_salesforce_report)
     input_salesforce_report_long_id.input.report = SFR_TESTING_REPORT["long_id"]
+    input_salesforce_report_long_id.input.credentials = sf_config["CREDENTIALS"]
     context_archive = create_bundle_archive(
         input_salesforce_report_long_id,
         local_packages=LOCAL_PACKAGES_LIST,
@@ -127,10 +127,11 @@ def test_input_salesforce_report_by_long_id(tmp_path):
 @pytest.mark.slow
 @pytest.mark.tabsserver
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_input_salesforce_report_by_short_id(tmp_path):
+def test_input_salesforce_report_by_short_id(tmp_path, sf_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     input_salesforce_report_short_id = copy.deepcopy(input_salesforce_report)
     input_salesforce_report_short_id.input.report = SFR_TESTING_REPORT["short_id"]
+    input_salesforce_report_short_id.input.credentials = sf_config["CREDENTIALS"]
     context_archive = create_bundle_archive(
         input_salesforce_report_short_id,
         local_packages=LOCAL_PACKAGES_LIST,
@@ -181,10 +182,11 @@ def test_input_salesforce_report_by_short_id(tmp_path):
 @pytest.mark.slow
 @pytest.mark.tabsserver
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_input_salesforce_report_by_name(tmp_path):
+def test_input_salesforce_report_by_name(tmp_path, sf_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     input_salesforce_report_name = copy.deepcopy(input_salesforce_report)
     input_salesforce_report_name.input.report = SFR_TESTING_REPORT["name"]
+    input_salesforce_report_name.input.credentials = sf_config["CREDENTIALS"]
     context_archive = create_bundle_archive(
         input_salesforce_report_name,
         local_packages=LOCAL_PACKAGES_LIST,
@@ -235,7 +237,7 @@ def test_input_salesforce_report_by_name(tmp_path):
 @pytest.mark.slow
 @pytest.mark.tabsserver
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_input_salesforce_report_initial_values_by_label(tmp_path):
+def test_input_salesforce_report_initial_values_by_label(tmp_path, sf_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     input_sfr_initial_values_by_label = copy.deepcopy(
         input_salesforce_report_initial_values
@@ -246,6 +248,7 @@ def test_input_salesforce_report_initial_values_by_label(tmp_path):
     input_sfr_initial_values_by_label.input.initial_last_modified = (
         "2024-03-10T11:03:08.000+0000"
     )
+    input_sfr_initial_values_by_label.input.credentials = sf_config["CREDENTIALS"]
     context_archive = create_bundle_archive(
         input_sfr_initial_values_by_label,
         local_packages=LOCAL_PACKAGES_LIST,
@@ -343,7 +346,7 @@ def test_input_salesforce_report_initial_values_by_label(tmp_path):
 @pytest.mark.slow
 @pytest.mark.tabsserver
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_input_salesforce_report_initial_values_by_name(tmp_path):
+def test_input_salesforce_report_initial_values_by_name(tmp_path, sf_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     input_sfr_initial_values_by_name = copy.deepcopy(
         input_salesforce_report_initial_values
@@ -354,6 +357,7 @@ def test_input_salesforce_report_initial_values_by_name(tmp_path):
     input_sfr_initial_values_by_name.input.initial_last_modified = (
         "2024-03-10T11:03:08.000+0000"
     )
+    input_sfr_initial_values_by_name.input.credentials = sf_config["CREDENTIALS"]
     context_archive = create_bundle_archive(
         input_sfr_initial_values_by_name,
         local_packages=LOCAL_PACKAGES_LIST,
@@ -646,9 +650,9 @@ def test_maximum_date():
 @pytest.mark.requires_internet
 @pytest.mark.salesforce
 @pytest.mark.slow
-def test_chunk(tmp_path):
+def test_chunk(tmp_path, sf_config):
     source = td.SalesforceReportSource(
-        CORRECT_CREDENTIALS,
+        sf_config["CREDENTIALS"],
         report="DOES NOT EXIST",
         column_name_strategy="columnName",
     )
@@ -656,7 +660,7 @@ def test_chunk(tmp_path):
         source.chunk(str(tmp_path))
 
     source = td.SalesforceReportSource(
-        CORRECT_CREDENTIALS,
+        sf_config["CREDENTIALS"],
         report=SFR_TESTING_REPORT["long_id"],
         column_name_strategy="columnName",
     )
@@ -668,7 +672,7 @@ def test_chunk(tmp_path):
     assert not first_output.is_empty()
 
     source = td.SalesforceReportSource(
-        CORRECT_CREDENTIALS,
+        sf_config["CREDENTIALS"],
         report=SFR_TESTING_REPORT["long_id"],
         column_name_strategy="columnName",
     )
@@ -685,10 +689,10 @@ def test_chunk(tmp_path):
 @pytest.mark.requires_internet
 @pytest.mark.salesforce
 @pytest.mark.slow
-def test_chunk_with_filter_by_column_name(tmp_path):
+def test_chunk_with_filter_by_column_name(tmp_path, sf_config):
     for value, number in SFR_TESTING_ALIASES_AND_ROWS.items():
         source = td.SalesforceReportSource(
-            CORRECT_CREDENTIALS,
+            sf_config["CREDENTIALS"],
             report=SFR_TESTING_REPORT["long_id"],
             column_name_strategy="columnName",
             filter=("CREATED_ALIAS", "equals", value),
@@ -710,7 +714,7 @@ def test_chunk_with_filter_by_column_name(tmp_path):
 
     # Since we will and different values, the result should be empty
     source = td.SalesforceReportSource(
-        CORRECT_CREDENTIALS,
+        sf_config["CREDENTIALS"],
         report=SFR_TESTING_REPORT["long_id"],
         column_name_strategy="columnName",
         filter=filter,
@@ -721,7 +725,7 @@ def test_chunk_with_filter_by_column_name(tmp_path):
     # Since we will or different values, the result should be the sum
     logic = " OR ".join([f"{i+1}" for i in range(len(filter))])
     source = td.SalesforceReportSource(
-        CORRECT_CREDENTIALS,
+        sf_config["CREDENTIALS"],
         report=SFR_TESTING_REPORT["long_id"],
         column_name_strategy="columnName",
         filter=filter,
@@ -741,10 +745,10 @@ def test_chunk_with_filter_by_column_name(tmp_path):
 @pytest.mark.requires_internet
 @pytest.mark.salesforce
 @pytest.mark.slow
-def test_chunk_with_filter_by_label(tmp_path):
+def test_chunk_with_filter_by_label(tmp_path, sf_config):
     for value, number in SFR_TESTING_ALIASES_AND_ROWS.items():
         source = td.SalesforceReportSource(
-            CORRECT_CREDENTIALS,
+            sf_config["CREDENTIALS"],
             report=SFR_TESTING_REPORT["long_id"],
             column_name_strategy="label",
             filter=("Created Alias", "equals", value),
@@ -766,7 +770,7 @@ def test_chunk_with_filter_by_label(tmp_path):
 
     # Since we will and different values, the result should be empty
     source = td.SalesforceReportSource(
-        CORRECT_CREDENTIALS,
+        sf_config["CREDENTIALS"],
         report=SFR_TESTING_REPORT["long_id"],
         column_name_strategy="label",
         filter=filter,
@@ -777,7 +781,7 @@ def test_chunk_with_filter_by_label(tmp_path):
     # Since we will or different values, the result should be the sum
     logic = " OR ".join([f"{i+1}" for i in range(len(filter))])
     source = td.SalesforceReportSource(
-        CORRECT_CREDENTIALS,
+        sf_config["CREDENTIALS"],
         report=SFR_TESTING_REPORT["long_id"],
         column_name_strategy="label",
         filter=filter,
@@ -797,10 +801,10 @@ def test_chunk_with_filter_by_label(tmp_path):
 @pytest.mark.requires_internet
 @pytest.mark.salesforce
 @pytest.mark.slow
-def test_chunk_with_filter_and_offset_by_column_name(tmp_path):
+def test_chunk_with_filter_and_offset_by_column_name(tmp_path, sf_config):
     for value, number in SFR_INITIAL_VALUES_TESTING_ALIASES_AND_ROWS.items():
         source = td.SalesforceReportSource(
-            CORRECT_CREDENTIALS,
+            sf_config["CREDENTIALS"],
             report=SFR_INITIAL_VALUES_TESTING_REPORT,
             column_name_strategy="columnName",
             last_modified_column="LAST_UPDATE",
@@ -824,7 +828,7 @@ def test_chunk_with_filter_and_offset_by_column_name(tmp_path):
 
     # Since we will and different values, the result should be empty
     source = td.SalesforceReportSource(
-        CORRECT_CREDENTIALS,
+        sf_config["CREDENTIALS"],
         report=SFR_INITIAL_VALUES_TESTING_REPORT,
         column_name_strategy="columnName",
         last_modified_column="LAST_UPDATE",
@@ -837,7 +841,7 @@ def test_chunk_with_filter_and_offset_by_column_name(tmp_path):
     # Since we will or different values, the result should be the sum
     logic = " OR ".join([f"{i+1}" for i in range(len(filter))])
     source = td.SalesforceReportSource(
-        CORRECT_CREDENTIALS,
+        sf_config["CREDENTIALS"],
         report=SFR_INITIAL_VALUES_TESTING_REPORT,
         column_name_strategy="columnName",
         filter=filter,
@@ -861,10 +865,10 @@ def test_chunk_with_filter_and_offset_by_column_name(tmp_path):
 @pytest.mark.requires_internet
 @pytest.mark.salesforce
 @pytest.mark.slow
-def test_chunk_with_filter_and_offset_by_label(tmp_path):
+def test_chunk_with_filter_and_offset_by_label(tmp_path, sf_config):
     for value, number in SFR_INITIAL_VALUES_TESTING_ALIASES_AND_ROWS.items():
         source = td.SalesforceReportSource(
-            CORRECT_CREDENTIALS,
+            sf_config["CREDENTIALS"],
             report=SFR_INITIAL_VALUES_TESTING_REPORT,
             column_name_strategy="label",
             last_modified_column="Last Modified Date",
@@ -888,7 +892,7 @@ def test_chunk_with_filter_and_offset_by_label(tmp_path):
 
     # Since we will and different values, the result should be empty
     source = td.SalesforceReportSource(
-        CORRECT_CREDENTIALS,
+        sf_config["CREDENTIALS"],
         report=SFR_INITIAL_VALUES_TESTING_REPORT,
         column_name_strategy="label",
         last_modified_column="Last Modified Date",
@@ -901,7 +905,7 @@ def test_chunk_with_filter_and_offset_by_label(tmp_path):
     # Since we will or different values, the result should be the sum
     logic = " OR ".join([f"{i+1}" for i in range(len(filter))])
     source = td.SalesforceReportSource(
-        CORRECT_CREDENTIALS,
+        sf_config["CREDENTIALS"],
         report=SFR_INITIAL_VALUES_TESTING_REPORT,
         column_name_strategy="label",
         filter=filter,
@@ -925,9 +929,9 @@ def test_chunk_with_filter_and_offset_by_label(tmp_path):
 @pytest.mark.requires_internet
 @pytest.mark.salesforce
 @pytest.mark.slow
-def test_column_name_strategy(tmp_path):
+def test_column_name_strategy(tmp_path, sf_config):
     source = td.SalesforceReportSource(
-        CORRECT_CREDENTIALS,
+        sf_config["CREDENTIALS"],
         report=SFR_TESTING_REPORT["long_id"],
         column_name_strategy="columnName",
     )
@@ -939,7 +943,7 @@ def test_column_name_strategy(tmp_path):
     assert not first_output.is_empty()
 
     source = td.SalesforceReportSource(
-        CORRECT_CREDENTIALS,
+        sf_config["CREDENTIALS"],
         report=SFR_TESTING_REPORT["long_id"],
         column_name_strategy="label",
     )
@@ -961,10 +965,10 @@ def test_column_name_strategy(tmp_path):
 @pytest.mark.requires_internet
 @pytest.mark.salesforce
 @pytest.mark.slow
-def test_chunk_with_filter_and_late_offset_by_column_name(tmp_path):
+def test_chunk_with_filter_and_late_offset_by_column_name(tmp_path, sf_config):
     for value, number in SFR_INITIAL_VALUES_TESTING_ALIASES_AND_ROWS.items():
         source = td.SalesforceReportSource(
-            CORRECT_CREDENTIALS,
+            sf_config["CREDENTIALS"],
             report=SFR_INITIAL_VALUES_TESTING_REPORT,
             column_name_strategy="columnName",
             last_modified_column="LAST_UPDATE",
@@ -981,7 +985,7 @@ def test_chunk_with_filter_and_late_offset_by_column_name(tmp_path):
 
     # Since we will and different values, the result should be empty
     source = td.SalesforceReportSource(
-        CORRECT_CREDENTIALS,
+        sf_config["CREDENTIALS"],
         report=SFR_INITIAL_VALUES_TESTING_REPORT,
         column_name_strategy="columnName",
         last_modified_column="LAST_UPDATE",
@@ -994,7 +998,7 @@ def test_chunk_with_filter_and_late_offset_by_column_name(tmp_path):
     # Since we will or different values, the result should be the sum
     logic = " OR ".join([f"{i+1}" for i in range(len(filter))])
     source = td.SalesforceReportSource(
-        CORRECT_CREDENTIALS,
+        sf_config["CREDENTIALS"],
         report=SFR_INITIAL_VALUES_TESTING_REPORT,
         column_name_strategy="columnName",
         filter=filter,
@@ -1009,10 +1013,10 @@ def test_chunk_with_filter_and_late_offset_by_column_name(tmp_path):
 @pytest.mark.requires_internet
 @pytest.mark.salesforce
 @pytest.mark.slow
-def test_chunk_with_filter_and_late_offset_by_label(tmp_path):
+def test_chunk_with_filter_and_late_offset_by_label(tmp_path, sf_config):
     for value, number in SFR_INITIAL_VALUES_TESTING_ALIASES_AND_ROWS.items():
         source = td.SalesforceReportSource(
-            CORRECT_CREDENTIALS,
+            sf_config["CREDENTIALS"],
             report=SFR_INITIAL_VALUES_TESTING_REPORT,
             column_name_strategy="label",
             last_modified_column="Last Modified Date",
@@ -1029,7 +1033,7 @@ def test_chunk_with_filter_and_late_offset_by_label(tmp_path):
 
     # Since we will and different values, the result should be empty
     source = td.SalesforceReportSource(
-        CORRECT_CREDENTIALS,
+        sf_config["CREDENTIALS"],
         report=SFR_INITIAL_VALUES_TESTING_REPORT,
         column_name_strategy="label",
         last_modified_column="Last Modified Date",
@@ -1042,7 +1046,7 @@ def test_chunk_with_filter_and_late_offset_by_label(tmp_path):
     # Since we will or different values, the result should be the sum
     logic = " OR ".join([f"{i+1}" for i in range(len(filter))])
     source = td.SalesforceReportSource(
-        CORRECT_CREDENTIALS,
+        sf_config["CREDENTIALS"],
         report=SFR_INITIAL_VALUES_TESTING_REPORT,
         column_name_strategy="label",
         filter=filter,
@@ -1056,11 +1060,11 @@ def test_chunk_with_filter_and_late_offset_by_label(tmp_path):
 
 @pytest.mark.requires_internet
 @pytest.mark.salesforce
-def test_login():
+def test_login(sf_config):
     from tabsdata_salesforce._connector import _log_into_salesforce
 
     source = td.SalesforceReportSource(
-        CORRECT_CREDENTIALS,
+        sf_config["CREDENTIALS"],
         report="FAKE_ID",
         column_name_strategy="columnName",
     )

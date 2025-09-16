@@ -11,6 +11,7 @@ from unittest import mock
 import polars as pl
 import pytest
 
+import tabsdata as td
 from tabsdata._tabsserver.function.response_utils import RESPONSE_FILE_NAME
 from tabsdata._tabsserver.invoker import REQUEST_FILE_NAME
 from tabsdata._tabsserver.invoker import invoke as tabsserver_main
@@ -59,8 +60,11 @@ LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_input_azure_csv(tmp_path):
+def test_input_azure_csv(tmp_path, azure_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    file = azure_config["URI"] + "/testing_resources/data.csv"
+    source = td.AzureSource(uri=file, credentials=azure_config["CREDENTIALS"])
+    input_azure_csv.input = source
     context_archive = create_bundle_archive(
         input_azure_csv, local_packages=LOCAL_PACKAGES_LIST, save_location=tmp_path
     )
@@ -108,8 +112,11 @@ def test_input_azure_csv(tmp_path):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_input_azure_log(tmp_path):
+def test_input_azure_log(tmp_path, azure_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    file = azure_config["URI"] + "/testing_resources/data.log"
+    source = td.AzureSource(uri=file, credentials=azure_config["CREDENTIALS"])
+    input_azure_log.input = source
     context_archive = create_bundle_archive(
         input_azure_log, local_packages=LOCAL_PACKAGES_LIST, save_location=tmp_path
     )
@@ -157,8 +164,11 @@ def test_input_azure_log(tmp_path):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_input_azure_parquet(tmp_path):
+def test_input_azure_parquet(tmp_path, azure_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    file = azure_config["URI"] + "/testing_resources/data.parquet"
+    source = td.AzureSource(uri=file, credentials=azure_config["CREDENTIALS"])
+    input_azure_parquet.input = source
     context_archive = create_bundle_archive(
         input_azure_parquet, local_packages=LOCAL_PACKAGES_LIST, save_location=tmp_path
     )
@@ -206,8 +216,11 @@ def test_input_azure_parquet(tmp_path):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_input_azure_ndjson(tmp_path):
+def test_input_azure_ndjson(tmp_path, azure_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    file = azure_config["URI"] + "/testing_resources/data.csv"
+    source = td.AzureSource(uri=file, credentials=azure_config["CREDENTIALS"])
+    input_azure_ndjson.input = source
     context_archive = create_bundle_archive(
         input_azure_ndjson, local_packages=LOCAL_PACKAGES_LIST, save_location=tmp_path
     )

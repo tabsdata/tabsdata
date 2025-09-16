@@ -1,6 +1,9 @@
 #
 # Copyright 2025 Tabs Data Inc.
 #
+
+import os
+
 from tests_tabsdata_snowflake.bootest import TESTING_RESOURCES_PATH
 from xdist.workermanage import WorkerController
 
@@ -36,17 +39,6 @@ def pytest_configure_node(node: WorkerController):
     setup_temp_folder_node(node)
 
 
-REAL_CONNECTION_PARAMETERS = {
-    "account": td.EnvironmentSecret("TD_SNOWFLAKE_ACCOUNT"),
-    "user": td.EnvironmentSecret("TD_SNOWFLAKE_USER"),
-    "password": td.EnvironmentSecret("TD_SNOWFLAKE_PAT"),
-    "role": td.EnvironmentSecret("TD_SNOWFLAKE_ROLE"),
-    "database": td.EnvironmentSecret("TD_SNOWFLAKE_DATABASE"),
-    "schema": td.EnvironmentSecret("TD_SNOWFLAKE_SCHEMA"),
-    "warehouse": td.EnvironmentSecret("TD_SNOWFLAKE_WAREHOUSE"),
-}
-
-
 # noinspection PyUnusedLocal
 def pytest_sessionfinish(session, exitstatus):
     # Based on the following discussion:
@@ -58,8 +50,44 @@ def pytest_sessionfinish(session, exitstatus):
 
 
 @pytest.fixture(scope="session")
-def snowflake_connection():
-    conn = connect(**_recursively_evaluate_secret(REAL_CONNECTION_PARAMETERS))
+def snowflake_config():
+    config = {
+        "ACCOUNT_ENV": "SNW__ACCOUNT",
+        "USER_ENV": "SNW__USER",
+        "PAT_ENV": "SNW__PAT",
+        "ROLE_ENV": "SNW__ROLE",
+        "DATABASE_ENV": "SNW__DATABASE",
+        "SCHEMA_ENV": "SNW__SCHEMA",
+        "WAREHOUSE_ENV": "SNW__WAREHOUSE",
+    }
+    missing_vars = []
+    for var in config.values():
+        if not os.environ.get(var):
+            missing_vars.append(var)
+    if missing_vars:
+        raise Exception(
+            f"The environment variables {', '.join(missing_vars)} are not set. "
+            "Unable to run tests using the 'snowflake_config' fixture."
+        )
+
+    config["CONNECTION_PARAMETERS"] = {
+        "account": td.EnvironmentSecret(config["ACCOUNT_ENV"]),
+        "user": td.EnvironmentSecret(config["USER_ENV"]),
+        "password": td.EnvironmentSecret(config["PAT_ENV"]),
+        "role": td.EnvironmentSecret(config["ROLE_ENV"]),
+        "database": td.EnvironmentSecret(config["DATABASE_ENV"]),
+        "schema": td.EnvironmentSecret(config["SCHEMA_ENV"]),
+        "warehouse": td.EnvironmentSecret(config["WAREHOUSE_ENV"]),
+    }
+
+    yield config
+
+
+@pytest.fixture(scope="session")
+def snowflake_connection(snowflake_config):
+    conn = connect(
+        **_recursively_evaluate_secret(snowflake_config["CONNECTION_PARAMETERS"])
+    )
     try:
         yield conn
     finally:

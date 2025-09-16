@@ -13,7 +13,6 @@ import polars as pl
 # noinspection PyPackageRequirements
 import pytest
 from tests_tabsdata_salesforce.conftest import (
-    CORRECT_CREDENTIALS,
     FAKE_CREDENTIALS,
     TESTING_RESOURCES_FOLDER,
 )
@@ -61,8 +60,9 @@ LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
 @pytest.mark.slow
 @pytest.mark.tabsserver
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_input_salesforce(tmp_path):
+def test_input_salesforce(tmp_path, sf_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    input_salesforce.input.credentials = sf_config["CREDENTIALS"]
     context_archive = create_bundle_archive(
         input_salesforce,
         local_packages=LOCAL_PACKAGES_LIST,
@@ -112,8 +112,9 @@ def test_input_salesforce(tmp_path):
 @pytest.mark.slow
 @pytest.mark.tabsserver
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_input_salesforce_initial_values(tmp_path):
+def test_input_salesforce_initial_values(tmp_path, sf_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    input_salesforce_initial_values.input.credentials = sf_config["CREDENTIALS"]
     context_archive = create_bundle_archive(
         input_salesforce_initial_values,
         local_packages=LOCAL_PACKAGES_LIST,
@@ -426,11 +427,11 @@ def test_maximum_date():
 @pytest.mark.requires_internet
 @pytest.mark.salesforce
 @pytest.mark.slow
-def test_chunk(tmp_path):
+def test_chunk(tmp_path, sf_config):
     date1 = "2098-02-05T11:27:47.000000+0000"
     date5 = "1934-04-16T14:10:02.000000+0000"
     source = td.SalesforceSource(
-        CORRECT_CREDENTIALS,
+        sf_config["CREDENTIALS"],
         query=(
             f"SELECT Name,{td.SalesforceSource.LAST_MODIFIED_COLUMN} FROM Contact"
             f" WHERE {td.SalesforceSource.LAST_MODIFIED_COLUMN} > {date1}"
@@ -440,7 +441,7 @@ def test_chunk(tmp_path):
     assert result is None
 
     source = td.SalesforceSource(
-        CORRECT_CREDENTIALS,
+        sf_config["CREDENTIALS"],
         query=(
             f"SELECT Name,{td.SalesforceSource.LAST_MODIFIED_COLUMN} FROM Contact"
             f" WHERE {td.SalesforceSource.LAST_MODIFIED_COLUMN} > {date5}"
@@ -456,12 +457,12 @@ def test_chunk(tmp_path):
 
 @pytest.mark.requires_internet
 @pytest.mark.salesforce
-def test_login():
+def test_login(sf_config):
     from tabsdata_salesforce._connector import _log_into_salesforce
 
     date5 = "1934-04-16T14:10:02.000000+0000"
     source = td.SalesforceSource(
-        CORRECT_CREDENTIALS,
+        sf_config["CREDENTIALS"],
         query=(
             f"SELECT Name,{td.SalesforceSource.LAST_MODIFIED_COLUMN} FROM Contact"
             f" WHERE {td.SalesforceSource.LAST_MODIFIED_COLUMN} > {date5}"
@@ -493,8 +494,9 @@ def test_login_fails():
 @pytest.mark.slow
 @pytest.mark.tabsserver
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_input_salesforce_with_none(tmp_path):
+def test_input_salesforce_with_none(tmp_path, sf_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    input_salesforce_none.input.credentials = sf_config["CREDENTIALS"]
     context_archive = create_bundle_archive(
         input_salesforce_none,
         local_packages=LOCAL_PACKAGES_LIST,
@@ -535,8 +537,9 @@ def test_input_salesforce_with_none(tmp_path):
 @pytest.mark.slow
 @pytest.mark.tabsserver
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_input_salesforce_with_list_none(tmp_path):
+def test_input_salesforce_with_list_none(tmp_path, sf_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    input_salesforce_none.input.credentials = sf_config["CREDENTIALS"]
     context_archive = create_bundle_archive(
         input_salesforce_list_none,
         local_packages=LOCAL_PACKAGES_LIST,

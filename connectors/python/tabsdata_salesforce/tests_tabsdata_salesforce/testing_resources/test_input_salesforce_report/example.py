@@ -17,9 +17,9 @@ ABSOLUTE_LOCATION = os.path.dirname(os.path.abspath(__file__))
     name="test_input_salesforce_report",
     source=td.SalesforceReportSource(
         td.SalesforceTokenCredentials(
-            username=td.EnvironmentSecret("SALESFORCE_USERNAME"),
-            password=td.EnvironmentSecret("SALESFORCE_PASSWORD"),
-            security_token=td.EnvironmentSecret("SALESFORCE_SECURITY_TOKEN"),
+            username=td.EnvironmentSecret("SF0__USERNAME"),
+            password=td.EnvironmentSecret("SF0__PASSWORD"),
+            security_token=td.EnvironmentSecret("SF0__SECURITY_TOKEN"),
         ),
         report="FAKE_REPORT",
         column_name_strategy="columnName",

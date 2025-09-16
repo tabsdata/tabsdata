@@ -3,6 +3,7 @@
 #
 
 import logging
+import os
 
 import pytest
 from tests_tabsdata_salesforce.bootest import TESTING_RESOURCES_PATH
@@ -29,11 +30,30 @@ FAKE_CREDENTIALS = td.SalesforceTokenCredentials(
     security_token="security_token",
 )
 
-CORRECT_CREDENTIALS = td.SalesforceTokenCredentials(
-    username=td.EnvironmentSecret("SALESFORCE_USERNAME"),
-    password=td.EnvironmentSecret("SALESFORCE_PASSWORD"),
-    security_token=td.EnvironmentSecret("SALESFORCE_SECURITY_TOKEN"),
-)
+
+@pytest.fixture(scope="session")
+def sf_config():
+    config = {
+        "USERNAME_ENV": "SF0__USERNAME",
+        "PASSWORD_ENV": "SF0__PASSWORD",
+        "SECURITY_TOKEN_ENV": "SF0__SECURITY_TOKEN",
+    }
+    username = os.environ.get(config["USERNAME_ENV"])
+    password = os.environ.get(config["PASSWORD_ENV"])
+    security_token = os.environ.get(config["SECURITY_TOKEN_ENV"])
+    if not username or not password or not security_token:
+        raise Exception(
+            f"The environment variables {config['USERNAME_ENV']}, "
+            f"{config['PASSWORD_ENV']}, and/or "
+            f"{config['SECURITY_TOKEN_ENV']} are not set. Unable to run tests "
+            "using the 'sf_config' fixture."
+        )
+    config["CREDENTIALS"] = td.SalesforceTokenCredentials(
+        username=td.EnvironmentSecret(config["USERNAME_ENV"]),
+        password=td.EnvironmentSecret(config["PASSWORD_ENV"]),
+        security_token=td.EnvironmentSecret(config["SECURITY_TOKEN_ENV"]),
+    )
+    yield config
 
 
 def pytest_configure(config: pytest.Config):

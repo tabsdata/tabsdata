@@ -17,7 +17,6 @@ import pytest
 # noinspection PyPackageRequirements
 from snowflake.connector.errors import ProgrammingError
 from tests_tabsdata_snowflake.conftest import (
-    REAL_CONNECTION_PARAMETERS,
     TESTING_RESOURCES_FOLDER,
 )
 from tests_tabsdata_snowflake.testing_resources.test_multiple_outputs_snowflake.example import (
@@ -124,9 +123,11 @@ def test_snowflake_chunk(tmp_path):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @pytest.mark.snowflake
-def test_write_snowflake(tmp_path, snowflake_connection):
+def test_write_snowflake(tmp_path, snowflake_connection, snowflake_config):
     table_name = f"write_snowflake_table_{uuid.uuid4()}".replace("-", "_")
-    destination = td.SnowflakeDestination(REAL_CONNECTION_PARAMETERS, table_name)
+    destination = td.SnowflakeDestination(
+        snowflake_config["CONNECTION_PARAMETERS"], table_name
+    )
     mock_parquet_table = os.path.join(
         TESTING_RESOURCES_FOLDER, "example_file", "mock_table.parquet"
     )
@@ -152,7 +153,9 @@ def test_write_snowflake(tmp_path, snowflake_connection):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @pytest.mark.snowflake
-def test_write_snowflake_multiple_files(tmp_path, snowflake_connection):
+def test_write_snowflake_multiple_files(
+    tmp_path, snowflake_connection, snowflake_config
+):
     table_name_0 = f"write_snowflake_multiple_files_table_0_{uuid.uuid4()}".replace(
         "-", "_"
     )
@@ -160,7 +163,7 @@ def test_write_snowflake_multiple_files(tmp_path, snowflake_connection):
         "-", "_"
     )
     destination = td.SnowflakeDestination(
-        REAL_CONNECTION_PARAMETERS, [table_name_0, table_name_1]
+        snowflake_config["CONNECTION_PARAMETERS"], [table_name_0, table_name_1]
     )
     mock_parquet_table_0 = os.path.join(
         TESTING_RESOURCES_FOLDER, "example_file", "mock_table.parquet"
@@ -213,10 +216,10 @@ def test_write_snowflake_multiple_files(tmp_path, snowflake_connection):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @pytest.mark.snowflake
-def test_write_snowflake_with_stage(tmp_path, snowflake_connection):
+def test_write_snowflake_with_stage(tmp_path, snowflake_connection, snowflake_config):
     table_name = f"write_snowflake_with_stage_table_{uuid.uuid4()}".replace("-", "_")
     destination = td.SnowflakeDestination(
-        REAL_CONNECTION_PARAMETERS, table_name, stage=PREEXISTING_STAGE
+        snowflake_config["CONNECTION_PARAMETERS"], table_name, stage=PREEXISTING_STAGE
     )
     mock_parquet_table = os.path.join(
         TESTING_RESOURCES_FOLDER, "example_file", "mock_table.parquet"
@@ -243,10 +246,10 @@ def test_write_snowflake_with_stage(tmp_path, snowflake_connection):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @pytest.mark.snowflake
-def test_write_snowflake_append(tmp_path, snowflake_connection):
+def test_write_snowflake_append(tmp_path, snowflake_connection, snowflake_config):
     table_name = f"write_snowflake_append_table_{uuid.uuid4()}".replace("-", "_")
     destination = td.SnowflakeDestination(
-        REAL_CONNECTION_PARAMETERS, table_name, if_table_exists="append"
+        snowflake_config["CONNECTION_PARAMETERS"], table_name, if_table_exists="append"
     )
     mock_parquet_table = os.path.join(
         TESTING_RESOURCES_FOLDER, "example_file", "mock_table.parquet"
@@ -277,10 +280,10 @@ def test_write_snowflake_append(tmp_path, snowflake_connection):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @pytest.mark.snowflake
-def test_write_snowflake_replace(tmp_path, snowflake_connection):
+def test_write_snowflake_replace(tmp_path, snowflake_connection, snowflake_config):
     table_name = f"write_snowflake_replace_table_{uuid.uuid4()}".replace("-", "_")
     destination = td.SnowflakeDestination(
-        REAL_CONNECTION_PARAMETERS, table_name, if_table_exists="replace"
+        snowflake_config["CONNECTION_PARAMETERS"], table_name, if_table_exists="replace"
     )
     mock_parquet_table = os.path.join(
         TESTING_RESOURCES_FOLDER, "example_file", "mock_table.parquet"
@@ -311,10 +314,12 @@ def test_write_snowflake_replace(tmp_path, snowflake_connection):
 @pytest.mark.snowflake
 @pytest.mark.tabsserver
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_snowflake(tmp_path, snowflake_connection):
+def test_output_snowflake(tmp_path, snowflake_connection, snowflake_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     table_name = f"output_snowflake_table_{uuid.uuid4()}".replace("-", "_")
-    destination = td.SnowflakeDestination(REAL_CONNECTION_PARAMETERS, table_name)
+    destination = td.SnowflakeDestination(
+        snowflake_config["CONNECTION_PARAMETERS"], table_name
+    )
     output_snowflake.output = destination
     context_archive = create_bundle_archive(
         output_snowflake,
@@ -374,7 +379,7 @@ def test_output_snowflake(tmp_path, snowflake_connection):
 @pytest.mark.snowflake
 @pytest.mark.tabsserver
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_multiple_outputs_snowflake(tmp_path, snowflake_connection):
+def test_multiple_outputs_snowflake(tmp_path, snowflake_connection, snowflake_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     table_name_0 = f"multiple_outputs_snowflake_table_0_{uuid.uuid4()}".replace(
         "-", "_"
@@ -383,7 +388,7 @@ def test_multiple_outputs_snowflake(tmp_path, snowflake_connection):
         "-", "_"
     )
     destination = td.SnowflakeDestination(
-        REAL_CONNECTION_PARAMETERS, [table_name_0, table_name_1]
+        snowflake_config["CONNECTION_PARAMETERS"], [table_name_0, table_name_1]
     )
     multiple_outputs_snowflake.output = destination
     context_archive = create_bundle_archive(
@@ -475,10 +480,12 @@ def test_multiple_outputs_snowflake(tmp_path, snowflake_connection):
 @pytest.mark.snowflake
 @pytest.mark.tabsserver
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_snowflake_with_none(tmp_path, snowflake_connection):
+def test_output_snowflake_with_none(tmp_path, snowflake_connection, snowflake_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     table_name = f"output_snowflake_table_with_none_{uuid.uuid4()}".replace("-", "_")
-    destination = td.SnowflakeDestination(REAL_CONNECTION_PARAMETERS, table_name)
+    destination = td.SnowflakeDestination(
+        snowflake_config["CONNECTION_PARAMETERS"], table_name
+    )
     output_snowflake_none.output = destination
     context_archive = create_bundle_archive(
         output_snowflake_none,
@@ -534,7 +541,9 @@ def test_output_snowflake_with_none(tmp_path, snowflake_connection):
 @pytest.mark.snowflake
 @pytest.mark.tabsserver
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_snowflake_with_list_none(tmp_path, snowflake_connection):
+def test_output_snowflake_with_list_none(
+    tmp_path, snowflake_connection, snowflake_config
+):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     table_name_0 = f"output_snowflake_list_none_table_0_{uuid.uuid4()}".replace(
         "-", "_"
@@ -543,7 +552,7 @@ def test_output_snowflake_with_list_none(tmp_path, snowflake_connection):
         "-", "_"
     )
     destination = td.SnowflakeDestination(
-        REAL_CONNECTION_PARAMETERS, [table_name_0, table_name_1]
+        snowflake_config["CONNECTION_PARAMETERS"], [table_name_0, table_name_1]
     )
     output_snowflake_list_none.output = destination
     context_archive = create_bundle_archive(

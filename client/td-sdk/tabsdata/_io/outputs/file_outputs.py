@@ -223,7 +223,8 @@ class AWSGlue(Catalog):
 
     @property
     def definition(self) -> dict:
-        definition = self._user_definition
+        definition = {**self._user_definition}  # Make a copy to avoid modifying the
+        # original
         if hasattr(self, "s3_credentials"):
             if isinstance(self.s3_credentials, S3AccessKeyCredentials):
                 credentials: S3AccessKeyCredentials = self.s3_credentials

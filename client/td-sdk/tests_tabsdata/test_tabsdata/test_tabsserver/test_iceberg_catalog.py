@@ -75,14 +75,14 @@ pytestmark = pytest.mark.catalog
 @pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_s3_catalog(tmp_path, s3_client):
+def test_output_s3_catalog(tmp_path, s3_client, s3_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_file_0 = (
-        "s3://tabsdata-testing-bucket/testing_output/test_output_s3_catalog_"
+        f"{s3_config['URI']}/testing_output/test_output_s3_catalog_"
         f"{uuid.uuid4()}_0.parquet"
     )
     output_file_1 = (
-        "s3://tabsdata-testing-bucket/testing_output/test_output_s3_catalog_"
+        f"{s3_config['URI']}/testing_output/test_output_s3_catalog_"
         f"{uuid.uuid4()}_1.parquet"
     )
     output_s3_catalog.output.uri = [
@@ -103,6 +103,7 @@ def test_output_s3_catalog(tmp_path, s3_client):
         f"s3://tabsdata-us-east-1-catalog-metadata/{namespace}/s3_catalog_0",
         f"s3://tabsdata-us-east-1-catalog-metadata/{namespace}/s3_catalog_1",
     ]
+    output_s3_catalog.output.credentials = s3_config["CREDENTIALS"]
 
     context_archive = create_bundle_archive(
         output_s3_catalog,
@@ -190,7 +191,7 @@ def test_output_s3_catalog(tmp_path, s3_client):
 @pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_s3_catalog_replace(tmp_path, s3_client):
+def test_output_s3_catalog_replace(tmp_path, s3_client, s3_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
 
     catalog_definition = _recursively_evaluate_secret(
@@ -209,10 +210,11 @@ def test_output_s3_catalog_replace(tmp_path, s3_client):
     try:
         for i in range(2):
             output_file = (
-                "s3://tabsdata-testing-bucket/testing_output/test_output_s3_catalog_replace"
+                f"{s3_config['URI']}/testing_output/test_output_s3_catalog_replace"
                 f"{uuid.uuid4()}_{i}.parquet"
             )
             output_s3_catalog_replace.output.uri = output_file
+            output_s3_catalog_replace.output.credentials = s3_config["CREDENTIALS"]
 
             context_archive = create_bundle_archive(
                 output_s3_catalog_replace,
@@ -297,7 +299,7 @@ def test_output_s3_catalog_replace(tmp_path, s3_client):
 @pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_s3_catalog_append(tmp_path, s3_client):
+def test_output_s3_catalog_append(tmp_path, s3_client, s3_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
 
     catalog_definition = _recursively_evaluate_secret(
@@ -316,10 +318,11 @@ def test_output_s3_catalog_append(tmp_path, s3_client):
     try:
         for i in range(2):
             output_file = (
-                "s3://tabsdata-testing-bucket/testing_output/test_output_s3_catalog_append"
+                f"{s3_config['URI']}/testing_output/test_output_s3_catalog_append"
                 f"{uuid.uuid4()}_{i}.parquet"
             )
             output_s3_catalog_append.output.uri = output_file
+            output_s3_catalog_append.output.credentials = s3_config["CREDENTIALS"]
 
             context_archive = create_bundle_archive(
                 output_s3_catalog_append,
@@ -404,16 +407,16 @@ def test_output_s3_catalog_append(tmp_path, s3_client):
 @pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_s3_catalog_no_auto_create_at_fails(tmp_path, s3_client):
+def test_output_s3_catalog_no_auto_create_at_fails(tmp_path, s3_client, s3_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_s3_catalog_no_auto_create_at_fails = copy.deepcopy(output_s3_catalog)
     output_file_0 = (
-        "s3://tabsdata-testing-bucket/testing_output"
+        f"{s3_config['URI']}/testing_output"
         "/test_output_s3_catalog_no_autocreate_"
         f"{uuid.uuid4()}_0.parquet"
     )
     output_file_1 = (
-        "s3://tabsdata-testing-bucket/testing_output/test_output_s3_catalog_no_autocreate_"
+        f"{s3_config['URI']}/testing_output/test_output_s3_catalog_no_autocreate_"
         f"{uuid.uuid4()}_1.parquet"
     )
     output_s3_catalog_no_auto_create_at_fails.output.uri = [
@@ -431,6 +434,9 @@ def test_output_s3_catalog_no_auto_create_at_fails(tmp_path, s3_client):
 
     output_s3_catalog_no_auto_create_at_fails.output.catalog.tables = [table_0, table_1]
     output_s3_catalog_no_auto_create_at_fails.output.catalog.auto_create_at = None
+    output_s3_catalog_no_auto_create_at_fails.output.credentials = s3_config[
+        "CREDENTIALS"
+    ]
 
     context_archive = create_bundle_archive(
         output_s3_catalog_no_auto_create_at_fails,
@@ -487,11 +493,11 @@ def test_output_s3_catalog_no_auto_create_at_fails(tmp_path, s3_client):
 @pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_s3_catalog_schema_update(tmp_path, s3_client):
+def test_output_s3_catalog_schema_update(tmp_path, s3_client, s3_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_s3_catalog_schema_update = copy.deepcopy(output_s3_catalog_schema_strategy)
     output_file = (
-        "s3://tabsdata-testing-bucket/testing_output"
+        f"{s3_config['URI']}/testing_output"
         "/test_output_s3_catalog_schema_update_"
         f"{uuid.uuid4()}.parquet"
     )
@@ -506,6 +512,7 @@ def test_output_s3_catalog_schema_update(tmp_path, s3_client):
 
     output_s3_catalog_schema_update.output.catalog.tables = table_name
     output_s3_catalog_schema_update.output.catalog.schema_strategy = "update"
+    output_s3_catalog_schema_update.output.credentials = s3_config["CREDENTIALS"]
 
     context_archive = create_bundle_archive(
         output_s3_catalog_schema_update,
@@ -597,11 +604,11 @@ def test_output_s3_catalog_schema_update(tmp_path, s3_client):
 @pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_s3_catalog_schema_strict(tmp_path, s3_client):
+def test_output_s3_catalog_schema_strict(tmp_path, s3_client, s3_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_s3_catalog_schema_strict = copy.deepcopy(output_s3_catalog_schema_strategy)
     output_file = (
-        "s3://tabsdata-testing-bucket/testing_output"
+        f"{s3_config['URI']}/testing_output"
         "/test_output_s3_catalog_schema_strict_"
         f"{uuid.uuid4()}.parquet"
     )
@@ -616,6 +623,7 @@ def test_output_s3_catalog_schema_strict(tmp_path, s3_client):
 
     output_s3_catalog_schema_strict.output.catalog.tables = table_name
     output_s3_catalog_schema_strict.output.catalog.schema_strategy = "strict"
+    output_s3_catalog_schema_strict.output.credentials = s3_config["CREDENTIALS"]
 
     context_archive = create_bundle_archive(
         output_s3_catalog_schema_strict,
@@ -682,7 +690,7 @@ def test_output_s3_catalog_schema_strict(tmp_path, s3_client):
 @pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_s3_catalog_partition(tmp_path, s3_client):
+def test_output_s3_catalog_partition(tmp_path, s3_client, s3_config):
 
     from tests_tabsdata.testing_resources.test_output_s3_catalog_partition.example import (
         NUMBER_OF_PARTITIONS,
@@ -690,7 +698,7 @@ def test_output_s3_catalog_partition(tmp_path, s3_client):
 
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_file = (
-        "s3://tabsdata-testing-bucket/testing_output"
+        f"{s3_config['URI']}/testing_output"
         "/test_output_s3_catalog_partition_"
         f"{uuid.uuid4()}_$FRAGMENT_IDX.parquet"
     )
@@ -704,6 +712,7 @@ def test_output_s3_catalog_partition(tmp_path, s3_client):
     table_name = f"{namespace}.s3_catalog_partition"
 
     output_s3_catalog_partition.output.catalog.tables = table_name
+    output_s3_catalog_partition.output.credentials = s3_config["CREDENTIALS"]
 
     context_archive = create_bundle_archive(
         output_s3_catalog_partition,
@@ -807,14 +816,14 @@ def test_output_s3_catalog_partition(tmp_path, s3_client):
 @pytest.mark.s3
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_s3_catalog_region_creds(tmp_path, s3_client):
+def test_output_s3_catalog_region_creds(tmp_path, s3_client, s3_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_file_0 = (
-        "s3://tabsdata-testing-bucket/testing_output/test_output_s3_catalog_region_creds_"
+        f"{s3_config['URI']}/testing_output/test_output_s3_catalog_region_creds_"
         f"{uuid.uuid4()}_0.parquet"
     )
     output_file_1 = (
-        "s3://tabsdata-testing-bucket/testing_output/test_output_s3_catalog_region_creds_"
+        f"{s3_config['URI']}/testing_output/test_output_s3_catalog_region_creds_"
         f"{uuid.uuid4()}_1.parquet"
     )
     output_s3_catalog_region_creds.output.uri = [
@@ -840,6 +849,10 @@ def test_output_s3_catalog_region_creds(tmp_path, s3_client):
             "s3://tabsdata-us-east-1-catalog-metadata/"
             f"{namespace}/s3_catalog_region_creds_1"
         ),
+    ]
+    output_s3_catalog_region_creds.output.credentials = s3_config["CREDENTIALS"]
+    output_s3_catalog_region_creds.output.catalog.s3_credentials = s3_config[
+        "CREDENTIALS"
     ]
 
     context_archive = create_bundle_archive(

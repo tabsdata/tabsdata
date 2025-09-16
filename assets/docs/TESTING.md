@@ -175,7 +175,7 @@ TBD
 
 * `<PREFIX>_SALESFORCE_URI`: The URI of the Salesforce instance.
 * `<PREFIX>_SALESFORCE_USER`: The user for the Salesforce instance.
-* `<PREFIX>_SALESFORCE_PASSWORD`: The password for the Salesforce instance.
+* `<PREFIX>_SF0__PASSWORD`: The password for the Salesforce instance.
 * `<PREFIX>_SALESFORCE_TOKEN`: The token for the Salesforce instance.
 
 Python:

@@ -2,6 +2,7 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
+import copy
 import inspect
 import logging
 import os
@@ -16,15 +17,7 @@ import pytest
 
 # noinspection PyPackageRequirements
 from databricks.sql import ServerOperationError
-from tests_tabsdata_databricks.conftest import (
-    DATABRICKS_CATALOG,
-    DATABRICKS_HOST,
-    DATABRICKS_SCHEMA,
-    DATABRICKS_TOKEN,
-    DATABRICKS_VOLUME,
-    DATABRICKS_WAREHOUSE_NAME,
-    TESTING_RESOURCES_FOLDER,
-)
+from tests_tabsdata_databricks.conftest import TESTING_RESOURCES_FOLDER
 from tests_tabsdata_databricks.testing_resources.test_multiple_outputs_databricks.example import (
     multiple_outputs_databricks,
 )
@@ -73,20 +66,24 @@ DATABRICKS_BUDGET_SAFETY_TIMEOUT = 600
 @pytest.mark.databricks
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
 @pytest.mark.unit
-def test_class_initialization_default_options():
+def test_class_initialization_default_options(databricks_config):
+    host = databricks_config["HOST"]
+    token = databricks_config["TOKEN"]
+    volume = databricks_config["VOLUME"]
+    warehouse_name = databricks_config["WAREHOUSE_NAME"]
     tables = ["catalog.schema.table1", "catalog.schema.table2"]
     output = td.DatabricksDestination(
-        DATABRICKS_HOST,
-        DATABRICKS_TOKEN,
+        host,
+        token,
         tables,
-        DATABRICKS_VOLUME,
-        warehouse=DATABRICKS_WAREHOUSE_NAME,
+        volume,
+        warehouse=warehouse_name,
     )
-    assert output.host_url == DATABRICKS_HOST
-    assert output.token == DirectSecret(DATABRICKS_TOKEN)
+    assert output.host_url == host
+    assert output.token == DirectSecret(token)
     assert output.tables == tables
-    assert output.volume == DATABRICKS_VOLUME
-    assert output.warehouse == DATABRICKS_WAREHOUSE_NAME
+    assert output.volume == volume
+    assert output.warehouse == warehouse_name
     assert output.warehouse_id is None
     assert output.catalog is None
     assert output.schema is None
@@ -97,14 +94,18 @@ def test_class_initialization_default_options():
 @pytest.mark.databricks
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
 @pytest.mark.unit
-def test_class_initialization_single_table():
+def test_class_initialization_single_table(databricks_config):
+    host = databricks_config["HOST"]
+    token = databricks_config["TOKEN"]
+    volume = databricks_config["VOLUME"]
+    warehouse_name = databricks_config["WAREHOUSE_NAME"]
     table = "catalog.schema.table1"
     output = td.DatabricksDestination(
-        DATABRICKS_HOST,
-        DATABRICKS_TOKEN,
+        host,
+        token,
         table,
-        DATABRICKS_VOLUME,
-        warehouse=DATABRICKS_WAREHOUSE_NAME,
+        volume,
+        warehouse=warehouse_name,
     )
     assert output.tables == [table]
 
@@ -112,80 +113,101 @@ def test_class_initialization_single_table():
 @pytest.mark.databricks
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
 @pytest.mark.unit
-def test_class_initialization_single_table_no_catalog_fails():
+def test_class_initialization_single_table_no_catalog_fails(databricks_config):
+    host = databricks_config["HOST"]
+    token = databricks_config["TOKEN"]
+    volume = databricks_config["VOLUME"]
+    warehouse_name = databricks_config["WAREHOUSE_NAME"]
     table = "schema.table1"
     with pytest.raises(ValueError):
         td.DatabricksDestination(
-            DATABRICKS_HOST,
-            DATABRICKS_TOKEN,
+            host,
+            token,
             table,
-            DATABRICKS_VOLUME,
-            warehouse=DATABRICKS_WAREHOUSE_NAME,
+            volume,
+            warehouse=warehouse_name,
         )
 
 
 @pytest.mark.databricks
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
 @pytest.mark.unit
-def test_class_initialization_single_table_no_schema_fails():
+def test_class_initialization_single_table_no_schema_fails(databricks_config):
+    host = databricks_config["HOST"]
+    token = databricks_config["TOKEN"]
+    volume = databricks_config["VOLUME"]
+    warehouse_name = databricks_config["WAREHOUSE_NAME"]
     table = "table1"
     with pytest.raises(ValueError):
         td.DatabricksDestination(
-            DATABRICKS_HOST,
-            DATABRICKS_TOKEN,
+            host,
+            token,
             table,
-            DATABRICKS_VOLUME,
-            warehouse=DATABRICKS_WAREHOUSE_NAME,
+            volume,
+            warehouse=warehouse_name,
         )
 
 
 @pytest.mark.databricks
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
 @pytest.mark.unit
-def test_class_initialization_tables_no_catalog_fails():
+def test_class_initialization_tables_no_catalog_fails(databricks_config):
+    host = databricks_config["HOST"]
+    token = databricks_config["TOKEN"]
+    volume = databricks_config["VOLUME"]
+    warehouse_name = databricks_config["WAREHOUSE_NAME"]
     tables = ["catalog.schema.table1", "catalog.schema.table2", "schema.table3"]
     with pytest.raises(ValueError):
         td.DatabricksDestination(
-            DATABRICKS_HOST,
-            DATABRICKS_TOKEN,
+            host,
+            token,
             tables,
-            DATABRICKS_VOLUME,
-            warehouse=DATABRICKS_WAREHOUSE_NAME,
+            volume,
+            warehouse=warehouse_name,
         )
 
 
 @pytest.mark.databricks
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
 @pytest.mark.unit
-def test_class_initialization_tables_no_schema_fails():
+def test_class_initialization_tables_no_schema_fails(databricks_config):
+    host = databricks_config["HOST"]
+    token = databricks_config["TOKEN"]
+    volume = databricks_config["VOLUME"]
+    warehouse_name = databricks_config["WAREHOUSE_NAME"]
     tables = ["catalog.schema.table1", "catalog.schema.table2", "table3"]
     with pytest.raises(ValueError):
         td.DatabricksDestination(
-            DATABRICKS_HOST,
-            DATABRICKS_TOKEN,
+            host,
+            token,
             tables,
-            DATABRICKS_VOLUME,
-            warehouse=DATABRICKS_WAREHOUSE_NAME,
+            volume,
+            warehouse=warehouse_name,
         )
 
 
 @pytest.mark.databricks
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
 @pytest.mark.unit
-def test_class_initialization_tables_catalog():
+def test_class_initialization_tables_catalog(databricks_config):
+    host = databricks_config["HOST"]
+    token = databricks_config["TOKEN"]
+    volume = databricks_config["VOLUME"]
+    warehouse_name = databricks_config["WAREHOUSE_NAME"]
+    catalog = databricks_config["CATALOG"]
     tables = ["catalog.schema.table1", "catalog.schema.table2", "schema.table3"]
     expected_tables = [
         "catalog.schema.table1",
         "catalog.schema.table2",
-        f"{DATABRICKS_CATALOG}.schema.table3",
+        f"{catalog}.schema.table3",
     ]
     output = td.DatabricksDestination(
-        DATABRICKS_HOST,
-        DATABRICKS_TOKEN,
+        host,
+        token,
         tables,
-        DATABRICKS_VOLUME,
-        warehouse=DATABRICKS_WAREHOUSE_NAME,
-        catalog=DATABRICKS_CATALOG,
+        volume,
+        warehouse=warehouse_name,
+        catalog=catalog,
     )
     assert output.tables == expected_tables
 
@@ -193,21 +215,27 @@ def test_class_initialization_tables_catalog():
 @pytest.mark.databricks
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
 @pytest.mark.unit
-def test_class_initialization_tables_catalog_and_schema():
+def test_class_initialization_tables_catalog_and_schema(databricks_config):
+    host = databricks_config["HOST"]
+    token = databricks_config["TOKEN"]
+    volume = databricks_config["VOLUME"]
+    warehouse_name = databricks_config["WAREHOUSE_NAME"]
+    catalog = databricks_config["CATALOG"]
+    schema = databricks_config["SCHEMA"]
     tables = ["catalog.schema.table1", "catalog.schema.table2", "table3"]
     expected_tables = [
         "catalog.schema.table1",
         "catalog.schema.table2",
-        f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}.table3",
+        f"{catalog}.{schema}.table3",
     ]
     output = td.DatabricksDestination(
-        DATABRICKS_HOST,
-        DATABRICKS_TOKEN,
+        host,
+        token,
         tables,
-        DATABRICKS_VOLUME,
-        warehouse=DATABRICKS_WAREHOUSE_NAME,
-        catalog=DATABRICKS_CATALOG,
-        schema=DATABRICKS_SCHEMA,
+        volume,
+        warehouse=warehouse_name,
+        catalog=catalog,
+        schema=schema,
     )
     assert output.tables == expected_tables
 
@@ -215,29 +243,31 @@ def test_class_initialization_tables_catalog_and_schema():
 @pytest.mark.databricks
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
 @pytest.mark.unit
-def test_class_initialization_all_options():
+def test_class_initialization_all_options(databricks_config):
+    host = databricks_config["HOST"]
+    volume = databricks_config["VOLUME"]
+    catalog = databricks_config["CATALOG"]
+    schema = databricks_config["SCHEMA"]
     tables = ["table1", "table2"]
     output = td.DatabricksDestination(
-        DATABRICKS_HOST,
-        EnvironmentSecret("DATABRICKS_TOKEN"),
+        host,
+        EnvironmentSecret("token"),
         tables,
-        DATABRICKS_VOLUME,
-        catalog=DATABRICKS_CATALOG,
-        schema=DATABRICKS_SCHEMA,
+        volume,
+        catalog=catalog,
+        schema=schema,
         schema_strategy="strict",
         if_table_exists="replace",
         warehouse_id="fake_id",
     )
-    assert output.host_url == DATABRICKS_HOST
-    assert output.token == EnvironmentSecret("DATABRICKS_TOKEN")
-    assert output.tables == [
-        f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}.{table}" for table in tables
-    ]
-    assert output.volume == DATABRICKS_VOLUME
+    assert output.host_url == host
+    assert output.token == EnvironmentSecret("token")
+    assert output.tables == [f"{catalog}.{schema}.{table}" for table in tables]
+    assert output.volume == volume
     assert output.warehouse is None
     assert output.warehouse_id == "fake_id"
-    assert output.catalog == DATABRICKS_CATALOG
-    assert output.schema == DATABRICKS_SCHEMA
+    assert output.catalog == catalog
+    assert output.schema == schema
     assert output.schema_strategy == "strict"
     assert output.if_table_exists == "replace"
 
@@ -245,14 +275,18 @@ def test_class_initialization_all_options():
 @pytest.mark.databricks
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
 @pytest.mark.unit
-def test_class_initialization_support_options():
+def test_class_initialization_support_options(databricks_config):
+    host = databricks_config["HOST"]
+    token = databricks_config["TOKEN"]
+    volume = databricks_config["VOLUME"]
+    warehouse_name = databricks_config["WAREHOUSE_NAME"]
     tables = ["catalog.schema.table1", "catalog.schema.table2"]
     output = td.DatabricksDestination(
-        DATABRICKS_HOST,
-        DATABRICKS_TOKEN,
+        host,
+        token,
         tables,
-        DATABRICKS_VOLUME,
-        warehouse=DATABRICKS_WAREHOUSE_NAME,
+        volume,
+        warehouse=warehouse_name,
         support_append_create_table={"key": "value"},
     )
     assert output.kwargs == {"support_append_create_table": {"key": "value"}}
@@ -262,44 +296,57 @@ def test_class_initialization_support_options():
 @pytest.mark.databricks
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
 @pytest.mark.unit
-def test_no_warehouse():
+def test_no_warehouse(databricks_config):
+    host = databricks_config["HOST"]
+    token = databricks_config["TOKEN"]
+    volume = databricks_config["VOLUME"]
     tables = ["catalog.schema.table1", "catalog.schema.table2"]
     with pytest.raises(ValueError):
         td.DatabricksDestination(
-            DATABRICKS_HOST,
-            DATABRICKS_TOKEN,
+            host,
+            token,
             tables,
-            DATABRICKS_VOLUME,
+            volume,
         )
 
 
 @pytest.mark.databricks
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
 @pytest.mark.unit
-def test_both_warehouse():
+def test_both_warehouse(databricks_config):
+    host = databricks_config["HOST"]
+    token = databricks_config["TOKEN"]
+    volume = databricks_config["VOLUME"]
+    warehouse_name = databricks_config["WAREHOUSE_NAME"]
     tables = ["catalog.schema.table1", "catalog.schema.table2"]
     with pytest.raises(ValueError):
         td.DatabricksDestination(
-            DATABRICKS_HOST,
-            DATABRICKS_TOKEN,
+            host,
+            token,
             tables,
-            DATABRICKS_VOLUME,
-            warehouse=DATABRICKS_WAREHOUSE_NAME,
+            volume,
+            warehouse=warehouse_name,
             warehouse_id="fake_id",
         )
 
 
 @pytest.mark.databricks
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
-def test_databricks_chunk(tmp_path):
+def test_databricks_chunk(tmp_path, databricks_config):
+    host = databricks_config["HOST"]
+    token = databricks_config["TOKEN"]
+    volume = databricks_config["VOLUME"]
+    warehouse_name = databricks_config["WAREHOUSE_NAME"]
+    catalog = databricks_config["CATALOG"]
+    schema = databricks_config["SCHEMA"]
     databricks_destination = td.DatabricksDestination(
-        DATABRICKS_HOST,
-        DATABRICKS_TOKEN,
+        host,
+        token,
         "table",
-        DATABRICKS_VOLUME,
-        warehouse=DATABRICKS_WAREHOUSE_NAME,
-        catalog=DATABRICKS_CATALOG,
-        schema=DATABRICKS_SCHEMA,
+        volume,
+        warehouse=warehouse_name,
+        catalog=catalog,
+        schema=schema,
     )
     df1 = pl.LazyFrame({"a": [1, 2, 3], "b": ["c", "d", "e"]})
     df2 = pl.LazyFrame({"c": [4, 5, 6], "d": ["hi", "hello", "bye"]})
@@ -318,17 +365,21 @@ def test_databricks_chunk(tmp_path):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
-def test_stream(tmp_path, size, databricks_client, sql_conn):
+def test_stream(tmp_path, size, databricks_client, sql_conn, databricks_config):
+    host = databricks_config["HOST"]
+    token = databricks_config["TOKEN"]
+    volume = databricks_config["VOLUME"]
+    warehouse_name = databricks_config["WAREHOUSE_NAME"]
+    catalog = databricks_config["CATALOG"]
+    schema = databricks_config["SCHEMA"]
     lf = get_lf(size)
-    table_name = (
-        f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}.test_stream_table_{uuid.uuid4()}"
-    )
+    table_name = f"{catalog}.{schema}.test_stream_table_{uuid.uuid4()}"
     databricks_destination = td.DatabricksDestination(
-        DATABRICKS_HOST,
-        DATABRICKS_TOKEN,
+        host,
+        token,
         table_name,
-        DATABRICKS_VOLUME,
-        warehouse=DATABRICKS_WAREHOUSE_NAME,
+        volume,
+        warehouse=warehouse_name,
         catalog="fake_catalog",  # This should not affect execution as table is fully
         # qualified
         schema="fake_schema",  # This should not affect execution as table is fully
@@ -354,18 +405,21 @@ def test_stream(tmp_path, size, databricks_client, sql_conn):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
-def test_stream_append(tmp_path, size, databricks_client, sql_conn):
+def test_stream_append(tmp_path, size, databricks_client, sql_conn, databricks_config):
+    host = databricks_config["HOST"]
+    token = databricks_config["TOKEN"]
+    volume = databricks_config["VOLUME"]
+    warehouse_name = databricks_config["WAREHOUSE_NAME"]
+    catalog = databricks_config["CATALOG"]
+    schema = databricks_config["SCHEMA"]
     lf = get_lf(size)
-    table_name = (
-        f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}.test_stream_table_append"
-        f"nd_{uuid.uuid4()}"
-    )
+    table_name = f"{catalog}.{schema}.test_stream_table_appendnd_{uuid.uuid4()}"
     databricks_destination = td.DatabricksDestination(
-        DATABRICKS_HOST,
-        DATABRICKS_TOKEN,
+        host,
+        token,
         table_name,
-        DATABRICKS_VOLUME,
-        warehouse=DATABRICKS_WAREHOUSE_NAME,
+        volume,
+        warehouse=warehouse_name,
         catalog="fake_catalog",  # This should not affect execution as table is fully
         # qualified
         schema="fake_schema",  # This should not affect execution as table is fully
@@ -393,19 +447,22 @@ def test_stream_append(tmp_path, size, databricks_client, sql_conn):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
-def test_stream_replace(tmp_path, size, databricks_client, sql_conn):
+def test_stream_replace(tmp_path, size, databricks_client, sql_conn, databricks_config):
+    host = databricks_config["HOST"]
+    token = databricks_config["TOKEN"]
+    volume = databricks_config["VOLUME"]
+    warehouse_name = databricks_config["WAREHOUSE_NAME"]
+    catalog = databricks_config["CATALOG"]
+    schema = databricks_config["SCHEMA"]
     lf = get_lf(size)
-    table_name = (
-        f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}.test_stream_table_"
-        f"replace_{uuid.uuid4()}"
-    )
+    table_name = f"{catalog}.{schema}.test_stream_table_replace_{uuid.uuid4()}"
     databricks_destination = td.DatabricksDestination(
-        DATABRICKS_HOST,
-        DATABRICKS_TOKEN,
+        host,
+        token,
         table_name,
-        DATABRICKS_VOLUME,
+        volume,
         if_table_exists="replace",
-        warehouse=DATABRICKS_WAREHOUSE_NAME,
+        warehouse=warehouse_name,
         catalog="fake_catalog",  # This should not affect execution as table is fully
         # qualified
         schema="fake_schema",  # This should not affect execution as table is fully
@@ -433,25 +490,29 @@ def test_stream_replace(tmp_path, size, databricks_client, sql_conn):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
-def test_stream_multiple_lf(tmp_path, size, databricks_client, sql_conn):
+def test_stream_multiple_lf(
+    tmp_path, size, databricks_client, sql_conn, databricks_config
+):
+    host = databricks_config["HOST"]
+    token = databricks_config["TOKEN"]
+    volume = databricks_config["VOLUME"]
+    warehouse_name = databricks_config["WAREHOUSE_NAME"]
+    catalog = databricks_config["CATALOG"]
+    schema = databricks_config["SCHEMA"]
     lf = get_lf(size)
     table_name_1 = f"test_stream_multiple_lf_table_1_{uuid.uuid4()}"
     table_name_2 = f"test_stream_multiple_lf_table_2_{uuid.uuid4()}"
     databricks_destination = td.DatabricksDestination(
-        DATABRICKS_HOST,
-        DATABRICKS_TOKEN,
+        host,
+        token,
         [table_name_1, table_name_2],
-        DATABRICKS_VOLUME,
-        warehouse=DATABRICKS_WAREHOUSE_NAME,
-        catalog=DATABRICKS_CATALOG,
-        schema=DATABRICKS_SCHEMA,
+        volume,
+        warehouse=warehouse_name,
+        catalog=catalog,
+        schema=schema,
     )
-    full_name_1 = _table_fqn_4sql(
-        f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}.{table_name_1}"
-    )
-    full_name_2 = _table_fqn_4sql(
-        f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}.{table_name_2}"
-    )
+    full_name_1 = _table_fqn_4sql(f"{catalog}.{schema}.{table_name_1}")
+    full_name_2 = _table_fqn_4sql(f"{catalog}.{schema}.{table_name_2}")
     try:
         databricks_destination.stream(str(tmp_path), lf, lf)
 
@@ -479,17 +540,25 @@ def test_stream_multiple_lf(tmp_path, size, databricks_client, sql_conn):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
-def test_stream_different_len_raises_error(tmp_path, databricks_client):
+def test_stream_different_len_raises_error(
+    tmp_path, databricks_client, databricks_config
+):
+    host = databricks_config["HOST"]
+    token = databricks_config["TOKEN"]
+    volume = databricks_config["VOLUME"]
+    warehouse_name = databricks_config["WAREHOUSE_NAME"]
+    catalog = databricks_config["CATALOG"]
+    schema = databricks_config["SCHEMA"]
     size = 25000
     lf = get_lf(size)
     databricks_destination = td.DatabricksDestination(
-        DATABRICKS_HOST,
-        DATABRICKS_TOKEN,
+        host,
+        token,
         ["table1", "table2"],
-        DATABRICKS_VOLUME,
-        warehouse=DATABRICKS_WAREHOUSE_NAME,
-        catalog=DATABRICKS_CATALOG,
-        schema=DATABRICKS_SCHEMA,
+        volume,
+        warehouse=warehouse_name,
+        catalog=catalog,
+        schema=schema,
     )
     try:
         with pytest.raises(ValueError):
@@ -500,16 +569,12 @@ def test_stream_different_len_raises_error(tmp_path, databricks_client):
     finally:
         # noinspection PyBroadException
         try:
-            databricks_client.tables.delete(
-                full_name=f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}.table1"
-            )
+            databricks_client.tables.delete(full_name=f"{catalog}.{schema}.table1")
         except Exception:
             pass
         # noinspection PyBroadException
         try:
-            databricks_client.tables.delete(
-                full_name=f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}.table2"
-            )
+            databricks_client.tables.delete(full_name=f"{catalog}.{schema}.table2")
         except Exception:
             pass
 
@@ -518,18 +583,25 @@ def test_stream_different_len_raises_error(tmp_path, databricks_client):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
-def test_single_element_table_list(tmp_path, size, databricks_client, sql_conn):
+def test_single_element_table_list(
+    tmp_path, size, databricks_client, sql_conn, databricks_config
+):
+    host = databricks_config["HOST"]
+    token = databricks_config["TOKEN"]
+    volume = databricks_config["VOLUME"]
+    warehouse_name = databricks_config["WAREHOUSE_NAME"]
+    catalog = databricks_config["CATALOG"]
+    schema = databricks_config["SCHEMA"]
     lf = get_lf(size)
     table_name = (
-        f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}.test_single_element_table_list_table"
-        f"_{uuid.uuid4()}"
+        f"{catalog}.{schema}.test_single_element_table_list_table_{uuid.uuid4()}"
     )
     databricks_destination = td.DatabricksDestination(
-        DATABRICKS_HOST,
-        DATABRICKS_TOKEN,
+        host,
+        token,
         [table_name],
-        DATABRICKS_VOLUME,
-        warehouse=DATABRICKS_WAREHOUSE_NAME,
+        volume,
+        warehouse=warehouse_name,
         catalog="fake_catalog",  # This should not affect execution as table is fully
         # qualified
         schema="fake_schema",  # This should not affect execution as table is fully
@@ -558,19 +630,32 @@ def test_single_element_table_list(tmp_path, size, databricks_client, sql_conn):
 @pytest.mark.tabsserver
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_databricks(tmp_path, databricks_client, sql_conn):
+def test_output_databricks(tmp_path, databricks_client, sql_conn, databricks_config):
+    host = databricks_config["HOST"]
+    volume = databricks_config["VOLUME"]
+    warehouse_name = databricks_config["WAREHOUSE_NAME"]
+    catalog = databricks_config["CATALOG"]
+    schema = databricks_config["SCHEMA"]
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     table_name = f"test_output_databricks_table_{uuid.uuid4()}"
-    output_databricks.output.tables = table_name
+    output_databricks_copy = copy.deepcopy(output_databricks)
+    destination = td.DatabricksDestination(
+        host,
+        td.EnvironmentSecret(databricks_config["TOKEN_ENV"]),
+        table_name,
+        volume,
+        warehouse=warehouse_name,
+        catalog=catalog,
+        schema=schema,
+    )
+    output_databricks_copy.output = destination
     context_archive = create_bundle_archive(
-        output_databricks,
+        output_databricks_copy,
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 
-    full_table_name = _table_fqn_4sql(
-        f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}.{table_name}"
-    )
+    full_table_name = _table_fqn_4sql(f"{catalog}.{schema}.{table_name}")
 
     input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
@@ -622,19 +707,29 @@ def test_output_databricks(tmp_path, databricks_client, sql_conn):
 @pytest.mark.tabsserver
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_multiple_outputs_databricks(tmp_path, databricks_client, sql_conn):
+def test_multiple_outputs_databricks(
+    tmp_path, databricks_client, sql_conn, databricks_config
+):
+    host = databricks_config["HOST"]
+    volume = databricks_config["VOLUME"]
+    warehouse_name = databricks_config["WAREHOUSE_NAME"]
+    catalog = databricks_config["CATALOG"]
+    schema = databricks_config["SCHEMA"]
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     table_name_1 = (
-        f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}."
-        "test_multiple_outputs_databricks_table_1"
-        f"_{uuid.uuid4()}"
+        f"{catalog}.{schema}.test_multiple_outputs_databricks_table_1_{uuid.uuid4()}"
     )
     table_name_2 = (
-        f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}."
-        "test_multiple_outputs_databricks_table_2"
-        f"_{uuid.uuid4()}"
+        f"{catalog}.{schema}.test_multiple_outputs_databricks_table_2_{uuid.uuid4()}"
     )
-    multiple_outputs_databricks.output.tables = [table_name_1, table_name_2]
+    destination = td.DatabricksDestination(
+        host,
+        td.EnvironmentSecret(databricks_config["TOKEN_ENV"]),
+        [table_name_1, table_name_2],
+        volume,
+        warehouse=warehouse_name,
+    )
+    multiple_outputs_databricks.output = destination
     context_archive = create_bundle_archive(
         multiple_outputs_databricks,
         local_packages=LOCAL_PACKAGES_LIST,
@@ -707,19 +802,33 @@ def test_multiple_outputs_databricks(tmp_path, databricks_client, sql_conn):
 @pytest.mark.tabsserver
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_databricks_with_none(tmp_path, databricks_client, sql_conn):
+def test_output_databricks_with_none(
+    tmp_path, databricks_client, sql_conn, databricks_config
+):
+    host = databricks_config["HOST"]
+    volume = databricks_config["VOLUME"]
+    warehouse_name = databricks_config["WAREHOUSE_NAME"]
+    catalog = databricks_config["CATALOG"]
+    schema = databricks_config["SCHEMA"]
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     table_name = f"test_output_databricks_none_table_{uuid.uuid4()}"
-    output_databricks_none.output.tables = table_name
+    destination = td.DatabricksDestination(
+        host,
+        td.EnvironmentSecret(databricks_config["TOKEN_ENV"]),
+        table_name,
+        volume,
+        warehouse=warehouse_name,
+        catalog=catalog,
+        schema=schema,
+    )
+    output_databricks_none.output = destination
     context_archive = create_bundle_archive(
         output_databricks_none,
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 
-    full_table_name = _table_fqn_4sql(
-        f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}.{table_name}"
-    )
+    full_table_name = _table_fqn_4sql(f"{catalog}.{schema}.{table_name}")
 
     input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
@@ -771,19 +880,29 @@ def test_output_databricks_with_none(tmp_path, databricks_client, sql_conn):
 @pytest.mark.tabsserver
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_databricks_with_list_none(tmp_path, databricks_client, sql_conn):
+def test_output_databricks_with_list_none(
+    tmp_path, databricks_client, sql_conn, databricks_config
+):
+    host = databricks_config["HOST"]
+    volume = databricks_config["VOLUME"]
+    warehouse_name = databricks_config["WAREHOUSE_NAME"]
+    catalog = databricks_config["CATALOG"]
+    schema = databricks_config["SCHEMA"]
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     table_name_1 = (
-        f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}."
-        "test_output_databricks_list_none_table_1"
-        f"_{uuid.uuid4()}"
+        f"{catalog}.{schema}.test_output_databricks_list_none_table_1_{uuid.uuid4()}"
     )
     table_name_2 = (
-        f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}."
-        "test_output_databricks_list_none_table_2"
-        f"_{uuid.uuid4()}"
+        f"{catalog}.{schema}.test_output_databricks_list_none_table_2_{uuid.uuid4()}"
     )
-    output_databricks_list_none.output.tables = [table_name_1, table_name_2]
+    destination = td.DatabricksDestination(
+        host,
+        td.EnvironmentSecret(databricks_config["TOKEN_ENV"]),
+        [table_name_1, table_name_2],
+        volume,
+        warehouse=warehouse_name,
+    )
+    output_databricks_list_none.output = destination
     context_archive = create_bundle_archive(
         output_databricks_list_none,
         local_packages=LOCAL_PACKAGES_LIST,

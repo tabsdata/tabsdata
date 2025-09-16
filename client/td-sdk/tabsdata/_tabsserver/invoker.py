@@ -183,13 +183,17 @@ def invoke(
     )
     with clear_environment():
         mount_options = sys.stdin.read()
-        with time_block:
-            # See explanation on parameter temp_cwd
-            if temp_cwd:
+        # See explanation on parameter temp_cwd
+        if temp_cwd:
+            with time_block:
                 cwd = tempfile.mkdtemp(dir=tabsdata_temp_folder())
-                logger.info(f"Using cwd for the running function: {cwd}")
-            else:
-                cwd = None
+            logger.info(
+                f"Using cwd for the running function: {cwd}. Time taken to "
+                f"obtain cwd: {time_block.time_taken():.2f}s"
+            )
+        else:
+            cwd = None
+        with time_block:
             result = subprocess.run(
                 command_to_execute,
                 env=env,
