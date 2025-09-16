@@ -1187,6 +1187,14 @@ script = [
     set_env TD_SKIP_NON_EXISTING_ASSETS "false"
 
     set_env TD_WHEELS_FLAVOUR "4repo"
+
+    td_ui_mode = get_env TD_UI_MODE
+    if ${td_ui_mode}
+        info "☂️ TD_UI_MODE set. Using '${td_ui_mode}' for wheel tasks..."
+    else
+        info "☂️ TD_UI_MODE not set. Using 'internal' for wheel tasks..."
+        set_env TD_UI_MODE "internal"
+    end
     ''']
 
 [tasks.wheels_4repo_teardown]
@@ -1271,6 +1279,14 @@ script = [
     set_env TD_SKIP_NON_EXISTING_ASSETS "false"
 
     set_env TD_WHEELS_FLAVOUR "4whl"
+
+    td_ui_mode = get_env TD_UI_MODE
+    if ${td_ui_mode}
+        info "☂️ TD_UI_MODE set. Using '${td_ui_mode}' for wheel tasks..."
+    else
+        info "☂️ TD_UI_MODE not set. Using 'internal' for wheel tasks..."
+        set_env TD_UI_MODE "internal"
+    end
     ''']
 
 [tasks.wheels_4whl_teardown]
