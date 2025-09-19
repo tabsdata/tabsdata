@@ -1,10 +1,3 @@
---
---  Copyright 2025 Tabs Data Inc.
---
-
-UPDATE tabsdata_system
-SET value = '2'
-WHERE name = 'db_version';
-
-ALTER TABLE functions
-    ADD COLUMN connector sssasasTEXT NULL;
+version https://git-lfs.github.com/spec/v1
+oid sha256:632607c70b6945b01951f2fcd77f0c0493b6b85fbaa65fdf658fb637c9ea87f0
+size 172
