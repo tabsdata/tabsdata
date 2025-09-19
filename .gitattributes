@@ -1,1 +1,0 @@
-server/libraries/td-schema/resources/schemas/tabsdata/live/* filter=lfs diff=lfs merge=lfs -text lockable
