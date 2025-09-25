@@ -1,0 +1,59 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[tasks.__os__fmt_py_flake8_conventions]
+plugin = "td-task-tracker"
+category = "08 - Linting"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🚀 flake8 --select=E9,F63,F7,F82 --ignore=E203,W503 --show-source --statistics . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*"
+    exec --fail-on-error flake8 --select=E9,F63,F7,F82 --ignore=E203,W503 --show-source --statistics . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*
+    ''']
+
+[tasks.__os__fmt_py_flake8_complexity]
+plugin = "td-task-tracker"
+category = "08 - Linting"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🚀 flake8 --max-complexity=10 --ignore=E203,W503 --max-line-length=88 --statistics  . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*"
+    exec --fail-on-error flake8 --max-complexity=10 --ignore=E203,W503 --max-line-length=88 --statistics  . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*
+    ''']
+
+[tasks.__os__fmt_py_black]
+plugin = "td-task-tracker"
+category = "08 - Linting"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🚀 black --preview --enable-unstable-feature string_processing --check . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_* --force-exclude \\.pyi$"
+    exec --fail-on-error black --preview --enable-unstable-feature string_processing --check . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_* --force-exclude \\.pyi$
+    ''']
+
+[tasks.__os__fmt_py_isort]
+plugin = "td-task-tracker"
+category = "08 - Linting"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🚀 isort --check . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_*"
+    exec --fail-on-error isort --check . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_*"
+    ''']

@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use std::{env, fs};
 
 const OUT_DIR: &str = "OUT_DIR";
-const ROOT_PROJECT_TABSDATA_FOLDER: &str = "ROOT_PROJECT_TABSDATA_FOLDER";
+const PROJECT_TABSDATA_ROOT_FOLDER: &str = "PROJECT_TABSDATA_ROOT_FOLDER";
 const CARGO_MANIFEST_DIR: &str = "CARGO_MANIFEST_DIR";
 
 const GIT_FOLDER: &str = ".git";
@@ -39,7 +39,7 @@ pub fn workspace_root(_: TokenStream) -> TokenStream {
 }
 
 fn get_workspace_root(id: String, log_crate_tm_workspace: bool) -> Option<PathBuf> {
-    let env_vars = [OUT_DIR, ROOT_PROJECT_TABSDATA_FOLDER, CARGO_MANIFEST_DIR];
+    let env_vars = [OUT_DIR, PROJECT_TABSDATA_ROOT_FOLDER, CARGO_MANIFEST_DIR];
     let mut build_roots: Vec<PathBuf> = vec![];
     for var in env_vars {
         if let Ok(value) = env::var(var) {
@@ -66,7 +66,7 @@ fn get_workspace_root(id: String, log_crate_tm_workspace: bool) -> Option<PathBu
         panic!(
             "📕 - {id} · \
             Neither OUT_DIR \
-            nor ROOT_PROJECT_TABSDATA_FOLDER \
+            nor PROJECT_TABSDATA_ROOT_FOLDER \
             nor CARGO_MANIFEST_DIR is set. \
             Compilation cannot proceed...\n{env_dump}"
         );

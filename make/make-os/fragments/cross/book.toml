@@ -1,0 +1,16 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[tasks.book_dguide]
+plugin = "td-task-tracker"
+category = "50 - Documentation"
+description = "Read book 'Tabsdata Developer Guide'"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    cd "${BOOK_DEVELOPER_GUIDE_FOLDER}"
+    exec --fail-on-error mdbook serve --open
+    ''']

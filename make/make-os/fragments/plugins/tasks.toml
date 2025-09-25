@@ -1,0 +1,20 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[plugins.impl.td-task-tracker]
+script ='''
+    !include_files ./make/make-os/libraries/log.ds
+
+    start_ms = current_time
+
+    cm_plugin_run_task
+
+    end_ms = current_time
+
+    elapsed_ms = calc ${end_ms} - ${start_ms}
+    elapsed_time = exec --fail-on-error python -c "from datetime import timedelta; import sys; print(timedelta(milliseconds=int(sys.argv[1])))" ${elapsed_ms}
+    elapsed_time = trim ${elapsed_time.stdout}
+
+    info "🠞🠞🠞🠞🠞 ⏱️ Elapsed time: ${elapsed_time} ⚙️ ${task.name}"
+    '''

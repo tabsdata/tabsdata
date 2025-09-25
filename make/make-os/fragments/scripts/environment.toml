@@ -1,0 +1,291 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+env_scripts = [
+
+    # Display build information
+    '''
+    #!@duckscript
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🏷️ CARGO_MANIFEST_DIR.............................: '${CARGO_MANIFEST_DIR}'"
+    debug "🏷️ CARGO_MAKE_PROFILE.............................: '${CARGO_MAKE_PROFILE}'"
+    debug "🏷️ CARGO_MAKE_CARGO_PROFILE.......................: '${CARGO_MAKE_CARGO_PROFILE}'"
+    debug "🏷️ CARGO_MAKE_RUST_CHANNEL........................: '${CARGO_MAKE_RUST_CHANNEL}'"
+    debug "🏷️ CARGO_MAKE_RUST_TARGET_ARCH....................: '${CARGO_MAKE_RUST_TARGET_ARCH}'"
+    debug "🏷️ CARGO_MAKE_RUST_TARGET_POINTER_WIDTH...........: '${CARGO_MAKE_RUST_TARGET_POINTER_WIDTH}'"
+    debug "🏷️ CARGO_MAKE_RUST_TARGET_VENDOR..................: '${CARGO_MAKE_RUST_TARGET_VENDOR}'"
+    debug "🏷️ CARGO_MAKE_RUST_TARGET_OS......................: '${CARGO_MAKE_RUST_TARGET_OS}'"
+    debug "🏷️ CARGO_MAKE_RUST_TARGET_ENV.....................: '${CARGO_MAKE_RUST_TARGET_ENV}'"
+    debug "🏷️ CARGO_MAKE_RUST_TARGET_TRIPLE..................: '${CARGO_MAKE_RUST_TARGET_TRIPLE}'"
+    debug "🏷️ CARGO_MAKE_CRATE_TARGET_TRIPLE.................: '${CARGO_MAKE_CRATE_TARGET_TRIPLE}'"
+    debug "🏷️ CARGO_MAKE_CRATE_TARGET_DIRECTORY..............: '${CARGO_MAKE_CRATE_TARGET_DIRECTORY}'"
+    debug "🏷️ CARGO_MAKE_CRATE_CUSTOM_TRIPLE_TARGET_DIRECTORY: '${CARGO_MAKE_CRATE_CUSTOM_TRIPLE_TARGET_DIRECTORY}'"
+    fi
+    ''',
+
+    # Set up project root folder
+    '''
+    #!@duckscript
+    !include_files ./make/make-os/libraries/log.ds
+
+    current_folder = pwd
+    debug "✅ Current folder is: ${current_folder}"
+    ko = set true
+    while eq ${ko} true
+        git_folder = concat ${current_folder} "/.git"
+        if is_dir ${git_folder}
+            debug "✅ Project root folder is: ${current_folder}"
+            set_env PROJECT_ROOT_FOLDER ${current_folder}
+            ko = set false
+        else
+            project_root_folder = concat ${current_folder} "/.root"
+            if is_file ${project_root_folder}
+                debug "✅ Project root project is: ${current_folder}"
+                set_env PROJECT_ROOT_FOLDER ${current_folder}
+                ko = set false
+            else
+                parent_folder = dirname ${current_folder}
+                if eq ${current_folder} ${parent_folder}
+                    assert_fail "Current folder not inside a git repository or owned by a .root file"
+                else
+                    current_folder = set ${parent_folder}
+                end
+            end
+        end
+    end
+    ''',
+
+    # Set up project tabsdata (tabsdata-os/tabsdata-ee/tabsdata) root folder
+    '''
+    #!@duckscript
+    !include_files ./make/make-os/libraries/log.ds
+
+    project_root_folder = get_env PROJECT_ROOT_FOLDER
+    project_root_folder_basename = basename ${project_root_folder}
+    is_tabsdata = eq ${project_root_folder_basename} "tabsdata"
+    is_tabsdata_os = eq ${project_root_folder_basename} "tabsdata-os"
+    is_tabsdata_ee = eq ${project_root_folder_basename} "tabsdata-ee"
+    project_tabsdata_base_folder = set ${project_root_folder}
+    if ${is_tabsdata} or ${is_tabsdata_os} or ${is_tabsdata_ee}
+        noop
+    else
+        project_tabsdata_base_folder_candidate = set ${project_tabsdata_base_folder}/../tabsdata
+        project_tabsdata_base_folder_candidate_exists = is_dir ${project_tabsdata_base_folder_candidate}
+        if ${project_tabsdata_base_folder_exists}
+            project_tabsdata_base_folder = set ${project_tabsdata_base_folder_candidate}
+        else
+            project_tabsdata_base_folder = set ${project_tabsdata_base_folder}/../tabsdata-ee
+        end
+    end
+    PROJECT_TABSDATA_BASE_FOLDER = set ${project_tabsdata_base_folder}
+    set_env PROJECT_TABSDATA_BASE_FOLDER ${project_tabsdata_base_folder}
+    debug "✅ Project tabsdata base folder is: ${project_tabsdata_base_folder}"
+    ''',
+
+    # Set up rust settings (rustflags, target, toolchain, build folder, path)
+    '''
+    #!@duckscript
+    !include_files ./make/make-os/libraries/log.ds
+
+    os_name = get_env OS
+    is_windows = contains ${os_name} "Windows"
+    if ${is_windows}
+        separator = set ";"
+    else
+        separator = set ":"
+    end
+
+    project_root_folder = get_env PROJECT_ROOT_FOLDER
+    project_tabsdata_base_folder = get_env PROJECT_TABSDATA_BASE_FOLDER
+
+    if not is_empty ${td-target}
+        set_env td-target ${td-target}
+        set_env td-target-token "--target"
+        td-target-token = set "--target"
+    else
+        unset_env td-target
+        unset_env td-target-token
+        td-target-token = set ""
+    end
+    debug "🔅 Using td target: '${td-target}'"
+    debug "🔅 Using td target (token): '${td-target-token}'"
+
+    if not is_empty ${td-toolchain}
+        set_env td-toolchain ${td-toolchain}
+        set_env td-toolchain-token "+"
+    else
+        unset_env td-toolchain
+        unset_env td-toolchain-token
+    end
+    debug "🔅 Using td toolchain: '${td-toolchain}'"
+    debug "🔅 Using td toolchain (token): '${td-toolchain-token}'"
+
+    if not is_empty ${td-cross}
+        use_cross = eq ${td-cross} "true"
+        if ${use_cross}
+            set_env td-cargo "cross"
+        else
+            set_env td-cargo "cargo"
+        end
+    else
+        set_env td-cargo "cargo"
+    end
+    td-cargo = get_env td-cargo
+    debug "🔅 Using Cargo tool: '${td-cargo}'"
+
+    set_env RUSTFLAGS ""
+    td-profile = set ${profile}
+    if is_empty ${profile}
+        build-folder = set "debug"
+        td-profile = set "dev"
+    else
+        is_dev = eq ${profile} "dev"
+        if ${is_dev}
+            build-folder = set "debug"
+        else
+            build-folder = set ${profile}
+            is_assembly = eq ${profile} "assembly"
+            if ${is_assembly}
+                os_family = os_family
+                flags = readfile ${project_tabsdata_base_folder}/.cargo/rustflags-${os_family}.cfg
+                rust-flags = replace ${flags} "\n" " "
+                set_env RUSTFLAGS ${rust-flags}
+            end
+        end
+    end
+    set_env td-profile ${td-profile}
+    td-profile = get_env td-profile
+    debug "✅ Using tabsdata profile: '${td-profile}'"
+
+    if not is_empty ${td-target}
+        build-folder = set ${td-target}/${build-folder}
+    end
+    debug "✅ Using build folder is: '${build-folder}'"
+
+    rustflags = get_env RUSTFLAGS
+    debug "✅ RUSTFLAGS environment variable is: '${rustflags}'"
+
+    old_path = get_env PATH
+    new_path = set ${old_path}
+
+    debug "✅ Using os connectors folder: '${OS_CONNECTORS_PY_ROOT_FOLDER}'"
+    connectors = glob_array ${OS_CONNECTORS_PY_ROOT_FOLDER}/tabsdata_*
+    for connector in ${connectors}
+        is_connector = is_dir ${connector}
+        if ${is_connector}
+            new_path_item = concat ${connector}/target/${build-folder} ${separator} ${connector}/target/pytest/build
+            new_path = concat ${new_path_item} ${separator} ${new_path}
+        end
+    end
+
+    ee_connectors_py_root_folder = get_env EE_CONNECTORS_PY_ROOT_FOLDER
+    ee_connectors_py_root_folder_is_defined = is_defined EE_CONNECTORS_PY_ROOT_FOLDER
+    ee_connectors_py_root_folder_is_not_defined = not {ee_connectors_py_root_folder_is_defined}
+    ee_connectors_py_root_folder_is_blank = is_empty ${ee_connectors_py_root_folder}
+    if ${ee_connectors_py_root_folder_is_not_defined} or ${ee_connectors_py_root_folder_is_blank}
+        noop
+    else
+        debug "✅ Using ee connectors folder: '${EE_CONNECTORS_PY_ROOT_FOLDER}'"
+        connectors = glob_array ${EE_CONNECTORS_PY_ROOT_FOLDER}/tabsdata_*
+        for connector in ${connectors}
+            is_connector = is_dir ${connector}
+            if ${is_connector}
+                new_path_item = concat ${connector}/target/${build-folder} ${separator} ${connector}/target/pytest/build
+                new_path = concat ${new_path_item} ${separator} ${new_path}
+            end
+        end
+    end
+
+    new_path_item = concat ${project_tabsdata_base_folder}/target/${build-folder} ${separator} ${project_tabsdata_base_folder}/target/pytest/build
+    new_path = concat ${new_path_item} ${separator} ${new_path}
+
+    project_tabsdata_ag_root_folder = get_env PROJECT_TABSDATA_AG_ROOT_FOLDER
+    project_tabsdata_ag_root_folder_is_defined = is_defined PROJECT_TABSDATA_AG_ROOT_FOLDER
+    project_tabsdata_ag_root_folder_is_not_defined = not {project_tabsdata_ag_root_folder_is_defined}
+    project_tabsdata_ag_root_folder_is_blank = is_empty ${project_tabsdata_ag_root_folder}
+    if ${project_tabsdata_ag_root_folder_is_not_defined} or ${project_tabsdata_ag_root_folder_is_blank}
+        noop
+    else
+        debug "✅ Using tabsdata agent older: '${PROJECT_TABSDATA_AG_ROOT_FOLDER}'"
+        new_path_item = concat ${project_tabsdata_ag_root_folder}/target/${build-folder} ${separator} ${project_tabsdata_ag_root_folder}/target/pytest/build
+        new_path = concat ${new_path_item} ${separator} ${new_path}
+    end
+
+    set_env PATH ${new_path}
+    set_path = get_env PATH
+    debug "✅ System PATH: ${set_path}"
+
+    is_musl = eq ${td-target} "x86_64-unknown-linux-musl"
+    if ${is_musl}
+        PROJECT_RS_TABSDATA_CARGO_TOML = set "./Cargo.toml"
+        PROJECT_RS_TD_MACROS_CARGO_TOML = set "./macros/Cargo.toml"
+        set_env PROJECT_RS_TABSDATA_CARGO_TOML ${PROJECT_RS_TABSDATA_CARGO_TOML}
+        set_env PROJECT_RS_TD_MACROS_CARGO_TOML ${PROJECT_RS_TD_MACROS_CARGO_TOML}
+    end
+    PROJECT_RS_TABSDATA_CARGO_TOML = get_env PROJECT_RS_TABSDATA_CARGO_TOML
+    PROJECT_RS_TD_MACROS_CARGO_TOML = get_env PROJECT_RS_TD_MACROS_CARGO_TOML
+    debug "✅ Materialized PROJECT_RS_TABSDATA_CARGO_TOML: ${PROJECT_RS_TABSDATA_CARGO_TOML}"
+    debug "✅ Materialized PROJECT_RS_TD_MACROS_CARGO_TOML: ${PROJECT_RS_TD_MACROS_CARGO_TOML}"
+
+    if not is_empty ${macros-features}
+        macros-test-features = concat "dummy" "," ${macros-features}
+    else
+        macros-test-features = set "td-test"
+    end
+    if not is_empty ${modules-features}
+        modules-test-features = concat "dummy" "," ${modules-features}
+        modules-test-features-test_logging = concat "dummy" "," ${modules-features} "," "test_logging"
+        modules-test-features-test_tower_metadata = concat "dummy" "," ${modules-features} "," "test_tower_metadata"
+    else
+        modules-test-features = set "td-test"
+        modules-test-features-test_logging = set "td-test,test_logging"
+        modules-test-features-test_tower_metadata = set "td-test,test_tower_metadata"
+    end
+    if not is_empty ${expansions-features}
+        expansions-test-features = concat "dummy" "," ${expansions-features}
+    else
+        expansions-test-features = set "td-test"
+    end
+
+    set_env macros-test-features ${macros-test-features}
+    set_env modules-test-features ${modules-test-features}
+    set_env modules-test-features-test_logging ${modules-test-features-test_logging}
+    set_env modules-test-features-test_tower_metadata ${modules-test-features-test_tower_metadata}
+    set_env expansions-test-features ${expansions-test-features}
+
+    macros-test-features = get_env macros-test-features
+    modules-test-features = get_env modules-test-features
+    modules-test-features-test_logging = get_env modules-test-features-test_logging
+    modules-test-features-test_tower_metadata = get_env modules-test-features-test_tower_metadata
+    expansions-test-features = get_env expansions-test-features
+
+    debug "✅ Using 'macros-test-features': ${macros-test-features}"
+    debug "✅ Using 'modules-test-features': ${modules-test-features}"
+    debug "✅ Using 'modules-test-features-test_logging': ${modules-test-features-test_logging}"
+    debug "✅ Using 'modules-test-features-test_tower_metadata': ${modules-test-features-test_tower_metadata}"
+    debug "✅ Using 'expansions-test-features': ${expansions-test-features}"
+    ''',
+
+    # Check path
+    '''
+    #!@duckscript
+    !include_files ./make/make-os/libraries/log.ds
+
+    PATH = get_env PATH
+    debug "✅ Current PATH: ${PATH}"
+    ''',
+
+    # Set up python markers
+    '''
+    #!@duckscript
+    !include_files ./make/make-os/libraries/log.ds
+
+    MARKERS = get_env MARKERS
+    no_markers = eq ${MARKERS} ""
+    if ${no_markers}
+        set_env MARKERS ""
+    end
+    debug "✅ Using markers: '${MARKERS}'"
+    ''']

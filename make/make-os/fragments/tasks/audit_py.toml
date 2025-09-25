@@ -1,0 +1,20 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[tasks.__os__audit_py]
+plugin = "td-task-tracker"
+category = "07 - Shield"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🚀 pip-audit --progress-spinner on --strict --requirement requirements/requirements-third-party-all.txt --ignore-vuln PYSEC-2022-42969"
+    exec --fail-on-error pip-audit --progress-spinner on --strict --requirement requirements/requirements-third-party-all.txt --ignore-vuln PYSEC-2022-42969
+
+    debug "🚀 pip-audit --progress-spinner on --strict --requirement requirements/requirements-dev-third-party.txt --ignore-vuln PYSEC-2022-42969"
+    exec --fail-on-error pip-audit --progress-spinner on --strict --requirement requirements/requirements-dev-third-party.txt --ignore-vuln PYSEC-2022-42969
+    ''']

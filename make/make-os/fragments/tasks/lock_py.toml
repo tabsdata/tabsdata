@@ -1,0 +1,97 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[tasks.__os__lock_py_ta_features]
+plugin = "td-task-tracker"
+category = "02 - Tidy"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    warn "⏳ Nothing to do."
+    ''']
+
+[tasks.__os__lock_py_ta_tableframe]
+plugin = "td-task-tracker"
+category = "02 - Tidy"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    warn "⏳ Nothing to do."
+    ''']
+
+[tasks.__os__lock_py_te_examples]
+plugin = "td-task-tracker"
+category = "02 - Tidy"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    warn "⏳ Nothing to do."
+    ''']
+
+[tasks.__os__lock_py_te_tableframe]
+plugin = "td-task-tracker"
+category = "02 - Tidy"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    warn "⏳ Nothing to do."
+    ''']
+
+[tasks.__os__lock_py_ty_tableframe]
+plugin = "td-task-tracker"
+category = "01 - Clean"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    warn "⏳ Nothing to do."
+    ''']
+
+[tasks.__os__lock_py_tabsdata]
+plugin = "td-task-tracker"
+category = "02 - Tidy"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    cd "${PROJECT_TABSDATA_ROOT_FOLDER}"
+    debug "🚀 python ${LOCK_REQUIREMENTS_SCRIPT} ${PROJECT_TABSDATA_ROOT_FOLDER}"
+    exec --fail-on-error python ${LOCK_REQUIREMENTS_SCRIPT} ${PROJECT_TABSDATA_ROOT_FOLDER}
+    ''']
+
+[tasks.__os__lock_py_connectors]
+plugin = "td-task-tracker"
+category = "01 - Tidy"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    connectors = glob_array ${OS_CONNECTORS_PY_ROOT_FOLDER}/tabsdata_*
+
+    for connector in ${connectors}
+        is_connector = is_dir ${connector}
+        if ${is_connector}
+            warn "⏳ Nothing to do: ${connector}."
+        end
+    end
+    ''']

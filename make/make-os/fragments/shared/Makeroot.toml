@@ -1,0 +1,142 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+# On Windows, you will need to create an env variable HOME pointing to your home dir before running any task.
+
+env_files = [
+    { path = "${HOME}/.tabsdata-dev/test.env", defaults_only = true },
+    { path = "${HOME}/.tabsdata-dev/make.env", defaults_only = true },
+
+    { path = "../../settings/product.env", defaults_only = true },
+    { path = "../../settings/output.env", defaults_only = true },
+    { path = "../../settings/makers.env", defaults_only = true },
+    { path = "../../settings/toolchain.env", defaults_only = true }
+]
+
+extend = [
+    { path = "./make/make-os/fragments/scripts/environment.toml", relative = "git" },
+
+    { path = "./make/make-os/fragments/hooks/banner.toml", relative = "git" },
+    { path = "./make/make-os/fragments/hooks/failure.toml", relative = "git" },
+    { path = "./make/make-os/fragments/hooks/start.toml", relative = "git" },
+    { path = "./make/make-os/fragments/hooks/stop.toml", relative = "git" },
+]
+
+[env]
+MAKE_SUCCESS = true
+ECHO_ENV_FILES = true
+
+CLEAN = "${clean:false}"
+PROFILE = "${profile:dev}"
+
+PROJECT_TABSDATA_ROOT_FOLDER = { value = "${PROJECT_TABSDATA_BASE_FOLDER}/", normalize = true }
+
+PROJECT_RS_TD_MACROS_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/macros/", normalize = true }
+PROJECT_RS_TD_TABSDATA_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/", normalize = true }
+PROJECT_RS_TY_EXPANSIONS_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/expansions/polars/", normalize = true }
+
+PROJECT_PY_TA_FEATURES_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/client/td-lib/ta_features/", normalize = true }
+PROJECT_PY_TA_TABLEFRAME_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/client/td-lib/ta_tableframe/", normalize = true }
+PROJECT_PY_TE_EXAMPLES_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/extensions/python/td-lib/te_examples/", normalize = true }
+PROJECT_PY_TE_TABLEFRAME_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/extensions/python/td-lib/te_tableframe/", normalize = true }
+PROJECT_PY_TY_TABLEFRAME_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/expansions/polars/modules/ty-tableframe/python/", normalize = true }
+PROJECT_PY_TD_TABSDATA_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/client/td-sdk/", normalize = true }
+
+OS_CONNECTORS_PY_ROOT_FOLDER = { value = "${PROJECT_TABSDATA_BASE_FOLDER}/connectors/python/", normalize = true }
+
+PROJECT_RS_TD_MACROS_CARGO_TOML = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/macros/Cargo.toml", normalize = true }
+PROJECT_RS_TD_TABSDATA_CARGO_TOML = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/Cargo.toml", normalize = true }
+PROJECT_RS_TY_EXPANSIONS_CARGO_TOML = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/expansions/polars/Cargo.toml", normalize = true }
+
+PROJECT_RS_TD_MACROS_CARGO_LOCK = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/macros/Cargo.lock", normalize = true }
+PROJECT_RS_TD_TABSDATA_CARGO_LOCK = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/Cargo.lock", normalize = true }
+PROJECT_RS_TY_EXPANSIONS_CARGO_LOCK = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/expansions/polars/Cargo.lock", normalize = true }
+
+TESTS_PY_TA_FEATURES_FOLDER = { value = "tests_ta_features/", normalize = true }
+TESTS_PY_TA_TABLEFRAME_FOLDER = { value = "tests_ta_tableframe/", normalize = true }
+TESTS_PY_TE_EXAMPLES_FOLDER = { value = "tests_te_examples/", normalize = true }
+TESTS_PY_TE_TABLEFRAME_FOLDER = { value = "tests_te_tableframe/", normalize = true }
+TESTS_PY_TY_TABLEFRAME_FOLDER = { value = "tests_ty_tableframe/", normalize = true }
+TESTS_PY_TD_TABSDATA_FOLDER = { value = "tests_tabsdata/", normalize = true }
+
+BOOK_DEVELOPER_GUIDE_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/books/dguide", normalize = true }
+
+MAKE_LIBRARIES_PATH = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/make/make-os/libraries", normalize = true }
+
+BUMP_VERSION_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/bump_version.py", normalize = true }
+CLEAN_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/clean.py", normalize = true }
+COPY_ASSETS_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/copy_assets.py", normalize = true }
+GENERATE_PYDOC_CSV_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/generate_pydoc_csv.py", normalize = true }
+LOCK_REQUIREMENTS_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/lock_requirements.py", normalize = true }
+REPORT_LICENSES_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/report_licenses.py", normalize = true }
+REPORT_LICENSES_PY_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/report_licenses_py.py", normalize = true }
+REPORT_LICENSES_RS_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/report_licenses_rs.py", normalize = true }
+REPORT_LICENSES_TS_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/report_licenses_ts.py", normalize = true }
+SOURCETRACK_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/variant/devutils/automation/tasks/makers/td-scripts/sourcetrack.py", normalize = true }
+SYMLINK_SO_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/symlink_so.py", normalize = true }
+WHEELS_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/wheels.py", normalize = true }
+
+AUDIT_TOML = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/.cargo/audit.toml", normalize = true }
+CLIPPY_CONF_DIR = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/.cargo", normalize = true }
+DENY_TOML = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/.cargo/deny.toml", normalize = true }
+PANTS_JSON = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/.cargo/pants.json", normalize = true }
+
+SWAGGER_UI_OVERWRITE_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/server/binaries/td-server/resources/swagger", normalize = true }
+
+[config]
+load_script = [
+    '''
+    #!@duckscript
+    !include_files ./make/make-os/libraries/log.ds
+
+    echo_env_files = get_env ECHO_ENV_FILES
+
+    LOCAL_ROOT = pwd
+
+    ok_make_env = is_path_exists ${HOME}/.tabsdata-dev/make.env
+    if ${ok_make_env}
+        if eq ${echo_env_files} "true"
+            debug "📎 File ${HOME}/.tabsdata-dev/make.env alredy exists"
+        end
+    else
+        if eq ${echo_env_files} "true"
+            debug "💈 Copying ${LOCAL_ROOT}/.custom/make-dev.env to ${HOME}/.tabsdata-dev/make.env"
+        end
+        cp ${LOCAL_ROOT}/.custom/make-dev.env ${HOME}/.tabsdata-dev/make.env
+    end
+
+    ok_test_env = is_path_exists ${HOME}/.tabsdata-dev/test.env
+    if ${ok_test_env}
+        if eq ${echo_env_files} "true"
+            debug "📎 File ${HOME}/.tabsdata-dev/test.env alredy exists"
+        end
+    else
+        if eq ${echo_env_files} "true"
+            debug "💈 Copying ${LOCAL_ROOT}/.custom/test-dev.env to ${HOME}/.tabsdata-dev/test.env"
+        end
+        cp ${LOCAL_ROOT}/.custom/test-dev.env ${HOME}/.tabsdata-dev/test.env
+    end
+
+    if eq ${echo_env_files} "true"
+        debug "🎈 This build is using the following environment variables files:"
+        debug "   - 🪬 ${HOME}/.tabsdata-dev/test.env"
+        debug "   - 🪬 ${HOME}/.tabsdata-dev/make.env"
+        files = glob_array ${LOCAL_ROOT}/make/settings/*.env
+        for file in ${files}
+            debug "   - 🪬 ${file}"
+        end
+    end
+
+    set_env ECHO_ENV_FILES "false"
+    ''']
+
+skip_core_tasks = true
+skip_rust_env_info = true
+skip_crate_env_info = true
+
+reduce_output = false
+
+init_task = "start"
+end_task = "stop"
+on_error_task = "failure"

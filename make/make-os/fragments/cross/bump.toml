@@ -1,0 +1,70 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[tasks.__os__bump]
+plugin = "td-task-tracker"
+category = "02 - Tidy"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    project = set ${PROJECT_TABSDATA_BASE_FOLDER}/../tabsdata-ee
+    project_exists = is_path_exists ${project}
+    if ${project_exists}
+        cd ${project}/macros/
+        info "🚀 cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force \"*\""
+        exec --fail-on-error cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force "*"
+
+        cd ${project}/
+        info "🚀 cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force \"*\""
+        exec --fail-on-error cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force "*"
+
+        cd ${project}/expansions/polars/
+        info "🚀 cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force \"*\""
+        exec --fail-on-error cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force "*"
+
+        cd ${project}/
+        info "🚀 python ${BUMP_VERSION_SCRIPT} ${project} ${CARGO_MAKE_TASK_ARGS}"
+        exec --fail-on-error python ${BUMP_VERSION_SCRIPT} ${project} ${CARGO_MAKE_TASK_ARGS}
+    end
+
+    project = set ${PROJECT_TABSDATA_BASE_FOLDER}/../tabsdata-ag
+    project_exists = is_path_exists ${project}
+    if ${project_exists}
+        cd ${project}/
+        info "🚀 python ${BUMP_VERSION_SCRIPT} ${project} ${CARGO_MAKE_TASK_ARGS}"
+        exec --fail-on-error python ${BUMP_VERSION_SCRIPT} ${project} ${CARGO_MAKE_TASK_ARGS}
+    end
+
+    project = set ${PROJECT_TABSDATA_BASE_FOLDER}/../tabsdata-ui
+    project_exists = is_path_exists ${project}
+    if ${project_exists}
+        cd ${project}/
+        info "🚀 python ${BUMP_VERSION_SCRIPT} ${project} ${CARGO_MAKE_TASK_ARGS}"
+        exec --fail-on-error python ${BUMP_VERSION_SCRIPT} ${project} ${CARGO_MAKE_TASK_ARGS}
+    end
+
+    project = set ${PROJECT_TABSDATA_BASE_FOLDER}/../tabsdata-os
+    project_exists = is_path_exists ${project}
+    if ${project_exists}
+        cd ${project}/macros/
+        info "🚀 cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force \"*\""
+        exec --fail-on-error cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force "*"
+
+        cd ${project}/
+        info "🚀 cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force \"*\""
+        exec --fail-on-error cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force "*"
+
+        cd ${project}/expansions/polars/
+        info "🚀 cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force \"*\""
+        exec --fail-on-error cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force "*"
+
+        cd ${project}/
+        info "🚀 python ${BUMP_VERSION_SCRIPT} ${project} ${CARGO_MAKE_TASK_ARGS}"
+        exec --fail-on-error python ${BUMP_VERSION_SCRIPT} ${project} ${CARGO_MAKE_TASK_ARGS}
+    end
+
+    ''']

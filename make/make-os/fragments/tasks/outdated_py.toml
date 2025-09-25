@@ -1,0 +1,28 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[tasks.__os__outdated_py]
+plugin = "td-task-tracker"
+category = "05 - Inspect"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+env.PIP_EXTRA_INDEX_URL = { unset = true }
+env.PIP_FIND_LINKS      = { unset = true }
+env.PIP_INDEX_URL       = { unset = true }
+env.PIP_NO_INDEX        = { unset = true }
+env.PIP_PYPI_URL        = { unset = true }
+env.UV_DEFAULT_INDEX    = { unset = true }
+env.UV_EXTRA_INDEX_URL  = { unset = true }
+env.UV_FIND_LINKS       = { unset = true }
+env.UV_INDEX            = { unset = true }
+env.UV_INDEX_STRATEGY   = { unset = true }
+env.UV_INDEX_URL        = { unset = true }
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🚀 pip-upgrade --dry-run requirements-dev.txt"
+    exec --fail-on-error --input "x" pip-upgrade --dry-run requirements-dev.txt
+    ''']

@@ -32,10 +32,10 @@ fn main() {
         }
         black_box(&code);
 
-        if let Some(ref p) = previous {
-            if code <= *p {
-                eprintln!("⚠️ Violation at {i}: {code} <= {p}");
-            }
+        if let Some(ref p) = previous
+            && code <= *p
+        {
+            eprintln!("⚠️ Violation at {i}: {code} <= {p}");
         }
         previous = Some(code);
     }

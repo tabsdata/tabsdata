@@ -1,0 +1,9 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+extend = [
+    { path = "./make/make-os/fragments/shared/Makeroot.toml", relative = "git" },
+
+    { path = "./make/make-os/fragments/shared/Maketask.toml", relative = "git" }
+]

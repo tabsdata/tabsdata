@@ -1,0 +1,56 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[tasks.__os__preconditions_assembly]
+plugin = "td-task-tracker"
+category = "10 - Bundle"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    compile = get_env TD_COMPILE
+    if eq ${compile} "true"
+        cm_run_task build
+    end
+
+    cm_run_task sourcetrack
+    ''']
+
+[tasks.__os__postconditions_assembly]
+plugin = "td-task-tracker"
+category = "10 - Bundle"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    warn "⏳ Nothing to do."
+    ''']
+
+[tasks.__os__preconditions_install]
+plugin = "td-task-tracker"
+category = "10 - Bundle"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    cm_run_task assembly
+    ''']
+
+[tasks.__os__postconditions_install]
+plugin = "td-task-tracker"
+category = "10 - Bundle"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    warn "⏳ Nothing to do."
+    ''']

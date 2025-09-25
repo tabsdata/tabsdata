@@ -1,0 +1,59 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[tasks.__os__uninstall_py_tabsdata]
+plugin = "td-task-tracker"
+category = "10 - Bundle"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    cd "${PROJECT_TABSDATA_ROOT_FOLDER}"
+
+    debug "🚀 pip uninstall tabsdata --yes"
+    exec --fail-on-error pip uninstall tabsdata --yes
+
+    exec uv cache clean tabsdata
+    exec pip cache remove tabsdata
+
+    exec python setup.py --quiet clean --all
+
+    rm -r ${PROJECT_TABSDATA_ROOT_FOLDER}/target/python/
+    ''']
+
+[tasks.__os__uninstall_py_connectors]
+plugin = "td-task-tracker"
+category = "10 - Bundle"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    cd "${PROJECT_TABSDATA_ROOT_FOLDER}"
+
+    connectors = glob_array ${OS_CONNECTORS_PY_ROOT_FOLDER}/tabsdata_*
+
+    for connector in ${connectors}
+        is_connector = is_dir ${connector}
+        if ${is_connector}
+            cd ${connector}
+
+            connector_name = basename ${connector}
+            connector_package = replace ${connector_name} "_" "-"
+
+            debug "🚀 pip uninstall ${connector_package} --yes"
+            exec --fail-on-error pip uninstall ${connector_package} --yes
+
+            exec uv cache clean ${connector_package}
+            exec pip cache remove ${connector_package}
+
+            exec python setup.py --quiet clean --all
+
+            rm -r ${connector}/target/python/
+        end
+    end
+    ''']

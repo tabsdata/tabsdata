@@ -34,22 +34,38 @@ def wheels(root: Path):
         dirnames.sort()
         filenames.sort()
         for filename in filenames:
-            if filename.endswith(".whl"):
+            if filename.startswith("tabsdata") and filename.endswith(".whl"):
                 yield Path(dirpath) / filename
 
 
 def main(wheel_profile: str, wheel_flavour: str):
-    source_folder = Path(".").resolve()
+    tabsdata_source_folder = Path(".").resolve()
+    tabsdata_ag_source_folder = Path("../tabsdata-ag").resolve()
     target_folder = Path("./target/wheels").resolve()
     target_folder.mkdir(parents=True, exist_ok=True)
     target_archive = os.path.join(
         target_folder, f"tabsdata-{wheel_profile}-{wheel_flavour}.tar.gz"
     )
     with tarfile.open(target_archive, "w:gz") as tar:
-        for wheel in wheels(source_folder):
-            logger.info(f"Adding wheel: {wheel}")
+        for wheel in wheels(tabsdata_source_folder):
+            logger.info(
+                f"🧲 Adding wheel from tabsdata: 🎡 {wheel} to archive 📦"
+                f" {target_archive}"
+            )
             tar.add(wheel, arcname=wheel.name)
-    logger.info(f"Created file {target_archive} with wheels from {source_folder}")
+        if (
+            tabsdata_ag_source_folder.exists()
+            and tabsdata_ag_source_folder != tabsdata_source_folder
+        ):
+            for wheel in wheels(tabsdata_ag_source_folder):
+                logger.info(
+                    f"🧲 Adding wheel from tabsdata agent: 🎡 {wheel} to archive 📦"
+                    f" {target_archive}"
+                )
+                tar.add(wheel, arcname=wheel.name)
+    logger.info(
+        f"Created file {target_archive} with wheels from {tabsdata_source_folder}"
+    )
 
 
 if __name__ == "__main__":

@@ -1,0 +1,210 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[tasks.__os__test_rs_macros]
+plugin = "td-task-tracker"
+category = "04 - Test"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    set_env CARGO_TERM_PROGRESS_WHEN "always"
+    set_env CARGO_TERM_PROGRESS_WIDTH "256"
+
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build --quiet --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --features ${macros-test-features} --all-targets --tests"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build --quiet --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --features ${macros-test-features} --all-targets --tests
+
+    if eq ${td-cargo} "cross"
+        debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} test --locked --no-fail-fast %{td-target-token} %{td-target} --jobs 8 --all-targets --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --features ${macros-test-features}"
+        exit_code = exec --get-exit-code ${td-cargo} %{td-toolchain-token}%{td-toolchain} test --locked --no-fail-fast %{td-target-token} %{td-target} --jobs 8 --all-targets --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --features ${macros-test-features}
+    else
+        debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run --build-jobs 16 --locked --no-fail-fast %{td-target-token} %{td-target} --test-threads 32 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --features ${macros-test-features} --all-targets"
+        exit_code = exec --get-exit-code ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run --build-jobs 16 --locked --no-fail-fast %{td-target-token} %{td-target} --test-threads 32 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --features ${macros-test-features} --all-targets
+    end
+
+    is_zero = eq ${exit_code} "0"
+    if ${is_zero}
+        info "⌛️ Tests finished with zero exit code: '${exit_code}'"
+    else
+        info "⌛️ Tests finished with non-zero exit code: '${exit_code}'"
+        TD_FAIL_FAST_RS = get_env TD_FAIL_FAST_RS
+        if not ${TD_FAIL_FAST_RS}
+            info "⌛️ Setting TD_TESTS_CODE_RS to ${exit_code}..."
+            set_env TD_TESTS_CODE_RS ${exit_code}
+        else
+            info "⌛️ Failing fast..."
+            code = exit ${exit_code}
+        end
+    end
+    ''']
+
+[tasks.__os__test_rs_modules]
+plugin = "td-task-tracker"
+category = "04 - Test"
+private = true
+run_task = [
+    { name = [
+        "__os__test_rs_modules_standard",
+        "__os__test_rs_modules_logging",
+        "__os__test_rs_modules_tower"
+    ] }
+]
+
+[tasks.__os__test_rs_modules_standard]
+plugin = "td-task-tracker"
+category = "04 - Test"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    set_env CARGO_TERM_PROGRESS_WHEN "always"
+    set_env CARGO_TERM_PROGRESS_WIDTH "256"
+
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build --quiet --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features} --all-targets --tests"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build --quiet --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features} --all-targets --tests
+
+    if eq ${td-cargo} "cross"
+        debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} test --locked --no-fail-fast %{td-target-token} %{td-target} --jobs 8 --all-targets --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features}"
+        exit_code = exec --get-exit-code ${td-cargo} %{td-toolchain-token}%{td-toolchain} test --locked --no-fail-fast %{td-target-token} %{td-target} --jobs 8 --all-targets --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features}
+    else
+        debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run --build-jobs 16 --locked --no-fail-fast %{td-target-token} %{td-target} --test-threads 32 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features} --all-targets"
+        exit_code = exec --get-exit-code ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run --build-jobs 16 --locked --no-fail-fast %{td-target-token} %{td-target} --test-threads 32 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features} --all-targets
+    end
+
+    is_zero = eq ${exit_code} "0"
+    if ${is_zero}
+        info "⌛️ Tests finished with zero exit code: '${exit_code}'"
+    else
+        info "⌛️ Tests finished with non-zero exit code: '${exit_code}'"
+        TD_FAIL_FAST_RS = get_env TD_FAIL_FAST_RS
+        if not ${TD_FAIL_FAST_RS}
+            info "⌛️ Setting TD_TESTS_CODE_RS to ${exit_code}..."
+            set_env TD_TESTS_CODE_RS ${exit_code}
+        else
+            info "⌛️ Failing fast..."
+            code = exit ${exit_code}
+        end
+    end
+    ''']
+
+[tasks.__os__test_rs_modules_logging]
+plugin = "td-task-tracker"
+category = "04 - Test"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    set_env CARGO_TERM_PROGRESS_WHEN "always"
+    set_env CARGO_TERM_PROGRESS_WIDTH "256"
+
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build --quiet --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_logging} --all-targets --tests"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build --quiet --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_logging} --all-targets --tests
+
+    if eq ${td-cargo} "cross"
+        debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} test --locked --no-fail-fast %{td-target-token} %{td-target} --jobs 8 --all-targets --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_logging} -- test_logging"
+        exit_code = exec --get-exit-code ${td-cargo} %{td-toolchain-token}%{td-toolchain} test --locked --no-fail-fast %{td-target-token} %{td-target} --jobs 8 --all-targets --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_logging} -- test_logginge
+    else
+        debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run --build-jobs 16 --locked --no-fail-fast %{td-target-token} %{td-target} --test-threads 32 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_logging} --all-targets -- test_logging"
+        exit_code = exec --get-exit-code ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run --build-jobs 16 --locked --no-fail-fast %{td-target-token} %{td-target} --test-threads 32 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_logging} --all-targets -- test_logging
+    end
+
+    is_zero = eq ${exit_code} "0"
+    if ${is_zero}
+        info "⌛️ Tests finished with zero exit code: '${exit_code}'"
+    else
+        info "⌛️ Tests finished with non-zero exit code: '${exit_code}'"
+        TD_FAIL_FAST_RS = get_env TD_FAIL_FAST_RS
+        if not ${TD_FAIL_FAST_RS}
+            info "⌛️ Setting TD_TESTS_CODE_RS to ${exit_code}..."
+            set_env TD_TESTS_CODE_RS ${exit_code}
+        else
+            info "⌛️ Failing fast..."
+            code = exit ${exit_code}
+        end
+    end
+    ''']
+
+[tasks.__os__test_rs_modules_tower]
+plugin = "td-task-tracker"
+category = "04 - Test"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    set_env CARGO_TERM_PROGRESS_WHEN "always"
+    set_env CARGO_TERM_PROGRESS_WIDTH "256"
+
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build --quiet --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_tower_metadata} --all-targets --tests"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build --quiet --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_tower_metadata} --all-targets --tests
+
+    if eq ${td-cargo} "cross"
+        debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} test --locked --no-fail-fast %{td-target-token} %{td-target} --jobs 8 --all-targets --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_tower_metadata} -- test_tower_metadata"
+        exit_code = exec --get-exit-code ${td-cargo} %{td-toolchain-token}%{td-toolchain} test --locked --no-fail-fast %{td-target-token} %{td-target} --jobs 8 --all-targets --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_tower_metadata} -- test_tower_metadata
+    else
+        debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run --build-jobs 16 --locked --no-fail-fast %{td-target-token} %{td-target} --test-threads 32--cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_tower_metadata} --all-targets -- test_tower_metadata"
+        exit_code = exec --get-exit-code ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run --build-jobs 16 --locked --no-fail-fast %{td-target-token} %{td-target} --test-threads 32 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_tower_metadata} --all-targets -- test_tower_metadata
+    end
+
+    is_zero = eq ${exit_code} "0"
+    if ${is_zero}
+        info "⌛️ Tests finished with zero exit code: '${exit_code}'"
+    else
+        info "⌛️ Tests finished with non-zero exit code: '${exit_code}'"
+        TD_FAIL_FAST_RS = get_env TD_FAIL_FAST_RS
+        if not ${TD_FAIL_FAST_RS}
+            info "⌛️ Setting TD_TESTS_CODE_RS to ${exit_code}..."
+            set_env TD_TESTS_CODE_RS ${exit_code}
+        else
+            info "⌛️ Failing fast..."
+            code = exit ${exit_code}
+        end
+    end
+    ''']
+
+[tasks.__os__test_rs_expansions]
+plugin = "td-task-tracker"
+category = "04 - Test"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    set_env CARGO_TERM_PROGRESS_WHEN "always"
+    set_env CARGO_TERM_PROGRESS_WIDTH "256"
+
+    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} build --quiet --locked --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --features ${expansions-test-features} --all-targets --tests"
+    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} build --quiet --locked --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --features ${expansions-test-features} --all-targets --tests
+
+    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} nextest run --build-jobs 16 --locked --no-fail-fast --test-threads 32 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --features ${expansions-test-features} --all-targets"
+    exit_code = exec --get-exit-code cargo %{td-toolchain-token}%{td-toolchain} nextest run --build-jobs 16 --locked --no-fail-fast --test-threads 32 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --features ${expansions-test-features} --all-targets
+
+    is_zero = eq ${exit_code} "0"
+    if ${is_zero}
+        info "⌛️ Tests finished with zero exit code: '${exit_code}'"
+    else
+        info "⌛️ Tests finished with non-zero exit code: '${exit_code}'"
+        TD_FAIL_FAST_RS = get_env TD_FAIL_FAST_RS
+        if not ${TD_FAIL_FAST_RS}
+            info "⌛️ Setting TD_TESTS_CODE_RS to ${exit_code}..."
+            set_env TD_TESTS_CODE_RS ${exit_code}
+        else
+            info "⌛️ Failing fast..."
+            code = exit ${exit_code}
+        end
+    end
+    ''']

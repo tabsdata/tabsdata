@@ -1,0 +1,168 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[tasks.__os__start_pytest_tabsdata_server]
+plugin = "td-task-tracker"
+category = "04 - Test"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🔷 _____ Starting tabsdata server (pytest)..."
+
+    if is_empty ${profile}
+        build-folder = set "debug"
+    else
+        is_dev = eq ${profile} "dev"
+        if ${is_dev}
+            build-folder = set "debug"
+        else
+            build-folder = set ${profile}
+        end
+    end
+    if not is_empty ${td-target}
+        build-folder = set ${td-target}/${build-folder}
+    end
+    debug "🔅 Using build folder ${build-folder}"
+    os_family = os_family
+    if eq ${os_family} "windows"
+        tdserver = set "tdserver.exe"
+    else
+        tdserver = set "tdserver"
+    end
+    debug "🔅 Using tdserver binary: '${os_family}' - '${tdserver}'"
+    debug "🚀 ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} start --instance pytest -- -- apiserver --address 127.0.0.1:2467 --internal-address 127.0.0.1:2468 --access-jwt-expiration 36288000"
+
+    # Necessary until we figure out how to cleanly start the supervisor detached from tdserver.
+    os = os_family
+    if eq ${os} "windows"
+        exec --fail-on-error ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} start --instance pytest -- -- apiserver --address 127.0.0.1:2467 --internal-address 127.0.0.1:2468 --access-jwt-expiration 36288000
+    else
+        output = exec --fail-on-error ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} start --instance pytest -- -- apiserver --address 127.0.0.1:2467 --internal-address 127.0.0.1:2468 --access-jwt-expiration 36288000
+    end
+    ''']
+
+[tasks.__os__status_pytest_tabsdata_server]
+plugin = "td-task-tracker"
+category = "04 - Test"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🔷 _____ Checking status of tabsdata server (pytest)..."
+
+    if is_empty ${profile}
+        build-folder = set "debug"
+    else
+        is_dev = eq ${profile} "dev"
+        if ${is_dev}
+            build-folder = set "debug"
+        else
+            build-folder = set ${profile}
+        end
+    end
+    if not is_empty ${td-target}
+        build-folder = set ${td-target}/${build-folder}
+    end
+    debug "🔅 Using build folder ${build-folder}"
+    os_family = os_family
+    if eq ${os_family} "windows"
+        tdserver = set "tdserver.exe"
+    else
+        tdserver = set "tdserver"
+    end
+
+    debug "🔅 Using tdserver binary: '${os_family}' - '${tdserver}'"
+    debug "🚀 ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} status --instance pytest"
+
+    status_timeout = calc 3 * 60
+    status_sleep = set 1000
+    status_attempts = calc ${status_timeout} * 1000
+    status_attempts = calc ${status_attempts} / ${status_sleep}
+
+    status_attempt = set 0
+    status_running = set true
+
+    while ${status_running}
+        output = exec --fail-on-error ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} status --instance pytest
+        status_started = contains ${output.stdout} "apiserver"
+        if ${status_started}
+            debug "🔅 Verified supervisor & apiserver are running"
+            status_running = set false
+        else
+            debug ". ${status_attempt}"
+            status_attempt = calc ${status_attempt} + 1
+            status_exhausted = eq ${status_attempt} ${status_attempts}
+            if ${status_exhausted}
+                error "😡 Cancelling execution as supervisor did not start after ${status_timeout} seconds"
+                exit 1
+            end
+            sleep ${status_sleep}
+        end
+    end
+    ''']
+
+[tasks.__os__stop_pytest_tabsdata_server]
+plugin = "td-task-tracker"
+category = "04 - Test"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🔷 _____ Stopping tabsdata server (pytest)..."
+
+    if is_empty ${profile}
+        build-folder = set "debug"
+    else
+        is_dev = eq ${profile} "dev"
+        if ${is_dev}
+            build-folder = set "debug"
+        else
+            build-folder = set ${profile}
+        end
+    end
+    if not is_empty ${td-target}
+        build-folder = set ${td-target}/${build-folder}
+    end
+    debug "🔅 Using build folder ${build-folder}"
+    os_family = os_family
+    if eq ${os_family} "windows"
+        tdserver = set "tdserver.exe"
+    else
+        tdserver = set "tdserver"
+    end
+    debug "🔅 Using tdserver binary: '${os_family}' - '${tdserver}'"
+    debug "🚀 ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} stop --instance pytest"
+    output = exec --fail-on-error ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} stop --instance pytest
+    ''']
+
+[tasks.__os__drop_pytest_tabsdata_server]
+plugin = "td-task-tracker"
+category = "04 - Test"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🔷 _____ Deleteing tabsdata server (pytest)..."
+
+    home_folder = set ${HOME}
+    instance_folder = set ${home_folder}/.tabsdata/instances/pytest
+    debug "✅ The tabsdata instance pytest folder is: ${instance_folder}"
+    exists_instance_folder = is_path_exists ${instance_folder}
+    if eq ${exists_instance_folder} true
+        debug "✅ The tabsdata instance pytest folder exists. Deleting it: ${target_dir}..."
+        rm -r ${instance_folder}
+        debug "✅ The tabsdata instance pytest has been deleted: ${target_dir}!"
+    else
+        debug "✅ The tabsdata instance pytest folder does not exist. Skipping deleting it: ${target_dir}."
+    end
+    ''']

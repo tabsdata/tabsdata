@@ -1,9 +1,0 @@
-#
-# Copyright 2025 Tabs Data Inc.
-#
-
-[tasks.dguide]
-alias = "book_dguide"
-
-[tasks.docs]
-alias = "book_dguide"

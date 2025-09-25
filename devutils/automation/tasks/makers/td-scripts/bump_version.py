@@ -28,6 +28,7 @@ def load(module_name) -> ModuleType:
 logger = load("log").get_logger()
 
 TABSDATA_EE = "tabsdata-ee"
+TABSDATA_AG = "tabsdata-ag"
 TABSDATA_UI = "tabsdata-ui"
 
 IGNORED_FOLDERS = {
@@ -53,6 +54,8 @@ IGNORED_EXTENSIONS = {
 def get_old_version(root_folder) -> str:
     version_file = os.path.join(
         root_folder,
+        "..",
+        "tabsdata-os",
         "assets",
         "manifest",
         "VERSION",
@@ -202,8 +205,7 @@ def main():
     bump(args.root, old_version, new_version)
     root = os.path.basename(args.root.rstrip(os.sep))
     parent = Path(args.root).resolve().parent
-    if root == TABSDATA_EE:
-        bump(os.path.join(parent, TABSDATA_UI), args.version, new_version)
+    if root == TABSDATA_UI:
         subprocess.run(
             [
                 "npm",
@@ -218,7 +220,7 @@ def main():
             errors="strict",
         )
     else:
-        logger.info(f"✂️ No need to upgrade additional root: {root}")
+        logger.info(f"✂️ No need for additional upgrades for root: {root}")
 
 
 if __name__ == "__main__":

@@ -12,13 +12,13 @@ while eq ${ko} true
     git_folder = concat ${current_folder} "/.git"
     if is_dir ${git_folder}
         debug "✅ Root project tabsdata folder is: ${current_folder}"
-        set_env ROOT_PROJECT_TABSDATA_FOLDER ${current_folder}
+        set_env PROJECT_TABSDATA_ROOT_FOLDER ${current_folder}
         ko = set false
     else
         root_file = concat ${current_folder} "/.root"
         if is_file ${root_file}
             debug "✅ Root project tabsdata folder is: ${current_folder}"
-            set_env ROOT_PROJECT_TABSDATA_FOLDER ${current_folder}
+            set_env PROJECT_TABSDATA_ROOT_FOLDER ${current_folder}
             ko = set false
         else
             parent_folder = dirname ${current_folder}

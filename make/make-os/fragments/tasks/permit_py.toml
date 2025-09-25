@@ -1,0 +1,44 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[tasks.__os__permit_py]
+plugin = "td-task-tracker"
+category = "80 - Verify"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    tabsdata_python_version = set 3.12.0
+    set_env TABSDATA_PYTHON_VERSION ${tabsdata_python_version}
+
+    info "♻️ Checking if the required Python version is installed..."
+
+    python = which python
+    if equals ${python} ""
+        error "🚫🚫🚫🚫🚫 Python is not available. Make aborted."
+        assert_fail
+    end
+
+    result = exec python --version
+    code = set ${result.code}
+    if not equals ${code} "0"
+        error "🚫🚫🚫🚫🚫 Python is available but unusable. Make aborted."
+        assert_fail
+    end
+
+    version = trim ${result.stdout}
+    info "❇️ Python version: ${version}"
+
+    result = exec python -c "import os, sys, subprocess; v = tuple(map(int, os.environ['TABSDATA_PYTHON_VERSION'].split('.'))); r = subprocess.check_output(['python', '--version']).decode().split()[1]; rv = tuple(map(int, r.split('.'))); sys.exit(0 if rv >= v else 1)"
+    code = set ${result.code}
+    if not equals ${code} "0"
+        error "🚫🚫🚫🚫🚫 The Python version is lesser than requited Python version < ${tabsdata_python_version} >. Make aborted."
+        assert_fail
+    end
+
+    cd ${PROJECT_TABSDATA_ROOT_FOLDER}
+    result = exec uv pip install -r requirements-dev.txt --quiet
+    ''']

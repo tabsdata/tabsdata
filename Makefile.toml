@@ -1,9 +1,9 @@
 #
-# Copyright 2024 Tabs Data Inc.
+# Copyright 2025 Tabs Data Inc.
 #
 
 extend = [
-    { path = "./Makeroot.toml" },
+    { path = "./Makeroot.toml", relative = "git" },
 
-    { path = "./Maketask.toml" },
+    { path = "./Maketask.toml", relative = "git" }
 ]

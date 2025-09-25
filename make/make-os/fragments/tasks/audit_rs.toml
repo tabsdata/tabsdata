@@ -1,0 +1,45 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[tasks.__os__audit_rs_macros]
+plugin = "td-task-tracker"
+category = "07 - Shield"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🚀 cargo audit --deny warnings --file ${PROJECT_RS_TD_MACROS_CARGO_LOCK}"
+    exec --fail-on-error cargo audit --deny warnings --file "${PROJECT_RS_TD_MACROS_CARGO_LOCK}"
+    ''']
+
+[tasks.__os__audit_rs_modules]
+plugin = "td-task-tracker"
+category = "07 - Shield"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🚀 cargo audit --deny warnings --file ${PROJECT_RS_TD_TABSDATA_CARGO_LOCK}"
+    exec --fail-on-error cargo audit --deny warnings --file "${PROJECT_RS_TD_TABSDATA_CARGO_LOCK}"
+    ''']
+
+[tasks.__os__audit_rs_expansions]
+plugin = "td-task-tracker"
+category = "07 - Shield"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🚀 cargo audit --deny warnings --file ${PROJECT_RS_TY_EXPANSIONS_CARGO_LOCK}"
+    exec --fail-on-error cargo audit --deny warnings --file "${PROJECT_RS_TY_EXPANSIONS_CARGO_LOCK}"
+    ''']

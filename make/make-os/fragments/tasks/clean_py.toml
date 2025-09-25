@@ -1,0 +1,115 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[tasks.__os__clean_py_ta_features]
+plugin = "td-task-tracker"
+category = "01 - Clean"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🚀 python ${CLEAN_SCRIPT} ${PROJECT_PY_TA_FEATURES_FOLDER} py"
+    exec --fail-on-error python ${CLEAN_SCRIPT} ${PROJECT_PY_TA_FEATURES_FOLDER} py
+    ''']
+
+[tasks.__os__clean_py_ta_tableframe]
+plugin = "td-task-tracker"
+category = "01 - Clean"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🚀 python ${CLEAN_SCRIPT} ${PROJECT_PY_TA_TABLEFRAME_FOLDER} py"
+    exec --fail-on-error python ${CLEAN_SCRIPT} ${PROJECT_PY_TA_TABLEFRAME_FOLDER} py
+    ''']
+
+
+[tasks.__os__clean_py_te_examples]
+plugin = "td-task-tracker"
+category = "01 - Clean"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🚀 python ${CLEAN_SCRIPT} ${PROJECT_PY_TE_EXAMPLES_FOLDER} py"
+    exec --fail-on-error python ${CLEAN_SCRIPT} ${PROJECT_PY_TE_EXAMPLES_FOLDER} py
+    ''']
+
+[tasks.__os__clean_py_te_tableframe]
+plugin = "td-task-tracker"
+category = "01 - Clean"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🚀 python ${CLEAN_SCRIPT} ${PROJECT_PY_TE_TABLEFRAME_FOLDER} py"
+    exec --fail-on-error python ${CLEAN_SCRIPT} ${PROJECT_PY_TE_TABLEFRAME_FOLDER} py
+    ''']
+
+[tasks.__os__clean_py_ty_tableframe]
+plugin = "td-task-tracker"
+category = "01 - Clean"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🚀 python ${CLEAN_SCRIPT} ${PROJECT_PY_TY_TABLEFRAME_FOLDER} py"
+    exec --fail-on-error python ${CLEAN_SCRIPT} ${PROJECT_PY_TY_TABLEFRAME_FOLDER} py
+    ''']
+
+[tasks.__os__clean_py_tabsdata]
+plugin = "td-task-tracker"
+category = "01 - Clean"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🚀 python ${CLEAN_SCRIPT} ${PROJECT_PY_TD_SDK_FOLDER} py"
+    exec --fail-on-error python ${CLEAN_SCRIPT} ${PROJECT_PY_TD_SDK_FOLDER} py
+    ''']
+
+[tasks.__os__clean_py_connectors]
+plugin = "td-task-tracker"
+category = "01 - Clean"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    connectors = glob_array ${OS_CONNECTORS_PY_ROOT_FOLDER}/tabsdata_*
+
+    for connector in ${connectors}
+        is_connector = is_dir ${connector}
+        if ${is_connector}
+            debug "🚀 python ${CLEAN_SCRIPT} ${connector} py"
+            exec --fail-on-error python ${CLEAN_SCRIPT} ${connector} py
+        end
+    end
+    ''']
+
+[tasks.__os__clean_py_all]
+plugin = "td-task-tracker"
+category = "01 - Clean"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🚀 python ${CLEAN_SCRIPT} ${PROJECT_TABSDATA_ROOT_FOLDER} py"
+    exec --fail-on-error python ${CLEAN_SCRIPT} ${PROJECT_TABSDATA_ROOT_FOLDER} py
+    ''']

@@ -1,0 +1,63 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[tasks.__os__setup_context_test_py]
+plugin = "td-task-tracker"
+category = "04 - Test"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🔷 _____ Setting up tabsdata pytest context (tabsdata & connectors)..."
+
+    cd ${PROJECT_TABSDATA_ROOT_FOLDER}
+    cm_run_task egg_py
+
+    debug "🔷 _____ Setting up tabsdata pytest python path..."
+
+    debug "🚀 python ${PROJECT_PY_TD_TABSDATA_FOLDER}/tests_tabsdata/bootest.py"
+    output = exec --fail-on-error python ${PROJECT_PY_TD_TABSDATA_FOLDER}tests_tabsdata/bootest.py
+
+    debug "📦 The received pythonpath is ${output.stdout}"
+    pythonpath = set ${output.stdout}
+    debug "✅ Python system path will be added: ${pythonpath}"
+    old_pythonpath = get_env PYTHONPATH
+    debug "✅ Python system path before adjusting: ${old_pythonpath}"
+    os_name = get_env OS
+    is_windows = contains ${os_name} "Windows"
+    if ${is_windows}
+        separator = set ";"
+    else
+        separator = set ":"
+    end
+    new_pythonpath = concat ${pythonpath} ${separator} ${old_path}
+    debug "✅ Python system path after adjusting: ${new_pythonpath}"
+    set_env PYTHONPATH ${new_pythonpath}
+    set_pythonpath = get_env PYTHONPATH
+    debug "🔅 Python system path persisted: ${set_pythonpath}"
+
+    debug "🔷 _____ Setting up tabsdata development package mode..."
+
+    set_env TD_TABSDATA_DEV_PKG ${PROJECT_TABSDATA_ROOT_FOLDER}
+    set_td_tabsdata_dev_pkg = get_env TD_TABSDATA_DEV_PKG
+    debug "🔅 tabsdata development python package location set to: ${set_td_tabsdata_dev_pkg}"
+
+    connectors = glob_array ${OS_CONNECTORS_PY_ROOT_FOLDER}/tabsdata_*
+    for connector in ${connectors}
+        is_connector = is_dir ${connector}
+        if ${is_connector}
+            connector_name = basename ${connector}
+            connector_name_upper = uppercase ${connector_name}
+            connector_name_env = set TD_${connector_name_upper}_DEV_PKG
+
+            debug "🔷 _____ Setting up ${connector} development package mode..."
+
+            set_env ${connector_name_env} ${connector}
+            set_td_connector_dev_pkg_env = get_env ${connector_name_env}
+            debug "🔅 ${connector} development python package location set to: ${set_td_connector_dev_pkg_env}"
+        end
+    end
+    ''']

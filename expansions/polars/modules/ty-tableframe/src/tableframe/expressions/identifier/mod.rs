@@ -8,7 +8,7 @@ use pyo3_polars::derive::polars_expr;
 use serde::Deserialize;
 use td_common::logging;
 use td_common::logging::LogOutput;
-use tracing::{debug, Level};
+use tracing::{Level, debug};
 
 /// Arguments passed to the `_identifier_generator` Polars expression.
 ///

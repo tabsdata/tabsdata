@@ -1,0 +1,87 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+severities = map
+map_put ${severities} "none"      0
+map_put ${severities} "critical" 10
+map_put ${severities} "fatal"    20
+map_put ${severities} "error"    30
+map_put ${severities} "warn"     40
+map_put ${severities} "info"     50
+map_put ${severities} "debug"    60
+map_put ${severities} "trace"    70
+
+colors = map
+map_put ${colors} "none"     white
+map_put ${colors} "critical" bright_magenta
+map_put ${colors} "fatal"    purple
+map_put ${colors} "error"    red
+map_put ${colors} "warn"     yellow
+map_put ${colors} "info"     green
+map_put ${colors} "debug"    cyan
+map_put ${colors} "trace"    blue
+
+fn log
+    level = trim ${1}
+    message = set ${2}
+
+    ok = map_contains_key ${severities} ${level}
+    if ${ok}
+        severity = map_get ${severities} ${level}
+    else
+        severity = map_get ${severities} "info"
+    end
+
+    ok = map_contains_key ${colors} ${level}
+    if ${ok}
+        color = map_get ${colors} ${level}
+    else
+        color = map_get ${colors} "info"
+    end
+
+    _gt = greater_than ${log_severity} ${severity}
+    _eq = eq ${log_severity} ${severity}
+    _ok = set ${_gt} or ${_eq}
+    if ${_ok}
+        println -c ${color} "[${level}] ${message}"
+    end
+end
+
+fn critical
+    log critical ${1}
+end
+
+fn fatal
+    log fatal ${1}
+end
+
+fn error
+    log error ${1}
+end
+
+fn warn
+    log warn ${1}
+end
+
+fn info
+    log info ${1}
+end
+
+fn debug
+    log debug ${1}
+end
+
+fn trace
+    log trace ${1}
+end
+
+log_level = set ${DUCKSCRIPT_LOG_LEVEL}
+ok = map_contains_key ${severities} ${log_level}
+if ${ok}
+    log_severity = map_get ${severities} ${log_level}
+else
+    log_severity = map_get ${severities} "info"
+end
+
+debug "📌 Duckscript 'log' library loaded with '${log_level}' level & '${log_severity}' severity"

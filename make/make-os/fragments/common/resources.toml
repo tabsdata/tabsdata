@@ -1,0 +1,47 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[tasks.__os__generate_pydoc_csv]
+plugin = "td-task-tracker"
+category = "02 - Tidy"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🚀 python ${GENERATE_PYDOC_CSV_SCRIPT}"
+    exec --fail-on-error python ${GENERATE_PYDOC_CSV_SCRIPT}
+    ''']
+
+[tasks.__os__generate_assets]
+plugin = "td-task-tracker"
+category = "02 - Tidy"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🚀 python ${COPY_ASSETS_SCRIPT}"
+    exec --fail-on-error python ${COPY_ASSETS_SCRIPT}
+    ''']
+
+[tasks._os__generate_sourcetrack]
+plugin = "td-task-tracker"
+category = "02 - Tidy"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    sourcetrack_script_exists = is_path_exists ${SOURCETRACK_SCRIPT}
+    if eq ${sourcetrack_script_exists} true
+        exec --fail-on-error python ${SOURCETRACK_SCRIPT}
+    else
+        warn "🚍 Generating the sourcetrack metadata file does not apply for this project."
+        warn "⏳ Nothing to do."
+    end
+    ''']

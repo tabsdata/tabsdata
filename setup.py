@@ -74,7 +74,7 @@ def root_folder() -> str:
 ROOT = root_folder()
 logger.debug(f"ROOT folder for setup is: {ROOT}")
 
-TABSDATA_PACKAGES_PREFIX = "tabsdata_"
+TABSDATA_PACKAGES_PREFIX = "tabsdata"
 
 REQUIRE_SERVER_BINARIES = "REQUIRE_SERVER_BINARIES"
 REQUIRE_THIRD_PARTY = "REQUIRE_THIRD_PARTY"

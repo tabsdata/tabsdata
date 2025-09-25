@@ -44,7 +44,11 @@ def clean(project_folder, inclusion_patterns, exclusion_patterns):
             logger.debug(f"✏️ Found path: '{path}'")
             relative_path = os.path.relpath(full_path, project_folder)
             first_component = relative_path.split(os.sep, 1)[0]
-            if first_component.startswith(".") and first_component != ".pytest_cache":
+            if (
+                first_component.startswith(".")
+                and first_component != ".pytest_cache"
+                and first_component != ".coverage"
+            ):
                 logger.debug(f"✏️    - Skipping root dot file/folder: {full_path}")
                 continue
             elif "target" in full_path and "deps" in full_path and pattern == "*.log.*":
@@ -59,6 +63,11 @@ def clean(project_folder, inclusion_patterns, exclusion_patterns):
                 else:
                     logger.debug(f"✏️    - Removing file: {full_path}")
                     os.remove(full_path)
+
+    target_folder = os.path.join(project_folder, "target")
+    if os.path.isdir(target_folder) and not os.listdir(target_folder):
+        logger.debug(f"✏️    - Removing directory: {target_folder}")
+        shutil.rmtree(target_folder)
 
 
 def clean_py(project_folder):
@@ -90,6 +99,7 @@ def clean_py(project_folder):
 
     inclusion_patterns = [
         "__pycache__",
+        ".benchmarks",
         ".cache",
         ".coverage*",
         ".egg-info",
@@ -97,9 +107,15 @@ def clean_py(project_folder):
         ".pytest_cache",
         ".tox",
         "*.egg-info",
+        "PYDOC.csv",
         "target/build",
+        "target/pydoc",
+        "target/pytest",
+        "target/python",
+        "target/reports",
+        "target/tdlocal",
+        "target/wheels",
         "coverage.xml",
-        "target/python/dist",
         "docs/_build",
         "htmlcov",
         "*.log",
@@ -109,6 +125,7 @@ def clean_py(project_folder):
         "tdlocal",
         "local_development_artifacts",
         "client/td-sdk/tabsdata/assets",
+        "tabsdata_agent/assets",
         "SOURCETRACK.yaml",
         "tabsdata.libs",
         EXAMPLES_GUIDES_BOOK_PATH,

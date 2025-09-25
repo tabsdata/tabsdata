@@ -109,7 +109,7 @@ test_tower_metadata = []
 tokio_console = []
 
 [profile.dev]
-codegen-units = 4096
+codegen-units = 32
 debug = true
 incremental = true
 lto = "off"
@@ -119,7 +119,7 @@ strip = "none"
 
 [profile.integration]
 inherits = "release"
-codegen-units = 256
+codegen-units = 64
 incremental = true
 lto = "off"
 opt-level = 0

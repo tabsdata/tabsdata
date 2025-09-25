@@ -13,21 +13,21 @@ use indexmap::IndexMap;
 use once_cell::sync::Lazy;
 use polars::prelude::*;
 use pyo3::exceptions::PyValueError;
-use pyo3::{pyfunction, PyResult};
+use pyo3::{PyResult, pyfunction};
 use pyo3_polars::derive::polars_expr;
 use pyo3_stub_gen::derive::gen_stub_pyfunction;
 use serde::Deserialize;
 use std::collections::BTreeMap;
 use td_common::logging;
 use td_common::logging::LogOutput;
-use tracing::{debug, Level};
+use tracing::{Level, debug};
 
 struct GrokContext {
     matcher: Arc<grok::Pattern>,
     captures: Arc<[String]>,
 }
 
-static GROK_CONTEXT_CACHE: Lazy<DashMap<String, Arc<GrokContext>>> = Lazy::new(|| DashMap::new());
+static GROK_CONTEXT_CACHE: Lazy<DashMap<String, Arc<GrokContext>>> = Lazy::new(DashMap::new);
 
 fn get_matcher_and_captures(pattern: &str) -> PolarsResult<Arc<GrokContext>> {
     if let Some(grok_context) = GROK_CONTEXT_CACHE.get(pattern) {
@@ -38,7 +38,7 @@ fn get_matcher_and_captures(pattern: &str) -> PolarsResult<Arc<GrokContext>> {
     let matcher = Arc::new(grok_fns::grok_compile(&grok, pattern).map_err(
         |error| polars_err!(ComputeError: "Grok compile error for '{}': {}", pattern, error),
     )?);
-    let captures: Arc<[String]> = grok_fns::grok_fields(&*matcher)
+    let captures: Arc<[String]> = grok_fns::grok_fields(&matcher)
         .map_err(|error| polars_err!(ComputeError: "Failed to list captures of '{}': {}", pattern, error))?
         .into();
     if captures.is_empty() {
@@ -46,11 +46,10 @@ fn get_matcher_and_captures(pattern: &str) -> PolarsResult<Arc<GrokContext>> {
             polars_err!(ComputeError: "No capture groups found in grok pattern '{}'", pattern),
         );
     }
-    let grok_context = Arc::new(GrokContext {
-        matcher,
-        captures
-    });
-    if let Some(grok_context_hit) = GROK_CONTEXT_CACHE.insert(pattern.to_string(), Arc::clone(&grok_context)) {
+    let grok_context = Arc::new(GrokContext { matcher, captures });
+    if let Some(grok_context_hit) =
+        GROK_CONTEXT_CACHE.insert(pattern.to_string(), Arc::clone(&grok_context))
+    {
         return Ok(grok_context_hit);
     }
     Ok(grok_context)
@@ -158,7 +157,7 @@ fn _grok_impl(batch: &[Series], kwargs: GrokKwargs) -> PolarsResult<Series> {
         match row_in {
             Some(input) => {
                 let values_out: Vec<Option<String>> =
-                    grok_fns::grok_values(&*grok_context.matcher, input, &fields_out);
+                    grok_fns::grok_values(&grok_context.matcher, input, &fields_out);
                 let row_out = Series::new(PlSmallStr::from(""), values_out);
                 data_out.append_series(&row_out)?;
             }

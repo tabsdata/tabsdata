@@ -1,5 +1,5 @@
 #
-# Copyright 2024 Tabs Data Inc.
+# Copyright 2025 Tabs Data Inc.
 #
 
 __pycache__/
@@ -143,3 +143,4 @@ venv.bak/
 venv/
 wheels/
 client/td-sdk/tabsdata/assets
+tabsdata_agent/assets

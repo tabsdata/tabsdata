@@ -2,6 +2,7 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
+import csv
 import importlib
 import importlib.util
 import json
@@ -32,8 +33,10 @@ logger = load("log").get_logger()
 
 sys.stdout.reconfigure(encoding="utf-8")
 
+SOURCE_FILE = "requirements.txt"
+
 TARGET_DIR = os.path.join("..", "target", "audit")
-TARGET_FILE = os.path.join(TARGET_DIR, "licenses_py.txt")
+TARGET_FILE_TXT = os.path.join(TARGET_DIR, "licenses_py.txt")
 
 # fmt: off
 # noinspection DuplicatedCode
@@ -47,7 +50,11 @@ normalized_licenses = {
     "(MIT OR CC0-1.0)": "MIT License, and Creative Commons Zero Version 1.0 Universal",                                                                                                        # noqa: E231,E241,E501
     "0BSD OR Apache-2.0 OR MIT": "BSD Zero-Clause License or Apache License Version 2.0 or MIT License",                                                                                       # noqa: E231,E241,E501
     "0BSD": "BSD Zero-Clause License",                                                                                                                                                         # noqa: E231,E241,E501
+    "3-CLAUSE BSD LICENSE": "BSD Revised License (BSD-3-Clause)",                                                                                                                              # noqa: E231,E241,E501
+    "APACHE 2.0": "Apache License Version 2.0",                                                                                                                                                # noqa: E231,E241,E501
     "APACHE LICENSE 2.0": "Apache License Version 2.0",                                                                                                                                        # noqa: E231,E241,E501
+    "APACHE LICENSE_ VERSION 2.0": "Apache License Version 2.0",                                                                                                                               # noqa: E231,E241,E501
+    "APACHE SOFTWARE LICENSE V2": "Apache License Version 2.0",                                                                                                                                # noqa: E231,E241,E501
     "APACHE SOFTWARE LICENSE;; BSD LICENSE": "Apache License Version 2.0 or BSD License",                                                                                                      # noqa: E231,E241,E501
     "APACHE SOFTWARE LICENSE;; MIT LICENSE": "Apache License Version 2.0 or MIT License",                                                                                                      # noqa: E231,E241,E501
     "APACHE SOFTWARE LICENSE": "Apache License Version 2.0",                                                                                                                                   # noqa: E231,E241,E501
@@ -64,19 +71,27 @@ normalized_licenses = {
     "Apache-2.0 OR MIT OR Zlib": "Apache License Version 2.0 or MIT License or Zlib License",                                                                                                  # noqa: E231,E241,E501
     "Apache-2.0 OR MIT": "Apache License Version 2.0 or MIT License",                                                                                                                          # noqa: E231,E241,E501
     "Apache-2.0 WITH LLVM-exception": "Apache License Version 2.0 with LLVM Exception",                                                                                                        # noqa: E231,E241,E501
+    "APACHE-2.0;; BSD 3-CLAUSE": "Apache License Version 2.0 or BSD Revised License (BSD-3-Clause)",                                                                                           # noqa: E231,E241,E501
+    "APACHE-2.0;; BSD-2-CLAUSE": "Apache License Version 2.0 or BSD Simplified License (BSD-2-Clause)",                                                                                        # noqa: E231,E241,E501
     "APACHE-2.0;; BSD-3-CLAUSE": "Apache License Version 2.0 or BSD Revised License (BSD-3-Clause)",                                                                                           # noqa: E231,E241,E501
+    "APACHE-2.0;; CNRI-PYTHON": "Apache License Version 2.0 or Python Software Foundation License Version 2.0",                                                                                # noqa: E231,E241,E501
+    "APACHE-2.0;; MIT": "Apache License Version 2.0 or MIT License",                                                                                                                           # noqa: E231,E241,E501
     "Apache-2.0": "Apache License Version 2.0",                                                                                                                                                # noqa: E231,E241,E501
     "APACHE-2.0": "Apache License Version 2.0",                                                                                                                                                # noqa: E231,E241,E501
     "Artistic-2.0 OR CC0-1.0": "Artistic License Version 2.0 or Creative Commons Zero Version 1.0 Universal",                                                                                  # noqa: E231,E241,E501
     "BlueOak-1.0.0": "Blue Oak Model License Version 1.0.0",                                                                                                                                   # noqa: E231,E241,E501
+    "BSD 3-CLAUSE": "BSD Revised License (BSD-3-Clause)",                                                                                                                                      # noqa: E231,E241,E501
     "BSD LICENSE;; APACHE SOFTWARE LICENSE": "BSD Revised License (BSD-3-Clause) or Apache Software License Version 2.0",                                                                      # noqa: E231,E241,E501
-    "BSD LICENSE": "BSD License",                                                                                                                                                              # noqa: E231,E241,E501
+    "BSD LICENSE;; PUBLIC DOMAIN": "BSD Revised License (BSD-3-Clause) or Public Domain",                                                                                                      # noqa: E231,E241,E501
+    "BSD LICENSE": "BSD Revised License (BSD-3-Clause)",                                                                                                                                       # noqa: E231,E241,E501
     "BSD-2-Clause": "BSD Simplified License (BSD-2-Clause)",                                                                                                                                   # noqa: E231,E241,E501
     "BSD-3-Clause AND MIT": "BSD Revised License (BSD-3-Clause), and MIT License",                                                                                                             # noqa: E231,E241,E501
     "BSD-3-Clause OR MIT": "BSD Revised License (BSD-3-Clause) or MIT License",                                                                                                                # noqa: E231,E241,E501
     "BSD-3-CLAUSE;; ISC": "BSD Revised License (BSD-3-Clause) or Internet Systems Consortium License",                                                                                         # noqa: E231,E241,E501
     "BSD-3-Clause": "BSD Revised License (BSD-3-Clause)",                                                                                                                                      # noqa: E231,E241,E501
     "BSD-3-CLAUSE": "BSD Revised License (BSD-3-Clause)",                                                                                                                                      # noqa: E231,E241,E501
+    "BSD-3-CLAUSE;; MIT": "BSD Revised License (BSD-3-Clause) or MIT License",                                                                                                                 # noqa: E231,E241,E501
+    "BSD": "BSD Revised License (BSD-3-Clause)",                                                                                                                                               # noqa: E231,E241,E501
     "BSL-1.0": "Boost Software License Version 1.0",                                                                                                                                           # noqa: E231,E241,E501
     "CC-BY-4.0": "Creative Commons Attribution Version 4.0 International License",                                                                                                             # noqa: E231,E241,E501
     "CC0-1.0": "Creative Commons Zero Version 1.0 Universal",                                                                                                                                  # noqa: E231,E241,E501
@@ -86,9 +101,10 @@ normalized_licenses = {
     "ISC AND (Apache-2.0 OR ISC)": "Internet Systems Consortium License, and Apache License Version 2.0 or Internet Systems Consortium License",                                               # noqa: E231,E241,E501
     "ISC LICENSE _ISCL_": "Internet Systems Consortium License",                                                                                                                               # noqa: E231,E241,E501
     "ISC": "Internet Systems Consortium License",                                                                                                                                              # noqa: E231,E241,E501
-    "MIT AND Apache-2.0": "MiT License, and Apache License Version 2.0",                                                                                                                       # noqa: E231,E241,E501
+    "MIT AND Apache-2.0": "MIT License, and Apache License Version 2.0",                                                                                                                       # noqa: E231,E241,E501
     "MIT AND BSD-3-Clause": "MIT License, and BSD Revised License (BSD-3-Clause)",                                                                                                             # noqa: E231,E241,E501
     "MIT LICENSE;; APACHE SOFTWARE LICENSE": "MIT License or Apache Software License Version 2.0",                                                                                             # noqa: E231,E241,E501
+    "MIT LICENSE;; MOZILLA PUBLIC LICENSE 2.0 _MPL 2.0_": "MIT License or Mozilla Public License Version 2.0",                                                                                 # noqa: E231,E241,E501
     "MIT LICENSE": "MIT License",                                                                                                                                                              # noqa: E231,E241,E501
     "MIT NO ATTRIBUTION LICENSE _MIT-0_": "MIT No Attribution License",                                                                                                                        # noqa: E231,E241,E501
     "MIT OR Unlicense": "MIT License or The Unlicense",                                                                                                                                        # noqa: E231,E241,E501
@@ -106,6 +122,7 @@ normalized_licenses = {
     "THE UNLICENSE _UNLICENSE_": "The Unlicense",                                                                                                                                              # noqa: E231,E241,E501
     "THE UNLICENSE (UNLICENSE)": "The Unlicense",                                                                                                                                              # noqa: E231,E241,E501
     "Unicode-3.0": "Unicode License Version 3.0",                                                                                                                                              # noqa: E231,E241,E501
+    "UNKNOWN": "The Unknown License",                                                                                                                                                          # noqa: E231,E241,E501
     "UNLICENSED": "The Unlicense",                                                                                                                                                             # noqa: E231,E241,E501
     "Zlib": "Zlib License",                                                                                                                                                                    # noqa: E231,E241,E501
 }
@@ -124,14 +141,27 @@ def ignore_package(name):
     return name.startswith("td-") or name == "tabsdata"
 
 
+if len(sys.argv) == 3:
+    source_file = sys.argv[1]
+    target_file = sys.argv[2]
+    SOURCE_FILE = source_file
+    TARGET_FILE_TXT = os.path.join(TARGET_DIR, f"{target_file}.txt")
+    TARGET_FILE_CSV = os.path.join(TARGET_DIR, f"{target_file}.csv")
+else:
+    logger.error("⭕️ Error: No source or target file names provided", file=sys.stderr)
+    sys.exit(1)
+
 os.makedirs(TARGET_DIR, exist_ok=True)
 
-if os.path.exists(TARGET_FILE):
-    os.remove(TARGET_FILE)
+if os.path.exists(TARGET_FILE_TXT):
+    os.remove(TARGET_FILE_TXT)
+
+if os.path.exists(TARGET_FILE_CSV):
+    os.remove(TARGET_FILE_CSV)
 
 try:
     result = subprocess.run(
-        ["licensecheck", "-r", "requirements.txt", "--format", "json"],
+        ["licensecheck", "-r", SOURCE_FILE, "--format", "json"],
         capture_output=True,
         text=True,
         check=True,
@@ -165,7 +195,11 @@ content = (
 )
 content += tabulate(table_data, headers=headers, tablefmt="fancy_grid")
 
-with open(TARGET_FILE, "w", encoding="utf-8") as f:
+with open(TARGET_FILE_TXT, "w", encoding="utf-8") as f:
     f.write(content + "\n")
+
+with open(TARGET_FILE_CSV, "w", encoding="utf-8", newline="") as f:
+    writer = csv.writer(f)
+    writer.writerows(table_data)
 
 logger.debug(content)

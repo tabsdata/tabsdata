@@ -1,0 +1,15 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[tasks.build_rs_tm]
+plugin = "td-task-tracker"
+alias = "build_rs_macros"
+
+[tasks.build_rs_td]
+plugin = "td-task-tracker"
+alias = "build_rs_tabsdata"
+
+[tasks.build_rs_te]
+plugin = "td-task-tracker"
+alias = "build_rs_expansions"

@@ -8,6 +8,7 @@ import importlib
 import importlib.util
 import os
 from os.path import join
+from pathlib import Path
 from types import ModuleType
 
 PYTHON_EXTENSION = ".py"
@@ -113,13 +114,34 @@ def find_pydoc_categories(root, output):
 
 
 def generate_pydoc_csv():
-    project_root = os.getenv("ROOT_PROJECT_TABSDATA_FOLDER")
-    target = join(project_root, "target", "pydoc")
-    os.makedirs(target, exist_ok=True)
-    code_root = join(project_root, "client", "td-sdk")
-    code_root = os.path.normpath(code_root)
-    output = join(target, "PYDOC.csv")
-    find_pydoc_categories(code_root, output)
+    project_tabsdata_root_folder = os.getenv("PROJECT_TABSDATA_ROOT_FOLDER")
+    if not project_tabsdata_root_folder:
+        raise ValueError(
+            "The environment variable PROJECT_TABSDATA_ROOT_FOLDER.csv is missing."
+        )
+    project_tabsdata_root_folder = Path(project_tabsdata_root_folder).resolve()
+    project_tabsdata_agent_root_folder = os.path.join(
+        project_tabsdata_root_folder,
+        "..",
+        "tabsdata-ag",
+    )
+    project_tabsdata_agent_root_folder = Path(
+        project_tabsdata_agent_root_folder
+    ).resolve()
+
+    tabsdata_target = join(project_tabsdata_root_folder, "target", "pydoc")
+    os.makedirs(tabsdata_target, exist_ok=True)
+    tabsdata_code_root = join(project_tabsdata_root_folder, "client", "td-sdk")
+    tabsdata_code_root = os.path.normpath(tabsdata_code_root)
+    tabsdata_output = join(tabsdata_target, "PYDOC.csv")
+    find_pydoc_categories(tabsdata_code_root, tabsdata_output)
+
+    tabsdata_agent_target = join(project_tabsdata_agent_root_folder, "target", "pydoc")
+    os.makedirs(tabsdata_agent_target, exist_ok=True)
+    tabsdata_agent_code_root = join(project_tabsdata_agent_root_folder)
+    tabsdata_agent_code_root = os.path.normpath(tabsdata_agent_code_root)
+    tabsdata_agent_output = join(tabsdata_agent_target, "PYDOC.csv")
+    find_pydoc_categories(tabsdata_agent_code_root, tabsdata_agent_output)
 
 
 generate_pydoc_csv()

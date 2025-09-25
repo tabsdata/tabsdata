@@ -17,7 +17,10 @@ PYTEST_CONTEXT_ACTIVE = "PYTEST_VERSION"
 TD_SYMLINK_POLARS_LIBS_PYTEST = "TD_SYMLINK_POLARS_LIBS_PYTEST"
 
 DUPLICATE_METHODS = ["collect_schema"]
-FUNCTION_METHODS = ["pipe"]
+FUNCTION_METHODS = [
+    "pipe",
+    "pipe_with_schema",
+]
 INTERNAL_METHODS = [
     "_comparison_error",
     "_fetch",

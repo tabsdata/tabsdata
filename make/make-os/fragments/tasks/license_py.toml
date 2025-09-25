@@ -1,0 +1,74 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[tasks.__os__license_check_py]
+plugin = "td-task-tracker"
+category = "06 - Compliance"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    # debug "🚀 pip-compile --no-strip-extras --quiet ./requirements/requirements-third-party-all.txt --output-file ./target/requirements.txt"
+    # exec --fail-on-error pip-compile --no-strip-extras --quiet ./requirements/requirements-third-party-all.txt --output-file ./target/requirements.txt
+
+    debug "🚀 uv pip compile --all-extras --format requirements.txt --no-strip-extras --quiet --output-file ./target/requirements.txt ./requirements/requirements-third-party-all.txt"
+    exec --fail-on-error uv pip compile --format requirements.txt --no-strip-extras --quiet --output-file ./target/requirements.txt ./requirements/requirements-third-party-all.txt
+
+    cd target
+
+    license_cfg = readfile ../.cargo/licensecheck.cfg
+    license_cfg_items = split ${license_cfg} \n
+
+    authorized_licenses = set "--only-licenses"
+    ignored_licenses = set "--ignore-licenses"
+    authorized_packages = set "--ignore-packages"
+
+    current_section = set ""
+
+    for item in ${license_cfg_items}
+        item_trimmed = trim ${item}
+        if not is_empty ${item_trimmed}
+            starts_with_hash = starts_with ${item_trimmed} "#"
+            if not ${starts_with_hash}
+                starts_with_bracket = starts_with ${item_trimmed} "["
+                if ${starts_with_bracket}
+                    current_section = set ${item_trimmed}
+                else
+                    if equals ${current_section} "[authorized licenses]"
+                        authorized_licenses = set "${authorized_licenses} \"${item_trimmed}\""
+                    end
+                    if equals ${current_section} "[ignored licenses]"
+                        ignored_licenses = set "${ignored_licenses} \"${item_trimmed}\""
+                    end
+                    if equals ${current_section} "[authorized packages]"
+                        authorized_packages = set "${authorized_packages} \"${item_trimmed}\""
+                    end
+                end
+            end
+        end
+    end
+
+    debug "🚀 licensecheck --license \"PROPRIETARY\" --requirements-paths requirements.txt ${authorized_licenses} ${authorized_packages} ${ignored_licenses} --show-only-failing --zero"
+    exec --fail-on-error licensecheck --license "PROPRIETARY" --requirements-paths requirements.txt %{authorized_licenses} %{authorized_packages} %{ignored_licenses} --show-only-failing --zero
+
+    cd ..
+    ''']
+
+[tasks.__os__license_report_py]
+plugin = "td-task-tracker"
+category = "06 - Compliance"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    cd target
+
+    exec --fail-on-error python ${REPORT_LICENSES_PY_SCRIPT} requirements.txt licenses_py
+    ''']

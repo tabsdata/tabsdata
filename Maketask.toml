@@ -1,38 +1,17 @@
 #
-# Copyright 2024 Tabs Data Inc.
+# Copyright 2025 Tabs Data Inc.
 #
 
 extend = [
-    { path = "./make/fragments/tasks/permit_rs.toml" },
-    { path = "./make/fragments/tasks/permit_py.toml" },
+    { path = "./make/make-os/fragments/shared/Maketask.toml", relative = "git" },
 
-    { path = "./make/fragments/tasks/clean_rs.toml" },
-    { path = "./make/fragments/tasks/clean_py.toml" },
-
-    { path = "./make/fragments/tasks/license_rs.toml" },
-    { path = "./make/fragments/tasks/license_py.toml" },
-
-    { path = "./make/fragments/tasks/lock_rs.toml" },
-    { path = "./make/fragments/tasks/lock_py.toml" },
-
-    { path = "./make/fragments/tasks/build_rs.toml" },
-    { path = "./make/fragments/tasks/build_py.toml" },
-
-    { path = "./make/fragments/tasks/outdated_rs.toml" },
-    { path = "./make/fragments/tasks/outdated_py.toml" },
-
-    { path = "./make/fragments/tasks/shield_rs.toml" },
-    { path = "./make/fragments/tasks/shield_py.toml" },
-
-    { path = "./make/fragments/tasks/test_rs.toml" },
-    { path = "./make/fragments/tasks/test_py.toml" },
-
-    { path = "./make/fragments/tasks/book.toml" },
-
-    { path = "./make/fragments/aliases/custom.toml" },
+    { path = "./make/make-os/fragments/aliases/custom.toml", relative = "git" }
 ]
 
 [tasks.make]
+plugin = "td-task-tracker"
+category = "00 - Make"
+description = "Full build and verification"
 run_task = [
     { name = [
         "make_rs",
@@ -41,6 +20,9 @@ run_task = [
 ]
 
 [tasks.make_rs]
+plugin = "td-task-tracker"
+category = "00 - Make"
+description = "Task 'make' for Rust projects"
 run_task = [
     { name = [
         "clean_rs",
@@ -51,6 +33,9 @@ run_task = [
 ]
 
 [tasks.make_py]
+plugin = "td-task-tracker"
+category = "00 - Make"
+description = "Task 'make' for Python projects"
 run_task = [
     { name = [
         "clean_py",
@@ -61,6 +46,9 @@ run_task = [
 ]
 
 [tasks.compose]
+plugin = "td-task-tracker"
+category = "00 - Make"
+description = "Full build and verification orchestration"
 private = true
 run_task = [
     { name = [
@@ -70,43 +58,50 @@ run_task = [
 ]
 
 [tasks.compose_rs]
+plugin = "td-task-tracker"
+category = "00 - Make"
+description = "Task 'compose' for Rust projects"
 private = true
 run_task = [
     { name = [
         "build_rs",
         "test_rs",
         "check_rs",
+        "clippy_rs",
         "fmt_rs",
         "license_rs",
         "outdated_rs",
-        "deny_rs",
-        "audit_rs",
-        "pants_rs",
         "machete_rs",
-        "clippy_rs"
+        "audit_rs",
+        "deny_rs",
+        "pants_rs"
     ] }
 ]
 
 [tasks.compose_py]
+plugin = "td-task-tracker"
+category = "00 - Make"
+description = "Task 'compose' for Python projects"
 private = true
 run_task = [
     { name = [
         "build_py",
         "test_py",
         "check_py",
+        "clippy_py",
         "fmt_py",
         "license_py",
         "outdated_py",
-        "deny_py",
-        "audit_py",
-        "pants_py",
         "machete_py",
-        "clippy_py"
+        "audit_py",
+        "deny_py",
+        "pants_py"
     ] }
 ]
 
 [tasks.permit]
-category = "00 - Verify"
+plugin = "td-task-tracker"
+category = "80 - Verify"
 description = "Verify that all essential language tools are available"
 run_task = [
     { name = [
@@ -115,7 +110,28 @@ run_task = [
     ] }
 ]
 
+[tasks.permit_rs]
+plugin = "td-task-tracker"
+category = "80 - Verify"
+description = "Task 'permit' for Rust projects"
+run_task = [
+    { name = [
+        "__os__permit_rs"
+    ] }
+]
+
+[tasks.permit_py]
+plugin = "td-task-tracker"
+category = "80 - Verify"
+description = "Task 'permit' for Python projects"
+run_task = [
+    { name = [
+        "__os__permit_py"
+    ] }
+]
+
 [tasks.clean]
+plugin = "td-task-tracker"
 category = "01 - Clean"
 description = "Remove temporary, build, and target folders"
 run_task = [
@@ -125,7 +141,48 @@ run_task = [
     ] }
 ]
 
+[tasks.clean_rs]
+plugin = "td-task-tracker"
+category = "01 - Clean"
+description = "Task 'clean' for Rust projects"
+run_task = [
+    { name = [
+        "__os__clean_rs_macros",
+        "__os__clean_rs_modules",
+        "__os__clean_rs_expansions",
+        "__os__clean_rs_all"
+    ] }
+]
+
+[tasks.clean_py]
+plugin = "td-task-tracker"
+category = "01 - Clean"
+description = "Task 'clean' for Python projects"
+run_task = [
+    { name = [
+        "__os__clean_py_ta_features",
+        "__os__clean_py_ta_tableframe",
+        "__os__clean_py_te_examples",
+        "__os__clean_py_te_tableframe",
+        "__os__clean_py_ty_tableframe",
+        "__os__clean_py_tabsdata",
+        "__os__clean_py_connectors",
+        "__os__clean_py_all"
+    ] }
+]
+
+[tasks.bump]
+plugin = "td-task-tracker"
+category = "02 - Tidy"
+description = "Bump the version of all tabsdata projects"
+run_task = [
+    { name = [
+        "__os__bump"
+    ] }
+]
+
 [tasks.lock]
+plugin = "td-task-tracker"
 category = "02 - Tidy"
 description = "Generate the dependencies lock files"
 run_task = [
@@ -135,7 +192,46 @@ run_task = [
     ] }
 ]
 
+[tasks.lock_rs]
+plugin = "td-task-tracker"
+category = "02 - Tidy"
+description = "Task 'lock' for Rust projects"
+run_task = [
+    { name = [
+        "__os__lock_rs_macros",
+        "__os__lock_rs_modules",
+        "__os__lock_rs_expansions"
+    ] }
+]
+
+[tasks.lock_py]
+plugin = "td-task-tracker"
+category = "02 - Tidy"
+description = "Task 'lock' for Python projects"
+run_task = [
+    { name = [
+        "__os__lock_py_ta_features",
+        "__os__lock_py_ta_tableframe",
+        "__os__lock_py_te_examples",
+        "__os__lock_py_te_tableframe",
+        "__os__lock_py_ty_tableframe",
+        "__os__lock_py_tabsdata",
+        "__os__lock_py_connectors"
+    ] }
+]
+
+[tasks.sourcetrack]
+plugin = "td-task-tracker"
+category = "02 - Tidy"
+description = "Generate the sourcetrack metadata"
+run_task = [
+    { name = [
+        "_os__generate_sourcetrack"
+    ] }
+]
+
 [tasks.build]
+plugin = "td-task-tracker"
 category = "03 - Build"
 description = "Compile and build from source code"
 run_task = [
@@ -145,7 +241,79 @@ run_task = [
     ] }
 ]
 
+[tasks.build_rs]
+plugin = "td-task-tracker"
+category = "03 - Build"
+description = "Task 'build' for Rust projects"
+run_task = [
+    { name = [
+        "__os__build_all_rs",
+        "__os__build_none_rs"], condition = { env = { "TD_BUILD_ALL" = "true" } } },
+    { name = [
+        "__os__build_none_rs"
+    ] }
+]
+
+[tasks.build_rs_macros]
+plugin = "td-task-tracker"
+category = "03 - Build"
+description = "Task 'build' for Rust projects (macros)"
+run_task = [
+    { name = [
+        "__os__build_all_rs_macros",
+        "__os__build_none_rs_macros"], condition = { env = { "TD_BUILD_ALL" = "true" } } },
+    { name = [
+        "__os__build_none_rs_macros"
+    ] }
+]
+
+[tasks.build_rs_tabsdata]
+plugin = "td-task-tracker"
+category = "03 - Build"
+description = "Task 'build' for Rust projects (tabsdata)"
+run_task = [
+    { name = [
+        "__os__build_all_rs_macros",
+        "__os__build_none_rs_macros",
+        "__os__build_all_rs_modules",
+        "__os__build_none_rs_modules"], condition = { env = { "TD_BUILD_ALL" = "true" } } },
+    { name = [
+        "__os__build_none_rs_macros",
+        "__os__build_none_rs_modules"
+    ] }
+]
+
+[tasks.build_rs_expansions]
+plugin = "td-task-tracker"
+category = "03 - Build"
+description = "Task 'build' for Rust projects (expnasions)"
+run_task = [
+    { name = [
+        "__os__build_all_rs_expansions",
+        "__os__build_none_rs_expansions"], condition = { env = { "TD_BUILD_ALL" = "true" } } },
+    { name = [
+        "__os__build_none_rs_expansions"
+    ] }
+]
+
+[tasks.build_py]
+plugin = "td-task-tracker"
+category = "03 - Build"
+description = "Task 'build' for Python projects"
+run_task = [
+    { name = [
+        "__os__build_py_ta_features",
+        "__os__build_py_ta_tableframe",
+        "__os__build_py_te_examples",
+        "__os__build_py_te_tableframe",
+        "__os__build_py_ty_tableframe",
+        "__os__build_py_tabsdata",
+        "__os__build_py_connectors"
+    ] }
+]
+
 [tasks.link]
+plugin = "td-task-tracker"
 category = "03 - Build"
 description = "Generate dynamic libraries from source code"
 run_task = [
@@ -155,7 +323,31 @@ run_task = [
     ] }
 ]
 
+[tasks.link_rs]
+plugin = "td-task-tracker"
+category = "03 - Build"
+description = "Task 'link' for Rust projects"
+run_task = [
+    { name = [
+        "__os__link_all_rs",
+        "__os__link_none_rs"], condition = { env = { "TD_BUILD_ALL" = "true" } } },
+    { name = [
+        "__os__link_none_rs"
+    ] }
+]
+
+[tasks.link_py]
+plugin = "td-task-tracker"
+category = "03 - Build"
+description = "Task 'link' for Python projects"
+run_task = [
+    { name = [
+        "__os__link_py"
+    ] }
+]
+
 [tasks.egg]
+plugin = "td-task-tracker"
 category = "03 - Build"
 description = "Generate editablue builds from source code"
 run_task = [
@@ -165,7 +357,34 @@ run_task = [
     ] }
 ]
 
+[tasks.egg_rs]
+plugin = "td-task-tracker"
+category = "03 - Build"
+description = "Task 'egg' for Rust projects"
+run_task = [
+    { name = [
+        "__os__egg_rs"
+    ] }
+]
+
+[tasks.egg_py]
+plugin = "td-task-tracker"
+category = "03 - Build"
+description = "Task 'build' for Python projects"
+run_task = [
+    { name = [
+        "__os__egg_py_ta_features",
+        "__os__egg_py_ta_tableframe",
+        "__os__egg_py_te_examples",
+        "__os__egg_py_te_tableframe",
+        "__os__egg_py_ty_tableframe",
+        "__os__egg_py_tabsdata",
+        "__os__egg_py_connectors"
+    ] }
+]
+
 [tasks.test]
+plugin = "td-task-tracker"
 category = "04 - Test"
 description = "Run unit tests"
 run_task = [
@@ -175,7 +394,43 @@ run_task = [
     ] }
 ]
 
+[tasks.test_rs]
+plugin = "td-task-tracker"
+category = "04 - Test"
+description = "Task 'test' for Rust projects"
+run_task = [
+    { name = [
+        "__os__setup_test_rs",
+        "__os__test_rs_macros",
+        "__os__test_rs_modules",
+        "__os__test_rs_expansions",
+        "__os__cleanup_test_rs"
+    ] }
+]
+
+[tasks.test_py]
+plugin = "td-task-tracker"
+category = "04 - Test"
+description = "Task 'test' for Python projects"
+dependencies = ["__os__set_mode_test_py"]
+run_task = [
+    { name = [
+        "__os__setup_test_py",
+        "__os__start_test_py",
+        "__os__test_py_ta_features",
+        "__os__test_py_ta_tableframe",
+        "__os__test_py_te_examples",
+        "__os__test_py_te_tableframe",
+        "__os__test_py_ty_tableframe",
+        "__os__test_py_tabsdata",
+        "__os__test_py_connectors",
+        "__os__stop_test_py",
+        "__os__cleanup_test_py"
+    ] }
+]
+
 [tasks.outdated]
+plugin = "td-task-tracker"
 category = "05 - Inspect"
 description = "Find outdated dependencies"
 run_task = [
@@ -185,15 +440,69 @@ run_task = [
     ] }
 ]
 
+[tasks.outdated_rs]
+plugin = "td-task-tracker"
+category = "05 - Inspect"
+description = "Task 'outdated' for Rust projects"
+run_task = [
+    { name = [
+        "__os__outdated_rs_macros",
+        "__os__outdated_rs_modules",
+        "__os__outdated_rs_expansions"
+    ] }
+]
+
+[tasks.outdated_py]
+plugin = "td-task-tracker"
+category = "05 - Inspect"
+description = "Task 'outdated' for Python projects"
+run_task = [
+    { name = [
+        "__os__outdated_py"
+    ] }
+]
+
+[tasks.machete]
+plugin = "td-task-tracker"
+category = "05 - Inspect"
+description = "Find unused dependencies"
+run_task = [
+    { name = [
+        "machete_rs",
+        "machete_py"
+    ] }
+]
+
+[tasks.machete_rs]
+plugin = "td-task-tracker"
+category = "05 - Inspect"
+description = "Task 'machete' for Rust projects"
+run_task = [
+    { name = [
+        "__os__machete_rs",
+    ] }
+]
+
+[tasks.machete_py]
+plugin = "td-task-tracker"
+category = "05 - Inspect"
+description = "Task 'machete' for Python projects"
+run_task = [
+    { name = [
+        "__os__machete_py"
+    ] }
+]
+
 [tasks.license]
+plugin = "td-task-tracker"
 category = "06 - Compliance"
 description = "Generate the dependencies' license files"
 cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-dependencies = ["set_mode_license"]
+dependencies = ["__os__set_mode_license"]
 script_runner = "@duckscript"
 script = [
     '''
-    !include_files ./make/libraries/log.ds
+    !include_files ./make/make-os/libraries/log.ds
 
     license = get_env TD_LICENSE
     if eq ${license} "true"
@@ -201,53 +510,33 @@ script = [
         cm_run_task license_py
     end
 
-    exec --fail-on-error python ./devutils/automation/tasks/makers/td-scripts/report_licenses.py
+    exec --fail-on-error python ${REPORT_LICENSES_SCRIPT}
     ''']
 
-[tasks.set_mode_license]
-private = true
-script_runner = "@duckscript"
-script = [
-    '''
-    !include_files ./make/libraries/log.ds
-
-    license = get_env TD_LICENSE
-    license_empty = is_empty ${license}
-    license_true = eq ${license} "true"
-    license = set ${license_empty} or ${license_true}
-    if ${license}
-        set_env TD_LICENSE "true"
-    else
-        set_env TD_LICENSE "false"
-    end
-    TD_LICENSE = get_env TD_LICENSE
-    debug "🔅 Using td license: '${TD_LICENSE}'"
-    ''']
-
-[tasks.duck]
-category = "🦆🦆 - Diagnosis"
-description = "Placeholder for duckscript scripts tests"
-cwd = "${ROOT_PROJECT_TABSDATA_FOLDER}"
-script_runner = "@duckscript"
-script = [
-    '''
-    !include_files ./make/libraries/log.ds
-
-    info "🦆 Running duckscript..."
-    info "🦆️ If it looks like a duck, swims like a duck, and quacks like a duck, then it probably is a duck."
-    ''']
-
-[tasks.deny]
-category = "07 - Shield"
-description = "Validate code and dependencies for compliance with security and coding conventions"
+[tasks.license_rs]
+plugin = "td-task-tracker"
+category = "06 - Compliance"
+description = "Task 'license' for Rust projects"
 run_task = [
     { name = [
-        "deny_rs",
-        "deny_py"
+        "__os__license_check_rs",
+        "__os__license_report_rs"
+    ] }
+]
+
+[tasks.license_py]
+plugin = "td-task-tracker"
+category = "06 - Compliance"
+description = "Task 'license' for Python projects"
+run_task = [
+    { name = [
+        "__os__license_check_py",
+        "__os__license_report_py"
     ] }
 ]
 
 [tasks.audit]
+plugin = "td-task-tracker"
 category = "07 - Shield"
 description = "Scan peroject for dependencies with known security vulnerabilities"
 run_task = [
@@ -257,7 +546,63 @@ run_task = [
     ] }
 ]
 
+[tasks.audit_rs]
+plugin = "td-task-tracker"
+category = "07 - Shield"
+description = "Task 'audit' for Rust projects"
+run_task = [
+    { name = [
+        "__os__audit_rs_macros",
+        "__os__audit_rs_modules",
+        "__os__audit_rs_expansions"
+    ] }
+]
+
+[tasks.audit_py]
+plugin = "td-task-tracker"
+category = "07 - Shield"
+description = "Task 'audit' for Python projects"
+run_task = [
+    { name = [
+        "__os__audit_py"
+    ] }
+]
+
+[tasks.deny]
+plugin = "td-task-tracker"
+category = "07 - Shield"
+description = "Validate code and dependencies for compliance with security and coding conventions"
+run_task = [
+    { name = [
+        "deny_rs",
+        "deny_py"
+    ] }
+]
+
+[tasks.deny_rs]
+plugin = "td-task-tracker"
+category = "07 - Shield"
+description = "Task 'deny' for Rust projects"
+run_task = [
+    { name = [
+        "__os__deny_rs_macros",
+        "__os__deny_rs_modules",
+        "__os__deny_rs_expansions"
+    ] }
+]
+
+[tasks.deny_py]
+plugin = "td-task-tracker"
+category = "07 - Shield"
+description = "Task 'deny' for Python projects"
+run_task = [
+    { name = [
+        "__os__deny_py"
+    ] }
+]
+
 [tasks.pants]
+plugin = "td-task-tracker"
 category = "07 - Shield"
 description = "Scan peroject for dependencies with known security vulnerabilities (cross-language)"
 run_task = [
@@ -267,268 +612,32 @@ run_task = [
     ] }
 ]
 
-[tasks.env]
-category = "🦆🦆 - Diagnosis"
-description = "SHow all environment variables available to cargo-make"
-cwd = "${ROOT_PROJECT_TABSDATA_FOLDER}"
-script_runner = "@duckscript"
-script = [
-    '''
-    !include_files ./make/libraries/log.ds
+[tasks.pants_rs]
+plugin = "td-task-tracker"
+category = "07 - Shield"
+description = "Task 'pants' for Rust projects"
+run_task = [
+    { name = [
+        "__os__pants_rs_macros",
+        "__os__pants_rs_modules",
+        "__os__pants_rs_expansions"
+    ] }
+]
 
-    env_keys = array
-    array_push ${env_keys} CARGO_MAKE
-    array_push ${env_keys} CARGO_MAKE_TASK
-    array_push ${env_keys} CARGO_MAKE_TASK_ARGS
-    array_push ${env_keys} CARGO_MAKE_CURRENT_TASK_NAME
-    array_push ${env_keys} CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE
-    array_push ${env_keys} CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE_DIRECTORY
-    array_push ${env_keys} CARGO_MAKE_COMMAND
-    array_push ${env_keys} CARGO_MAKE_WORKING_DIRECTORY
-    array_push ${env_keys} CARGO_MAKE_WORKSPACE_WORKING_DIRECTORY
-    array_push ${env_keys} CARGO_MAKE_PROFILE
-    array_push ${env_keys} CARGO_MAKE_ADDITIONAL_PROFILES
-    array_push ${env_keys} CARGO_MAKE_PROJECT_NAME
-    array_push ${env_keys} CARGO_MAKE_PROJECT_VERSION
-    array_push ${env_keys} CARGO_MAKE_CARGO_HOME
-    array_push ${env_keys} CARGO_MAKE_CARGO_PROFILE
-    array_push ${env_keys} CARGO_MAKE_RUST_VERSION
-    array_push ${env_keys} CARGO_MAKE_RUST_CHANNEL
-    array_push ${env_keys} CARGO_MAKE_RUST_TARGET_ARCH
-    array_push ${env_keys} CARGO_MAKE_RUST_TARGET_ENV
-    array_push ${env_keys} CARGO_MAKE_RUST_TARGET_OS
-    array_push ${env_keys} CARGO_MAKE_RUST_TARGET_POINTER_WIDTH
-    array_push ${env_keys} CARGO_MAKE_RUST_TARGET_VENDOR
-    array_push ${env_keys} CARGO_MAKE_RUST_TARGET_TRIPLE
-    array_push ${env_keys} CARGO_MAKE_CRATE_TARGET_DIRECTORY
-    array_push ${env_keys} CARGO_MAKE_CRATE_CUSTOM_TRIPLE_TARGET_DIRECTORY
-    array_push ${env_keys} CARGO_MAKE_CRATE_HAS_DEPENDENCIES
-    array_push ${env_keys} CARGO_MAKE_CRATE_IS_WORKSPACE
-    array_push ${env_keys} CARGO_MAKE_CRATE_WORKSPACE_MEMBERS
-    array_push ${env_keys} CARGO_MAKE_CRATE_CURRENT_WORKSPACE_MEMBER
-    array_push ${env_keys} CARGO_MAKE_CRATE_LOCK_FILE_EXISTS
-    array_push ${env_keys} CARGO_MAKE_CRATE_TARGET_TRIPLE
-    array_push ${env_keys} CARGO_MAKE_WORKSPACE_PACKAGE_NAME
-    array_push ${env_keys} CARGO_MAKE_WORKSPACE_PACKAGE_VERSION
-    array_push ${env_keys} CARGO_MAKE_WORKSPACE_PACKAGE_DESCRIPTION
-    array_push ${env_keys} CARGO_MAKE_WORKSPACE_PACKAGE_LICENSE
-    array_push ${env_keys} CARGO_MAKE_WORKSPACE_PACKAGE_DOCUMENTATION
-    array_push ${env_keys} CARGO_MAKE_WORKSPACE_PACKAGE_HOMEPAGE
-    array_push ${env_keys} CARGO_MAKE_WORKSPACE_PACKAGE_REPOSITORY
-    array_push ${env_keys} CARGO_MAKE_CI
-    array_push ${env_keys} CARGO_MAKE_PR
-    array_push ${env_keys} CARGO_MAKE_CI_BRANCH_NAME
-    array_push ${env_keys} CARGO_MAKE_CI_VENDOR
-    array_push ${env_keys} CARGO_MAKE_DUCKSCRIPT_VERSION
-    array_push ${env_keys} CARGO_MAKE_DUCKSCRIPT_SDK_VERSION
-    array_push ${env_keys} CARGO_MAKE_CRATE_NAME
-    array_push ${env_keys} CARGO_MAKE_CRATE_FS_NAME
-    array_push ${env_keys} CARGO_MAKE_CRATE_VERSION
-    array_push ${env_keys} CARGO_MAKE_CRATE_DESCRIPTION
-    array_push ${env_keys} CARGO_MAKE_CRATE_LICENSE
-    array_push ${env_keys} CARGO_MAKE_CRATE_DOCUMENTATION
-    array_push ${env_keys} CARGO_MAKE_CRATE_HOMEPAGE
-    array_push ${env_keys} CARGO_MAKE_CRATE_REPOSITORY
-    array_push ${env_keys} CARGO_MAKE_GIT_BRANCH
-    array_push ${env_keys} CARGO_MAKE_GIT_USER_NAME
-    array_push ${env_keys} CARGO_MAKE_GIT_USER_EMAIL
-    array_push ${env_keys} CARGO_MAKE_GIT_HEAD_LAST_COMMIT_HASH
-    array_push ${env_keys} CARGO_MAKE_GIT_HEAD_LAST_COMMIT_HASH_PREFIX
-
-    for env_key in ${env_keys}
-        env_value = get_env ${env_key}
-        debug "☘️ ${env_key} :: ${env_value}"
-    end
-    ''']
-
-## wip...
-
-[tasks.deploy]
-category = "80 - Install"
-description = "Build and install a local assembly"
-cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-script_runner = "@duckscript"
-script = [
-    '''
-    !include_files ./make/libraries/log.ds
-
-    info "🛠️ Configuring..."
-    set_env RUST_BACKTRACE "1"
-    set_env RUST_LOG "error"
-    set_env RUSTDOC_LOG "error"
-    set_env RUST_TEST_THREADS "16"
-    set_env TABSDATA_ATTACH "false"
-    set_env SWAGGER_UI_OVERWRITE_FOLDER "server/binaries/td-server/resources/swagger"
-    set_env PYTEST_MAXIMUM_RETRY_COUNT "16"
-    set_env TD_CLI_SHOW "false"
-    set_env TD_SHOW_ENV "false"
-    set_env LOG_CRATE_TM_WORKSPACE "false"
-    set_env TD_DISABLE_OPENAPI_DOCS_ENDPOINT "false"
-    set_env REQUIRE_SERVER_BINARIE "true"
-    set_env REQUIRE_THIRD_PARTY "false"
-    set_env REQUIRE_PYDOC_CSV "false"
-    set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "false"
-    set_env TD_SKIP_NON_EXISTING_ASSETS "false"
-    set_env PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES "true"
-    set_env TD_PYTHON_LINKED_TO_REPOSITORY "false"
-    set_env TD_INHERIT_TABSDATA_PACKAGES "false"
-    set_env TD_REMOTE_DEBUG "false"
-
-    td_ui_mode = get_env TD_UI_MODE
-    if ${td_ui_mode}
-        info "☂️ TD_UI_MODE set. Using '${td_ui_mode}' for install tasks..."
-    else
-        info "☂️ TD_UI_MODE not set. Using 'internal' for install tasks..."
-        set_env TD_UI_MODE "internal"
-    end
-
-    info "✂️️ Uninstalling..."
-    cm_run_task uninstall
-    debug "🚀 pip uninstall tabsdata --yes"
-    exec --fail-on-error pip uninstall tabsdata --yes
-    connectors = glob_array ${CONNECTORS_PY_ROOT_FOLDER}/tabsdata_*
-    for connector in ${connectors}
-        is_connector = is_dir ${connector}
-        if ${is_connector}
-            connector_name = basename ${connector}
-            connector_package = replace ${connector_name} "_" "-"
-            debug "🚀 pip uninstall ${connector_package} --yes"
-            exec --fail-on-error pip uninstall ${connector_package} --yes
-        end
-    end
-
-    info "🧹️ Cleaning..."
-    cm_run_task clean
-
-    info "🏕️ Installing..."
-    cm_run_task install
-
-    os = get_env OS
-    if ${os}
-        lower_os = lowercase ${os}
-        contains_win = contains ${lower_os} "windows"
-        if ${contains_win}
-            exec cls
-        else
-            exec clear
-        end
-    else
-        exec clear
-    end
-
-    lines = array
-    array_push ${lines} "🎊 Local tabsdata successfully deployed!"
-    message = array_join ${lines} "\n"
-    info ${message}
-
-    lines = array
-    array_push ${lines} ""
-    array_push ${lines} ""
-    array_push ${lines} "❗ Set the environment variables below for a better user experience:"
-    array_push ${lines} ""
-    array_push ${lines} "export PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES=true"
-    array_push ${lines} "export TD_CLI_SHOW=true"
-    array_push ${lines} "export TD_IGNORE_CONNECTOR_REQUIREMENTS=true"
-    array_push ${lines} "export TD_INHERIT_TABSDATA_PACKAGES=true"
-    array_push ${lines} "export TD_PYTHON_LINKED_TO_REPOSITORY=false"
-    array_push ${lines} "export TD_SKIP_NON_EXISTING_ASSETS=true"
-    message = array_join ${lines} "\n"
-    info ${message}
-    ''']
-
-[tasks.rstest]
-alias = "rstest_modules"
-
-[tasks.rstest_logging]
-alias = "rstest_modules_logging"
-
-[tasks.rstest_tower]
-alias = "rstest_modules_tower"
-
-[tasks.rstest_macros]
-cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-command = "cargo"
-args = ["test", "--locked", "@@split(CARGO_MAKE_TASK_ARGS, ;)", "--profile", "${td-profile}", "--manifest-path", "${PROJECT_RS_TD_MACROS_CARGO_TOML}", "--features", "${macros-test-features}", "--", "--nocapture"]
-
-[tasks.rstest_modules]
-cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-command = "cargo"
-args = ["test", "--locked", "@@split(CARGO_MAKE_TASK_ARGS, ;)", "--profile", "${td-profile}", "--manifest-path", "${PROJECT_RS_TABSDATA_CARGO_TOML}", "--features", "${modules-test-features}", "--", "--nocapture"]
-
-[tasks.rstest_modules_logging]
-cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-command = "cargo"
-args = ["test", "--locked", "@@split(CARGO_MAKE_TASK_ARGS, ;)", "--profile", "${td-profile}", "--manifest-path", "${PROJECT_RS_TABSDATA_CARGO_TOML}", "--features", "${modules-test-features-test_logging}", "--", "test_logging", "--", "--nocapture"]
-
-[tasks.rstest_modules_tower]
-cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-command = "cargo"
-args = ["test", "--locked", "@@split(CARGO_MAKE_TASK_ARGS, ;)", "--profile", "${td-profile}", "--manifest-path", "${PROJECT_RS_TABSDATA_CARGO_TOML}", "--features", "${modules-test-features-test_tower_metadata}", "--", "test_tower_metadata", "--", "--nocapture"]
-
-[tasks.rsnext]
-alias = "rsnext_modules"
-
-[tasks.rsnext_logging]
-alias = "rsnext_modules_logging"
-
-[tasks.rsnext_tower]
-alias = "rsnext_modules_tower"
-
-[tasks.rsnext_macros]
-cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-command = "cargo"
-args = ["nextest", "run", "--locked", "--nocapture", "--cargo-profile", "${td-profile}", "--manifest-path", "${PROJECT_RS_TD_MACROS_CARGO_TOML}", "--features", "${macros-test-features}", "@@split(CARGO_MAKE_TASK_ARGS, ;)"]
-
-[tasks.rsnext_modules]
-cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-command = "cargo"
-args = ["nextest", "run", "--locked", "--nocapture", "--cargo-profile", "${td-profile}", "--manifest-path", "${PROJECT_RS_TABSDATA_CARGO_TOML}", "--features", "${modules-test-features}", "@@split(CARGO_MAKE_TASK_ARGS, ;)"]
-
-[tasks.rsnext_modules_logging]
-cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-command = "cargo"
-args = ["nextest", "run", "--locked", "--nocapture", "--cargo-profile", "${td-profile}", "--manifest-path", "${PROJECT_RS_TABSDATA_CARGO_TOML}", "--features", "${modules-test-features-test_logging}", "--", "test_logging", "@@split(CARGO_MAKE_TASK_ARGS, ;)"]
-
-[tasks.rsnext_modules_tower]
-cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-command = "cargo"
-args = ["nextest", "run", "--locked", "--nocapture", "--cargo-profile", "${td-profile}", "--manifest-path", "${PROJECT_RS_TABSDATA_CARGO_TOML}", "--features", "${modules-test-features-test_tower_metadata}", "--", "test_tower_metadata", "@@split(CARGO_MAKE_TASK_ARGS, ;)"]
-
-[tasks.pytest]
-dependencies = ["set_mode_test_py"]
-cwd = "${PROJECT_PY_TD_SDK_FOLDER}"
-script_runner = "@duckscript"
-script = [
-    '''
-    verbose = get_env TD_VERBOSE
-    compile = get_env TD_COMPILE
-
-    if eq ${compile} "true"
-        echo "_____ Compiling first..."
-        cm_run_task build
-    end
-
-    echo "_____ Testing next..."
-    arguments = set ${@}
-    parameters = array
-    configuration = temp_file "ini"
-    found = set false
-    for argument in ${arguments}
-        if ${found}
-            array_push ${parameters} ${argument}
-            appendfile ${configuration} ${argument}\n
-        else
-            if eq ${argument} "--"
-                found = set true
-            end
-        end
-    end
-    echo "_____ Running command: pytest @${configuration}"
-    exec --fail-on-error pytest @${configuration}
-    rm ${configuration}
-    ''']
+[tasks.pants_py]
+plugin = "td-task-tracker"
+category = "07 - Shield"
+description = "Task 'pants' for Python projects"
+run_task = [
+    { name = [
+        "__os__pants_py"
+    ] }
+]
 
 [tasks.check]
+plugin = "td-task-tracker"
+category = "08 - Linter"
+description = "Check projects and dependencies for errors"
 run_task = [
     { name = [
         "check_rs",
@@ -537,201 +646,31 @@ run_task = [
 ]
 
 [tasks.check_rs]
+plugin = "td-task-tracker"
+category = "08 - Linter"
+description = "Task 'check' for Rust projects"
 run_task = [
     { name = [
-        "check_rs_macros",
-        "check_rs_modules"
+        "__os__check_rs_macros",
+        "__os__check_rs_modules",
+        "__os__check_rs_expansions"
     ] }
 ]
 
 [tasks.check_py]
-
-[tasks.check_rs_macros]
-private = true
-cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-script_runner = "@duckscript"
-script = [
-    '''
-    if is_empty ${td-target}
-        if is_empty ${td-toolchain}
-            exec --fail-on-error ${td-cargo} check --locked --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML}
-        else
-            exec --fail-on-error ${td-cargo} +${td-toolchain} check --locked --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML}
-       end
-    else
-        if is_empty ${td-toolchain}
-            exec --fail-on-error ${td-cargo} check --locked --target ${td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML}
-        else
-            exec --fail-on-error ${td-cargo} +${td-toolchain} check --locked --target ${td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML}
-        end
-    end
-    ''']
-
-[tasks.check_rs_modules]
-private = true
-cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-script_runner = "@duckscript"
-script = [
-    '''
-    if is_empty ${td-target}
-        if is_empty ${td-toolchain}
-            exec --fail-on-error ${td-cargo} check --locked --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML}
-        else
-            exec --fail-on-error ${td-cargo} +${td-toolchain} check --locked --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML}
-       end
-    else
-        if is_empty ${td-toolchain}
-            exec --fail-on-error ${td-cargo} check --locked --target ${td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML}
-        else
-            exec --fail-on-error ${td-cargo} +${td-toolchain} check --locked --target ${td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML}
-        end
-    end
-    ''']
-
-[tasks.fmt]
+plugin = "td-task-tracker"
+category = "08 - Linter"
+description = "Task 'check' for Python projects"
 run_task = [
     { name = [
-        "fmt_rs",
-        "fmt_py"
+        "__os__check_py"
     ] }
 ]
-
-[tasks.fmt_rs]
-run_task = [
-    { name = [
-        "fmt_rs_macros",
-        "fmt_rs_modules"
-    ] }
-]
-
-[tasks.fmt_py]
-run_task = [
-    { name = [
-        "fmt_py_flake8_conventions",
-        "fmt_py_flake8_complexity",
-        "fmt_py_black",
-        "fmt_py_isort"
-    ] }
-]
-
-[tasks.fmt_rs_macros]
-private = true
-command = "cargo"
-args = ["fmt", "--manifest-path", "${PROJECT_RS_TD_MACROS_CARGO_TOML}", "--all", "--", "--check"]
-
-[tasks.fmt_rs_modules]
-private = true
-command = "cargo"
-args = ["fmt", "--manifest-path", "${PROJECT_RS_TABSDATA_CARGO_TOML}", "--all", "--", "--check"]
-
-[tasks.fmt_py_flake8_conventions]
-private = true
-cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-script_runner = "@duckscript"
-script = [
-    '''
-    echo "Running command: ${ENV_PREFIX}flake8 --select=E9,F63,F7,F82 --ignore=E203,W503 --show-source --statistics . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*"
-    exec --fail-on-error ${ENV_PREFIX}flake8 --select=E9,F63,F7,F82 --ignore=E203,W503 --show-source --statistics . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*
-    ''']
-
-[tasks.fmt_py_flake8_complexity]
-private = true
-cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-script_runner = "@duckscript"
-script = [
-    '''
-    echo "Running command: ${ENV_PREFIX}flake8 --max-complexity=10 --ignore=E203,W503 --max-line-length=88 --statistics  . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*"
-    exec --fail-on-error ${ENV_PREFIX}flake8 --max-complexity=10 --ignore=E203,W503 --max-line-length=88 --statistics  . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*
-    ''']
-
-[tasks.fmt_py_black]
-private = true
-cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-script_runner = "@duckscript"
-script = [
-    '''
-    echo "Running command: ${ENV_PREFIX}black --preview --enable-unstable-feature string_processing --check . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_* --force-exclude \\.pyi$"
-    exec --fail-on-error ${ENV_PREFIX}black --preview --enable-unstable-feature string_processing --check . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_* --force-exclude \\.pyi$
-    ''']
-
-[tasks.fmt_py_isort]
-private = true
-cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-script_runner = "@duckscript"
-script = [
-    '''
-    echo "Running command: ${ENV_PREFIX}isort --check . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_*"
-    exec --fail-on-error ${ENV_PREFIX}isort --check . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_*"
-    ''']
-
-[tasks.format]
-run_task = [
-    { name = [
-        "format_rs",
-        "format_py"
-    ] }
-]
-
-[tasks.format_rs]
-
-[tasks.format_py]
-run_task = [
-    { name = [
-        "format_py_black",
-        "format_py_isort"
-    ] }
-]
-
-[tasks.format_py_black]
-private = true
-cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-script_runner = "@duckscript"
-script = [
-    '''
-    echo "Running command: ${ENV_PREFIX}black --preview --enable-unstable-feature string_processing . --force-exclude \\.pyi$"
-    exec --fail-on-error ${ENV_PREFIX}black --preview --enable-unstable-feature string_processing . --force-exclude \\.pyi$
-    ''']
-
-[tasks.format_py_isort]
-private = true
-cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-script_runner = "@duckscript"
-script = [
-    '''
-    echo "Running command: ${ENV_PREFIX}isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_*"
-    exec --fail-on-error ${ENV_PREFIX}isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_*
-    ''']
-
-[tasks.sourcetrack]
-cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-script_runner = "@duckscript"
-script = [
-    '''
-    !include_files ./make/libraries/log.ds
-
-    exists = is_path_exists ./variant/devutils/automation/tasks/makers/td-scripts/sourcetrack.py
-    if eq ${exists} true
-        exec --fail-on-error python ./variant/devutils/automation/tasks/makers/td-scripts/sourcetrack.py
-    else
-        warn "Generating the source track metadata file does not apply for this project"
-    end
-    ''']
-
-[tasks.machete]
-run_task = [
-    { name = [
-        "machete_rs",
-        "machete_py"
-    ] }
-]
-
-[tasks.machete_rs]
-command = "cargo"
-args = ["machete", "--with-metadata"]
-
-[tasks.machete_py]
 
 [tasks.clippy]
+plugin = "td-task-tracker"
+category = "08 - Linter"
+description = "Catch common mistakes to improve code quality and correctness"
 run_task = [
     { name = [
         "clippy_rs",
@@ -740,58 +679,101 @@ run_task = [
 ]
 
 [tasks.clippy_rs]
+plugin = "td-task-tracker"
+category = "08 - Linter"
+description = "Task 'clippy' for Rust projects"
 run_task = [
     { name = [
-        "clippy_rs_macros",
-        "clippy_rs_modules"
+        "__os__clippy_rs_macros",
+        "__os__clippy_rs_modules",
+        "__os__clippy_rs_expansions"
     ] }
 ]
 
 [tasks.clippy_py]
+plugin = "td-task-tracker"
+category = "08 - Linter"
+description = "Task 'clippy' for Python projects"
+run_task = [
+    { name = [
+        "__os__clippy_py"
+    ] }
+]
 
-[tasks.clippy_rs_macros]
-private = true
-cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-script_runner = "@duckscript"
-script = [
-    '''
-    if is_empty ${td-target}
-        if is_empty ${td-toolchain}
-            exec --fail-on-error ${td-cargo} clippy --locked --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} -- -D warnings
-        else
-            exec --fail-on-error ${td-cargo} +${td-toolchain} clippy --locked --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} -- -D warnings
-       end
-    else
-        if is_empty ${td-toolchain}
-            exec --fail-on-error ${td-cargo} clippy --locked --target ${td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} -- -D warnings
-        else
-            exec --fail-on-error ${td-cargo} +${td-toolchain} clippy --locked --target ${td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} -- -D warnings
-        end
-    end
-    ''']
+[tasks.fmt]
+plugin = "td-task-tracker"
+category = "08 - Linter"
+description = "Check code formatting for the whole project"
+run_task = [
+    { name = [
+        "fmt_rs",
+        "fmt_py"
+    ] }
+]
 
-[tasks.clippy_rs_modules]
-private = true
-cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-script_runner = "@duckscript"
-script = [
-    '''
-    if is_empty ${td-target}
-        if is_empty ${td-toolchain}
-            exec --fail-on-error ${td-cargo} clippy --locked --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} -- -D warnings
-        else
-            exec --fail-on-error ${td-cargo} +${td-toolchain} clippy --locked --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} -- -D warnings
-       end
-    else
-        if is_empty ${td-toolchain}
-            exec --fail-on-error ${td-cargo} clippy --locked --target ${td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} -- -D warnings
-        else
-            exec --fail-on-error ${td-cargo} +${td-toolchain} clippy --locked --target ${td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} -- -D warnings
-        end
-    end
-    ''']
+[tasks.fmt_rs]
+plugin = "td-task-tracker"
+category = "08 - Linter"
+description = "Task 'fmt' for Rust projects"
+run_task = [
+    { name = [
+        "__os__fmt_rs_macros",
+        "__os__fmt_rs_modules",
+        "__os__fmt_rs_expansions"
+    ] }
+]
+
+[tasks.fmt_py]
+plugin = "td-task-tracker"
+category = "08 - Linter"
+description = "Task 'fmt' for Python projects"
+run_task = [
+    { name = [
+        "__os__fmt_py_flake8_conventions",
+        "__os__fmt_py_flake8_complexity",
+        "__os__fmt_py_black",
+        "__os__fmt_py_isort"
+    ] }
+]
+
+[tasks.format]
+plugin = "td-task-tracker"
+category = "09 - Repair"
+description = "Formats all code using the project's formatting rules"
+run_task = [
+    { name = [
+        "format_rs",
+        "format_py"
+    ] }
+]
+
+[tasks.format_rs]
+plugin = "td-task-tracker"
+category = "09 - Repair"
+description = "Task 'format' for Rust projects"
+run_task = [
+    { name = [
+        "__os__format_rs_macros",
+        "__os__format_rs_modules",
+        "__os__format_rs_expansions"
+    ] }
+]
+
+[tasks.format_py]
+plugin = "td-task-tracker"
+category = "09 - Repair"
+description = "Task 'format' for Python projects"
+run_task = [
+    { name = [
+        "__os__format_py_black",
+        "__os__format_py_isort"
+    ] }
+]
 
 [tasks.fix]
+plugin = "td-task-tracker"
+category = "09 - Repair"
+description = "Fix common mistakes to improve code quality and correctness"
 run_task = [
     { name = [
         "fix_rs",
@@ -800,849 +782,213 @@ run_task = [
 ]
 
 [tasks.fix_rs]
+plugin = "td-task-tracker"
+category = "09 - Repair"
+description = "Task 'fix' for Rust projects"
 run_task = [
     { name = [
-        "fix_rs_macros",
-        "fix_rs_modules"
+        "__os__fix_rs_macros",
+        "__os__fix_rs_modules",
+        "__os__fix_rs_expansions"
     ] }
 ]
 
 [tasks.fix_py]
-
-[tasks.fix_rs_macros]
-private = true
-cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-script_runner = "@duckscript"
-script = [
-    '''
-    if is_empty ${td-target}
-        if is_empty ${td-toolchain}
-            exec --fail-on-error ${td-cargo} clippy --locked --fix --allow-dirty --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} -- -D warnings
-        else
-            exec --fail-on-error ${td-cargo} +${td-toolchain} clippy --locked --fix --allow-dirty --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} -- -D warnings
-       end
-    else
-        if is_empty ${td-toolchain}
-            exec --fail-on-error ${td-cargo} clippy --locked --fix --allow-dirty --target ${td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} -- -D warnings
-        else
-            exec --fail-on-error ${td-cargo} +${td-toolchain} clippy --locked --fix --allow-dirty --target ${td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} -- -D warnings
-        end
-    end
-    ''']
-
-[tasks.fix_rs_modules]
-private = true
-cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-script_runner = "@duckscript"
-script = [
-    '''
-    if is_empty ${td-target}
-        if is_empty ${td-toolchain}
-            exec --fail-on-error ${td-cargo} clippy --locked --fix --allow-dirty --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} -- -D warnings
-        else
-            exec --fail-on-error ${td-cargo} +${td-toolchain} clippy --locked --fix --allow-dirty --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} -- -D warnings
-       end
-    else
-        if is_empty ${td-toolchain}
-            exec --fail-on-error ${td-cargo} clippy --locked --fix --allow-dirty --target ${td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} -- -D warnings
-        else
-            exec --fail-on-error ${td-cargo} +${td-toolchain} clippy --locked --fix --allow-dirty --target ${td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} -- -D warnings
-        end
-    end
-    ''']
-
-[tasks.doc]
+plugin = "td-task-tracker"
+category = "09 - Repair"
+description = "Task 'fix' for Python projects"
 run_task = [
     { name = [
-        "doc_rs",
-        "doc_py"
+        "__os__fix_py"
     ] }
 ]
-
-[tasks.doc_rs]
-run_task = [
-    { name = [
-        "doc_rs_macros",
-        "doc_rs_modules"
-    ] }
-]
-
-[tasks.doc_py]
-cwd = "${PROJECT_PY_TD_SDK_FOLDER}"
-script_runner = "@duckscript"
-script = [
-    '''
-    echo "Running command: {ENV_PREFIX}mkdocs build"
-    exec --fail-on-error ${ENV_PREFIX}mkdocs build
-    ''']
-
-[tasks.doc_rs_macros]
-private = true
-cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-script_runner = "@duckscript"
-script = [
-    '''
-    if is_empty ${td-target}
-        if is_empty ${td-toolchain}
-            exec --fail-on-error ${td-cargo} doc --locked --workspace --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML}
-        else
-            exec --fail-on-error ${td-cargo} +${td-toolchain} doc --locked --workspace --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML}
-       end
-    else
-        if is_empty ${td-toolchain}
-            exec --fail-on-error ${td-cargo} doc --locked --target ${td-target} --workspace --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML}
-        else
-            exec --fail-on-error ${td-cargo} +${td-toolchain} doc --locked --target ${td-target} --workspace --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML}
-        end
-    end
-    ''']
-
-[tasks.doc_rs_modules]
-private = true
-cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-script_runner = "@duckscript"
-script = [
-    '''
-    if is_empty ${td-target}
-        if is_empty ${td-toolchain}
-            exec --fail-on-error ${td-cargo} doc --locked --workspace --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML}
-        else
-            exec --fail-on-error ${td-cargo} +${td-toolchain} doc --locked --workspace --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML}
-       end
-    else
-        if is_empty ${td-toolchain}
-            exec --fail-on-error ${td-cargo} doc --locked --target ${td-target} --workspace --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML}
-        else
-            exec --fail-on-error ${td-cargo} +${td-toolchain} doc --locked --target ${td-target} --workspace --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML}
-        end
-    end
-    ''']
-
-[tasks.chrome]
-run_task = [
-    { name = [
-        "chrome_rs",
-        "chrome_py"
-    ] }
-]
-
-[tasks.chrome_rs]
-script = "open -b com.google.Chrome ${RUST_DOCS}"
-
-[tasks.chrome_py]
-cwd = "${PROJECT_PY_TD_SDK_FOLDER}"
-script = "open -b com.google.Chrome ${PYTHON_DOCS}"
-
-[tasks.opendoc]
-run_task = [
-    { name = [
-        "opendoc_rs",
-        "opendoc_py"
-    ] }
-]
-
-[tasks.opendoc_rs]
-script = "open ${RUST_DOCS}"
-
-[tasks.opendoc_py]
-cwd = "${PROJECT_PY_TD_SDK_FOLDER}"
-script = "open ${PYTHON_DOCS}"
-
-[tasks.examples]
-command = "pwsh"
-args = ["${PROJECT_PY_TD_SDK_FOLDER}examples/persons/persons.ps1", "${td-profile}"]
 
 [tasks.package]
+plugin = "td-task-tracker"
+category = "10 - Bundle"
+description = "Generate distributable packages from source code"
 run_task = [
     { name = [
         "package_rs",
-        "package_py",
+        "package_py"
     ] }
 ]
 
 [tasks.package_rs]
-
-[tasks.package_py]
+plugin = "td-task-tracker"
+category = "10 - Bundle"
+description = "Task 'package' for Rust projects"
 run_task = [
     { name = [
-        "package_py_tabsdata",
-        "package_py_connectors",
+        "__os__package_rs"
     ] }
 ]
 
-[tasks.package_py_tabsdata]
-cwd = "${ROOT_PROJECT_TABSDATA_FOLDER}"
-script_runner = "@duckscript"
-script = [
-    '''
-    echo "Running command: python setup.py --quiet sdist --dist-dir target/python/dist --formats=tar bdist_wheel --dist-dir target/python/dist --compression stored"
-    exec --fail-on-error python setup.py --quiet sdist --dist-dir target/python/dist --formats=tar bdist_wheel --dist-dir target/python/dist --compression stored
-    ''']
-
-[tasks.package_py_connectors]
-script_runner = "@duckscript"
-script = [
-    '''
-    !include_files ./make/libraries/log.ds
-
-    connectors = glob_array ${CONNECTORS_PY_ROOT_FOLDER}/tabsdata_*
-
-    for connector in ${connectors}
-        is_connector = is_dir ${connector}
-        if ${is_connector}
-            cd ${connector}
-            debug "🚀 python setup.py --quiet sdist --dist-dir target/python/dist --formats=tar bdist_wheel --dist-dir target/python/dist --compression stored"
-            exec --fail-on-error python setup.py --quiet sdist --dist-dir target/python/dist --formats=tar bdist_wheel --dist-dir target/python/dist --compression stored
-        end
-    end
-    ''']
-
-[tasks.generate_pydoc_csv]
-private = true
-script_runner = "@duckscript"
-script = [
-    '''
-    !include_files ./make/libraries/log.ds
-
-    debug "🚀 python ${GENERATE_PYDOC_CSV}"
-    exec --fail-on-error python ${GENERATE_PYDOC_CSV}
-    ''']
-
-[tasks.copy_assets]
-private = true
-script_runner = "@duckscript"
-script = [
-    '''
-    !include_files ./make/libraries/log.ds
-
-    debug "🚀 python ${COPY_ASSETS_PY}"
-    exec --fail-on-error python ${COPY_ASSETS_PY}
-    ''']
-
-[tasks.assembly]
+[tasks.package_py]
+plugin = "td-task-tracker"
+category = "10 - Bundle"
+description = "Task 'package' for Python projects"
 run_task = [
     { name = [
-        "set_mode_assembly",
+        "__os__package_py_tabsdata",
+        "__os__package_py_connectors"
+    ] }
+]
+
+[tasks.assembly]
+plugin = "td-task-tracker"
+category = "10 - Bundle"
+description = "Generate distributable assebmlies from source code"
+dependencies = ["__os__set_mode_assembly"]
+run_task = [
+    { name = [
         "assembly_rs",
         "assembly_py"], condition = { env = { "TD_ON_GA" = "true" } } },
     { name = [
-        "set_mode_assembly",
-        "assembly_build",
-        "sourcetrack",
+        "__os__preconditions_assembly",
         "assembly_rs",
-        "assembly_py"] }
+        "assembly_py",
+        "__os__postconditions_assembly"
+    ] }
 ]
-
-[tasks.set_mode_assembly]
-private = true
-script_runner = "@duckscript"
-script = [
-    '''
-    !include_files ./make/libraries/log.ds
-
-    compile = get_env TD_COMPILE
-    compile_empty = is_empty ${compile}
-    compile_true = eq ${compile} "true"
-    on_ga = get_env TD_ON_GA
-    on_ga_true = eq ${on_ga} "true"
-    compile = set ${compile_empty} or ${compile_true}
-    if ${on_ga_true}
-        set_env TD_COMPILE "false"
-    else
-        if ${compile}
-            set_env TD_COMPILE "true"
-        else
-            set_env TD_COMPILE "false"
-        end
-    end
-    TD_COMPILE = get_env TD_COMPILE
-    debug "🔅 Using td compile: '${TD_COMPILE}'"
-    ''']
-
-[tasks.assembly_build]
-private = true
-script_runner = "@duckscript"
-script = [
-    '''
-    !include_files ./make/libraries/log.ds
-
-    compile = get_env TD_COMPILE
-    if eq ${compile} "true"
-        cm_run_task build
-    end
-    ''']
 
 [tasks.assembly_rs]
+plugin = "td-task-tracker"
+category = "10 - Bundle"
+description = "Task 'assembly' for Rust projects"
+run_task = [
+    { name = [
+        "__os__assembly_rs"
+    ] }
+]
 
 [tasks.assembly_py]
+plugin = "td-task-tracker"
+category = "10 - Bundle"
 run_task = [
     { name = [
-        "assembly_py_tabsdata",
-        "assembly_py_connectors",
+        "license",
+        "__os__generate_pydoc_csv",
+        "__os__generate_assets",
+        "__os__assembly_py_tabsdata",
+        "__os__assembly_py_connectors",
     ] }
 ]
-
-[tasks.assembly_py_tabsdata]
-dependencies = ["license", "generate_pydoc_csv", "copy_assets"]
-script_runner = "@duckscript"
-script = [
-    '''
-    !include_files ./make/libraries/log.ds
-
-    cd "${ROOT_PROJECT_TABSDATA_FOLDER}"
-
-    td_pypi_linked = get_env TD_PYTHON_LINKED_TO_REPOSITORY
-    if eq ${td_pypi_linked} ""
-        info "🔗 Unespecified link to python repository status... defaulting to true"
-        td_pypi_linked = set "true"
-    else
-        info "🔗 Specified link to python repository status: ${td_pypi_linked}"
-    end
-    if eq ${td_pypi_linked} "true"
-        set_env REQUIRE_SERVER_BINARIES "true"
-        set_env REQUIRE_THIRD_PARTY "true"
-        set_env REQUIRE_PYDOC_CSV "true"
-        set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "false"
-        set_env TD_SKIP_NON_EXISTING_ASSETS "false"
-    else
-        set_env REQUIRE_SERVER_BINARIES "false"
-        set_env REQUIRE_THIRD_PARTY "false"
-        set_env REQUIRE_PYDOC_CSV "false"
-        set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "true"
-        set_env TD_SKIP_NON_EXISTING_ASSETS "true"
-    end
-    # This must be false when using a local PyPi reopsitory.
-    set_env PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES = "true"
-
-    info "Running command: python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist"
-    exec --fail-on-error python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist
-    ''']
-
-[tasks.assembly_py_connectors]
-script_runner = "@duckscript"
-script = [
-    '''
-    !include_files ./make/libraries/log.ds
-
-    connectors = glob_array ${CONNECTORS_PY_ROOT_FOLDER}/tabsdata_*
-
-    for connector in ${connectors}
-        is_connector = is_dir ${connector}
-        if ${is_connector}
-            cd ${connector}
-
-            td_pypi_linked = get_env TD_PYTHON_LINKED_TO_REPOSITORY
-            if eq ${td_pypi_linked} ""
-                info "🔗 Unespecified link to python repository status... defaulting to true"
-                td_pypi_linked = set "true"
-            else
-                info "🔗 Specified link to python repository status: ${td_pypi_linked}"
-            end
-            if eq ${td_pypi_linked} "true"
-                set_env REQUIRE_SERVER_BINARIES "true"
-                set_env REQUIRE_THIRD_PARTY "true"
-                set_env REQUIRE_PYDOC_CSV "true"
-                set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "false"
-                set_env TD_SKIP_NON_EXISTING_ASSETS "false"
-            else
-                set_env REQUIRE_SERVER_BINARIES "false"
-                set_env REQUIRE_THIRD_PARTY "false"
-                set_env REQUIRE_PYDOC_CSV "false"
-                set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "true"
-                set_env TD_SKIP_NON_EXISTING_ASSETS "true"
-            end
-            # This must be false when using a local PyPi reopsitory.
-            set_env PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES = "true"
-
-            debug "🚀 python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist"
-            exec --fail-on-error python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist
-        end
-    end
-    ''']
 
 [tasks.wheels_4repo]
+plugin = "td-task-tracker"
+category = "10 - Bundle"
+description = "Generate wheels for installation using a repository"
 run_task = [
     { name = [
-        "wheels_4repo_setup",
+        "__os__wheels_4repo_ingest",
         "assembly",
-        "wheels_rs",
-        "wheels_py",
-        "wheels_4repo_teardown"
+        "__os__wheels_rs",
+        "__os__wheels_py",
+        "__os__wheels_4repo_digest"
     ] }
 ]
-
-[tasks.wheels_4repo_setup]
-private = true
-script_runner = "@duckscript"
-script = [
-    '''
-    !include_files ./make/libraries/log.ds
-
-    set_env TD_PYTHON_LINKED_TO_REPOSITORY "true"
-
-    set_env REQUIRE_SERVER_BINARIES "true"
-    set_env REQUIRE_THIRD_PARTY "true"
-    set_env REQUIRE_PYDOC_CSV "true"
-    set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "false"
-    set_env TD_SKIP_NON_EXISTING_ASSETS "false"
-
-    set_env TD_WHEELS_FLAVOUR "4repo"
-
-    td_ui_mode = get_env TD_UI_MODE
-    if ${td_ui_mode}
-        info "☂️ TD_UI_MODE set. Using '${td_ui_mode}' for wheel tasks..."
-    else
-        info "☂️ TD_UI_MODE not set. Using 'internal' for wheel tasks..."
-        set_env TD_UI_MODE "internal"
-    end
-    ''']
-
-[tasks.wheels_4repo_teardown]
-private = true
-script_runner = "@duckscript"
-script = [
-    '''
-    !include_files ./make/libraries/log.ds
-
-    exec python -c "from rich.console import Console; Console().clear()"
-
-    lines = array
-    array_push ${lines} "🎊 Local tabsdata wheels successfully generated!"
-    message = array_join ${lines} "\n"
-    info ${message}
-
-    lines = array
-    array_push ${lines} ""
-    array_push ${lines} ""
-    array_push ${lines} "❗ The generated wheels are intended for use via a PyPI-compliant repository."
-    array_push ${lines} "❗ Installing them directly using 'pip install <wheel>' will result in an incomplete or incorrect setup."
-    array_push ${lines} "❗ Upload them using the standard 'twine upload <wheel>'."
-    array_push ${lines} "❗ If you are using our devpi setup (http://localhost:3141/tabsdata/dev), set the environment variables below before installing."
-    array_push ${lines} "❗ These variables must be set in every terminal where you will run the tabsdata cli or the tabsdata server."
-    array_push ${lines} ""
-    array_push ${lines} "export PIP_INDEX_URL=http://localhost:3141/tabsdata/dev/"
-    array_push ${lines} "export UV_DEFAULT_INDEX=http://localhost:3141/tabsdata/dev/"
-    array_push ${lines} ""
-    array_push ${lines} "❗ Install the packages using the standard 'pip install <package>' command."
-    array_push ${lines} "❗ If you are using multiple environments, remember to install the packages in each of them separately."
-    array_push ${lines} ""
-    array_push ${lines} "❗ Before starting any TabsData instance or using the cli, you must set the following environment variables."
-    array_push ${lines} "❗ These variables must be set in every terminal where you will run the tabsdata cli or the tabsdata server."
-    array_push ${lines} ""
-    array_push ${lines} "export PIP_INDEX_URL=http://localhost:3141/tabsdata/dev/"
-    array_push ${lines} "export UV_DEFAULT_INDEX=http://localhost:3141/tabsdata/dev/"
-    array_push ${lines} "unset PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES"
-    array_push ${lines} "unset REQUIRE_SERVER_BINARIES"
-    array_push ${lines} "unset REQUIRE_THIRD_PARTY"
-    array_push ${lines} "unset REQUIRE_PYDOC_CSV"
-    array_push ${lines} "unset TD_CLI_SHOW"
-    array_push ${lines} "unset TD_IGNORE_CONNECTOR_REQUIREMENTS"
-    array_push ${lines} "unset TD_INHERIT_TABSDATA_PACKAGES"
-    array_push ${lines} "unset TD_PYTHON_LINKED_TO_REPOSITORY"
-    array_push ${lines} "unset TD_SKIP_NON_EXISTING_ASSETS"
-    array_push ${lines} ""
-    array_push ${lines} "❗ The following commands will install your local wheels on a 'td4repo' conda environment using a local devpi:"
-    array_push ${lines} "❗ (Note: The finer details are left to you. The commands below assume you generated the wheels only with the 'wheels_4repo' task.)"
-    array_push ${lines} ""
-    array_push ${lines} "conda create -y --name td4repo python=3.12; conda activate td4repo"
-    array_push ${lines} "cd ./target/wheels"
-    array_push ${lines} "../../../tabsdata-ee/docker/devpi/install.sh"
-    array_push ${lines} ""
-    message = array_join ${lines} "\n"
-    info ${message}
-    ''']
 
 [tasks.wheels_4whl]
+plugin = "td-task-tracker"
+category = "10 - Bundle"
+description = "Generate wheels for installation avoiding a repository"
 run_task = [
     { name = [
-        "wheels_4whl_setup",
+        "__os__wheels_4whl_ingest",
         "assembly",
-        "wheels_rs",
-        "wheels_py",
-        "wheels_4whl_teardown"
+        "__os__wheels_rs",
+        "__os__wheels_py",
+        "__os__wheels_4whl_digest"
     ] }
 ]
 
-[tasks.wheels_4whl_setup]
-private = true
-script_runner = "@duckscript"
-script = [
-    '''
-    !include_files ./make/libraries/log.ds
-
-    set_env TD_PYTHON_LINKED_TO_REPOSITORY "false"
-
-    set_env REQUIRE_SERVER_BINARIES "true"
-    set_env REQUIRE_THIRD_PARTY "true"
-    set_env REQUIRE_PYDOC_CSV "true"
-    set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "false"
-    set_env TD_SKIP_NON_EXISTING_ASSETS "false"
-
-    set_env TD_WHEELS_FLAVOUR "4whl"
-
-    td_ui_mode = get_env TD_UI_MODE
-    if ${td_ui_mode}
-        info "☂️ TD_UI_MODE set. Using '${td_ui_mode}' for wheel tasks..."
-    else
-        info "☂️ TD_UI_MODE not set. Using 'internal' for wheel tasks..."
-        set_env TD_UI_MODE "internal"
-    end
-    ''']
-
-[tasks.wheels_4whl_teardown]
-private = true
-script_runner = "@duckscript"
-script = [
-    '''
-    !include_files ./make/libraries/log.ds
-
-    exec python -c "from rich.console import Console; Console().clear()"
-
-    lines = array
-    array_push ${lines} "🎊 Local tabsdata wheels successfully generated!"
-    message = array_join ${lines} "\n"
-    info ${message}
-
-    lines = array
-    array_push ${lines} ""
-    array_push ${lines} ""
-    array_push ${lines} "❗ The generated wheels are not suitable for distribution via a PyPI-compliant repository."
-    array_push ${lines} "❗ Installing them through such a repository will result in an incomplete or incorrect setup."
-    array_push ${lines} ""
-    array_push ${lines} "❗ Install all wheels directly using 'pip install <wheel>' for each file."
-    array_push ${lines} "❗ If you are using multiple environments, remember to install the packages in each of them separately."
-    array_push ${lines} ""
-    array_push ${lines} "❗ Note: Dependencies between TabsData packages are not preserved in this mode; each wheel must be installed explicitly."
-    array_push ${lines} "❗ Before starting any tabsdata instance or using the cli, you must set the following environment variables."
-    array_push ${lines} "❗ These variables must be set in every terminal where you will run the tabsdata cli or the tabsdata server."
-    array_push ${lines} ""
-    array_push ${lines} "unset PIP_INDEX_URL"
-    array_push ${lines} "unset UV_DEFAULT_INDEX"
-    array_push ${lines} "export PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES=true"
-    array_push ${lines} "export REQUIRE_SERVER_BINARIES=false"
-    array_push ${lines} "export REQUIRE_THIRD_PARTY=false"
-    array_push ${lines} "export REQUIRE_PYDOC_CSV=false"
-    array_push ${lines} "export TD_CLI_SHOW=true"
-    array_push ${lines} "export TD_IGNORE_CONNECTOR_REQUIREMENTS=true"
-    array_push ${lines} "export TD_INHERIT_TABSDATA_PACKAGES=true"
-    array_push ${lines} "export TD_PYTHON_LINKED_TO_REPOSITORY=false"
-    array_push ${lines} "export TD_SKIP_NON_EXISTING_ASSETS=true"
-    array_push ${lines} ""
-    array_push ${lines} "❗ The following commands will install your local wheels on a 'td4whl' conda environment using a direct wheels:"
-    array_push ${lines} "❗ (Note: The finer details are left to you. The commands below assume you generated the wheels only with the 'wheels_4whl' task.)"
-    array_push ${lines} ""
-    array_push ${lines} "conda env remove --name td4whl --yes; conda create -y --name td4whl python=3.12; conda activate td4whl"
-    array_push ${lines} "cd ./target/wheels"
-    array_push ${lines} "tar -xvf *.tar.gz"
-    array_push ${lines} "python -m pip install --upgrade pip"
-    array_push ${lines} "pip install --upgrade packaging pipx platformdirs setuptools wheel"
-    array_push ${lines} "pip list --format=freeze | grep '^tabsdata==' | cut -d= -f1 | xargs -r pip uninstall -y"
-    array_push ${lines} "for wheel in tabsdata*.whl; do pip install \"\${wheel}[deps]\"; done"
-    array_push ${lines} "cd ../.."
-    array_push ${lines} "pip install -r requirements/requirements-drivers-all.txt"
-    message = array_join ${lines} "\n"
-    info ${message}
-    ''']
-
-[tasks.wheels_rs]
-private = true
-
-[tasks.wheels_py]
-private = true
-script_runner = "@duckscript"
-script = [
-    '''
-    !include_files ./make/libraries/log.ds
-
-    cd "${ROOT_PROJECT_TABSDATA_FOLDER}"
-
-    td_wheels_flavour = get_env TD_WHEELS_FLAVOUR
-
-    exec --fail-on-error python ./devutils/automation/tasks/makers/td-scripts/wheels.py ${td-profile} ${td_wheels_flavour}
-    ''']
-
 [tasks.install]
+plugin = "td-task-tracker"
+category = "10 - Bundle"
+description = "Install the distributable artifact into the current environment"
+dependencies = [ "uninstall", "__os__set_mode_install"]
 run_task = [
     { name = [
-        "set_mode_install",
+        "uninstall_rs",
+        "uninstall_py",
         "install_rs",
         "install_py"], condition = { env = { "TD_ON_GA" = "true" } } },
     { name = [
-        "set_mode_install",
-        "assembly",
+        "__os__preconditions_install",
         "install_rs",
-        "install_py"] }
-]
-
-[tasks.set_mode_install]
-private = true
-script_runner = "@duckscript"
-script = [
-    '''
-    !include_files ./make/libraries/log.ds
-
-    compile = get_env TD_COMPILE
-    compile_empty = is_empty ${compile}
-    compile_true = eq ${compile} "true"
-    on_ga = get_env TD_ON_GA
-    on_ga_true = eq ${on_ga} "true"
-    compile = set ${compile_empty} or ${compile_true}
-    if ${on_ga_true}
-        set_env TD_COMPILE "false"
-    else
-        if ${compile}
-            set_env TD_COMPILE "true"
-        else
-            set_env TD_COMPILE "false"
-        end
-    end
-    TD_COMPILE = get_env TD_COMPILE
-    debug "🔅 Using td compile: '${TD_COMPILE}'"
-    ''']
-
-[tasks.install_rs]
-
-[tasks.install_py]
-run_task = [
-    { name = [
-        "install_py_connectors",
-        "install_py_tabsdata",
+        "install_py",
+        "__os__postconditions_install"
     ] }
 ]
 
-[tasks.install_py_connectors]
-script_runner = "@duckscript"
-script = [
-    '''
-    !include_files ./make/libraries/log.ds
+[tasks.install_rs]
+plugin = "td-task-tracker"
+category = "10 - Bundle"
+description = "Task 'install' for Rust projects"
+run_task = [
+    { name = [
+        "__os__install_rs"
+    ] }
+]
 
-    connectors = glob_array ${CONNECTORS_PY_ROOT_FOLDER}/tabsdata_*
-
-    for connector in ${connectors}
-        is_connector = is_dir ${connector}
-        if ${is_connector}
-            cd ${connector}
-
-            td_pypi_linked = get_env TD_PYTHON_LINKED_TO_REPOSITORY
-            if eq ${td_pypi_linked} ""
-                info "🔗 Unespecified link to python repository status... defaulting to true"
-                td_pypi_linked = set "true"
-            else
-                info "🔗 Specified link to python repository status: ${td_pypi_linked}"
-            end
-            if eq ${td_pypi_linked} "true"
-                set_env REQUIRE_SERVER_BINARIES "true"
-                set_env REQUIRE_THIRD_PARTY "true"
-                set_env REQUIRE_PYDOC_CSV "true"
-                set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "false"
-                set_env TD_SKIP_NON_EXISTING_ASSETS "false"
-            else
-                set_env REQUIRE_SERVER_BINARIES "false"
-                set_env REQUIRE_THIRD_PARTY "false"
-                set_env REQUIRE_PYDOC_CSV "false"
-                set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "true"
-                set_env TD_SKIP_NON_EXISTING_ASSETS "true"
-            end
-            # This must be false when using a local PyPi reopsitory.
-            set_env PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES = "true"
-
-            connector_name = basename ${connector}
-            connector_package = replace ${connector_name} "_" "-"
-            debug "🚀 pip uninstall ${connector_package} --yes"
-            exec --fail-on-error pip uninstall ${connector_package} --yes
-            wheels = glob_array ./target/python/dist/${connector_name}*.whl
-            for wheel in ${wheels}
-                if not contains ${wheel} "musllinux"
-                    info "Running command: pip install ${wheel}"
-                    exec --fail-on-error pip install ${wheel}
-                else
-                    info "Skipping musl linux wheel: ${wheel}"
-                end
-            end
-
-            debug "🚀 python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist"
-            exec --fail-on-error python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist
-        end
-    end
-    ''']
-
-[tasks.install_py_tabsdata]
-script_runner = "@duckscript"
-script = [
-    '''
-    !include_files ./make/libraries/log.ds
-
-    cd "${ROOT_PROJECT_TABSDATA_FOLDER}"
-
-    td_pypi_linked = get_env TD_PYTHON_LINKED_TO_REPOSITORY
-    if eq ${td_pypi_linked} ""
-        info "🔗 Unespecified link to python repository status... defaulting to true"
-        td_pypi_linked = set "true"
-    else
-        info "🔗 Specified link to python repository status: ${td_pypi_linked}"
-    end
-    if eq ${td_pypi_linked} "true"
-        set_env REQUIRE_SERVER_BINARIES "true"
-        set_env REQUIRE_THIRD_PARTY "true"
-        set_env REQUIRE_PYDOC_CSV "true"
-        set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "false"
-        set_env TD_SKIP_NON_EXISTING_ASSETS "false"
-    else
-        set_env REQUIRE_SERVER_BINARIES "false"
-        set_env REQUIRE_THIRD_PARTY "false"
-        set_env REQUIRE_PYDOC_CSV "false"
-        set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "true"
-        set_env TD_SKIP_NON_EXISTING_ASSETS "true"
-    end
-    # This must be false when using a local PyPi reopsitory.
-    set_env PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES = "true"
-
-    exec --fail-on-error pip uninstall tabsdata --yes
-    wheels = glob_array ./target/python/dist/tabsdata*.whl
-    for wheel in ${wheels}
-        if not contains ${wheel} "musllinux"
-            info "Running command: pip install ${wheel}"
-            exec --fail-on-error pip install ${wheel}
-        else
-            info "Skipping musl linux wheel: ${wheel}"
-        end
-    end
-    ''']
+[tasks.install_py]
+plugin = "td-task-tracker"
+category = "10 - Bundle"
+description = "Task 'install' for Python projects"
+run_task = [
+    { name = [
+        "__os__install_py_connectors",
+        "__os__install_py_tabsdata"
+    ] }
+]
 
 [tasks.uninstall]
+plugin = "td-task-tracker"
+category = "10 - Bundle"
+description = "Uninstall the distributable artifact from the current environment"
 run_task = [
     { name = [
         "uninstall_rs",
         "uninstall_py",
     ] }
 ]
-
 [tasks.uninstall_rs]
+plugin = "td-task-tracker"
+category = "10 - Bundle"
+description = "Task 'uninstall' for Rust projects"
+run_task = [
+    { name = [
+        "__os__uninstall_rs"
+    ] }
+]
 
 [tasks.uninstall_py]
+plugin = "td-task-tracker"
+category = "10 - Bundle"
 run_task = [
     { name = [
-        "uninstall_py_tabsdata",
-        "uninstall_py_connectors",
+        "__os__uninstall_py_tabsdata",
+        "__os__uninstall_py_connectors"
     ] }
 ]
 
-[tasks.uninstall_py_tabsdata]
-cwd = "${ROOT_PROJECT_TABSDATA_FOLDER}"
-script_runner = "@duckscript"
-script = [
-    '''
-    exec --fail-on-error pip uninstall tabsdata --yes
-    exec uv cache clean tabsdata
-    exec pip cache remove tabsdata
-    exec python setup.py --quiet clean --all
-    rm -r ${ROOT_PROJECT_TABSDATA_FOLDER}/target/python/
-    ''']
-
-[tasks.uninstall_py_connectors]
-script_runner = "@duckscript"
-script = [
-    '''
-    !include_files ./make/libraries/log.ds
-
-    connectors = glob_array ${CONNECTORS_PY_ROOT_FOLDER}/tabsdata_*
-
-    for connector in ${connectors}
-        is_connector = is_dir ${connector}
-        if ${is_connector}
-            cd ${connector}
-
-            connector_name = basename ${connector}
-            connector_package = replace ${connector_name} "_" "-"
-            debug "🚀 pip uninstall ${connector_package} --yes"
-            exec --fail-on-error pip uninstall ${connector_package} --yes
-            exec uv cache clean ${connector_package}
-            exec pip cache remove ${connector_package}
-            exec python setup.py --quiet clean --all
-            rm -r ${connector}/target/python/
-        end
-    end
-    ''']
-
-[tasks.bump]
+[tasks.env]
+plugin = "td-task-tracker"
+category = "70 - Debug"
+description = "Show all environment variables available to cargo make"
 run_task = [
     { name = [
-        "bump_cargo",
-        "bump_other",
+        "__os__env"
     ] }
 ]
 
-[tasks.bump_cargo]
-private = true
+[tasks.duck]
+plugin = "td-task-tracker"
+category = "70 - Debug"
+description = "Utility task for DuckScript code explorations"
 run_task = [
     { name = [
-        "bump_cargo_modules",
-        "bump_cargo_macros",
-        "bump_cargo_expansions",
+        "__os__duck"
     ] }
 ]
-
-[tasks.bump_cargo_modules]
-private = true
-cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-script_runner = "@duckscript"
-script = [
-    '''
-    !include_files ./make/libraries/log.ds
-
-    cd "${PROJECT_TABSDATA_ROOT_FOLDER}"
-    info "🚀 cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force \"*\""
-    exec --fail-on-error cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force "*"
-    ''']
-
-[tasks.bump_cargo_macros]
-private = true
-cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-script_runner = "@duckscript"
-script = [
-    '''
-    !include_files ./make/libraries/log.ds
-
-    cd "${PROJECT_RS_TD_MACROS_FOLDER}"
-    info "🚀 cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force \"*\""
-    exec --fail-on-error cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force "*"
-    ''']
-
-[tasks.bump_cargo_expansions]
-private = true
-cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-script_runner = "@duckscript"
-script = [
-    '''
-    !include_files ./make/libraries/log.ds
-
-    cd "${PROJECT_RS_TY_EXPANSIONS_FOLDER}"
-    info "🚀 cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force \"*\""
-    exec --fail-on-error cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force "*"
-    ''']
-
-[tasks.bump_other]
-private = true
-cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-script_runner = "@duckscript"
-script = [
-    '''
-    !include_files ./make/libraries/log.ds
-
-    cd "${PROJECT_TABSDATA_ROOT_FOLDER}"
-    info "🚀 python ${BUMP_VERSION_PY} ${PROJECT_TABSDATA_ROOT_FOLDER} ${CARGO_MAKE_TASK_ARGS}"
-    exec --fail-on-error python ${BUMP_VERSION_PY} ${PROJECT_TABSDATA_ROOT_FOLDER} ${CARGO_MAKE_TASK_ARGS}
-    ''']
-
-[tasks.virtualenv]
-cwd = "${ROOT_PROJECT_TABSDATA_FOLDER}"
-script_runner = "@duckscript"
-script = [
-    '''
-    exec --fail-on-error rm -rf .venv
-    exec --fail-on-error python -m venv .venv
-    exec --fail-on-error ${VIRTUAL_PIP} install -U pip
-    exec --fail-on-error ${VIRTUAL_PIP} install -e .[test]
-
-    echo "Virtual environment created. Use 'source ${VIRTUAL_ACTIVATE}' to activate it"
-    ''']

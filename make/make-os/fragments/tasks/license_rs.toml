@@ -1,0 +1,143 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[tasks.__os__license_check_rs]
+plugin = "td-task-tracker"
+category = "06 - Compliance"
+private = true
+run_task = [
+    { name = [
+        "__os__license_check_rs_macros",
+        "__os__license_check_rs_modules",
+        "__os__license_check_rs_expansions"
+    ] }
+]
+
+[tasks.__os__license_check_rs_macros]
+plugin = "td-task-tracker"
+category = "06 - Compliance"
+private = true
+run_task = [
+    { name = [
+        # "__os__license_check_list_rs_macros",
+        "__os__license_check_deny_rs_macros"
+    ] }
+]
+
+[tasks.__os__license_check_rs_modules]
+plugin = "td-task-tracker"
+category = "06 - Compliance"
+private = true
+run_task = [
+    { name = [
+        # "__os__license_check_list_rs_modules",
+        "__os__license_check_deny_rs_modules"
+    ] }
+]
+
+[tasks.__os__license_check_rs_expansions]
+plugin = "td-task-tracker"
+category = "06 - Compliance"
+private = true
+run_task = [
+    { name = [
+        # "__os__license_check_list_rs_expansions",
+        "__os__license_check_deny_rs_expansions"
+    ] }
+]
+
+[tasks.__os__license_check_list_rs_macros]
+plugin = "td-task-tracker"
+category = "06 - Compliance"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🚀 cargo license manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --all-features"
+    exec --fail-on-error cargo license manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --all-features
+    ''']
+
+[tasks.__os__license_check_list_rs_modules]
+plugin = "td-task-tracker"
+category = "06 - Compliance"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🚀 cargo license manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --all-features"
+    exec --fail-on-error cargo license manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --all-features
+    ''']
+
+[tasks.__os__license_check_list_rs_expansions]
+plugin = "td-task-tracker"
+category = "06 - Compliance"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🚀 cargo license manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --all-features"
+    exec --fail-on-error cargo license manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --all-features
+    ''']
+
+[tasks.__os__license_check_deny_rs_macros]
+plugin = "td-task-tracker"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} deny --locked %{td-target-token} %{td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} check --config ${DENY_TOML} --hide-inclusion-graph license"
+    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} deny --locked %{td-target-token} %{td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} check --config ${DENY_TOML} --hide-inclusion-graph license
+    ''']
+
+[tasks.__os__license_check_deny_rs_modules]
+plugin = "td-task-tracker"
+category = "06 - Compliance"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} deny --locked %{td-target-token} %{td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} check --config ${DENY_TOML} --hide-inclusion-graph license"
+    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} deny --locked %{td-target-token} %{td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} check --config ${DENY_TOML} --hide-inclusion-graph license
+    ''']
+
+[tasks.__os__license_check_deny_rs_expansions]
+plugin = "td-task-tracker"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} deny --locked %{td-target-token} %{td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} check --config ${DENY_TOML} --hide-inclusion-graph license"
+    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} deny --locked %{td-target-token} %{td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} check --config ${DENY_TOML} --hide-inclusion-graph license
+    ''']
+
+[tasks.__os__license_report_rs]
+plugin = "td-task-tracker"
+category = "06 - Compliance"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    exec --fail-on-error python ${REPORT_LICENSES_RS_SCRIPT}
+    ''']

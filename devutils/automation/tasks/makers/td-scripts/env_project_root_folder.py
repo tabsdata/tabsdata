@@ -34,11 +34,11 @@ def env_root_project_tabsdata_folder():
     while True:
         if os.path.isdir(os.path.join(current_folder, ".git")):
             logging.info(f"✅ Root project tabsdata folder is: {current_folder}")
-            os.environ["ROOT_PROJECT_TABSDATA_FOLDER"] = current_folder
+            os.environ["PROJECT_TABSDATA_ROOT_FOLDER"] = current_folder
             return
         elif os.path.isfile(os.path.join(current_folder, ".root")):
             logging.info(f"✅ Root project tabsdata folder is: {current_folder}")
-            os.environ["ROOT_PROJECT_TABSDATA_FOLDER"] = current_folder
+            os.environ["PROJECT_TABSDATA_ROOT_FOLDER"] = current_folder
             return
         else:
             parent_folder = os.path.abspath(os.path.join(current_folder, os.pardir))

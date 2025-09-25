@@ -1,0 +1,31 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[tasks.__os__format_py_black]
+plugin = "td-task-tracker"
+category = "09 - Repair"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🚀 black --preview --enable-unstable-feature string_processing . --force-exclude \\.pyi$"
+    exec --fail-on-error black --preview --enable-unstable-feature string_processing . --force-exclude \\.pyi$
+    ''']
+
+[tasks.__os__format_py_isort]
+plugin = "td-task-tracker"
+category = "09 - Repair"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🚀 isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_*"
+    exec --fail-on-error isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_*
+    ''']

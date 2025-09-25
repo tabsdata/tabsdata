@@ -1,0 +1,86 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+extend = [
+    { path = "./make/make-os/fragments/plugins/tasks.toml", relative = "git" },
+
+    { path = "./make/make-os/fragments/aliases/common.toml", relative = "git" },
+
+    { path = "./make/make-os/fragments/common/conditions.toml", relative = "git" },
+    { path = "./make/make-os/fragments/common/context.toml", relative = "git" },
+    { path = "./make/make-os/fragments/common/resources.toml", relative = "git" },
+    { path = "./make/make-os/fragments/common/scenarios.toml", relative = "git" },
+    { path = "./make/make-os/fragments/common/server.toml", relative = "git" },
+    { path = "./make/make-os/fragments/common/status.toml", relative = "git" },
+    { path = "./make/make-os/fragments/common/variables.toml", relative = "git" },
+
+    { path = "./make/make-os/fragments/cross/book.toml", relative = "git" },
+
+    { path = "./make/make-os/fragments/tasks/permit_rs.toml", relative = "git" },
+    { path = "./make/make-os/fragments/tasks/permit_py.toml", relative = "git" },
+
+    { path = "./make/make-os/fragments/tasks/clean_rs.toml", relative = "git" },
+    { path = "./make/make-os/fragments/tasks/clean_py.toml", relative = "git" },
+
+    { path = "./make/make-os/fragments/cross/bump.toml", relative = "git" },
+
+    { path = "./make/make-os/fragments/tasks/lock_rs.toml", relative = "git" },
+    { path = "./make/make-os/fragments/tasks/lock_py.toml", relative = "git" },
+
+    { path = "./make/make-os/fragments/tasks/build_rs.toml", relative = "git" },
+    { path = "./make/make-os/fragments/tasks/build_py.toml", relative = "git" },
+
+    { path = "./make/make-os/fragments/tasks/test_rs.toml", relative = "git" },
+    { path = "./make/make-os/fragments/tasks/test_py.toml", relative = "git" },
+
+    { path = "./make/make-os/fragments/tasks/outdated_rs.toml", relative = "git" },
+    { path = "./make/make-os/fragments/tasks/outdated_py.toml", relative = "git" },
+
+    { path = "./make/make-os/fragments/tasks/machete_rs.toml", relative = "git" },
+    { path = "./make/make-os/fragments/tasks/machete_py.toml", relative = "git" },
+
+    { path = "./make/make-os/fragments/tasks/license_rs.toml", relative = "git" },
+    { path = "./make/make-os/fragments/tasks/license_py.toml", relative = "git" },
+
+    { path = "./make/make-os/fragments/tasks/audit_rs.toml", relative = "git" },
+    { path = "./make/make-os/fragments/tasks/audit_py.toml", relative = "git" },
+
+    { path = "./make/make-os/fragments/tasks/deny_rs.toml", relative = "git" },
+    { path = "./make/make-os/fragments/tasks/deny_py.toml", relative = "git" },
+
+    { path = "./make/make-os/fragments/tasks/pants_rs.toml", relative = "git" },
+    { path = "./make/make-os/fragments/tasks/pants_py.toml", relative = "git" },
+
+    { path = "./make/make-os/fragments/tasks/check_rs.toml", relative = "git" },
+    { path = "./make/make-os/fragments/tasks/check_py.toml", relative = "git" },
+
+    { path = "./make/make-os/fragments/tasks/clippy_rs.toml", relative = "git" },
+    { path = "./make/make-os/fragments/tasks/clippy_py.toml", relative = "git" },
+
+    { path = "./make/make-os/fragments/tasks/fmt_rs.toml", relative = "git" },
+    { path = "./make/make-os/fragments/tasks/fmt_py.toml", relative = "git" },
+
+    { path = "./make/make-os/fragments/tasks/format_rs.toml", relative = "git" },
+    { path = "./make/make-os/fragments/tasks/format_py.toml", relative = "git" },
+
+    { path = "./make/make-os/fragments/tasks/fix_rs.toml", relative = "git" },
+    { path = "./make/make-os/fragments/tasks/fix_py.toml", relative = "git" },
+
+    { path = "./make/make-os/fragments/tasks/package_rs.toml", relative = "git" },
+    { path = "./make/make-os/fragments/tasks/package_py.toml", relative = "git" },
+
+    { path = "./make/make-os/fragments/tasks/assembly_rs.toml", relative = "git" },
+    { path = "./make/make-os/fragments/tasks/assembly_py.toml", relative = "git" },
+
+    { path = "./make/make-os/fragments/tasks/wheel_rs.toml", relative = "git" },
+    { path = "./make/make-os/fragments/tasks/wheel_py.toml", relative = "git" },
+
+    { path = "./make/make-os/fragments/tasks/install_rs.toml", relative = "git" },
+    { path = "./make/make-os/fragments/tasks/install_py.toml", relative = "git" },
+
+    { path = "./make/make-os/fragments/tasks/uninstall_rs.toml", relative = "git" },
+    { path = "./make/make-os/fragments/tasks/uninstall_py.toml", relative = "git" },
+
+    { path = "./make/make-os/fragments/tools/debug.toml", relative = "git" }
+]

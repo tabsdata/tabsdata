@@ -3,10 +3,10 @@
 //
 
 use arrow::legacy::error::PolarsResult;
-use grok::{patterns, Grok, Pattern};
+use grok::{Grok, Pattern, patterns};
 use polars::datatypes::{DataType, Field};
-use pyo3::exceptions::PyValueError;
 use pyo3::PyResult;
+use pyo3::exceptions::PyValueError;
 use std::collections::BTreeMap;
 use uuid::Uuid;
 

@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use pyo3::{pyfunction, PyResult};
+use pyo3::{PyResult, pyfunction};
 use pyo3_stub_gen::derive::gen_stub_pyfunction;
 
 #[inline]

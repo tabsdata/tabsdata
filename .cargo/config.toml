@@ -6,6 +6,8 @@
 xtask = "run --locked --manifest-path ./devutils/automation/tasks/makers/td-xtask/Cargo.toml --"
 
 [build]
+jobs = 16
+
 # Uncomment if you want to enable the tokio_console feature.
 # rustflags = ["--cfg", "tokio_unstable"]
 

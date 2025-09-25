@@ -1,0 +1,68 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[tasks.stop]
+plugin = "td-task-tracker"
+category = "90 - Lifecycle"
+description = "Handle make tasks stop"
+private = false
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    os_family = os_family
+    if eq ${os_family} "windows"
+        cm_run_task stop_windows
+    else
+        if eq ${os_family} "mac"
+            cm_run_task stop_mac
+        else
+            if eq ${os_family} "linux"
+                cm_run_task stop_linux
+            end
+        end
+    end
+    ''']
+
+[tasks.stop_windows]
+plugin = "td-task-tracker"
+category = "90 - Lifecycle"
+private = true
+ignore_errors = true
+condition = { env = { MAKE_SUCCESS = "true" } }
+
+[tasks.stop_linux]
+plugin = "td-task-tracker"
+category = "90 - Lifecycle"
+private = true
+ignore_errors = true
+condition = { env = { MAKE_SUCCESS = "true" } }
+
+[tasks.stop_mac]
+plugin = "td-task-tracker"
+category = "90 - Lifecycle"
+private = true
+ignore_errors = true
+condition = { env = { MAKE_SUCCESS = "true" } }
+script = [
+    '''
+    if [[ -z "$PROJECT_TABSDATA_ROOT_FOLDER" || ! -d "$PROJECT_TABSDATA_ROOT_FOLDER" ]]; then
+        TD_ROOT="."
+    else
+        TD_ROOT="$PROJECT_TABSDATA_ROOT_FOLDER"
+    fi
+
+    if command -v viu &> /dev/null; then
+        echo
+        viu --width 32 ${TD_ROOT}/make/make-os/resources/images/ferri-happy.png
+    fi
+    if command -v lolcat &> /dev/null && command -v figlet &> /dev/null; then
+        echo
+        figlet -f ${TD_ROOT}/make/make-os/resources/fonts/3d.flf Done! | lolcat
+        echo
+    else
+        echo "✅ Ok!"
+    fi
+    ''']

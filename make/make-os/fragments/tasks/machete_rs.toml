@@ -1,0 +1,17 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[tasks.__os__machete_rs]
+plugin = "td-task-tracker"
+category = "05 - Inspect"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🚀 machete --with-metadata"
+    exec --fail-on-error cargo machete --with-metadata
+    ''']

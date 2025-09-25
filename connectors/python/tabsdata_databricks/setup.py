@@ -64,7 +64,7 @@ def root_folder() -> str:
 ROOT = root_folder()
 logger.debug(f"ROOT folder for setup is: {ROOT}")
 
-TABSDATA_PACKAGES_PREFIX = "tabsdata_"
+TABSDATA_PACKAGES_PREFIX = "tabsdata"
 
 REQUIRE_SERVER_BINARIES = "REQUIRE_SERVER_BINARIES"
 REQUIRE_THIRD_PARTY = "REQUIRE_THIRD_PARTY"
@@ -190,6 +190,11 @@ class CustomSDist(_sdist):
             "sdist",
         )
         os.makedirs(self.temp_dir, exist_ok=True)
+
+    def check_readme(self):
+        # README lives in shared assets; skip setuptools validation warning.
+        logger.debug("Skipping README validation for sdist build")
+        return
 
 
 class CustomBDistWheel(_bdist_wheel):

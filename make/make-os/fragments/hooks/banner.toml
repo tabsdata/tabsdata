@@ -1,0 +1,62 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[tasks.banner]
+plugin = "td-task-tracker"
+category = "90 - Lifecycle"
+description = "Show banner when starting make"
+private = false
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    os_family = os_family
+    if eq ${os_family} "windows"
+        cm_run_task banner_windows
+    else
+        if eq ${os_family} "mac"
+            cm_run_task banner_mac
+        else
+            if eq ${os_family} "linux"
+                cm_run_task banner_linux
+            end
+        end
+    end
+    ''']
+
+[tasks.banner_windows]
+plugin = "td-task-tracker"
+category = "90 - Lifecycle"
+private = true
+ignore_errors = true
+condition = { env = { MAKE_SUCCESS = "true" } }
+
+[tasks.banner_linux]
+plugin = "td-task-tracker"
+category = "90 - Lifecycle"
+private = true
+ignore_errors = true
+condition = { env = { MAKE_SUCCESS = "true" } }
+
+[tasks.banner_mac]
+plugin = "td-task-tracker"
+category = "90 - Lifecycle"
+private = true
+ignore_errors = true
+condition = { env = { MAKE_SUCCESS = "true" } }
+script = [
+    '''
+    if [[ -z "$PROJECT_TABSDATA_ROOT_FOLDER" || ! -d "$PROJECT_TABSDATA_ROOT_FOLDER" ]]; then
+        TD_ROOT="."
+    else
+        TD_ROOT="$PROJECT_TABSDATA_ROOT_FOLDER"
+    fi
+
+    if command -v viu &> /dev/null; then
+        echo
+        viu --width 32 ${TD_ROOT}/make/make-os/resources/images/tabsdata.png
+        echo
+    fi
+    ''']

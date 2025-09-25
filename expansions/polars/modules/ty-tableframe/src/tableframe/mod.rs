@@ -9,7 +9,7 @@ pub mod functions;
 use pyo3::prelude::PyModuleMethods;
 use pyo3::types::PyAnyMethods;
 use pyo3::types::PyModule;
-use pyo3::{pymodule, wrap_pyfunction, Bound, PyResult, Python};
+use pyo3::{Bound, PyResult, Python, pymodule, wrap_pyfunction};
 use tracing::{debug, warn};
 
 const PY_ATTRIBUTE_NAME: &str = "__name__";
@@ -39,7 +39,7 @@ fn _expressions(module: &Bound<'_, PyModule>) -> PyResult<()> {
 
     let grok_module = PyModule::import(
         py,
-        &format!("{ROOT_MODULE_PATH}.{FEATURES_MODULE_NAME}.{GROK_MODULE_NAME}"),
+        format!("{ROOT_MODULE_PATH}.{FEATURES_MODULE_NAME}.{GROK_MODULE_NAME}"),
     )?;
 
     let grok_engine_submodule = register_py_module(ENGINE_MODULE_NAME, &grok_module, py)?;
@@ -73,12 +73,12 @@ fn register_py_module<'a>(
     let parent_path = parent.name()?;
     let module_path = format!("{parent_path}.{module_name}");
 
-    if let Ok(module) = sys_modules.get_item(&module_path) {
-        if let Ok(module) = module.downcast::<PyModule>() {
-            warn!("Module {module_path:?} already exists!");
+    if let Ok(module) = sys_modules.get_item(&module_path)
+        && let Ok(module) = module.downcast::<PyModule>()
+    {
+        warn!("Module {module_path:?} already exists!");
 
-            return Ok(module.clone());
-        }
+        return Ok(module.clone());
     }
 
     debug!("Module {module_path:?} does not exist. Creating it...");

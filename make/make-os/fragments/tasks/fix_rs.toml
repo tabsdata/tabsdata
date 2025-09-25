@@ -1,0 +1,54 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[tasks.__os__fix_rs_macros]
+plugin = "td-task-tracker"
+category = "08 - Linting"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    set_env CARGO_TERM_PROGRESS_WHEN "always"
+    set_env CARGO_TERM_PROGRESS_WIDTH "256"
+
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} clippy --quiet --locked --fix --allow-dirty %{td-target-token} %{td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} -- -D warnings"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} clippy --quiet --locked --fix --allow-dirty %{td-target-token} %{td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} -- -D warnings
+    ''']
+
+[tasks.__os__fix_rs_modules]
+plugin = "td-task-tracker"
+category = "08 - Linting"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    set_env CARGO_TERM_PROGRESS_WHEN "always"
+    set_env CARGO_TERM_PROGRESS_WIDTH "256"
+
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} clippy --quiet --locked --fix --allow-dirty %{td-target-token} %{td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} -- -D warnings"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} clippy --quiet --locked --fix --allow-dirty %{td-target-token} %{td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} -- -D warnings
+    ''']
+
+[tasks.__os__fix_rs_expansions]
+plugin = "td-task-tracker"
+category = "08 - Linting"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    set_env CARGO_TERM_PROGRESS_WHEN "always"
+    set_env CARGO_TERM_PROGRESS_WIDTH "256"
+
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} clippy --quiet --locked --fix --allow-dirty %{td-target-token} %{td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} -- -D warnings"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} clippy --quiet --locked --fix --allow-dirty %{td-target-token} %{td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} -- -D warnings
+    ''']

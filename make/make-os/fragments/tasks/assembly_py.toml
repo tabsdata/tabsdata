@@ -1,0 +1,92 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[tasks.__os__assembly_py_tabsdata]
+plugin = "td-task-tracker"
+category = "10 - Bundle"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    set_env PYTHONWARNINGS ignore
+
+    cd "${PROJECT_TABSDATA_ROOT_FOLDER}"
+
+    td_pypi_linked = get_env TD_PYTHON_LINKED_TO_REPOSITORY
+    if eq ${td_pypi_linked} ""
+        info "🔗 Unespecified link to python repository status... defaulting to true"
+        td_pypi_linked = set "true"
+    else
+        info "🔗 Specified link to python repository status: ${td_pypi_linked}"
+    end
+    if eq ${td_pypi_linked} "true"
+        set_env REQUIRE_SERVER_BINARIES "true"
+        set_env REQUIRE_THIRD_PARTY "true"
+        set_env REQUIRE_PYDOC_CSV "true"
+        set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "false"
+        set_env TD_SKIP_NON_EXISTING_ASSETS "false"
+    else
+        set_env REQUIRE_SERVER_BINARIES "false"
+        set_env REQUIRE_THIRD_PARTY "false"
+        set_env REQUIRE_PYDOC_CSV "false"
+        set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "true"
+        set_env TD_SKIP_NON_EXISTING_ASSETS "true"
+    end
+    # This must be false when using a local PyPi reopsitory.
+    set_env PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES = "true"
+
+    debug "🚀 python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist"
+    exec --fail-on-error python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist
+    ''']
+
+[tasks.__os__assembly_py_connectors]
+plugin = "td-task-tracker"
+category = "10 - Bundle"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    set_env PYTHONWARNINGS ignore
+
+    cd "${PROJECT_TABSDATA_ROOT_FOLDER}"
+
+    connectors = glob_array ${OS_CONNECTORS_PY_ROOT_FOLDER}/tabsdata_*
+
+    for connector in ${connectors}
+        is_connector = is_dir ${connector}
+        if ${is_connector}
+            cd ${connector}
+
+            td_pypi_linked = get_env TD_PYTHON_LINKED_TO_REPOSITORY
+            if eq ${td_pypi_linked} ""
+                info "🔗 Unespecified link to python repository status... defaulting to true"
+                td_pypi_linked = set "true"
+            else
+                info "🔗 Specified link to python repository status: ${td_pypi_linked}"
+            end
+            if eq ${td_pypi_linked} "true"
+                set_env REQUIRE_SERVER_BINARIES "true"
+                set_env REQUIRE_THIRD_PARTY "true"
+                set_env REQUIRE_PYDOC_CSV "true"
+                set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "false"
+                set_env TD_SKIP_NON_EXISTING_ASSETS "false"
+            else
+                set_env REQUIRE_SERVER_BINARIES "false"
+                set_env REQUIRE_THIRD_PARTY "false"
+                set_env REQUIRE_PYDOC_CSV "false"
+                set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "true"
+                set_env TD_SKIP_NON_EXISTING_ASSETS "true"
+            end
+            # This must be false when using a local PyPi reopsitory.
+            set_env PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES = "true"
+
+            debug "🚀 python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist"
+            exec --fail-on-error python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist
+        end
+    end
+    ''']

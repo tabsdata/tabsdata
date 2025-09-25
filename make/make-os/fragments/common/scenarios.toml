@@ -1,0 +1,289 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[tasks.__os__setup_test_rs]
+plugin = "td-task-tracker"
+category = "04 - Test"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    arguments = split ${CARGO_MAKE_TASK_ARGS} ;
+    for argument in ${arguments}
+        if eq ${argument} "--fail-fast-rs"
+            info "⌛️ Fail-Fast enabled. Groups of Rust tests will execute until some group has failures."
+            set_env TD_FAIL_FAST_RS true
+        else
+            set_env TD_FAIL_FAST_RS false
+        end
+    end
+    set_env TD_TESTS_CODE_RS 0
+    ''']
+
+[tasks.__os__cleanup_test_rs]
+plugin = "td-task-tracker"
+category = "04 - Test"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    exit_code = get_env TD_TESTS_CODE_RS
+    if not eq ${exit_code} "0"
+        info "⌛️ Marking rs tests run as failed: '${exit_code}'"
+        code = exit ${exit_code}
+    else
+        info "⌛️ Marking rs tests run as successful: '${exit_code}'"
+        exit 0
+    end
+    ''']
+
+[tasks.__os__setup_test_py]
+plugin = "td-task-tracker"
+category = "04 - Test"
+private = true
+dependencies = ["__os__set_mode_test_py", "license"]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🔷 _____ Generating pydoc csv..."
+    cm_run_task __os__generate_pydoc_csv
+
+    debug "🔷 _____ Copying assets..."
+    cm_run_task __os__generate_assets
+
+    compile = get_env TD_COMPILE
+    if eq ${compile} "true"
+        debug "🔷 _____ Building..."
+        cm_run_task build
+    else
+        debug "🔷 _____ Not building."
+    end
+
+    debug "🔷 _____ Generating python binaries..."
+    cm_run_task __os__setup_context_test_py
+
+    no-server = set false
+    arguments = split ${CARGO_MAKE_TASK_ARGS} ;
+    for argument in ${arguments}
+        if eq ${argument} "--no-server"
+            no-server = set true
+        end
+    end
+
+    if ${no-server}
+        info "🚜 Starting tabsdata server skipped."
+    else
+        debug "🔷 _____ Starting tabsdata server (pytest)..."
+
+        cm_run_task __os__stop_pytest_tabsdata_server
+        cm_run_task __os__drop_pytest_tabsdata_server
+        cm_run_task __os__start_pytest_tabsdata_server
+        cm_run_task __os__status_pytest_tabsdata_server
+    end
+    ''']
+
+[tasks.__os__cleanup_test_py]
+plugin = "td-task-tracker"
+category = "04 - Test"
+private = true
+dependencies = ["__os__set_mode_test_py"]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    no-server = set false
+    arguments = split ${CARGO_MAKE_TASK_ARGS} ;
+    for argument in ${arguments}
+        if eq ${argument} "--no-server"
+            no-server = set true
+        end
+    end
+
+    if ${no-server}
+        info "🚜 Stopping tabsdata server skipped."
+    else
+        debug "🔷 _____ Stopping tabsdata server (pytest)..."
+
+        cm_run_task __os__stop_pytest_tabsdata_server
+    end
+    ''']
+
+[tasks.__os__wheels_4repo_ingest]
+plugin = "td-task-tracker"
+category = "10 - Bundle"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    set_env TD_PYTHON_LINKED_TO_REPOSITORY "true"
+
+    set_env REQUIRE_SERVER_BINARIES "true"
+    set_env REQUIRE_THIRD_PARTY "true"
+    set_env REQUIRE_PYDOC_CSV "true"
+    set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "false"
+    set_env TD_SKIP_NON_EXISTING_ASSETS "false"
+
+    set_env TD_WHEELS_FLAVOUR "4repo"
+
+    td_ui_mode = get_env TD_UI_MODE
+    if ${td_ui_mode}
+        info "☂️ TD_UI_MODE set. Using '${td_ui_mode}' for wheel tasks..."
+    else
+        info "☂️ TD_UI_MODE not set. Using 'internal' for wheel tasks..."
+        set_env TD_UI_MODE "internal"
+    end
+    ''']
+
+[tasks.__os__wheels_4repo_digest]
+plugin = "td-task-tracker"
+category = "10 - Bundle"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    exec python -c "from rich.console import Console; Console().clear()"
+    exec --fail-on-error python -c "import sys; sys.stdout.write('\\033[H\\n'); sys.stdout.flush()"
+
+    lines = array
+    array_push ${lines} "🎊 Local tabsdata wheels successfully generated!"
+    message = array_join ${lines} "\n"
+    info ${message}
+
+    lines = array
+    array_push ${lines} ""
+    array_push ${lines} ""
+    array_push ${lines} "❗ The generated wheels are intended for use via a PyPI-compliant repository."
+    array_push ${lines} "❗ Installing them directly using 'pip install <wheel>' will result in an incomplete or incorrect setup."
+    array_push ${lines} "❗ Upload them using the standard 'twine upload <wheel>'."
+    array_push ${lines} "❗ If you are using our devpi setup (http://localhost:3141/tabsdata/dev), set the environment variables below before installing."
+    array_push ${lines} "❗ These variables must be set in every terminal where you will run the tabsdata cli or the tabsdata server."
+    array_push ${lines} ""
+    array_push ${lines} "export PIP_INDEX_URL=http://localhost:3141/tabsdata/dev/"
+    array_push ${lines} "export UV_DEFAULT_INDEX=http://localhost:3141/tabsdata/dev/"
+    array_push ${lines} ""
+    array_push ${lines} "❗ Install the packages using the standard 'pip install <package>' command."
+    array_push ${lines} "❗ If you are using multiple environments, remember to install the packages in each of them separately."
+    array_push ${lines} ""
+    array_push ${lines} "❗ Before starting any tabsdata instance or using the cli, you must set the following environment variables."
+    array_push ${lines} "❗ These variables must be set in every terminal where you will run the tabsdata cli or the tabsdata server."
+    array_push ${lines} ""
+    array_push ${lines} "export PIP_INDEX_URL=http://localhost:3141/tabsdata/dev/"
+    array_push ${lines} "export UV_DEFAULT_INDEX=http://localhost:3141/tabsdata/dev/"
+    array_push ${lines} "unset PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES"
+    array_push ${lines} "unset REQUIRE_SERVER_BINARIES"
+    array_push ${lines} "unset REQUIRE_THIRD_PARTY"
+    array_push ${lines} "unset REQUIRE_PYDOC_CSV"
+    array_push ${lines} "unset TD_CLI_SHOW"
+    array_push ${lines} "unset TD_IGNORE_CONNECTOR_REQUIREMENTS"
+    array_push ${lines} "unset TD_INHERIT_TABSDATA_PACKAGES"
+    array_push ${lines} "unset TD_PYTHON_LINKED_TO_REPOSITORY"
+    array_push ${lines} "unset TD_SKIP_NON_EXISTING_ASSETS"
+    array_push ${lines} ""
+    array_push ${lines} "❗ The following commands will install your local wheels on a 'td4repo' conda environment using a local devpi:"
+    array_push ${lines} "❗ (Note: The finer details are left to you. The commands below assume you generated the wheels only with the 'wheels_4repo' task.)"
+    array_push ${lines} ""
+    array_push ${lines} "conda env remove --name td4repo --yes; conda create -y --name td4repo python=3.12; conda activate td4repo"
+    array_push ${lines} "python -m pip install --upgrade pip"
+    array_push ${lines} "cd ./target/wheels"
+    array_push ${lines} "../../../tabsdata-ee/docker/devpi/install.sh"
+    array_push ${lines} ""
+    message = array_join ${lines} "\n"
+    info ${message}
+    ''']
+
+[tasks.__os__wheels_4whl_ingest]
+plugin = "td-task-tracker"
+category = "10 - Bundle"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    set_env TD_PYTHON_LINKED_TO_REPOSITORY "false"
+
+    set_env REQUIRE_SERVER_BINARIES "true"
+    set_env REQUIRE_THIRD_PARTY "true"
+    set_env REQUIRE_PYDOC_CSV "true"
+    set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "false"
+    set_env TD_SKIP_NON_EXISTING_ASSETS "false"
+
+    set_env TD_WHEELS_FLAVOUR "4whl"
+
+    td_ui_mode = get_env TD_UI_MODE
+    if ${td_ui_mode}
+        info "☂️ TD_UI_MODE set. Using '${td_ui_mode}' for wheel tasks..."
+    else
+        info "☂️ TD_UI_MODE not set. Using 'internal' for wheel tasks..."
+        set_env TD_UI_MODE "internal"
+    end
+    ''']
+
+[tasks.__os__wheels_4whl_digest]
+plugin = "td-task-tracker"
+category = "10 - Bundle"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    exec python -c "from rich.console import Console; Console().clear()"
+
+    lines = array
+    array_push ${lines} "🎊 Local tabsdata wheels successfully generated!"
+    message = array_join ${lines} "\n"
+    info ${message}
+
+    lines = array
+    array_push ${lines} ""
+    array_push ${lines} ""
+    array_push ${lines} "❗ The generated wheels are not suitable for distribution via a PyPI-compliant repository."
+    array_push ${lines} "❗ Installing them through such a repository will result in an incomplete or incorrect setup."
+    array_push ${lines} ""
+    array_push ${lines} "❗ Install all wheels directly using 'pip install <wheel>' for each file."
+    array_push ${lines} "❗ If you are using multiple environments, remember to install the packages in each of them separately."
+    array_push ${lines} ""
+    array_push ${lines} "❗ Note: Dependencies between tabsdata packages are not preserved in this mode; each wheel must be installed explicitly."
+    array_push ${lines} "❗ Before starting any tabsdata instance or using the cli, you must set the following environment variables."
+    array_push ${lines} "❗ These variables must be set in every terminal where you will run the tabsdata cli or the tabsdata server."
+    array_push ${lines} ""
+    array_push ${lines} "unset PIP_INDEX_URL"
+    array_push ${lines} "unset UV_DEFAULT_INDEX"
+    array_push ${lines} "export PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES=true"
+    array_push ${lines} "export REQUIRE_SERVER_BINARIES=false"
+    array_push ${lines} "export REQUIRE_THIRD_PARTY=false"
+    array_push ${lines} "export REQUIRE_PYDOC_CSV=false"
+    array_push ${lines} "export TD_CLI_SHOW=true"
+    array_push ${lines} "export TD_IGNORE_CONNECTOR_REQUIREMENTS=true"
+    array_push ${lines} "export TD_INHERIT_TABSDATA_PACKAGES=true"
+    array_push ${lines} "export TD_PYTHON_LINKED_TO_REPOSITORY=false"
+    array_push ${lines} "export TD_SKIP_NON_EXISTING_ASSETS=true"
+    array_push ${lines} ""
+    array_push ${lines} "❗ The following commands will install your local wheels on a 'td4whl' conda environment using a direct wheels:"
+    array_push ${lines} "❗ (Note: The finer details are left to you. The commands below assume you generated the wheels only with the 'wheels_4whl' task.)"
+    array_push ${lines} ""
+    array_push ${lines} "conda env remove --name td4whl --yes; conda create -y --name td4whl python=3.12; conda activate td4whl"
+    array_push ${lines} "cd ./target/wheels"
+    array_push ${lines} "tar -xvf *.tar.gz"
+    array_push ${lines} "python -m pip install --upgrade pip"
+    array_push ${lines} "pip install --upgrade packaging pipx platformdirs setuptools wheel"
+    array_push ${lines} "pip list --format=freeze | grep '^tabsdata==' | cut -d= -f1 | xargs -r pip uninstall -y"
+    array_push ${lines} "for wheel in tabsdata*.whl; do pip install \"\${wheel}[deps]\"; done"
+    array_push ${lines} "cd ../.."
+    array_push ${lines} "pip install -r requirements/requirements-drivers-all.txt"
+    message = array_join ${lines} "\n"
+    info ${message}
+    ''']

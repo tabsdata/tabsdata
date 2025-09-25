@@ -1,0 +1,113 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[tasks.__os__set_mode_test_py]
+plugin = "td-task-tracker"
+category = "02 - Tidy"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    if is_empty ${verbose}
+        set_env TD_VERBOSE "false"
+    end
+    debug "🔅 Using td verbose: '${TD_VERBOSE}'"
+    compile = get_env TD_COMPILE
+    compile_empty = is_empty ${compile}
+    compile_true = eq ${compile} "true"
+    on_ga = get_env TD_ON_GA
+    on_ga_true = eq ${on_ga} "true"
+    compile = set ${compile_empty} or ${compile_true}
+    if ${on_ga_true}
+        set_env TD_COMPILE "false"
+    else
+        if ${compile}
+            set_env TD_COMPILE "true"
+        else
+            set_env TD_COMPILE "false"
+        end
+    end
+    TD_COMPILE = get_env TD_COMPILE
+    debug "🔅 Using td compile: '${TD_COMPILE}'"
+    ''']
+
+[tasks.__os__set_mode_license]
+plugin = "td-task-tracker"
+category = "02 - Tidy"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    license = get_env TD_LICENSE
+    license_empty = is_empty ${license}
+    license_true = eq ${license} "true"
+    license = set ${license_empty} or ${license_true}
+    if ${license}
+        set_env TD_LICENSE "true"
+    else
+        set_env TD_LICENSE "false"
+    end
+    TD_LICENSE = get_env TD_LICENSE
+    debug "🔅 Using td license: '${TD_LICENSE}'"
+    ''']
+
+[tasks.__os__set_mode_assembly]
+plugin = "td-task-tracker"
+category = "02 - Tidy"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    compile = get_env TD_COMPILE
+    compile_empty = is_empty ${compile}
+    compile_true = eq ${compile} "true"
+    on_ga = get_env TD_ON_GA
+    on_ga_true = eq ${on_ga} "true"
+    compile = set ${compile_empty} or ${compile_true}
+    if ${on_ga_true}
+        set_env TD_COMPILE "false"
+    else
+        if ${compile}
+            set_env TD_COMPILE "true"
+        else
+            set_env TD_COMPILE "false"
+        end
+    end
+    TD_COMPILE = get_env TD_COMPILE
+    debug "🔅 Using td compile: '${TD_COMPILE}'"
+    ''']
+
+[tasks.__os__set_mode_install]
+plugin = "td-task-tracker"
+category = "02 - Tidy"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    compile = get_env TD_COMPILE
+    compile_empty = is_empty ${compile}
+    compile_true = eq ${compile} "true"
+    on_ga = get_env TD_ON_GA
+    on_ga_true = eq ${on_ga} "true"
+    compile = set ${compile_empty} or ${compile_true}
+    if ${on_ga_true}
+        set_env TD_COMPILE "false"
+    else
+        if ${compile}
+            set_env TD_COMPILE "true"
+        else
+            set_env TD_COMPILE "false"
+        end
+    end
+    TD_COMPILE = get_env TD_COMPILE
+    debug "🔅 Using td compile: '${TD_COMPILE}'"
+    ''']

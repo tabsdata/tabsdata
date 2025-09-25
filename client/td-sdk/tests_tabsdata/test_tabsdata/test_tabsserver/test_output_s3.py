@@ -293,6 +293,7 @@ def test_output_s3_parquet_with_execution_id(tmp_path, s3_client, s3_config):
             tabsserver_output_folder,
             environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
             logs_folder=logs_folder,
+            temp_cwd=True,
         )
         assert result == 0
         assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
@@ -359,6 +360,7 @@ def test_output_s3_parquet_with_export_timestamp(tmp_path, s3_client, s3_config)
             tabsserver_output_folder,
             environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
             logs_folder=logs_folder,
+            temp_cwd=True,
         )
         assert result == 0
         assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
@@ -436,6 +438,7 @@ def test_output_s3_parquet_with_trigger_timestamp(tmp_path, s3_client, s3_config
             tabsserver_output_folder,
             environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
             logs_folder=logs_folder,
+            temp_cwd=True,
         )
         assert result == 0
         assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
@@ -514,6 +517,7 @@ def test_output_s3_parquet_with_scheduler_timestamp(tmp_path, s3_client, s3_conf
             tabsserver_output_folder,
             environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
             logs_folder=logs_folder,
+            temp_cwd=True,
         )
         assert result == 0
         assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
@@ -595,6 +599,7 @@ def test_output_s3_csv(tmp_path, s3_client, s3_config):
             tabsserver_output_folder,
             environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
             logs_folder=logs_folder,
+            temp_cwd=True,
         )
         assert result == 0
         assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
@@ -659,6 +664,7 @@ def test_output_s3_ndjson(tmp_path, s3_client, s3_config):
             tabsserver_output_folder,
             environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
             logs_folder=logs_folder,
+            temp_cwd=True,
         )
         assert result == 0
         assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
@@ -723,6 +729,7 @@ def test_output_s3_frame_list(tmp_path, s3_client, s3_config):
             tabsserver_output_folder,
             environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
             logs_folder=logs_folder,
+            temp_cwd=True,
         )
         assert result == 0
         assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))

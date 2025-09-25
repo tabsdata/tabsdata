@@ -1,0 +1,67 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[tasks.__os__clean_rs_macros]
+plugin = "td-task-tracker"
+category = "01 - Clean"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} clean --locked %{td-target-token} %{td-target} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML}"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} clean --locked %{td-target-token} %{td-target} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML}
+    ''']
+
+[tasks.__os__clean_rs_modules]
+plugin = "td-task-tracker"
+category = "01 - Clean"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} clean --locked %{td-target-token} %{td-target} --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML}"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} clean --locked %{td-target-token} %{td-target} --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML}
+    ''']
+
+[tasks.__os__clean_rs_expansions]
+plugin = "td-task-tracker"
+category = "01 - Clean"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} clean --locked --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML}"
+    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} clean --locked --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML}
+
+    cd "${PROJECT_RS_TY_EXPANSIONS_FOLDER}/modules"
+    extensions = array .so .dll .dylib .pyd
+    for extension in ${extensions}
+        debug "Cleaning extension: ${extension}"
+        glob_files = glob_array ./**/*${extension}*
+        for file in ${glob_files}
+            debug "Cleaning file: ${file}"
+            rm "${file}"
+            output = exec python -c "import os, sys; os.unlink(sys.argv[1])" ${file}
+        end
+    end
+    ''']
+
+[tasks.__os__clean_rs_all]
+plugin = "td-task-tracker"
+category = "01 - Clean"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🚀 python ${CLEAN_SCRIPT} ${connector} py"
+    exec --fail-on-error python ${CLEAN_SCRIPT} ${PROJECT_TABSDATA_ROOT_FOLDER} rs
+    ''']

@@ -1,0 +1,15 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[tasks.__os__package_rs]
+plugin = "td-task-tracker"
+category = "10 - Bundle"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    warn "⏳ Nothing to do."
+    ''']

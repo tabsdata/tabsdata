@@ -1,0 +1,19 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[tasks.default]
+plugin = "td-task-tracker"
+alias = "make"
+
+[tasks.book]
+plugin = "td-task-tracker"
+alias = "book_dguide"
+
+[tasks.dguide]
+plugin = "td-task-tracker"
+alias = "book_dguide"
+
+[tasks.docs]
+plugin = "td-task-tracker"
+alias = "book_dguide"
