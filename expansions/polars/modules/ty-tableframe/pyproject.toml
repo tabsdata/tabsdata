@@ -45,6 +45,7 @@ profile = "black"
 skip_glob = ["*.pyi"]
 known_first_party = [
     "tabsdata",
+    "tabsdata_agent",
     "tabsdata_databricks",
     "tabsdata_mongodb",
     "tabsdata_mssql",

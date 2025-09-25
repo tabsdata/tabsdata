@@ -25,6 +25,7 @@ logger.setLevel(logging.INFO)
 
 # noinspection PyBroadException
 try:
+    # noinspection PyUnresolvedReferences
     from setuptools.command.build_py import _IncludePackageDataAbuse
 
     # noinspection PyProtectedMember
