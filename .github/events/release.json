@@ -1,6 +1,6 @@
 {
   "inputs": {
-    "td_product": "standard",
+    "td_product": "open source",
     "runner_mode": "release",
     "runner_action": "build",
     "dump_server": "false",

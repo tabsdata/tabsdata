@@ -121,6 +121,7 @@ normalized_licenses = {
     "Unicode-3.0": "Unicode License Version 3.0",                                                                                                                                              # noqa: E231,E241,E501
     "UNKNOWN": "The Unknown License",                                                                                                                                                          # noqa: E231,E241,E501
     "UNLICENSED": "The Unlicense",                                                                                                                                                             # noqa: E231,E241,E501
+    "Unlicense": "The Unlicense",                                                                                                                                                              # noqa: E231,E241,E501
     "Zlib": "Zlib License",                                                                                                                                                                    # noqa: E231,E241,E501
 }
 # fmt: on

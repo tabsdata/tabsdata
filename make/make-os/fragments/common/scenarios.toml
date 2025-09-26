@@ -154,7 +154,6 @@ script = [
     !include_files ./make/make-os/libraries/log.ds
 
     exec python -c "from rich.console import Console; Console().clear()"
-    exec --fail-on-error python -c "import sys; sys.stdout.write('\\033[H\\n'); sys.stdout.flush()"
 
     lines = array
     array_push ${lines} "🎊 Local tabsdata wheels successfully generated!"

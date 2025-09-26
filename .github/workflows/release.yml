@@ -17,7 +17,7 @@ defaults:
     working-directory: .
 
 run-name: >
-  ${{ github.event_name == 'workflow_dispatch' && format('Release Workflow (Standard) - ({0})', inputs.runner_action) || github.event_name == 'schedule' && 'Release Workflow (Standard) - (Weekly)' || '' }}
+  ${{ github.event_name == 'workflow_dispatch' && format('Release Workflow (Open Source) - ({0})', inputs.runner_action) || github.event_name == 'schedule' && 'Release Workflow (Open Source) - (Weekly)' || '' }}
 
 on:
   workflow_dispatch:
@@ -252,7 +252,7 @@ jobs:
     with:
       job_timeout: ${{ fromJson(needs.cap-job.outputs.job_timeout) }}
       dump_server: ${{ inputs.dump_server }}
-      td_product: "standard"
+      td_product: "open source"
       runner_mode: "release"
       runner_action: ${{ inputs.runner_action || 'build' }}
       run_on_linux_x86_64: ${{ needs.describe-job.outputs.run_on_linux_x86_64 }}

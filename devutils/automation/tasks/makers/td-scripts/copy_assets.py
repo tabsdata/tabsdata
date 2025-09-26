@@ -109,7 +109,7 @@ def copy_assets():  # noqa: C901
         ignore=shutil.ignore_patterns(".gitignore"),
     )
 
-    if os.path.exists(tabsdata_agent_assets_folder):
+    if os.path.exists(tabsdata_agent_variant_assets_folder):
         logger.debug(
             f"✏️ 2 Copying contents of {tabsdata_agent_variant_assets_folder} to"
             f" {tabsdata_agent_assets_folder}"
@@ -185,7 +185,7 @@ def copy_assets():  # noqa: C901
             follow_symlinks=True,
         )
 
-    if os.path.exists(tabsdata_agent_assets_folder):
+    if os.path.exists(tabsdata_agent_variant_assets_folder):
         tabsdata_agent_pydoc_csv_source = Path(
             os.path.join(
                 project_tabsdata_agent_root_folder,

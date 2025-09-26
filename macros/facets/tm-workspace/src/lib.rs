@@ -22,7 +22,7 @@ const LOG_CRATE_TM_WORKSPACE: Option<&str> = option_env!("LOG_CRATE_TM_WORKSPACE
 #[proc_macro]
 pub fn workspace_root(_: TokenStream) -> TokenStream {
     let id = random_string(8);
-    let log_crate_tm_workspace = LOG_CRATE_TM_WORKSPACE.unwrap_or("true") == "true";
+    let log_crate_tm_workspace = LOG_CRATE_TM_WORKSPACE.unwrap_or("false") == "true";
 
     if let Some(workspace_root) = get_workspace_root(id.clone(), log_crate_tm_workspace) {
         if log_crate_tm_workspace {

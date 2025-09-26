@@ -82,6 +82,10 @@ script = [
     end
     TD_COMPILE = get_env TD_COMPILE
     debug "🔅 Using td compile: '${TD_COMPILE}'"
+
+    set_env TD_SYMLINK_POLARS_LIBS "false"
+    TD_SYMLINK_POLARS_LIBS = get_env TD_SYMLINK_POLARS_LIBS
+    debug "🔅 Using td symlink: '${TD_SYMLINK_POLARS_LIBS}'"
     ''']
 
 [tasks.__os__set_mode_install]
