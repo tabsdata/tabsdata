@@ -1,9 +1,9 @@
 #
-# Copyright 2024 Tabs Data Inc.
+# Copyright 2025 Tabs Data Inc.
 #
 
 [build-system]
-requires = ["psutil>=7.0", "setuptools>=64.0"]
+requires = ["psutil>=7.0", "setuptools==78.0.2"]
 build-backend = "setuptools.build_meta"
 
 [tool.flake8]
@@ -49,6 +49,8 @@ known_first_party = [
     "tests_ty_tableframe",
     "ty_tableframe",
 ]
+known_third_party = ["docker"]
+skip = ["docker/"]
 
 [tool.licensecheck]
 using = "requirements:requirements.txt"

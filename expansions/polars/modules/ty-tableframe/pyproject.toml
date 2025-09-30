@@ -64,3 +64,8 @@ known_first_party = [
     "tests_ty_tableframe",
     "ty_tableframe",
 ]
+known_third_party = ["docker"]
+skip = ["docker/"]
+
+[tool.licensecheck]
+using = "requirements:requirements.txt"
