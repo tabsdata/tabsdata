@@ -6,11 +6,13 @@
 
 use crate::component::describer::DescriberError;
 use crate::component::runner::RunnerError::*;
+use crate::component::runtime::{RuntimeContextProvider, RuntimeContextVariables};
 use crate::component::supplier::SupplierError;
 use crate::component::tracker::{TrackerError, UNKNOWN_WORKER_PID};
 use crate::launch::worker::Worker;
 use crate::resource::instance::InstanceError;
 use crate::resource::state::StateError;
+use crate::services::supervisor::RuntimeConfig;
 use http::StatusCode;
 use http::header::{InvalidHeaderName, InvalidHeaderValue};
 use reqwest::Error;
@@ -25,6 +27,7 @@ use td_common::server::WorkerName::FUNCTION;
 use td_common::server::{
     ResponseMessagePayloadBuilderError, WORKER_ERR_FILE, WORKER_OUT_FILE, WorkerClass,
 };
+use td_error::TdError;
 use td_python::venv::{
     ENV_CONDA_PREFIX, ENV_PYENV_VERSION, ENV_PYTHONHOME, ENV_PYTHONPATH, ENV_UV_VENV,
     ENV_VIRTUAL_ENV, ENV_VIRTUAL_ENV_PROMPT,
@@ -102,6 +105,30 @@ impl WorkerRunner for TabsDataWorkerRunner {
             args.extend(worker.describer().markers().iter().cloned())
         }
 
+        let mut envs: Vec<(String, String)> = obtain_env_vars(worker.describer().name());
+
+        let runtime_context = match worker.describer().runtime() {
+            None => None,
+            Some(_runtime @ RuntimeConfig::Java { .. }) => {
+                return Err(UnsupportedRuntime {
+                    runtime: "Java".to_string(),
+                });
+            }
+            Some(_runtime @ RuntimeConfig::Node { .. }) => {
+                return Err(UnsupportedRuntime {
+                    runtime: "Node".to_string(),
+                });
+            }
+            Some(runtime @ RuntimeConfig::Python { .. }) => Some(runtime.context(
+                worker.describer().instance().clone(),
+                worker.describer().config().clone(),
+            )?),
+        };
+
+        if let Some(context) = runtime_context.as_ref() {
+            envs = context.variables(envs);
+        }
+
         let mut command = Command::new(worker.describer().program());
 
         #[cfg(windows)]
@@ -116,7 +143,8 @@ impl WorkerRunner for TabsDataWorkerRunner {
 
         command
             .current_dir(worker.describer().work())
-            .envs(obtain_env_vars(worker.describer().name()))
+            .env_clear()
+            .envs(envs)
             .args(args)
             .stdin(Stdio::piped())
             .stderr(err);
@@ -313,6 +341,10 @@ pub enum RunnerError {
     MissingStdIn,
     #[error("Unexpected error processing supervisor states: {0}")]
     GetSetStateError(#[from] StateError),
+    #[error("The provided runtime is not supported: {runtime}")]
+    UnsupportedRuntime { runtime: String },
+    #[error("Error generating the runtime environment: {0}")]
+    RuntimeEnvironmentCreationError(#[from] TdError),
 }
 
 pub fn check_show_env() -> bool {

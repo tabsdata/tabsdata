@@ -84,4 +84,14 @@ else
     log_severity = map_get ${severities} "info"
 end
 
+td_root = get_env PROJECT_TABSDATA_ROOT_FOLDER
+debug "📐 Root from environment: '${td_root}'"
+
+td_width_output = exec python ${td_root}/make/make-os/libraries/term.py
+td_width = trim ${td_width_output.stdout}
+debug "📐 Width from python: '${td_width}'"
+
+set_env CARGO_TERM_PROGRESS_WHEN "always"
+set_env CARGO_TERM_PROGRESS_WIDTH "${td_width}"
+
 debug "📌 Duckscript 'log' library loaded with '${log_level}' level & '${log_severity}' severity"

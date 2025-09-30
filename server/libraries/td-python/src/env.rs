@@ -57,45 +57,29 @@ pub fn env() -> String {
         .collect()
 }
 
-pub fn join(paths: Vec<String>, env: String) -> Result<OsString, TdError> {
-    match env::join_paths(paths) {
-        Ok(new_env_path) => {
-            // Setting env vars is not thread-safe; use with care.
-            unsafe {
-                env::set_var(env, &new_env_path);
-            }
-            Ok(new_env_path)
-        }
-        Err(err) => Err(WrongEnvPath(err))?,
-    }
-}
-
 pub fn prepend_in_path(path: &str, env: Option<String>) -> Result<OsString, TdError> {
     if path.trim().is_empty() {
         return Ok(env::var_os(env_path()).unwrap_or_default());
     }
-    let (env_path_name, mut env_paths) = path_vec(env);
+    let (_, mut env_paths) = path_vec(env);
     let normalized_path = path.trim_end_matches(MAIN_SEPARATOR).to_string();
     env_paths.retain(|p| p != &normalized_path);
     env_paths.insert(0, normalized_path);
-    join(env_paths, env_path_name)
+    match env::join_paths(env_paths) {
+        Ok(new_env_path) => Ok(new_env_path),
+        Err(err) => Err(WrongEnvPath(err))?,
+    }
 }
 
 pub fn remove_from_path(path: &str, env: Option<String>) -> Result<OsString, TdError> {
     if path.trim().is_empty() {
         return Ok(env::var_os(env_path()).unwrap_or_default());
     }
-    let (env_path_name, mut env_paths) = path_vec(env);
+    let (_, mut env_paths) = path_vec(env);
     let normalized_path = path.trim_end_matches(MAIN_SEPARATOR);
     env_paths.retain(|p| p != normalized_path);
     match env::join_paths(env_paths) {
-        Ok(new_env_path) => {
-            // Setting env vars is not thread-safe; use with care.
-            unsafe {
-                env::set_var(&env_path_name, &new_env_path);
-            }
-            Ok(new_env_path)
-        }
+        Ok(new_env_path) => Ok(new_env_path),
         Err(err) => Err(WrongEnvPath(err))?,
     }
 }
@@ -104,7 +88,6 @@ pub fn remove_from_path(path: &str, env: Option<String>) -> Result<OsString, TdE
 mod tests {
     use super::*;
     use std::env;
-    use std::ffi::OsString;
 
     #[test]
     fn test_prepend_in_path_with_existing_path() {
@@ -115,20 +98,22 @@ mod tests {
         unsafe {
             env::set_var(&env_path_name, format!("{path}{PATH_SEPARATOR}{old_path}"));
         }
-        let result = prepend_in_path(path, Some(env_path_name.to_string())).unwrap();
-        let new_path = env::var(&env_path_name).unwrap();
-        assert!(new_path.starts_with(path));
-        assert_eq!(result, OsString::from(new_path));
+        let result = prepend_in_path(path, Some(env_path_name.to_string()))
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
+        assert!(result.starts_with(path));
     }
 
     #[test]
     fn test_prepend_in_path_with_new_path() {
         let env_path_name = env_path();
         let path = "/my/path";
-        let result = prepend_in_path(path, Some(env_path_name.to_string())).unwrap();
-        let new_path = env::var(&env_path_name).unwrap();
-        assert!(new_path.starts_with(path));
-        assert_eq!(result, OsString::from(new_path));
+        let result = prepend_in_path(path, Some(env_path_name.to_string()))
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
+        assert!(result.starts_with(path));
     }
 
     #[test]
@@ -136,8 +121,11 @@ mod tests {
         let env_path_name = env_path();
         let path = "";
         let old_path = env::var(&env_path_name).unwrap_or_default();
-        let result = prepend_in_path(path, Some(env_path_name.to_string())).unwrap();
-        assert_eq!(result, OsString::from(old_path));
+        let result = prepend_in_path(path, Some(env_path_name.to_string()))
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
+        assert_eq!(result, old_path);
     }
 
     #[test]

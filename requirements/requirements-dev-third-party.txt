@@ -19,7 +19,7 @@ devpi-client==7.2.0
 devpi-server==6.17.0
 devpi-web==5.0.1
 docker==7.1.0
-fastapi==0.116.1
+fastapi==0.117.1
 flake8==7.3.0
 google-cloud-storage==3.4.0
 GitPython==3.1.45
@@ -54,7 +54,7 @@ tabulate==0.9.0
 tomlkit==0.13.3
 tqdm==4.67.1
 twine==6.2.0
-uvicorn==0.35.0
+uvicorn==0.37.0
 wheel
 wheel-inspect
 

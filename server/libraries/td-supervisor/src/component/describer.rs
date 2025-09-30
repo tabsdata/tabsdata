@@ -6,7 +6,7 @@
 
 use crate::component::describer::DescriberError::*;
 use crate::resource::instance::{InstanceError, get_program_path};
-use crate::services::supervisor::{GetState, SetState, WorkerLocation};
+use crate::services::supervisor::{GetState, RuntimeConfig, SetState, WorkerLocation};
 use derive_builder::{Builder, UninitializedFieldError};
 use getset::{Getters, Setters};
 use std::fmt::{Debug, Display, Formatter};
@@ -17,8 +17,10 @@ use thiserror::Error;
 
 /// Describes a worker that can be run under the Tabsdata system.
 pub trait WorkerDescriber: Display + Debug {
+    fn instance(&self) -> &PathBuf;
     fn class(&self) -> &WorkerClass;
     fn name(&self) -> &String;
+    fn runtime(&self) -> &Option<RuntimeConfig>;
     fn location(&self) -> &WorkerLocation;
     fn program(&self) -> &PathBuf;
     fn arguments(&self) -> &Vec<String>;
@@ -45,11 +47,17 @@ pub trait WorkerDescriber: Display + Debug {
 )]
 #[getset(get = "pub")]
 pub struct TabsDataWorkerDescriber {
+    /// Instance of the worker to run.
+    instance: PathBuf,
+
     /// Class of the worker to run.
     class: WorkerClass,
 
     /// Name of the worker to run.
     name: String,
+
+    /// Runtime of the program to run.
+    runtime: Option<RuntimeConfig>,
 
     /// Location of the program to run.
     location: WorkerLocation,
@@ -199,12 +207,20 @@ impl TabsDataWorkerDescriberBuilder {
 }
 
 impl WorkerDescriber for TabsDataWorkerDescriber {
+    fn instance(&self) -> &PathBuf {
+        &self.instance
+    }
+
     fn class(&self) -> &WorkerClass {
         &self.class
     }
 
     fn name(&self) -> &String {
         &self.name
+    }
+
+    fn runtime(&self) -> &Option<RuntimeConfig> {
+        &self.runtime
     }
 
     fn location(&self) -> &WorkerLocation {
@@ -339,6 +355,7 @@ mod tests {
     use td_common::server::{CONFIG_FOLDER, ETC_FOLDER, MSG_FOLDER, WORK_FOLDER};
     use tempfile::tempdir;
 
+    //noinspection DuplicatedCode
     #[test]
     fn test_valid_data() {
         let workspace_folder = tempdir().unwrap();
@@ -347,8 +364,10 @@ mod tests {
         let work_folder = workspace_folder.path().to_path_buf().join(WORK_FOLDER);
         create_dir_all(&work_folder).expect("Error creating work folder");
         let describer = TabsDataWorkerDescriberBuilder::default()
+            .instance(PathBuf::from("."))
             .class(REGULAR)
             .name(get_current_exe_name().unwrap())
+            .runtime(None)
             .location(Relative)
             .program(get_current_exe_path().expect("Error getting current running program"))
             .set_state(None)
@@ -366,8 +385,10 @@ mod tests {
     #[test]
     fn test_missing_name() {
         let describer = TabsDataWorkerDescriberBuilder::default()
+            .instance(PathBuf::from("."))
             .class(REGULAR)
             .name(" ".to_string())
+            .runtime(None)
             .location(Relative)
             .program(get_current_exe_path().expect("Error getting current running program"))
             .set_state(None)
@@ -385,8 +406,10 @@ mod tests {
     #[test]
     fn test_non_existing_program() {
         let describer = TabsDataWorkerDescriberBuilder::default()
+            .instance(PathBuf::from("."))
             .class(REGULAR)
             .name("non_existing_program".to_string())
+            .runtime(None)
             .location(Relative)
             .program(PathBuf::from("/non/existing/program"))
             .set_state(None)
@@ -401,6 +424,7 @@ mod tests {
         assert!(describer.is_err());
     }
 
+    //noinspection DuplicatedCode
     #[test]
     fn test_no_arguments() {
         let workspace_folder = tempdir().unwrap();
@@ -409,8 +433,10 @@ mod tests {
         let work_folder = workspace_folder.path().to_path_buf().join(WORK_FOLDER);
         create_dir_all(&work_folder).expect("Error creating work folder");
         let describer = TabsDataWorkerDescriberBuilder::default()
+            .instance(PathBuf::from("."))
             .class(REGULAR)
             .name(get_current_exe_name().unwrap())
+            .runtime(None)
             .location(Relative)
             .program(get_current_exe_path().expect("Error getting current running program"))
             .set_state(None)

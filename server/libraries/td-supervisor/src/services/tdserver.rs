@@ -64,7 +64,7 @@ use td_process::launcher::cli::{
 use td_process::monitor::processes::{ProcessDistilled, get_process_tree};
 use td_process::monitor::space::instance_space;
 use td_python::upgrade::{get_source_version, get_target_version, upgrade};
-use td_python::venv::prepare;
+use td_python::venv;
 use te_tableframe::engine::TableFrameExtension;
 use terminal_size::{Width, terminal_size};
 use textwrap::{Options, WordSeparator, fill};
@@ -731,6 +731,7 @@ fn command_create(arguments: CreateArguments) {
     create_database(arguments.instance());
 }
 
+//noinspection DuplicatedCode
 fn create_instance(instance: &Option<PathBuf>, profile: &Option<PathBuf>) {
     let supervisor_instance = get_instance_path_for_instance(instance);
     let supervisor_instance_absolute = to_absolute(&supervisor_instance.clone()).unwrap();
@@ -794,6 +795,7 @@ fn create_instance(instance: &Option<PathBuf>, profile: &Option<PathBuf>) {
     }
 }
 
+//noinspection DuplicatedCode
 fn create_database(instance: &Option<PathBuf>) {
     let supervisor_instance = get_instance_path_for_instance(instance);
     let supervisor_instance_absolute = to_absolute(&supervisor_instance.clone()).unwrap();
@@ -861,6 +863,7 @@ fn create_database(instance: &Option<PathBuf>) {
     }
 }
 
+//noinspection DuplicatedCode
 fn command_upgrade(arguments: UpgradeArguments) {
     let supervisor_instance = get_instance_path_for_instance(&arguments.instance.instance);
     let supervisor_instance_absolute = to_absolute(&supervisor_instance.clone()).unwrap();
@@ -1114,13 +1117,14 @@ fn command_start(arguments: StartArguments) {
             }
 
             let describer = build_instance_describer(
+                &supervisor_instance_absolute.clone(),
                 forwarded_parameters,
                 supervisor_config_absolute,
                 supervisor_work_absolute,
             )
             .unwrap();
 
-            prepare(&supervisor_instance, false);
+            venv::prepare(&supervisor_instance, false);
 
             set_log_level(Level::ERROR);
             match TabsDataWorker::new(describer.clone()).work(None, true) {
@@ -1215,7 +1219,7 @@ fn command_stop(arguments: StopArguments) {
                             supervisor_instance_absolute.clone().display(),
                             pid
                         );
-                        std::thread::sleep(STOP_WAIT);
+                        sleep(STOP_WAIT);
                     }
                     _ => {
                         break;
@@ -1642,13 +1646,16 @@ fn forward_argument(value: Option<PathBuf>, key: InheritedArgumentKey, vector: &
 }
 
 fn build_instance_describer(
+    instance: &PathBuf,
     forwarded_parameters: Vec<String>,
     supervisor_config: PathBuf,
     supervisor_work: PathBuf,
 ) -> Result<TabsDataWorkerDescriber, DescriberError> {
     let describer = TabsDataWorkerDescriberBuilder::default()
+        .instance(instance)
         .class(REGULAR)
         .name(SUPERVISOR.to_string())
+        .runtime(None)
         .location(Relative)
         .program(PathBuf::from(SUPERVISOR))
         .set_state(None)
@@ -1749,6 +1756,7 @@ fn clean_envs(arguments: CleanArguments) {
     info!("All Tabsdata internal Python virtual environments removed successfully!");
 }
 
+//noinspection DuplicatedCode
 fn clean_cache(_: CleanArguments) {
     let mut ok: bool = true;
     let mut binary = Command::new("uv");

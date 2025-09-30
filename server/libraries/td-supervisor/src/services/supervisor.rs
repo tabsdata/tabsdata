@@ -75,7 +75,7 @@ use td_process::launcher::arg::InheritedArgumentKey::*;
 use td_process::launcher::arg::{ArgumentKey, InheritedArgumentKey, MarkerKey};
 use td_process::launcher::cli::{Cli, TRAILING_ARGUMENTS_PREFIX, parse_extra_arguments};
 use td_process::launcher::config::Config;
-use td_python::venv::prepare;
+use td_python::venv;
 use tempfile::tempdir;
 use tokio::io::AsyncReadExt;
 use tokio::runtime::Handle;
@@ -177,12 +177,78 @@ pub struct GetState {
     state_prefixes: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, AsRefStr, strum::VariantNames)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+#[strum(serialize_all = "lowercase")]
+pub enum RuntimeConfig {
+    Java {
+        #[serde(default)]
+        version: Option<String>,
+        #[serde(default)]
+        classpath: Vec<String>,
+    },
+    Node {
+        #[serde(default)]
+        version: Option<String>,
+        #[serde(default)]
+        dependencies: Vec<String>,
+    },
+    Python {
+        #[serde(default)]
+        version: Option<String>,
+        #[serde(default)]
+        requirements: Vec<String>,
+    },
+}
+
+impl RuntimeConfig {
+    pub fn default_version(&self) -> &'static str {
+        match self {
+            RuntimeConfig::Java { .. } => "25",
+            RuntimeConfig::Node { .. } => "22.14",
+            RuntimeConfig::Python { .. } => "3.12",
+        }
+    }
+
+    pub fn set_defaults(mut self) -> Self {
+        let default_version = self.default_version().to_string();
+        match &mut self {
+            RuntimeConfig::Java { version, .. } => {
+                if version.is_none() {
+                    *version = Some(default_version);
+                }
+            }
+            RuntimeConfig::Python { version, .. } => {
+                if version.is_none() {
+                    *version = Some(default_version.clone());
+                }
+            }
+            RuntimeConfig::Node { version, .. } => {
+                if version.is_none() {
+                    *version = Some(default_version.clone());
+                }
+            }
+        }
+        self
+    }
+
+    fn validate(&self) -> Result<(), String> {
+        match self {
+            RuntimeConfig::Java { .. } => Err("Runtime Java currently not supported.".to_string()),
+            RuntimeConfig::Node { .. } => Err("Runtime Node currently not supported.".to_string()),
+            RuntimeConfig::Python { .. } => Ok(()),
+        }
+    }
+}
+
 #[derive(Default, Debug, Clone, Serialize, Deserialize, Getters)]
 #[getset(get = "pub")]
 pub struct WorkerConfig {
     name: String,
     #[serde(default)]
     kind: WorkerKind,
+    #[serde(default, deserialize_with = "set_runtime")]
+    runtime: Option<RuntimeConfig>,
     #[serde(default)]
     location: WorkerLocation,
     program: String,
@@ -204,12 +270,38 @@ pub struct WorkerConfig {
     retries: u16,
 }
 
+fn set_runtime<'de, D>(deserializer: D) -> Result<Option<RuntimeConfig>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let runtime: Option<RuntimeConfig> = Option::deserialize(deserializer)?;
+    if let Some(runtime) = runtime {
+        let runtime = runtime.set_defaults();
+        runtime.validate().map_err(serde::de::Error::custom)?;
+        Ok(Some(runtime))
+    } else {
+        Ok(None)
+    }
+}
+
+impl WorkerConfig {
+    pub fn process_runtime(mut self) -> Result<Self, String> {
+        if let Some(runtime) = self.runtime.take() {
+            let runtime = runtime.set_defaults();
+            runtime.validate()?;
+            self.runtime = Some(runtime);
+        }
+        Ok(self)
+    }
+}
+
 impl Display for WorkerConfig {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "WorkerConfig {{ name: {}, \
                              kind: {:?}, \
+                             runtime: {:?} }} \
                              location: {:?}, \
                              program: {}, \
                              parameters: {:?}, \
@@ -218,9 +310,11 @@ impl Display for WorkerConfig {
                              markers: {:?}, \
                              set_state: {:?}, \
                              get_states: {:?}, \
-                             concurrency: {} }}",
+                             concurrency: {}, \
+                             retries: {}",
             self.name,
             self.kind,
+            self.runtime,
             self.location,
             self.program,
             self.parameters,
@@ -229,7 +323,8 @@ impl Display for WorkerConfig {
             self.markers,
             self.set_state,
             self.get_states,
-            self.concurrency
+            self.concurrency,
+            self.retries,
         )
     }
 }
@@ -269,6 +364,7 @@ where
 }
 
 impl<'de> Deserialize<'de> for ControllersConfig {
+    //noinspection DuplicatedCode
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -918,7 +1014,7 @@ impl Supervisor {
         failure_message: &'static str,
     ) -> Result<(), RuntimeError>
     where
-        Fut: std::future::Future<Output = Result<(), RuntimeError>>,
+        Fut: Future<Output = Result<(), RuntimeError>>,
     {
         let workers_task = start_workers_function();
         let workers_result = workers_task.await;
@@ -1009,7 +1105,7 @@ impl Supervisor {
             + Send
             + Sync
             + 'static,
-        Fut: std::future::Future<Output = Result<(), RuntimeError>> + Send + 'static,
+        Fut: Future<Output = Result<(), RuntimeError>> + Send + 'static,
     {
         type RunningTasksSet = FuturesUnordered<
             JoinHandle<Result<(WorkerConfig, Result<(), RuntimeError>), tokio::task::JoinError>>,
@@ -1319,8 +1415,10 @@ impl Supervisor {
         };
 
         let describer = match TabsDataWorkerDescriberBuilder::default()
+            .instance(self.params.instance())
             .class(class.clone())
             .name(worker.name())
+            .runtime(worker.runtime().clone())
             .location(worker.location().clone())
             .program(program)
             .set_state(worker.set_state().clone())
@@ -1397,7 +1495,9 @@ impl Supervisor {
                         map
                     } else {
                         map.into_iter()
-                            .filter(|(k, _)| prefixes.iter().any(|p| k.starts_with(p)))
+                            .filter(|(key, _)| {
+                                prefixes.iter().any(|prefix| key.starts_with(prefix))
+                            })
                             .collect()
                     };
                     match EncodedMap::serialize(&mapping) {
@@ -1542,6 +1642,7 @@ impl Supervisor {
         (Some(td_worker), Ok(()))
     }
 
+    //noinspection DuplicatedCode
     fn obtain_worker_folders(
         &self,
         worker: WorkerConfig,
@@ -2156,7 +2257,7 @@ fn setup(arguments: Arguments) -> (Option<PathBuf>, PathBuf) {
         );
     }
 
-    prepare(&instance_dir_absolute, true);
+    venv::prepare(&instance_dir_absolute, true);
 
     (
         config.and_then(|file| file.parent().map(|folder| folder.to_path_buf())),

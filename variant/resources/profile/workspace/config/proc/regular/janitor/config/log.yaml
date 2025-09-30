@@ -2,7 +2,6 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
----
 version: 1
 disable_existing_loggers: False
 formatters:
@@ -13,7 +12,7 @@ handlers:
 
   log_file_handler:
     class: logging.handlers.RotatingFileHandler
-    level: INFO
+    level: DEBUG
     formatter: simple
     filename: td.log
     maxBytes: 10485760 # 10MB
@@ -26,5 +25,5 @@ loggers:
     propagate: False
 
 root:
-  level: INFO
+  level: DEBUG
   handlers: [log_file_handler]

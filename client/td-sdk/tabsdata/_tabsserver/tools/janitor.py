@@ -20,7 +20,6 @@ from tabsdata._utils.internal._process import TaskRunner
 ABSOLUTE_LOCATION = os.path.dirname(os.path.abspath(__file__))
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
 
 def delete_file(file: Path):
@@ -161,6 +160,12 @@ def main():
         required=True,
         help="Path of the folder where the logs of the janitor are stored.",
     )
+    parser.add_argument(
+        "--log-config-file",
+        type=str,
+        required=True,
+        help="Path of the log configuration descriptor.",
+    )
     arguments = parser.parse_args()
     complete_messages_folder = (
         arguments.instance.joinpath("workspace")
@@ -177,10 +182,16 @@ def main():
         .joinpath("work")
         .joinpath("cast")
     )
+
+    logs_folder = arguments.logs_folder
+    log_config_file = arguments.log_config_file
     setup_logging(
-        default_path=os.path.join(ABSOLUTE_LOCATION, "janitor_logging.yaml"),
-        logs_folder=arguments.logs_folder,
+        default_path=log_config_file,
+        logs_folder=logs_folder,
     )
+    global logger
+    logger = logging.getLogger(__name__)
+
     process(
         arguments.instance,
         complete_messages_folder,

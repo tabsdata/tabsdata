@@ -25,6 +25,7 @@ from typing import List, Literal, Tuple, TypeAlias
 import importlib_metadata
 import yaml
 from filelock import FileLock, Timeout
+from packaging.requirements import InvalidRequirement, Requirement
 from yaml import MappingNode
 from yaml.constructor import ConstructorError
 
@@ -53,9 +54,11 @@ from tabsdata._utils.bundle_utils import (
 
 # noinspection PyProtectedMember
 from tabsdata._utils.constants import (
+    TABSDATA_AGENT_MODULE_NAME,
     TABSDATA_CONNECTORS,
     TABSDATA_MODULE_NAME,
     TABSDATA_PACKAGES,
+    TD_TABSDATA_AGENT_DEV_PKG,
     TD_TABSDATA_DEV_PKG,
     TRUE_VALUES,
 )
@@ -469,6 +472,7 @@ def found_requirements_tabsdata(
                             logger.info(f"Package {package} marked as: td-unavailable")
                     else:
                         logger.info(f"Package {package} marked as: unavailable")
+        development_packages[:] = list(dict.fromkeys(development_packages))
 
 
 def get_dict_hash(data):
@@ -811,7 +815,7 @@ def delete_testimony(environment_name):
         logger.info(f"Testimony file '{testimony_file}' deleted successfully.")
 
 
-def testimony_exists(environment_name) -> bool:
+def check_if_testimony_exists(environment_name) -> bool:
     testimony_file = os.path.join(
         DEFAULT_ENVIRONMENT_TESTIMONY_FOLDER, environment_name
     )
@@ -854,7 +858,7 @@ def atomic_environment_creation(
     # interrupted, it will show as existing but there will be no testimony, since it
     # is stored at the end of a successful environment creation.
     if (
-        testimony_exists(logical_environment_name)
+        check_if_testimony_exists(logical_environment_name)
         and real_environment_name in existing_virtual_environments
     ):
         logger.info(
@@ -1326,9 +1330,7 @@ def normalize_location(
     return location
 
 
-def main():  # noqa: C901
-    logger.setLevel(logging.INFO)
-
+def inspect():
     _packages = sorted(
         [pkg.metadata["Name"] for pkg in importlib.metadata.distributions()]
     )
@@ -1341,78 +1343,264 @@ def main():  # noqa: C901
     for module in _modules:
         logger.debug(f"   🗂️ · {module}")
 
-    parser = argparse.ArgumentParser(
-        description=(
-            "Create the server base Python virtual environment for a given tabsdata "
-            "instance."
-        )
-    )
-    parser.add_argument(
-        "--instance",
-        type=str,
-        help="Path of the Tabsdata instance.",
-        required=False,
-    )
 
-    args = parser.parse_args()
-
-    with tempfile.NamedTemporaryFile(
-        suffix=".yaml",
-        mode="w",
-        delete=False,
-        dir=tabsdata_temp_folder(),
-    ) as requirements_file:
-        development_packages = []
-
-        # tabsdata connectors
-
-        for module_name, metadata in TABSDATA_CONNECTORS.items():
-            provider, location = get_tabsdata_package_metadata(
-                module_name,
-                metadata["is_dev_env"],
-            )
-            logger.info(
-                f"Module {module_name} classified as: "
-                f"provider: {provider} - "
-                f"location: {location}"
-            )
-
-            if provider in (
-                "Archive (Project)",
-                "Archive (Folder)",
-                "Archive (Wheel)",
-                "Folder (Editable)",
-                "Folder (Frozen)",
-            ):
-                development_packages.append(str(location))
-
-        # Note: tabsdata added the last one as then dependencies to other tabsdata
-        # packages do not need to be accessible through PyPI during development stages.
-
-        # tabsdata (start)
-
-        tabsdata_provider, tabsdata_location = get_tabsdata_package_metadata(
-            TABSDATA_MODULE_NAME,
-            TD_TABSDATA_DEV_PKG,
+def retrieve_tabsdata_connectors_packages() -> list[str]:
+    tabsdata_connectors_development_packages = []
+    for module_name, metadata in TABSDATA_CONNECTORS.items():
+        provider, location = get_tabsdata_package_metadata(
+            module_name,
+            metadata["is_dev_env"],
         )
         logger.info(
-            "Module tabsdata classified as: "
-            f"provider: {tabsdata_provider} - "
-            f"location: {tabsdata_location}"
+            f"Module {module_name} classified as: "
+            f"provider: {provider} - "
+            f"location: {location}"
         )
 
-        if tabsdata_provider in (
+        if provider in (
             "Archive (Project)",
             "Archive (Folder)",
             "Archive (Wheel)",
             "Folder (Editable)",
             "Folder (Frozen)",
         ):
-            development_packages.append(str(tabsdata_location))
+            tabsdata_connectors_development_packages.append(str(location))
+    return tabsdata_connectors_development_packages
 
-        # tabsdata (end)
 
+# noinspection DuplicatedCode
+def retrieve_tabsdata_package() -> Tuple[PackageProvider | None, str | None, list[str]]:
+    tabsdata_development_packages = []
+    provider, location = get_tabsdata_package_metadata(
+        TABSDATA_MODULE_NAME,
+        TD_TABSDATA_DEV_PKG,
+    )
+    logger.info(
+        f"Module tabsdata classified as: provider: {provider} - location: {location}"
+    )
+
+    if provider in (
+        "Archive (Project)",
+        "Archive (Folder)",
+        "Archive (Wheel)",
+        "Folder (Editable)",
+        "Folder (Frozen)",
+    ):
+        tabsdata_development_packages.append(str(location))
+    return provider, location, tabsdata_development_packages
+
+
+# noinspection DuplicatedCode
+def retrieve_tabsdata_agent_package() -> (
+    Tuple[PackageProvider | None, str | None, list[str]]
+):
+    tabsdata_agent_development_packages = []
+    provider, location = get_tabsdata_package_metadata(
+        TABSDATA_AGENT_MODULE_NAME,
+        TD_TABSDATA_AGENT_DEV_PKG,
+    )
+    logger.info(
+        f"Module tabsdata_agent classified as: provider: {provider} - location:"
+        f" {location}"
+    )
+
+    if provider in (
+        "Archive (Project)",
+        "Archive (Folder)",
+        "Archive (Wheel)",
+        "Folder (Editable)",
+        "Folder (Frozen)",
+    ):
+        tabsdata_agent_development_packages.append(str(location))
+    return provider, location, tabsdata_agent_development_packages
+
+
+def retrieve_tabsdata_requirements_packages(
+    tabsdata_requirements: list[str],
+) -> Tuple[list[str], list[str]]:
+    tabsdata_requirements_development_packages = []
+    tabsdata_requirements_non_development_packages = []
+    for requirement in tabsdata_requirements:
+        requirement_object = Requirement(requirement)
+        module_name = requirement_object.name
+        is_dev_env = f"TD_{requirement_object.name.upper()}_DEV_PKG"
+        provider, location = get_tabsdata_package_metadata(
+            module_name,
+            is_dev_env,
+        )
+        logger.info(
+            f"Module {module_name} classified as: "
+            f"provider: {provider} - "
+            f"location: {location}"
+        )
+
+        if provider in (
+            "Archive (Project)",
+            "Archive (Folder)",
+            "Archive (Wheel)",
+            "Folder (Editable)",
+            "Folder (Frozen)",
+        ):
+            tabsdata_requirements_development_packages.append(str(location))
+        else:
+            tabsdata_requirements_non_development_packages.append(str(requirement))
+    return (
+        tabsdata_requirements_development_packages,
+        tabsdata_requirements_non_development_packages,
+    )
+
+
+def extract_requirements(
+    requirements_path: Path,
+) -> tuple[list[str], list[str]]:
+    tabsdata_requirements: list[str] = []
+    non_tabsdata_requirements: list[str] = []
+
+    if requirements_path is None:
+        return tabsdata_requirements, non_tabsdata_requirements
+
+    resolved_path = requirements_path.expanduser().resolve()
+    if not resolved_path.exists():
+        message = f"Requirements file does not exist: '{resolved_path}'"
+        logger.error(message)
+        raise FileNotFoundError(message)
+    if not resolved_path.is_file():
+        message = f"Requirements path is not a file: '{resolved_path}'"
+        logger.error(message)
+        raise ValueError(message)
+
+    with resolved_path.open(encoding="utf-8") as requirements_file:
+        for requirement_line in requirements_file:
+            requirement_entry = requirement_line.strip()
+            if not requirement_entry or requirement_entry.startswith("#"):
+                continue
+            try:
+                requirement = Requirement(requirement_entry)
+            except InvalidRequirement as error:
+                message = (
+                    "Invalid entry in requirements file "
+                    f"'{resolved_path}': '{requirement_entry}'"
+                )
+                logger.error(message)
+                raise ValueError(message) from error
+            normalized_requirement = str(requirement)
+            if requirement.name.startswith(TABSDATA_MODULE_NAME):
+                tabsdata_requirements.append(normalized_requirement)
+            else:
+                non_tabsdata_requirements.append(normalized_requirement)
+
+    logger.debug(
+        "Validated requirements file '%s' with %d tabsdata and %d external entries",
+        requirements_path,
+        len(tabsdata_requirements),
+        len(non_tabsdata_requirements),
+    )
+
+    return tabsdata_requirements, non_tabsdata_requirements
+
+
+def extract_instance(instance: str) -> Tuple[str, Path]:
+    instance = instance or DEFAULT_INSTANCE
+    instance_path = Path(instance)
+    if instance_path.is_absolute():
+        if instance_path.exists() and not instance_path.is_dir():
+            message = (
+                f"Invalid instance: '{instance_path}'. An instance absolute path"
+                " must be a directory or not exist."
+            )
+            logger.error(message)
+            raise ValueError(message)
+        instance = instance_path.name
+    elif os.sep not in instance and (os.altsep is None or os.altsep not in instance):
+        instance_path = Path(os.path.join(DEFAULT_INSTANCES_FOLDER, str(instance)))
+        if instance_path.exists() and not instance_path.is_dir():
+            message = (
+                f"Invalid instance: '{instance_path}'. An instance relative path"
+                " must be a directory or not exist."
+            )
+            logger.error(message)
+            raise ValueError(message)
+        instance = instance_path.name
+    else:
+        message = (
+            f"Invalid instance: '{instance_path}'. It is neither an absolute path"
+            " nor a single name."
+        )
+        logger.error(message)
+        raise ValueError(message)
+    return instance, instance_path
+
+
+def main():  # noqa: C901
+    parser = argparse.ArgumentParser(
+        description=(
+            "Create a virtual environment to be used by a workers of a tabsdata "
+            "instance. The environment will be either the instance base "
+            "environment or an environment for a worker with a Python runtime "
+            "specification"
+        )
+    )
+    parser.add_argument(
+        "--instance",
+        type=str,
+        help="Path of the tabsdata instance.",
+        required=False,
+    )
+    parser.add_argument(
+        "--requirements",
+        type=Path,
+        help="Path of the environment additional requirements.",
+        required=False,
+    )
+    args = parser.parse_args()
+
+    inspect()
+
+    # Note: tabsdata added the last one as then dependencies to other tabsdata
+    # packages do not need to be accessible through PyPI during development stages.
+    with tempfile.NamedTemporaryFile(
+        suffix=".yaml",
+        mode="w",
+        delete=False,
+        dir=tabsdata_temp_folder(),
+    ) as requirements_file:
         logger.debug(f"Temporary base requirements file: {requirements_file.name}")
+
+        development_packages = []
+
+        tabsdata_connectors_development_packages = (
+            retrieve_tabsdata_connectors_packages()
+        )
+        development_packages.extend(tabsdata_connectors_development_packages)
+        (
+            tabsdata_provider,
+            tabsdata_location,
+            tabsdata_development_packages,
+        ) = retrieve_tabsdata_package()
+        development_packages.extend(tabsdata_development_packages)
+        (
+            _tabsdata_agent_provider,
+            _tabsdata_agent_location,
+            tabsdata_agent_development_packages,
+        ) = retrieve_tabsdata_agent_package()
+        development_packages.extend(tabsdata_agent_development_packages)
+        (
+            additional_tabsdata_requirements,
+            additional_non_tabsdata_requirements,
+        ) = extract_requirements(args.requirements)
+        (
+            tabsdata_requirements_development_packages,
+            tabsdata_requirements_non_development_packages,
+        ) = retrieve_tabsdata_requirements_packages(additional_tabsdata_requirements)
+        development_packages.extend(tabsdata_requirements_development_packages)
+        development_packages = list(dict.fromkeys(development_packages))
+
+        public_packages = tabsdata_requirements_non_development_packages
+        public_packages.extend(additional_non_tabsdata_requirements)
+        if debug_enabled():
+            public_packages.extend(DEBUG_PACKAGES)
+        public_packages = list(dict.fromkeys(public_packages))
+
         requirements_path = requirements_file.name
         requirements = {
             PYTHON_VERSION_KEY: PYTHON_BASE_VERSION,
@@ -1426,7 +1614,7 @@ def main():  # noqa: C901
                     "Folder (Frozen)",
                 )
             ),
-            PYTHON_PUBLIC_PACKAGES_KEY: DEBUG_PACKAGES if debug_enabled() else [],
+            PYTHON_PUBLIC_PACKAGES_KEY: public_packages,
             PYTHON_DEVELOPMENT_PACKAGES_KEY: development_packages,
         }
 
@@ -1434,37 +1622,7 @@ def main():  # noqa: C901
             yaml.dump(requirements, file, default_flow_style=False)
         logger.debug(f"Temporary base requirements contents: {requirements}")
 
-        instance = args.instance or DEFAULT_INSTANCE
-
-        instance_path = Path(instance)
-        if instance_path.is_absolute():
-            if instance_path.exists() and not instance_path.is_dir():
-                message = (
-                    f"Invalid instance: '{instance_path}'. An instance absolute path"
-                    " must be a directory or not exist."
-                )
-                logger.error(message)
-                raise ValueError(message)
-            instance = instance_path.name
-        elif os.sep not in args.instance and (
-            os.altsep is None or os.altsep not in args.instance
-        ):
-            instance_path = Path(os.path.join(DEFAULT_INSTANCES_FOLDER, str(instance)))
-            if instance_path.exists() and not instance_path.is_dir():
-                message = (
-                    f"Invalid instance: '{instance_path}'. An instance relative path"
-                    " must be a directory or not exist."
-                )
-                logger.error(message)
-                raise ValueError(message)
-            instance = instance_path.name
-        else:
-            message = (
-                f"Invalid instance: '{instance_path}'. It is neither an absolute path"
-                " nor a single name."
-            )
-            logger.error(message)
-            raise ValueError(message)
+        instance, instance_path = extract_instance(args.instance)
 
         requirements_description_file = requirements_file.name
         locks_folder = os.path.join(

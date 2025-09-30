@@ -24,9 +24,6 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    set_env CARGO_TERM_PROGRESS_WHEN "always"
-    set_env CARGO_TERM_PROGRESS_WIDTH "256"
-
     debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build --quiet --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --all-features --lib --bins --examples"
     exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build --quiet --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --all-features --lib --bins --examples
     ''']
@@ -40,9 +37,6 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
-
-    set_env CARGO_TERM_PROGRESS_WHEN "always"
-    set_env CARGO_TERM_PROGRESS_WIDTH "256"
 
     debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build --quiet --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --all-features --lib --bins --examples"
     exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build --quiet --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --all-features --lib --bins --examples
@@ -82,9 +76,6 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    set_env CARGO_TERM_PROGRESS_WHEN "always"
-    set_env CARGO_TERM_PROGRESS_WIDTH "256"
-
     debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build --quiet --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --lib --bins"
     exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build --quiet --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --lib --bins
     ''']
@@ -98,9 +89,6 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
-
-    set_env CARGO_TERM_PROGRESS_WHEN "always"
-    set_env CARGO_TERM_PROGRESS_WIDTH "256"
 
     debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build --quiet --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --lib --bins"
     exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build --quiet --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --lib --bins
@@ -128,9 +116,6 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    set_env CARGO_TERM_PROGRESS_WHEN "always"
-    set_env CARGO_TERM_PROGRESS_WIDTH "256"
-
     debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} build --quiet --locked --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --lib --bins --examples"
     exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} build --quiet --locked --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --lib --bins --examples
 
@@ -149,9 +134,6 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
-
-    set_env CARGO_TERM_PROGRESS_WHEN "always"
-    set_env CARGO_TERM_PROGRESS_WIDTH "256"
 
     debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} build --quiet --locked --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --lib --bins"
     exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} build --quiet --locked --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --lib --bins
@@ -231,9 +213,6 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
-
-    set_env CARGO_TERM_PROGRESS_WHEN "always"
-    set_env CARGO_TERM_PROGRESS_WIDTH "256"
 
     cd "${PROJECT_RS_TY_EXPANSIONS_FOLDER}/modules/ty-tableframe"
 

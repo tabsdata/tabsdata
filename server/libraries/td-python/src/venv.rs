@@ -2,13 +2,14 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::env::{prepend_in_path, remove_from_path};
+use crate::env::{ENV_PATH, prepend_in_path, remove_from_path};
 use crate::error::PythonError::{
-    InstanceExtractionError, InterpreterResolutionError, InterpreterResolutionPanic,
-    InterpreterResolutionParseError, OutputEncodingError, VenvCreationError, VenvCreationPanic,
-    VenvCreationParseError,
+    EnvironmentVariablesPropagationError, InstanceExtractionError, InterpreterResolutionError,
+    InterpreterResolutionPanic, InterpreterResolutionParseError, OutputEncodingError,
+    VenvCreationError, VenvCreationPanic, VenvCreationParseError,
 };
 use crate::io::log_std_out_and_err;
+use std::collections::HashMap;
 use std::env;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, exit};
@@ -26,6 +27,7 @@ pub const PYTHON_INTERPRETER_SCRIPT: &str =
 
 pub const TDVENV_PROGRAM: &str = "tdvenv";
 pub const TDVENV_ARGUMENT_INSTANCE: &str = "--instance";
+pub const TDVENV_ARGUMENT_REQUIREMENTS: &str = "--requirements";
 
 #[cfg(not(target_os = "windows"))]
 pub const PYTHON_BIN_FOLDER: &str = "bin";
@@ -46,13 +48,31 @@ const ENVIRONMENT_END: &str = "</environment>";
 const INTERPRETER_START: &str = "<interpreter>";
 const INTERPRETER_END: &str = "</interpreter>";
 
-pub fn set(instance: &PathBuf, dump_std: bool) -> Result<PathBuf, TdError> {
-    let environment = create(instance, dump_std)?;
+pub fn set(
+    instance: &PathBuf,
+    requirements: Option<&PathBuf>,
+    dump_std: bool,
+) -> Result<PathBuf, TdError> {
+    let environment = create(instance, requirements, dump_std)?;
     activate(&environment)?;
     Ok(environment)
 }
 
-pub fn get(dump_std: bool) -> Result<PathBuf, TdError> {
+pub fn get(
+    instance: &PathBuf,
+    requirements: Option<&PathBuf>,
+    dump_std: bool,
+) -> Result<(PathBuf, HashMap<String, Option<String>>), TdError> {
+    let environment = create(instance, requirements, dump_std)?;
+    let variables = match propagate(&environment) {
+        Ok(variables) => variables,
+        Err(err) => return Err(TdError::from(EnvironmentVariablesPropagationError(err))),
+    };
+    Ok((environment, variables))
+}
+
+//noinspection DuplicatedCode
+pub fn check(dump_std: bool) -> Result<PathBuf, TdError> {
     let python = name_program(&PathBuf::from(PYTHON_PROGRAM));
     let mut command = Command::new(python);
     if check_flag_env(TD_DETACHED_SUBPROCESSES) {
@@ -91,7 +111,12 @@ pub fn get(dump_std: bool) -> Result<PathBuf, TdError> {
     }
 }
 
-pub fn create(instance: &PathBuf, dump_std: bool) -> Result<PathBuf, TdError> {
+//noinspection DuplicatedCode
+pub fn create(
+    instance: &PathBuf,
+    requirements: Option<&PathBuf>,
+    dump_std: bool,
+) -> Result<PathBuf, TdError> {
     let tdvenv = name_program(&PathBuf::from(TDVENV_PROGRAM));
     let mut command = Command::new(tdvenv);
     if check_flag_env(TD_DETACHED_SUBPROCESSES) {
@@ -103,11 +128,11 @@ pub fn create(instance: &PathBuf, dump_std: bool) -> Result<PathBuf, TdError> {
             command.creation_flags(CREATE_NO_WINDOW);
         }
     }
-    let output = command
-        .arg(TDVENV_ARGUMENT_INSTANCE)
-        .arg(instance)
-        .output()
-        .map_err(VenvCreationPanic)?;
+    command.arg(TDVENV_ARGUMENT_INSTANCE).arg(instance);
+    if let Some(requirements) = requirements {
+        command.arg(TDVENV_ARGUMENT_REQUIREMENTS).arg(requirements);
+    }
+    let output = command.output().map_err(VenvCreationPanic)?;
     let mut dumped = false;
     if dump_std {
         dump(&output);
@@ -130,82 +155,82 @@ pub fn create(instance: &PathBuf, dump_std: bool) -> Result<PathBuf, TdError> {
     }
 }
 
-pub fn activate(venv: &PathBuf) -> Result<(), TdError> {
+pub fn propagate(venv: &Path) -> Result<HashMap<String, Option<String>>, TdError> {
     let instance = venv
         .file_name()
-        .ok_or_else(|| InstanceExtractionError(venv.clone()))?
+        .ok_or_else(|| InstanceExtractionError(venv.to_path_buf()))?
         .to_string_lossy()
         .to_string();
-    prepend_in_path(
-        Path::new(venv.as_path())
-            .join(PYTHON_BIN_FOLDER)
-            .to_str()
-            .unwrap(),
+
+    let path = prepend_in_path(
+        Path::new(venv).join(PYTHON_BIN_FOLDER).to_str().unwrap(),
         None,
     )?;
+    Ok(HashMap::from([
+        (
+            ENV_PATH.to_string(),
+            Some(path.to_string_lossy().to_string()),
+        ),
+        (ENV_CONDA_PREFIX.to_string(), None),
+        (ENV_PYENV_VERSION.to_string(), None),
+        (ENV_PYTHONHOME.to_string(), None),
+        (ENV_PYTHONPATH.to_string(), None),
+        (ENV_UV_VENV.to_string(), None),
+        (
+            ENV_VIRTUAL_ENV.to_string(),
+            Some(venv.to_string_lossy().to_string()),
+        ),
+        (
+            ENV_VIRTUAL_ENV_PROMPT.to_string(),
+            Some(format!("({instance})")),
+        ),
+    ]))
+}
+
+pub fn activate(venv: &Path) -> Result<(), TdError> {
+    let envs = propagate(venv)?;
     // Setting env vars is not thread-safe; use with care.
     unsafe {
-        env::remove_var(ENV_CONDA_PREFIX);
-    }
-    // Setting env vars is not thread-safe; use with care.
-    unsafe {
-        env::remove_var(ENV_PYENV_VERSION);
-    }
-    // Setting env vars is not thread-safe; use with care.
-    unsafe {
-        env::remove_var(ENV_PYTHONHOME);
-    }
-    // Setting env vars is not thread-safe; use with care.
-    unsafe {
-        env::remove_var(ENV_PYTHONPATH);
-    }
-    // Setting env vars is not thread-safe; use with care.
-    unsafe {
-        env::remove_var(ENV_UV_VENV);
-    }
-    // Setting env vars is not thread-safe; use with care.
-    unsafe {
-        env::set_var(ENV_VIRTUAL_ENV, venv);
-    }
-    // Setting env vars is not thread-safe; use with care.
-    unsafe {
-        env::set_var(ENV_VIRTUAL_ENV_PROMPT, format!("({instance})"));
+        for (key, value) in envs {
+            match value {
+                Some(value) => env::set_var(key, value),
+                None => env::remove_var(key),
+            }
+        }
     }
     Ok(())
 }
 
-pub fn deactivate(venv: &PathBuf) -> Result<(), TdError> {
-    remove_from_path(
+pub fn supress(venv: &PathBuf) -> Result<HashMap<String, Option<String>>, TdError> {
+    let path = remove_from_path(
         Path::new(venv).join(PYTHON_BIN_FOLDER).to_str().unwrap(),
         None,
     )?;
+    Ok(HashMap::from([
+        (
+            ENV_PATH.to_string(),
+            Some(path.to_string_lossy().to_string()),
+        ),
+        (ENV_CONDA_PREFIX.to_string(), None),
+        (ENV_PYENV_VERSION.to_string(), None),
+        (ENV_PYTHONHOME.to_string(), None),
+        (ENV_PYTHONPATH.to_string(), None),
+        (ENV_UV_VENV.to_string(), None),
+        (ENV_VIRTUAL_ENV.to_string(), None),
+        (ENV_VIRTUAL_ENV_PROMPT.to_string(), None),
+    ]))
+}
+
+pub fn deactivate(venv: &PathBuf) -> Result<(), TdError> {
+    let envs = supress(venv)?;
     // Setting env vars is not thread-safe; use with care.
     unsafe {
-        env::remove_var(ENV_CONDA_PREFIX);
-    }
-    // Setting env vars is not thread-safe; use with care.
-    unsafe {
-        env::remove_var(ENV_PYENV_VERSION);
-    }
-    // Setting env vars is not thread-safe; use with care.
-    unsafe {
-        env::remove_var(ENV_PYTHONHOME);
-    }
-    // Setting env vars is not thread-safe; use with care.
-    unsafe {
-        env::remove_var(ENV_PYTHONPATH);
-    }
-    // Setting env vars is not thread-safe; use with care.
-    unsafe {
-        env::remove_var(ENV_UV_VENV);
-    }
-    // Setting env vars is not thread-safe; use with care.
-    unsafe {
-        env::remove_var(ENV_VIRTUAL_ENV);
-    }
-    // Setting env vars is not thread-safe; use with care.
-    unsafe {
-        env::remove_var(ENV_VIRTUAL_ENV_PROMPT);
+        for (key, value) in envs {
+            match value {
+                Some(value) => env::set_var(key, value),
+                None => env::remove_var(key),
+            }
+        }
     }
     Ok(())
 }
@@ -221,7 +246,7 @@ fn extract(string: &str, start: &str, end: &str) -> Option<String> {
 }
 
 pub fn prepare(instance: &PathBuf, dump_std: bool) {
-    match set(instance, dump_std) {
+    match set(instance, None, dump_std) {
         Ok(environment) => {
             debug!(
                 "Using Python base virtual environment: {}",
@@ -233,7 +258,7 @@ pub fn prepare(instance: &PathBuf, dump_std: bool) {
             exit(GeneralError.code());
         }
     }
-    match get(dump_std) {
+    match check(dump_std) {
         Ok(interpreter) => {
             debug!(
                 "Using Python base virtual interpreter: {}",

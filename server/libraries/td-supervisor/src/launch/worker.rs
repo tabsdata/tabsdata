@@ -163,6 +163,7 @@ mod tests {
     use td_common::server::{CONFIG_FOLDER, ETC_FOLDER, MSG_FOLDER, WORK_FOLDER};
     use tempfile::tempdir;
 
+    //noinspection DuplicatedCode
     #[test]
     fn test_describer() {
         let workspace_folder = tempdir().unwrap();
@@ -171,8 +172,10 @@ mod tests {
         let work_folder = workspace_folder.path().to_path_buf().join(WORK_FOLDER);
         create_dir_all(&work_folder).expect("Error creating work folder");
         let describer = TabsDataWorkerDescriberBuilder::default()
+            .instance(PathBuf::from("."))
             .class(REGULAR)
             .name(get_current_exe_name().unwrap())
+            .runtime(None)
             .location(Relative)
             .program(get_current_exe_path().expect("Error getting current running program"))
             .set_state(None)
@@ -194,6 +197,7 @@ mod tests {
             "Describer error: {name:?}"
         );
     }
+    //noinspection DuplicatedCode
     #[test]
     fn test_supplier() {
         let workspace_folder = tempdir().unwrap();
@@ -202,8 +206,10 @@ mod tests {
         let work_folder = workspace_folder.path().to_path_buf().join(WORK_FOLDER);
         create_dir_all(&work_folder).expect("Error creating work folder");
         let describer = TabsDataWorkerDescriberBuilder::default()
+            .instance(PathBuf::from("."))
             .class(REGULAR)
             .name(get_current_exe_name().unwrap())
+            .runtime(None)
             .location(Relative)
             .program(get_current_exe_path().expect("Error getting current running program"))
             .set_state(None)

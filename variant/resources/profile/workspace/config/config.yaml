@@ -100,6 +100,7 @@ controllers:
         location: system
         program: janitor
         parameters:
+          - log-config-file: ${TD_PATH_CONFIG}/proc/regular/janitor/config/log.yaml
           - instance: ${TD_PATH_INSTANCE}
           - frequency: 900 # 15 minutes (seconds)
           - retention: 86400000 # 3 days (milliseconds)

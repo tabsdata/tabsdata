@@ -7,7 +7,7 @@ use std::io::Error;
 use std::path::PathBuf;
 use std::process::ExitStatus;
 use std::string::FromUtf8Error;
-use td_error::td_error;
+use td_error::{TdError, td_error};
 
 #[td_error]
 pub enum PythonError {
@@ -39,4 +39,6 @@ pub enum PythonError {
     InvalidVersionFormat(String) = 5013,
     #[error("Failed to read .version file: {0}")]
     InvalidVersionFile(#[source] Error) = 5014,
+    #[error("Error propagating venv environment variables: {0}")]
+    EnvironmentVariablesPropagationError(#[source] TdError) = 5015,
 }

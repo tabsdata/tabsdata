@@ -16,5 +16,8 @@ script ='''
     elapsed_time = exec --fail-on-error python -c "from datetime import timedelta; import sys; print(timedelta(milliseconds=int(sys.argv[1])))" ${elapsed_ms}
     elapsed_time = trim ${elapsed_time.stdout}
 
-    info "····· ⏱️ Elapsed time: ${elapsed_time} ⚙️ ${task.name}"
+    td_monintor_make = get_env TD_MONITOR_MAKE
+    if eq ${td_monintor_make} "true"
+        info "····· ⏱️ Elapsed time: ${elapsed_time} ⚙️ ${task.name}"
+    end
     '''
