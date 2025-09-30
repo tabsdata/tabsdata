@@ -125,6 +125,7 @@ mod tests {
     use std::ops::Deref;
     use td_database::sql::DbPool;
     use td_error::TdError;
+    use td_execution::version_resolver::VersionResolverError;
     use td_objects::crudl::handle_sql_err;
     use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_collection::seed_collection;
@@ -1035,6 +1036,129 @@ mod tests {
             .collect();
         assert!(!map.get("table0").unwrap().private().deref());
         assert!(map.get("_table0").unwrap().private().deref());
+        Ok(())
+    }
+
+    #[td_test::test(sqlx)]
+    #[tokio::test]
+    async fn test_dependency_fixed_validation(db: DbPool) -> Result<(), TdError> {
+        let collection_name_1 = CollectionName::try_from("collection_1")?;
+        seed_collection(&db, &collection_name_1, &UserId::admin()).await;
+
+        let bundle_id = BundleId::default();
+        let create = FunctionRegister::builder()
+            .try_name("function")?
+            .try_description("description")?
+            .bundle_id(bundle_id)
+            .try_snippet("snippet")?
+            .decorator(Decorator::Publisher)
+            .dependencies(Some(vec![TableDependencyDto::try_from(
+                "table_0@00000000000000000000000004",
+            )?]))
+            .triggers(Some(vec![]))
+            .tables(Some(vec![TableNameDto::try_from("table_0")?]))
+            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
+            .reuse_frozen_tables(false)
+            .build()?;
+
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
+                CollectionParam::builder()
+                    .try_collection(collection_name_1.as_str())?
+                    .build()?,
+                create,
+            );
+
+        let service = RegisterFunctionService::with_defaults(db.clone())
+            .service()
+            .await;
+        let res = service.raw_oneshot(request).await;
+        assert!(res.is_err());
+        let err = res.err().unwrap();
+        let err = err.domain_err::<VersionResolverError>();
+        assert!(matches!(
+            err,
+            VersionResolverError::FixedTableDataVersionsNotFound(_)
+        ));
+
+        let bundle_id = BundleId::default();
+        let create = FunctionRegister::builder()
+            .try_name("function")?
+            .try_description("description")?
+            .bundle_id(bundle_id)
+            .try_snippet("snippet")?
+            .decorator(Decorator::Publisher)
+            .dependencies(Some(vec![TableDependencyDto::try_from(
+                "table_0@00000000000000000000000004..00000000000000000000000004",
+            )?]))
+            .triggers(Some(vec![]))
+            .tables(Some(vec![TableNameDto::try_from("table_0")?]))
+            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
+            .reuse_frozen_tables(false)
+            .build()?;
+
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
+                CollectionParam::builder()
+                    .try_collection(collection_name_1.as_str())?
+                    .build()?,
+                create,
+            );
+
+        let service = RegisterFunctionService::with_defaults(db.clone())
+            .service()
+            .await;
+        let res = service.raw_oneshot(request).await;
+        assert!(res.is_err());
+        let err = res.err().unwrap();
+        let err = err.domain_err::<VersionResolverError>();
+        assert!(matches!(
+            err,
+            VersionResolverError::FixedTableDataVersionsNotFound(_)
+        ));
+
+        Ok(())
+    }
+
+    #[td_test::test(sqlx)]
+    #[tokio::test]
+    async fn test_dependency_range_validation(db: DbPool) -> Result<(), TdError> {
+        let collection_name_1 = CollectionName::try_from("collection_1")?;
+        seed_collection(&db, &collection_name_1, &UserId::admin()).await;
+
+        let bundle_id = BundleId::default();
+        let create = FunctionRegister::builder()
+            .try_name("function")?
+            .try_description("description")?
+            .bundle_id(bundle_id)
+            .try_snippet("snippet")?
+            .decorator(Decorator::Publisher)
+            .dependencies(Some(vec![TableDependencyDto::try_from(
+                "table_0@HEAD..HEAD~2",
+            )?]))
+            .triggers(Some(vec![]))
+            .tables(Some(vec![TableNameDto::try_from("table_0")?]))
+            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
+            .reuse_frozen_tables(false)
+            .build()?;
+
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
+                CollectionParam::builder()
+                    .try_collection(collection_name_1.as_str())?
+                    .build()?,
+                create,
+            );
+
+        let service = RegisterFunctionService::with_defaults(db.clone())
+            .service()
+            .await;
+        let res = service.raw_oneshot(request).await;
+        assert!(res.is_err());
+        let err = res.err().unwrap();
+        let err = err.domain_err::<VersionResolverError>();
+        assert!(matches!(err, VersionResolverError::InvalidRange(_)));
+
         Ok(())
     }
 }

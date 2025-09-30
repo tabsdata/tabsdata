@@ -6,6 +6,7 @@ use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
 use td_error::display_vec::DisplayVec;
 use td_error::{TdError, td_error};
+use td_execution::version_resolver::VersionResolver;
 use td_objects::crudl::handle_sql_err;
 use td_objects::sql::cte::CteQueries;
 use td_objects::sql::{DaoQueries, FindBy};
@@ -13,7 +14,7 @@ use td_objects::types::basic::{
     AtTime, CollectionId, CollectionName, DataLocation, DependencyId, DependencyPos,
     DependencyStatus, FunctionId, ReuseFrozen, TableDependency, TableDependencyDto,
     TableFunctionParamPos, TableId, TableName, TableNameDto, TableStatus, TableTrigger,
-    TableTriggerDto, TriggerId, TriggerStatus, TriggerVersionId,
+    TableTriggerDto, TriggerId, TriggerStatus, TriggerVersionId, TriggeredOn,
 };
 use td_objects::types::collection::CollectionDB;
 use td_objects::types::dependency::{DependencyDB, DependencyDBBuilder};
@@ -304,6 +305,7 @@ pub async fn build_tables_trigger_versions(
     Ok(trigger_versions)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn build_dependency_versions(
     Connection(connection): Connection,
     SrvCtx(queries): SrvCtx<DaoQueries>,
@@ -312,6 +314,7 @@ pub async fn build_dependency_versions(
     Input(collection_in_context): Input<CollectionName>,
     Input(function_id): Input<FunctionId>,
     Input(dependency_version_builder): Input<DependencyDBBuilder>,
+    Input(at_time): Input<AtTime>,
 ) -> Result<Vec<DependencyDB>, TdError> {
     let mut conn = connection.lock().await;
     let conn = conn.get_mut_connection()?;
@@ -408,6 +411,18 @@ pub async fn build_dependency_versions(
                 dependency_table.clone(),
             )),
         }?;
+
+        // Validate dependencies if we can (fixed versions should exist at registration time,
+        // ranges should be older to newer, etc.). This avoids potential issues on trigger.
+        // A standalone function should be at least triggerable at the time it is registered.
+        let _ = VersionResolver::builder()
+            .table_id(table_db.table_id())
+            .versions(dependency_table.versions())
+            .triggered_on(&TriggeredOn::try_from(&*at_time)?)
+            .error_on_desc_range(true)
+            .build()?
+            .resolve(queries.deref(), &mut *conn)
+            .await?;
 
         // Reuse dependency id if the dependency is the same
         let existing_version = existing_versions.get(&(

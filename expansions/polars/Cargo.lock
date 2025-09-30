@@ -4514,6 +4514,7 @@ name = "td-error"
 version = "1.4.0"
 dependencies = [
  "anyhow",
+ "derive_builder",
  "itertools 0.14.0",
  "openssl",
  "strum",

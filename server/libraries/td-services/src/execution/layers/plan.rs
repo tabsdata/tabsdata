@@ -158,7 +158,11 @@ pub async fn build_execution_plan(
                     Cow::Borrowed(versions)
                 };
 
-                let found = VersionResolver::new(table.table_id(), &lookup_versions, &triggered_on)
+                let found = VersionResolver::builder()
+                    .table_id(table.table_id())
+                    .versions(&lookup_versions)
+                    .triggered_on(&triggered_on)
+                    .build()?
                     .resolve(queries.deref(), &mut *conn)
                     .await?;
 

@@ -6,6 +6,7 @@ pub mod display_vec;
 
 pub use tm_error::td_error;
 
+use derive_builder::UninitializedFieldError;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use strum::AsRefStr;
@@ -130,6 +131,18 @@ impl Display for TdError {
 impl Error for TdError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         Some(self.td_error.as_ref())
+    }
+}
+
+// useful for types using derive_builder
+impl From<UninitializedFieldError> for TdError {
+    fn from(ufe: UninitializedFieldError) -> TdError {
+        TdError {
+            domain: "UninitializedFieldError".to_string(),
+            code: "UninitializedFieldError::0000".to_string(),
+            api_error: ApiError::InternalError,
+            td_error: anyhow::Error::new(ufe),
+        }
     }
 }
 
