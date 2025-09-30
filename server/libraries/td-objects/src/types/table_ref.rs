@@ -17,6 +17,8 @@ pub enum Version {
     Fixed(TableDataVersionId),
     /// A head relative version, it is always zero or negative.
     Head(isize),
+    /// An initial relative version, it is always zero or positive.
+    Initial(isize),
 }
 
 impl Display for Version {
@@ -30,12 +32,20 @@ impl Display for Version {
                     write!(f, "HEAD~{}", -back)
                 }
             }
+            Version::Initial(forward) => {
+                if *forward == 0 {
+                    write!(f, "INITIAL")
+                } else {
+                    write!(f, "INITIAL~{}", forward)
+                }
+            }
         }
     }
 }
 
 impl Version {
     pub fn shift_mut(&mut self, pos: isize) {
+        // No need to shift INITIAL, as it does not change on new versions.
         if let Version::Head(head) = self {
             *head += pos
         }
@@ -235,6 +245,24 @@ mod tests {
         assert_eq!(table.to_string(), "collection/table@HEAD~2..HEAD");
         let table = VersionedTableRef::<TableName>::parse("collection/table@HEAD^^,HEAD").unwrap();
         assert_eq!(table.to_string(), "collection/table@HEAD~2,HEAD");
+        let table = VersionedTableRef::<TableName>::parse("collection/table").unwrap();
+        assert_eq!(table.to_string(), "collection/table");
+        let table = VersionedTableRef::<TableName>::parse("collection/table@INITIAL^^").unwrap();
+        assert_eq!(table.to_string(), "collection/table@INITIAL~2");
+        let table =
+            VersionedTableRef::<TableName>::parse("collection/table@INITIAL^^..INITIAL").unwrap();
+        assert_eq!(table.to_string(), "collection/table@INITIAL~2..INITIAL");
+        let table =
+            VersionedTableRef::<TableName>::parse("collection/table@INITIAL^^,INITIAL").unwrap();
+        assert_eq!(table.to_string(), "collection/table@INITIAL~2,INITIAL");
+        let table = VersionedTableRef::<TableName>::parse("collection/table").unwrap();
+        assert_eq!(table.to_string(), "collection/table");
+        let table =
+            VersionedTableRef::<TableName>::parse("collection/table@INITIAL^^..HEAD").unwrap();
+        assert_eq!(table.to_string(), "collection/table@INITIAL~2..HEAD");
+        let table =
+            VersionedTableRef::<TableName>::parse("collection/table@HEAD^^,INITIAL").unwrap();
+        assert_eq!(table.to_string(), "collection/table@HEAD~2,INITIAL");
         let table = format!("collection/table@{}", id::id());
         assert_eq!(table.to_string(), table);
     }
@@ -257,6 +285,22 @@ mod tests {
         assert_eq!(versions.to_string(), "HEAD~2,HEAD");
         let versions = Versions::parse("HEAD^^..HEAD").unwrap();
         assert_eq!(versions.to_string(), "HEAD~2..HEAD");
+        let versions = Versions::parse("INITIAL").unwrap();
+        assert_eq!(versions.to_string(), "INITIAL");
+        let versions = Versions::parse("INITIAL^^").unwrap();
+        assert_eq!(versions.to_string(), "INITIAL~2");
+        let versions = Versions::parse("INITIAL^^,INITIAL").unwrap();
+        assert_eq!(versions.to_string(), "INITIAL~2,INITIAL");
+        let versions = Versions::parse("INITIAL^^..INITIAL").unwrap();
+        assert_eq!(versions.to_string(), "INITIAL~2..INITIAL");
+        let versions = Versions::parse("INITIAL^^,HEAD").unwrap();
+        assert_eq!(versions.to_string(), "INITIAL~2,HEAD");
+        let versions = Versions::parse("INITIAL^^..HEAD").unwrap();
+        assert_eq!(versions.to_string(), "INITIAL~2..HEAD");
+        let versions = Versions::parse("HEAD^^,INITIAL").unwrap();
+        assert_eq!(versions.to_string(), "HEAD~2,INITIAL");
+        let versions = Versions::parse("HEAD^^..INITIAL").unwrap();
+        assert_eq!(versions.to_string(), "HEAD~2..INITIAL");
         let id = id::id();
         let versions = Versions::parse(format!("{id}")).unwrap();
         assert_eq!(versions.to_string(), format!("{id}"));

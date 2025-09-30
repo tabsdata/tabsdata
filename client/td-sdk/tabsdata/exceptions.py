@@ -1026,8 +1026,9 @@ class ErrorCode(Enum):
     TUCE9 = {
         "code": "TUCE-009",
         "message": (
-            "A valid version string must be of the form 'HEAD', 'HEAD^', 'HEAD~1' or "
-            "a Hash, i.e., match the regex '{}'. Got '{}' instead."
+            "A valid version string must be of the form 'HEAD', 'HEAD^', 'HEAD~1', "
+            "'INITIAL', 'INITIAL^', 'INITIAL~1',"
+            "or a Hash, i.e., match the regex '{}'. Got '{}' instead."
         ),
     }
     TUCE10 = {

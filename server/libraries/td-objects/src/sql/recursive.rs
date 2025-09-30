@@ -38,7 +38,8 @@ pub trait RecursiveQueries {
     /// ranked_function_versions AS (
     ///     SELECT
     ///         fv.*,
-    ///         ROW_NUMBER() OVER (PARTITION BY fv.function_id ORDER BY fv.id DESC) AS rn
+    ///         ROW_NUMBER() OVER (PARTITION BY fv.function_id ORDER BY fv.id DESC) AS rn,
+    ///         COUNT(*) OVER (PARTITION BY v.partition_id) AS total_count
     ///     FROM
     ///         function_versions fv
     /// ),
@@ -53,7 +54,8 @@ pub trait RecursiveQueries {
     /// ranked_dependency_versions AS (
     ///     SELECT
     ///         dv.*,
-    ///         ROW_NUMBER() OVER (PARTITION BY dv.dependency_id ORDER BY dv.id DESC) AS rn
+    ///         ROW_NUMBER() OVER (PARTITION BY dv.dependency_id ORDER BY dv.id DESC) AS rn,
+    ///         COUNT(*) OVER (PARTITION BY v.partition_id) AS total_count
     ///     FROM
     ///         dependency_versions dv
     /// ),
@@ -278,8 +280,7 @@ mod tests {
     use crate::types::dependency::{DependencyDB, DependencyDBWithNames};
     use crate::types::function::FunctionDB;
     use crate::types::trigger::{TriggerDB, TriggerDBWithNames};
-    use chrono::DateTime;
-    use chrono::Utc;
+    use chrono::{DateTime, Utc};
     use sqlx::Execute;
     use std::sync::LazyLock;
     use td_database::sql::DbPool;
@@ -501,7 +502,8 @@ mod tests {
         let expected = "WITH latest_reference_versions_ranked AS (\
         \n            SELECT\
         \n                v.*,\
-        \n                ROW_NUMBER() OVER (PARTITION BY v.reference_id ORDER BY v.defined_on DESC, v.id DESC) AS rn\
+        \n                ROW_NUMBER() OVER (PARTITION BY v.reference_id ORDER BY v.defined_on DESC, v.id DESC) AS rn,\
+        \n                COUNT(*) OVER (PARTITION BY v.reference_id) AS total_count\
         \n            FROM\
         \n                test_table_reference v\
         \n         ),latest_reference_versions AS (\
@@ -514,7 +516,8 @@ mod tests {
         \n        ),latest_recursion_versions_ranked AS (\
         \n            SELECT\
         \n                v.*,\
-        \n                ROW_NUMBER() OVER (PARTITION BY v.id ORDER BY v.defined_on DESC, v.id DESC) AS rn\
+        \n                ROW_NUMBER() OVER (PARTITION BY v.id ORDER BY v.defined_on DESC, v.id DESC) AS rn,\
+        \n                COUNT(*) OVER (PARTITION BY v.id) AS total_count\
         \n            FROM\
         \n                test_table v\
         \n         ),latest_recursion_versions AS (\
@@ -599,7 +602,8 @@ mod tests {
         let expected = "WITH latest_reference_versions_ranked AS (\
         \n            SELECT\
         \n                v.*,\
-        \n                ROW_NUMBER() OVER (PARTITION BY v.reference_id ORDER BY v.defined_on DESC, v.id DESC) AS rn\
+        \n                ROW_NUMBER() OVER (PARTITION BY v.reference_id ORDER BY v.defined_on DESC, v.id DESC) AS rn,\
+        \n                COUNT(*) OVER (PARTITION BY v.reference_id) AS total_count\
         \n            FROM\
         \n                test_table_reference v\
         \n        WHERE v.defined_on <= ? ),latest_reference_versions AS (\
@@ -612,7 +616,8 @@ mod tests {
         \n        ),latest_recursion_versions_ranked AS (\
         \n            SELECT\
         \n                v.*,\
-        \n                ROW_NUMBER() OVER (PARTITION BY v.id ORDER BY v.defined_on DESC, v.id DESC) AS rn\
+        \n                ROW_NUMBER() OVER (PARTITION BY v.id ORDER BY v.defined_on DESC, v.id DESC) AS rn,\
+        \n                COUNT(*) OVER (PARTITION BY v.id) AS total_count\
         \n            FROM\
         \n                test_table v\
         \n        WHERE v.defined_on <= ? ),latest_recursion_versions AS (\

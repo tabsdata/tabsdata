@@ -23,7 +23,9 @@ class Version:
         to_string() -> str: Return the version as a string.
     """
 
-    VERSION_PATTERN = re.compile(r"^(HEAD\^*|HEAD~[0-9]+|[A-Z0-9]{26})$")
+    VERSION_PATTERN = re.compile(
+        r"^(HEAD\^*|HEAD~[0-9]+|INITIAL\^*|INITIAL~[0-9]+|[A-Z0-9]{26})$"
+    )
 
     def __init__(self, version: str):
         """

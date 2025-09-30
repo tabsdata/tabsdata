@@ -145,7 +145,8 @@ pub(crate) fn ranked_versions_at<'a, D>(
         r#"
             SELECT
                 v.*,
-                ROW_NUMBER() OVER (PARTITION BY v.{partition_field} ORDER BY v.{natural_order_field} DESC, v.id DESC) AS rn
+                ROW_NUMBER() OVER (PARTITION BY v.{partition_field} ORDER BY v.{natural_order_field} DESC, v.id DESC) AS rn,
+                COUNT(*) OVER (PARTITION BY v.{partition_field}) AS total_count
             FROM
                 {table} v
         "#
@@ -315,6 +316,10 @@ fn select_table_data_versions_at<'a, D>(
                 query_builder.push(" AND rv.rn = ");
                 query_builder.push_bind((-back + 1) as i64);
             }
+            Version::Initial(forward) => {
+                query_builder.push(" AND rv.rn = total_count - ");
+                query_builder.push_bind(*forward as i64);
+            }
         },
         Versions::List(versions) => {
             query_builder.push(" AND ");
@@ -330,11 +335,20 @@ fn select_table_data_versions_at<'a, D>(
                     separated.push(" rv.rn = ");
                     separated.push_bind_unseparated((-back + 1) as i64);
                 }
+                Version::Initial(forward) => {
+                    // We are not really using this, as we do not know which of these is
+                    // present or not and we actually need it.
+                    separated.push(" rv.rn = total_count - ");
+                    separated.push_bind_unseparated(*forward as i64);
+                }
             });
         }
         Versions::Range(from, to) => {
             // Ranges only include versions between older-newer. So doing HEAD~0..HEAD~2 gives
             // an empty result, but HEAD~2..HEAD~0 gives the last three versions, if any.
+            // And so INITIAL~1..INITIAL~3 gives the second and third versions, if any, but
+            // INITIAL~3..INITIAL~1 gives an empty result.
+            // The range of combining HEAD and INITIAL is defined by the actual versions present.
             match from {
                 Version::Fixed(id) => {
                     query_builder.push(" AND rv.rn <= ");
@@ -347,6 +361,10 @@ fn select_table_data_versions_at<'a, D>(
                 Version::Head(back) => {
                     query_builder.push(" AND rv.rn <= ");
                     query_builder.push_bind((-back + 1) as i64);
+                }
+                Version::Initial(forward) => {
+                    query_builder.push(" AND rv.rn <= total_count - ");
+                    query_builder.push_bind(*forward as i64);
                 }
             }
             match to {
@@ -361,6 +379,10 @@ fn select_table_data_versions_at<'a, D>(
                 Version::Head(back) => {
                     query_builder.push(" AND rv.rn >= ");
                     query_builder.push_bind((-back + 1) as i64);
+                }
+                Version::Initial(forward) => {
+                    query_builder.push(" AND rv.rn >= total_count - ");
+                    query_builder.push_bind(*forward as i64);
                 }
             }
             // Order by rn DESC, so the older versions come first
@@ -490,7 +512,8 @@ mod tests {
         let expected = "test_ranked AS (\
         \n            SELECT\
         \n                v.*,\
-        \n                ROW_NUMBER() OVER (PARTITION BY v.partition_id ORDER BY v.defined_on DESC, v.id DESC) AS rn\
+        \n                ROW_NUMBER() OVER (PARTITION BY v.partition_id ORDER BY v.defined_on DESC, v.id DESC) AS rn,\
+        \n                COUNT(*) OVER (PARTITION BY v.partition_id) AS total_count\
         \n            FROM\
         \n                test_table v\
         \n         ),test AS (\
@@ -516,7 +539,8 @@ mod tests {
         let expected = "test_ranked AS (\
         \n            SELECT\
         \n                v.*,\
-        \n                ROW_NUMBER() OVER (PARTITION BY v.partition_id ORDER BY v.defined_on DESC, v.id DESC) AS rn\
+        \n                ROW_NUMBER() OVER (PARTITION BY v.partition_id ORDER BY v.defined_on DESC, v.id DESC) AS rn,\
+        \n                COUNT(*) OVER (PARTITION BY v.partition_id) AS total_count\
         \n            FROM\
         \n                test_table v\
         \n        WHERE v.defined_on <= ? ),test AS (\
@@ -611,7 +635,8 @@ mod tests {
         let expected = "WITH latest_versions_ranked AS (\
         \n            SELECT\
         \n                v.*,\
-        \n                ROW_NUMBER() OVER (PARTITION BY v.partition_id ORDER BY v.defined_on DESC, v.id DESC) AS rn\
+        \n                ROW_NUMBER() OVER (PARTITION BY v.partition_id ORDER BY v.defined_on DESC, v.id DESC) AS rn,\
+        \n                COUNT(*) OVER (PARTITION BY v.partition_id) AS total_count\
         \n            FROM\
         \n                test_table v\
         \n         ),latest_versions AS (\
@@ -636,7 +661,8 @@ mod tests {
         let expected = "WITH latest_versions_ranked AS (\
         \n            SELECT\
         \n                v.*,\
-        \n                ROW_NUMBER() OVER (PARTITION BY v.partition_id ORDER BY v.defined_on DESC, v.id DESC) AS rn\
+        \n                ROW_NUMBER() OVER (PARTITION BY v.partition_id ORDER BY v.defined_on DESC, v.id DESC) AS rn,\
+        \n                COUNT(*) OVER (PARTITION BY v.partition_id) AS total_count\
         \n            FROM\
         \n                test_table v\
         \n        WHERE v.defined_on <= ? ),latest_versions AS (\
@@ -662,7 +688,8 @@ mod tests {
         let expected = "WITH latest_versions_ranked AS (\
         \n            SELECT\
         \n                v.*,\
-        \n                ROW_NUMBER() OVER (PARTITION BY v.partition_id ORDER BY v.defined_on DESC, v.id DESC) AS rn\
+        \n                ROW_NUMBER() OVER (PARTITION BY v.partition_id ORDER BY v.defined_on DESC, v.id DESC) AS rn,\
+        \n                COUNT(*) OVER (PARTITION BY v.partition_id) AS total_count\
         \n            FROM\
         \n                test_table v\
         \n        WHERE v.defined_on <= ? ),latest_versions AS (\

@@ -111,6 +111,8 @@ const VERSION_PATTERN: &str = concat!(
     "^(",
     "HEAD(?<head_back>\\^{0,10})",
     "|HEAD~(?<head_minus>[0-9]{1,7})",
+    "|INITIAL(?<initial_forward>\\^{0,10})",
+    "|INITIAL~(?<initial_plus>[0-9]{1,7})",
     "|(?<id>[A-Z0-9]{26})",
     ")$"
 );
@@ -122,29 +124,29 @@ pub fn parse_version(s: impl Into<String>) -> Result<Version, TdError> {
     match VERSION_REGEX.captures(&s) {
         None => Err(ParserError::CouldNotParse(
             s.clone(),
-            "a single version, HEAD or fixed".to_string(),
+            "a single version, HEAD, INITIAL or fixed".to_string(),
         ))?,
         Some(captures) => {
-            let version = match captures.name("head_back") {
-                Some(back) => Version::Head(-(back.len() as isize)),
-                None => match captures.name("head_minus") {
-                    Some(head_minus) => {
-                        let minus: isize = head_minus.as_str().parse().map_err(|_| {
-                            ParserError::CouldNotParse(
-                                s.clone(),
-                                "a version HEAD index".to_string(),
-                            )
-                        })?;
-                        Version::Head(-minus)
-                    }
-                    None => {
-                        let version = captures.name("id").unwrap().as_str();
-                        let id = Id::try_from(version).map_err(|_| {
-                            ParserError::CouldNotParse(s.clone(), "a valid version ID".to_string())
-                        })?;
-                        Version::Fixed(id.into())
-                    }
-                },
+            let version = if let Some(back) = captures.name("head_back") {
+                Version::Head(-(back.len() as isize))
+            } else if let Some(head_minus) = captures.name("head_minus") {
+                let minus: isize = head_minus.as_str().parse().map_err(|_| {
+                    ParserError::CouldNotParse(s.clone(), "a version HEAD index".to_string())
+                })?;
+                Version::Head(-minus)
+            } else if let Some(forward) = captures.name("initial_forward") {
+                Version::Initial(forward.len() as isize)
+            } else if let Some(initial_plus) = captures.name("initial_plus") {
+                let plus: isize = initial_plus.as_str().parse().map_err(|_| {
+                    ParserError::CouldNotParse(s.clone(), "a version INITIAL index".to_string())
+                })?;
+                Version::Initial(plus)
+            } else {
+                let version = captures.name("id").unwrap().as_str();
+                let id = Id::try_from(version).map_err(|_| {
+                    ParserError::CouldNotParse(s.clone(), "a valid version ID".to_string())
+                })?;
+                Version::Fixed(id.into())
             };
             Ok(version)
         }
@@ -152,7 +154,7 @@ pub fn parse_version(s: impl Into<String>) -> Result<Version, TdError> {
 }
 
 const UNNAMED_VERSION_PATTERN: &str =
-    "(HEAD(\\^{0,10})|HEAD(~[0-9]{1,7})|TAIL(\\^{0,10})|TAIL(\\+[0-9]{1,7})|[A-Z0-9]{26})";
+    "(HEAD(\\^{0,10})|HEAD(~[0-9]{1,7})|INITIAL(\\^{0,10})|INITIAL(\\~[0-9]{1,7})|[A-Z0-9]{26})";
 const VERSIONS_PATTERN: &str = concat!(
     "^((?<single>",
     UNNAMED_VERSION_PATTERN,
@@ -372,15 +374,22 @@ mod tests {
     #[test]
     fn test_parse_version() {
         let version = parse_version("HEAD").unwrap();
-        assert!(matches!(version, Version::Head(0)));
+        assert_eq!(version, Version::Head(0));
         let version = parse_version("HEAD^").unwrap();
-        assert!(matches!(version, Version::Head(-1)));
+        assert_eq!(version, Version::Head(-1));
         let version = parse_version("HEAD~1").unwrap();
-        assert!(matches!(version, Version::Head(-1)));
+        assert_eq!(version, Version::Head(-1));
         assert!(parse_version("HEAD~a").is_err());
+        let version = parse_version("INITIAL").unwrap();
+        assert_eq!(version, Version::Initial(0));
+        let version = parse_version("INITIAL^").unwrap();
+        assert_eq!(version, Version::Initial(1));
+        let version = parse_version("INITIAL~1").unwrap();
+        assert_eq!(version, Version::Initial(1));
+        assert!(parse_version("INITIAL~a").is_err());
         let id = id::id();
         let version = parse_version(id).unwrap();
-        assert!(matches!(version, Version::Fixed(_)));
+        assert_eq!(version, Version::Fixed(id.into()));
         assert!(parse_version("A".repeat(26)).is_err());
     }
 
@@ -403,6 +412,44 @@ mod tests {
             Versions::Range(Version::Head(-1), Version::Head(0))
         );
 
+        let versions = parse_versions("INITIAL").unwrap();
+        assert_eq!(versions, Versions::Single(Version::Initial(0)));
+        let versions = parse_versions("INITIAL^").unwrap();
+        assert_eq!(versions, Versions::Single(Version::Initial(1)));
+        let versions = parse_versions("INITIAL~1").unwrap();
+        assert_eq!(versions, Versions::Single(Version::Initial(1)));
+        let versions = parse_versions("INITIAL~1,INITIAL").unwrap();
+        assert_eq!(
+            versions,
+            Versions::List(vec![Version::Initial(1), Version::Initial(0)])
+        );
+        let versions = parse_versions("INITIAL~1..INITIAL").unwrap();
+        assert_eq!(
+            versions,
+            Versions::Range(Version::Initial(1), Version::Initial(0))
+        );
+
+        let versions = parse_versions("INITIAL~1,HEAD").unwrap();
+        assert_eq!(
+            versions,
+            Versions::List(vec![Version::Initial(1), Version::Head(0)])
+        );
+        let versions = parse_versions("INITIAL~1..HEAD").unwrap();
+        assert_eq!(
+            versions,
+            Versions::Range(Version::Initial(1), Version::Head(0))
+        );
+        let versions = parse_versions("HEAD~1,INITIAL").unwrap();
+        assert_eq!(
+            versions,
+            Versions::List(vec![Version::Head(-1), Version::Initial(0)])
+        );
+        let versions = parse_versions("HEAD~1..INITIAL").unwrap();
+        assert_eq!(
+            versions,
+            Versions::Range(Version::Head(-1), Version::Initial(0))
+        );
+
         let id = id::id();
         let versions = parse_versions(format!("{id}")).unwrap();
         assert_eq!(versions, Versions::Single(Version::Fixed(id.into())));
@@ -410,6 +457,21 @@ mod tests {
         assert_eq!(
             versions,
             Versions::List(vec![Version::Fixed(id.into()), Version::Head(-2)])
+        );
+        let versions = parse_versions(format!("HEAD~2,{id}")).unwrap();
+        assert_eq!(
+            versions,
+            Versions::List(vec![Version::Head(-2), Version::Fixed(id.into())])
+        );
+        let versions = parse_versions(format!("{id},INITIAL~2")).unwrap();
+        assert_eq!(
+            versions,
+            Versions::List(vec![Version::Fixed(id.into()), Version::Initial(2)])
+        );
+        let versions = parse_versions(format!("INITIAL~2,{id}")).unwrap();
+        assert_eq!(
+            versions,
+            Versions::List(vec![Version::Initial(2), Version::Fixed(id.into())])
         );
 
         assert!(parse_versions("HEAD~a").is_err());
@@ -430,6 +492,17 @@ mod tests {
             "collection/table@HEAD~1",
             "collection/table@HEAD^^^^,HEAD^,HEAD",
             "collection/table@HEAD^^..HEAD",
+            "collection/table@INITIAL",
+            "table@INITIAL",
+            "collection/table@INITIAL",
+            "collection/table@INITIAL^",
+            "collection/table@INITIAL~1",
+            "collection/table@INITIAL^^^^,INITIAL^,INITIAL",
+            "collection/table@INITIAL^^..INITIAL",
+            "collection/table@HEAD^^^^,INITIAL^,INITIAL",
+            "collection/table@INITIAL^^..HEAD",
+            "collection/table@INITIAL^^^^,HEAD^,INITIAL",
+            "collection/table@INITIAL^^..HEAD",
             valid_table_with_id.as_str(),
         ];
         valid_tables.into_iter().for_each(|table| {
@@ -458,7 +531,9 @@ mod tests {
             "collection//table/",
             "collection/table/table/",
             "table@head",
+            "table@initial",
             "collection/table@HEAD-1",
+            "collection/table@INITIAL-1",
             "collection/table@01234567890123456789012",
             // Valid versioned, invalid refs
             "table@HEAD",
@@ -469,6 +544,14 @@ mod tests {
             "collection/table@HEAD~1",
             "collection/table@HEAD^^^^,HEAD^,HEAD",
             "collection/table@HEAD^^..HEAD",
+            "table@INITIAL",
+            "collection/table@INITIAL",
+            "table@INITIAL",
+            "collection/table@INITIAL",
+            "collection/table@INITIAL^",
+            "collection/table@INITIAL~1",
+            "collection/table@INITIAL^^^^,INITIAL^,INITIAL",
+            "collection/table@INITIAL^^..INITIAL",
         ];
         invalid_table_refs.into_iter().for_each(|table| {
             let parsed = parse_table_ref::<TableNameDto, _>(table);

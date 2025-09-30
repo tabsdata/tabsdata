@@ -110,6 +110,21 @@ def test_version_range_update():
     assert version_range.final_version == Version(new_final_version)
     assert build_version_object(version_range) == version_range
     assert version_range.to_string() == new_initial_version + ".." + new_final_version
+    initial_version = "INITIAL~2"
+    final_version = "INITIAL~7"
+    version_range = VersionRange(initial_version, final_version)
+    assert version_range.initial_version == Version(initial_version)
+    assert version_range.final_version == Version(final_version)
+    assert build_version_object(version_range) == version_range
+    assert version_range.to_string() == initial_version + ".." + final_version
+    new_initial_version = "INITIAL"
+    new_final_version = "INITIAL^^^"
+    version_range.initial_version = new_initial_version
+    version_range.final_version = new_final_version
+    assert version_range.initial_version == Version(new_initial_version)
+    assert version_range.final_version == Version(new_final_version)
+    assert build_version_object(version_range) == version_range
+    assert version_range.to_string() == new_initial_version + ".." + new_final_version
 
 
 def test_build_version_object_wrong_type_raises_exception():
