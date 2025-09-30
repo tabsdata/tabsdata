@@ -317,7 +317,10 @@ def lock_pytest_ini(root: str) -> None:
         if path.is_file() and path.resolve() != tabsdata_pytest_ini_path:
             logger.info(f"🔏 Locking pytest.ini file: {path}")
             shutil.copy2(tabsdata_pytest_ini_path, path)
-
+    for path in Path(os.path.join(root, "..", "tabsdata-ag")).rglob(pytest_ini_name):
+        if path.is_file() and path.resolve() != tabsdata_pytest_ini_path:
+            logger.info(f"🔏 Locking pytest.ini file: {path}")
+            shutil.copy2(tabsdata_pytest_ini_path, path)
 
 def lock(root: str):
     year = datetime.now().year
