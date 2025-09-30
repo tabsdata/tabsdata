@@ -11,12 +11,14 @@ use ta_execution::transaction::{TransactionMap, TransactionMapper};
 use td_error::TdError;
 use td_execution::planner::ExecutionPlanner;
 use td_execution::version_resolver::VersionResolver;
-use td_objects::sql::DaoQueries;
-use td_objects::types::basic::{Dot, InputIdx, Trigger, VersionPos};
+use td_objects::crudl::handle_sql_err;
+use td_objects::sql::{DaoQueries, FindBy, UpdateBy};
+use td_objects::types::basic::{Dot, FunctionRunStatus, InputIdx, Trigger, VersionPos};
 use td_objects::types::execution::{
     ExecutionDB, ExecutionResponse, FunctionRequirementDB, FunctionRunDB, FunctionRunDBBuilder,
     FunctionVersionResponseBuilder, GraphEdge, ResolvedVersion, ResolvedVersionResponse,
     TableDataVersionDB, TableVersionResponseBuilder, TransactionDB, TransactionDBBuilder,
+    UpdateFunctionRunDB,
 };
 use td_objects::types::table_ref::Versions;
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
@@ -171,6 +173,69 @@ pub async fn build_execution_plan(
         .await?;
 
     Ok(execution_plan)
+}
+
+// similar to `update_function_run_status`
+pub async fn update_initial_function_run_status(
+    SrvCtx(queries): SrvCtx<DaoQueries>,
+    Connection(connection): Connection,
+    Input(function_runs): Input<Vec<FunctionRunDB>>,
+    Input(function_reqs): Input<Vec<FunctionRequirementDB>>,
+) -> Result<(), TdError> {
+    let mut conn = connection.lock().await;
+    let conn = conn.get_mut_connection()?;
+
+    let function_reqs_upstream = function_reqs
+        .iter()
+        .filter_map(|req| req.requirement_function_run_id().as_ref())
+        .unique()
+        .collect::<Vec<_>>();
+
+    let function_runs_upstream: Vec<FunctionRunDB> = queries
+        .find_by::<FunctionRunDB>(&function_reqs_upstream)?
+        .build_query_as()
+        .fetch_all(&mut *conn)
+        .await
+        .map_err(handle_sql_err)?;
+
+    let mut function_run_updates = HashMap::new();
+    for fr in function_runs.iter() {
+        // collect all upstream runs for this function_run
+        let upstream_runs = function_reqs
+            .iter()
+            .filter(|req| req.function_run_id() == fr.id())
+            .filter_map(|req| *req.requirement_function_run_id())
+            .filter_map(|id| function_runs_upstream.iter().find(|ufr| *ufr.id() == id))
+            .collect::<Vec<_>>();
+
+        // and update status accordingly
+        if upstream_runs.iter().any(|ufr| {
+            matches!(
+                ufr.status(),
+                FunctionRunStatus::Failed | FunctionRunStatus::OnHold
+            )
+        }) {
+            // any upstream Failed, OnHold → OnHold
+            function_run_updates
+                .entry(FunctionRunStatus::OnHold)
+                .or_insert_with(HashSet::new)
+                .extend(std::iter::once(*fr.id()));
+        }
+    }
+
+    for (status, function_run_ids) in function_run_updates {
+        let update = UpdateFunctionRunDB::builder().status(status).build()?;
+        let function_run_ids: Vec<_> = function_run_ids.iter().collect();
+        // TODO this is not getting chunked
+        let _ = queries
+            .update_all_by::<_, FunctionRunDB>(&update, &(function_run_ids))?
+            .build()
+            .execute(&mut *conn)
+            .await
+            .map_err(handle_sql_err)?;
+    }
+
+    Ok(())
 }
 
 pub async fn build_function_requirements(

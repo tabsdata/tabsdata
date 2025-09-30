@@ -5,6 +5,7 @@
 use crate::execution::layers::plan::{
     build_execution_plan, build_function_requirements, build_function_runs, build_response,
     build_table_data_versions, build_transaction_map, build_transactions,
+    update_initial_function_run_status,
 };
 use crate::execution::layers::template::assert_active_status;
 use crate::execution::layers::template::{
@@ -106,6 +107,8 @@ fn service() {
         // Create steps
         from_fn(build_function_requirements),
         from_fn(insert_vec::<FunctionRequirementDB>),
+        // Update function run initial status if needed
+        from_fn(update_initial_function_run_status),
         // Execution plan response
         from_fn(build_response),
     )
@@ -120,8 +123,12 @@ pub(crate) mod tests {
     use td_objects::crudl::{RequestContext, handle_sql_err};
     use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_collection::seed_collection;
+    use td_objects::test_utils::seed_execution::seed_execution;
     use td_objects::test_utils::seed_function::seed_function;
+    use td_objects::test_utils::seed_function_run::seed_function_run;
     use td_objects::test_utils::seed_inter_collection_permission::seed_inter_collection_permission;
+    use td_objects::test_utils::seed_table_data_version::seed_table_data_version;
+    use td_objects::test_utils::seed_transaction::seed_transaction;
     use td_objects::tower_service::authz::AuthzError;
     use td_objects::types::basic::{
         AccessTokenId, ExecutionStatus, FunctionRunStatus, TableDependencyDto, TableNameDto,
@@ -129,14 +136,17 @@ pub(crate) mod tests {
     };
     use td_objects::types::basic::{
         BundleId, CollectionName, Decorator, ExecutionName, FunctionName, FunctionRuntimeValues,
-        TableName, TriggeredOn, UserId,
+        TableName, TransactionKey, TriggeredOn, UserId,
     };
     use td_objects::types::basic::{RoleId, ToCollectionId};
-    use td_objects::types::execution::{ExecutionDBWithStatus, TransactionDBWithStatus};
+    use td_objects::types::execution::{
+        ExecutionDBWithStatus, FunctionRunDBWithNames, TransactionDBWithStatus,
+    };
     use td_objects::types::execution::{
         FunctionRequirementDBWithNames, TableDataVersionDBWithFunction,
     };
     use td_objects::types::function::{FunctionDBWithNames, FunctionRegister};
+    use td_objects::types::table::TableDB;
     use td_tower::ctx_service::RawOneshot;
     use td_tower::td_service::TdService;
 
@@ -214,6 +224,8 @@ pub(crate) mod tests {
                     // Create steps
                     type_of_val(&build_function_requirements),
                     type_of_val(&insert_vec::<FunctionRequirementDB>),
+                    // Update function run initial status if needed
+                    type_of_val(&update_initial_function_run_status),
                     // Execution plan response
                     type_of_val(&build_response),
                 ],
@@ -598,5 +610,188 @@ pub(crate) mod tests {
             );
             Err(err)
         }
+    }
+
+    #[td_test::test(sqlx)]
+    #[tokio::test]
+    async fn test_execute_initial_status_upstream_scheduled(db: DbPool) -> Result<(), TdError> {
+        test_execute_upstream_initial_status(
+            db,
+            FunctionRunStatus::Scheduled,
+            FunctionRunStatus::Scheduled,
+        )
+        .await
+    }
+
+    #[td_test::test(sqlx)]
+    #[tokio::test]
+    async fn test_execute_initial_status_upstream_on_hold(db: DbPool) -> Result<(), TdError> {
+        test_execute_upstream_initial_status(
+            db,
+            FunctionRunStatus::OnHold,
+            FunctionRunStatus::OnHold,
+        )
+        .await
+    }
+
+    #[td_test::test(sqlx)]
+    #[tokio::test]
+    async fn test_execute_initial_status_upstream_failed(db: DbPool) -> Result<(), TdError> {
+        test_execute_upstream_initial_status(
+            db,
+            FunctionRunStatus::Failed,
+            FunctionRunStatus::OnHold,
+        )
+        .await
+    }
+
+    async fn test_execute_upstream_initial_status(
+        db: DbPool,
+        upstream_status: FunctionRunStatus,
+        expected_initial_status: FunctionRunStatus,
+    ) -> Result<(), TdError> {
+        let collection_name = CollectionName::try_from("collection")?;
+        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
+
+        let create = FunctionRegister::builder()
+            .try_name("function_0")?
+            .try_description("foo description")?
+            .bundle_id(BundleId::default())
+            .try_snippet("foo snippet")?
+            .decorator(Decorator::Publisher)
+            .dependencies(None)
+            .triggers(None)
+            .tables(vec![TableNameDto::try_from("table_0")?])
+            .runtime_values(FunctionRuntimeValues::try_from("foo runtime values")?)
+            .reuse_frozen_tables(false)
+            .build()?;
+
+        let function_0 = seed_function(&db, &collection, &create).await;
+
+        let create = FunctionRegister::builder()
+            .try_name("function_1")?
+            .try_description("foo description")?
+            .bundle_id(BundleId::default())
+            .try_snippet("foo snippet")?
+            .decorator(Decorator::Publisher)
+            .dependencies(None)
+            .triggers(None)
+            .tables(vec![TableNameDto::try_from("table_1")?])
+            .runtime_values(FunctionRuntimeValues::try_from("foo runtime values")?)
+            .reuse_frozen_tables(false)
+            .build()?;
+
+        let function_1 = seed_function(&db, &collection, &create).await;
+
+        let create = FunctionRegister::builder()
+            .try_name("function_2")?
+            .try_description("foo description")?
+            .bundle_id(BundleId::default())
+            .try_snippet("foo snippet")?
+            .decorator(Decorator::Publisher)
+            .dependencies(vec![
+                TableDependencyDto::try_from("table_0")?,
+                TableDependencyDto::try_from("table_1")?,
+            ])
+            .triggers(vec![
+                TableTriggerDto::try_from("table_0")?,
+                TableTriggerDto::try_from("table_1")?,
+            ])
+            .tables(vec![TableNameDto::try_from("table_2")?])
+            .runtime_values(FunctionRuntimeValues::try_from("foo runtime values")?)
+            .reuse_frozen_tables(false)
+            .build()?;
+
+        let _function_2 = seed_function(&db, &collection, &create).await;
+
+        // seed a function_run for function_0, with OnHold status
+        let execution = seed_execution(&db, &function_0).await;
+        let transaction_key = TransactionKey::try_from("ANY")?;
+        let transaction = seed_transaction(&db, &execution, &transaction_key).await;
+        let function_run = seed_function_run(
+            &db,
+            &collection,
+            &function_0,
+            &execution,
+            &transaction,
+            &upstream_status,
+        )
+        .await;
+        let table_name = TableName::try_from("table_0")?;
+        let table: TableDB = DaoQueries::default()
+            .select_by::<TableDB>(&(collection.id(), &table_name))?
+            .build_query_as()
+            .fetch_one(&db)
+            .await
+            .unwrap();
+        let _table_data_version = seed_table_data_version(
+            &db,
+            &collection,
+            &execution,
+            &transaction,
+            &function_run,
+            &table,
+        )
+        .await;
+
+        // seed a function_run for function_1, with Done status
+        let execution = seed_execution(&db, &function_1).await;
+        let transaction_key = TransactionKey::try_from("ANY")?;
+        let transaction = seed_transaction(&db, &execution, &transaction_key).await;
+        let function_run = seed_function_run(
+            &db,
+            &collection,
+            &function_1,
+            &execution,
+            &transaction,
+            &FunctionRunStatus::Done,
+        )
+        .await;
+        let table_name = TableName::try_from("table_1")?;
+        let table: TableDB = DaoQueries::default()
+            .select_by::<TableDB>(&(collection.id(), &table_name))?
+            .build_query_as()
+            .fetch_one(&db)
+            .await
+            .unwrap();
+        let _table_data_version = seed_table_data_version(
+            &db,
+            &collection,
+            &execution,
+            &transaction,
+            &function_run,
+            &table,
+        )
+        .await;
+
+        // And then run function_2
+        let function_name = FunctionName::try_from("function_2")?;
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
+                FunctionParam::builder()
+                    .try_collection(collection.name().to_string())?
+                    .try_function(function_name.to_string())?
+                    .build()?,
+                ExecutionRequest::builder()
+                    .name(Some(ExecutionName::try_from("test_execution")?))
+                    .build()?,
+            );
+
+        let service = ExecuteFunctionService::with_defaults(db.clone())
+            .service()
+            .await;
+        let _response = service.raw_oneshot(request).await?;
+
+        // there should only be one function run for function_2
+        let function_run: FunctionRunDBWithNames = DaoQueries::default()
+            .select_by::<FunctionRunDBWithNames>(&(&function_name))?
+            .build_query_as()
+            .fetch_one(&db)
+            .await
+            .unwrap();
+
+        // and in OnHold status, because even tho function_1 is Done, function_0 is not ready
+        assert_eq!(*function_run.status(), expected_initial_status);
+        Ok(())
     }
 }
