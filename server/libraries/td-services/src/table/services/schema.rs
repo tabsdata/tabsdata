@@ -177,13 +177,13 @@ mod tests {
         let storage_location = StorageVersion::default();
 
         // 3 function runs, 2 with data and 1 without, per table
-        let mut at_times = vec![AtTime::now().await];
+        let mut at_times = vec![AtTime::now()];
         for i in 0..3 {
             let execution = seed_execution(&db, &function_version).await;
             let transaction_key = TransactionKey::try_from("ANY")?;
             let transaction = seed_transaction(&db, &execution, &transaction_key).await;
 
-            at_times.push(AtTime::now().await);
+            at_times.push(AtTime::now());
             let function_run = seed_function_run(
                 &db,
                 &collection,

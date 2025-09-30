@@ -745,7 +745,7 @@ impl UpdateFunctionRunDB {
 
     pub async fn cancel() -> Result<Self, TdError> {
         Ok(Self::builder()
-            .ended_on(AtTime::now().await)
+            .ended_on(AtTime::now())
             .status(FunctionRunStatus::Canceled)
             .build()?)
     }

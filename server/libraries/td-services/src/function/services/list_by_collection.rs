@@ -104,7 +104,7 @@ mod tests {
         )
         .await;
 
-        let t0 = AtTime::now().await;
+        let t0 = AtTime::now();
 
         // Create function_1 and function_2
         let create = FunctionRegister::builder()
@@ -121,7 +121,7 @@ mod tests {
             .build()?;
         let _ = seed_function(&db, &collection, &create).await;
 
-        let t1 = AtTime::now().await;
+        let t1 = AtTime::now();
 
         // Create function_2
         let create = FunctionRegister::builder()
@@ -138,7 +138,7 @@ mod tests {
             .build()?;
         let _ = seed_function(&db, &collection, &create).await;
 
-        let t2 = AtTime::now().await;
+        let t2 = AtTime::now();
 
         // Update function_1 to function_3
         let update = FunctionUpdate::builder()
@@ -168,7 +168,7 @@ mod tests {
         let response = service.raw_oneshot(request).await;
         let _response = response?;
 
-        let t3 = AtTime::now().await;
+        let t3 = AtTime::now();
 
         // Delete function_2
         let request =
@@ -183,7 +183,7 @@ mod tests {
             .await;
         service.raw_oneshot(request).await?;
 
-        let t4 = AtTime::now().await;
+        let t4 = AtTime::now();
 
         // Create function_5
         let create = FunctionRegister::builder()
@@ -200,7 +200,7 @@ mod tests {
             .build()?;
         let _ = seed_function(&db, &collection, &create).await;
 
-        let t5 = AtTime::now().await;
+        let t5 = AtTime::now();
 
         // Actual test
         // t0 -> no functions

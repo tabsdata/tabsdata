@@ -124,7 +124,7 @@ mod tests {
         let create_name = CollectionName::try_from("ds0").unwrap();
         let _ = seed_collection(&db, &create_name, &UserId::admin()).await;
 
-        let before_update = AtTime::now().await;
+        let before_update = AtTime::now();
 
         let name = CollectionName::try_from("ds1").unwrap();
         let description = Description::try_from("DS1").unwrap();

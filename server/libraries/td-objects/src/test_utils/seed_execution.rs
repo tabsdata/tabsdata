@@ -13,7 +13,7 @@ pub async fn seed_execution(db: &DbPool, function_version: &FunctionDB) -> Execu
         .name(ExecutionName::try_from("test_execution").unwrap())
         .collection_id(function_version.collection_id())
         .function_version_id(function_version.id())
-        .triggered_on(TriggeredOn::now().await)
+        .triggered_on(TriggeredOn::now())
         .triggered_by_id(UserId::admin())
         .build()
         .unwrap();
@@ -85,6 +85,6 @@ mod tests {
             **execution.triggered_by_id(),
             **function_version.defined_by_id()
         );
-        assert!(*execution.triggered_on() < TriggeredOn::now().await);
+        assert!(*execution.triggered_on() < TriggeredOn::now());
     }
 }

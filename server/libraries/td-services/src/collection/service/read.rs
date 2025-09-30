@@ -75,7 +75,7 @@ mod tests {
     #[td_test::test(sqlx)]
     #[tokio::test]
     async fn test_read_collection(db: DbPool) {
-        let before = AtTime::now().await;
+        let before = AtTime::now();
         let name = CollectionName::try_from("ds0").unwrap();
         let _ = seed_collection(&db, &name, &UserId::admin()).await;
 

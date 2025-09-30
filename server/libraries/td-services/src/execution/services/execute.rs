@@ -417,7 +417,7 @@ pub(crate) mod tests {
                 *response.name(),
                 Some(ExecutionName::try_from("test_execution")?)
             );
-            assert!(*response.triggered_on() < TriggeredOn::now().await);
+            assert!(*response.triggered_on() < TriggeredOn::now());
 
             let all_functions_map = response.all_functions();
             let mut all_functions: Vec<_> = response

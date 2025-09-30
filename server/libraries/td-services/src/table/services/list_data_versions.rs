@@ -146,7 +146,7 @@ mod tests {
         let transaction_key = TransactionKey::try_from("ANY")?;
 
         // First data_version
-        let t0 = AtTime::now().await;
+        let t0 = AtTime::now();
 
         let execution = seed_execution(&db, &function_version).await;
         let transaction = seed_transaction(&db, &execution, &transaction_key).await;
@@ -160,7 +160,7 @@ mod tests {
         )
         .await;
 
-        let t1 = AtTime::now().await;
+        let t1 = AtTime::now();
 
         let table_version = DaoQueries::default()
             .select_by::<TableDB>(&(collection.id(), &TableName::try_from(tables[0].clone())?))?
@@ -202,7 +202,7 @@ mod tests {
         )
         .await;
 
-        let t2 = AtTime::now().await;
+        let t2 = AtTime::now();
 
         // Actual test
         // t0 -> no versions

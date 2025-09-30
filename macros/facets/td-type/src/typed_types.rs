@@ -900,7 +900,7 @@ pub fn typed_timestamp(
         }
 
         impl #name {
-            pub async fn now() -> Self {
+            pub fn now() -> Self {
                 Self(td_common::time::UniqueUtc::now_millis())
             }
 

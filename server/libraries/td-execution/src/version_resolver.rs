@@ -423,7 +423,7 @@ mod tests {
 
         let table_id = table_data_versions.get(&table_name).unwrap()[0].table_id();
         let versions = Versions::None;
-        let triggered_on = TriggeredOn::now().await;
+        let triggered_on = TriggeredOn::now();
 
         let mut conn = db.acquire().await.unwrap();
         let versions_found = VersionResolver::builder()
@@ -460,7 +460,7 @@ mod tests {
 
         let table_id = table_data_versions.get(&table_name).unwrap()[0].table_id();
         let versions = Versions::None;
-        let triggered_on = TriggeredOn::now().await;
+        let triggered_on = TriggeredOn::now();
 
         let mut conn = db.acquire().await.unwrap();
         let versions_found = VersionResolver::builder()
@@ -528,7 +528,7 @@ mod tests {
         assert_eq!(version_found.id(), version_2.id());
 
         // And the second one if current triggered_on is used.
-        let triggered_on = TriggeredOn::now().await;
+        let triggered_on = TriggeredOn::now();
         let versions_found = VersionResolver::builder()
             .table_id(table_id)
             .versions(&versions)
@@ -568,8 +568,7 @@ mod tests {
         let table_id = version_1.table_id();
 
         // Check the latest version is found with HEAD.
-        let (versions, triggered_on) =
-            (Versions::Single(Version::Head(0)), TriggeredOn::now().await);
+        let (versions, triggered_on) = (Versions::Single(Version::Head(0)), TriggeredOn::now());
         let versions_found = VersionResolver::builder()
             .table_id(table_id)
             .versions(&versions)
@@ -598,10 +597,7 @@ mod tests {
         assert_eq!(version_found.id(), version_2.id());
 
         // And then get HEAD~1
-        let (versions, triggered_on) = (
-            Versions::Single(Version::Head(-1)),
-            TriggeredOn::now().await,
-        );
+        let (versions, triggered_on) = (Versions::Single(Version::Head(-1)), TriggeredOn::now());
         let versions_found = VersionResolver::builder()
             .table_id(table_id)
             .versions(&versions)
@@ -615,10 +611,7 @@ mod tests {
         assert_eq!(version_found.id(), version_2.id());
 
         // And then get HEAD~2
-        let (versions, triggered_on) = (
-            Versions::Single(Version::Head(-2)),
-            TriggeredOn::now().await,
-        );
+        let (versions, triggered_on) = (Versions::Single(Version::Head(-2)), TriggeredOn::now());
         let versions_found = VersionResolver::builder()
             .table_id(table_id)
             .versions(&versions)
@@ -671,7 +664,7 @@ mod tests {
         // Check fixed versions are found with its ids.
         let (versions, triggered_on) = (
             Versions::Single(Version::Fixed(*version_1.id())),
-            TriggeredOn::now().await,
+            TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
             .table_id(table_id)
@@ -687,7 +680,7 @@ mod tests {
 
         let (versions, triggered_on) = (
             Versions::Single(Version::Fixed(*version_2.id())),
-            TriggeredOn::now().await,
+            TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
             .table_id(table_id)
@@ -705,7 +698,7 @@ mod tests {
         let not_found_id = TableDataVersionId::default();
         let (versions, triggered_on) = (
             Versions::Single(Version::Fixed(not_found_id)),
-            TriggeredOn::now().await,
+            TriggeredOn::now(),
         );
         let res = VersionResolver::builder()
             .table_id(table_id)
@@ -799,7 +792,7 @@ mod tests {
                 Version::Fixed(*version_1.id()),
                 Version::Fixed(*version_2.id()),
             ]),
-            TriggeredOn::now().await,
+            TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
             .table_id(table_id)
@@ -845,8 +838,9 @@ mod tests {
                 Version::Head(-1),
                 Version::Fixed(*version_1.id()),
                 Version::Head(0),
+                Version::Initial(0),
             ]),
-            TriggeredOn::now().await,
+            TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
             .table_id(table_id)
@@ -898,7 +892,7 @@ mod tests {
                 Version::Fixed(not_found_id_1),
                 Version::Fixed(not_found_id_2),
             ]),
-            TriggeredOn::now().await,
+            TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
             .table_id(table_id)
@@ -951,7 +945,7 @@ mod tests {
         // Check fixed versions are found with its ids.
         let (versions, triggered_on) = (
             Versions::Range(Version::Head(-2), Version::Head(0)),
-            TriggeredOn::now().await,
+            TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
             .table_id(table_id)
@@ -998,7 +992,7 @@ mod tests {
         // Check fixed versions are found with its ids.
         let (versions, triggered_on) = (
             Versions::Range(Version::Head(-2), Version::Head(0)),
-            TriggeredOn::now().await,
+            TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
             .table_id(table_id)
@@ -1040,10 +1034,10 @@ mod tests {
         // Get table_id
         let table_id = version_1.table_id();
 
-        // Check fixed versions are found with its ids.
+        // And the inverse returns nothing
         let (versions, triggered_on) = (
             Versions::Range(Version::Head(0), Version::Head(-1)),
-            TriggeredOn::now().await,
+            TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
             .table_id(table_id)
@@ -1086,7 +1080,7 @@ mod tests {
                 Version::Fixed(*version_1.id()),
                 Version::Fixed(*version_3.id()),
             ),
-            TriggeredOn::now().await,
+            TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
             .table_id(table_id)
@@ -1141,7 +1135,7 @@ mod tests {
                 Version::Fixed(*version_3.id()),
                 Version::Fixed(*version_1.id()),
             ),
-            TriggeredOn::now().await,
+            TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
             .table_id(table_id)
@@ -1176,7 +1170,7 @@ mod tests {
         // Check version is found.
         let (versions, triggered_on) = (
             Versions::Range(Version::Head(-1), Version::Head(-1)),
-            TriggeredOn::now().await,
+            TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
             .table_id(table_id)
@@ -1214,7 +1208,7 @@ mod tests {
         // Check version is found.
         let (versions, triggered_on) = (
             Versions::Range(Version::Head(-3), Version::Head(-3)),
-            TriggeredOn::now().await,
+            TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
             .table_id(table_id)
@@ -1253,7 +1247,7 @@ mod tests {
                 Version::Fixed(*version_1.id()),
                 Version::Fixed(*version_1.id()),
             ),
-            TriggeredOn::now().await,
+            TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
             .table_id(table_id)
@@ -1291,7 +1285,7 @@ mod tests {
         // Check versions are found.
         let (versions, triggered_on) = (
             Versions::Range(Version::Fixed(*version_1.id()), Version::Head(0)),
-            TriggeredOn::now().await,
+            TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
             .table_id(table_id)
@@ -1334,7 +1328,8 @@ mod tests {
         // Check versions are found.
         let (versions, triggered_on) = (
             Versions::Range(Version::Head(-1), Version::Fixed(*version_1.id())),
-            TriggeredOn::now().await,
+            TriggeredOn::now(),
+        );
         );
         let versions_found = VersionResolver::builder()
             .table_id(table_id)
@@ -1373,7 +1368,7 @@ mod tests {
         // Check versions are found.
         let (versions, triggered_on) = (
             Versions::Range(Version::Head(-5), Version::Fixed(*version_1.id())),
-            TriggeredOn::now().await,
+            TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
             .table_id(table_id)
@@ -1407,7 +1402,7 @@ mod tests {
         // Assert invalid range errors are returned.
         let (versions, triggered_on) = (
             Versions::Range(Version::Head(0), Version::Head(-1)),
-            TriggeredOn::now().await,
+            TriggeredOn::now(),
         );
         let mut conn = db.acquire().await.unwrap();
         let versions_found = VersionResolver::builder()

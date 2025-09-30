@@ -133,7 +133,7 @@ mod tests {
             .build()
             .unwrap();
 
-        let before = AtTime::now().await;
+        let before = AtTime::now();
         let request = RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),

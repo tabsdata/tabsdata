@@ -57,7 +57,7 @@ mod tests {
         let my_f64 = Myf64::try_from(64.0).unwrap();
         let my_bool = MyBool::from(true);
         let my_id = MyId::default();
-        let my_timestamp = MyTimestamp::now().await;
+        let my_timestamp = MyTimestamp::now();
 
         let db = sqlx::sqlite::SqlitePoolOptions::new()
             .connect("sqlite::memory:")

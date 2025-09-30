@@ -507,7 +507,7 @@ mod tests {
     #[tokio::test]
     async fn test_versions_defined_on_some() {
         let mut query_builder = sqlx::QueryBuilder::default();
-        let defined_on = &AtTime::now().await;
+        let defined_on = &AtTime::now();
         ranked_versions_at::<TestDao>("test", &mut query_builder, Some(defined_on));
         let status = [&TestStatus::try_from("A").unwrap()];
         select_ranked_versions_at::<TestDao>("test", &mut query_builder, Some(&status));
@@ -627,7 +627,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_select_versions_at_defined_on_sql() {
-        let defined_on = &AtTime::now().await;
+        let defined_on = &AtTime::now();
         let mut query_builder = DaoQueries::default()
             .select_versions_at::<TestDao>(Some(defined_on), None, &())
             .unwrap();
@@ -652,7 +652,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_select_versions_at_defined_on_where_sql() {
-        let defined_on = &AtTime::now().await;
+        let defined_on = &AtTime::now();
         let by = &TestId::try_from("00000000000000000000000000").unwrap();
         let mut query_builder = DaoQueries::default()
             .select_versions_at::<TestDao>(Some(defined_on), None, &(by))

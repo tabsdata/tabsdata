@@ -104,7 +104,7 @@ mod tests {
         )
         .await;
 
-        let t0 = AtTime::now().await;
+        let t0 = AtTime::now();
 
         // Create function with table_1 and table_2 tables
         let tables = vec![
@@ -125,7 +125,7 @@ mod tests {
             .build()?;
         let _ = seed_function(&db, &collection, &create).await;
 
-        let t1 = AtTime::now().await;
+        let t1 = AtTime::now();
 
         // Update function with table_1 table (remove table_2)
         let tables = vec![TableNameDto::try_from("table_1")?];
@@ -171,7 +171,7 @@ mod tests {
             .raw_oneshot(request)
             .await?;
 
-        let t2 = AtTime::now().await;
+        let t2 = AtTime::now();
 
         // Actual test
 
