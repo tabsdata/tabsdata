@@ -430,6 +430,30 @@ pub struct ActiveTableDataVersionDB {
     with_data_table_data_version_id: Option<TableDataVersionId>,
 }
 
+#[td_type::Dto]
+#[td_type(builder(try_from = ActiveTableDataVersionDB))]
+#[derive(Hash)]
+pub struct ExecutionTableDataVersionRead {
+    id: TableDataVersionId,
+    collection_id: CollectionId,
+    table_id: TableId,
+    name: TableName,
+    table_version_id: TableVersionId,
+    function_version_id: FunctionVersionId,
+    has_data: Option<HasData>,
+    execution_id: ExecutionId,
+    transaction_id: TransactionId,
+    function_run_id: FunctionRunId,
+    function_param_pos: Option<TableFunctionParamPos>,
+
+    triggered_on: TriggeredOn,
+    triggered_by_id: UserId,
+    started_on: Option<AtTime>,
+    ended_on: Option<AtTime>,
+    status: FunctionRunStatus,
+    with_data_table_data_version_id: Option<TableDataVersionId>,
+}
+
 #[td_type::Dao]
 #[dao(
     sql_table = "table_data_versions__with_names",
@@ -829,6 +853,7 @@ pub struct ExecutionResponse {
         TableVersionId,
         GraphEdge<ResolvedVersionResponse>,
     )>,
+    relations_info: HashMap<TableDataVersionId, ExecutionTableDataVersionRead>,
 }
 
 impl ExecutionResponseBuilder {
@@ -849,9 +874,9 @@ impl ExecutionResponseBuilder {
         relations.sort_by(|a, b| {
             let edge_order = |edge: &GraphEdge<ResolvedVersionResponse>| -> u8 {
                 match edge {
-                    GraphEdge::Trigger { .. } => 0,
-                    GraphEdge::Dependency { .. } => 1,
-                    GraphEdge::Output { .. } => 2,
+                    GraphEdge::Output { .. } => 0,
+                    GraphEdge::Trigger { .. } => 1,
+                    GraphEdge::Dependency { .. } => 2,
                 }
             };
             a.0.cmp(&b.0)
@@ -1032,29 +1057,46 @@ impl Display for ResolvedVersion {
     }
 }
 
+impl ResolvedVersion {
+    pub fn to_response(
+        &self,
+    ) -> Result<
+        (
+            ResolvedVersionResponse,
+            HashMap<TableDataVersionId, ExecutionTableDataVersionRead>,
+        ),
+        TdError,
+    > {
+        let mut resolved_info = HashMap::new();
+        let inner = self
+            .inner
+            .iter()
+            .map(|v| {
+                v.as_ref()
+                    .map(|t| {
+                        let info = ExecutionTableDataVersionReadBuilder::try_from(t)?.build()?;
+                        resolved_info.insert(t.id, info);
+                        Ok::<_, TdError>(t.id)
+                    })
+                    .transpose()
+            })
+            .collect::<Result<_, _>>()?;
+
+        Ok((
+            ResolvedVersionResponse {
+                inner,
+                original: self.original.clone(),
+            },
+            resolved_info,
+        ))
+    }
+}
+
 /// Represents the versions of a table to be included in the response.
 #[td_type::Dto]
 pub struct ResolvedVersionResponse {
     inner: Vec<Option<TableDataVersionId>>,
     original: TableVersions,
-}
-
-impl From<&ResolvedVersion> for ResolvedVersionResponse {
-    fn from(value: &ResolvedVersion) -> Self {
-        let mut inner: Vec<_> = value
-            .inner
-            .iter()
-            .map(|v| v.as_ref().map(|t| t.id))
-            .collect();
-
-        // Sort to ensure consistent ordering for reliable comparisons.
-        inner.sort();
-
-        Self {
-            inner,
-            original: value.original.clone(),
-        }
-    }
 }
 
 /// Graph node representation. It can be a function or a table.
