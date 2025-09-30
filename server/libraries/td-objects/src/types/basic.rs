@@ -75,6 +75,9 @@ pub struct CollectionName;
 #[td_type::typed(i64)]
 pub struct ColumnCount;
 
+#[td_type::typed(string)]
+pub struct Connector;
+
 #[td_type::typed(bool)]
 pub struct DataChanged;
 

@@ -4,6 +4,7 @@
 
 mod base;
 mod v1;
+mod v2;
 
 use sqlx::migrate::Migrator;
 use sqlx::sqlite::SqliteRow;

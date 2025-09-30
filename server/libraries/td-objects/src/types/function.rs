@@ -4,7 +4,7 @@
 
 use crate::crudl::RequestContext;
 use crate::types::basic::{
-    AtTime, BundleHash, BundleId, CollectionId, CollectionName, DataLocation, Decorator,
+    AtTime, BundleHash, BundleId, CollectionId, CollectionName, Connector, DataLocation, Decorator,
     Description, FunctionId, FunctionName, FunctionRuntimeValues, FunctionStatus,
     FunctionVersionId, ReuseFrozen, Snippet, StorageVersion, TableDependency, TableDependencyDto,
     TableName, TableNameDto, TableTrigger, TableTriggerDto, UserId, UserName,
@@ -22,6 +22,8 @@ pub struct FunctionRegister {
     bundle_id: BundleId,
     snippet: Snippet,
     decorator: Decorator,
+    #[builder(default)]
+    connector: Option<Connector>,
     #[td_type(extractor)]
     dependencies: Option<Vec<TableDependencyDto>>,
     #[td_type(extractor)]
@@ -104,6 +106,8 @@ pub struct FunctionDB {
     #[td_type(builder(include))]
     decorator: Decorator,
     #[td_type(builder(include))]
+    connector: Option<Connector>,
+    #[td_type(builder(include))]
     runtime_values: FunctionRuntimeValues,
     #[builder(default)]
     #[td_type(setter, extractor)]
@@ -138,6 +142,7 @@ pub struct FunctionDBWithNames {
     name: FunctionName,
     description: Description,
     decorator: Decorator,
+    connector: Option<Connector>,
     #[td_type(extractor)]
     function_id: FunctionId,
     data_location: DataLocation,
@@ -166,6 +171,8 @@ pub struct Function {
     description: Description,
     #[dto(list(filter, filter_like, order_by))]
     decorator: Decorator,
+    #[dto(list(filter, filter_like, order_by))]
+    connector: Option<Connector>,
     #[dto(list(filter, filter_like, order_by))]
     function_id: FunctionId,
     #[dto(list(filter, filter_like, order_by))]

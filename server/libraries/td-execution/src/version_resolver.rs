@@ -351,6 +351,7 @@ mod tests {
             .try_snippet("function_foo snippet")
             .unwrap()
             .decorator(Decorator::Publisher)
+            .connector(None)
             .dependencies(dependencies)
             .triggers(triggers)
             .tables(Some(created_tables))
