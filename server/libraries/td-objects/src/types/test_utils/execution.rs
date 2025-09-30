@@ -13,70 +13,77 @@ use crate::types::execution::{FunctionVersionNode, TableVersionNode};
 use crate::types::function::FunctionDBWithNames;
 use crate::types::table::TableDBWithNames;
 use crate::types::trigger::TriggerDBWithNames;
-use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::ops::Deref;
+use std::sync::LazyLock;
 
-lazy_static! {
-    static ref COLLECTION_ID: CollectionId = CollectionId::default();
-    static ref COLLECTION_NAME: CollectionName = CollectionName::try_from("test").unwrap();
+static COLLECTION_ID: LazyLock<CollectionId> = LazyLock::new(CollectionId::default);
+static COLLECTION_NAME: LazyLock<CollectionName> =
+    LazyLock::new(|| CollectionName::try_from("test").unwrap());
 
-    pub static ref FUNCTION_NAMES: Vec<FunctionName> = vec![
+pub static FUNCTION_NAMES: LazyLock<Vec<FunctionName>> = LazyLock::new(|| {
+    vec![
         FunctionName::try_from("function_0").unwrap(),
         FunctionName::try_from("function_1").unwrap(),
-    ];
+    ]
+});
 
-    pub static ref TABLE_NAMES: Vec<TableName> = vec![
+pub static TABLE_NAMES: LazyLock<Vec<TableName>> = LazyLock::new(|| {
+    vec![
         TableName::try_from("table_0").unwrap(),
         TableName::try_from("table_1").unwrap(),
         TableName::try_from("table_2").unwrap(),
-    ];
+    ]
+});
 
-    // 2 possible functions to use, [0] or [1], each with its own version and table. And each
-    // table with its own version.
-    pub static ref FUNCTIONS: HashMap<FunctionName, Vec<TableName>> = {
-        let mut map = HashMap::new();
-        map.insert(FUNCTION_NAMES[0].clone(), vec![TABLE_NAMES[0].clone()]);
-        map.insert(FUNCTION_NAMES[1].clone(), vec![TABLE_NAMES[1].clone(), TABLE_NAMES[2].clone()]);
-        map
-    };
+// 2 possible functions to use, [0] or [1], each with its own version and table. And each
+// table with its own version.
+pub static FUNCTIONS: LazyLock<HashMap<FunctionName, Vec<TableName>>> = LazyLock::new(|| {
+    let mut map = HashMap::new();
+    map.insert(FUNCTION_NAMES[0].clone(), vec![TABLE_NAMES[0].clone()]);
+    map.insert(
+        FUNCTION_NAMES[1].clone(),
+        vec![TABLE_NAMES[1].clone(), TABLE_NAMES[2].clone()],
+    );
+    map
+});
 
-    static ref FUNCTION_IDS: HashMap<FunctionName, FunctionId> = {
-        let mut map = HashMap::new();
-        for name in FUNCTIONS.keys() {
-            map.insert(name.clone(), FunctionId::default());
-        }
-        map
-    };
+static FUNCTION_IDS: LazyLock<HashMap<FunctionName, FunctionId>> = LazyLock::new(|| {
+    let mut map = HashMap::new();
+    for name in FUNCTIONS.keys() {
+        map.insert(name.clone(), FunctionId::default());
+    }
+    map
+});
 
-    static ref FUNCTION_VERSION_IDS: HashMap<FunctionName, FunctionVersionId> = {
+static FUNCTION_VERSION_IDS: LazyLock<HashMap<FunctionName, FunctionVersionId>> =
+    LazyLock::new(|| {
         let mut map = HashMap::new();
         for name in FUNCTIONS.keys() {
             map.insert(name.clone(), FunctionVersionId::default());
         }
         map
-    };
+    });
 
-    static ref TABLE_IDS: HashMap<TableName, TableId> = {
-        let mut map = HashMap::new();
-        for name in FUNCTIONS.keys() {
-            for table in FUNCTIONS.get(name).unwrap() {
-                map.insert(table.clone(), TableId::default());
-            }
+static TABLE_IDS: LazyLock<HashMap<TableName, TableId>> = LazyLock::new(|| {
+    let mut map = HashMap::new();
+    for name in FUNCTIONS.keys() {
+        for table in FUNCTIONS.get(name).unwrap() {
+            map.insert(table.clone(), TableId::default());
         }
-        map
-    };
+    }
+    map
+});
 
-    static ref TABLE_VERSION_IDS: HashMap<TableName, TableVersionId> = {
-        let mut map = HashMap::new();
-        for name in FUNCTIONS.keys() {
-            for table in FUNCTIONS.get(name).unwrap() {
-                map.insert(table.clone(), TableVersionId::default());
-            }
+static TABLE_VERSION_IDS: LazyLock<HashMap<TableName, TableVersionId>> = LazyLock::new(|| {
+    let mut map = HashMap::new();
+    for name in FUNCTIONS.keys() {
+        for table in FUNCTIONS.get(name).unwrap() {
+            map.insert(table.clone(), TableVersionId::default());
         }
-        map
-    };
-}
+    }
+    map
+});
 
 pub fn function_node(function: &FunctionName) -> FunctionVersionNode {
     FunctionVersionNode::builder()

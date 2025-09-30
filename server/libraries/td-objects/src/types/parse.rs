@@ -5,8 +5,8 @@
 use crate::types::basic::CollectionName;
 use crate::types::table_ref::{TableRef, Version, VersionedTableRef, Versions};
 use constcat::concat;
-use lazy_static::lazy_static;
 use regex::Regex;
+use std::sync::LazyLock;
 use td_common::id::Id;
 use td_error::{TdError, td_error};
 
@@ -50,9 +50,8 @@ where
     T: TryFrom<String, Error = E>,
     E: Into<TdError>,
 {
-    lazy_static! {
-        static ref VERSIONED_TABLE_REGEX: Regex = Regex::new(VERSIONED_TABLE_PATTERN).unwrap();
-    }
+    static VERSIONED_TABLE_REGEX: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(VERSIONED_TABLE_PATTERN).unwrap());
 
     let s = s.into();
     let (collection, table, versions) = match VERSIONED_TABLE_REGEX.captures(&s) {
@@ -87,9 +86,7 @@ where
     T: TryFrom<String, Error = E>,
     E: Into<TdError>,
 {
-    lazy_static! {
-        static ref TABLE_REGEX: Regex = Regex::new(TABLE_PATTERN).unwrap();
-    }
+    static TABLE_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(TABLE_PATTERN).unwrap());
 
     let s = s.into();
     let (collection, table) = match TABLE_REGEX.captures(&s) {
@@ -119,9 +116,7 @@ const VERSION_PATTERN: &str = concat!(
 );
 
 pub fn parse_version(s: impl Into<String>) -> Result<Version, TdError> {
-    lazy_static! {
-        static ref VERSION_REGEX: Regex = Regex::new(VERSION_PATTERN).unwrap();
-    }
+    static VERSION_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(VERSION_PATTERN).unwrap());
 
     let s = s.into();
     match VERSION_REGEX.captures(&s) {
@@ -156,7 +151,8 @@ pub fn parse_version(s: impl Into<String>) -> Result<Version, TdError> {
     }
 }
 
-const UNNAMED_VERSION_PATTERN: &str = "(HEAD(\\^{0,10})|HEAD(~[0-9]{1,7})|[A-Z0-9]{26})";
+const UNNAMED_VERSION_PATTERN: &str =
+    "(HEAD(\\^{0,10})|HEAD(~[0-9]{1,7})|TAIL(\\^{0,10})|TAIL(\\+[0-9]{1,7})|[A-Z0-9]{26})";
 const VERSIONS_PATTERN: &str = concat!(
     "^((?<single>",
     UNNAMED_VERSION_PATTERN,
@@ -172,9 +168,8 @@ const VERSIONS_PATTERN: &str = concat!(
 );
 
 pub fn parse_versions(s: impl Into<String>) -> Result<Versions, TdError> {
-    lazy_static! {
-        static ref VERSIONS_REGEX: Regex = Regex::new(VERSIONS_PATTERN).unwrap();
-    }
+    static VERSIONS_REGEX: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(VERSIONS_PATTERN).unwrap());
 
     let s = s.into();
 
@@ -220,9 +215,8 @@ pub fn parse_versions(s: impl Into<String>) -> Result<Versions, TdError> {
 const NAME_PATTERN: &str = concat!("^", IDENTIFIER_PATTERN, "$");
 
 pub fn parse_name(s: impl Into<String>, name_type: &str) -> Result<String, TdError> {
-    lazy_static! {
-        static ref REGEX: Regex = Regex::new(NAME_PATTERN).unwrap();
-    }
+    static REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(NAME_PATTERN).unwrap());
+
     parser(
         REGEX.clone(),
         s,
@@ -233,9 +227,8 @@ pub fn parse_name(s: impl Into<String>, name_type: &str) -> Result<String, TdErr
 const UNDERSCORE_NAME_PATTERN: &str = concat!("^", UNDERSCORE_IDENTIFIER_PATTERN, "$");
 
 pub fn parse_underscore_name(s: impl Into<String>, name_type: &str) -> Result<String, TdError> {
-    lazy_static! {
-        static ref REGEX: Regex = Regex::new(UNDERSCORE_NAME_PATTERN).unwrap();
-    }
+    static REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(UNDERSCORE_NAME_PATTERN).unwrap());
+
     parser(
         REGEX.clone(),
         s,
@@ -273,9 +266,9 @@ pub fn parse_user(s: impl Into<String>) -> Result<String, TdError> {
 
 pub fn parse_email(s: impl Into<String>) -> Result<String, TdError> {
     const EMAIL_PATTERN: &str = "[a-z0-9._%+-]+@[a-z0-9.-]+\\.[a-z]{2,}";
-    lazy_static! {
-        static ref REGEX: Regex = Regex::new(EMAIL_PATTERN).unwrap();
-    }
+
+    static REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(EMAIL_PATTERN).unwrap());
+
     parser(
         REGEX.clone(),
         s.into().to_lowercase(),

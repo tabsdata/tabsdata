@@ -280,8 +280,8 @@ mod tests {
     use crate::types::trigger::{TriggerDB, TriggerDBWithNames};
     use chrono::DateTime;
     use chrono::Utc;
-    use lazy_static::lazy_static;
     use sqlx::Execute;
+    use std::sync::LazyLock;
     use td_database::sql::DbPool;
     use td_error::TdError;
     use td_type::Dao;
@@ -327,10 +327,6 @@ mod tests {
         defined_on: AtTime,
     }
 
-    lazy_static! {
-        static ref TEST_QUERIES: DaoQueries = DaoQueries::default();
-    }
-
     fn time(i: usize) -> AtTime {
         AtTime::try_from(
             format!("2025-04-02T08:19:5{i}.543+00:00")
@@ -340,8 +336,8 @@ mod tests {
         .unwrap()
     }
 
-    lazy_static! {
-        static ref FIXTURE_TEST_DAOS: Vec<TestDao> = vec![
+    static FIXTURE_TEST_DAOS: LazyLock<Vec<TestDao>> = LazyLock::new(|| {
+        vec![
             TestDao {
                 id: TestId::try_from("AAA").unwrap(),
                 status: TestStatus::try_from("A").unwrap(),
@@ -377,11 +373,11 @@ mod tests {
                 downstream: TestRecursion::try_from("ref_5").unwrap(),
                 defined_on: time(3),
             },
-        ];
-    }
+        ]
+    });
 
-    lazy_static! {
-        static ref FIXTURE_RECURSION_REF: Vec<RecursionReference> = vec![
+    static _FIXTURE_RECURSION_REF: LazyLock<Vec<RecursionReference>> = LazyLock::new(|| {
+        vec![
             RecursionReference {
                 id: TestId::try_from("MMM").unwrap(),
                 reference_id: TestRecursion::try_from("ref_0").unwrap(),
@@ -424,8 +420,8 @@ mod tests {
                 status: TestStatus::try_from("A").unwrap(),
                 defined_on: time(3),
             },
-        ];
-    }
+        ]
+    });
 
     #[test]
     fn test_recursive_active_versions_sql() {
@@ -495,7 +491,7 @@ mod tests {
     #[test]
     fn test_select_active_recursive_versions_at_none_sql() {
         let id = TestId::try_from("AAA").unwrap();
-        let mut query_builder = TEST_QUERIES
+        let mut query_builder = DaoQueries::default()
             .select_recursive_versions_at::<TestDao, RecursionReference, _>(
                 None, None, None, None, &id,
             )
@@ -589,7 +585,7 @@ mod tests {
     fn test_select_active_recursive_versions_at_sql() {
         let at = time(0);
         let id = TestRecursion::try_from("ref_X").unwrap();
-        let mut query_builder = TEST_QUERIES
+        let mut query_builder = DaoQueries::default()
             .select_recursive_versions_at::<TestDao, RecursionReference, _>(
                 Some(&at),
                 None,
@@ -687,7 +683,7 @@ mod tests {
     #[tokio::test]
     async fn test_select_active_versions_none_fetch_all(db: DbPool) {
         let id = TestId::try_from("MMM").unwrap();
-        let mut query_builder = TEST_QUERIES
+        let mut query_builder = DaoQueries::default()
             .select_recursive_versions_at::<TestDao, RecursionReference, _>(
                 None, None, None, None, &id,
             )
@@ -708,7 +704,7 @@ mod tests {
     #[tokio::test]
     async fn test_select_active_versions_none_fetch_all_upstream(db: DbPool) {
         let id = TestId::try_from("NNN").unwrap();
-        let mut query_builder = TEST_QUERIES
+        let mut query_builder = DaoQueries::default()
             .select_recursive_versions_at::<TestDao, RecursionReference, _>(
                 None, None, None, None, &id,
             )
@@ -732,7 +728,7 @@ mod tests {
     async fn test_select_active_versions_at_time_fetch_all(db: DbPool) {
         let at = time(1);
         let id = TestId::try_from("MMM").unwrap();
-        let mut query_builder = TEST_QUERIES
+        let mut query_builder = DaoQueries::default()
             .select_recursive_versions_at::<TestDao, RecursionReference, _>(
                 Some(&at),
                 None,
@@ -757,7 +753,7 @@ mod tests {
         let id = TestId::try_from("MMM").unwrap();
         // PPP is D at time 2, so it will stop the recursion
         let status = &[&TestStatus::try_from("A").unwrap()];
-        let mut query_builder = TEST_QUERIES
+        let mut query_builder = DaoQueries::default()
             .select_recursive_versions_at::<TestDao, RecursionReference, _>(
                 Some(&at),
                 Some(status),
@@ -778,7 +774,7 @@ mod tests {
     #[tokio::test]
     async fn test_select_active_versions_none_last_in_stream(db: DbPool) {
         let id = TestId::try_from("SSS").unwrap();
-        let mut query_builder = TEST_QUERIES
+        let mut query_builder = DaoQueries::default()
             .select_recursive_versions_at::<TestDao, RecursionReference, _>(
                 None, None, None, None, &id,
             )
@@ -794,7 +790,7 @@ mod tests {
     async fn test_select_active_versions_none_deleted(db: DbPool) {
         // OOO is active, but PPP has the same partition_id and is deleted
         let id = TestId::try_from("OOO").unwrap();
-        let mut query_builder = TEST_QUERIES
+        let mut query_builder = DaoQueries::default()
             .select_recursive_versions_at::<TestDao, RecursionReference, _>(
                 None, None, None, None, &id,
             )
@@ -817,7 +813,7 @@ mod tests {
                 status: TestStatus::try_from("A")?,
                 defined_on: time(5),
             };
-            TEST_QUERIES
+            DaoQueries::default()
                 .insert(&reference)?
                 .build()
                 .execute(&db)
@@ -830,7 +826,7 @@ mod tests {
                 downstream: TestRecursion::try_from(format!("x_ref_{:04}", i + 1))?,
                 defined_on: time(5),
             };
-            TEST_QUERIES
+            DaoQueries::default()
                 .insert(&dao)?
                 .build()
                 .execute(&db)
@@ -840,7 +836,7 @@ mod tests {
         }
 
         let id = TestId::try_from(format!("YYY{:04}", 0))?;
-        let mut query_builder = TEST_QUERIES
+        let mut query_builder = DaoQueries::default()
             .select_recursive_versions_at::<TestDao, RecursionReference, _>(
                 None, None, None, None, &id,
             )?;
@@ -861,7 +857,7 @@ mod tests {
             R: DataAccessObject + PartitionBy + VersionedAt,
             E: SqlEntity,
         {
-            let mut query_builder = TEST_QUERIES.select_recursive_versions_at::<D, R, E>(
+            let mut query_builder = DaoQueries::default().select_recursive_versions_at::<D, R, E>(
                 None,
                 None,
                 None,

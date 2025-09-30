@@ -3,9 +3,8 @@
 //
 
 use chrono::{DateTime, Utc};
-use lazy_static::lazy_static;
 use std::marker::PhantomData;
-use std::sync::Mutex;
+use std::sync::{LazyLock, Mutex};
 
 /// Type holder for [`UniqueUtc::now_millis`] function.
 pub struct UniqueUtc {
@@ -95,10 +94,8 @@ impl ThreadSafeElasticUniqueEpoch {
 }
 
 // Singleton instance of [`ThreadSafeElasticUniqueEpoch`] used by [`UniqueUtc::now`].
-lazy_static! {
-    static ref ELASTIC_UNIQUE_EPOCH: ThreadSafeElasticUniqueEpoch =
-        ThreadSafeElasticUniqueEpoch::new();
-}
+static ELASTIC_UNIQUE_EPOCH: LazyLock<ThreadSafeElasticUniqueEpoch> =
+    LazyLock::new(ThreadSafeElasticUniqueEpoch::new);
 
 #[cfg(test)]
 mod tests {

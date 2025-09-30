@@ -404,8 +404,8 @@ mod tests {
     use crate::types::trigger::{TriggerDB, TriggerDBWithNames};
     use chrono::DateTime;
     use chrono::Utc;
-    use lazy_static::lazy_static;
     use sqlx::Execute;
+    use std::sync::LazyLock;
     use td_database::sql::DbPool;
     use td_error::TdError;
     use td_type::Dao;
@@ -432,30 +432,32 @@ mod tests {
         defined_on: AtTime,
     }
 
-    lazy_static! {
-        static ref TEST_QUERIES: DaoQueries = DaoQueries::default();
-    }
-
-    lazy_static! {
-        static ref AT_BEFORE: AtTime = AtTime::try_from(
+    static AT_BEFORE: LazyLock<AtTime> = LazyLock::new(|| {
+        AtTime::try_from(
             "2025-04-02T08:19:52.543+00:00"
                 .parse::<DateTime<Utc>>()
-                .unwrap()
+                .unwrap(),
         )
-        .unwrap();
-        static ref AT_04_08: AtTime = AtTime::try_from(
+        .unwrap()
+    });
+    static AT_04_08: LazyLock<AtTime> = LazyLock::new(|| {
+        AtTime::try_from(
             "2025-04-02T08:19:53.543+00:00"
                 .parse::<DateTime<Utc>>()
-                .unwrap()
+                .unwrap(),
         )
-        .unwrap();
-        static ref AT_0C: AtTime = AtTime::try_from(
+        .unwrap()
+    });
+    static AT_0C: LazyLock<AtTime> = LazyLock::new(|| {
+        AtTime::try_from(
             "2025-04-02T08:19:54.543+00:00"
                 .parse::<DateTime<Utc>>()
-                .unwrap()
+                .unwrap(),
         )
-        .unwrap();
-        static ref FIXTURE_DAOS: Vec<TestDao> = vec![
+        .unwrap()
+    });
+    static FIXTURE_DAOS: LazyLock<Vec<TestDao>> = LazyLock::new(|| {
+        vec![
             TestDao {
                 id: TestId::try_from("00000000000000000000000004").unwrap(),
                 partition_id: TestPartition::try_from("0").unwrap(),
@@ -474,8 +476,8 @@ mod tests {
                 status: TestStatus::try_from("D").unwrap(),
                 defined_on: AT_0C.clone(),
             },
-        ];
-    }
+        ]
+    });
 
     #[test]
     fn test_versions_defined_on_none() {
@@ -601,7 +603,7 @@ mod tests {
 
     #[test]
     fn test_select_versions_at_none_sql() {
-        let mut query_builder = TEST_QUERIES
+        let mut query_builder = DaoQueries::default()
             .select_versions_at::<TestDao>(None, None, &())
             .unwrap();
         let query = query_builder.build();
@@ -626,7 +628,7 @@ mod tests {
     #[tokio::test]
     async fn test_select_versions_at_defined_on_sql() {
         let defined_on = &AtTime::now().await;
-        let mut query_builder = TEST_QUERIES
+        let mut query_builder = DaoQueries::default()
             .select_versions_at::<TestDao>(Some(defined_on), None, &())
             .unwrap();
         let query = query_builder.build();
@@ -652,7 +654,7 @@ mod tests {
     async fn test_select_versions_at_defined_on_where_sql() {
         let defined_on = &AtTime::now().await;
         let by = &TestId::try_from("00000000000000000000000000").unwrap();
-        let mut query_builder = TEST_QUERIES
+        let mut query_builder = DaoQueries::default()
             .select_versions_at::<TestDao>(Some(defined_on), None, &(by))
             .unwrap();
         let query = query_builder.build();
@@ -678,7 +680,7 @@ mod tests {
     #[tokio::test]
     async fn test_select_versions_none_fetch_all(db: DbPool) {
         let status = &TestStatus::try_from("A").unwrap();
-        let mut query_builder = TEST_QUERIES
+        let mut query_builder = DaoQueries::default()
             .select_versions_at::<TestDao>(None, None, &(status))
             .unwrap();
         let result: Vec<TestDao> = query_builder.build_query_as().fetch_all(&db).await.unwrap();
@@ -691,7 +693,7 @@ mod tests {
     async fn test_select_versions_at_none_where_fetch_all(db: DbPool) {
         // 00, no matches
         let by = &TestId::try_from("00000000000000000000000000").unwrap();
-        let mut query_builder = TEST_QUERIES
+        let mut query_builder = DaoQueries::default()
             .select_versions_at::<TestDao>(None, None, &(by))
             .unwrap();
         let result: Vec<TestDao> = query_builder.build_query_as().fetch_all(&db).await.unwrap();
@@ -701,7 +703,7 @@ mod tests {
     #[td_test::test(sqlx(fixture = "test_cte"))]
     #[tokio::test]
     async fn test_select_versions_at_defined_on_before_fetch_all(db: DbPool) {
-        let mut query_builder = TEST_QUERIES
+        let mut query_builder = DaoQueries::default()
             .select_versions_at::<TestDao>(Some(AT_BEFORE.deref()), None, &())
             .unwrap();
         let result: Vec<TestDao> = query_builder.build_query_as().fetch_all(&db).await.unwrap();
@@ -711,7 +713,7 @@ mod tests {
     #[td_test::test(sqlx(fixture = "test_cte"))]
     #[tokio::test]
     async fn test_select_versions_at_defined_on_04_08_fetch_all(db: DbPool) {
-        let mut query_builder = TEST_QUERIES
+        let mut query_builder = DaoQueries::default()
             .select_versions_at::<TestDao>(Some(AT_04_08.deref()), None, &())
             .unwrap();
         let result: Vec<TestDao> = query_builder.build_query_as().fetch_all(&db).await.unwrap();
@@ -735,7 +737,7 @@ mod tests {
                     .unwrap(),
             )?)
             .build()?;
-        TEST_QUERIES
+        DaoQueries::default()
             .insert::<TestDao>(&new)?
             .build()
             .execute(&db)
@@ -745,7 +747,7 @@ mod tests {
         // At now, we get only the new one
         let status = &TestStatus::try_from("A")?;
         let mut query_builder =
-            TEST_QUERIES.select_versions_at::<TestDao>(None, None, &(status))?;
+            DaoQueries::default().select_versions_at::<TestDao>(None, None, &(status))?;
         let result: Vec<TestDao> = query_builder.build_query_as().fetch_all(&db).await.unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0], new);
@@ -757,7 +759,7 @@ mod tests {
                 .unwrap(),
         )?;
         let mut query_builder =
-            TEST_QUERIES.select_versions_at::<TestDao>(Some(at), None, &(status))?;
+            DaoQueries::default().select_versions_at::<TestDao>(Some(at), None, &(status))?;
         let result: Vec<TestDao> = query_builder.build_query_as().fetch_all(&db).await.unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0], FIXTURE_DAOS[0]);
@@ -768,7 +770,7 @@ mod tests {
     #[tokio::test]
     async fn test_select_versions_at_defined_on_04_08_fetch_one(db: DbPool) {
         let by = &TestId::try_from("00000000000000000000000004").unwrap();
-        let mut query_builder = TEST_QUERIES
+        let mut query_builder = DaoQueries::default()
             .select_versions_at::<TestDao>(Some(AT_04_08.deref()), None, &(by))
             .unwrap();
         let result: Vec<TestDao> = query_builder.build_query_as().fetch_all(&db).await.unwrap();
@@ -783,7 +785,8 @@ mod tests {
         where
             D: DataAccessObject + PartitionBy + VersionedAt,
         {
-            let mut query_builder = TEST_QUERIES.select_versions_at::<D>(None, None, &())?;
+            let mut query_builder =
+                DaoQueries::default().select_versions_at::<D>(None, None, &())?;
             let _result: Vec<D> = query_builder.build_query_as().fetch_all(db).await.unwrap();
             Ok(())
         }

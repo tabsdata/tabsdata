@@ -92,13 +92,10 @@ fn check_attach_config(filename: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use lazy_static::lazy_static;
     use std::env::{remove_var, set_var};
-    use std::sync::{Mutex, MutexGuard};
+    use std::sync::{LazyLock, Mutex, MutexGuard};
 
-    lazy_static! {
-        static ref TEST_MUTEX: Mutex<()> = Mutex::new(());
-    }
+    static TEST_MUTEX: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
     struct EnvironmentGuard;
 

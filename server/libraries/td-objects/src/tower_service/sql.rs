@@ -1031,29 +1031,21 @@ mod tests {
     use crate::crudl::{ListParams, RequestContext};
     use crate::sql::{DaoQueries, NoListFilter};
     use crate::types::basic::{AccessTokenId, RoleId, UserId};
-    use lazy_static::lazy_static;
+    use std::sync::LazyLock;
     use td_database::sql::DbPool;
     use td_error::TdError;
     use td_tower::extractors::{Connection, ConnectionType, Input, SrvCtx};
     use td_type::{Dao, Dto};
 
-    lazy_static! {
-        static ref TEST_QUERIES: SrvCtx<DaoQueries> = SrvCtx::new(DaoQueries::default());
-    }
+    static MARIO: LazyLock<FooDao> = LazyLock::new(|| FooDao {
+        id: FooId::try_from("its a me").unwrap(),
+        name: FooName::try_from("mario").unwrap(),
+    });
 
-    lazy_static! {
-        static ref MARIO: FooDao = FooDao {
-            id: FooId::try_from("its a me").unwrap(),
-            name: FooName::try_from("mario").unwrap(),
-        };
-    }
-
-    lazy_static! {
-        static ref LUIGI: FooDao = FooDao {
-            id: FooId::try_from("its a me but in green").unwrap(),
-            name: FooName::try_from("luigi").unwrap(),
-        };
-    }
+    static LUIGI: LazyLock<FooDao> = LazyLock::new(|| FooDao {
+        id: FooId::try_from("its a me but in green").unwrap(),
+        name: FooName::try_from("luigi").unwrap(),
+    });
 
     #[td_type::typed(string)]
     struct FooId;
@@ -1087,7 +1079,7 @@ mod tests {
             id: FooId::try_from("final boss")?,
             name: FooName::try_from("bowser")?,
         });
-        insert(connection.clone(), TEST_QUERIES.clone(), dao).await?;
+        insert(connection.clone(), SrvCtx::new(DaoQueries::default()), dao).await?;
 
         let mut conn = connection.0.lock().await;
         let conn = conn.get_mut_connection()?;
@@ -1110,7 +1102,7 @@ mod tests {
 
         let found = By::<FooName>::select::<FooDao>(
             connection,
-            TEST_QUERIES.clone(),
+            SrvCtx::new(DaoQueries::default()),
             Input::new(FooName::try_from("mario")?),
         )
         .await?;
@@ -1129,7 +1121,7 @@ mod tests {
 
         let found = By::<FooName>::select::<FooDao>(
             connection,
-            TEST_QUERIES.clone(),
+            SrvCtx::new(DaoQueries::default()),
             Input::new(FooName::try_from("not mario")?),
         )
         .await;
@@ -1146,7 +1138,7 @@ mod tests {
 
         let found = By::<(FooId, FooName)>::select::<FooDao>(
             connection,
-            TEST_QUERIES.clone(),
+            SrvCtx::new(DaoQueries::default()),
             Input::new((FooId::try_from("its a me")?, FooName::try_from("mario")?)),
         )
         .await?;
@@ -1165,7 +1157,7 @@ mod tests {
 
         let found = By::<(FooId, FooName)>::select::<FooDao>(
             connection,
-            TEST_QUERIES.clone(),
+            SrvCtx::new(DaoQueries::default()),
             Input::new((
                 FooId::try_from("its a me")?,
                 FooName::try_from("not mario")?,
@@ -1185,7 +1177,7 @@ mod tests {
 
         let found = By::<FooName>::select_all::<FooDao>(
             connection,
-            TEST_QUERIES.clone(),
+            SrvCtx::new(DaoQueries::default()),
             Input::new(FooName::try_from("mario")?),
         )
         .await?;
@@ -1204,9 +1196,12 @@ mod tests {
         let transaction = ConnectionType::Transaction(transaction).into();
         let connection = Connection::new(transaction);
 
-        let found =
-            By::<()>::select_all::<FooDao>(connection, TEST_QUERIES.clone(), Input::new(()))
-                .await?;
+        let found = By::<()>::select_all::<FooDao>(
+            connection,
+            SrvCtx::new(DaoQueries::default()),
+            Input::new(()),
+        )
+        .await?;
 
         assert_eq!(found.len(), 2);
         let (found_1, found_2) = (&found[0], &found[1]);
@@ -1226,7 +1221,7 @@ mod tests {
 
         let exists = By::<FooName>::assert_exists::<FooDao>(
             connection.clone(),
-            TEST_QUERIES.clone(),
+            SrvCtx::new(DaoQueries::default()),
             Input::new(FooName::try_from("mario")?),
         )
         .await;
@@ -1234,7 +1229,7 @@ mod tests {
 
         let exists = By::<FooName>::assert_exists::<FooDao>(
             connection,
-            TEST_QUERIES.clone(),
+            SrvCtx::new(DaoQueries::default()),
             Input::new(FooName::try_from("not mario")?),
         )
         .await;
@@ -1254,7 +1249,7 @@ mod tests {
 
         let not_exists = By::<FooName>::assert_not_exists::<FooDao>(
             connection.clone(),
-            TEST_QUERIES.clone(),
+            SrvCtx::new(DaoQueries::default()),
             Input::new(FooName::try_from("not mario")?),
         )
         .await;
@@ -1262,7 +1257,7 @@ mod tests {
 
         let not_exists = By::<FooName>::assert_not_exists::<FooDao>(
             connection,
-            TEST_QUERIES.clone(),
+            SrvCtx::new(DaoQueries::default()),
             Input::new(FooName::try_from("mario")?),
         )
         .await;
@@ -1286,7 +1281,7 @@ mod tests {
         // id
         let found = By::<FooIdOrName>::select::<FooDao>(
             connection.clone(),
-            TEST_QUERIES.clone(),
+            SrvCtx::new(DaoQueries::default()),
             Input::new(FooIdOrName::try_from("~its a me")?),
         )
         .await?;
@@ -1297,7 +1292,7 @@ mod tests {
         // name
         let found = By::<FooIdOrName>::select::<FooDao>(
             connection,
-            TEST_QUERIES.clone(),
+            SrvCtx::new(DaoQueries::default()),
             Input::new(FooIdOrName::try_from("mario")?),
         )
         .await?;
@@ -1316,7 +1311,7 @@ mod tests {
 
         By::<FooName>::update::<FooDao, FooDao>(
             connection.clone(),
-            TEST_QUERIES.clone(),
+            SrvCtx::new(DaoQueries::default()),
             Input::new(FooDao {
                 id: FooId::try_from("now its not us anymore")?,
                 name: FooName::try_from("bowser")?,
@@ -1327,7 +1322,7 @@ mod tests {
 
         let not_found = By::<FooName>::select::<FooDao>(
             connection.clone(),
-            TEST_QUERIES.clone(),
+            SrvCtx::new(DaoQueries::default()),
             Input::new(FooName::try_from("mario")?),
         )
         .await;
@@ -1335,7 +1330,7 @@ mod tests {
 
         let found = By::<FooName>::select::<FooDao>(
             connection,
-            TEST_QUERIES.clone(),
+            SrvCtx::new(DaoQueries::default()),
             Input::new(FooName::try_from("bowser")?),
         )
         .await?;
@@ -1361,7 +1356,7 @@ mod tests {
 
         let list = By::<()>::list::<(), NoListFilter, FooDto>(
             connection,
-            TEST_QUERIES.clone(),
+            SrvCtx::new(DaoQueries::default()),
             Input::new(list_request),
             Input::new(()),
             Input::new(()),
@@ -1638,7 +1633,7 @@ mod tests {
                 Connection::new(ConnectionType::PoolConnection(db.acquire().await.unwrap()).into());
             By::<()>::list::<(), NoListFilter, FooDto2>(
                 connection,
-                TEST_QUERIES.clone(),
+                SrvCtx::new(DaoQueries::default()),
                 Input::new(request),
                 Input::new(()),
                 Input::new(()),
@@ -1761,7 +1756,7 @@ mod tests {
                 Connection::new(ConnectionType::PoolConnection(db.acquire().await.unwrap()).into());
             By::<()>::list::<(), NoListFilter, FooDto2>(
                 connection,
-                TEST_QUERIES.clone(),
+                SrvCtx::new(DaoQueries::default()),
                 Input::new(request),
                 Input::new(()),
                 Input::new(()),

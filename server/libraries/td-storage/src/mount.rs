@@ -8,7 +8,6 @@ use derive_builder::Builder;
 use futures_util::TryStreamExt;
 use futures_util::stream::BoxStream;
 use getset::Getters;
-use lazy_static::lazy_static;
 use object_store::path::{Path, PathPart};
 use object_store::{ObjectStore, PutPayload};
 #[cfg(target_os = "windows")]
@@ -16,6 +15,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::sync::LazyLock;
 use td_common::absolute_path::AbsolutePath;
 use tracing::debug;
 use url::Url;
@@ -68,9 +68,7 @@ impl MountDef {
     }
 
     pub fn options(&self) -> &HashMap<String, String> {
-        lazy_static! {
-            static ref NO_OPTIONS: HashMap<String, String> = HashMap::new();
-        }
+        static NO_OPTIONS: LazyLock<HashMap<String, String>> = LazyLock::new(HashMap::new);
         self.options.as_ref().unwrap_or(&NO_OPTIONS)
     }
 }

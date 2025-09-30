@@ -191,9 +191,8 @@ pub fn typed_string(input: &ItemStruct, typed: Option<TypedString>) -> proc_macr
     let max_len = some_or_none(max_len);
     let regex = if let Some(regex) = regex {
         quote! {
-            lazy_static::lazy_static! {
-                static ref RE: Option<regex::Regex> = Some(regex::Regex::new(&#regex).unwrap());
-            };
+            static RE: std::sync::LazyLock<Option<regex::Regex>> =
+                std::sync::LazyLock::new(|| Some(regex::Regex::new(&#regex).unwrap()));
             RE.clone()
         }
     } else {

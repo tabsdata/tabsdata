@@ -2,8 +2,8 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use lazy_static::lazy_static;
 use regex::Regex;
+use std::sync::LazyLock;
 
 /// Maximum length for a name, 100 characters.
 pub fn name_max_len() -> usize {
@@ -17,41 +17,32 @@ pub fn name_max_len() -> usize {
 ///
 /// It must be at most [`name_max_len`] characters long, 100 characters.
 pub fn name_regex_pattern() -> &'static str {
-    lazy_static! {
-        static ref NAME_REGEX: String =
-            format!("[a-zA-Z_][a-zA-Z0-9_-]{{0,{}}}", name_max_len() - 1);
-    }
+    static NAME_REGEX: LazyLock<String> =
+        LazyLock::new(|| format!("[a-zA-Z_][a-zA-Z0-9_-]{{0,{}}}", name_max_len() - 1));
     &NAME_REGEX
 }
 
 pub fn name_with_dot_regex_pattern() -> &'static str {
-    lazy_static! {
-        static ref NAME_REGEX: String =
-            format!("[.a-zA-Z_][.a-zA-Z0-9_-]{{0,{}}}", name_max_len() - 1);
-    }
+    static NAME_REGEX: LazyLock<String> =
+        LazyLock::new(|| format!("[.a-zA-Z_][.a-zA-Z0-9_-]{{0,{}}}", name_max_len() - 1));
     &NAME_REGEX
 }
 
 pub fn name_regex() -> &'static Regex {
-    lazy_static! {
-        static ref NAME_REGEX: Regex = Regex::new(name_regex_pattern()).unwrap();
-    }
+    static NAME_REGEX: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(name_regex_pattern()).unwrap());
     &NAME_REGEX
 }
 
 pub fn is_valid_name(name: &str) -> bool {
-    lazy_static! {
-        static ref VALID_NAME_REGEX: Regex =
-            Regex::new(&format!("^{}$", name_regex_pattern())).unwrap();
-    }
+    static VALID_NAME_REGEX: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(&format!("^{}$", name_regex_pattern())).unwrap());
     VALID_NAME_REGEX.is_match(name)
 }
 
 pub fn is_valid_name_with_dot(name: &str) -> bool {
-    lazy_static! {
-        static ref VALID_NAME_REGEX: Regex =
-            Regex::new(&format!("^{}$", name_with_dot_regex_pattern())).unwrap();
-    }
+    static VALID_NAME_REGEX: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(&format!("^{}$", name_with_dot_regex_pattern())).unwrap());
     VALID_NAME_REGEX.is_match(name)
 }
 

@@ -5,12 +5,12 @@
 use crate::{TestSetup, TestSetupExecution};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use lazy_static::lazy_static;
 use sha2::{Digest, Sha256};
 use std::any::type_name;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 use testdir::testdir;
 
 pub mod aws_s3;
@@ -46,9 +46,7 @@ fn format_timestamp(datetime: &DateTime<Utc>) -> String {
 }
 
 pub(crate) fn timestamp(vars: &HashMap<String, String>) -> String {
-    lazy_static! {
-        static ref TESTS_TIMESTAMP: String = format_timestamp(&Utc::now());
-    }
+    static TESTS_TIMESTAMP: LazyLock<String> = LazyLock::new(|| format_timestamp(&Utc::now()));
     let _: &str = &TESTS_TIMESTAMP;
     vars.get(TESTS_TIMESTAMP_KEY)
         .unwrap_or(&TESTS_TIMESTAMP)

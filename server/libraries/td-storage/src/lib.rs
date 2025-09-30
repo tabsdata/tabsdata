@@ -6,12 +6,12 @@ use bytes::Bytes;
 use derive_builder::UninitializedFieldError;
 use futures_util::stream::BoxStream;
 use itertools::Itertools;
-use lazy_static::lazy_static;
 use object_store::path::Path;
 use regex::Regex;
 use std::fmt::{Debug, Display};
 use std::ops::Deref;
 use std::path::PathBuf;
+use std::sync::LazyLock;
 use td_error::td_error;
 use tracing::{trace, warn};
 use url::Url;
@@ -67,13 +67,13 @@ impl SPath {
     const MAX_ELEMENT_LENGTH: usize = 100;
 
     fn assert_path_element_name(name: &str) -> Result<()> {
-        lazy_static! {
-            static ref ELEMENT_NAME_REGEX: Regex = Regex::new(&format!(
+        static ELEMENT_NAME_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+            Regex::new(&format!(
                 "^([0-9A-Za-z_.-]){{1,{}}}$",
                 SPath::MAX_ELEMENT_LENGTH
             ))
-            .unwrap();
-        }
+            .unwrap()
+        });
         if !ELEMENT_NAME_REGEX.is_match(name) {
             return Err(StorageError::InvalidPathElement(name.to_string()));
         }

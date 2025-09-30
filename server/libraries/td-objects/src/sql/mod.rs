@@ -640,7 +640,6 @@ all_the_tuples!(impl_delete_by);
 mod tests {
     use super::*;
     use crate::crudl::ListParams;
-    use lazy_static::lazy_static;
     use sqlx::Execute;
     use td_database::sql::DbPool;
     use td_error::TdError;
@@ -663,15 +662,12 @@ mod tests {
         modified_on: TestModifiedOn,
     }
 
-    lazy_static! {
-        static ref TEST_QUERIES: DaoQueries = DaoQueries::default();
-    }
-
     mod default {
         use super::*;
+        use std::sync::LazyLock;
 
-        lazy_static! {
-            static ref FIXTURE_DAOS: Vec<TestDao> = vec![
+        static FIXTURE_DAOS: LazyLock<Vec<TestDao>> = LazyLock::new(|| {
+            vec![
                 TestDao {
                     id: TestId::try_from("00000000000000000000000004").unwrap(),
                     name: TestName::try_from("mario").unwrap(),
@@ -682,8 +678,8 @@ mod tests {
                     name: TestName::try_from("luigi").unwrap(),
                     modified_on: TestModifiedOn::try_from(6789).unwrap(),
                 },
-            ];
-        }
+            ]
+        });
 
         #[td_test::test(sqlx(fixture = "test_queries"))]
         #[tokio::test]
@@ -694,7 +690,7 @@ mod tests {
                 .try_modified_on(123)?
                 .build()?;
 
-            let mut query_builder = TEST_QUERIES.insert(&dao)?;
+            let mut query_builder = DaoQueries::default().insert(&dao)?;
             let query = query_builder.build();
 
             let query_str = query.sql();
@@ -719,7 +715,7 @@ mod tests {
         #[td_test::test(sqlx(fixture = "test_queries"))]
         #[tokio::test]
         async fn test_dao_select_by(db: DbPool) -> Result<(), TdError> {
-            let mut query_builder = TEST_QUERIES.select_by::<TestDao>(&())?;
+            let mut query_builder = DaoQueries::default().select_by::<TestDao>(&())?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -747,7 +743,7 @@ mod tests {
                 modified_on: TestModifiedOn,
             }
 
-            let mut query_builder = TEST_QUERIES.select_by::<OrderedTestDao>(&())?;
+            let mut query_builder = DaoQueries::default().select_by::<OrderedTestDao>(&())?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -767,7 +763,7 @@ mod tests {
         #[tokio::test]
         async fn test_dao_select_by_where(db: DbPool) -> Result<(), TdError> {
             let by = &(TestName::try_from("mario")?);
-            let mut query_builder = TEST_QUERIES.select_by::<TestDao>(&by)?;
+            let mut query_builder = DaoQueries::default().select_by::<TestDao>(&by)?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -789,7 +785,7 @@ mod tests {
                 &TestId::try_from("00000000000000000000000004")?,
                 &TestName::try_from("mario")?,
             );
-            let mut query_builder = TEST_QUERIES.select_by::<TestDao>(&by)?;
+            let mut query_builder = DaoQueries::default().select_by::<TestDao>(&by)?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -808,7 +804,7 @@ mod tests {
         #[tokio::test]
         async fn test_dao_find_by(db: DbPool) -> Result<(), TdError> {
             let find_by: [&TestId; 0] = [];
-            let mut query_builder = TEST_QUERIES.find_by::<TestDao>(&find_by)?;
+            let mut query_builder = DaoQueries::default().find_by::<TestDao>(&find_by)?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -826,7 +822,7 @@ mod tests {
         #[tokio::test]
         async fn test_dao_find_by_where(db: DbPool) -> Result<(), TdError> {
             let by = [&TestName::try_from("mario")?];
-            let mut query_builder = TEST_QUERIES.find_by::<TestDao>(&by)?;
+            let mut query_builder = DaoQueries::default().find_by::<TestDao>(&by)?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -848,7 +844,7 @@ mod tests {
                 &TestId::try_from("00000000000000000000000004")?,
                 &TestName::try_from("mario")?,
             )];
-            let mut query_builder = TEST_QUERIES.find_by::<TestDao>(&by)?;
+            let mut query_builder = DaoQueries::default().find_by::<TestDao>(&by)?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -876,7 +872,7 @@ mod tests {
                     &TestName::try_from("luigi")?,
                 ),
             ];
-            let mut query_builder = TEST_QUERIES.find_by::<TestDao>(&by)?;
+            let mut query_builder = DaoQueries::default().find_by::<TestDao>(&by)?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -902,7 +898,8 @@ mod tests {
         #[tokio::test]
         async fn test_dao_update_by(db: DbPool) -> Result<(), TdError> {
             let update_dao = UpdateDao::builder().try_name("peach")?.build()?;
-            let mut query_builder = TEST_QUERIES.update_by::<_, TestDao>(&update_dao, &())?;
+            let mut query_builder =
+                DaoQueries::default().update_by::<_, TestDao>(&update_dao, &())?;
             let query = query_builder.build();
 
             let query_str = query.sql();
@@ -933,7 +930,8 @@ mod tests {
         async fn test_dao_update_by_where(db: DbPool) -> Result<(), TdError> {
             let by = &(TestName::try_from("mario")?);
             let update_dao = UpdateDao::builder().try_name("peach")?.build()?;
-            let mut query_builder = TEST_QUERIES.update_by::<_, TestDao>(&update_dao, &by)?;
+            let mut query_builder =
+                DaoQueries::default().update_by::<_, TestDao>(&update_dao, &by)?;
             let query = query_builder.build();
 
             let query_str = query.sql();
@@ -970,7 +968,8 @@ mod tests {
                 &TestName::try_from("mario")?,
             );
             let update_dao = UpdateDao::builder().try_name("peach")?.build()?;
-            let mut query_builder = TEST_QUERIES.update_by::<_, TestDao>(&update_dao, &by)?;
+            let mut query_builder =
+                DaoQueries::default().update_by::<_, TestDao>(&update_dao, &by)?;
             let query = query_builder.build();
 
             let query_str = query.sql();
@@ -1002,7 +1001,7 @@ mod tests {
         #[td_test::test(sqlx(fixture = "test_queries"))]
         #[tokio::test]
         async fn test_dao_delete_by(db: DbPool) -> Result<(), TdError> {
-            let mut query_builder = TEST_QUERIES.delete_by::<TestDao>(&())?;
+            let mut query_builder = DaoQueries::default().delete_by::<TestDao>(&())?;
             let query = query_builder.build();
 
             let query_str = query.sql();
@@ -1024,7 +1023,7 @@ mod tests {
         #[tokio::test]
         async fn test_dao_delete_by_where(db: DbPool) -> Result<(), TdError> {
             let by = &(TestName::try_from("mario")?);
-            let mut query_builder = TEST_QUERIES.delete_by::<TestDao>(&by)?;
+            let mut query_builder = DaoQueries::default().delete_by::<TestDao>(&by)?;
             let query = query_builder.build();
 
             let query_str = query.sql();
@@ -1057,7 +1056,7 @@ mod tests {
                 &TestId::try_from("00000000000000000000000004")?,
                 &TestName::try_from("mario")?,
             );
-            let mut query_builder = TEST_QUERIES.delete_by::<TestDao>(&by)?;
+            let mut query_builder = DaoQueries::default().delete_by::<TestDao>(&by)?;
             let query = query_builder.build();
 
             let query_str = query.sql();
@@ -1090,10 +1089,11 @@ mod tests {
     mod list {
         use super::*;
         use crate::crudl::ListParamsBuilder;
+        use std::sync::LazyLock;
         use td_type::Dto;
 
-        lazy_static! {
-            static ref FIXTURE_DAOS: Vec<TestDao> = vec![
+        static FIXTURE_DAOS: LazyLock<Vec<TestDao>> = LazyLock::new(|| {
+            vec![
                 TestDao {
                     id: TestId::try_from("00000000000000000000000004").unwrap(),
                     name: TestName::try_from("B").unwrap(),
@@ -1114,8 +1114,8 @@ mod tests {
                     name: TestName::try_from("C").unwrap(),
                     modified_on: TestModifiedOn::try_from(4).unwrap(),
                 },
-            ];
-        }
+            ]
+        });
 
         #[td_test::test(sqlx(fixture = "test_list_queries"))]
         #[tokio::test]
@@ -1144,7 +1144,7 @@ mod tests {
                 .unwrap();
             let where_clause = &TestName::try_from("A")?;
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
-            let mut query_builder = TEST_QUERIES
+            let mut query_builder = DaoQueries::default()
                 .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &where_clause)
                 .await?;
             let query = query_builder.build_query_as();
@@ -1179,7 +1179,7 @@ mod tests {
 
             let list_params = ListParams::default();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
-            let mut query_builder = TEST_QUERIES
+            let mut query_builder = DaoQueries::default()
                 .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
                 .await?;
             let query = query_builder.build_query_as();
@@ -1210,7 +1210,7 @@ mod tests {
 
             let list_params = ListParams::default();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
-            let mut query_builder = TEST_QUERIES
+            let mut query_builder = DaoQueries::default()
                 .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
                 .await?;
             let query = query_builder.build_query_as();
@@ -1247,7 +1247,7 @@ mod tests {
                 .build()
                 .unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
-            let mut query_builder = TEST_QUERIES
+            let mut query_builder = DaoQueries::default()
                 .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
                 .await?;
             let query = query_builder.build_query_as();
@@ -1285,7 +1285,7 @@ mod tests {
                 .build()
                 .unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
-            let mut query_builder = TEST_QUERIES
+            let mut query_builder = DaoQueries::default()
                 .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
                 .await?;
             let query = query_builder.build_query_as();
@@ -1321,7 +1321,7 @@ mod tests {
                 .filter(vec!["name:eq:A".to_string()])
                 .build()?;
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
-            let mut query_builder = TEST_QUERIES
+            let mut query_builder = DaoQueries::default()
                 .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
                 .await?;
             let query = query_builder.build_query_as();
@@ -1358,7 +1358,7 @@ mod tests {
                 .build()
                 .unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
-            let mut query_builder = TEST_QUERIES
+            let mut query_builder = DaoQueries::default()
                 .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
                 .await?;
             let query = query_builder.build_query_as();
@@ -1395,7 +1395,7 @@ mod tests {
                 .build()
                 .unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
-            let mut query_builder = TEST_QUERIES
+            let mut query_builder = DaoQueries::default()
                 .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
                 .await?;
             let query = query_builder.build_query_as();
@@ -1430,7 +1430,7 @@ mod tests {
                 .build()
                 .unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
-            let mut query_builder = TEST_QUERIES
+            let mut query_builder = DaoQueries::default()
                 .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
                 .await?;
             let query = query_builder.build_query_as();
@@ -1463,7 +1463,7 @@ mod tests {
 
             let list_params = ListParamsBuilder::default().len(1usize).build().unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
-            let mut query_builder = TEST_QUERIES
+            let mut query_builder = DaoQueries::default()
                 .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
                 .await?;
             let query = query_builder.build_query_as();
@@ -1501,7 +1501,7 @@ mod tests {
                 .build()
                 .unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
-            let mut query_builder = TEST_QUERIES
+            let mut query_builder = DaoQueries::default()
                 .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
                 .await?;
             let query = query_builder.build_query_as();
@@ -1537,7 +1537,7 @@ mod tests {
                 .build()
                 .unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
-            let mut query_builder = TEST_QUERIES
+            let mut query_builder = DaoQueries::default()
                 .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
                 .await?;
             let query = query_builder.build_query_as();
@@ -1573,7 +1573,7 @@ mod tests {
                 .build()
                 .unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
-            let mut query_builder = TEST_QUERIES
+            let mut query_builder = DaoQueries::default()
                 .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
                 .await?;
             let query = query_builder.build_query_as();
@@ -1608,7 +1608,7 @@ mod tests {
                 .pagination_id(FIXTURE_DAOS[2].id().to_string())
                 .build()?;
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
-            let mut query_builder = TEST_QUERIES
+            let mut query_builder = DaoQueries::default()
                 .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
                 .await?;
             let query = query_builder.build_query_as();
@@ -1646,7 +1646,7 @@ mod tests {
                 .build()
                 .unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
-            let mut query_builder = TEST_QUERIES
+            let mut query_builder = DaoQueries::default()
                 .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
                 .await?;
             let query = query_builder.build_query_as();
@@ -1688,7 +1688,7 @@ mod tests {
                 .build()
                 .unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
-            let mut query_builder = TEST_QUERIES
+            let mut query_builder = DaoQueries::default()
                 .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
                 .await?;
             let query = query_builder.build_query_as();
@@ -1727,7 +1727,7 @@ mod tests {
                 .build()
                 .unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
-            let mut query_builder = TEST_QUERIES
+            let mut query_builder = DaoQueries::default()
                 .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
                 .await?;
             let query = query_builder.build_query_as();
@@ -1764,7 +1764,7 @@ mod tests {
                 .build()
                 .unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
-            let mut query_builder = TEST_QUERIES
+            let mut query_builder = DaoQueries::default()
                 .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
                 .await?;
             let query = query_builder.build_query_as();
@@ -1805,7 +1805,7 @@ mod tests {
                 .build()
                 .unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
-            let mut query_builder = TEST_QUERIES
+            let mut query_builder = DaoQueries::default()
                 .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
                 .await?;
             let query = query_builder.build_query_as();
@@ -1845,7 +1845,7 @@ mod tests {
                 .build()
                 .unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
-            let mut query_builder = TEST_QUERIES
+            let mut query_builder = DaoQueries::default()
                 .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
                 .await?;
             let query = query_builder.build_query_as();
@@ -1885,7 +1885,7 @@ mod tests {
                 .build()
                 .unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
-            let mut query_builder = TEST_QUERIES
+            let mut query_builder = DaoQueries::default()
                 .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
                 .await?;
             let query = query_builder.build_query_as();
@@ -1925,7 +1925,7 @@ mod tests {
                 .build()
                 .unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
-            let mut query_builder = TEST_QUERIES
+            let mut query_builder = DaoQueries::default()
                 .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
                 .await?;
             let query = query_builder.build_query_as();

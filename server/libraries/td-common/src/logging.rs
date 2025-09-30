@@ -597,20 +597,24 @@ mod tests {
     use std::time::Duration;
 
     use super::*;
-    use std::sync::Mutex;
+    use std::sync::{LazyLock, Mutex};
 
-    lazy_static::lazy_static! {
-        static ref TEST_LOGGING_MUTEX: Mutex<()> = Mutex::new(());
-    }
+    static TEST_LOGGING_MUTEX: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
-    lazy_static::lazy_static! {
-        static ref SHARED_LOGGER: Mutex<(Sender<String>, Receiver<String>, LoggerGuard)> = {
-            let (sender, receiver) = channel();
-            let writer = TestWriter { sender: sender.clone() };
-            let logger_provider = init(Level::DEBUG, writer, vec!["opentelemetry_sdk=error".to_string()], false);
-            Mutex::new((sender, receiver, logger_provider))
+    type SharedLogger = Mutex<(Sender<String>, Receiver<String>, LoggerGuard)>;
+    static SHARED_LOGGER: LazyLock<SharedLogger> = LazyLock::new(|| {
+        let (sender, receiver) = channel();
+        let writer = TestWriter {
+            sender: sender.clone(),
         };
-    }
+        let logger_provider = init(
+            Level::DEBUG,
+            writer,
+            vec!["opentelemetry_sdk=error".to_string()],
+            false,
+        );
+        Mutex::new((sender, receiver, logger_provider))
+    });
 
     // Custom writer for testing. It sends log messages through a channel.
     struct TestWriter {

@@ -56,7 +56,6 @@ td-schema = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }
 hex = { workspace = true }
-lazy_static = { workspace = true }
 path-slash = { workspace = true }
 sha2 = { workspace = true }
 sqlx = { workspace = true, features = ["runtime-tokio", "macros"] }

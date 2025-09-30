@@ -8,10 +8,10 @@ use crate::types::parse::IDENTIFIER_PATTERN;
 use crate::types::{ListQuery, SqlEntity};
 use getset::Getters;
 use itertools::Itertools;
-use lazy_static::lazy_static;
 use regex::Regex;
 use std::marker::PhantomData;
 use std::str::FromStr;
+use std::sync::LazyLock;
 use td_error::{TdError, td_error};
 
 #[td_error]
@@ -91,9 +91,8 @@ impl Order {
             ")(?<direction>(\\+|\\-))?$"
         );
 
-        lazy_static! {
-            static ref ORDER_BY_REGEX: Regex = Regex::new(ORDER_BY_PATTERN).unwrap();
-        }
+        static ORDER_BY_REGEX: LazyLock<Regex> =
+            LazyLock::new(|| Regex::new(ORDER_BY_PATTERN).unwrap());
 
         if let Some(captures) = ORDER_BY_REGEX.captures(s) {
             let field = captures.name("field").unwrap().as_str().to_string();
@@ -178,9 +177,8 @@ impl<D: ListQuery> Condition<D> {
             "))(?<value>(.*))$"
         );
 
-        lazy_static! {
-            static ref CONDITION_REGEX: Regex = Regex::new(CONDITION_PATTERN).unwrap();
-        }
+        static CONDITION_REGEX: LazyLock<Regex> =
+            LazyLock::new(|| Regex::new(CONDITION_PATTERN).unwrap());
 
         if let Some(captures) = CONDITION_REGEX.captures(s) {
             let field = captures.name("field").unwrap().as_str().to_string();

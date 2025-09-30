@@ -70,7 +70,6 @@ getset = { workspace = true }
 homedir = { workspace = true }
 http = { workspace = true }
 itertools = { workspace = true }
-lazy_static = { workspace = true }
 libc = { workspace = true }
 nix = { workspace = true, features = ["process"] }
 once_cell = { workspace = true }
