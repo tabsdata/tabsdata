@@ -27,13 +27,3 @@ pub fn test_config() -> SqliteConfig {
         .to_string();
     SqliteConfigBuilder::default().url(db_file).build().unwrap()
 }
-
-/// Returns the user and role ids for the given username.
-pub async fn user_role_ids(conn: &DbPool, user_name: &str) -> (String, String) {
-    let user_id = sqlx::query_scalar("SELECT id FROM users WHERE name = ?")
-        .bind(user_name)
-        .fetch_one(conn)
-        .await
-        .unwrap();
-    (user_id, "role_id".to_string())
-}

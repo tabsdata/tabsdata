@@ -49,6 +49,7 @@ ignored = ["openssl", "td-build", "td-schema", "toml"]
 # External dependencies
 
 sqlx = { workspace = true }
+tokio = { workspace = true }
 
 [dev-dependencies]
 td-schema = { workspace = true, features = ["td-test"] }

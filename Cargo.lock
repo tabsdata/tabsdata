@@ -5733,6 +5733,7 @@ dependencies = [
  "openssl",
  "sqlx",
  "td-schema",
+ "tokio",
 ]
 
 [[package]]

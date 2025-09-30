@@ -15,7 +15,7 @@ use td_database::sql::SqliteConfig;
 use td_error::td_error;
 use td_security::config::PasswordHashingConfig;
 use td_services::auth::jwt::JwtConfig;
-use td_storage::MountDef;
+use td_storage::{MountDef, StorageError};
 use te_execution::transaction::TransactionBy;
 
 #[derive(Clone, Serialize, Deserialize, Getters)]
@@ -74,7 +74,7 @@ impl Config {
                     .path("/")
                     .uri(storage.url.as_ref().unwrap())
                     .build()
-                    .map_err(|_| ConfigError::InvalidMountDefinition)?;
+                    .map_err(ConfigError::InvalidMountDefinition)?;
                 Ok(vec![mount_def])
             }
             (false, true) => Ok(storage.mounts.as_ref().unwrap().clone()),
@@ -283,8 +283,8 @@ pub enum ConfigError {
     DoubleStorageConfig = 5,
     #[error("Neither storage.url nor storage.mounts has been configured.")]
     MissingStorageConfig = 6,
-    #[error("The url specified in storage.url is wrong.")]
-    InvalidMountDefinition = 7,
+    #[error("The url specified in storage.url is wrong: {0}")]
+    InvalidMountDefinition(#[source] StorageError) = 7,
 }
 
 #[cfg(test)]

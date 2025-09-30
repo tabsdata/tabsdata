@@ -20,6 +20,7 @@ use std::cmp::Ordering;
 use std::future::Future;
 use std::time::Duration;
 use td_error::td_error;
+use td_schema::{DB_VERSION_NAME, DB_VERSION_VALUE};
 use tracing::log::LevelFilter;
 
 const SLOW_QUERIES_THRESHOLD: u64 = 5000;
@@ -138,11 +139,11 @@ pub enum DbError {
     #[error("Tabsdata database schema has not be created. It must be created")]
     DatabaseSchemaDoesNotExist = 5000,
     #[error("Tabsdata database version is '{0}', it should be an integer")]
-    DatabaseNeedsUpgrade(String, String) = 5001,
+    DatabaseNeedsUpgrade(String, usize) = 5001,
     #[error(
         "Tabsdata database version is '{0}', binary database version is '{1}'. Binary must be upgraded"
     )]
-    DatabaseIsNewer(String, String) = 5002,
+    DatabaseIsNewer(String, usize) = 5002,
     #[error("Tabsdata database corrupted. {0}")]
     DatabaseCorrupted(String) = 5003,
     #[error("Database location is missing in the given configuration")]
@@ -258,15 +259,6 @@ pub struct DbPool {
     pub rw_pool: Pool<Sqlite>,
 }
 
-pub const DB_VERSION_NAME: &str = "db_version";
-pub const DB_VERSION_VALUE: usize = 1;
-
-#[derive(Debug, FromRow)]
-pub struct SystemValue {
-    pub name: String,
-    pub value: String,
-}
-
 /// Specialized Sqlx Sqlite [`Pool`] that uses two pools, one for read-only operations and one for
 /// read-write operations.
 impl DbPool {
@@ -318,16 +310,17 @@ impl DbPool {
     }
 
     pub async fn check_db_version(&self) -> Result<(), DbError> {
-        let select_version_sql =
-            format!("SELECT name, value FROM tabsdata_system WHERE name = '{DB_VERSION_NAME}'");
-        let res: SystemValue = sqlx::query_as(&select_version_sql)
-            .fetch_one(&self.ro_pool)
-            .await
-            .map_err(Self::map_db_version_error)?;
-        let version = res.value.parse::<usize>().map_err(|_| {
+        let res: String =
+            sqlx::QueryBuilder::new("SELECT value FROM tabsdata_system WHERE name = ")
+                .push_bind(DB_VERSION_NAME)
+                .build_query_scalar()
+                .fetch_one(&self.ro_pool)
+                .await
+                .map_err(Self::map_db_version_error)?;
+        let version = res.parse::<usize>().map_err(|_| {
             DbError::DatabaseCorrupted(format!(
                 "'{}' value '{}' must be an integer",
-                DB_VERSION_NAME, res.value
+                DB_VERSION_NAME, res
             ))
         })?;
 
@@ -335,11 +328,11 @@ impl DbPool {
             Ordering::Equal => Ok(()),
             Ordering::Less => Err(DbError::DatabaseNeedsUpgrade(
                 version.to_string(),
-                DB_VERSION_VALUE.to_string(),
+                *DB_VERSION_VALUE,
             )),
             Ordering::Greater => Err(DbError::DatabaseIsNewer(
                 version.to_string(),
-                DB_VERSION_VALUE.to_string(),
+                *DB_VERSION_VALUE,
             )),
         }
     }

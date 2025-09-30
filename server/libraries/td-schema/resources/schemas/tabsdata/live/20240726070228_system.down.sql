@@ -2,4 +2,4 @@
 -- Copyright 2024 Tabs Data Inc.
 --
 
-DROP VIEW tabsdata_system;
+DROP TABLE tabsdata_system;
