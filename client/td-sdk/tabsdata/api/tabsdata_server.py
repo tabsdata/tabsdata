@@ -448,6 +448,7 @@ class Collection:
             context_location,
             decorator_function_name,
             decorator_type,
+            source_or_destination_name,
         ) = _create_archive(
             function_path,
             temporary_directory,
@@ -486,6 +487,7 @@ class Collection:
             runtime_values=runtime_values,
             reuse_frozen_tables=reuse_tables,
             decorator=decorator_type,
+            plugin_name=source_or_destination_name,
             raise_for_status=raise_for_status,
         )
         return Function(self.connection, self, function_name)
@@ -557,6 +559,7 @@ class Collection:
             context_location,
             decorator_new_function_name,
             decorator_type,
+            source_or_destination_name,
         ) = _create_archive(
             function_path,
             temporary_directory,
@@ -593,6 +596,7 @@ class Collection:
             bundle_id=bundle_id,
             runtime_values=runtime_values,
             reuse_frozen_tables=reuse_tables,
+            plugin_name=source_or_destination_name,
             raise_for_status=raise_for_status,
         )
 
@@ -4531,6 +4535,13 @@ def _create_archive(
         "transformer": "T",
     }
     function_type = function_type_to_api_type.get(function.type, "U")  # Unknown type
+
+    source_or_destination = None
+    if function_type == "P":
+        source_or_destination = function.input.__class__.__name__
+    elif function_type == "S":
+        source_or_destination = function.output.__class__.__name__
+
     return (
         tables,
         string_dependencies,
@@ -4539,6 +4550,7 @@ def _create_archive(
         context_location,
         function_name,
         function_type,
+        source_or_destination,
     )
 
 
