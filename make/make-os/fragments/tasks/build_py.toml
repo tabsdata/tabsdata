@@ -208,7 +208,7 @@ script = [
     debug "🚀 uv pip install --quiet -e ."
     output = exec --fail-on-error uv pip install --quiet -e .
 
-    python_output = exec python -c "import sys; print(sys.prefix + '/bin')"
+    python_output = exec python -c "import sysconfig; print(sysconfig.get_path('scripts'))"
     python_bin_dir = set ${python_output.stdout}
     python_bin_dir = trim ${python_bin_dir}
     mkdir target/pytest/build
