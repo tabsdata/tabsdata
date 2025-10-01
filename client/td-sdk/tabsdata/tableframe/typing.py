@@ -18,6 +18,13 @@ if TYPE_CHECKING:
     from tabsdata.tableframe.expr.expr import Expr
     from tabsdata.tableframe.selectors import SelectorProxy
 
+ConcatMethod = Literal[
+    "vertical",
+    "vertical_relaxed",
+    "diagonal",
+    "diagonal_relaxed",
+]
+
 TableDictionary = Mapping[
     str,
     Union[
