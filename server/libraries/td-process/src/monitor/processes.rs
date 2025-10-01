@@ -57,6 +57,7 @@ fn extract_marker(cmd: &[String], key: &str) -> String {
         .unwrap_or_default()
 }
 
+//noinspection DuplicatedCode
 /// Recursive function to get the process tree, with indentation and marker propagation.
 fn process_tree(
     system: &System,
@@ -81,52 +82,56 @@ fn process_tree(
         .unwrap_or_default();
 
     let exec = base_name.trim_matches('"');
+    let is_python_exec = if cfg!(windows) {
+        exec.starts_with("python") && exec.ends_with(".exe")
+    } else {
+        exec.starts_with("python")
+    };
 
-    // In some well-known case, we try to infer a best name to be more informative:
-    let mut name =
-        if exec == "python" || exec == "python.exe" || exec == "python3" || exec == "python3.exe" {
-            // If running python, we try to infer the actual module being run.
-            if let Some(idx) = cmd.iter().position(|arg| arg == "-m") {
-                // If running a module, we extract its name, and alias it if existing in the aliases map.
-                let alias_map = python_module_aliases();
-                cmd.get(idx + 1)
-                    .map(|modname| {
-                        alias_map
-                            .get(modname.as_str())
-                            .map(|s| s.to_string())
-                            .unwrap_or_else(|| modname.to_string())
-                    })
-                    .unwrap_or_else(|| base_name.clone())
-            } else {
-                // Fallback: try to infer from script/binary, only if not a flag
-                cmd.get(1)
-                    .filter(|s| !s.starts_with('-'))
-                    .and_then(|s| Path::new(s).file_name())
-                    .and_then(|n| n.to_str())
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| base_name.clone())
-            }
-        } else if exec == "bash" || exec == "sh" {
-            // If running on Unixes shell, we extract the file name of the running script.
+    // In some well-known cases, we try to infer the best name to be more informative:
+    let mut name = if is_python_exec {
+        // If running python, we try to infer the actual module being run.
+        if let Some(idx) = cmd.iter().position(|arg| arg == "-m") {
+            // If running a module, we extract its name, and alias it if existing in the aliases map.
+            let alias_map = python_module_aliases();
+            cmd.get(idx + 1)
+                .map(|modname| {
+                    alias_map
+                        .get(modname.as_str())
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| modname.to_string())
+                })
+                .unwrap_or_else(|| base_name.clone())
+        } else {
+            // Fallback: try to infer from script/binary, only if not a flag
             cmd.get(1)
                 .filter(|s| !s.starts_with('-'))
                 .and_then(|s| Path::new(s).file_name())
                 .and_then(|n| n.to_str())
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| base_name.clone())
-        } else if exec == "cmd" {
-            // If running on Windows shell, we extract the file name of the running script, skipping first
-            // slashed arguments
-            cmd.iter()
-                .skip(1)
-                .find(|s| !s.starts_with('/'))
-                .and_then(|s| Path::new(s).file_name())
-                .and_then(|n| n.to_str())
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| base_name.clone())
-        } else {
-            base_name.clone()
-        };
+        }
+    } else if exec == "bash" || exec == "sh" {
+        // If running on Unixes shell, we extract the file name of the running script.
+        cmd.get(1)
+            .filter(|s| !s.starts_with('-'))
+            .and_then(|s| Path::new(s).file_name())
+            .and_then(|n| n.to_str())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| base_name.clone())
+    } else if exec == "cmd" {
+        // If running on Windows shell, we extract the file name of the running script, skipping first
+        // slashed arguments
+        cmd.iter()
+            .skip(1)
+            .find(|s| !s.starts_with('/'))
+            .and_then(|s| Path::new(s).file_name())
+            .and_then(|n| n.to_str())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| base_name.clone())
+    } else {
+        base_name.clone()
+    };
 
     name = format!("{}► {}", "  ".repeat(level), name);
 
