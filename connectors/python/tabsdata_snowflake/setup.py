@@ -7,23 +7,41 @@ import logging
 import os
 import platform
 import shutil
+import sys
+import threading
+import time
+import warnings
+from contextlib import contextmanager
 from pathlib import Path
 from sysconfig import get_platform
 
+import colorama
 import psutil
+import tqdm
 from setuptools import find_packages, setup
 from setuptools.command.bdist_egg import bdist_egg as _bdist_egg
 from setuptools.command.build import build as _build
 from setuptools.command.sdist import sdist as _sdist
+
+# noinspection PyDeprecation
 from wheel.bdist_wheel import bdist_wheel as _bdist_wheel
 
+# noinspection DuplicatedCode
+colorama.init()
+
+# noinspection DuplicatedCode
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
+# noinspection PyBroadException
 try:
+    # noinspection PyUnresolvedReferences
     from setuptools.command.build_py import _IncludePackageDataAbuse
 
     _IncludePackageDataAbuse._Warning._DETAILS = ""
+
+    # noinspection PyProtectedMember
+    warnings.filterwarnings("ignore", category=_IncludePackageDataAbuse._Warning)
 except Exception:
     pass
 
@@ -137,7 +155,7 @@ def get_python_tags():
                         break
     if not spec_py:
         raise FileNotFoundError(
-            "Could not locate '__spec.py' in any of the expected locations."
+            f"Could not locate '__spec.py' in any of the expected locations: {ROOT}."
         )
 
     with open(spec_py) as f:
@@ -313,15 +331,15 @@ def get_binaries_folder():
 
 
 # noinspection DuplicatedCode
-def read_requirements(path, visited=None):
+def read_requirements(from_path, visited=None):
     if visited is None:
         visited = set()
-    path = Path(path).resolve()
-    if path in visited:
-        raise ValueError(f"Circular dependency detected: {path}")
-    visited.add(path)
+    from_path = Path(from_path).resolve()
+    if from_path in visited:
+        raise ValueError(f"Circular dependency detected: {from_path}")
+    visited.add(from_path)
     requirements = []
-    with path.open(encoding="utf-8") as file:
+    with from_path.open(encoding="utf-8") as file:
         for line in file:
             line = line.strip()
             if not line or line.startswith(("#", '"')):
@@ -329,7 +347,7 @@ def read_requirements(path, visited=None):
             if line.startswith("-r"):
                 included_path = line.split(maxsplit=1)[1]
                 if not os.path.isabs(included_path):
-                    included_path = path.parent / included_path
+                    included_path = from_path.parent / included_path
                 requirements.extend(read_requirements(included_path, visited))
             elif not line.startswith(("-", "git+")):
                 requirements.append(line)
@@ -501,70 +519,139 @@ os.makedirs(
     exist_ok=True,
 )
 
-setup(
-    name="tabsdata_snowflake",
-    version=read(
-        os.path.join(
-            "tabsdata_snowflake",
-            "assets",
-            "manifest",
-            "VERSION",
-        )
-    ),
-    description="Tabsdata plugin to access Snowflake data.",
-    long_description=read(
-        os.path.join(
-            "tabsdata_snowflake",
-            "assets",
-            "manifest",
-            "README-PyPi.md",
-        )
-    ),
-    long_description_content_type="text/markdown",
-    license_files=(
-        os.path.join(
-            "tabsdata_snowflake",
-            "assets",
-            "manifest",
-            "LICENSE",
-        ),
-    ),
-    author="Tabs Data Inc.",
-    url="https://tabsdata.com",
-    project_urls={
-        "Source": "https://github.com/tabsdata/tabsdata",
-    },
-    python_requires=python_version_spec,
-    install_requires=[],
-    extras_require={"deps": read_requirements("requirements.txt")},
-    cmdclass={
-        "build": CustomBuild,
-        "sdist": CustomSDist,
-        "bdist_wheel": CustomBDistWheel,
-        "bdist_egg": CustomBDistEgg,
-    },
-    packages=find_packages(
-        where=os.getcwd(),
-        exclude=[
-            "tests",
-            "tests*",
-            "tests_tabsdata_snowflake",
-            "tests_tabsdata_snowflake*",
-        ],
-    ),
-    package_dir={
-        "tabsdata_snowflake": "tabsdata_snowflake",
-    },
-    package_data={
-        "tabsdata_snowflake": [
+
+# noinspection DuplicatedCode
+class SpinnerStream:
+
+    def __init__(self, stream, batr):
+        self.stream = stream
+        self.bar = batr
+
+    def write(self, text):
+        if text.strip():
+            self.bar.write(text.rstrip("\n"), file=self.stream)
+        elif text:
+            self.stream.write(text)
+
+    def flush(self):
+        self.stream.flush()
+
+    def __getattr__(self, name):
+        return getattr(self.stream, name)
+
+
+# noinspection DuplicatedCode
+@contextmanager
+def global_spinner(desc: str):
+    if not tqdm or not sys.stderr.isatty():
+        yield
+        return
+
+    stop = threading.Event()
+    spinner_symbols = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+    spinner_index = 0
+    spinner_bar = None
+
+    def worker():
+        nonlocal spinner_index, spinner_bar
+        with tqdm.tqdm(
+            desc=desc,
+            dynamic_ncols=True,
+            bar_format=(
+                f"{colorama.Fore.CYAN}{{desc}} {{elapsed}}{colorama.Style.RESET_ALL}"
+            ),
+            leave=True,
+            file=sys.stderr,
+        ) as bar:
+            spinner_bar = bar
+            while not stop.is_set():
+                bar.set_description_str(f"⏳ {spinner_symbols[spinner_index]} {desc}")
+                spinner_index = (spinner_index + 1) % len(spinner_symbols)
+                bar.refresh()
+                time.sleep(0.1)
+
+    t = threading.Thread(target=worker, daemon=True)
+    t.start()
+
+    while spinner_bar is None:
+        time.sleep(0.01)
+
+    sys_stdout = sys.stdout
+    sys_stderr = sys.stderr
+    sys.stdout = SpinnerStream(sys_stdout, spinner_bar)
+    sys.stderr = SpinnerStream(sys_stderr, spinner_bar)
+
+    try:
+        yield
+    finally:
+        sys.stdout = sys_stdout
+        sys.stderr = sys_stderr
+        stop.set()
+        t.join()
+    setup(
+        name="tabsdata_snowflake",
+        version=read(
             os.path.join(
+                "tabsdata_snowflake",
                 "assets",
                 "manifest",
-                "*",
+                "VERSION",
+            )
+        ),
+        description="Tabsdata plugin to access Snowflake data.",
+        long_description=read(
+            os.path.join(
+                "tabsdata_snowflake",
+                "assets",
+                "manifest",
+                "README-PyPi.md",
+            )
+        ),
+        long_description_content_type="text/markdown",
+        license_files=(
+            os.path.join(
+                "tabsdata_snowflake",
+                "assets",
+                "manifest",
+                "LICENSE",
             ),
-        ],
-    },
-    data_files=datafiles,
-    entry_points={},
-    include_package_data=True,
-)
+        ),
+        author="Tabs Data Inc.",
+        url="https://tabsdata.com",
+        project_urls={
+            "Source": "https://github.com/tabsdata/tabsdata",
+        },
+        python_requires=python_version_spec,
+        install_requires=[],
+        extras_require={"deps": read_requirements("requirements.txt")},
+        cmdclass={
+            "build": CustomBuild,
+            "sdist": CustomSDist,
+            "bdist_wheel": CustomBDistWheel,
+            "bdist_egg": CustomBDistEgg,
+        },
+        packages=find_packages(
+            where=os.getcwd(),
+            exclude=[
+                "tests",
+                "tests*",
+                "tests_tabsdata_snowflake",
+                "tests_tabsdata_snowflake*",
+            ],
+        ),
+        package_dir={
+            "tabsdata_snowflake": "tabsdata_snowflake",
+        },
+        package_data={
+            "tabsdata_snowflake": [
+                os.path.join(
+                    "assets",
+                    "manifest",
+                    "*",
+                ),
+            ],
+        },
+        data_files=datafiles,
+        entry_points={},
+        include_package_data=True,
+    )

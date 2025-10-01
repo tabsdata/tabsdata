@@ -3,7 +3,13 @@
 #
 
 [build-system]
-requires = ["psutil>=7.0", "setuptools==78.0.2", "maturin>=1.0,<2.0", "polars>=1.32.3"]
+requires = [
+    "setuptools==78.1.1",
+    "psutil==7.1.0",
+    "tqdm==4.67.1",
+    "colorama==0.4.6",
+    "maturin>=1.0,<2.0",
+    "polars>=1.32.3"]
 build-backend = "maturin"
 
 [tool.flake8]

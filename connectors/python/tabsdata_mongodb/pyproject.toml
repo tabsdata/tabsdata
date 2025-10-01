@@ -3,7 +3,11 @@
 #
 
 [build-system]
-requires = ["psutil>=7.0", "setuptools==78.0.2"]
+requires = [
+    "setuptools==78.1.1",
+    "psutil==7.1.0",
+    "tqdm==4.67.1",
+    "colorama==0.4.6"]
 build-backend = "setuptools.build_meta"
 
 [tool.flake8]

@@ -8,17 +8,27 @@ import logging
 import os
 import platform
 import shutil
+import sys
+import threading
+import time
 import warnings
+from contextlib import contextmanager
 from pathlib import Path
 from sysconfig import get_platform
 from uuid import uuid4
 
+import colorama
 import psutil
+import tqdm
 from setuptools import find_packages, setup
 from setuptools.command.bdist_egg import bdist_egg as _bdist_egg
 from setuptools.command.build import build as _build
 from setuptools.command.sdist import sdist as _sdist
+
+# noinspection PyDeprecation
 from wheel.bdist_wheel import bdist_wheel as _bdist_wheel
+
+colorama.init()
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -148,7 +158,7 @@ def get_python_tags():
                         break
     if not spec_py:
         raise FileNotFoundError(
-            "Could not locate '__spec.py' in any of the expected locations."
+            f"Could not locate '__spec.py' in any of the expected locations: {ROOT}."
         )
 
     with open(spec_py) as f:
@@ -220,6 +230,7 @@ class CustomSDist(_sdist):
         os.makedirs(self.temp_dir, exist_ok=True)
 
 
+# noinspection DuplicatedCode
 class CustomBDistWheel(_bdist_wheel):
     def __init__(self, dist):
         super().__init__(dist)
@@ -337,20 +348,20 @@ def get_binaries_folder():
 
 
 # noinspection DuplicatedCode
-def read_requirements(path, root=None, token=None, visited=None):  # noqa: C901
+def read_requirements(from_path, root=None, token=None, visited=None):  # noqa: C901
     if token is None:
         token = str(uuid4())
     if visited is None:
         visited = set()
-    path = Path(path).resolve()
+    from_path = Path(from_path).resolve()
 
-    logger.debug(f" - 🥁 {token} · Visiting requirements path: {root} - {path}")
+    logger.debug(f" - 🥁 {token} · Visiting requirements path: {root} - {from_path}")
 
-    if path in visited:
-        raise ValueError(f"Circular dependency detected: {path}")
-    visited.add(path)
+    if from_path in visited:
+        raise ValueError(f"Circular dependency detected: {from_path}")
+    visited.add(from_path)
     requirements = []
-    with path.open(encoding="utf-8") as file:
+    with from_path.open(encoding="utf-8") as file:
         for line in file:
             line = line.strip()
             if not line or line.startswith(("#", '"')):
@@ -358,9 +369,9 @@ def read_requirements(path, root=None, token=None, visited=None):  # noqa: C901
             if line.startswith("-r"):
                 included_path = line.split(maxsplit=1)[1]
                 if not os.path.isabs(included_path):
-                    included_path = path.parent / included_path
+                    included_path = from_path.parent / included_path
                 requirements.extend(
-                    read_requirements(included_path, path, token, visited)
+                    read_requirements(included_path, from_path, token, visited)
                 )
             elif not line.startswith(("-", "git+")):
                 requirements.append(line)
@@ -643,192 +654,264 @@ def build_extras_require(root: str) -> dict[str, list[str]]:
 
 TABSDATA_LICENSE = read(os.path.join(variant_manifest_folder, "LICENSE.setup"))
 
-setup(
-    name="tabsdata",
-    version=TABSDATA_VERSION,
-    description="Tabsdata is a publish-subscribe (pub/sub) server for tables.",
-    long_description=read(
-        os.path.join(
-            "variant",
-            "assets",
-            "manifest",
-            "README-PyPi.md",
-        )
-    ),
-    long_description_content_type="text/markdown",
-    # On Windows, setuptools interprets license_files paths as glob patterns,
-    # and backslashes (\) are treated as escape characters, which may cause
-    # unexpected parsing errors or “invalid character” complaints. Because of
-    # this, back-slashes are replaced with forward-slashes.
-    license=TABSDATA_LICENSE,
-    license_files=(
-        os.path.join(
-            "variant",
-            "assets",
-            "manifest",
-            "LICENSE",
-        ).replace(os.sep, "/"),
-    ),
-    author="Tabs Data Inc.",
-    url="https://tabsdata.com",
-    project_urls={
-        "Source": "https://github.com/tabsdata/tabsdata",
-    },
-    python_requires=python_version_spec,
-    install_requires=read_requirements("requirements.txt"),
-    extras_require=build_extras_require(os.getcwd()),
-    cmdclass={
-        "build": CustomBuild,
-        "sdist": CustomSDist,
-        "bdist_wheel": CustomBDistWheel,
-        "bdist_egg": CustomBDistEgg,
-    },
-    packages=[
-        # tabsdata
-        *find_packages(
-            where=os.path.join(
+
+# noinspection DuplicatedCode
+class SpinnerStream:
+
+    def __init__(self, stream, batr):
+        self.stream = stream
+        self.bar = batr
+
+    def write(self, text):
+        if text.strip():
+            self.bar.write(text.rstrip("\n"), file=self.stream)
+        elif text:
+            self.stream.write(text)
+
+    def flush(self):
+        self.stream.flush()
+
+    def __getattr__(self, name):
+        return getattr(self.stream, name)
+
+
+# noinspection DuplicatedCode
+@contextmanager
+def global_spinner(desc: str):
+    if not tqdm or not sys.stderr.isatty():
+        yield
+        return
+
+    stop = threading.Event()
+    spinner_symbols = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+    spinner_index = 0
+    spinner_bar = None
+
+    def worker():
+        nonlocal spinner_index, spinner_bar
+        with tqdm.tqdm(
+            desc=desc,
+            dynamic_ncols=True,
+            bar_format=(
+                f"{colorama.Fore.CYAN}{{desc}} {{elapsed}}{colorama.Style.RESET_ALL}"
+            ),
+            leave=True,
+            file=sys.stderr,
+        ) as bar:
+            spinner_bar = bar
+            while not stop.is_set():
+                bar.set_description_str(f"⏳ {spinner_symbols[spinner_index]} {desc}")
+                spinner_index = (spinner_index + 1) % len(spinner_symbols)
+                bar.refresh()
+                time.sleep(0.1)
+
+    t = threading.Thread(target=worker, daemon=True)
+    t.start()
+
+    while spinner_bar is None:
+        time.sleep(0.01)
+
+    sys_stdout = sys.stdout
+    sys_stderr = sys.stderr
+    sys.stdout = SpinnerStream(sys_stdout, spinner_bar)
+    sys.stderr = SpinnerStream(sys_stderr, spinner_bar)
+
+    try:
+        yield
+    finally:
+        sys.stdout = sys_stdout
+        sys.stderr = sys_stderr
+        stop.set()
+        t.join()
+
+
+with global_spinner("Building package 'tabsdata' (TabsData)..."):
+    setup(
+        name="tabsdata",
+        version=TABSDATA_VERSION,
+        description="Tabsdata is a publish-subscribe (pub/sub) server for tables.",
+        long_description=read(
+            os.path.join(
+                "variant",
+                "assets",
+                "manifest",
+                "README-PyPi.md",
+            )
+        ),
+        long_description_content_type="text/markdown",
+        # On Windows, setuptools interprets license_files paths as glob patterns,
+        # and backslashes (\) are treated as escape characters, which may cause
+        # unexpected parsing errors or “invalid character” complaints. Because of
+        # this, back-slashes are replaced with forward-slashes.
+        license=TABSDATA_LICENSE,
+        license_files=(
+            os.path.join(
+                "variant",
+                "assets",
+                "manifest",
+                "LICENSE",
+            ).replace(os.sep, "/"),
+        ),
+        author="Tabs Data Inc.",
+        url="https://tabsdata.com",
+        project_urls={
+            "Source": "https://github.com/tabsdata/tabsdata",
+        },
+        python_requires=python_version_spec,
+        install_requires=read_requirements("requirements.txt"),
+        extras_require=build_extras_require(os.getcwd()),
+        cmdclass={
+            "build": CustomBuild,
+            "bdist_egg": CustomBDistEgg,
+            "bdist_wheel": CustomBDistWheel,
+            "sdist": CustomSDist,
+        },
+        packages=[
+            # tabsdata
+            *find_packages(
+                where=os.path.join(
+                    "client",
+                    "td-sdk",
+                ),
+                exclude=[
+                    "tests",
+                    "tests*",
+                    "tabsdata.assets",
+                    "tabsdata.assets*",
+                ],
+            ),
+            # tabsdata.extensions._features.api
+            *find_packages(
+                where=os.path.join(
+                    "client",
+                    "td-lib",
+                    "ta_features",
+                ),
+                include=["tabsdata.extensions._features.api*"],
+            ),
+            # tabsdata.extensions._tableframe.api
+            *find_packages(
+                where=os.path.join(
+                    "client",
+                    "td-lib",
+                    "ta_tableframe",
+                ),
+                include=["tabsdata.extensions._tableframe.api*"],
+            ),
+            # tabsdata.extensions._examples
+            *find_packages(
+                where=os.path.join(
+                    "extensions",
+                    "python",
+                    "td-lib",
+                    "te_examples",
+                ),
+                include=["tabsdata.extensions._examples*"],
+            ),
+            # tabsdata.extensions._tableframe
+            *find_packages(
+                where=os.path.join(
+                    "extensions",
+                    "python",
+                    "td-lib",
+                    "te_tableframe",
+                ),
+                include=["tabsdata.extensions._tableframe*"],
+            ),
+            # tabsdata.expansions.tableframe
+            *find_packages(
+                where=os.path.join(
+                    "expansions",
+                    "polars",
+                    "modules",
+                    "ty-tableframe",
+                    "python",
+                ),
+                include=["tabsdata.expansions.tableframe*"],
+            ),
+        ],
+        package_dir={
+            "tabsdata": os.path.join(
                 "client",
                 "td-sdk",
+                "tabsdata",
             ),
-            exclude=[
-                "tests",
-                "tests*",
-                "tabsdata.assets",
-                "tabsdata.assets*",
-            ],
-        ),
-        # tabsdata.extensions._features.api
-        *find_packages(
-            where=os.path.join(
+            "tabsdata.extensions._features.api": os.path.join(
                 "client",
                 "td-lib",
                 "ta_features",
+                "tabsdata",
+                "extensions",
+                "_features",
+                "api",
             ),
-            include=["tabsdata.extensions._features.api*"],
-        ),
-        # tabsdata.extensions._tableframe.api
-        *find_packages(
-            where=os.path.join(
+            "tabsdata.extensions._tableframe.api": os.path.join(
                 "client",
                 "td-lib",
                 "ta_tableframe",
+                "tabsdata",
+                "extensions",
+                "_tableframe",
+                "api",
             ),
-            include=["tabsdata.extensions._tableframe.api*"],
-        ),
-        # tabsdata.extensions._examples
-        *find_packages(
-            where=os.path.join(
+            "tabsdata.extensions._examples": os.path.join(
                 "extensions",
                 "python",
                 "td-lib",
                 "te_examples",
+                "tabsdata",
+                "extensions",
+                "_examples",
             ),
-            include=["tabsdata.extensions._examples*"],
-        ),
-        # tabsdata.extensions._tableframe
-        *find_packages(
-            where=os.path.join(
+            "tabsdata.extensions._tableframe": os.path.join(
                 "extensions",
                 "python",
                 "td-lib",
                 "te_tableframe",
+                "tabsdata",
+                "extensions",
+                "_tableframe",
             ),
-            include=["tabsdata.extensions._tableframe*"],
-        ),
-        # tabsdata.expansions.tableframe
-        *find_packages(
-            where=os.path.join(
+            "tabsdata.expansions.tableframe": os.path.join(
                 "expansions",
                 "polars",
                 "modules",
                 "ty-tableframe",
                 "python",
+                "tabsdata",
+                "expansions",
+                "tableframe",
             ),
-            include=["tabsdata.expansions.tableframe*"],
-        ),
-    ],
-    package_dir={
-        "tabsdata": os.path.join(
-            "client",
-            "td-sdk",
-            "tabsdata",
-        ),
-        "tabsdata.extensions._features.api": os.path.join(
-            "client",
-            "td-lib",
-            "ta_features",
-            "tabsdata",
-            "extensions",
-            "_features",
-            "api",
-        ),
-        "tabsdata.extensions._tableframe.api": os.path.join(
-            "client",
-            "td-lib",
-            "ta_tableframe",
-            "tabsdata",
-            "extensions",
-            "_tableframe",
-            "api",
-        ),
-        "tabsdata.extensions._examples": os.path.join(
-            "extensions",
-            "python",
-            "td-lib",
-            "te_examples",
-            "tabsdata",
-            "extensions",
-            "_examples",
-        ),
-        "tabsdata.extensions._tableframe": os.path.join(
-            "extensions",
-            "python",
-            "td-lib",
-            "te_tableframe",
-            "tabsdata",
-            "extensions",
-            "_tableframe",
-        ),
-        "tabsdata.expansions.tableframe": os.path.join(
-            "expansions",
-            "polars",
-            "modules",
-            "ty-tableframe",
-            "python",
-            "tabsdata",
-            "expansions",
-            "tableframe",
-        ),
-    },
-    package_data={
-        "tabsdata": [
-            os.path.join(
-                "assets",
-                "manifest",
-                "*",
-            ),
-            *yaml_files,
-        ],
-        "tabsdata.extensions._examples": [
-            os.path.join(
-                "guides",
-                "book",
-                "**",
-                "*",
-            ),
-            os.path.join(
-                "cases",
-                "**",
-                "*",
-            ),
-        ],
-        "tabsdata.expansions.tableframe": [
-            os.path.join(
-                "_*",
-            ),
-        ],
-    },
-    data_files=datafiles,
-    entry_points={"console_scripts": console_scripts},
-    include_package_data=True,
-)
+        },
+        package_data={
+            "tabsdata": [
+                os.path.join(
+                    "assets",
+                    "manifest",
+                    "*",
+                ),
+                *yaml_files,
+            ],
+            "tabsdata.extensions._examples": [
+                os.path.join(
+                    "guides",
+                    "book",
+                    "**",
+                    "*",
+                ),
+                os.path.join(
+                    "cases",
+                    "**",
+                    "*",
+                ),
+            ],
+            "tabsdata.expansions.tableframe": [
+                os.path.join(
+                    "_*",
+                ),
+            ],
+        },
+        data_files=datafiles,
+        entry_points={"console_scripts": console_scripts},
+        include_package_data=True,
+    )
