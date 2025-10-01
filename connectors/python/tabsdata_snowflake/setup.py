@@ -8,6 +8,7 @@ import os
 import platform
 import shutil
 import sys
+import sysconfig
 import threading
 import time
 import warnings
@@ -551,6 +552,8 @@ def global_spinner(desc: str):
     spinner_symbols = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
     spinner_index = 0
     spinner_bar = None
+
+    sysconfig.PREFIX
 
     def worker():
         nonlocal spinner_index, spinner_bar
