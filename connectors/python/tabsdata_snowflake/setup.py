@@ -8,7 +8,6 @@ import os
 import platform
 import shutil
 import sys
-import sysconfig
 import threading
 import time
 import warnings
@@ -553,8 +552,6 @@ def global_spinner(desc: str):
     spinner_index = 0
     spinner_bar = None
 
-    sysconfig.PREFIX
-
     def worker():
         nonlocal spinner_index, spinner_bar
         with tqdm.tqdm(
@@ -591,6 +588,7 @@ def global_spinner(desc: str):
         sys.stderr = sys_stderr
         stop.set()
         t.join()
+
 
 with global_spinner("Building package 'tabsdata-snowflake' (Snowflake Connector)..."):
     setup(
