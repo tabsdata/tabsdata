@@ -590,7 +590,7 @@ def global_spinner(desc: str):
         t.join()
 
 
-with global_spinner("Building package 'tabsdata-mssql' (Salesforce Connector)..."):
+with global_spinner("Building package 'tabsdata-salesforce' (Salesforce Connector)..."):
     setup(
         name="tabsdata_salesforce",
         version=read(

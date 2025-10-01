@@ -588,6 +588,8 @@ def global_spinner(desc: str):
         sys.stderr = sys_stderr
         stop.set()
         t.join()
+
+with global_spinner("Building package 'tabsdata-snowflake' (Snowflake Connector)..."):
     setup(
         name="tabsdata_snowflake",
         version=read(
