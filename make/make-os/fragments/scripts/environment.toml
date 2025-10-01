@@ -288,4 +288,48 @@ env_scripts = [
         set_env MARKERS ""
     end
     debug "✅ Using markers: '${MARKERS}'"
+    ''',
+
+    # Setup build environment variables
+    '''
+    #!@duckscript
+    !include_files ./make/make-os/libraries/log.ds
+
+    os = os_family
+    info "📺 Current os: ${os}"
+
+    is_linux = eq ${os} "linux"
+    is_mac = eq ${os} "mac"
+    is_windows = eq ${os} "windows"
+
+    if ${is_windows}
+        separator = set ";"
+    else
+        separator = set ":"
+    end
+
+    python_venv  = exec --fail-on-error python-config --prefix
+    python_venv = trim ${python_venv.stdout}
+
+    info "🐍 Using Python environment: '${python_venv}'"
+
+    if ${is_windows}
+        lib_path_var = set "PATH"
+        old_lib_path = get_env PATH
+    elseif ${is_mac}
+        lib_path_var = set "DYLD_LIBRARY_PATH"
+        old_lib_path = get_env DYLD_LIBRARY_PATH
+    elseif ${is_linux}
+        lib_path_var = set "LD_LIBRARY_PATH"
+        old_lib_path = get_env LD_LIBRARY_PATH
+    else
+        trigger_error "Unsupported OS: ${os}. Only windows, mac, and linux are supported."
+    end
+
+    new_lib_path = set ${old_lib_path}
+    new_lib_path = concat ${python_venv}/lib ${separator} ${old_lib_path}
+
+    info "📚 Using library path (${lib_path_var}): '${new_lib_path}'"
+
+    set_env ${lib_path_var} ${new_lib_path}
     ''']
