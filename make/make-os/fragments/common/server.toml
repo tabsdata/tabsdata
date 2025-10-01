@@ -33,15 +33,21 @@ script = [
     else
         tdserver = set "tdserver"
     end
-    debug "🔅 Using tdserver binary: '${os_family}' - '${tdserver}'"
-    debug "🚀 ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} start --instance pytest -- -- apiserver --address 127.0.0.1:2467 --internal-address 127.0.0.1:2468 --access-jwt-expiration 36288000"
 
-    # Necessary until we figure out how to cleanly start the supervisor detached from tdserver.
-    os = os_family
-    if eq ${os} "windows"
-        exec --fail-on-error ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} start --instance pytest -- -- apiserver --address 127.0.0.1:2467 --internal-address 127.0.0.1:2468 --access-jwt-expiration 36288000
+    exists = is_path_exists ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver}
+    if ${exists}
+        debug "🔅 Using tdserver binary: '${os_family}' - '${tdserver}'"
+        debug "🚀 ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} start --instance pytest -- -- apiserver --address 127.0.0.1:2467 --internal-address 127.0.0.1:2468 --access-jwt-expiration 36288000"
+
+        # Necessary until we figure out how to cleanly start the supervisor detached from tdserver.
+        os = os_family
+        if eq ${os} "windows"
+            exec --fail-on-error ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} start --instance pytest -- -- apiserver --address 127.0.0.1:2467 --internal-address 127.0.0.1:2468 --access-jwt-expiration 36288000
+        else
+            output = exec --fail-on-error ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} start --instance pytest -- -- apiserver --address 127.0.0.1:2467 --internal-address 127.0.0.1:2468 --access-jwt-expiration 36288000
+        end
     else
-        output = exec --fail-on-error ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} start --instance pytest -- -- apiserver --address 127.0.0.1:2467 --internal-address 127.0.0.1:2468 --access-jwt-expiration 36288000
+        warn "🚚 Binaries for tdserver not available. Skipping tabsdata start."
     end
     ''']
 
@@ -77,33 +83,38 @@ script = [
         tdserver = set "tdserver"
     end
 
-    debug "🔅 Using tdserver binary: '${os_family}' - '${tdserver}'"
-    debug "🚀 ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} status --instance pytest"
+    exists = is_path_exists ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver}
+    if ${exists}
+        debug "🔅 Using tdserver binary: '${os_family}' - '${tdserver}'"
+        debug "🚀 ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} status --instance pytest"
 
-    status_timeout = calc 3 * 60
-    status_sleep = set 1000
-    status_attempts = calc ${status_timeout} * 1000
-    status_attempts = calc ${status_attempts} / ${status_sleep}
+        status_timeout = calc 3 * 60
+        status_sleep = set 1000
+        status_attempts = calc ${status_timeout} * 1000
+        status_attempts = calc ${status_attempts} / ${status_sleep}
 
-    status_attempt = set 0
-    status_running = set true
+        status_attempt = set 0
+        status_running = set true
 
-    while ${status_running}
-        output = exec --fail-on-error ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} status --instance pytest
-        status_started = contains ${output.stdout} "apiserver"
-        if ${status_started}
-            debug "🔅 Verified supervisor & apiserver are running"
-            status_running = set false
-        else
-            debug ". ${status_attempt}"
-            status_attempt = calc ${status_attempt} + 1
-            status_exhausted = eq ${status_attempt} ${status_attempts}
-            if ${status_exhausted}
-                error "😡 Cancelling execution as supervisor did not start after ${status_timeout} seconds"
-                exit 1
+        while ${status_running}
+            output = exec --fail-on-error ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} status --instance pytest
+            status_started = contains ${output.stdout} "apiserver"
+            if ${status_started}
+                debug "🔅 Verified supervisor & apiserver are running"
+                status_running = set false
+            else
+                debug ". ${status_attempt}"
+                status_attempt = calc ${status_attempt} + 1
+                status_exhausted = eq ${status_attempt} ${status_attempts}
+                if ${status_exhausted}
+                    error "😡 Cancelling execution as supervisor did not start after ${status_timeout} seconds"
+                    exit 1
+                end
+                sleep ${status_sleep}
             end
-            sleep ${status_sleep}
         end
+    else
+        warn "🚚 Binaries for tdserver not available. Skipping tabsdata status."
     end
     ''']
 
@@ -138,9 +149,15 @@ script = [
     else
         tdserver = set "tdserver"
     end
-    debug "🔅 Using tdserver binary: '${os_family}' - '${tdserver}'"
-    debug "🚀 ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} stop --instance pytest"
-    output = exec --fail-on-error ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} stop --instance pytest
+
+    exists = is_path_exists ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver}
+    if ${exists}
+        debug "🔅 Using tdserver binary: '${os_family}' - '${tdserver}'"
+        debug "🚀 ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} stop --instance pytest"
+        output = exec --fail-on-error ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} stop --instance pytest
+    else
+        warn "🚚 Binaries for tdserver not available. Skipping tabsdata status."
+    end
     ''']
 
 [tasks.__os__drop_pytest_tabsdata_server]
