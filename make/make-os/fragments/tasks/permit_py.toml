@@ -63,8 +63,15 @@ script = [
     end
     pyenv = which pyenv
     if not eq ${pyenv} ""
-        warn "🐙️ Component pyenv is available. Rehashing..."
-        exec --fail-on-error pyenv rehash
+        os = os_family
+        info "🪴 Current os: ${os}"
+        is_windows = eq ${os} "windows"
+        if ${is_windows}
+            warn "🐙️ Component pyenv is available. Rehashing..."
+            exec --fail-on-error pyenv rehash
+        else
+            warn "🦧️ Operating system is Windows. Skipping rehashing."
+        end
     else
         warn "⚠️ Component pyenv is not available. Skipping rehash."
     end
