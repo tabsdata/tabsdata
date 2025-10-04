@@ -226,7 +226,7 @@ category = "02 - Tidy"
 description = "Generate the sourcetrack metadata"
 run_task = [
     { name = [
-        "_os__generate_sourcetrack"
+        "__os__generate_sourcetrack"
     ] }
 ]
 
@@ -910,8 +910,6 @@ description = "Install the distributable artifact into the current environment"
 dependencies = [ "uninstall", "__os__set_mode_install"]
 run_task = [
     { name = [
-        "uninstall_rs",
-        "uninstall_py",
         "install_rs",
         "install_py"], condition = { env = { "TD_ON_GA" = "true" } } },
     { name = [

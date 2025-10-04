@@ -39,6 +39,33 @@ script = [
         assert_fail
     end
 
+    on_ga = get_env TD_ON_GA
+    on_ga_true = eq ${on_ga} "true"
+
     cd ${PROJECT_TABSDATA_ROOT_FOLDER}
-    result = exec uv pip install -r requirements-dev.txt --quiet
+    virtual_env = get_env VIRTUAL_ENV
+    if is_empty ${virtual_env}
+        if ${on_ga_true}
+            debug "🚀 uv pip install --system --requirement requirements-dev.txt"
+            exec --fail-on-error uv pip install --system --requirement requirements-dev.txt
+        else
+            debug "🚀 uv pip install --system --quiet --requirement requirements-dev.txt"
+            exec --fail-on-error uv pip install --system --quiet --requirement requirements-dev.txt
+        end
+    else
+        if ${on_ga_true}
+            debug "🚀 uv pip install --requirement requirements-dev.txt"
+            exec --fail-on-error uv pip install --requirement requirements-dev.txt
+        else
+            debug "🚀 uv pip install --quiet --requirement requirements-dev.txt"
+            exec --fail-on-error uv pip install --quiet --requirement requirements-dev.txt
+        end
+    end
+    pyenv = which pyenv
+    if not eq ${pyenv} ""
+        warn "🐙️ Component pyenv is available. Rehashing..."
+        exec --fail-on-error pyenv rehash
+    else
+        warn "⚠️ Component pyenv is not available. Skipping rehash."
+    end
     ''']

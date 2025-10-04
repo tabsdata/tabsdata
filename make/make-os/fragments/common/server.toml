@@ -13,6 +13,12 @@ script = [
 
     debug "🔷 _____ Starting tabsdata server (pytest)..."
 
+    trace "🛞 🔴 Process list >>>>>"
+    processes = exec python -c "import psutil; [print(f'{pi[\"pid\"]:>6} {pi[\"ppid\"]:>6} {pi.get(\"username\",\"?\"):>10} ' + ' '.join(pi['cmdline'] or [pi['name']])) for pi in (p.info for p in psutil.process_iter(['pid','ppid','username','name','cmdline']))]"
+    processes = trim ${processes.stdout}
+    trace "${processes}"
+    trace "🛞 🔴 <<<<<"
+
     if is_empty ${profile}
         build-folder = set "debug"
     else
@@ -39,16 +45,29 @@ script = [
         debug "🔅 Using tdserver binary: '${os_family}' - '${tdserver}'"
         debug "🚀 ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} start --instance pytest -- -- apiserver --address 127.0.0.1:2467 --internal-address 127.0.0.1:2468 --access-jwt-expiration 36288000"
 
+        on_ga = get_env TD_ON_GA
+        on_ga_true = eq ${on_ga} "true"
+
         # Necessary until we figure out how to cleanly start the supervisor detached from tdserver.
         os = os_family
         if eq ${os} "windows"
             exec --fail-on-error ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} start --instance pytest -- -- apiserver --address 127.0.0.1:2467 --internal-address 127.0.0.1:2468 --access-jwt-expiration 36288000
         else
-            output = exec --fail-on-error ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} start --instance pytest -- -- apiserver --address 127.0.0.1:2467 --internal-address 127.0.0.1:2468 --access-jwt-expiration 36288000
+            if ${on_ga_true}
+                exec --fail-on-error ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} start --instance pytest -- -- apiserver --address 127.0.0.1:2467 --internal-address 127.0.0.1:2468 --access-jwt-expiration 36288000
+            else
+                output = exec --fail-on-error ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} start --instance pytest -- -- apiserver --address 127.0.0.1:2467 --internal-address 127.0.0.1:2468 --access-jwt-expiration 36288000
+            end
         end
     else
         warn "🚚 Binaries for tdserver not available. Skipping tabsdata start."
     end
+
+    trace "🛞 🟢 Process list >>>>>"
+    processes = exec python -c "import psutil; [print(f'{pi[\"pid\"]:>6} {pi[\"ppid\"]:>6} {pi.get(\"username\",\"?\"):>10} ' + ' '.join(pi['cmdline'] or [pi['name']])) for pi in (p.info for p in psutil.process_iter(['pid','ppid','username','name','cmdline']))]"
+    processes = trim ${processes.stdout}
+    trace "${processes}"
+    trace "🛞 🟢 <<<<<"
     ''']
 
 [tasks.__os__status_pytest_tabsdata_server]
@@ -61,6 +80,12 @@ script = [
     !include_files ./make/make-os/libraries/log.ds
 
     debug "🔷 _____ Checking status of tabsdata server (pytest)..."
+
+    trace "🛞 🔴 Process list >>>>>"
+    processes = exec python -c "import psutil; [print(f'{pi[\"pid\"]:>6} {pi[\"ppid\"]:>6} {pi.get(\"username\",\"?\"):>10} ' + ' '.join(pi['cmdline'] or [pi['name']])) for pi in (p.info for p in psutil.process_iter(['pid','ppid','username','name','cmdline']))]"
+    processes = trim ${processes.stdout}
+    trace "${processes}"
+    trace "🛞 🔴 <<<<<"
 
     if is_empty ${profile}
         build-folder = set "debug"
@@ -97,7 +122,26 @@ script = [
         status_running = set true
 
         while ${status_running}
+            trace "🛞 🔴 Process list >>>>>"
+            processes = exec python -c "import psutil; [print(f'{pi[\"pid\"]:>6} {pi[\"ppid\"]:>6} {pi.get(\"username\",\"?\"):>10} ' + ' '.join(pi['cmdline'] or [pi['name']])) for pi in (p.info for p in psutil.process_iter(['pid','ppid','username','name','cmdline']))]"
+            processes = trim ${processes.stdout}
+            trace "${processes}"
+            trace "🛞 🔴 <<<<<"
+
             output = exec --fail-on-error ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} status --instance pytest
+
+            trace "🛞👀 Supervisor status >>>>>"
+            trace "🛞👀 <out.i>"
+            trace "${output.stdout}"
+            trace "🛞👀 <out.f>"
+            trace "🛞👀 <err.i>"
+            trace "${output.stderr}"
+            trace "🛞👀 <err.f>"
+            trace "🛞👀 <code.i>"
+            trace "${output.code}"
+            trace "🛞👀 <code.f>"
+            trace "🛞👀 <<<<<"
+
             status_started = contains ${output.stdout} "apiserver"
             if ${status_started}
                 debug "🔅 Verified supervisor & apiserver are running"
@@ -116,6 +160,12 @@ script = [
     else
         warn "🚚 Binaries for tdserver not available. Skipping tabsdata status."
     end
+
+    trace "🛞 🟢 Process list >>>>>"
+    processes = exec python -c "import psutil; [print(f'{pi[\"pid\"]:>6} {pi[\"ppid\"]:>6} {pi.get(\"username\",\"?\"):>10} ' + ' '.join(pi['cmdline'] or [pi['name']])) for pi in (p.info for p in psutil.process_iter(['pid','ppid','username','name','cmdline']))]"
+    processes = trim ${processes.stdout}
+    trace "${processes}"
+    trace "🛞 🟢 <<<<<"
     ''']
 
 [tasks.__os__stop_pytest_tabsdata_server]
@@ -128,6 +178,12 @@ script = [
     !include_files ./make/make-os/libraries/log.ds
 
     debug "🔷 _____ Stopping tabsdata server (pytest)..."
+
+    trace "🛞 🔴 Process list >>>>>"
+    processes = exec python -c "import psutil; [print(f'{pi[\"pid\"]:>6} {pi[\"ppid\"]:>6} {pi.get(\"username\",\"?\"):>10} ' + ' '.join(pi['cmdline'] or [pi['name']])) for pi in (p.info for p in psutil.process_iter(['pid','ppid','username','name','cmdline']))]"
+    processes = trim ${processes.stdout}
+    trace "${processes}"
+    trace "🛞 🔴 <<<<<"
 
     if is_empty ${profile}
         build-folder = set "debug"
@@ -154,10 +210,24 @@ script = [
     if ${exists}
         debug "🔅 Using tdserver binary: '${os_family}' - '${tdserver}'"
         debug "🚀 ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} stop --instance pytest"
-        output = exec --fail-on-error ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} stop --instance pytest
+
+        on_ga = get_env TD_ON_GA
+        on_ga_true = eq ${on_ga} "true"
+
+        if ${on_ga_true}
+            exec --fail-on-error ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} stop --instance pytest
+        else
+            output = exec --fail-on-error ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} stop --instance pytest
+        end
     else
         warn "🚚 Binaries for tdserver not available. Skipping tabsdata status."
     end
+
+    trace "🛞 🟢 Process list >>>>>"
+    processes = exec python -c "import psutil; [print(f'{pi[\"pid\"]:>6} {pi[\"ppid\"]:>6} {pi.get(\"username\",\"?\"):>10} ' + ' '.join(pi['cmdline'] or [pi['name']])) for pi in (p.info for p in psutil.process_iter(['pid','ppid','username','name','cmdline']))]"
+    processes = trim ${processes.stdout}
+    trace "${processes}"
+    trace "🛞 🟢 <<<<<"
     ''']
 
 [tasks.__os__drop_pytest_tabsdata_server]

@@ -28,7 +28,7 @@ script = [
     exec --fail-on-error python ${COPY_ASSETS_SCRIPT}
     ''']
 
-[tasks._os__generate_sourcetrack]
+[tasks.__os__generate_sourcetrack]
 plugin = "td-task-tracker"
 category = "02 - Tidy"
 private = true
