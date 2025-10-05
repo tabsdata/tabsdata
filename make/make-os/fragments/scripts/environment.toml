@@ -84,7 +84,7 @@ env_scripts = [
     debug "✅ Project tabsdata base folder is: ${project_tabsdata_base_folder}"
     ''',
 
-    # Set up rust settings (rustflags, target, toolchain, build folder, path)
+    # Set up rust settings (rustflags, target, toolchain, build folder, path, quiet)
     '''
     #!@duckscript
     !include_files ./make/make-os/libraries/log.ds
@@ -166,6 +166,16 @@ env_scripts = [
 
     rustflags = get_env RUSTFLAGS
     debug "✅ RUSTFLAGS environment variable is: '${rustflags}'"
+
+    on_ga = get_env TD_ON_GA
+    on_ga_true = eq ${on_ga} "true"
+    if ${on_ga_true}
+        set_env td-rust-quiet ""
+        debug "🔈 Configuring Rust in verbose mode"
+    else
+        set_env td-rust-quiet "--quiet"
+        debug "🔇 Configuring Rust in quiet mode: '${td-rust-quiet}'"
+    end
 
     old_path = get_env PATH
     new_path = set ${old_path}

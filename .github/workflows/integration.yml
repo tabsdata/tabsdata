@@ -272,6 +272,7 @@ jobs:
       SNW__SCHEMA: ${{ secrets.SNW__SCHEMA }}
       SNW__USER: ${{ secrets.SNW__USER }}
       SNW__WAREHOUSE: ${{ secrets.SNW__WAREHOUSE }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
     with:
       job_timeout: ${{ fromJson(needs.cap-job.outputs.job_timeout) }}
       dump_server: ${{ inputs.dump_server }}

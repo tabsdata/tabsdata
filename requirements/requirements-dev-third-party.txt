@@ -42,6 +42,7 @@ psutil==7.1.0
 pydevd
 pydevd_pycharm
 pygame
+pysentry-rs==0.3.11
 pytest-check==2.5.4
 pytest-cov==7.0.0
 pytest-reporter-html1==0.9.3

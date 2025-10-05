@@ -24,8 +24,8 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build --quiet --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --all-features --lib --bins --examples"
-    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build --quiet --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --all-features --lib --bins --examples
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --all-features --lib --bins --examples"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --all-features --lib --bins --examples
     ''']
 
 [tasks.__os__build_all_rs_modules]
@@ -38,8 +38,8 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build --quiet --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --all-features --lib --bins --examples"
-    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build --quiet --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --all-features --lib --bins --examples
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --all-features --lib --bins --examples"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --all-features --lib --bins --examples
     ''']
 
 [tasks.__os__build_all_rs_expansions]
@@ -76,8 +76,8 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build --quiet --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --lib --bins"
-    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build --quiet --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --lib --bins
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --lib --bins"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --lib --bins
     ''']
 
 [tasks.__os__build_none_rs_modules]
@@ -90,8 +90,8 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build --quiet --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --lib --bins"
-    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build --quiet --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --lib --bins
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --lib --bins"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --lib --bins
     ''']
 
 [tasks.__os__build_none_rs_expansions]
@@ -116,8 +116,8 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} build --quiet --locked --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --lib --bins --examples"
-    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} build --quiet --locked --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --lib --bins --examples
+    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --lib --bins --examples"
+    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --lib --bins --examples
 
     cd ${PROJECT_RS_TY_EXPANSIONS_FOLDER}/modules/ty-tableframe
 
@@ -135,8 +135,8 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} build --quiet --locked --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --lib --bins"
-    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} build --quiet --locked --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --lib --bins
+    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --lib --bins"
+    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --lib --bins
 
     cd ${PROJECT_RS_TY_EXPANSIONS_FOLDER}/modules/ty-tableframe
 
@@ -280,6 +280,7 @@ script = [
         cd ${PROJECT_TABSDATA_ROOT_FOLDER}
 
         td_profile = set ${td-profile}
+        td_rust_quiet = set ${td-rust-quiet}
 
         debug "🚀 docker run --rm --mount=type=bind,src=${PROJECT_TABSDATA_ROOT_FOLDER},target=/tabsdata -w /tabsdata --env TD_PROFILE=${td_profile} quay.io/pypa/manylinux2014_x86_64 bash -lc ..."
         td_script = set "yum -y install perl perl-IPC-Cmd"
@@ -297,7 +298,7 @@ script = [
         td_script = set "${td_script} && cargo --version"
         td_script = set "${td_script} && python3.12 -m maturin --version"
         td_script = set "${td_script} && patchelf --version"
-        td_script = set "${td_script} && python3.12 -m maturin build --quiet --locked --compatibility manylinux2014 --profile ${td-profile} --manifest-path /tabsdata/expansions/polars/modules/ty-tableframe/Cargo.toml --features extension-module"
+        td_script = set "${td_script} && python3.12 -m maturin build ${td_rust_quiet} --locked --compatibility manylinux2014 --profile ${td-profile} --manifest-path /tabsdata/expansions/polars/modules/ty-tableframe/Cargo.toml --features extension-module"
         exec --fail-on-error docker run --platform linux/amd64 --rm --mount=type=bind,src=${PROJECT_TABSDATA_ROOT_FOLDER},target=/tabsdata -w /tabsdata --env TD_PROFILE=${td_profile} quay.io/pypa/manylinux2014_x86_64 bash -lc "${td_script}"
 
         debug "🚀 sudo chown -R ${USER}:${USER} ${PROJECT_TABSDATA_ROOT_FOLDER}/expansions/polars/target"
@@ -306,8 +307,8 @@ script = [
         debug "🚀 cd ${PROJECT_RS_TY_EXPANSIONS_FOLDER}/modules/ty-tableframe"
         cd "${PROJECT_RS_TY_EXPANSIONS_FOLDER}/modules/ty-tableframe"
     else
-        debug "🚀 maturin build --quiet --locked %{td-target-token} %{td-target} --profile ${td-profile} --features extension-module"
-        exec --fail-on-error maturin build --quiet --locked %{td-target-token} %{td-target} --profile ${td-profile} --features extension-module
+        debug "🚀 maturin build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --features extension-module"
+        exec --fail-on-error maturin build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --features extension-module
     end
 
     info "⏳ Extracting maturin wheel to python source folder..."
