@@ -48,7 +48,8 @@ except Exception:
 
 # noinspection DuplicatedCode
 def root_folder() -> str:
-    current_folder = Path(os.getenv("PWD", psutil.Process().cwd()))
+    # current_folder = Path(os.getenv("PWD", psutil.Process().cwd()))
+    current_folder = Path(__file__).parent.absolute()
     logger.debug(f"📁 Current setup folder is: {current_folder}")
     while True:
         root_file = Path(
