@@ -341,4 +341,21 @@ env_scripts = [
     info "📚 Using library path (${lib_path_var}): '${new_lib_path}'"
 
     set_env ${lib_path_var} ${new_lib_path}
+
+    malloc_stack_loggin = get_env MallocStackLogging
+    malloc_stack_loggin_compact = get_env MallocStackLoggingNoCompact
+
+    info "🏗 Environment variable 'MallocStackLogging' former value is '${malloc_stack_loggin}'."
+    info "🏗 Environment variable 'MallocStackLoggingNoCompact' former value is '${malloc_stack_loggin_compact}'."
+
+    unset_env MallocStackLogging
+    unset_env MallocStackLoggingNoCompact
+
+    info "🔧 Cleared environment variables 'MallocStackLogging' & 'MallocStackLoggingNoCompact'."
+
+    malloc_stack_loggin = get_env MallocStackLogging
+    malloc_stack_loggin_compact = get_env MallocStackLoggingNoCompact
+
+    info "🏗 Environment variable 'MallocStackLogging' current value is '${malloc_stack_loggin}'."
+    info "🏗 Environment variable 'MallocStackLoggingNoCompact' current value is '${malloc_stack_loggin_compact}'."
     ''']

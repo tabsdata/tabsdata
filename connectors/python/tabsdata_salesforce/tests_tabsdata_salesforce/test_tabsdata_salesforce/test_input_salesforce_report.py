@@ -63,7 +63,7 @@ SFR_INITIAL_VALUES_TESTING_REPORT = "users_dev_ci"
 
 SFR_INITIAL_VALUES_TESTING_ALIASES_AND_ROWS = {
     "User": 2,
-    "EPIC": 2,
+    "EPIC": 3,
 }
 
 
