@@ -36,10 +36,28 @@ script = [
         set_env TD_SKIP_NON_EXISTING_ASSETS "true"
     end
     # This must be false when using a local PyPi reopsitory.
-    set_env PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES = "true"
+    set_env PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES "true"
+
+    in_folder = pwd
+    debug "🧶 Base folder for assembly - tabsdata: ${in_folder}"
 
     debug "🚀 python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist"
     exec --fail-on-error python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist
+
+    in_folder = pwd
+    debug "🧶 Base folder for assembly - tabsdata: ${in_folder}"
+    listing = exec python -c "import os; print('\\n'.join(os.listdir('${in_folder}')))"
+    listing = trim ${listing.stdout}
+    debug "🛟 Contents of base folder for assembly - tabsdata: ${in_folder}\n${listing}"
+    listing = exec python -c "import os; print('\\n'.join(os.listdir('${in_folder}/target')) if os.path.exists('${in_folder}/target') else '')"
+    listing = trim ${listing.stdout}
+    debug "🚧 Contents of base/target folder for assembly - tabsdata\n${listing}"
+    listing = exec python -c "import os; print('\\n'.join(os.listdir('${in_folder}/target/python')) if os.path.exists('${in_folder}/target/python') else '')"
+    listing = trim ${listing.stdout}
+    debug "🚦 Contents of base/target/python folder for assembly - tabsdata\n${listing}"
+    listing = exec python -c "import os; print('\\n'.join(os.listdir('${in_folder}/target/python/dist')) if os.path.exists('${in_folder}/target/python/dist') else '')"
+    listing = trim ${listing.stdout}
+    debug "⚓️ Contents of base/target/python/dist folder for assembly - tabsdata\n${listing}"
     ''']
 
 [tasks.__os__assembly_py_connectors]
@@ -83,10 +101,28 @@ script = [
                 set_env TD_SKIP_NON_EXISTING_ASSETS "true"
             end
             # This must be false when using a local PyPi reopsitory.
-            set_env PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES = "true"
+            set_env PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES "true"
+
+            in_folder = pwd
+            debug "🧶 Base folder for assembly - ${connector}: ${in_folder}"
 
             debug "🚀 python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist"
             exec --fail-on-error python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist
+
+            in_folder = pwd
+            debug "🧶 Base folder for assembly - ${connector}: ${in_folder}"
+            listing = exec python -c "import os; print('\\n'.join(os.listdir('${in_folder}')))"
+            listing = trim ${listing.stdout}
+            debug "🛟 Contents of base folder for assembly - ${connector}: ${in_folder}\n${listing}"
+            listing = exec python -c "import os; print('\\n'.join(os.listdir('${in_folder}/target')) if os.path.exists('${in_folder}/target') else '')"
+            listing = trim ${listing.stdout}
+            debug "🚧 Contents of base/target folder for assembly - ${connector}\n${listing}"
+            listing = exec python -c "import os; print('\\n'.join(os.listdir('${in_folder}/target/python')) if os.path.exists('${in_folder}/target/python') else '')"
+            listing = trim ${listing.stdout}
+            debug "🚦 Contents of base/target/python folder for assembly - ${connector}\n${listing}"
+            listing = exec python -c "import os; print('\\n'.join(os.listdir('${in_folder}/target/python/dist')) if os.path.exists('${in_folder}/target/python/dist') else '')"
+            listing = trim ${listing.stdout}
+            debug "⚓️ Contents of base/target/python/dist folder for assembly - ${connector}\n${listing}"
         end
     end
     ''']

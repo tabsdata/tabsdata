@@ -34,7 +34,7 @@ script = [
         set_env TD_SKIP_NON_EXISTING_ASSETS "true"
     end
     # This must be false when using a local PyPi reopsitory.
-    set_env PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES = "true"
+    set_env PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES "true"
 
     # debug "🚀 pip uninstall tabsdata --yes"
     # exec --fail-on-error pip uninstall tabsdata --yes
@@ -89,7 +89,7 @@ script = [
                 set_env TD_SKIP_NON_EXISTING_ASSETS "true"
             end
             # This must be false when using a local PyPi reopsitory.
-            set_env PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES = "true"
+            set_env PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES "true"
 
             connector_name = basename ${connector}
             connector_package = replace ${connector_name} "_" "-"

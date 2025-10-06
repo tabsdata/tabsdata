@@ -31,6 +31,9 @@ colorama.init()
 # noinspection DuplicatedCode
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
+handler = logging.StreamHandler()
+handler.setLevel(logging.INFO)
+logger.addHandler(handler)
 
 # noinspection PyBroadException
 try:
@@ -49,7 +52,7 @@ except Exception:
 def root_folder() -> str:
     # current_folder = Path(os.getenv("PWD", psutil.Process().cwd()))
     current_folder = Path(__file__).parent.absolute()
-    logger.debug(f"📁 Current setup folder is: {current_folder}")
+    logger.info(f"📁 Current setup folder is: {current_folder}")
     while True:
         root_file = Path(
             os.path.join(
