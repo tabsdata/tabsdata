@@ -18,7 +18,6 @@ from sysconfig import get_platform
 from uuid import uuid4
 
 import colorama
-import psutil
 import tqdm
 from setuptools import find_packages, setup
 from setuptools.command.bdist_egg import bdist_egg as _bdist_egg
