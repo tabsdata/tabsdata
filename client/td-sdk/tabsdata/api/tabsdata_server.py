@@ -4651,13 +4651,22 @@ def _complete_utc_datetime(incomplete_datetime: str | None) -> int | None:
     return None
 
 
-def _dynamic_import_function_from_path(path: str) -> TabsdataFunction:
+def _dynamic_import_function_from_path(path: str) -> TabsdataFunction:  # noqa: C901
     """
     Dynamically import a function from a path in the form of 'path::function_name'.
     :param path:
     :return:
     """
+
     file_path, function_name = path.split("::")
+    file_path = os.path.abspath(file_path)
+    if not os.path.exists(file_path):
+        if not file_path.endswith(".py"):
+            raise FileNotFoundError(
+                f"File not found: {file_path}. The .py extension may be missing."
+            )
+        else:
+            raise FileNotFoundError(f"File not found: {file_path}")
     sys.path.insert(0, os.path.dirname(file_path))
     try:
         module_name = os.path.splitext(os.path.basename(file_path))[0]
@@ -4666,11 +4675,27 @@ def _dynamic_import_function_from_path(path: str) -> TabsdataFunction:
             f"Invalid file path: {file_path}. Expected format is "
             "'/path/to/file.py::function_name'."
         )
-
     spec = importlib.util.spec_from_file_location(module_name, file_path)
+    if spec is None:
+        raise ImportError(
+            f"Failed to load module spec from {file_path}. "
+            "The file may not be a valid Python module."
+        )
     module = importlib.util.module_from_spec(spec)
+    if module is None:
+        raise ImportError(
+            f"Failed to create module from spec for {file_path}. "
+            "The file may not be a valid Python module."
+        )
     sys.modules[module_name] = module
-    spec.loader.exec_module(module)
-
-    function = getattr(module, function_name)
+    try:
+        spec.loader.exec_module(module)
+    except Exception as e:
+        raise ImportError(f"Failed to execute module {file_path}: {str(e)}")
+    try:
+        function = getattr(module, function_name)
+    except AttributeError:
+        raise AttributeError(
+            f"Function '{function_name}' not found in module {file_path}."
+        )
     return function
