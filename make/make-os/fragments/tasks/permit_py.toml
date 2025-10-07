@@ -39,6 +39,13 @@ script = [
         assert_fail
     end
 
+    python_root_folder = exec python -c "import sys; print(sys.prefix)"
+    python_root_folder = trim ${python_root_folder.stdout}
+    python_scripts_folder = exec python -c "import sysconfig; print(sysconfig.get_path('scripts'))"
+    python_scripts_folder = trim ${python_scripts_folder.stdout}
+    info "☘️ Python root folder ${python_root_folder}"
+    info "🌺 Python scripts folder ${python_scripts_folder}"
+
     on_ga = get_env TD_ON_GA
     on_ga_true = eq ${on_ga} "true"
 

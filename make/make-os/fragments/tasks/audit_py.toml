@@ -11,34 +11,44 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/file.ds
 
     requirements-third-party-all-path = temp_file txt
-    info "🌤 Using temporary file at ${requirements-third-party-all-path} for requirements-third-party-all.txt"
+    info "🌤  Using temporary file at ${requirements-third-party-all-path} for requirements-third-party-all.txt"
     info "🚀 uv pip compile --format requirements.txt --no-strip-extras --quiet --output-file ${requirements-third-party-all-path} ./requirements/requirements-third-party-all.txt"
     exec --fail-on-error uv pip compile --format requirements.txt --no-strip-extras --quiet --output-file ${requirements-third-party-all-path} ./requirements/requirements-third-party-all.txt
 
-    info "🚀 pysentry-rs --severity low --fail-on low --ignore PYSEC-2022-42969 --ignore GHSA-4xh5-x5gv-qwph --no-cache --sources pypa,osv,pypi --resolver uv --verbose --detailed --requirements-files ${requirements-third-party-all-path}"
-    exec --fail-on-error pysentry-rs --severity low --fail-on low --ignore PYSEC-2022-42969 --ignore GHSA-4xh5-x5gv-qwph --no-cache --sources pypa,osv,pypi --resolver uv --verbose --detailed --requirements-files ${requirements-third-party-all-path}
+    file_is_empty = is_file_empty ${requirements-third-party-all-path}
+    if ${file_is_empty}
+        warn "🪹 File ${requirements-third-party-all-path} contains no requirement. Skipping audit on it."
+    else
+        debug "🚀 pysentry-rs --severity low --fail-on low --ignore PYSEC-2022-42969 --ignore GHSA-4xh5-x5gv-qwph --no-cache --sources pypa,osv,pypi --resolver uv --verbose --detailed --requirements-files ${requirements-third-party-all-path}"
+        exec --fail-on-error pysentry-rs --severity low --fail-on low --ignore PYSEC-2022-42969 --ignore GHSA-4xh5-x5gv-qwph --no-cache --sources pypa,osv,pypi --resolver uv --verbose --detailed --requirements-files ${requirements-third-party-all-path}
 
-    info "🚀 pysentry-rs --severity low --fail-on low --ignore PYSEC-2022-42969 --ignore GHSA-4xh5-x5gv-qwph --no-cache --sources pypa,osv,pypi --resolver pip-tools --verbose --detailed --requirements-files ${requirements-third-party-all-path}"
-    exec --fail-on-error pysentry-rs --severity low --fail-on low --ignore PYSEC-2022-42969 --ignore GHSA-4xh5-x5gv-qwph --no-cache --sources pypa,osv,pypi --resolver pip-tools --verbose --detailed --requirements-files ${requirements-third-party-all-path}
+        debug "🚀 pysentry-rs --severity low --fail-on low --ignore PYSEC-2022-42969 --ignore GHSA-4xh5-x5gv-qwph --no-cache --sources pypa,osv,pypi --resolver pip-tools --verbose --detailed --requirements-files ${requirements-third-party-all-path}"
+        exec --fail-on-error pysentry-rs --severity low --fail-on low --ignore PYSEC-2022-42969 --ignore GHSA-4xh5-x5gv-qwph --no-cache --sources pypa,osv,pypi --resolver pip-tools --verbose --detailed --requirements-files ${requirements-third-party-all-path}
+    end
 
     requirements-dev-third-party-path = temp_file txt
-    info "🌦 Using temporary file at ${requirements-dev-third-party-path} for requirements-dev-third-party.txt"
+    info "🌦  Using temporary file at ${requirements-dev-third-party-path} for requirements-dev-third-party.txt"
     info "🚀 uv pip compile --format requirements.txt --no-strip-extras --quiet --output-file ${requirements-dev-third-party-path} ./requirements/requirements-dev-third-party.txt"
     exec --fail-on-error uv pip compile --format requirements.txt --no-strip-extras --quiet --output-file ${requirements-dev-third-party-path} ./requirements/requirements-dev-third-party.txt
 
-    info "🚀 pysentry-rs --severity low --fail-on low --ignore PYSEC-2022-42969 --ignore GHSA-4xh5-x5gv-qwph --no-cache --sources pypa,osv,pypi --resolver uv --verbose --detailed --requirements-files ${requirements-dev-third-party-path}"
-    exec --fail-on-error pysentry-rs --severity low --fail-on low --ignore PYSEC-2022-42969 --ignore GHSA-4xh5-x5gv-qwph --no-cache --sources pypa,osv,pypi --resolver uv --verbose --detailed --requirements-files ${requirements-dev-third-party-path}
+    file_is_empty = is_file_empty ${requirements-dev-third-party-path}
+    if ${file_is_empty}
+        warn "🪹 File ${requirements-dev-third-party-path} contains no requirement. Skipping audit on it."
+    else
+        debug "🚀 pysentry-rs --severity low --fail-on low --ignore PYSEC-2022-42969 --ignore GHSA-4xh5-x5gv-qwph --no-cache --sources pypa,osv,pypi --resolver uv --verbose --detailed --requirements-files ${requirements-dev-third-party-path}"
+        exec --fail-on-error pysentry-rs --severity low --fail-on low --ignore PYSEC-2022-42969 --ignore GHSA-4xh5-x5gv-qwph --no-cache --sources pypa,osv,pypi --resolver uv --verbose --detailed --requirements-files ${requirements-dev-third-party-path}
 
-    info "🚀 pysentry-rs --severity low --fail-on low --ignore PYSEC-2022-42969 --ignore GHSA-4xh5-x5gv-qwph --no-cache --sources pypa,osv,pypi --resolver pip-tools --verbose --detailed --requirements-files ${requirements-dev-third-party-path}"
-    exec --fail-on-error pysentry-rs --severity low --fail-on low --ignore PYSEC-2022-42969 --ignore GHSA-4xh5-x5gv-qwph --no-cache --sources pypa,osv,pypi --resolver pip-tools --verbose --detailed --requirements-files ${requirements-dev-third-party-path}
+        debug "🚀 pysentry-rs --severity low --fail-on low --ignore PYSEC-2022-42969 --ignore GHSA-4xh5-x5gv-qwph --no-cache --sources pypa,osv,pypi --resolver pip-tools --verbose --detailed --requirements-files ${requirements-dev-third-party-path}"
+        exec --fail-on-error pysentry-rs --severity low --fail-on low --ignore PYSEC-2022-42969 --ignore GHSA-4xh5-x5gv-qwph --no-cache --sources pypa,osv,pypi --resolver pip-tools --verbose --detailed --requirements-files ${requirements-dev-third-party-path}
+    end
 
-
-    # info "🚀 pip-audit --progress-spinner on --strict --requirement requirements/requirements-third-party-all.txt --ignore-vuln PYSEC-2022-42969"
+    # debug "🚀 pip-audit --progress-spinner on --strict --requirement requirements/requirements-third-party-all.txt --ignore-vuln PYSEC-2022-42969"
     # exec --fail-on-error pip-audit --progress-spinner on --strict --requirement requirements/requirements-third-party-all.txt --ignore-vuln PYSEC-2022-42969
 
-    # info "🚀 pip-audit --progress-spinner on --strict --requirement requirements/requirements-dev-third-party.txt --ignore-vuln PYSEC-2022-42969"
+    # debug "🚀 pip-audit --progress-spinner on --strict --requirement requirements/requirements-dev-third-party.txt --ignore-vuln PYSEC-2022-42969"
     # exec --fail-on-error pip-audit --progress-spinner on --strict --requirement requirements/requirements-dev-third-party.txt --ignore-vuln PYSEC-2022-42969
     ''']
 

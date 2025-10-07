@@ -6,9 +6,16 @@
 script ='''
     !include_files ./make/make-os/libraries/log.ds
 
+    td_skip_env = concat "skip_" ${task.name}
+    td_skip_task = get_env ${td_skip_env}
+
     start_ms = current_time
 
-    cm_plugin_run_task
+    if is_empty ${td_skip_task}
+        cm_plugin_run_task
+    else
+        warn "🧨 Skipping task '${task.name}' as configured by environment variable '${td_skip_env}'"
+    end
 
     end_ms = current_time
 

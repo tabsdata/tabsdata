@@ -1,0 +1,22 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+fn is_file_empty
+    file_path = set ${1}
+    file_content = readfile ${file_path}
+    file_lines = split ${file_content} "\n"
+    for file_line in ${file_lines}
+        file_line = trim ${file_line}
+        starts_with_hash = starts_with ${file_line} "#"
+        is_empty = is_empty ${file_line}
+        if not ${starts_with_hash}
+            if not ${is_empty}
+                return false
+            end
+        end
+    end
+    return true
+end
+
+trace "📌 Duckscript 'file' library loaded"
