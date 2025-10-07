@@ -27,13 +27,18 @@ from setuptools.command.sdist import sdist as _sdist
 # noinspection PyDeprecation
 from wheel.bdist_wheel import bdist_wheel as _bdist_wheel
 
+# noinspection DuplicatedCode
 colorama.init()
 
+# noinspection DuplicatedCode
 logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.ERROR)
 handler = logging.StreamHandler()
-handler.setLevel(logging.INFO)
+handler.setLevel(logging.ERROR)
 logger.addHandler(handler)
+
+logging.getLogger("distutils").setLevel(logging.ERROR)
+logging.getLogger("setuptools").setLevel(logging.ERROR)
 
 # noinspection PyBroadException
 try:
@@ -57,7 +62,7 @@ warnings.filterwarnings(
 def root_folder() -> str:
     # current_folder = Path(os.getenv("PWD", psutil.Process().cwd()))
     current_folder = Path(__file__).parent.absolute()
-    logger.info(f"📁 Current setup folder is: {current_folder}")
+    logger.debug(f"📁 Current setup folder is: {current_folder}")
     while True:
         root_file = Path(
             os.path.join(
@@ -659,23 +664,19 @@ TABSDATA_LICENSE = read(os.path.join(variant_manifest_folder, "LICENSE.setup"))
 
 
 # noinspection DuplicatedCode
-class SpinnerStream:
-
-    def __init__(self, stream, batr):
-        self.stream = stream
-        self.bar = batr
+class TqdmStream:
+    def __init__(self, file):
+        self.file = file
 
     def write(self, text):
-        if text.strip():
-            self.bar.write(text.rstrip("\n"), file=self.stream)
-        elif text:
-            self.stream.write(text)
+        if text and text.strip():
+            tqdm.tqdm.write(text.rstrip("\n"), file=self.file)
 
     def flush(self):
-        self.stream.flush()
+        self.file.flush()
 
     def __getattr__(self, name):
-        return getattr(self.stream, name)
+        return getattr(self.file, name)
 
 
 # noinspection DuplicatedCode
@@ -716,14 +717,24 @@ def global_spinner(desc: str):
 
     sys_stdout = sys.stdout
     sys_stderr = sys.stderr
-    sys.stdout = SpinnerStream(sys_stdout, spinner_bar)
-    sys.stderr = SpinnerStream(sys_stderr, spinner_bar)
+
+    log_handlers = []
+    for w_handler in logging.root.handlers[:]:
+        if isinstance(w_handler, logging.StreamHandler):
+            log_handlers.append((w_handler, w_handler.stream))
+            w_handler.setStream(TqdmStream(w_handler.stream))
 
     try:
+        sys.stdout = TqdmStream(sys_stdout)
+        sys.stderr = TqdmStream(sys_stderr)
         yield
     finally:
         sys.stdout = sys_stdout
         sys.stderr = sys_stderr
+
+        for w_handler, original_stream in log_handlers:
+            w_handler.setStream(original_stream)
+
         stop.set()
         t.join()
 
