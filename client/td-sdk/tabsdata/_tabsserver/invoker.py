@@ -13,6 +13,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import tabsdata
+from tabsdata._tabsserver.engine import EngineProvider
 from tabsdata._tabsserver.function import execute_function_from_bundle_path
 from tabsdata._tabsserver.function.global_utils import (
     DEFAULT_DEVELOPMENT_LOCKS_LOCATION,
@@ -210,6 +211,8 @@ def invoke(
 
 
 def main():
+    EngineProvider.instance(on_server=True)
+
     parser = argparse.ArgumentParser(
         description=(
             "Install a Python virtual environment and execute a function from a file."

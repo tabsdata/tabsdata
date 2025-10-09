@@ -27,6 +27,8 @@ from accessify import accessify, private
 # noinspection PyProtectedMember
 from polars.dependencies import numpy as np
 
+import tabsdata._tabsserver.engine as engine
+
 # noinspection PyProtectedMember
 import tabsdata._utils.tableframe._common as td_common
 
@@ -489,7 +491,12 @@ class TableFrame:
         )
 
     def __str__(self) -> str:
-        return self._lf.explain(optimized=False)
+        server_engine = engine.instance()
+        return (
+            self._lf.explain(optimized=False)
+            if server_engine.on_server
+            else str(self._lf.collect())
+        )
 
     def __repr__(self) -> str:
         return (
