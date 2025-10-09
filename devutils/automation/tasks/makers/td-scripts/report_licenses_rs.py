@@ -85,9 +85,9 @@ normalized_licenses = {
     "BSD-3-Clause AND MIT": "BSD Revised License (BSD-3-Clause), and MIT License",                                                                                                             # noqa: E231,E241,E501
     "BSD-3-Clause OR MIT": "BSD Revised License (BSD-3-Clause) or MIT License",                                                                                                                # noqa: E231,E241,E501
     "BSD-3-CLAUSE;; ISC": "BSD Revised License (BSD-3-Clause) or Internet Systems Consortium License",                                                                                         # noqa: E231,E241,E501
+    "BSD-3-CLAUSE;; MIT": "BSD Revised License (BSD-3-Clause) or MIT License",                                                                                                                 # noqa: E231,E241,E501
     "BSD-3-Clause": "BSD Revised License (BSD-3-Clause)",                                                                                                                                      # noqa: E231,E241,E501
     "BSD-3-CLAUSE": "BSD Revised License (BSD-3-Clause)",                                                                                                                                      # noqa: E231,E241,E501
-    "BSD-3-CLAUSE;; MIT": "BSD Revised License (BSD-3-Clause) or MIT License",                                                                                                                 # noqa: E231,E241,E501
     "BSD": "BSD Revised License (BSD-3-Clause)",                                                                                                                                               # noqa: E231,E241,E501
     "BSL-1.0": "Boost Software License Version 1.0",                                                                                                                                           # noqa: E231,E241,E501
     "CC-BY-4.0": "Creative Commons Attribution Version 4.0 International License",                                                                                                             # noqa: E231,E241,E501
@@ -100,6 +100,7 @@ normalized_licenses = {
     "ISC": "Internet Systems Consortium License",                                                                                                                                              # noqa: E231,E241,E501
     "MIT AND Apache-2.0": "MIT License, and Apache License Version 2.0",                                                                                                                       # noqa: E231,E241,E501
     "MIT AND BSD-3-Clause": "MIT License, and BSD Revised License (BSD-3-Clause)",                                                                                                             # noqa: E231,E241,E501
+    "MIT LICENSE_ APACHE LICENSE_ VERSION 2.0": "MIT License or Apache License Version 2.0",                                                                                                   # noqa: E231,E241,E501
     "MIT LICENSE;; APACHE SOFTWARE LICENSE": "MIT License or Apache Software License Version 2.0",                                                                                             # noqa: E231,E241,E501
     "MIT LICENSE;; MOZILLA PUBLIC LICENSE 2.0 _MPL 2.0_": "MIT License or Mozilla Public License Version 2.0",                                                                                 # noqa: E231,E241,E501
     "MIT LICENSE": "MIT License",                                                                                                                                                              # noqa: E231,E241,E501
@@ -120,8 +121,8 @@ normalized_licenses = {
     "THE UNLICENSE (UNLICENSE)": "The Unlicense",                                                                                                                                              # noqa: E231,E241,E501
     "Unicode-3.0": "Unicode License Version 3.0",                                                                                                                                              # noqa: E231,E241,E501
     "UNKNOWN": "The Unknown License",                                                                                                                                                          # noqa: E231,E241,E501
-    "UNLICENSED": "The Unlicense",                                                                                                                                                             # noqa: E231,E241,E501
     "Unlicense": "The Unlicense",                                                                                                                                                              # noqa: E231,E241,E501
+    "UNLICENSED": "The Unlicense",                                                                                                                                                             # noqa: E231,E241,E501
     "Zlib": "Zlib License",                                                                                                                                                                    # noqa: E231,E241,E501
 }
 # fmt: on
