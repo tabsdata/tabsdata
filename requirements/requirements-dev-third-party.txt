@@ -38,6 +38,7 @@ pip-audit==2.9.0
 pip-tools==7.5.0
 pip-upgrader==1.4.15
 pipdeptree==2.28.0
+prompt_toolkit==3.0.52
 psutil==7.1.0
 pydevd
 pydevd_pycharm
