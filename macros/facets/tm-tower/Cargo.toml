@@ -3,7 +3,7 @@
 #
 
 [package]
-description = "Tabsdata Tower Services Macros"
+description = "Tabsdata Tower Macros"
 name = "tm-tower"
 
 authors = { workspace = true }

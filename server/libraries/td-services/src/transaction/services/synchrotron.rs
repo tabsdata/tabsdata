@@ -2,13 +2,14 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use ta_services::factory::service_factory;
 use td_objects::crudl::{ListRequest, ListResponse};
 use td_objects::sql::{DaoQueries, NoListFilter};
 use td_objects::tower_service::sql::{By, SqlListService};
 use td_objects::types::execution::SynchrotronResponse;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::{layers, service_factory};
+use td_tower::layers;
 
 /// Very similar to the `TransactionListService`. The idea is that this service is used as a
 /// lightweight timeline of the transactions in the system, not a regular list. It should evolve
@@ -33,6 +34,7 @@ fn service() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::TdError;
     use td_objects::crudl::{ListParams, RequestContext};
@@ -45,7 +47,6 @@ mod tests {
     };
     use td_objects::types::function::FunctionRegister;
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]

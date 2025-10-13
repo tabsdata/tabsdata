@@ -2,6 +2,7 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
+use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
 use td_objects::crudl::{ListRequest, ListResponse, RequestContext};
 use td_objects::sql::DaoQueries;
@@ -12,7 +13,7 @@ use td_objects::types::basic::VisibleCollections;
 use td_objects::types::collection::CollectionRead;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::{layers, service_factory};
+use td_tower::layers;
 
 #[service_factory(
     name = ListCollectionsService,
@@ -34,6 +35,7 @@ fn service() {
 mod tests {
     use super::*;
     use std::sync::Arc;
+    use ta_services::service::TdService;
     use td_authz::AuthzContext;
     use td_database::sql::DbPool;
     use td_error::TdError;
@@ -46,7 +48,6 @@ mod tests {
         AccessTokenId, CollectionName, Description, RoleId, RoleName, UserEnabled, UserId, UserName,
     };
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]

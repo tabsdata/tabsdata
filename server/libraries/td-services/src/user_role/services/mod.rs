@@ -7,7 +7,7 @@ use crate::user_role::services::delete::DeleteUserRoleService;
 use crate::user_role::services::list::ListUserRoleService;
 use crate::user_role::services::read::ReadUserRoleService;
 use getset::Getters;
-use td_tower::ServiceFactory;
+use ta_services::factory::ServiceFactory;
 
 mod create;
 mod delete;

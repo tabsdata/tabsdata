@@ -4,9 +4,10 @@
 
 use crate::auth::layers::cert_download::get_certificate_pem_file;
 use std::path::PathBuf;
+use ta_services::factory::service_factory;
 use td_objects::types::stream::BoxedSyncStream;
 use td_tower::from_fn::from_fn;
-use td_tower::{layers, service_factory};
+use td_tower::layers;
 
 #[service_factory(
     name = CertDownloadService,
@@ -23,10 +24,10 @@ mod tests {
     use super::*;
     use futures_util::StreamExt;
     use std::sync::Arc;
+    use ta_services::service::TdService;
     use td_common::server::SSL_CERT_PEM_FILE;
     use td_error::TdError;
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::td_service::TdService;
     use testdir::testdir;
     use tokio::fs;
     use tokio::io::AsyncWriteExt;

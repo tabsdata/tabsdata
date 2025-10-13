@@ -15,6 +15,7 @@ mod routes {
     use ta_apiserver::status::ok_status::{
         CreateStatus, DeleteStatus, GetStatus, ListStatus, NoContent, UpdateStatus,
     };
+    use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
     use td_objects::crudl::{ListParams, RequestContext};
     use td_objects::rest_urls::{
@@ -27,7 +28,6 @@ mod routes {
     };
     use td_objects::types::table::{CollectionAtName, FunctionAtIdName};
     use td_services::function::services::FunctionServices;
-    use td_tower::td_service::TdService;
     use tower::ServiceExt;
 
     const FUNCTIONS_TAG: &str = "Functions";

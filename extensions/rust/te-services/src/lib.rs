@@ -3,7 +3,17 @@
 //
 
 use axum::extract::FromRef;
-use td_tower::ServiceFactory;
+use ta_services::extension::ContextExt;
+use ta_services::factory::{FieldAccessors, ServiceFactory};
 
-#[derive(Clone, ServiceFactory, FromRef)]
+#[derive(ServiceFactory, Clone, Debug)]
 pub struct ExtendedServices {}
+
+#[derive(FieldAccessors, FromRef, Default, Clone, Debug)]
+pub struct ExtendedContext {}
+
+impl<Base, Extended> ContextExt<Base, Extended> for ExtendedContext {
+    fn build(_base: &Base, _extended: &Extended) -> Self {
+        Self::default()
+    }
+}

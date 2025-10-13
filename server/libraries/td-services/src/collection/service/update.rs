@@ -5,6 +5,7 @@
 use crate::collection::service::layer::update::{
     UpdateCollectionDBBuilderUpdate, update_collection_validate,
 };
+use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
 use td_objects::crudl::{RequestContext, UpdateRequest};
 use td_objects::rest_urls::CollectionParam;
@@ -22,7 +23,7 @@ use td_objects::types::collection::{
 };
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::{layers, service_factory};
+use td_tower::layers;
 
 #[service_factory(
     name = UpdateCollectionService,
@@ -65,6 +66,7 @@ fn service() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_objects::crudl::RequestContext;
     use td_objects::rest_urls::CollectionParam;
@@ -74,7 +76,6 @@ mod tests {
     };
     use td_objects::types::collection::CollectionUpdate;
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]

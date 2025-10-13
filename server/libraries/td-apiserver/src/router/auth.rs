@@ -15,13 +15,13 @@ mod secure_routes {
     use ta_apiserver::status::error_status::ErrorStatus;
     use ta_apiserver::status::extractors::Json;
     use ta_apiserver::status::ok_status::{GetStatus, NoContent, RawStatus, UpdateStatus};
+    use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
     use td_objects::crudl::RequestContext;
     use td_objects::rest_urls::{AUTH_LOGOUT, AUTH_REFRESH, AUTH_ROLE_CHANGE, AUTH_USER_INFO};
     use td_objects::types::auth::{RefreshRequestX, RoleChange, TokenResponseX, UserInfo};
     use td_services::auth::services::AuthServices;
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::td_service::TdService;
     use tower::ServiceExt;
 
     #[apiserver_path(method = post, path = AUTH_LOGOUT, tag = AUTH_TAG)]
@@ -87,13 +87,13 @@ mod unsecure_routes {
     use ta_apiserver::status::error_status::ErrorStatus;
     use ta_apiserver::status::extractors::Json;
     use ta_apiserver::status::ok_status::{NoContent, RawStatus, UpdateStatus};
+    use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
     use td_objects::rest_urls::{AUTH_LOGIN, AUTH_PASSWORD_CHANGE, CERT_DOWNLOAD};
     use td_objects::types::auth::{Login, PasswordChange, TokenResponseX};
     use td_objects::types::stream::BoxedSyncStream;
     use td_services::auth::services::AuthServices;
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::td_service::TdService;
     use tower::ServiceExt;
     use utoipa::IntoResponses;
 

@@ -3,10 +3,11 @@
 //
 
 use crate::system::layers::status::database_status;
+use ta_services::factory::service_factory;
 use td_objects::types::system::ApiStatus;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::{layers, service_factory};
+use td_tower::layers;
 
 #[service_factory(
     name = StatusService,
@@ -21,9 +22,9 @@ fn service() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_objects::types::system::HealthStatus;
-    use td_tower::td_service::TdService;
     use tower::ServiceExt;
 
     #[cfg(feature = "test_tower_metadata")]

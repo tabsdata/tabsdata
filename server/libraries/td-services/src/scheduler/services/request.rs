@@ -3,6 +3,7 @@
 //
 
 use crate::scheduler::layers::schedule::create_locked_workers;
+use ta_services::factory::service_factory;
 use td_common::server::{FileWorkerMessageQueue, WorkerMessageQueue};
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::from::{ExtractVecService, With};
@@ -14,9 +15,9 @@ use td_objects::types::execution::{
 use td_storage::Storage;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::{layer, layers, service_factory};
+use td_tower::{layer, layers};
 
-// TODO make provider accept generics so scheduler services can be used with different message queues.
+// TODO make factory accept generics so scheduler services can be used with different message queues.
 #[service_factory(
     name = ScheduleRequestService,
     request = (),
@@ -62,6 +63,8 @@ mod tests {
     use super::*;
     use crate::SchedulerContext;
     use crate::execution::services::execute::ExecuteFunctionService;
+    use ta_services::factory::ServiceFactory;
+    use ta_services::service::TdService;
     use td_common::server::SupervisorMessagePayload;
     use td_database::sql::DbPool;
     use td_error::TdError;
@@ -82,8 +85,6 @@ mod tests {
     use td_objects::types::worker::{EnvPrefix, FunctionInput};
     use td_storage::SPath;
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::factory::ServiceFactory;
-    use td_tower::td_service::TdService;
     use tower::ServiceExt;
 
     #[cfg(feature = "test_tower_metadata")]

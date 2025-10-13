@@ -3,6 +3,7 @@
 //
 
 use crate::role::layers::assert_not_fixed;
+use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
 use td_objects::crudl::{DeleteRequest, RequestContext};
 use td_objects::rest_urls::RoleParam;
@@ -15,7 +16,7 @@ use td_objects::types::permission::PermissionDB;
 use td_objects::types::role::{RoleDB, RoleDBWithNames, UserRoleDB};
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::{layers, service_factory};
+use td_tower::layers;
 
 #[service_factory(
     name = DeleteRoleService,
@@ -50,6 +51,7 @@ fn service() {
 mod tests {
     use super::*;
     use crate::role::RoleError;
+    use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::TdError;
     use td_objects::crudl::RequestContext;
@@ -65,7 +67,6 @@ mod tests {
     use td_objects::types::role::UserRoleDBWithNames;
     use td_objects::types::{IdOrName, SqlEntity};
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]

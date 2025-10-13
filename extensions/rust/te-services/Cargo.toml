@@ -46,7 +46,7 @@ td-build = { workspace = true }
 
 # Internal dependencies
 
-td-tower = { workspace = true }
+ta-services = { workspace = true }
 
 ## Macros
 

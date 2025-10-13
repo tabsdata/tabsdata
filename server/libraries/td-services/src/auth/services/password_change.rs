@@ -8,6 +8,7 @@ use crate::auth::layers::assert_user_enabled::assert_user_enabled;
 use crate::auth::layers::create_password_hash::create_password_hash;
 use crate::auth::layers::refresh_sessions::refresh_sessions;
 use crate::auth::session::Sessions;
+use ta_services::factory::service_factory;
 use td_error::TdError;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::from::{
@@ -25,7 +26,7 @@ use td_objects::types::user::{UserDB, UserDBBuilder};
 use td_security::config::PasswordHashingConfig;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::{layers, service_factory};
+use td_tower::layers;
 use tower::util::MapErrLayer;
 
 #[service_factory(
@@ -90,6 +91,8 @@ mod tests {
     use crate::auth::jwt::decode_token;
     use crate::auth::services::AuthServices;
     use crate::auth::services::tests::get_session;
+    use ta_services::factory::ServiceFactory;
+    use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::assert_service_error;
     use td_objects::types::auth::{Login, PasswordChange};
@@ -97,8 +100,6 @@ mod tests {
         NewPassword, OldPassword, Password, RoleName, SessionStatus, UserName,
     };
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::factory::ServiceFactory;
-    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]

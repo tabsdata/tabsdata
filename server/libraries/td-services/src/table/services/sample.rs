@@ -4,6 +4,7 @@
 
 use crate::table::layers::find_data_version_location_at;
 use crate::table::layers::sample::get_table_sample;
+use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
 use td_objects::crudl::{ReadRequest, RequestContext};
 use td_objects::rest_urls::FileFormat;
@@ -23,7 +24,6 @@ use td_storage::Storage;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
-use td_tower::service_factory;
 
 #[service_factory(
     name = TableSampleService,
@@ -72,6 +72,7 @@ mod tests {
     use std::io::Cursor;
     use std::path::Path;
     use std::sync::Arc;
+    use ta_services::service::TdService;
     use td_common::absolute_path::AbsolutePath;
     use td_database::sql::DbPool;
     use td_error::TdError;
@@ -97,7 +98,6 @@ mod tests {
     use td_storage::location::StorageLocation;
     use td_storage::{MountDef, Storage};
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::td_service::TdService;
     use testdir::testdir;
     use url::Url;
 

@@ -6,7 +6,7 @@ use crate::inter_coll_permission::services::create::CreateInterCollectionPermiss
 use crate::inter_coll_permission::services::delete::DeleteInterCollectionPermissionService;
 use crate::inter_coll_permission::services::list::ListInterCollectionPermissionService;
 use getset::Getters;
-use td_tower::ServiceFactory;
+use ta_services::factory::ServiceFactory;
 
 pub mod create;
 pub mod delete;

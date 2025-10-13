@@ -10,7 +10,7 @@ use crate::auth::services::refresh::RefreshService;
 use crate::auth::services::role_change::RoleChangeService;
 use crate::auth::services::user_info::UserInfoService;
 use getset::Getters;
-use td_tower::ServiceFactory;
+use ta_services::factory::ServiceFactory;
 
 mod cert_download;
 mod login;

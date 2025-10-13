@@ -570,9 +570,9 @@ impl Default for ApiServerAddresses {
     }
 }
 
-impl Into<NonEmptyAddresses> for ApiServerAddresses {
-    fn into(self) -> NonEmptyAddresses {
-        self.0
+impl From<ApiServerAddresses> for NonEmptyAddresses {
+    fn from(v: ApiServerAddresses) -> Self {
+        v.0
     }
 }
 
@@ -595,9 +595,9 @@ impl Deref for InternalServerAddresses {
     }
 }
 
-impl Into<NonEmptyAddresses> for InternalServerAddresses {
-    fn into(self) -> NonEmptyAddresses {
-        self.0
+impl From<InternalServerAddresses> for NonEmptyAddresses {
+    fn from(v: InternalServerAddresses) -> Self {
+        v.0
     }
 }
 

@@ -2,6 +2,8 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+pub mod config;
+
 use ta_apiserver::router::RouterExtension;
 use utoipa_axum::router::OpenApiRouter;
 

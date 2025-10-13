@@ -6,6 +6,7 @@ use crate::user::layers::update::{
     UpdateUserDBBuilderUpdate, update_user_validate, update_user_validate_enabled,
     update_user_validate_password_change,
 };
+use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
 use td_objects::crudl::{RequestContext, UpdateRequest};
 use td_objects::rest_urls::UserParam;
@@ -24,7 +25,7 @@ use td_objects::types::user::{
 use td_security::config::PasswordHashingConfig;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::{layers, service_factory};
+use td_tower::layers;
 
 #[service_factory(
     name = UpdateUserService,
@@ -64,6 +65,7 @@ fn service() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_objects::crudl::RequestContext;
     use td_objects::rest_urls::UserParam;
@@ -74,7 +76,6 @@ mod tests {
     };
     use td_objects::types::user::{UserDB, UserUpdate};
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]

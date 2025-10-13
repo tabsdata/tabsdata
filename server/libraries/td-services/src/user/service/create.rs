@@ -3,6 +3,7 @@
 //
 
 use crate::user::layers::create::UpdateCreateUserDBBuilder;
+use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
 use td_objects::crudl::{CreateRequest, RequestContext};
 use td_objects::sql::DaoQueries;
@@ -20,7 +21,7 @@ use td_objects::types::user::{
 use td_security::config::PasswordHashingConfig;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::{layers, service_factory};
+use td_tower::layers;
 
 #[service_factory(
     name = CreateUserService,
@@ -64,13 +65,13 @@ fn service() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_objects::sql::SelectBy;
     use td_objects::types::basic::{
         AccessTokenId, AtTime, Email, FullName, RoleId, UserEnabled, UserId, UserName,
     };
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]

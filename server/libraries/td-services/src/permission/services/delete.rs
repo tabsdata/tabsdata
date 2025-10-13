@@ -6,6 +6,7 @@ use crate::permission::layers::{
     assert_permission_is_not_fixed, assert_role_in_permission,
     is_permission_with_names_on_a_single_collection,
 };
+use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext, refresh_authz_context};
 use td_objects::crudl::{DeleteRequest, RequestContext};
 use td_objects::rest_urls::RolePermissionParam;
@@ -21,7 +22,7 @@ use td_objects::types::basic::{
 use td_objects::types::permission::{PermissionDB, PermissionDBWithNames};
 use td_tower::default_services::{Do, Else, If, TransactionProvider, conditional};
 use td_tower::from_fn::from_fn;
-use td_tower::{layers, service, service_factory};
+use td_tower::{layers, service};
 
 #[service_factory(
     name = DeletePermissionService,
@@ -74,6 +75,7 @@ mod tests {
     use crate::permission::PermissionError;
     use crate::permission::services::create::CreatePermissionService;
     use std::collections::HashSet;
+    use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::{TdError, assert_service_error};
     use td_objects::crudl::RequestContext;
@@ -92,7 +94,6 @@ mod tests {
         ENCODED_ID_CA_ALL_SEC_ADMIN, ENCODED_ID_SA_SYS_ADMIN, ENCODED_ID_SS_SEC_ADMIN,
     };
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::td_service::TdService;
     use tower::ServiceExt;
 
     #[cfg(feature = "test_tower_metadata")]

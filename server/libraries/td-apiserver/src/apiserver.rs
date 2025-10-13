@@ -58,6 +58,8 @@ use std::sync::Arc;
 use std::time::Duration;
 use ta_apiserver::router::RouterExtension;
 use ta_apiserver::status::error_status::ErrorStatus;
+use ta_services::extension::ContextExt;
+use ta_services::factory::ServiceFactory;
 use td_authz::AuthzContext;
 use td_database::sql::DbPool;
 use td_error::{ApiError, api_error};
@@ -67,9 +69,8 @@ use td_services::auth::session::Sessions;
 use td_services::execution::services::runtime_info::RuntimeContext;
 use td_services::{Context, Services};
 use td_storage::Storage;
-use td_tower::factory::ServiceFactory;
 use te_apiserver::{AuthenticatedExtendedRouter, UnauthenticatedExtendedRouter};
-use te_services::ExtendedServices;
+use te_services::{ExtendedContext, ExtendedServices};
 use tower_http::timeout::TimeoutLayer;
 
 pub struct ApiServerInstance {
@@ -103,10 +104,12 @@ impl ApiServerInstance {
     }
 }
 
+#[allow(dead_code)]
 pub struct ApiServerInstanceBuilder {
     config: Config,
     context: Context,
     services: Services,
+    extended_context: ExtendedContext,
     extended_services: ExtendedServices,
 }
 
@@ -136,12 +139,14 @@ impl ApiServerInstanceBuilder {
             transaction_by: Arc::new(config.transaction_by().clone()),
         };
         let services = Services::build(&context);
-        let extended_services = ExtendedServices::build(&context);
+        let extended_context = ExtendedContext::build(&context, config.extended_config());
+        let extended_services = ExtendedServices::build(&extended_context);
 
         Self {
             config,
             context,
             services,
+            extended_context,
             extended_services,
         }
     }

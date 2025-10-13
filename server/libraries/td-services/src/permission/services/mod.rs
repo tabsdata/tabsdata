@@ -6,7 +6,7 @@ use crate::permission::services::create::CreatePermissionService;
 use crate::permission::services::delete::DeletePermissionService;
 use crate::permission::services::list::ListPermissionService;
 use getset::Getters;
-use td_tower::ServiceFactory;
+use ta_services::factory::ServiceFactory;
 
 mod create;
 mod delete;

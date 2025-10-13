@@ -3,6 +3,7 @@
 //
 
 use crate::worker::layers::logs::{get_worker_logs, resolve_worker_log_path};
+use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
 use td_objects::crudl::{ReadRequest, RequestContext};
 use td_objects::rest_urls::{LogsExtension, WorkerLogsParams};
@@ -15,7 +16,7 @@ use td_objects::types::execution::WorkerDB;
 use td_objects::types::stream::BoxedSyncStream;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::{layers, service_factory};
+use td_tower::layers;
 
 #[service_factory(
     name = WorkerLogService,
@@ -53,6 +54,7 @@ mod tests {
     use crate::worker::layers::tests::create_log_files;
     use bytes::Bytes;
     use futures_util::TryStreamExt;
+    use ta_services::service::TdService;
     use td_common::server::WORKSPACE_URI_ENV;
     use td_database::sql::DbPool;
     use td_error::TdError;
@@ -70,7 +72,6 @@ mod tests {
     use td_objects::types::execution::WorkerMessageStatus;
     use td_objects::types::function::FunctionRegister;
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::td_service::TdService;
     use testdir::testdir;
 
     #[cfg(feature = "test_tower_metadata")]

@@ -8,7 +8,7 @@ use crate::collection::service::list::ListCollectionsService;
 use crate::collection::service::read::ReadCollectionService;
 use crate::collection::service::update::UpdateCollectionService;
 use getset::Getters;
-use td_tower::ServiceFactory;
+use ta_services::factory::ServiceFactory;
 
 mod create;
 mod delete;

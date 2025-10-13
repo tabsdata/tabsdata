@@ -28,8 +28,6 @@ use tracing::{debug, error, info, warn};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ServerError {
-    #[error("No address provided")]
-    NoAddress,
     #[error("Failed to run Server in address [{0}]: {1}")]
     Server(String, std::io::Error),
     #[error("Failed to bind to address [{0}]: {1}")]

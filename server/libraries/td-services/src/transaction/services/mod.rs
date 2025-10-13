@@ -12,7 +12,7 @@ use crate::transaction::services::list::TransactionListService;
 use crate::transaction::services::recover::TransactionRecoverService;
 use crate::transaction::services::synchrotron::SynchrotronService;
 use getset::Getters;
-use td_tower::ServiceFactory;
+use ta_services::factory::ServiceFactory;
 
 #[derive(ServiceFactory, Getters)]
 #[getset(get = "pub")]

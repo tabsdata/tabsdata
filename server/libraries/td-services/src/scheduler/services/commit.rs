@@ -3,11 +3,12 @@
 //
 
 use crate::scheduler::layers::schedule::unlock_workers;
+use ta_services::factory::service_factory;
 use td_common::server::{FileWorkerMessageQueue, WorkerMessageQueue};
 use td_objects::sql::DaoQueries;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::{layer, layers, service_factory};
+use td_tower::{layer, layers};
 
 #[service_factory(
     name = ScheduleCommitService,
@@ -39,6 +40,8 @@ mod tests {
     use crate::SchedulerContext;
     use crate::execution::services::execute::ExecuteFunctionService;
     use crate::scheduler::services::request::ScheduleRequestService;
+    use ta_services::factory::ServiceFactory;
+    use ta_services::service::TdService;
     use td_common::files::{YAML_EXTENSION, get_files_in_folder_sorted_by_name};
     use td_common::server::{PayloadType, SupervisorMessage};
     use td_database::sql::DbPool;
@@ -56,8 +59,6 @@ mod tests {
     use td_objects::types::function::FunctionRegister;
     use td_objects::types::worker::FunctionInput;
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::factory::ServiceFactory;
-    use td_tower::td_service::TdService;
     use tower::ServiceExt;
 
     #[cfg(feature = "test_tower_metadata")]

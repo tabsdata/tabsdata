@@ -2,7 +2,15 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+pub use tm_services::FieldAccessors;
+pub use tm_services::ServiceFactory;
+pub use tm_services::service_factory;
+
 use std::sync::Arc;
+
+pub trait FieldAccessor<T> {
+    fn get_field(ctx: &T) -> Self;
+}
 
 pub trait ServiceFactory<C> {
     type Service;

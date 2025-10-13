@@ -4,6 +4,7 @@
 
 use crate::function::layers::register::data_location;
 use crate::function::layers::upload::upload_function_write_to_storage;
+use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
 use td_objects::crudl::CreateRequest;
 use td_objects::crudl::RequestContext;
@@ -25,7 +26,7 @@ use td_objects::types::function::{
 use td_storage::Storage;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::{layers, service_factory};
+use td_tower::layers;
 
 #[service_factory(
     name = UploadFunctionService,
@@ -79,6 +80,8 @@ mod tests {
     use axum::body::Body;
     use axum::extract::Request;
     use sha2::{Digest, Sha256};
+    use ta_services::factory::ServiceFactory;
+    use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::TdError;
     use td_objects::crudl::handle_sql_err;
@@ -87,8 +90,6 @@ mod tests {
     use td_objects::types::basic::{AccessTokenId, CollectionName, DataLocation, RoleId, UserId};
     use td_storage::location::StorageLocation;
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::factory::ServiceFactory;
-    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]

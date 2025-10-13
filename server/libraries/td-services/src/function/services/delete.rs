@@ -6,6 +6,7 @@ use crate::function::layers::delete::build_deleted_function_version;
 use crate::function::layers::{
     SKIP_AUTHZ, register_dependencies, register_tables, register_triggers,
 };
+use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
 use td_objects::crudl::{DeleteRequest, RequestContext};
 use td_objects::rest_urls::FunctionParam;
@@ -28,7 +29,7 @@ use td_objects::types::table::TableDB;
 use td_objects::types::trigger::TriggerDBWithNames;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::{layers, service_factory};
+use td_tower::layers;
 
 #[service_factory(
     name = DeleteFunctionService,
@@ -91,6 +92,7 @@ mod tests {
     use super::*;
     use crate::function::services::register::RegisterFunctionService;
     use crate::function::services::tests::{assert_delete, assert_register};
+    use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::TdError;
     use td_objects::crudl::{RequestContext, handle_sql_err};
@@ -104,7 +106,6 @@ mod tests {
     };
     use td_objects::types::function::{FunctionBuilder, FunctionDBWithNames, FunctionRegister};
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]

@@ -10,7 +10,7 @@ use crate::execution::services::read::ExecutionReadService;
 use crate::execution::services::recover::ExecutionRecoverService;
 use crate::execution::services::runtime_info::RuntimeInfoService;
 use getset::Getters;
-use td_tower::ServiceFactory;
+use ta_services::factory::ServiceFactory;
 
 pub(crate) mod callback;
 mod cancel;

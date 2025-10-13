@@ -11,6 +11,7 @@ use crate::execution::layers::template::assert_active_status;
 use crate::execution::layers::template::{
     build_execution_template, find_all_input_tables, find_trigger_graph,
 };
+use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
 use td_objects::crudl::{CreateRequest, RequestContext};
 use td_objects::rest_urls::FunctionParam;
@@ -34,7 +35,7 @@ use td_objects::types::permission::{InterCollectionAccess, InterCollectionAccess
 use td_objects::types::trigger::TriggerDBWithNames;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::{layers, service_factory};
+use td_tower::layers;
 use te_execution::transaction::TransactionBy;
 
 #[service_factory(
@@ -118,6 +119,7 @@ fn service() {
 pub(crate) mod tests {
     use super::*;
     use std::collections::HashSet;
+    use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::TdError;
     use td_objects::crudl::{RequestContext, handle_sql_err};
@@ -148,7 +150,6 @@ pub(crate) mod tests {
     use td_objects::types::function::{FunctionDBWithNames, FunctionRegister};
     use td_objects::types::table::TableDB;
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]

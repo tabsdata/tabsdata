@@ -12,6 +12,7 @@ mod routes {
     use std::sync::Arc;
     use ta_apiserver::status::error_status::ErrorStatus;
     use ta_apiserver::status::ok_status::{ListStatus, NoContent, UpdateStatus};
+    use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
     use td_objects::crudl::{ListParams, RequestContext};
     use td_objects::rest_urls::{
@@ -20,7 +21,6 @@ mod routes {
     };
     use td_objects::types::execution::{SynchrotronResponse, Transaction};
     use td_services::transaction::services::TransactionServices;
-    use td_tower::td_service::TdService;
     use tower::ServiceExt;
 
     const TRANSACTIONS_TAG: &str = "Transactions";

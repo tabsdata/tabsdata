@@ -6,6 +6,7 @@ use crate::function::layers::register::{data_location, validate_tables_do_not_ex
 use crate::function::layers::{
     DO_AUTHZ, check_private_tables, register_dependencies, register_tables, register_triggers,
 };
+use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
 use td_objects::crudl::{CreateRequest, RequestContext};
 use td_objects::rest_urls::CollectionParam;
@@ -32,7 +33,7 @@ use td_objects::types::table::TableDB;
 use td_objects::types::trigger::TriggerDBWithNames;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::{layers, service_factory};
+use td_tower::layers;
 
 #[service_factory(
     name = RegisterFunctionService,
@@ -123,6 +124,7 @@ mod tests {
     use crate::function::services::tests::assert_register;
     use std::collections::HashMap;
     use std::ops::Deref;
+    use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::TdError;
     use td_execution::version_resolver::VersionResolverError;
@@ -137,7 +139,6 @@ mod tests {
         AccessTokenId, BundleId, Decorator, FunctionRuntimeValues, RoleId, ToCollectionId, UserId,
     };
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]

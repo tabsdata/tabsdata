@@ -2,6 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
 use td_objects::crudl::{ListRequest, ListResponse, RequestContext};
 use td_objects::rest_urls::AtTimeParam;
@@ -15,7 +16,7 @@ use td_objects::types::basic::{
 use td_objects::types::function::Function;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::{layers, service_factory};
+use td_tower::layers;
 
 #[service_factory(
     name = FunctionListService,
@@ -45,6 +46,7 @@ mod tests {
     use super::*;
     use crate::function::services::delete::DeleteFunctionService;
     use crate::function::services::update::UpdateFunctionService;
+    use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::TdError;
     use td_objects::crudl::{ListParams, ListParamsBuilder, RequestContext};
@@ -60,7 +62,6 @@ mod tests {
     };
     use td_objects::types::function::{FunctionRegister, FunctionUpdate};
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]

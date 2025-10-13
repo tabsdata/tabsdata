@@ -48,6 +48,7 @@ ignored = ["openssl", "td-services", "thiserror"]
 ## Libraries
 
 ta-execution = { workspace = true }
+ta-services = { workspace = true }
 td-authz = { workspace = true }
 td-common = { workspace = true }
 td-database = { workspace = true }

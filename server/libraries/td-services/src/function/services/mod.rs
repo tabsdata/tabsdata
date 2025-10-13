@@ -11,7 +11,7 @@ use crate::function::services::register::RegisterFunctionService;
 use crate::function::services::update::UpdateFunctionService;
 use crate::function::services::upload::UploadFunctionService;
 use getset::Getters;
-use td_tower::ServiceFactory;
+use ta_services::factory::ServiceFactory;
 
 pub(crate) mod delete;
 pub(crate) mod history;

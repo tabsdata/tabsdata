@@ -5,6 +5,7 @@
 use crate::execution::layers::update_status::{
     update_function_run_status, update_table_data_version_status, update_worker_status,
 };
+use ta_services::factory::service_factory;
 use td_objects::crudl::UpdateRequest;
 use td_objects::rest_urls::FunctionRunIdParam;
 use td_objects::sql::DaoQueries;
@@ -19,7 +20,7 @@ use td_objects::types::execution::{
 };
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::{layers, service_factory};
+use td_tower::layers;
 
 #[service_factory(
     name = ExecutionCallbackService,
@@ -66,6 +67,7 @@ mod tests {
     use crate::execution::layers::update_status::tests::{
         TestExecution, TestFunction, TestTransaction, test_status_update,
     };
+    use ta_services::service::TdService;
     use td_common::execution_status::WorkerCallbackStatus;
     use td_common::server::ResponseMessagePayloadBuilder;
     use td_common::server::{MessageAction, WorkerClass};
@@ -85,7 +87,6 @@ mod tests {
     use td_objects::types::worker::FunctionOutput;
     use td_objects::types::worker::v2::{FunctionOutputV2, TableInfo, WrittenTableV2};
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]

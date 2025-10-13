@@ -23,6 +23,7 @@ use crate::worker::services::WorkerServices;
 use axum::extract::FromRef;
 use std::path::PathBuf;
 use std::sync::Arc;
+use ta_services::factory::{FieldAccessors, ServiceFactory};
 use td_authz::AuthzContext;
 use td_common::server::FileWorkerMessageQueue;
 use td_database::sql::DbPool;
@@ -30,7 +31,6 @@ use td_objects::sql::DaoQueries;
 use td_objects::types::basic::{ApiServerAddresses, InternalServerAddresses};
 use td_security::config::PasswordHashingConfig;
 use td_storage::Storage;
-use td_tower::ServiceFactory;
 use te_execution::transaction::TransactionBy;
 
 pub mod auth;
@@ -49,7 +49,7 @@ pub mod user;
 pub mod user_role;
 pub mod worker;
 
-#[derive(ServiceFactory, FromRef, Clone)]
+#[derive(ServiceFactory, FieldAccessors, FromRef, Clone)]
 pub struct Services {
     auth: Arc<AuthServices>,
     collection: Arc<CollectionServices>,
@@ -67,7 +67,7 @@ pub struct Services {
     worker: Arc<WorkerServices>,
 }
 
-#[derive(FromRef, Clone)]
+#[derive(FieldAccessors, FromRef, Clone)]
 pub struct Context {
     pub db: DbPool,
     pub queries: Arc<DaoQueries>,
@@ -106,7 +106,7 @@ pub struct SchedulerServices {
     schedule: Arc<ScheduleServices>,
 }
 
-#[derive(FromRef)]
+#[derive(FieldAccessors, FromRef, Clone)]
 pub struct SchedulerContext {
     pub db: DbPool,
     pub queries: Arc<DaoQueries>,

@@ -11,6 +11,7 @@ mod routes {
     use std::sync::Arc;
     use ta_apiserver::status::error_status::ErrorStatus;
     use ta_apiserver::status::ok_status::GetStatus;
+    use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
     use td_objects::crudl::RequestContext;
     use td_objects::rest_urls::{RUNTIME_INFO, SERVER_STATUS};
@@ -18,7 +19,6 @@ mod routes {
     use td_objects::types::system::ApiStatus;
     use td_services::execution::services::ExecutionServices;
     use td_services::system::services::SystemServices;
-    use td_tower::td_service::TdService;
     use tower::ServiceExt;
 
     const STATUS_TAG: &str = "Status";
@@ -52,13 +52,13 @@ mod tests {
     use axum::{Extension, Router};
     use http::{Method, StatusCode};
     use ta_apiserver::router::RouterExtension;
+    use ta_services::factory::ServiceFactory;
     use td_database::sql::DbPool;
     use td_objects::crudl::RequestContext;
     use td_objects::rest_urls::SERVER_STATUS;
     use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
     use td_objects::types::system::{ApiStatus, HealthStatus};
     use td_services::{Context, Services};
-    use td_tower::factory::ServiceFactory;
     use tower::ServiceExt;
 
     async fn to_route<R: Into<Router> + Clone>(router: &R) -> Router {

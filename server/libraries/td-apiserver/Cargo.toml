@@ -54,6 +54,7 @@ td-error = { workspace = true }
 ## Libraries
 
 ta-apiserver = { workspace = true }
+ta-services = { workspace = true }
 td-apiforge = { workspace = true }
 td-authz = { workspace = true }
 td-build = { workspace = true }

@@ -29,7 +29,7 @@ pub fn derive_service_factory(input: TokenStream) -> TokenStream {
             let ty = &f.ty;
             (
                 quote! {
-                    #fn_name: <#ty as ::td_tower::factory::ServiceFactory<C>>::build(ctx)
+                    #fn_name: <#ty as ::ta_services::factory::ServiceFactory<C>>::build(ctx)
                 },
                 quote! { #ty },
             )
@@ -37,9 +37,9 @@ pub fn derive_service_factory(input: TokenStream) -> TokenStream {
         .collect();
 
     let expanded = quote! {
-        impl<C> ::td_tower::factory::ServiceFactory<C> for #name
+        impl<C> ::ta_services::factory::ServiceFactory<C> for #name
         where
-            #( #field_types: ::td_tower::factory::ServiceFactory<C, Service = #field_types>, )*
+            #( #field_types: ::ta_services::factory::ServiceFactory<C, Service = #field_types>, )*
         {
             type Service = Self;
 

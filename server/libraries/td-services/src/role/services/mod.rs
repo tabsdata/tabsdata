@@ -8,7 +8,7 @@ use crate::role::services::list::ListRoleService;
 use crate::role::services::read::ReadRoleService;
 use crate::role::services::update::UpdateRoleService;
 use getset::Getters;
-use td_tower::ServiceFactory;
+use ta_services::factory::ServiceFactory;
 
 mod create;
 mod delete;

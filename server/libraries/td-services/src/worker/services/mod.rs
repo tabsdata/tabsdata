@@ -8,7 +8,7 @@ mod logs;
 use crate::worker::services::list::WorkerListService;
 use crate::worker::services::logs::WorkerLogService;
 use getset::Getters;
-use td_tower::ServiceFactory;
+use ta_services::factory::ServiceFactory;
 
 #[derive(ServiceFactory, Getters)]
 #[getset(get = "pub")]

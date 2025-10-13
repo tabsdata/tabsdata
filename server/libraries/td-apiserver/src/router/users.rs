@@ -15,6 +15,7 @@ mod routes {
     use ta_apiserver::status::ok_status::{
         CreateStatus, DeleteStatus, GetStatus, ListStatus, NoContent, UpdateStatus,
     };
+    use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
     use td_objects::crudl::{ListParams, RequestContext};
     use td_objects::rest_urls::{
@@ -22,7 +23,6 @@ mod routes {
     };
     use td_objects::types::user::{UserCreate, UserRead, UserUpdate};
     use td_services::user::service::UserServices;
-    use td_tower::td_service::TdService;
     use tower::ServiceExt;
 
     const USERS_TAG: &str = "Users";
@@ -113,6 +113,7 @@ mod tests {
     use http::method::Method;
     use serde_json::json;
     use ta_apiserver::router::RouterExtension;
+    use ta_services::factory::ServiceFactory;
     use td_database::sql::DbPool;
     use td_objects::crudl::RequestContext;
     use td_objects::rest_urls::{CREATE_USER, DELETE_USER, GET_USER, LIST_USERS, UPDATE_USER};
@@ -120,7 +121,6 @@ mod tests {
     use td_objects::types::basic::RoleId;
     use td_objects::types::basic::UserId;
     use td_services::{Context, Services};
-    use td_tower::factory::ServiceFactory;
     use tower::ServiceExt;
 
     async fn to_route<R: Into<Router> + Clone>(router: &R) -> Router {

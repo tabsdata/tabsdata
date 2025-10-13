@@ -72,6 +72,7 @@ mod tests {
     use super::*;
     use crate::function::services::update::UpdateFunctionService;
     use std::sync::Arc;
+    use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_objects::crudl::RequestContext;
     use td_objects::rest_urls::FunctionParam;
@@ -95,7 +96,6 @@ mod tests {
     use td_objects::types::table::TableDB;
     use td_tower::ctx_service::RawOneshot;
     use td_tower::extractors::ConnectionType;
-    use td_tower::td_service::TdService;
 
     #[td_test::test(sqlx)]
     #[tokio::test]

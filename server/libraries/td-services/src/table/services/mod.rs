@@ -18,7 +18,7 @@ use crate::table::services::list_data_versions::TableListDataVersionsService;
 use crate::table::services::sample::TableSampleService;
 use crate::table::services::schema::TableSchemaService;
 use getset::Getters;
-use td_tower::ServiceFactory;
+use ta_services::factory::ServiceFactory;
 
 #[derive(ServiceFactory, Getters)]
 #[getset(get = "pub")]

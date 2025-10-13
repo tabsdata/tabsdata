@@ -12,12 +12,12 @@ mod routes {
     use ta_apiserver::status::error_status::ErrorStatus;
     use ta_apiserver::status::extractors::Json;
     use ta_apiserver::status::ok_status::{NoContent, UpdateStatus};
+    use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
     use td_objects::crudl::RequestContext;
     use td_objects::rest_urls::{FunctionRunIdParam, UPDATE_FUNCTION_RUN};
     use td_objects::types::execution::CallbackRequest;
     use td_services::execution::services::ExecutionServices;
-    use td_tower::td_service::TdService;
     use tower::ServiceExt;
 
     const INTERNAL_TAG: &str = "Internal";

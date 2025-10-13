@@ -35,6 +35,7 @@ members = [
     "facets/td-attach",
     "facets/td-type",
     "facets/tm-error",
+    "facets/tm-services",
     "facets/tm-test",
     "facets/tm-tower",
     "facets/tm-workspace"

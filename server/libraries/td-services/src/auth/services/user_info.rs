@@ -1,3 +1,4 @@
+use ta_services::factory::service_factory;
 //
 // Copyright 2025. Tabs Data Inc.
 //
@@ -17,7 +18,7 @@ use td_objects::types::permission::{Permission, PermissionBuilder, PermissionDBW
 use td_objects::types::user::UserDBWithNames;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::{layers, service_factory};
+use td_tower::layers;
 
 #[service_factory(
     name = UserInfoService,
@@ -61,14 +62,14 @@ mod tests {
     use crate::Context;
     use crate::auth::jwt::decode_token;
     use crate::auth::services::AuthServices;
+    use ta_services::factory::ServiceFactory;
+    use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::TdError;
     use td_objects::crudl::RequestContext;
     use td_objects::types::auth::Login;
     use td_objects::types::basic::{Password, RoleName, UserName};
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::factory::ServiceFactory;
-    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]

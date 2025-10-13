@@ -5,7 +5,7 @@
 use crate::function_run::services::list::FunctionRunListService;
 use crate::function_run::services::read::FunctionRunReadService;
 use getset::Getters;
-use td_tower::ServiceFactory;
+use ta_services::factory::ServiceFactory;
 
 mod list;
 mod read;

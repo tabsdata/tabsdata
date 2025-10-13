@@ -15,6 +15,7 @@ mod routes {
     use ta_apiserver::status::ok_status::{
         CreateStatus, DeleteStatus, GetStatus, ListStatus, NoContent, UpdateStatus,
     };
+    use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
     use td_objects::crudl::{ListParams, RequestContext};
     use td_objects::rest_urls::{
@@ -23,7 +24,6 @@ mod routes {
     };
     use td_objects::types::collection::{CollectionCreate, CollectionRead, CollectionUpdate};
     use td_services::collection::service::CollectionServices;
-    use td_tower::td_service::TdService;
     use tower::ServiceExt;
 
     const COLLECTIONS_TAG: &str = "Collections";
@@ -125,6 +125,7 @@ mod tests {
     use serde_json::json;
     use std::sync::Arc;
     use ta_apiserver::router::RouterExtension;
+    use ta_services::factory::ServiceFactory;
     use td_database::sql::DbPool;
     use td_objects::crudl::RequestContext;
     use td_objects::rest_urls::{
@@ -133,7 +134,6 @@ mod tests {
     use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
     use td_services::Context;
     use td_services::collection::service::CollectionServices;
-    use td_tower::factory::ServiceFactory;
     use tower::ServiceExt;
 
     async fn to_route<R: Into<Router> + Clone>(router: &R) -> Router {

@@ -4,6 +4,7 @@
 
 use crate::table::layers::download::get_table_download;
 use crate::table::layers::find_data_version_location_at;
+use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
 use td_objects::crudl::{ReadRequest, RequestContext};
 use td_objects::sql::DaoQueries;
@@ -20,7 +21,6 @@ use td_storage::Storage;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
-use td_tower::service_factory;
 
 #[service_factory(
     name = TableDownloadService,
@@ -63,6 +63,8 @@ mod tests {
     };
     use std::io::Cursor;
     use std::path::Path;
+    use ta_services::factory::ServiceFactory;
+    use ta_services::service::TdService;
     use td_common::absolute_path::AbsolutePath;
     use td_error::TdError;
     use td_objects::crudl::RequestContext;
@@ -84,8 +86,6 @@ mod tests {
     use td_objects::types::table::TableDB;
     use td_storage::location::StorageLocation;
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::factory::ServiceFactory;
-    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]

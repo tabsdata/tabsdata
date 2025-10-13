@@ -5,7 +5,7 @@
 use crate::scheduler::services::commit::ScheduleCommitService;
 use crate::scheduler::services::request::ScheduleRequestService;
 use getset::Getters;
-use td_tower::ServiceFactory;
+use ta_services::factory::ServiceFactory;
 
 mod commit;
 mod request;

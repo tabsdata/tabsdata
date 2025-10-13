@@ -5,6 +5,7 @@
 use crate::execution::layers::runtime_info::runtime_info;
 use getset::Getters;
 use serde::de::DeserializeOwned;
+use ta_services::factory::service_factory;
 use td_common::server::{EtcContent, etc_service};
 use td_error::{TdError, td_error};
 use td_objects::crudl::ReadRequest;
@@ -12,7 +13,7 @@ use td_objects::types::basic::{BuildManifest, TabsdataVersion};
 use td_objects::types::runtime_info::RuntimeInfo;
 use td_objects::types::runtime_info::{PythonVersions, ServerVersion};
 use td_tower::from_fn::from_fn;
-use td_tower::{layers, service_factory};
+use td_tower::layers;
 use tracing::error;
 
 #[service_factory(
@@ -120,9 +121,9 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
     async fn test_tower_metadata_runtime_info() {
+        use ta_services::service::TdService;
         use td_objects::crudl::ReadRequest;
         use td_objects::types::runtime_info::RuntimeInfo;
-        use td_tower::td_service::TdService;
 
         use td_tower::metadata::type_of_val;
 

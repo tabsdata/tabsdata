@@ -11,6 +11,7 @@ use std::fmt::Display;
 use std::net::{AddrParseError, SocketAddr};
 use std::path::PathBuf;
 use strum::{Display, EnumString, ParseError};
+use ta_services::factory::FieldAccessors;
 use td_database::sql::SqliteConfig;
 use td_error::{TdError, td_error};
 use td_objects::types::basic::{ApiServerAddresses, InternalServerAddresses, NonEmptyAddresses};
@@ -20,7 +21,7 @@ use td_storage::{MountDef, StorageError};
 use te_apiserver::config::{ExtendedConfig, ExtendedParams};
 use te_execution::transaction::TransactionBy;
 
-#[derive(Clone, Serialize, Deserialize, Getters)]
+#[derive(Clone, Serialize, Deserialize, Getters, FieldAccessors)]
 #[getset(get = "pub")]
 pub struct Config {
     #[serde(default)]
@@ -329,8 +330,8 @@ mod tests {
             storage_url: Some(String::from("file:///c:/storage")),
             #[cfg(not(target_os = "windows"))]
             storage_url: Some(String::from("file:///storage")),
-            address: Some(vec!["127.0.0.1:8080".parse().unwrap()]),
-            internal_address: Some(vec!["127.0.0.1:8081".parse().unwrap()]),
+            address: Some(vec!["127.0.0.1:2457".parse().unwrap()]),
+            internal_address: Some(vec!["127.0.0.1:2458".parse().unwrap()]),
             ssl_folder: Some(PathBuf::from("file:///ssl")),
             jwt_secret: Some(String::from("NEW_SECRET")),
             access_jwt_expiration: Some(7200),

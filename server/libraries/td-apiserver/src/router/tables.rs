@@ -15,6 +15,7 @@ mod routes {
     use std::sync::Arc;
     use ta_apiserver::status::error_status::ErrorStatus;
     use ta_apiserver::status::ok_status::{DeleteStatus, GetStatus, ListStatus, NoContent};
+    use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
     use td_objects::crudl::{ListParams, RequestContext};
     use td_objects::rest_urls::{
@@ -29,7 +30,6 @@ mod routes {
     };
     use td_services::table::services::TableServices;
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::td_service::TdService;
     use tower::ServiceExt;
     use utoipa::IntoResponses;
 

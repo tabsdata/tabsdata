@@ -7,6 +7,7 @@ use crate::execution::layers::read::build_existing_transaction_map;
 use crate::execution::layers::template::{
     build_execution_template, find_all_input_tables, find_trigger_graph,
 };
+use ta_services::factory::service_factory;
 use td_objects::crudl::ReadRequest;
 use td_objects::rest_urls::ExecutionParam;
 use td_objects::sql::DaoQueries;
@@ -19,7 +20,7 @@ use td_objects::types::execution::{ExecutionDB, ExecutionResponse, TransactionDB
 use td_objects::types::function::FunctionDBWithNames;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::{layers, service_factory};
+use td_tower::layers;
 use te_execution::transaction::TransactionBy;
 
 // Very similar to trigger, but without triggering. It selects entities needed to build an execution plan.
@@ -65,12 +66,12 @@ fn service() {
 mod tests {
     use super::*;
     use crate::execution::services::execute::tests::test_execute;
+    use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::TdError;
     use td_objects::crudl::RequestContext;
     use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]

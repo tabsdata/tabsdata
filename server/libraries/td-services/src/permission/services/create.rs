@@ -3,6 +3,7 @@
 //
 
 use crate::permission::layers::{PermissionBuildService, is_permission_on_a_single_collection};
+use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext, refresh_authz_context};
 use td_objects::crudl::{CreateRequest, RequestContext};
 use td_objects::rest_urls::RoleParam;
@@ -21,7 +22,7 @@ use td_objects::types::permission::{
 use td_objects::types::role::RoleDB;
 use td_tower::default_services::{Do, Else, If, TransactionProvider, conditional};
 use td_tower::from_fn::from_fn;
-use td_tower::{layers, service, service_factory};
+use td_tower::{layers, service};
 
 #[service_factory(
     name = CreatePermissionService,
@@ -76,6 +77,7 @@ fn service() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::{TdError, assert_service_error};
     use td_objects::crudl::RequestContext;
@@ -88,7 +90,6 @@ mod tests {
         UserId,
     };
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]

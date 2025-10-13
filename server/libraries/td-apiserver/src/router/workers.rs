@@ -15,6 +15,7 @@ mod routes {
     use std::sync::Arc;
     use ta_apiserver::status::error_status::ErrorStatus;
     use ta_apiserver::status::ok_status::ListStatus;
+    use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
     use td_objects::crudl::{ListParams, RequestContext};
     use td_objects::rest_urls::{
@@ -24,7 +25,6 @@ mod routes {
     use td_objects::types::stream::BoxedSyncStream;
     use td_services::worker::services::WorkerServices;
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::td_service::TdService;
     use tower::ServiceExt;
     use utoipa::IntoResponses;
 

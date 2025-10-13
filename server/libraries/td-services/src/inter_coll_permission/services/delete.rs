@@ -3,6 +3,7 @@
 //
 
 use crate::inter_coll_permission::layers::assert_collection_in_permission;
+use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext, refresh_authz_context};
 use td_objects::crudl::{DeleteRequest, RequestContext};
 use td_objects::rest_urls::InterCollectionPermissionParam;
@@ -18,7 +19,7 @@ use td_objects::types::permission::{
 };
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::{layers, service_factory};
+use td_tower::layers;
 
 #[service_factory(
     name = DeleteInterCollectionPermissionService,
@@ -64,6 +65,7 @@ fn service() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::{TdError, assert_service_error};
     use td_objects::crudl::RequestContext;
@@ -79,7 +81,6 @@ mod tests {
         UserId,
     };
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]

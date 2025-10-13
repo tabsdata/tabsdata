@@ -4,7 +4,7 @@
 
 use crate::system::services::status::StatusService;
 use getset::Getters;
-use td_tower::ServiceFactory;
+use ta_services::factory::ServiceFactory;
 
 mod status;
 

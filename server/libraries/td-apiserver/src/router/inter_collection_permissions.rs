@@ -13,6 +13,7 @@ mod routes {
     use ta_apiserver::status::error_status::ErrorStatus;
     use ta_apiserver::status::extractors::Json;
     use ta_apiserver::status::ok_status::{CreateStatus, DeleteStatus, ListStatus, NoContent};
+    use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
     use td_objects::crudl::{ListParams, RequestContext};
     use td_objects::rest_urls::{
@@ -23,7 +24,6 @@ mod routes {
         InterCollectionPermission, InterCollectionPermissionCreate,
     };
     use td_services::inter_coll_permission::services::InterCollectionPermissionServices;
-    use td_tower::td_service::TdService;
     use tower::ServiceExt;
 
     const INTER_COLLECTION_PERMISSIONS_TAG: &str = "Inter Collection Permissions";

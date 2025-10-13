@@ -97,7 +97,7 @@ pub fn service_factory(attr: TokenStream, item: TokenStream) -> TokenStream {
     func.sig.output = ReturnType::Type(
         syn::token::RArrow::default(),
         Box::new(parse_quote! {
-            td_tower::service_provider::ServiceProvider<Req, Res, td_error::TdError>
+            ::td_tower::service_provider::ServiceProvider<Req, Res, td_error::TdError>
         }),
     );
 
@@ -111,10 +111,10 @@ pub fn service_factory(attr: TokenStream, item: TokenStream) -> TokenStream {
     let (db_input, db_arg, db_provider) = match &args.connection {
         None => (None, None, vec![]),
         Some(prov) => {
-            factory_args.push(quote! { td_database::sql::DbPool::from_ref(ctx) });
-            factory_types.push(quote! { td_database::sql::DbPool });
+            factory_args.push(quote! { ::td_database::sql::DbPool::get_field(ctx) });
+            factory_types.push(quote! { ::td_database::sql::DbPool });
             (
-                Some(quote! { db: td_database::sql::DbPool, }),
+                Some(quote! { db: ::td_database::sql::DbPool, }),
                 Some(quote! { db.clone(), }),
                 vec![quote! { #prov::new(db), }],
             )
@@ -131,7 +131,7 @@ pub fn service_factory(attr: TokenStream, item: TokenStream) -> TokenStream {
                     .to_lowercase()
             );
 
-            factory_args.push(quote! { std::sync::Arc::<#ty>::from_ref(ctx) });
+            factory_args.push(quote! { std::sync::Arc::<#ty>::get_field(ctx) });
             factory_types.push(quote! { std::sync::Arc<#ty> });
             (
                 quote! { #ty_name: std::sync::Arc<#ty> },
@@ -146,7 +146,7 @@ pub fn service_factory(attr: TokenStream, item: TokenStream) -> TokenStream {
     func.sig.inputs = {
         let mut inputs = Punctuated::<FnArg, Comma>::new();
         if db_input.is_some() {
-            inputs.push(parse_quote! { db: td_database::sql::DbPool });
+            inputs.push(parse_quote! { db: ::td_database::sql::DbPool });
         }
         for input in &ctx_input {
             inputs.push(parse_quote! { #input });
@@ -157,7 +157,7 @@ pub fn service_factory(attr: TokenStream, item: TokenStream) -> TokenStream {
     // Wrap body in `ServiceProvider`
     let original_block = func.block;
     func.block = parse_quote!({
-        use td_tower::service_provider::IntoServiceProvider;
+        use ::td_tower::service_provider::IntoServiceProvider;
         tower::builder::ServiceBuilder::new()
             .layer(td_tower::default_services::ServiceEntry::default())
             #(
@@ -175,9 +175,9 @@ pub fn service_factory(attr: TokenStream, item: TokenStream) -> TokenStream {
     // Generate provider struct
     TokenStream::from(quote! {
         pub struct #name {
-            provider: td_tower::service_provider::ServiceProvider<#req_ty, #res_ty, td_error::TdError>,
+            provider: ::td_tower::service_provider::ServiceProvider<#req_ty, #res_ty, td_error::TdError>,
             #[cfg(feature = "test_tower_metadata")]
-            metadata: td_tower::service_provider::ServiceProvider<(), td_tower::metadata::MetadataMutex, td_error::TdError>,
+            metadata: ::td_tower::service_provider::ServiceProvider<(), td_tower::metadata::MetadataMutex, td_error::TdError>,
         }
 
         #[allow(non_snake_case)]
@@ -202,25 +202,24 @@ pub fn service_factory(attr: TokenStream, item: TokenStream) -> TokenStream {
             #func
         }
 
-        impl<C> ::td_tower::factory::ServiceFactory<C> for #name
+        impl<C> ::ta_services::factory::ServiceFactory<C> for #name
         where
-            #(#factory_types: axum::extract::FromRef<C>,)*
+            #(#factory_types: ::ta_services::factory::FieldAccessor<C>,)*
         {
             type Service = Self;
             fn build(ctx: &C) -> Self {
-                // using axum::extract::FromRef for simplicity
-                use axum::extract::FromRef;
+                use ::ta_services::factory::FieldAccessor;
                 Self::new(#(#factory_args),*)
             }
         }
 
         #[async_trait::async_trait]
-        impl ::td_tower::td_service::TdService for #name {
+        impl ::ta_services::service::TdService for #name {
             type Request = #req_ty;
             type Response = #res_ty;
             type Error = td_error::TdError;
 
-            async fn service(&self) -> td_tower::service_provider::TdBoxService<Self::Request, Self::Response, Self::Error> {
+            async fn service(&self) -> ::td_tower::service_provider::TdBoxService<Self::Request, Self::Response, Self::Error> {
                 self.provider.make().await
             }
 

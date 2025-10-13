@@ -8,6 +8,7 @@ use crate::auth::layers::decode_refresh_token::decode_refresh_token;
 use crate::auth::layers::refresh_sessions::refresh_sessions;
 use crate::auth::layers::set_session_expiration::set_session_expiration;
 use crate::auth::session::Sessions;
+use ta_services::factory::service_factory;
 use td_objects::crudl::{RequestContext, UpdateRequest};
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::from::{
@@ -23,7 +24,7 @@ use td_objects::types::basic::{
 };
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::{layers, service_factory};
+use td_tower::layers;
 
 #[service_factory(
     name = RefreshService,
@@ -75,13 +76,13 @@ mod tests {
     use crate::auth::jwt::decode_token;
     use crate::auth::services::AuthServices;
     use crate::auth::services::tests::{assert_session, get_session};
+    use ta_services::factory::ServiceFactory;
+    use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::TdError;
     use td_objects::types::auth::Login;
     use td_objects::types::basic::{Password, RoleId, RoleName, SessionStatus, UserId, UserName};
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::factory::ServiceFactory;
-    use td_tower::td_service::TdService;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]

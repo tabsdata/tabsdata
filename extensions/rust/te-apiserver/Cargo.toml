@@ -51,9 +51,14 @@ td-build = { workspace = true }
 ## Libraries
 
 ta-apiserver = { workspace = true }
+ta-services = { workspace = true }
+td-error = { workspace = true }
 
 # External dependencies
 
+clap = { workspace = true, features = ["derive"] }
+getset = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
 utoipa-axum = { workspace = true }
 
 [dev-dependencies]

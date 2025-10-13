@@ -12,12 +12,12 @@ mod routes {
     use std::sync::Arc;
     use ta_apiserver::status::error_status::ErrorStatus;
     use ta_apiserver::status::ok_status::{GetStatus, ListStatus};
+    use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
     use td_objects::crudl::{ListParams, RequestContext};
     use td_objects::rest_urls::{FUNCTION_RUN_GET, FUNCTION_RUN_LIST, FunctionRunParam};
     use td_objects::types::execution::FunctionRun;
     use td_services::function_run::services::FunctionRunServices;
-    use td_tower::td_service::TdService;
     use tower::ServiceExt;
 
     const FUNCTION_RUNS_TAG: &str = "Function Runs";

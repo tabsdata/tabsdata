@@ -8,7 +8,7 @@ use crate::user::service::list::ListUsersService;
 use crate::user::service::read::ReadUserService;
 use crate::user::service::update::UpdateUserService;
 use getset::Getters;
-use td_tower::ServiceFactory;
+use ta_services::factory::ServiceFactory;
 
 pub mod create;
 pub mod delete;
