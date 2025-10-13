@@ -43,20 +43,43 @@ script = [
     exists = is_path_exists ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver}
     if ${exists}
         debug "🔅 Using tdserver binary: '${os_family}' - '${tdserver}'"
-        debug "🚀 ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} start --instance pytest -- -- apiserver --address 127.0.0.1:2467 --internal-address 127.0.0.1:2468 --access-jwt-expiration 36288000"
+
+        forward_arguments = array
+        array_push ${forward_arguments} ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver}
+        array_push ${forward_arguments} start
+        array_push ${forward_arguments} --instance
+        array_push ${forward_arguments} pytest
+        array_push ${forward_arguments} --
+
+        yaml_path = set "./variant/config/pytest/supervisor.yaml"
+        debug "🔅 Processing supervisor configuration override from: '${yaml_path}'"
+
+        yaml_content = exec --fail-on-error python make/make-os/libraries/yml.py ${yaml_path}
+        yaml_content = trim ${yaml_content.stdout}
+        debug "🔅 Output of yaml parser:\n ${yaml_content}"
+
+        yaml_lines = split ${yaml_content.stdout} "\n"
+        for yaml_line in ${yaml_lines}
+            yaml_line = trim ${yaml_line}
+            is_yaml_line_empty = is_empty ${yaml_line}
+            if not ${is_yaml_line_empty}
+                array_push ${forward_arguments} ${yaml_line}
+            end
+        end
+        command = array_join ${forward_arguments} " "
+
+        debug "🚀 ${command}"
 
         on_ga = get_env TD_ON_GA
         on_ga_true = eq ${on_ga} "true"
-
-        # Necessary until we figure out how to cleanly start the supervisor detached from tdserver.
         os = os_family
         if eq ${os} "windows"
-            exec --fail-on-error ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} start --instance pytest -- -- apiserver --address 127.0.0.1:2467 --internal-address 127.0.0.1:2468 --access-jwt-expiration 36288000
+            exec --fail-on-error %{command}
         else
             if ${on_ga_true}
-                exec --fail-on-error ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} start --instance pytest -- -- apiserver --address 127.0.0.1:2467 --internal-address 127.0.0.1:2468 --access-jwt-expiration 36288000
+                exec --fail-on-error %{command}
             else
-                output = exec --fail-on-error ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} start --instance pytest -- -- apiserver --address 127.0.0.1:2467 --internal-address 127.0.0.1:2468 --access-jwt-expiration 36288000
+                output = exec --fail-on-error %{command}
             end
         end
     else
