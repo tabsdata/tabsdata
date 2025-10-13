@@ -2,7 +2,6 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::scheduler::ServerUrl;
 use http::Method;
 use itertools::{Either, Itertools};
 use sqlx::SqliteConnection;
@@ -18,7 +17,9 @@ use td_error::{TdError, td_error};
 use td_objects::crudl::handle_sql_err;
 use td_objects::rest_urls::{BASE_URL, UPDATE_FUNCTION_RUN};
 use td_objects::sql::{DaoQueries, FindBy, SelectBy, UpdateBy};
-use td_objects::types::basic::{FunctionRunId, FunctionRunStatus, WorkerId, WorkerStatus};
+use td_objects::types::basic::{
+    FunctionRunId, FunctionRunStatus, InternalServerAddresses, WorkerId, WorkerStatus,
+};
 use td_objects::types::execution::TableDataVersionDBWithNames;
 use td_objects::types::execution::{
     FunctionRequirementDBWithNames, FunctionRunDB, FunctionRunToExecuteDB, UpdateFunctionRunDB,
@@ -48,7 +49,7 @@ pub async fn create_locked_workers<T: WorkerMessageQueue>(
     SrvCtx(message_queue): SrvCtx<T>,
     SrvCtx(queries): SrvCtx<DaoQueries>,
     SrvCtx(storage): SrvCtx<Storage>,
-    SrvCtx(server_url): SrvCtx<ServerUrl>,
+    SrvCtx(server_addresses): SrvCtx<InternalServerAddresses>,
     Connection(connection): Connection,
     Input(function_runs): Input<Vec<FunctionRunToExecuteDB>>,
 ) -> Result<Vec<WorkerDB>, TdError> {
@@ -59,16 +60,17 @@ pub async fn create_locked_workers<T: WorkerMessageQueue>(
             let queries = queries.clone();
             let connection = connection.clone();
             let storage = storage.clone();
-            let server_url = server_url.clone();
+            let server_addresses = server_addresses.clone();
             async move {
                 let mut conn = connection.lock().await;
                 let conn = conn.get_mut_connection()?;
 
                 // Build callback
                 // This is loopback address, because this endpoint is only available to the server.
+                let server_address = server_addresses.first();
                 let function_run_id = f.id().to_string();
                 let endpoint = UPDATE_FUNCTION_RUN.replace("{function_run_id}", &function_run_id);
-                let callback_url = format!("http://{server_url}{BASE_URL}{endpoint}");
+                let callback_url = format!("http://{server_address}{BASE_URL}{endpoint}");
                 let callback_url =
                     Url::parse(&callback_url).map_err(ScheduleError::CallbackUrlParseError)?;
 

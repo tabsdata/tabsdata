@@ -8,23 +8,25 @@ use clap::{Args, ValueEnum};
 use getset::Getters;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
-use std::net::{AddrParseError, Ipv4Addr, SocketAddr};
+use std::net::{AddrParseError, SocketAddr};
 use std::path::PathBuf;
 use strum::{Display, EnumString, ParseError};
 use td_database::sql::SqliteConfig;
-use td_error::td_error;
+use td_error::{TdError, td_error};
+use td_objects::types::basic::{ApiServerAddresses, InternalServerAddresses, NonEmptyAddresses};
 use td_security::config::PasswordHashingConfig;
 use td_services::auth::jwt::JwtConfig;
 use td_storage::{MountDef, StorageError};
+use te_apiserver::config::{ExtendedConfig, ExtendedParams};
 use te_execution::transaction::TransactionBy;
 
 #[derive(Clone, Serialize, Deserialize, Getters)]
 #[getset(get = "pub")]
 pub struct Config {
-    #[serde(default = "addresses_default")]
-    addresses: Vec<SocketAddr>,
-    #[serde(default = "internal_addresses_default")]
-    internal_addresses: Vec<SocketAddr>,
+    #[serde(default)]
+    addresses: ApiServerAddresses,
+    #[serde(default)]
+    internal_addresses: InternalServerAddresses,
     password: PasswordHashingConfig,
     jwt: JwtConfig,
     request_timeout: i64, // in seconds
@@ -34,16 +36,8 @@ pub struct Config {
     storage: Option<StorageConfig>,
     #[serde(default)]
     transaction_by: TransactionBy,
-}
-
-pub fn addresses_default() -> Vec<SocketAddr> {
-    const DEFAULT_PORT: u16 = 2457;
-    vec![SocketAddr::new(Ipv4Addr::LOCALHOST.into(), DEFAULT_PORT)]
-}
-
-pub fn internal_addresses_default() -> Vec<SocketAddr> {
-    const DEFAULT_PORT: u16 = 2458;
-    vec![SocketAddr::new(Ipv4Addr::LOCALHOST.into(), DEFAULT_PORT)]
+    #[serde(flatten)]
+    extended_config: ExtendedConfig,
 }
 
 #[derive(Clone, Serialize, Deserialize, Getters, Debug)]
@@ -85,8 +79,8 @@ impl Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            addresses: addresses_default(),
-            internal_addresses: internal_addresses_default(),
+            addresses: ApiServerAddresses::default(),
+            internal_addresses: InternalServerAddresses::default(),
             password: PasswordHashingConfig::default(),
             jwt: JwtConfig::default(),
             request_timeout: 60,
@@ -94,6 +88,7 @@ impl Default for Config {
             database: SqliteConfig::default(),
             storage: Some(StorageConfig::default()),
             transaction_by: TransactionBy::default(),
+            extended_config: ExtendedConfig::default(),
         }
     }
 }
@@ -180,10 +175,12 @@ pub struct Params {
     #[clap(long)]
     /// The supervisor message queue directory
     msg: Option<String>, // not used via clap. Added for queue_service to work correctly with CLI option
+    #[clap(flatten)]
+    extended_params: ExtendedParams,
 }
 
 impl Params {
-    pub fn resolve(&self, config: Config) -> Result<Config, ConfigError> {
+    pub fn resolve(&self, config: Config) -> Result<Config, TdError> {
         let mut resolved_storage: StorageConfig = config.storage.clone().unwrap_or_default();
         if self.storage_url.is_some() {
             let resolved_storage_url = self
@@ -198,11 +195,17 @@ impl Params {
             addresses: self
                 .address
                 .clone()
-                .unwrap_or_else(|| config.addresses().clone()),
+                .map(NonEmptyAddresses::from_vec)
+                .transpose()?
+                .map(ApiServerAddresses)
+                .unwrap_or(config.addresses.clone()),
             internal_addresses: self
                 .internal_address
                 .clone()
-                .unwrap_or_else(|| config.internal_addresses().clone()),
+                .map(NonEmptyAddresses::from_vec)
+                .transpose()?
+                .map(InternalServerAddresses)
+                .unwrap_or(config.internal_addresses.clone()),
             password: config.password().clone(),
             jwt: {
                 let secret = self
@@ -235,11 +238,10 @@ impl Params {
                 .transaction_by
                 .clone()
                 .unwrap_or_else(|| config.transaction_by().clone()),
+            extended_config: self
+                .extended_params
+                .resolve(config.extended_config.clone())?,
         };
-
-        if config.addresses().is_empty() {
-            Err(ConfigError::MissingAddress)?;
-        }
 
         if config.jwt().secret().is_none() {
             Err(ConfigError::MissingJWTSecret)?
@@ -291,7 +293,9 @@ pub enum ConfigError {
 mod tests {
     use super::*;
     use chrono::Duration;
+    use nonempty::nonempty;
     use std::net::SocketAddr;
+    use std::ops::Deref;
     use td_common::id;
 
     #[test]
@@ -299,8 +303,8 @@ mod tests {
         let config = Config::default();
         assert_eq!(config.database().url(), &None);
         assert_eq!(
-            config.addresses(),
-            &vec![SocketAddr::from(([127, 0, 0, 1], 2457))]
+            config.addresses().deref(),
+            &NonEmptyAddresses::new(nonempty![SocketAddr::from(([127, 0, 0, 1], 2457))])
         );
         id::Id::try_from(config.jwt().secret().as_ref().unwrap()).unwrap();
         assert!(config.storage.is_some());
@@ -335,6 +339,7 @@ mod tests {
             db_schema: None,
             etc: None,
             msg: None,
+            extended_params: ExtendedParams::default(),
         };
 
         let resolved_config = params.resolve(default_config.clone()).unwrap();
@@ -344,8 +349,8 @@ mod tests {
             &Some("NEW_SECRET".to_string())
         );
         assert_eq!(
-            resolved_config.addresses(),
-            &vec!["127.0.0.1:8080".parse().unwrap()]
+            resolved_config.addresses().deref(),
+            &NonEmptyAddresses::new(nonempty![SocketAddr::from(([127, 0, 0, 1], 2457))])
         );
         #[cfg(target_os = "windows")]
         assert_eq!(
@@ -402,17 +407,18 @@ mod tests {
             db_schema: None,
             etc: None,
             msg: None,
+            extended_params: ExtendedParams::default(),
         };
 
         let partially_resolved_config = partial_params.resolve(default_config.clone()).unwrap();
 
         assert_eq!(
-            partially_resolved_config.addresses(),
-            default_config.addresses()
+            partially_resolved_config.addresses().deref(),
+            default_config.addresses().deref()
         );
         assert_eq!(
-            partially_resolved_config.internal_addresses(),
-            default_config.internal_addresses()
+            partially_resolved_config.internal_addresses().deref(),
+            default_config.internal_addresses().deref()
         );
         assert_eq!(
             resolved_config.jwt().secret(),

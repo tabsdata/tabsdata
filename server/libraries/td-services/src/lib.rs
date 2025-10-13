@@ -13,7 +13,6 @@ use crate::function_run::services::FunctionRunServices;
 use crate::inter_coll_permission::services::InterCollectionPermissionServices;
 use crate::permission::services::PermissionServices;
 use crate::role::services::RoleServices;
-use crate::scheduler::ServerUrl;
 use crate::scheduler::services::ScheduleServices;
 use crate::system::services::SystemServices;
 use crate::table::services::TableServices;
@@ -28,6 +27,7 @@ use td_authz::AuthzContext;
 use td_common::server::FileWorkerMessageQueue;
 use td_database::sql::DbPool;
 use td_objects::sql::DaoQueries;
+use td_objects::types::basic::{ApiServerAddresses, InternalServerAddresses};
 use td_security::config::PasswordHashingConfig;
 use td_storage::Storage;
 use td_tower::ServiceFactory;
@@ -71,6 +71,7 @@ pub struct Services {
 pub struct Context {
     pub db: DbPool,
     pub queries: Arc<DaoQueries>,
+    pub server_addresses: Arc<ApiServerAddresses>,
     pub jwt_config: Arc<JwtConfig>,
     pub auth_context: Arc<AuthzContext>,
     pub sessions: Arc<Sessions>,
@@ -87,6 +88,7 @@ impl Context {
         Self {
             db,
             queries: Arc::new(DaoQueries::default()),
+            server_addresses: Arc::new(ApiServerAddresses::default()),
             jwt_config: Arc::new(JwtConfig::default()),
             auth_context: Arc::new(AuthzContext::default()),
             sessions: Arc::new(Sessions::default()),
@@ -110,7 +112,7 @@ pub struct SchedulerContext {
     pub queries: Arc<DaoQueries>,
     pub storage: Arc<Storage>,
     pub worker_queue: Arc<FileWorkerMessageQueue>,
-    pub server_url: Arc<ServerUrl>,
+    pub internal_addresses: Arc<InternalServerAddresses>,
 }
 
 #[cfg(feature = "test-utils")]
@@ -121,7 +123,7 @@ impl SchedulerContext {
             queries: Arc::new(DaoQueries::default()),
             storage: Arc::new(Storage::default()),
             worker_queue: Arc::new(FileWorkerMessageQueue::default()),
-            server_url: Arc::new(ServerUrl::default()),
+            internal_addresses: Arc::new(InternalServerAddresses::default()),
         }
     }
 }

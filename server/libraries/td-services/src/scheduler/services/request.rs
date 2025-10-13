@@ -2,13 +2,12 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::scheduler::ServerUrl;
 use crate::scheduler::layers::schedule::create_locked_workers;
 use td_common::server::{FileWorkerMessageQueue, WorkerMessageQueue};
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::from::{ExtractVecService, With};
 use td_objects::tower_service::sql::{By, SqlSelectAllService, SqlUpdateService, insert_vec};
-use td_objects::types::basic::FunctionRunId;
+use td_objects::types::basic::{FunctionRunId, InternalServerAddresses};
 use td_objects::types::execution::{
     FunctionRunDB, FunctionRunToExecuteDB, UpdateFunctionRunDB, WorkerDB,
 };
@@ -26,7 +25,7 @@ use td_tower::{layer, layers, service_factory};
     context = DaoQueries,
     context = Storage,
     context = FileWorkerMessageQueue,
-    context = ServerUrl,
+    context = InternalServerAddresses,
 )]
 fn service() {
     layers!(request::<_, FileWorkerMessageQueue>())

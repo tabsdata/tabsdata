@@ -21,6 +21,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 use td_common::server::{SSL_CERT_PEM_FILE, SSL_KEY_PEM_FILE};
 use td_common::signal::terminate;
+use td_objects::types::basic::NonEmptyAddresses;
 use tokio::net::TcpListener;
 use tokio::task::{JoinError, JoinHandle};
 use tracing::{debug, error, info, warn};
@@ -44,15 +45,15 @@ pub enum ServerError {
 /// Builder for [`Server`]. It will bind the addresses used and create the server on build.
 #[derive(Debug)]
 pub struct ServerBuilder {
-    addresses: Vec<SocketAddr>,
+    addresses: NonEmptyAddresses,
     router: Router,
     ssl_folder: Option<PathBuf>,
 }
 
 impl ServerBuilder {
-    pub fn new(addresses: Vec<SocketAddr>, router: Router) -> Self {
+    pub fn new<A: Into<NonEmptyAddresses>>(addresses: A, router: Router) -> Self {
         Self {
-            addresses,
+            addresses: addresses.into(),
             router,
             ssl_folder: None,
         }
@@ -64,12 +65,8 @@ impl ServerBuilder {
     }
 
     async fn bind_listeners(&self) -> Result<Vec<TcpListener>, ServerError> {
-        if self.addresses.is_empty() {
-            Err(ServerError::NoAddress)?;
-        }
-
         let mut listeners = Vec::new();
-        for addr in &self.addresses {
+        for addr in self.addresses.iter() {
             match TcpListener::bind(addr).await {
                 Ok(listener) => listeners.push(listener),
                 Err(e) => Err(ServerError::Bind(*addr, e))?,
@@ -128,7 +125,7 @@ impl ServerBuilder {
         RustlsConfig::from_pem_file(cert_path, key_path)
             .await
             .map_err(|e| {
-                error!("Error loading the tls certificates: {e}");
+                warn!("Error loading the tls certificates: {e}");
             })
             .ok()
     }
@@ -274,6 +271,7 @@ impl Server for TlsServer {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    use nonempty::nonempty;
     use reqwest::Client;
     use std::net::{Ipv4Addr, SocketAddr};
     use ta_apiserver::router::RouterExtension;
@@ -323,7 +321,7 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn test_server_run() {
         let server = ServerBuilder::new(
-            vec![SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 0)],
+            NonEmptyAddresses::new(nonempty![SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 0)]),
             TestRouter::router(()).into(),
         )
         .build()
@@ -354,7 +352,7 @@ pub(crate) mod tests {
     async fn test_tls_config_missing_files() {
         let tls_path = testdir!();
         let builder = ServerBuilder::new(
-            vec![SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 0)],
+            NonEmptyAddresses::new(nonempty![SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 0)]),
             Router::new(),
         )
         .tls(tls_path);
@@ -433,7 +431,7 @@ vRcg70teydPmY1fiAURFk3gl/g==
         eprintln!("Certificate pem created in {cert_path:?}");
 
         let builder = ServerBuilder::new(
-            vec![SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 0)],
+            NonEmptyAddresses::new(nonempty![SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 0)]),
             Router::new(),
         )
         .tls(tls_path);

@@ -69,6 +69,7 @@ derive-new = { workspace = true }
 futures = { workspace = true }
 getset = { workspace = true }
 itertools = { workspace = true }
+nonempty = { workspace = true }
 paste = { workspace = true }
 polars = { workspace = true }
 regex = { workspace = true }

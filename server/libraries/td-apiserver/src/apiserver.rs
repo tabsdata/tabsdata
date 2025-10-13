@@ -54,7 +54,6 @@ use crate::router::workers::WorkersRouter;
 use crate::{Server, ServerBuilder, ServerError};
 use axum::middleware::{from_fn, from_fn_with_state};
 use std::error::Error;
-use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use ta_apiserver::router::RouterExtension;
@@ -63,6 +62,7 @@ use td_authz::AuthzContext;
 use td_database::sql::DbPool;
 use td_error::{ApiError, api_error};
 use td_objects::sql::DaoQueries;
+use td_objects::types::basic::{ApiServerAddresses, InternalServerAddresses, NonEmptyAddresses};
 use td_services::auth::session::Sessions;
 use td_services::execution::services::runtime_info::RuntimeContext;
 use td_services::{Context, Services};
@@ -78,22 +78,24 @@ pub struct ApiServerInstance {
 }
 
 impl ApiServerInstance {
-    pub async fn api_v1_addresses(&self) -> Result<Vec<SocketAddr>, Box<dyn Error>> {
-        self.api_v1
+    pub async fn api_v1_addresses(&self) -> Result<ApiServerAddresses, Box<dyn Error>> {
+        let addr = self
+            .api_v1
             .listeners()
             .iter()
             .map(|listener| listener.local_addr())
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(Into::into)
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(ApiServerAddresses(NonEmptyAddresses::from_vec(addr)?))
     }
 
-    pub async fn internal_addresses(&self) -> Result<Vec<SocketAddr>, Box<dyn Error>> {
-        self.internal
+    pub async fn internal_addresses(&self) -> Result<InternalServerAddresses, Box<dyn Error>> {
+        let addr = self
+            .internal
             .listeners()
             .iter()
             .map(|listener| listener.local_addr())
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(Into::into)
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(InternalServerAddresses(NonEmptyAddresses::from_vec(addr)?))
     }
 
     pub async fn run(self) -> Result<(), Box<dyn Error>> {
@@ -116,7 +118,6 @@ impl ApiServerInstanceBuilder {
         storage: Arc<Storage>,
         runtime_context: Arc<RuntimeContext>,
     ) -> Self {
-        let sessions = Arc::new(Sessions::default());
         // to verify up front configuration is OK.
         let password_hash_config = config.password();
         password_hash_config.password_hasher();
@@ -124,9 +125,10 @@ impl ApiServerInstanceBuilder {
         let context = Context {
             db: db.clone(),
             queries: queries.clone(),
+            server_addresses: Arc::new(config.addresses().clone()),
             jwt_config: Arc::new(config.jwt().clone()),
             auth_context: Arc::new(AuthzContext::default()),
-            sessions: sessions.clone(),
+            sessions: Arc::new(Sessions::default()),
             password_settings: Arc::new(password_hash_config.clone()),
             ssl_folder: Arc::new(config.ssl_folder().clone()),
             storage: storage.clone(),

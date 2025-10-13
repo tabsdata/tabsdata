@@ -2742,6 +2742,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "nonempty"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9737e026353e5cd0736f98eddae28665118eb6f6600902a7f50db585621fecb6"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "notify"
 version = "5.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5444,6 +5453,7 @@ dependencies = [
  "clap",
  "getset",
  "http",
+ "nonempty",
  "openssl",
  "reqwest",
  "ring",
@@ -5651,6 +5661,7 @@ dependencies = [
  "futures",
  "getset",
  "itertools 0.14.0",
+ "nonempty",
  "openssl",
  "paste",
  "polars",
@@ -5827,6 +5838,7 @@ dependencies = [
  "td-test",
  "td-tower",
  "te-execution",
+ "te-services",
  "temp-env",
  "testdir",
  "thiserror 2.0.17",
@@ -6056,9 +6068,13 @@ dependencies = [
 name = "te-apiserver"
 version = "1.4.0"
 dependencies = [
+ "clap",
+ "getset",
  "openssl",
+ "serde",
  "ta-apiserver",
  "td-build",
+ "td-error",
  "utoipa-axum",
 ]
 
@@ -6083,6 +6099,7 @@ dependencies = [
  "axum 0.8.6",
  "openssl",
  "td-build",
+ "td-database",
  "td-tower",
 ]
 

@@ -394,6 +394,10 @@ version = "0.2.175"
 version = "0.30.1"
 features = ["process"]
 
+[workspace.dependencies.nonempty]
+version = "0.12.0"
+features = ["serialize"]
+
 [workspace.dependencies.num-format]
 version = "0.4"
 

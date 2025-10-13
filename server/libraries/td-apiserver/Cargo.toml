@@ -79,6 +79,7 @@ chrono = { workspace = true }
 clap = { workspace = true }
 getset = { workspace = true }
 http = { workspace = true }
+nonempty = { workspace = true, features = ["serialize"] }
 reqwest = { workspace = true }
 ring = { workspace = true }
 rustls = { workspace = true, features = ["aws-lc-rs"] }

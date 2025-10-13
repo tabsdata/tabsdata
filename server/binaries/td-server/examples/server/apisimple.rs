@@ -7,6 +7,7 @@ use crate::endpoint::CounterRouter;
 use std::net::{Ipv4Addr, SocketAddr};
 use ta_apiserver::router::RouterExtension;
 use td_apiserver::{Server, ServerBuilder};
+use td_objects::types::basic::NonEmptyAddresses;
 use td_process::launcher::hooks;
 
 /// This example just demonstrate how to create a simple server with a thread safe counter
@@ -23,7 +24,7 @@ async fn main() {
 async fn init_server() -> Box<dyn Server> {
     let counter = Counter::create();
     ServerBuilder::new(
-        vec![SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 0)],
+        NonEmptyAddresses::from_vec(vec![SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 0)]).unwrap(),
         CounterRouter::router(counter).into(),
     )
     .build()

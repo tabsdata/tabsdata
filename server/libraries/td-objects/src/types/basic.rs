@@ -11,13 +11,16 @@ use crate::types::table::{TableDBRead, TableDBWithNames};
 use crate::types::table_ref::{TableRef, VersionedTableRef, Versions};
 use crate::types::{ComposedString, DataAccessObject};
 use async_trait::async_trait;
+use nonempty::{NonEmpty, nonempty};
+use serde::{Deserialize, Serialize};
 use sqlx::{QueryBuilder, Sqlite};
 use std::collections::{HashMap, HashSet};
+use std::net::{Ipv4Addr, SocketAddr};
 use std::ops::Deref;
 use strum::IntoEnumIterator;
 use td_common::execution_status::WorkerCallbackStatus;
 use td_common::id::{ID_LENGTH, Id};
-use td_error::TdError;
+use td_error::{ApiError, TdError, api_error};
 use td_security::{
     ADMIN_USER, ID_ALL_ENTITIES, ID_ROLE_SEC_ADMIN, ID_ROLE_SYS_ADMIN, ID_ROLE_USER, ID_USER_ADMIN,
     SEC_ADMIN_ROLE, SYS_ADMIN_ROLE, USER_ROLE,
@@ -523,6 +526,90 @@ pub struct SchemaHash;
 
 #[td_type::typed(bool)]
 pub struct SelfDependency;
+
+/// A non-empty list of server addresses.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct NonEmptyAddresses(NonEmpty<SocketAddr>);
+
+impl NonEmptyAddresses {
+    pub fn new(addresses: NonEmpty<SocketAddr>) -> Self {
+        Self(addresses)
+    }
+
+    pub fn from_vec(addresses: Vec<SocketAddr>) -> Result<Self, TdError> {
+        let non_empty = NonEmpty::from_vec(addresses);
+        if let Some(non_empty) = non_empty {
+            Ok(Self(non_empty))
+        } else {
+            Err(api_error!(
+                ApiError::InputError,
+                "At least one address is required"
+            ))
+        }
+    }
+}
+
+impl Deref for NonEmptyAddresses {
+    type Target = NonEmpty<SocketAddr>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ApiServerAddresses(pub NonEmptyAddresses);
+
+impl Default for ApiServerAddresses {
+    fn default() -> Self {
+        const DEFAULT_PORT: u16 = 2457;
+        ApiServerAddresses(NonEmptyAddresses::new(nonempty![SocketAddr::new(
+            Ipv4Addr::LOCALHOST.into(),
+            DEFAULT_PORT
+        )]))
+    }
+}
+
+impl Into<NonEmptyAddresses> for ApiServerAddresses {
+    fn into(self) -> NonEmptyAddresses {
+        self.0
+    }
+}
+
+impl Deref for ApiServerAddresses {
+    type Target = NonEmptyAddresses;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct InternalServerAddresses(pub NonEmptyAddresses);
+
+impl Deref for InternalServerAddresses {
+    type Target = NonEmptyAddresses;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Into<NonEmptyAddresses> for InternalServerAddresses {
+    fn into(self) -> NonEmptyAddresses {
+        self.0
+    }
+}
+
+impl Default for InternalServerAddresses {
+    fn default() -> Self {
+        const DEFAULT_PORT: u16 = 2458;
+        InternalServerAddresses(NonEmptyAddresses::new(nonempty![SocketAddr::new(
+            Ipv4Addr::LOCALHOST.into(),
+            DEFAULT_PORT
+        )]))
+    }
+}
 
 #[td_type::typed(id)]
 pub struct SessionId;

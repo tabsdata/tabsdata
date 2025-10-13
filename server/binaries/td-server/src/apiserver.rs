@@ -16,7 +16,6 @@ use td_objects::sql::DaoQueries;
 use td_process::launcher::cli::Cli;
 use td_process::launcher::hooks;
 use td_services::execution::services::runtime_info::RuntimeContext;
-use td_services::scheduler::ServerUrl;
 use td_storage::Storage;
 use tracing::{Level, error, info};
 
@@ -208,10 +207,10 @@ fn main() {
             };
 
             // Create execution server
-            let loopback_address = match api_server.internal_addresses().await {
-                Ok(address) => Arc::new(ServerUrl(address[0])),
+            let internal_addresses = match api_server.internal_addresses().await {
+                Ok(addresses) => Arc::new(addresses),
                 Err(e) => {
-                    error!("Error getting loopback address: {}", e);
+                    error!("Error retrieving internal addresses: {}", e);
                     return ExitStatus::GeneralError;
                 }
             };
@@ -221,7 +220,7 @@ fn main() {
                 queries.clone(),
                 storage.clone(),
                 worker_message_queue.clone(),
-                loopback_address,
+                internal_addresses,
             )
             .build()
             .await;

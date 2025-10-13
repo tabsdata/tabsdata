@@ -9,8 +9,8 @@ use td_common::server::FileWorkerMessageQueue;
 use td_common::signal::terminate;
 use td_database::sql::DbPool;
 use td_objects::sql::DaoQueries;
+use td_objects::types::basic::InternalServerAddresses;
 use td_services::SchedulerContext;
-use td_services::scheduler::ServerUrl;
 use td_services::scheduler::services::ScheduleServices;
 use td_storage::Storage;
 use td_tower::ServiceFactory;
@@ -92,14 +92,14 @@ impl SchedulerBuilder {
         queries: Arc<DaoQueries>,
         storage: Arc<Storage>,
         worker_queue: Arc<FileWorkerMessageQueue>,
-        server_url: Arc<ServerUrl>,
+        internal_addresses: Arc<InternalServerAddresses>,
     ) -> Self {
         let context = SchedulerContext {
             db,
             queries,
             storage,
             worker_queue,
-            server_url,
+            internal_addresses,
         };
 
         let services = ScheduleServices::build(&context);
