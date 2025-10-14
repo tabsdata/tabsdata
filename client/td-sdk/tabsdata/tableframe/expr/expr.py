@@ -2740,3 +2740,10 @@ class Expr:
         Return an object namespace with all string methods for a string value.
         """
         return td_string.ExprStringNameSpace(self._expr.str)
+
+
+def expr_resolves_to_multiple_outputs(expr: pl.Expr) -> bool:
+    try:
+        return expr._pyexpr.meta_has_multiple_outputs()
+    except AttributeError:
+        return False

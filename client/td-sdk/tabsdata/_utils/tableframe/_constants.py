@@ -145,6 +145,9 @@ class StandardVolatileSystemColumns(Enum):
     TD_ITEM_COLUMN = "$td._item"
     TD_MIN_COLUMN = "$td._min"
     TD_MAX_COLUMN = "$td._max"
+    TD_UDF_IN = "$td._udf_in"
+    TD_UDF_WORK = "$td._udf_work"
+    TD_UDF_OUT = "$td._udf_out"
 
 
 class StandardSystemColumnsMetadata(Enum):

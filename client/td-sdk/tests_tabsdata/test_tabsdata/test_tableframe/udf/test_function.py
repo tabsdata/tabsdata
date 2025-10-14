@@ -6,6 +6,7 @@ import polars as pl
 import pytest
 
 import tabsdata.tableframe.typing as td_typing
+from tabsdata.tableframe.functions.col import Column
 from tabsdata.tableframe.udf.function import UDF
 
 
@@ -61,6 +62,9 @@ class TestUDFValidation:
             def on_element(self, values):
                 return values
 
+            def schema(self):
+                return ["result"]
+
         udf = ValidElementUDF()
         assert udf is not None
 
@@ -74,6 +78,9 @@ class TestUDFOnBatch:
                 for values in zip(*series):
                     h_series.append(sum(values))
                 return [td_typing.Series(h_series)]
+
+            def schema(self):
+                return [Column("sum", pl.Int64)]
 
         udf = BatchUDF()
         series_in = [
@@ -115,7 +122,10 @@ class TestUDFOnBatch:
                     for value in values:
                         product *= value
                     products.append(product)
-                return [td_typing.Series(sums), td_typing.Series(products)]
+                return [
+                    td_typing.Series(sums).alias("sum"),
+                    td_typing.Series(products).alias("product"),
+                ]
 
         udf = MultiOutputUDF()
         series_in = [
@@ -131,7 +141,7 @@ class TestUDFOnBatch:
         class SquareUDF(UDF):
             def on_batch(self, series):
                 squared = [value * value for value in series[0]]
-                return [td_typing.Series(squared)]
+                return [td_typing.Series(squared).alias("squared")]
 
         udf = SquareUDF()
         series_in = [td_typing.Series([1, 2, 3])]
@@ -147,6 +157,9 @@ class TestUDFOnElement:
             def on_element(self, values):
                 return [sum(values)]
 
+            def schema(self):
+                return ["sum"]
+
         udf = ElementUDF()
         series_in = [
             td_typing.Series([1, 2, 3]),
@@ -161,6 +174,9 @@ class TestUDFOnElement:
             def on_element(self, values):
                 return values
 
+            def schema(self):
+                return []
+
         udf = ElementUDF()
         series_in = []
         series_out = udf(series_in)
@@ -170,6 +186,9 @@ class TestUDFOnElement:
         class ElementUDF(UDF):
             def on_element(self, values):
                 return values
+
+            def schema(self):
+                return []
 
         udf = ElementUDF()
         assert udf._on_batch_is_overridden is False
@@ -183,6 +202,9 @@ class TestUDFOnElement:
                 for value in values:
                     values_product *= value
                 return [values_sum, values_product]
+
+            def schema(self):
+                return ["sum", "product"]
 
         udf = MultiOutputUDF()
         series_in = [
@@ -199,6 +221,9 @@ class TestUDFOnElement:
             def on_element(self, values):
                 return [values[0] * values[0]]
 
+            def schema(self):
+                return ["squared"]
+
         udf = SquareUDF()
         series_in = [td_typing.Series([1, 2, 3])]
         result = udf(series_in)
@@ -213,6 +238,9 @@ class TestUDFEdgeCases:
         class TestUDF(UDF):
             def on_element(self, values):
                 return values
+
+            def schema(self):
+                return []
 
         udf = TestUDF()
         udf._on_batch_is_overridden = False
@@ -232,6 +260,9 @@ class TestUDFEdgeCases:
                 if total == 0:
                     return [0.0] * len(values)
                 return [value / total for value in values]
+
+            def schema(self):
+                return ["norm1", "norm2", "norm3"]
 
         udf = NormalizeUDF()
         series_in = [

@@ -60,6 +60,7 @@ from tabsdata.tableframe.functions.eager import concat
 from tabsdata.tableframe.functions.lit import lit
 from tabsdata.tableframe.lazyframe.frame import TableFrame
 from tabsdata.tableframe.schema import Schema
+from tabsdata.tableframe.udf.function import UDF
 
 __all__ = [
     # from tabsdata.tableframe...
@@ -69,6 +70,7 @@ __all__ = [
     "concat",
     "lit",
     "TableFrame",
+    "UDF",
     # from tabsdata._utils.tableframe
     "empty",
     "from_dict",
