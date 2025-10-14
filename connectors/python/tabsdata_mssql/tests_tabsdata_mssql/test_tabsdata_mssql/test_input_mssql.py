@@ -14,15 +14,6 @@ import polars as pl
 # noinspection PyPackageRequirements
 import pytest
 
-# noinspection PyPackageRequirements
-from tests_tabsdata_mssql.conftest import (
-    DB_PASSWORD,
-    INVOICE_HEADER_DF,
-    INVOICE_ITEM_DF,
-    MSSQL_USER,
-    TESTING_RESOURCES_FOLDER,
-)
-
 import tabsdata as td
 from tabsdata._tabsserver.function.response_utils import RESPONSE_FILE_NAME
 from tabsdata._tabsserver.invoker import REQUEST_FILE_NAME
@@ -36,6 +27,15 @@ from tests_tabsdata.conftest import (
     clean_polars_df,
     read_json_and_clean,
     write_v2_yaml_file,
+)
+
+# noinspection PyPackageRequirements
+from tests_tabsdata_mssql.conftest import (
+    DB_PASSWORD,
+    INVOICE_HEADER_DF,
+    INVOICE_ITEM_DF,
+    MSSQL_USER,
+    TESTING_RESOURCES_FOLDER,
 )
 
 logger = logging.getLogger(__name__)

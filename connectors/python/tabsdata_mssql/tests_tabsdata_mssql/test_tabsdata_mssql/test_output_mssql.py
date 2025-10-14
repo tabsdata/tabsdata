@@ -19,11 +19,6 @@ import pytest
 # noinspection PyPackageRequirements
 from sqlalchemy import create_engine
 from sqlalchemy.engine import URL
-from tests_tabsdata_mssql.conftest import (
-    DB_PASSWORD,
-    MSSQL_USER,
-    TESTING_RESOURCES_FOLDER,
-)
 
 import tabsdata as td
 from tabsdata._tabsserver.function.response_utils import RESPONSE_FILE_NAME
@@ -39,6 +34,11 @@ from tests_tabsdata.conftest import (
     get_lf,
     read_json_and_clean,
     write_v2_yaml_file,
+)
+from tests_tabsdata_mssql.conftest import (
+    DB_PASSWORD,
+    MSSQL_USER,
+    TESTING_RESOURCES_FOLDER,
 )
 
 logger = logging.getLogger(__name__)

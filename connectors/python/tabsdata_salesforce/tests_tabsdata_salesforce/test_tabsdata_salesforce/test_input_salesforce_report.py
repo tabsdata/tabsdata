@@ -13,16 +13,6 @@ import polars as pl
 
 # noinspection PyPackageRequirements
 import pytest
-from tests_tabsdata_salesforce.conftest import (
-    FAKE_CREDENTIALS,
-    TESTING_RESOURCES_FOLDER,
-)
-from tests_tabsdata_salesforce.testing_resources.test_input_salesforce_report.example import (
-    input_salesforce_report,
-)
-from tests_tabsdata_salesforce.testing_resources.test_input_salesforce_report_initial_values.example import (
-    input_salesforce_report_initial_values,
-)
 
 import tabsdata as td
 from tabsdata._secret import DirectSecret
@@ -38,6 +28,16 @@ from tests_tabsdata.conftest import (
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
     clean_polars_df,
     write_v2_yaml_file,
+)
+from tests_tabsdata_salesforce.conftest import (
+    FAKE_CREDENTIALS,
+    TESTING_RESOURCES_FOLDER,
+)
+from tests_tabsdata_salesforce.testing_resources.test_input_salesforce_report.example import (
+    input_salesforce_report,
+)
+from tests_tabsdata_salesforce.testing_resources.test_input_salesforce_report_initial_values.example import (
+    input_salesforce_report_initial_values,
 )
 
 logger = logging.getLogger(__name__)

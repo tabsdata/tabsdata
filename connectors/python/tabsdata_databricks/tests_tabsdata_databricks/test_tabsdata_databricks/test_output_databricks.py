@@ -17,19 +17,6 @@ import pytest
 
 # noinspection PyPackageRequirements
 from databricks.sql import ServerOperationError
-from tests_tabsdata_databricks.conftest import TESTING_RESOURCES_FOLDER
-from tests_tabsdata_databricks.testing_resources.test_multiple_outputs_databricks.example import (
-    multiple_outputs_databricks,
-)
-from tests_tabsdata_databricks.testing_resources.test_output_databricks.example import (
-    output_databricks,
-)
-from tests_tabsdata_databricks.testing_resources.test_output_databricks_list_none.example import (
-    output_databricks_list_none,
-)
-from tests_tabsdata_databricks.testing_resources.test_output_databricks_none.example import (
-    output_databricks_none,
-)
 
 import tabsdata as td
 from tabsdata._secret import DirectSecret, EnvironmentSecret
@@ -49,6 +36,19 @@ from tests_tabsdata.conftest import (
     get_lf,
     read_json_and_clean,
     write_v2_yaml_file,
+)
+from tests_tabsdata_databricks.conftest import TESTING_RESOURCES_FOLDER
+from tests_tabsdata_databricks.testing_resources.test_multiple_outputs_databricks.example import (
+    multiple_outputs_databricks,
+)
+from tests_tabsdata_databricks.testing_resources.test_output_databricks.example import (
+    output_databricks,
+)
+from tests_tabsdata_databricks.testing_resources.test_output_databricks_list_none.example import (
+    output_databricks_list_none,
+)
+from tests_tabsdata_databricks.testing_resources.test_output_databricks_none.example import (
+    output_databricks_none,
 )
 
 logger = logging.getLogger(__name__)

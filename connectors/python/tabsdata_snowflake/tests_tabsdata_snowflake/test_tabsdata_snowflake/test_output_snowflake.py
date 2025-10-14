@@ -16,21 +16,6 @@ import pytest
 
 # noinspection PyPackageRequirements
 from snowflake.connector.errors import ProgrammingError
-from tests_tabsdata_snowflake.conftest import (
-    TESTING_RESOURCES_FOLDER,
-)
-from tests_tabsdata_snowflake.testing_resources.test_multiple_outputs_snowflake.example import (
-    multiple_outputs_snowflake,
-)
-from tests_tabsdata_snowflake.testing_resources.test_output_snowflake.example import (
-    output_snowflake,
-)
-from tests_tabsdata_snowflake.testing_resources.test_output_snowflake_list_none.example import (
-    output_snowflake_list_none,
-)
-from tests_tabsdata_snowflake.testing_resources.test_output_snowflake_none.example import (
-    output_snowflake_none,
-)
 
 import tabsdata as td
 from tabsdata._tabsserver.function.response_utils import RESPONSE_FILE_NAME
@@ -45,6 +30,21 @@ from tests_tabsdata.conftest import (
     clean_polars_df,
     read_json_and_clean,
     write_v2_yaml_file,
+)
+from tests_tabsdata_snowflake.conftest import (
+    TESTING_RESOURCES_FOLDER,
+)
+from tests_tabsdata_snowflake.testing_resources.test_multiple_outputs_snowflake.example import (
+    multiple_outputs_snowflake,
+)
+from tests_tabsdata_snowflake.testing_resources.test_output_snowflake.example import (
+    output_snowflake,
+)
+from tests_tabsdata_snowflake.testing_resources.test_output_snowflake_list_none.example import (
+    output_snowflake_list_none,
+)
+from tests_tabsdata_snowflake.testing_resources.test_output_snowflake_none.example import (
+    output_snowflake_none,
 )
 
 logger = logging.getLogger(__name__)

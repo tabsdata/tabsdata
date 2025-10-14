@@ -8,7 +8,6 @@ import pytest
 
 # noinspection PyPackageRequirements
 from pytest import MonkeyPatch
-from tests_tabsdata_mssql.conftest import MSSQL_2022_PORT
 
 # noinspection PyPackageRequirements
 import tabsdata as td
@@ -19,6 +18,7 @@ from tests_tabsdata.conftest import (
     DB_PASSWORD,
     DB_USER,
 )
+from tests_tabsdata_mssql.conftest import MSSQL_2022_PORT
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

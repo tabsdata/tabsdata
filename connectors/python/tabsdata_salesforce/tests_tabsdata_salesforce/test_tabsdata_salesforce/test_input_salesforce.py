@@ -12,22 +12,6 @@ import polars as pl
 
 # noinspection PyPackageRequirements
 import pytest
-from tests_tabsdata_salesforce.conftest import (
-    FAKE_CREDENTIALS,
-    TESTING_RESOURCES_FOLDER,
-)
-from tests_tabsdata_salesforce.testing_resources.test_input_salesforce.example import (
-    input_salesforce,
-)
-from tests_tabsdata_salesforce.testing_resources.test_input_salesforce_initial_values.example import (
-    input_salesforce_initial_values,
-)
-from tests_tabsdata_salesforce.testing_resources.test_input_salesforce_list_none.example import (
-    input_salesforce_list_none,
-)
-from tests_tabsdata_salesforce.testing_resources.test_input_salesforce_none.example import (
-    input_salesforce_none,
-)
 
 import tabsdata as td
 from tabsdata._secret import DirectSecret
@@ -44,6 +28,22 @@ from tests_tabsdata.conftest import (
     clean_polars_df,
     read_json_and_clean,
     write_v2_yaml_file,
+)
+from tests_tabsdata_salesforce.conftest import (
+    FAKE_CREDENTIALS,
+    TESTING_RESOURCES_FOLDER,
+)
+from tests_tabsdata_salesforce.testing_resources.test_input_salesforce.example import (
+    input_salesforce,
+)
+from tests_tabsdata_salesforce.testing_resources.test_input_salesforce_initial_values.example import (
+    input_salesforce_initial_values,
+)
+from tests_tabsdata_salesforce.testing_resources.test_input_salesforce_list_none.example import (
+    input_salesforce_list_none,
+)
+from tests_tabsdata_salesforce.testing_resources.test_input_salesforce_none.example import (
+    input_salesforce_none,
 )
 
 logger = logging.getLogger(__name__)

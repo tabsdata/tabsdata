@@ -262,14 +262,40 @@ def lock_pyprojects(
             v for v in known_first_party_entry if isinstance(v, str)
         }
 
-        merged = known_first_party_entry_set | connector_modules
+        test_connector_modules = {f"tests_{name}" for name in connector_modules}
+        merged = (
+            known_first_party_entry_set | connector_modules | test_connector_modules
+        )
 
-        tabsdata = sorted(name for name in merged if name.startswith("tabsdata"))
-        others = sorted(name for name in merged if not name.startswith("tabsdata"))
+        tabsdata_packages = sorted(
+            name for name in merged if name.startswith("tabsdata")
+        )
+        tests_tabsdata_packages = sorted(
+            name for name in merged if name.startswith("tests_tabsdata")
+        )
+        tabsdata_libraries = sorted(
+            name
+            for name in merged
+            if not (
+                name.startswith("tabsdata")
+                or name.startswith("tests_tabsdata")
+                or name.startswith("tests_")
+            )
+        )
+        tests_tabsdata_libraries = sorted(
+            name
+            for name in merged
+            if (name.startswith("tests_") and not name.startswith("tests_tabsdata"))
+        )
 
         sorted_array = array()
         sorted_array.multiline(True)
-        for name in tabsdata + others:
+        for name in (
+            tabsdata_packages
+            + tabsdata_libraries
+            + tests_tabsdata_packages
+            + tests_tabsdata_libraries
+        ):
             sorted_array.append(name)
 
         isort_entry["known_first_party"] = sorted_array

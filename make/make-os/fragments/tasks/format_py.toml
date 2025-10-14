@@ -26,6 +26,9 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    debug "🚀 isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_*"
-    exec --fail-on-error isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_*
+    debug "🚀 isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv"
+    exec --fail-on-error isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv
+
+    # debug "🚀 isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_*"
+    # exec --fail-on-error isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_*
     ''']
