@@ -2,27 +2,40 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
+from __future__ import annotations
+
 import logging
-import os
+from typing import Any
 
-import pytest
-from tests_tabsdata_salesforce.bootest import TESTING_RESOURCES_PATH
-from xdist.workermanage import WorkerController
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
-from tabsdata._utils.logging import setup_tests_logging
 from tests_tabsdata.bootest import enrich_sys_path
+from tests_tabsdata_salesforce.bootest import TESTING_RESOURCES_PATH
+
+
+def _enrich_sys_path():
+    pass
+
 
 TESTING_RESOURCES_FOLDER = TESTING_RESOURCES_PATH
 enrich_sys_path()
+_enrich_sys_path()
+
+import os
+
+import pytest
+from xdist.workermanage import WorkerController
 
 import tabsdata as td
+from tabsdata._utils.logging import setup_tests_logging
 from tests_tabsdata.conftest import (
     clean_python_virtual_environments,
+    pytest_addoption,
+    pytest_generate_tests,
     setup_temp_folder,
     setup_temp_folder_node,
 )
-
-logger = logging.getLogger(__name__)
 
 FAKE_CREDENTIALS = td.SalesforceTokenCredentials(
     username="username",
@@ -33,7 +46,7 @@ FAKE_CREDENTIALS = td.SalesforceTokenCredentials(
 
 @pytest.fixture(scope="session")
 def sf_config():
-    config = {
+    config: dict[str, Any] = {
         "USERNAME_ENV": "SF0__USERNAME",
         "PASSWORD_ENV": "SF0__PASSWORD",
         "SECURITY_TOKEN_ENV": "SF0__SECURITY_TOKEN",

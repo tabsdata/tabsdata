@@ -1,23 +1,39 @@
 #
 # Copyright 2025 Tabs Data Inc.
 #
-from tests_tabsdata_databricks.bootest import TESTING_RESOURCES_PATH
-from xdist.workermanage import WorkerController
 
-from tabsdata._utils.logging import setup_tests_logging
+from __future__ import annotations
+
+import logging
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
 from tests_tabsdata.bootest import enrich_sys_path
+from tests_tabsdata_databricks.bootest import TESTING_RESOURCES_PATH
+
+
+def _enrich_sys_path():
+    pass
+
 
 TESTING_RESOURCES_FOLDER = TESTING_RESOURCES_PATH
 enrich_sys_path()
+_enrich_sys_path()
 
-import logging
 import os
+from typing import Any, Generator
 
 import databricks.sdk as dbsdk
 import databricks.sql as dbsql
 import pytest
+from databricks.sdk import WorkspaceClient
 from databricks.sdk.core import Config, pat_auth
+from xdist.workermanage import WorkerController
 
+from tabsdata._utils.logging import setup_tests_logging
+
+# noinspection PyUnusedImports
 from tests_tabsdata.conftest import (
     clean_python_virtual_environments,
     pytest_addoption,
@@ -25,8 +41,6 @@ from tests_tabsdata.conftest import (
     setup_temp_folder,
     setup_temp_folder_node,
 )
-
-logger = logging.getLogger(__name__)
 
 
 def pytest_configure(config: pytest.Config):
@@ -50,7 +64,7 @@ def pytest_sessionfinish(session, exitstatus):
 
 
 @pytest.fixture(scope="session")
-def databricks_client(databricks_config) -> dbsdk.WorkspaceClient:
+def databricks_client(databricks_config: dict) -> Generator[WorkspaceClient, Any, None]:
     host = databricks_config["HOST"]
     token = databricks_config["TOKEN"]
     ws_client = dbsdk.WorkspaceClient(
@@ -61,7 +75,7 @@ def databricks_client(databricks_config) -> dbsdk.WorkspaceClient:
 
 
 @pytest.fixture(scope="session")
-def databricks_config():
+def databricks_config() -> Generator[dict[str, str], Any, None]:
     config = {
         "CATALOG_ENV": "DBX0__CATALOG",
         "HOST_ENV": "DBX0__HOST",

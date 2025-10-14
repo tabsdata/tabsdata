@@ -1,22 +1,35 @@
 #
 # Copyright 2025 Tabs Data Inc.
 #
-from tests_tabsdata_mssql.bootest import TESTING_RESOURCES_PATH
-from xdist.workermanage import WorkerController
 
-from tabsdata._utils.logging import setup_tests_logging
+from __future__ import annotations
+
+import logging
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
 from tests_tabsdata.bootest import enrich_sys_path
+from tests_tabsdata_mssql.bootest import TESTING_RESOURCES_PATH
+
+
+def _enrich_sys_path():
+    pass
+
 
 TESTING_RESOURCES_FOLDER = TESTING_RESOURCES_PATH
 enrich_sys_path()
+_enrich_sys_path()
 
-import logging
 from time import sleep
 
 import docker
+import polars as pl
 import pytest
 from filelock import FileLock
+from xdist.workermanage import WorkerController
 
+from tabsdata._utils.logging import setup_tests_logging
 from tests_tabsdata.conftest import (
     DB_HOST,
     DB_NAME,
@@ -25,12 +38,11 @@ from tests_tabsdata.conftest import (
     clean_polars_df,
     clean_python_virtual_environments,
     pytest_addoption,
+    pytest_generate_tests,
     remove_docker_containers,
     setup_temp_folder,
     setup_temp_folder_node,
 )
-
-logger = logging.getLogger(__name__)
 
 
 def pytest_configure(config: pytest.Config):
@@ -50,7 +62,6 @@ DEFAULT_PYTEST_MSSQL_2019_DOCKER_CONTAINER_NAME = (
 DEFAULT_PYTEST_MSSQL_2022_DOCKER_CONTAINER_NAME = (
     "pytest_exclusive_mssql_2022_container"
 )
-import polars as pl
 
 MSSQL_2019_PORT = 2544
 MSSQL_2022_PORT = 1433

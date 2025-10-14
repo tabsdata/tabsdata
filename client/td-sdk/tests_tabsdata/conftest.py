@@ -5,6 +5,16 @@
 from __future__ import annotations
 
 import logging
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+from tests_tabsdata.bootest import TESTING_RESOURCES_PATH, check_assets, enrich_sys_path
+
+TESTING_RESOURCES_FOLDER = TESTING_RESOURCES_PATH
+enrich_sys_path()
+check_assets()
+
 import os
 import pathlib
 import re
@@ -40,19 +50,28 @@ from google.cloud import storage
 from xdist.workermanage import WorkerController
 
 import tabsdata as td
+import tabsdata as _td
+
+# noinspection PyProtectedMember
+import tabsdata._utils.tableframe._constants as td_constants
+from tabsdata._secret import HashiCorpSecret
+from tabsdata._tabsdatafunction import TableInput, TableOutput
+from tabsdata._tabsserver.function.sql_utils import MARIADB_COLLATION
+from tabsdata._tabsserver.pyenv_creation import (
+    DEFAULT_ENVIRONMENT_TESTIMONY_FOLDER,
+    delete_virtual_environment,
+)
 from tabsdata._utils.logging import setup_tests_logging
+
+# noinspection PyProtectedMember
+from tabsdata._utils.tableframe._generators import _id
 from tabsdata._utils.temps import tabsdata_temp_folder
+from tabsdata.api.apiserver import APIServer, obtain_connection
 from tabsdata.api.status_utils.data_version import (
     DataVersionStatus,
     data_version_status_to_mapping,
 )
-
-# The following non-import code must execute early to set up the environment correctly.
-# Suppressing E402 to allow imports after this setup.
-# flake8: noqa: E402
-
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+from tabsdata.api.tabsdata_server import TabsdataServer
 
 
 def pytest_configure(config: pytest.Config):
@@ -85,29 +104,6 @@ TABSDATA_EE = "tabsdata-ee"
 TESTS_ROOT_FOLDER = os.path.dirname(__file__)
 
 sys.path.insert(0, TESTS_ROOT_FOLDER)
-
-from tests_tabsdata.bootest import TESTING_RESOURCES_PATH, check_assets, enrich_sys_path
-
-TESTING_RESOURCES_FOLDER = TESTING_RESOURCES_PATH
-enrich_sys_path()
-check_assets()
-
-import tabsdata as _td
-
-# noinspection PyProtectedMember
-import tabsdata._utils.tableframe._constants as td_constants
-from tabsdata._secret import HashiCorpSecret
-from tabsdata._tabsdatafunction import TableInput, TableOutput
-from tabsdata._tabsserver.function.sql_utils import MARIADB_COLLATION
-from tabsdata._tabsserver.pyenv_creation import (
-    DEFAULT_ENVIRONMENT_TESTIMONY_FOLDER,
-    delete_virtual_environment,
-)
-
-# noinspection PyProtectedMember
-from tabsdata._utils.tableframe._generators import _id
-from tabsdata.api.apiserver import APIServer, obtain_connection
-from tabsdata.api.tabsdata_server import TabsdataServer
 
 module_path = str(_td.__file__)
 
