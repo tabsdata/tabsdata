@@ -78,6 +78,80 @@ def test_resolve_env_token_no_env_var(monkeypatch):
 
 @pytest.mark.config_resolver
 @pytest.mark.unit
+def test_resolve_env_token_optional_undefined(monkeypatch):
+    monkeypatch.delenv("NON_EXISTING_ENV_VAR", raising=False)
+    leaf = "${env:NON_EXISTING_ENV_VAR?}"
+    resolved_leaf = BASE_RESOLVER.resolve_env_token(leaf)
+    assert resolved_leaf == ""
+
+
+@pytest.mark.config_resolver
+@pytest.mark.unit
+def test_resolve_env_token_optional_with_prefix_suffix(monkeypatch):
+    monkeypatch.delenv("NON_EXISTING_ENV_VAR", raising=False)
+    leaf = "prefix_${env:NON_EXISTING_ENV_VAR?}_suffix"
+    resolved_leaf = BASE_RESOLVER.resolve_env_token(leaf)
+    assert resolved_leaf == "prefix__suffix"
+
+
+@pytest.mark.config_resolver
+@pytest.mark.unit
+def test_resolve_env_token_optional_defined(monkeypatch):
+    monkeypatch.setenv("ENV_VAR_NAME", "env_var_value")
+    leaf = "${env:ENV_VAR_NAME?}"
+    resolved_leaf = BASE_RESOLVER.resolve_env_token(leaf)
+    assert resolved_leaf == "env_var_value"
+
+
+@pytest.mark.config_resolver
+@pytest.mark.unit
+def test_resolve_env_token_empty_value(monkeypatch):
+    monkeypatch.setenv("EMPTY_ENV_VAR", "")
+    assert os.getenv("EMPTY_ENV_VAR") == ""
+    leaf = "${env:EMPTY_ENV_VAR}"
+    resolved_leaf = BASE_RESOLVER.resolve_env_token(leaf)
+    assert resolved_leaf == ""
+
+
+@pytest.mark.config_resolver
+@pytest.mark.unit
+def test_resolve_env_token_with_leading_spaces(monkeypatch):
+    monkeypatch.setenv("ENV_WITH_SPACES", "  value_with_leading_spaces")
+    leaf = "${env:ENV_WITH_SPACES}"
+    resolved_leaf = BASE_RESOLVER.resolve_env_token(leaf)
+    assert resolved_leaf == "value_with_leading_spaces"
+
+
+@pytest.mark.config_resolver
+@pytest.mark.unit
+def test_resolve_env_token_with_trailing_spaces(monkeypatch):
+    monkeypatch.setenv("ENV_WITH_SPACES", "value_with_trailing_spaces  ")
+    leaf = "${env:ENV_WITH_SPACES}"
+    resolved_leaf = BASE_RESOLVER.resolve_env_token(leaf)
+    assert resolved_leaf == "value_with_trailing_spaces"
+
+
+@pytest.mark.config_resolver
+@pytest.mark.unit
+def test_resolve_env_token_with_leading_and_trailing_spaces(monkeypatch):
+    monkeypatch.setenv("ENV_WITH_SPACES", "  value_with_both_spaces  ")
+    leaf = "${env:ENV_WITH_SPACES}"
+    resolved_leaf = BASE_RESOLVER.resolve_env_token(leaf)
+    assert resolved_leaf == "value_with_both_spaces"
+
+
+@pytest.mark.config_resolver
+@pytest.mark.unit
+def test_resolve_env_token_mixed_optional_and_required(monkeypatch):
+    monkeypatch.setenv("DEFINED_VAR", "defined_value")
+    monkeypatch.delenv("UNDEFINED_VAR", raising=False)
+    leaf = "${env:DEFINED_VAR}_${env:UNDEFINED_VAR?}"
+    resolved_leaf = BASE_RESOLVER.resolve_env_token(leaf)
+    assert resolved_leaf == "defined_value_"
+
+
+@pytest.mark.config_resolver
+@pytest.mark.unit
 def test_resolve_env_other_token(monkeypatch):
     monkeypatch.setenv("ENV_VAR_NAME", "env_var_value")
     monkeypatch.setenv("ANOTHER_ENV_VAR_NAME", "another_env_var_value")

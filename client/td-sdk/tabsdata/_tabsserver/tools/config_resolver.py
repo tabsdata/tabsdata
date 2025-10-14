@@ -6,12 +6,11 @@ import argparse
 import os
 import re
 import sys
-from typing import Dict, List
 
 import hvac
 import yaml
 
-ENV_VAR_PATTERN = r"\${env:(\w+)}"
+ENV_VAR_PATTERN = r"\${env:(\w+)(\?)?}"
 HASHICORP_PATTERN = r"\${hashicorp:([^;]+;[^}]+)}"
 
 START_TAG = "<message><i>"
@@ -30,13 +29,14 @@ class ConfigResolver:
             "env": self.resolve_env_token,
             "hashicorp": self.resolve_hashicorp_token,
         }
-        self.hashicorp_config = {
+        self.hashicorp_config: dict[str, str | None] = {
             "url": hashicorp_url,
             "token": hashicorp_token,
             "namespace": hashicorp_namespace,
         }
 
-    def resolve_yaml(self, path_to_yaml: str, strategies: List[str]):
+    def resolve_yaml(self, path_to_yaml: str, strategies: list[str]):
+        data = None
         with open(path_to_yaml, "r") as file:
             data = yaml.safe_load(file)
         for strategy in strategies:
@@ -44,8 +44,8 @@ class ConfigResolver:
         return data
 
     def resolve_collection(
-        self, data: Dict | List | str, strategy: str
-    ) -> Dict | List | str:
+        self, data: dict | list | str, strategy: str
+    ) -> dict | list | str:
         if isinstance(data, dict):
             for key, value in data.items():
                 data[key] = self.resolve_collection(value, strategy=strategy)
@@ -88,16 +88,21 @@ class ConfigResolver:
             match = re.search(HASHICORP_PATTERN, leaf)
         return leaf
 
-    def resolve_env_token(self, leaf: str) -> str:
+    @staticmethod
+    def resolve_env_token(leaf: str) -> str:
         match = re.search(ENV_VAR_PATTERN, leaf)
         while match:
             env_var = match.group(1)
+            is_optional = match.group(2) is not None
             env_var_value = os.getenv(env_var)
             if env_var_value is None:
-                raise ValueError(f"Environment variable {env_var} not found")
-            leaf = leaf.replace(match.group(0), env_var_value)
+                if is_optional:
+                    env_var_value = ""
+                else:
+                    raise ValueError(f"Environment variable {env_var} not found")
+            leaf = leaf.replace(match.group(0), env_var_value.strip())
             match = re.search(ENV_VAR_PATTERN, leaf)
-        return leaf
+        return leaf.strip()
 
 
 def main():
