@@ -70,6 +70,7 @@ LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
 pytestmark = pytest.mark.catalog
 
 
+@pytest.mark.skip("Pending fixing coexistence of S3 anf Glue credentials & regions")
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.s3
@@ -186,6 +187,7 @@ def test_output_s3_catalog(tmp_path, s3_client, s3_config):
                 pass
 
 
+@pytest.mark.skip("Pending fixing coexistence of S3 anf Glue credentials & regions")
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.s3
@@ -294,6 +296,7 @@ def test_output_s3_catalog_replace(tmp_path, s3_client, s3_config):
             s3_client.delete_object(Bucket=bucket_name, Key=file)
 
 
+@pytest.mark.skip("Pending fixing coexistence of S3 anf Glue credentials & regions")
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.s3
@@ -488,6 +491,7 @@ def test_output_s3_catalog_no_auto_create_at_fails(tmp_path, s3_client, s3_confi
                 pass
 
 
+@pytest.mark.skip("Pending fixing coexistence of S3 anf Glue credentials & regions")
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.s3
@@ -599,6 +603,7 @@ def test_output_s3_catalog_schema_update(tmp_path, s3_client, s3_config):
                 pass
 
 
+@pytest.mark.skip("Pending fixing coexistence of S3 anf Glue credentials & regions")
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.s3
@@ -685,6 +690,7 @@ def test_output_s3_catalog_schema_strict(tmp_path, s3_client, s3_config):
                 pass
 
 
+@pytest.mark.skip("Pending fixing coexistence of S3 anf Glue credentials & regions")
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.s3
@@ -811,6 +817,7 @@ def test_output_s3_catalog_partition(tmp_path, s3_client, s3_config):
                 pass
 
 
+@pytest.mark.skip("Pending fixing coexistence of S3 anf Glue credentials & regions")
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.s3

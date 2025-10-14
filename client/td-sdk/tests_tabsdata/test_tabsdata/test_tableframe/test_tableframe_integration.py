@@ -558,8 +558,7 @@ def test_expr_last():
     api_tester(fn)
 
 
-# ToDo: ⚠️ Tucu: Fixed. Pending decision on 1x1 polars frames.
-@pytest.mark.skip
+@pytest.mark.skip("Pending decision on 1x1 polars frames.")
 def test_expr_last_mmh():
     def fn(library: pk, frame: ft):
         return frame.select(library.col("f").last())
