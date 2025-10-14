@@ -13,46 +13,6 @@ __path__ = pkgutil.extend_path(__path__, __name__)
 import importlib.metadata
 import logging
 
-from polars import (
-    Boolean,
-    Categorical,
-    Date,
-    Datetime,
-    Decimal,
-    Duration,
-    Enum,
-    Float32,
-    Float64,
-    Int8,
-    Int16,
-    Int32,
-    Int64,
-    Int128,
-    Null,
-    String,
-    Time,
-    UInt8,
-    UInt16,
-    UInt32,
-    UInt64,
-)
-from polars.datatypes.classes import (
-    FloatType,
-    IntegerType,
-    NumericType,
-    SignedIntegerType,
-    TemporalType,
-    UnsignedIntegerType,
-)
-from polars.datatypes.group import (
-    FLOAT_DTYPES,
-    INTEGER_DTYPES,
-    NUMERIC_DTYPES,
-    SIGNED_INTEGER_DTYPES,
-    TEMPORAL_DTYPES,
-    UNSIGNED_INTEGER_DTYPES,
-)
-
 from tabsdata._credentials import (
     AzureAccountKeyCredentials,
     GCPServiceAccountKeyCredentials,
@@ -110,6 +70,42 @@ from tabsdata._tabsdatafunction import TabsdataFunction
 
 # noinspection PyProtectedMember
 from tabsdata._tabsserver.function.execution_exceptions import CustomException
+from tabsdata.tableframe.dtypes import (
+    FLOAT_DTYPES,
+    INTEGER_DTYPES,
+    NUMERIC_DTYPES,
+    SIGNED_INTEGER_DTYPES,
+    TEMPORAL_DTYPES,
+    UNSIGNED_INTEGER_DTYPES,
+    Boolean,
+    Categorical,
+    Date,
+    Datetime,
+    Decimal,
+    Duration,
+    Enum,
+    Float32,
+    Float64,
+    FloatType,
+    Int8,
+    Int16,
+    Int32,
+    Int64,
+    Int128,
+    IntegerType,
+    Null,
+    NumericType,
+    SignedIntegerType,
+    String,
+    TemporalType,
+    Time,
+    UInt8,
+    UInt16,
+    UInt32,
+    UInt64,
+    UnsignedIntegerType,
+    Utf8,
+)
 from tabsdata.tableframe.functions.col import col as col
 from tabsdata.tableframe.functions.eager import concat
 from tabsdata.tableframe.functions.lit import lit
@@ -205,6 +201,7 @@ __all__ = [
     UInt16,
     UInt32,
     UInt64,
+    Utf8,
     # from polars (advanced)...
     FLOAT_DTYPES,
     INTEGER_DTYPES,

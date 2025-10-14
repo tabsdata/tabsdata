@@ -66,6 +66,7 @@ JoinStrategy: TypeAlias = Literal[
     "outer",
 ]
 
+# noinspection DuplicatedCode
 Schema: TypeAlias = td_schema.Schema
 
 Series: TypeAlias = pl.Series

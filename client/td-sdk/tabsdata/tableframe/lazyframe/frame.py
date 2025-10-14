@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import copy
 import enum
 import logging
 import os
@@ -409,7 +408,7 @@ class TableFrame:
     # ToDo: pending restricted access and system td columns handling.
     # status(Status.TODO)
     def __getattr__(self, name):
-        if hasattr(self._lf, name):
+        if name in self._lf.__dict__:
             attr = getattr(self._lf, name)
             if callable(attr):
 
@@ -1221,15 +1220,29 @@ class TableFrame:
         batches even when authoring row-wise logic. In both cases the returned series
         become new columns appended to the original `TableFrame`.
 
-        Using UDFs:
+        Creating UDFs:
             1. Subclass :class:`tabsdata.tableframe.udf.function.UDF`.
-            2. Override exactly one of `on_batch` or `on_element`.
-            3. Return a list of Polars series (for `on_batch`) or Python scalars
-               (for `on_element`) with the same length as the input.
-            4. Provide output metadata by aliasing the returned series or overriding
-               :meth:`UDF.schema`. Supplying a schema is required when implementing
-               `on_element` and optional for `on_batch`; it lets you define field
-               names and the resulting data types of the generated columns.
+            2. Implement ``__init__`` to call ``super().__init__(output_columns)`` where
+               ``output_columns`` is a tuple or list of tuples ``(name, data type)``
+               specifying the UDF default output schema (column names and data types).
+               Each tuple must contain a column name (string) and a data type
+               (DataType).
+            3. Override exactly one of `on_batch` or `on_element`, to implement the UDF
+               function logic.
+            4. Return a list of TabsData Series (for `on_batch`) or TabsData supported
+               scalars (for `on_element`) with the same length as specified in the
+               output schema.
+            4. If overriding the `on_batch` method, the return type must be a list of
+               TabsData Series. If overriding the `on_element` method, the return type
+               must be a list of supported TabsData scalar values. For both cases, the
+               number of elements in the returned lists must match the number of
+               elements in the output_columns list provided to the UDF constructor.
+
+        Using UDFs:
+            1. Instantiate a function created as above.
+            2. Pass it to TableFrame method udf().
+            3. Optionally use :meth:`UDF.output_columns` to override output column names
+               or data types after instantiation.
 
         Args:
             expr: Expression selecting the input column(s) that feed the UDF.
@@ -1242,8 +1255,11 @@ class TableFrame:
             >>> import tabsdata.tableframe as tdf
             >>>
             >>> class SumUDF(tdf.UDF):
+            ...     def __init__(self):
+            ...         super().__init__(("total", tdf.Int64))
+            ...
             ...     def on_batch(self, series):
-            ...         return [(series[0] + series[1]).alias("total")]
+            ...         return [series[0] + series[1]]
             >>>
             >>> tf = td.TableFrame({"a": [1, 2, 3], "b": [10, 20, 30]})
             >>> print(tf)
@@ -1269,11 +1285,11 @@ class TableFrame:
             └─────┴─────┴───────┘
 
             >>> class RatioUDF(tdf.UDF):
+            ...     def __init__(self):
+            ...         super().__init__(("ratio", tdf.Float64))
+            ...
             ...     def on_element(self, values):
             ...         return [values[0] / values[1]]
-            ...
-            ...     def schema(self):
-            ...         return ["ratio"]
             >>>
             >>> tf = td.TableFrame({"numerator": [10, 20, 30],
             >>>                     "denominator": [2, 5, 10],})
@@ -1300,84 +1316,6 @@ class TableFrame:
             └───────────┴──────────────┴──────┘
         """
 
-        def sample_value(s_dtype: td_typing.DataType):
-            if isinstance(s_dtype, pl.Boolean):
-                return True
-            elif isinstance(s_dtype, pl.Date):
-                return pl.date(2001, 1, 1)
-            elif isinstance(s_dtype, pl.Datetime):
-                return pl.datetime(2001, 1, 1)
-            elif isinstance(s_dtype, pl.Duration):
-                return pl.duration(seconds=1)
-            elif isinstance(
-                s_dtype,
-                (
-                    pl.Float32,
-                    pl.Float64,
-                ),
-            ):
-                return 1.1
-            if isinstance(
-                s_dtype,
-                (
-                    pl.Int8,
-                    pl.Int16,
-                    pl.Int32,
-                    pl.Int64,
-                ),
-            ):
-                return -1
-            elif isinstance(s_dtype, pl.Null):
-                return None
-            elif isinstance(s_dtype, pl.String):
-                return "a"
-            elif isinstance(s_dtype, pl.Time):
-                return pl.time(1, 1, 1)
-            elif isinstance(
-                s_dtype,
-                (
-                    pl.UInt8,
-                    pl.UInt16,
-                    pl.UInt32,
-                    pl.UInt64,
-                ),
-            ):
-                return 1
-            else:
-                return None
-
-        def sample_data() -> pl.PolarsDataType:
-            names_in = self._lf.select(pl_expr).collect_schema()
-            s_data = {}
-            for name in names_in.names():
-                dtype_in = names_in[name]
-                s_data[name] = [
-                    sample_value(dtype_in) if dtype_in is not None else None
-                ]
-            s_df = pl.DataFrame(s_data)
-            s_series_in = s_df.select(pl.struct(*s_data.keys()).alias("s"))["s"]
-
-            udf = copy.deepcopy(function)
-            s_series_out = apply(s_series_in, udf)
-
-            s_series_out_width = len(s_series_out.struct.fields)
-            f_names = udf._names(s_series_out_width)
-            f_dtypes = udf._dtypes(s_series_out_width)
-
-            if f_names is not None:
-                names = f_names
-            else:
-                names = list(s_series_out.struct.fields)
-            if f_dtypes is not None:
-                dtypes = f_dtypes
-            else:
-                dtypes = [s_series_out.struct.field(name).dtype for name in names]
-
-            s_dtype = pl.Struct(
-                [pl.Field(name, dtype_out) for name, dtype_out in zip(names, dtypes)]
-            )
-            return s_dtype
-
         def apply(
             series: td_typing.Series, udf: td_udf.UDF | None = None
         ) -> td_typing.Series:
@@ -1395,7 +1333,7 @@ class TableFrame:
             )
 
         pl_expr = td_translator._unwrap_into_tdexpr_column(expr)
-        dtype = sample_data()
+        dtype = function._columns()
         lf = (
             self._lf.with_columns(
                 pl.struct(pl_expr).alias(

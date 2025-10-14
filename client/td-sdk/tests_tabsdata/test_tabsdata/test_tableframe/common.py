@@ -90,21 +90,27 @@ def load_normalized_complex_dataframe(
 ) -> Tuple[pl.LazyFrame, pl.DataFrame, td.TableFrame]:
     lazy_frame, data_frame, table_frame = load_complex_dataframe(token)
     lazy_frame = lazy_frame.with_columns(
-        pl.when(pl.col("bill_length_mm") == "NA")
-        .then(None)
-        .otherwise(pl.col("bill_length_mm"))
+        pl.col("bill_length_mm")
+        .cast(pl.String)
+        .replace("NA", None)
         .cast(pl.Float64)
         .alias("bill_length_mm"),
-        pl.when(pl.col("bill_depth_mm") == "NA")
-        .then(None)
-        .otherwise(pl.col("bill_depth_mm"))
+        pl.col("bill_depth_mm")
+        .cast(pl.String)
+        .replace("NA", None)
         .cast(pl.Float64)
         .alias("bill_depth_mm"),
-        pl.when(pl.col("body_mass_g") == "NA")
-        .then(None)
-        .otherwise(pl.col("body_mass_g"))
+        pl.col("flipper_length_mm")
+        .cast(pl.String)
+        .replace("NA", None)
+        .cast(pl.Int64)
+        .alias("flipper_length_mm"),
+        pl.col("body_mass_g")
+        .cast(pl.String)
+        .replace("NA", None)
         .cast(pl.Int64)
         .alias("body_mass_g"),
+        pl.col("year").cast(pl.String).replace("NA", None).cast(pl.Int64).alias("year"),
     )
     data_frame = pl.DataFrame(lazy_frame.collect())
     table_frame = td.TableFrame.__build__(

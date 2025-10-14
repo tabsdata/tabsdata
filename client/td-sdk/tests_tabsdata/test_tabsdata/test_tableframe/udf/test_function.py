@@ -2,44 +2,48 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
-import polars as pl
 import pytest
 
+import tabsdata as td
 import tabsdata.tableframe.typing as td_typing
-from tabsdata.tableframe.functions.col import Column
 from tabsdata.tableframe.udf.function import UDF
 
 
 class TestUDFValidation:
-
-    # noinspection PyAbstractClass
     def test_cannot_instantiate_directly(self):
-        with pytest.raises(TypeError, match="Cannot instantiate UDF directly"):
-            UDF()
+        with pytest.raises(
+            TypeError,
+            match="Cannot instantiate UDF directly",
+        ):
+            # noinspection PyAbstractClass
+            UDF([("a", td.Int64)])
 
     # noinspection PyUnusedLocal
-    def test_cannot_override_call_method(self):
-        with pytest.raises(TypeError, match="must not override '__call__' method"):
+    def test_cannot_implement_call_method(self):
+        with pytest.raises(
+            TypeError,
+            match="must not implement '__call__' method",
+        ):
 
             class InvalidUDF(UDF):
                 def __call__(self, series):
                     return series
 
     # noinspection PyUnusedLocal
-    def test_must_override_at_least_one_method(self):
+    def test_must_implement_at_least_one_method(self):
         with pytest.raises(
             TypeError,
-            match="must override at least one of 'on_element' or 'on_batch' methods",
+            match="must implement exactly one of 'on_element' or 'on_batch' methods",
         ):
 
             class InvalidUDF(UDF):
                 pass
 
     # noinspection PyUnusedLocal
-    def test_cannot_override_both_methods(self):
+    def test_cannot_implement_both_methods(self):
         with pytest.raises(
             TypeError,
-            match="must override only one of 'on_element' and 'on_batch' methods",
+            match="must implement exactly one of 'on_element' and 'on_batch' methods",
         ):
 
             class InvalidUDF(UDF):
@@ -49,40 +53,33 @@ class TestUDFValidation:
                 def on_element(self, values):
                     return values
 
-    def test_valid_on_batch_override(self):
+    def test_valid_on_batch_implementation(self):
         class ValidBatchUDF(UDF):
             def on_batch(self, series):
                 return series
 
-        udf = ValidBatchUDF()
+        udf = ValidBatchUDF([("a", td.Int64)])
         assert udf is not None
 
-    def test_valid_on_element_override(self):
+    def test_valid_on_element_implementation(self):
         class ValidElementUDF(UDF):
             def on_element(self, values):
                 return values
 
-            def schema(self):
-                return ["result"]
-
-        udf = ValidElementUDF()
+        udf = ValidElementUDF([("a", td.Int64)])
         assert udf is not None
 
 
 class TestUDFOnBatch:
-
     def test_call_delegates_to_on_batch(self):
         class BatchUDF(UDF):
             def on_batch(self, series):
-                h_series = []
+                output_series = []
                 for values in zip(*series):
-                    h_series.append(sum(values))
-                return [td_typing.Series(h_series)]
+                    output_series.append(sum(values))
+                return [td_typing.Series(output_series)]
 
-            def schema(self):
-                return [Column("sum", pl.Int64)]
-
-        udf = BatchUDF()
+        udf = BatchUDF([("sum", td.Int64)])
         series_in = [
             td_typing.Series([1, 2, 3]),
             td_typing.Series([10, 20, 30]),
@@ -91,25 +88,26 @@ class TestUDFOnBatch:
         assert len(series_out) == 1
         assert series_out[0].to_list() == [11, 22, 33]
 
-    def test_on_batch_with_empty_list(self):
+    def test_on_batch_with_empty_input_fails_on_schema_mismatch(self):
         class BatchUDF(UDF):
             def on_batch(self, series):
-                return [] if not series else series
+                return []
 
-        udf = BatchUDF()
-        series_in = []
-        series_out = udf(series_in)
-        assert series_out == []
+        udf = BatchUDF([("a", td.Int64)])
+        with pytest.raises(
+            ValueError,
+            match="produced 0 output columns",
+        ):
+            udf([])
 
     def test_on_batch_caching(self):
-
         class BatchUDF(UDF):
             def on_batch(self, series):
                 return series
 
-        udf = BatchUDF()
-        assert udf._on_batch_is_overridden is True
-        assert udf._on_element_is_overridden is False
+        udf = BatchUDF([("a", td.Int64)])
+        assert udf._on_batch is True
+        assert udf._on_element is False
 
     def test_on_batch_multiple_outputs(self):
         class MultiOutputUDF(UDF):
@@ -123,17 +121,19 @@ class TestUDFOnBatch:
                         product *= value
                     products.append(product)
                 return [
-                    td_typing.Series(sums).alias("sum"),
-                    td_typing.Series(products).alias("product"),
+                    td_typing.Series(sums),
+                    td_typing.Series(products),
                 ]
 
-        udf = MultiOutputUDF()
+        udf = MultiOutputUDF([("sum", td.Int64), ("product", td.Int64)])
         series_in = [
             td_typing.Series([1, 2, 3]),
             td_typing.Series([4, 5, 6]),
         ]
         series_out = udf(series_in)
         assert len(series_out) == 2
+        assert series_out[0].name == "sum"
+        assert series_out[1].name == "product"
         assert series_out[0].to_list() == [5, 7, 9]
         assert series_out[1].to_list() == [4, 10, 18]
 
@@ -141,58 +141,52 @@ class TestUDFOnBatch:
         class SquareUDF(UDF):
             def on_batch(self, series):
                 squared = [value * value for value in series[0]]
-                return [td_typing.Series(squared).alias("squared")]
+                return [td_typing.Series(squared)]
 
-        udf = SquareUDF()
+        udf = SquareUDF([("squared", td.Int64)])
         series_in = [td_typing.Series([1, 2, 3])]
         series_out = udf(series_in)
         assert len(series_out) == 1
+        assert series_out[0].name == "squared"
         assert series_out[0].to_list() == [1, 4, 9]
 
 
 class TestUDFOnElement:
-
     def test_call_delegates_to_on_element(self):
         class ElementUDF(UDF):
             def on_element(self, values):
                 return [sum(values)]
 
-            def schema(self):
-                return ["sum"]
-
-        udf = ElementUDF()
+        udf = ElementUDF([("sum", td.Int64)])
         series_in = [
             td_typing.Series([1, 2, 3]),
             td_typing.Series([10, 20, 30]),
         ]
         series_out = udf(series_in)
         assert len(series_out) == 1
+        assert series_out[0].name == "sum"
         assert series_out[0].to_list() == [11, 22, 33]
 
-    def test_on_element_with_empty_list(self):
+    def test_on_element_with_empty_input_fails_on_schema_mismatch(self):
         class ElementUDF(UDF):
             def on_element(self, values):
                 return values
 
-            def schema(self):
-                return []
-
-        udf = ElementUDF()
-        series_in = []
-        series_out = udf(series_in)
-        assert series_out == []
+        udf = ElementUDF([("a", td.Int64)])  # Schema expects 1 column
+        with pytest.raises(
+            ValueError,
+            match="produced 0 output columns",
+        ):
+            udf([])
 
     def test_on_element_caching(self):
         class ElementUDF(UDF):
             def on_element(self, values):
                 return values
 
-            def schema(self):
-                return []
-
-        udf = ElementUDF()
-        assert udf._on_batch_is_overridden is False
-        assert udf._on_element_is_overridden is True
+        udf = ElementUDF([("a", td.Int64)])
+        assert udf._on_batch is False
+        assert udf._on_element is True
 
     def test_on_element_multiple_outputs(self):
         class MultiOutputUDF(UDF):
@@ -203,16 +197,15 @@ class TestUDFOnElement:
                     values_product *= value
                 return [values_sum, values_product]
 
-            def schema(self):
-                return ["sum", "product"]
-
-        udf = MultiOutputUDF()
+        udf = MultiOutputUDF([("sum", td.Int64), ("product", td.Int64)])
         series_in = [
             td_typing.Series([1, 2, 3]),
             td_typing.Series([4, 5, 6]),
         ]
         series_out = udf(series_in)
         assert len(series_out) == 2
+        assert series_out[0].name == "sum"
+        assert series_out[1].name == "product"
         assert series_out[0].to_list() == [5, 7, 9]
         assert series_out[1].to_list() == [4, 10, 18]
 
@@ -221,39 +214,31 @@ class TestUDFOnElement:
             def on_element(self, values):
                 return [values[0] * values[0]]
 
-            def schema(self):
-                return ["squared"]
-
-        udf = SquareUDF()
+        udf = SquareUDF([("squared", td.Int64)])
         series_in = [td_typing.Series([1, 2, 3])]
         result = udf(series_in)
         assert len(result) == 1
+        assert result[0].name == "squared"
         assert result[0].to_list() == [1, 4, 9]
 
 
 class TestUDFEdgeCases:
-
-    def test_neither_overridden_raises_runtime_error(self):
-
+    def test_neither_implemented_raises_runtime_error(self):
         class TestUDF(UDF):
             def on_element(self, values):
                 return values
 
-            def schema(self):
-                return []
-
-        udf = TestUDF()
-        udf._on_batch_is_overridden = False
-        udf._on_element_is_overridden = False
+        udf = TestUDF([("a", td.Int64)])
+        udf._on_batch = False
+        udf._on_element = False
 
         with pytest.raises(
             RuntimeError,
-            match="has neither on_batch nor on_element overridden",
+            match="has neither on_batch nor on_element implemented",
         ):
             udf([td_typing.Series([1, 2, 3])])
 
     def test_complex_transformation(self):
-
         class NormalizeUDF(UDF):
             def on_element(self, values):
                 total = sum(values)
@@ -261,10 +246,13 @@ class TestUDFEdgeCases:
                     return [0.0] * len(values)
                 return [value / total for value in values]
 
-            def schema(self):
-                return ["norm1", "norm2", "norm3"]
-
-        udf = NormalizeUDF()
+        udf = NormalizeUDF(
+            [
+                ("norm1", td.Float64),
+                ("norm2", td.Float64),
+                ("norm3", td.Float64),
+            ]
+        )
         series_in = [
             td_typing.Series([1.0, 2.0, 3.0]),
             td_typing.Series([2.0, 3.0, 4.0]),
