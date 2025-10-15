@@ -17,6 +17,7 @@ import pytest
 from pyiceberg.catalog import load_catalog
 from pyiceberg.transforms import YearTransform
 
+import tabsdata as td
 from tabsdata._secret import _recursively_evaluate_secret
 from tabsdata._tabsserver.function.response_utils import RESPONSE_FILE_NAME
 from tabsdata._tabsserver.invoker import REQUEST_FILE_NAME
@@ -70,7 +71,32 @@ LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
 pytestmark = pytest.mark.catalog
 
 
-@pytest.mark.skip("Pending fixing coexistence of S3 anf Glue credentials & regions")
+def create_bucket(bucket_name: str, region: str, client):
+    create_bucket_configurations = (
+        {"LocationConstraint": region}  # Change region as needed
+        if region != "us-east-1"
+        else {}
+    )
+    client.create_bucket(
+        Bucket=bucket_name, CreateBucketConfiguration=create_bucket_configurations
+    )
+
+
+def delete_bucket(bucket_name: str, client):
+    try:
+        # Delete all objects in the bucket before deleting the bucket itself
+        response = client.list_objects_v2(Bucket=bucket_name)
+        if "Contents" in response:
+            objects_to_delete = [{"Key": obj["Key"]} for obj in response["Contents"]]
+            client.delete_objects(
+                Bucket=bucket_name, Delete={"Objects": objects_to_delete}
+            )
+
+        client.delete_bucket(Bucket=bucket_name)
+    except Exception as e:
+        logger.error(f"Error deleting bucket {bucket_name}: {e}")
+
+
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.s3
@@ -90,21 +116,37 @@ def test_output_s3_catalog(tmp_path, s3_client, s3_config):
         output_file_0,
         output_file_1,
     ]
+
+    namespace = f"testing_namespace_{uuid.uuid4()}"
+    table_0 = f"{namespace}.s3_catalog_0"
+    table_1 = f"{namespace}.s3_catalog_1"
+
+    catalog = td.AWSGlue(
+        definition=s3_config["CATALOG_DEFINITION"],
+        tables=[
+            table_0,
+            table_1,
+        ],
+    )
+
+    output_s3_catalog.output.catalog = catalog
+
     catalog_definition = _recursively_evaluate_secret(
         output_s3_catalog.output.catalog.definition
     )
     catalog = load_catalog(**catalog_definition)
-    namespace = f"testing_namespace_{uuid.uuid4()}"
     catalog.create_namespace(namespace)
-    table_0 = f"{namespace}.s3_catalog_0"
-    table_1 = f"{namespace}.s3_catalog_1"
 
-    output_s3_catalog.output.catalog.tables = [table_0, table_1]
+    catalog_bucket_name = (
+        f'{s3_config["CATALOG_BUCKET_NAME_PREFIX"]}-{uuid.uuid4().hex[:16]}'
+    )
+    create_bucket(catalog_bucket_name, s3_config["REGION"], s3_client)
     output_s3_catalog.output.catalog.auto_create_at = [
-        f"s3://tabsdata-us-east-1-catalog-metadata/{namespace}/s3_catalog_0",
-        f"s3://tabsdata-us-east-1-catalog-metadata/{namespace}/s3_catalog_1",
+        f"s3://{catalog_bucket_name}/{namespace}/s3_catalog_0",
+        f"s3://{catalog_bucket_name}/{namespace}/s3_catalog_1",
     ]
     output_s3_catalog.output.credentials = s3_config["CREDENTIALS"]
+    output_s3_catalog.output.region = s3_config["REGION"]
 
     context_archive = create_bundle_archive(
         output_s3_catalog,
@@ -186,8 +228,9 @@ def test_output_s3_catalog(tmp_path, s3_client, s3_config):
             except:
                 pass
 
+        delete_bucket(catalog_bucket_name, s3_client)
 
-@pytest.mark.skip("Pending fixing coexistence of S3 anf Glue credentials & regions")
+
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.s3
@@ -196,16 +239,28 @@ def test_output_s3_catalog(tmp_path, s3_client, s3_config):
 def test_output_s3_catalog_replace(tmp_path, s3_client, s3_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
 
+    namespace = f"testing_namespace_replace_{uuid.uuid4()}"
+    table_name = f"{namespace}.s3_catalog_replace"
+
+    catalog = td.AWSGlue(
+        definition=s3_config["CATALOG_DEFINITION"],
+        tables=table_name,
+        if_table_exists="replace",
+    )
+
+    output_s3_catalog_replace.output.catalog = catalog
+
     catalog_definition = _recursively_evaluate_secret(
         output_s3_catalog_replace.output.catalog.definition
     )
     catalog = load_catalog(**catalog_definition)
-    namespace = f"testing_namespace_replace_{uuid.uuid4()}"
     catalog.create_namespace(namespace)
-    table_name = f"{namespace}.s3_catalog_replace"
-    output_s3_catalog_replace.output.catalog.tables = table_name
+    catalog_bucket_name = (
+        f'{s3_config["CATALOG_BUCKET_NAME_PREFIX"]}-{uuid.uuid4().hex[:16]}'
+    )
+    create_bucket(catalog_bucket_name, s3_config["REGION"], s3_client)
     output_s3_catalog_replace.output.catalog.auto_create_at = (
-        f"s3://tabsdata-us-east-1-catalog-metadata/{namespace}/s3_catalog_replace"
+        f"s3://{catalog_bucket_name}/{namespace}/s3_catalog_replace"
     )
 
     files_to_delete = []
@@ -217,6 +272,7 @@ def test_output_s3_catalog_replace(tmp_path, s3_client, s3_config):
             )
             output_s3_catalog_replace.output.uri = output_file
             output_s3_catalog_replace.output.credentials = s3_config["CREDENTIALS"]
+            output_s3_catalog_replace.output.region = s3_config["REGION"]
 
             context_archive = create_bundle_archive(
                 output_s3_catalog_replace,
@@ -295,8 +351,9 @@ def test_output_s3_catalog_replace(tmp_path, s3_client, s3_config):
         for file in files_to_delete:
             s3_client.delete_object(Bucket=bucket_name, Key=file)
 
+        delete_bucket(catalog_bucket_name, s3_client)
 
-@pytest.mark.skip("Pending fixing coexistence of S3 anf Glue credentials & regions")
+
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.s3
@@ -305,16 +362,28 @@ def test_output_s3_catalog_replace(tmp_path, s3_client, s3_config):
 def test_output_s3_catalog_append(tmp_path, s3_client, s3_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
 
+    namespace = f"testing_namespace_append_{uuid.uuid4()}"
+    table_name = f"{namespace}.s3_catalog_append"
+
+    catalog = td.AWSGlue(
+        definition=s3_config["CATALOG_DEFINITION"],
+        tables=table_name,
+        if_table_exists="append",
+    )
+
+    output_s3_catalog_append.output.catalog = catalog
+
     catalog_definition = _recursively_evaluate_secret(
         output_s3_catalog_append.output.catalog.definition
     )
     catalog = load_catalog(**catalog_definition)
-    namespace = f"testing_namespace_append_{uuid.uuid4()}"
     catalog.create_namespace(namespace)
-    table_name = f"{namespace}.s3_catalog_append"
-    output_s3_catalog_append.output.catalog.tables = table_name
+    catalog_bucket_name = (
+        f'{s3_config["CATALOG_BUCKET_NAME_PREFIX"]}-{uuid.uuid4().hex[:16]}'
+    )
+    create_bucket(catalog_bucket_name, s3_config["REGION"], s3_client)
     output_s3_catalog_append.output.catalog.auto_create_at = (
-        f"s3://tabsdata-us-east-1-catalog-metadata/{namespace}/s3_catalog_append"
+        f"s3://{catalog_bucket_name}/{namespace}/s3_catalog_append"
     )
 
     files_to_delete = []
@@ -326,6 +395,7 @@ def test_output_s3_catalog_append(tmp_path, s3_client, s3_config):
             )
             output_s3_catalog_append.output.uri = output_file
             output_s3_catalog_append.output.credentials = s3_config["CREDENTIALS"]
+            output_s3_catalog_append.output.region = s3_config["REGION"]
 
             context_archive = create_bundle_archive(
                 output_s3_catalog_append,
@@ -403,6 +473,8 @@ def test_output_s3_catalog_append(tmp_path, s3_client, s3_config):
 
         for file in files_to_delete:
             s3_client.delete_object(Bucket=bucket_name, Key=file)
+
+        delete_bucket(catalog_bucket_name, s3_client)
 
 
 @pytest.mark.integration
@@ -491,7 +563,6 @@ def test_output_s3_catalog_no_auto_create_at_fails(tmp_path, s3_client, s3_confi
                 pass
 
 
-@pytest.mark.skip("Pending fixing coexistence of S3 anf Glue credentials & regions")
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.s3
@@ -500,6 +571,17 @@ def test_output_s3_catalog_no_auto_create_at_fails(tmp_path, s3_client, s3_confi
 def test_output_s3_catalog_schema_update(tmp_path, s3_client, s3_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_s3_catalog_schema_update = copy.deepcopy(output_s3_catalog_schema_strategy)
+
+    namespace = f"testing_namespace_schema_update_{uuid.uuid4()}"
+    table_name = f"{namespace}.s3_catalog_schema_update"
+
+    catalog = td.AWSGlue(
+        definition=s3_config["CATALOG_DEFINITION"],
+        tables=table_name,
+    )
+
+    output_s3_catalog_schema_update.output.catalog = catalog
+
     output_file = (
         f"{s3_config['URI']}/testing_output"
         "/test_output_s3_catalog_schema_update_"
@@ -510,13 +592,11 @@ def test_output_s3_catalog_schema_update(tmp_path, s3_client, s3_config):
         output_s3_catalog_schema_update.output.catalog.definition
     )
     catalog = load_catalog(**catalog_definition)
-    namespace = f"testing_namespace_schema_update_{uuid.uuid4()}"
     catalog.create_namespace(namespace)
-    table_name = f"{namespace}.s3_catalog_schema_update"
 
-    output_s3_catalog_schema_update.output.catalog.tables = table_name
     output_s3_catalog_schema_update.output.catalog.schema_strategy = "update"
     output_s3_catalog_schema_update.output.credentials = s3_config["CREDENTIALS"]
+    output_s3_catalog_schema_update.output.region = s3_config["REGION"]
 
     context_archive = create_bundle_archive(
         output_s3_catalog_schema_update,
@@ -524,9 +604,11 @@ def test_output_s3_catalog_schema_update(tmp_path, s3_client, s3_config):
         save_location=tmp_path,
     )
 
-    table_location = (
-        f"s3://tabsdata-us-east-1-catalog-metadata/{namespace}/s3_catalog_schema_update"
+    catalog_bucket_name = (
+        f'{s3_config["CATALOG_BUCKET_NAME_PREFIX"]}-{uuid.uuid4().hex[:16]}'
     )
+    create_bucket(catalog_bucket_name, s3_config["REGION"], s3_client)
+    table_location = f"s3://{catalog_bucket_name}/{namespace}/s3_catalog_schema_update"
     example_df = pl.DataFrame({"first_column": [1, 2, 3], "second_column": [4, 5, 6]})
     pyarrow_table = example_df.to_arrow()
     catalog.create_table(
@@ -602,8 +684,9 @@ def test_output_s3_catalog_schema_update(tmp_path, s3_client, s3_config):
             except:
                 pass
 
+        delete_bucket(catalog_bucket_name, s3_client)
 
-@pytest.mark.skip("Pending fixing coexistence of S3 anf Glue credentials & regions")
+
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.s3
@@ -618,17 +701,26 @@ def test_output_s3_catalog_schema_strict(tmp_path, s3_client, s3_config):
         f"{uuid.uuid4()}.parquet"
     )
     output_s3_catalog_schema_strict.output.uri = output_file
+
+    namespace = f"testing_namespace_schema_strict_{uuid.uuid4()}"
+    table_name = f"{namespace}.s3_catalog_schema_strict"
+
+    catalog = td.AWSGlue(
+        definition=s3_config["CATALOG_DEFINITION"],
+        tables=table_name,
+    )
+
+    output_s3_catalog_schema_strict.output.catalog = catalog
+
     catalog_definition = _recursively_evaluate_secret(
         output_s3_catalog_schema_strict.output.catalog.definition
     )
     catalog = load_catalog(**catalog_definition)
-    namespace = f"testing_namespace_schema_strict_{uuid.uuid4()}"
     catalog.create_namespace(namespace)
-    table_name = f"{namespace}.s3_catalog_schema_strict"
 
-    output_s3_catalog_schema_strict.output.catalog.tables = table_name
     output_s3_catalog_schema_strict.output.catalog.schema_strategy = "strict"
     output_s3_catalog_schema_strict.output.credentials = s3_config["CREDENTIALS"]
+    output_s3_catalog_schema_strict.output.region = s3_config["REGION"]
 
     context_archive = create_bundle_archive(
         output_s3_catalog_schema_strict,
@@ -636,9 +728,11 @@ def test_output_s3_catalog_schema_strict(tmp_path, s3_client, s3_config):
         save_location=tmp_path,
     )
 
-    table_location = (
-        f"s3://tabsdata-us-east-1-catalog-metadata/{namespace}/s3_catalog_schema_strict"
+    catalog_bucket_name = (
+        f'{s3_config["CATALOG_BUCKET_NAME_PREFIX"]}-{uuid.uuid4().hex[:16]}'
     )
+    create_bucket(catalog_bucket_name, s3_config["REGION"], s3_client)
+    table_location = f"s3://{catalog_bucket_name}/{namespace}/s3_catalog_schema_strict"
     example_df = pl.DataFrame({"first_column": [1, 2, 3], "second_column": [4, 5, 6]})
     pyarrow_table = example_df.to_arrow()
     catalog.create_table(
@@ -689,8 +783,9 @@ def test_output_s3_catalog_schema_strict(tmp_path, s3_client, s3_config):
             except:
                 pass
 
+        delete_bucket(catalog_bucket_name, s3_client)
 
-@pytest.mark.skip("Pending fixing coexistence of S3 anf Glue credentials & regions")
+
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.s3
@@ -709,16 +804,25 @@ def test_output_s3_catalog_partition(tmp_path, s3_client, s3_config):
         f"{uuid.uuid4()}_$FRAGMENT_IDX.parquet"
     )
     output_s3_catalog_partition.output.uri = output_file
+
+    namespace = f"testing_namespace_partition_{uuid.uuid4()}"
+    table_name = f"{namespace}.s3_catalog_partition"
+
+    catalog = td.AWSGlue(
+        definition=s3_config["CATALOG_DEFINITION"],
+        tables=table_name,
+    )
+
+    output_s3_catalog_partition.output.catalog = catalog
+
     catalog_definition = _recursively_evaluate_secret(
         output_s3_catalog_partition.output.catalog.definition
     )
     catalog = load_catalog(**catalog_definition)
-    namespace = f"testing_namespace_partition_{uuid.uuid4()}"
     catalog.create_namespace(namespace)
-    table_name = f"{namespace}.s3_catalog_partition"
 
-    output_s3_catalog_partition.output.catalog.tables = table_name
     output_s3_catalog_partition.output.credentials = s3_config["CREDENTIALS"]
+    output_s3_catalog_partition.output.region = s3_config["REGION"]
 
     context_archive = create_bundle_archive(
         output_s3_catalog_partition,
@@ -726,9 +830,11 @@ def test_output_s3_catalog_partition(tmp_path, s3_client, s3_config):
         save_location=tmp_path,
     )
 
-    table_location = (
-        f"s3://tabsdata-us-east-1-catalog-metadata/{namespace}/s3_catalog_partition"
+    catalog_bucket_name = (
+        f'{s3_config["CATALOG_BUCKET_NAME_PREFIX"]}-{uuid.uuid4().hex[:16]}'
     )
+    create_bucket(catalog_bucket_name, s3_config["REGION"], s3_client)
+    table_location = f"s3://{catalog_bucket_name}/{namespace}/s3_catalog_partition"
     date_range = pd.date_range(start="1900-01-01", end=pd.Timestamp.now(), freq="D")
     random_dates = np.random.choice(date_range, size=10)
     random_numbers = np.random.rand(10)
@@ -816,8 +922,9 @@ def test_output_s3_catalog_partition(tmp_path, s3_client, s3_config):
             except:
                 pass
 
+        delete_bucket(catalog_bucket_name, s3_client)
 
-@pytest.mark.skip("Pending fixing coexistence of S3 anf Glue credentials & regions")
+
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.s3
@@ -837,27 +944,48 @@ def test_output_s3_catalog_region_creds(tmp_path, s3_client, s3_config):
         output_file_0,
         output_file_1,
     ]
+
+    namespace = f"testing_namespace_region_creds_{uuid.uuid4()}"
+    table_0 = f"{namespace}.s3_catalog_region_creds_0"
+    table_1 = f"{namespace}.s3_catalog_region_creds_1"
+
+    definition = {
+        "name": "default",
+        "type": "glue",
+    }
+    credentials = td.S3AccessKeyCredentials(
+        td.EnvironmentSecret(s3_config["ACCESS_KEY_ENV"]),
+        td.EnvironmentSecret(s3_config["SECRET_KEY_ENV"]),
+    )
+    region = s3_config["REGION"]
+
+    catalog = td.AWSGlue(
+        definition=definition,
+        s3_region=region,
+        s3_credentials=credentials,
+        tables=[
+            table_0,
+            table_1,
+        ],
+    )
+
+    output_s3_catalog_region_creds.output.catalog = catalog
+
     catalog_definition = _recursively_evaluate_secret(
         output_s3_catalog_region_creds.output.catalog.definition
     )
     catalog = load_catalog(**catalog_definition)
-    namespace = f"testing_namespace_region_creds_{uuid.uuid4()}"
     catalog.create_namespace(namespace)
-    table_0 = f"{namespace}.s3_catalog_region_creds_0"
-    table_1 = f"{namespace}.s3_catalog_region_creds_1"
-
-    output_s3_catalog_region_creds.output.catalog.tables = [table_0, table_1]
+    catalog_bucket_name = (
+        f'{s3_config["CATALOG_BUCKET_NAME_PREFIX"]}-{uuid.uuid4().hex[:16]}'
+    )
+    create_bucket(catalog_bucket_name, s3_config["REGION"], s3_client)
     output_s3_catalog_region_creds.output.catalog.auto_create_at = [
-        (
-            "s3://tabsdata-us-east-1-catalog-metadata/"
-            f"{namespace}/s3_catalog_region_creds_0"
-        ),
-        (
-            "s3://tabsdata-us-east-1-catalog-metadata/"
-            f"{namespace}/s3_catalog_region_creds_1"
-        ),
+        f"s3://{catalog_bucket_name}/{namespace}/s3_catalog_region_creds_0",
+        f"s3://{catalog_bucket_name}/{namespace}/s3_catalog_region_creds_1",
     ]
     output_s3_catalog_region_creds.output.credentials = s3_config["CREDENTIALS"]
+    output_s3_catalog_region_creds.output.region = s3_config["REGION"]
     output_s3_catalog_region_creds.output.catalog.s3_credentials = s3_config[
         "CREDENTIALS"
     ]
@@ -943,3 +1071,5 @@ def test_output_s3_catalog_region_creds(tmp_path, s3_client, s3_config):
                 operation()
             except:
                 pass
+
+        delete_bucket(catalog_bucket_name, s3_client)

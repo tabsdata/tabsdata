@@ -106,6 +106,10 @@ class AWSGlue(Catalog):
     AWS_GLUE_REGION = "client.region"
     AWS_GLUE_SECRET_ACCESS_KEY = "client.secret-access-key"
 
+    S3_ACCESS_KEY_ID = "s3.access-key-id"
+    S3_REGION = "s3.region"
+    S3_SECRET_ACCESS_KEY = "s3.secret-access-key"
+
     def __init__(
         self,
         definition: dict,
@@ -1215,7 +1219,7 @@ class S3Destination(DestinationPlugin):
             )
 
     @property
-    def credentials(self) -> S3Credentials:
+    def credentials(self) -> S3Credentials | S3AccessKeyCredentials:
         """
         S3Credentials: The credentials required to access the S3 bucket.
         """
@@ -1370,6 +1374,7 @@ def _write_results_in_final_files(
                     catalog.tables[number],
                     result,
                     number,
+                    destination,
                 )
     logger.info(f"Results stored in file destination {destination} successfully.")
 
@@ -1603,6 +1608,7 @@ def _store_file_in_catalog(
     destination_table: str,
     lf_list: list[pl.LazyFrame],
     index: int,
+    destination: S3Destination,
 ):
 
     import pyarrow as pa
@@ -1613,6 +1619,10 @@ def _store_file_in_catalog(
     definition = catalog.definition
     logger.debug(f"Catalog definition: {definition}")
     definition = _recursively_evaluate_secret(definition)
+    if isinstance(destination, S3Destination):
+        definition = _add_s3_credentials_to_catalog_definition(
+            definition, catalog, destination
+        )
     iceberg_catalog = load_catalog(**definition)
     logger.debug(f"Catalog loaded: {iceberg_catalog}")
     schemas = []
@@ -1690,6 +1700,38 @@ def _store_file_in_catalog(
         logger.debug(
             f"File '{path_to_table_files}' added to table '{destination_table}'"
         )
+
+
+def _add_s3_credentials_to_catalog_definition(
+    definition: dict, catalog: AWSGlue, destination: S3Destination
+):
+    destination_credentials: S3AccessKeyCredentials = destination.credentials
+    logger.debug("Adding S3 and AWS Glue credentials to catalog definition if missing")
+    # Set S3 credentials in the catalog definition if not already set
+    definition[catalog.S3_ACCESS_KEY_ID] = (
+        definition.get(catalog.S3_ACCESS_KEY_ID)
+        or destination_credentials.aws_access_key_id.secret_value
+    )
+    definition[catalog.S3_REGION] = (
+        definition.get(catalog.S3_REGION) or destination.region
+    )
+    definition[catalog.S3_SECRET_ACCESS_KEY] = (
+        definition.get(catalog.S3_SECRET_ACCESS_KEY)
+        or destination_credentials.aws_secret_access_key.secret_value
+    )
+    # Set AWS Glue credentials in the catalog definition if not already set
+    definition[catalog.AWS_GLUE_ACCESS_KEY_ID] = (
+        definition.get(catalog.AWS_GLUE_ACCESS_KEY_ID)
+        or destination_credentials.aws_access_key_id.secret_value
+    )
+    definition[catalog.AWS_GLUE_REGION] = (
+        definition.get(catalog.AWS_GLUE_REGION) or destination.region
+    )
+    definition[catalog.AWS_GLUE_SECRET_ACCESS_KEY] = (
+        definition.get(catalog.AWS_GLUE_SECRET_ACCESS_KEY)
+        or destination_credentials.aws_secret_access_key.secret_value
+    )
+    return definition
 
 
 def _verify_fragment_destination(
