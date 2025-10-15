@@ -1321,6 +1321,16 @@ class TableFrame:
         ) -> td_typing.Series:
             if udf is None:
                 udf = function
+
+            if any(
+                column.name.startswith(td_constants.TD_COLUMN_PREFIX)
+                for column in udf._schema.columns
+            ):
+                raise ValueError(
+                    "The output column names of a UDF cannot use the reserved system"
+                    " columns namespace (td$)"
+                )
+
             expanded_series_in = [
                 series.struct.field(name) for name in series.struct.fields
             ]
