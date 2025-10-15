@@ -1,8 +1,7 @@
 #
 #  Copyright 2025 Tabs Data Inc.
 #
-
-
+import copy
 from abc import ABC
 from dataclasses import dataclass
 from typing import Any, Union
@@ -111,7 +110,7 @@ class UDF(ABC):
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
 
-        output_columns_implemented = cls.output_columns is not UDF.output_columns
+        output_columns_implemented = cls.with_columns is not UDF.with_columns
         if output_columns_implemented:
             raise TypeError(
                 f"{cls.__name__} must not implement 'output_columns' method."
@@ -194,7 +193,31 @@ class UDF(ABC):
 
     pass
 
-    def output_columns(
+    def columns(self) -> list[tuple[str, td_typing.DataType]]:
+        columns = self.__schema.columns
+        if len(columns) == 0:
+            raise ValueError("Output schema must be specified.")
+
+        names = []
+        columns = []
+        for i, column in enumerate(columns):
+            if column.name is None:
+                raise ValueError(
+                    f"Column at index {i} is missing a name. "
+                    "Use output_columns() method to provide missing column names."
+                )
+            if column.dtype is None:
+                raise ValueError(
+                    f"Column at index {i} is missing a data type. "
+                    "Use output_columns method to provide missing column data types."
+                )
+            names.append(column.name)
+            columns.append((column.name, column.dtype))
+        if len(set(names)) != len(names):
+            raise ValueError("Output schema cannot have duplicate column names.")
+        return columns
+
+    def with_columns(
         self,
         output_columns: Union[
             tuple[str | None, td_typing.DataType | None],
@@ -250,7 +273,7 @@ class UDF(ABC):
             schema_columns.extend(self.__schema.columns[len(columns_in) :])
 
         self.__schema.columns = schema_columns
-        return self
+        return copy.deepcopy(self)
 
     def _columns_dict(
         self, columns: dict[int, tuple[str | None, td_typing.DataType | None]]
@@ -282,7 +305,7 @@ class UDF(ABC):
             schema_columns[i] = _Column(name=name, dtype=dtype)
 
         self.__schema.columns = schema_columns
-        return self
+        return copy.deepcopy(self)
 
     @property
     def _schema(self) -> _Schema:

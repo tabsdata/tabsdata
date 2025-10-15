@@ -254,9 +254,9 @@ class TestUDFExperience:
             [(start_name1, td.Float64), (start_name2, td.Float64)]
         )
 
-        passthrough.output_columns(
+        passthrough = passthrough.with_columns(
             [(f"{start_name1}_renamed", td.String)]
-        ).output_columns({1: (f"{start_name2}_final", None)})
+        ).with_columns({1: (f"{start_name2}_final", None)})
 
         result_tf = tf.udf(td.col("bill_length_mm", "bill_depth_mm"), passthrough)
         collected = result_tf._lf.collect()

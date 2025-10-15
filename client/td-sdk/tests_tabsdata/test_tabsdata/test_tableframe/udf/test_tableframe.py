@@ -846,7 +846,7 @@ class TestTableFrameUDFOutputNames:
         original_columns = set(original_df.columns)
 
         udf = RenameUDF([("doubled", td.Int64)])
-        udf.output_columns([("doubled_new", None)])  # Override name
+        udf.with_columns([("doubled_new", None)])  # Override name
         result = tf.udf(td.col("intColumn"), udf)
 
         assert isinstance(result, td.TableFrame)
@@ -967,7 +967,7 @@ class TestTableFrameUDFOutputNames:
         original_columns = set(original_df.columns)
         result = tf.udf(
             td.col("intColumn"),
-            EmptyNamesWithAliasUDF(("proper_name", td.Int64)).output_columns(
+            EmptyNamesWithAliasUDF(("proper_name", td.Int64)).with_columns(
                 (None, None)
             ),
         )

@@ -65,7 +65,7 @@ class TestUDFSchema:
 
     def test_output_columns_full_update(self):
         udf = SimpleUDF([("a", td.Int64), ("b", td.String)])
-        udf.output_columns([("c", td.Float32), ("d", td.Boolean)])
+        udf.with_columns([("c", td.Float32), ("d", td.Boolean)])
         schema = udf._schema
         assert schema.columns[0].name == "c"
         assert schema.columns[0].dtype == td.Float32
@@ -74,7 +74,7 @@ class TestUDFSchema:
 
     def test_output_columns_partial_update_preserves_rest(self):
         udf = SimpleUDF([("a", td.Int64), ("b", td.String)])
-        udf.output_columns([("c", td.Float32)])
+        udf.with_columns([("c", td.Float32)])
         schema = udf._schema
         assert len(schema.columns) == 2
         assert schema.columns[0].name == "c"
@@ -84,7 +84,7 @@ class TestUDFSchema:
 
     def test_output_columns_with_single_tuple(self):
         udf = SimpleUDF([("a", td.Int64), ("b", td.String)])
-        udf.output_columns(("c", td.Float32))
+        udf.with_columns(("c", td.Float32))
         schema = udf._schema
         assert len(schema.columns) == 2
         assert schema.columns[0].name == "c"
@@ -94,14 +94,14 @@ class TestUDFSchema:
 
     def test_output_columns_list_preserve_name(self):
         udf = SimpleUDF([("a", td.Int64)])
-        udf.output_columns([(None, td.Float32)])
+        udf.with_columns([(None, td.Float32)])
         schema = udf._schema
         assert schema.columns[0].name == "a"
         assert schema.columns[0].dtype == td.Float32
 
     def test_output_columns_list_preserve_dtype(self):
         udf = SimpleUDF([("a", td.Int64)])
-        udf.output_columns([("b", None)])
+        udf.with_columns([("b", None)])
         schema = udf._schema
         assert schema.columns[0].name == "b"
         assert schema.columns[0].dtype == td.Int64
@@ -112,11 +112,11 @@ class TestUDFSchema:
             ValueError,
             match="expects at most 1 columns, but 2 were provided",
         ):
-            udf.output_columns([("b", td.Int32), ("c", td.String)])
+            udf.with_columns([("b", td.Int32), ("c", td.String)])
 
     def test_output_columns_update_single(self):
         udf = SimpleUDF([("a", td.Int64), ("b", td.String)])
-        udf.output_columns({1: ("c", td.Float32)})
+        udf.with_columns({1: ("c", td.Float32)})
         schema = udf._schema
         assert schema.columns[0].name == "a"
         assert schema.columns[0].dtype == td.Int64
@@ -125,14 +125,14 @@ class TestUDFSchema:
 
     def test_output_columns_dict_preserve_name(self):
         udf = SimpleUDF([("a", td.Int64)])
-        udf.output_columns({0: (None, td.Float32)})
+        udf.with_columns({0: (None, td.Float32)})
         schema = udf._schema
         assert schema.columns[0].name == "a"
         assert schema.columns[0].dtype == td.Float32
 
     def test_output_columns_dict_preserve_dtype(self):
         udf = SimpleUDF([("a", td.Int64)])
-        udf.output_columns({0: ("b", None)})
+        udf.with_columns({0: ("b", None)})
         schema = udf._schema
         assert schema.columns[0].name == "b"
         assert schema.columns[0].dtype == td.Int64
@@ -143,7 +143,7 @@ class TestUDFSchema:
             IndexError,
             match="Invalid index provided",
         ):
-            udf.output_columns({1: ("b", td.Int32)})
+            udf.with_columns({1: ("b", td.Int32)})
 
     def test_output_columns_invalid_index_negative_raises_error(self):
         udf = SimpleUDF([("a", td.Int64)])
@@ -151,7 +151,7 @@ class TestUDFSchema:
             IndexError,
             match="Invalid index provided",
         ):
-            udf.output_columns({-1: ("b", td.Int32)})
+            udf.with_columns({-1: ("b", td.Int32)})
 
     def test_internal_names_method_success(self):
         udf = SimpleUDF([("a", td.Int64), ("b", td.String)])

@@ -25,7 +25,7 @@ class CombineInputsUDF(UDF):
 def test_udf_single_positional_expr():
     data = {"a": [1, 2], "b": ["x", "y"]}
     tf = td.TableFrame(data)
-    result = tf.udf("a", function=CombineInputsUDF())
+    result = tf.udf("a", CombineInputsUDF())
     collected = result.to_polars_df()
     assert "out_0" in collected.columns
     assert collected["out_0"].to_list() == ["1", "2"]
@@ -34,7 +34,7 @@ def test_udf_single_positional_expr():
 def test_udf_multiple_positional_exprs():
     data = {"a": [1, 2], "b": ["x", "y"]}
     tf = td.TableFrame(data)
-    result = tf.udf("a", "b", function=CombineInputsUDF())
+    result = tf.udf(["a", "b"], function=CombineInputsUDF())
     collected = result.to_polars_df()
     assert "out_0" in collected.columns
     assert collected["out_0"].to_list() == ["1_x", "2_y"]
@@ -94,6 +94,6 @@ def test_system_column_in_output_columns():
         ),
     ):
         result = tf.udf(
-            "a", function=OutputSystemColumnsUDF().output_columns(("$td.id", None))
+            "a", function=OutputSystemColumnsUDF().with_columns(("$td.id", None))
         )
         _ = result._lf.collect()

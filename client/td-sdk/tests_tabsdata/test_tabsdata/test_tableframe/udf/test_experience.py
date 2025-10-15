@@ -36,20 +36,20 @@ def test_multiple_outputs_from_multiple_inputs_on_batch():
     # fmt: off
     result = tf.udf(td.col("a", "b"),
                     sum_and_product_udf
-                    .output_columns([("the_sum", td.Int32),
-                                     ("the_product", td.Int32)])
-                    .output_columns([("a_sum", None),
-                                     (None, td.Int32)])
-                    .output_columns([(None, td.Int32),
-                                     ("a_product", None)])
-                    .output_columns({0: ("this_sum", td.Float64),
-                                     1: ("this_product", None)})
-                    .output_columns({0: ("this_sum", None),
-                                     1: ("this_product", td.Float64)})
-                    .output_columns({0: (None, td.Float32)})
-                    .output_columns({1: (None, td.Float32)})
-                    .output_columns({0: ("that_sum", None)})
-                    .output_columns({1: ("that_product", None)}),
+                    .with_columns([("the_sum", td.Int32),
+                                   ("the_product", td.Int32)])
+                    .with_columns([("a_sum", None),
+                                   (None, td.Int32)])
+                    .with_columns([(None, td.Int32),
+                                   ("a_product", None)])
+                    .with_columns({0: ("this_sum", td.Float64),
+                                   1: ("this_product", None)})
+                    .with_columns({0: ("this_sum", None),
+                                   1: ("this_product", td.Float64)})
+                    .with_columns({0: (None, td.Float32)})
+                    .with_columns({1: (None, td.Float32)})
+                    .with_columns({0: ("that_sum", None)})
+                    .with_columns({1: ("that_product", None)}),
                     )
     # fmt: on
 
@@ -91,20 +91,20 @@ def test_multiple_outputs_from_multiple_inputs_on_element():
     # fmt: off
     result = tf.udf(td.col("a", "b"),
                     sum_and_product_udf
-                    .output_columns([("the_sum", td.Int32),
-                                     ("the_product", td.Int32)])
-                    .output_columns([("a_sum", None),
-                                     (None, td.Int32)])
-                    .output_columns([(None, td.Int32),
-                                     ("a_product", None)])
-                    .output_columns({0: ("this_sum", td.Float64),
-                                     1: ("this_product", None)})
-                    .output_columns({0: ("this_sum", None),
-                                     1: ("this_product", td.Float64)})
-                    .output_columns({0: (None, td.Float32)})
-                    .output_columns({1: (None, td.Float32)})
-                    .output_columns({0: ("that_sum", None)})
-                    .output_columns({1: ("that_product", None)}),
+                    .with_columns([("the_sum", td.Int32),
+                                   ("the_product", td.Int32)])
+                    .with_columns([("a_sum", None),
+                                   (None, td.Int32)])
+                    .with_columns([(None, td.Int32),
+                                   ("a_product", None)])
+                    .with_columns({0: ("this_sum", td.Float64),
+                                   1: ("this_product", None)})
+                    .with_columns({0: ("this_sum", None),
+                                   1: ("this_product", td.Float64)})
+                    .with_columns({0: (None, td.Float32)})
+                    .with_columns({1: (None, td.Float32)})
+                    .with_columns({0: ("that_sum", None)})
+                    .with_columns({1: ("that_product", None)}),
                     )
     # fmt: on
 
@@ -151,20 +151,20 @@ def test_multiple_outputs_from_multiple_inputs_on_batch_with_parameter():
     # fmt: off
     result = tf.udf(td.col("a", "b"),
                     sum_and_product_udf(5)
-                    .output_columns([("the_sum", td.Int32),
-                                     ("the_product", td.Int32)])
-                    .output_columns([("a_sum", None),
-                                     (None, td.Int32)])
-                    .output_columns([(None, td.Int32),
-                                     ("a_product", None)])
-                    .output_columns({0: ("this_sum", td.Float64),
-                                     1: ("this_product", None)})
-                    .output_columns({0: ("this_sum", None),
-                                     1: ("this_product", td.Float64)})
-                    .output_columns({0: (None, td.Float32)})
-                    .output_columns({1: (None, td.Float32)})
-                    .output_columns({0: ("that_sum", None)})
-                    .output_columns({1: ("that_product", None)}),
+                    .with_columns([("the_sum", td.Int32),
+                                   ("the_product", td.Int32)])
+                    .with_columns([("a_sum", None),
+                                   (None, td.Int32)])
+                    .with_columns([(None, td.Int32),
+                                   ("a_product", None)])
+                    .with_columns({0: ("this_sum", td.Float64),
+                                   1: ("this_product", None)})
+                    .with_columns({0: ("this_sum", None),
+                                   1: ("this_product", td.Float64)})
+                    .with_columns({0: (None, td.Float32)})
+                    .with_columns({1: (None, td.Float32)})
+                    .with_columns({0: ("that_sum", None)})
+                    .with_columns({1: ("that_product", None)}),
                     )
     # fmt: on
 
@@ -207,20 +207,20 @@ def test_multiple_outputs_from_multiple_inputs_on_element_with_parameter():
     # fmt: off
     result = tf.udf(td.col("a", "b"),
                     sum_and_product_udf(5)
-                    .output_columns([("the_sum", td.Int32),
-                                     ("the_product", td.Int32)])
-                    .output_columns([("a_sum", None),
-                                     (None, td.Int32)])
-                    .output_columns([(None, td.Int32),
-                                     ("a_product", None)])
-                    .output_columns({0: ("this_sum", td.Float64),
-                                     1: ("this_product", None)})
-                    .output_columns({0: ("this_sum", None),
-                                     1: ("this_product", td.Float64)})
-                    .output_columns({0: (None, td.Float32)})
-                    .output_columns({1: (None, td.Float32)})
-                    .output_columns({0: ("that_sum", None)})
-                    .output_columns({1: ("that_product", None)}),
+                    .with_columns([("the_sum", td.Int32),
+                                   ("the_product", td.Int32)])
+                    .with_columns([("a_sum", None),
+                                   (None, td.Int32)])
+                    .with_columns([(None, td.Int32),
+                                   ("a_product", None)])
+                    .with_columns({0: ("this_sum", td.Float64),
+                                   1: ("this_product", None)})
+                    .with_columns({0: ("this_sum", None),
+                                   1: ("this_product", td.Float64)})
+                    .with_columns({0: (None, td.Float32)})
+                    .with_columns({1: (None, td.Float32)})
+                    .with_columns({0: ("that_sum", None)})
+                    .with_columns({1: ("that_product", None)}),
                     )
     # fmt: on
 

@@ -746,9 +746,9 @@ def execute_udf_test(
     spec = OPERATION_SPECS[operation_key]
     udf_instance = spec.factory()
     udf_function = (
-        udf_instance.output_columns(payload)
+        udf_instance.with_columns(payload)
         if method == "all"
-        else udf_instance.output_columns(payload)
+        else udf_instance.with_columns(payload)
     )
     column_expr = td.col(*spec.expr)
     result_tf = table_frame.udf(column_expr, udf_function)
