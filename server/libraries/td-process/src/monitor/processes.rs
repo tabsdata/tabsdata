@@ -111,7 +111,7 @@ fn process_tree(
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| base_name.clone())
         }
-    } else if exec == "bash" || exec == "sh" {
+    } else if exec == "bash" || exec == "sh" || exec == "zsh" {
         // If running on Unixes shell, we extract the file name of the running script.
         cmd.get(1)
             .filter(|s| !s.starts_with('-'))

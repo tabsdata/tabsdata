@@ -338,24 +338,24 @@ env_scripts = [
     new_lib_path = set ${old_lib_path}
     new_lib_path = concat ${python_venv}/lib ${separator} ${old_lib_path}
 
-    info "📚 Using library path (${lib_path_var}): '${new_lib_path}'"
+    debug "📚 Using library path (${lib_path_var}): '${new_lib_path}'"
 
     set_env ${lib_path_var} ${new_lib_path}
 
     malloc_stack_loggin = get_env MallocStackLogging
     malloc_stack_loggin_compact = get_env MallocStackLoggingNoCompact
 
-    info "🏗 Environment variable 'MallocStackLogging' former value is '${malloc_stack_loggin}'."
-    info "🏗 Environment variable 'MallocStackLoggingNoCompact' former value is '${malloc_stack_loggin_compact}'."
+    debug "🏗 Environment variable 'MallocStackLogging' former value is '${malloc_stack_loggin}'."
+    debug "🏗 Environment variable 'MallocStackLoggingNoCompact' former value is '${malloc_stack_loggin_compact}'."
 
     unset_env MallocStackLogging
     unset_env MallocStackLoggingNoCompact
 
-    info "🔧 Cleared environment variables 'MallocStackLogging' & 'MallocStackLoggingNoCompact'."
+    debug "🔧 Cleared environment variables 'MallocStackLogging' & 'MallocStackLoggingNoCompact'."
 
     malloc_stack_loggin = get_env MallocStackLogging
     malloc_stack_loggin_compact = get_env MallocStackLoggingNoCompact
 
-    info "🏗 Environment variable 'MallocStackLogging' current value is '${malloc_stack_loggin}'."
-    info "🏗 Environment variable 'MallocStackLoggingNoCompact' current value is '${malloc_stack_loggin_compact}'."
+    debug "🏗 Environment variable 'MallocStackLogging' current value is '${malloc_stack_loggin}'."
+    debug "🏗 Environment variable 'MallocStackLoggingNoCompact' current value is '${malloc_stack_loggin_compact}'."
     ''']

@@ -69,6 +69,7 @@ CLEAN_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/ta
 COPY_ASSETS_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/copy_assets.py", normalize = true }
 GENERATE_PYDOC_CSV_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/generate_pydoc_csv.py", normalize = true }
 LOCK_REQUIREMENTS_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/lock_requirements.py", normalize = true }
+PS_SUPERVISORS_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/ps_supervisors.py", normalize = true }
 REPORT_LICENSES_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/report_licenses.py", normalize = true }
 REPORT_LICENSES_PY_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/report_licenses_py.py", normalize = true }
 REPORT_LICENSES_RS_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/report_licenses_rs.py", normalize = true }
@@ -83,6 +84,10 @@ DENY_TOML = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/.cargo/deny.toml", normal
 PANTS_JSON = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/.cargo/pants.json", normalize = true }
 
 SWAGGER_UI_OVERWRITE_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/server/binaries/td-server/resources/swagger", normalize = true }
+
+TESTING_SUPERVISORS_CONFIG = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/./variant/config/pytest/supervisor.yaml", normalize = true }
+TESTING_INSTANCE_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/testing_instance.py", normalize = true }
+TESTING_INSTANCES_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/testing_instances.py", normalize = true }
 
 [config]
 load_script = [

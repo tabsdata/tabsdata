@@ -2,7 +2,7 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
-[tasks.__os__start_pytest_tabsdata_server]
+[tasks.__os__ps_pytest_tabsdata_servers]
 plugin = "td-task-tracker"
 category = "04 - Test"
 private = true
@@ -11,13 +11,22 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    debug "🔷 _____ Starting tabsdata server (pytest)..."
+    debug "🚀 python ${PS_SUPERVISORS_SCRIPT}"
+    exec --fail-on-error python ${PS_SUPERVISORS_SCRIPT}
+    ''']
 
-    trace "🛞 🔴 Process list >>>>>"
-    processes = exec python -c "import psutil; [print(f'{pi[\"pid\"]:>6} {pi[\"ppid\"]:>6} {pi.get(\"username\",\"?\"):>10} ' + ' '.join(pi['cmdline'] or [pi['name']])) for pi in (p.info for p in psutil.process_iter(['pid','ppid','username','name','cmdline']))]"
-    processes = trim ${processes.stdout}
-    trace "${processes}"
-    trace "🛞 🔴 <<<<<"
+[tasks.__os__start_pytest_tabsdata_servers]
+plugin = "td-task-tracker"
+category = "04 - Test"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🔷 _____ Starting tabsdata testing servers..."
+
+    cm_run_task __os__ps_pytest_tabsdata_servers
 
     if is_empty ${profile}
         build-folder = set "debug"
@@ -44,56 +53,59 @@ script = [
     if ${exists}
         debug "🔅 Using tdserver binary: '${os_family}' - '${tdserver}'"
 
-        forward_arguments = array
-        array_push ${forward_arguments} ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver}
-        array_push ${forward_arguments} start
-        array_push ${forward_arguments} --instance
-        array_push ${forward_arguments} pytest
-        array_push ${forward_arguments} --
+        instances = exec --fail-on-error python ${TESTING_INSTANCES_SCRIPT} ${TESTING_SUPERVISORS_CONFIG}
+        instances = split ${instances.stdout} "\n"
 
-        yaml_path = set "./variant/config/pytest/supervisor.yaml"
-        debug "🔅 Processing supervisor configuration override from: '${yaml_path}'"
+        for instance in ${instances}
+            instance = trim ${instance}
+            if not is_empty ${instance}
+                debug "🔅 Starting instance: ${instance}"
 
-        yaml_content = exec --fail-on-error python make/make-os/libraries/yml.py ${yaml_path}
-        yaml_content = trim ${yaml_content.stdout}
-        debug "🔅 Output of yaml parser:\n ${yaml_content}"
+                instance_arguments = array
+                array_push ${instance_arguments} ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver}
+                array_push ${instance_arguments} start
+                array_push ${instance_arguments} --instance
+                array_push ${instance_arguments} ${instance}
+                array_push ${instance_arguments} --
 
-        yaml_lines = split ${yaml_content.stdout} "\n"
-        for yaml_line in ${yaml_lines}
-            yaml_line = trim ${yaml_line}
-            is_yaml_line_empty = is_empty ${yaml_line}
-            if not ${is_yaml_line_empty}
-                array_push ${forward_arguments} ${yaml_line}
-            end
-        end
-        command = array_join ${forward_arguments} " "
+                debug "🚀 python ${TESTING_INSTANCE_SCRIPT} ${TESTING_SUPERVISORS_CONFIG} ${instance}"
+                instance_config = exec --fail-on-error python ${TESTING_INSTANCE_SCRIPT} ${TESTING_SUPERVISORS_CONFIG} ${instance}
+                instance_config = trim ${instance_config.stdout}
+                debug "🔅 Output of yaml parser for ${instance}:\n ${instance_config}"
 
-        debug "🚀 ${command}"
+                instance_parameters = split ${instance_config.stdout} "\n"
+                for yaml_line in ${instance_parameters}
+                    yaml_line = trim ${yaml_line}
+                    if not is_empty ${yaml_line}
+                        array_push ${instance_arguments} ${yaml_line}
+                    end
+                end
 
-        on_ga = get_env TD_ON_GA
-        on_ga_true = eq ${on_ga} "true"
-        os = os_family
-        if eq ${os} "windows"
-            exec --fail-on-error %{command}
-        else
-            if ${on_ga_true}
-                exec --fail-on-error %{command}
-            else
-                output = exec --fail-on-error %{command}
+                command = array_join ${instance_arguments} " "
+                debug "🚀 ${command}"
+
+                on_ga = get_env TD_ON_GA
+                on_ga_true = eq ${on_ga} "true"
+                os = os_family
+                if eq ${os} "windows"
+                    exec --fail-on-error %{command}
+                else
+                    if ${on_ga_true}
+                        exec --fail-on-error %{command}
+                    else
+                        output = exec --fail-on-error %{command}
+                    end
+                end
             end
         end
     else
         warn "🚚 Binaries for tdserver not available. Skipping tabsdata start."
     end
 
-    trace "🛞 🟢 Process list >>>>>"
-    processes = exec python -c "import psutil; [print(f'{pi[\"pid\"]:>6} {pi[\"ppid\"]:>6} {pi.get(\"username\",\"?\"):>10} ' + ' '.join(pi['cmdline'] or [pi['name']])) for pi in (p.info for p in psutil.process_iter(['pid','ppid','username','name','cmdline']))]"
-    processes = trim ${processes.stdout}
-    trace "${processes}"
-    trace "🛞 🟢 <<<<<"
+    cm_run_task __os__ps_pytest_tabsdata_servers
     ''']
 
-[tasks.__os__status_pytest_tabsdata_server]
+[tasks.__os__status_pytest_tabsdata_servers]
 plugin = "td-task-tracker"
 category = "04 - Test"
 private = true
@@ -102,13 +114,9 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    debug "🔷 _____ Checking status of tabsdata server (pytest)..."
+    debug "🔷 _____ Checking tabsdata testing servers..."
 
-    trace "🛞 🔴 Process list >>>>>"
-    processes = exec python -c "import psutil; [print(f'{pi[\"pid\"]:>6} {pi[\"ppid\"]:>6} {pi.get(\"username\",\"?\"):>10} ' + ' '.join(pi['cmdline'] or [pi['name']])) for pi in (p.info for p in psutil.process_iter(['pid','ppid','username','name','cmdline']))]"
-    processes = trim ${processes.stdout}
-    trace "${processes}"
-    trace "🛞 🔴 <<<<<"
+    cm_run_task __os__ps_pytest_tabsdata_servers
 
     if is_empty ${profile}
         build-folder = set "debug"
@@ -134,64 +142,68 @@ script = [
     exists = is_path_exists ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver}
     if ${exists}
         debug "🔅 Using tdserver binary: '${os_family}' - '${tdserver}'"
-        debug "🚀 ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} status --instance pytest"
 
-        status_timeout = calc 3 * 60
-        status_sleep = set 1000
-        status_attempts = calc ${status_timeout} * 1000
-        status_attempts = calc ${status_attempts} / ${status_sleep}
+        instances = exec --fail-on-error python ${TESTING_INSTANCES_SCRIPT} ${TESTING_SUPERVISORS_CONFIG}
+        instances = split ${instances.stdout} "\n"
 
-        status_attempt = set 0
-        status_running = set true
+        for instance in ${instances}
+            instance = trim ${instance}
+            if not is_empty ${instance}
+                debug "🔅 Checking instance: ${instance}"
 
-        while ${status_running}
-            trace "🛞 🔴 Process list >>>>>"
-            processes = exec python -c "import psutil; [print(f'{pi[\"pid\"]:>6} {pi[\"ppid\"]:>6} {pi.get(\"username\",\"?\"):>10} ' + ' '.join(pi['cmdline'] or [pi['name']])) for pi in (p.info for p in psutil.process_iter(['pid','ppid','username','name','cmdline']))]"
-            processes = trim ${processes.stdout}
-            trace "${processes}"
-            trace "🛞 🔴 <<<<<"
+                debug "🚀 ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} status --instance ${instance}"
 
-            output = exec --fail-on-error ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} status --instance pytest
+                status_timeout = calc 3 * 60
+                status_sleep = set 1000
+                status_attempts = calc ${status_timeout} * 1000
+                status_attempts = calc ${status_attempts} / ${status_sleep}
 
-            trace "🛞👀 Supervisor status >>>>>"
-            trace "🛞👀 <out.i>"
-            trace "${output.stdout}"
-            trace "🛞👀 <out.f>"
-            trace "🛞👀 <err.i>"
-            trace "${output.stderr}"
-            trace "🛞👀 <err.f>"
-            trace "🛞👀 <code.i>"
-            trace "${output.code}"
-            trace "🛞👀 <code.f>"
-            trace "🛞👀 <<<<<"
+                status_attempt = set 0
+                status_checking = set true
 
-            status_started = contains ${output.stdout} "apiserver"
-            if ${status_started}
-                debug "🔅 Verified supervisor & apiserver are running"
-                status_running = set false
-            else
-                debug ". ${status_attempt}"
-                status_attempt = calc ${status_attempt} + 1
-                status_exhausted = eq ${status_attempt} ${status_attempts}
-                if ${status_exhausted}
-                    error "😡 Cancelling execution as supervisor did not start after ${status_timeout} seconds"
-                    exit 1
+                while ${status_checking}
+                    output = exec --fail-on-error ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} status --instance ${instance}
+
+                    apiserver_started = contains ${output.stdout} "apiserver"
+                    aiagent_started = contains ${output.stdout} "aiagent"
+                    janitor_started = contains ${output.stdout} "janitor"
+                    if ${apiserver_started} and ${aiagent_started} and ${janitor_started}
+                        debug "🔅 Verified supervisor & (apiserver, aiagent, janitor) are running"
+                        status_checking = set false
+                    else
+                        debug ". ${status_attempt}"
+                        status_attempt = calc ${status_attempt} + 1
+                        status_exhausted = eq ${status_attempt} ${status_attempts}
+                        if ${status_exhausted}
+                            error "😡 Cancelling execution as supervisor did not start after ${status_timeout} seconds"
+
+                            debug "🛞👀 Supervisor status >>>>>"
+                            debug "🛞👀 <out.i>"
+                            debug "${output.stdout}"
+                            debug "🛞👀 <out.f>"
+                            debug "🛞👀 <err.i>"
+                            debug "${output.stderr}"
+                            debug "🛞👀 <err.f>"
+                            debug "🛞👀 <code.i>"
+                            debug "${output.code}"
+                            debug "🛞👀 <code.f>"
+                            debug "🛞👀 <<<<<"
+
+                            exit 1
+                        end
+                        sleep ${status_sleep}
+                    end
                 end
-                sleep ${status_sleep}
             end
         end
     else
         warn "🚚 Binaries for tdserver not available. Skipping tabsdata status."
     end
 
-    trace "🛞 🟢 Process list >>>>>"
-    processes = exec python -c "import psutil; [print(f'{pi[\"pid\"]:>6} {pi[\"ppid\"]:>6} {pi.get(\"username\",\"?\"):>10} ' + ' '.join(pi['cmdline'] or [pi['name']])) for pi in (p.info for p in psutil.process_iter(['pid','ppid','username','name','cmdline']))]"
-    processes = trim ${processes.stdout}
-    trace "${processes}"
-    trace "🛞 🟢 <<<<<"
+    cm_run_task __os__ps_pytest_tabsdata_servers
     ''']
 
-[tasks.__os__stop_pytest_tabsdata_server]
+[tasks.__os__stop_pytest_tabsdata_servers]
 plugin = "td-task-tracker"
 category = "04 - Test"
 private = true
@@ -200,13 +212,9 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    debug "🔷 _____ Stopping tabsdata server (pytest)..."
+    debug "🔷 _____ Stopping tabsdata testing servers..."
 
-    trace "🛞 🔴 Process list >>>>>"
-    processes = exec python -c "import psutil; [print(f'{pi[\"pid\"]:>6} {pi[\"ppid\"]:>6} {pi.get(\"username\",\"?\"):>10} ' + ' '.join(pi['cmdline'] or [pi['name']])) for pi in (p.info for p in psutil.process_iter(['pid','ppid','username','name','cmdline']))]"
-    processes = trim ${processes.stdout}
-    trace "${processes}"
-    trace "🛞 🔴 <<<<<"
+    cm_run_task __os__ps_pytest_tabsdata_servers
 
     if is_empty ${profile}
         build-folder = set "debug"
@@ -232,28 +240,35 @@ script = [
     exists = is_path_exists ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver}
     if ${exists}
         debug "🔅 Using tdserver binary: '${os_family}' - '${tdserver}'"
-        debug "🚀 ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} stop --instance pytest"
 
-        on_ga = get_env TD_ON_GA
-        on_ga_true = eq ${on_ga} "true"
+        instances = exec --fail-on-error python ${TESTING_INSTANCES_SCRIPT} ${TESTING_SUPERVISORS_CONFIG}
+        instances = split ${instances.stdout} "\n"
 
-        if ${on_ga_true}
-            exec --fail-on-error ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} stop --instance pytest
-        else
-            output = exec --fail-on-error ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} stop --instance pytest
+        for instance in ${instances}
+            instance = trim ${instance}
+            if not is_empty ${instance}
+                debug "🔅 Stopping instance: ${instance}"
+
+                debug "🚀 ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} stop --instance ${instance}"
+
+                on_ga = get_env TD_ON_GA
+                on_ga_true = eq ${on_ga} "true"
+
+                if ${on_ga_true}
+                    exec --fail-on-error ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} stop --instance ${instance}
+                else
+                    output = exec --fail-on-error ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} stop --instance ${instance}
+                end
+            end
         end
     else
         warn "🚚 Binaries for tdserver not available. Skipping tabsdata status."
     end
 
-    trace "🛞 🟢 Process list >>>>>"
-    processes = exec python -c "import psutil; [print(f'{pi[\"pid\"]:>6} {pi[\"ppid\"]:>6} {pi.get(\"username\",\"?\"):>10} ' + ' '.join(pi['cmdline'] or [pi['name']])) for pi in (p.info for p in psutil.process_iter(['pid','ppid','username','name','cmdline']))]"
-    processes = trim ${processes.stdout}
-    trace "${processes}"
-    trace "🛞 🟢 <<<<<"
+    cm_run_task __os__ps_pytest_tabsdata_servers
     ''']
 
-[tasks.__os__drop_pytest_tabsdata_server]
+[tasks.__os__drop_pytest_tabsdata_servers]
 plugin = "td-task-tracker"
 category = "04 - Test"
 private = true
@@ -262,17 +277,28 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    debug "🔷 _____ Deleteing tabsdata server (pytest)..."
+    debug "🔷 _____ Deleteing tabsdata testing servers..."
 
     home_folder = set ${HOME}
-    instance_folder = set ${home_folder}/.tabsdata/instances/pytest
-    debug "✅ The tabsdata instance pytest folder is: ${instance_folder}"
-    exists_instance_folder = is_path_exists ${instance_folder}
-    if eq ${exists_instance_folder} true
-        debug "✅ The tabsdata instance pytest folder exists. Deleting it: ${target_dir}..."
-        rm -r ${instance_folder}
-        debug "✅ The tabsdata instance pytest has been deleted: ${target_dir}!"
-    else
-        debug "✅ The tabsdata instance pytest folder does not exist. Skipping deleting it: ${target_dir}."
+
+    instances = exec --fail-on-error python ${TESTING_INSTANCES_SCRIPT} ${TESTING_SUPERVISORS_CONFIG}
+    instances = split ${instances.stdout} "\n"
+
+    for instance in ${instances}
+        instance = trim ${instance}
+        if not is_empty ${instance}
+            debug "🔅 Droping instance: ${instance}"
+
+            instance_folder = set ${home_folder}/.tabsdata/instances/${instance}
+            debug "✅ The tabsdata instance ${instance} folder is: ${instance_folder}"
+            exists_instance_folder = is_path_exists ${instance_folder}
+            if eq ${exists_instance_folder} true
+                debug "✅ The tabsdata instance ${instance} folder exists. Deleting it: ${target_dir}..."
+                rm -r ${instance_folder}
+                debug "✅ The tabsdata instance ${instance} has been deleted: ${target_dir}!"
+            else
+                debug "✅ The tabsdata instance ${instance} folder does not exist. Skipping deleting it: ${target_dir}."
+            end
+        end
     end
     ''']

@@ -40,13 +40,13 @@ def get_logger() -> logging.Logger:
     logger.addHandler(handler)
 
     def critical(self, message, *args, **kwargs):
-        self._log(CRITICAL, message, args, **kwargs)
+        self.log(CRITICAL, message, args, **kwargs)
 
     def fatal(self, message, *args, **kwargs):
-        self._log(FATAL, message, args, **kwargs)
+        self.log(FATAL, message, args, **kwargs)
 
     def trace(self, message, *args, **kwargs):
-        self._log(TRACE, message, args, **kwargs)
+        self.log(TRACE, message, args, **kwargs)
 
     logger.trace = trace.__get__(logger, logging.Logger)
     logger.fatal = fatal.__get__(logger, logging.Logger)

@@ -82,10 +82,10 @@ script = [
     else
         debug "🔷 _____ Starting tabsdata server (pytest)..."
 
-        cm_run_task __os__stop_pytest_tabsdata_server
-        cm_run_task __os__drop_pytest_tabsdata_server
-        cm_run_task __os__start_pytest_tabsdata_server
-        cm_run_task __os__status_pytest_tabsdata_server
+        cm_run_task __os__stop_pytest_tabsdata_servers
+        cm_run_task __os__drop_pytest_tabsdata_servers
+        cm_run_task __os__start_pytest_tabsdata_servers
+        cm_run_task __os__status_pytest_tabsdata_servers
     end
     ''']
 
