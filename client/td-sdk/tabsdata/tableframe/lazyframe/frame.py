@@ -1205,7 +1205,7 @@ class TableFrame:
     @pydoc(categories="projection")
     def udf(  # noqa: C901
         self,
-        expr: td_typing.Expr,
+        *exprs: td_typing.IntoExpr | Iterable[td_typing.IntoExpr],
         function: td_udf.UDF,
     ) -> TableFrame:
         """
@@ -1245,7 +1245,7 @@ class TableFrame:
                or data types after instantiation.
 
         Args:
-            expr: Expression selecting the input column(s) that feed the UDF.
+            exprs: Expression selecting the input column(s) of the UDF.
             function: Instance of :class:`tabsdata.tableframe.udf.function.UDF`
                 defining `on_batch` or `on_element` to produce the output series.
 
@@ -1332,11 +1332,11 @@ class TableFrame:
                 td_constants.StandardVolatileSystemColumns.TD_UDF_WORK.name
             )
 
-        pl_expr = td_translator._unwrap_into_tdexpr_column(expr)
+        pl_exprs = [td_translator._unwrap_into_tdexpr(e) for e in exprs]
         dtype = function._columns()
         lf = (
             self._lf.with_columns(
-                pl.struct(pl_expr).alias(
+                pl.struct(*pl_exprs).alias(
                     td_constants.StandardVolatileSystemColumns.TD_UDF_IN.name
                 )
             )
