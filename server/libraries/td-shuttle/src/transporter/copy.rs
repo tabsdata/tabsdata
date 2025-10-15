@@ -123,7 +123,15 @@ impl CopyTask {
         let writer = Writer::new(self.target.clone(), self.parallelism).await?;
         let writer = tokio::spawn(async move { writer.write(receiver).await });
         self.read(sender).await?;
-        let _ = writer.await.unwrap();
+        match writer.await {
+            Ok(result) => result?,
+            Err(err) => {
+                return Err(TransporterError::CouldNotCopyFile(
+                    self.target.url().to_string(),
+                    err.to_string(),
+                ));
+            }
+        }
         let end = UniqueUtc::now_millis();
         let report = FileCopyReport {
             idx: self.idx,
@@ -256,7 +264,7 @@ impl Writer {
 
 #[cfg(test)]
 mod tests {
-    use crate::transporter::api::Location;
+    use crate::transporter::api::{AwsConfigs, Location, Value};
     use crate::transporter::copy::CopyTask;
     use std::fs::File;
     use std::io::Write;
@@ -325,7 +333,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_copy() {
+    async fn test_copy_ok() {
         let (source0, target0, input0) = create_source_target("data0");
         let (source1, target1, input1) = create_source_target("data1");
         let request = super::CopyRequest::new(vec![(source0, target0), (source1, target1)], None);
@@ -337,5 +345,24 @@ mod tests {
         assert_eq!(output0.as_bytes(), input0);
         let output1 = std::fs::read_to_string(report.files()[1].to.abs_path()).unwrap();
         assert_eq!(output1.as_bytes(), input1);
+    }
+
+    #[tokio::test]
+    async fn test_copy_fail() {
+        let (source0, target0, _) = create_source_target("data0");
+        let (source1, _target1, _) = create_source_target("data1");
+        let target1 = Location::S3 {
+            url: Url::parse("s3://non-existing-bucket/output-data1").unwrap(),
+            configs: AwsConfigs {
+                access_key: Value::Literal("ak".to_string()),
+                secret_key: Value::Literal("sk".to_string()),
+                region: None,
+                extra_configs: None,
+            },
+        };
+
+        let request = super::CopyRequest::new(vec![(source0, target0), (source1, target1)], None);
+        let result = super::copy(request).await;
+        assert!(result.is_err());
     }
 }

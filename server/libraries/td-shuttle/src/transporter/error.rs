@@ -77,4 +77,6 @@ pub enum TransporterError {
     ImportFilesTaskFailed(String) = 5016,
     #[error("Could not decode last modified info: {0}")]
     CouldNotDecodeLastModifiedInfo(String) = 5017,
+    #[error("Could copy file to {0}, error: {1}")]
+    CouldNotCopyFile(String, String) = 5018,
 }
