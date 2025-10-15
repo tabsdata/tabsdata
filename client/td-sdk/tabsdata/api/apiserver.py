@@ -215,13 +215,14 @@ class APIServer:
                 verify=self.certificate_file,
             )
         else:
-            return GET_HTTP_SESSION.get(
-                self.url + path,
-                headers=headers,
-                timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
-                params=params,
-                verify=self.certificate_file,
-            )
+            with GET_HTTP_SESSION as session:
+                return session.get(
+                    self.url + path,
+                    headers=headers,
+                    timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
+                    params=params,
+                    verify=self.certificate_file,
+                )
 
     def post(
         self,
@@ -252,15 +253,16 @@ class APIServer:
                 verify=self.certificate_file,
             )
         else:
-            return DEFAULT_HTTP_SESSION.post(
-                self.url + path,
-                headers=headers,
-                timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
-                json=json,
-                data=data,
-                params=params,
-                verify=self.certificate_file,
-            )
+            with DEFAULT_HTTP_SESSION as session:
+                return session.post(
+                    self.url + path,
+                    headers=headers,
+                    timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
+                    json=json,
+                    data=data,
+                    params=params,
+                    verify=self.certificate_file,
+                )
 
     def post_binary(self, path, data, refresh_if_needed=True):
         headers = {}
@@ -280,13 +282,14 @@ class APIServer:
                 verify=self.certificate_file,
             )
         else:
-            return DEFAULT_HTTP_SESSION.post(
-                self.url + path,
-                headers=headers,
-                timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
-                data=data,
-                verify=self.certificate_file,
-            )
+            with DEFAULT_HTTP_SESSION as session:
+                return session.post(
+                    self.url + path,
+                    headers=headers,
+                    timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
+                    data=data,
+                    verify=self.certificate_file,
+                )
 
     def delete(self, path, refresh_if_needed=True):
         headers = {}
@@ -304,12 +307,13 @@ class APIServer:
                 verify=self.certificate_file,
             )
         else:
-            return DEFAULT_HTTP_SESSION.delete(
-                self.url + path,
-                headers=headers,
-                timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
-                verify=self.certificate_file,
-            )
+            with DEFAULT_HTTP_SESSION as session:
+                return session.delete(
+                    self.url + path,
+                    headers=headers,
+                    timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
+                    verify=self.certificate_file,
+                )
 
     def _store_in_file(self, file_path: str):
         with open(file_path, "w") as file:
