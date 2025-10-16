@@ -22,6 +22,7 @@ import tqdm
 from setuptools import find_packages, setup
 from setuptools.command.bdist_egg import bdist_egg as _bdist_egg
 from setuptools.command.build import build as _build
+from setuptools.command.build_py import build_py as _build_py
 from setuptools.command.sdist import sdist as _sdist
 
 # noinspection PyDeprecation
@@ -215,6 +216,39 @@ class CustomBuild(_build):
             if os.path.exists(tabsdata_libs_folder):
                 shutil.rmtree(tabsdata_libs_folder)
             shutil.copytree(tabsdata_libs_path, tabsdata_libs_folder)
+
+
+PACKAGE_RESOURCES = {
+    Path(ROOT)
+    / "variant"
+    / "resources"
+    / "profile"
+    / "workspace"
+    / "config"
+    / "config.yaml": (
+        Path(".")
+        / "tabsdata"
+        / "resources"
+        / "profile"
+        / "workspace"
+        / "config"
+        / "config.yaml"
+    ),
+}
+
+
+class CustomBuildPy(_build_py):
+
+    def run(self):
+        package_root = Path(self.build_lib)
+        for source, target in PACKAGE_RESOURCES.items():
+            if source.exists():
+                destination = package_root / target
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, destination)
+            else:
+                logger.warning(f"External resource {source} does not exist. Skipping.")
+        super().run()
 
 
 class CustomSDist(_sdist):
@@ -779,6 +813,7 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
             "bdist_egg": CustomBDistEgg,
             "bdist_wheel": CustomBDistWheel,
             "sdist": CustomSDist,
+            "build_py": CustomBuildPy,
         },
         packages=[
             # tabsdata
@@ -792,6 +827,8 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
                     "tests*",
                     "tabsdata.assets",
                     "tabsdata.assets*",
+                    "tabsdata.resources",
+                    "tabsdata.resources*",
                 ],
             ),
             # tabsdata.extensions._features.api
@@ -902,6 +939,11 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
                 os.path.join(
                     "assets",
                     "manifest",
+                    "*",
+                ),
+                os.path.join(
+                    "resources",
+                    "**",
                     "*",
                 ),
                 *yaml_files,
