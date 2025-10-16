@@ -7,8 +7,3 @@ pytest:
     address: 127.0.0.1:2467
     internal-address: 127.0.0.1:2468
     access-jwt-expiration: 36288000
-aitest:
-  apiserver:
-    address: 127.0.0.1:2477
-    internal-address: 127.0.0.1:2478
-    access-jwt-expiration: 36288000

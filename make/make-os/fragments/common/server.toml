@@ -147,6 +147,29 @@ script = [
             if not is_empty ${instance}
                 info "🔅 Checking instance: ${instance}"
 
+                supervisor_workers_config_folder_exists = is_path_exists ${SUPERVISOR_WORKERS_CONFIG_FOLDER}
+                workers = array
+                if ${supervisor_workers_config_folder_exists}
+                    supervisor_workers = exec --fail-on-error python -c "import os, sys; path = sys.argv[1]; print('\\n'.join(sorted(name for name in os.listdir(path) if os.path.isdir(os.path.join(path, name)))))" ${SUPERVISOR_WORKERS_CONFIG_FOLDER}
+                    supervisor_workers = trim ${supervisor_workers.stdout}
+                    supervisor_workers = split ${supervisor_workers} "\n"
+                    for supervisor_worker in ${supervisor_workers}
+                        supervisor_worker = trim ${supervisor_worker}
+                        if not is_empty ${supervisor_worker}
+                            debug "🔅 Selecting worker: ${supervisor_worker}"
+                            array_push ${workers} ${supervisor_worker}
+                        end
+                    end
+                else
+                    warn "⚠️ Supervisor regular workers config folder not found: ${SUPERVISOR_WORKERS_CONFIG_FOLDER}"
+                end
+                workers_list = array_join ${workers} ", "
+                if is_empty ${workers_list}
+                    debug "❓ No regular supervisor workers configured under ${SUPERVISOR_WORKERS_CONFIG_FOLDER}"
+                else
+                    debug "🌀 Supervisor workers to check: ${workers_list}"
+                end
+
                 debug "🚀 ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} status --instance ${instance}"
 
                 status_timeout = calc 3 * 60
@@ -160,14 +183,33 @@ script = [
                 while ${status_checking}
                     output = exec --fail-on-error ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} status --instance ${instance}
 
-                    apiserver_started = contains ${output.stdout} "apiserver"
-                    aiagent_started = contains ${output.stdout} "aiagent"
-                    janitor_started = contains ${output.stdout} "janitor"
-                    if ${apiserver_started} and ${aiagent_started} and ${janitor_started}
-                        debug "🔅 Verified supervisor & (apiserver, aiagent, janitor) are running"
+                    workers_started = set true
+                    stopped_workers = array
+                    for worker in ${workers}
+                        worker = trim ${worker}
+                        if not is_empty ${worker}
+                            info "🔅 Checking worker: ${worker}"
+                            worker_started = contains ${output.stdout} ${worker}
+                            if not ${worker_started}
+                                workers_started = set false
+                                array_push ${stopped_workers} ${worker}
+                            end
+                        end
+                    end
+
+                    if ${workers_started}
+                        if is_empty ${workers_list}
+                            info "🚦 Verified supervisor is running"
+                        else
+                            info "🚦 Verified supervisor & (${workers_list}) are running"
+                        end
                         status_checking = set false
                     else
+                        stopped_workers_list = array_join ${stopped_workers} ", "
                         debug ". ${status_attempt}"
+                        if not is_empty ${stopped_workers_list}
+                            debug "👀 Waiting for workers: ${stopped_workers_list}"
+                        end
                         status_attempt = calc ${status_attempt} + 1
                         status_exhausted = eq ${status_attempt} ${status_attempts}
                         if ${status_exhausted}

@@ -85,6 +85,7 @@ PANTS_JSON = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/.cargo/pants.json", norm
 
 SWAGGER_UI_OVERWRITE_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/server/binaries/td-server/resources/swagger", normalize = true }
 
+SUPERVISOR_WORKERS_CONFIG_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/variant/resources/profile/workspace/config/proc/regular", normalize = true }
 TESTING_SUPERVISORS_CONFIG = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/./variant/config/pytest/supervisor.yaml", normalize = true }
 TESTING_INSTANCE_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/testing_instance.py", normalize = true }
 TESTING_INSTANCES_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/testing_instances.py", normalize = true }
