@@ -26,8 +26,6 @@ script = [
 
     debug "🔷 _____ Starting tabsdata testing servers..."
 
-    cm_run_task __os__ps_pytest_tabsdata_servers
-
     if is_empty ${profile}
         build-folder = set "debug"
     else
@@ -59,7 +57,7 @@ script = [
         for instance in ${instances}
             instance = trim ${instance}
             if not is_empty ${instance}
-                debug "🔅 Starting instance: ${instance}"
+                info "🔅 Starting instance: ${instance}"
 
                 instance_arguments = array
                 array_push ${instance_arguments} ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver}
@@ -116,8 +114,6 @@ script = [
 
     debug "🔷 _____ Checking tabsdata testing servers..."
 
-    cm_run_task __os__ps_pytest_tabsdata_servers
-
     if is_empty ${profile}
         build-folder = set "debug"
     else
@@ -149,7 +145,7 @@ script = [
         for instance in ${instances}
             instance = trim ${instance}
             if not is_empty ${instance}
-                debug "🔅 Checking instance: ${instance}"
+                info "🔅 Checking instance: ${instance}"
 
                 debug "🚀 ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} status --instance ${instance}"
 
@@ -214,8 +210,6 @@ script = [
 
     debug "🔷 _____ Stopping tabsdata testing servers..."
 
-    cm_run_task __os__ps_pytest_tabsdata_servers
-
     if is_empty ${profile}
         build-folder = set "debug"
     else
@@ -247,7 +241,7 @@ script = [
         for instance in ${instances}
             instance = trim ${instance}
             if not is_empty ${instance}
-                debug "🔅 Stopping instance: ${instance}"
+                info "🔅 Stopping instance: ${instance}"
 
                 debug "🚀 ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} stop --instance ${instance}"
 
@@ -287,7 +281,7 @@ script = [
     for instance in ${instances}
         instance = trim ${instance}
         if not is_empty ${instance}
-            debug "🔅 Droping instance: ${instance}"
+            info "🔅 Droping instance: ${instance}"
 
             instance_folder = set ${home_folder}/.tabsdata/instances/${instance}
             debug "✅ The tabsdata instance ${instance} folder is: ${instance_folder}"

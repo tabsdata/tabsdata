@@ -112,7 +112,7 @@ script = [
     else
         debug "🔷 _____ Stopping tabsdata server (pytest)..."
 
-        cm_run_task __os__stop_pytest_tabsdata_server
+        cm_run_task __os__stop_pytest_tabsdata_servers
     end
     ''']
 
