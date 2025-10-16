@@ -268,7 +268,8 @@ mod tests {
     };
     use polars_io::cloud::{CloudOptions, ObjectStorePath};
     use polars_io::json::JsonWriterOptions;
-    use polars_io::prelude::{CsvWriterOptions, ParquetWriteOptions};
+    use polars_io::prelude::QuoteStyle::Never;
+    use polars_io::prelude::{CsvWriterOptions, ParquetWriteOptions, SerializeOptions};
     use polars_io::utils::sync_on_close::SyncOnCloseType;
     use std::collections::HashMap;
     use td_common::id::id;
@@ -834,7 +835,7 @@ mod tests {
         let col_int = Int64Chunked::from_iter((0i64..1000i64).map(Some))
             .into_series()
             .with_name(PlSmallStr::from("col_int"));
-        let col_string = StringChunked::from_iter((0..1000).map(|i| Some(format!("str_{}", i))))
+        let col_string = StringChunked::from_iter((0..1000).map(|i| Some(format!("str_{}\"", i))))
             .into_series()
             .with_name(PlSmallStr::from("col_string"));
         let df = DataFrame::new(vec![Column::from(col_int), Column::from(col_string)]).unwrap();
@@ -864,7 +865,13 @@ mod tests {
             ImportFormat::Log => lf
                 .sink_csv(
                     create_sink_target(&from_file.url(), &from_file.cloud_configs()).unwrap(),
-                    CsvWriterOptions::default(),
+                    CsvWriterOptions {
+                        serialize_options: SerializeOptions {
+                            quote_style: Never,
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    },
                     None,
                     sink_options.clone(),
                 )

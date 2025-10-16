@@ -590,7 +590,10 @@ impl ImporterLogReadOptions {
         let mut reader = reader;
         // using a control character so the whole log line is a single column
         // later it can be groked into multiple columns
-        reader = reader.with_separator(2).with_has_header(false);
+        reader = reader
+            .with_separator(b'\0')
+            .with_has_header(false)
+            .with_quote_char(None);
         reader
     }
 }
