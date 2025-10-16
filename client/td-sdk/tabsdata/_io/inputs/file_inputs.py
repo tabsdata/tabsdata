@@ -1321,15 +1321,7 @@ def _read_avro_in_chunks(avro_path, chunk_size):
             yield batch
 
 
-def _obtain_transporter_import(
-    origin_location_uri: str,
-    destination_folder: str,
-    file_format: FileFormat,
-    initial_last_modified: str | None,
-    user_source: AzureSource | GCSSource | LocalFileSource | S3Source,
-    lastmod_info: str = None,
-):
-    # Create the transporter source object
+def _obtain_source_object(user_source, origin_location_uri):
     if isinstance(user_source, S3Source):
         transporter_source = TransporterS3(
             origin_location_uri,
@@ -1356,6 +1348,19 @@ def _obtain_transporter_import(
         logger.error(f"Importing from '{user_source}' not supported.")
         raise TypeError(f"Importing from '{user_source}' not supported.")
     logger.debug(f"Source config: {transporter_source}")
+    return transporter_source
+
+
+def _obtain_transporter_import(
+    origin_location_uri: str,
+    destination_folder: str,
+    file_format: FileFormat,
+    initial_last_modified: str | None,
+    user_source: AzureSource | GCSSource | LocalFileSource | S3Source,
+    lastmod_info: str = None,
+):
+    # Create the transporter source object
+    transporter_source = _obtain_source_object(user_source, origin_location_uri)
 
     # Create the transporter format object
     if isinstance(file_format, CSVFormat):
@@ -1374,6 +1379,10 @@ def _obtain_transporter_import(
     logger.debug(f"Format config: {transporter_format}")
 
     # Create transporter target object
+    if not destination_folder.endswith(os.sep):
+        logger.debug(f"Adding trailing separator to '{destination_folder}'")
+        destination_folder = destination_folder + os.sep
+        logger.debug(f"New destination folder: '{destination_folder}'")
     transporter_target = TransporterLocalFile(convert_path_to_uri(destination_folder))
     logger.debug(f"Target config: {transporter_target}")
 

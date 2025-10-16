@@ -21,7 +21,7 @@ def trace(msg, *args, **kwargs):
 
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 
 ABSOLUTE_LOCATION = os.path.dirname(os.path.abspath(__file__))
 
@@ -94,7 +94,13 @@ def convert_uri_to_path(uri: str) -> str:
 
 
 def convert_path_to_uri(path: str) -> str:
-    return path if path.startswith(FILE_URI_PREFIX) else Path(path).as_uri()
+    uri = path if path.startswith(FILE_URI_PREFIX) else Path(path).as_uri()
+    if path.endswith(os.path.sep) and not uri.endswith("/"):
+        # This might seem redundant, but Path(path).as_uri() removes the trailing
+        # slash, and we want to keep it if it was present in the original path.
+        uri += "/"
+    logger.debug(f"Converted path '{path}' to URI '{uri}'")
+    return uri
 
 
 def _get_root_folder() -> str:
