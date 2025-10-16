@@ -123,7 +123,6 @@ ABSOLUTE_ROOT_FOLDER_LOCATION = os.path.dirname(
 )
 logger.debug(f"ABSOLUTE_ROOT_FOLDER_LOCATION: {ABSOLUTE_ROOT_FOLDER_LOCATION}")
 
-APISERVER_URL = "127.0.0.1:2467"
 CORRECT_SOURCE = TableInput("input")
 CORRECT_DESTINATION = TableOutput("output")
 
@@ -145,6 +144,86 @@ HASHICORP_TESTING_URL = "http://127.0.0.1:8200"
 ROOT_PROJECT_DIR = os.path.dirname(
     os.path.dirname(os.path.dirname(ABSOLUTE_TEST_FOLDER_LOCATION))
 )
+
+
+class TestInstance:
+    def __init__(self, values: dict[str, Any] | None = None):
+        self._values = values or {}
+
+    def __getitem__(self, key: str) -> Any:
+        return self._values[key]
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return self._values.get(key, default)
+
+    def items(self):
+        return self._values.items()
+
+    def as_dict(self) -> dict[str, Any]:
+        return dict(self._values)
+
+
+class TestInstances:
+    def __init__(self, instances: dict[str, TestInstance] | None = None):
+        self._instances = instances or {}
+
+    def __getitem__(self, name: str) -> TestInstance:
+        return self._instances[name]
+
+    def get(self, name: str, default: TestInstance = None) -> TestInstance:
+        return self._instances.get(name, default)
+
+    def items(self):
+        return self._instances.items()
+
+    def as_dict(self) -> dict[str, TestInstance]:
+        return dict(self._instances)
+
+
+def load_testing_supervisor_instances() -> TestInstances:
+    testing_instances_config_path = (
+        pathlib.Path(ROOT_PROJECT_DIR)
+        / "variant"
+        / "config"
+        / "pytest"
+        / "supervisor.yaml"
+    )
+    if not testing_instances_config_path.exists():
+        logger.warning(
+            f"Testing instances configuration '{testing_instances_config_path}' not"
+            " found; continuing with no instance."
+        )
+        return TestInstances()
+
+    with testing_instances_config_path.open("r", encoding="utf-8") as supervisor_file:
+        testing_instances_config = yaml.safe_load(supervisor_file) or {}
+
+    if not isinstance(testing_instances_config, dict):
+        logger.warning(
+            f"Testing instances configuration '{testing_instances_config_path}' is not"
+            " a mapping; continuing with empty instances."
+        )
+        return TestInstances()
+
+    testing_instances: dict[str, TestInstance] = {}
+    for (
+        testing_instance_name,
+        testing_instance_settings,
+    ) in testing_instances_config.items():
+        if not isinstance(testing_instance_settings, dict):
+            logger.warning(
+                f"Configured testing instance '{testing_instance_name}' is not a"
+                " mapping; storing empty configuration."
+            )
+            testing_instance_settings = {}
+        testing_instances[testing_instance_name] = TestInstance(
+            testing_instance_settings
+        )
+
+    return TestInstances(testing_instances)
+
+
+TESTING_SUPERVISOR_INSTANCES = load_testing_supervisor_instances()
 
 
 def gather_connectors() -> list[str]:
@@ -172,6 +251,10 @@ def gather_connectors() -> list[str]:
                     logger.debug(f"📦️ Inserting connector {entry}")
     return sorted(tabsdata_connectors)
 
+
+APISERVER_URL = (
+    TESTING_SUPERVISOR_INSTANCES.get("pytest").get("apiserver").get("address")
+)
 
 LOCAL_PACKAGES_LIST = [ROOT_PROJECT_DIR]
 
