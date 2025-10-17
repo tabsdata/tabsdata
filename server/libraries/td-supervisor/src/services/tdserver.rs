@@ -1192,15 +1192,52 @@ fn command_stop(arguments: StopArguments) {
     let supervisor_tracker = WorkerTracker::new(supervisor_work.clone());
     match supervisor_tracker.check_worker_status() {
         WorkerStatus::Running { pid } => {
-            terminate_process(
-                pid,
-                if arguments.options.force {
-                    Signal::Kill
-                } else {
-                    Signal::Term
-                },
-            )
-            .unwrap();
+            let signal = if arguments.options.force {
+                Signal::Kill
+            } else {
+                Signal::Term
+            };
+
+            if let Err(e) = terminate_process(pid, signal) {
+                match supervisor_tracker.check_worker_status() {
+                    WorkerStatus::Running { .. } => {
+                        error!(
+                            "Failed to terminate Tabsdata instance '{}' with pid '{}': {}. \
+                            Instance is still running and cannot be terminated.",
+                            supervisor_instance_absolute.display(),
+                            pid,
+                            e
+                        );
+                        error!(
+                            "Tabsdata instance '{}' with pid '{}' appears to be stuck. \
+                             You can either \
+                             wait for termination, \
+                             retry stopping it,
+                             retry stopping it using flag --force, or \
+                             manually kill the process.",
+                            supervisor_instance_absolute.clone().display(),
+                            pid
+                        );
+                        exit(GeneralError.code());
+                    }
+                    _ => {
+                        info!(
+                            "Failed to terminate Tabsdata instance '{}' with pid '{}': {}. \
+                            However, process is not running anymore.",
+                            supervisor_instance_absolute.clone().display(),
+                            pid,
+                            e
+                        );
+                        info!(
+                            "Tabsdata instance '{}' with pid {} has already stopped.",
+                            supervisor_instance_absolute.clone().display(),
+                            pid
+                        );
+                        return;
+                    }
+                }
+            }
+
             let start = Instant::now();
             loop {
                 if start.elapsed() > STOP_TIMEOUT {

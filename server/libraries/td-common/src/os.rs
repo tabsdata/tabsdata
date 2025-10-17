@@ -22,7 +22,6 @@ use std::path::{Path, PathBuf};
 use std::process;
 use sysinfo::{Pid, Process, Signal, System};
 use tracing::info;
-#[cfg(not(target_os = "windows"))]
 use tracing::warn;
 
 #[allow(dead_code)]
@@ -95,6 +94,7 @@ pub fn terminate_process(pid: i32, signal: Signal) -> Result<(), OsProcessError>
 /// function could be removed.
 #[cfg(target_os = "windows")]
 pub fn kill_with(process: &Process, _signal: Signal) -> Option<bool> {
+    let pid = process.pid();
     let mut kill = process::Command::new("taskkill.exe");
     if check_flag_env(TD_DETACHED_SUBPROCESSES) {
         use std::os::windows::process::CommandExt;
@@ -102,13 +102,26 @@ pub fn kill_with(process: &Process, _signal: Signal) -> Option<bool> {
 
         kill.creation_flags(CREATE_NO_WINDOW);
     }
-    kill.arg("/PID")
-        .arg(process.pid().to_string())
-        .arg("/T")
-        .arg("/F");
+    kill.arg("/PID").arg(pid.to_string()).arg("/T").arg("/F");
     match kill.output() {
-        Ok(output) => Some(output.status.success()),
-        Err(_) => Some(false),
+        Ok(output) => {
+            let success = output.status.success();
+            if !success {
+                warn!(
+                    "Failure killing process with pid '{}': exit code {:?} - error: {}",
+                    pid,
+                    output.status.code(),
+                    String::from_utf8_lossy(&output.stderr).trim()
+                );
+            } else {
+                warn!("Successfully killed process with pid '{}'", pid);
+            }
+            Some(success)
+        }
+        Err(error) => {
+            warn!("Error killing process with pid '{}': error: {}", pid, error);
+            Some(false)
+        }
     }
 }
 
