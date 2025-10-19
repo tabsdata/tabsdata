@@ -10,6 +10,7 @@ from pathlib import Path
 import rich_click as click
 from rich.console import Console
 
+from tabsdata import __version__
 from tabsdata._cli import examples_guide
 from tabsdata._cli.auth_group import auth
 from tabsdata._cli.cli_utils import (
@@ -49,7 +50,7 @@ CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"])
 
 
 @click.group(context_settings=CONTEXT_SETTINGS)
-@click.version_option()
+@click.version_option(version=__version__, message="Tabsdata Client %(version)s")
 @click.option(
     "--no-prompt",
     is_flag=True,
