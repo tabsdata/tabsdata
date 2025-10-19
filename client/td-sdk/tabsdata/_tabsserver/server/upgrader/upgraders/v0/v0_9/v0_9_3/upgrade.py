@@ -10,7 +10,7 @@ from packaging.version import Version
 from tabsdata._tabsserver.server.upgrader.entity import Upgrade
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 
 # noinspection PyPep8Naming

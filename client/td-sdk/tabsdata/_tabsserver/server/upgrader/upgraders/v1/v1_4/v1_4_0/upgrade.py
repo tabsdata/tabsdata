@@ -14,7 +14,7 @@ from tabsdata._tabsserver.server.upgrader.entity import Upgrade
 from tabsdata._utils.internal._resources import td_resource
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 
 # noinspection PyPep8Naming,DuplicatedCode
@@ -32,6 +32,7 @@ class Upgrade_1_3_0_to_1_4_0(Upgrade):
 
         messages.extend(self.upgrade_instance(instance, dry_run))
         messages.extend(self.upgrade_apiserver(instance, dry_run))
+        messages.extend(self.upgrade_janitor(instance, dry_run))
 
         return messages
 
@@ -55,6 +56,7 @@ class Upgrade_1_3_0_to_1_4_0(Upgrade):
         )
 
         instance_config_upgrade_spec_yaml = YAML()
+        instance_config_upgrade_spec_yaml.preserve_quotes = True
         with open(instance_config_upgrade_spec_path, "r", encoding="utf-8") as f:
             upgrade_spec = instance_config_upgrade_spec_yaml.load(f)
         instance_config_upgrade_spec = (
@@ -113,14 +115,17 @@ class Upgrade_1_3_0_to_1_4_0(Upgrade):
                             "skipping folder provisioning."
                         )
                     if source_worker_config_folder is not None:
-                        logger.debug(f"Copying from "
-                                       f"'{source_worker_config_folder}' "
-                                       f"to "
-                                       f"'{target_worker_config_folder}'.")
+                        logger.debug(
+                            "Copying from "
+                            f"'{source_worker_config_folder}' "
+                            "to "
+                            f"'{target_worker_config_folder}'."
+                        )
                         shutil.copytree(
                             source_worker_config_folder,
                             target_worker_config_folder,
                             dirs_exist_ok=True,
+                            ignore=shutil.ignore_patterns(".gitkeep"),
                         )
 
                 logger.debug(f"Provisioning work folder for worker '{worker}'.")
@@ -141,14 +146,17 @@ class Upgrade_1_3_0_to_1_4_0(Upgrade):
                             "skipping folder provisioning."
                         )
                     if source_worker_work_folder is not None:
-                        logger.debug(f"Copying from "
-                                       f"'{source_worker_work_folder}' "
-                                       f"to "
-                                       f"'{target_worker_work_folder}'...")
+                        logger.debug(
+                            "Copying from "
+                            f"'{source_worker_work_folder}' "
+                            "to "
+                            f"'{target_worker_work_folder}'..."
+                        )
                         shutil.copytree(
                             source_worker_work_folder,
                             target_worker_work_folder,
                             dirs_exist_ok=True,
+                            ignore=shutil.ignore_patterns(".gitkeep"),
                         )
 
         return messages
@@ -183,6 +191,7 @@ class Upgrade_1_3_0_to_1_4_0(Upgrade):
         )
 
         apiserver_config_upgrade_spec_yaml = YAML()
+        apiserver_config_upgrade_spec_yaml.preserve_quotes = True
         with open(apiserver_config_spec_path, "r", encoding="utf-8") as f:
             upgrade_spec = apiserver_config_upgrade_spec_yaml.load(f)
         apiserver_config_upgrade_spec = (
@@ -212,6 +221,47 @@ class Upgrade_1_3_0_to_1_4_0(Upgrade):
         else:
             apiserver_config_upgrade_editor.apply(dry_run=False)
             messages.append(f"Upgraded '{apiserver_config_path}' using upgrade spec.")
+
+        return messages
+
+    @staticmethod
+    def upgrade_janitor(  # noqa: C901
+        instance: Path,
+        dry_run: bool,
+    ) -> list[str]:
+        messages: list[str] = []
+
+        if dry_run:
+            messages.append("[dry-run] Would upgrade 'janitor' log.yaml configuration.")
+        else:
+            source_janitor_config_log_file = None
+            # noinspection PyBroadException
+            try:
+                source_janitor_config_log_file = td_resource(
+                    "resources/profile/workspace/config/proc/regular/"
+                    "janitor/config/log.yaml"
+                )
+            except Exception:
+                logger.debug(
+                    "No workspace config file log.yaml for worker 'janitor'"
+                    "skipping folder provisioning."
+                )
+            target_janitor_config_log_file = (
+                instance
+                / "workspace"
+                / "config"
+                / "proc"
+                / "regular"
+                / "janitor"
+                / "config"
+                / "log.yaml"
+            )
+            if source_janitor_config_log_file is not None:
+                target_janitor_config_log_file.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy(
+                    source_janitor_config_log_file,
+                    target_janitor_config_log_file,
+                )
 
         return messages
 
