@@ -219,11 +219,7 @@ class CustomBuild(_build):
 
 
 PACKAGE_RESOURCES = {
-    Path(ROOT)
-    / "variant"
-    / "resources"
-    / "profile"
-    / "workspace": Path(".") / "tabsdata" / "resources" / "profile" / "workspace",
+    Path(ROOT) / "variant" / "resources": Path(".") / "tabsdata" / "resources",
 }
 
 
@@ -646,7 +642,7 @@ console_scripts: list[str] = [
     "janitor = tabsdata._tabsserver.tools.janitor:main",
     # Supervisor tools
     "tdinvoker = tabsdata._tabsserver.invoker:main",
-    "tdupgrader = tabsdata._tabsserver.server.upgrader:main",
+    "tdupgrader = tabsdata._tabsserver.server.upgrader.upgrader:main",
     "tdvenv = tabsdata._tabsserver.pyenv_creation:main",
 ]
 console_scripts.extend(load_console_scripts())

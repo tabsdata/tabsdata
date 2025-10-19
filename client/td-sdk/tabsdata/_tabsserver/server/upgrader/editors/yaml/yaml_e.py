@@ -27,7 +27,6 @@ class YamlEditor:
         self.yaml.preserve_quotes = True
         self.yaml.indent(mapping=2, sequence=4, offset=2)
         self.yaml.width = 4096
-
         if isinstance(spec, (str, Path)):
             spec_path = Path(spec)
             if not spec_path.exists():
@@ -41,7 +40,6 @@ class YamlEditor:
             raise ValueError(f"Invalid spec type: {type(spec)}")
         if not isinstance(self.spec_data, list):
             self.spec_data = [self.spec_data]
-
         if isinstance(source, (str, Path)):
             self.path = Path(source)
             if not self.path.exists():
@@ -154,6 +152,8 @@ class YamlEditor:
                 raise ValueError(
                     "For map insertion, new data must be a single-key dict"
                 )
+            if data_key in parent:
+                return
             insert_position = min(max(data_index, 0), len(keys))
             parent.insert(insert_position, data_key, data_value)
             if isinstance(data, CommentedMap):
@@ -178,6 +178,15 @@ class YamlEditor:
                 raise ValueError(
                     f"Item with {anchor_key}={anchor_value} not found in list"
                 )
+            if isinstance(data, dict):
+                data_key = data.get(anchor_key) if anchor_key in data else None
+                for item in parent:
+                    if isinstance(item, dict):
+                        item_value = item.get(anchor_key)
+                        if data_key and (
+                            item_value == data_key or str(item_value) == str(data_key)
+                        ):
+                            return
             if position == "after":
                 data_index = anchor_index + 1
             else:

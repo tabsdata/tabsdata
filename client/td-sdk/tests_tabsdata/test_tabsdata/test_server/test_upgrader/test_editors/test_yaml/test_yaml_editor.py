@@ -847,7 +847,6 @@ new: inserted
 class TestComplexCommentScenarios:
 
     def test_multiple_inline_comments(self):
-        """Test preservation of multiple inline comments."""
         # fmt: off
         yaml_str = \
 """\
@@ -1010,7 +1009,6 @@ settings:
         editor = YamlEditor(spec=spec, source=source)
         result = editor.apply(dry_run=True)
 
-        # When inserting after database, the cache comment stays with cache
         # fmt: off
         expected = \
 """\
@@ -1138,7 +1136,6 @@ items:
         assert editor.data["items"][2]["id"] == 2.5
 
     def test_deeply_nested_with_comments_at_each_level(self):
-        """Test deep nesting with comments at every level."""
         # fmt: off
         yaml_str = \
 """\
@@ -1617,9 +1614,385 @@ root:
         # fmt: on
         assert result == expected
 
-        # Verify structure is maintained
         assert editor.data["root"]["level1"]["level2"]["key2"] == "value2"
         assert "key: value" in result
+
+
+class TestInsertedCommentPreservation:
+
+    def test_inserted_map_comment_single_line(self):
+        # fmt: off
+        original_yaml = \
+"""\
+config:
+  existing: true
+"""
+        insert_yaml = \
+"""\
+# Inserted comment
+new_feature: enabled
+"""
+        # fmt: on
+        yaml = YAML()
+        source = yaml.load(StringIO(original_yaml))
+        insert_data = yaml.load(StringIO(insert_yaml))
+
+        spec = {
+            "path": ["config", "existing"],
+            "action": "insert_sibling",
+            "position": "after",
+            "data": insert_data,
+        }
+
+        editor = YamlEditor(spec=spec, source=source)
+        result = editor.apply(dry_run=True)
+
+        # fmt: off
+        expected = \
+"""\
+config:
+  existing: true
+  # Inserted comment
+  new_feature: enabled
+"""
+        # fmt: on
+        assert result == expected
+
+    def test_inserted_map_comment_multiple_lines(self):
+        # fmt: off
+        original_yaml = \
+"""\
+config:
+  existing: true
+"""
+        insert_yaml = \
+"""\
+# First line
+# Second line
+new_feature: enabled
+"""
+        # fmt: on
+        yaml = YAML()
+        source = yaml.load(StringIO(original_yaml))
+        insert_data = yaml.load(StringIO(insert_yaml))
+
+        spec = {
+            "path": ["config", "existing"],
+            "action": "insert_sibling",
+            "position": "after",
+            "data": insert_data,
+        }
+
+        editor = YamlEditor(spec=spec, source=source)
+        result = editor.apply(dry_run=True)
+
+        # fmt: off
+        expected = \
+"""\
+config:
+  existing: true
+  # First line
+  # Second line
+  new_feature: enabled
+"""
+        # fmt: on
+        assert result == expected
+
+    def test_inserted_map_inline_comment_preserved(self):
+        # fmt: off
+        original_yaml = \
+"""\
+config:
+  existing: true
+"""
+        insert_yaml = \
+"""\
+new_feature: enabled  # Inline note
+"""
+        # fmt: on
+        yaml = YAML()
+        source = yaml.load(StringIO(original_yaml))
+        insert_data = yaml.load(StringIO(insert_yaml))
+
+        spec = {
+            "path": ["config", "existing"],
+            "action": "insert_sibling",
+            "position": "after",
+            "data": insert_data,
+        }
+
+        editor = YamlEditor(spec=spec, source=source)
+        result = editor.apply(dry_run=True)
+
+        # fmt: off
+        expected = \
+"""\
+config:
+  existing: true
+  new_feature: enabled # Inline note
+"""
+        # fmt: on
+        assert result == expected
+
+    def test_inserted_list_comment_single_line(self):
+        # fmt: off
+        original_yaml = \
+"""\
+workers:
+  - name: alpha
+    kind: processor
+"""
+        insert_yaml = \
+"""\
+# Inserted worker
+name: beta
+kind: listener
+"""
+        # fmt: on
+        yaml = YAML()
+        source = yaml.load(StringIO(original_yaml))
+        insert_data = yaml.load(StringIO(insert_yaml))
+
+        spec = {
+            "path": ["workers", "name:alpha"],
+            "action": "insert_sibling",
+            "position": "after",
+            "data": insert_data,
+        }
+
+        editor = YamlEditor(spec=spec, source=source)
+        result = editor.apply(dry_run=True)
+
+        # fmt: off
+        expected = \
+"""\
+workers:
+  - name: alpha
+    kind: processor
+# Inserted worker
+  - name: beta
+    kind: listener
+"""
+        # fmt: on
+        assert result == expected
+
+
+# noinspection PyTypeChecker,PyUnresolvedReferences
+class TestIdempotency:
+
+    def test_duplicate_list_sibling_insertion_skipped(self):
+        # fmt: off
+        yaml_str = \
+"""\
+workers:
+  - name: worker1
+    kind: processor
+  - name: worker2
+    kind: listener
+  - name: worker3
+    kind: processor
+"""
+        # fmt: off
+        yaml = YAML()
+        source = yaml.load(StringIO(yaml_str))
+
+        spec = {
+            "path": ["workers", "name:worker1"],
+            "action": "insert_sibling",
+            "position": "after",
+            "data": {"name": "worker2", "kind": "listener"},
+        }
+
+        editor = YamlEditor(spec=spec, source=source)
+        result = editor.apply(dry_run=True)
+
+        assert result == yaml_str
+
+        workers = editor.data["workers"]
+        assert len(workers) == 3  # No duplicate added
+        assert workers[1]["name"] == "worker2"
+
+    def test_duplicate_map_sibling_insertion_skipped(self):
+        # fmt: off
+        yaml_str = \
+"""\
+config:
+  key1: value1
+  key2: value2
+  key3: value3
+"""
+        # fmt: off
+        yaml = YAML()
+        source = yaml.load(StringIO(yaml_str))
+
+        spec = {
+            "path": ["config", "key1"],
+            "action": "insert_sibling",
+            "position": "after",
+            "data": {"key2": "new_value"},
+        }
+
+        editor = YamlEditor(spec=spec, source=source)
+        result = editor.apply(dry_run=True)
+
+        assert result == yaml_str
+
+        config_keys = list(editor.data["config"].keys())
+        assert len(config_keys) == 3  # No duplicate added
+        assert editor.data["config"]["key2"] == "value2"  # Original value preserved
+
+    def test_multiple_insertions_with_duplicate(self):
+        # fmt: off
+        yaml_str = \
+"""\
+workers:
+  - name: worker1
+    kind: processor
+  - name: worker2
+    kind: listener
+"""
+        # fmt: off
+        yaml = YAML()
+        source = yaml.load(StringIO(yaml_str))
+
+        spec = [
+            {
+                "path": ["workers", "name:worker1"],
+                "action": "insert_sibling",
+                "position": "after",
+                "data": {"name": "worker2", "kind": "listener"},
+            },
+            {
+                "path": ["workers", "name:worker2"],
+                "action": "insert_sibling",
+                "position": "after",
+                "data": {"name": "worker3", "kind": "scheduler"},
+            },
+        ]
+
+        editor = YamlEditor(spec=spec, source=source)
+        result = editor.apply(dry_run=True)
+
+        # fmt: off
+        expected = \
+"""\
+workers:
+  - name: worker1
+    kind: processor
+  - name: worker2
+    kind: listener
+  - name: worker3
+    kind: scheduler
+"""
+        # fmt: on
+        assert result == expected
+
+        workers = editor.data["workers"]
+        assert len(workers) == 3
+        assert workers[2]["name"] == "worker3"
+
+    def test_idempotent_upgrade_simulation(self):
+        # fmt: off
+        yaml_str = \
+"""\
+name: tabsdata
+controllers:
+  regular:
+    workers:
+      - name: apiserver
+        kind: processor
+        location: relative
+        program: apiserver
+      - name: janitor
+        kind: processor
+        location: system
+        program: janitor
+"""
+        # fmt: off
+        yaml = YAML()
+        source = yaml.load(StringIO(yaml_str))
+
+        spec = {
+            "path": ["controllers", "regular", "workers", "name:apiserver"],
+            "action": "insert_sibling",
+            "position": "after",
+            "data": {
+                "name": "aiagent",
+                "kind": "processor",
+                "location": "system",
+                "program": "aiagent",
+            },
+        }
+
+        # First application
+        editor1 = YamlEditor(spec=spec, source=source)
+        result1 = editor1.apply(dry_run=True)
+
+        # fmt: off
+        expected = \
+"""\
+name: tabsdata
+controllers:
+  regular:
+    workers:
+      - name: apiserver
+        kind: processor
+        location: relative
+        program: apiserver
+      - name: aiagent
+        kind: processor
+        location: system
+        program: aiagent
+      - name: janitor
+        kind: processor
+        location: system
+        program: janitor
+"""
+        # fmt: on
+        assert result1 == expected
+
+        source2 = yaml.load(StringIO(result1))
+        editor2 = YamlEditor(spec=spec, source=source2)
+        result2 = editor2.apply(dry_run=True)
+
+        assert result2 == expected
+        assert result1 == result2
+
+        workers = editor2.data["controllers"]["regular"]["workers"]
+        assert len(workers) == 3
+
+        aiagent_count = sum(1 for w in workers if w.get("name") == "aiagent")
+        assert aiagent_count == 1
+
+    def test_duplicate_with_different_fields(self):
+        # fmt: off
+        yaml_str = \
+"""\
+workers:
+  - name: worker1
+    kind: processor
+    priority: high
+"""
+        # fmt: off
+        yaml = YAML()
+        source = yaml.load(StringIO(yaml_str))
+
+        spec = {
+            "path": ["workers", "name:worker1"],
+            "action": "insert_sibling",
+            "position": "after",
+            "data": {"name": "worker1", "kind": "scheduler", "priority": "low"},
+        }
+
+        editor = YamlEditor(spec=spec, source=source)
+        result = editor.apply(dry_run=True)
+
+        assert result == yaml_str
+
+        workers = editor.data["workers"]
+        assert len(workers) == 1
+        assert workers[0]["kind"] == "processor"
+        assert workers[0]["priority"] == "high"
 
 
 class TestSpecFormats:
