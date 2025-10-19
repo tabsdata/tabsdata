@@ -23,6 +23,7 @@ pip-tools==7.5.0
 platformdirs==4.4.0
 polars==1.33.1
 PyYAML==6.0.2
+ruamel.yaml==0.18.15
 pyarrow==21.0.0
 # Note: pinning pydantic and pyiceberg to specific versions due to a regression in
 # their code, upgrade to latest once solved.
