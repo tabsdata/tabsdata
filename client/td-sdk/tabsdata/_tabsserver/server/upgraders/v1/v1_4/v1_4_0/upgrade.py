@@ -4,6 +4,7 @@
 
 import copy
 import logging
+import shutil
 from pathlib import Path
 from typing import Any, Optional
 
@@ -23,8 +24,20 @@ class Upgrade_1_3_0_to_1_4_0(Upgrade):
     target_version = Version("1.4.0")
 
     # noinspection DuplicatedCode
-    def upgrade(  # noqa: C901
+    def upgrade(
         self,
+        instance: Path,
+        dry_run: bool,
+    ) -> list[str]:
+        messages: list[str] = []
+
+        messages.extend(self.upgrade_instance(instance, dry_run))
+        messages.extend(self.upgrade_instance_apiserver(instance, dry_run))
+
+        return messages
+
+    @staticmethod
+    def upgrade_instance(  # noqa: C901
         instance: Path,
         dry_run: bool,
     ) -> list[str]:
@@ -179,5 +192,130 @@ class Upgrade_1_3_0_to_1_4_0(Upgrade):
                 default_flow_style=False,
             )
 
-        messages.append(message)
+        for worker in new_resources_workers:
+            source_worker_config_folder = td_resource(
+                f"resources/profile/workspace/config/proc/regular/{worker}/"
+            )
+            target_worker_config_folder = (
+                instance / "workspace" / "config" / "proc" / "regular" / worker
+            )
+            shutil.copytree(
+                source_worker_config_folder,
+                target_worker_config_folder,
+                dirs_exist_ok=True,
+            )
+
+            source_worker_work_folder = td_resource(
+                f"resources/profile/workspace/work/proc/regular/{worker}/"
+            )
+            target_worker_work_folder = (
+                instance / "workspace" / "work" / "proc" / "regular" / worker
+            )
+            shutil.copytree(
+                source_worker_work_folder,
+                target_worker_work_folder,
+                dirs_exist_ok=True,
+            )
+
+        return messages
+
+    @staticmethod
+    def upgrade_instance_apiserver(
+        instance: Path,
+        dry_run: bool,
+    ) -> list[str]:
+        messages: list[str] = []
+
+        instance_apiserver_config_path = (
+            instance
+            / "workspace"
+            / "config"
+            / "proc"
+            / "regular"
+            / "apiserver"
+            / "config"
+            / "config.yaml"
+        )
+        if not instance_apiserver_config_path.exists():
+            logger.warning(
+                "Instance apiserver config file "
+                f"'{instance_apiserver_config_path}' not found; "
+                "skipping apiserver upgrade."
+            )
+            return messages
+
+        resources_apiserver_config_path = td_resource(
+            "resources/"
+            "profile/"
+            "workspace/"
+            "config/"
+            "proc/"
+            "regular/"
+            "apiserver/"
+            "config/"
+            "config.yaml"
+        )
+
+        with instance_apiserver_config_path.open(
+            "r", encoding="utf-8"
+        ) as instance_apiserver_config_file:
+            instance_apiserver_config = (
+                yaml.safe_load(instance_apiserver_config_file) or {}
+            )
+        if not isinstance(instance_apiserver_config, dict):
+            logger.warning(
+                "Instance apiserver config has unexpected structure; "
+                "skipping apiserver upgrade."
+            )
+            return messages
+
+        with resources_apiserver_config_path.open(
+            "r", encoding="utf-8"
+        ) as resources_apiserver_config_file:
+            resources_apiserver_config = (
+                yaml.safe_load(resources_apiserver_config_file) or {}
+            )
+        if not isinstance(resources_apiserver_config, dict):
+            logger.warning(
+                "Resources apiserver config has unexpected structure; "
+                "skipping apiserver upgrade."
+            )
+            return messages
+
+        all_apiserver_config: dict[str, Any] = {}
+        new_apiserver_config: list[str] = []
+
+        for key, value in resources_apiserver_config.items():
+            if key in instance_apiserver_config:
+                all_apiserver_config[key] = instance_apiserver_config[key]
+            else:
+                all_apiserver_config[key] = copy.deepcopy(value)
+                new_apiserver_config.append(key)
+
+        if not new_apiserver_config:
+            logger.info(
+                "No missing apiserver config nodes detected; skipping apiserver"
+                " upgrade."
+            )
+            return messages
+        apiserver_message = (
+            "Added missing apiserver config node(s) "
+            f"{', '.join(new_apiserver_config)} "
+            f"in '{instance_apiserver_config_path}'."
+        )
+
+        if dry_run:
+            messages.append(f"[dry-run] {apiserver_message}")
+            return messages
+
+        with instance_apiserver_config_path.open(
+            "w", encoding="utf-8"
+        ) as instance_apiserver_config_file:
+            yaml.safe_dump(
+                all_apiserver_config,
+                instance_apiserver_config_file,
+                sort_keys=False,
+                default_flow_style=False,
+            )
+
         return messages

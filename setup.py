@@ -223,17 +223,7 @@ PACKAGE_RESOURCES = {
     / "variant"
     / "resources"
     / "profile"
-    / "workspace"
-    / "config"
-    / "config.yaml": (
-        Path(".")
-        / "tabsdata"
-        / "resources"
-        / "profile"
-        / "workspace"
-        / "config"
-        / "config.yaml"
-    ),
+    / "workspace": Path(".") / "tabsdata" / "resources" / "profile" / "workspace",
 }
 
 
@@ -242,12 +232,19 @@ class CustomBuildPy(_build_py):
     def run(self):
         package_root = Path(self.build_lib)
         for source, target in PACKAGE_RESOURCES.items():
-            if source.exists():
-                destination = package_root / target
+            if not source.exists():
+                logger.warning(f"External resource {source} does not exist. Skipping.")
+                continue
+            destination = package_root / target
+            if source.is_dir():
+                shutil.copytree(source, destination, dirs_exist_ok=True)
+            elif source.is_file():
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(source, destination)
             else:
-                logger.warning(f"External resource {source} does not exist. Skipping.")
+                logger.warning(
+                    f"External resource {source} has unsupported type. Skipping."
+                )
         super().run()
 
 
