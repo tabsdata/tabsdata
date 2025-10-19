@@ -109,6 +109,13 @@ class YamlEditor:
                     if node not in segment:
                         raise ValueError(f"Key '{node}' not found in dict")
                     return segment[node]
+                elif isinstance(segment, list):
+                    for element in segment:
+                        if isinstance(element, dict) and node in element:
+                            return element
+                    raise ValueError(
+                        f"No dict item found in list containing key '{node}'"
+                    )
                 else:
                     raise ValueError(
                         f"Cannot access key '{node}' in non-dict type {type(segment)}"
@@ -124,7 +131,10 @@ class YamlEditor:
         if ":" in destination:
             anchor = tuple(destination.split(":", 1))
         else:
-            anchor = destination
+            if isinstance(parent, list) and isinstance(target, dict):
+                anchor = (destination, target.get(destination))
+            else:
+                anchor = destination
         return parent, target, anchor
 
     # noinspection DuplicatedCode

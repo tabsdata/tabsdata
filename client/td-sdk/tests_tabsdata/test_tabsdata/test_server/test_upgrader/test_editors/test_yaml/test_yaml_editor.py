@@ -23,6 +23,7 @@ third: value3
 """
         # fmt: off
         yaml = YAML()
+        yaml.preserve_quotes = True
         source = yaml.load(StringIO(yaml_str))
 
         spec = {
@@ -60,6 +61,7 @@ parent:
 """
         # fmt: off
         yaml = YAML()
+        yaml.preserve_quotes = True
         source = yaml.load(StringIO(yaml_str))
 
         spec = {
@@ -97,6 +99,7 @@ section2:
 """
         # fmt: off
         yaml = YAML()
+        yaml.preserve_quotes = True
         source = yaml.load(StringIO(yaml_str))
 
         spec = [
@@ -160,6 +163,7 @@ workers:
 """
         # fmt: off
         yaml = YAML()
+        yaml.preserve_quotes = True
         source = yaml.load(StringIO(yaml_str))
 
         spec = {
@@ -207,6 +211,7 @@ workers:
 """
         # fmt: off
         yaml = YAML()
+        yaml.preserve_quotes = True
         source = yaml.load(StringIO(yaml_str))
 
         spec = {
@@ -253,6 +258,7 @@ apps:
 """
         # fmt: off
         yaml = YAML()
+        yaml.preserve_quotes = True
         source = yaml.load(StringIO(yaml_str))
 
         spec = {
@@ -387,6 +393,7 @@ database:
 """
 
         yaml = YAML()
+        yaml.preserve_quotes = True
         source = yaml.load(StringIO(original_yaml))
         insert_data = yaml.load(StringIO(insert_yaml))
 
@@ -447,6 +454,7 @@ controllers:
 """
         # fmt: off
         yaml = YAML()
+        yaml.preserve_quotes = True
         source = yaml.load(StringIO(yaml_str))
 
         spec = {
@@ -583,6 +591,7 @@ level1:
 """
         # fmt: off
         yaml = YAML()
+        yaml.preserve_quotes = True
         source = yaml.load(StringIO(yaml_str))
 
         spec = {
@@ -628,6 +637,7 @@ key: value
 """
         # fmt: off
         yaml = YAML()
+        yaml.preserve_quotes = True
         source = yaml.load(StringIO(yaml_str))
 
         spec = {"path": ["key"], "action": "invalid_action", "data": {"new": "value"}}
@@ -644,6 +654,7 @@ key: value
 """
         # fmt: off
         yaml = YAML()
+        yaml.preserve_quotes = True
         source = yaml.load(StringIO(yaml_str))
 
         spec = {
@@ -665,6 +676,7 @@ existing: value
 """
         # fmt: off
         yaml = YAML()
+        yaml.preserve_quotes = True
         source = yaml.load(StringIO(yaml_str))
 
         spec = {
@@ -689,6 +701,7 @@ items:
 """
         # fmt: off
         yaml = YAML()
+        yaml.preserve_quotes = True
         source = yaml.load(StringIO(yaml_str))
 
         spec = {
@@ -715,6 +728,7 @@ items:
 """
         # fmt: off
         yaml = YAML()
+        yaml.preserve_quotes = True
         source = yaml.load(StringIO(yaml_str))
 
         spec = {
@@ -751,6 +765,7 @@ items:
 """
         # fmt: off
         yaml = YAML()
+        yaml.preserve_quotes = True
         source = yaml.load(StringIO(yaml_str))
 
         spec = {
@@ -785,6 +800,7 @@ items: []
 """
         # fmt: off
         yaml = YAML()
+        yaml.preserve_quotes = True
         source = yaml.load(StringIO(yaml_str))
 
         spec = {
@@ -818,6 +834,7 @@ key: value
 """
         # fmt: off
         yaml = YAML()
+        yaml.preserve_quotes = True
         source = yaml.load(StringIO(yaml_str))
 
         spec = {
@@ -1634,6 +1651,7 @@ new_feature: enabled
 """
         # fmt: on
         yaml = YAML()
+        yaml.preserve_quotes = True
         source = yaml.load(StringIO(original_yaml))
         insert_data = yaml.load(StringIO(insert_yaml))
 
@@ -1673,6 +1691,7 @@ new_feature: enabled
 """
         # fmt: on
         yaml = YAML()
+        yaml.preserve_quotes = True
         source = yaml.load(StringIO(original_yaml))
         insert_data = yaml.load(StringIO(insert_yaml))
 
@@ -1711,6 +1730,7 @@ new_feature: enabled  # Inline note
 """
         # fmt: on
         yaml = YAML()
+        yaml.preserve_quotes = True
         source = yaml.load(StringIO(original_yaml))
         insert_data = yaml.load(StringIO(insert_yaml))
 
@@ -1750,6 +1770,7 @@ kind: listener
 """
         # fmt: on
         yaml = YAML()
+        yaml.preserve_quotes = True
         source = yaml.load(StringIO(original_yaml))
         insert_data = yaml.load(StringIO(insert_yaml))
 
@@ -1794,6 +1815,7 @@ workers:
 """
         # fmt: off
         yaml = YAML()
+        yaml.preserve_quotes = True
         source = yaml.load(StringIO(yaml_str))
 
         spec = {
@@ -1823,6 +1845,7 @@ config:
 """
         # fmt: off
         yaml = YAML()
+        yaml.preserve_quotes = True
         source = yaml.load(StringIO(yaml_str))
 
         spec = {
@@ -1853,6 +1876,7 @@ workers:
 """
         # fmt: off
         yaml = YAML()
+        yaml.preserve_quotes = True
         source = yaml.load(StringIO(yaml_str))
 
         spec = [
@@ -1910,6 +1934,7 @@ controllers:
 """
         # fmt: off
         yaml = YAML()
+        yaml.preserve_quotes = True
         source = yaml.load(StringIO(yaml_str))
 
         spec = {
@@ -1975,6 +2000,7 @@ workers:
 """
         # fmt: off
         yaml = YAML()
+        yaml.preserve_quotes = True
         source = yaml.load(StringIO(yaml_str))
 
         spec = {
@@ -2005,6 +2031,7 @@ key: value
 """
         # fmt: off
         yaml = YAML()
+        yaml.preserve_quotes = True
         source = yaml.load(StringIO(yaml_str))
 
         spec = {"path": ["key"], "action": "insert_sibling", "data": {"new": "data"}}
@@ -2029,6 +2056,7 @@ key: value
 """
         # fmt: off
         yaml = YAML()
+        yaml.preserve_quotes = True
         source = yaml.load(StringIO(yaml_str))
 
         spec = [
@@ -2063,6 +2091,7 @@ data:
 """
 
         yaml = YAML()
+        yaml.preserve_quotes = True
         spec = yaml.load(StringIO(spec_yaml))
 
         source_yaml = """\
