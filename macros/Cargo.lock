@@ -13,9 +13,9 @@ dependencies = [
 
 [[package]]
 name = "bitflags"
-version = "2.9.4"
+version = "2.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2261d10cca569e4643e526d8dc2e62e433cc8aba21ab764233731f8d369bf394"
+checksum = "812e12b5285cc515a9c72a5c1d3b6d46a19dac5acfef5265968c166106e31dd3"
 
 [[package]]
 name = "cc"
@@ -139,9 +139,9 @@ checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
 
 [[package]]
 name = "indexmap"
-version = "2.11.4"
+version = "2.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4b0f83760fb341a774ed326568e19f5a863af4a952def8c39f9ab92fd95b88e5"
+checksum = "6717a8d2a5a929a1a2eb43a12812498ed141a0bcfb7e8f7844fbdbe4303bba9f"
 dependencies = [
  "equivalent",
  "hashbrown",
@@ -469,9 +469,9 @@ checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
 
 [[package]]
 name = "syn"
-version = "2.0.106"
+version = "2.0.107"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ede7c438028d4436d71104916910f5bb611972c5cfd7f89b8300a8186e6fada6"
+checksum = "2a26dbd934e5451d21ef060c018dae56fc073894c5a7896f882928a76e6d081b"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -480,7 +480,7 @@ dependencies = [
 
 [[package]]
 name = "td-apiforge"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "darling",
  "openssl",
@@ -492,7 +492,7 @@ dependencies = [
 
 [[package]]
 name = "td-attach"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "darling",
  "openssl",
@@ -504,7 +504,7 @@ dependencies = [
 
 [[package]]
 name = "td-build"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "duct",
  "openssl",
@@ -516,7 +516,7 @@ dependencies = [
 
 [[package]]
 name = "td-macros"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "openssl",
  "td-build",
@@ -524,7 +524,7 @@ dependencies = [
 
 [[package]]
 name = "td-shared"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "darling",
  "duct",
@@ -536,7 +536,7 @@ dependencies = [
 
 [[package]]
 name = "td-type"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "darling",
  "openssl",
@@ -548,7 +548,7 @@ dependencies = [
 
 [[package]]
 name = "tm-error"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "openssl",
  "quote",
@@ -557,7 +557,7 @@ dependencies = [
 
 [[package]]
 name = "tm-services"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "openssl",
  "quote",
@@ -566,7 +566,7 @@ dependencies = [
 
 [[package]]
 name = "tm-test"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "darling",
  "openssl",
@@ -578,7 +578,7 @@ dependencies = [
 
 [[package]]
 name = "tm-tower"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "openssl",
  "quote",
@@ -587,7 +587,7 @@ dependencies = [
 
 [[package]]
 name = "tm-workspace"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "openssl",
  "quote",
