@@ -45,7 +45,7 @@ pre-build = [
     "pip --version",
     "pip3 --version",
     "echo Installing maturin...",
-    "pip install maturin[patchelf]==1.9.3",
+    "pip install maturin[patchelf]==1.9.4",
     "echo Checking maturin...",
     "rustc --version",
     "cargo --version",

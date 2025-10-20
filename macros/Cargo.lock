@@ -480,7 +480,7 @@ dependencies = [
 
 [[package]]
 name = "td-apiforge"
-version = "1.5.0"
+version = "1.4.0"
 dependencies = [
  "darling",
  "openssl",
@@ -492,7 +492,7 @@ dependencies = [
 
 [[package]]
 name = "td-attach"
-version = "1.5.0"
+version = "1.4.0"
 dependencies = [
  "darling",
  "openssl",
@@ -504,7 +504,7 @@ dependencies = [
 
 [[package]]
 name = "td-build"
-version = "1.5.0"
+version = "1.4.0"
 dependencies = [
  "duct",
  "openssl",
@@ -516,7 +516,7 @@ dependencies = [
 
 [[package]]
 name = "td-macros"
-version = "1.5.0"
+version = "1.4.0"
 dependencies = [
  "openssl",
  "td-build",
@@ -524,7 +524,7 @@ dependencies = [
 
 [[package]]
 name = "td-shared"
-version = "1.5.0"
+version = "1.4.0"
 dependencies = [
  "darling",
  "duct",
@@ -536,7 +536,7 @@ dependencies = [
 
 [[package]]
 name = "td-type"
-version = "1.5.0"
+version = "1.4.0"
 dependencies = [
  "darling",
  "openssl",
@@ -548,7 +548,7 @@ dependencies = [
 
 [[package]]
 name = "tm-error"
-version = "1.5.0"
+version = "1.4.0"
 dependencies = [
  "openssl",
  "quote",
@@ -557,7 +557,7 @@ dependencies = [
 
 [[package]]
 name = "tm-services"
-version = "1.5.0"
+version = "1.4.0"
 dependencies = [
  "openssl",
  "quote",
@@ -566,7 +566,7 @@ dependencies = [
 
 [[package]]
 name = "tm-test"
-version = "1.5.0"
+version = "1.4.0"
 dependencies = [
  "darling",
  "openssl",
@@ -578,7 +578,7 @@ dependencies = [
 
 [[package]]
 name = "tm-tower"
-version = "1.5.0"
+version = "1.4.0"
 dependencies = [
  "openssl",
  "quote",
@@ -587,7 +587,7 @@ dependencies = [
 
 [[package]]
 name = "tm-workspace"
-version = "1.5.0"
+version = "1.4.0"
 dependencies = [
  "openssl",
  "quote",

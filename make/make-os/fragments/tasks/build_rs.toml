@@ -228,11 +228,11 @@ script = [
         ## td_profile = set ${td-profile}
 
         ## td_script = set "apk add --no-cache perl"
-        ## td_script = set "${td_script} && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.89.0"
+        ## td_script = set "${td_script} && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.90.0"
         ## td_script = set "${td_script} && . $HOME/.cargo/env"
         ## td_script = set "${td_script} && rustup target add x86_64-unknown-linux-musl"
         ## td_script = set "${td_script} && python3.12 -m pip install --upgrade pip"
-        ## td_script = set "${td_script} && python3.12 -m pip install maturin[patchelf]==1.9.3 --root-user-action=ignore"
+        ## td_script = set "${td_script} && python3.12 -m pip install maturin[patchelf]==1.9.4 --root-user-action=ignore"
         ## td_script = set "${td_script} && python3.12 -m pip --version"
         ## td_script = set "${td_script} && export OPENSSL_STATIC=1"
         ## td_script = set "${td_script} && export PKG_CONFIG_ALL_STATIC=1"
@@ -284,10 +284,10 @@ script = [
 
         debug "🚀 docker run --rm --mount=type=bind,src=${PROJECT_TABSDATA_ROOT_FOLDER},target=/tabsdata -w /tabsdata --env TD_PROFILE=${td_profile} quay.io/pypa/manylinux2014_x86_64 bash -lc ..."
         td_script = set "yum -y install perl perl-IPC-Cmd perl-Time-Piece"
-        td_script = set "${td_script} && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.89.0"
+        td_script = set "${td_script} && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.90.0"
         td_script = set "${td_script} && . $HOME/.cargo/env"
         td_script = set "${td_script} && python3.12 -m pip install --upgrade pip"
-        td_script = set "${td_script} && python3.12 -m pip install maturin[patchelf]==1.9.3 --root-user-action=ignore"
+        td_script = set "${td_script} && python3.12 -m pip install maturin[patchelf]==1.9.4 --root-user-action=ignore"
         td_script = set "${td_script} && export OPENSSL_STATIC=1"
         td_script = set "${td_script} && export PKG_CONFIG_ALL_STATIC=1"
         td_script = set "${td_script} && export ZLIB_STATIC=1"

@@ -30,8 +30,8 @@ RUN python3 --version
 RUN pip --version
 RUN pip3 --version
 
-ENV RUST_VERSION=1.89.0
-ENV MATURIN_VERSION=1.9.3
+ENV RUST_VERSION=1.90.0
+ENV MATURIN_VERSION=1.9.4
 
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain ${RUST_VERSION}
 ENV PATH="/root/.cargo/bin:${PATH}"
