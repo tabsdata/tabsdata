@@ -92,7 +92,7 @@ path = "helpers/td-shared"
 # External dependencies
 
 [workspace.dependencies.axum]
-version = "0.8.4"
+version = "0.8.6"
 
 [workspace.dependencies.darling]
 version = "0.21.3"
@@ -107,7 +107,7 @@ version = "1.1.0"
 version = "0.1.6"
 
 [workspace.dependencies.openssl]
-version = "0.10.73"
+version = "0.10.74"
 features = ["vendored"]
 
 [workspace.dependencies.proc-macro-crate]
@@ -117,21 +117,21 @@ version = "3.4.0"
 version = "1.0.101"
 
 [workspace.dependencies.quote]
-version = "1.0.40"
+version = "1.0.41"
 
 [workspace.dependencies.rand]
 version = "0.9.2"
 
 [workspace.dependencies.serde]
-version = "1.0.225"
+version = "1.0.228"
 features = ["derive"]
 
 [workspace.dependencies.syn]
-version = "2.0.106"
+version = "2.0.107"
 features = ["full"]
 
 [workspace.dependencies.toml]
-version = "0.9.6"
+version = "0.9.8"
 
 [workspace.dependencies.utoipa]
 version = "5.4.0"

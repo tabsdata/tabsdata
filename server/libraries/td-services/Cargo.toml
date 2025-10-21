@@ -78,7 +78,7 @@ glob = { workspace = true }
 hex = { workspace = true }
 http = { workspace = true }
 itertools = { workspace = true }
-jsonwebtoken = { workspace = true }
+jsonwebtoken = { workspace = true, features = ["aws_lc_rs"] }
 polars = { workspace = true }
 serde = { workspace = true }
 serde_yaml = { workspace = true }
