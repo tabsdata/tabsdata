@@ -15,8 +15,7 @@ class TestYamlEditorBasics:
 
     def test_simple_sibling_insertion(self):
         # fmt: off
-        yaml_str = \
-"""\
+        yaml_str = """\
 first: value1
 second: value2
 third: value3
@@ -37,8 +36,7 @@ third: value3
         result_yaml = editor.apply(dry_run=True)
 
         # fmt: off
-        expected = \
-"""\
+        expected ="""\
 first: value1
 second: value2
 new: inserted
@@ -54,8 +52,7 @@ third: value3
 
     def test_simple_child_insertion(self):
         # fmt: off
-        yaml_str = \
-"""\
+        yaml_str ="""\
 parent:
   existing: value
 """
@@ -75,8 +72,7 @@ parent:
         result_yaml = editor.apply(dry_run=True)
 
         # fmt: off
-        expected = \
-"""\
+        expected ="""\
 parent:
   existing: value
   new_child: new_value
@@ -90,8 +86,7 @@ parent:
 
     def test_multiple_transformations(self):
         # fmt: off
-        yaml_str = \
-"""\
+        yaml_str ="""\
 section1:
   items: []
 section2:
@@ -128,8 +123,7 @@ section2:
         result = yaml.load(StringIO(result_yaml))
 
         # fmt: off
-        expected = \
-"""\
+        expected ="""\
 section1:
   items:
     - id: 1
@@ -151,8 +145,7 @@ class TestListOperations:
 
     def test_insert_sibling_in_list_after(self):
         # fmt: off
-        yaml_str = \
-"""\
+        yaml_str ="""\
 workers:
   - name: worker1
     kind: processor
@@ -177,8 +170,7 @@ workers:
         result_yaml = editor.apply(dry_run=True)
 
         # fmt: off
-        expected = \
-"""\
+        expected ="""\
 workers:
   - name: worker1
     kind: processor
@@ -201,8 +193,7 @@ workers:
 
     def test_insert_sibling_in_list_before(self):
         # fmt: off
-        yaml_str = \
-"""\
+        yaml_str ="""\
 workers:
   - name: worker1
     kind: processor
@@ -225,8 +216,7 @@ workers:
         result_yaml = editor.apply(dry_run=True)
 
         # fmt: off
-        expected = \
-"""\
+        expected ="""\
 workers:
   - name: worker1
     kind: processor
@@ -246,8 +236,7 @@ workers:
 
     def test_nested_list_insertion(self):
         # fmt: off
-        yaml_str = \
-"""\
+        yaml_str ="""\
 apps:
   - name: app1
     settings:
@@ -271,8 +260,7 @@ apps:
         result_yaml = editor.apply(dry_run=True)
 
         # fmt: off
-        expected = \
-"""\
+        expected ="""\
 apps:
   - name: app1
     settings:
@@ -295,8 +283,7 @@ class TestCommentPreservation:
 
     def test_comments_preserved_in_map(self):
         # fmt: off
-        yaml_str = \
-"""\
+        yaml_str ="""\
 # Configuration file
 first: value1  # inline comment
 # Comment before second
@@ -319,8 +306,7 @@ third: value3
         result = editor.apply(dry_run=True)
 
         # fmt: off
-        expected = \
-"""\
+        expected ="""\
 # Configuration file
 first: value1  # inline comment
 # Comment before second
@@ -333,8 +319,7 @@ third: value3
 
     def test_comments_preserved_in_list(self):
         # fmt: off
-        yaml_str = \
-"""\
+        yaml_str ="""\
 # Workers configuration
 workers:
   # First worker
@@ -360,8 +345,7 @@ workers:
         result = editor.apply(dry_run=True)
 
         # fmt: off
-        expected = \
-"""\
+        expected ="""\
 # Workers configuration
 workers:
   # First worker
@@ -408,8 +392,7 @@ database:
         result = editor.apply(dry_run=True)
 
         # fmt: off
-        expected = \
-"""\
+        expected ="""\
 # Main config
 services:
   # API service
@@ -436,8 +419,7 @@ class TestRealWorldScenarios:
 
     def test_config_worker_insertion(self):
         # fmt: off
-        yaml_str = \
-"""\
+        yaml_str ="""\
 name: tabsdata
 controllers:
   init:
@@ -473,8 +455,7 @@ controllers:
         result = editor.apply(dry_run=True)
 
         # fmt: off
-        expected = \
-"""\
+        expected ="""\
 name: tabsdata
 controllers:
   init:
@@ -504,8 +485,7 @@ controllers:
 
     def test_config_worker_insertion_with_comments(self):
         # fmt: off
-        yaml_str = \
-"""\
+        yaml_str ="""\
 # TabsData Configuration
 name: tabsdata
 controllers:
@@ -549,8 +529,7 @@ controllers:
         assert workers[1]["name"] == "config-validator"
 
         # fmt: off
-        expected = \
-"""\
+        expected ="""\
 # TabsData Configuration
 name: tabsdata
 controllers:
@@ -578,8 +557,7 @@ controllers:
 
     def test_deeply_nested_path(self):
         # fmt: off
-        yaml_str = \
-"""\
+        yaml_str ="""\
 level1:
   level2:
     level3:
@@ -605,8 +583,7 @@ level1:
         result = editor.apply(dry_run=True)
 
         # fmt: off
-        expected = \
-"""\
+        expected ="""\
 level1:
   level2:
     level3:
@@ -631,8 +608,7 @@ class TestErrorHandling:
 
     def test_invalid_action_raises(self):
         # fmt: off
-        yaml_str = \
-"""\
+        yaml_str ="""\
 key: value
 """
         # fmt: off
@@ -648,8 +624,7 @@ key: value
 
     def test_invalid_position_raises(self):
         # fmt: off
-        yaml_str = \
-"""\
+        yaml_str ="""\
 key: value
 """
         # fmt: off
@@ -670,8 +645,7 @@ key: value
 
     def test_nonexistent_path_raises(self):
         # fmt: off
-        yaml_str = \
-"""\
+        yaml_str ="""\
 existing: value
 """
         # fmt: off
@@ -691,8 +665,7 @@ existing: value
 
     def test_nonexistent_list_item_raises(self):
         # fmt: off
-        yaml_str = \
-"""\
+        yaml_str ="""\
 items:
   - id: 1
     name: first
@@ -720,8 +693,7 @@ class TestEdgeCases:
 
     def test_insert_at_list_start(self):
         # fmt: off
-        yaml_str = \
-"""\
+        yaml_str ="""\
 items:
   - id: 2
   - id: 3
@@ -742,8 +714,7 @@ items:
         result = editor.apply(dry_run=True)
 
         # fmt: off
-        expected = \
-"""\
+        expected ="""\
 items:
   - id: 1
   - id: 2
@@ -758,8 +729,7 @@ items:
 
     def test_insert_at_list_end(self):
         # fmt: off
-        yaml_str = \
-"""\
+        yaml_str ="""\
 items:
   - id: 1
 """
@@ -779,8 +749,7 @@ items:
         result = editor.apply(dry_run=True)
 
         # fmt: off
-        expected = \
-"""\
+        expected ="""\
 items:
   - id: 1
   - id: 2
@@ -794,8 +763,7 @@ items:
 
     def test_empty_list_insertion(self):
         # fmt: off
-        yaml_str = \
-"""\
+        yaml_str ="""\
 items: []
 """
         # fmt: off
@@ -814,8 +782,7 @@ items: []
         result = editor.apply(dry_run=True)
 
         # fmt: off
-        expected = \
-"""\
+        expected ="""\
 items:
   - id: 1
 """
@@ -828,8 +795,7 @@ items:
 
     def test_single_dict_spec(self):
         # fmt: off
-        yaml_str = \
-"""\
+        yaml_str ="""\
 key: value
 """
         # fmt: off
@@ -848,8 +814,7 @@ key: value
         result_yaml = editor.apply(dry_run=True)
 
         # fmt: off
-        expected = \
-"""\
+        expected ="""\
 key: value
 new: inserted
 """
@@ -865,8 +830,7 @@ class TestComplexCommentScenarios:
 
     def test_multiple_inline_comments(self):
         # fmt: off
-        yaml_str = \
-"""\
+        yaml_str ="""\
 config:
   key1: value1  # first comment
   key2: value2  # second comment
@@ -888,8 +852,7 @@ config:
         result = editor.apply(dry_run=True)
 
         # fmt: off
-        expected = \
-"""\
+        expected ="""\
 config:
   key1: value1  # first comment
   key2: value2  # second comment
@@ -901,8 +864,7 @@ config:
 
     def test_nested_comments_at_multiple_levels(self):
         # fmt: off
-        yaml_str = \
-"""\
+        yaml_str ="""\
 # Top level comment
 root:
   # Level 1 comment
@@ -929,8 +891,7 @@ root:
         result = editor.apply(dry_run=True)
 
         # fmt: off
-        expected = \
-"""\
+        expected ="""\
 # Top level comment
 root:
   # Level 1 comment
@@ -947,8 +908,7 @@ root:
 
     def test_comments_before_and_after_list_items(self):
         # fmt: off
-        yaml_str = \
-"""\
+        yaml_str ="""\
 workers:
   # First worker
   - name: worker1
@@ -976,8 +936,7 @@ workers:
         result = editor.apply(dry_run=True)
 
         # fmt: off
-        expected = \
-"""\
+        expected ="""\
 workers:
   # First worker
   - name: worker1
@@ -996,8 +955,7 @@ workers:
 
     def test_multiline_comments(self):
         # fmt: off
-        yaml_str = \
-"""\
+        yaml_str ="""\
 # This is a configuration file
 # It contains multiple settings
 # Each setting is important
@@ -1027,8 +985,7 @@ settings:
         result = editor.apply(dry_run=True)
 
         # fmt: off
-        expected = \
-"""\
+        expected ="""\
 # This is a configuration file
 # It contains multiple settings
 # Each setting is important
@@ -1049,8 +1006,7 @@ settings:
 
     def test_empty_lines_with_comments(self):
         # fmt: off
-        yaml_str = \
-"""\
+        yaml_str ="""\
 config:
 
   # First section
@@ -1078,8 +1034,7 @@ config:
         result = editor.apply(dry_run=True)
 
         # fmt: off
-        expected = \
-"""\
+        expected ="""\
 config:
 
   # First section
@@ -1102,8 +1057,7 @@ config:
 
     def test_list_with_mixed_comment_styles(self):
         # fmt: off
-        yaml_str = \
-"""\
+        yaml_str ="""\
 items:
   - id: 1  # inline comment for item 1
     name: first
@@ -1129,8 +1083,7 @@ items:
         result = editor.apply(dry_run=True)
 
         # fmt: off
-        expected = \
-"""\
+        expected ="""\
 items:
   - id: 1  # inline comment for item 1
     name: first
@@ -1154,8 +1107,7 @@ items:
 
     def test_deeply_nested_with_comments_at_each_level(self):
         # fmt: off
-        yaml_str = \
-"""\
+        yaml_str ="""\
 # Root comment
 app:
   # Config comment
@@ -1185,8 +1137,7 @@ app:
         result = editor.apply(dry_run=True)
 
         # fmt: off
-        expected = \
-"""\
+        expected ="""\
 # Root comment
 app:
   # Config comment
@@ -1206,8 +1157,7 @@ app:
 
     def test_insert_at_beginning_with_comment(self):
         # fmt: off
-        yaml_str = \
-"""\
+        yaml_str ="""\
 config:
   # First key
   key1: value1
@@ -1229,8 +1179,7 @@ config:
         result = editor.apply(dry_run=True)
 
         # fmt: off
-        expected = \
-"""\
+        expected ="""\
 config:
   # First key
   key0: value0
@@ -1242,8 +1191,7 @@ config:
 
     def test_insert_at_end_with_comment(self):
         # fmt: off
-        yaml_str = \
-"""\
+        yaml_str ="""\
 config:
   key1: value1
   # Last key
@@ -1265,8 +1213,7 @@ config:
         result = editor.apply(dry_run=True)
 
         # fmt: off
-        expected = \
-"""\
+        expected ="""\
 config:
   key1: value1
   # Last key
@@ -1278,8 +1225,7 @@ config:
 
     def test_multiple_transformations_with_comments(self):
         # fmt: off
-        yaml_str = \
-"""\
+        yaml_str ="""\
 # Main config
 services:
   # Service A
@@ -1313,8 +1259,7 @@ services:
         result = editor.apply(dry_run=True)
 
         # fmt: off
-        expected = \
-"""\
+        expected ="""\
 # Main config
 services:
   # Service A
@@ -1333,8 +1278,7 @@ services:
 
     def test_list_insertion_preserves_surrounding_comments(self):
         # fmt: off
-        yaml_str = \
-"""\
+        yaml_str ="""\
 # Configuration
 workers:
   # Essential worker
@@ -1360,8 +1304,7 @@ workers:
         result = editor.apply(dry_run=True)
 
         # fmt: off
-        expected = \
-"""\
+        expected ="""\
 # Configuration
 workers:
   # Essential worker
@@ -1378,8 +1321,7 @@ workers:
 
     def test_complex_nested_list_with_comments(self):
         # fmt: off
-        yaml_str = \
-"""\
+        yaml_str ="""\
 # Application config
 application:
   # Modules section
@@ -1411,8 +1353,7 @@ application:
         result = editor.apply(dry_run=True)
 
         # fmt: off
-        expected = \
-"""\
+        expected ="""\
 # Application config
 application:
   # Modules section
@@ -1441,8 +1382,7 @@ application:
 
     def test_insert_child_in_empty_map_with_comment(self):
         # fmt: off
-        yaml_str = \
-"""\
+        yaml_str ="""\
 config:
   # Empty section
   section: {}
@@ -1462,8 +1402,7 @@ config:
         result = editor.apply(dry_run=True)
 
         # fmt: off
-        expected = \
-"""\
+        expected ="""\
 config:
   # Empty section
   section:
@@ -1474,8 +1413,7 @@ config:
 
     def test_insert_child_in_empty_list_with_comment(self):
         # fmt: off
-        yaml_str = \
-"""\
+        yaml_str ="""\
 config:
   # Empty list
   items: []
@@ -1495,8 +1433,7 @@ config:
         result = editor.apply(dry_run=True)
 
         # fmt: off
-        expected = \
-"""\
+        expected ="""\
 config:
   # Empty list
   items:
@@ -1508,8 +1445,7 @@ config:
 
     def test_special_characters_in_comments(self):
         # fmt: off
-        yaml_str = \
-"""\
+        yaml_str ="""\
 config:
   # Special chars: @#$%^&*()
   key1: value1
@@ -1534,8 +1470,7 @@ config:
         result = editor.apply(dry_run=True)
 
         # fmt: off
-        expected = \
-"""\
+        expected ="""\
 config:
   # Special chars: @#$%^&*()
   key1: value1
@@ -1554,8 +1489,7 @@ config:
 
     def test_comment_with_yaml_like_content(self):
         # fmt: off
-        yaml_str = \
-"""\
+        yaml_str ="""\
 config:
   # Example: key: value
   key1: value1
@@ -1578,8 +1512,7 @@ config:
         result = editor.apply(dry_run=True)
 
         # fmt: off
-        expected = \
-"""\
+        expected ="""\
 config:
   # Example: key: value
   key1: value1
@@ -1592,8 +1525,7 @@ config:
 
     def test_mixed_indent_comments(self):
         # fmt: off
-        yaml_str = \
-"""\
+        yaml_str ="""\
 root:
 # Top level comment (no indent)
   level1:
@@ -1617,8 +1549,7 @@ root:
         result = editor.apply(dry_run=True)
 
         # fmt: off
-        expected = \
-"""\
+        expected ="""\
 root:
 # Top level comment (no indent)
   level1:
@@ -1639,13 +1570,11 @@ class TestInsertedCommentPreservation:
 
     def test_inserted_map_comment_single_line(self):
         # fmt: off
-        original_yaml = \
-"""\
+        original_yaml ="""\
 config:
   existing: true
 """
-        insert_yaml = \
-"""\
+        insert_yaml ="""\
 # Inserted comment
 new_feature: enabled
 """
@@ -1666,8 +1595,7 @@ new_feature: enabled
         result = editor.apply(dry_run=True)
 
         # fmt: off
-        expected = \
-"""\
+        expected ="""\
 config:
   existing: true
   # Inserted comment
@@ -1678,13 +1606,11 @@ config:
 
     def test_inserted_map_comment_multiple_lines(self):
         # fmt: off
-        original_yaml = \
-"""\
+        original_yaml ="""\
 config:
   existing: true
 """
-        insert_yaml = \
-"""\
+        insert_yaml ="""\
 # First line
 # Second line
 new_feature: enabled
@@ -1706,8 +1632,7 @@ new_feature: enabled
         result = editor.apply(dry_run=True)
 
         # fmt: off
-        expected = \
-"""\
+        expected ="""\
 config:
   existing: true
   # First line
@@ -1719,13 +1644,11 @@ config:
 
     def test_inserted_map_inline_comment_preserved(self):
         # fmt: off
-        original_yaml = \
-"""\
+        original_yaml ="""\
 config:
   existing: true
 """
-        insert_yaml = \
-"""\
+        insert_yaml ="""\
 new_feature: enabled  # Inline note
 """
         # fmt: on
@@ -1745,8 +1668,7 @@ new_feature: enabled  # Inline note
         result = editor.apply(dry_run=True)
 
         # fmt: off
-        expected = \
-"""\
+        expected ="""\
 config:
   existing: true
   new_feature: enabled # Inline note
@@ -1756,14 +1678,12 @@ config:
 
     def test_inserted_list_comment_single_line(self):
         # fmt: off
-        original_yaml = \
-"""\
+        original_yaml ="""\
 workers:
   - name: alpha
     kind: processor
 """
-        insert_yaml = \
-"""\
+        insert_yaml ="""\
 # Inserted worker
 name: beta
 kind: listener
@@ -1785,8 +1705,7 @@ kind: listener
         result = editor.apply(dry_run=True)
 
         # fmt: off
-        expected = \
-"""\
+        expected ="""\
 workers:
   - name: alpha
     kind: processor
@@ -1803,8 +1722,7 @@ class TestIdempotency:
 
     def test_duplicate_list_sibling_insertion_skipped(self):
         # fmt: off
-        yaml_str = \
-"""\
+        yaml_str ="""\
 workers:
   - name: worker1
     kind: processor
@@ -1836,8 +1754,7 @@ workers:
 
     def test_duplicate_map_sibling_insertion_skipped(self):
         # fmt: off
-        yaml_str = \
-"""\
+        yaml_str ="""\
 config:
   key1: value1
   key2: value2
@@ -1866,8 +1783,7 @@ config:
 
     def test_multiple_insertions_with_duplicate(self):
         # fmt: off
-        yaml_str = \
-"""\
+        yaml_str ="""\
 workers:
   - name: worker1
     kind: processor
@@ -1898,8 +1814,7 @@ workers:
         result = editor.apply(dry_run=True)
 
         # fmt: off
-        expected = \
-"""\
+        expected ="""\
 workers:
   - name: worker1
     kind: processor
@@ -1917,8 +1832,7 @@ workers:
 
     def test_idempotent_upgrade_simulation(self):
         # fmt: off
-        yaml_str = \
-"""\
+        yaml_str ="""\
 name: tabsdata
 controllers:
   regular:
@@ -1954,8 +1868,7 @@ controllers:
         result1 = editor1.apply(dry_run=True)
 
         # fmt: off
-        expected = \
-"""\
+        expected ="""\
 name: tabsdata
 controllers:
   regular:
@@ -1991,8 +1904,7 @@ controllers:
 
     def test_duplicate_with_different_fields(self):
         # fmt: off
-        yaml_str = \
-"""\
+        yaml_str ="""\
 workers:
   - name: worker1
     kind: processor
@@ -2025,8 +1937,7 @@ class TestSpecFormats:
 
     def test_spec_as_dict(self):
         # fmt: off
-        yaml_str = \
-"""\
+        yaml_str ="""\
 key: value
 """
         # fmt: off
@@ -2039,8 +1950,7 @@ key: value
         editor = YamlEditor(spec=spec, source=source)
         result = editor.apply(dry_run=True)
         # fmt: off
-        expected = \
-"""\
+        expected ="""\
 key: value
 new: data
 """
@@ -2050,8 +1960,7 @@ new: data
 
     def test_spec_as_list(self):
         # fmt: off
-        yaml_str = \
-"""\
+        yaml_str ="""\
 key: value
 """
         # fmt: off
@@ -2068,8 +1977,7 @@ key: value
         result_yaml = editor.apply(dry_run=True)
 
         # fmt: off
-        expected = \
-"""\
+        expected ="""\
 key: value
 new1: data1
 new2: data2
@@ -2102,8 +2010,7 @@ key: value
         editor = YamlEditor(spec=spec, source=source)
         result = editor.apply(dry_run=True)
         # fmt: off
-        expected = \
-"""\
+        expected ="""\
 key: value
 new: inserted
 """

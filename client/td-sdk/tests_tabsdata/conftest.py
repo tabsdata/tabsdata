@@ -61,10 +61,10 @@ from tabsdata._tabsserver.pyenv_creation import (
     DEFAULT_ENVIRONMENT_TESTIMONY_FOLDER,
     delete_virtual_environment,
 )
-from tabsdata._utils.logging import setup_tests_logging
 
 # noinspection PyProtectedMember
 from tabsdata._utils.tableframe._generators import _id
+from tabsdata._utils.tdlogging import setup_tests_logging
 from tabsdata._utils.temps import tabsdata_temp_folder
 from tabsdata.api.apiserver import APIServer, obtain_connection
 from tabsdata.api.status_utils.data_version import (

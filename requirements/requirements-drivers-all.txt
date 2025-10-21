@@ -2,7 +2,7 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
-azure-storage-blob==12.26.0
+azure-storage-blob==12.27.0
 mysql-connector-python==9.4.0
-oracledb==3.3.0
-psycopg2-binary==2.9.10
+oracledb==3.4.0
+psycopg2-binary==2.9.11

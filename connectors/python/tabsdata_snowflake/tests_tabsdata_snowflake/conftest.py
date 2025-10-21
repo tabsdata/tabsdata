@@ -30,7 +30,7 @@ from xdist.workermanage import WorkerController
 
 import tabsdata as td
 from tabsdata._secret import _recursively_evaluate_secret
-from tabsdata._utils.logging import setup_tests_logging
+from tabsdata._utils.tdlogging import setup_tests_logging
 from tests_tabsdata.conftest import (
     clean_python_virtual_environments,
     pytest_addoption,

@@ -31,7 +31,7 @@ from databricks.sdk import WorkspaceClient
 from databricks.sdk.core import Config, pat_auth
 from xdist.workermanage import WorkerController
 
-from tabsdata._utils.logging import setup_tests_logging
+from tabsdata._utils.tdlogging import setup_tests_logging
 
 # noinspection PyUnusedImports
 from tests_tabsdata.conftest import (

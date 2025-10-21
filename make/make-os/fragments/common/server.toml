@@ -145,7 +145,7 @@ script = [
         for instance in ${instances}
             instance = trim ${instance}
             if not is_empty ${instance}
-                info "🔅 Checking instance: ${instance}"
+                info "🎯 Checking instance: ${instance}"
 
                 supervisor_workers_config_folder_exists = is_path_exists ${SUPERVISOR_WORKERS_CONFIG_FOLDER}
                 workers = array
@@ -156,7 +156,7 @@ script = [
                     for supervisor_worker in ${supervisor_workers}
                         supervisor_worker = trim ${supervisor_worker}
                         if not is_empty ${supervisor_worker}
-                            debug "🔅 Selecting worker: ${supervisor_worker}"
+                            debug "📎 Selecting worker: ${supervisor_worker}"
                             array_push ${workers} ${supervisor_worker}
                         end
                     end
@@ -173,7 +173,7 @@ script = [
                 debug "🚀 ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} status --instance ${instance}"
 
                 status_timeout = calc 3 * 60
-                status_sleep = set 1000
+                status_sleep = set 5000
                 status_attempts = calc ${status_timeout} * 1000
                 status_attempts = calc ${status_attempts} / ${status_sleep}
 
@@ -181,6 +181,10 @@ script = [
                 status_checking = set true
 
                 while ${status_checking}
+                    output_timestamp = exec --fail-on-error python -c "from datetime import datetime; print(datetime.now().isoformat())"
+                    current_timestamp = trim ${output_timestamp.stdout}
+                    info "☕️ (${current_timestamp}) Checking workers..."
+
                     output = exec --fail-on-error ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} status --instance ${instance}
 
                     workers_started = set true
@@ -191,8 +195,11 @@ script = [
                             info "🔅 Checking worker: ${worker}"
                             worker_started = contains ${output.stdout} ${worker}
                             if not ${worker_started}
+                                info "   🔴 Worker ${worker} is not running"
                                 workers_started = set false
                                 array_push ${stopped_workers} ${worker}
+                            else
+                                info "   🟢 Worker ${worker} is running"
                             end
                         end
                     end
@@ -215,17 +222,17 @@ script = [
                         if ${status_exhausted}
                             error "😡 Cancelling execution as supervisor did not start after ${status_timeout} seconds"
 
-                            debug "🛞👀 Supervisor status >>>>>"
-                            debug "🛞👀 <out.i>"
-                            debug "${output.stdout}"
-                            debug "🛞👀 <out.f>"
-                            debug "🛞👀 <err.i>"
-                            debug "${output.stderr}"
-                            debug "🛞👀 <err.f>"
-                            debug "🛞👀 <code.i>"
-                            debug "${output.code}"
-                            debug "🛞👀 <code.f>"
-                            debug "🛞👀 <<<<<"
+                            error "🛞👀 Supervisor status >>>>>"
+                            error "🛞👀 <out.i>"
+                            error "${output.stdout}"
+                            error "🛞👀 <out.f>"
+                            error "🛞👀 <err.i>"
+                            error "${output.stderr}"
+                            error "🛞👀 <err.f>"
+                            error "🛞👀 <code.i>"
+                            error "${output.code}"
+                            error "🛞👀 <code.f>"
+                            error "🛞👀 <<<<<"
 
                             exit 1
                         end

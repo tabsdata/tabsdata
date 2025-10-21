@@ -29,7 +29,7 @@ import pytest
 from filelock import FileLock
 from xdist.workermanage import WorkerController
 
-from tabsdata._utils.logging import setup_tests_logging
+from tabsdata._utils.tdlogging import setup_tests_logging
 from tests_tabsdata.conftest import (
     DB_HOST,
     DB_NAME,

@@ -11,8 +11,8 @@ from filelock import FileLock
 from xdist.workermanage import WorkerController
 
 from tabsdata._cli.cli import cli
-from tabsdata._utils.logging import setup_tests_logging
 from tabsdata._utils.tableframe._generators import _id
+from tabsdata._utils.tdlogging import setup_tests_logging
 from tests_tabsdata.conftest import (
     ABSOLUTE_TEST_FOLDER_LOCATION,
     APISERVER_URL,

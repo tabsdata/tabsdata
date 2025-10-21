@@ -21,11 +21,9 @@ from typing import (
     cast,
 )
 
+import numpy as np
 import polars as pl
 from accessify import accessify, private
-
-# noinspection PyProtectedMember
-from polars.dependencies import numpy as np
 
 import tabsdata._tabsserver.engine as engine
 

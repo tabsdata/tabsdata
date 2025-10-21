@@ -2,63 +2,210 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
-
-def check_cpu_flags():
-    import importlib.util
-    import os
-    import runpy
-
-    try:
-        pl_spec = importlib.util.find_spec("polars")
-        if pl_spec and pl_spec.submodule_search_locations:
-            pl_path = pl_spec.submodule_search_locations[0]
-            pl_mod = os.path.join(pl_path, "_cpu_check.py")
-            pl_run = runpy.run_path(pl_mod)
-            pl_run["check_cpu_flags"]()
-    except (MemoryError, RuntimeError) as error:
-        message = str(error)
-        message = message[0].upper() + message[1:] if message else ""
-        raise RuntimeError(f"{message}")
-    except Exception as exception:
-        message = str(exception)
-        message = message[0].upper() + message[1:] if message else ""
-        raise RuntimeError(f"An error occurred while checking cpu flags: {message}")
+import platform
+import subprocess
+import sys
+import warnings
 
 
-def check_polars_lib():
+class CompatibilityError(RuntimeError):
+    def __init__(self, messages):
+        if isinstance(messages, str):
+            messages = [messages]
+        self.messages = messages
+        super().__init__("\n".join(messages))
+
+
+def check_load() -> None:
+    smoke_code = """
+import sys
+try:
     import polars as pl
-
-    data = {
-        "name": ["Alice", "Bob", "Charlie", "Diana"],
-        "age": [25, 30, 35, 28],
-        "city": ["New York", "London", "Tokyo", "Paris"],
-    }
-    df = pl.DataFrame(data)
-    lf = df.lazy()
-    lf.collect()
-
-
-if __name__ == "__main__":
-    # noinspection PyBroadException
+    pl.DataFrame({"o": ["aleph"]}).lazy().collect()
+    sys.exit(0)
+except Exception as e:
+    print(f"Import error: {e}", file=sys.stderr)
+    sys.exit(1)
+"""
+    check_messages = []
     try:
-        check_cpu_flags()
-        check_polars_lib()
-    except Exception as e:
+        result = subprocess.run(
+            [sys.executable, "-c", smoke_code],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if result.returncode < 0:
+            import signal
+
+            signal_name = signal.Signals(-result.returncode).name
+            check_messages.append("")
+            check_messages.append(
+                f"Load crashed with signal {signal_name} (code {result.returncode})"
+            )
+            check_messages.append(
+                "This typically means the cpu lacks required instruction sets."
+            )
+            raise CompatibilityError(check_messages)
+        elif result.returncode != 0:
+            check_messages.append("")
+            check_messages.append("Failed to load.")
+            if result.stderr:
+                check_messages.append(result.stderr.strip())
+            raise CompatibilityError(check_messages)
+    except subprocess.TimeoutExpired:
+        check_messages.append("")
+        check_messages.append("Load timed out.")
+        check_messages.append("This may indicate cpu compatibility issues.")
+        raise CompatibilityError(check_messages)
+    except CompatibilityError:
+        raise
+    except Exception as exception:
+        check_messages.append("")
+        check_messages.append("Failed to smoke test.")
+        check_messages.append(str(exception).strip())
+        raise CompatibilityError(check_messages)
+
+
+def check_cpu() -> None:
+    from polars._cpu_check import check_cpu_flags
+
+    check_messages = []
+    with warnings.catch_warnings(record=True) as warning_outputs:
+        warnings.simplefilter("always", RuntimeWarning)
+        check_cpu_flags("")
+        if warning_outputs:
+            for warning_output in warning_outputs:
+                if issubclass(warning_output.category, RuntimeWarning):
+                    check_messages.append("")
+                    warning_messages = str(warning_output.message)
+                    check_messages.append(
+                        "This cpu lacks required features for "
+                        "tabsdata standard runtime."
+                    )
+                    check_messages.append("")
+                    for warning_message in warning_messages.split(""):
+                        check_messages.append(warning_message.strip())
+                    raise CompatibilityError(check_messages)
+
+
+def check_lib() -> None:
+    check_messages = []
+    try:
+        import polars as pl
+
+        pl.DataFrame({"o": ["aleph"]}).lazy().collect()
+    except Exception as exception:
+        exception_messages = str(exception)
+        for exception_message in exception_messages.split(""):
+            check_messages.append(exception_message.strip())
+        raise CompatibilityError(check_messages)
+
+
+# noinspection PyListCreation
+def sys_info():
+    import polars as pl
+    from polars._cpu_check import get_runtime_repr
+
+    info_messages = []
+    try:
+        info_messages.append("")
+        info_messages.append("System Information:")
+        info_messages.append(f"  - Platform.............: {platform.platform()}")
+        info_messages.append(
+            f"  - Processor............: {platform.processor() or 'Unknown'}"
+        )
+        info_messages.append(
+            f"  - Machine..............: {platform.machine() or 'Unknown'}"
+        )
+        info_messages.append(f"  - Python Version.......: {sys.version.split()[0]}")
+        info_messages.append(
+            f"  - Python Implementation: {platform.python_implementation()}"
+        )
+        info_messages.append(f"  - Polars Version.......: {pl.__version__}")
+        # noinspection PyBroadException
+        try:
+            runtime = get_runtime_repr()
+            info_messages.append(f"  - Polars Runtime.......: {runtime}")
+        except Exception:
+            info_messages.append("  - Polars Runtime.......: Not yet loaded")
+    except Exception as exception:
+        exception_messages = str(exception)
+        info_messages.append("")
+        info_messages.append("Cannot retrieve complete system information.")
+        for exception_message in exception_messages.split(""):
+            info_messages.append(exception_message.strip())
+    return info_messages
+
+
+if __name__ == "__main__":  # noqa: C901
+    validation_messages = []
+    try:
+        check_load()
+    except CompatibilityError as load_error:
+        validation_messages.extend(load_error.messages)
+    if not validation_messages:
+        try:
+            check_cpu()
+        except CompatibilityError as cpu_error:
+            validation_messages.extend(cpu_error.messages)
+        try:
+            check_lib()
+        except CompatibilityError as lib_error:
+            validation_messages.extend(lib_error.messages)
+
+    if validation_messages:
         from colorama import Fore, Style, init
 
+        validation_messages = sys_info() + validation_messages
         init()
         print(
-            Fore.RED
-            + "\n"
-            + "!!! The CPU on this machine lacks full support for the SIMD features "
-            + "required by this version of Polars."
-            + "\n"
-            + "!!! Please run Polars on a modern CPU that supports the necessary SIMD "
-            + "instructions."
-            + "\n"
-            + "!!! Check message below for additional information:"
-            + "\n"
-            + f"{e}"
-            + Style.RESET_ALL
+            Fore.RED,
+            file=sys.stderr,
         )
-        exit(1)
+        print(
+            "The cpu on this system is not supported.",
+            file=sys.stderr,
+        )
+        print(
+            "",
+            file=sys.stderr,
+        )
+        print(
+            "If you are running inside a virtual machine or container, the emulated ",
+            file=sys.stderr,
+        )
+        print(
+            "processor may not fully support the simd instruction sets required by ",
+            file=sys.stderr,
+        )
+        print(
+            "tabsdata.",
+            file=sys.stderr,
+        )
+        print(
+            "",
+            file=sys.stderr,
+        )
+        print(
+            "Run tabsdata on a modern cpu with full simd support.",
+            file=sys.stderr,
+        )
+        print(
+            "",
+            file=sys.stderr,
+        )
+        print(
+            "Refer to the diagnostic messages below for more details.",
+            file=sys.stderr,
+        )
+        for message in validation_messages:
+            print(
+                message,
+                file=sys.stderr,
+            )
+        print(
+            Style.RESET_ALL,
+            file=sys.stderr,
+        )
+        sys.exit(1)

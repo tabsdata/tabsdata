@@ -24,7 +24,7 @@ import pytest
 from xdist.workermanage import WorkerController
 
 # noinspection PyProtectedMember
-from tabsdata._utils.logging import setup_tests_logging
+from tabsdata._utils.tdlogging import setup_tests_logging
 from tests_tabsdata.conftest import setup_temp_folder, setup_temp_folder_node
 
 logger = logging.getLogger(__name__)

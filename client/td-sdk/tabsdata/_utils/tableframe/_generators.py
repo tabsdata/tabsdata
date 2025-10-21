@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import Iterable, Union
+from typing import Any, Iterable, Union
 
 import polars as pl
 
@@ -34,9 +34,11 @@ class IdGenerator:
     def index(self):
         return self._index
 
+    # noinspection PyUnusedLocal
     def python(
         self,
         batch: pl.DataFrame | pl.Series,
+        **kwargs: Any,
     ) -> pl.DataFrame | pl.Series:
         n = batch.len() if isinstance(batch, pl.Series) else batch.height
 
