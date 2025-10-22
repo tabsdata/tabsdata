@@ -13,7 +13,7 @@ pre-build = [
 volumes = ["TABSDATA_SOLUTION_HOME=/tdshome:rw"]
 passthrough = [
     # >>> passthrough:MOUNS:BEGIN >>>
-    "TABSDATA_SOLUTION_HOME_MOUNT=/tdshome",
+    "TABSDATA_SOLUTION_HOME=/tdshome",
     # >>> passthrough:MOUNS:END >>>
     "TD_CROSS_BUILD=true",
     # >>> passthrough:MAKE:BEGIN >>>
