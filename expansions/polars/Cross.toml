@@ -44,10 +44,10 @@ pre-build = [
 ]
 
 [target.x86_64-unknown-linux-musl.env]
-volumes = ["GA_TABSDATA_SOLUTION_HOME=/tdshome"]
+volumes = ["TABSDATA_SOLUTION_HOME=${HOST_TABSDATA_SOLUTION_HOME}:/tdshome"]
 passthrough = [
     # >>> passthrough:MOUNS:BEGIN >>>
-    "TABSDATA_SOLUTION_HOME=/tdshome",
+    "TABSDATA_SOLUTION_HOME",
     # >>> passthrough:MOUNS:END >>>
     "TD_CROSS_BUILD=true",
     # >>> passthrough:MAKE:BEGIN >>>
