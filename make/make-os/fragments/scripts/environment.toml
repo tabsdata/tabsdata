@@ -135,6 +135,14 @@ env_scripts = [
     td-cargo = get_env td-cargo
     debug "🔅 Using Cargo tool: '${td-cargo}'"
 
+    if eq ${td-cargo} "cross"
+        set_env TD_BUILD_ON_CROSS "true"
+    else
+        set_env TD_BUILD_ON_CROSS "false"
+    end
+    td_build_on_cross = get_env TD_BUILD_ON_CROSS
+    debug "🤞 Building on cross: '${td_build_on_cross}'"
+
     set_env RUSTFLAGS ""
     td-profile = set ${profile}
     if is_empty ${profile}

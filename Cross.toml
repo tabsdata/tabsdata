@@ -6,22 +6,15 @@
 
 [target.x86_64-unknown-linux-musl]
 pre-build = [
-    "echo Showing cross docker container context for root...",
-    "echo _____ import TD_CROSS_BUILD",
-    "echo ${TD_CROSS_BUILD}",
-    "echo _____",
-    "export TD_CROSS_BUILD=true",
-    "echo _____ export TD_CROSS_BUILD",
-    "echo ${TD_CROSS_BUILD}",
-    "echo _____ pwd ",
-    "pwd",
-    "echo _____ pwd contents",
-    "ls -lah .",
-    "echo _____",
+    "echo ...",
 ]
 
 [target.x86_64-unknown-linux-musl.env]
+volumes = ["TABSDATA_SOLUTION_HOME=/tdshome:rw"]
 passthrough = [
+    # >>> passthrough:MOUNS:BEGIN >>>
+    "TABSDATA_SOLUTION_HOME_MOUNT=/tdshome",
+    # >>> passthrough:MOUNS:END >>>
     "TD_CROSS_BUILD=true",
     # >>> passthrough:MAKE:BEGIN >>>
     "TD_ON_GA",
