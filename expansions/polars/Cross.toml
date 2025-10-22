@@ -44,7 +44,7 @@ pre-build = [
 ]
 
 [target.x86_64-unknown-linux-musl.env]
-volumes = ["TABSDATA_SOLUTION_HOME=/tdshome"]
+volumes = ["GA_TABSDATA_SOLUTION_HOME=/tdshome"]
 passthrough = [
     # >>> passthrough:MOUNS:BEGIN >>>
     "TABSDATA_SOLUTION_HOME=/tdshome",
