@@ -4492,6 +4492,7 @@ dependencies = [
  "tempfile",
  "testdir",
  "thiserror 2.0.17",
+ "tm-workspace",
  "tokio",
  "toml 0.9.8",
  "tracing",

@@ -5425,7 +5425,6 @@ dependencies = [
  "ta-tableframe",
  "td-build",
  "te-tableframe",
- "tm-workspace",
  "toml",
 ]
 
@@ -5571,6 +5570,7 @@ dependencies = [
  "tempfile",
  "testdir",
  "thiserror 2.0.17",
+ "tm-workspace",
  "tokio",
  "toml",
  "tracing",

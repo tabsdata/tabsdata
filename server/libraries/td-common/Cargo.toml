@@ -39,6 +39,7 @@ ignored = ["openssl", "td-build", "toml"]
 # Internal dependencies
 
 td-build = { workspace = true }
+tm-workspace = { workspace = true }
 
 # External dependencies
 
