@@ -32,5 +32,28 @@ fn main() {
         tabsdata_solution_home
     );
 
+    match std::fs::read_dir(&tabsdata_solution_home) {
+        Ok(entries) => {
+            println!("cargo:info=🪣 Contents of tabsdata solution home:");
+            let mut items: Vec<_> = entries.filter_map(|e| e.ok()).collect();
+            items.sort_by_key(|e| e.path());
+            for entry in items {
+                let path = entry.path();
+                let file_type = if path.is_dir() { "folder" } else { "file" };
+                println!(
+                    "cargo:info=  📚 [{:6}] {}",
+                    file_type,
+                    path.file_name().unwrap_or_default().to_string_lossy()
+                );
+            }
+        }
+        Err(error) => {
+            println!(
+                "cargo:warning=Failed to read contents of tabsdata solution home: {}",
+                error
+            );
+        }
+    }
+
     boot();
 }
