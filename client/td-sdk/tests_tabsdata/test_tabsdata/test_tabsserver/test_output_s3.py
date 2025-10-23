@@ -322,10 +322,11 @@ def test_output_s3_parquet_with_execution_id(tmp_path, s3_client, s3_config):
 def test_output_s3_parquet_with_export_timestamp(tmp_path, s3_client, s3_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_s3_parquet_with_export_timestamp = copy.deepcopy(output_s3_format_testing)
+    current_test_indicator = int(datetime.datetime.now().timestamp())
     output_file = (
         f"{s3_config['URI']}/testing_output"
         "/test_output_s3_parquet_with_export_timestamp_"
-        f"{int(datetime.datetime.now().timestamp())}_$EXPORT_TIMESTAMP.parquet"
+        f"{current_test_indicator}_$EXPORT_TIMESTAMP.parquet"
     )
     output_s3_parquet_with_export_timestamp.output.uri = output_file
     output_s3_parquet_with_export_timestamp.output.credentials = s3_config[
@@ -371,6 +372,7 @@ def test_output_s3_parquet_with_export_timestamp(tmp_path, s3_client, s3_config)
             for obj in response["Contents"]:
                 if obj["Key"].startswith(
                     "testing_output/test_output_s3_parquet_with_export_timestamp_"
+                    f"{current_test_indicator}_"
                 ):
                     file_name = obj["Key"]
                     break
@@ -400,15 +402,17 @@ def test_output_s3_parquet_with_export_timestamp(tmp_path, s3_client, s3_config)
 def test_output_s3_parquet_with_trigger_timestamp(tmp_path, s3_client, s3_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_s3_parquet_with_trigger_timestamp = copy.deepcopy(output_s3_format_testing)
+    current_test_indicator = int(datetime.datetime.now().timestamp())
     output_file = (
         f"{s3_config['URI']}/testing_output"
         "/test_output_s3_parquet_with_trigger_timestamp_"
-        f"{int(datetime.datetime.now().timestamp())}_$TRIGGER_TIMESTAMP.parquet"
+        f"{current_test_indicator}_$TRIGGER_TIMESTAMP.parquet"
     )
     output_s3_parquet_with_trigger_timestamp.output.uri = output_file
     output_s3_parquet_with_trigger_timestamp.output.credentials = s3_config[
         "CREDENTIALS"
     ]
+    output_s3_parquet_with_trigger_timestamp.output.region = s3_config["REGION"]
     context_archive = create_bundle_archive(
         output_s3_parquet_with_trigger_timestamp,
         local_packages=LOCAL_PACKAGES_LIST,
@@ -449,6 +453,7 @@ def test_output_s3_parquet_with_trigger_timestamp(tmp_path, s3_client, s3_config
             for obj in response["Contents"]:
                 if obj["Key"].startswith(
                     "testing_output/test_output_s3_parquet_with_trigger_timestamp_"
+                    f"{current_test_indicator}_"
                 ):
                     file_name = obj["Key"]
                     break
@@ -479,10 +484,11 @@ def test_output_s3_parquet_with_trigger_timestamp(tmp_path, s3_client, s3_config
 def test_output_s3_parquet_with_scheduler_timestamp(tmp_path, s3_client, s3_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_s3_parquet_with_scheduler_timestamp = copy.deepcopy(output_s3_format_testing)
+    current_test_indicator = int(datetime.datetime.now().timestamp())
     output_file = (
         f"{s3_config['URI']}/testing_output"
         "/test_output_s3_parquet_with_scheduler_timestamp_"
-        f"{int(datetime.datetime.now().timestamp())}_$SCHEDULER_TIMESTAMP.parquet"
+        f"{current_test_indicator}_$SCHEDULER_TIMESTAMP.parquet"
     )
     output_s3_parquet_with_scheduler_timestamp.output.uri = output_file
     output_s3_parquet_with_scheduler_timestamp.output.credentials = s3_config[
@@ -527,7 +533,7 @@ def test_output_s3_parquet_with_scheduler_timestamp(tmp_path, s3_client, s3_conf
         if "Contents" in response:
             for obj in response["Contents"]:
                 if obj["Key"].startswith(
-                    "testing_output/test_output_s3_parquet_with_scheduler_timestamp_"
+                    f"testing_output/test_output_s3_parquet_with_scheduler_timestamp_{current_test_indicator}_"
                 ):
                     file_name = obj["Key"]
                     break

@@ -1559,6 +1559,7 @@ def _store_result_using_transporter(
         raise TypeError(
             f"Storing results in destination '{destination}' not supported."
         )
+    logger.debug(f"Destination file for the transporter: {destination}")
     copy_pair = [[origin, destination]]
 
     current_timestamp = int(
