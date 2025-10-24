@@ -3206,9 +3206,9 @@ dependencies = [
 
 [[package]]
 name = "gix-trace"
-version = "0.1.14"
+version = "0.1.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d35bf1c8c1a883bdbb17ed1fef49be8c751a50dc3a28a2deb4234d826eddb4bb"
+checksum = "1d3f59a8de2934f6391b6b3a1a7654eae18961fcb9f9c843533fed34ad0f3457"
 
 [[package]]
 name = "gix-transport"
@@ -7275,7 +7275,7 @@ dependencies = [
 
 [[package]]
 name = "ta-apiserver"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "axum 0.8.6",
  "derive_builder",
@@ -7298,7 +7298,7 @@ dependencies = [
 
 [[package]]
 name = "ta-execution"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "getset",
  "openssl",
@@ -7313,7 +7313,7 @@ dependencies = [
 
 [[package]]
 name = "ta-services"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "async-trait",
  "openssl",
@@ -7323,7 +7323,7 @@ dependencies = [
 
 [[package]]
 name = "ta-tableframe"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "openssl",
  "td-build",
@@ -7357,7 +7357,7 @@ dependencies = [
 
 [[package]]
 name = "tabsdata"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "openssl",
  "ta-tableframe",
@@ -7368,7 +7368,7 @@ dependencies = [
 
 [[package]]
 name = "td-apiforge"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "darling 0.21.3",
  "openssl",
@@ -7380,7 +7380,7 @@ dependencies = [
 
 [[package]]
 name = "td-apiserver"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "async-trait",
  "axum 0.8.6",
@@ -7430,7 +7430,7 @@ dependencies = [
 
 [[package]]
 name = "td-attach"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "darling 0.21.3",
  "openssl",
@@ -7442,7 +7442,7 @@ dependencies = [
 
 [[package]]
 name = "td-authz"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "async-trait",
  "itertools 0.14.0",
@@ -7460,7 +7460,7 @@ dependencies = [
 
 [[package]]
 name = "td-build"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -7471,6 +7471,7 @@ dependencies = [
  "openssl",
  "serde",
  "serde_yaml",
+ "sysinfo 0.37.2",
  "tm-workspace",
  "toml",
  "vergen-gix",
@@ -7478,7 +7479,7 @@ dependencies = [
 
 [[package]]
 name = "td-common"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -7530,7 +7531,7 @@ dependencies = [
 
 [[package]]
 name = "td-database"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "derive_builder",
  "futures-util",
@@ -7555,7 +7556,7 @@ dependencies = [
 
 [[package]]
 name = "td-error"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "anyhow",
  "derive_builder",
@@ -7571,7 +7572,7 @@ dependencies = [
 
 [[package]]
 name = "td-execution"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "async-trait",
  "derive_builder",
@@ -7594,7 +7595,7 @@ dependencies = [
 
 [[package]]
 name = "td-objects"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "aquamarine",
  "async-trait",
@@ -7636,7 +7637,7 @@ dependencies = [
 
 [[package]]
 name = "td-process"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "clap",
  "clap_derive",
@@ -7665,7 +7666,7 @@ dependencies = [
 
 [[package]]
 name = "td-python"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "openssl",
  "rand 0.9.2",
@@ -7682,7 +7683,7 @@ dependencies = [
 
 [[package]]
 name = "td-schema"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "openssl",
  "sqlx",
@@ -7692,7 +7693,7 @@ dependencies = [
 
 [[package]]
 name = "td-security"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "argon2",
  "derive_builder",
@@ -7706,7 +7707,7 @@ dependencies = [
 
 [[package]]
 name = "td-server"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "axum 0.8.6",
  "clap",
@@ -7747,7 +7748,7 @@ dependencies = [
 
 [[package]]
 name = "td-services"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "argon2",
  "async-trait",
@@ -7797,7 +7798,7 @@ dependencies = [
 
 [[package]]
 name = "td-shared"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "darling 0.21.3",
  "duct",
@@ -7809,7 +7810,7 @@ dependencies = [
 
 [[package]]
 name = "td-shuttle"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -7849,7 +7850,7 @@ dependencies = [
 
 [[package]]
 name = "td-storage"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "bytes",
  "derive_builder",
@@ -7875,7 +7876,7 @@ dependencies = [
 
 [[package]]
 name = "td-supervisor"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "async-trait",
  "atomic_enum",
@@ -7933,7 +7934,7 @@ dependencies = [
 
 [[package]]
 name = "td-tableframe"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "openssl",
  "polars",
@@ -7947,7 +7948,7 @@ dependencies = [
 
 [[package]]
 name = "td-test"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -7966,7 +7967,7 @@ dependencies = [
 
 [[package]]
 name = "td-tower"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "async-trait",
  "derive_builder",
@@ -7992,7 +7993,7 @@ dependencies = [
 
 [[package]]
 name = "td-type"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "darling 0.21.3",
  "openssl",
@@ -8004,7 +8005,7 @@ dependencies = [
 
 [[package]]
 name = "td-xtask"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "clap",
  "clap_derive",
@@ -8013,7 +8014,7 @@ dependencies = [
 
 [[package]]
 name = "te-apiserver"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "clap",
  "getset",
@@ -8028,7 +8029,7 @@ dependencies = [
 
 [[package]]
 name = "te-execution"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "async-trait",
  "openssl",
@@ -8042,7 +8043,7 @@ dependencies = [
 
 [[package]]
 name = "te-services"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "axum 0.8.6",
  "openssl",
@@ -8052,7 +8053,7 @@ dependencies = [
 
 [[package]]
 name = "te-tableframe"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "openssl",
  "ta-tableframe",
@@ -8244,7 +8245,7 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tm-error"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "openssl",
  "quote",
@@ -8253,7 +8254,7 @@ dependencies = [
 
 [[package]]
 name = "tm-services"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "openssl",
  "quote",
@@ -8262,7 +8263,7 @@ dependencies = [
 
 [[package]]
 name = "tm-test"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "darling 0.21.3",
  "openssl",
@@ -8274,7 +8275,7 @@ dependencies = [
 
 [[package]]
 name = "tm-tower"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "openssl",
  "quote",
@@ -8283,7 +8284,7 @@ dependencies = [
 
 [[package]]
 name = "tm-workspace"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "openssl",
  "quote",

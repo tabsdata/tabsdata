@@ -8,7 +8,8 @@ requires = [
     "psutil==7.1.0",
     "tqdm==4.67.1",
     "colorama==0.4.6"]
-build-backend = "setuptools.build_meta"
+build-backend = "tdabout"
+backend-path = ["."]
 
 [tool.flake8]
 exclude = ["*.pyi"]

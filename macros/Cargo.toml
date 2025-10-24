@@ -6,7 +6,7 @@
 description = "Tabsdata Macros"
 name = "td-macros"
 edition = "2024"
-version = "1.4.0"
+version = "1.5.0"
 license = "Apache 2.0"
 build = "build.rs"
 
@@ -26,7 +26,7 @@ publish = false
 readme = "../README.md"
 repository = "https://github.com/tabsdata/tabsdata"
 rust-version = "1.90.0"
-version = "1.4.0"
+version = "1.5.0"
 
 [workspace]
 members = [

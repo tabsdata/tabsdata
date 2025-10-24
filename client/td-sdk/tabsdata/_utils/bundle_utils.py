@@ -72,6 +72,7 @@ BASE_BINARIES = [
     "apiserver",
     "bootloader",
     "supervisor",
+    "tdabout",
     "tdserver",
     "transporter",
 ]

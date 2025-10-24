@@ -718,7 +718,7 @@ fn command_information(_arguments: InformationArguments) {
 }
 
 fn command_about(_arguments: AboutArguments) {
-    td_common::about::show_build_metadata(VERSION)
+    td_common::about::tdabout(VERSION)
 }
 
 fn command_create(arguments: CreateArguments) {

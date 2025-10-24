@@ -6,6 +6,7 @@ use anyhow::Result;
 use chrono::Local;
 use std::env;
 use std::path::PathBuf;
+use sysinfo::System;
 use tm_workspace::workspace_root;
 use vergen_gix::{BuildBuilder, CargoBuilder, Emitter, GixBuilder, RustcBuilder, SysinfoBuilder};
 
@@ -263,7 +264,6 @@ impl Stamper for Stamping {
             .cpu_brand(true)
             .cpu_core_count(true)
             .cpu_frequency(true)
-            .cpu_name(true)
             .cpu_vendor(true)
             .memory(true)
             .name(true)
@@ -283,6 +283,38 @@ impl Stamper for Stamping {
             .add_instructions(&sysinfo)?
             .emit()?;
 
+        // Manually capture full LLVM version at build time to override vergen's truncated version
+        // vergen uses rustc_version crate which only stores major.minor, dropping the patch version
+        let llvm_version_full = std::process::Command::new("rustc")
+            .arg("--version")
+            .arg("--verbose")
+            .output()
+            .ok()
+            .and_then(|output| {
+                if output.status.success() {
+                    String::from_utf8(output.stdout).ok().and_then(|s| {
+                        s.lines()
+                            .find(|line| line.starts_with("LLVM version:"))
+                            .map(|line| line.trim_start_matches("LLVM version:").trim().to_string())
+                    })
+                } else {
+                    None
+                }
+            });
+
+        if let Some(llvm_ver) = llvm_version_full {
+            println!("cargo:rustc-env=VERGEN_RUSTC_LLVM_VERSION={}", llvm_ver);
+        }
+
+        let mut sys = System::new();
+        sys.refresh_cpu_all();
+        let cpu_name = if let Some(cpu) = sys.cpus().first() {
+            cpu.brand().to_string()
+        } else {
+            env::var("VERGEN_SYSINFO_CPU_BRAND").unwrap_or_else(|_| "?".to_string())
+        };
+        println!("cargo:rustc-env=VERGEN_SYSINFO_CPU_NAME={}", cpu_name);
+
         let now_local = Local::now();
         let timezone_offset = now_local.offset().to_string();
         let timezone_name =
@@ -295,6 +327,62 @@ impl Stamper for Stamping {
             "cargo:rustc-env=VERGEN_BUILD_TIMEZONE_NAME={}",
             timezone_name.trim()
         );
+
+        // Capture Python version
+        let python_version = std::process::Command::new("python")
+            .arg("--version")
+            .output()
+            .ok()
+            .and_then(|output| {
+                if output.status.success() {
+                    String::from_utf8(output.stdout)
+                        .ok()
+                        .or_else(|| String::from_utf8(output.stderr).ok())
+                        .map(|s| s.trim().replace("Python ", ""))
+                } else {
+                    None
+                }
+            })
+            .unwrap_or_else(|| "?".to_string());
+        println!("cargo:rustc-env=VERGEN_PYTHON_VERSION={}", python_version);
+
+        // Capture Python implementation
+        let python_implementation = std::process::Command::new("python")
+            .arg("-c")
+            .arg("import platform; print(platform.python_implementation())")
+            .output()
+            .ok()
+            .and_then(|output| {
+                if output.status.success() {
+                    String::from_utf8(output.stdout)
+                        .ok()
+                        .map(|s| s.trim().to_string())
+                } else {
+                    None
+                }
+            })
+            .unwrap_or_else(|| "?".to_string());
+        println!(
+            "cargo:rustc-env=VERGEN_PYTHON_IMPLEMENTATION={}",
+            python_implementation
+        );
+
+        // Capture Node version
+        let node_version = std::process::Command::new("node")
+            .arg("--version")
+            .output()
+            .ok()
+            .and_then(|output| {
+                if output.status.success() {
+                    String::from_utf8(output.stdout)
+                        .ok()
+                        .map(|s| s.trim().replace("v", ""))
+                } else {
+                    None
+                }
+            })
+            .unwrap_or_else(|| "?".to_string());
+        println!("cargo:rustc-env=VERGEN_NODE_VERSION={}", node_version);
 
         Ok(())
     }

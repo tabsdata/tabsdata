@@ -16,7 +16,7 @@ fn main() {
     hooks::panic();
 
     if env::args().any(|arg| arg == "about") {
-        about::show_build_metadata(VERSION);
+        about::tdabout(VERSION);
         process::exit(0);
     }
 

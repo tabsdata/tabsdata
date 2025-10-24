@@ -33,6 +33,7 @@ from tabsdata._cli.fn_group import fn
 from tabsdata._cli.role_group import role
 from tabsdata._cli.table_group import table
 from tabsdata._cli.user_group import user
+from tabsdata._utils.internal._about import tdabout
 from tabsdata.api.apiserver import DEFAULT_TABSDATA_DIRECTORY
 
 CYAN = "[cyan]"
@@ -167,6 +168,12 @@ def examples(ctx: click.Context, dir: str, guide: bool):
 
     if guide:
         examples_guide.run()
+
+
+@cli.command()
+def about():
+    """Show build metadata and system information."""
+    tdabout()
 
 
 @cli.command()

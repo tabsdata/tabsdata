@@ -68,9 +68,7 @@ class CurrentPlatform:
     """Just a class to get the current platform information in a simple way."""
 
     def __init__(self):
-        logger.debug("Getting the current platform information.")
         self.platform = platform.system()
-        logger.debug(f"Platform: {self.platform}")
 
     def is_windows(self):
         return self.platform == "Windows"

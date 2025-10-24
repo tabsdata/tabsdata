@@ -28,6 +28,8 @@ from setuptools.command.sdist import sdist as _sdist
 # noinspection PyDeprecation
 from wheel.bdist_wheel import bdist_wheel as _bdist_wheel
 
+import tdabout
+
 # noinspection DuplicatedCode
 colorama.init()
 
@@ -288,7 +290,18 @@ class CustomBDistWheel(_bdist_wheel):
         _, _, plat = super().get_tag()
         return python_version_tag, python_version_abi, get_platname()
 
+    def run(self):
+        super().run()
+        # noinspection PyBroadException
+        try:
+            dist_dir = Path(self.dist_dir or ".")
+            for wheel_path in dist_dir.glob("*.whl"):
+                tdabout.inject_wheel_metadata(wheel_path)
+        except Exception:
+            logger.exception("Failed to inject wheel metadata", exc_info=True)
 
+
+# noinspection DuplicatedCode
 class CustomBDistEgg(_bdist_egg):
     def __init__(self, dist):
         super().__init__(dist)
@@ -477,6 +490,7 @@ base_binaries = [
     "apiserver",
     "bootloader",
     "supervisor",
+    "tdabout",
     "tdserver",
     "transporter",
 ]

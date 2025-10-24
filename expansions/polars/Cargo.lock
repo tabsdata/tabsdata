@@ -2653,9 +2653,9 @@ dependencies = [
 
 [[package]]
 name = "gix-trace"
-version = "0.1.14"
+version = "0.1.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d35bf1c8c1a883bdbb17ed1fef49be8c751a50dc3a28a2deb4234d826eddb4bb"
+checksum = "1d3f59a8de2934f6391b6b3a1a7654eae18961fcb9f9c843533fed34ad0f3457"
 
 [[package]]
 name = "gix-transport"
@@ -6289,7 +6289,7 @@ dependencies = [
 
 [[package]]
 name = "ta-tableframe"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "openssl",
  "td-build",
@@ -6305,7 +6305,7 @@ checksum = "df7f62577c25e07834649fc3b39fafdc597c0a3527dc1c60129201ccfcbaa50c"
 
 [[package]]
 name = "td-attach"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "darling 0.21.3",
  "openssl",
@@ -6317,7 +6317,7 @@ dependencies = [
 
 [[package]]
 name = "td-build"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -6328,6 +6328,7 @@ dependencies = [
  "openssl",
  "serde",
  "serde_yaml",
+ "sysinfo 0.37.2",
  "tm-workspace",
  "toml 0.9.8",
  "vergen-gix",
@@ -6335,7 +6336,7 @@ dependencies = [
 
 [[package]]
 name = "td-common"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -6386,7 +6387,7 @@ dependencies = [
 
 [[package]]
 name = "td-error"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "anyhow",
  "derive_builder",
@@ -6402,7 +6403,7 @@ dependencies = [
 
 [[package]]
 name = "td-security"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "argon2",
  "derive_builder",
@@ -6416,7 +6417,7 @@ dependencies = [
 
 [[package]]
 name = "te-tableframe"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "openssl",
  "ta-tableframe",
@@ -6568,7 +6569,7 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tm-error"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "openssl",
  "quote",
@@ -6577,7 +6578,7 @@ dependencies = [
 
 [[package]]
 name = "tm-workspace"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "openssl",
  "quote",
@@ -6853,7 +6854,7 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "ty-expansions"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "openssl",
  "ta-tableframe",
@@ -6864,7 +6865,7 @@ dependencies = [
 
 [[package]]
 name = "ty-tableframe"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "chrono",
  "dashmap",

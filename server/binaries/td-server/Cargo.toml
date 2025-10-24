@@ -18,6 +18,10 @@ rust-version = { workspace = true }
 version = { workspace = true }
 
 [[bin]]
+name = "tdabout"
+path = "src/tdabout.rs"
+
+[[bin]]
 name = "tdserver"
 path = "src/tdserver.rs"
 
