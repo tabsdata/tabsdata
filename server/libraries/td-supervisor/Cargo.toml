@@ -87,6 +87,7 @@ ignore = { workspace = true }
 include_dir = { workspace = true }
 indexmap = { workspace = true }
 linemux = { workspace = true }
+netstat2 = { workspace = true }
 num-format = { workspace = true }
 path-slash = { workspace = true }
 regex = { workspace = true }

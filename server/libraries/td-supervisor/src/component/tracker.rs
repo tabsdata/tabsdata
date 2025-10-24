@@ -5,6 +5,8 @@
 //! Module that provides all the functionality to track workers running under the Tabsdata system.
 
 use getset::{Getters, Setters};
+use netstat2::{AddressFamilyFlags, ProtocolFlags, ProtocolSocketInfo, TcpState, get_sockets_info};
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::fs::{File, OpenOptions, remove_file};
 use std::io::{Read, Write};
@@ -158,6 +160,36 @@ impl WorkerTracker {
         let pid_path = self.get_worker_pid_path();
         check_status(pid_path)
     }
+}
+
+/// Gets listening ports for a list of PIDs.
+/// Returns a HashMap mapping PIDs to their listening ports.
+pub fn get_listening_ports_for_pids(pids: &[u32]) -> HashMap<u32, Vec<u16>> {
+    let address_family_flags = AddressFamilyFlags::IPV4 | AddressFamilyFlags::IPV6;
+    let protocol_flags = ProtocolFlags::TCP | ProtocolFlags::UDP;
+    let mut ports_by_pid: HashMap<u32, Vec<u16>> = HashMap::new();
+
+    if let Ok(sockets) = get_sockets_info(address_family_flags, protocol_flags) {
+        for socket in sockets {
+            if let Some(&pid) = socket.associated_pids.first() {
+                if pids.contains(&pid) {
+                    let is_listening = match socket.protocol_socket_info {
+                        ProtocolSocketInfo::Tcp(ref tcp_info) => tcp_info.state == TcpState::Listen,
+                        ProtocolSocketInfo::Udp(_) => true,
+                    };
+                    if is_listening {
+                        let port = socket.local_port();
+                        ports_by_pid.entry(pid).or_insert_with(Vec::new).push(port);
+                    }
+                }
+            }
+        }
+    }
+    for ports in ports_by_pid.values_mut() {
+        ports.sort_unstable();
+        ports.dedup();
+    }
+    ports_by_pid
 }
 
 pub fn get_pid_path(work_path: PathBuf) -> PathBuf {

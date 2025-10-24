@@ -5,7 +5,7 @@
 use crate::component::describer::{
     DescriberError, TabsDataWorkerDescriber, TabsDataWorkerDescriberBuilder,
 };
-use crate::component::tracker::{WorkerStatus, WorkerTracker};
+use crate::component::tracker::{WorkerStatus, WorkerTracker, get_listening_ports_for_pids};
 use crate::launch::worker::{TabsDataWorker, Worker};
 use crate::resource::instance::{
     get_instance_path_for_instance, get_repository_path_for_instance,
@@ -33,13 +33,15 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output, exit};
 use std::thread::sleep;
 use std::{env, fs, io};
-use sysinfo::Signal;
+use sysinfo::{Signal, System};
 use ta_tableframe::api::{ENTERPRISE, Extension};
+use tabled::settings::Panel;
+use tabled::settings::themes::BorderCorrection;
 use tabled::{
     Table, Tabled,
     settings::{
         Alignment, Modify,
-        object::Columns,
+        object::{Columns, Rows},
         style::{HorizontalLine, Style, VerticalLine},
     },
 };
@@ -52,8 +54,8 @@ use td_common::os::{name_program, terminate_process};
 use td_common::server::WorkerClass::REGULAR;
 use td_common::server::{
     AVAILABLE_ENVIRONMENTS_FOLDER, CONFIG_FOLDER, DATABASE_FILE, DATABASE_FOLDER,
-    ENVIRONMENTS_FOLDER, ETC_FOLDER, MSG_FOLDER, STORAGE_FOLDER, TD_DETACHED_SUBPROCESSES,
-    WORK_FOLDER,
+    ENVIRONMENTS_FOLDER, ETC_FOLDER, INSTANCES_FOLDER, MSG_FOLDER, STORAGE_FOLDER,
+    TD_DETACHED_SUBPROCESSES, WORK_FOLDER,
 };
 use td_common::status::ExitStatus::{GeneralError, NoAction, Success};
 use td_process::launcher::arg::InheritedArgumentKey;
@@ -178,10 +180,9 @@ enum Commands {
         about = "Clean Tabsdata internal Python virtual environments & pip and uv cache"
     )]
     Clean(CleanArguments),
-    /*
-    #[command(about = "Find Tabsdata instances in the system")]
-    Instances,
-     */
+
+    #[command(about = "Show the status of Tabsdata instances")]
+    Instances(InstancesArguments),
 }
 
 #[derive(Debug, Clone, Getters, Args)]
@@ -450,6 +451,19 @@ struct StatusOptionsArguments {
     metrics: bool,
 }
 
+#[derive(Debug, Clone, Getters, Args)]
+#[getset(get = "pub")]
+struct InstancesArguments {
+    /// Option to report every hosted instance instead of inspecting running instances.
+    #[arg(
+        long,
+        name = "hosted",
+        default_value_t = false,
+        long_help = "Report the status for every hosted instance under ~/.tabsdata/instances."
+    )]
+    hosted: bool,
+}
+
 pub struct TabsDataCli {}
 
 impl TabsDataCli {
@@ -501,11 +515,10 @@ impl TabsDataCli {
             }
             Commands::Clean(arguments) => {
                 command_clean(arguments);
-            } /*
-              Commands::Instances => {
-                  command_instances();
-              }
-               */
+            }
+            Commands::Instances(arguments) => {
+                command_instances(arguments);
+            }
         }
     }
 }
@@ -1280,20 +1293,53 @@ fn command_stop(arguments: StopArguments) {
 }
 
 fn command_status(arguments: StatusArguments) {
-    let supervisor_instance = get_instance_path_for_instance(&arguments.control.instance().clone());
-    let supervisor_workspace =
-        get_workspace_path_for_instance(&arguments.control.instance().clone());
+    let StatusArguments { control, options } = arguments;
+    let ControlArguments { instance } = control;
+    let StatusOptionsArguments { metrics } = options;
+
+    let status = instance_status(&instance, metrics);
+
+    info!("\n\n{status}\n");
+}
+
+fn instance_status(instance: &Option<PathBuf>, metrics: bool) -> String {
+    let supervisor_instance = get_instance_path_for_instance(instance);
+    let supervisor_workspace = get_workspace_path_for_instance(instance);
     let supervisor_work = supervisor_workspace.clone().join(WORK_FOLDER);
 
     let theme = Style::modern()
-        .horizontals([(1, HorizontalLine::inherit(Style::modern()))])
+        .horizontals([
+            (1, HorizontalLine::inherit(Style::modern())),
+            (2, HorizontalLine::inherit(Style::modern())),
+        ])
         .verticals([(1, VerticalLine::inherit(Style::modern()))])
         .remove_horizontal();
 
     let mut status = String::new();
 
     match status_processes(supervisor_work) {
-        (WorkerStatus::Running { pid }, Some(workers)) => {
+        (WorkerStatus::Running { pid: _ }, Some(workers)) => {
+            let pids: Vec<u32> = workers.iter().map(|(pid, ..)| pid.as_u32()).collect();
+            let ports_by_pid = get_listening_ports_for_pids(&pids);
+            let mut all_ports: Vec<u16> = ports_by_pid
+                .values()
+                .flat_map(|ports| ports.iter().copied())
+                .collect();
+            all_ports.sort_unstable();
+            all_ports.dedup();
+            let ports_display = if all_ports.is_empty() {
+                "No listening ports".to_string()
+            } else {
+                format!(
+                    "Listening ports: {}",
+                    all_ports
+                        .iter()
+                        .map(|p| p.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            };
+
             let tabled_workers: Vec<WorkerRow> = workers
                 .into_iter()
                 .flat_map(
@@ -1333,20 +1379,25 @@ fn command_status(arguments: StatusArguments) {
             let mut table = Table::new(tabled_workers);
 
             table
+                .with(Panel::horizontal(
+                    0,
+                    format!(
+                        "Instance: {}\n{}",
+                        supervisor_instance.display().to_string(),
+                        ports_display
+                    ),
+                ))
                 .with((theme.clone(), Alignment::left()))
+                .with(BorderCorrection::span())
                 .with(Modify::new(Columns::one(0)).with(Alignment::right()))
                 .with(Modify::new(Columns::one(1)).with(Alignment::right()))
                 .with(Modify::new(Columns::one(6)).with(Alignment::right()))
                 .with(Modify::new(Columns::one(7)).with(Alignment::right()))
                 .with(Modify::new(Columns::one(8)).with(Alignment::right()))
-                .with(Modify::new(Columns::one(9)).with(Alignment::right()));
+                .with(Modify::new(Columns::one(9)).with(Alignment::right()))
+                .with(Modify::new(Rows::first()).with(Alignment::left()));
 
-            status.push_str(&format!(
-                "Workers and its sub-workers of instance '{}' - '{}':\n{}",
-                pid,
-                supervisor_instance.display(),
-                table
-            ));
+            status.push_str(&format!("{}", table));
         }
         other => {
             status.push_str(&format!(
@@ -1357,7 +1408,7 @@ fn command_status(arguments: StatusArguments) {
         }
     }
 
-    if arguments.options.metrics {
+    if metrics {
         let space_folders = status_space(supervisor_instance);
         let tabled_space: Vec<SpaceRow> = space_folders
             .into_iter()
@@ -1376,7 +1427,7 @@ fn command_status(arguments: StatusArguments) {
             status.push_str(&format!("\nRelevant folders disk usage:\n{table}"));
         }
     }
-    info!("{status}");
+    status
 }
 
 fn status_processes(supervisor_work: PathBuf) -> (WorkerStatus, Option<Vec<ProcessDistilled>>) {
@@ -1843,73 +1894,128 @@ fn clean_cache(_: CleanArguments) {
     }
 }
 
-/*
-fn command_instances() {
-    let start_time = Instant::now();
-    let instances = Arc::new(Mutex::new(Vec::new()));
-    let progress_bar = ProgressBar::new_spinner();
-    progress_bar.set_style(
-        ProgressStyle::default_spinner()
-            .template("[{elapsed_precise}] {spinner} Instances found: {pos}")
-            .expect("Invalid progress bar template")
-            .tick_chars("|/-\\"),
-    );
-    progress_bar.enable_steady_tick(Duration::from_millis(100));
-    let walker = WalkBuilder::new(ROOT)
-        .hidden(false)
-        .parents(false)
-        .ignore(false)
-        .git_ignore(false)
-        .git_global(false)
-        .git_exclude(false)
-        .follow_links(false)
-        .build_parallel();
-    walker.run(|| {
-        let token = TD_KEEP;
-        let instances = Arc::clone(&instances);
-        let progress_bar = progress_bar.clone();
-        Box::new(move |entry| {
-            if let Ok(dir_entry) = entry {
-                if dir_entry.file_type().map(|t| t.is_file()).unwrap_or(false)
-                    && dir_entry.file_name() == token
-                {
-                    if let Some(parent) = dir_entry.path().parent() {
-                        instances.lock().unwrap().push(parent.to_path_buf());
-                        progress_bar.inc(1);
-                    }
-                }
-            }
-            WalkState::Continue
-        })
-    });
-    progress_bar.finish_and_clear();
-    let instances = instances.lock().unwrap();
-    if instances.is_empty() {
-        info!("No Tabsdata instance found");
+fn command_instances(arguments: InstancesArguments) {
+    if *arguments.hosted() {
+        status_hosted_instances();
     } else {
-        let tabled_instances: Vec<InstanceRow> = instances
-            .iter()
-            .map(|path| InstanceRow {
-                path: path.display().to_string(),
-            })
-            .collect();
-
-        let theme = Style::modern()
-            .horizontals([(1, HorizontalLine::inherit(Style::modern()))])
-            .remove_horizontal();
-        let mut table = Table::new(tabled_instances);
-
-        table.with((theme, Alignment::left()));
-
-        info!(
-            "Some Tabsdata instances found: {}:\n{}",
-            instances.len(),
-            table
-        );
+        status_running_instances();
     }
-    info!("Search completed in {:.2?} seconds", start_time.elapsed());
 }
- */
+
+fn status_running_instances() {
+    let mut system = System::new_all();
+    system.refresh_all();
+
+    let mut instances: Vec<(sysinfo::Pid, PathBuf)> = system
+        .processes()
+        .iter()
+        .filter_map(|(&pid, process)| {
+            if !is_supervisor_process(process) {
+                return None;
+            }
+            let instance = supervisor_instance_argument(process);
+            let instance = supervisor_instance(instance);
+            Some((pid, instance))
+        })
+        .collect();
+
+    if instances.is_empty() {
+        info!("\nNo running instances found.\n");
+        return;
+    }
+
+    instances.sort_by_key(|(pid, _)| pid.as_u32());
+
+    let mut instances_status = String::new();
+
+    for (_, instance) in instances {
+        let instance_status = instance_status(&Some(instance.clone()), false);
+        instances_status.push_str("\n\n");
+        instances_status.push_str(instance_status.as_str());
+    }
+    instances_status.push_str("\n");
+
+    info!("{instances_status}");
+}
+
+fn status_hosted_instances() {
+    let instances_home = get_home_dir()
+        .join(TABSDATA_HOME_DIR)
+        .join(INSTANCES_FOLDER);
+
+    let Ok(entries) = fs::read_dir(&instances_home) else {
+        info!(
+            "\nNo hosted instances found at '{}'.\n",
+            instances_home.display()
+        );
+        return;
+    };
+
+    let mut instances: Vec<PathBuf> = entries
+        .filter_map(|entry| entry.ok().map(|e| e.path()))
+        .filter(|path| path.is_dir() && path.join(".version").is_file())
+        .collect();
+
+    if instances.is_empty() {
+        info!(
+            "\nNo hosted instances found at '{}'.\n",
+            instances_home.display()
+        );
+        return;
+    }
+
+    instances.sort();
+
+    let mut instances_status = String::new();
+
+    for instance in instances {
+        let status = instance_status(&Some(instance.clone()), false);
+        instances_status.push_str("\n\n");
+        instances_status.push_str(status.as_str());
+    }
+    instances_status.push_str("\n");
+
+    info!("{instances_status}");
+}
+
+fn is_supervisor_process(process: &sysinfo::Process) -> bool {
+    let supervisor_program = name_program(Path::new(SUPERVISOR));
+    let Some(supervisor_program_name) = supervisor_program
+        .file_name()
+        .and_then(|name| name.to_str())
+    else {
+        return false;
+    };
+    process
+        .exe()
+        .and_then(|path| path.file_name())
+        .and_then(|name| name.to_str())
+        .map(|name| name.eq_ignore_ascii_case(supervisor_program_name))
+        .unwrap_or(false)
+}
+
+fn supervisor_instance_argument(process: &sysinfo::Process) -> Option<PathBuf> {
+    let instance_flag = format!("--{}", Instance.as_ref());
+    let args: Vec<String> = process
+        .cmd()
+        .iter()
+        .filter_map(|arg| arg.to_str().map(|s| s.to_string()))
+        .collect();
+
+    args.windows(2).find_map(|window| {
+        let flag = &window[0];
+        let value = &window[1];
+        if flag == &instance_flag {
+            Some(PathBuf::from(value))
+        } else {
+            None
+        }
+    })
+}
+
+fn supervisor_instance(instance: Option<PathBuf>) -> PathBuf {
+    get_instance_path_for_instance(&instance)
+}
 
 #[derive(Tabled)]
 struct WorkerRow {
