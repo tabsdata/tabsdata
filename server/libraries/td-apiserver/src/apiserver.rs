@@ -33,6 +33,7 @@
 
 use crate::config::Config;
 use crate::layers::authorization::authorization_layer;
+use crate::layers::compression::CompressionService;
 use crate::layers::cors::CorsService;
 use crate::layers::tracing::TraceService;
 use crate::layers::uri_filter::LoopbackIpFilterService;
@@ -243,7 +244,8 @@ impl ApiServerInstanceBuilder {
                     *self.config.request_timeout() as u64,
                 )))
                 .layer(CorsService::layer())
-                .layer(TraceService::layer());
+                .layer(TraceService::layer())
+                .layer(CompressionService::layer());
 
             ServerBuilder::new(self.config.addresses().clone(), router)
                 .tls(self.config.ssl_folder())

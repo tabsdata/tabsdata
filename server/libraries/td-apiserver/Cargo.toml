@@ -91,7 +91,7 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 tower = { workspace = true, features = ["buffer", "limit", "make", "timeout", "util"] }
-tower-http = { workspace = true, features = ["cors", "timeout", "trace"] }
+tower-http = { workspace = true, features = ["cors", "compression-full", "timeout", "trace"] }
 utoipa = { workspace = true, features = ["axum_extras", "preserve_order", "uuid"] }
 utoipa-axum = { workspace = true }
 utoipa-swagger-ui = { workspace = true, features = ["axum", "reqwest"] }
