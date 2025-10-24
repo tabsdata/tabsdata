@@ -55,6 +55,19 @@ script = [
     exec --fail-on-error python ${CLEAN_SCRIPT} ${PROJECT_PY_TE_TABLEFRAME_FOLDER} py
     ''']
 
+[tasks.__os__clean_py_te_variant]
+plugin = "td-task-tracker"
+category = "01 - Clean"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🚀 python ${CLEAN_SCRIPT} ${PROJECT_PY_TE_VARIANT_FOLDER} py"
+    exec --fail-on-error python ${CLEAN_SCRIPT} ${PROJECT_PY_TE_VARIANT_FOLDER} py
+    ''']
+
 [tasks.__os__clean_py_ty_tableframe]
 plugin = "td-task-tracker"
 category = "01 - Clean"

@@ -123,15 +123,13 @@ impl Stamping {
 
 impl Stamper for Stamping {
     fn stamp() -> Result<()> {
-        let solution: PathBuf = Self::solution();
-
         if env::var(VERGEN_ALREADY_RAN).is_ok() {
             println!(
                 "cargo:warning=Vergen already ran; skipping to avoid inconsistent metadata generation."
             );
             return Ok(());
         }
-        println!("cargo:rustc-env={}=1", VERGEN_ALREADY_RAN);
+        let solution: PathBuf = Self::solution();
 
         let build = BuildBuilder::default()
             .build_date(true)
@@ -383,6 +381,8 @@ impl Stamper for Stamping {
             })
             .unwrap_or_else(|| "?".to_string());
         println!("cargo:rustc-env=VERGEN_NODE_VERSION={}", node_version);
+
+        println!("cargo:rustc-env={}=1", VERGEN_ALREADY_RAN);
 
         Ok(())
     }

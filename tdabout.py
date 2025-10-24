@@ -482,6 +482,15 @@ def _inject_wheel_metadata(wheel_path):
         ) from exception
 
 
+def build_editable(wheel_directory, config_settings=None, metadata_directory=None):
+    wheel_name = _backend.build_editable(
+        wheel_directory, config_settings, metadata_directory
+    )
+    wheel_path = Path(wheel_directory) / wheel_name
+    _inject_wheel_metadata(wheel_path)
+    return wheel_name
+
+
 def inject_wheel_metadata(wheel_path):
     _inject_wheel_metadata(wheel_path)
 

@@ -228,6 +228,17 @@ def enrich_sys_path():
         os.path.abspath(
             os.path.join(
                 root,
+                "extensions",
+                "python",
+                "td-lib",
+                "te_variant",
+            )
+        ),
+    )
+    sys.path.append(
+        os.path.abspath(
+            os.path.join(
+                root,
                 "expansions",
                 "polars",
                 "modules",

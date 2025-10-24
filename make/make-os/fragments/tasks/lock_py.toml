@@ -50,6 +50,18 @@ script = [
     warn "⏳ Nothing to do."
     ''']
 
+[tasks.__os__lock_py_te_variant]
+plugin = "td-task-tracker"
+category = "02 - Tidy"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    warn "⏳ Nothing to do."
+    ''']
+
 [tasks.__os__lock_py_ty_tableframe]
 plugin = "td-task-tracker"
 category = "01 - Clean"

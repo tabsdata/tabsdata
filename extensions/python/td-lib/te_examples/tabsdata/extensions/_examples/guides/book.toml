@@ -11,5 +11,9 @@ title = "Tabsdata Examples Guide"
 
 [preprocessor.image-size]
 
+[preprocessor.toc]
+command = "mdbook-toc"
+renderer = ["html"]
+
 [output.html]
 additional-css = ["./theme/custom.css"]

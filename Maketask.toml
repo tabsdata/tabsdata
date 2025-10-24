@@ -164,6 +164,7 @@ run_task = [
         "__os__clean_py_ta_tableframe",
         "__os__clean_py_te_examples",
         "__os__clean_py_te_tableframe",
+        "__os__clean_py_te_variant",
         "__os__clean_py_ty_tableframe",
         "__os__clean_py_tabsdata",
         "__os__clean_py_connectors",
@@ -214,6 +215,7 @@ run_task = [
         "__os__lock_py_ta_tableframe",
         "__os__lock_py_te_examples",
         "__os__lock_py_te_tableframe",
+        "__os__lock_py_te_variant",
         "__os__lock_py_ty_tableframe",
         "__os__lock_py_tabsdata",
         "__os__lock_py_connectors"
@@ -306,6 +308,7 @@ run_task = [
         "__os__build_py_ta_tableframe",
         "__os__build_py_te_examples",
         "__os__build_py_te_tableframe",
+        "__os__build_py_te_variant",
         "__os__build_py_ty_tableframe",
         "__os__build_py_tabsdata",
         "__os__build_py_connectors"
@@ -377,6 +380,7 @@ run_task = [
         "__os__egg_py_ta_tableframe",
         "__os__egg_py_te_examples",
         "__os__egg_py_te_tableframe",
+        "__os__egg_py_te_variant",
         "__os__egg_py_ty_tableframe",
         "__os__egg_py_tabsdata",
         "__os__egg_py_connectors"
@@ -421,6 +425,7 @@ run_task = [
         "__os__test_py_ta_tableframe",
         "__os__test_py_te_examples",
         "__os__test_py_te_tableframe",
+        "__os__test_py_te_variant",
         "__os__test_py_ty_tableframe",
         "__os__test_py_tabsdata",
         "__os__test_py_connectors",

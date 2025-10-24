@@ -4,10 +4,13 @@
 
 [build-system]
 requires = [
-    "setuptools==78.1.1",
+    "archspec==0.2.5",
+    "colorama==0.4.6",
     "psutil==7.1.0",
+    "py-cpuinfo==9.0.0",
+    "setuptools==78.1.1",
     "tqdm==4.67.1",
-    "colorama==0.4.6"]
+    "tzlocal==5.3.1"]
 build-backend = "tdabout"
 backend-path = ["."]
 
@@ -46,6 +49,7 @@ known_first_party = [
     "ta_tableframe",
     "te_examples",
     "te_tableframe",
+    "te_variant",
     "ty_tableframe",
     "tests_tabsdata",
     "tests_tabsdata_agent",
@@ -59,6 +63,7 @@ known_first_party = [
     "tests_ta_tableframe",
     "tests_te_examples",
     "tests_te_tableframe",
+    "tests_te_variant",
     "tests_ty_tableframe",
 ]
 known_third_party = ["docker"]

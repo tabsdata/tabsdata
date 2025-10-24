@@ -40,6 +40,7 @@ PROJECT_PY_TA_FEATURES_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/clien
 PROJECT_PY_TA_TABLEFRAME_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/client/td-lib/ta_tableframe/", normalize = true }
 PROJECT_PY_TE_EXAMPLES_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/extensions/python/td-lib/te_examples/", normalize = true }
 PROJECT_PY_TE_TABLEFRAME_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/extensions/python/td-lib/te_tableframe/", normalize = true }
+PROJECT_PY_TE_VARIANT_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/extensions/python/td-lib/te_variant/", normalize = true }
 PROJECT_PY_TY_TABLEFRAME_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/expansions/polars/modules/ty-tableframe/python/", normalize = true }
 PROJECT_PY_TD_TABSDATA_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/client/td-sdk/", normalize = true }
 
@@ -57,6 +58,7 @@ TESTS_PY_TA_FEATURES_FOLDER = { value = "tests_ta_features/", normalize = true }
 TESTS_PY_TA_TABLEFRAME_FOLDER = { value = "tests_ta_tableframe/", normalize = true }
 TESTS_PY_TE_EXAMPLES_FOLDER = { value = "tests_te_examples/", normalize = true }
 TESTS_PY_TE_TABLEFRAME_FOLDER = { value = "tests_te_tableframe/", normalize = true }
+TESTS_PY_TE_VARIANT_FOLDER = { value = "tests_te_variant/", normalize = true }
 TESTS_PY_TY_TABLEFRAME_FOLDER = { value = "tests_ty_tableframe/", normalize = true }
 TESTS_PY_TD_TABSDATA_FOLDER = { value = "tests_tabsdata/", normalize = true }
 

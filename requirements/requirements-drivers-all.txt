@@ -3,6 +3,6 @@
 #
 
 azure-storage-blob==12.27.0
-mysql-connector-python==9.4.0
+mysql-connector-python==9.5.0
 oracledb==3.4.0
 psycopg2-binary==2.9.11

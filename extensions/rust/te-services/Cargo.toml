@@ -3,7 +3,7 @@
 #
 
 [package]
-description = "Tabsdata Services Extension Implementation - Standard"
+description = "Tabsdata Services Extension Implementation - Open Source"
 name = "te-services"
 build = "build.rs"
 

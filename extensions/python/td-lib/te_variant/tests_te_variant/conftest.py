@@ -9,13 +9,13 @@ import os
 
 # import sys
 
-# from tests_te_tableframe.bootest import TESTS_ROOT_FOLDER
+# from tests_te_variant.bootest import TESTS_ROOT_FOLDER
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 from tests_tabsdata.bootest import enrich_sys_path
-from tests_te_tableframe.bootest import TESTING_RESOURCES_PATH, _enrich_sys_path
+from tests_te_variant.bootest import TESTING_RESOURCES_PATH, _enrich_sys_path
 
 TESTING_RESOURCES_FOLDER = TESTING_RESOURCES_PATH
 enrich_sys_path()

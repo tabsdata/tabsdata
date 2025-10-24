@@ -876,6 +876,16 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
                 ),
                 include=["tabsdata.extensions._tableframe*"],
             ),
+            # tabsdata.extensions.variant
+            *find_packages(
+                where=os.path.join(
+                    "extensions",
+                    "python",
+                    "td-lib",
+                    "te_variant",
+                ),
+                include=["tabsdata.extensions.variant*"],
+            ),
             # tabsdata.expansions.tableframe
             *find_packages(
                 where=os.path.join(
@@ -929,6 +939,15 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
                 "tabsdata",
                 "extensions",
                 "_tableframe",
+            ),
+            "tabsdata.extensions.variant": os.path.join(
+                "extensions",
+                "python",
+                "td-lib",
+                "te_variant",
+                "tabsdata",
+                "extensions",
+                "variant",
             ),
             "tabsdata.expansions.tableframe": os.path.join(
                 "expansions",

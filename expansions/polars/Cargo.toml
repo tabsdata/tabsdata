@@ -68,7 +68,7 @@ ignored = ["openssl", "toml", "ta-tableframe", "td-build", "te-tableframe"]
 
 [features]
 
-# This feature enbles enterprise functionalities not available in the standard implementation.
+# This feature enbles enterprise functionalities not available in the open source implementation.
 # It should be normally used only for cross-crates tests.
 enterprise = []
 

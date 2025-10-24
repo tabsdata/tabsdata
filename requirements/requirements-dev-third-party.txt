@@ -10,7 +10,7 @@
 
 ansi2html==1.9.2    
 black==25.9.0
-boto3==1.40.55
+boto3==1.40.58
 build
 colorlog==6.10.1
 cookiecutter==2.6.0
@@ -35,7 +35,7 @@ mkdocs==1.6.1
 parquet-tools==0.2.16
 pdoc==15.0.4
 pip-audit==2.9.0
-pip-tools==7.5.0
+pip-tools==7.5.1
 pip-upgrader==1.4.15
 pipdeptree==2.29.0
 prompt_toolkit==3.0.52

@@ -58,7 +58,7 @@ class TestUDFSchema:
     def test_init_invalid_item_raises_error(self):
         with pytest.raises(
             TypeError,
-            match="not a \(name, data type\) tuple",
+            match=r"not a \(name, data type\) tuple",
         ):
             # noinspection PyTypeChecker
             SimpleUDF(["a", "b"])

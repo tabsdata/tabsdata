@@ -3,7 +3,7 @@
 #
 
 [package]
-description = "Tabsdata Execution Extension Implementation - Standard"
+description = "Tabsdata Execution Extension Implementation - Open Source"
 name = "te-execution"
 build = "build.rs"
 

@@ -53,6 +53,18 @@ script = [
     warn "⏳ Nothing to do."
     ''']
 
+[tasks.__os__build_py_te_variant]
+plugin = "td-task-tracker"
+category = "03 - Build"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    warn "⏳ Nothing to do."
+    ''']
+
 [tasks.__os__build_py_ty_tableframe]
 plugin = "td-task-tracker"
 category = "03 - Build"
@@ -119,6 +131,7 @@ run_task = [
         "__os__egg_py_ta_tableframe",
         "__os__egg_py_te_examples",
         "__os__egg_py_te_tableframe",
+        "__os__egg_py_te_variant",
         "__os__egg_py_ty_tableframe",
         "__os__egg_py_tabsdata",
         "__os__egg_py_connectors",
@@ -162,6 +175,18 @@ script = [
     ''']
 
 [tasks.__os__egg_py_te_tableframe]
+plugin = "td-task-tracker"
+category = "03 - Build"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    warn "⏳ Nothing to do."
+    ''']
+
+[tasks.__os__egg_py_te_variant]
 plugin = "td-task-tracker"
 category = "03 - Build"
 private = true

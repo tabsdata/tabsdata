@@ -10,7 +10,7 @@ from tabsdata.extensions._tableframe.version import version
 
 
 class Test(TestTableFrameExtension, ABC):
-    name = "Test TableFrame Extension (Standard)"
+    name = "Test TableFrame Extension (Open Source)"
     version = version()
 
     @classmethod

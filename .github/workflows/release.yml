@@ -2,7 +2,7 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
-name: Release Workflow (Standard)
+name: Release Workflow (Open Source)
 
 concurrency:
   group: >-
@@ -34,7 +34,7 @@ on:
         options: ['true', 'false']
         default: 'false'
       runner_action:
-        description: "Action"
+        description: 'Action'
         required: true
         type: choice
         options: ['build', 'release', 'explore', 'lock', 'wheels4whl', 'wheels4repo']

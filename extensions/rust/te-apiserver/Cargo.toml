@@ -3,7 +3,7 @@
 #
 
 [package]
-description = "Tabsdata Apiserver Extension Implementation - Standard"
+description = "Tabsdata Apiserver Extension Implementation - Open Source"
 name = "te-apiserver"
 build = "build.rs"
 
