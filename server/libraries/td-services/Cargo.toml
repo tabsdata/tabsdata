@@ -25,7 +25,7 @@ dummy = []
 mock-env = []
 sqlx_log = []
 test_logging = []
-test_tower_metadata = ["td-tower/test_tower_metadata"]
+test_tower_metadata = ["ta-services/test_tower_metadata", "td-tower/test_tower_metadata"]
 test-utils = []
 
 [package.metadata.cargo-machete]

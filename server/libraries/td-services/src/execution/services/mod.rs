@@ -4,6 +4,7 @@
 
 use crate::execution::services::callback::ExecutionCallbackService;
 use crate::execution::services::cancel::ExecutionCancelService;
+use crate::execution::services::details::ExecutionDetailsService;
 use crate::execution::services::execute::ExecuteFunctionService;
 use crate::execution::services::list::ExecutionListService;
 use crate::execution::services::read::ExecutionReadService;
@@ -14,6 +15,7 @@ use ta_services::factory::ServiceFactory;
 
 pub(crate) mod callback;
 mod cancel;
+mod details;
 pub(crate) mod execute;
 mod list;
 mod read;
@@ -25,6 +27,7 @@ pub mod runtime_info;
 pub struct ExecutionServices {
     callback: ExecutionCallbackService,
     cancel: ExecutionCancelService,
+    details: ExecutionDetailsService,
     execute: ExecuteFunctionService,
     list: ExecutionListService,
     read: ExecutionReadService,

@@ -19,10 +19,12 @@ mod routes {
     use td_apiforge::apiserver_path;
     use td_objects::crudl::{ListParams, RequestContext};
     use td_objects::rest_urls::{
-        EXECUTION_CANCEL, EXECUTION_LIST, EXECUTION_READ, EXECUTION_RECOVER, ExecutionParam,
-        FUNCTION_EXECUTE, FunctionParam,
+        EXECUTION_CANCEL, EXECUTION_DETAILS, EXECUTION_LIST, EXECUTION_READ, EXECUTION_RECOVER,
+        ExecutionParam, FUNCTION_EXECUTE, FunctionParam,
     };
-    use td_objects::types::execution::{Execution, ExecutionRequest, ExecutionResponse};
+    use td_objects::types::execution::{
+        Execution, ExecutionDetails, ExecutionRequest, ExecutionResponse,
+    };
     use td_services::execution::services::ExecutionServices;
     use tower::ServiceExt;
 
@@ -38,6 +40,23 @@ mod routes {
         let request = context.update(param, ());
         let response = executions.cancel().service().await.oneshot(request).await?;
         Ok(UpdateStatus::OK(response))
+    }
+
+    #[apiserver_path(method = get, path = EXECUTION_DETAILS, tag = EXECUTION_TAG)]
+    #[doc = "Details of an execution"]
+    pub async fn details(
+        State(executions): State<Arc<ExecutionServices>>,
+        Extension(context): Extension<RequestContext>,
+        Path(param): Path<ExecutionParam>,
+    ) -> Result<GetStatus<ExecutionDetails>, ErrorStatus> {
+        let request = context.read(param);
+        let response = executions
+            .details()
+            .service()
+            .await
+            .oneshot(request)
+            .await?;
+        Ok(GetStatus::OK(response))
     }
 
     #[apiserver_path(method = post, path = FUNCTION_EXECUTE, tag = EXECUTION_TAG)]
@@ -57,6 +76,7 @@ mod routes {
             .await?;
         Ok(CreateStatus::CREATED(response))
     }
+
     #[apiserver_path(method = get, path = EXECUTION_LIST, tag = EXECUTION_TAG)]
     #[doc = "List executions"]
     pub async fn lists(
@@ -68,6 +88,7 @@ mod routes {
         let response = executions.list().service().await.oneshot(request).await?;
         Ok(ListStatus::OK(response))
     }
+
     #[apiserver_path(method = get, path = EXECUTION_READ, tag = EXECUTION_TAG)]
     #[doc = "Read an execution"]
     pub async fn read(
@@ -79,6 +100,7 @@ mod routes {
         let response = executions.read().service().await.oneshot(request).await?;
         Ok(GetStatus::OK(response))
     }
+
     #[apiserver_path(method = post, path = EXECUTION_RECOVER, tag = EXECUTION_TAG)]
     #[doc = "Recover all transactions in the given execution"]
     pub async fn recover(

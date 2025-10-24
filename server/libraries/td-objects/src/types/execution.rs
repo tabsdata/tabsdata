@@ -12,7 +12,7 @@ use crate::types::basic::{
     TransactionByStr, TransactionId, TransactionKey, TransactionStatus, Trigger, TriggeredOn,
     UserId, UserName, VersionPos, WorkerId, WorkerStatus,
 };
-use crate::types::function::FunctionDBWithNames;
+use crate::types::function::{Function, FunctionDBWithNames};
 use crate::types::table::TableDBWithNames;
 use crate::types::worker::FunctionOutput;
 use serde::{Deserialize, Serialize};
@@ -77,6 +77,7 @@ pub struct ExecutionDBWithNames {
 #[td_type::Dao]
 #[dao(sql_table = "executions__with_status")]
 pub struct ExecutionDBWithStatus {
+    #[td_type(extractor)]
     id: ExecutionId,
     name: Option<ExecutionName>,
     collection_id: CollectionId,
@@ -224,6 +225,7 @@ pub struct FunctionRunDB {
     #[builder(default)]
     id: FunctionRunId,
     collection_id: CollectionId, // this is not the ExecutionDB function_version_id, as that's the trigger
+    #[td_type(extractor)]
     function_version_id: FunctionVersionId, // this is not the ExecutionDB function_version_id, as that's the trigger
     #[td_type(extractor, builder(field = "id"))]
     execution_id: ExecutionId,
@@ -909,6 +911,14 @@ pub struct TableVersionResponse {
 
 // TODO: Value is a placeholder, we need to define the actual type
 pub type CallbackRequest = ResponseMessagePayload<FunctionOutput>;
+
+#[td_type::Dto]
+pub struct ExecutionDetails {
+    #[td_type(setter)]
+    execution: Execution,
+    #[td_type(setter)]
+    functions: Vec<Function>,
+}
 
 // Dlos
 
