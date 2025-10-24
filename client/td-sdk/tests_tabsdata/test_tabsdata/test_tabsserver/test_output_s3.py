@@ -352,6 +352,7 @@ def test_output_s3_parquet_with_export_timestamp(tmp_path, s3_client, s3_config)
         function_data_path=function_data_folder,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+
     bucket_name = output_file.split("/")[2]
     file_name = None
     try:
@@ -366,10 +367,9 @@ def test_output_s3_parquet_with_export_timestamp(tmp_path, s3_client, s3_config)
         assert result == 0
         assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
 
-        response = s3_client.list_objects_v2(Bucket=bucket_name)
-        # Check if the bucket contains any files
-        if "Contents" in response:
-            for obj in response["Contents"]:
+        paginator = s3_client.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=bucket_name):
+            for obj in page.get("Contents", []):
                 if obj["Key"].startswith(
                     "testing_output/test_output_s3_parquet_with_export_timestamp_"
                     f"{current_test_indicator}_"
@@ -447,10 +447,9 @@ def test_output_s3_parquet_with_trigger_timestamp(tmp_path, s3_client, s3_config
         assert result == 0
         assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
 
-        response = s3_client.list_objects_v2(Bucket=bucket_name)
-        # Check if the bucket contains any files
-        if "Contents" in response:
-            for obj in response["Contents"]:
+        paginator = s3_client.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=bucket_name):
+            for obj in page.get("Contents", []):
                 if obj["Key"].startswith(
                     "testing_output/test_output_s3_parquet_with_trigger_timestamp_"
                     f"{current_test_indicator}_"
@@ -528,10 +527,9 @@ def test_output_s3_parquet_with_scheduler_timestamp(tmp_path, s3_client, s3_conf
         assert result == 0
         assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
 
-        response = s3_client.list_objects_v2(Bucket=bucket_name)
-        # Check if the bucket contains any files
-        if "Contents" in response:
-            for obj in response["Contents"]:
+        paginator = s3_client.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=bucket_name):
+            for obj in page.get("Contents", []):
                 if obj["Key"].startswith(
                     f"testing_output/test_output_s3_parquet_with_scheduler_timestamp_{current_test_indicator}_"
                 ):

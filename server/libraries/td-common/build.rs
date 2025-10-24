@@ -25,7 +25,10 @@ fn main() {
             path_before_canonicalize, e
         )
     });
-    println!("cargo:warning=tabsdata solution home: {:?}", tabsdata_solution_home);
+    println!(
+        "cargo:warning=tabsdata solution home: {:?}",
+        tabsdata_solution_home
+    );
 
     match std::fs::read_dir(&tabsdata_solution_home) {
         Ok(entries) => {
