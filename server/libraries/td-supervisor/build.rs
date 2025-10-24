@@ -2,8 +2,10 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use td_build::customizer::{Customization, Customizer};
+use crate::boot::boot;
+
+mod boot;
 
 fn main() {
-    Customization::customize();
+    boot();
 }

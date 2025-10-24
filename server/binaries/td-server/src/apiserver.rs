@@ -3,10 +3,12 @@
 //
 
 use std::env;
+use std::process;
 use std::sync::Arc;
 use td_apiserver::apiserver::ApiServerInstanceBuilder;
 use td_apiserver::config::{Config, DbSchema, Params};
 use td_apiserver::scheduler_server::SchedulerBuilder;
+use td_common::about;
 use td_common::attach::attach;
 use td_common::logging;
 use td_common::server::FileWorkerMessageQueue;
@@ -20,10 +22,16 @@ use td_storage::Storage;
 use tracing::{Level, error, info};
 
 const CONFIG_NAME: &str = "apiserver";
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[attach(signal = "apiserver")]
 fn main() {
     hooks::panic();
+
+    if env::args().any(|arg| arg == "about") {
+        about::show_build_metadata(VERSION);
+        process::exit(0);
+    }
 
     logging::start(Level::INFO, None, false);
 

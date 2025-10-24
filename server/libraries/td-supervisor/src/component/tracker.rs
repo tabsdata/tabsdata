@@ -171,16 +171,16 @@ pub fn get_listening_ports_for_pids(pids: &[u32]) -> HashMap<u32, Vec<u16>> {
 
     if let Ok(sockets) = get_sockets_info(address_family_flags, protocol_flags) {
         for socket in sockets {
-            if let Some(&pid) = socket.associated_pids.first() {
-                if pids.contains(&pid) {
-                    let is_listening = match socket.protocol_socket_info {
-                        ProtocolSocketInfo::Tcp(ref tcp_info) => tcp_info.state == TcpState::Listen,
-                        ProtocolSocketInfo::Udp(_) => true,
-                    };
-                    if is_listening {
-                        let port = socket.local_port();
-                        ports_by_pid.entry(pid).or_insert_with(Vec::new).push(port);
-                    }
+            if let Some(&pid) = socket.associated_pids.first()
+                && pids.contains(&pid)
+            {
+                let is_listening = match socket.protocol_socket_info {
+                    ProtocolSocketInfo::Tcp(ref tcp_info) => tcp_info.state == TcpState::Listen,
+                    ProtocolSocketInfo::Udp(_) => true,
+                };
+                if is_listening {
+                    let port = socket.local_port();
+                    ports_by_pid.entry(pid).or_default().push(port);
                 }
             }
         }

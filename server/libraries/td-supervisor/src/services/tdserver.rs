@@ -151,6 +151,9 @@ enum Commands {
     #[command(about = "Show Tabsdata installation information", name = "info")]
     Information(InformationArguments),
 
+    #[command(about = "Show build metadata and system information")]
+    About(AboutArguments),
+
     #[command(about = "Create a Tabsdata instance")]
     Create(CreateArguments),
 
@@ -196,6 +199,10 @@ struct LicenseArguments {}
 #[derive(Debug, Clone, Getters, Args)]
 #[getset(get = "pub")]
 struct InformationArguments {}
+
+#[derive(Debug, Clone, Getters, Args)]
+#[getset(get = "pub")]
+struct AboutArguments {}
 
 #[derive(Debug, Clone, Getters, Args)]
 #[getset(get = "pub")]
@@ -489,6 +496,9 @@ impl TabsDataCli {
             Commands::Information(arguments) => {
                 command_information(arguments);
             }
+            Commands::About(arguments) => {
+                command_about(arguments);
+            }
             Commands::Create(arguments) => {
                 command_create(arguments);
             }
@@ -705,6 +715,10 @@ fn command_license(_arguments: LicenseArguments) {
 
 fn command_information(_arguments: InformationArguments) {
     show_information()
+}
+
+fn command_about(_arguments: AboutArguments) {
+    td_common::about::show_build_metadata(VERSION)
 }
 
 fn command_create(arguments: CreateArguments) {
@@ -1383,7 +1397,7 @@ fn instance_status(instance: &Option<PathBuf>, metrics: bool) -> String {
                     0,
                     format!(
                         "Instance: {}\n{}",
-                        supervisor_instance.display().to_string(),
+                        supervisor_instance.display(),
                         ports_display
                     ),
                 ))
@@ -1933,7 +1947,7 @@ fn status_running_instances() {
         instances_status.push_str("\n\n");
         instances_status.push_str(instance_status.as_str());
     }
-    instances_status.push_str("\n");
+    instances_status.push('\n');
 
     info!("{instances_status}");
 }
@@ -1973,7 +1987,7 @@ fn status_hosted_instances() {
         instances_status.push_str("\n\n");
         instances_status.push_str(status.as_str());
     }
-    instances_status.push_str("\n");
+    instances_status.push('\n');
 
     info!("{instances_status}");
 }

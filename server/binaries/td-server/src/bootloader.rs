@@ -3,15 +3,24 @@
 //
 
 use std::env;
+use std::process;
+use td_common::about;
 use td_common::attach::attach;
 use td_common::logging;
 use td_process::launcher::hooks;
 use td_supervisor::services::bootloader;
 use tracing::{Level, info};
 
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 #[attach(signal = "bootloader")]
 pub fn main() {
     hooks::panic();
+
+    if env::args().any(|arg| arg == "about") {
+        about::show_build_metadata(VERSION);
+        process::exit(0);
+    }
 
     logging::start(Level::INFO, None, false);
 

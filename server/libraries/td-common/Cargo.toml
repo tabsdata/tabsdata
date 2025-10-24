@@ -30,7 +30,7 @@ test-utils = []
 tokio_console = ["console-subscriber"]
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "td-build", "toml"]
+ignored = ["openssl", "toml"]
 
 # Build dependencies
 
@@ -39,7 +39,6 @@ ignored = ["openssl", "td-build", "toml"]
 # Internal dependencies
 
 td-build = { workspace = true }
-tm-workspace = { workspace = true }
 
 # External dependencies
 
@@ -49,6 +48,7 @@ toml = { workspace = true }
 
 # Internal dependencies
 
+td-build = { workspace = true }
 td-error = { workspace = true }
 td-security = { workspace = true }
 
@@ -62,6 +62,7 @@ async-trait = { workspace = true }
 config = { workspace = true, features = ["yaml"] }
 console-subscriber = { workspace = true, optional = true }
 chrono = { workspace = true, features = ["serde"] }
+colored = { workspace = true }
 const_format = { workspace = true }
 data-encoding = { workspace = true }
 derive_builder = { workspace = true }
@@ -83,6 +84,7 @@ serde = { workspace = true, features = ["derive"] }
 serde_yaml = { workspace = true }
 sqlx = { workspace = true, features = ["sqlite", "macros"] }
 strum = { workspace = true, features = ["derive"] }
+supports-color = { workspace = true }
 sysinfo = { workspace = true }
 tempfile = { workspace = true }
 testdir = { workspace = true }

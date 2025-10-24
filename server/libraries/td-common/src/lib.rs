@@ -2,6 +2,7 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
+pub mod about;
 pub mod absolute_path;
 pub mod attach;
 pub mod constants;

@@ -7,6 +7,8 @@ use path_slash::PathBufExt;
 use std::env;
 use std::env::set_var;
 use std::ffi::OsString;
+use std::process;
+use td_common::about;
 use td_common::attach::attach;
 use td_common::env::check_flag_env;
 use td_common::logging;
@@ -16,9 +18,16 @@ use td_supervisor::services::supervisor;
 use td_supervisor::services::supervisor::{Arguments, prepend_slash};
 use tracing::{Level, info};
 
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 #[attach(signal = "supervisor")]
 pub fn main() {
     hooks::panic();
+
+    if env::args().any(|arg| arg == "about") {
+        about::show_build_metadata(VERSION);
+        process::exit(0);
+    }
 
     let instance_path = Arguments::parse().instance_path();
     // Setting env vars is not thread-safe; use with care.

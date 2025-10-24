@@ -179,11 +179,19 @@ env_scripts = [
     on_ga_true = eq ${on_ga} "true"
     if ${on_ga_true}
         set_env td-rust-quiet ""
-        debug "🔈 Configuring Rust in verbose mode"
+        debug "🔈 Configuring Rust in automatic verbose mode"
     else
         set_env td-rust-quiet "--quiet"
-        debug "🔇 Configuring Rust in quiet mode: '${td-rust-quiet}'"
+        debug "🔇 Configuring Rust in automatic quiet mode: '${td-rust-quiet}'"
     end
+
+    td_rustc_verbose = get_env TD_RUSTC_VERBOSE
+    td_rustc_verbose_true = eq ${td_rustc_verbose} "true"
+    if ${td_rustc_verbose_true}
+        set_env td-rust-quiet ""
+        debug "🔔 Configuring Rust in manual verbose mode"
+    end
+
 
     old_path = get_env PATH
     new_path = set ${old_path}

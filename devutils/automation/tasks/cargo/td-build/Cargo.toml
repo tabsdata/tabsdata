@@ -36,10 +36,16 @@ tm-workspace = { workspace = true }
 
 # External dependencies
 
+anyhow = { workspace = true }
+chrono = { workspace = true }
 duct = { workspace = true }
+gix = { workspace = true }
+hostname = { workspace = true }
+iana-time-zone = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_yaml = { workspace = true }
 toml = { workspace = true }
+vergen-gix = { workspace = true, features = ["build", "cargo", "emit_and_set", "rustc", "si"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }

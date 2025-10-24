@@ -355,6 +355,9 @@ version = "0.3.31"
 [workspace.dependencies.getset]
 version = "0.1.6"
 
+[workspace.dependencies.gix]
+version = "0.68.0"
+
 [workspace.dependencies.glob]
 version = "0.3.3"
 
@@ -366,6 +369,9 @@ version = "0.4.3"
 
 [workspace.dependencies.homedir]
 version = "0.3.6"
+
+[workspace.dependencies.hostname]
+version = "0.4.0"
 
 [workspace.dependencies.http]
 version = "1.3.1"
@@ -592,7 +598,7 @@ features = ["v7"]
 
 [workspace.dependencies.vergen-gix]
 version = "1.0.9"
-features = ["build", "cargo", "rustc", "si"]
+features = ["build", "cargo", "emit_and_set", "rustc", "si"]
 
 [workspace.dependencies.walkdir]
 version = "2.5.0"
