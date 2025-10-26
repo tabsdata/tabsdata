@@ -89,14 +89,9 @@ mod tests {
                 type_of_val(&With::<ExecutionBuilder>::build::<Execution, _>),
                 type_of_val(&With::<Execution>::set::<ExecutionDetailsBuilder>),
                 // Find all function runs.
-                type_of_val(&By::<ExecutionId>::select_all::<FunctionRunDBWithNames>),
-                type_of_val(
-                    &With::<FunctionRunDBWithNames>::vec_convert_to::<FunctionRunBuilder, _>,
-                ),
-                type_of_val(&With::<FunctionRunBuilder>::vec_build::<FunctionRun, _>),
-                type_of_val(&With::<Vec<FunctionRun>>::set::<ExecutionDetailsBuilder>),
+                type_of_val(&By::<ExecutionId>::select_all::<FunctionRunDB>),
                 // Find all functions.
-                type_of_val(&With::<FunctionRunDBWithNames>::extract_vec::<FunctionVersionId>),
+                type_of_val(&With::<FunctionRunDB>::extract_vec::<FunctionVersionId>),
                 type_of_val(&By::<FunctionVersionId>::find::<FunctionDBWithNames>),
                 type_of_val(&With::<FunctionDBWithNames>::vec_convert_to::<FunctionBuilder, _>),
                 type_of_val(&With::<FunctionBuilder>::vec_build::<Function, _>),
