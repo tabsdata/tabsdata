@@ -68,5 +68,7 @@ script = [
 
         exec --fail-on-error rustup component add %{components}
         exec --fail-on-error cargo install --quiet --jobs 8 %{crates}
+
+        exec --fail-on-error cargo install --quiet --git https://github.com/tabsdata/cargo-pants --branch main
     end
     ''']
