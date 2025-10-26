@@ -13,6 +13,8 @@ script = [
     !include_files ./make/make-os/libraries/log.ds
     !include_files ./make/make-os/libraries/file.ds
 
+    exec --fail-on-error python -m pip install --upgrade "pip==25.2"
+
     requirements-third-party-all-path = temp_file txt
     info "🌤  Using temporary file at ${requirements-third-party-all-path} for requirements-third-party-all.txt"
     info "🚀 uv pip compile --format requirements.txt --no-strip-extras --quiet --output-file ${requirements-third-party-all-path} ./requirements/requirements-third-party-all.txt"
@@ -44,6 +46,8 @@ script = [
         debug "🚀 pysentry-rs --severity low --fail-on low --ignore PYSEC-2022-42969 --ignore GHSA-4xh5-x5gv-qwph --no-cache --sources pypa,osv,pypi --resolver pip-tools --verbose --detailed --requirements-files ${requirements-dev-third-party-path}"
         exec --fail-on-error pysentry-rs --severity low --fail-on low --ignore PYSEC-2022-42969 --ignore GHSA-4xh5-x5gv-qwph --no-cache --sources pypa,osv,pypi --resolver pip-tools --verbose --detailed --requirements-files ${requirements-dev-third-party-path}
     end
+
+    exec --fail-on-error python -m pip install --upgrade pip
 
     # debug "🚀 pip-audit --progress-spinner on --strict --requirement requirements/requirements-third-party-all.txt --ignore-vuln PYSEC-2022-42969"
     # exec --fail-on-error pip-audit --progress-spinner on --strict --requirement requirements/requirements-third-party-all.txt --ignore-vuln PYSEC-2022-42969

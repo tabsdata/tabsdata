@@ -58,7 +58,7 @@ script = [
         array_push ${crates_array} "cargo-make"
         array_push ${crates_array} "cargo-nextest"
         array_push ${crates_array} "cargo-outdated"
-        array_push ${crates_array} "cargo-pants"
+        # array_push ${crates_array} "cargo-pants"
         array_push ${crates_array} "cargo-update"
         array_push ${crates_array} "cargo-upgrades"
         array_push ${crates_array} "cargo-workspaces"

@@ -142,24 +142,61 @@ def _capture_node_information():
     return node_info
 
 
-def _capture_system_information():
-    hostname = socket.gethostname()
-    user = getpass.getuser()
-    os_name = platform.system()
-    if os_name == "Darwin":
-        os_version = f"macOS {platform.mac_ver()[0]}"
-    else:
-        os_version = platform.release()
-    cpu_info = cpuinfo.get_cpu_info()
-    cpu_vendor = cpu.host().vendor
-    cpu_brand = cpu_info.get("brand_raw", "?")
-    cpu_name = cpu_info.get("brand_raw", "?")
-    cpu_count = psutil.cpu_count(logical=False)
-    cpu_freq = psutil.cpu_freq()
-    cpu_frequency = str(int(cpu_freq.current))
-    total_memory_bytes = psutil.virtual_memory().total
-    total_memory_gib = total_memory_bytes / (1024**3)
-    total_memory = f"{total_memory_gib:.0f} GiB"
+# noinspection PyBroadException
+def _capture_system_information():  # noqa: C901
+    try:
+        hostname = socket.gethostname()
+    except Exception:
+        hostname = "-"
+
+    try:
+        user = getpass.getuser()
+    except Exception:
+        user = "-"
+
+    try:
+        os_name = platform.system()
+    except Exception:
+        os_name = "-"
+
+    try:
+        if os_name == "Darwin":
+            os_version = f"macOS {platform.mac_ver()[0]}"
+        else:
+            os_version = platform.release()
+    except Exception:
+        os_version = "-"
+
+    try:
+        cpu_info = cpuinfo.get_cpu_info()
+    except Exception:
+        cpu_info = {}
+
+    try:
+        cpu_vendor = cpu.host().vendor
+    except Exception:
+        cpu_vendor = "-"
+
+    cpu_brand = cpu_info.get("brand_raw", "-")
+    cpu_name = cpu_info.get("brand_raw", "-")
+
+    try:
+        cpu_count = psutil.cpu_count(logical=False)
+    except Exception:
+        cpu_count = "-"
+
+    try:
+        cpu_freq = psutil.cpu_freq()
+        cpu_frequency = str(int(cpu_freq.current))
+    except Exception:
+        cpu_frequency = "-"
+
+    try:
+        total_memory_bytes = psutil.virtual_memory().total
+        total_memory_gib = total_memory_bytes / (1024**3)
+        total_memory = f"{total_memory_gib:.0f} GiB"
+    except Exception:
+        total_memory = "-"
 
     return {
         "hostname": hostname,
@@ -169,7 +206,7 @@ def _capture_system_information():
         "cpu_vendor": cpu_vendor,
         "cpu_brand": cpu_brand,
         "cpu_name": cpu_name,
-        "cpu_core_count": str(cpu_count),
+        "cpu_core_count": str(cpu_count) if cpu_count != "-" else "-",
         "cpu_frequency": cpu_frequency,
         "total_memory": total_memory,
     }

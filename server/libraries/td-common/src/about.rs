@@ -6,6 +6,7 @@ use chrono::FixedOffset;
 use colored::Colorize;
 use std::env;
 use std::process::Command;
+#[cfg(not(windows))]
 use supports_color;
 
 pub fn tdabout(version: &str) {
