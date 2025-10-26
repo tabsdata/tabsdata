@@ -17,3 +17,7 @@ alias = "book_dguide"
 [tasks.docs]
 plugin = "td-task-tracker"
 alias = "book_dguide"
+
+[tasks.setup]
+plugin = "td-task-tracker"
+alias = "permit"
