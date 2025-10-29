@@ -28,6 +28,7 @@ from tabsdata._cli.cli_utils import (
     verify_login_or_prompt,
 )
 from tabsdata._cli.collection_group import collection
+from tabsdata._cli.config_utils import execute_actions_for_command
 from tabsdata._cli.exe_group import exe
 from tabsdata._cli.fn_group import fn
 from tabsdata._cli.role_group import role
@@ -264,6 +265,7 @@ def login(ctx: click.Context, server: str, user: str, role: str, password: str):
     )
     role = role or logical_prompt(ctx, "Role", default_value="user")
     utils_login(ctx, server, user, password, role)
+    execute_actions_for_command("login")
 
 
 @cli.command()
