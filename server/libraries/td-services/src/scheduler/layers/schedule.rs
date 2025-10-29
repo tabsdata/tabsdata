@@ -5,6 +5,7 @@
 use http::Method;
 use itertools::{Either, Itertools};
 use sqlx::SqliteConnection;
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
 use td_common::server::WorkerName::FUNCTION;
@@ -147,7 +148,9 @@ pub async fn create_locked_workers<T: WorkerMessageQueue>(
                         req.requirement_dependency_pos(),
                         req.requirement_input_idx(),
                     ) {
-                        let location = match req.requirement_table_data_version_id() {
+                        let (found_data_version, location) = match req
+                            .requirement_table_data_version_id()
+                        {
                             Some(data_version_id) => {
                                 let found_data_version: TableDataVersionDBWithNames = queries
                                     .select_by::<TableDataVersionDBWithNames>(&data_version_id)?
@@ -161,16 +164,17 @@ pub async fn create_locked_workers<T: WorkerMessageQueue>(
                                 {
                                     let data_version_with_data =
                                         if with_data_data_version_id == found_data_version.id() {
-                                            found_data_version
+                                            Cow::Borrowed(&found_data_version)
                                         } else {
-                                            queries
+                                            let res = queries
                                                 .select_by::<TableDataVersionDBWithNames>(
                                                     &with_data_data_version_id,
                                                 )?
                                                 .build_query_as()
                                                 .fetch_one(&mut *conn)
                                                 .await
-                                                .map_err(handle_sql_err)?
+                                                .map_err(handle_sql_err)?;
+                                            Cow::Owned(res)
                                         };
 
                                     let (path, _) = storage_location
@@ -190,12 +194,12 @@ pub async fn create_locked_workers<T: WorkerMessageQueue>(
                                         .uri(external_path)
                                         .env_prefix(env_prefix)
                                         .build()?;
-                                    Some(location)
+                                    (Some(found_data_version), Some(location))
                                 } else {
-                                    None
+                                    (None, None)
                                 }
                             }
-                            None => None,
+                            None => (None, None),
                         };
 
                         let input_table = InputTableVersion::builder()
@@ -204,7 +208,20 @@ pub async fn create_locked_workers<T: WorkerMessageQueue>(
                             .collection(req.collection())
                             .table_id(req.requirement_table_id())
                             .table_version_id(req.requirement_table_version_id())
-                            .table_data_version_id(*req.requirement_table_data_version_id())
+                            .execution_id(found_data_version.as_ref().map(|v| *v.execution_id()))
+                            .transaction_id(
+                                found_data_version.as_ref().map(|v| *v.transaction_id()),
+                            )
+                            .function_run_id(
+                                found_data_version.as_ref().map(|v| *v.function_run_id()),
+                            )
+                            .triggered_on(
+                                found_data_version
+                                    .as_ref()
+                                    .map(|v| v.triggered_on().timestamp_millis().try_into())
+                                    .transpose()?,
+                            )
+                            .table_data_version_id(found_data_version.as_ref().map(|v| *v.id()))
                             .location(location)
                             .input_idx(input_idx)
                             .table_pos(dependency_pos)

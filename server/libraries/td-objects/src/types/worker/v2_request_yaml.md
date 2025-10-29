@@ -44,6 +44,10 @@ context: !V2
     collection: {c}                                      
     table_id: {t_id}    
     table_version_id: {tv_id}    
+    execution_id: {e_id}                                                                                                
+    transaction_id: {t_id}
+    function_run_id: {fr_id}                                                                                                
+    triggered_on: {int}                                                                                             
     table_data_version_id: {tdv_id}                                                                                                
     location: null
     table_pos: -1                                                      # position in the table array (always < 0)
@@ -54,7 +58,11 @@ context: !V2
     collection_id: {c_id}                                            
     collection: {c}              
     table_id: {t_id}                                                              
-    table_version_id: {tv_id}                                                              
+    table_version_id: {tv_id}
+    execution_id: {e_id}                                                                                                
+    transaction_id: {t_id}
+    function_run_id: {fr_id}                                                                                                
+    triggered_on: {int}                                                
     table_data_version_id: {tdv_id}                                                              
     location:                                                          
       uri: file:///../.tdserver/default/c/{c_id}/d/{tdv_id}/t/{t_id}/{tv_id}.t
@@ -130,6 +138,10 @@ system_input:
   collection: collection_1
   table_id: 06BCT5V3SDPR1FAUEHHFFA6NG4
   table_version_id: 06BCT5V3SDPR1FAUEHTRTED2EG
+  transaction_id: 06BCT5V3SLON37VQOI2E5BB3BH
+  execution_id: 06BCT5V3SLON37VQOICPFQV8HJ
+  function_run_id: 06BCT5V3SLON37VQOHPNPUGNAG
+  triggered_on: 0
   table_data_version_id: 06BCT5V3SDPR1FAUEI3HHVBFD8
   location:
     uri: file:///foo1
@@ -144,6 +156,10 @@ input:
   collection: collection_1
   table_id: 06BCT5V3SHQ770L1H7KB8BL1J4
   table_version_id: 06BCT5V3SHQ770L1H7VET6KARG
+  transaction_id: 06BCT5V3SLON37VQOI2E5BB3BI
+  execution_id: 06BCT5V3SLON37VQOICPFQV8HK
+  function_run_id: 06BCT5V3SLON37VQOHPNPUGNAG
+  triggered_on: 0
   table_data_version_id: 06BCT5V3SHQ770L1H84D745MV0
   location:
     uri: file:///foo2
@@ -157,6 +173,10 @@ input:
   collection: collection_1
   table_id: 06BCT5V3SHQ770L1H8KNNERS0C
   table_version_id: 06BCT5V3SHQ770L1H8OI46J348
+  transaction_id: 06BCT5V3SLON37VQOI2E5BB3BH
+  execution_id: 06BCT5V3SLON37VQOICPFQV8HJ
+  function_run_id: 06BCT5V3SLON37VQOHPNPUGNAG
+  triggered_on: 0
   table_data_version_id: 06BCT5V3SHQ770L1H92UUNHHG8
   location:
     uri: file:///foo3
@@ -170,6 +190,10 @@ input:
   collection: collection_1
   table_id: 06BCT5V3SHQ770L1H9JJ157F9C
   table_version_id: 06BCT5V3SHQ770L1H9TFJTHH7G
+  transaction_id: 06BCT5V3SLON37VQOI2E5BB3BH
+  execution_id: 06BCT5V3SLON37VQOICPFQV8HJ
+  function_run_id: 06BCT5V3SLON37VQOHPNPUGNAG
+  triggered_on: 0
   table_data_version_id: 06BCT5V3SHQ770L1HA6HO00AIC
   location:
     uri: file:///foo4

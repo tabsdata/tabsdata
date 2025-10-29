@@ -70,6 +70,14 @@ pub struct InputTableVersion {
     table_id: TableId,
     table_version_id: TableVersionId,
     #[builder(default)]
+    execution_id: Option<ExecutionId>,
+    #[builder(default)]
+    transaction_id: Option<TransactionId>,
+    #[builder(default)]
+    function_run_id: Option<FunctionRunId>,
+    #[builder(default)]
+    triggered_on: Option<TriggeredOnMillis>,
+    #[builder(default)]
     table_data_version_id: Option<TableDataVersionId>,
     #[builder(default)]
     location: Option<Location>,
@@ -95,6 +103,10 @@ pub struct InputPartitionTableVersion {
     collection: CollectionName,
     table_id: TableId,
     table_version_id: TableVersionId,
+    execution_id: Option<ExecutionId>,
+    transaction_id: Option<TransactionId>,
+    function_run_id: Option<FunctionRunId>,
+    triggered_on: Option<TriggeredOnMillis>,
     table_data_version_id: Option<TableDataVersionId>,
     partitions: HashMap<PartitionName, Location>,
     input_idx: InputIdx,
@@ -243,6 +255,8 @@ mod tests {
             .try_collection("cn")?
             .table_id(TableId::default())
             .table_version_id(TableVersionId::default())
+            .execution_id(ExecutionId::default())
+            .transaction_id(TransactionId::default())
             .table_data_version_id(TableDataVersionId::default())
             .location(location.clone())
             .try_input_idx(1)?
@@ -261,6 +275,10 @@ mod tests {
             .try_collection("cn")?
             .table_id(TableId::default())
             .table_version_id(TableVersionId::default())
+            .execution_id(ExecutionId::default())
+            .transaction_id(TransactionId::default())
+            .function_run_id(FunctionRunId::default())
+            .triggered_on(TriggeredOnMillis::default())
             .table_data_version_id(TableDataVersionId::default())
             .try_input_idx(1)?
             .try_table_pos(1)?
@@ -279,6 +297,10 @@ mod tests {
             .try_collection("cn")?
             .table_id(TableId::default())
             .table_version_id(TableVersionId::default())
+            .execution_id(ExecutionId::default())
+            .transaction_id(TransactionId::default())
+            .function_run_id(FunctionRunId::default())
+            .triggered_on(TriggeredOnMillis::default())
             .table_data_version_id(TableDataVersionId::default())
             .try_input_idx(1)?
             .try_table_pos(1)?
@@ -300,6 +322,10 @@ mod tests {
             .try_collection("cn")?
             .table_id(TableId::default())
             .table_version_id(TableVersionId::default())
+            .execution_id(ExecutionId::default())
+            .transaction_id(TransactionId::default())
+            .function_run_id(FunctionRunId::default())
+            .triggered_on(TriggeredOnMillis::default())
             .table_data_version_id(TableDataVersionId::default())
             .location(location.clone())
             .try_input_idx(1)?
@@ -318,6 +344,10 @@ mod tests {
             .try_collection("cn")?
             .table_id(TableId::default())
             .table_version_id(TableVersionId::default())
+            .execution_id(ExecutionId::default())
+            .transaction_id(TransactionId::default())
+            .function_run_id(FunctionRunId::default())
+            .triggered_on(TriggeredOnMillis::default())
             .table_data_version_id(TableDataVersionId::default())
             .try_input_idx(1)?
             .try_table_pos(1)?
@@ -400,7 +430,7 @@ mod tests {
     }
 
     #[test]
-    fn test_function_input_v1_locations() -> Result<(), TdError> {
+    fn test_function_input_v2_locations() -> Result<(), TdError> {
         let locations = vec![
             Location::builder()
                 .uri(Url::parse("file:///foo0").unwrap())
@@ -443,6 +473,8 @@ mod tests {
             .try_collection("collection_1")?
             .table_id(TableId::default())
             .table_version_id(TableVersionId::default())
+            .execution_id(ExecutionId::default())
+            .transaction_id(TransactionId::default())
             .table_data_version_id(TableDataVersionId::default())
             .location(locations[1].clone())
             .try_input_idx(0)?
@@ -455,6 +487,10 @@ mod tests {
             .try_collection("collection_1")?
             .table_id(TableId::default())
             .table_version_id(TableVersionId::default())
+            .execution_id(ExecutionId::default())
+            .transaction_id(TransactionId::default())
+            .function_run_id(FunctionRunId::default())
+            .triggered_on(TriggeredOnMillis::default())
             .table_data_version_id(TableDataVersionId::default())
             .location(locations[2].clone())
             .try_input_idx(0)?
@@ -467,6 +503,10 @@ mod tests {
             .try_collection("collection_1")?
             .table_id(TableId::default())
             .table_version_id(TableVersionId::default())
+            .execution_id(ExecutionId::default())
+            .transaction_id(TransactionId::default())
+            .function_run_id(FunctionRunId::default())
+            .triggered_on(TriggeredOnMillis::default())
             .table_data_version_id(TableDataVersionId::default())
             .location(locations[3].clone())
             .try_input_idx(1)?
@@ -479,6 +519,10 @@ mod tests {
             .try_collection("collection_1")?
             .table_id(TableId::default())
             .table_version_id(TableVersionId::default())
+            .execution_id(ExecutionId::default())
+            .transaction_id(TransactionId::default())
+            .function_run_id(FunctionRunId::default())
+            .triggered_on(TriggeredOnMillis::default())
             .table_data_version_id(TableDataVersionId::default())
             .location(locations[4].clone())
             .try_input_idx(2)?
