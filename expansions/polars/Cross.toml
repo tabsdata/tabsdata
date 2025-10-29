@@ -141,5 +141,7 @@ passthrough = [
     "SNW__USER",
     "SNW__WAREHOUSE",
     "OPENAI_API_KEY",
+    "OSS_INDEX_USERNAME",
+    "OSS_INDEX_API_KEY",
     # <<< passthrough:SECRETS:END <<<
 ]
