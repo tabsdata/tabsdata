@@ -40,7 +40,7 @@ impl ScriptBuilder {
     const SHEBANG: [&'static str; 0] = [];
 
     #[cfg(not(windows))]
-    const CONTEXT: [&'static str; 2] = ["set -e +x", "trap \"kill 0\" INT TERM"];
+    const CONTEXT: [&'static str; 2] = ["set -e +x", "trap 'exit 143' INT TERM"];
     #[cfg(windows)]
     const CONTEXT: [&'static str; 2] = ["@echo off", "setlocal"];
 
