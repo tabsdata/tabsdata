@@ -41,6 +41,7 @@ rich<14.0.0
 rich-click==1.9.3
 ruamel.yaml==0.18.16
 sqlalchemy==2.0.44
+starlette==0.49.1
 typing_extensions==4.15.0
 tzlocal==5.3.1
 uuid6==2025.0.1
