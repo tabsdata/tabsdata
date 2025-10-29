@@ -12,6 +12,7 @@ import requests
 
 import tabsdata as td
 from tabsdata._utils.temps import tabsdata_temp_folder
+from tabsdata.tableframe.lazyframe.properties import TableFramePropertiesBuilder
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -50,6 +51,7 @@ def load_simple_dataframe(
         df=lazy_frame,
         mode="raw",
         idx=0,
+        properties=TableFramePropertiesBuilder.empty(),
     )
     return lazy_frame, data_frame, table_frame
 
@@ -80,6 +82,7 @@ def load_complex_dataframe(
         df=lazy_frame,
         mode="raw",
         idx=0,
+        properties=TableFramePropertiesBuilder.empty(),
     )
     return lazy_frame, data_frame, table_frame
 
@@ -117,5 +120,6 @@ def load_normalized_complex_dataframe(
         df=lazy_frame,
         mode="raw",
         idx=0,
+        properties=TableFramePropertiesBuilder.empty(),
     )
     return lazy_frame, data_frame, table_frame

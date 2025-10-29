@@ -14,6 +14,7 @@ import tabsdata.tableframe.expr.expr as td_expr
 import tabsdata.tableframe.functions.datetime as td_datetime
 import tabsdata.tableframe.lazyframe.frame as td_frame
 from tabsdata.exceptions import ErrorCode, TableFrameError
+from tabsdata.tableframe.lazyframe.properties import TableFramePropertiesBuilder
 
 
 def _is_instance_of_union(obj, tp):
@@ -28,10 +29,23 @@ def _wrap_polars_frame(f: pl.LazyFrame | pl.DataFrame) -> td_frame.TableFrame:
     """Use only for testing."""
     if isinstance(f, pl.LazyFrame):
         # noinspection PyProtectedMember
-        return td_frame.TableFrame._from_lazy(f)
+        return td_frame.TableFrame.__build__(
+            df=f,
+            mode="raw",
+            idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
+        )
+        # return td_frame.TableFrame._from_lazy(f)
     elif isinstance(f, pl.DataFrame):
         # noinspection PyProtectedMember
-        return td_frame.TableFrame._from_lazy(f.lazy())
+        return td_frame.TableFrame.__build__(
+            df=f.lazy(),
+            mode="raw",
+            idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
+        )
+        # noinspection PyProtectedMember
+        # return td_frame.TableFrame._from_lazy(f.lazy())
     else:
         raise TableFrameError(ErrorCode.TF7, type(f))
 

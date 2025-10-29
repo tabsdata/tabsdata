@@ -11,6 +11,7 @@ import tabsdata as td
 
 # noinspection PyProtectedMember
 from tabsdata._utils.tableframe._translator import _wrap_polars_frame
+from tabsdata.tableframe.lazyframe.properties import TableFramePropertiesBuilder
 
 # noinspection PyUnresolvedReferences
 from .. import pytestmark  # noqa: F401
@@ -56,11 +57,13 @@ class TestTableFrame(unittest.TestCase):
             df=pl.LazyFrame({"a": [1, 2], "b": ["x", "y"]}),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         tf2 = td.TableFrame.__build__(
             df=pl.LazyFrame({"a": [3, 4], "b": ["z", "w"]}),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         result = td.concat([tf1, tf2], how="vertical")
         collected = result.to_polars_lf().collect()
@@ -72,11 +75,13 @@ class TestTableFrame(unittest.TestCase):
             df=pl.LazyFrame({"a": [1, 2], "b": ["x", "y"]}),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         tf2 = td.TableFrame.__build__(
             df=pl.LazyFrame({"a": [3, 4], "c": [10, 20]}),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         with self.assertRaises(Exception):
             td.concat([tf1, tf2], how="vertical")
@@ -86,11 +91,13 @@ class TestTableFrame(unittest.TestCase):
             df=pl.LazyFrame({"a": [1, 2], "b": ["x", "y"]}),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         tf2 = td.TableFrame.__build__(
             df=pl.LazyFrame({"a": [3, 4], "c": [10, 20]}),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         result = td.concat([tf1, tf2], how="diagonal")
         collected = result.to_polars_lf().collect()
@@ -104,11 +111,13 @@ class TestTableFrame(unittest.TestCase):
             df=pl.LazyFrame({"a": pl.Series([1, 2], dtype=pl.Int32)}),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         tf2 = td.TableFrame.__build__(
             df=pl.LazyFrame({"a": pl.Series([3, 4], dtype=pl.Int64)}),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         result = td.concat([tf1, tf2], how="vertical_relaxed")
         collected = result.to_polars_lf().collect()
@@ -120,11 +129,13 @@ class TestTableFrame(unittest.TestCase):
             df=pl.LazyFrame({"a": pl.Series([1, 2], dtype=pl.Int32), "b": [10, 20]}),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         tf2 = td.TableFrame.__build__(
             df=pl.LazyFrame({"a": pl.Series([3, 4], dtype=pl.Int64), "c": ["x", "y"]}),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         result = td.concat([tf1, tf2], how="diagonal_relaxed")
         collected = result.to_polars_lf().collect()
@@ -144,11 +155,13 @@ class TestTableFrame(unittest.TestCase):
             df=pl.LazyFrame({"a": ["x", "y"]}),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         tf2 = td.TableFrame.__build__(
             df=pl.LazyFrame({"a": [1, 2]}),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         result = td.concat([tf1, tf2], how="vertical_relaxed")
         collected = result.to_polars_lf().collect()
@@ -162,11 +175,13 @@ class TestTableFrame(unittest.TestCase):
             df=pl.LazyFrame({"a": pl.Series([1, 2], dtype=pl.Int32)}),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         tf2 = td.TableFrame.__build__(
             df=pl.LazyFrame({"a": pl.Series([3.5, 4.5], dtype=pl.Float64)}),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         result = td.concat([tf1, tf2], how="vertical_relaxed")
         collected = result.to_polars_lf().collect()
@@ -178,16 +193,19 @@ class TestTableFrame(unittest.TestCase):
             df=pl.LazyFrame({"a": pl.Series([1, 2], dtype=pl.Int8)}),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         tf2 = td.TableFrame.__build__(
             df=pl.LazyFrame({"a": pl.Series([3, 4], dtype=pl.Int32)}),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         tf3 = td.TableFrame.__build__(
             df=pl.LazyFrame({"a": pl.Series([5, 6], dtype=pl.Int64)}),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         result = td.concat([tf1, tf2, tf3], how="vertical_relaxed")
         collected = result.to_polars_lf().collect()
@@ -199,11 +217,13 @@ class TestTableFrame(unittest.TestCase):
             df=pl.LazyFrame({"a": pl.Series([1.0, 2.0], dtype=pl.Float32)}),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         tf2 = td.TableFrame.__build__(
             df=pl.LazyFrame({"a": pl.Series([3.0, 4.0], dtype=pl.Float64)}),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         result = td.concat([tf1, tf2], how="vertical_relaxed")
         collected = result.to_polars_lf().collect()
@@ -215,11 +235,13 @@ class TestTableFrame(unittest.TestCase):
             df=pl.LazyFrame({"a": [True, False]}),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         tf2 = td.TableFrame.__build__(
             df=pl.LazyFrame({"a": [1, 2]}),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         result = td.concat([tf1, tf2], how="vertical_relaxed")
         collected = result.to_polars_lf().collect()
@@ -233,11 +255,13 @@ class TestTableFrame(unittest.TestCase):
             df=pl.LazyFrame({"a": pl.Series(["x", "y"], dtype=pl.String)}),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         tf2 = td.TableFrame.__build__(
             df=pl.LazyFrame({"a": pl.Series(["z", "w"], dtype=pl.Categorical)}),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         result = td.concat([tf1, tf2], how="vertical_relaxed")
         collected = result.to_polars_lf().collect()
@@ -253,6 +277,7 @@ class TestTableFrame(unittest.TestCase):
             ),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         tf2 = td.TableFrame.__build__(
             df=pl.LazyFrame(
@@ -263,6 +288,7 @@ class TestTableFrame(unittest.TestCase):
             ),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         tf3 = td.TableFrame.__build__(
             df=pl.LazyFrame(
@@ -273,6 +299,7 @@ class TestTableFrame(unittest.TestCase):
             ),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         result = td.concat([tf1, tf2, tf3], how="diagonal_relaxed")
         collected = result.to_polars_lf().collect()
@@ -288,11 +315,13 @@ class TestTableFrame(unittest.TestCase):
             ),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         tf2 = td.TableFrame.__build__(
             df=pl.LazyFrame({"a": [1, 2]}),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         result = td.concat([tf1, tf2], how="vertical_relaxed")
         collected = result.to_polars_lf().collect()
@@ -304,11 +333,13 @@ class TestTableFrame(unittest.TestCase):
             df=pl.LazyFrame({"a": [1, 2], "b": [10, 20], "c": [100, 200]}),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         tf2 = td.TableFrame.__build__(
             df=pl.LazyFrame({"a": [3, 4], "b": [30, 40], "d": [300, 400]}),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         with self.assertRaises(Exception):
             td.concat([tf1, tf2], how="vertical")
@@ -318,16 +349,19 @@ class TestTableFrame(unittest.TestCase):
             df=pl.LazyFrame({"a": [1], "b": [10], "c": [100], "d": [1000]}),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         tf2 = td.TableFrame.__build__(
             df=pl.LazyFrame({"a": [2], "b": [20], "c": [200], "e": [2000]}),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         tf3 = td.TableFrame.__build__(
             df=pl.LazyFrame({"a": [3], "b": [30], "f": [300]}),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         with self.assertRaises(Exception):
             td.concat([tf1, tf2, tf3], how="vertical")
@@ -337,11 +371,13 @@ class TestTableFrame(unittest.TestCase):
             df=pl.LazyFrame({"a": [1, 2]}),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         tf2 = td.TableFrame.__build__(
             df=pl.LazyFrame({"b": [3, 4]}),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         with self.assertRaises(Exception):
             td.concat([tf1, tf2], how="vertical")
@@ -351,11 +387,13 @@ class TestTableFrame(unittest.TestCase):
             df=pl.LazyFrame({"a": [1, 2], "b": [10, 20]}),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         tf2 = td.TableFrame.__build__(
             df=pl.LazyFrame({"a": [3, 4], "c": [30, 40]}),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         result = td.concat([tf1, tf2], how="diagonal")
         collected = result.to_polars_lf().collect()
@@ -371,21 +409,25 @@ class TestTableFrame(unittest.TestCase):
             df=pl.LazyFrame({"a": [1], "b": [10]}),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         tf2 = td.TableFrame.__build__(
             df=pl.LazyFrame({"b": [20], "c": [200]}),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         tf3 = td.TableFrame.__build__(
             df=pl.LazyFrame({"c": [300], "d": [3000]}),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         tf4 = td.TableFrame.__build__(
             df=pl.LazyFrame({"a": [4], "d": [4000]}),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         result = td.concat([tf1, tf2, tf3, tf4], how="diagonal")
         collected = result.to_polars_lf().collect()
@@ -413,16 +455,19 @@ class TestTableFrame(unittest.TestCase):
             df=pl.LazyFrame({"a": [1]}),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         tf2 = td.TableFrame.__build__(
             df=pl.LazyFrame({"b": [2]}),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         tf3 = td.TableFrame.__build__(
             df=pl.LazyFrame({"c": [3]}),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         result = td.concat([tf1, tf2, tf3], how="diagonal")
         collected = result.to_polars_lf().collect()
@@ -451,6 +496,7 @@ class TestTableFrame(unittest.TestCase):
             ),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         tf2 = td.TableFrame.__build__(
             df=pl.LazyFrame(
@@ -458,6 +504,7 @@ class TestTableFrame(unittest.TestCase):
             ),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         with self.assertRaises(Exception):
             td.concat([tf1, tf2], how="vertical_relaxed")

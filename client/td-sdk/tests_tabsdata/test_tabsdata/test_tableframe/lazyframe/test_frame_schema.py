@@ -8,6 +8,7 @@ import polars as pl
 import pytest
 
 import tabsdata as td
+from tabsdata.tableframe.lazyframe.properties import TableFramePropertiesBuilder
 
 # noinspection PyUnresolvedReferences
 from .. import pytestmark  # noqa: F401
@@ -23,6 +24,7 @@ def base_tableframe():
         df=pl.LazyFrame(data),
         mode="raw",
         idx=0,
+        properties=TableFramePropertiesBuilder.empty(),
     )
 
 

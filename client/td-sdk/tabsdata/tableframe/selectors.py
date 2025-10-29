@@ -31,6 +31,15 @@ class SelectorProxy(td_expr.Expr):
         super().__init__(expr)
 
 
+def _exclude_system_columns() -> pl.Expr:
+    selector = pl.selectors.exclude(
+        pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX)
+    )
+    for prefix in td_constants.TD_NAMESPACED_VIRTUAL_COLUMN_PREFIXES:
+        selector = selector | pl.selectors.starts_with(prefix)
+    return selector
+
+
 """
 Selectors by position.
 """
@@ -84,10 +93,7 @@ def all() -> SelectorProxy:
         │ 8   ┆ "h"  │
         └─────┴──────┘
     """
-    return SelectorProxy(
-        pl.selectors.all()
-        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
-    )
+    return SelectorProxy(pl.selectors.all() & _exclude_system_columns())
 
 
 @pydoc(categories="projection")
@@ -138,10 +144,7 @@ def first() -> SelectorProxy:
         │ 108 │
         └─────┘
     """
-    return SelectorProxy(
-        pl.selectors.first()
-        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
-    )
+    return SelectorProxy(pl.selectors.first() & _exclude_system_columns())
 
 
 @pydoc(categories="projection")
@@ -196,8 +199,7 @@ def last() -> SelectorProxy:
         └───────┘
     """
     return SelectorProxy(
-        pl.selectors.by_index(-(len(SystemColumns) + 1))
-        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
+        pl.selectors.by_index(-(len(SystemColumns) + 1)) & _exclude_system_columns()
     )
 
 
@@ -279,8 +281,7 @@ def by_index(*indices: int | range | Sequence[int | range]) -> SelectorProxy:
             raise TypeError(f"Unsupported index type: {type(index)}")
 
     return SelectorProxy(
-        pl.selectors.by_index(*normalized_indices)
-        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
+        pl.selectors.by_index(*normalized_indices) & _exclude_system_columns()
     )
 
 
@@ -344,7 +345,7 @@ def by_name(*names: str | Collection[str], require_all: bool = True) -> Selector
     """
     return SelectorProxy(
         pl.selectors.by_name(*names, require_all=require_all)
-        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
+        & _exclude_system_columns()
     )
 
 
@@ -396,10 +397,7 @@ def contains(*substring: str) -> SelectorProxy:
         │ 8      ┆ "H"      │
         └────────┴──────────┘
     """
-    return SelectorProxy(
-        pl.selectors.contains(*substring)
-        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
-    )
+    return SelectorProxy(pl.selectors.contains(*substring) & _exclude_system_columns())
 
 
 @pydoc(categories="projection")
@@ -454,10 +452,7 @@ def starts_with(*prefix: str) -> SelectorProxy:
         │ "Hana"   ┆ 89       │
         └──────────┴──────────┘
     """
-    return SelectorProxy(
-        pl.selectors.starts_with(*prefix)
-        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
-    )
+    return SelectorProxy(pl.selectors.starts_with(*prefix) & _exclude_system_columns())
 
 
 @pydoc(categories="projection")
@@ -512,10 +507,7 @@ def ends_with(*suffix: str) -> SelectorProxy:
         │ 8    ┆ 107    ┆ 208       │
         └──────┴────────┴───────────┘
     """
-    return SelectorProxy(
-        pl.selectors.ends_with(*suffix)
-        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
-    )
+    return SelectorProxy(pl.selectors.ends_with(*suffix) & _exclude_system_columns())
 
 
 @pydoc(categories="projection")
@@ -571,8 +563,7 @@ def matches(pattern: str) -> SelectorProxy:
         └──────┴──────┘
     """
     return SelectorProxy(
-        pl.selectors.matches(pattern=pattern)
-        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
+        pl.selectors.matches(pattern=pattern) & _exclude_system_columns()
     )
 
 
@@ -630,7 +621,7 @@ def alpha(ascii_only: bool = False, *, ignore_spaces: bool = False) -> SelectorP
     """
     return SelectorProxy(
         pl.selectors.alpha(ascii_only=ascii_only, ignore_spaces=ignore_spaces)
-        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
+        & _exclude_system_columns()
     )
 
 
@@ -693,7 +684,7 @@ def alphanumeric(
     """
     return SelectorProxy(
         pl.selectors.alphanumeric(ascii_only=ascii_only, ignore_spaces=ignore_spaces)
-        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
+        & _exclude_system_columns()
     )
 
 
@@ -751,8 +742,7 @@ def digit(ascii_only: bool = False) -> SelectorProxy:
         └──────┴─────┘
     """
     return SelectorProxy(
-        pl.selectors.digit(ascii_only=ascii_only)
-        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
+        pl.selectors.digit(ascii_only=ascii_only) & _exclude_system_columns()
     )
 
 
@@ -817,10 +807,7 @@ def by_dtype(
         │ 89.0  │
         └───────┘
     """
-    return SelectorProxy(
-        pl.selectors.by_dtype(*dtypes)
-        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
-    )
+    return SelectorProxy(pl.selectors.by_dtype(*dtypes) & _exclude_system_columns())
 
 
 """
@@ -877,10 +864,7 @@ def integer() -> SelectorProxy:
         │ 8  ┆ 2     │
         └────┴───────┘
     """
-    return SelectorProxy(
-        pl.selectors.integer()
-        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
-    )
+    return SelectorProxy(pl.selectors.integer() & _exclude_system_columns())
 
 
 @pydoc(categories="projection")
@@ -932,10 +916,7 @@ def signed_integer() -> SelectorProxy:
         │ 17     ┆ 1      │
         └────────┴────────┘
     """
-    return SelectorProxy(
-        pl.selectors.signed_integer()
-        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
-    )
+    return SelectorProxy(pl.selectors.signed_integer() & _exclude_system_columns())
 
 
 @pydoc(categories="projection")
@@ -989,10 +970,7 @@ def unsigned_integer() -> SelectorProxy:
         │ 17     ┆ 96    ┆ 0      │
         └────────┴───────┴────────┘
     """
-    return SelectorProxy(
-        pl.selectors.unsigned_integer()
-        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
-    )
+    return SelectorProxy(pl.selectors.unsigned_integer() & _exclude_system_columns())
 
 
 # noinspection PyShadowingBuiltins
@@ -1044,10 +1022,7 @@ def float() -> SelectorProxy:
         │ 86.5  │
         └───────┘
     """
-    return SelectorProxy(
-        pl.selectors.float()
-        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
-    )
+    return SelectorProxy(pl.selectors.float() & _exclude_system_columns())
 
 
 @pydoc(categories="projection")
@@ -1101,10 +1076,7 @@ def numeric() -> SelectorProxy:
         │ 8  ┆ 89.0   │
         └────┴────────┘
     """
-    return SelectorProxy(
-        pl.selectors.numeric()
-        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
-    )
+    return SelectorProxy(pl.selectors.numeric() & _exclude_system_columns())
 
 
 @pydoc(categories="projection")
@@ -1196,10 +1168,7 @@ def temporal() -> SelectorProxy:
         │ 2024-01-08 16:00:00+00:00 ┆ 2024-01-08  ┆ 0:35:00  ┆ 16:00:00  │
         └───────────────────────────┴─────────────┴──────────┴───────────┘
     """
-    return SelectorProxy(
-        pl.selectors.temporal()
-        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
-    )
+    return SelectorProxy(pl.selectors.temporal() & _exclude_system_columns())
 
 
 """
@@ -1254,10 +1223,7 @@ def binary() -> SelectorProxy:
         │ b"H8"  │
         └────────┘
     """
-    return SelectorProxy(
-        pl.selectors.binary()
-        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
-    )
+    return SelectorProxy(pl.selectors.binary() & _exclude_system_columns())
 
 
 @pydoc(categories="projection")
@@ -1307,10 +1273,7 @@ def boolean() -> SelectorProxy:
         │ false   │
         └─────────┘
     """
-    return SelectorProxy(
-        pl.selectors.boolean()
-        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
-    )
+    return SelectorProxy(pl.selectors.boolean() & _exclude_system_columns())
 
 
 @pydoc(categories="projection")
@@ -1363,10 +1326,7 @@ def categorical() -> SelectorProxy:
         │ "B"      │
         └──────────┘
     """
-    return SelectorProxy(
-        pl.selectors.categorical()
-        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
-    )
+    return SelectorProxy(pl.selectors.categorical() & _exclude_system_columns())
 
 
 @pydoc(categories="projection")
@@ -1434,10 +1394,7 @@ def date() -> SelectorProxy:
         │ 2023-01-08 │
         └────────────┘
     """
-    return SelectorProxy(
-        pl.selectors.date()
-        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
-    )
+    return SelectorProxy(pl.selectors.date() & _exclude_system_columns())
 
 
 @pydoc(categories="projection")
@@ -1527,7 +1484,7 @@ def datetime(
     """
     return SelectorProxy(
         pl.selectors.datetime(time_unit=time_unit, time_zone=time_zone)
-        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
+        & _exclude_system_columns()
     )
 
 
@@ -1583,10 +1540,7 @@ def decimal() -> SelectorProxy:
         │ 11.45  │
         └────────┘
     """
-    return SelectorProxy(
-        pl.selectors.decimal()
-        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
-    )
+    return SelectorProxy(pl.selectors.decimal() & _exclude_system_columns())
 
 
 @pydoc(categories="projection")
@@ -1654,8 +1608,7 @@ def duration(
         └──────────┘
     """
     return SelectorProxy(
-        pl.selectors.duration(time_unit=time_unit)
-        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
+        pl.selectors.duration(time_unit=time_unit) & _exclude_system_columns()
     )
 
 
@@ -1712,10 +1665,7 @@ def object() -> SelectorProxy:
         │ {"h": 8}   │
         └────────────┘
     """
-    return SelectorProxy(
-        pl.selectors.object()
-        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
-    )
+    return SelectorProxy(pl.selectors.object() & _exclude_system_columns())
 
 
 @pydoc(categories="projection")
@@ -1771,7 +1721,7 @@ def string(*, include_categorical: bool = False) -> SelectorProxy:
     """
     return SelectorProxy(
         pl.selectors.string(include_categorical=include_categorical)
-        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
+        & _exclude_system_columns()
     )
 
 
@@ -1826,10 +1776,7 @@ def time() -> SelectorProxy:
         │ 16:55:00  │
         └───────────┘
     """
-    return SelectorProxy(
-        pl.selectors.time()
-        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
-    )
+    return SelectorProxy(pl.selectors.time() & _exclude_system_columns())
 
 
 """
@@ -1907,6 +1854,5 @@ def exclude(
         └───═─┴──────┘
     """
     return SelectorProxy(
-        pl.selectors.exclude(columns=columns, *more_columns)
-        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
+        pl.selectors.exclude(columns=columns, *more_columns) & _exclude_system_columns()
     )

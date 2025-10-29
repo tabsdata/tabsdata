@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
@@ -106,6 +107,16 @@ class Inception(Enum):
 TD_COLUMN_PREFIX = "$td."
 TD_COLUMN_PREFIX_REGEXP = "^\\$td\\..*$"
 
+TD_VER_COLUMN_PREFIX = "$td.ver."
+
+TD_NAMESPACED_VIRTUAL_COLUMN_PREFIXES = [TD_VER_COLUMN_PREFIX]
+
+EMPTY_UUID_V7 = "00000000000000000000000000"
+EMPTY_EXECUTION = EMPTY_UUID_V7
+EMPTY_TRANSACTION = EMPTY_UUID_V7
+EMPTY_VERSION = EMPTY_UUID_V7
+EMPTY_TIMESTAMP = datetime.fromtimestamp(0, tz=timezone.utc)
+
 
 @dataclass(slots=True, eq=True, frozen=True)
 class SystemColumn:
@@ -138,6 +149,10 @@ class SystemColumn:
 class StandardSystemColumns(Enum):
     TD_IDENTIFIER = "$td.id"
     TD_OFFSET = "$td.offset"
+    TD_VER_EXECUTION = "$td.ver.execution"
+    TD_VER_TRANSACTION = "$td.ver.transaction"
+    TD_VER_VERSION = "$td.ver.version"
+    TD_VER_TIMESTAMP = "$td.ver.timestamp"
 
 
 class StandardVolatileSystemColumns(Enum):
@@ -158,6 +173,38 @@ class StandardSystemColumnsMetadata(Enum):
         language=Language.RUST,
         generator=td_generators.IdGenerator,
         inception=Inception.REGENERATE,
+        aggregation=None,
+    )
+    TD_VER_EXECUTION = SystemColumn(
+        dtype=pl.String,
+        default=EMPTY_EXECUTION,
+        language=Language.PYTHON,
+        generator=StandardSystemColumns.TD_VER_EXECUTION.value,
+        inception=Inception.PROPAGATE,
+        aggregation=None,
+    )
+    TD_VER_TRANSACTION = SystemColumn(
+        dtype=pl.String,
+        default=EMPTY_TRANSACTION,
+        language=Language.PYTHON,
+        generator=StandardSystemColumns.TD_VER_TRANSACTION.value,
+        inception=Inception.PROPAGATE,
+        aggregation=None,
+    )
+    TD_VER_VERSION = SystemColumn(
+        dtype=pl.String,
+        default=EMPTY_VERSION,
+        language=Language.PYTHON,
+        generator=StandardSystemColumns.TD_VER_VERSION.value,
+        inception=Inception.PROPAGATE,
+        aggregation=None,
+    )
+    TD_VER_TIMESTAMP = SystemColumn(
+        dtype=pl.Datetime(time_unit="us", time_zone=timezone.utc),
+        default=EMPTY_TIMESTAMP,
+        language=Language.PYTHON,
+        generator=StandardSystemColumns.TD_VER_TIMESTAMP.value,
+        inception=Inception.PROPAGATE,
         aggregation=None,
     )
 

@@ -25,6 +25,7 @@ from tabsdata.exceptions import (
     ErrorCode,
     FunctionConfigurationError,
 )
+from tabsdata.tableframe.lazyframe.properties import TableFramePropertiesBuilder
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -318,18 +319,21 @@ def _convert_recursively_to_tableframe(arguments: Any):
             df=arguments,
             mode="raw",
             idx=None,
+            properties=TableFramePropertiesBuilder.empty(),
         )
     elif isinstance(arguments, pl.LazyFrame):
         return td_frame.TableFrame.__build__(
             df=arguments,
             mode="raw",
             idx=None,
+            properties=TableFramePropertiesBuilder.empty(),
         )
     elif isinstance(arguments, pd.DataFrame):
         return td_frame.TableFrame.__build__(
             df=pl.DataFrame(arguments),
             mode="raw",
             idx=None,
+            properties=TableFramePropertiesBuilder.empty(),
         )
     return arguments
 

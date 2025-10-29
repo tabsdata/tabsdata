@@ -124,6 +124,7 @@ def _wrap_polars_type(
             df=obj,
             mode="tab",
             idx=None,
+            properties=None,
         )
     elif isinstance(obj, pl.Expr):
         # noinspection PyProtectedMember

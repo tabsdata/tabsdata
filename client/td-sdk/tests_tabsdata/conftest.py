@@ -20,6 +20,7 @@ import pathlib
 import re
 import sys
 import uuid
+from datetime import datetime, timezone
 from time import sleep
 from typing import Any
 
@@ -1197,23 +1198,45 @@ def write_v2_yaml_file(
                 )
                 table_content = {
                     "name": "mocked_table",
+                    "collection_id": "mocked_collection_id",
+                    "collection": "mocked_collection",
+                    "table_id": "mocked_table_id",
+                    "table_version_id": "mocked_table_version_id",
+                    "execution_id": "mocked_execution_id",
+                    "transaction_id": "mocked_transaction_id",
+                    "triggered_on": datetime.now(tz=timezone.utc),
+                    "table_data_version_id": "mocked_table_data_version_id",
                     "location": {
                         "uri": uri,
                         "env_prefix": None,
                     },
+                    "input_idx": 314,
+                    "table_pos": 25,
+                    "version_pos": 19,
                 }
 
                 content["input"].append(MockTable(table_content))
             elif isinstance(mocked_table, list):
                 table_versions = []
-                for table in mocked_table:
+                for idx, table in enumerate(mocked_table):
                     uri = pathlib.Path(table).as_uri() if table != "null" else None
                     table_content = {
-                        "name": "mocked_table",
+                        "name": f"mocked_table_{idx}",
+                        "collection_id": f"mocked_collection_id_{idx}",
+                        "collection": f"mocked_collection_{idx}",
+                        "table_id": f"mocked_table_id_{idx}",
+                        "table_version_id": f"mocked_table_version_id_{idx}",
+                        "execution_id": f"mocked_execution_id_{idx}",
+                        "transaction_id": f"mocked_transaction_id_{idx}",
+                        "triggered_on": datetime.now(tz=timezone.utc),
+                        "table_data_version_id": f"mocked_table_data_version_id_{idx}",
                         "location": {
                             "uri": uri,
                             "env_prefix": None,
                         },
+                        "input_idx": 314 + idx,
+                        "table_pos": 25 + idx,
+                        "version_pos": 19 + idx,
                     }
                     table_versions.append(table_content)
                 content["input"].append(MockTableVersions(table_versions))
@@ -1258,23 +1281,45 @@ def add_mock_table_location(mock_table_location):
             )
             table_content = {
                 "name": "mocked_table",
+                "collection_id": "mocked_collection_id",
+                "collection": "mocked_collection",
+                "table_id": "mocked_table_id",
+                "table_version_id": "mocked_table_version_id",
+                "execution_id": "mocked_execution_id",
+                "transaction_id": "mocked_transaction_id",
+                "triggered_on": datetime.now(tz=timezone.utc),
+                "table_data_version_id": "mocked_table_data_version_id",
                 "location": {
                     "uri": uri,
                     "env_prefix": None,
                 },
+                "input_idx": 314,
+                "table_pos": 25,
+                "version_pos": 19,
             }
 
             output.append(MockTable(table_content))
         elif isinstance(mocked_table, list):
             table_versions = []
-            for table in mocked_table:
+            for idx, table in enumerate(mocked_table):
                 uri = pathlib.Path(table).as_uri() if table != "null" else None
                 table_content = {
-                    "name": "mocked_table",
+                    "name": f"mocked_table_{idx}",
+                    "collection_id": f"mocked_collection_id_{idx}",
+                    "collection": f"mocked_collection_{idx}",
+                    "table_id": f"mocked_table_id_{idx}",
+                    "table_version_id": f"mocked_table_version_id_{idx}",
+                    "execution_id": f"mocked_execution_id_{idx}",
+                    "transaction_id": f"mocked_transaction_id_{idx}",
+                    "triggered_on": datetime.now(tz=timezone.utc),
+                    "table_data_version_id": f"mocked_table_data_version_id_{idx}",
                     "location": {
                         "uri": uri,
                         "env_prefix": None,
                     },
+                    "input_idx": 314 + idx,
+                    "table_pos": 25 + idx,
+                    "version_pos": 19 + idx,
                 }
                 table_versions.append(table_content)
             output.append(MockTableVersions(table_versions))

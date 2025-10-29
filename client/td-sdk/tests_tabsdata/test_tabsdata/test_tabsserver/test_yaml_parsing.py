@@ -60,7 +60,6 @@ def test_parse_input_yaml():
     assert input_table.location.env_prefix is None
     assert input_table.uri is None
     assert input_table.env_prefix is None
-    assert input_table.table is None
     assert input_table.table_id is None
 
     input_table_versions = input[1]
@@ -69,7 +68,6 @@ def test_parse_input_yaml():
     first_table = input_table_versions.list_of_table_objects[0]
     assert isinstance(first_table, Table)
     assert first_table.name == "users"
-    assert first_table.table == "td://eu/users/$td.initial_values/HEAD"
     assert first_table.table_id == "td://ID1/ID2/$td.initial_values/ID4"
     assert (
         first_table.location.uri
@@ -85,7 +83,6 @@ def test_parse_input_yaml():
     third_table = input_table_versions.list_of_table_objects[2]
     assert isinstance(third_table, Table)
     assert third_table.name == "users"
-    assert third_table.table == "td://eu/users/$td.initial_values/HEAD^^"
     assert third_table.table_id is None
     assert not third_table.location
     assert third_table.location.uri is None
@@ -97,7 +94,6 @@ def test_parse_input_yaml():
     first_output_table = output[0]
     assert isinstance(first_output_table, Table)
     assert first_output_table.name == "users"
-    assert first_output_table.table is None
     assert (
         first_output_table.uri
         == "file:///users/tucu/.tdserver/default/s/ID1/d/ID2/v/ID3/IDA/t/users.f"

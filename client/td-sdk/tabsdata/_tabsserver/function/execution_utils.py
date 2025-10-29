@@ -23,10 +23,12 @@ from tabsdata._tabsserver.function.results_collection import ResultsCollection
 from tabsdata._tabsserver.function.yaml_parsing import (
     Location,
 )
+from tabsdata._utils.tableframe._constants import EMPTY_VERSION
 
 # noinspection PyProtectedMember
 from tabsdata._utils.tableframe._context import TableFrameContext
 from tabsdata.tableframe.lazyframe.frame import TableFrame
+from tabsdata.tableframe.lazyframe.properties import TableFrameProperties
 
 if TYPE_CHECKING:
     from tabsdata._tabsserver.function.execution_context import ExecutionContext
@@ -218,11 +220,24 @@ def store_source_raw_data(
     elif function_data.uri is None:
         raise ValueError("The uri for the function data is required for publishers")
 
-    tf = TableFrame.__build__(df=lf, mode="raw", idx=idx)
+    properties: TableFrameProperties = (
+        TableFrameProperties.builder()
+        .with_execution(request.execution_id)
+        .with_transaction(request.transaction_id)
+        .with_version(EMPTY_VERSION)
+        .with_timestamp(request.triggered_on)
+        .build()
+    )
+    tf = TableFrame.__build__(
+        df=lf,
+        mode="raw",
+        idx=idx,
+        properties=properties,
+    )
+
     uri = function_data.uri
     # noinspection PyProtectedMember
     uri = uri.rstrip("/").rstrip("\\") + f"/e/{request.work}/r/{tf._idx}.t"
-
     file_location = Location({"uri": uri, "env_prefix": function_data.env_prefix})
 
     logger.debug(f"Performing sink of raw data to '{file_location}'")
@@ -239,4 +254,5 @@ def store_source_raw_data(
         ),
         mode="tab",
         idx=tf._idx,
+        properties=properties,
     )

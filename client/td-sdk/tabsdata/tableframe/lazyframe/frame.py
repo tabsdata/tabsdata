@@ -64,6 +64,10 @@ from tabsdata.expansions.tableframe.features.grok.api._handler import GrokParser
 
 # noinspection PyProtectedMember
 from tabsdata.extensions._tableframe.extension import TableFrameExtension
+from tabsdata.tableframe.lazyframe.properties import (
+    TableFrameProperties,
+    TableFramePropertiesBuilder,
+)
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -110,6 +114,7 @@ class TableFrame:
             df=lf,
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
 
     def _to_lazy(self) -> pl.LazyFrame:
@@ -128,6 +133,7 @@ class TableFrame:
             df=None,
             mode="tab",
             idx=None,
+            properties=None,
         )
 
     # noinspection PyUnreachableCode
@@ -154,7 +160,11 @@ class TableFrame:
         else:
             raise TableFrameError(ErrorCode.TF11, type(data))
         return cls.__build__(
-            origin=TableFrameOrigin.IMPORT, df=data_out, mode="raw", idx=None
+            origin=TableFrameOrigin.IMPORT,
+            df=data_out,
+            mode="raw",
+            idx=None,
+            properties=TableFramePropertiesBuilder.empty(),
         )
 
     @classmethod
@@ -182,7 +192,11 @@ class TableFrame:
         else:
             raise TableFrameError(ErrorCode.TF12, type(data))
         return cls.__build__(
-            origin=TableFrameOrigin.IMPORT, df=data_out, mode="raw", idx=None
+            origin=TableFrameOrigin.IMPORT,
+            df=data_out,
+            mode="raw",
+            idx=None,
+            properties=TableFramePropertiesBuilder.empty(),
         )
 
     @classmethod
@@ -206,7 +220,11 @@ class TableFrame:
         else:
             raise TableFrameError(ErrorCode.TF13, type(data))
         return cls.__build__(
-            origin=TableFrameOrigin.IMPORT, df=data_out, mode="raw", idx=None
+            origin=TableFrameOrigin.IMPORT,
+            df=data_out,
+            mode="raw",
+            idx=None,
+            properties=TableFramePropertiesBuilder.empty(),
         )
 
     @pydoc(categories="tableframe")
@@ -308,13 +326,17 @@ class TableFrame:
         df: td_typing.TableDictionary | pl.LazyFrame | pl.DataFrame | TableFrame | None,
         mode: td_common.AddSystemColumnsMode,
         idx: IndexInput,
+        properties: TableFrameProperties | None = None,
     ) -> TableFrame:
         computed_origin = cls._compute_origin(origin, df)
         computed_idx = cls._compute_idx(idx)
         computed_df = cls._compute_dataframe(df)
 
         df_with_columns = td_common.add_system_columns(
-            lf=computed_df, mode=mode, idx=computed_idx
+            lf=computed_df,
+            mode=mode,
+            idx=computed_idx,
+            properties=properties,
         )
         td_reflection.check_required_columns(df_with_columns)
 
@@ -322,7 +344,9 @@ class TableFrame:
         instance._origin = computed_origin
         instance._id = td_generators._id()
         instance._idx = computed_idx
-        instance._lf = _arrange_columns(df_with_columns)
+        instance._properties = properties
+        lf = _arrange_columns(df_with_columns)
+        instance._lf = lf
         return instance
 
     # noinspection PyUnreachableCode
@@ -331,6 +355,7 @@ class TableFrame:
         df: td_typing.TableDictionary | TableFrame | None = None,
         *,
         origin: TableFrameOrigin | None = TableFrameOrigin.INIT,
+        properties: TableFrameProperties | None = None,
     ) -> None:
         if isinstance(df, TableFrame):
             # noinspection PyProtectedMember
@@ -364,14 +389,17 @@ class TableFrame:
             lf=df,
             mode=cast(td_common.AddSystemColumnsMode, mode),
             idx=idx,
+            properties=properties,
         )
         td_reflection.check_required_columns(df)
 
         self._origin = origin
+        self._properties = properties
         # noinspection PyProtectedMember
         self._id = td_generators._id()
         self._idx = idx
-        self._lf: pl.LazyFrame | None = _arrange_columns(df)
+        lf = _arrange_columns(df)
+        self._lf: pl.LazyFrame | None = lf
 
     def columns(
         self, kind: Literal["all", "user", "system"] | None = "user"
@@ -417,6 +445,7 @@ class TableFrame:
                             df=result,
                             mode="tab",
                             idx=self._idx,
+                            properties=None,
                         )
                     return result
 
@@ -487,6 +516,7 @@ class TableFrame:
             df=self._lf.__getitem__(item=item),
             mode="tab",
             idx=self._idx,
+            properties=None,
         )
 
     def __str__(self) -> str:
@@ -559,6 +589,7 @@ class TableFrame:
             df=self._lf.inspect(fmt=fmt),
             mode="tab",
             idx=self._idx,
+            properties=None,
         )
 
     @pydoc(categories="tableframe")
@@ -855,6 +886,7 @@ class TableFrame:
             ),
             mode="tab",
             idx=self._idx,
+            properties=None,
         )
 
     # ToDo: disallow transformations in system td columns.
@@ -926,6 +958,7 @@ class TableFrame:
             ),
             mode="tab",
             idx=self._idx,
+            properties=None,
         )
 
     # ToDo: should we allow only clear to 0 rows?
@@ -971,6 +1004,7 @@ class TableFrame:
             df=self._lf.clear(n=n),
             mode="tab",
             idx=self._idx,
+            properties=None,
         )
 
     # ToDo: allways attach system td columns.
@@ -1134,6 +1168,7 @@ class TableFrame:
             df=_assemble_system_columns(lf),
             mode="tab",
             idx=self._idx,
+            properties=None,
         )
 
     # ToDo: allways attach system td columns.
@@ -1197,6 +1232,7 @@ class TableFrame:
             ),
             mode="tab",
             idx=self._idx,
+            properties=None,
         )
 
     # noinspection PyUnreachableCode
@@ -1369,6 +1405,7 @@ class TableFrame:
             df=lf,
             mode="tab",
             idx=self._idx,
+            properties=None,
         )
 
     # noinspection PyUnreachableCode
@@ -1437,6 +1474,7 @@ class TableFrame:
             df=self._lf.rename(mapping, strict=True),
             mode="tab",
             idx=self._idx,
+            properties=None,
         )
 
     # ToDo: allways attach system td columns.
@@ -1498,6 +1536,7 @@ class TableFrame:
             df=self._lf.drop(td_translator._unwrap_tdexpr(*columns), strict=strict),
             mode="tab",
             idx=self._idx,
+            properties=None,
         )
 
     # ToDo: allways attach system td columns.
@@ -1568,6 +1607,7 @@ class TableFrame:
             ),
             mode="tab",
             idx=self._idx,
+            properties=None,
         )
 
     # ToDo: ensure system td columns are left unchanged.
@@ -1628,6 +1668,7 @@ class TableFrame:
             ),
             mode="tab",
             idx=self._idx,
+            properties=None,
         )
 
     # ToDo: ensure system td columns are left unchanged.
@@ -1680,6 +1721,7 @@ class TableFrame:
             df=self._lf.fill_nan(value=td_translator._unwrap_tdexpr(value)),
             mode="tab",
             idx=self._idx,
+            properties=None,
         )
 
     # ToDo: check for undesired operations of system td columns.
@@ -1756,6 +1798,7 @@ class TableFrame:
             ),
             mode="tab",
             idx=self._idx,
+            properties=None,
         )
 
     # ToDo: check for undesired operations of system td columns.
@@ -1826,6 +1869,7 @@ class TableFrame:
             df=self._lf.drop_nans(subset=td_translator._unwrap_tdexpr(subset)),
             mode="tab",
             idx=self._idx,
+            properties=None,
         )
 
     # ToDo: check for undesired operations of system td columns.
@@ -1897,6 +1941,7 @@ class TableFrame:
             df=self._lf.drop_nulls(subset=td_translator._unwrap_tdexpr(subset)),
             mode="tab",
             idx=self._idx,
+            properties=None,
         )
 
     """> Retrieval Functions """
@@ -1962,6 +2007,7 @@ class TableFrame:
             ),
             mode="tab",
             idx=self._idx,
+            properties=None,
         )
 
     # TODO: should we hide the named_exprs parameter?
@@ -2050,6 +2096,7 @@ class TableFrame:
             ),
             mode="tab",
             idx=self._idx,
+            properties=None,
         )
 
     # ToDo: allways attach system td columns.
@@ -2155,6 +2202,7 @@ class TableFrame:
             df=self._lf.slice(offset=offset, length=length),
             mode="tab",
             idx=self._idx,
+            properties=None,
         )
 
     # status(Status.DONE)
@@ -2201,6 +2249,7 @@ class TableFrame:
             df=self._lf.limit(n=n),
             mode="tab",
             idx=self._idx,
+            properties=None,
         )
 
     # status(Status.DONE)
@@ -2246,6 +2295,7 @@ class TableFrame:
             df=self._lf.head(n=n),
             mode="tab",
             idx=self._idx,
+            properties=None,
         )
 
     # status(Status.DONE)
@@ -2291,6 +2341,7 @@ class TableFrame:
             df=self._lf.tail(n=n),
             mode="tab",
             idx=self._idx,
+            properties=None,
         )
 
     # status(Status.DONE)
@@ -2332,6 +2383,7 @@ class TableFrame:
             df=self._lf.last(),
             mode="tab",
             idx=self._idx,
+            properties=None,
         )
 
     # status(Status.DONE)
@@ -2373,6 +2425,7 @@ class TableFrame:
             df=self._lf.first(),
             mode="tab",
             idx=self._idx,
+            properties=None,
         )
 
     # status(Status.DONE)
@@ -2689,7 +2742,12 @@ class TableFrame:
             .drop(parser.temp_column)
         )
 
-        return TableFrame.__build__(df=lf, mode="tab", idx=self._idx)
+        return TableFrame.__build__(
+            df=lf,
+            mode="tab",
+            idx=self._idx,
+            properties=None,
+        )
 
 
 TdType = TypeVar("TdType", "TableFrame", "td_typing.Series", "td_expr.Expr")
@@ -2704,6 +2762,7 @@ def _assemble_system_columns(f: TableFrame | pl.LazyFrame) -> TableFrame:
             df=TableFrameExtension.instance().assemble_system_columns(f),
             mode="tab",
             idx=None,
+            properties=None,
         )
     elif isinstance(f, TableFrame):
         # noinspection PyProtectedMember
@@ -2711,6 +2770,7 @@ def _assemble_system_columns(f: TableFrame | pl.LazyFrame) -> TableFrame:
             df=TableFrameExtension.instance().assemble_system_columns(f._lf),
             mode="tab",
             idx=f._idx,
+            properties=None,
         )
     else:
         raise TypeError(

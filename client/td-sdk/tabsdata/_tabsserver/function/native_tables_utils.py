@@ -10,8 +10,11 @@ from typing import TYPE_CHECKING
 
 import polars as pl
 
+# noinspection PyProtectedMember
+import tabsdata._utils.tableframe._constants as td_constants
 from tabsdata._tabsserver.function.global_utils import convert_uri_to_path
 from tabsdata.tableframe.lazyframe.frame import TableFrame
+from tabsdata.tableframe.lazyframe.properties import TableFrameProperties
 
 if TYPE_CHECKING:
     from tabsdata._tabsserver.function.execution_context import ExecutionContext
@@ -33,8 +36,21 @@ def scan_tf_from_table(
     if lf is None:
         tf = None
     else:
+        properties = (
+            TableFrameProperties.builder()
+            .with_execution(table.execution_id)
+            .with_transaction(table.transaction_id)
+            .with_version(table.table_data_version_id)
+            .with_timestamp(table.triggered_on)
+            .build()
+        )
         # noinspection PyProtectedMember
-        tf = TableFrame.__build__(df=lf, mode="tab", idx=table.input_idx)
+        tf = TableFrame.__build__(
+            df=lf,
+            mode="tab",
+            idx=table.input_idx,
+            properties=properties,
+        )
     return tf
 
 
@@ -96,6 +112,16 @@ def sink_lf_to_location(
                 f"Error creating the folder for the raw data with uri '{uri}': {e}"
             )
     logger.debug(f"Sinking LazyFrame to location: '{uri}'")
+    columns_to_drop = [
+        column
+        for column in lf.collect_schema().names()
+        if any(
+            column.startswith(prefix)
+            for prefix in td_constants.TD_NAMESPACED_VIRTUAL_COLUMN_PREFIXES
+        )
+    ]
+    if columns_to_drop:
+        lf = lf.drop(columns_to_drop)
     lf.sink_parquet(uri, storage_options=storage_options, maintain_order=True)
     logger.debug("LazyFrame sunk successfully.")
     return

@@ -10,11 +10,13 @@ import polars as pl
 
 # noinspection PyProtectedMember
 import tabsdata._utils.tableframe._constants as td_constants
+from tabsdata._utils.tableframe._appliers import apply_constant_system_column
 
 # noinspection PyProtectedMember
 from tabsdata.extensions._features.api.features import Feature, FeaturesManager
 from tabsdata.extensions._tableframe.api.api import Extension
 from tabsdata.extensions._tableframe.version import version
+from tabsdata.tableframe.lazyframe.properties import TableFrameProperties
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -30,22 +32,64 @@ class ExtendedSystemColumnsMetadata(Enum):
 
 class SystemColumns(Enum):
     TD_IDENTIFIER = td_constants.StandardSystemColumns.TD_IDENTIFIER.value
+    TD_VER_EXECUTION = td_constants.StandardSystemColumns.TD_VER_EXECUTION.value
+    TD_VER_TRANSACTION = td_constants.StandardSystemColumns.TD_VER_TRANSACTION.value
+    TD_VER_VERSION = td_constants.StandardSystemColumns.TD_VER_VERSION.value
+    TD_VER_TIMESTAMP = td_constants.StandardSystemColumns.TD_VER_TIMESTAMP.value
 
 
 class RequiredColumns(Enum):
     TD_IDENTIFIER = td_constants.StandardSystemColumns.TD_IDENTIFIER.value
+    TD_VER_EXECUTION = td_constants.StandardSystemColumns.TD_VER_EXECUTION.value
+    TD_VER_TRANSACTION = td_constants.StandardSystemColumns.TD_VER_TRANSACTION.value
+    TD_VER_VERSION = td_constants.StandardSystemColumns.TD_VER_VERSION.value
+    TD_VER_TIMESTAMP = td_constants.StandardSystemColumns.TD_VER_TIMESTAMP.value
 
 
+# noinspection DuplicatedCode
 _s_id_metadata = td_constants.StandardSystemColumnsMetadata.TD_IDENTIFIER.value
+_s_ver_execution_metadata = (
+    td_constants.StandardSystemColumnsMetadata.TD_VER_EXECUTION.value
+)
+_s_ver_transaction_metadata = (
+    td_constants.StandardSystemColumnsMetadata.TD_VER_TRANSACTION.value
+)
+_s_ver_version_metadata = (
+    td_constants.StandardSystemColumnsMetadata.TD_VER_VERSION.value
+)
+_s_ver_timestamp_metadata = (
+    td_constants.StandardSystemColumnsMetadata.TD_VER_TIMESTAMP.value
+)
 
 SYSTEM_COLUMNS_METADATA = {
     SystemColumns.TD_IDENTIFIER.value: _s_id_metadata,
+    SystemColumns.TD_VER_EXECUTION.value: _s_ver_execution_metadata,
+    SystemColumns.TD_VER_TRANSACTION.value: _s_ver_transaction_metadata,
+    SystemColumns.TD_VER_VERSION.value: _s_ver_version_metadata,
+    SystemColumns.TD_VER_TIMESTAMP.value: _s_ver_timestamp_metadata,
 }
 
+# noinspection DuplicatedCode
 _r_id_metadata = td_constants.StandardSystemColumnsMetadata.TD_IDENTIFIER.value
+_r_ver_execution_metadata = (
+    td_constants.StandardSystemColumnsMetadata.TD_VER_EXECUTION.value
+)
+_r_ver_transaction_metadata = (
+    td_constants.StandardSystemColumnsMetadata.TD_VER_TRANSACTION.value
+)
+_r_ver_version_metadata = (
+    td_constants.StandardSystemColumnsMetadata.TD_VER_VERSION.value
+)
+_r_ver_TIMESTAMP_metadata = (
+    td_constants.StandardSystemColumnsMetadata.TD_VER_TIMESTAMP.value
+)
 
 REQUIRED_COLUMNS_METADATA = {
     RequiredColumns.TD_IDENTIFIER.value: _r_id_metadata,
+    RequiredColumns.TD_VER_EXECUTION.value: _r_ver_execution_metadata,
+    RequiredColumns.TD_VER_TRANSACTION.value: _r_ver_transaction_metadata,
+    RequiredColumns.TD_VER_VERSION.value: _r_ver_version_metadata,
+    RequiredColumns.TD_VER_TIMESTAMP.value: _r_ver_TIMESTAMP_metadata,
 }
 
 
@@ -100,9 +144,19 @@ class TableFrameExtension(Extension):
         self,
         lf: pl.LazyFrame,
         column: str,
+        dtype: pl.DataType,
+        default: Any,
         function: str,
+        properties: TableFrameProperties = None,
     ) -> pl.LazyFrame:
-        return lf
+        return apply_constant_system_column(
+            lf,
+            column,
+            dtype,
+            default,
+            function,
+            properties,
+        )
 
     # From a given LazyFrame, expectedly coming from an internal of a TableFrame, it
     # selects:

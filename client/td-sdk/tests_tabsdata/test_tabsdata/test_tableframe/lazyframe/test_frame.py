@@ -27,6 +27,7 @@ from tabsdata.extensions._tableframe.extension import SystemColumns
 
 # noinspection PyProtectedMember
 from tabsdata.tableframe.lazyframe.frame import _assemble_system_columns
+from tabsdata.tableframe.lazyframe.properties import TableFramePropertiesBuilder
 
 # noinspection PyUnresolvedReferences
 from .. import pytestmark  # noqa: F401
@@ -269,6 +270,7 @@ class TestTableFrame(unittest.TestCase):
             df=lf,
             mode="raw",
             idx=None,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         tf = tf.with_columns(
             td.col("letters").str.to_uppercase().alias("letters_uppercase")
@@ -292,6 +294,7 @@ class TestTableFrame(unittest.TestCase):
             df=lf,
             mode="raw",
             idx=None,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         _unwrap_table_frame(tf).sink_csv(
             os.path.join(tabsdata_temp_folder(), "delete.sink_csv.csv")
@@ -308,6 +311,7 @@ class TestTableFrame(unittest.TestCase):
             df=lf,
             mode="raw",
             idx=None,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         _unwrap_table_frame(tf).sink_ndjson(
             os.path.join(tabsdata_temp_folder(), "delete.sink.ndjson")
@@ -324,6 +328,7 @@ class TestTableFrame(unittest.TestCase):
             df=lf,
             mode="raw",
             idx=None,
+            properties=TableFramePropertiesBuilder.empty(),
         )
         tf._lf.sink_parquet(
             os.path.join(tabsdata_temp_folder(), "delete.sink_parquet_1.parquet")
@@ -343,6 +348,7 @@ class TestTableFrame(unittest.TestCase):
             df=lf,
             mode="raw",
             idx=None,
+            properties=TableFramePropertiesBuilder.empty(),
         )
 
         item = tf.select(td.col("numbers").mean()).item()
@@ -359,6 +365,7 @@ class TestTableFrame(unittest.TestCase):
             df=lf,
             mode="raw",
             idx=None,
+            properties=TableFramePropertiesBuilder.empty(),
         )
 
         item = tf.select(td.col("numbers").mean()).item()
@@ -375,6 +382,7 @@ class TestTableFrame(unittest.TestCase):
             df=lf,
             mode="raw",
             idx=None,
+            properties=TableFramePropertiesBuilder.empty(),
         )
 
         first = tf.first_row()
@@ -397,6 +405,7 @@ class TestTableFrame(unittest.TestCase):
             df=lf,
             mode="raw",
             idx=None,
+            properties=TableFramePropertiesBuilder.empty(),
         )
 
         last = tf.first_row()
@@ -419,6 +428,7 @@ class TestTableFrame(unittest.TestCase):
             df=lf,
             mode="raw",
             idx=None,
+            properties=TableFramePropertiesBuilder.empty(),
         )
 
         last = tf.last_row()
@@ -441,6 +451,7 @@ class TestTableFrame(unittest.TestCase):
             df=lf,
             mode="raw",
             idx=None,
+            properties=TableFramePropertiesBuilder.empty(),
         )
 
         last = tf.last_row()

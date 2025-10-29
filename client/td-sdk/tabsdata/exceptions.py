@@ -967,6 +967,12 @@ class ErrorCode(Enum):
             " instead."
         ),
     }
+    TF14 = {
+        "code": "TF-014",
+        "message": "Internal error: "
+                   "The input TableFrame is missing the non_optional column(s) '{}'. "
+                   "Contact Tabsdata for help and to report it.",
+    }
     TUCE1 = {
         "code": "TUCE-001",
         "message": (

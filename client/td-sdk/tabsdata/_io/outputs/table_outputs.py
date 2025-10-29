@@ -156,7 +156,12 @@ def _store_results_in_table(
             # values.
             result_value: TableFrame = result.value
             lf = result_value._to_lazy()
-            tf = TableFrame.__build__(df=lf, mode="sys", idx=result_value._idx)
+            tf = TableFrame.__build__(
+                df=lf,
+                mode="sys",
+                idx=result_value._idx,
+                properties=result_value._properties,
+            )
             sink_lf_to_location(tf._to_lazy(), execution_context, table.location)
             table_meta_info = get_table_meta_info_from_lf(lf)
             table_info = {"name": table.name, "meta_info": table_meta_info}

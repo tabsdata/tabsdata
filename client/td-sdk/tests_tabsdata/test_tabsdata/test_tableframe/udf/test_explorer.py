@@ -11,6 +11,7 @@ from polars._typing import PolarsDataType
 
 import tabsdata as td
 import tabsdata.tableframe.typing as td_typing
+from tabsdata.tableframe.lazyframe.properties import TableFramePropertiesBuilder
 from tabsdata.tableframe.udf.function import UDF
 from tests_tabsdata.test_tabsdata.test_tableframe.common import (
     load_normalized_complex_dataframe,
@@ -730,6 +731,7 @@ def penguin_table_frame(
         df=penguin_data_frame.lazy(),
         mode="raw",
         idx=0,
+        properties=TableFramePropertiesBuilder.empty(),
     )
     return penguin_data_frame, table_frame
 

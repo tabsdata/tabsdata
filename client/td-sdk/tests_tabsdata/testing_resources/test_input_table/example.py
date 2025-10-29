@@ -9,6 +9,7 @@ import polars as pl
 import tabsdata as td
 from tabsdata._utils.bundle_utils import create_bundle_archive
 from tabsdata.extensions._tableframe.extension import SystemColumns
+from tabsdata.tableframe.lazyframe.properties import TableFramePropertiesBuilder
 from tests_tabsdata.bootest import TDLOCAL_FOLDER
 from tests_tabsdata.conftest import LOCAL_PACKAGES_LIST
 
@@ -40,6 +41,7 @@ def input_table(df: td.TableFrame):
             ),
             mode="raw",
             idx=0,
+            properties=TableFramePropertiesBuilder.empty(),
         )
     new_df = df.drop_nulls()
     return new_df

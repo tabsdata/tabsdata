@@ -46,29 +46,54 @@ class Table:
     ):
         self.data = data
 
-    @property
-    def location(self):
-        return Location(self.data.get("location", {}))
-
-    @property
-    def uri(self):
-        return self.location.uri if self.location else None
-
-    @property
-    def env_prefix(self):
-        return self.location.env_prefix if self.location else None
-
+    # Ket for backward compatibility. Attribute 'table' is now 'name'.
     @property
     def table(self):
-        return self.data.get("table")
+        return self.data.get("name")
+
+    @property
+    def name(self):
+        return self.data.get("name")
+
+    @property
+    def collection_id(self):
+        return self.data.get("collection_id")
+
+    @property
+    def collection(self):
+        return self.data.get("collection")
 
     @property
     def table_id(self):
         return self.data.get("table_id")
 
     @property
-    def name(self):
-        return self.data.get("name")
+    def table_version_id(self):
+        return self.data.get("table_version_id")
+
+    @property
+    def execution_id(self):
+        return self.data.get("execution_id")
+
+    @property
+    def transaction_id(self):
+        return self.data.get("transaction_id")
+
+    @property
+    def triggered_on(self):
+        return self.data.get("triggered_on")
+
+    @property
+    def table_data_version_id(self):
+        return self.data.get("table_data_version_id")
+
+    @property
+    def location(self):
+        return Location(self.data.get("location", {}))
+
+    @property
+    def input_idx(self) -> int:
+        return self.data.get("input_idx")
 
     @property
     def table_pos(self) -> int:
@@ -79,14 +104,33 @@ class Table:
         return self.data.get("version_pos")
 
     @property
-    def input_idx(self) -> int:
-        return self.data.get("input_idx")
+    def uri(self):
+        return self.location.uri if self.location else None
+
+    @property
+    def env_prefix(self):
+        return self.location.env_prefix if self.location else None
 
     def __eq__(self, other):
         return isinstance(other, Table) and self.data == other.data
 
     def __repr__(self):
-        return f"Table(name={self.name}, {self.location}, data={self.data})"
+        parts = [
+            f"name={self.name!r}",
+            f"collection_id={self.collection_id!r}",
+            f"collection={self.collection!r}",
+            f"table_id={self.table_id!r}",
+            f"table_version_id={self.table_version_id!r}",
+            f"execution_id={self.execution_id!r}",
+            f"transaction_id={self.execution_id!r}",
+            f"triggered_on={self.triggered_on!r}",
+            f"table_data_version_id={self.table_data_version_id!r}",
+            f"location={self.location!r}",
+            f"input_idx={self.input_idx}",
+            f"table_pos={self.table_pos}",
+            f"version_pos={self.version_pos}",
+        ]
+        return f"Table({', '.join(parts)})"
 
 
 # Define a custom constructor for the !TableVersions tag

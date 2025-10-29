@@ -23,6 +23,7 @@ from tabsdata.exceptions import ErrorCode, TabsDataException
 from tabsdata.extensions._features.api.features import Feature, FeaturesManager
 from tabsdata.extensions._tableframe.extension import TableFrameExtension
 from tabsdata.tableframe.lazyframe.frame import TableFrame, TableFrameOrigin
+from tabsdata.tableframe.lazyframe.properties import TableFramePropertiesBuilder
 
 # noinspection PyUnresolvedReferences
 from .. import pytestmark  # noqa: F401
@@ -52,6 +53,7 @@ def test_init_with_lazyframe_with_required_columns():
         df=d,
         mode="raw",
         idx=None,
+        properties=TableFramePropertiesBuilder.empty(),
     )
     assert isinstance(tdtf, tdf.TableFrame)
 
@@ -64,6 +66,7 @@ def test_init_with_tabsdata_lazyframe():
         df=tdtf_i,
         mode="raw",
         idx=None,
+        properties=TableFramePropertiesBuilder.empty(),
     )
     assert isinstance(tdtf_o, tdf.TableFrame)
 
@@ -76,6 +79,7 @@ def test_init_with_string():
             df=data,
             mode="raw",
             idx=None,
+            properties=TableFramePropertiesBuilder.empty(),
         )
     assert error.value.error_code == ErrorCode.TF2
 
@@ -168,13 +172,22 @@ def test_from_polars_none():
 
 
 def test_build():
-    tf = TableFrame.__build__(df={"a": [1]}, mode="raw", idx=None)
+    tf = TableFrame.__build__(
+        df={"a": [1]},
+        mode="raw",
+        idx=None,
+        properties=TableFramePropertiesBuilder.empty(),
+    )
     assert_origin(tf, TableFrameOrigin.BUILD)
 
 
 def test_build_explicit():
     tf = TableFrame.__build__(
-        origin=TableFrameOrigin.IMPORT, df={"a": [1]}, mode="raw", idx=None
+        origin=TableFrameOrigin.IMPORT,
+        df={"a": [1]},
+        mode="raw",
+        idx=None,
+        properties=TableFramePropertiesBuilder.empty(),
     )
     assert_origin(tf, TableFrameOrigin.IMPORT)
 
@@ -283,20 +296,40 @@ def test_from_non_empty_polars():
 
 
 def test_from_none_tableframe_none():
-    tf = TableFrame.__build__(df=None, mode="raw", idx=None)
+    tf = TableFrame.__build__(
+        df=None,
+        mode="raw",
+        idx=None,
+        properties=TableFramePropertiesBuilder.empty(),
+    )
     assert tf.is_empty()
 
 
 def test_from_empty_tableframe():
-    tf = TableFrame.__build__(df={}, mode="raw", idx=None)
+    tf = TableFrame.__build__(
+        df={},
+        mode="raw",
+        idx=None,
+        properties=TableFramePropertiesBuilder.empty(),
+    )
     assert tf.is_empty()
 
 
 def test_from_no_row_tableframe():
-    tf = TableFrame.__build__(df={"a": []}, mode="raw", idx=None)
+    tf = TableFrame.__build__(
+        df={"a": []},
+        mode="raw",
+        idx=None,
+        properties=TableFramePropertiesBuilder.empty(),
+    )
     assert tf.is_empty()
 
 
 def test_from_non_empty_tableframe():
-    tf = TableFrame.__build__(df={"a": [1]}, mode="raw", idx=None)
+    tf = TableFrame.__build__(
+        df={"a": [1]},
+        mode="raw",
+        idx=None,
+        properties=TableFramePropertiesBuilder.empty(),
+    )
     assert not tf.is_empty()

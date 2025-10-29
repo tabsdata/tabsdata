@@ -153,6 +153,7 @@ class TableFrameGroupBy:
             df=self._lgb.agg(expressions),
             mode="tab",
             idx=None,
+            properties=None,
         )
 
     def len(self) -> td_frame.TableFrame:
@@ -205,6 +206,7 @@ class TableFrameGroupBy:
                 df=self.agg(functions.all().exclude(system_agg_columns()).len()),
                 mode="tab",
                 idx=None,
+                properties=None,
             )
 
     @pydoc(categories="aggregation")
@@ -258,6 +260,7 @@ class TableFrameGroupBy:
                 df=self.agg(functions.all().exclude(system_agg_columns()).count()),
                 mode="tab",
                 idx=None,
+                properties=None,
             )
 
     @pydoc(categories="aggregation")
@@ -310,6 +313,7 @@ class TableFrameGroupBy:
                 df=self.agg(functions.all().exclude(system_agg_columns()).max()),
                 mode="tab",
                 idx=None,
+                properties=None,
             )
 
     @pydoc(categories="aggregation")
@@ -362,6 +366,7 @@ class TableFrameGroupBy:
                 df=self.agg(functions.all().exclude(system_agg_columns()).mean()),
                 mode="tab",
                 idx=None,
+                properties=None,
             )
 
     @pydoc(categories="aggregation")
@@ -414,6 +419,7 @@ class TableFrameGroupBy:
                 df=self.agg(functions.all().exclude(system_agg_columns()).median()),
                 mode="tab",
                 idx=None,
+                properties=None,
             )
 
     @pydoc(categories="aggregation")
@@ -466,6 +472,7 @@ class TableFrameGroupBy:
                 df=self.agg(functions.all().exclude(system_agg_columns()).min()),
                 mode="tab",
                 idx=None,
+                properties=None,
             )
 
     @pydoc(categories="aggregation")
@@ -518,6 +525,7 @@ class TableFrameGroupBy:
                 df=self.agg(functions.all().exclude(system_agg_columns()).n_unique()),
                 mode="tab",
                 idx=None,
+                properties=None,
             )
 
     @pydoc(categories="aggregation")
@@ -570,6 +578,7 @@ class TableFrameGroupBy:
                 df=self.agg(functions.all().exclude(system_agg_columns()).sum()),
                 mode="tab",
                 idx=None,
+                properties=None,
             )
 
 

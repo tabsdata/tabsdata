@@ -1,6 +1,7 @@
 #
 # Copyright 2024 Tabs Data Inc.
 #
+
 import itertools
 from typing import Any, Sequence
 
@@ -35,6 +36,7 @@ from tabsdata.tableframe.lazyframe.frame import (
     TableFrameOrigin,
     _split_columns,
 )
+from tabsdata.tableframe.lazyframe.properties import TableFramePropertiesBuilder
 
 # noinspection PyUnresolvedReferences
 from .. import pytestmark  # noqa: F401
@@ -64,6 +66,7 @@ def test_init_with_lazyframe_with_required_columns():
         df=d,
         mode="raw",
         idx=None,
+        properties=TableFramePropertiesBuilder.empty(),
     )
     assert isinstance(tdf, td.TableFrame)
 
@@ -76,6 +79,7 @@ def test_init_with_tabsdata_lazyframe():
         df=tdf_i,
         mode="raw",
         idx=None,
+        properties=TableFramePropertiesBuilder.empty(),
     )
     assert isinstance(tdf_o, td.TableFrame)
 
@@ -88,6 +92,7 @@ def test_init_with_string():
             df=data,
             mode="raw",
             idx=None,
+            properties=TableFramePropertiesBuilder.empty(),
         )
     assert error.value.error_code == ErrorCode.TF2
 
@@ -188,14 +193,23 @@ def test_from_polars_none():
 
 
 def test_build():
-    tf = TableFrame.__build__(df={"a": [1]}, mode="raw", idx=None)
+    tf = TableFrame.__build__(
+        df={"a": [1]},
+        mode="raw",
+        idx=None,
+        properties=TableFramePropertiesBuilder.empty(),
+    )
     assert tf
     assert_origin(tf, TableFrameOrigin.BUILD)
 
 
 def test_build_explicit():
     tf = TableFrame.__build__(
-        origin=TableFrameOrigin.IMPORT, df={"a": [1]}, mode="raw", idx=None
+        origin=TableFrameOrigin.IMPORT,
+        df={"a": [1]},
+        mode="raw",
+        idx=None,
+        properties=TableFramePropertiesBuilder.empty(),
     )
     assert tf
     assert_origin(tf, TableFrameOrigin.IMPORT)
@@ -326,25 +340,45 @@ def test_from_non_empty_polars():
 
 
 def test_from_none_tableframe_none():
-    tf = TableFrame.__build__(df=None, mode="raw", idx=None)
+    tf = TableFrame.__build__(
+        df=None,
+        mode="raw",
+        idx=None,
+        properties=TableFramePropertiesBuilder.empty(),
+    )
     assert tf.is_empty()
     assert not tf
 
 
 def test_from_empty_tableframe():
-    tf = TableFrame.__build__(df={}, mode="raw", idx=None)
+    tf = TableFrame.__build__(
+        df={},
+        mode="raw",
+        idx=None,
+        properties=TableFramePropertiesBuilder.empty(),
+    )
     assert tf.is_empty()
     assert not tf
 
 
 def test_from_no_row_tableframe():
-    tf = TableFrame.__build__(df={"a": []}, mode="raw", idx=None)
+    tf = TableFrame.__build__(
+        df={"a": []},
+        mode="raw",
+        idx=None,
+        properties=TableFramePropertiesBuilder.empty(),
+    )
     assert tf.is_empty()
     assert not tf
 
 
 def test_from_non_empty_tableframe():
-    tf = TableFrame.__build__(df={"a": [1]}, mode="raw", idx=None)
+    tf = TableFrame.__build__(
+        df={"a": [1]},
+        mode="raw",
+        idx=None,
+        properties=TableFramePropertiesBuilder.empty(),
+    )
     assert not tf.is_empty()
     assert tf
 
@@ -385,7 +419,13 @@ def test_sorted_columns_from_build(columns):
     lf = pl.LazyFrame(data)
     tf = TableFrame.from_polars(lf)
     tf = TableFrame(tf, origin=TableFrameOrigin.IMPORT)
-    tf = TableFrame.__build__(origin=TableFrameOrigin.IMPORT, df=tf, mode="raw", idx=19)
+    tf = TableFrame.__build__(
+        origin=TableFrameOrigin.IMPORT,
+        df=tf,
+        mode="raw",
+        idx=19,
+        properties=TableFramePropertiesBuilder.empty(),
+    )
 
     assert_columns_sorted(tf._lf)
 
@@ -396,7 +436,13 @@ def test_sorted_columns_from_group_by(columns):
     lf = pl.LazyFrame(data)
     tf = TableFrame.from_polars(lf)
     tf = TableFrame(tf, origin=TableFrameOrigin.IMPORT)
-    tf = TableFrame.__build__(origin=TableFrameOrigin.IMPORT, df=tf, mode="raw", idx=19)
+    tf = TableFrame.__build__(
+        origin=TableFrameOrigin.IMPORT,
+        df=tf,
+        mode="raw",
+        idx=19,
+        properties=TableFramePropertiesBuilder.empty(),
+    )
 
     tf = tf.group_by("a").max()
     assert_columns_sorted(tf._lf)
@@ -408,7 +454,13 @@ def test_sorted_columns_from_chained_group_by(columns):
     lf = pl.LazyFrame(data)
     tf = TableFrame.from_polars(lf)
     tf = TableFrame(tf, origin=TableFrameOrigin.IMPORT)
-    tf = TableFrame.__build__(origin=TableFrameOrigin.IMPORT, df=tf, mode="raw", idx=19)
+    tf = TableFrame.__build__(
+        origin=TableFrameOrigin.IMPORT,
+        df=tf,
+        mode="raw",
+        idx=19,
+        properties=TableFramePropertiesBuilder.empty(),
+    )
 
     tf = tf.group_by("a").max().group_by("b").min()
     assert_columns_sorted(tf._lf)
@@ -421,7 +473,11 @@ def test_sorted_columns_from_join(columns):
     tf_left = TableFrame.from_polars(lf_left)
     tf_left = TableFrame(tf_left, origin=TableFrameOrigin.IMPORT)
     tf_left = TableFrame.__build__(
-        origin=TableFrameOrigin.IMPORT, df=tf_left, mode="raw", idx=19
+        origin=TableFrameOrigin.IMPORT,
+        df=tf_left,
+        mode="raw",
+        idx=19,
+        properties=TableFramePropertiesBuilder.empty(),
     )
 
     data_right = make_data(columns)
@@ -429,7 +485,11 @@ def test_sorted_columns_from_join(columns):
     tf_right = TableFrame.from_polars(lf_right)
     tf_right = TableFrame(tf_right, origin=TableFrameOrigin.IMPORT)
     tf_right = TableFrame.__build__(
-        origin=TableFrameOrigin.IMPORT, df=tf_right, mode="raw", idx=19
+        origin=TableFrameOrigin.IMPORT,
+        df=tf_right,
+        mode="raw",
+        idx=19,
+        properties=TableFramePropertiesBuilder.empty(),
     )
 
     tf = tf_left.join(other=tf_right, on="a")
@@ -443,7 +503,11 @@ def test_sorted_columns_from_join_and_chained_group_by(columns):
     tf_left = TableFrame.from_polars(lf_left)
     tf_left = TableFrame(tf_left, origin=TableFrameOrigin.IMPORT)
     tf_left = TableFrame.__build__(
-        origin=TableFrameOrigin.IMPORT, df=tf_left, mode="raw", idx=19
+        origin=TableFrameOrigin.IMPORT,
+        df=tf_left,
+        mode="raw",
+        idx=19,
+        properties=TableFramePropertiesBuilder.empty(),
     )
 
     data_right = make_data(columns)
@@ -451,7 +515,11 @@ def test_sorted_columns_from_join_and_chained_group_by(columns):
     tf_right = TableFrame.from_polars(lf_right)
     tf_right = TableFrame(tf_right, origin=TableFrameOrigin.IMPORT)
     tf_right = TableFrame.__build__(
-        origin=TableFrameOrigin.IMPORT, df=tf_right, mode="raw", idx=19
+        origin=TableFrameOrigin.IMPORT,
+        df=tf_right,
+        mode="raw",
+        idx=19,
+        properties=TableFramePropertiesBuilder.empty(),
     )
 
     tf = tf_left.join(other=tf_right, on="a")

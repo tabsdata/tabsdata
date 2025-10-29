@@ -7,6 +7,8 @@ from typing import Any
 
 import polars as pl
 
+from tabsdata.tableframe.lazyframe.properties import TableFrameProperties
+
 
 class Extension(ABC):
     IDENTIFIER = "tableframe"
@@ -73,7 +75,10 @@ class Extension(ABC):
         self,
         lf: pl.LazyFrame,
         column: str,
+        dtype: pl.DataType,
+        default: Any,
         function: str,
+        properties: TableFrameProperties = None,
     ) -> pl.LazyFrame:
         """
         Given a LazyFrame, creates a new column based on the provided abstract

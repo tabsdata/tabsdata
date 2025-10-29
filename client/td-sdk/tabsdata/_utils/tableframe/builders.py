@@ -25,6 +25,7 @@ def empty() -> td_frame.TableFrame:
         df=None,
         mode="tab",
         idx=None,
+        properties=None,
     )
 
 

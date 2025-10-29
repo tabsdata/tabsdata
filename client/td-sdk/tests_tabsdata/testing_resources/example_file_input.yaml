@@ -16,19 +16,16 @@ input:
     location: null                                                     # Null if not available
   - !TableVersions                                      # the dependency refers to multiple versions, a dataframe per each will be
     - name: users
-      table: td://eu/users/$td.initial_values/HEAD
       table_id: td://ID1/ID2/$td.initial_values/ID4
       location:
         uri: file:///users/tucu/.tdserver/default/s/ID1/d/ID2/v/ID3/ID4/t/.initial_values.t
         env_prefix: null
     - name: users
-      table: td://eu/users/$td.initial_values/HEAD^
       table_id: td://ID1/ID2/$td.initial_values/IDX
       location:
         uri: file:///users/tucu/.tdserver/default/s/ID1/d/ID2/v/ID3/IDX/t/.initial_values.t
         env_prefix: null
     - name: users
-      table: td://eu/users/$td.initial_values/HEAD^^
       table_id: null                                   # this version does not exist, a NULL data frame will be provided to the function
       location: null
 output:

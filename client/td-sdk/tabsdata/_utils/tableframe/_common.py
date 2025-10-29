@@ -16,6 +16,7 @@ from tabsdata.exceptions import ErrorCode, TableFrameError
 
 # noinspection PyProtectedMember
 from tabsdata.extensions._tableframe.extension import TableFrameExtension
+from tabsdata.tableframe.lazyframe.properties import TableFrameProperties
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -40,6 +41,9 @@ AddSystemColumnsMode: TypeAlias = Literal[
 
 def check_column_name(name: str):
     if name.startswith(td_constants.TD_COLUMN_PREFIX):
+        for namespaced_prefix in td_constants.TD_NAMESPACED_VIRTUAL_COLUMN_PREFIXES:
+            if name.startswith(namespaced_prefix):
+                return
         raise TableFrameError(ErrorCode.TF10, name)
 
 
@@ -75,6 +79,7 @@ def add_system_columns(
     lf: pl.LazyFrame,
     mode: AddSystemColumnsMode,
     idx: int | None = None,
+    properties: TableFrameProperties = None,
 ) -> pl.LazyFrame:
     if mode == "raw":
         lf = drop_system_columns(
@@ -101,7 +106,10 @@ def add_system_columns(
             lf = TableFrameExtension.instance().apply_system_column(
                 lf,
                 column,
+                metadata.dtype,
+                metadata.default,
                 metadata.generator,
+                properties,
             )
         else:
             # If a lazy frame has 0 rows and 0 columns, polars will create a new

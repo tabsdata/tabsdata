@@ -3,6 +3,7 @@
 #
 
 import logging
+from datetime import datetime, timezone
 
 import polars as pl
 
@@ -18,6 +19,7 @@ from tabsdata._utils.tableframe._translator import (
     _wrap_polars_frame,
 )
 from tabsdata.tableframe.lazyframe.frame import TableFrame
+from tabsdata.tableframe.lazyframe.properties import TableFrameProperties
 
 from .. import pytestmark  # noqa: F401
 
@@ -33,7 +35,15 @@ def test_add_and_drop_system_columns():
         }
     )
 
-    lf = add_system_columns(lf=lf, mode="raw", idx=0)
+    properties = (
+        TableFrameProperties.builder()
+        .with_execution("e")
+        .with_transaction("t")
+        .with_version("v")
+        .with_timestamp(datetime.now(tz=timezone.utc))
+        .build()
+    )
+    lf = add_system_columns(lf=lf, mode="raw", idx=0, properties=properties)
 
     df = lf.collect()
     system_columns = SYSTEM_COLUMNS_METADATA
