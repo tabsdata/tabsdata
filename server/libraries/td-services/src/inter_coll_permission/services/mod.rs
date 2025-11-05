@@ -5,17 +5,15 @@
 use crate::inter_coll_permission::services::create::CreateInterCollectionPermissionService;
 use crate::inter_coll_permission::services::delete::DeleteInterCollectionPermissionService;
 use crate::inter_coll_permission::services::list::ListInterCollectionPermissionService;
-use getset::Getters;
 use ta_services::factory::ServiceFactory;
 
 pub mod create;
 pub mod delete;
 pub mod list;
 
-#[derive(ServiceFactory, Getters)]
-#[getset(get = "pub")]
+#[derive(ServiceFactory)]
 pub struct InterCollectionPermissionServices {
-    create: CreateInterCollectionPermissionService,
-    delete: DeleteInterCollectionPermissionService,
-    list: ListInterCollectionPermissionService,
+    pub create: CreateInterCollectionPermissionService,
+    pub delete: DeleteInterCollectionPermissionService,
+    pub list: ListInterCollectionPermissionService,
 }

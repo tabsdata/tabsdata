@@ -586,6 +586,7 @@ mod tests {
     struct TestModifiedOn;
 
     #[Dao]
+    #[derive(Eq, PartialEq)]
     #[dao(sql_table = "test_table")]
     struct TestDao {
         id: TestId,

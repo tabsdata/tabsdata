@@ -3,13 +3,11 @@
 //
 
 use crate::system::services::status::StatusService;
-use getset::Getters;
 use ta_services::factory::ServiceFactory;
 
 mod status;
 
-#[derive(ServiceFactory, Getters)]
-#[getset(get = "pub")]
+#[derive(ServiceFactory)]
 pub struct SystemServices {
-    status: StatusService,
+    pub status: StatusService,
 }

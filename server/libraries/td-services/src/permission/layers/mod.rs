@@ -6,15 +6,17 @@ use crate::permission::PermissionError;
 use async_trait::async_trait;
 use std::ops::Deref;
 use td_error::TdError;
-use td_objects::crudl::handle_sql_err;
-use td_objects::sql::{DaoQueries, SelectBy};
-use td_objects::tower_service::from::With;
-use td_objects::types::IdOrName;
-use td_objects::types::basic::{CollectionName, EntityId, PermissionEntityType, RoleIdName};
-use td_objects::types::collection::CollectionDB;
-use td_objects::types::permission::{
+use td_objects::dxo::collection::defs::CollectionDB;
+use td_objects::dxo::crudl::handle_sql_err;
+use td_objects::dxo::permission::defs::{
     PermissionCreate, PermissionDB, PermissionDBBuilder, PermissionDBWithNames,
 };
+use td_objects::sql::{DaoQueries, SelectBy};
+use td_objects::tower_service::from::With;
+use td_objects::types::id::EntityId;
+use td_objects::types::id_name::{IdOrName, RoleIdName};
+use td_objects::types::string::CollectionName;
+use td_objects::types::typed_enum::PermissionEntityType;
 use td_tower::default_services::Condition;
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
 
@@ -39,8 +41,8 @@ impl PermissionBuildService for With<PermissionDBBuilder> {
         let mut conn = connection.lock().await;
         let conn = conn.get_mut_connection()?;
 
-        let permission_type = permission_create.permission_type();
-        let entity_name = permission_create.entity_name();
+        let permission_type = &permission_create.permission_type;
+        let entity_name = &permission_create.entity_name;
         let entity_type = permission_type.on_entity_type();
 
         let entity_id = if let Some(entity_name) = entity_name {
@@ -52,7 +54,7 @@ impl PermissionBuildService for With<PermissionDBBuilder> {
                 .await
                 .map_err(handle_sql_err)?;
 
-            EntityId::try_from(collection.id())?
+            EntityId::try_from(collection.id)?
         } else {
             EntityId::all_entities()
         };
@@ -70,8 +72,8 @@ pub async fn is_permission_with_names_on_a_single_collection(
     Input(permission): Input<PermissionDBWithNames>,
 ) -> Result<Condition, TdError> {
     Ok(Condition(
-        permission.permission_type().on_entity_type() == PermissionEntityType::Collection
-            && permission.entity_id().is_some(),
+        permission.permission_type.on_entity_type() == PermissionEntityType::Collection
+            && permission.entity_id.is_some(),
     ))
 }
 
@@ -79,15 +81,15 @@ pub async fn is_permission_on_a_single_collection(
     Input(permission): Input<PermissionDB>,
 ) -> Result<Condition, TdError> {
     Ok(Condition(
-        permission.permission_type().on_entity_type() == PermissionEntityType::Collection
-            && !permission.entity_id().is_all_entities(),
+        permission.permission_type.on_entity_type() == PermissionEntityType::Collection
+            && !permission.entity_id.is_all_entities(),
     ))
 }
 
 pub async fn assert_permission_is_not_fixed(
     Input(permission): Input<PermissionDBWithNames>,
 ) -> Result<(), TdError> {
-    if **permission.fixed() {
+    if *permission.fixed {
         Err(PermissionError::PermissionIsFixed)?
     } else {
         Ok(())
@@ -99,12 +101,12 @@ pub async fn assert_role_in_permission(
     Input(permission): Input<PermissionDBWithNames>,
 ) -> Result<(), TdError> {
     if let Some(role_id) = role_id_name.id()
-        && role_id != permission.role_id()
+        && role_id != &permission.role_id
     {
         Err(PermissionError::RolePermissionMismatch)?
     }
     if let Some(role_name) = role_id_name.name()
-        && role_name != permission.role()
+        && role_name != &permission.role
     {
         Err(PermissionError::RolePermissionMismatch)?
     }

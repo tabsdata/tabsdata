@@ -225,7 +225,6 @@ mod tests {
     use crate::dxo::request::FunctionOutput;
     use crate::dxo::request::{EnvPrefix, FunctionInput};
     use crate::types::id::FunctionId;
-    use crate::types::worker::{EnvPrefix, FunctionInput};
     use itertools::Itertools;
     use std::collections::HashSet;
     use td_error::TdError;
@@ -589,7 +588,7 @@ mod tests {
             .system_output(vec![ot3])
             .output(vec![ot4, ot5])
             .build()?;
-        let function_input = FunctionInput::V2(function_input.clone());
+        let function_input = FunctionInput::V2(Box::new(function_input));
         assert_eq!(
             function_input
                 .locations()

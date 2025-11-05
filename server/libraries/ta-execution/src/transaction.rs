@@ -6,8 +6,9 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::str::FromStr;
 use td_error::{TdError, td_error};
-use td_objects::types::basic::{CollectionId, TransactionByStr, TransactionId, TransactionKey};
-use td_objects::types::execution::FunctionVersionNode;
+use td_objects::execution::graph::FunctionNode;
+use td_objects::types::id::{CollectionId, TransactionId};
+use td_objects::types::string::{TransactionByStr, TransactionKey};
 
 #[td_error]
 pub enum TransactionMapperError {
@@ -23,7 +24,7 @@ pub enum TransactionMapperError {
 pub trait TransactionMapper:
     Default + FromStr + for<'a> TryFrom<&'a str> + Display + Sized
 {
-    fn key(&self, node: &FunctionVersionNode) -> Result<TransactionKey, TdError>;
+    fn key(&self, node: &FunctionNode) -> Result<TransactionKey, TdError>;
 
     fn transaction_by(&self) -> Result<TransactionByStr, TdError> {
         TransactionByStr::try_from(self.to_string())
@@ -56,17 +57,14 @@ impl<T: TransactionMapper> TransactionMap<T> {
         &self.mapper
     }
 
-    pub fn add(
-        &mut self,
-        v: &FunctionVersionNode,
-    ) -> Result<&(TransactionId, CollectionId), TdError> {
+    pub fn add(&mut self, v: &FunctionNode) -> Result<&(TransactionId, CollectionId), TdError> {
         Ok(self
             .map
             .entry(self.mapper.key(v)?.clone())
             .or_insert_with(|| {
                 let transaction_id = TransactionId::default();
                 // This works because transactions last at most one collection.
-                let collection_id = *v.collection_id();
+                let collection_id = v.collection_id;
                 (transaction_id, collection_id)
             }))
     }
@@ -86,7 +84,7 @@ impl<T: TransactionMapper> TransactionMap<T> {
 mod tests {
     use super::*;
     use crate::test_utils::transaction::TestTransactionBy;
-    use td_objects::types::test_utils::execution::{FUNCTION_NAMES, function_node};
+    use td_objects::test_utils::graph::{FUNCTION_NAMES, function_node};
 
     #[test]
     fn test_add() -> Result<(), TdError> {

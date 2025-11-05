@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
 use std::collections::HashSet;
 use url::Url;
+use utoipa::ToSchema;
 
 pub mod v2;
 
@@ -34,7 +35,7 @@ impl<T: Locations> Locations for Vec<T> {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum FunctionInput {
     V0(String), // used in testing
-    V2(FunctionInputV2),
+    V2(Box<FunctionInputV2>),
 }
 
 impl TryFrom<Value> for FunctionInput {

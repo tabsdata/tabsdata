@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 use td_common::server::{SSL_CERT_PEM_FILE, SSL_KEY_PEM_FILE};
 use td_common::signal::terminate;
-use td_objects::types::basic::NonEmptyAddresses;
+use td_objects::types::addresses::NonEmptyAddresses;
 use tokio::net::TcpListener;
 use tokio::task::{JoinError, JoinHandle};
 use tracing::{debug, error, info, warn};
@@ -276,6 +276,7 @@ pub(crate) mod tests {
     use td_apiforge::router_ext;
     use td_common::constants::TD_CROSS_BUILD;
     use td_common::env::check_flag_env;
+    use td_objects::types::addresses::NonEmptyAddresses;
     use testdir::testdir;
     use tokio::fs;
     use tokio::io::AsyncWriteExt;

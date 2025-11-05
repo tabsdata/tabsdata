@@ -4,15 +4,16 @@
 
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
-use td_objects::crudl::{ListRequest, ListResponse, RequestContext};
+use td_objects::dxo::collection::defs::CollectionDB;
+use td_objects::dxo::crudl::{ListRequest, ListResponse, RequestContext};
+use td_objects::dxo::inter_collection_permission::defs::InterCollectionPermission;
 use td_objects::rest_urls::CollectionParam;
 use td_objects::sql::{DaoQueries, NoListFilter};
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, SecAdmin};
 use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlListService, SqlSelectService};
-use td_objects::types::basic::{CollectionId, CollectionIdName};
-use td_objects::types::collection::CollectionDB;
-use td_objects::types::permission::InterCollectionPermission;
+use td_objects::types::id::CollectionId;
+use td_objects::types::id_name::CollectionIdName;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -49,14 +50,13 @@ mod tests {
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::{TdError, assert_service_error};
-    use td_objects::crudl::{ListParams, RequestContext};
+    use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::rest_urls::CollectionParam;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_inter_collection_permission::seed_inter_collection_permission;
     use td_objects::tower_service::authz::AuthzError;
-    use td_objects::types::basic::{
-        AccessTokenId, CollectionIdName, CollectionName, RoleId, UserId,
-    };
+    use td_objects::types::id::{AccessTokenId, RoleId, UserId};
+    use td_objects::types::string::CollectionName;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -95,7 +95,7 @@ mod tests {
 
         let c0 = seed_collection(&db, &CollectionName::try_from("c0")?, &UserId::admin()).await;
         let c1 = seed_collection(&db, &CollectionName::try_from("c1")?, &UserId::admin()).await;
-        seed_inter_collection_permission(&db, c0.id(), &(**c1.id()).into()).await;
+        seed_inter_collection_permission(&db, &c0.id, &(*c1.id).into()).await;
 
         let request = RequestContext::with(
             AccessTokenId::default(),
@@ -112,7 +112,7 @@ mod tests {
         let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
         let response = response?;
-        assert_eq!(response.data().len(), 1);
+        assert_eq!(response.data.len(), 1);
         Ok(())
     }
 

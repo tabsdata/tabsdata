@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::ops::Deref;
 use ta_execution::transaction::TransactionMap;
 use td_error::TdError;
-use td_objects::types::execution::TransactionDB;
+use td_objects::dxo::transaction::defs::TransactionDB;
 use td_tower::extractors::{Input, SrvCtx};
 use te_execution::transaction::TransactionBy;
 
@@ -17,7 +17,7 @@ pub async fn build_existing_transaction_map(
 ) -> Result<TransactionMap<TransactionBy>, TdError> {
     let mapped_transactions = transactions
         .iter()
-        .map(|t| (t.transaction_key().clone(), (*t.id(), *t.collection_id())))
+        .map(|t| (t.transaction_key.clone(), (t.id, t.collection_id)))
         .collect::<HashMap<_, _>>();
 
     let transaction_map =

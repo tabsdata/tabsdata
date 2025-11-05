@@ -4,15 +4,16 @@
 
 use std::ops::Deref;
 use td_error::{TdError, td_error};
-use td_objects::crudl::RequestContext;
-use td_objects::types::basic::{
-    CollectionName, DependencyStatus, DependencyVersionId, FunctionStatus, FunctionVersionId,
-    TableName, TableStatus, TableVersionId, TriggerStatus, TriggerVersionId,
+use td_objects::dxo::crudl::RequestContext;
+use td_objects::dxo::dependency::defs::{DependencyDB, DependencyDBBuilder};
+use td_objects::dxo::function::defs::{FunctionDB, FunctionDBBuilder};
+use td_objects::dxo::table::defs::{TableDB, TableDBBuilder};
+use td_objects::dxo::trigger::defs::{TriggerDB, TriggerDBBuilder};
+use td_objects::types::id::{
+    DependencyVersionId, FunctionVersionId, TableVersionId, TriggerVersionId,
 };
-use td_objects::types::dependency::{DependencyDB, DependencyDBBuilder};
-use td_objects::types::function::{FunctionDB, FunctionDBBuilder};
-use td_objects::types::table::{TableDB, TableDBBuilder};
-use td_objects::types::trigger::{TriggerDB, TriggerDBBuilder};
+use td_objects::types::string::{CollectionName, TableName};
+use td_objects::types::typed_enum::{DependencyStatus, FunctionStatus, TableStatus, TriggerStatus};
 use td_tower::extractors::Input;
 
 #[td_error]
@@ -28,7 +29,7 @@ pub async fn build_frozen_functions(
     let frozen_versions = dependant_versions_found
         .iter()
         .map(|v| {
-            FunctionDBBuilder::try_from((request_context.deref(), v.to_builder()))?
+            FunctionDBBuilder::try_from((request_context.deref(), v.clone().to_builder()))?
                 .id(FunctionVersionId::default())
                 .status(FunctionStatus::Frozen)
                 .build()
@@ -44,7 +45,7 @@ pub async fn build_deleted_triggers(
     let deleted_versions = triggers
         .iter()
         .map(|t| {
-            TriggerDBBuilder::try_from((request_context.deref(), t.to_builder()))?
+            TriggerDBBuilder::try_from((request_context.deref(), t.clone().to_builder()))?
                 .id(TriggerVersionId::default())
                 .status(TriggerStatus::Deleted)
                 .build()
@@ -60,7 +61,7 @@ pub async fn build_deleted_dependencies(
     let deleted_versions = deps
         .iter()
         .map(|d| {
-            DependencyDBBuilder::try_from((request_context.deref(), d.to_builder()))?
+            DependencyDBBuilder::try_from((request_context.deref(), d.clone().to_builder()))?
                 .id(DependencyVersionId::default())
                 .status(DependencyStatus::Deleted)
                 .build()
@@ -74,11 +75,11 @@ pub async fn build_deleted_table(
     Input(existing_table_version): Input<TableDB>,
     Input(builder): Input<TableDBBuilder>,
 ) -> Result<TableDB, TdError> {
-    if !matches!(existing_table_version.status(), TableStatus::Frozen) {
+    if !matches!(existing_table_version.status, TableStatus::Frozen) {
         Err(DeleteTableError::TableNotFrozen(
-            existing_table_version.name().clone(),
+            existing_table_version.name.clone(),
             collection_name.deref().clone(),
-            existing_table_version.status().to_string(),
+            existing_table_version.status.to_string(),
         ))?
     }
 

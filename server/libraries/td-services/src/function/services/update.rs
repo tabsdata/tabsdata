@@ -9,7 +9,15 @@ use crate::function::layers::{
 };
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
-use td_objects::crudl::{RequestContext, UpdateRequest};
+use td_objects::dxo::bundle::defs::BundleDB;
+use td_objects::dxo::collection::defs::CollectionDB;
+use td_objects::dxo::crudl::{RequestContext, UpdateRequest};
+use td_objects::dxo::dependency::defs::DependencyDB;
+use td_objects::dxo::function::defs::{
+    Function, FunctionBuilder, FunctionDB, FunctionDBBuilder, FunctionDBWithNames, FunctionUpdate,
+};
+use td_objects::dxo::table::defs::TableDB;
+use td_objects::dxo::trigger::defs::TriggerDBWithNames;
 use td_objects::rest_urls::FunctionParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev};
@@ -20,19 +28,12 @@ use td_objects::tower_service::from::{
 use td_objects::tower_service::sql::{
     By, SqlDeleteService, SqlSelectAllService, SqlSelectService, insert,
 };
-use td_objects::types::basic::{
-    AtTime, BundleId, CollectionId, CollectionIdName, CollectionName, DataLocation,
-    DependencyStatus, FunctionId, FunctionIdName, FunctionStatus, FunctionVersionId, ReuseFrozen,
-    StorageVersion, TableDependencyDto, TableNameDto, TableStatus, TableTriggerDto, TriggerStatus,
-};
-use td_objects::types::collection::CollectionDB;
-use td_objects::types::dependency::DependencyDB;
-use td_objects::types::function::{
-    BundleDB, Function, FunctionBuilder, FunctionDB, FunctionDBBuilder, FunctionDBWithNames,
-    FunctionUpdate,
-};
-use td_objects::types::table::TableDB;
-use td_objects::types::trigger::TriggerDBWithNames;
+use td_objects::types::bool::ReuseFrozen;
+use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
+use td_objects::types::id::{BundleId, CollectionId, FunctionId, FunctionVersionId};
+use td_objects::types::id_name::{CollectionIdName, FunctionIdName};
+use td_objects::types::string::{CollectionName, DataLocation, StorageVersion, TableNameDto};
+use td_objects::types::timestamp::AtTime;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -67,8 +68,12 @@ fn service() {
         // Get function. Extract function id and name.
         from_fn(combine::<CollectionIdName, FunctionIdName>),
         from_fn(With::<RequestContext>::extract::<AtTime>),
-        from_fn(FunctionStatus::active_or_frozen),
-        from_fn(By::<(CollectionIdName, FunctionIdName)>::select_version::<FunctionDBWithNames>),
+        from_fn(
+            By::<(CollectionIdName, FunctionIdName)>::select_version::<
+                { FunctionDBWithNames::Available },
+                FunctionDBWithNames,
+            >
+        ),
         // This is, before update function id and function version id. Function id does
         // not change, but function version id does.
         from_fn(With::<FunctionDBWithNames>::extract::<FunctionId>),
@@ -93,12 +98,14 @@ fn service() {
         from_fn(By::<BundleId>::delete::<BundleDB>),
         // Register associations
         // Find previous versions
-        from_fn(TableStatus::active_or_frozen),
-        from_fn(By::<FunctionId>::select_all_versions::<TableDB>),
-        from_fn(DependencyStatus::active),
-        from_fn(By::<FunctionId>::select_all_versions::<DependencyDB>),
-        from_fn(TriggerStatus::active_or_frozen),
-        from_fn(By::<FunctionId>::select_all_versions::<TriggerDBWithNames>),
+        from_fn(By::<FunctionId>::select_all_versions::<{ TableDB::Available }, TableDB>),
+        from_fn(By::<FunctionId>::select_all_versions::<{ DependencyDB::Active }, DependencyDB>),
+        from_fn(
+            By::<FunctionId>::select_all_versions::<
+                { TriggerDBWithNames::Available },
+                TriggerDBWithNames,
+            >
+        ),
         // Extract new associations
         from_fn(With::<FunctionUpdate>::extract::<Option<Vec<TableNameDto>>>),
         from_fn(With::<FunctionUpdate>::extract::<Option<Vec<TableDependencyDto>>>),
@@ -134,7 +141,9 @@ mod tests {
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::TdError;
-    use td_objects::crudl::handle_sql_err;
+    use td_objects::dxo::crudl::handle_sql_err;
+    use td_objects::dxo::function::defs::FunctionRegister;
+    use td_objects::dxo::trigger::defs::TriggerDB;
     use td_objects::rest_urls::CollectionParam;
     use td_objects::sql::SelectBy;
     use td_objects::sql::cte::CteQueries;
@@ -142,13 +151,11 @@ mod tests {
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_function::seed_function;
     use td_objects::test_utils::seed_inter_collection_permission::seed_inter_collection_permission;
-    use td_objects::types::basic::{
-        AccessTokenId, BundleId, Decorator, FunctionRuntimeValues, RoleId, TableDependencyDto,
-        TableName, TableNameDto, TableStatus, ToCollectionId, UserId,
-    };
-    use td_objects::types::function::FunctionRegister;
-    use td_objects::types::table::TableDB;
-    use td_objects::types::trigger::TriggerDB;
+    use td_objects::types::id::{AccessTokenId, RoleId, ToCollectionId, UserId};
+    use td_objects::types::string::FunctionRuntimeValues;
+    use td_objects::types::string::TableName;
+    use td_objects::types::typed_enum::Decorator;
+    use td_objects::types::typed_enum::TableStatus;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -159,14 +166,16 @@ mod tests {
             build_dependency_versions, build_table_versions, build_tables_trigger_versions,
             build_trigger_versions,
         };
+        use td_objects::dxo::dependency::defs::DependencyDBBuilder;
+        use td_objects::dxo::inter_collection_access::defs::{
+            InterCollectionAccess, InterCollectionAccessBuilder,
+        };
+        use td_objects::dxo::table::defs::TableDBBuilder;
+        use td_objects::dxo::trigger::defs::{TriggerDB, TriggerDBBuilder, TriggerDBWithNames};
         use td_objects::tower_service::authz::InterColl;
         use td_objects::tower_service::from::{ConvertIntoMapService, VecBuildService};
         use td_objects::tower_service::sql::insert_vec;
-        use td_objects::types::basic::ReuseFrozen;
-        use td_objects::types::dependency::DependencyDBBuilder;
-        use td_objects::types::permission::{InterCollectionAccess, InterCollectionAccessBuilder};
-        use td_objects::types::table::TableDBBuilder;
-        use td_objects::types::trigger::{TriggerDB, TriggerDBBuilder, TriggerDBWithNames};
+        use td_objects::types::bool::ReuseFrozen;
 
         use td_tower::metadata::type_of_val;
 
@@ -192,8 +201,10 @@ mod tests {
                 // Get function. Extract function id and name.
                 type_of_val(&combine::<CollectionIdName, FunctionIdName>),
                 type_of_val(&With::<RequestContext>::extract::<AtTime>),
-                type_of_val(&FunctionStatus::active_or_frozen),
-                type_of_val(&By::<(CollectionIdName, FunctionIdName)>::select_version::<FunctionDBWithNames>),
+                type_of_val(&By::<(CollectionIdName, FunctionIdName)>::select_version::<
+                    { FunctionDBWithNames::Available },
+                    FunctionDBWithNames,
+                >),
                 // This is, before update function id and function version id. Function id does
                 // not change, but function version id does.
                 type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
@@ -218,12 +229,12 @@ mod tests {
                 type_of_val(&By::<BundleId>::delete::<BundleDB>),
                 // Register associations
                 // Find previous versions
-                type_of_val(&TableStatus::active_or_frozen),
-                type_of_val(&By::<FunctionId>::select_all_versions::<TableDB>),
-                type_of_val(&DependencyStatus::active),
-                type_of_val(&By::<FunctionId>::select_all_versions::<DependencyDB>),
-                type_of_val(&TriggerStatus::active_or_frozen),
-                type_of_val(&By::<FunctionId>::select_all_versions::<TriggerDBWithNames>),
+                type_of_val(&By::<FunctionId>::select_all_versions::<{ TableDB::Available }, TableDB>),
+                type_of_val(&By::<FunctionId>::select_all_versions::<{ DependencyDB::Active }, DependencyDB>),
+                type_of_val(&By::<FunctionId>::select_all_versions::<
+                    { TriggerDBWithNames::Available },
+                    TriggerDBWithNames,
+                >),
                 // Extract new associations
                 type_of_val(&With::<FunctionUpdate>::extract::<Option<Vec<TableNameDto>>>),
                 type_of_val(&With::<FunctionUpdate>::extract::<Option<Vec<TableDependencyDto>>>),
@@ -315,7 +326,7 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
                 FunctionParam::builder()
-                    .try_collection(format!("{}", collection.name()))?
+                    .try_collection(format!("{}", collection.name))?
                     .try_function("foo")?
                     .build()?,
                 update.clone(),
@@ -376,7 +387,7 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
                 FunctionParam::builder()
-                    .try_collection(format!("~{}", collection.id()))?
+                    .try_collection(format!("~{}", collection.id))?
                     .try_function("joaquin_workout")?
                     .build()?,
                 update.clone(),
@@ -441,7 +452,7 @@ mod tests {
         )
         .update(
             FunctionParam::builder()
-                .try_collection(format!("~{}", collection.id()))?
+                .try_collection(format!("~{}", collection.id))?
                 .try_function("joaquin_workout")?
                 .build()?,
             update.clone(),
@@ -502,7 +513,7 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
                 FunctionParam::builder()
-                    .try_collection(format!("~{}", collection.id()))?
+                    .try_collection(format!("~{}", collection.id))?
                     .try_function("joaquin_workout")?
                     .build()?,
                 update.clone(),
@@ -563,7 +574,7 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
                 FunctionParam::builder()
-                    .try_collection(format!("~{}", collection.id()))?
+                    .try_collection(format!("~{}", collection.id))?
                     .try_function("joaquin_workout")?
                     .build()?,
                 update.clone(),
@@ -624,7 +635,7 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
                 FunctionParam::builder()
-                    .try_collection(format!("~{}", collection.id()))?
+                    .try_collection(format!("~{}", collection.id))?
                     .try_function("joaquin_workout")?
                     .build()?,
                 update.clone(),
@@ -685,7 +696,7 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
                 FunctionParam::builder()
-                    .try_collection(format!("~{}", collection.id()))?
+                    .try_collection(format!("~{}", collection.id))?
                     .try_function("joaquin_workout")?
                     .build()?,
                 update.clone(),
@@ -762,7 +773,7 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
                 FunctionParam::builder()
-                    .try_collection(format!("{}", collection.name()))?
+                    .try_collection(format!("{}", collection.name))?
                     .try_function("joaquin_workout")?
                     .build()?,
                 update.clone(),
@@ -843,7 +854,7 @@ mod tests {
         )
         .update(
             FunctionParam::builder()
-                .try_collection(format!("{}", collection.name()))?
+                .try_collection(format!("{}", collection.name))?
                 .try_function("joaquin_workout")?
                 .build()?,
             update.clone(),
@@ -920,7 +931,7 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
                 FunctionParam::builder()
-                    .try_collection(format!("{}", collection.name()))?
+                    .try_collection(format!("{}", collection.name))?
                     .try_function("joaquin_workout")?
                     .build()?,
                 update.clone(),
@@ -1009,7 +1020,7 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
                 FunctionParam::builder()
-                    .try_collection(format!("{}", collection.name()))?
+                    .try_collection(format!("{}", collection.name))?
                     .try_function("joaquin_workout")?
                     .build()?,
                 update.clone(),
@@ -1070,7 +1081,7 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
                 FunctionParam::builder()
-                    .try_collection(format!("{}", collection.name()))?
+                    .try_collection(format!("{}", collection.name))?
                     .try_function("joaquin_workout")?
                     .build()?,
                 update.clone(),
@@ -1083,7 +1094,7 @@ mod tests {
         let _response = response?;
 
         let tables: Vec<TableDB> = DaoQueries::default()
-            .select_by::<TableDB>(&(&TableName::try_from("joaquin_table")?, &TableStatus::Frozen))?
+            .select_by::<TableDB>(&(TableName::try_from("joaquin_table")?, TableStatus::Frozen))?
             .build_query_as()
             .fetch_all(&db)
             .await
@@ -1106,7 +1117,7 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
                 FunctionParam::builder()
-                    .try_collection(format!("{}", collection.name()))?
+                    .try_collection(format!("{}", collection.name))?
                     .try_function("joaquin_workout")?
                     .build()?,
                 update.clone(),
@@ -1142,7 +1153,7 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
                 FunctionParam::builder()
-                    .try_collection(format!("{}", collection.name()))?
+                    .try_collection(format!("{}", collection.name))?
                     .try_function("joaquin_workout")?
                     .build()?,
                 update.clone(),
@@ -1162,11 +1173,11 @@ mod tests {
             .await
             .map_err(handle_sql_err)?;
         assert_eq!(tables.len(), 3);
-        assert_eq!(*tables[0].status(), TableStatus::Active);
-        assert_eq!(*tables[1].status(), TableStatus::Frozen);
-        assert_eq!(*tables[2].status(), TableStatus::Active);
-        assert_eq!(tables[0].table_id(), tables[1].table_id());
-        assert_eq!(tables[1].table_id(), tables[2].table_id());
+        assert_eq!(tables[0].status, TableStatus::Active);
+        assert_eq!(tables[1].status, TableStatus::Frozen);
+        assert_eq!(tables[2].status, TableStatus::Active);
+        assert_eq!(tables[0].table_id, tables[1].table_id);
+        assert_eq!(tables[1].table_id, tables[2].table_id);
         Ok(())
     }
 
@@ -1211,7 +1222,7 @@ mod tests {
         let update_request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
                 FunctionParam::builder()
-                    .try_collection(format!("{}", collection.name()))?
+                    .try_collection(format!("{}", collection.name))?
                     .try_function("function_foo")?
                     .build()?,
                 update.clone(),
@@ -1288,8 +1299,8 @@ mod tests {
 
         seed_inter_collection_permission(
             &db,
-            collection_1.id(),
-            &ToCollectionId::try_from(collection_2.id())?,
+            &collection_1.id,
+            &ToCollectionId::try_from(collection_2.id)?,
         )
         .await;
 
@@ -1382,7 +1393,7 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
                 FunctionParam::builder()
-                    .try_collection(format!("{}", collection_2.name()))?
+                    .try_collection(format!("{}", collection_2.name))?
                     .try_function("function_2")?
                     .build()?,
                 update.clone(),
@@ -1446,7 +1457,7 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
                 FunctionParam::builder()
-                    .try_collection(format!("{}", collection_1.name()))?
+                    .try_collection(format!("{}", collection_1.name))?
                     .try_function("function")?
                     .build()?,
                 update.clone(),
@@ -1459,17 +1470,17 @@ mod tests {
         assert!(res.is_ok());
 
         let tables: Vec<TableDB> = DaoQueries::default()
-            .select_by::<TableDB>(&(res.unwrap().id()))?
+            .select_by::<TableDB>(&(res.unwrap().id))?
             .build_query_as()
             .fetch_all(&db)
             .await
             .map_err(handle_sql_err)?;
         let map: HashMap<String, TableDB> = tables
             .into_iter()
-            .map(|table| (table.name().to_string(), table))
+            .map(|table| (table.name.to_string(), table))
             .collect();
-        assert!(!map.get("table0").unwrap().private().deref());
-        assert!(map.get("_table0").unwrap().private().deref());
+        assert!(!map.get("table0").unwrap().private.deref());
+        assert!(map.get("_table0").unwrap().private.deref());
         Ok(())
     }
 
@@ -1527,7 +1538,7 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
                 FunctionParam::builder()
-                    .try_collection(format!("~{}", collection.id()))?
+                    .try_collection(format!("~{}", collection.id))?
                     .try_function("function_1")?
                     .build()?,
                 update.clone(),
@@ -1551,12 +1562,10 @@ mod tests {
         .await?;
 
         let recursive_downstream_trigger: Vec<TriggerDB> = DaoQueries::default()
-            .select_recursive_versions_at::<TriggerDB, FunctionDB, _>(
+            .select_recursive_versions_at::<{ TriggerDB::Active }, TriggerDB, { FunctionDB::Active }, FunctionDB>(
                 None,
-                Some(&[&TriggerStatus::Active]),
                 None,
-                Some(&[&FunctionStatus::Active]),
-                response.function_id(),
+                &response.function_id,
             )?
             .build_query_as()
             .fetch_all(&db)
@@ -1564,19 +1573,21 @@ mod tests {
             .unwrap();
         // 2 triggered functions, 1 downstream
         assert_eq!(recursive_downstream_trigger.len(), 1);
-        let triggered_function_id = recursive_downstream_trigger[0].function_id();
+        let triggered_function_id = &recursive_downstream_trigger[0].function_id;
         let triggered_function: FunctionDBWithNames = DaoQueries::default()
-            .select_versions_at::<FunctionDBWithNames>(None, None, &(triggered_function_id))?
+            .select_versions_at::<{ FunctionDBWithNames::All }, FunctionDBWithNames>(
+                None,
+                &(triggered_function_id),
+            )?
             .build_query_as()
             .fetch_one(&db)
             .await
             .unwrap();
-        assert_eq!(triggered_function.name(), dependant.name());
+        assert_eq!(triggered_function.name, dependant.name);
 
         let downstream_dependencies: Vec<DependencyDB> = DaoQueries::default()
-            .select_versions_at::<DependencyDB>(
+            .select_versions_at::<{ DependencyDB::Active }, DependencyDB>(
                 None,
-                Some(&[&DependencyStatus::Active]),
                 &(triggered_function_id),
             )?
             .build_query_as()
@@ -1585,14 +1596,17 @@ mod tests {
             .unwrap();
         // 1 downstream dependency on the triggered function
         assert_eq!(downstream_dependencies.len(), 1);
-        let dependency_function_id = recursive_downstream_trigger[0].function_id();
+        let dependency_function_id = &recursive_downstream_trigger[0].function_id;
         let dependency_function: FunctionDBWithNames = DaoQueries::default()
-            .select_versions_at::<FunctionDBWithNames>(None, None, &(dependency_function_id))?
+            .select_versions_at::<{ FunctionDBWithNames::All }, FunctionDBWithNames>(
+                None,
+                &dependency_function_id,
+            )?
             .build_query_as()
             .fetch_one(&db)
             .await
             .unwrap();
-        assert_eq!(dependency_function.name(), dependant.name());
+        assert_eq!(dependency_function.name, dependant.name);
         Ok(())
     }
 
@@ -1650,7 +1664,7 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
                 FunctionParam::builder()
-                    .try_collection(collection.name().to_string())?
+                    .try_collection(collection.name.to_string())?
                     .try_function("function_2")?
                     .build()?,
                 update.clone(),
@@ -1674,12 +1688,10 @@ mod tests {
         .await?;
 
         let recursive_downstream_trigger: Vec<TriggerDB> = DaoQueries::default()
-            .select_recursive_versions_at::<TriggerDB, FunctionDB, _>(
+            .select_recursive_versions_at::<{ TriggerDB::Active }, TriggerDB, { FunctionDB::Active }, FunctionDB>(
                 None,
-                Some(&[&TriggerStatus::Active]),
                 None,
-                Some(&[&FunctionStatus::Active]),
-                response.function_id(),
+                &response.function_id,
             )?
             .build_query_as()
             .fetch_all(&db)
@@ -1690,13 +1702,16 @@ mod tests {
 
         // Downstream dependency removed
         let dependency_function: Vec<FunctionDBWithNames> = DaoQueries::default()
-            .select_versions_at::<FunctionDBWithNames>(None, None, &(response.function_id()))?
+            .select_versions_at::<{ FunctionDBWithNames::All }, FunctionDBWithNames>(
+                None,
+                &(&response.function_id),
+            )?
             .build_query_as()
             .fetch_all(&db)
             .await
             .unwrap();
         assert_eq!(dependency_function.len(), 1); // only implicit self dependency
-        assert_eq!(dependency_function[0].name(), dependant.name());
+        assert_eq!(dependency_function[0].name, dependant.name);
         Ok(())
     }
 }

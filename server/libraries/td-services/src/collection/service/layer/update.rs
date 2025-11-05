@@ -6,14 +6,14 @@ use crate::collection::CollectionError;
 use async_trait::async_trait;
 use std::ops::Deref;
 use td_error::TdError;
+use td_objects::dxo::collection::defs::{CollectionUpdate, CollectionUpdateDBBuilder};
 use td_objects::tower_service::from::With;
-use td_objects::types::collection::{CollectionUpdate, CollectionUpdateDBBuilder};
 use td_tower::extractors::Input;
 
 pub async fn update_collection_validate(
     Input(update): Input<CollectionUpdate>,
 ) -> Result<(), TdError> {
-    if update.name().is_none() && update.description().is_none() {
+    if update.name.is_none() && update.description.is_none() {
         return Err(CollectionError::UpdateRequestHasNothingToUpdate)?;
     }
     Ok(())
@@ -34,11 +34,11 @@ impl UpdateCollectionDBBuilderUpdate for With<CollectionUpdate> {
         Input(builder): Input<CollectionUpdateDBBuilder>,
     ) -> Result<CollectionUpdateDBBuilder, TdError> {
         let mut builder = builder.deref().clone();
-        if update.name().is_some() {
-            builder.name(update.name().as_ref().unwrap());
+        if update.name.is_some() {
+            builder.name(update.name.as_ref().unwrap());
         }
-        if update.description().is_some() {
-            builder.description(update.description().as_ref().unwrap());
+        if update.description.is_some() {
+            builder.description(update.description.as_ref().unwrap());
         }
 
         Ok(builder)

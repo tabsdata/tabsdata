@@ -55,13 +55,13 @@ fn main() {
             };
 
             // Connect to db
-            let db = match td_database::db(config.database()).await {
+            let db = match td_database::db(&config.database).await {
                 Ok(db) => {
                     info!(
                         "Connected to Sqlite database: {}",
-                        config.database().url().as_ref().unwrap()
+                        config.database.url.as_ref().unwrap()
                     );
-                    if let Some(db_schema) = params.db_schema() {
+                    if let Some(db_schema) = &params.db_schema {
                         match db_schema {
                             DbSchema::Create => {
                                 info!("Creating database");

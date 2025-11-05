@@ -11,8 +11,9 @@ use std::sync::Arc;
 use ta_apiserver::status::error_status::ErrorStatus;
 use td_database::sql::DbPool;
 use td_error::TdError;
-use td_objects::crudl::RequestContext;
-use td_objects::types::basic::{AccessToken, AccessTokenId};
+use td_objects::dxo::crudl::RequestContext;
+use td_objects::types::id::AccessTokenId;
+use td_objects::types::string::AccessToken;
 use td_services::auth::AuthError;
 use td_services::auth::jwt::{JwtConfig, decode_token};
 use td_services::auth::session::{Session, SessionError, SessionProvider, Sessions};
@@ -90,11 +91,8 @@ pub async fn authorization_layer(
         })?;
 
     // Insert the context into the request extensions
-    let request_context = RequestContext::with(
-        session.access_token_id(),
-        session.user_id(),
-        session.role_id(),
-    );
+    let request_context =
+        RequestContext::with(&session.access_token_id, &session.user_id, &session.role_id);
     let mut request = request;
     request.extensions_mut().insert(request_context);
     request.extensions_mut().insert(access_token);
@@ -110,9 +108,9 @@ fn log_span(session: &Session) -> Span {
     span!(
         Level::INFO,
         "authorized",
-        user_name = %session.user_name(),
-        role_name = %session.role_name(),
-        access_token_id = %session.access_token_id().log(),
+        user_name = %session.user_name,
+        role_name = %session.role_name,
+        access_token_id = %session.access_token_id.log(),
     )
 }
 
@@ -121,9 +119,10 @@ mod tests {
     use super::*;
     use std::io::{self, Write};
     use std::sync::{Arc, Mutex};
-    use td_objects::types::basic::{
-        AtTime, RefreshTokenId, RoleId, RoleName, SessionStatus, UserId, UserName,
-    };
+    use td_objects::types::id::{AccessTokenId, RefreshTokenId, RoleId, UserId};
+    use td_objects::types::string::{RoleName, UserName};
+    use td_objects::types::timestamp::AtTime;
+    use td_objects::types::typed_enum::SessionStatus;
     use td_services::auth::session::Session;
     use tracing::info;
     use tracing::subscriber::set_default;

@@ -5,15 +5,17 @@
 use crate::worker::layers::logs::{get_worker_logs, resolve_worker_log_path};
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
-use td_objects::crudl::{ReadRequest, RequestContext};
+use td_objects::dxo::crudl::{ReadRequest, RequestContext};
+use td_objects::dxo::worker::defs::WorkerDB;
 use td_objects::rest_urls::{LogsExtension, WorkerLogsParams};
 use td_objects::sql::DaoQueries;
+use td_objects::stream::BoxedSyncStream;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead};
 use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlSelectService};
-use td_objects::types::basic::{CollectionId, LogsCastNumber, WorkerId, WorkerIdName};
-use td_objects::types::execution::WorkerDB;
-use td_objects::types::stream::BoxedSyncStream;
+use td_objects::types::i16::LogsCastNumber;
+use td_objects::types::id::{CollectionId, WorkerId};
+use td_objects::types::id_name::WorkerIdName;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -58,19 +60,17 @@ mod tests {
     use td_common::server::WORKSPACE_URI_ENV;
     use td_database::sql::DbPool;
     use td_error::TdError;
-    use td_objects::crudl::RequestContext;
+    use td_objects::dxo::crudl::RequestContext;
+    use td_objects::dxo::function::defs::FunctionRegister;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_execution::seed_execution;
     use td_objects::test_utils::seed_function::seed_function;
     use td_objects::test_utils::seed_function_run::seed_function_run;
     use td_objects::test_utils::seed_transaction::seed_transaction;
     use td_objects::test_utils::seed_worker::seed_worker;
-    use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, Decorator, FunctionRunStatus, RoleId,
-        TransactionKey, UserId,
-    };
-    use td_objects::types::execution::WorkerMessageStatus;
-    use td_objects::types::function::FunctionRegister;
+    use td_objects::types::id::{AccessTokenId, BundleId, RoleId, UserId};
+    use td_objects::types::string::{CollectionName, TransactionKey};
+    use td_objects::types::typed_enum::{Decorator, FunctionRunStatus, WorkerMessageStatus};
     use td_tower::ctx_service::RawOneshot;
     use testdir::testdir;
 
@@ -172,7 +172,7 @@ mod tests {
                 async move {
                     // Create sample log files for the first worker, which will have the file names
                     // as the content.
-                    create_log_files(workers[0].id(), 1, 1).await;
+                    create_log_files(&workers[0].id, 1, 1).await;
 
                     let service = WorkerLogService::with_defaults(db.clone()).service().await;
 
@@ -183,7 +183,7 @@ mod tests {
                     )
                     .read(
                         WorkerLogsParams::builder()
-                            .try_worker(workers[0].id().to_string())?
+                            .try_worker(workers[0].id.to_string())?
                             .extension(vec![LogsExtension::All])
                             .retry(vec![])
                             .build()?,

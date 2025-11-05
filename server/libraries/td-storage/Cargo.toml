@@ -56,7 +56,6 @@ td-test = { workspace = true }
 bytes = { workspace = true }
 derive_builder = { workspace = true }
 futures-util = { workspace = true }
-getset = { workspace = true }
 itertools = { workspace = true }
 object_store = { workspace = true, features = ["aws", "azure", "gcp", "http"] }
 regex = { workspace = true }

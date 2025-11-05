@@ -4,7 +4,7 @@
 
 use crate::system::layers::status::database_status;
 use ta_services::factory::service_factory;
-use td_objects::types::system::ApiStatus;
+use td_objects::dxo::system::ApiStatus;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -24,7 +24,7 @@ mod tests {
     use super::*;
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
-    use td_objects::types::system::HealthStatus;
+    use td_objects::dxo::system::HealthStatus;
     use tower::ServiceExt;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -45,7 +45,7 @@ mod tests {
         let service = StatusService::with_defaults(db).service().await;
         let response = service.oneshot(()).await.unwrap();
 
-        assert!(matches!(response.status(), HealthStatus::OK));
-        assert!(*response.latency_as_nanos() > 0);
+        assert!(matches!(response.status, HealthStatus::OK));
+        assert!(response.latency_as_nanos > 0);
     }
 }

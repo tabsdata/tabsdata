@@ -9,7 +9,6 @@ use crate::auth::services::password_change::PasswordChangeService;
 use crate::auth::services::refresh::RefreshService;
 use crate::auth::services::role_change::RoleChangeService;
 use crate::auth::services::user_info::UserInfoService;
-use getset::Getters;
 use ta_services::factory::ServiceFactory;
 
 mod cert_download;
@@ -20,24 +19,23 @@ mod refresh;
 mod role_change;
 mod user_info;
 
-#[derive(ServiceFactory, Getters)]
-#[getset(get = "pub")]
+#[derive(ServiceFactory)]
 pub struct AuthServices {
-    login: LoginService,
-    refresh: RefreshService,
-    logout: LogoutService,
-    user_info: UserInfoService,
-    role_change: RoleChangeService,
-    password_change: PasswordChangeService,
-    cert_download: CertDownloadService,
+    pub login: LoginService,
+    pub refresh: RefreshService,
+    pub logout: LogoutService,
+    pub user_info: UserInfoService,
+    pub role_change: RoleChangeService,
+    pub password_change: PasswordChangeService,
+    pub cert_download: CertDownloadService,
 }
 
 #[cfg(test)]
 mod tests {
     use sqlx::FromRow;
     use td_database::sql::DbPool;
-    use td_objects::types::auth::SessionDB;
-    use td_objects::types::basic::AccessTokenId;
+    use td_objects::dxo::auth::defs::SessionDB;
+    use td_objects::types::id::AccessTokenId;
 
     pub async fn assert_session(db: &DbPool, access_token_id: &Option<AccessTokenId>) {
         #[derive(Debug, FromRow)]

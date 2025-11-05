@@ -7,12 +7,10 @@ mod logs;
 
 use crate::worker::services::list::WorkerListService;
 use crate::worker::services::logs::WorkerLogService;
-use getset::Getters;
 use ta_services::factory::ServiceFactory;
 
-#[derive(ServiceFactory, Getters)]
-#[getset(get = "pub")]
+#[derive(ServiceFactory)]
 pub struct WorkerServices {
-    list: WorkerListService,
-    logs: WorkerLogService,
+    pub list: WorkerListService,
+    pub logs: WorkerLogService,
 }

@@ -207,16 +207,15 @@ pub enum MessageAction {
     Notify,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, new, Getters, Setters, Serialize, Deserialize)]
-#[getset(get = "pub", set = "pub")]
+#[derive(Debug, Clone, Eq, PartialEq, new, Setters, Serialize, Deserialize)]
 pub struct SupervisorMessage<T = Value>
 where
     T: Clone,
 {
-    id: String,
-    work: String,
-    file: PathBuf,
-    payload: SupervisorMessagePayload<T>,
+    pub id: String,
+    pub work: String,
+    pub file: PathBuf,
+    pub payload: SupervisorMessagePayload<T>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -297,37 +296,34 @@ where
     }
 }
 
-#[derive(
-    ToSchema, Debug, Clone, Eq, PartialEq, Getters, Setters, Builder, Serialize, Deserialize,
-)]
-#[getset(get = "pub", set = "pub")]
+#[derive(Clone, Debug, Eq, PartialEq, Builder, Serialize, Deserialize, ToSchema)]
 pub struct ResponseMessagePayload<T = Value>
 where
     T: Clone,
 {
     #[serde(default = "default_id")]
-    id: String,
+    pub id: String,
     #[serde(default = "default_class")]
-    class: WorkerClass,
+    pub class: WorkerClass,
     #[serde(default = "default_worker")]
-    worker: String,
+    pub worker: String,
     #[serde(default = "default_action")]
-    action: MessageAction,
+    pub action: MessageAction,
     #[serde(default = "default_start")]
-    start: i64,
-    end: Option<i64>,
+    pub start: i64,
+    pub end: Option<i64>,
     #[serde(default = "default_status")]
-    status: WorkerCallbackStatus,
+    pub status: WorkerCallbackStatus,
     #[serde(default = "default_execution")]
-    execution: i16,
-    limit: Option<i16>,
-    error: Option<String>,
-    exception_kind: Option<String>,
-    exception_message: Option<String>,
-    exception_error_code: Option<String>,
+    pub execution: i16,
+    pub limit: Option<i16>,
+    pub error: Option<String>,
+    pub exception_kind: Option<String>,
+    pub exception_message: Option<String>,
+    pub exception_error_code: Option<String>,
     #[serde(default = "default_exit_status")]
-    exit_status: i32,
-    context: Option<T>,
+    pub exit_status: i32,
+    pub context: Option<T>,
 }
 
 fn default_id() -> String {
@@ -513,8 +509,10 @@ where
                             format!("Error deserializing response message {message:?}: {e}"),
                         )
                     })?;
-                let mut response_payload = ResponseMessagePayload::default();
-                response_payload.set_context(Some(response_context));
+                let response_payload = ResponseMessagePayload {
+                    context: Some(response_context),
+                    ..Default::default()
+                };
                 SupervisorResponseMessagePayload(response_payload)
             }
             PayloadType::Exception => {
@@ -791,7 +789,7 @@ mod tests_queue {
             "File '.yaml' exists and it shouldn't"
         );
 
-        queue.commit(message.id()).await.unwrap();
+        queue.commit(&message.id).await.unwrap();
 
         assert!(
             !lock_message_path.exists(),
@@ -844,7 +842,7 @@ mod tests_queue {
             "File '.yaml' exists and it shouldn't"
         );
 
-        queue.rollback(message.id()).await.unwrap();
+        queue.rollback(&message.id).await.unwrap();
 
         assert!(
             !lock_message_path.exists(),

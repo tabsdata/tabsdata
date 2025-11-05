@@ -17,12 +17,12 @@ mod routes {
     use ta_apiserver::status::ok_status::ListStatus;
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
-    use td_objects::crudl::{ListParams, RequestContext};
+    use td_objects::dxo::crudl::{ListParams, RequestContext};
+    use td_objects::dxo::worker::defs::Worker;
     use td_objects::rest_urls::{
         WORKER_LOGS, WORKERS_LIST, WorkerLogsParams, WorkerLogsQueryParams, WorkerParam,
     };
-    use td_objects::types::execution::Worker;
-    use td_objects::types::stream::BoxedSyncStream;
+    use td_objects::stream::BoxedSyncStream;
     use td_services::worker::services::WorkerServices;
     use td_tower::ctx_service::RawOneshot;
     use tower::ServiceExt;
@@ -38,7 +38,7 @@ mod routes {
         Query(query_params): Query<ListParams>,
     ) -> Result<ListStatus<Worker>, ErrorStatus> {
         let request = context.list((), query_params);
-        let response = messages.list().service().await.oneshot(request).await?;
+        let response = messages.list.service().await.oneshot(request).await?;
         Ok(ListStatus::OK(response))
     }
 
@@ -70,7 +70,7 @@ mod routes {
     ) -> Result<LogsFile, ErrorStatus> {
         let params = WorkerLogsParams::new(path_params, query_params);
         let request = context.read(params);
-        let response = messages.logs().service().await.raw_oneshot(request).await?;
+        let response = messages.logs.service().await.raw_oneshot(request).await?;
         Ok(LogsFile(response))
     }
 }

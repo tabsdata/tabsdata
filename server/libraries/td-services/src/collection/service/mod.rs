@@ -7,7 +7,6 @@ use crate::collection::service::delete::DeleteCollectionService;
 use crate::collection::service::list::ListCollectionsService;
 use crate::collection::service::read::ReadCollectionService;
 use crate::collection::service::update::UpdateCollectionService;
-use getset::Getters;
 use ta_services::factory::ServiceFactory;
 
 mod create;
@@ -20,12 +19,11 @@ mod update;
 #[cfg(test)]
 mod test_errors;
 
-#[derive(ServiceFactory, Getters)]
-#[getset(get = "pub")]
+#[derive(ServiceFactory)]
 pub struct CollectionServices {
-    create: CreateCollectionService,
-    read: ReadCollectionService,
-    update: UpdateCollectionService,
-    delete: DeleteCollectionService,
-    list: ListCollectionsService,
+    pub create: CreateCollectionService,
+    pub read: ReadCollectionService,
+    pub update: UpdateCollectionService,
+    pub delete: DeleteCollectionService,
+    pub list: ListCollectionsService,
 }

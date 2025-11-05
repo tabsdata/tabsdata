@@ -8,7 +8,12 @@ use crate::function::layers::{
 };
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
-use td_objects::crudl::{DeleteRequest, RequestContext};
+use td_objects::dxo::collection::defs::CollectionDB;
+use td_objects::dxo::crudl::{DeleteRequest, RequestContext};
+use td_objects::dxo::dependency::defs::DependencyDB;
+use td_objects::dxo::function::defs::{FunctionDB, FunctionDBBuilder, FunctionDBWithNames};
+use td_objects::dxo::table::defs::TableDB;
+use td_objects::dxo::trigger::defs::TriggerDBWithNames;
 use td_objects::rest_urls::FunctionParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev};
@@ -17,16 +22,12 @@ use td_objects::tower_service::from::{
     combine,
 };
 use td_objects::tower_service::sql::{By, SqlSelectAllService, SqlSelectService, insert};
-use td_objects::types::basic::{
-    AtTime, CollectionId, CollectionIdName, CollectionName, DependencyStatus, FunctionId,
-    FunctionIdName, FunctionStatus, FunctionVersionId, ReuseFrozen, TableDependencyDto,
-    TableNameDto, TableStatus, TableTriggerDto, TriggerStatus,
-};
-use td_objects::types::collection::CollectionDB;
-use td_objects::types::dependency::DependencyDB;
-use td_objects::types::function::{FunctionDB, FunctionDBBuilder, FunctionDBWithNames};
-use td_objects::types::table::TableDB;
-use td_objects::types::trigger::TriggerDBWithNames;
+use td_objects::types::bool::ReuseFrozen;
+use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
+use td_objects::types::id::{CollectionId, FunctionId, FunctionVersionId};
+use td_objects::types::id_name::{CollectionIdName, FunctionIdName};
+use td_objects::types::string::{CollectionName, TableNameDto};
+use td_objects::types::timestamp::AtTime;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -56,8 +57,12 @@ fn service() {
         // Get function. Extract function version id.
         from_fn(combine::<CollectionIdName, FunctionIdName>),
         from_fn(With::<RequestContext>::extract::<AtTime>),
-        from_fn(FunctionStatus::active_or_frozen),
-        from_fn(By::<(CollectionIdName, FunctionIdName)>::select_version::<FunctionDBWithNames>),
+        from_fn(
+            By::<(CollectionIdName, FunctionIdName)>::select_version::<
+                { FunctionDBWithNames::Available },
+                FunctionDBWithNames,
+            >
+        ),
         from_fn(With::<FunctionDBWithNames>::extract::<FunctionId>),
         from_fn(With::<FunctionDBWithNames>::extract::<FunctionVersionId>),
         // Insert into function_versions(sql) status=Deleted.
@@ -68,12 +73,14 @@ fn service() {
         from_fn(insert::<FunctionDB>),
         // Register associations
         // Find previous versions.
-        from_fn(TableStatus::active),
-        from_fn(By::<FunctionId>::select_all_versions::<TableDB>),
-        from_fn(DependencyStatus::active),
-        from_fn(By::<FunctionId>::select_all_versions::<DependencyDB>),
-        from_fn(TriggerStatus::active_or_frozen),
-        from_fn(By::<FunctionId>::select_all_versions::<TriggerDBWithNames>),
+        from_fn(By::<FunctionId>::select_all_versions::<{ TableDB::Active }, TableDB>),
+        from_fn(By::<FunctionId>::select_all_versions::<{ DependencyDB::Active }, DependencyDB>),
+        from_fn(
+            By::<FunctionId>::select_all_versions::<
+                { TriggerDBWithNames::Available },
+                TriggerDBWithNames,
+            >
+        ),
         // Extract new associations (empty because it is a delete operation).
         from_fn(With::<Option<Vec<TableNameDto>>>::default),
         from_fn(With::<Option<Vec<TableDependencyDto>>>::default),
@@ -95,16 +102,16 @@ mod tests {
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::TdError;
-    use td_objects::crudl::{RequestContext, handle_sql_err};
+    use td_objects::dxo::crudl::handle_sql_err;
+    use td_objects::dxo::function::defs::FunctionBuilder;
+    use td_objects::dxo::function::defs::FunctionRegister;
     use td_objects::rest_urls::CollectionParam;
     use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_function::seed_function;
-    use td_objects::types::basic::{
-        AccessTokenId, BundleId, Decorator, FunctionRuntimeValues, RoleId, TableDependencyDto,
-        TableNameDto, TableTriggerDto, UserId,
-    };
-    use td_objects::types::function::{FunctionBuilder, FunctionDBWithNames, FunctionRegister};
+    use td_objects::types::id::{AccessTokenId, BundleId, RoleId, UserId};
+    use td_objects::types::string::FunctionRuntimeValues;
+    use td_objects::types::typed_enum::Decorator;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -117,12 +124,12 @@ mod tests {
             build_dependency_versions, build_table_versions, build_tables_trigger_versions,
             build_trigger_versions,
         };
+        use td_objects::dxo::dependency::defs::DependencyDBBuilder;
+        use td_objects::dxo::table::defs::TableDBBuilder;
+        use td_objects::dxo::trigger::defs::{TriggerDB, TriggerDBBuilder, TriggerDBWithNames};
         use td_objects::tower_service::from::{TryIntoService, UpdateService};
         use td_objects::tower_service::sql::insert_vec;
-        use td_objects::types::basic::ReuseFrozen;
-        use td_objects::types::dependency::DependencyDBBuilder;
-        use td_objects::types::table::TableDBBuilder;
-        use td_objects::types::trigger::{TriggerDB, TriggerDBBuilder, TriggerDBWithNames};
+        use td_objects::types::bool::ReuseFrozen;
 
         DeleteFunctionService::with_defaults(db)
             .metadata()
@@ -136,18 +143,18 @@ mod tests {
                 // Get collection. Extract collection id and name.
                 type_of_val(&By::<CollectionIdName>::select::<CollectionDB>),
                 type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
-                // check requester is coll_admin or coll_exec for the function's collection
+                // check requester is coll_admin or coll_dev for the function's collection
                 type_of_val(&AuthzOn::<CollectionId>::set),
                 type_of_val(&Authz::<CollAdmin, CollDev>::check),
                 type_of_val(&With::<CollectionDB>::extract::<CollectionName>),
                 // Get function. Extract function version id.
                 type_of_val(&combine::<CollectionIdName, FunctionIdName>),
                 type_of_val(&With::<RequestContext>::extract::<AtTime>),
-                type_of_val(&FunctionStatus::active_or_frozen),
-                type_of_val(
-                    &By::<(CollectionIdName, FunctionIdName)>::select_version::<
+                type_of_val(&
+                    By::<(CollectionIdName, FunctionIdName)>::select_version::<
+                        { FunctionDBWithNames::Available },
                         FunctionDBWithNames,
-                    >,
+                    >
                 ),
                 type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
                 type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionVersionId>),
@@ -159,12 +166,14 @@ mod tests {
                 type_of_val(&insert::<FunctionDB>),
                 // Register associations
                 // Find previous versions.
-                type_of_val(&TableStatus::active),
-                type_of_val(&By::<FunctionId>::select_all_versions::<TableDB>),
-                type_of_val(&DependencyStatus::active),
-                type_of_val(&By::<FunctionId>::select_all_versions::<DependencyDB>),
-                type_of_val(&TriggerStatus::active_or_frozen),
-                type_of_val(&By::<FunctionId>::select_all_versions::<TriggerDBWithNames>),
+                type_of_val(&By::<FunctionId>::select_all_versions::<{ TableDB::Active }, TableDB>),
+                type_of_val(&By::<FunctionId>::select_all_versions::<{ DependencyDB::Active }, DependencyDB>),
+                type_of_val(&
+                    By::<FunctionId>::select_all_versions::<
+                        { TriggerDBWithNames::Available },
+                        TriggerDBWithNames,
+                    >
+                ),
                 // Extract new associations (empty because it is a delete operation).
                 type_of_val(&With::<Option<Vec<TableNameDto>>>::default),
                 type_of_val(&With::<Option<Vec<TableDependencyDto>>>::default),
@@ -177,9 +186,10 @@ mod tests {
                 type_of_val(&With::<RequestContext>::update::<TableDBBuilder, _>),
                 type_of_val(&build_table_versions),
                 type_of_val(&insert_vec::<TableDB>),
+                // Insert into trigger_versions(sql) downstream table triggers updates.
                 type_of_val(&build_tables_trigger_versions),
                 type_of_val(&insert_vec::<TriggerDB>),
-                // Insert into dependency_versions(sql) current function table dependencies status=Active.
+                // Build dependency_versions(sql) current function table dependencies status=Active.
                 type_of_val(&With::<FunctionDB>::convert_to::<DependencyDBBuilder, _>),
                 type_of_val(&With::<RequestContext>::update::<DependencyDBBuilder, _>),
                 type_of_val(&build_dependency_versions),
@@ -216,7 +226,7 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).delete(
                 FunctionParam::builder()
-                    .try_collection(format!("~{}", collection.id()))?
+                    .try_collection(format!("~{}", collection.id))?
                     .try_function("joaquin_workout")?
                     .build()?,
             );
@@ -263,7 +273,7 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).delete(
                 FunctionParam::builder()
-                    .try_collection(format!("{}", collection.name()))?
+                    .try_collection(format!("{}", collection.name))?
                     .try_function("joaquin_workout")?
                     .build()?,
             );
@@ -322,7 +332,7 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).delete(
                 FunctionParam::builder()
-                    .try_collection(format!("{}", collection.name()))?
+                    .try_collection(format!("{}", collection.name))?
                     .try_function("joaquin_workout")?
                     .build()?,
             );
@@ -381,7 +391,7 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).delete(
                 FunctionParam::builder()
-                    .try_collection(format!("{}", collection.name()))?
+                    .try_collection(format!("{}", collection.name))?
                     .try_function("joaquin_workout")?
                     .build()?,
             );
@@ -467,7 +477,7 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).delete(
                 FunctionParam::builder()
-                    .try_collection(format!("~{}", collection.id()))?
+                    .try_collection(format!("~{}", collection.id))?
                     .try_function("joaquin_workout_2")?
                     .build()?,
             );
@@ -479,7 +489,7 @@ mod tests {
 
         // Assert that the first function is as if it just got registered
         let function_version: FunctionDBWithNames = DaoQueries::default()
-            .select_by::<FunctionDBWithNames>(&(created_function_version_1.id()))?
+            .select_by::<FunctionDBWithNames>(&(&created_function_version_1.id))?
             .build_query_as()
             .fetch_one(&db)
             .await

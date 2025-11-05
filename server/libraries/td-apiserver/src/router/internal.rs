@@ -14,9 +14,9 @@ mod routes {
     use ta_apiserver::status::ok_status::{NoContent, UpdateStatus};
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
-    use td_objects::crudl::RequestContext;
+    use td_objects::dxo::crudl::RequestContext;
+    use td_objects::dxo::worker::defs::CallbackRequest;
     use td_objects::rest_urls::{FunctionRunIdParam, UPDATE_FUNCTION_RUN};
-    use td_objects::types::execution::CallbackRequest;
     use td_services::execution::services::ExecutionServices;
     use tower::ServiceExt;
 
@@ -31,12 +31,7 @@ mod routes {
         Json(request): Json<CallbackRequest>,
     ) -> Result<UpdateStatus<NoContent>, ErrorStatus> {
         let request = context.update(param, request);
-        let response = execution
-            .callback()
-            .service()
-            .await
-            .oneshot(request)
-            .await?;
+        let response = execution.callback.service().await.oneshot(request).await?;
         Ok(UpdateStatus::OK(response))
     }
 }

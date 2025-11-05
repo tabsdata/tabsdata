@@ -4,17 +4,17 @@
 
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
-use td_objects::crudl::{ListRequest, ListResponse, RequestContext};
+use td_objects::dxo::collection::defs::CollectionDB;
+use td_objects::dxo::crudl::{ListRequest, ListResponse, RequestContext};
+use td_objects::dxo::function::defs::{Function, FunctionDBWithNames};
+use td_objects::rest_urls::params::FunctionAtIdName;
 use td_objects::sql::{DaoQueries, NoListFilter};
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead};
 use td_objects::tower_service::from::{ExtractNameService, ExtractService, With, combine};
 use td_objects::tower_service::sql::{By, SqlListService, SqlSelectService};
-use td_objects::types::basic::{
-    AtTime, CollectionId, CollectionIdName, FunctionId, FunctionIdName, FunctionStatus,
-};
-use td_objects::types::collection::CollectionDB;
-use td_objects::types::function::{Function, FunctionDBWithNames};
-use td_objects::types::table::FunctionAtIdName;
+use td_objects::types::id::{CollectionId, FunctionId};
+use td_objects::types::id_name::{CollectionIdName, FunctionIdName};
+use td_objects::types::timestamp::AtTime;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -41,14 +41,25 @@ fn service() {
         // extract attime (natural order)
         from_fn(With::<FunctionAtIdName>::extract::<AtTime>),
         // find function ID at time (as name could change in time)
-        from_fn(FunctionStatus::active_or_frozen),
         from_fn(With::<FunctionAtIdName>::extract::<FunctionIdName>),
         from_fn(combine::<CollectionId, FunctionIdName>),
-        from_fn(By::<(CollectionId, FunctionIdName)>::select_version::<FunctionDBWithNames>),
+        from_fn(
+            By::<(CollectionId, FunctionIdName)>::select_version::<
+                { FunctionDBWithNames::Readable },
+                FunctionDBWithNames,
+            >
+        ),
         from_fn(With::<FunctionDBWithNames>::extract::<FunctionId>),
         // List (all active versions at the time). Here we want the history, so we do not want
         // to query the versioned view.
-        from_fn(By::<FunctionId>::list_at::<FunctionAtIdName, NoListFilter, Function>),
+        from_fn(
+            By::<FunctionId>::list_at::<
+                FunctionAtIdName,
+                NoListFilter,
+                { FunctionDBWithNames::Available },
+                Function,
+            >
+        ),
     )
 }
 
@@ -60,14 +71,14 @@ mod tests {
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::TdError;
-    use td_objects::crudl::{ListParams, ListParamsBuilder};
+    use td_objects::dxo::crudl::{ListParams, ListParamsBuilder};
+    use td_objects::dxo::function::defs::{FunctionRegister, FunctionUpdate};
     use td_objects::rest_urls::FunctionParam;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_function::seed_function;
-    use td_objects::types::basic::{
-        AccessTokenId, AtTime, BundleId, CollectionName, Decorator, FunctionName, RoleId, UserId,
-    };
-    use td_objects::types::function::{FunctionRegister, FunctionUpdate};
+    use td_objects::types::id::{AccessTokenId, BundleId, RoleId, UserId};
+    use td_objects::types::string::{CollectionName, FunctionName};
+    use td_objects::types::typed_enum::Decorator;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -94,16 +105,25 @@ mod tests {
                 // extract attime (natural order)
                 type_of_val(&With::<FunctionAtIdName>::extract::<AtTime>),
                 // find function ID at time (as name could change in time)
-                type_of_val(&FunctionStatus::active_or_frozen),
                 type_of_val(&With::<FunctionAtIdName>::extract::<FunctionIdName>),
                 type_of_val(&combine::<CollectionId, FunctionIdName>),
                 type_of_val(
-                    &By::<(CollectionId, FunctionIdName)>::select_version::<FunctionDBWithNames>,
+                    &By::<(CollectionId, FunctionIdName)>::select_version::<
+                        { FunctionDBWithNames::Readable },
+                        FunctionDBWithNames,
+                    >,
                 ),
                 type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
                 // List (all active versions at the time). Here we want the history, so we do not want
                 // to query the versioned view.
-                type_of_val(&By::<FunctionId>::list_at::<FunctionAtIdName, NoListFilter, Function>),
+                type_of_val(
+                    &By::<FunctionId>::list_at::<
+                        FunctionAtIdName,
+                        NoListFilter,
+                        { FunctionDBWithNames::Available },
+                        Function,
+                    >,
+                ),
             ]);
     }
 
@@ -152,7 +172,7 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
                 FunctionParam::builder()
-                    .try_collection(format!("{}", collection.name()))?
+                    .try_collection(format!("{}", collection.name))?
                     .try_function("function_1")?
                     .build()?,
                 update.clone(),
@@ -170,7 +190,7 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).delete(
                 FunctionParam::builder()
-                    .try_collection(format!("{}", collection.name()))?
+                    .try_collection(format!("{}", collection.name))?
                     .try_function("function_2")?
                     .build()?,
             );
@@ -203,7 +223,7 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
                 FunctionAtIdName::builder()
-                    .try_collection(format!("~{}", collection.id()))?
+                    .try_collection(format!("~{}", collection.id))?
                     .try_function("function_1")?
                     .at(t0)
                     .build()?,
@@ -220,14 +240,13 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
                 FunctionAtIdName::builder()
-                    .try_collection(format!("~{}", collection.id()))?
+                    .try_collection(format!("~{}", collection.id))?
                     .try_function("function_1")?
                     .at(t1)
                     .build()?,
                 ListParamsBuilder::default()
                     .order_by("name".to_string())
-                    .build()
-                    .unwrap(),
+                    .build()?,
             );
 
         let service = FunctionHistoryService::with_defaults(db.clone())
@@ -235,16 +254,16 @@ mod tests {
             .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
-        let data = response.data();
+        let data = response.data;
 
         assert_eq!(data.len(), 1);
-        assert_eq!(data[0].name(), &FunctionName::try_from("function_1")?);
+        assert_eq!(data[0].name, FunctionName::try_from("function_1")?);
 
         // t2 -> function_1 and function_2 in history
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
                 FunctionAtIdName::builder()
-                    .try_collection(format!("~{}", collection.id()))?
+                    .try_collection(format!("~{}", collection.id))?
                     .try_function("function_2")?
                     .at(t2)
                     .build()?,
@@ -256,16 +275,16 @@ mod tests {
             .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
-        let data = response.data();
+        let data = response.data;
 
-        assert_eq!(data[0].name(), &FunctionName::try_from("function_1")?);
-        assert_eq!(data[1].name(), &FunctionName::try_from("function_2")?);
+        assert_eq!(data[0].name, FunctionName::try_from("function_1")?);
+        assert_eq!(data[1].name, FunctionName::try_from("function_2")?);
 
         // t3 -> no function to retrieve the history
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
                 FunctionAtIdName::builder()
-                    .try_collection(format!("~{}", collection.id()))?
+                    .try_collection(format!("~{}", collection.id))?
                     .try_function("function_2")?
                     .at(t3)
                     .build()?,
@@ -282,7 +301,7 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
                 FunctionAtIdName::builder()
-                    .try_collection(format!("~{}", collection.id()))?
+                    .try_collection(format!("~{}", collection.id))?
                     .try_function("function_1")?
                     .at(t4)
                     .build()?,
@@ -297,9 +316,9 @@ mod tests {
             .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
-        let data = response.data();
+        let data = response.data;
 
-        assert_eq!(data[0].name(), &FunctionName::try_from("function_1")?);
+        assert_eq!(data[0].name, FunctionName::try_from("function_1")?);
 
         Ok(())
     }

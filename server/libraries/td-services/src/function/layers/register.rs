@@ -7,19 +7,24 @@ use std::ops::Deref;
 use td_error::display_vec::DisplayVec;
 use td_error::{TdError, td_error};
 use td_execution::version_resolver::VersionResolver;
-use td_objects::crudl::handle_sql_err;
+use td_objects::dxo::collection::defs::CollectionDB;
+use td_objects::dxo::crudl::handle_sql_err;
+use td_objects::dxo::dependency::defs::{DependencyDB, DependencyDBBuilder};
+use td_objects::dxo::table::defs::{TableDB, TableDBBuilder, TableDBWithNames};
+use td_objects::dxo::trigger::defs::{TriggerDB, TriggerDBBuilder, TriggerDBWithNames};
 use td_objects::sql::cte::CteQueries;
 use td_objects::sql::{DaoQueries, FindBy};
-use td_objects::types::basic::{
-    AtTime, CollectionId, CollectionName, DataLocation, DependencyId, DependencyPos,
-    DependencyStatus, FunctionId, ReuseFrozen, TableDependency, TableDependencyDto,
-    TableFunctionParamPos, TableId, TableName, TableNameDto, TableStatus, TableTrigger,
-    TableTriggerDto, TriggerId, TriggerStatus, TriggerVersionId, TriggeredOn,
+use td_objects::types::bool::ReuseFrozen;
+use td_objects::types::composed::{
+    TableDependency, TableDependencyDto, TableTrigger, TableTriggerDto,
 };
-use td_objects::types::collection::CollectionDB;
-use td_objects::types::dependency::{DependencyDB, DependencyDBBuilder};
-use td_objects::types::table::{TableDB, TableDBBuilder, TableDBWithNames};
-use td_objects::types::trigger::{TriggerDB, TriggerDBBuilder, TriggerDBWithNames};
+use td_objects::types::i32::{DependencyPos, TableFunctionParamPos};
+use td_objects::types::id::{
+    CollectionId, DependencyId, FunctionId, TableId, TriggerId, TriggerVersionId,
+};
+use td_objects::types::string::{CollectionName, DataLocation, TableName, TableNameDto};
+use td_objects::types::timestamp::{AtTime, TriggeredOn};
+use td_objects::types::typed_enum::{DependencyStatus, TableStatus, TriggerStatus};
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, ReqCtx, SrvCtx};
 
 #[td_error]
@@ -64,7 +69,7 @@ pub async fn validate_tables_do_not_exist(
         // there is no existing tables).
         let existing_tables_map = existing_versions
             .iter()
-            .map(|t| ((t.collection_id(), t.name()), t))
+            .map(|t| ((&t.collection_id, &t.name), t))
             .collect::<HashMap<_, _>>();
         let new_tables_lookup = new_tables
             .iter()
@@ -82,9 +87,8 @@ pub async fn validate_tables_do_not_exist(
             .collect();
 
         let tables_found: Vec<TableDBWithNames> = queries
-            .find_versions_at::<TableDBWithNames>(
+            .find_versions_at::<{ TableDBWithNames::Available }, TableDBWithNames>(
                 Some(&at_time),
-                Some(&[&TableStatus::Active, &TableStatus::Frozen]),
                 &new_tables_lookup,
             )?
             .build_query_as()
@@ -96,7 +100,7 @@ pub async fn validate_tables_do_not_exist(
             let new_tables_set: HashSet<_> = new_tables_lookup.iter().collect();
             let tables_found: HashSet<_> = tables_found
                 .iter()
-                .map(|t| (collection_id.deref(), t.name()))
+                .map(|t| (collection_id.deref(), &t.name))
                 .collect();
 
             let duplicate_tables: Vec<_> = tables_found
@@ -136,7 +140,7 @@ pub async fn build_table_versions(
     // Existing versions
     let existing_versions: HashMap<_, _> = existing_versions
         .iter()
-        .map(|t| ((t.collection_id(), t.name()), t))
+        .map(|t| ((&t.collection_id, &t.name), t))
         .collect();
 
     // Add iterators of new tables (system tables with negative pos)
@@ -172,8 +176,8 @@ pub async fn build_table_versions(
         // Reuse table id if the table is the same
         let existing_version = existing_versions.get(&(&*collection_id, table_name));
         let table_id = if let Some(existing_version) = existing_version {
-            match existing_version.status() {
-                TableStatus::Active => existing_version.table_id(),
+            match existing_version.status {
+                TableStatus::Active => &existing_version.table_id,
                 TableStatus::Frozen => {
                     // We can only unfreeze a frozen table if reuse_frozen is enabled
                     if **reuse_frozen {
@@ -184,7 +188,7 @@ pub async fn build_table_versions(
                         ))
                         .await;
 
-                        existing_version.table_id()
+                        &existing_version.table_id
                     } else {
                         Err(RegisterFunctionError::FrozenTableAlreadyExists(
                             table_name.clone(),
@@ -222,13 +226,13 @@ pub async fn build_table_versions(
             let table_version = table_version_builder
                 .deref()
                 .clone()
-                .table_id(existing_version.table_id())
-                .name(existing_version.name())
-                .function_param_pos(existing_version.function_param_pos().clone())
+                .table_id(existing_version.table_id)
+                .name(existing_version.name.clone())
+                .function_param_pos(existing_version.function_param_pos.clone())
                 .status(TableStatus::Frozen)
                 .build()?;
 
-            new_table_versions.insert((&*collection_id, existing_version.name()), table_version);
+            new_table_versions.insert((&*collection_id, &existing_version.name), table_version);
         }
     }
 
@@ -248,10 +252,10 @@ pub async fn build_tables_trigger_versions(
     // Find existing downstream triggers (using table ids)
     let table_ids = new_table_versions
         .iter()
-        .map(|t| t.table_id())
+        .map(|t| t.table_id)
         .collect::<Vec<_>>();
     let existing_triggers: Vec<TriggerDB> = queries
-        .find_versions_at::<TriggerDB>(Some(&at_time), None, &table_ids)?
+        .find_versions_at::<{ TriggerDB::All }, TriggerDB>(Some(&at_time), &table_ids)?
         .build_query_as()
         .fetch_all(&mut *conn)
         .await
@@ -263,20 +267,21 @@ pub async fn build_tables_trigger_versions(
     // triggers need to change that too.
     let table_versions_map: HashMap<_, _> = new_table_versions
         .iter()
-        .map(|t| (t.table_id(), t))
+        .map(|t| (&t.table_id, t))
         .collect();
     let trigger_versions = existing_triggers
         .into_iter()
         .filter_map(|trigger| {
-            let table = match table_versions_map.get(&trigger.trigger_by_table_id()) {
+            let table = match table_versions_map.get(&trigger.trigger_by_table_id) {
                 Some(table) => table,
                 None => return None, // No matching table version found
             };
-            match (table.status(), trigger.status()) {
+            match (&table.status, &trigger.status) {
                 (TableStatus::Frozen, TriggerStatus::Active) => {
                     // If the table is now frozen, and the trigger was active, we freeze the trigger
                     Some(
                         trigger
+                            .clone()
                             .to_builder()
                             .id(TriggerVersionId::default())
                             .status(TriggerStatus::Frozen)
@@ -289,9 +294,10 @@ pub async fn build_tables_trigger_versions(
                     // for the new function id
                     Some(
                         trigger
+                            .clone()
                             .to_builder()
                             .id(TriggerVersionId::default())
-                            .trigger_by_function_id(table.function_id())
+                            .trigger_by_function_id(table.function_id)
                             .status(TriggerStatus::Active)
                             .defined_on(&*at_time)
                             .build(),
@@ -328,10 +334,10 @@ pub async fn build_dependency_versions(
         .map(|d| {
             (
                 (
-                    d.table_collection_id(),
-                    d.table_id(),
-                    d.table_versions().deref(),
-                    **d.dep_pos(),
+                    d.table_collection_id,
+                    d.table_id,
+                    d.table_versions.deref(),
+                    *d.dep_pos,
                 ),
                 d,
             )
@@ -378,8 +384,8 @@ pub async fn build_dependency_versions(
             .iter()
             .map(|(_, d)| {
                 (
-                    d.collection().as_ref().unwrap_or(&*collection_in_context),
-                    d.table(),
+                    d.collection.as_ref().unwrap_or(&*collection_in_context),
+                    &d.table,
                 )
             })
             .collect();
@@ -394,17 +400,17 @@ pub async fn build_dependency_versions(
 
     let tables_found: HashMap<_, _> = tables_found
         .iter()
-        .map(|t| ((t.collection(), t.name()), t))
+        .map(|t| ((&t.collection, &t.name), t))
         .collect();
 
     // Create new versions
     for (pos, dependency_table) in new_dependencies {
         let table_db = match tables_found.get(&(
             dependency_table
-                .collection()
+                .collection
                 .as_ref()
                 .unwrap_or(&*collection_in_context),
-            dependency_table.table(),
+            &dependency_table.table,
         )) {
             Some(table_db) => Ok(table_db),
             None => Err(RegisterFunctionError::DependencyTableDoesNotExist(
@@ -416,8 +422,8 @@ pub async fn build_dependency_versions(
         // ranges should be older to newer, etc.). This avoids potential issues on trigger.
         // A standalone function should be at least triggerable at the time it is registered.
         let _ = VersionResolver::builder()
-            .table_id(table_db.table_id())
-            .versions(dependency_table.versions())
+            .table_id(&table_db.table_id)
+            .versions(&dependency_table.versions)
             .triggered_on(&TriggeredOn::try_from(&*at_time)?)
             .error_on_desc_range(true)
             .build()?
@@ -426,13 +432,13 @@ pub async fn build_dependency_versions(
 
         // Reuse dependency id if the dependency is the same
         let existing_version = existing_versions.get(&(
-            table_db.collection_id(),
-            table_db.table_id(),
-            dependency_table.versions(),
+            table_db.collection_id,
+            table_db.table_id,
+            &dependency_table.versions,
             pos,
         ));
         let dependency_id = if let Some(existing_version) = existing_version {
-            existing_version.dependency_id()
+            &existing_version.dependency_id
         } else {
             &DependencyId::default()
         };
@@ -441,10 +447,10 @@ pub async fn build_dependency_versions(
             .deref()
             .clone()
             .dependency_id(dependency_id)
-            .table_collection_id(table_db.collection_id())
-            .table_function_id(table_db.function_id())
-            .table_id(table_db.table_id())
-            .table_versions(dependency_table.versions())
+            .table_collection_id(table_db.collection_id)
+            .table_function_id(table_db.function_id)
+            .table_id(table_db.table_id)
+            .table_versions(dependency_table.versions.clone())
             .dep_pos(DependencyPos::try_from(pos)?)
             .status(DependencyStatus::Active)
             .system(pos < 0)
@@ -452,9 +458,9 @@ pub async fn build_dependency_versions(
 
         new_dependency_versions.insert(
             (
-                table_db.collection_id(),
-                table_db.table_id(),
-                dependency_table.versions(),
+                table_db.collection_id,
+                table_db.table_id,
+                &dependency_table.versions,
                 pos,
             ),
             dependency_version,
@@ -467,22 +473,22 @@ pub async fn build_dependency_versions(
             let dependency_version = dependency_version_builder
                 .deref()
                 .clone()
-                .dependency_id(existing_version.dependency_id())
-                .table_collection_id(existing_version.table_collection_id())
-                .table_function_id(existing_version.function_id())
-                .table_id(existing_version.table_id())
-                .table_versions(existing_version.table_versions().clone())
-                .dep_pos(existing_version.dep_pos())
+                .dependency_id(existing_version.dependency_id)
+                .table_collection_id(existing_version.table_collection_id)
+                .table_function_id(existing_version.function_id)
+                .table_id(existing_version.table_id)
+                .table_versions(existing_version.table_versions.clone())
+                .dep_pos(existing_version.dep_pos.clone())
                 .status(DependencyStatus::Deleted)
-                .system(existing_version.system())
+                .system(existing_version.system.clone())
                 .build()?;
 
             new_dependency_versions.insert(
                 (
-                    existing_version.table_collection_id(),
-                    existing_version.table_id(),
-                    existing_version.table_versions(),
-                    **existing_version.dep_pos(),
+                    existing_version.table_collection_id,
+                    existing_version.table_id,
+                    existing_version.table_versions.deref(),
+                    *existing_version.dep_pos,
                 ),
                 dependency_version,
             );
@@ -512,7 +518,7 @@ pub async fn build_trigger_versions(
     // Fetch existing versions
     let existing_versions: HashMap<_, _> = existing_versions
         .iter()
-        .map(|t| ((t.trigger_by_collection_id(), t.trigger_by_table_id()), t))
+        .map(|t| ((&t.trigger_by_collection_id, &t.trigger_by_table_id), t))
         .collect();
 
     let new_triggers = if let Some(new_triggers) = new_triggers.as_deref() {
@@ -530,9 +536,9 @@ pub async fn build_trigger_versions(
             .unwrap_or_default()
             .iter()
             .filter(|t| {
-                !((t.collection().is_none()
-                    || t.collection().as_deref() == Some(&*collection_in_context))
-                    && new_tables.contains(t.table()))
+                !((t.collection.is_none()
+                    || t.collection.as_deref() == Some(&*collection_in_context))
+                    && new_tables.contains(&t.table))
             })
             .map(TableTrigger::try_from)
             .collect::<Result<HashSet<_>, _>>()?
@@ -550,8 +556,8 @@ pub async fn build_trigger_versions(
             .iter()
             .map(|d| {
                 (
-                    d.collection().as_ref().unwrap_or(&*collection_in_context),
-                    d.table(),
+                    d.collection.as_ref().unwrap_or(&*collection_in_context),
+                    &d.table,
                 )
             })
             .collect();
@@ -568,26 +574,26 @@ pub async fn build_trigger_versions(
 
     let tables_found: HashMap<_, _> = tables_found
         .iter()
-        .map(|t: &TableDBWithNames| ((t.collection(), t.name()), t))
+        .map(|t: &TableDBWithNames| ((&t.collection, &t.name), t))
         .collect();
 
     // Create new versions
     for trigger_table in new_triggers {
         let table_db = match tables_found.get(&(
             trigger_table
-                .collection()
+                .collection
                 .as_ref()
                 .unwrap_or(&*collection_in_context),
-            trigger_table.table(),
+            &trigger_table.table,
         )) {
             None => Err(RegisterFunctionError::TriggerTableDoesNotExist(
                 trigger_table.clone(),
             )),
             Some(table_db)
-                if table_db.collection() == &*collection_in_context
+                if table_db.collection == *collection_in_context
                     && new_tables
                         .as_deref()
-                        .is_some_and(|t| t.iter().any(|t| **t == **table_db.name())) =>
+                        .is_some_and(|t| t.iter().any(|t| **t == *table_db.name)) =>
             {
                 Err(RegisterFunctionError::SelfTrigger(trigger_table.clone()))
             }
@@ -596,26 +602,26 @@ pub async fn build_trigger_versions(
 
         // Reuse trigger id if the trigger is the same
         let existing_version =
-            existing_versions.get(&(table_db.collection_id(), table_db.table_id()));
+            existing_versions.get(&(&table_db.collection_id, &table_db.table_id));
         let trigger_id = if let Some(existing_version) = existing_version {
-            existing_version.trigger_id()
+            existing_version.trigger_id
         } else {
-            &TriggerId::default()
+            TriggerId::default()
         };
 
         let trigger_version = trigger_version_builder
             .deref()
             .clone()
             .trigger_id(trigger_id)
-            .trigger_by_collection_id(table_db.collection_id())
-            .trigger_by_function_id(*table_db.function_id())
-            .trigger_by_table_id(table_db.table_id())
+            .trigger_by_collection_id(table_db.collection_id)
+            .trigger_by_function_id(*table_db.function_id)
+            .trigger_by_table_id(table_db.table_id)
             .status(TriggerStatus::Active)
-            .system(table_db.system())
+            .system(table_db.system.clone())
             .build()?;
 
         new_trigger_versions.insert(
-            (table_db.collection_id(), table_db.table_id()),
+            (&table_db.collection_id, &table_db.table_id),
             trigger_version,
         );
     }
@@ -626,18 +632,18 @@ pub async fn build_trigger_versions(
             let trigger_version = trigger_version_builder
                 .deref()
                 .clone()
-                .trigger_id(existing_version.trigger_id())
-                .trigger_by_collection_id(existing_version.trigger_by_collection_id())
-                .trigger_by_function_id(*existing_version.trigger_by_function_id())
-                .trigger_by_table_id(existing_version.trigger_by_table_id())
+                .trigger_id(existing_version.trigger_id)
+                .trigger_by_collection_id(existing_version.trigger_by_collection_id)
+                .trigger_by_function_id(*existing_version.trigger_by_function_id)
+                .trigger_by_table_id(existing_version.trigger_by_table_id)
                 .status(TriggerStatus::Deleted)
-                .system(existing_version.system())
+                .system(existing_version.system.clone())
                 .build()?;
 
             new_trigger_versions.insert(
                 (
-                    existing_version.trigger_by_collection_id(),
-                    existing_version.trigger_by_table_id(),
+                    &existing_version.trigger_by_collection_id,
+                    &existing_version.trigger_by_table_id,
                 ),
                 trigger_version,
             );

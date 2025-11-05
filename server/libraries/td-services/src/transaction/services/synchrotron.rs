@@ -3,10 +3,10 @@
 //
 
 use ta_services::factory::service_factory;
-use td_objects::crudl::{ListRequest, ListResponse};
+use td_objects::dxo::crudl::{ListRequest, ListResponse};
+use td_objects::dxo::synchrotron::defs::SynchrotronResponse;
 use td_objects::sql::{DaoQueries, NoListFilter};
 use td_objects::tower_service::sql::{By, SqlListService};
-use td_objects::types::execution::SynchrotronResponse;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -37,15 +37,15 @@ mod tests {
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::TdError;
-    use td_objects::crudl::{ListParams, RequestContext};
+    use td_objects::dxo::crudl::{ListParams, RequestContext};
+    use td_objects::dxo::function::defs::FunctionRegister;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_execution::seed_execution;
     use td_objects::test_utils::seed_function::seed_function;
     use td_objects::test_utils::seed_transaction::seed_transaction;
-    use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, Decorator, RoleId, TransactionKey, UserId,
-    };
-    use td_objects::types::function::FunctionRegister;
+    use td_objects::types::id::{AccessTokenId, BundleId, RoleId, UserId};
+    use td_objects::types::string::{CollectionName, TransactionKey};
+    use td_objects::types::typed_enum::Decorator;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -108,32 +108,17 @@ mod tests {
                 .list((), ListParams::default());
 
         let response = service.raw_oneshot(request).await?;
-        assert_eq!(*response.len(), transactions.len());
-        assert_eq!(response.data()[0].id(), transactions[0].id());
-        assert_eq!(
-            response.data()[0].triggered_on(),
-            transactions[0].triggered_on()
-        );
-        assert_eq!(response.data()[1].id(), transactions[1].id());
-        assert_eq!(
-            response.data()[1].triggered_on(),
-            transactions[1].triggered_on()
-        );
-        assert_eq!(response.data()[2].id(), transactions[2].id());
-        assert_eq!(
-            response.data()[2].triggered_on(),
-            transactions[2].triggered_on()
-        );
-        assert_eq!(response.data()[3].id(), transactions[3].id());
-        assert_eq!(
-            response.data()[3].triggered_on(),
-            transactions[3].triggered_on()
-        );
-        assert_eq!(response.data()[4].id(), transactions[4].id());
-        assert_eq!(
-            response.data()[4].triggered_on(),
-            transactions[4].triggered_on()
-        );
+        assert_eq!(response.len, transactions.len());
+        assert_eq!(response.data[0].id, transactions[0].id);
+        assert_eq!(response.data[0].triggered_on, transactions[0].triggered_on);
+        assert_eq!(response.data[1].id, transactions[1].id);
+        assert_eq!(response.data[1].triggered_on, transactions[1].triggered_on);
+        assert_eq!(response.data[2].id, transactions[2].id);
+        assert_eq!(response.data[2].triggered_on, transactions[2].triggered_on);
+        assert_eq!(response.data[3].id, transactions[3].id);
+        assert_eq!(response.data[3].triggered_on, transactions[3].triggered_on);
+        assert_eq!(response.data[4].id, transactions[4].id);
+        assert_eq!(response.data[4].triggered_on, transactions[4].triggered_on);
         Ok(())
     }
 }

@@ -4,7 +4,11 @@
 
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
-use td_objects::crudl::{ListRequest, ListResponse, RequestContext};
+use td_objects::dxo::collection::defs::CollectionDB;
+use td_objects::dxo::crudl::{ListRequest, ListResponse, RequestContext};
+use td_objects::dxo::table::defs::TableDBWithNames;
+use td_objects::dxo::table_data_version::defs::{TableDataVersion, TableDataVersionDBWithNames};
+use td_objects::rest_urls::params::TableAtIdName;
 use td_objects::sql::{DaoQueries, NoListFilter};
 use td_objects::tower_service::authz::{
     AuthzOn, CollAdmin, CollDev, CollExec, CollRead, InterCollRead,
@@ -13,13 +17,9 @@ use td_objects::tower_service::from::{
     ExtractNameService, ExtractService, TryIntoService, With, combine,
 };
 use td_objects::tower_service::sql::{By, SqlListService, SqlSelectService};
-use td_objects::types::basic::{
-    AtTime, CollectionId, CollectionIdName, FunctionRunStatus, TableId, TableIdName, TableStatus,
-    TriggeredOn,
-};
-use td_objects::types::collection::CollectionDB;
-use td_objects::types::execution::TableDataVersion;
-use td_objects::types::table::{TableAtIdName, TableDBWithNames};
+use td_objects::types::id::{CollectionId, TableId};
+use td_objects::types::id_name::{CollectionIdName, TableIdName};
+use td_objects::types::timestamp::{AtTime, TriggeredOn};
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -49,12 +49,22 @@ fn service() {
         // find table ID
         from_fn(With::<TableAtIdName>::extract::<TableIdName>),
         from_fn(combine::<CollectionIdName, TableIdName>),
-        from_fn(TableStatus::active_or_frozen),
-        from_fn(By::<(CollectionIdName, TableIdName)>::select_version::<TableDBWithNames>),
+        from_fn(
+            By::<(CollectionIdName, TableIdName)>::select_version::<
+                { TableDBWithNames::Available },
+                TableDBWithNames,
+            >
+        ),
         from_fn(With::<TableDBWithNames>::extract::<TableId>),
         // list
-        from_fn(FunctionRunStatus::committed),
-        from_fn(By::<TableId>::list_at::<TableAtIdName, NoListFilter, TableDataVersion>),
+        from_fn(
+            By::<TableId>::list_at::<
+                TableAtIdName,
+                NoListFilter,
+                { TableDataVersionDBWithNames::Committed },
+                TableDataVersion,
+            >
+        ),
     )
 }
 
@@ -64,7 +74,9 @@ mod tests {
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::TdError;
-    use td_objects::crudl::ListParams;
+    use td_objects::dxo::crudl::ListParams;
+    use td_objects::dxo::function::defs::FunctionRegister;
+    use td_objects::dxo::table::defs::TableDB;
     use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_execution::seed_execution;
@@ -72,12 +84,10 @@ mod tests {
     use td_objects::test_utils::seed_function_run::seed_function_run;
     use td_objects::test_utils::seed_table_data_version::seed_table_data_version;
     use td_objects::test_utils::seed_transaction::seed_transaction;
-    use td_objects::types::basic::{
-        AccessTokenId, AtTime, BundleId, CollectionName, Decorator, RoleId, TableName,
-        TableNameDto, TransactionKey, UserId,
-    };
-    use td_objects::types::function::FunctionRegister;
-    use td_objects::types::table::TableDB;
+    use td_objects::types::id::{AccessTokenId, BundleId, RoleId, UserId};
+    use td_objects::types::string::{CollectionName, TableName, TableNameDto, TransactionKey};
+    use td_objects::types::typed_enum::Decorator;
+    use td_objects::types::typed_enum::FunctionRunStatus;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -105,15 +115,21 @@ mod tests {
                 // find table ID
                 type_of_val(&With::<TableAtIdName>::extract::<TableIdName>),
                 type_of_val(&combine::<CollectionIdName, TableIdName>),
-                type_of_val(&TableStatus::active_or_frozen),
                 type_of_val(
-                    &By::<(CollectionIdName, TableIdName)>::select_version::<TableDBWithNames>,
+                    &By::<(CollectionIdName, TableIdName)>::select_version::<
+                        { TableDBWithNames::Available },
+                        TableDBWithNames,
+                    >,
                 ),
                 type_of_val(&With::<TableDBWithNames>::extract::<TableId>),
                 // list
-                type_of_val(&FunctionRunStatus::committed),
                 type_of_val(
-                    &By::<TableId>::list_at::<TableAtIdName, NoListFilter, TableDataVersion>,
+                    &By::<TableId>::list_at::<
+                        TableAtIdName,
+                        NoListFilter,
+                        { TableDataVersionDBWithNames::Committed },
+                        TableDataVersion,
+                    >,
                 ),
             ]);
     }
@@ -164,7 +180,7 @@ mod tests {
         let t1 = AtTime::now();
 
         let table_version = DaoQueries::default()
-            .select_by::<TableDB>(&(collection.id(), &TableName::try_from(tables[0].clone())?))?
+            .select_by::<TableDB>(&(&collection.id, &TableName::try_from(tables[0].clone())?))?
             .build_query_as()
             .fetch_one(&db)
             .await
@@ -210,8 +226,8 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
                 TableAtIdName::builder()
-                    .try_collection(format!("~{}", collection.id()))?
-                    .try_table(format!("{}", table_version.name()))?
+                    .try_collection(format!("~{}", collection.id))?
+                    .try_table(format!("{}", table_version.name))?
                     .at(t0)
                     .build()?,
                 ListParams::default(),
@@ -222,7 +238,7 @@ mod tests {
             .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
-        let data = response.data();
+        let data = response.data;
 
         assert_eq!(data.len(), 0);
 
@@ -230,8 +246,8 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
                 TableAtIdName::builder()
-                    .try_collection(format!("~{}", collection.id()))?
-                    .try_table(format!("{}", table_version.name()))?
+                    .try_collection(format!("~{}", collection.id))?
+                    .try_table(format!("{}", table_version.name))?
                     .at(t1)
                     .build()?,
                 ListParams::default(),
@@ -242,17 +258,17 @@ mod tests {
             .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
-        let data = response.data();
+        let data = response.data;
 
         assert_eq!(data.len(), 1);
-        assert_eq!(data[0].id(), v1.id());
+        assert_eq!(data[0].id, v1.id);
 
         // t2 -> versions v1 and v2
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
                 TableAtIdName::builder()
-                    .try_collection(format!("~{}", collection.id()))?
-                    .try_table(format!("{}", table_version.name()))?
+                    .try_collection(format!("~{}", collection.id))?
+                    .try_table(format!("{}", table_version.name))?
                     .at(t2)
                     .build()?,
                 ListParams::default(),
@@ -263,11 +279,11 @@ mod tests {
             .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
-        let data = response.data();
+        let data = response.data;
 
         assert_eq!(data.len(), 2);
-        assert_eq!(data[0].id(), v1.id());
-        assert_eq!(data[1].id(), v2.id());
+        assert_eq!(data[0].id, v1.id);
+        assert_eq!(data[1].id, v2.id);
 
         Ok(())
     }

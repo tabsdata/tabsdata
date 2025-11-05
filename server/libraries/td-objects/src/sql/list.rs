@@ -548,6 +548,7 @@ mod tests {
     }
 
     #[td_type::Dto]
+    #[derive(Eq, PartialEq)]
     #[dto(list(on = TestDao))]
     #[td_type(builder(try_from = TestDao))]
     struct TestDto {
@@ -640,7 +641,7 @@ mod tests {
         #[td_type::Dto]
         #[dto(list(on = DaoDef))]
         #[td_type(builder(try_from = DaoDef))]
-        #[derive(Hash)]
+        #[derive(Eq, PartialEq, Hash)]
         struct Def {
             #[dto(list(pagination_by = "+"))]
             #[td_type(builder(field = "id"))]

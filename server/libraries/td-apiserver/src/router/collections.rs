@@ -17,12 +17,12 @@ mod routes {
     };
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
-    use td_objects::crudl::{ListParams, RequestContext};
+    use td_objects::dxo::collection::defs::{CollectionCreate, CollectionRead, CollectionUpdate};
+    use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::rest_urls::{
         CREATE_COLLECTION, CollectionParam, DELETE_COLLECTION, GET_COLLECTION, LIST_COLLECTIONS,
         UPDATE_COLLECTION,
     };
-    use td_objects::types::collection::{CollectionCreate, CollectionRead, CollectionUpdate};
     use td_services::collection::service::CollectionServices;
     use tower::ServiceExt;
 
@@ -37,7 +37,7 @@ mod routes {
     ) -> Result<ListStatus<CollectionRead>, ErrorStatus> {
         let request = context.list((), query_params);
         let response = collection_state
-            .list()
+            .list
             .service()
             .await
             .oneshot(request)
@@ -54,7 +54,7 @@ mod routes {
     ) -> Result<GetStatus<CollectionRead>, ErrorStatus> {
         let request = context.read(collection_param);
         let response = collection_state
-            .read()
+            .read
             .service()
             .await
             .oneshot(request)
@@ -71,7 +71,7 @@ mod routes {
     ) -> Result<CreateStatus<CollectionRead>, ErrorStatus> {
         let request = context.create((), request);
         let response = collection_state
-            .create()
+            .create
             .service()
             .await
             .oneshot(request)
@@ -89,7 +89,7 @@ mod routes {
     ) -> Result<UpdateStatus<CollectionRead>, ErrorStatus> {
         let request = context.update(collection_param, request);
         let response = collection_state
-            .update()
+            .update
             .service()
             .await
             .oneshot(request)
@@ -106,7 +106,7 @@ mod routes {
     ) -> Result<DeleteStatus<NoContent>, ErrorStatus> {
         let request = context.delete(collection_param);
         let response = collection_state
-            .delete()
+            .delete
             .service()
             .await
             .oneshot(request)
@@ -127,11 +127,11 @@ mod tests {
     use ta_apiserver::router::RouterExtension;
     use ta_services::factory::ServiceFactory;
     use td_database::sql::DbPool;
-    use td_objects::crudl::RequestContext;
+    use td_objects::dxo::crudl::RequestContext;
     use td_objects::rest_urls::{
         CREATE_COLLECTION, DELETE_COLLECTION, GET_COLLECTION, LIST_COLLECTIONS, UPDATE_COLLECTION,
     };
-    use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
+    use td_objects::types::id::{AccessTokenId, RoleId, UserId};
     use td_services::Context;
     use td_services::collection::service::CollectionServices;
     use tower::ServiceExt;

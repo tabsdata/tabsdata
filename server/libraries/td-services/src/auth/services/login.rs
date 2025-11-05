@@ -13,18 +13,18 @@ use crate::auth::layers::set_session_expiration::set_session_expiration;
 use crate::auth::session::Sessions;
 use ta_services::factory::service_factory;
 use td_error::TdError;
+use td_objects::dxo::auth::defs::{Login, SessionDB, SessionDBBuilder, TokenResponseX};
+use td_objects::dxo::user::defs::UserDB;
+use td_objects::dxo::user_role::defs::UserRoleDBWithNames;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::from::DefaultService;
 use td_objects::tower_service::from::{
     BuildService, ExtractService, SetService, With, builder, combine,
 };
 use td_objects::tower_service::sql::{By, SqlSelectService, insert};
-use td_objects::types::auth::{Login, SessionDB, SessionDBBuilder, TokenResponseX};
-use td_objects::types::basic::{
-    AtTime, Password, PasswordHash, RoleId, RoleName, UserId, UserName,
-};
-use td_objects::types::role::UserRoleDBWithNames;
-use td_objects::types::user::UserDB;
+use td_objects::types::id::{RoleId, UserId};
+use td_objects::types::string::{Password, PasswordHash, RoleName, UserName};
+use td_objects::types::timestamp::AtTime;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -84,18 +84,16 @@ fn service() {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::Context;
     use crate::auth::AuthError;
     use crate::auth::jwt::decode_token;
     use crate::auth::services::AuthServices;
     use crate::auth::services::tests::assert_session;
-    use std::ops::Deref;
     use ta_services::factory::ServiceFactory;
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::assert_service_error;
-    use td_objects::types::auth::Login;
-    use td_objects::types::basic::{Password, RoleName, UserName};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -109,16 +107,11 @@ mod tests {
         use crate::auth::layers::refresh_sessions::refresh_sessions;
         use crate::auth::layers::set_session_expiration::set_session_expiration;
         use crate::auth::services::login::LoginService;
+        use td_objects::dxo::user::defs::UserDB;
         use td_objects::tower_service::from::{
             BuildService, DefaultService, ExtractService, SetService, With, builder, combine,
         };
         use td_objects::tower_service::sql::{By, SqlSelectService, insert};
-        use td_objects::types::auth::{Login, SessionDB, SessionDBBuilder, TokenResponseX};
-        use td_objects::types::basic::{
-            AtTime, Password, PasswordHash, RoleId, RoleName, UserId, UserName,
-        };
-        use td_objects::types::role::UserRoleDBWithNames;
-        use td_objects::types::user::UserDB;
         use td_tower::metadata::type_of_val;
 
         LoginService::with_defaults(db)
@@ -165,16 +158,16 @@ mod tests {
         let res = service.raw_oneshot(request).await;
         assert!(res.is_ok());
         let token_response = res?;
-        let access_token = token_response.access_token();
+        let access_token = &token_response.access_token;
         let access_token_id = *decode_token(&context.jwt_config, access_token)?.jti();
 
         assert_session(&db, &Some(access_token_id.into())).await;
 
         assert_eq!(
-            token_response.expires_in().deref(),
-            context.jwt_config.access_token_expiration()
+            *token_response.expires_in,
+            context.jwt_config.access_token_expiration
         );
-        assert!(!token_response.refresh_token().is_empty());
+        assert!(!token_response.refresh_token.is_empty());
         Ok(())
     }
 

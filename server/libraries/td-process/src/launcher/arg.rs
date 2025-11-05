@@ -10,7 +10,7 @@ use td_common::server::{
     BIN_FOLDER, INPUT_FOLDER, LOCK_FOLDER, LOG_FOLDER, OUTPUT_FOLDER, REQUEST_FOLDER,
     RESPONSE_FOLDER, RequestMessagePayload, SupervisorMessage, base, counter,
 };
-use td_objects::types::worker::FunctionInput;
+use td_objects::dxo::request::FunctionInput;
 use thiserror::Error;
 
 #[derive(Debug, Clone, EnumIter, EnumString, AsRefStr)]
@@ -160,8 +160,7 @@ impl MarkerKey {
             };
             match context {
                 FunctionInput::V0(_) => Ok("?".to_string()),
-                FunctionInput::V1(_) => Ok("?".to_string()),
-                FunctionInput::V2(v2) => Ok(v2.info().collection().to_string()),
+                FunctionInput::V2(v2) => Ok(v2.info.collection.to_string()),
             }
         } else {
             Ok("!".to_string())
@@ -178,8 +177,7 @@ impl MarkerKey {
             };
             match context {
                 FunctionInput::V0(_) => Ok("?".to_string()),
-                FunctionInput::V1(_) => Ok("?".to_string()),
-                FunctionInput::V2(v2) => Ok(v2.info().function().to_string()),
+                FunctionInput::V2(v2) => Ok(v2.info.function.to_string()),
             }
         } else {
             Ok("!".to_string())
@@ -187,7 +185,7 @@ impl MarkerKey {
     }
 
     fn worker<T: Clone>(message: &SupervisorMessage<T>) -> Result<String, ArgumentError> {
-        if let Some(file_stem) = message.file().file_stem() {
+        if let Some(file_stem) = message.file.file_stem() {
             Ok(base(file_stem.to_string_lossy().to_string().as_str()))
         } else {
             Ok("!".to_string())
@@ -195,7 +193,7 @@ impl MarkerKey {
     }
 
     fn attempt<T: Clone>(message: &SupervisorMessage<T>) -> Result<String, ArgumentError> {
-        Ok(counter(message.file()))
+        Ok(counter(&message.file))
     }
 }
 

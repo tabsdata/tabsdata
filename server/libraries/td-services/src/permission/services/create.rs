@@ -5,7 +5,12 @@
 use crate::permission::layers::{PermissionBuildService, is_permission_on_a_single_collection};
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext, refresh_authz_context};
-use td_objects::crudl::{CreateRequest, RequestContext};
+use td_objects::dxo::crudl::{CreateRequest, RequestContext};
+use td_objects::dxo::permission::defs::{
+    Permission, PermissionBuilder, PermissionCreate, PermissionDB, PermissionDBBuilder,
+    PermissionDBWithNames,
+};
+use td_objects::dxo::role::defs::RoleDB;
 use td_objects::rest_urls::RoleParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, SecAdmin, System};
@@ -14,12 +19,8 @@ use td_objects::tower_service::from::{
     UpdateService, With,
 };
 use td_objects::tower_service::sql::{By, SqlSelectService, insert};
-use td_objects::types::basic::{CollectionId, EntityId, PermissionId, RoleIdName};
-use td_objects::types::permission::{
-    Permission, PermissionBuilder, PermissionCreate, PermissionDB, PermissionDBBuilder,
-    PermissionDBWithNames,
-};
-use td_objects::types::role::RoleDB;
+use td_objects::types::id::{CollectionId, EntityId, PermissionId};
+use td_objects::types::id_name::RoleIdName;
 use td_tower::default_services::{Do, Else, If, TransactionProvider, conditional};
 use td_tower::from_fn::from_fn;
 use td_tower::{layers, service};
@@ -80,15 +81,14 @@ mod tests {
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::{TdError, assert_service_error};
-    use td_objects::crudl::RequestContext;
+    use td_objects::dxo::crudl::RequestContext;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_permission::{get_permission, seed_permission};
     use td_objects::test_utils::seed_role::seed_role;
     use td_objects::tower_service::authz::AuthzError;
-    use td_objects::types::basic::{
-        AccessTokenId, CollectionName, Description, EntityName, PermissionType, RoleId, RoleName,
-        UserId,
-    };
+    use td_objects::types::id::{AccessTokenId, RoleId, UserId};
+    use td_objects::types::string::{CollectionName, Description, EntityName, RoleName};
+    use td_objects::types::typed_enum::PermissionType;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -163,18 +163,18 @@ mod tests {
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
-        let found = get_permission(&db, response.id()).await?;
-        assert_eq!(response.id(), found.id());
-        assert_eq!(response.role_id(), found.role_id());
-        assert_eq!(response.permission_type(), found.permission_type());
-        assert_eq!(response.entity_type(), found.entity_type());
+        let found = get_permission(&db, &response.id).await?;
+        assert_eq!(response.id, found.id);
+        assert_eq!(response.role_id, found.role_id);
+        assert_eq!(response.permission_type, found.permission_type);
+        assert_eq!(response.entity_type, found.entity_type);
         assert_eq!(
-            response.entity_id().unwrap_or(EntityId::all_entities()),
-            *found.entity_id()
+            response.entity_id.unwrap_or(EntityId::all_entities()),
+            found.entity_id
         );
-        assert_eq!(response.granted_by_id(), found.granted_by_id());
-        assert_eq!(response.granted_on(), found.granted_on());
-        assert_eq!(response.fixed(), found.fixed());
+        assert_eq!(response.granted_by_id, found.granted_by_id);
+        assert_eq!(response.granted_on, found.granted_on);
+        assert_eq!(response.fixed, found.fixed);
         Ok(())
     }
 
@@ -185,7 +185,7 @@ mod tests {
     ) -> Result<(), TdError> {
         let coll0 = seed_collection(&db, &CollectionName::try_from("c0")?, &UserId::admin()).await;
         let role = seed_role(&db, RoleName::try_from("r0")?, Description::try_from("d")?).await;
-        let entity_id: EntityId = coll0.id().try_into()?;
+        let entity_id: EntityId = coll0.id.try_into()?;
         seed_permission(
             &db,
             PermissionType::CollectionAdmin,
@@ -201,7 +201,7 @@ mod tests {
             .unwrap()
             .build()?;
 
-        let request = RequestContext::with(AccessTokenId::default(), UserId::admin(), role.id())
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin(), role.id)
             .create(
                 RoleParam::builder()
                     .role(RoleIdName::try_from("r0")?)
@@ -215,18 +215,18 @@ mod tests {
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
-        let found = get_permission(&db, response.id()).await?;
-        assert_eq!(response.id(), found.id());
-        assert_eq!(response.role_id(), found.role_id());
-        assert_eq!(response.permission_type(), found.permission_type());
-        assert_eq!(response.entity_type(), found.entity_type());
+        let found = get_permission(&db, &response.id).await?;
+        assert_eq!(response.id, found.id);
+        assert_eq!(response.role_id, found.role_id);
+        assert_eq!(response.permission_type, found.permission_type);
+        assert_eq!(response.entity_type, found.entity_type);
         assert_eq!(
-            response.entity_id().unwrap_or(EntityId::all_entities()),
-            *found.entity_id()
+            response.entity_id.unwrap_or(EntityId::all_entities()),
+            found.entity_id
         );
-        assert_eq!(response.granted_by_id(), found.granted_by_id());
-        assert_eq!(response.granted_on(), found.granted_on());
-        assert_eq!(response.fixed(), found.fixed());
+        assert_eq!(response.granted_by_id, found.granted_by_id);
+        assert_eq!(response.granted_on, found.granted_on);
+        assert_eq!(response.fixed, found.fixed);
         Ok(())
     }
 
@@ -238,7 +238,7 @@ mod tests {
         let coll0 = seed_collection(&db, &CollectionName::try_from("c0")?, &UserId::admin()).await;
         let _ = seed_collection(&db, &CollectionName::try_from("c1")?, &UserId::admin()).await;
         let role = seed_role(&db, RoleName::try_from("r0")?, Description::try_from("d")?).await;
-        let entity_id: EntityId = coll0.id().try_into()?;
+        let entity_id: EntityId = coll0.id.try_into()?;
         seed_permission(
             &db,
             PermissionType::CollectionAdmin,
@@ -254,7 +254,7 @@ mod tests {
             .unwrap()
             .build()?;
 
-        let request = RequestContext::with(AccessTokenId::default(), UserId::admin(), role.id())
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin(), role.id)
             .create(
                 RoleParam::builder()
                     .role(RoleIdName::try_from("r0")?)

@@ -4,15 +4,13 @@
 
 use crate::function_run::services::list::FunctionRunListService;
 use crate::function_run::services::read::FunctionRunReadService;
-use getset::Getters;
 use ta_services::factory::ServiceFactory;
 
 mod list;
 mod read;
 
-#[derive(ServiceFactory, Getters)]
-#[getset(get = "pub")]
+#[derive(ServiceFactory)]
 pub struct FunctionRunServices {
-    list: FunctionRunListService,
-    read: FunctionRunReadService,
+    pub list: FunctionRunListService,
+    pub read: FunctionRunReadService,
 }

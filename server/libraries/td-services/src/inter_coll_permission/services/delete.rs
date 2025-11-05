@@ -5,18 +5,17 @@
 use crate::inter_coll_permission::layers::assert_collection_in_permission;
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext, refresh_authz_context};
-use td_objects::crudl::{DeleteRequest, RequestContext};
+use td_objects::dxo::crudl::{DeleteRequest, RequestContext};
+use td_objects::dxo::inter_collection_permission::defs::{
+    InterCollectionPermissionDB, InterCollectionPermissionDBWithNames,
+};
 use td_objects::rest_urls::InterCollectionPermissionParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, SecAdmin, System};
 use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlDeleteService, SqlSelectService};
-use td_objects::types::basic::{
-    CollectionId, CollectionIdName, InterCollectionPermissionId, InterCollectionPermissionIdName,
-};
-use td_objects::types::permission::{
-    InterCollectionPermissionDB, InterCollectionPermissionDBWithNames,
-};
+use td_objects::types::id::{CollectionId, InterCollectionPermissionId};
+use td_objects::types::id_name::{CollectionIdName, InterCollectionPermissionIdName};
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -68,18 +67,16 @@ mod tests {
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::{TdError, assert_service_error};
-    use td_objects::crudl::RequestContext;
+    use td_objects::dxo::crudl::RequestContext;
     use td_objects::rest_urls::InterCollectionPermissionParam;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_inter_collection_permission::{
         get_inter_collection_permissions, seed_inter_collection_permission,
     };
     use td_objects::tower_service::authz::AuthzError;
-    use td_objects::types::IdOrName;
-    use td_objects::types::basic::{
-        AccessTokenId, CollectionIdName, CollectionName, InterCollectionPermissionIdName, RoleId,
-        UserId,
-    };
+    use td_objects::types::id::{AccessTokenId, RoleId, UserId};
+    use td_objects::types::id_name::IdOrName;
+    use td_objects::types::string::CollectionName;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -150,7 +147,7 @@ mod tests {
 
         let c0 = seed_collection(&db, &CollectionName::try_from("c0")?, &UserId::admin()).await;
         let c1 = seed_collection(&db, &CollectionName::try_from("c1")?, &UserId::admin()).await;
-        let p = seed_inter_collection_permission(&db, c0.id(), &(**c1.id()).into()).await;
+        let p = seed_inter_collection_permission(&db, &c0.id, &(*c1.id).into()).await;
 
         let request = RequestContext::with(
             AccessTokenId::default(),
@@ -160,14 +157,14 @@ mod tests {
         .delete(
             InterCollectionPermissionParam::builder()
                 .collection(CollectionIdName::try_from("c0")?)
-                .permission(InterCollectionPermissionIdName::from_id(p.id()))
+                .permission(InterCollectionPermissionIdName::from_id(p.id))
                 .build()?,
         );
 
         let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
 
-        let permissions = get_inter_collection_permissions(&db, c0.id()).await?;
+        let permissions = get_inter_collection_permissions(&db, &c0.id).await?;
         assert_eq!(permissions.len(), 0);
         Ok(())
     }
@@ -181,13 +178,13 @@ mod tests {
 
         let c0 = seed_collection(&db, &CollectionName::try_from("c0")?, &UserId::admin()).await;
         let c1 = seed_collection(&db, &CollectionName::try_from("c1")?, &UserId::admin()).await;
-        let p = seed_inter_collection_permission(&db, c0.id(), &(**c1.id()).into()).await;
+        let p = seed_inter_collection_permission(&db, &c0.id, &(*c1.id).into()).await;
 
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).delete(
                 InterCollectionPermissionParam::builder()
                     .collection(CollectionIdName::try_from("c0")?)
-                    .permission(InterCollectionPermissionIdName::from_id(p.id()))
+                    .permission(InterCollectionPermissionIdName::from_id(p.id))
                     .build()?,
             );
 

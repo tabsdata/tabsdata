@@ -3,11 +3,12 @@
 //
 
 use std::collections::HashMap;
+use std::ops::Deref;
 use td_error::TdError;
-use td_objects::types::basic::TableDependency;
-use td_objects::types::dependency::DependencyDBRead;
-use td_objects::types::table::TableDBWithNames;
-use td_objects::types::table_ref::VersionedTableRef;
+use td_objects::dxo::dependency::defs::DependencyDBRead;
+use td_objects::dxo::table::defs::TableDBWithNames;
+use td_objects::table_ref::VersionedTableRef;
+use td_objects::types::composed::TableDependency;
 use td_tower::extractors::Input;
 
 pub async fn vec_create_table_dependency(
@@ -16,18 +17,18 @@ pub async fn vec_create_table_dependency(
 ) -> Result<Vec<TableDependency>, TdError> {
     let tables = tables
         .iter()
-        .map(|t| (t.table_id(), t))
+        .map(|t| (t.table_id, t))
         .collect::<HashMap<_, _>>();
 
     let table_deps = dependencies
         .iter()
         .filter_map(|d| {
-            let table = tables.get(d.table_id())?;
-            let versions = &**d.table_versions();
+            let table = tables.get(&d.table_id)?;
+            let versions = d.table_versions.deref().clone();
             Some(TableDependency::new(VersionedTableRef::new(
-                Some(table.collection().clone()),
-                table.name().clone(),
-                versions.clone(),
+                Some(table.collection.clone()),
+                table.name.clone(),
+                versions,
             )))
         })
         .collect::<Vec<_>>();

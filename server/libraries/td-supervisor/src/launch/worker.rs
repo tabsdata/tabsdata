@@ -122,7 +122,7 @@ pub async fn notify(
     error: Option<String>,
 ) -> Result<bool, RunnerError> {
     let mut failed = false;
-    let payload = match request_message.payload() {
+    let payload = match &request_message.payload {
         SupervisorRequestMessagePayload(payload) => payload,
         SupervisorResponseMessagePayload(_) | SupervisorExceptionMessagePayload(_) => {
             return Err(InvalidMessageType);

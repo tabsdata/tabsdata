@@ -56,7 +56,6 @@ td-security = { workspace = true }
 
 derive_builder = { workspace = true }
 futures-util = { workspace = true }
-getset = { workspace = true }
 itertools = { workspace = true }
 regex = { workspace = true }
 serde = { workspace = true, features = ["derive"] }

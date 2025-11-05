@@ -17,11 +17,11 @@ mod routes {
     };
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
-    use td_objects::crudl::{ListParams, RequestContext};
+    use td_objects::dxo::crudl::{ListParams, RequestContext};
+    use td_objects::dxo::role::defs::{Role, RoleCreate, RoleUpdate};
     use td_objects::rest_urls::{
         CREATE_ROLE, DELETE_ROLE, GET_ROLE, LIST_ROLES, RoleParam, UPDATE_ROLE,
     };
-    use td_objects::types::role::{Role, RoleCreate, RoleUpdate};
     use td_services::role::services::RoleServices;
     use tower::ServiceExt;
 
@@ -35,7 +35,7 @@ mod routes {
         Json(request): Json<RoleCreate>,
     ) -> Result<CreateStatus<Role>, ErrorStatus> {
         let request = context.create((), request);
-        let response = state.create().service().await.oneshot(request).await?;
+        let response = state.create.service().await.oneshot(request).await?;
         Ok(CreateStatus::CREATED(response))
     }
 
@@ -47,7 +47,7 @@ mod routes {
         Path(role_path): Path<RoleParam>,
     ) -> Result<DeleteStatus<NoContent>, ErrorStatus> {
         let request = context.delete(role_path);
-        let response = state.delete().service().await.oneshot(request).await?;
+        let response = state.delete.service().await.oneshot(request).await?;
         Ok(DeleteStatus::OK(response))
     }
 
@@ -59,7 +59,7 @@ mod routes {
         Query(query_params): Query<ListParams>,
     ) -> Result<ListStatus<Role>, ErrorStatus> {
         let request = context.list((), query_params);
-        let response = state.list().service().await.oneshot(request).await?;
+        let response = state.list.service().await.oneshot(request).await?;
         Ok(ListStatus::OK(response))
     }
 
@@ -71,7 +71,7 @@ mod routes {
         Path(role_param): Path<RoleParam>,
     ) -> Result<GetStatus<Role>, ErrorStatus> {
         let request = context.read(role_param);
-        let response = state.read().service().await.oneshot(request).await?;
+        let response = state.read.service().await.oneshot(request).await?;
         Ok(GetStatus::OK(response))
     }
 
@@ -84,7 +84,7 @@ mod routes {
         Json(request): Json<RoleUpdate>,
     ) -> Result<UpdateStatus<Role>, ErrorStatus> {
         let request = context.update(role_param, request);
-        let response = state.update().service().await.oneshot(request).await?;
+        let response = state.update.service().await.oneshot(request).await?;
         Ok(UpdateStatus::OK(response))
     }
 }

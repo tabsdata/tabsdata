@@ -13,15 +13,15 @@ use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use std::ops::Deref;
 use td_error::{TdError, td_error};
-use td_objects::types::basic::{FunctionName, TransactionByStr, TransactionKey};
-use td_objects::types::dependency::DependencyDBWithNames;
-use td_objects::types::execution::{
-    FunctionVersionNode, GraphDependency, GraphEdge, GraphNode, GraphOutput,
+use td_objects::dxo::dependency::defs::DependencyDBWithNames;
+use td_objects::dxo::function::defs::FunctionDBWithNames;
+use td_objects::dxo::table::defs::TableDBWithNames;
+use td_objects::dxo::trigger::defs::TriggerDBWithNames;
+use td_objects::execution::graph::{
+    FunctionNode, GraphDependency, GraphEdge, GraphNode, GraphOutput,
 };
-use td_objects::types::function::FunctionDBWithNames;
-use td_objects::types::table::TableDBWithNames;
-use td_objects::types::table_ref::Versions;
-use td_objects::types::trigger::TriggerDBWithNames;
+use td_objects::table_ref::Versions;
+use td_objects::types::string::{FunctionName, TransactionByStr, TransactionKey};
 
 #[td_error]
 enum GraphError {
@@ -86,7 +86,7 @@ impl<'a> GraphBuilder<'a> {
 
     /// Builds a `Graph` from the data and trigger graphs, starting from a trigger function.
     /// Nodes and edges are added to the graph based on the table inputs, table outputs and triggers.
-    pub fn build(self, trigger: FunctionVersionNode) -> Result<ExecutionGraph<Versions>, TdError> {
+    pub fn build(self, trigger: FunctionNode) -> Result<ExecutionGraph<Versions>, TdError> {
         let mut graph = DiGraph::new();
         let mut node_map = HashMap::new();
 
@@ -113,7 +113,7 @@ impl<'a> GraphBuilder<'a> {
             let target_index = add_if_absent(&mut graph, &mut node_map, target);
 
             let graph_output = GraphOutput::builder()
-                .output_pos(table.function_param_pos().clone())
+                .output_pos(table.function_param_pos.clone())
                 .build()?;
             graph.add_edge(
                 source_index,
@@ -129,10 +129,10 @@ impl<'a> GraphBuilder<'a> {
             let target_index = add_if_absent(&mut graph, &mut node_map, target);
 
             let graph_dependency = GraphDependency::builder()
-                .dep_pos(dep.dep_pos())
-                .self_dependency(function.id() == table.function_version_id())
+                .dep_pos(dep.dep_pos.clone())
+                .self_dependency(function.id == table.function_version_id)
                 .build()?;
-            let versions = dep.table_versions().deref();
+            let versions = dep.table_versions.deref();
             let edge = GraphEdge::dependency(versions.clone(), graph_dependency);
 
             graph.add_edge(source_index, target_index, edge);
@@ -174,7 +174,7 @@ impl<V> ExecutionGraph<V> {
         let partial = PartialGraph::trigger_graph(self)?;
         toposort(&partial.inner, None).map_err(|err| {
             let function = &partial.inner[err.node_id()];
-            GraphError::Cyclic(function.name().clone())
+            GraphError::Cyclic(function.name.clone())
         })?;
         Ok(())
     }
@@ -230,7 +230,7 @@ impl<F> PartialGraph<F> {
     /// Creates a partial graph containing only trigger edges.
     pub fn trigger_graph(
         original: &ExecutionGraph<F>,
-    ) -> Result<PartialGraph<&FunctionVersionNode>, TdError> {
+    ) -> Result<PartialGraph<&FunctionNode>, TdError> {
         let mut new_graph = DiGraph::new();
         let mut node_map = HashMap::new();
 
@@ -323,15 +323,14 @@ impl<F> PartialGraph<F> {
 
 #[cfg(test)]
 mod tests {
-    use crate::graphs::GraphBuilder;
-    use crate::graphs::{GraphEdge, GraphNode, PartialGraph, TransactionKey};
+    use super::*;
     use crate::test_utils::graph::test_graph;
     use crate::test_utils::transaction::TestTransactionBy;
-    use petgraph::visit::EdgeRef;
     use std::collections::HashSet;
-    use td_objects::types::test_utils::execution::{
-        FUNCTION_NAMES, TABLE_NAMES, dependency, function_node, table, table_node, trigger,
-    };
+    use td_objects::test_utils::graph::dependency;
+    use td_objects::test_utils::graph::table;
+    use td_objects::test_utils::graph::trigger;
+    use td_objects::test_utils::graph::{FUNCTION_NAMES, TABLE_NAMES, function_node, table_node};
 
     #[tokio::test]
     async fn test_graph_builder_build() {
@@ -413,7 +412,7 @@ mod tests {
                 let source = &graph.inner[edge.source()];
                 let target = &graph.inner[edge.target()];
                 match (source, target) {
-                    (GraphNode::Function(f), GraphNode::Table(t)) => match (f.name(), t.name()) {
+                    (GraphNode::Function(f), GraphNode::Table(t)) => match (&f.name, &t.name) {
                         (function, table)
                             if function == &FUNCTION_NAMES[0] && table == &TABLE_NAMES[0] =>
                         {
@@ -431,7 +430,7 @@ mod tests {
                         }
                         _ => unreachable!(),
                     },
-                    (GraphNode::Table(t), GraphNode::Function(f)) => match (t.name(), f.name()) {
+                    (GraphNode::Table(t), GraphNode::Function(f)) => match (&t.name, &f.name) {
                         (table, function)
                             if table == &TABLE_NAMES[0] && function == &FUNCTION_NAMES[1] =>
                         {
@@ -470,9 +469,9 @@ mod tests {
         assert_eq!(edges.len(), 1);
         let edge = edges[0];
         let source = trigger_graph.inner[edge.source()];
-        assert_eq!(*source.name(), FUNCTION_NAMES[0]);
+        assert_eq!(source.name, FUNCTION_NAMES[0]);
         let target = trigger_graph.inner[edge.target()];
-        assert_eq!(*target.name(), FUNCTION_NAMES[1]);
+        assert_eq!(target.name, FUNCTION_NAMES[1]);
     }
 
     #[tokio::test]

@@ -5,15 +5,17 @@
 use crate::role::layers::assert_not_fixed;
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
-use td_objects::crudl::{DeleteRequest, RequestContext};
+use td_objects::dxo::crudl::{DeleteRequest, RequestContext};
+use td_objects::dxo::permission::defs::PermissionDB;
+use td_objects::dxo::role::defs::{RoleDB, RoleDBWithNames};
+use td_objects::dxo::user_role::defs::UserRoleDB;
 use td_objects::rest_urls::RoleParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, SecAdmin, System};
 use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlDeleteService, SqlSelectService};
-use td_objects::types::basic::{RoleId, RoleIdName};
-use td_objects::types::permission::PermissionDB;
-use td_objects::types::role::{RoleDB, RoleDBWithNames, UserRoleDB};
+use td_objects::types::id::RoleId;
+use td_objects::types::id_name::RoleIdName;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -54,18 +56,20 @@ mod tests {
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::TdError;
-    use td_objects::crudl::RequestContext;
+    use td_objects::dxo::crudl::RequestContext;
+    use td_objects::dxo::permission::defs::PermissionDBWithNames;
+    use td_objects::dxo::user_role::defs::UserRoleDBWithNames;
     use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_permission::seed_permission;
     use td_objects::test_utils::seed_role::seed_role;
     use td_objects::test_utils::seed_user::seed_user;
     use td_objects::test_utils::seed_user_role::seed_user_role;
-    use td_objects::types::basic::{
-        AccessTokenId, Description, PermissionType, RoleName, UserEnabled, UserId, UserName,
-    };
-    use td_objects::types::permission::PermissionDBWithNames;
-    use td_objects::types::role::UserRoleDBWithNames;
-    use td_objects::types::{IdOrName, SqlEntity};
+    use td_objects::types::SqlEntity;
+    use td_objects::types::bool::UserEnabled;
+    use td_objects::types::id::{AccessTokenId, UserId};
+    use td_objects::types::id_name::IdOrName;
+    use td_objects::types::string::{Description, RoleName, UserName};
+    use td_objects::types::typed_enum::PermissionType;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -101,14 +105,14 @@ mod tests {
     #[tokio::test]
     async fn test_delete_role_by_id(db: DbPool) -> Result<(), TdError> {
         let (hero, _villain) = setup_roles(&db).await;
-        test_delete_role(&db, RoleIdName::try_from(format!("~{}", hero.id()))?).await
+        test_delete_role(&db, RoleIdName::try_from(format!("~{}", hero.id))?).await
     }
 
     #[td_test::test(sqlx)]
     #[tokio::test]
     async fn test_delete_role_by_name(db: DbPool) -> Result<(), TdError> {
         let (hero, _villain) = setup_roles(&db).await;
-        test_delete_role(&db, RoleIdName::try_from(format!("{}", hero.name()))?).await
+        test_delete_role(&db, RoleIdName::try_from(format!("{}", hero.name))?).await
     }
 
     async fn setup_roles(db: &DbPool) -> (RoleDB, RoleDB) {
@@ -135,8 +139,8 @@ mod tests {
         .await;
 
         // User Roles
-        let _user_hero_role = seed_user_role(db, user.id(), hero_role.id()).await;
-        let _user_hero_role = seed_user_role(db, user.id(), villain_role.id()).await;
+        let _user_hero_role = seed_user_role(db, &user.id, &hero_role.id).await;
+        let _user_hero_role = seed_user_role(db, &user.id, &villain_role.id).await;
 
         // Permissions
         let _hero_permissions = seed_permission(

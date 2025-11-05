@@ -5,7 +5,6 @@
 //! API Server CLI configuration and parameters.
 
 use clap::{Args, ValueEnum};
-use getset::Getters;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::net::{AddrParseError, SocketAddr};
@@ -14,36 +13,35 @@ use strum::{Display, EnumString, ParseError};
 use ta_services::factory::FieldAccessors;
 use td_database::sql::SqliteConfig;
 use td_error::{TdError, td_error};
-use td_objects::types::basic::{ApiServerAddresses, InternalServerAddresses, NonEmptyAddresses};
+use td_objects::types::addresses::{
+    ApiServerAddresses, InternalServerAddresses, NonEmptyAddresses,
+};
 use td_security::config::PasswordHashingConfig;
 use td_services::auth::jwt::JwtConfig;
 use td_storage::{MountDef, StorageError};
 use te_apiserver::config::{ExtendedConfig, ExtendedParams};
 use te_execution::transaction::TransactionBy;
 
-#[derive(Clone, Serialize, Deserialize, Getters, FieldAccessors)]
-#[getset(get = "pub")]
+#[derive(Clone, Serialize, Deserialize, FieldAccessors)]
 pub struct Config {
     #[serde(default)]
-    addresses: ApiServerAddresses,
+    pub addresses: ApiServerAddresses,
     #[serde(default)]
-    internal_addresses: InternalServerAddresses,
-    password: PasswordHashingConfig,
-    jwt: JwtConfig,
-    request_timeout: i64, // in seconds
-    ssl_folder: PathBuf,
-    database: SqliteConfig,
+    pub internal_addresses: InternalServerAddresses,
+    pub password: PasswordHashingConfig,
+    pub jwt: JwtConfig,
+    pub request_timeout: i64, // in seconds
+    pub ssl_folder: PathBuf,
+    pub database: SqliteConfig,
     #[serde(default)]
-    storage: Option<StorageConfig>,
+    pub storage: Option<StorageConfig>,
     #[serde(default)]
-    transaction_by: TransactionBy,
+    pub transaction_by: TransactionBy,
     #[serde(flatten)]
-    extended_config: ExtendedConfig,
+    pub extended_config: ExtendedConfig,
 }
 
-#[derive(Clone, Serialize, Deserialize, Getters, Debug)]
-#[getset(get = "pub")]
-#[derive(Default)]
+#[derive(Clone, Serialize, Deserialize, Debug, Default)]
 pub struct StorageConfig {
     #[serde(default)]
     url: Option<String>,
@@ -137,8 +135,7 @@ pub enum DbSchema {
     Auto,
 }
 
-#[derive(Debug, Clone, Getters, Args)]
-#[getset(get = "pub")]
+#[derive(Debug, Clone, Args)]
 pub struct Params {
     #[clap(long, alias = "db")]
     /// Database URL (it must be a file:// URI)
@@ -169,7 +166,7 @@ pub struct Params {
     transaction_by: Option<TransactionBy>,
     #[clap(long)]
     /// The apiserver will create or upgrade the DB schema on startup, default is false
-    db_schema: Option<DbSchema>,
+    pub db_schema: Option<DbSchema>,
     #[clap(long)]
     /// The etc directory
     etc: Option<String>, // not used via clap.Added for etc_service to work correctly with CLI option
@@ -188,7 +185,7 @@ impl Params {
                 .storage_url
                 .as_ref()
                 .map(|url| url.to_string())
-                .or(self.storage_url().clone());
+                .or(self.storage_url.clone());
             resolved_storage.url = resolved_storage_url;
         }
         let resolved_storage = Some(resolved_storage);
@@ -207,48 +204,46 @@ impl Params {
                 .transpose()?
                 .map(InternalServerAddresses)
                 .unwrap_or(config.internal_addresses.clone()),
-            password: config.password().clone(),
+            password: config.password.clone(),
             jwt: {
                 let secret = self
                     .jwt_secret
                     .to_owned()
-                    .unwrap_or_else(|| config.jwt().secret().to_owned().unwrap());
+                    .unwrap_or_else(|| config.jwt.secret.clone().unwrap());
                 let expiration = self
                     .access_jwt_expiration
-                    .unwrap_or_else(|| *config.jwt().access_token_expiration());
+                    .unwrap_or(config.jwt.access_token_expiration);
                 JwtConfig::new(secret, expiration)
             },
-            request_timeout: self
-                .request_timeout
-                .unwrap_or_else(|| *config.request_timeout()),
+            request_timeout: self.request_timeout.unwrap_or(config.request_timeout),
             ssl_folder: self
                 .ssl_folder
                 .clone()
-                .unwrap_or_else(|| config.ssl_folder().clone()),
+                .unwrap_or_else(|| config.ssl_folder.clone()),
             database: self
                 .database_url
                 .as_ref()
                 .map(|db_url| {
-                    let mut database_config_builder = config.database().to_builder();
+                    let mut database_config_builder = config.database.to_builder();
                     database_config_builder.url(Some(db_url.to_string()));
                     database_config_builder.build().unwrap()
                 })
-                .unwrap_or_else(|| config.database().clone()),
+                .unwrap_or_else(|| config.database.clone()),
             storage: resolved_storage,
             transaction_by: self
                 .transaction_by
                 .clone()
-                .unwrap_or_else(|| config.transaction_by().clone()),
+                .unwrap_or_else(|| config.transaction_by.clone()),
             extended_config: self
                 .extended_params
                 .resolve(config.extended_config.clone())?,
         };
 
-        if config.jwt().secret().is_none() {
+        if config.jwt.secret.is_none() {
             Err(ConfigError::MissingJWTSecret)?
         }
 
-        match config.database().url() {
+        match &config.database.url {
             None => Err(ConfigError::MissingDatabaseUrl)?,
             Some(url) if !url.starts_with("file://") => {
                 Err(ConfigError::InvalidDatabaseUrl(url.to_string()))?;
@@ -296,25 +291,25 @@ mod tests {
     use chrono::Duration;
     use nonempty::nonempty;
     use std::net::SocketAddr;
-    use std::ops::Deref;
     use td_common::id;
+    use td_objects::types::addresses::NonEmptyAddresses;
 
     #[test]
     fn test_default_config() {
         let config = Config::default();
-        assert_eq!(config.database().url(), &None);
+        assert_eq!(config.database.url, None);
         assert_eq!(
-            config.addresses().deref(),
-            &NonEmptyAddresses::new(nonempty![SocketAddr::from(([127, 0, 0, 1], 2457))])
+            *config.addresses,
+            NonEmptyAddresses::new(nonempty![SocketAddr::from(([127, 0, 0, 1], 2457))])
         );
-        id::Id::try_from(config.jwt().secret().as_ref().unwrap()).unwrap();
+        id::Id::try_from(config.jwt.secret.as_ref().unwrap()).unwrap();
         assert!(config.storage.is_some());
         assert!(config.clone().storage.unwrap().url.is_none());
         assert_eq!(
-            *config.jwt().access_token_expiration(),
+            config.jwt.access_token_expiration,
             Duration::hours(1).num_seconds()
         );
-        assert_eq!(*config.request_timeout(), 60);
+        assert_eq!(config.request_timeout, 60);
     }
 
     #[test]
@@ -345,13 +340,10 @@ mod tests {
 
         let resolved_config = params.resolve(default_config.clone()).unwrap();
 
+        assert_eq!(resolved_config.jwt.secret, Some("NEW_SECRET".to_string()));
         assert_eq!(
-            resolved_config.jwt().secret(),
-            &Some("NEW_SECRET".to_string())
-        );
-        assert_eq!(
-            resolved_config.addresses().deref(),
-            &NonEmptyAddresses::new(nonempty![SocketAddr::from(([127, 0, 0, 1], 2457))])
+            *resolved_config.addresses,
+            NonEmptyAddresses::new(nonempty![SocketAddr::from(([127, 0, 0, 1], 2457))])
         );
         #[cfg(target_os = "windows")]
         assert_eq!(
@@ -360,7 +352,7 @@ mod tests {
         );
         #[cfg(not(target_os = "windows"))]
         assert_eq!(
-            resolved_config.database().url().as_ref().unwrap(),
+            resolved_config.database.url.as_ref().unwrap(),
             "file:///test.db"
         );
         assert!(resolved_config.clone().storage.is_some());
@@ -381,12 +373,12 @@ mod tests {
                 .clone()
                 .storage
                 .unwrap()
-                .url()
+                .url
                 .as_ref()
                 .unwrap(),
             "file:///storage"
         );
-        assert_eq!(*resolved_config.request_timeout(), 120);
+        assert_eq!(resolved_config.request_timeout, 120);
 
         // Test with some fields not set in Params
         let partial_params = Params {
@@ -414,24 +406,18 @@ mod tests {
         let partially_resolved_config = partial_params.resolve(default_config.clone()).unwrap();
 
         assert_eq!(
-            partially_resolved_config.addresses().deref(),
-            default_config.addresses().deref()
+            partially_resolved_config.addresses,
+            default_config.addresses
         );
         assert_eq!(
-            partially_resolved_config.internal_addresses().deref(),
-            default_config.internal_addresses().deref()
+            partially_resolved_config.internal_addresses,
+            default_config.internal_addresses
         );
+        assert_eq!(resolved_config.jwt.secret, Some("NEW_SECRET".to_string()));
+        assert_eq!(partially_resolved_config.jwt.access_token_expiration, 1800);
         assert_eq!(
-            resolved_config.jwt().secret(),
-            &Some("NEW_SECRET".to_string())
-        );
-        assert_eq!(
-            *partially_resolved_config.jwt().access_token_expiration(),
-            1800
-        );
-        assert_eq!(
-            *partially_resolved_config.request_timeout(),
-            *default_config.request_timeout()
+            partially_resolved_config.request_timeout,
+            default_config.request_timeout
         );
     }
 }

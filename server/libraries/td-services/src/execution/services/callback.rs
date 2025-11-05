@@ -6,18 +6,20 @@ use crate::execution::layers::update_status::{
     update_function_run_status, update_table_data_version_status, update_worker_status,
 };
 use ta_services::factory::service_factory;
-use td_objects::crudl::UpdateRequest;
+use td_objects::dxo::crudl::UpdateRequest;
+use td_objects::dxo::function_run::defs::{
+    FunctionRunDB, UpdateFunctionRunDB, UpdateFunctionRunDBBuilder,
+};
+use td_objects::dxo::worker::defs::{
+    CallbackRequest, UpdateWorkerDB, UpdateWorkerDBBuilder, UpdateWorkerExecution,
+};
 use td_objects::rest_urls::FunctionRunIdParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::from::{
     BuildService, ExtractDataService, ExtractNameService, ExtractService, TryIntoService, With,
 };
 use td_objects::tower_service::sql::{By, SqlSelectAllService};
-use td_objects::types::basic::FunctionRunId;
-use td_objects::types::execution::{
-    CallbackRequest, FunctionRunDB, UpdateFunctionRunDB, UpdateFunctionRunDBBuilder,
-    UpdateWorkerDB, UpdateWorkerDBBuilder, UpdateWorkerExecution,
-};
+use td_objects::types::id::FunctionRunId;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -74,18 +76,18 @@ mod tests {
     use td_common::status::ExitStatus;
     use td_database::sql::DbPool;
     use td_error::TdError;
-    use td_objects::crudl::{RequestContext, handle_sql_err};
+    use td_objects::dxo::crudl::{RequestContext, handle_sql_err};
+    use td_objects::dxo::function_run::defs::FunctionRunDBWithNames;
+    use td_objects::dxo::request::FunctionOutput;
+    use td_objects::dxo::request::v2::{FunctionOutputV2, TableInfo, WrittenTableV2};
+    use td_objects::dxo::table_data_version::defs::TableDataVersionDBWithNames;
     use td_objects::sql::SelectBy;
-    use td_objects::types::basic::{
-        AccessTokenId, CollectionName, ColumnCount, ExecutionStatus, FunctionName,
-        FunctionRunStatus, RowCount, SchemaHash, TableName, TableNameDto, TransactionStatus,
-        UserId, WorkerId,
-    };
-    use td_objects::types::basic::{RoleId, TableDependencyDto};
-    use td_objects::types::execution::TableDataVersionDBWithNames;
-    use td_objects::types::execution::{FunctionRunDB, FunctionRunDBWithNames};
-    use td_objects::types::worker::FunctionOutput;
-    use td_objects::types::worker::v2::{FunctionOutputV2, TableInfo, WrittenTableV2};
+    use td_objects::types::composed::TableDependencyDto;
+    use td_objects::types::i64::{ColumnCount, RowCount};
+    use td_objects::types::id::{AccessTokenId, RoleId, UserId, WorkerId};
+    use td_objects::types::string::{CollectionName, FunctionName, TableNameDto};
+    use td_objects::types::string::{SchemaHash, TableName};
+    use td_objects::types::typed_enum::{ExecutionStatus, FunctionRunStatus, TransactionStatus};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -147,7 +149,7 @@ mod tests {
                 .flat_map(|t| &t.functions)
                 .find(|f| f.name.as_str() == callback_function)
                 .unwrap();
-            let function_run = *f[&test_function].id();
+            let function_run = *f[&test_function].id;
 
             async move {
                 let response: CallbackRequest = ResponseMessagePayloadBuilder::default()
@@ -529,7 +531,7 @@ mod tests {
         // Assertions
         let queries = DaoQueries::default();
         let function_runs: Vec<FunctionRunDB> = queries
-            .select_by::<FunctionRunDBWithNames>(&(&FunctionName::try_from("f_0")?))?
+            .select_by::<FunctionRunDBWithNames>(&FunctionName::try_from("f_0")?)?
             .build_query_as()
             .fetch_all(&db)
             .await
@@ -545,16 +547,13 @@ mod tests {
             .map_err(handle_sql_err)?;
         assert_eq!(table_data_versions.len(), 1);
         let table_data_version = &table_data_versions[0];
+        assert_eq!(table_data_version.triggered_on, function_run.triggered_on);
         assert_eq!(
-            table_data_version.triggered_on(),
-            function_run.triggered_on()
+            table_data_version.triggered_by_id,
+            function_run.triggered_by_id
         );
-        assert_eq!(
-            table_data_version.triggered_by_id(),
-            function_run.triggered_by_id()
-        );
-        assert_eq!(table_data_version.status(), function_run.status());
-        assert_eq!(*table_data_version.has_data(), Some(false.into()));
+        assert_eq!(table_data_version.status, function_run.status);
+        assert_eq!(table_data_version.has_data, Some(false.into()));
 
         let queries = DaoQueries::default();
         let table_data_versions: Vec<TableDataVersionDBWithNames> = queries
@@ -565,26 +564,23 @@ mod tests {
             .map_err(handle_sql_err)?;
         assert_eq!(table_data_versions.len(), 1);
         let table_data_version = &table_data_versions[0];
+        assert_eq!(table_data_version.triggered_on, function_run.triggered_on);
         assert_eq!(
-            table_data_version.triggered_on(),
-            function_run.triggered_on()
+            table_data_version.triggered_by_id,
+            function_run.triggered_by_id
         );
+        assert_eq!(table_data_version.status, function_run.status);
+        assert_eq!(table_data_version.has_data, Some(true.into()));
         assert_eq!(
-            table_data_version.triggered_by_id(),
-            function_run.triggered_by_id()
-        );
-        assert_eq!(table_data_version.status(), function_run.status());
-        assert_eq!(*table_data_version.has_data(), Some(true.into()));
-        assert_eq!(
-            *table_data_version.column_count(),
+            table_data_version.column_count,
             Some(ColumnCount::try_from(1i64)?)
         );
         assert_eq!(
-            *table_data_version.row_count(),
+            table_data_version.row_count,
             Some(RowCount::try_from(2i64)?)
         );
         assert_eq!(
-            *table_data_version.schema_hash(),
+            table_data_version.schema_hash,
             Some(SchemaHash::try_from("hash")?)
         );
 

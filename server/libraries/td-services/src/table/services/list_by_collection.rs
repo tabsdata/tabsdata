@@ -4,16 +4,19 @@
 
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
-use td_objects::crudl::{ListRequest, ListResponse, RequestContext};
+use td_objects::dxo::collection::defs::CollectionDB;
+use td_objects::dxo::crudl::{ListRequest, ListResponse, RequestContext};
+use td_objects::dxo::table::defs::{Table, TableDBRead};
+use td_objects::rest_urls::params::CollectionAtName;
 use td_objects::sql::{DaoQueries, NoListFilter};
 use td_objects::tower_service::authz::{
     AuthzOn, CollAdmin, CollDev, CollExec, CollRead, InterCollRead,
 };
 use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlListService, SqlSelectService};
-use td_objects::types::basic::{AtTime, CollectionId, CollectionIdName, TableStatus};
-use td_objects::types::collection::CollectionDB;
-use td_objects::types::table::{CollectionAtName, Table};
+use td_objects::types::id::CollectionId;
+use td_objects::types::id_name::CollectionIdName;
+use td_objects::types::timestamp::AtTime;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -40,8 +43,14 @@ fn service() {
         // extract attime (natural order)
         from_fn(With::<CollectionAtName>::extract::<AtTime>),
         // list
-        from_fn(TableStatus::active_or_frozen),
-        from_fn(By::<CollectionId>::list_versions_at::<CollectionAtName, NoListFilter, Table>),
+        from_fn(
+            By::<CollectionId>::list_versions_at::<
+                CollectionAtName,
+                NoListFilter,
+                { TableDBRead::Available },
+                Table,
+            >
+        ),
     )
 }
 
@@ -53,15 +62,14 @@ mod tests {
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::TdError;
-    use td_objects::crudl::{ListParams, ListParamsBuilder};
+    use td_objects::dxo::crudl::{ListParams, ListParamsBuilder};
+    use td_objects::dxo::function::defs::{FunctionRegister, FunctionUpdate};
     use td_objects::rest_urls::{FunctionParam, TableParam};
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_function::seed_function;
-    use td_objects::types::basic::{
-        AccessTokenId, AtTime, BundleId, CollectionName, Decorator, RoleId, TableName,
-        TableNameDto, UserId,
-    };
-    use td_objects::types::function::{FunctionRegister, FunctionUpdate};
+    use td_objects::types::id::{AccessTokenId, BundleId, RoleId, UserId};
+    use td_objects::types::string::{CollectionName, TableName, TableNameDto};
+    use td_objects::types::typed_enum::Decorator;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -88,9 +96,13 @@ mod tests {
                 // extract attime (natural order)
                 type_of_val(&With::<CollectionAtName>::extract::<AtTime>),
                 // list
-                type_of_val(&TableStatus::active_or_frozen),
                 type_of_val(
-                    &By::<CollectionId>::list_versions_at::<CollectionAtName, NoListFilter, Table>,
+                    &By::<CollectionId>::list_versions_at::<
+                        CollectionAtName,
+                        NoListFilter,
+                        { TableDBRead::Available },
+                        Table,
+                    >,
                 ),
             ]);
     }
@@ -145,7 +157,7 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
                 FunctionParam::builder()
-                    .try_collection(format!("{}", collection.name()))?
+                    .try_collection(format!("{}", collection.name))?
                     .try_function("joaquin")?
                     .build()?,
                 update.clone(),
@@ -161,7 +173,7 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).delete(
                 TableParam::builder()
-                    .try_collection(format!("{}", collection.name()))?
+                    .try_collection(format!("{}", collection.name))?
                     .try_table("table_2")?
                     .build()?,
             );
@@ -180,7 +192,7 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
                 CollectionAtName::builder()
-                    .try_collection(format!("~{}", collection.id()))?
+                    .try_collection(format!("~{}", collection.id))?
                     .at(t0)
                     .build()?,
                 ListParams::default(),
@@ -191,7 +203,7 @@ mod tests {
             .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
-        let data = response.data();
+        let data = response.data;
 
         assert_eq!(data.len(), 0);
 
@@ -199,13 +211,12 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
                 CollectionAtName::builder()
-                    .try_collection(format!("~{}", collection.id()))?
+                    .try_collection(format!("~{}", collection.id))?
                     .at(t1)
                     .build()?,
                 ListParamsBuilder::default()
                     .order_by("name".to_string())
-                    .build()
-                    .unwrap(),
+                    .build()?,
             );
 
         let service = TableListByCollectionService::with_defaults(db.clone())
@@ -213,17 +224,17 @@ mod tests {
             .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
-        let data = response.data();
+        let data = response.data;
 
         assert_eq!(data.len(), 2);
-        assert_eq!(data[0].name(), &TableName::try_from("table_1")?);
-        assert_eq!(data[1].name(), &TableName::try_from("table_2")?);
+        assert_eq!(data[0].name, TableName::try_from("table_1")?);
+        assert_eq!(data[1].name, TableName::try_from("table_2")?);
 
         // t2 -> table_1
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
                 CollectionAtName::builder()
-                    .try_collection(format!("~{}", collection.id()))?
+                    .try_collection(format!("~{}", collection.id))?
                     .at(t2)
                     .build()?,
                 ListParams::default(),
@@ -234,10 +245,10 @@ mod tests {
             .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
-        let data = response.data();
+        let data = response.data;
 
         assert_eq!(data.len(), 1);
-        assert_eq!(data[0].name(), &TableName::try_from("table_1")?);
+        assert_eq!(data[0].name, TableName::try_from("table_1")?);
         Ok(())
     }
 }

@@ -5,8 +5,8 @@
 use crate::transaction::TransactionMapper;
 use strum::{Display, EnumString};
 use td_error::TdError;
-use td_objects::types::basic::TransactionKey;
-use td_objects::types::execution::FunctionVersionNode;
+use td_objects::execution::graph::FunctionNode;
+use td_objects::types::string::TransactionKey;
 
 #[derive(Default, EnumString, Display)]
 pub enum TestTransactionBy {
@@ -18,9 +18,9 @@ pub enum TestTransactionBy {
 }
 
 impl TransactionMapper for TestTransactionBy {
-    fn key(&self, node: &FunctionVersionNode) -> Result<TransactionKey, TdError> {
+    fn key(&self, node: &FunctionNode) -> Result<TransactionKey, TdError> {
         match self {
-            TestTransactionBy::Name => Ok(node.name().to_string().try_into()?),
+            TestTransactionBy::Name => Ok(node.name.to_string().try_into()?),
             TestTransactionBy::Single => Ok("S".to_string().try_into()?),
         }
     }

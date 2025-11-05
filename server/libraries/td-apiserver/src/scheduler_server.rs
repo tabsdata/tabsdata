@@ -11,7 +11,7 @@ use td_common::server::FileWorkerMessageQueue;
 use td_common::signal::terminate;
 use td_database::sql::DbPool;
 use td_objects::sql::DaoQueries;
-use td_objects::types::basic::InternalServerAddresses;
+use td_objects::types::addresses::InternalServerAddresses;
 use td_services::SchedulerContext;
 use td_services::scheduler::services::ScheduleServices;
 use td_storage::Storage;

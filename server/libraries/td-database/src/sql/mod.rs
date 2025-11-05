@@ -5,7 +5,6 @@
 use derive_builder::Builder;
 use futures_util::future::BoxFuture;
 use futures_util::stream::BoxStream;
-use getset::{CopyGetters, Getters};
 use itertools::Either;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -27,27 +26,21 @@ const SLOW_QUERIES_THRESHOLD: u64 = 5000;
 const PRAGMA_TEMP_STORE: (&str, &str) = ("temp_store", "MEMORY");
 
 /// Configuration for a SQLite database.
-#[derive(Debug, Clone, Serialize, Deserialize, Builder, Getters, CopyGetters)]
+#[derive(Debug, Clone, Serialize, Deserialize, Builder)]
 #[builder(default)]
-#[getset(get_copy = "pub")]
 pub struct SqliteConfig {
     /// The Sqlite URI, required.
-    #[getset(skip)]
-    #[getset(get = "pub")]
     #[builder(setter(into))]
-    url: Option<String>,
+    pub url: Option<String>,
     /// The minimum number of database connections, defaults to `1`.
     min_connections: u32,
     /// The maximum number of database connections, defaults to `10`.
     max_connections: u32,
     /// The maximum time to wait for a database connection to be acquired, defaults to `30 seconds`.
-    #[getset(skip)]
     acquire_timeout: u64,
     /// The maximum lifetime of a database connection, defaults to `60 minutes`.
-    #[getset(skip)]
     max_lifetime: u64,
     /// The maximum time a database connection can be idle, defaults to `60 seconds`.
-    #[getset(skip)]
     idle_timeout: u64,
     /// Whether to test the connection before acquiring it, defaults to `true`.
     test_before_acquire: bool,
@@ -178,7 +171,7 @@ impl Db {
 
     fn db_location_path(config: &SqliteConfig) -> Result<String, DbError> {
         let mut db_url = config
-            .url()
+            .url
             .as_ref()
             .ok_or(DbError::MissingDatabaseLocation)?
             .to_string();
@@ -543,13 +536,13 @@ mod tests {
             .test_before_acquire(true)
             .build()
             .unwrap();
-        assert_eq!(config.url().as_ref().unwrap(), "sqlite::memory:");
-        assert_eq!(config.min_connections(), 2);
-        assert_eq!(config.max_connections(), 10);
+        assert_eq!(config.url.as_ref().unwrap(), "sqlite::memory:");
+        assert_eq!(config.min_connections, 2);
+        assert_eq!(config.max_connections, 10);
         assert_eq!(config.acquire_timeout(), Duration::from_secs(10));
         assert_eq!(config.max_lifetime(), Duration::from_secs(60 * 60));
         assert_eq!(config.idle_timeout(), Duration::from_secs(60));
-        assert!(config.test_before_acquire());
+        assert!(config.test_before_acquire);
     }
 
     //TODO

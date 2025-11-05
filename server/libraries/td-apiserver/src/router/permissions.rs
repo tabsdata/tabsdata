@@ -15,11 +15,11 @@ mod routes {
     use ta_apiserver::status::ok_status::{CreateStatus, DeleteStatus, ListStatus, NoContent};
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
-    use td_objects::crudl::{ListParams, RequestContext};
+    use td_objects::dxo::crudl::{ListParams, RequestContext};
+    use td_objects::dxo::permission::defs::{Permission, PermissionCreate};
     use td_objects::rest_urls::{
         CREATE_PERMISSION, DELETE_PERMISSION, LIST_PERMISSIONS, RoleParam, RolePermissionParam,
     };
-    use td_objects::types::permission::{Permission, PermissionCreate};
     use td_services::permission::services::PermissionServices;
     use tower::ServiceExt;
 
@@ -34,7 +34,7 @@ mod routes {
         Json(request): Json<PermissionCreate>,
     ) -> Result<CreateStatus<Permission>, ErrorStatus> {
         let request = context.create(role_param, request);
-        let response = state.create().service().await.oneshot(request).await?;
+        let response = state.create.service().await.oneshot(request).await?;
         Ok(CreateStatus::CREATED(response))
     }
 
@@ -46,7 +46,7 @@ mod routes {
         Path(param): Path<RolePermissionParam>,
     ) -> Result<DeleteStatus<NoContent>, ErrorStatus> {
         let request = context.delete(param);
-        let response = state.delete().service().await.oneshot(request).await?;
+        let response = state.delete.service().await.oneshot(request).await?;
         Ok(DeleteStatus::OK(response))
     }
 
@@ -59,7 +59,7 @@ mod routes {
         Path(path_params): Path<RoleParam>,
     ) -> Result<ListStatus<Permission>, ErrorStatus> {
         let request = context.list(path_params, query_params);
-        let response = state.list().service().await.oneshot(request).await?;
+        let response = state.list.service().await.oneshot(request).await?;
         Ok(ListStatus::OK(response))
     }
 }

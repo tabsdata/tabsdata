@@ -3,13 +3,13 @@
 //
 
 use crate::graphs::{ExecutionGraph, GraphBuilder};
-use td_objects::types::execution::FunctionVersionNode;
-use td_objects::types::table_ref::Versions;
-use td_objects::types::test_utils::execution::{
+use td_objects::execution::graph::FunctionNode;
+use td_objects::table_ref::Versions;
+use td_objects::test_utils::graph::{
     FUNCTION_NAMES, TABLE_NAMES, dependency, function_node, table, trigger,
 };
 
-pub async fn test_graph() -> (ExecutionGraph<Versions>, FunctionVersionNode) {
+pub async fn test_graph() -> (ExecutionGraph<Versions>, FunctionNode) {
     let output_tables = vec![
         table(&FUNCTION_NAMES[0], &TABLE_NAMES[0]).await,
         table(&FUNCTION_NAMES[1], &TABLE_NAMES[1]).await,

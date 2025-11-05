@@ -7,7 +7,6 @@ use bytes::Bytes;
 use derive_builder::Builder;
 use futures_util::TryStreamExt;
 use futures_util::stream::BoxStream;
-use getset::Getters;
 use object_store::path::{Path, PathPart};
 use object_store::{ObjectStore, PutPayload};
 #[cfg(target_os = "windows")]
@@ -21,25 +20,23 @@ use tracing::debug;
 use url::Url;
 
 /// Definition of a mount.
-#[derive(Debug, Clone, Serialize, Deserialize, Builder, Getters)]
+#[derive(Debug, Clone, Serialize, Deserialize, Builder)]
 #[builder(
     setter(into, strip_option),
     build_fn(validate = "Self::validate", error = "StorageError")
 )]
-#[getset(get = "pub")]
 pub struct MountDef {
     /// A unique identifier for the mount, it must be an ascii word, it should never change for a mount.
-    id: String,
+    pub id: String,
 
     /// Path, in the storage, where the mount is located.
-    path: String,
+    pub path: String,
 
     #[builder(setter(custom))]
     /// External URI that is backing the storage of the mount.
-    uri: String,
+    pub uri: String,
 
     #[builder(default)]
-    #[getset(skip)]
     /// Options for the mount. This is [`uri`] scheme specific.
     ///
     /// AWS S3: refer to https://docs.rs/object_store/0.11.0/object_store/aws/enum.AmazonS3ConfigKey.html
@@ -237,7 +234,7 @@ impl Debug for Mount {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Mount")
             .field("mount_path", &format!("{}/", &self.mount_path))
-            .field("store_uri", &self.def.uri())
+            .field("store_uri", &self.def.uri)
             .finish()
     }
 }
@@ -261,10 +258,10 @@ impl Mount {
 
     /// Create a [`Mount`] with the given definition.
     pub fn new(def: MountDef) -> Result<Self> {
-        let mut uri = Url::parse(def.uri()).unwrap();
+        let mut uri = Url::parse(&def.uri).unwrap();
         let store = Self::create_store(&uri, def.options())?;
 
-        let mount_path = SPath::parse(def.path())?;
+        let mount_path = SPath::parse(&def.path)?;
         let path_mapper_from_mount = PathMapperFromMount::new(mount_path.parts().count());
         let path_mapper_to_mount = PathMapperToMount::new(&mount_path);
 
@@ -272,7 +269,7 @@ impl Mount {
         let path_mapper_to_uri = PathMapperToUri::new(&uri_path);
         let path_mapper_from_uri = PathMapperFromUri::new(uri_path.parts().count());
 
-        debug!("Mount, mount: {} uri: {}", def.path(), def.uri());
+        debug!("Mount, mount: {} uri: {}", &def.path, &def.uri);
 
         uri.set_path("");
         Ok(Mount {
@@ -485,8 +482,8 @@ mod tests {
             .uri(bar_file())
             .build()
             .unwrap();
-        assert_eq!(mount_def.path(), "/foo");
-        assert_eq!(mount_def.uri(), &slashed_bar_file());
+        assert_eq!(mount_def.path, "/foo");
+        assert_eq!(mount_def.uri, slashed_bar_file());
         assert_eq!(mount_def.options(), &HashMap::new());
         assert_eq!(mount_def.id_as_prefix(), "ID_".to_uppercase());
     }

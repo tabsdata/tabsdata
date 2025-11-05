@@ -4,12 +4,12 @@
 
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
-use td_objects::crudl::{ListRequest, ListResponse, RequestContext};
+use td_objects::dxo::crudl::{ListRequest, ListResponse, RequestContext};
+use td_objects::dxo::role::defs::Role;
 use td_objects::sql::{DaoQueries, NoListFilter};
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, SecAdmin, System};
 use td_objects::tower_service::from::{ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlListService};
-use td_objects::types::role::Role;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -37,9 +37,10 @@ mod tests {
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::TdError;
-    use td_objects::crudl::{ListParams, RequestContext};
+    use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::test_utils::seed_role::{get_role, seed_role};
-    use td_objects::types::basic::{AccessTokenId, Description, RoleId, RoleName, UserId};
+    use td_objects::types::id::{AccessTokenId, RoleId, UserId};
+    use td_objects::types::string::{Description, RoleName};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -80,22 +81,22 @@ mod tests {
         let service = ListRoleService::with_defaults(db.clone()).service().await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
-        assert_eq!(*response.len(), 4); // 3 default roles + 1
-        let response = response.data();
-        assert_eq!(*response[0].name(), RoleName::try_from("sys_admin")?);
-        assert_eq!(*response[1].name(), RoleName::try_from("sec_admin")?);
-        assert_eq!(*response[2].name(), RoleName::try_from("user")?);
+        assert_eq!(response.len, 4); // 3 default roles + 1
+        let response = response.data;
+        assert_eq!(response[0].name, RoleName::try_from("sys_admin")?);
+        assert_eq!(response[1].name, RoleName::try_from("sec_admin")?);
+        assert_eq!(response[2].name, RoleName::try_from("user")?);
 
         let found = get_role(&db, &RoleName::try_from("joaquin").unwrap()).await?;
         let role = response.get(3).unwrap();
-        assert_eq!(role.id(), found.id());
-        assert_eq!(role.name(), found.name());
-        assert_eq!(role.description(), found.description());
-        assert_eq!(role.created_on(), found.created_on());
-        assert_eq!(role.created_by_id(), found.created_by_id());
-        assert_eq!(role.modified_on(), found.modified_on());
-        assert_eq!(role.modified_by_id(), found.modified_by_id());
-        assert_eq!(role.fixed(), found.fixed());
+        assert_eq!(role.id, found.id);
+        assert_eq!(role.name, found.name);
+        assert_eq!(role.description, found.description);
+        assert_eq!(role.created_on, found.created_on);
+        assert_eq!(role.created_by_id, found.created_by_id);
+        assert_eq!(role.modified_on, found.modified_on);
+        assert_eq!(role.modified_by_id, found.modified_by_id);
+        assert_eq!(role.fixed, found.fixed);
         Ok(())
     }
 }

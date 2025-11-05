@@ -6,11 +6,13 @@ use crate::user::service::create::CreateUserService;
 use ta_services::service::TdService;
 use td_database::sql::DbPool;
 use td_error::assert_service_error;
-use td_objects::crudl::RequestContext;
+use td_objects::dxo::crudl::RequestContext;
+use td_objects::dxo::user::defs::UserCreate;
 use td_objects::test_utils::seed_user::seed_user;
 use td_objects::tower_service::sql::SqlError;
-use td_objects::types::basic::{AccessTokenId, RoleId, UserEnabled, UserId, UserName};
-use td_objects::types::user::UserCreate;
+use td_objects::types::bool::UserEnabled;
+use td_objects::types::id::{AccessTokenId, RoleId, UserId};
+use td_objects::types::string::UserName;
 
 #[td_test::test(sqlx)]
 #[tokio::test]

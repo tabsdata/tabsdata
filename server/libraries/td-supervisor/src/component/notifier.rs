@@ -81,7 +81,7 @@ impl WorkerNotifier for Callback {
                     Some(worker) => worker.describer().name().to_string(),
                     None => "No worker...".to_string(),
                 },
-                request_message.id(),
+                request_message.id,
             );
             return Ok(failed);
         };
@@ -110,7 +110,7 @@ impl WorkerNotifier for Callback {
         );
         match self {
             Callback::Http(callback) => {
-                let request_payload = match request_message.payload() {
+                let request_payload = match &request_message.payload {
                     SupervisorRequestMessagePayload(payload) => payload,
                     SupervisorResponseMessagePayload(_) | SupervisorExceptionMessagePayload(_) => {
                         return Err(InvalidMessageType);
@@ -134,7 +134,7 @@ impl WorkerNotifier for Callback {
                                     PayloadType::Exception,
                                 ))?;
                                 let exception_payload: &ExceptionMessagePayload<Value> =
-                                    match exception_message.payload() {
+                                    match &exception_message.payload {
                                         SupervisorRequestMessagePayload(_)
                                         | SupervisorResponseMessagePayload(_) => {
                                             return Err(InvalidMessageType);
@@ -149,7 +149,7 @@ impl WorkerNotifier for Callback {
                     }
                 };
 
-                let mut response_payload = match worker {
+                let response_payload = match worker {
                     None => ResponseMessagePayload::default(),
                     Some(worker) => {
                         if matches!(status, WorkerCallbackStatus::Running) {
@@ -166,7 +166,7 @@ impl WorkerNotifier for Callback {
                                     PayloadType::Response,
                                 ))?;
                                 let response_payload: &ResponseMessagePayload<Value> =
-                                    match response_message.payload() {
+                                    match &response_message.payload {
                                         SupervisorRequestMessagePayload(_)
                                         | SupervisorExceptionMessagePayload(_) => {
                                             return Err(InvalidMessageType);
@@ -180,25 +180,27 @@ impl WorkerNotifier for Callback {
                         }
                     }
                 };
-                let response_payload = response_payload
-                    .set_id(request_message.id().clone())
-                    .set_class(request_payload.class().clone())
-                    .set_worker(request_payload.worker().clone())
-                    .set_action(Notify)
-                    .set_start(start)
-                    .set_end(end)
-                    .set_status(status)
-                    .set_execution(execution as i16)
-                    .set_limit(limit.map(|x| x as i16))
-                    .set_error(error)
-                    .set_exception_kind(exception_payload.kind().clone())
-                    .set_exception_message(exception_payload.message().clone())
-                    .set_exception_error_code(exception_payload.error_code().clone())
-                    .set_exit_status(*exception_payload.exit_status());
+                let mut response_payload = ResponseMessagePayload {
+                    id: request_message.id,
+                    class: request_payload.class().clone(),
+                    worker: request_payload.worker().clone(),
+                    action: Notify,
+                    start,
+                    end,
+                    status,
+                    execution: execution as i16,
+                    limit: limit.map(|x| x as i16),
+                    error,
+                    exception_kind: exception_payload.kind().clone(),
+                    exception_message: exception_payload.message().clone(),
+                    exception_error_code: exception_payload.error_code().clone(),
+                    exit_status: *exception_payload.exit_status(),
+                    ..response_payload
+                };
 
                 // Exit status 202 is using to signal work termination without further retry.
                 if *exception_payload.exit_status() == ExitStatus::TabsDataError.code() {
-                    response_payload.set_status(WorkerCallbackStatus::Failed);
+                    response_payload.status = WorkerCallbackStatus::Failed;
                     failed = true;
                 }
 
@@ -259,7 +261,7 @@ pub fn execution(message: &SupervisorMessage) -> u16 {
         Ok(re) => re,
         Err(_) => return UNKNOWN_RUN,
     };
-    if let Some(file_name) = message.file().file_name().and_then(|f| f.to_str())
+    if let Some(file_name) = message.file.file_name().and_then(|f| f.to_str())
         && let Some(captures) = regex.captures(file_name)
         && let Some(run_str) = captures.get(2).map(|m| m.as_str())
         && let Ok(run) = run_str.parse::<u16>()

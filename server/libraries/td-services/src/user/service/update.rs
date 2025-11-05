@@ -8,7 +8,11 @@ use crate::user::layers::update::{
 };
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
-use td_objects::crudl::{RequestContext, UpdateRequest};
+use td_objects::dxo::crudl::{RequestContext, UpdateRequest};
+use td_objects::dxo::user::defs::{
+    UserDB, UserDBWithNames, UserRead, UserReadBuilder, UserUpdate, UserUpdateDB,
+    UserUpdateDBBuilder,
+};
 use td_objects::rest_urls::UserParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, Requester, SecAdmin, SystemOrUserId};
@@ -17,11 +21,9 @@ use td_objects::tower_service::from::{
     UpdateService, With,
 };
 use td_objects::tower_service::sql::{By, SqlSelectService, SqlUpdateService};
-use td_objects::types::basic::{AtTime, UserId, UserIdName};
-use td_objects::types::user::{
-    UserDB, UserDBWithNames, UserRead, UserReadBuilder, UserUpdate, UserUpdateDB,
-    UserUpdateDBBuilder,
-};
+use td_objects::types::id::UserId;
+use td_objects::types::id_name::UserIdName;
+use td_objects::types::timestamp::AtTime;
 use td_security::config::PasswordHashingConfig;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
@@ -67,14 +69,13 @@ mod tests {
     use super::*;
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
-    use td_objects::crudl::RequestContext;
+    use td_objects::dxo::crudl::RequestContext;
     use td_objects::rest_urls::UserParam;
     use td_objects::sql::{DaoQueries, SelectBy};
     use td_objects::test_utils::seed_user::seed_user;
-    use td_objects::types::basic::{
-        AccessTokenId, AtTime, Email, FullName, Password, RoleId, UserEnabled, UserId, UserName,
-    };
-    use td_objects::types::user::{UserDB, UserUpdate};
+    use td_objects::types::bool::UserEnabled;
+    use td_objects::types::id::{AccessTokenId, RoleId};
+    use td_objects::types::string::{Email, FullName, Password, UserName};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -151,31 +152,27 @@ mod tests {
                 .unwrap(),
             user_update,
         );
-        let request_time = request.context().time().clone();
+        let request_time = request.context.time.clone();
         let response = service.raw_oneshot(request).await;
-        assert!(response.is_ok());
         let updated = response.unwrap();
 
-        assert_eq!(*updated.name(), UserName::try_from("u0").unwrap());
+        assert_eq!(updated.name, UserName::try_from("u0").unwrap());
+        assert_eq!(updated.full_name, FullName::try_from("U0 Update").unwrap());
         assert_eq!(
-            *updated.full_name(),
-            FullName::try_from("U0 Update").unwrap()
-        );
-        assert_eq!(
-            *updated.email().as_ref().unwrap(),
+            updated.email.unwrap(),
             Email::try_from("u0update@foo.com").unwrap()
         );
-        assert!(*updated.created_on() < before);
-        assert_eq!(*updated.created_by_id(), UserId::admin());
-        assert_eq!(*updated.created_by(), UserName::admin());
+        assert!(updated.created_on < before);
+        assert_eq!(updated.created_by_id, UserId::admin());
+        assert_eq!(updated.created_by, UserName::admin());
         assert_eq!(
-            updated.modified_on().timestamp_millis(),
+            updated.modified_on.timestamp_millis(),
             request_time.timestamp_millis()
         );
-        assert_eq!(*updated.modified_by_id(), UserId::admin());
-        assert_eq!(updated.modified_by(), &UserName::admin());
-        assert!(!(**updated.enabled()));
-        assert!(**updated.password_must_change());
+        assert_eq!(updated.modified_by_id, UserId::admin());
+        assert_eq!(updated.modified_by, UserName::admin());
+        assert!(!*updated.enabled);
+        assert!(*updated.password_must_change);
 
         let user: UserDB = DaoQueries::default()
             .select_by::<UserDB>(&())
@@ -184,7 +181,7 @@ mod tests {
             .fetch_one(&db)
             .await
             .unwrap();
-        assert!(**user.password_must_change())
+        assert!(*user.password_must_change)
     }
 
     #[td_test::test(sqlx)]
@@ -208,7 +205,7 @@ mod tests {
             .unwrap();
 
         let before = AtTime::now();
-        let request = RequestContext::with(AccessTokenId::default(), user.id(), RoleId::user())
+        let request = RequestContext::with(AccessTokenId::default(), user.id, RoleId::user())
             .update(
                 UserParam::builder()
                     .try_user("u0")
@@ -217,29 +214,25 @@ mod tests {
                     .unwrap(),
                 user_update,
             );
-        let request_time = request.context().time().clone();
+        let request_time = request.context.time.clone();
         let response = service.raw_oneshot(request).await;
-        assert!(response.is_ok());
         let updated = response.unwrap();
 
-        assert_eq!(*updated.name(), UserName::try_from("u0").unwrap());
+        assert_eq!(updated.name, UserName::try_from("u0").unwrap());
+        assert_eq!(updated.full_name, FullName::try_from("U0 Update").unwrap());
         assert_eq!(
-            *updated.full_name(),
-            FullName::try_from("U0 Update").unwrap()
-        );
-        assert_eq!(
-            *updated.email().as_ref().unwrap(),
+            updated.email.unwrap(),
             Email::try_from("u0update@foo.com").unwrap()
         );
-        assert!(*updated.created_on() < before);
-        assert_eq!(*updated.created_by_id(), UserId::admin());
-        assert_eq!(*updated.created_by(), UserName::admin());
+        assert!(updated.created_on < before);
+        assert_eq!(updated.created_by_id, UserId::admin());
+        assert_eq!(updated.created_by, UserName::admin());
         assert_eq!(
-            updated.modified_on().timestamp_millis(),
+            updated.modified_on.timestamp_millis(),
             request_time.timestamp_millis()
         );
-        assert_eq!(updated.modified_by_id(), user.id());
-        assert_eq!(updated.modified_by(), user.name());
-        assert!(**updated.enabled());
+        assert_eq!(updated.modified_by_id, user.id);
+        assert_eq!(updated.modified_by, user.name);
+        assert!(*updated.enabled);
     }
 }

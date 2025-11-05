@@ -4,7 +4,10 @@
 
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
-use td_objects::crudl::{ReadRequest, RequestContext};
+use td_objects::dxo::collection::defs::{
+    CollectionDBWithNames, CollectionRead, CollectionReadBuilder,
+};
+use td_objects::dxo::crudl::{ReadRequest, RequestContext};
 use td_objects::rest_urls::CollectionParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, NoPermissions, System};
@@ -12,8 +15,7 @@ use td_objects::tower_service::from::{
     BuildService, ExtractNameService, ExtractService, TryIntoService, With,
 };
 use td_objects::tower_service::sql::{By, SqlSelectService};
-use td_objects::types::basic::CollectionIdName;
-use td_objects::types::collection::{CollectionDBWithNames, CollectionRead, CollectionReadBuilder};
+use td_objects::types::id_name::CollectionIdName;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -44,12 +46,12 @@ mod tests {
     use super::*;
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
-    use td_objects::crudl::RequestContext;
+    use td_objects::dxo::crudl::RequestContext;
     use td_objects::rest_urls::CollectionParam;
     use td_objects::test_utils::seed_collection::seed_collection;
-    use td_objects::types::basic::{
-        AccessTokenId, AtTime, CollectionName, Description, RoleId, UserId, UserName,
-    };
+    use td_objects::types::id::{AccessTokenId, RoleId, UserId};
+    use td_objects::types::string::{CollectionName, Description, UserName};
+    use td_objects::types::timestamp::AtTime;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -94,13 +96,13 @@ mod tests {
         assert!(response.is_ok());
         let created = response.unwrap();
 
-        assert_eq!(*created.name(), name);
-        assert_eq!(*created.description(), Description::default());
-        assert!(*created.created_on() >= before);
-        assert_eq!(*created.created_by_id(), UserId::admin());
-        assert_eq!(*created.created_by(), UserName::admin());
-        assert_eq!(created.modified_on(), created.created_on());
-        assert_eq!(*created.modified_by_id(), UserId::admin());
-        assert_eq!(*created.modified_by(), UserName::admin());
+        assert_eq!(created.name, name);
+        assert_eq!(created.description, Description::default());
+        assert!(created.created_on >= before);
+        assert_eq!(created.created_by_id, UserId::admin());
+        assert_eq!(created.created_by, UserName::admin());
+        assert_eq!(created.modified_on, created.created_on);
+        assert_eq!(created.modified_by_id, UserId::admin());
+        assert_eq!(created.modified_by, UserName::admin());
     }
 }

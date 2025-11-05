@@ -8,7 +8,14 @@ use crate::table::layers::delete::{
 };
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
-use td_objects::crudl::{DeleteRequest, RequestContext};
+use td_objects::dxo::collection::defs::{
+    CollectionDB, CollectionDeleteDB, CollectionDeleteDBBuilder,
+};
+use td_objects::dxo::crudl::{DeleteRequest, RequestContext};
+use td_objects::dxo::dependency::defs::DependencyDB;
+use td_objects::dxo::function::defs::FunctionDB;
+use td_objects::dxo::table::defs::TableDB;
+use td_objects::dxo::trigger::defs::TriggerDB;
 use td_objects::rest_urls::CollectionParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, SysAdmin, System};
@@ -19,15 +26,9 @@ use td_objects::tower_service::from::{
 use td_objects::tower_service::sql::{
     By, SqlFindService, SqlSelectAllService, SqlSelectService, SqlUpdateService, insert_vec,
 };
-use td_objects::types::basic::{
-    AtTime, CollectionId, CollectionIdName, DependencyStatus, FunctionId, FunctionStatus, TableId,
-    TableStatus, TriggerStatus,
-};
-use td_objects::types::collection::{CollectionDB, CollectionDeleteDB, CollectionDeleteDBBuilder};
-use td_objects::types::dependency::DependencyDB;
-use td_objects::types::function::FunctionDB;
-use td_objects::types::table::TableDB;
-use td_objects::types::trigger::TriggerDB;
+use td_objects::types::id::{CollectionId, FunctionId, TableId};
+use td_objects::types::id_name::CollectionIdName;
+use td_objects::types::timestamp::AtTime;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -58,33 +59,27 @@ fn service() {
         from_fn(With::<CollectionDB>::extract::<CollectionId>),
         from_fn(By::<CollectionId>::update::<CollectionDeleteDB, CollectionDB>),
         // Find tables in the collection
-        from_fn(TableStatus::active_or_frozen),
-        from_fn(By::<CollectionId>::select_all_versions::<TableDB>),
+        from_fn(By::<CollectionId>::select_all_versions::<{ TableDB::Available }, TableDB>),
         from_fn(With::<TableDB>::extract_vec::<TableId>),
         // Find functions that use the tables and freeze them
-        from_fn(DependencyStatus::active),
-        from_fn(By::<TableId>::find_versions::<DependencyDB>),
+        from_fn(By::<TableId>::find_versions::<{ DependencyDB::Active }, DependencyDB>),
         from_fn(With::<DependencyDB>::extract_vec::<FunctionId>),
-        from_fn(FunctionStatus::active),
-        from_fn(By::<FunctionId>::find_versions::<FunctionDB>),
+        from_fn(By::<FunctionId>::find_versions::<{ FunctionDB::Active }, FunctionDB>),
         from_fn(build_frozen_functions),
         from_fn(insert_vec::<FunctionDB>),
         // Delete tables in the collection
         from_fn(build_deleted_tables),
         from_fn(insert_vec::<TableDB>),
         // Find triggers for the tables in the collection and delete them
-        from_fn(TriggerStatus::active_or_frozen),
-        from_fn(By::<TableId>::find_versions::<TriggerDB>),
+        from_fn(By::<TableId>::find_versions::<{ TriggerDB::Available }, TriggerDB>),
         from_fn(build_deleted_triggers),
         from_fn(insert_vec::<TriggerDB>),
         // Find dependencies for the tables in the collection and delete them
-        from_fn(DependencyStatus::active),
-        from_fn(By::<TableId>::find_versions::<DependencyDB>),
+        from_fn(By::<TableId>::find_versions::<{ DependencyDB::Active }, DependencyDB>),
         from_fn(build_deleted_dependencies),
         from_fn(insert_vec::<DependencyDB>),
         // Find functions in the collection
-        from_fn(FunctionStatus::active_or_frozen),
-        from_fn(By::<CollectionId>::select_all_versions::<FunctionDB>),
+        from_fn(By::<CollectionId>::select_all_versions::<{ FunctionDB::Available }, FunctionDB>),
         // Delete functions in the collection (note this will delete possible frozen
         // functions created in the previous step, this is, functions using tables
         // in the same collection)
@@ -99,27 +94,30 @@ mod tests {
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::TdError;
-    use td_objects::crudl::RequestContext;
+    use td_objects::dxo::collection::defs::CollectionCreateDB;
+    use td_objects::dxo::crudl::RequestContext;
+    use td_objects::dxo::dependency::defs::DependencyDBWithNames;
+    use td_objects::dxo::function::defs::{FunctionDBWithNames, FunctionRegister};
+    use td_objects::dxo::table::defs::TableDBWithNames;
+    use td_objects::dxo::trigger::defs::TriggerDBWithNames;
     use td_objects::rest_urls::CollectionParam;
     use td_objects::sql::cte::CteQueries;
     use td_objects::sql::{DaoQueries, SelectBy};
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_function::seed_function;
-    use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, Decorator, FunctionName, FunctionRuntimeValues,
-        RoleId, TableDependencyDto, TableName, TableNameDto, TableTriggerDto, UserId,
+    use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
+    use td_objects::types::id::{AccessTokenId, BundleId, RoleId, UserId};
+    use td_objects::types::string::FunctionName;
+    use td_objects::types::string::{
+        CollectionName, FunctionRuntimeValues, TableName, TableNameDto,
     };
-    use td_objects::types::collection::{CollectionCreateDB, CollectionDB};
-    use td_objects::types::dependency::DependencyDBWithNames;
-    use td_objects::types::function::{FunctionDBWithNames, FunctionRegister};
-    use td_objects::types::table::TableDBWithNames;
-    use td_objects::types::trigger::TriggerDBWithNames;
+    use td_objects::types::typed_enum::DependencyStatus;
+    use td_objects::types::typed_enum::{Decorator, FunctionStatus, TableStatus, TriggerStatus};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
-    #[tokio::test]
-    async fn test_tower_metadata_delete_service(db: DbPool) {
+    async fn test_tower_metadata_delete_collection_service(db: DbPool) {
         use td_tower::metadata::type_of_val;
 
         DeleteCollectionService::with_defaults(db)
@@ -129,9 +127,7 @@ mod tests {
                 type_of_val(&With::<DeleteRequest<CollectionParam>>::extract::<RequestContext>),
                 type_of_val(&AuthzOn::<System>::set),
                 type_of_val(&Authz::<SysAdmin>::check),
-                type_of_val(
-                    &With::<DeleteRequest<CollectionParam>>::extract_name::<CollectionParam>,
-                ),
+                type_of_val(&With::<DeleteRequest<CollectionParam>>::extract_name::<CollectionParam>),
                 type_of_val(&With::<RequestContext>::extract::<AtTime>),
                 // Get collection
                 type_of_val(&With::<CollectionParam>::extract::<CollectionIdName>),
@@ -144,33 +140,27 @@ mod tests {
                 type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
                 type_of_val(&By::<CollectionId>::update::<CollectionDeleteDB, CollectionDB>),
                 // Find tables in the collection
-                type_of_val(&TableStatus::active_or_frozen),
-                type_of_val(&By::<CollectionId>::select_all_versions::<TableDB>),
+                type_of_val(&By::<CollectionId>::select_all_versions::<{ TableDB::Available }, TableDB>),
                 type_of_val(&With::<TableDB>::extract_vec::<TableId>),
                 // Find functions that use the tables and freeze them
-                type_of_val(&DependencyStatus::active),
-                type_of_val(&By::<TableId>::find_versions::<DependencyDB>),
+                type_of_val(&By::<TableId>::find_versions::<{ DependencyDB::Active }, DependencyDB>),
                 type_of_val(&With::<DependencyDB>::extract_vec::<FunctionId>),
-                type_of_val(&FunctionStatus::active),
-                type_of_val(&By::<FunctionId>::find_versions::<FunctionDB>),
+                type_of_val(&By::<FunctionId>::find_versions::<{ FunctionDB::Active }, FunctionDB>),
                 type_of_val(&build_frozen_functions),
                 type_of_val(&insert_vec::<FunctionDB>),
                 // Delete tables in the collection
                 type_of_val(&build_deleted_tables),
                 type_of_val(&insert_vec::<TableDB>),
                 // Find triggers for the tables in the collection and delete them
-                type_of_val(&TriggerStatus::active_or_frozen),
-                type_of_val(&By::<TableId>::find_versions::<TriggerDB>),
+                type_of_val(&By::<TableId>::find_versions::<{ TriggerDB::Available }, TriggerDB>),
                 type_of_val(&build_deleted_triggers),
                 type_of_val(&insert_vec::<TriggerDB>),
                 // Find dependencies for the tables in the collection and delete them
-                type_of_val(&DependencyStatus::active),
-                type_of_val(&By::<TableId>::find_versions::<DependencyDB>),
+                type_of_val(&By::<TableId>::find_versions::<{ DependencyDB::Active }, DependencyDB>),
                 type_of_val(&build_deleted_dependencies),
                 type_of_val(&insert_vec::<DependencyDB>),
                 // Find functions in the collection
-                type_of_val(&FunctionStatus::active_or_frozen),
-                type_of_val(&By::<CollectionId>::select_all_versions::<FunctionDB>),
+                type_of_val(&By::<CollectionId>::select_all_versions::<{ FunctionDB::Available }, FunctionDB>),
                 // Delete functions in the collection (note this will delete possible frozen
                 // functions created in the previous step, this is, functions using tables
                 // in the same collection)
@@ -246,59 +236,59 @@ mod tests {
         assert_eq!(found.len(), 0);
 
         let res: CollectionCreateDB = DaoQueries::default()
-            .select_by::<CollectionCreateDB>(&(collection.id()))?
+            .select_by::<CollectionCreateDB>(&(collection.id))?
             .build_query_as()
             .fetch_one(&db)
             .await
             .unwrap();
-        assert_eq!(res.name_when_deleted().as_ref().unwrap(), collection.name());
+        assert_eq!(res.name_when_deleted, Some(collection.name));
 
         // Assert functions are deleted
         let found: Vec<FunctionDBWithNames> = DaoQueries::default()
-            .select_versions_at::<FunctionDBWithNames>(None, None, &())?
+            .select_versions_at::<{ FunctionDBWithNames::All }, FunctionDBWithNames>(None, &())?
             .build_query_as()
             .fetch_all(&db)
             .await
             .unwrap();
         assert_eq!(found.len(), 4);
         for function in found {
-            assert!(matches!(function.status(), FunctionStatus::Deleted));
+            assert!(matches!(function.status, FunctionStatus::Deleted));
         }
 
         // Assert tables are deleted
         let found: Vec<TableDBWithNames> = DaoQueries::default()
-            .select_versions_at::<TableDBWithNames>(None, None, &())?
+            .select_versions_at::<{ TableDBWithNames::All }, TableDBWithNames>(None, &())?
             .build_query_as()
             .fetch_all(&db)
             .await
             .unwrap();
         assert_eq!(found.len(), 4);
         for table in found {
-            assert!(matches!(table.status(), TableStatus::Deleted));
+            assert!(matches!(table.status, TableStatus::Deleted));
         }
 
         // Assert triggers are deleted
         let found: Vec<TriggerDBWithNames> = DaoQueries::default()
-            .select_versions_at::<TriggerDBWithNames>(None, None, &())?
+            .select_versions_at::<{ TriggerDBWithNames::All }, TriggerDBWithNames>(None, &())?
             .build_query_as()
             .fetch_all(&db)
             .await
             .unwrap();
         assert_eq!(found.len(), 2);
         for trigger in found {
-            assert!(matches!(trigger.status(), TriggerStatus::Deleted));
+            assert!(matches!(trigger.status, TriggerStatus::Deleted));
         }
 
         // Assert dependencies are deleted
         let found: Vec<DependencyDBWithNames> = DaoQueries::default()
-            .select_versions_at::<DependencyDBWithNames>(None, None, &())?
+            .select_versions_at::<{ DependencyDBWithNames::All }, DependencyDBWithNames>(None, &())?
             .build_query_as()
             .fetch_all(&db)
             .await
             .unwrap();
         assert_eq!(found.len(), 1);
         for dep in found {
-            assert!(matches!(dep.status(), DependencyStatus::Deleted));
+            assert!(matches!(dep.status, DependencyStatus::Deleted));
         }
 
         Ok(())
@@ -367,27 +357,31 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(found.len(), 1);
-        assert_eq!(found[0].name(), &name_c_1);
+        assert_eq!(found[0].name, name_c_1);
 
         // Assert function_1 is frozen
         let found: Vec<FunctionDBWithNames> = DaoQueries::default()
-            .select_versions_at::<FunctionDBWithNames>(None, Some(&[&FunctionStatus::Frozen]), &())?
+            .select_versions_at::<{ FunctionDBWithNames::Available }, FunctionDBWithNames>(
+                None,
+                &FunctionName::try_from("function_1")?,
+            )?
             .build_query_as()
             .fetch_all(&db)
             .await
             .unwrap();
         assert_eq!(found.len(), 1);
-        assert_eq!(*found[0].name(), FunctionName::try_from("function_1")?);
 
         // Assert table_1 is active still
         let found: Vec<TableDBWithNames> = DaoQueries::default()
-            .select_versions_at::<TableDBWithNames>(None, Some(&[&TableStatus::Active]), &())?
+            .select_versions_at::<{ TableDBWithNames::Available }, TableDBWithNames>(
+                None,
+                &(&TableName::try_from("table_1")?),
+            )?
             .build_query_as()
             .fetch_all(&db)
             .await
             .unwrap();
         assert_eq!(found.len(), 1);
-        assert_eq!(*found[0].name(), TableName::try_from("table_1")?);
 
         Ok(())
     }

@@ -4,13 +4,13 @@
 
 use std::ops::Deref;
 use td_error::{TdError, td_error};
-use td_objects::crudl::handle_sql_err;
+use td_objects::dxo::crudl::handle_sql_err;
+use td_objects::dxo::function::defs::{FunctionDBWithNames, FunctionUpdate};
 use td_objects::sql::DaoQueries;
 use td_objects::sql::cte::CteQueries;
-use td_objects::types::basic::{
-    AtTime, CollectionId, CollectionName, FunctionName, FunctionStatus,
-};
-use td_objects::types::function::{FunctionDBWithNames, FunctionUpdate};
+use td_objects::types::id::CollectionId;
+use td_objects::types::string::{CollectionName, FunctionName};
+use td_objects::types::timestamp::AtTime;
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
 
 #[td_error]
@@ -28,15 +28,14 @@ pub async fn assert_function_name_not_exists(
     Input(function): Input<FunctionDBWithNames>,
     Input(function_update): Input<FunctionUpdate>,
 ) -> Result<(), TdError> {
-    if function_update.name() != function.name() {
+    if function_update.name != function.name {
         let mut conn = connection.lock().await;
         let conn = conn.get_mut_connection()?;
 
         let found: Option<FunctionDBWithNames> = queries
-            .select_versions_at::<FunctionDBWithNames>(
+            .select_versions_at::<{ FunctionDBWithNames::Available }, FunctionDBWithNames>(
                 Some(&at_time),
-                Some(&[&FunctionStatus::Active]),
-                &(&*collection_id, function_update.name()),
+                &(&*collection_id, &function_update.name),
             )?
             .build_query_as()
             .fetch_optional(&mut *conn)
@@ -45,7 +44,7 @@ pub async fn assert_function_name_not_exists(
 
         if found.is_some() {
             Err(UpdateFunctionError::FunctionAlreadyExists(
-                function_update.name().clone(),
+                function_update.name.clone(),
                 collection_name.deref().clone(),
             ))?
         }

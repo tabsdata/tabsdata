@@ -5,7 +5,13 @@
 use crate::user::layers::create::UpdateCreateUserDBBuilder;
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
-use td_objects::crudl::{CreateRequest, RequestContext};
+use td_objects::dxo::crudl::{CreateRequest, RequestContext};
+use td_objects::dxo::user::defs::{
+    UserCreate, UserDB, UserDBBuilder, UserDBWithNames, UserRead, UserReadBuilder,
+};
+use td_objects::dxo::user_role::defs::{
+    FixedUserRole, FixedUserRoleBuilder, UserRoleDB, UserRoleDBBuilder,
+};
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, SecAdmin, System};
 use td_objects::tower_service::from::{
@@ -13,11 +19,8 @@ use td_objects::tower_service::from::{
     With, builder,
 };
 use td_objects::tower_service::sql::{By, SqlSelectService, insert};
-use td_objects::types::basic::{AtTime, UserId};
-use td_objects::types::role::{FixedUserRole, FixedUserRoleBuilder, UserRoleDB, UserRoleDBBuilder};
-use td_objects::types::user::{
-    UserCreate, UserDB, UserDBBuilder, UserDBWithNames, UserRead, UserReadBuilder,
-};
+use td_objects::types::id::UserId;
+use td_objects::types::timestamp::AtTime;
 use td_security::config::PasswordHashingConfig;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
@@ -68,9 +71,9 @@ mod tests {
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_objects::sql::SelectBy;
-    use td_objects::types::basic::{
-        AccessTokenId, AtTime, Email, FullName, RoleId, UserEnabled, UserId, UserName,
-    };
+    use td_objects::types::bool::UserEnabled;
+    use td_objects::types::id::{AccessTokenId, RoleId};
+    use td_objects::types::string::{Email, FullName, UserName};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -142,36 +145,35 @@ mod tests {
         )
         .create((), create);
         let response = service.raw_oneshot(request).await;
-        assert!(response.is_ok());
         let created = response.unwrap();
 
-        assert_eq!(*created.name(), UserName::try_from("u1").unwrap());
-        assert_eq!(*created.full_name(), FullName::try_from("U1").unwrap());
+        assert_eq!(created.name, UserName::try_from("u1").unwrap());
+        assert_eq!(created.full_name, FullName::try_from("U1").unwrap());
         if with_email {
             assert_eq!(
-                *created.email().as_ref().unwrap(),
+                created.email.unwrap(),
                 Email::try_from("u1@email.com").unwrap()
             );
         } else {
-            assert!(created.email().is_none());
+            assert!(created.email.is_none());
         }
-        assert!(*created.created_on() >= before);
-        assert_eq!(*created.created_by_id(), UserId::admin());
-        assert_eq!(*created.created_by(), UserName::admin());
-        assert_eq!(created.modified_on(), created.created_on());
-        assert_eq!(*created.modified_by_id(), UserId::admin());
-        assert_eq!(*created.modified_by(), UserName::admin());
-        assert_eq!(**created.enabled(), expected_enabled);
+        assert!(created.created_on >= before);
+        assert_eq!(created.created_by_id, UserId::admin());
+        assert_eq!(created.created_by, UserName::admin());
+        assert_eq!(created.modified_on, created.created_on);
+        assert_eq!(created.modified_by_id, UserId::admin());
+        assert_eq!(created.modified_by, UserName::admin());
+        assert_eq!(*created.enabled, expected_enabled);
 
         let res: Option<UserRoleDB> = DaoQueries::default()
-            .select_by::<UserRoleDB>(&created.id())
+            .select_by::<UserRoleDB>(&created.id)
             .unwrap()
             .build_query_as()
             .fetch_optional(db)
             .await
             .unwrap();
         assert!(res.is_some());
-        assert_eq!(&RoleId::user(), res.unwrap().role_id())
+        assert_eq!(RoleId::user(), res.unwrap().role_id)
     }
 
     #[td_test::test(sqlx)]

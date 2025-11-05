@@ -4,7 +4,13 @@
 
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
-use td_objects::crudl::{ReadRequest, RequestContext};
+use td_objects::dxo::collection::defs::CollectionDB;
+use td_objects::dxo::crudl::{ReadRequest, RequestContext};
+use td_objects::dxo::execution::defs::ExecutionDB;
+use td_objects::dxo::function::defs::FunctionDBWithNames;
+use td_objects::dxo::function_run::defs::{
+    FunctionRun, FunctionRunBuilder, FunctionRunDBWithNames,
+};
 use td_objects::rest_urls::FunctionRunParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead};
@@ -12,15 +18,9 @@ use td_objects::tower_service::from::{
     BuildService, ExtractNameService, ExtractService, TryIntoService, With, combine,
 };
 use td_objects::tower_service::sql::{By, SqlSelectService};
-use td_objects::types::basic::{
-    AtTime, CollectionId, CollectionIdName, ExecutionId, ExecutionIdName, FunctionIdName,
-    FunctionStatus, FunctionVersionId,
-};
-use td_objects::types::collection::CollectionDB;
-use td_objects::types::execution::{
-    ExecutionDB, FunctionRun, FunctionRunBuilder, FunctionRunDBWithNames,
-};
-use td_objects::types::function::FunctionDBWithNames;
+use td_objects::types::id::{CollectionId, ExecutionId, FunctionVersionId};
+use td_objects::types::id_name::{CollectionIdName, ExecutionIdName, FunctionIdName};
+use td_objects::types::timestamp::AtTime;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -48,8 +48,12 @@ fn service() {
         from_fn(With::<FunctionRunParam>::extract::<FunctionIdName>),
         from_fn(combine::<CollectionIdName, FunctionIdName>),
         from_fn(With::<RequestContext>::extract::<AtTime>),
-        from_fn(FunctionStatus::active),
-        from_fn(By::<(CollectionIdName, FunctionIdName)>::select_version::<FunctionDBWithNames>),
+        from_fn(
+            By::<(CollectionIdName, FunctionIdName)>::select_version::<
+                { FunctionDBWithNames::Active },
+                FunctionDBWithNames,
+            >
+        ),
         from_fn(With::<FunctionDBWithNames>::extract::<FunctionVersionId>),
         // find execution ID
         from_fn(With::<FunctionRunParam>::extract::<ExecutionIdName>),
@@ -70,17 +74,18 @@ mod tests {
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::TdError;
-    use td_objects::crudl::RequestContext;
+    use td_objects::dxo::crudl::RequestContext;
+    use td_objects::dxo::function::defs::FunctionRegister;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_execution::seed_execution;
     use td_objects::test_utils::seed_function::seed_function;
     use td_objects::test_utils::seed_function_run::seed_function_run;
     use td_objects::test_utils::seed_transaction::seed_transaction;
-    use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, Decorator, FunctionName, FunctionRunStatus,
-        RoleId, TableNameDto, TransactionKey, UserId, UserName,
+    use td_objects::types::id::{AccessTokenId, BundleId, RoleId, UserId};
+    use td_objects::types::string::{
+        CollectionName, FunctionName, TableNameDto, TransactionKey, UserName,
     };
-    use td_objects::types::function::FunctionRegister;
+    use td_objects::types::typed_enum::{Decorator, FunctionRunStatus};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -94,7 +99,9 @@ mod tests {
             .await
             .assert_service::<ReadRequest<FunctionRunParam>, FunctionRun>(&[
                 type_of_val(&With::<ReadRequest<FunctionRunParam>>::extract::<RequestContext>),
-                type_of_val(&With::<ReadRequest<FunctionRunParam>>::extract_name::<FunctionRunParam>),
+                type_of_val(
+                    &With::<ReadRequest<FunctionRunParam>>::extract_name::<FunctionRunParam>,
+                ),
                 type_of_val(&With::<FunctionRunParam>::extract::<CollectionIdName>),
                 // find collection ID
                 type_of_val(&By::<CollectionIdName>::select::<CollectionDB>),
@@ -106,9 +113,11 @@ mod tests {
                 type_of_val(&With::<FunctionRunParam>::extract::<FunctionIdName>),
                 type_of_val(&combine::<CollectionIdName, FunctionIdName>),
                 type_of_val(&With::<RequestContext>::extract::<AtTime>),
-                type_of_val(&FunctionStatus::active),
                 type_of_val(
-                    &By::<(CollectionIdName, FunctionIdName)>::select_version::<FunctionDBWithNames>,
+                    &By::<(CollectionIdName, FunctionIdName)>::select_version::<
+                        { FunctionDBWithNames::Active },
+                        FunctionDBWithNames,
+                    >,
                 ),
                 type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionVersionId>),
                 // find execution ID
@@ -117,7 +126,9 @@ mod tests {
                 type_of_val(&With::<ExecutionDB>::extract::<ExecutionId>),
                 // find function run
                 type_of_val(&combine::<ExecutionId, FunctionVersionId>),
-                type_of_val(&By::<(ExecutionId, FunctionVersionId)>::select::<FunctionRunDBWithNames>),
+                type_of_val(
+                    &By::<(ExecutionId, FunctionVersionId)>::select::<FunctionRunDBWithNames>,
+                ),
                 // Build FunctionRun
                 type_of_val(&With::<FunctionRunDBWithNames>::convert_to::<FunctionRunBuilder, _>),
                 type_of_val(&With::<FunctionRunBuilder>::build::<FunctionRun, _>),
@@ -168,9 +179,9 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).read(
                 FunctionRunParam::builder()
-                    .try_collection(format!("{}", collection.name()))?
-                    .try_function(format!("{}", function_version.name()))?
-                    .try_execution(format!("~{}", execution.id()))?
+                    .try_collection(format!("{}", collection.name))?
+                    .try_function(format!("{}", function_version.name))?
+                    .try_execution(format!("~{}", execution.id))?
                     .build()?,
             );
 
@@ -179,23 +190,23 @@ mod tests {
             .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
-        assert_eq!(response.id(), function_run.id());
-        assert_eq!(response.collection_id(), function_run.collection_id());
+        assert_eq!(response.id, function_run.id);
+        assert_eq!(response.collection_id, function_run.collection_id);
         assert_eq!(
-            response.function_version_id(),
-            function_run.function_version_id()
+            response.function_version_id,
+            function_run.function_version_id
         );
-        assert_eq!(response.execution_id(), function_run.execution_id());
-        assert_eq!(response.transaction_id(), function_run.transaction_id());
-        assert_eq!(response.triggered_on(), function_run.triggered_on());
-        assert_eq!(response.trigger(), function_run.trigger());
-        assert_eq!(response.started_on(), function_run.started_on());
-        assert_eq!(response.ended_on(), function_run.ended_on());
-        assert_eq!(response.status(), function_run.status());
-        assert_eq!(*response.name(), FunctionName::try_from("joaquin")?);
-        assert_eq!(response.collection(), collection.name());
-        assert_eq!(response.execution(), execution.name());
-        assert_eq!(*response.triggered_by(), UserName::admin());
+        assert_eq!(response.execution_id, function_run.execution_id);
+        assert_eq!(response.transaction_id, function_run.transaction_id);
+        assert_eq!(response.triggered_on, function_run.triggered_on);
+        assert_eq!(response.trigger, function_run.trigger);
+        assert_eq!(response.started_on, function_run.started_on);
+        assert_eq!(response.ended_on, function_run.ended_on);
+        assert_eq!(response.status, function_run.status);
+        assert_eq!(response.name, FunctionName::try_from("joaquin")?);
+        assert_eq!(response.collection, collection.name);
+        assert_eq!(response.execution, execution.name);
+        assert_eq!(response.triggered_by, UserName::admin());
         Ok(())
     }
 }

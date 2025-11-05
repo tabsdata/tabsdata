@@ -5,7 +5,7 @@
 use crate::auth::AuthError;
 use std::ops::Deref;
 use td_error::TdError;
-use td_objects::types::basic::PasswordHash;
+use td_objects::types::string::PasswordHash;
 use td_security::password;
 use td_tower::extractors::Input;
 use tracing::error;

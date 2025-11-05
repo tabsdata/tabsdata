@@ -9,19 +9,16 @@ use td_common::id;
 use td_common::id::Id;
 use td_error::td_error;
 
-#[derive(Clone, Serialize, Deserialize, Getters)]
-#[getset(get = "pub")]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct JwtConfig {
-    secret: Option<String>,
-    access_token_expiration: i64,
+    pub secret: Option<String>,
+    pub access_token_expiration: i64,
     #[serde(skip)]
-    #[getset(skip)]
     encoding_key: Option<EncodingKey>,
     #[serde(skip)]
-    #[getset(skip)]
     decoding_key: Option<DecodingKey>,
     #[serde(skip)]
-    validation: Validation,
+    pub validation: Validation,
 }
 
 impl JwtConfig {
@@ -97,11 +94,7 @@ pub fn decode_token(jwt_settings: &JwtConfig, token: &str) -> Result<TokenClaims
     let mut validation = Validation::new(Algorithm::HS256);
     validation.leeway = 5;
     validation.set_required_spec_claims(&["jti", "exp"]);
-    decode::<TokenClaims>(
-        token,
-        jwt_settings.decoding_key(),
-        jwt_settings.validation(),
-    )
-    .map_err(JwtError::JwtEncodingError)
-    .map(|tt| tt.claims)
+    decode::<TokenClaims>(token, jwt_settings.decoding_key(), &jwt_settings.validation)
+        .map_err(JwtError::JwtEncodingError)
+        .map(|tt| tt.claims)
 }

@@ -11,14 +11,12 @@ use crate::transaction::services::cancel::TransactionCancelService;
 use crate::transaction::services::list::TransactionListService;
 use crate::transaction::services::recover::TransactionRecoverService;
 use crate::transaction::services::synchrotron::SynchrotronService;
-use getset::Getters;
 use ta_services::factory::ServiceFactory;
 
-#[derive(ServiceFactory, Getters)]
-#[getset(get = "pub")]
+#[derive(ServiceFactory)]
 pub struct TransactionServices {
-    cancel: TransactionCancelService,
-    list: TransactionListService,
-    recover: TransactionRecoverService,
-    synchrotron: SynchrotronService,
+    pub cancel: TransactionCancelService,
+    pub list: TransactionListService,
+    pub recover: TransactionRecoverService,
+    pub synchrotron: SynchrotronService,
 }

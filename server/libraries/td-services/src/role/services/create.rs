@@ -4,17 +4,17 @@
 
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
-use td_objects::crudl::{CreateRequest, RequestContext};
+use td_objects::dxo::crudl::{CreateRequest, RequestContext};
+use td_objects::dxo::role::defs::{
+    Role, RoleBuilder, RoleCreate, RoleDB, RoleDBBuilder, RoleDBWithNames,
+};
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, SecAdmin, System};
 use td_objects::tower_service::from::{
     BuildService, ExtractDataService, ExtractService, TryIntoService, UpdateService, With,
 };
 use td_objects::tower_service::sql::{By, SqlSelectService, insert};
-use td_objects::types::basic::RoleId;
-use td_objects::types::role::{
-    Role, RoleBuilder, RoleCreate, RoleDB, RoleDBBuilder, RoleDBWithNames,
-};
+use td_objects::types::id::RoleId;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -50,9 +50,10 @@ mod tests {
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::TdError;
-    use td_objects::crudl::RequestContext;
+    use td_objects::dxo::crudl::RequestContext;
     use td_objects::test_utils::seed_role::get_role;
-    use td_objects::types::basic::{AccessTokenId, RoleName, UserId};
+    use td_objects::types::id::{AccessTokenId, UserId};
+    use td_objects::types::string::RoleName;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -101,14 +102,14 @@ mod tests {
         let response = response?;
 
         let found = get_role(&db, &RoleName::try_from("test")?).await?;
-        assert_eq!(response.id(), found.id());
-        assert_eq!(response.name(), found.name());
-        assert_eq!(response.description(), found.description());
-        assert_eq!(response.created_on(), found.created_on());
-        assert_eq!(response.created_by_id(), found.created_by_id());
-        assert_eq!(response.modified_on(), found.modified_on());
-        assert_eq!(response.modified_by_id(), found.modified_by_id());
-        assert_eq!(response.fixed(), found.fixed());
+        assert_eq!(response.id, found.id);
+        assert_eq!(response.name, found.name);
+        assert_eq!(response.description, found.description);
+        assert_eq!(response.created_on, found.created_on);
+        assert_eq!(response.created_by_id, found.created_by_id);
+        assert_eq!(response.modified_on, found.modified_on);
+        assert_eq!(response.modified_by_id, found.modified_by_id);
+        assert_eq!(response.fixed, found.fixed);
         Ok(())
     }
 }

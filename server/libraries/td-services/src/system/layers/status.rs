@@ -4,7 +4,7 @@
 
 use std::time::Instant;
 use td_error::TdError;
-use td_objects::types::system::{ApiStatus, HealthStatus};
+use td_objects::dxo::system::{ApiStatus, HealthStatus};
 use td_tower::extractors::{Connection, IntoMutSqlConnection};
 
 pub async fn database_status(Connection(connection): Connection) -> Result<ApiStatus, TdError> {

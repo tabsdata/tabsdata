@@ -10,7 +10,6 @@ use crate::execution::services::list::ExecutionListService;
 use crate::execution::services::read::ExecutionReadService;
 use crate::execution::services::recover::ExecutionRecoverService;
 use crate::execution::services::runtime_info::RuntimeInfoService;
-use getset::Getters;
 use ta_services::factory::ServiceFactory;
 
 pub(crate) mod callback;
@@ -22,15 +21,14 @@ mod read;
 mod recover;
 pub mod runtime_info;
 
-#[derive(ServiceFactory, Getters)]
-#[getset(get = "pub")]
+#[derive(ServiceFactory)]
 pub struct ExecutionServices {
-    callback: ExecutionCallbackService,
-    cancel: ExecutionCancelService,
-    details: ExecutionDetailsService,
-    execute: ExecuteFunctionService,
-    list: ExecutionListService,
-    read: ExecutionReadService,
-    recover: ExecutionRecoverService,
-    info: RuntimeInfoService,
+    pub callback: ExecutionCallbackService,
+    pub cancel: ExecutionCancelService,
+    pub details: ExecutionDetailsService,
+    pub execute: ExecuteFunctionService,
+    pub list: ExecutionListService,
+    pub read: ExecutionReadService,
+    pub recover: ExecutionRecoverService,
+    pub info: RuntimeInfoService,
 }

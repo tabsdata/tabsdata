@@ -17,11 +17,11 @@ mod routes {
     };
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
-    use td_objects::crudl::{ListParams, RequestContext};
+    use td_objects::dxo::crudl::{ListParams, RequestContext};
+    use td_objects::dxo::user::defs::{UserCreate, UserRead, UserUpdate};
     use td_objects::rest_urls::{
         CREATE_USER, DELETE_USER, GET_USER, LIST_USERS, UPDATE_USER, UserParam,
     };
-    use td_objects::types::user::{UserCreate, UserRead, UserUpdate};
     use td_services::user::service::UserServices;
     use tower::ServiceExt;
 
@@ -35,7 +35,7 @@ mod routes {
         Query(query_params): Query<ListParams>,
     ) -> Result<ListStatus<UserRead>, ErrorStatus> {
         let request = context.list((), query_params);
-        let response = users_state.list().service().await.oneshot(request).await?;
+        let response = users_state.list.service().await.oneshot(request).await?;
         Ok(ListStatus::OK(response))
     }
 
@@ -47,7 +47,7 @@ mod routes {
         Path(path_params): Path<UserParam>,
     ) -> Result<GetStatus<UserRead>, ErrorStatus> {
         let request = context.read(path_params);
-        let response = users_state.read().service().await.oneshot(request).await?;
+        let response = users_state.read.service().await.oneshot(request).await?;
         Ok(GetStatus::OK(response))
     }
 
@@ -59,12 +59,7 @@ mod routes {
         Json(request): Json<UserCreate>,
     ) -> Result<CreateStatus<UserRead>, ErrorStatus> {
         let request = context.create((), request);
-        let response = users_state
-            .create()
-            .service()
-            .await
-            .oneshot(request)
-            .await?;
+        let response = users_state.create.service().await.oneshot(request).await?;
         Ok(CreateStatus::CREATED(response))
     }
 
@@ -77,12 +72,7 @@ mod routes {
         Json(request): Json<UserUpdate>,
     ) -> Result<UpdateStatus<UserRead>, ErrorStatus> {
         let request = context.update(path_params, request);
-        let response = users_state
-            .update()
-            .service()
-            .await
-            .oneshot(request)
-            .await?;
+        let response = users_state.update.service().await.oneshot(request).await?;
         Ok(UpdateStatus::OK(response))
     }
 
@@ -94,12 +84,7 @@ mod routes {
         Path(path_params): Path<UserParam>,
     ) -> Result<DeleteStatus<NoContent>, ErrorStatus> {
         let request = context.delete(path_params);
-        let response = users_state
-            .delete()
-            .service()
-            .await
-            .oneshot(request)
-            .await?;
+        let response = users_state.delete.service().await.oneshot(request).await?;
         Ok(DeleteStatus::OK(response))
     }
 }
@@ -115,11 +100,9 @@ mod tests {
     use ta_apiserver::router::RouterExtension;
     use ta_services::factory::ServiceFactory;
     use td_database::sql::DbPool;
-    use td_objects::crudl::RequestContext;
+    use td_objects::dxo::crudl::RequestContext;
     use td_objects::rest_urls::{CREATE_USER, DELETE_USER, GET_USER, LIST_USERS, UPDATE_USER};
-    use td_objects::types::basic::AccessTokenId;
-    use td_objects::types::basic::RoleId;
-    use td_objects::types::basic::UserId;
+    use td_objects::types::id::{AccessTokenId, RoleId, UserId};
     use td_services::{Context, Services};
     use tower::ServiceExt;
 

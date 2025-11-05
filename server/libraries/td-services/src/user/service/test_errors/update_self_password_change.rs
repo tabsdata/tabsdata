@@ -7,13 +7,13 @@ use crate::user::service::update::UpdateUserService;
 use ta_services::service::TdService;
 use td_database::sql::DbPool;
 use td_error::assert_service_error;
-use td_objects::crudl::RequestContext;
+use td_objects::dxo::crudl::RequestContext;
+use td_objects::dxo::user::defs::UserUpdate;
 use td_objects::rest_urls::UserParam;
 use td_objects::test_utils::seed_user::seed_user;
-use td_objects::types::basic::{
-    AccessTokenId, Email, FullName, Password, RoleId, UserEnabled, UserName,
-};
-use td_objects::types::user::UserUpdate;
+use td_objects::types::bool::UserEnabled;
+use td_objects::types::id::{AccessTokenId, RoleId};
+use td_objects::types::string::{Email, FullName, Password, UserName};
 
 #[td_test::test(sqlx)]
 #[tokio::test]
@@ -35,7 +35,7 @@ async fn test_update_user_self(db: DbPool) {
         .build()
         .unwrap();
 
-    let request = RequestContext::with(AccessTokenId::default(), user.id(), RoleId::user()).update(
+    let request = RequestContext::with(AccessTokenId::default(), user.id, RoleId::user()).update(
         UserParam::builder()
             .try_user("u0")
             .unwrap()

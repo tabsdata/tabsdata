@@ -14,9 +14,9 @@ mod routes {
     use ta_apiserver::status::ok_status::{GetStatus, ListStatus};
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
-    use td_objects::crudl::{ListParams, RequestContext};
+    use td_objects::dxo::crudl::{ListParams, RequestContext};
+    use td_objects::dxo::function_run::defs::FunctionRun;
     use td_objects::rest_urls::{FUNCTION_RUN_GET, FUNCTION_RUN_LIST, FunctionRunParam};
-    use td_objects::types::execution::FunctionRun;
     use td_services::function_run::services::FunctionRunServices;
     use tower::ServiceExt;
 
@@ -30,12 +30,7 @@ mod routes {
         Query(query_params): Query<ListParams>,
     ) -> Result<ListStatus<FunctionRun>, ErrorStatus> {
         let request = context.list((), query_params);
-        let response = function_runs
-            .list()
-            .service()
-            .await
-            .oneshot(request)
-            .await?;
+        let response = function_runs.list.service().await.oneshot(request).await?;
         Ok(ListStatus::OK(response))
     }
 
@@ -47,7 +42,7 @@ mod routes {
         Path(param): Path<FunctionRunParam>,
     ) -> Result<GetStatus<FunctionRun>, ErrorStatus> {
         let request = context.read(param);
-        let response = state.read().service().await.oneshot(request).await?;
+        let response = state.read.service().await.oneshot(request).await?;
         Ok(GetStatus::OK(response))
     }
 }

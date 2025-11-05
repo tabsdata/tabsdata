@@ -5,7 +5,13 @@
 use crate::inter_coll_permission::layers::assert_collection_and_to_collection_are_different;
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext, refresh_authz_context};
-use td_objects::crudl::{CreateRequest, RequestContext};
+use td_objects::dxo::collection::defs::CollectionDB;
+use td_objects::dxo::crudl::{CreateRequest, RequestContext};
+use td_objects::dxo::inter_collection_permission::defs::{
+    InterCollectionPermission, InterCollectionPermissionBuilder, InterCollectionPermissionCreate,
+    InterCollectionPermissionDB, InterCollectionPermissionDBBuilder,
+    InterCollectionPermissionDBWithNames,
+};
 use td_objects::rest_urls::CollectionParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, SecAdmin, System};
@@ -14,16 +20,11 @@ use td_objects::tower_service::from::{
     TryIntoService, UpdateService, With, builder,
 };
 use td_objects::tower_service::sql::{By, SqlSelectService, insert};
-use td_objects::types::basic::{
-    CollectionId, CollectionIdName, CollectionName, FromCollectionId, InterCollectionPermissionId,
-    ToCollectionId, ToCollectionName,
+use td_objects::types::id::{
+    CollectionId, FromCollectionId, InterCollectionPermissionId, ToCollectionId,
 };
-use td_objects::types::collection::CollectionDB;
-use td_objects::types::permission::{
-    InterCollectionPermission, InterCollectionPermissionBuilder, InterCollectionPermissionCreate,
-    InterCollectionPermissionDB, InterCollectionPermissionDBBuilder,
-    InterCollectionPermissionDBWithNames,
-};
+use td_objects::types::id_name::CollectionIdName;
+use td_objects::types::string::{CollectionName, ToCollectionName};
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -105,15 +106,12 @@ mod tests {
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::{TdError, assert_service_error};
-    use td_objects::crudl::RequestContext;
+    use td_objects::dxo::crudl::RequestContext;
     use td_objects::rest_urls::CollectionParam;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_inter_collection_permission::get_inter_collection_permissions;
     use td_objects::tower_service::authz::AuthzError;
-    use td_objects::types::basic::{
-        AccessTokenId, CollectionIdName, CollectionName, RoleId, ToCollectionId, UserId,
-    };
-    use td_objects::types::permission::InterCollectionPermissionCreate;
+    use td_objects::types::id::{AccessTokenId, RoleId, UserId};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -205,13 +203,10 @@ mod tests {
         let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
 
-        let found = get_inter_collection_permissions(&db, c0.id()).await?;
+        let found = get_inter_collection_permissions(&db, &c0.id).await?;
         assert_eq!(found.len(), 1);
-        assert_eq!(found[0].from_collection_id(), c0.id());
-        assert_eq!(
-            found[0].to_collection_id(),
-            &ToCollectionId::try_from(c1.id())?
-        );
+        assert_eq!(found[0].from_collection_id, c0.id);
+        assert_eq!(found[0].to_collection_id, ToCollectionId::try_from(c1.id)?);
         Ok(())
     }
 

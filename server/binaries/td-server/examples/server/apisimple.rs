@@ -7,7 +7,7 @@ use crate::endpoint::CounterRouter;
 use std::net::{Ipv4Addr, SocketAddr};
 use ta_apiserver::router::RouterExtension;
 use td_apiserver::{Server, ServerBuilder};
-use td_objects::types::basic::NonEmptyAddresses;
+use td_objects::types::addresses::NonEmptyAddresses;
 use td_process::launcher::hooks;
 
 /// This example just demonstrate how to create a simple server with a thread safe counter

@@ -4,13 +4,13 @@
 
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
-use td_objects::crudl::{ListRequest, ListResponse, RequestContext};
+use td_objects::dxo::collection::defs::CollectionRead;
+use td_objects::dxo::crudl::{ListRequest, ListResponse, RequestContext};
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::NoPermissions;
 use td_objects::tower_service::from::{ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlListService};
-use td_objects::types::basic::VisibleCollections;
-use td_objects::types::collection::CollectionRead;
+use td_objects::types::visible_collections::VisibleCollections;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -39,14 +39,14 @@ mod tests {
     use td_authz::AuthzContext;
     use td_database::sql::DbPool;
     use td_error::TdError;
-    use td_objects::crudl::{ListParams, RequestContext};
+    use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_role::seed_role;
     use td_objects::test_utils::seed_user::seed_user;
     use td_objects::test_utils::seed_user_role::seed_user_role;
-    use td_objects::types::basic::{
-        AccessTokenId, CollectionName, Description, RoleId, RoleName, UserEnabled, UserId, UserName,
-    };
+    use td_objects::types::bool::UserEnabled;
+    use td_objects::types::id::{AccessTokenId, RoleId, UserId};
+    use td_objects::types::string::{CollectionName, Description, RoleName, UserName};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -85,8 +85,8 @@ mod tests {
         let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
         let list = response.unwrap();
-        assert_eq!(list.len(), &1);
-        assert_eq!(*list.data()[0].name(), name);
+        assert_eq!(list.len, 1);
+        assert_eq!(list.data[0].name, name);
     }
 
     #[td_test::test(sqlx)]
@@ -105,7 +105,7 @@ mod tests {
             Description::try_from("any user")?,
         )
         .await;
-        let _user_role = seed_user_role(&db, user.id(), role.id()).await;
+        let _user_role = seed_user_role(&db, &user.id, &role.id).await;
 
         // Create a collection
         let name = CollectionName::try_from("ds0")?;
@@ -122,11 +122,11 @@ mod tests {
         let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
         let list = response?;
-        assert_eq!(*list.len(), 1);
-        assert_eq!(*list.data()[0].name(), name);
+        assert_eq!(list.len, 1);
+        assert_eq!(list.data[0].name, name);
 
         // No collections are visible to unauthorized users
-        let request = RequestContext::with(AccessTokenId::default(), user.id(), role.id())
+        let request = RequestContext::with(AccessTokenId::default(), user.id, role.id)
             .list((), ListParams::default());
 
         let service = ListCollectionsService::with_defaults(db.clone())
@@ -135,7 +135,7 @@ mod tests {
         let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
         let list = response?;
-        assert_eq!(*list.len(), 0);
+        assert_eq!(list.len, 0);
         Ok(())
     }
 }

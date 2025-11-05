@@ -4,12 +4,12 @@
 
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
-use td_objects::crudl::{ListRequest, ListResponse, RequestContext};
+use td_objects::dxo::crudl::{ListRequest, ListResponse, RequestContext};
+use td_objects::dxo::user::defs::UserRead;
 use td_objects::sql::{DaoQueries, NoListFilter};
 use td_objects::tower_service::authz::{AuthzOn, SecAdmin, System};
 use td_objects::tower_service::from::{ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlListService};
-use td_objects::types::user::UserRead;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -37,9 +37,11 @@ mod tests {
     use std::collections::HashSet;
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
-    use td_objects::crudl::{ListParams, RequestContext};
+    use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::test_utils::seed_user::seed_user;
-    use td_objects::types::basic::{AccessTokenId, RoleId, UserEnabled, UserName};
+    use td_objects::types::bool::UserEnabled;
+    use td_objects::types::id::{AccessTokenId, RoleId};
+    use td_objects::types::string::UserName;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -77,17 +79,16 @@ mod tests {
 
         let service = ListUsersService::with_defaults(db.clone()).service().await;
 
-        let request =
-            RequestContext::with(AccessTokenId::default(), user1.id(), RoleId::sec_admin())
-                .list((), ListParams::default());
+        let request = RequestContext::with(AccessTokenId::default(), user1.id, RoleId::sec_admin())
+            .list((), ListParams::default());
         let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
         let list = response.unwrap();
-        assert_eq!(*list.len(), 3);
+        assert_eq!(list.len, 3);
         let users = list
-            .data()
-            .iter()
-            .map(|u| u.name().clone())
+            .data
+            .into_iter()
+            .map(|u| u.name)
             .collect::<HashSet<_>>();
         let expected = HashSet::from([
             UserName::admin(),

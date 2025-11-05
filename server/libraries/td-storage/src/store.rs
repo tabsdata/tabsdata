@@ -26,7 +26,7 @@ impl MountsStorage {
         static ROOT: &str = "/";
         for mount_def in mount_defs.iter() {
             mount_def.validate()?;
-            if mount_def.path() == ROOT {
+            if mount_def.path == ROOT {
                 has_root = true;
             }
         }
@@ -38,7 +38,7 @@ impl MountsStorage {
         let mut fs_mounts = HashMap::new();
         let mut dups = HashMap::new();
         for mount_def in mount_defs {
-            *dups.entry(mount_def.id().clone()).or_insert(0) += 1;
+            *dups.entry(mount_def.id.clone()).or_insert(0) += 1;
             let mount = Mount::new(mount_def)?;
             fs_mounts.insert(mount.mount_path().clone(), mount);
         }

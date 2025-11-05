@@ -3,7 +3,7 @@
 //
 
 use td_error::td_error;
-use td_objects::types::basic::{RoleName, UserName};
+use td_objects::types::string::{RoleName, UserName};
 
 mod layers;
 pub mod services;

@@ -46,18 +46,21 @@ mod tests {
     use td_common::server::{PayloadType, SupervisorMessage};
     use td_database::sql::DbPool;
     use td_error::TdError;
-    use td_objects::crudl::{RequestContext, handle_sql_err};
+    use td_objects::dxo::crudl::{RequestContext, handle_sql_err};
+    use td_objects::dxo::execution::defs::ExecutionRequest;
+    use td_objects::dxo::function::defs::FunctionRegister;
+    use td_objects::dxo::request::FunctionInput;
+    use td_objects::dxo::worker::defs::WorkerDB;
     use td_objects::rest_urls::FunctionParam;
     use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_function::seed_function;
-    use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, Decorator, ExecutionName, FunctionRuntimeValues,
-        RoleId, TableDependencyDto, TableNameDto, UserId, WorkerId,
+    use td_objects::types::composed::TableDependencyDto;
+    use td_objects::types::id::{AccessTokenId, BundleId, RoleId, UserId, WorkerId};
+    use td_objects::types::string::{
+        CollectionName, ExecutionName, FunctionRuntimeValues, TableNameDto,
     };
-    use td_objects::types::execution::{ExecutionRequest, WorkerDB, WorkerMessageStatus};
-    use td_objects::types::function::FunctionRegister;
-    use td_objects::types::worker::FunctionInput;
+    use td_objects::types::typed_enum::{Decorator, WorkerMessageStatus};
     use td_tower::ctx_service::RawOneshot;
     use tower::ServiceExt;
 
@@ -102,7 +105,7 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
                 FunctionParam::builder()
-                    .try_collection(format!("{}", collection.name()))?
+                    .try_collection(format!("{}", collection.name))?
                     .try_function("function_1")?
                     .build()?,
                 ExecutionRequest::builder()
@@ -157,21 +160,18 @@ mod tests {
         .unwrap();
 
         // The file will be the same, it is just renamed.
-        assert_eq!(created_message.id(), unlocked_message.id());
-        assert_eq!(created_message.work(), unlocked_message.work());
-        assert_eq!(created_message.payload(), unlocked_message.payload());
+        assert_eq!(created_message.id, unlocked_message.id);
+        assert_eq!(created_message.work, unlocked_message.work);
+        assert_eq!(created_message.payload, unlocked_message.payload);
 
         // And assert db
-        let queries = DaoQueries::default();
-        let message_id = WorkerId::try_from(created_message.id().as_str())?;
-
-        let message: WorkerDB = queries
-            .select_by::<WorkerDB>(&(&message_id))?
+        let message: WorkerDB = DaoQueries::default()
+            .select_by::<WorkerDB>(&WorkerId::try_from(created_message.id.as_str())?)?
             .build_query_as()
             .fetch_one(&db)
             .await
             .map_err(handle_sql_err)?;
-        assert_eq!(*message.message_status(), WorkerMessageStatus::Unlocked);
+        assert_eq!(message.message_status, WorkerMessageStatus::Unlocked);
 
         Ok(())
     }

@@ -9,19 +9,19 @@ use crate::auth::layers::refresh_sessions::refresh_sessions;
 use crate::auth::layers::set_session_expiration::set_session_expiration;
 use crate::auth::session::Sessions;
 use ta_services::factory::service_factory;
-use td_objects::crudl::{RequestContext, UpdateRequest};
+use td_objects::dxo::auth::defs::{
+    SessionDB, SessionDBBuilder, SessionNewTokenDB, SessionNewTokenDBBuilder, TokenResponseX,
+};
+use td_objects::dxo::crudl::{RequestContext, UpdateRequest};
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::from::{
     BuildService, DefaultService, ExtractDataService, ExtractService, SetService, With, builder,
     combine,
 };
 use td_objects::tower_service::sql::{By, SqlSelectService, SqlUpdateService, insert};
-use td_objects::types::auth::{
-    SessionDB, SessionDBBuilder, SessionNewTokenDB, SessionNewTokenDBBuilder, TokenResponseX,
-};
-use td_objects::types::basic::{
-    AccessTokenId, AtTime, RefreshToken, RefreshTokenId, RoleId, UserId,
-};
+use td_objects::types::id::{AccessTokenId, RefreshTokenId, RoleId, UserId};
+use td_objects::types::string::RefreshToken;
+use td_objects::types::timestamp::AtTime;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -80,8 +80,9 @@ mod tests {
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::TdError;
-    use td_objects::types::auth::Login;
-    use td_objects::types::basic::{Password, RoleId, RoleName, SessionStatus, UserId, UserName};
+    use td_objects::dxo::auth::defs::Login;
+    use td_objects::types::string::{Password, RoleName, UserName};
+    use td_objects::types::typed_enum::SessionStatus;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -143,9 +144,9 @@ mod tests {
         let res = service.raw_oneshot(request).await;
         assert!(res.is_ok());
         let token_response = res?;
-        let access_token = token_response.access_token();
+        let access_token = &token_response.access_token;
         let original_access_token_id = *decode_token(&context.jwt_config, access_token)?.jti();
-        let refresh_token = token_response.refresh_token();
+        let refresh_token = &token_response.refresh_token;
 
         let service = auth_services.refresh.service().await;
 
@@ -155,14 +156,14 @@ mod tests {
         let res = service.raw_oneshot(request).await;
         assert!(res.is_ok());
         let token_response = res?;
-        let access_token = token_response.access_token();
+        let access_token = &token_response.access_token;
         let access_token_id = *decode_token(&context.jwt_config, access_token)?.jti();
         assert_session(&db, &Some(access_token_id.into())).await;
 
         let session = get_session(&db, &original_access_token_id.into()).await;
         match session {
             Some(session) => {
-                assert_eq!(session.status(), &SessionStatus::InvalidNewToken);
+                assert_eq!(session.status, SessionStatus::InvalidNewToken);
             }
             None => {
                 panic!("Session not found");

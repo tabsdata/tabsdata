@@ -5,15 +5,16 @@
 use crate::user::layers::delete::delete_user_validate;
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
-use td_objects::crudl::{DeleteRequest, RequestContext};
+use td_objects::dxo::crudl::{DeleteRequest, RequestContext};
+use td_objects::dxo::user::defs::UserDB;
+use td_objects::dxo::user_role::defs::UserRoleDB;
 use td_objects::rest_urls::UserParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, SecAdmin, System};
 use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlDeleteService, SqlSelectService};
-use td_objects::types::basic::{UserId, UserIdName};
-use td_objects::types::role::UserRoleDB;
-use td_objects::types::user::UserDB;
+use td_objects::types::id::UserId;
+use td_objects::types::id_name::UserIdName;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -47,12 +48,14 @@ mod tests {
     use super::*;
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
-    use td_objects::crudl::RequestContext;
+    use td_objects::dxo::crudl::RequestContext;
+    use td_objects::dxo::user::defs::UserDB;
     use td_objects::rest_urls::UserParam;
     use td_objects::sql::{DaoQueries, SelectBy};
     use td_objects::test_utils::seed_user::seed_user;
-    use td_objects::types::basic::{AccessTokenId, RoleId, UserEnabled, UserId, UserName};
-    use td_objects::types::user::UserDB;
+    use td_objects::types::bool::UserEnabled;
+    use td_objects::types::id::{AccessTokenId, RoleId};
+    use td_objects::types::string::UserName;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -116,7 +119,7 @@ mod tests {
         assert!(res.is_none());
 
         let res: Option<UserRoleDB> = DaoQueries::default()
-            .select_by::<UserRoleDB>(&user.id())
+            .select_by::<UserRoleDB>(&user.id)
             .unwrap()
             .build_query_as()
             .fetch_optional(&db)

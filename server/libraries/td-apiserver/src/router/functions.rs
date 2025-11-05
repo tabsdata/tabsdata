@@ -17,16 +17,18 @@ mod routes {
     };
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
-    use td_objects::crudl::{ListParams, RequestContext};
+    use td_objects::dxo::bundle::defs::Bundle;
+    use td_objects::dxo::crudl::{ListParams, RequestContext};
+    use td_objects::dxo::function::defs::{
+        Function, FunctionRegister, FunctionUpdate, FunctionWithTables,
+    };
+    use td_objects::dxo::function_upload::FunctionUpload;
+    use td_objects::rest_urls::params::{CollectionAtName, FunctionAtIdName};
     use td_objects::rest_urls::{
         AtTimeParam, CollectionParam, FUNCTION_CREATE, FUNCTION_DELETE, FUNCTION_GET,
         FUNCTION_HISTORY, FUNCTION_LIST, FUNCTION_LIST_BY_COLL, FUNCTION_UPDATE, FUNCTION_UPLOAD,
         FunctionParam,
     };
-    use td_objects::types::function::{
-        Bundle, Function, FunctionRegister, FunctionUpdate, FunctionUpload, FunctionWithTables,
-    };
-    use td_objects::types::table::{CollectionAtName, FunctionAtIdName};
     use td_services::function::services::FunctionServices;
     use tower::ServiceExt;
 
@@ -39,7 +41,7 @@ mod routes {
         Path(function_param): Path<FunctionParam>,
     ) -> Result<DeleteStatus<NoContent>, ErrorStatus> {
         let request = context.delete(function_param);
-        let response = state.delete().service().await.oneshot(request).await?;
+        let response = state.delete.service().await.oneshot(request).await?;
         Ok(DeleteStatus::OK(response))
     }
 
@@ -53,7 +55,7 @@ mod routes {
     ) -> Result<ListStatus<Function>, ErrorStatus> {
         let name = FunctionAtIdName::new(function_param, at_param);
         let request = context.list(name, query_params);
-        let response = state.history().service().await.oneshot(request).await?;
+        let response = state.history.service().await.oneshot(request).await?;
         Ok(ListStatus::OK(response))
     }
 
@@ -66,7 +68,7 @@ mod routes {
         Query(at_param): Query<AtTimeParam>,
     ) -> Result<ListStatus<Function>, ErrorStatus> {
         let request = context.list(at_param, query_params);
-        let response = state.list().service().await.oneshot(request).await?;
+        let response = state.list.service().await.oneshot(request).await?;
         Ok(ListStatus::OK(response))
     }
 
@@ -82,7 +84,7 @@ mod routes {
         let name = CollectionAtName::new(collection_param, at_param);
         let request = context.list(name, query_params);
         let response = state
-            .list_by_collection()
+            .list_by_collection
             .service()
             .await
             .oneshot(request)
@@ -98,12 +100,7 @@ mod routes {
         Path(param): Path<FunctionParam>,
     ) -> Result<GetStatus<FunctionWithTables>, ErrorStatus> {
         let request = context.read(param);
-        let response = state
-            .read_version()
-            .service()
-            .await
-            .oneshot(request)
-            .await?;
+        let response = state.read_version.service().await.oneshot(request).await?;
         Ok(GetStatus::OK(response))
     }
 
@@ -116,7 +113,7 @@ mod routes {
         Json(request): Json<FunctionRegister>,
     ) -> Result<CreateStatus<Function>, ErrorStatus> {
         let request = context.create(collection_param, request);
-        let response = state.register().service().await.oneshot(request).await?;
+        let response = state.register.service().await.oneshot(request).await?;
         Ok(CreateStatus::CREATED(response))
     }
 
@@ -129,7 +126,7 @@ mod routes {
         Json(request): Json<FunctionUpdate>,
     ) -> Result<UpdateStatus<Function>, ErrorStatus> {
         let request = context.update(function_param, request);
-        let response = state.update().service().await.oneshot(request).await?;
+        let response = state.update.service().await.oneshot(request).await?;
         Ok(UpdateStatus::OK(response))
     }
 
@@ -149,7 +146,7 @@ mod routes {
     ) -> Result<CreateStatus<Bundle>, ErrorStatus> {
         let request = FunctionUpload::new(request);
         let request = request_context.create(param, request);
-        let response = state.upload().service().await.oneshot(request).await?;
+        let response = state.upload.service().await.oneshot(request).await?;
         Ok(CreateStatus::CREATED(response))
     }
 }

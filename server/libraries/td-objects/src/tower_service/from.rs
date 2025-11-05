@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::crudl::{Data, IntoData, IntoName, Name};
+use crate::dxo::crudl::{Data, IntoData, IntoName, Name};
 use crate::types::Extractor;
 use async_trait::async_trait;
 use std::marker::PhantomData;

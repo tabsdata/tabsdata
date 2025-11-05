@@ -7,13 +7,26 @@ use crate::execution::layers::plan::{
     build_table_data_versions, build_transaction_map, build_transactions,
     update_initial_function_run_status,
 };
-use crate::execution::layers::template::assert_active_status;
+use crate::execution::layers::template::assert_function_status;
 use crate::execution::layers::template::{
     build_execution_template, find_all_input_tables, find_trigger_graph,
 };
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
-use td_objects::crudl::{CreateRequest, RequestContext};
+use td_objects::dxo::crudl::{CreateRequest, RequestContext};
+use td_objects::dxo::dependency::defs::DependencyDBWithNames;
+use td_objects::dxo::execution::defs::{
+    ExecutionDB, ExecutionDBBuilder, ExecutionRequest, ExecutionResponse,
+};
+use td_objects::dxo::function::defs::FunctionDBWithNames;
+use td_objects::dxo::function_requirement::defs::FunctionRequirementDB;
+use td_objects::dxo::function_run::defs::{FunctionRunDB, FunctionRunDBBuilder};
+use td_objects::dxo::inter_collection_access::defs::{
+    InterCollectionAccess, InterCollectionAccessBuilder,
+};
+use td_objects::dxo::table_data_version::defs::TableDataVersionDB;
+use td_objects::dxo::transaction::defs::{TransactionDB, TransactionDBBuilder};
+use td_objects::dxo::trigger::defs::TriggerDBWithNames;
 use td_objects::rest_urls::FunctionParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollExec, InterColl};
@@ -22,17 +35,9 @@ use td_objects::tower_service::from::{
     TryIntoService, UpdateService, VecBuildService, With, combine,
 };
 use td_objects::tower_service::sql::{By, SqlSelectService, insert, insert_vec};
-use td_objects::types::basic::{
-    AtTime, CollectionId, CollectionIdName, FunctionId, FunctionIdName, FunctionStatus,
-};
-use td_objects::types::dependency::DependencyDBWithNames;
-use td_objects::types::execution::{
-    ExecutionDB, ExecutionDBBuilder, ExecutionRequest, ExecutionResponse, FunctionRequirementDB,
-    FunctionRunDB, FunctionRunDBBuilder, TableDataVersionDB, TransactionDB, TransactionDBBuilder,
-};
-use td_objects::types::function::FunctionDBWithNames;
-use td_objects::types::permission::{InterCollectionAccess, InterCollectionAccessBuilder};
-use td_objects::types::trigger::TriggerDBWithNames;
+use td_objects::types::id::{CollectionId, FunctionId};
+use td_objects::types::id_name::{CollectionIdName, FunctionIdName};
+use td_objects::types::timestamp::AtTime;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -62,9 +67,13 @@ fn service() {
         from_fn(With::<FunctionParam>::extract::<FunctionIdName>),
         from_fn(combine::<CollectionIdName, FunctionIdName>),
         // Select trigger function.
-        from_fn(FunctionStatus::none),
-        from_fn(By::<(CollectionIdName, FunctionIdName)>::select_version::<FunctionDBWithNames>),
-        from_fn(assert_active_status),
+        from_fn(
+            By::<(CollectionIdName, FunctionIdName)>::select_version::<
+                { FunctionDBWithNames::Active },
+                FunctionDBWithNames,
+            >
+        ),
+        from_fn(assert_function_status),
         // check requester is coll_admin or coll_exec for the function's collection
         from_fn(With::<FunctionDBWithNames>::extract::<CollectionId>),
         from_fn(AuthzOn::<CollectionId>::set),
@@ -122,7 +131,14 @@ pub(crate) mod tests {
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::TdError;
-    use td_objects::crudl::{RequestContext, handle_sql_err};
+    use td_objects::dxo::crudl::handle_sql_err;
+    use td_objects::dxo::execution::defs::ExecutionDBWithStatus;
+    use td_objects::dxo::function::defs::FunctionRegister;
+    use td_objects::dxo::function_requirement::defs::FunctionRequirementDBWithNames;
+    use td_objects::dxo::function_run::defs::FunctionRunDBWithNames;
+    use td_objects::dxo::table::defs::TableDB;
+    use td_objects::dxo::table_data_version::defs::TableDataVersionDBWithFunction;
+    use td_objects::dxo::transaction::defs::TransactionDBWithStatus;
     use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_execution::seed_execution;
@@ -132,33 +148,28 @@ pub(crate) mod tests {
     use td_objects::test_utils::seed_table_data_version::seed_table_data_version;
     use td_objects::test_utils::seed_transaction::seed_transaction;
     use td_objects::tower_service::authz::AuthzError;
-    use td_objects::types::basic::{
-        AccessTokenId, ExecutionStatus, FunctionRunStatus, TableDependencyDto, TableNameDto,
-        TableTriggerDto, TransactionStatus,
+    use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
+    use td_objects::types::id::{AccessTokenId, BundleId, RoleId, ToCollectionId, UserId};
+    use td_objects::types::string::{
+        CollectionName, ExecutionName, FunctionName, FunctionRuntimeValues, TableName,
+        TableNameDto, TransactionKey,
     };
-    use td_objects::types::basic::{
-        BundleId, CollectionName, Decorator, ExecutionName, FunctionName, FunctionRuntimeValues,
-        TableName, TransactionKey, TriggeredOn, UserId,
+    use td_objects::types::timestamp::TriggeredOn;
+    use td_objects::types::typed_enum::{
+        Decorator, ExecutionStatus, FunctionRunStatus, TransactionStatus,
     };
-    use td_objects::types::basic::{RoleId, ToCollectionId};
-    use td_objects::types::execution::{
-        ExecutionDBWithStatus, FunctionRunDBWithNames, TransactionDBWithStatus,
-    };
-    use td_objects::types::execution::{
-        FunctionRequirementDBWithNames, TableDataVersionDBWithFunction,
-    };
-    use td_objects::types::function::{FunctionDBWithNames, FunctionRegister};
-    use td_objects::types::table::TableDB;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     #[tokio::test]
     async fn test_tower_metadata_execute(db: DbPool) {
+        use td_objects::dxo::dependency::defs::DependencyDBWithNames;
+        use td_objects::dxo::inter_collection_access::defs::{
+            InterCollectionAccess, InterCollectionAccessBuilder,
+        };
         use td_objects::tower_service::authz::InterColl;
         use td_objects::tower_service::from::{ConvertIntoMapService, VecBuildService};
-        use td_objects::types::dependency::DependencyDBWithNames;
-        use td_objects::types::permission::{InterCollectionAccess, InterCollectionAccessBuilder};
         use td_tower::metadata::type_of_val;
 
         ExecuteFunctionService::with_defaults(db)
@@ -179,9 +190,13 @@ pub(crate) mod tests {
                     type_of_val(&With::<FunctionParam>::extract::<FunctionIdName>),
                     type_of_val(&combine::<CollectionIdName, FunctionIdName>),
                     // Select trigger function.
-                    type_of_val(&FunctionStatus::none),
-                    type_of_val(&By::<(CollectionIdName, FunctionIdName)>::select_version::<FunctionDBWithNames>),
-                    type_of_val(&assert_active_status),
+                    type_of_val(&
+                        By::<(CollectionIdName, FunctionIdName)>::select_version::<
+                            { FunctionDBWithNames::Active },
+                            FunctionDBWithNames,
+                        >
+                    ),
+                    type_of_val(&assert_function_status),
                     // check requester is coll_admin or coll_exec for the function's collection
                     type_of_val(&With::<FunctionDBWithNames>::extract::<CollectionId>),
                     type_of_val(&AuthzOn::<CollectionId>::set),
@@ -284,23 +299,23 @@ pub(crate) mod tests {
 
         seed_inter_collection_permission(
             &db,
-            collection_0.id(),
-            &ToCollectionId::try_from(collection_1.id())?,
+            &collection_0.id,
+            &ToCollectionId::try_from(&collection_1.id)?,
         )
         .await;
 
         seed_inter_collection_permission(
             &db,
-            collection_0.id(),
-            &ToCollectionId::try_from(collection_2.id())?,
+            &collection_0.id,
+            &ToCollectionId::try_from(&collection_2.id)?,
         )
         .await;
 
         if with_permission {
             seed_inter_collection_permission(
                 &db,
-                collection_1.id(),
-                &ToCollectionId::try_from(collection_2.id())?,
+                &collection_1.id,
+                &ToCollectionId::try_from(&collection_2.id)?,
             )
             .await;
         }
@@ -397,7 +412,7 @@ pub(crate) mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
                 FunctionParam::builder()
-                    .try_collection(format!("{}", collection_0.name()))?
+                    .try_collection(format!("{}", collection_0.name))?
                     .try_function("function_0")?
                     .build()?,
                 ExecutionRequest::builder()
@@ -415,44 +430,41 @@ pub(crate) mod tests {
 
             // Check the response
             assert_eq!(
-                *response.name(),
+                response.name,
                 Some(ExecutionName::try_from("test_execution")?)
             );
-            assert!(*response.triggered_on() < TriggeredOn::now());
+            assert!(response.triggered_on < TriggeredOn::now());
 
-            let all_functions_map = response.all_functions();
+            let all_functions_map = &response.all_functions;
             let mut all_functions: Vec<_> = response
-                .all_functions()
+                .all_functions
                 .values()
-                .map(|t| t.name())
+                .map(|t| t.name.clone())
                 .collect();
             all_functions.sort();
             assert_eq!(
                 all_functions,
                 vec![
-                    &FunctionName::try_from("function_0")?,
-                    &FunctionName::try_from("function_1")?,
-                    &FunctionName::try_from("function_2")?,
-                    &FunctionName::try_from("function_3")?,
+                    FunctionName::try_from("function_0")?,
+                    FunctionName::try_from("function_1")?,
+                    FunctionName::try_from("function_2")?,
+                    FunctionName::try_from("function_3")?,
                 ]
             );
             let triggered_functions: Vec<_> = response
-                .triggered_functions()
+                .triggered_functions
                 .iter()
                 .map(|t| &all_functions_map[t])
                 .collect();
             // it can vary depending on the execution
             assert!(triggered_functions.is_empty() || triggered_functions.len() == 3);
-            let manual_trigger = &all_functions_map[response.manual_trigger()];
-            assert_eq!(
-                manual_trigger.name(),
-                &FunctionName::try_from("function_0")?
-            );
+            let manual_trigger = &all_functions_map[&response.manual_trigger];
+            assert_eq!(manual_trigger.name, FunctionName::try_from("function_0")?);
 
-            let all_tables_map = response.all_tables();
+            let all_tables_map = &response.all_tables;
             let mut all_tables: Vec<_> = all_tables_map
                 .values()
-                .map(|t| TableName::try_from(format!("{}/{}", t.collection(), t.name())).unwrap())
+                .map(|t| TableName::try_from(format!("{}/{}", t.collection, t.name)).unwrap())
                 .collect();
             all_tables.sort();
             assert_eq!(
@@ -468,11 +480,11 @@ pub(crate) mod tests {
                 ]
             );
             // In this test, all tables are user tables.
-            assert_eq!(response.user_tables().len(), all_tables.len());
-            assert_eq!(response.system_tables().len(), 0);
+            assert_eq!(response.user_tables.len(), all_tables.len());
+            assert_eq!(response.system_tables.len(), 0);
 
             let created_tables: Vec<_> = response
-                .created_tables()
+                .created_tables
                 .iter()
                 .map(|t| &all_tables_map[t])
                 .collect();
@@ -490,10 +502,10 @@ pub(crate) mod tests {
                 .await
                 .map_err(handle_sql_err)?;
             assert_eq!(executions.len(), 1);
-            assert_eq!(executions[0].id(), response.id());
-            assert_eq!(executions[0].name(), response.name());
-            assert_eq!(executions[0].collection_id(), collection_0.id());
-            assert_eq!(*executions[0].status(), ExecutionStatus::Scheduled);
+            assert_eq!(executions[0].id, response.id);
+            assert_eq!(executions[0].name, response.name);
+            assert_eq!(executions[0].collection_id, collection_0.id);
+            assert_eq!(executions[0].status, ExecutionStatus::Scheduled);
 
             // Transaction
             let transactions: Vec<TransactionDBWithStatus> = queries
@@ -504,8 +516,8 @@ pub(crate) mod tests {
                 .map_err(handle_sql_err)?;
             assert!(transactions.len() == 1 || transactions.len() == 3);
             for transaction in transactions {
-                assert_eq!(transaction.execution_id(), response.id());
-                assert_eq!(*transaction.status(), TransactionStatus::Scheduled);
+                assert_eq!(&transaction.execution_id, &response.id);
+                assert_eq!(transaction.status, TransactionStatus::Scheduled);
             }
 
             // FunctionRun
@@ -516,15 +528,15 @@ pub(crate) mod tests {
                 .await
                 .map_err(handle_sql_err)?;
             let function_runs: Vec<FunctionRunDB> = queries
-                .select_by::<FunctionRunDB>(&(function.id()))?
+                .select_by::<FunctionRunDB>(&(&function.id))?
                 .build_query_as()
                 .fetch_all(&db)
                 .await
                 .map_err(handle_sql_err)?;
             assert_eq!(function_runs.len(), 1);
-            assert_eq!(function_runs[0].collection_id(), collection_0.id());
-            assert_eq!(function_runs[0].execution_id(), response.id());
-            assert_eq!(*function_runs[0].status(), FunctionRunStatus::Scheduled);
+            assert_eq!(function_runs[0].collection_id, collection_0.id);
+            assert_eq!(function_runs[0].execution_id, response.id);
+            assert_eq!(function_runs[0].status, FunctionRunStatus::Scheduled);
 
             let function: FunctionDBWithNames = queries
                 .select_by::<FunctionDBWithNames>(&(&FunctionName::try_from("function_2")?))?
@@ -533,15 +545,15 @@ pub(crate) mod tests {
                 .await
                 .map_err(handle_sql_err)?;
             let function_runs: Vec<FunctionRunDB> = queries
-                .select_by::<FunctionRunDB>(&(function.id()))?
+                .select_by::<FunctionRunDB>(&(&function.id))?
                 .build_query_as()
                 .fetch_all(&db)
                 .await
                 .map_err(handle_sql_err)?;
             // it can vary depending on the execution
             for function_run in function_runs {
-                assert_eq!(function_run.execution_id(), response.id());
-                assert_eq!(*function_run.status(), FunctionRunStatus::Scheduled);
+                assert_eq!(&function_run.execution_id, &response.id);
+                assert_eq!(function_run.status, FunctionRunStatus::Scheduled);
             }
 
             // TableDataVersion
@@ -554,9 +566,9 @@ pub(crate) mod tests {
             // it can vary depending on the execution
             assert!(table_data_versions.len() == 1 || table_data_versions.len() == 7);
             for table_data_version in table_data_versions {
-                assert_eq!(table_data_version.execution_id(), response.id());
-                assert_eq!(*table_data_version.has_data(), None);
-                assert_eq!(*table_data_version.status(), FunctionRunStatus::Scheduled);
+                assert_eq!(&table_data_version.execution_id, &response.id);
+                assert_eq!(table_data_version.has_data, None);
+                assert_eq!(table_data_version.status, FunctionRunStatus::Scheduled);
             }
 
             // FunctionCondition
@@ -571,25 +583,25 @@ pub(crate) mod tests {
 
             let mut function_idxs = HashSet::new();
             for function_condition in &function_requirements {
-                assert_eq!(function_condition.execution_id(), response.id());
-                if *function_condition.requirement_table() == TableName::try_from("table_3")? {
+                assert_eq!(function_condition.execution_id, response.id);
+                if function_condition.requirement_table == TableName::try_from("table_3")? {
                     // Self dependency on fist execution, version does not exist, requirement done.
-                    assert_eq!(*function_condition.status(), FunctionRunStatus::Committed);
+                    assert_eq!(function_condition.status, FunctionRunStatus::Committed);
                 } else {
-                    assert_eq!(*function_condition.status(), FunctionRunStatus::Scheduled);
+                    assert_eq!(function_condition.status, FunctionRunStatus::Scheduled);
                 }
 
-                if let Some(dependency_pos) = function_condition.requirement_dependency_pos() {
+                if let Some(dependency_pos) = &function_condition.requirement_dependency_pos {
                     // In the test, table order matches table name
                     assert!(
                         function_condition
-                            .requirement_table()
+                            .requirement_table
                             .as_str()
                             .contains(&(**dependency_pos + 1).to_string())
                     );
                 }
 
-                if let Some(input_idx) = function_condition.requirement_input_idx() {
+                if let Some(input_idx) = &function_condition.requirement_input_idx {
                     function_idxs.insert(**input_idx as usize);
                 }
             }
@@ -597,7 +609,7 @@ pub(crate) mod tests {
                 function_idxs,
                 (0..function_requirements
                     .iter()
-                    .filter(|f| f.requirement_input_idx().is_some())
+                    .filter(|f| f.requirement_input_idx.is_some())
                     .collect::<Vec<_>>()
                     .len())
                     .collect::<HashSet<_>>()
@@ -720,7 +732,7 @@ pub(crate) mod tests {
         .await;
         let table_name = TableName::try_from("table_0")?;
         let table: TableDB = DaoQueries::default()
-            .select_by::<TableDB>(&(collection.id(), &table_name))?
+            .select_by::<TableDB>(&(&collection.id, &table_name))?
             .build_query_as()
             .fetch_one(&db)
             .await
@@ -750,7 +762,7 @@ pub(crate) mod tests {
         .await;
         let table_name = TableName::try_from("table_1")?;
         let table: TableDB = DaoQueries::default()
-            .select_by::<TableDB>(&(collection.id(), &table_name))?
+            .select_by::<TableDB>(&(&collection.id, &table_name))?
             .build_query_as()
             .fetch_one(&db)
             .await
@@ -770,7 +782,7 @@ pub(crate) mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
                 FunctionParam::builder()
-                    .try_collection(collection.name().to_string())?
+                    .try_collection(collection.name.to_string())?
                     .try_function(function_name.to_string())?
                     .build()?,
                 ExecutionRequest::builder()
@@ -792,7 +804,7 @@ pub(crate) mod tests {
             .unwrap();
 
         // and in OnHold status, because even tho function_1 is Done, function_0 is not ready
-        assert_eq!(*function_run.status(), expected_initial_status);
+        assert_eq!(function_run.status, expected_initial_status);
         Ok(())
     }
 }

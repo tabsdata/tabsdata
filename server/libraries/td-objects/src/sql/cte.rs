@@ -433,6 +433,7 @@ mod tests {
     }
 
     #[Dao]
+    #[derive(Eq, PartialEq)]
     #[dao(
         sql_table = "test_table",
         versioned(order_by = "defined_on", partition_by = "partition_id"),

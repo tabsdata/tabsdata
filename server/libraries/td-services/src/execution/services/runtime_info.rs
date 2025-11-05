@@ -8,10 +8,9 @@ use serde::de::DeserializeOwned;
 use ta_services::factory::service_factory;
 use td_common::server::{EtcContent, etc_service};
 use td_error::{TdError, td_error};
-use td_objects::crudl::ReadRequest;
-use td_objects::types::basic::{BuildManifest, TabsdataVersion};
-use td_objects::types::runtime_info::RuntimeInfo;
-use td_objects::types::runtime_info::{PythonVersions, ServerVersion};
+use td_objects::dxo::crudl::ReadRequest;
+use td_objects::dxo::runtime_info::{PythonVersions, RuntimeInfo, ServerVersion};
+use td_objects::types::string::{BuildManifest, TabsdataVersion};
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
 use tracing::error;
@@ -37,7 +36,7 @@ impl RuntimeContext {
         let info = RuntimeInfo::builder()
             .version(server_version().await?)
             .build_manifest(build_manifest().await?)
-            .python_versions(valid_python_versions().await?.versions().clone())
+            .python_versions(valid_python_versions().await?.versions.clone())
             .build()?;
         Ok(Self { info })
     }
@@ -99,7 +98,7 @@ async fn read_string(etc_content: &EtcContent) -> Result<String, TdError> {
 
 async fn server_version() -> Result<TabsdataVersion, TdError> {
     let server_version = deserialize::<ServerVersion>(&EtcContent::ServerVersion_yaml).await?;
-    Ok(server_version.version().clone())
+    Ok(server_version.version)
 }
 async fn valid_python_versions() -> Result<PythonVersions, TdError> {
     let valid_python_versions =
@@ -122,8 +121,6 @@ mod tests {
     #[tokio::test]
     async fn test_tower_metadata_runtime_info() {
         use ta_services::service::TdService;
-        use td_objects::crudl::ReadRequest;
-        use td_objects::types::runtime_info::RuntimeInfo;
 
         use td_tower::metadata::type_of_val;
 
@@ -140,6 +137,6 @@ mod tests {
     async fn test_runtime_info() {
         let res = RuntimeContext::new().await;
         assert!(res.is_ok());
-        assert!(res.unwrap().info().python_versions().is_empty());
+        assert!(res.unwrap().info().python_versions.is_empty());
     }
 }

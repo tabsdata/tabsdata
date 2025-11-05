@@ -5,7 +5,7 @@
 #![allow(clippy::upper_case_acronyms)]
 
 use serde::Serialize;
-use td_objects::crudl::ListResponse;
+use td_objects::dxo::crudl::ListResponse;
 use td_tower::ctx_service::CtxResponse;
 use utoipa::__dev::ComposeSchema;
 use utoipa::ToSchema;

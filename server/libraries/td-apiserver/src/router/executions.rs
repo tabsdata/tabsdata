@@ -17,13 +17,13 @@ mod routes {
     };
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
-    use td_objects::crudl::{ListParams, RequestContext};
+    use td_objects::dxo::crudl::{ListParams, RequestContext};
+    use td_objects::dxo::execution::defs::{
+        Execution, ExecutionDetails, ExecutionRequest, ExecutionResponse,
+    };
     use td_objects::rest_urls::{
         EXECUTION_CANCEL, EXECUTION_DETAILS, EXECUTION_LIST, EXECUTION_READ, EXECUTION_RECOVER,
         ExecutionParam, FUNCTION_EXECUTE, FunctionParam,
-    };
-    use td_objects::types::execution::{
-        Execution, ExecutionDetails, ExecutionRequest, ExecutionResponse,
     };
     use td_services::execution::services::ExecutionServices;
     use tower::ServiceExt;
@@ -38,7 +38,7 @@ mod routes {
         Path(param): Path<ExecutionParam>,
     ) -> Result<UpdateStatus<NoContent>, ErrorStatus> {
         let request = context.update(param, ());
-        let response = executions.cancel().service().await.oneshot(request).await?;
+        let response = executions.cancel.service().await.oneshot(request).await?;
         Ok(UpdateStatus::OK(response))
     }
 
@@ -50,12 +50,7 @@ mod routes {
         Path(param): Path<ExecutionParam>,
     ) -> Result<GetStatus<ExecutionDetails>, ErrorStatus> {
         let request = context.read(param);
-        let response = executions
-            .details()
-            .service()
-            .await
-            .oneshot(request)
-            .await?;
+        let response = executions.details.service().await.oneshot(request).await?;
         Ok(GetStatus::OK(response))
     }
 
@@ -68,12 +63,7 @@ mod routes {
         Json(request): Json<ExecutionRequest>,
     ) -> Result<CreateStatus<ExecutionResponse>, ErrorStatus> {
         let request = context.create(function_param, request);
-        let response = executions
-            .execute()
-            .service()
-            .await
-            .oneshot(request)
-            .await?;
+        let response = executions.execute.service().await.oneshot(request).await?;
         Ok(CreateStatus::CREATED(response))
     }
 
@@ -85,7 +75,7 @@ mod routes {
         Query(query_params): Query<ListParams>,
     ) -> Result<ListStatus<Execution>, ErrorStatus> {
         let request = context.list((), query_params);
-        let response = executions.list().service().await.oneshot(request).await?;
+        let response = executions.list.service().await.oneshot(request).await?;
         Ok(ListStatus::OK(response))
     }
 
@@ -97,7 +87,7 @@ mod routes {
         Path(param): Path<ExecutionParam>,
     ) -> Result<GetStatus<ExecutionResponse>, ErrorStatus> {
         let request = context.read(param);
-        let response = executions.read().service().await.oneshot(request).await?;
+        let response = executions.read.service().await.oneshot(request).await?;
         Ok(GetStatus::OK(response))
     }
 
@@ -109,12 +99,7 @@ mod routes {
         Path(param): Path<ExecutionParam>,
     ) -> Result<UpdateStatus<NoContent>, ErrorStatus> {
         let request = context.update(param, ());
-        let response = executions
-            .recover()
-            .service()
-            .await
-            .oneshot(request)
-            .await?;
+        let response = executions.recover.service().await.oneshot(request).await?;
         Ok(UpdateStatus::OK(response))
     }
 }

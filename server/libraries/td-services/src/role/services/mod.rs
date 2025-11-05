@@ -7,7 +7,6 @@ use crate::role::services::delete::DeleteRoleService;
 use crate::role::services::list::ListRoleService;
 use crate::role::services::read::ReadRoleService;
 use crate::role::services::update::UpdateRoleService;
-use getset::Getters;
 use ta_services::factory::ServiceFactory;
 
 mod create;
@@ -16,12 +15,11 @@ mod list;
 mod read;
 mod update;
 
-#[derive(ServiceFactory, Getters)]
-#[getset(get = "pub")]
+#[derive(ServiceFactory)]
 pub struct RoleServices {
-    create: CreateRoleService,
-    read: ReadRoleService,
-    update: UpdateRoleService,
-    delete: DeleteRoleService,
-    list: ListRoleService,
+    pub create: CreateRoleService,
+    pub read: ReadRoleService,
+    pub update: UpdateRoleService,
+    pub delete: DeleteRoleService,
+    pub list: ListRoleService,
 }

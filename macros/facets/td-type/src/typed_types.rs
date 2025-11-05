@@ -344,6 +344,10 @@ pub fn typed_string(input: &ItemStruct, typed: Option<TypedString>) -> proc_macr
             fn as_display(&self) -> String {
                 self.to_string()
             }
+
+            fn as_any(&self) -> &dyn std::any::Any {
+                self
+            }
         }
     };
 
@@ -546,6 +550,10 @@ pub fn typed_numeric<T: FromStr + ToTokens + PartialOrd>(
             fn as_display(&self) -> String {
                 self.to_string()
             }
+
+            fn as_any(&self) -> &dyn std::any::Any {
+                self
+            }
         }
     };
 
@@ -587,6 +595,9 @@ pub fn typed_bool(input: &ItemStruct, typed: Option<TypedBool>) -> proc_macro2::
         }
 
         impl #name {
+            pub const TRUE: Self = Self(true);
+            pub const FALSE: Self = Self(false);
+
             fn parse(val: impl Into<bool>) -> Result<Self, td_error::TdError> {
                 let val = val.into();
                 Ok(Self(val))
@@ -673,6 +684,10 @@ pub fn typed_bool(input: &ItemStruct, typed: Option<TypedBool>) -> proc_macro2::
 
             fn as_display(&self) -> String {
                 self.to_string()
+            }
+
+            fn as_any(&self) -> &dyn std::any::Any {
+                self
             }
         }
     };
@@ -843,6 +858,10 @@ pub fn typed_id(input: &ItemStruct, typed: Option<TypedId>) -> proc_macro2::Toke
 
             fn as_display(&self) -> String {
                 self.to_string()
+            }
+
+            fn as_any(&self) -> &dyn std::any::Any {
+                self
             }
         }
     };
@@ -1034,6 +1053,10 @@ pub fn typed_timestamp(
             fn as_display(&self) -> String {
                 self.to_string()
             }
+
+            fn as_any(&self) -> &dyn std::any::Any {
+                self
+            }
         }
     };
 
@@ -1089,12 +1112,11 @@ pub fn typed_id_name(input: &ItemStruct, typed: Option<TypedIdName>) -> proc_mac
             }
         }
 
-        impl crate::types::IdOrName for #ident {
+        impl crate::types::id_name::IdOrName for #ident {
             type Id = #id;
             fn id(&self) -> Option<&Self::Id> {
                 self.id.as_ref()
             }
-
             fn from_id(id: impl Into<Self::Id>) -> Self {
                 Self { id: Some(id.into()), name: None }
             }
@@ -1103,9 +1125,73 @@ pub fn typed_id_name(input: &ItemStruct, typed: Option<TypedIdName>) -> proc_mac
             fn name(&self) -> Option<&Self::Name> {
                 self.name.as_ref()
             }
-
             fn from_name(name: impl Into<Self::Name>) -> Self {
                 Self { id: None, name: Some(name.into()) }
+            }
+        }
+
+        impl crate::types::SqlEntity for #ident {
+            fn push_bind<'a>(&'a self, builder: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>) {
+                use crate::types::id_name::IdOrName;
+                if let Some(id) = self.id() {
+                    id.push_bind(builder);
+                } else if let Some(name) = self.name() {
+                    name.push_bind(builder);
+                } else {
+                    panic!("No ID or Name found");
+                }
+            }
+
+            fn push_bind_unseparated<'a>(
+                &'a self,
+                builder: &mut sqlx::query_builder::Separated<'_, 'a, sqlx::Sqlite, &str>,
+            ) {
+                use crate::types::id_name::IdOrName;
+                if let Some(id) = self.id() {
+                    id.push_bind_unseparated(builder);
+                } else if let Some(name) = self.name() {
+                    name.push_bind_unseparated(builder);
+                } else {
+                    panic!("No ID or Name found");
+                }
+            }
+
+            fn as_display(&self) -> String {
+                use crate::types::id_name::IdOrName;
+                if let Some(id) = self.id() {
+                    format!("~{}", id.as_display())
+                } else if let Some(name) = self.name() {
+                    name.as_display()
+                } else {
+                    panic!("No ID or Name found");
+                }
+            }
+
+            fn from_display(s: impl ToString) -> Result<Self, td_error::TdError> {
+                use crate::types::id_name::IdOrName;
+                let s = s.to_string();
+                if s.starts_with("~") {
+                    let id = #id::from_display(s.trim_start_matches('~'))?;
+                    Ok(Self::from_id(id))
+                } else {
+                    let name = #name::from_display(s)?;
+                    Ok(Self::from_name(name))
+                }
+            }
+
+            fn type_id(&self) -> std::any::TypeId {
+                use crate::types::id_name::IdOrName;
+                if let Some(id) = self.id() {
+                    id.type_id()
+                } else if let Some(name) = self.name() {
+                    name.type_id()
+                } else {
+                    unreachable!("No ID or Name found");
+                }
+            }
+
+            fn as_any(&self) -> &dyn std::any::Any {
+                self
             }
         }
 
@@ -1322,6 +1408,10 @@ pub fn typed_composed(input: &ItemStruct, typed: ComposedTyped) -> proc_macro2::
             fn as_display(&self) -> String {
                 self.to_string()
             }
+
+            fn as_any(&self) -> &dyn std::any::Any {
+                self
+            }
         }
     };
 
@@ -1482,6 +1572,10 @@ pub fn typed_enum(args: TokenStream, item: TokenStream) -> TokenStream {
 
             fn as_display(&self) -> String {
                 self.to_string()
+            }
+
+            fn as_any(&self) -> &dyn std::any::Any {
+                self
             }
         }
     };

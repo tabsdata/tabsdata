@@ -75,7 +75,7 @@ impl WorkerSupplier for TabsDataWorkerSupplier {
             let mut request_context_file = File::create(request_context_path)?;
             let message = worker.describer().message().clone().unwrap();
             let request_context_yaml =
-                if let SupervisorRequestMessagePayload(payload) = message.payload() {
+                if let SupervisorRequestMessagePayload(payload) = &message.payload {
                     serde_yaml::to_string(&payload.context())?
                 } else {
                     return Err(InvalidMessageType);

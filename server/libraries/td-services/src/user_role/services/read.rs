@@ -4,7 +4,10 @@
 
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
-use td_objects::crudl::{ReadRequest, RequestContext};
+use td_objects::dxo::crudl::{ReadRequest, RequestContext};
+use td_objects::dxo::role::defs::RoleDB;
+use td_objects::dxo::user::defs::UserDB;
+use td_objects::dxo::user_role::defs::{UserRole, UserRoleBuilder, UserRoleDBWithNames};
 use td_objects::rest_urls::UserRoleParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, SecAdmin, System};
@@ -12,10 +15,8 @@ use td_objects::tower_service::from::{
     BuildService, ExtractNameService, ExtractService, TryIntoService, With, combine,
 };
 use td_objects::tower_service::sql::{By, SqlSelectService};
-use td_objects::types::basic::{RoleId, RoleIdName, UserId, UserIdName};
-use td_objects::types::role::RoleDB;
-use td_objects::types::role::{UserRole, UserRoleBuilder, UserRoleDBWithNames};
-use td_objects::types::user::UserDB;
+use td_objects::types::id::{RoleId, UserId};
+use td_objects::types::id_name::{RoleIdName, UserIdName};
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -53,11 +54,13 @@ mod tests {
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::TdError;
-    use td_objects::crudl::RequestContext;
+    use td_objects::dxo::crudl::RequestContext;
     use td_objects::test_utils::seed_role::seed_role;
     use td_objects::test_utils::seed_user::seed_user;
     use td_objects::test_utils::seed_user_role::{get_user_role, seed_user_role};
-    use td_objects::types::basic::{AccessTokenId, Description, RoleName, UserEnabled, UserName};
+    use td_objects::types::bool::UserEnabled;
+    use td_objects::types::id::AccessTokenId;
+    use td_objects::types::string::{Description, RoleName, UserName};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -102,7 +105,7 @@ mod tests {
             Description::try_from("super user")?,
         )
         .await;
-        let user_role = seed_user_role(&db, user.id(), role.id()).await;
+        let user_role = seed_user_role(&db, &user.id, &role.id).await;
 
         let request = RequestContext::with(
             AccessTokenId::default(),
@@ -122,13 +125,13 @@ mod tests {
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
-        let found = get_user_role(&db, user_role.id()).await?;
-        assert_eq!(response.id(), found.id());
-        assert_eq!(response.user_id(), found.user_id());
-        assert_eq!(response.role_id(), found.role_id());
-        assert_eq!(response.added_on(), found.added_on());
-        assert_eq!(response.added_by_id(), found.added_by_id());
-        assert_eq!(response.fixed(), found.fixed());
+        let found = get_user_role(&db, &user_role.id).await?;
+        assert_eq!(response.id, found.id);
+        assert_eq!(response.user_id, found.user_id);
+        assert_eq!(response.role_id, found.role_id);
+        assert_eq!(response.added_on, found.added_on);
+        assert_eq!(response.added_by_id, found.added_by_id);
+        assert_eq!(response.fixed, found.fixed);
         Ok(())
     }
 }

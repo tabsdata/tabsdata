@@ -17,9 +17,10 @@ mod secure_routes {
     use ta_apiserver::status::ok_status::{GetStatus, NoContent, RawStatus, UpdateStatus};
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
-    use td_objects::crudl::RequestContext;
+    use td_objects::dxo::auth::defs::{RefreshRequestX, RoleChange, TokenResponseX};
+    use td_objects::dxo::crudl::RequestContext;
+    use td_objects::dxo::user::defs::UserInfo;
     use td_objects::rest_urls::{AUTH_LOGOUT, AUTH_REFRESH, AUTH_ROLE_CHANGE, AUTH_USER_INFO};
-    use td_objects::types::auth::{RefreshRequestX, RoleChange, TokenResponseX, UserInfo};
     use td_services::auth::services::AuthServices;
     use td_tower::ctx_service::RawOneshot;
     use tower::ServiceExt;
@@ -31,7 +32,7 @@ mod secure_routes {
         Extension(context): Extension<RequestContext>,
     ) -> Result<UpdateStatus<NoContent>, ErrorStatus> {
         let request = context.update((), ());
-        let response = state.logout().service().await.oneshot(request).await?;
+        let response = state.logout.service().await.oneshot(request).await?;
         Ok(UpdateStatus::OK(response))
     }
 
@@ -42,8 +43,8 @@ mod secure_routes {
         Extension(context): Extension<RequestContext>,
         Form(request): Form<RefreshRequestX>,
     ) -> Result<RawStatus<TokenResponseX>, ErrorStatus> {
-        let request = context.update((), request.refresh_token().clone());
-        let response = state.refresh().service().await.raw_oneshot(request).await?;
+        let request = context.update((), request.refresh_token.clone());
+        let response = state.refresh.service().await.raw_oneshot(request).await?;
         Ok(RawStatus::OK(response))
     }
 
@@ -56,7 +57,7 @@ mod secure_routes {
     ) -> Result<RawStatus<TokenResponseX>, ErrorStatus> {
         let request = context.update((), request);
         let response = state
-            .role_change()
+            .role_change
             .service()
             .await
             .raw_oneshot(request)
@@ -71,7 +72,7 @@ mod secure_routes {
         Extension(context): Extension<RequestContext>,
     ) -> Result<GetStatus<UserInfo>, ErrorStatus> {
         let request = context.read(());
-        let response = state.user_info().service().await.oneshot(request).await?;
+        let response = state.user_info.service().await.oneshot(request).await?;
         Ok(GetStatus::OK(response))
     }
 }
@@ -89,9 +90,9 @@ mod unsecure_routes {
     use ta_apiserver::status::ok_status::{NoContent, RawStatus, UpdateStatus};
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
+    use td_objects::dxo::auth::defs::{Login, PasswordChange, TokenResponseX};
     use td_objects::rest_urls::{AUTH_LOGIN, AUTH_PASSWORD_CHANGE, CERT_DOWNLOAD};
-    use td_objects::types::auth::{Login, PasswordChange, TokenResponseX};
-    use td_objects::types::stream::BoxedSyncStream;
+    use td_objects::stream::BoxedSyncStream;
     use td_services::auth::services::AuthServices;
     use td_tower::ctx_service::RawOneshot;
     use tower::ServiceExt;
@@ -103,7 +104,7 @@ mod unsecure_routes {
         State(state): State<Arc<AuthServices>>,
         Json(request): Json<Login>,
     ) -> Result<RawStatus<TokenResponseX>, ErrorStatus> {
-        let response = state.login().service().await.raw_oneshot(request).await?;
+        let response = state.login.service().await.raw_oneshot(request).await?;
         // incorrect_role
         // user disabled
         // unauthorized
@@ -117,7 +118,7 @@ mod unsecure_routes {
         Json(request): Json<PasswordChange>,
     ) -> Result<UpdateStatus<NoContent>, ErrorStatus> {
         let response = state
-            .password_change()
+            .password_change
             .service()
             .await
             .oneshot(request)
@@ -150,12 +151,7 @@ mod unsecure_routes {
     pub async fn cert_download(
         State(state): State<Arc<AuthServices>>,
     ) -> Result<PemFile, ErrorStatus> {
-        let response = state
-            .cert_download()
-            .service()
-            .await
-            .raw_oneshot(())
-            .await?;
+        let response = state.cert_download.service().await.raw_oneshot(()).await?;
         Ok(PemFile(response))
     }
 }

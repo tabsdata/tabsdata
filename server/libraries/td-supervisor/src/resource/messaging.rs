@@ -77,9 +77,9 @@ impl SupervisorMessageQueue {
     }
 
     pub fn planned(message: SupervisorMessage, name: String) -> std::io::Result<()> {
-        let source = message.file();
+        let source = &message.file;
         let root = message
-            .file()
+            .file
             .parent()
             .ok_or_else(|| {
                 std::io::Error::new(
@@ -140,7 +140,7 @@ impl SupervisorMessageQueue {
                     source.clone().unwrap(),
                     target
                 );
-                fs::rename(source.unwrap().file(), target.file())?;
+                fs::rename(&source.unwrap().file, &target.file)?;
                 return Ok(target);
             }
         }
@@ -151,9 +151,9 @@ impl SupervisorMessageQueue {
     }
 
     pub fn fail(message: SupervisorMessage) -> std::io::Result<()> {
-        let source = message.file();
+        let source = &message.file;
         let root = message
-            .file()
+            .file
             .parent()
             .ok_or_else(|| {
                 std::io::Error::new(
@@ -170,7 +170,7 @@ impl SupervisorMessageQueue {
             })?;
         let target = root
             .join(FAIL_FOLDER)
-            .join(message.file().file_name().ok_or_else(|| {
+            .join(message.file.file_name().ok_or_else(|| {
                 std::io::Error::new(
                     std::io::ErrorKind::NotFound,
                     format!("Message file name not found for '{message:?}'"),
@@ -182,7 +182,7 @@ impl SupervisorMessageQueue {
 
     fn change_to(message: SupervisorMessage, vault: String) -> std::io::Result<SupervisorMessage> {
         let root = message
-            .file()
+            .file
             .parent()
             .ok_or_else(|| {
                 std::io::Error::new(
@@ -199,14 +199,14 @@ impl SupervisorMessageQueue {
             })?;
         let target = root
             .join(vault)
-            .join(message.file().file_name().ok_or_else(|| {
+            .join(message.file.file_name().ok_or_else(|| {
                 std::io::Error::new(
                     std::io::ErrorKind::NotFound,
                     format!("File name not found for '{message:?}'"),
                 )
             })?);
         let mut message = message.clone();
-        message.set_file(target);
+        message.file = target;
         Ok(message)
     }
 
@@ -215,7 +215,7 @@ impl SupervisorMessageQueue {
         vault: String,
     ) -> std::io::Result<Option<SupervisorMessage>> {
         let located_message = Self::change_to(message, vault)?;
-        Ok(if located_message.file().exists() {
+        Ok(if located_message.file.exists() {
             Some(located_message)
         } else {
             None
@@ -223,14 +223,14 @@ impl SupervisorMessageQueue {
     }
 
     fn at_error(message: SupervisorMessage) -> std::io::Result<SupervisorMessage> {
-        if let Some(folder) = message.file().parent()
-            && let Some(file) = message.file().file_name()
+        if let Some(folder) = &message.file.parent()
+            && let Some(file) = &message.file.file_name()
         {
             let mut path = PathBuf::from(folder);
             path.push(ERROR_FOLDER);
             path.push(file);
             let mut message = message.clone();
-            message.set_file(path);
+            message.file = path;
             return Ok(message);
         }
         Err(std::io::Error::new(
@@ -246,7 +246,7 @@ impl SupervisorMessageQueue {
     ) -> std::io::Result<SupervisorMessage> {
         let source = Self::change_to(message.clone(), source_vault)?;
         let target = Self::change_to(message.clone(), target_vault)?;
-        fs::rename(source.file(), target.file())?;
+        fs::rename(&source.file, &target.file)?;
         Ok(target)
     }
 }

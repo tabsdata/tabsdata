@@ -14,12 +14,13 @@ mod routes {
     use ta_apiserver::status::ok_status::{ListStatus, NoContent, UpdateStatus};
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
-    use td_objects::crudl::{ListParams, RequestContext};
+    use td_objects::dxo::crudl::{ListParams, RequestContext};
+    use td_objects::dxo::synchrotron::defs::SynchrotronResponse;
+    use td_objects::dxo::transaction::defs::Transaction;
     use td_objects::rest_urls::{
         SYNCHROTRON_READ, TRANSACTION_CANCEL, TRANSACTION_RECOVER, TRANSACTIONS_LIST,
         TransactionParam,
     };
-    use td_objects::types::execution::{SynchrotronResponse, Transaction};
     use td_services::transaction::services::TransactionServices;
     use tower::ServiceExt;
 
@@ -33,12 +34,7 @@ mod routes {
         Path(param): Path<TransactionParam>,
     ) -> Result<UpdateStatus<NoContent>, ErrorStatus> {
         let request = context.update(param, ());
-        let response = transaction
-            .cancel()
-            .service()
-            .await
-            .oneshot(request)
-            .await?;
+        let response = transaction.cancel.service().await.oneshot(request).await?;
         Ok(UpdateStatus::OK(response))
     }
 
@@ -50,7 +46,7 @@ mod routes {
         Query(query_params): Query<ListParams>,
     ) -> Result<ListStatus<Transaction>, ErrorStatus> {
         let request = context.list((), query_params);
-        let response = transaction.list().service().await.oneshot(request).await?;
+        let response = transaction.list.service().await.oneshot(request).await?;
         Ok(ListStatus::OK(response))
     }
 
@@ -62,12 +58,7 @@ mod routes {
         Path(param): Path<TransactionParam>,
     ) -> Result<UpdateStatus<NoContent>, ErrorStatus> {
         let request = context.update(param, ());
-        let response = transaction
-            .recover()
-            .service()
-            .await
-            .oneshot(request)
-            .await?;
+        let response = transaction.recover.service().await.oneshot(request).await?;
         Ok(UpdateStatus::OK(response))
     }
 
@@ -80,7 +71,7 @@ mod routes {
     ) -> Result<ListStatus<SynchrotronResponse>, ErrorStatus> {
         let request = context.list((), query_params);
         let response = transaction
-            .synchrotron()
+            .synchrotron
             .service()
             .await
             .oneshot(request)

@@ -1,21 +1,20 @@
 use ta_services::factory::service_factory;
+use td_objects::dxo::auth::defs::UserInfoUserRoleDB;
+use td_objects::dxo::crudl::{ReadRequest, RequestContext};
+use td_objects::dxo::permission::defs::{Permission, PermissionBuilder, PermissionDBWithNames};
+use td_objects::dxo::user::defs::{
+    UserDBWithNames, UserInfo, UserInfoBuilder, UserInfoRoleIdName, UserInfoRoleIdNameBuilder,
+};
 //
 // Copyright 2025. Tabs Data Inc.
 //
-use td_objects::crudl::ReadRequest;
-use td_objects::crudl::RequestContext;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::from::{
     BuildService, ConvertIntoMapService, ExtractService, SetService, TryIntoService,
     VecBuildService, With,
 };
 use td_objects::tower_service::sql::{By, SqlSelectAllService, SqlSelectService};
-use td_objects::types::auth::{
-    UserInfo, UserInfoBuilder, UserInfoRoleIdName, UserInfoRoleIdNameBuilder, UserInfoUserRoleDB,
-};
-use td_objects::types::basic::{RoleId, UserId};
-use td_objects::types::permission::{Permission, PermissionBuilder, PermissionDBWithNames};
-use td_objects::types::user::UserDBWithNames;
+use td_objects::types::id::{RoleId, UserId};
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -66,9 +65,9 @@ mod tests {
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::TdError;
-    use td_objects::crudl::RequestContext;
-    use td_objects::types::auth::Login;
-    use td_objects::types::basic::{Password, RoleName, UserName};
+    use td_objects::dxo::auth::defs::Login;
+    use td_objects::dxo::crudl::RequestContext;
+    use td_objects::types::string::{Password, RoleName, UserName};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -125,7 +124,7 @@ mod tests {
         let res = service.raw_oneshot(request).await;
         assert!(res.is_ok());
         let token_response = res?;
-        let access_token = token_response.access_token();
+        let access_token = &token_response.access_token;
         let access_token_id = *decode_token(&context.jwt_config, access_token)?.jti();
 
         let service = auth_services.user_info.service().await;
@@ -133,12 +132,11 @@ mod tests {
         let request =
             RequestContext::with(access_token_id, UserId::admin(), RoleId::user()).read(());
         let res = service.raw_oneshot(request).await;
-        assert!(res.is_ok());
         let user_info = res?;
-        assert_eq!(user_info.name(), &UserName::try_from("admin")?);
-        assert_eq!(user_info.current_role_id(), &RoleId::user());
-        assert_eq!(user_info.user_roles().len(), 3);
-        assert_eq!(user_info.current_permissions().len(), 3);
+        assert_eq!(user_info.name, UserName::try_from("admin")?);
+        assert_eq!(user_info.current_role_id, RoleId::user());
+        assert_eq!(user_info.user_roles.len(), 3);
+        assert_eq!(user_info.current_permissions.len(), 3);
         Ok(())
     }
 }

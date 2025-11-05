@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
 use ta_execution::transaction::TransactionMapper;
 use td_error::TdError;
-use td_objects::types::basic::TransactionKey;
-use td_objects::types::execution::FunctionVersionNode;
+use td_objects::execution::graph::FunctionNode;
+use td_objects::types::string::TransactionKey;
 
 /// `TransactionBy` is an enum that defines how to map a transaction to a key.
 /// It only supports mapping by function version ID.
@@ -19,9 +19,9 @@ pub enum TransactionBy {
 }
 
 impl TransactionMapper for TransactionBy {
-    fn key(&self, node: &FunctionVersionNode) -> Result<TransactionKey, TdError> {
+    fn key(&self, node: &FunctionNode) -> Result<TransactionKey, TdError> {
         match self {
-            TransactionBy::Function => Ok(node.function_version_id().to_string().try_into()?),
+            TransactionBy::Function => Ok(node.function_version_id.to_string().try_into()?),
         }
     }
 }
@@ -31,7 +31,9 @@ mod tests {
     use super::*;
     use crate::transaction::TransactionBy;
     use ta_execution::transaction::TransactionMapperError;
-    use td_objects::types::basic::{CollectionId, CollectionName, FunctionName, FunctionVersionId};
+    use td_objects::execution::graph::FunctionNode;
+    use td_objects::types::id::{CollectionId, FunctionVersionId};
+    use td_objects::types::string::{CollectionName, FunctionName, TransactionKey};
 
     #[test]
     fn test_transaction_by_default() {
@@ -43,7 +45,7 @@ mod tests {
         let mapper = TransactionBy::Function;
 
         let key = FunctionVersionId::default();
-        let function = FunctionVersionNode::builder()
+        let function = FunctionNode::builder()
             .collection_id(CollectionId::default())
             .collection(CollectionName::try_from("test")?)
             .function_version_id(key)

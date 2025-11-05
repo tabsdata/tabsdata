@@ -7,7 +7,7 @@ use argon2::password_hash::SaltString;
 use argon2::password_hash::rand_core::OsRng;
 use std::ops::Deref;
 use td_error::TdError;
-use td_objects::types::basic::PasswordHash;
+use td_objects::types::string::PasswordHash;
 use td_security::config::PasswordHashingConfig;
 use td_tower::extractors::{Input, SrvCtx};
 

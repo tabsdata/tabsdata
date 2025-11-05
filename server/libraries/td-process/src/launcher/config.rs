@@ -155,7 +155,7 @@ mod tests {
 
     #[test]
     fn test_default_as_yaml() {
-        println!("{}", MyConfig::default().name());
+        println!("{}", MyConfig::default().name);
     }
 
     #[test]
@@ -173,7 +173,7 @@ mod tests {
     #[test]
     fn test_load_config_no_files() {
         let config = load_config::<MyConfig>("my-config", None, false);
-        assert_eq!(config.name(), "default_name");
+        assert_eq!(config.name, "default_name");
         assert_eq!(config.port(), &1u16);
     }
 
@@ -192,7 +192,7 @@ mod tests {
         );
 
         let config = load_config::<MyConfig>("my-config", None, false);
-        assert_eq!(config.name(), "app_config_name");
+        assert_eq!(config.name, "app_config_name");
         assert_eq!(config.port(), &2u16);
     }
 
@@ -216,7 +216,7 @@ mod tests {
         );
 
         let config = load_config::<MyConfig>("my-config", None, false);
-        assert_eq!(config.name(), "user_config_name");
+        assert_eq!(config.name, "user_config_name");
         assert_eq!(config.port(), &3u16);
     }
 
@@ -253,7 +253,7 @@ mod tests {
 
         let config = load_config::<MyConfig>("my-config", None, false);
 
-        assert_eq!(config.name(), "user_home_dir_config_name");
+        assert_eq!(config.name, "user_home_dir_config_name");
         assert_eq!(config.port(), &4u16);
     }
 
@@ -299,7 +299,7 @@ mod tests {
 
         let config = load_config::<MyConfig>("my-config-env", None, false);
 
-        assert_eq!(config.name(), "env_config_name");
+        assert_eq!(config.name, "env_config_name");
         assert_eq!(config.port(), &5u16);
     }
 }

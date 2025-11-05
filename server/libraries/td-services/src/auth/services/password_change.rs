@@ -10,19 +10,19 @@ use crate::auth::layers::refresh_sessions::refresh_sessions;
 use crate::auth::session::Sessions;
 use ta_services::factory::service_factory;
 use td_error::TdError;
+use td_objects::dxo::auth::defs::{
+    PasswordChange, SessionDB, SessionPasswordChangeDB, SessionPasswordChangeDBBuilder,
+};
+use td_objects::dxo::user::defs::{UserDB, UserDBBuilder};
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::from::{
     BuildService, DefaultService, ExtractService, SetService, TryIntoService, With,
 };
 use td_objects::tower_service::sql::{By, SqlSelectService, SqlUpdateService};
-use td_objects::types::auth::{
-    PasswordChange, SessionDB, SessionPasswordChangeDB, SessionPasswordChangeDBBuilder,
-};
-use td_objects::types::basic::{
-    AtTime, NewPassword, OldPassword, PasswordChangeTime, PasswordHash, PasswordMustChange, UserId,
-    UserName,
-};
-use td_objects::types::user::{UserDB, UserDBBuilder};
+use td_objects::types::bool::PasswordMustChange;
+use td_objects::types::id::UserId;
+use td_objects::types::string::{NewPassword, OldPassword, PasswordHash, UserName};
+use td_objects::types::timestamp::{AtTime, PasswordChangeTime};
 use td_security::config::PasswordHashingConfig;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
@@ -86,6 +86,7 @@ fn service() {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::Context;
     use crate::auth::AuthError;
     use crate::auth::jwt::decode_token;
@@ -95,10 +96,9 @@ mod tests {
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::assert_service_error;
-    use td_objects::types::auth::{Login, PasswordChange};
-    use td_objects::types::basic::{
-        NewPassword, OldPassword, Password, RoleName, SessionStatus, UserName,
-    };
+    use td_objects::dxo::auth::defs::{Login, PasswordChange};
+    use td_objects::types::string::{Password, RoleName};
+    use td_objects::types::typed_enum::SessionStatus;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -110,18 +110,13 @@ mod tests {
         use crate::auth::layers::create_password_hash::create_password_hash;
         use crate::auth::layers::refresh_sessions::refresh_sessions;
         use crate::auth::services::password_change::PasswordChangeService;
+        use td_objects::dxo::auth::defs::{
+            PasswordChange, SessionDB, SessionPasswordChangeDB, SessionPasswordChangeDBBuilder,
+        };
         use td_objects::tower_service::from::{
             BuildService, DefaultService, ExtractService, SetService, TryIntoService, With,
         };
         use td_objects::tower_service::sql::{By, SqlSelectService, SqlUpdateService};
-        use td_objects::types::auth::{
-            PasswordChange, SessionDB, SessionPasswordChangeDB, SessionPasswordChangeDBBuilder,
-        };
-        use td_objects::types::basic::{
-            AtTime, NewPassword, OldPassword, PasswordChangeTime, PasswordHash, PasswordMustChange,
-            UserId, UserName,
-        };
-        use td_objects::types::user::{UserDB, UserDBBuilder};
         use td_tower::metadata::type_of_val;
 
         PasswordChangeService::with_defaults(db)
@@ -159,7 +154,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_password_change_ok(db: DbPool) -> Result<(), td_error::TdError> {
+    async fn test_password_change_ok(db: DbPool) -> Result<(), TdError> {
         let context = Context::with_defaults(db.clone());
         let auth_services = AuthServices::build(&context);
 
@@ -174,7 +169,7 @@ mod tests {
         let res = service.raw_oneshot(request).await;
         assert!(res.is_ok());
         let token_response = res?;
-        let access_token = token_response.access_token();
+        let access_token = &token_response.access_token;
         let access_token_id = *decode_token(&context.jwt_config, access_token)?.jti();
 
         let service = auth_services.password_change.service().await;
@@ -190,7 +185,7 @@ mod tests {
         let session = get_session(&db, &access_token_id.into()).await;
         match session {
             Some(session) => {
-                assert_eq!(session.status(), &SessionStatus::InvalidPasswordChange);
+                assert_eq!(session.status, SessionStatus::InvalidPasswordChange);
             }
             None => {
                 panic!("Session not found");

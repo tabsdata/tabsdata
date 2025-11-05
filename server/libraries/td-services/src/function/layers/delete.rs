@@ -4,8 +4,9 @@
 
 use std::ops::Deref;
 use td_error::TdError;
-use td_objects::types::basic::{FunctionStatus, FunctionVersionId};
-use td_objects::types::function::{FunctionDB, FunctionDBBuilder};
+use td_objects::dxo::function::defs::{FunctionDB, FunctionDBBuilder};
+use td_objects::types::id::FunctionVersionId;
+use td_objects::types::typed_enum::FunctionStatus;
 use td_tower::extractors::Input;
 
 pub async fn build_deleted_function_version(

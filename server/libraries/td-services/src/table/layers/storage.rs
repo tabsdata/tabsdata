@@ -5,9 +5,9 @@
 use polars::prelude::PolarsError;
 use std::borrow::Cow;
 use td_error::{TdError, td_error};
-use td_objects::crudl::handle_sql_err;
+use td_objects::dxo::crudl::handle_sql_err;
+use td_objects::dxo::table_data_version::defs::TableDataVersionDBWithNames;
 use td_objects::sql::{DaoQueries, SelectBy};
-use td_objects::types::execution::TableDataVersionDBWithNames;
 use td_storage::SPath;
 use td_storage::location::StorageLocation;
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
@@ -28,10 +28,9 @@ pub async fn resolve_table_location(
     Input(data_version): Input<Option<TableDataVersionDBWithNames>>,
 ) -> Result<Option<SPath>, TdError> {
     if let Some(data_version) = &*data_version {
-        if let Some(with_data_table_data_version_id) =
-            data_version.with_data_table_data_version_id()
+        if let Some(with_data_table_data_version_id) = data_version.with_data_table_data_version_id
         {
-            let data_version_with_data = if data_version.id() == with_data_table_data_version_id {
+            let data_version_with_data = if data_version.id == with_data_table_data_version_id {
                 Cow::Borrowed(data_version)
             } else {
                 let mut conn = connection.lock().await;
@@ -57,13 +56,12 @@ pub async fn resolve_table_location(
 }
 
 fn get_spath(data_version: &TableDataVersionDBWithNames) -> (SPath, StorageLocation) {
-    let storage_location = data_version.storage_version();
-    StorageLocation::try_from(storage_location)
+    StorageLocation::try_from(&data_version.storage_version)
         .unwrap()
-        .builder(data_version.data_location())
-        .collection(data_version.collection_id())
-        .data(data_version.id())
-        .table(data_version.table_id(), data_version.table_version_id())
+        .builder(&data_version.data_location)
+        .collection(&data_version.collection_id)
+        .data(&data_version.id)
+        .table(&data_version.table_id, &data_version.table_version_id)
         .build()
 }
 
@@ -74,7 +72,14 @@ mod tests {
     use std::sync::Arc;
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
-    use td_objects::crudl::RequestContext;
+    use td_objects::dxo::collection::defs::CollectionDB;
+    use td_objects::dxo::crudl::RequestContext;
+    use td_objects::dxo::execution::defs::ExecutionDB;
+    use td_objects::dxo::function::defs::{FunctionDB, FunctionRegister};
+    use td_objects::dxo::function_run::defs::FunctionRunDB;
+    use td_objects::dxo::table::defs::TableDB;
+    use td_objects::dxo::table_data_version::defs::TableDataVersionDB;
+    use td_objects::dxo::transaction::defs::TransactionDB;
     use td_objects::rest_urls::FunctionParam;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_execution::seed_execution;
@@ -84,16 +89,9 @@ mod tests {
         seed_table_data_version, seed_table_data_version_with_data,
     };
     use td_objects::test_utils::seed_transaction::seed_transaction;
-    use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, Decorator, FunctionRunStatus, RoleId, TableName,
-        TableNameDto, TransactionKey, UserId,
-    };
-    use td_objects::types::collection::CollectionDB;
-    use td_objects::types::execution::{
-        ExecutionDB, FunctionRunDB, TableDataVersionDB, TransactionDB,
-    };
-    use td_objects::types::function::{FunctionDB, FunctionRegister};
-    use td_objects::types::table::TableDB;
+    use td_objects::types::id::{AccessTokenId, BundleId, RoleId, UserId};
+    use td_objects::types::string::{CollectionName, TableName, TableNameDto, TransactionKey};
+    use td_objects::types::typed_enum::{Decorator, FunctionRunStatus};
     use td_tower::ctx_service::RawOneshot;
     use td_tower::extractors::ConnectionType;
 
@@ -197,8 +195,8 @@ mod tests {
         )
         .await;
         assert_ne!(
-            previous_with_data.table_version_id(),
-            current_without_data.table_version_id()
+            previous_with_data.table_version_id,
+            current_without_data.table_version_id
         );
         _run_test(db, Some(current_without_data), Some(previous_with_data)).await
     }
@@ -261,8 +259,8 @@ mod tests {
         )
         .await;
         assert_ne!(
-            previous_with_data.table_version_id(),
-            current_without_data.table_version_id()
+            previous_with_data.table_version_id,
+            current_without_data.table_version_id
         );
         _run_test(db, Some(current_without_data), None).await
     }
@@ -317,7 +315,7 @@ mod tests {
         .await;
 
         let table = queries
-            .select_by::<TableDB>(&(function.id()))?
+            .select_by::<TableDB>(&(function.id))?
             .build_query_as()
             .fetch_one(&db)
             .await
@@ -346,7 +344,7 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
                 FunctionParam::builder()
-                    .try_collection(format!("{}", collection.name()))?
+                    .try_collection(format!("{}", collection.name))?
                     .try_function("joaquin")?
                     .build()?,
                 update.clone(),
@@ -358,7 +356,7 @@ mod tests {
         let response = response?;
 
         let function = DaoQueries::default()
-            .select_by::<FunctionDB>(&(response.id()))?
+            .select_by::<FunctionDB>(&(response.id))?
             .build_query_as()
             .fetch_one(&db)
             .await
@@ -378,7 +376,7 @@ mod tests {
         .await;
 
         let table = DaoQueries::default()
-            .select_by::<TableDB>(&(function.id(), &TableName::try_from("table_1")?))?
+            .select_by::<TableDB>(&(function.id, &TableName::try_from("table_1")?))?
             .build_query_as()
             .fetch_one(&db)
             .await
@@ -396,7 +394,7 @@ mod tests {
 
         let lookup_data_version = if let Some(lookup_data_version) = lookup_data_version {
             let d = queries
-                .select_by::<TableDataVersionDBWithNames>(&(lookup_data_version.id()))?
+                .select_by::<TableDataVersionDBWithNames>(&(lookup_data_version.id))?
                 .build_query_as()
                 .fetch_one(&db)
                 .await
@@ -418,7 +416,7 @@ mod tests {
 
         let expected = if let Some(expected_data_version) = expected_data_version {
             let expected_data_version: TableDataVersionDBWithNames = queries
-                .select_by::<TableDataVersionDBWithNames>(&(expected_data_version.id()))?
+                .select_by::<TableDataVersionDBWithNames>(&(&expected_data_version.id))?
                 .build_query_as()
                 .fetch_one(&db)
                 .await

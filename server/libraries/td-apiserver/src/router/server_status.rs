@@ -13,10 +13,10 @@ mod routes {
     use ta_apiserver::status::ok_status::GetStatus;
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
-    use td_objects::crudl::RequestContext;
+    use td_objects::dxo::crudl::RequestContext;
+    use td_objects::dxo::runtime_info::RuntimeInfo;
+    use td_objects::dxo::system::ApiStatus;
     use td_objects::rest_urls::{RUNTIME_INFO, SERVER_STATUS};
-    use td_objects::types::runtime_info::RuntimeInfo;
-    use td_objects::types::system::ApiStatus;
     use td_services::execution::services::ExecutionServices;
     use td_services::system::services::SystemServices;
     use tower::ServiceExt;
@@ -28,7 +28,7 @@ mod routes {
     pub async fn status(
         State(status_state): State<Arc<SystemServices>>,
     ) -> Result<GetStatus<ApiStatus>, ErrorStatus> {
-        let response = status_state.status().service().await.oneshot(()).await?;
+        let response = status_state.status.service().await.oneshot(()).await?;
         Ok(GetStatus::OK(response))
     }
 
@@ -39,7 +39,7 @@ mod routes {
         Extension(context): Extension<RequestContext>,
     ) -> Result<GetStatus<RuntimeInfo>, ErrorStatus> {
         let request = context.read(());
-        let response = executions.info().service().await.oneshot(request).await?;
+        let response = executions.info.service().await.oneshot(request).await?;
         Ok(GetStatus::OK(response))
     }
 }
@@ -54,10 +54,10 @@ mod tests {
     use ta_apiserver::router::RouterExtension;
     use ta_services::factory::ServiceFactory;
     use td_database::sql::DbPool;
-    use td_objects::crudl::RequestContext;
+    use td_objects::dxo::crudl::RequestContext;
+    use td_objects::dxo::system::{ApiStatus, HealthStatus};
     use td_objects::rest_urls::SERVER_STATUS;
-    use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
-    use td_objects::types::system::{ApiStatus, HealthStatus};
+    use td_objects::types::id::{AccessTokenId, RoleId, UserId};
     use td_services::{Context, Services};
     use tower::ServiceExt;
 
@@ -91,7 +91,7 @@ mod tests {
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
         let database_status: ApiStatus =
             serde_json::from_value(body["data"].clone()).expect("Failed to parse database status");
-        assert!(matches!(database_status.status(), HealthStatus::OK));
-        assert!(*database_status.latency_as_nanos() > 0);
+        assert!(matches!(database_status.status, HealthStatus::OK));
+        assert!(database_status.latency_as_nanos > 0);
     }
 }

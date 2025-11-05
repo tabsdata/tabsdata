@@ -691,14 +691,14 @@ impl Supervisor {
 
     fn retry(&self, message: SupervisorMessage) -> Result<(), RuntimeError> {
         let regex = Regex::new(REQUEST_MESSAGE_FILE_PATTERN).unwrap();
-        if let Some(file_name) = message.file().file_name().and_then(|f| f.to_str())
+        if let Some(file_name) = message.file.file_name().and_then(|f| f.to_str())
             && let Some(captures) = regex.captures(file_name)
         {
             let id = captures.get(1).map(|m| m.as_str()).unwrap();
             let run = captures.get(2).map(|m| m.as_str()).unwrap();
             let ext = captures.get(3).map(|m| m.as_str()).unwrap();
             if let Ok(retry) = run.parse::<u16>() {
-                let payload = match message.payload() {
+                let payload = match &message.payload {
                     SupervisorRequestMessagePayload(payload) => payload,
                     SupervisorResponseMessagePayload(_) | SupervisorExceptionMessagePayload(_) => {
                         return Err(RuntimeError::new(
@@ -818,7 +818,7 @@ impl Supervisor {
                 },
                 Some(message) = receiver.recv() => {
                     debug!("Received message '{:?}", message);
-                    let payload = match message.payload() {
+                    let payload = match &message.payload {
                         SupervisorRequestMessagePayload(payload) => {payload},
                         SupervisorResponseMessagePayload(_) |
                         SupervisorExceptionMessagePayload(_) => {
@@ -1182,7 +1182,7 @@ impl Supervisor {
                     }
                 }
                 Some(message) = receiver.recv(), if !can_spawn_worker && can_spawn_task => {
-                    let payload = match message.payload() {
+                    let payload = match &message.payload {
                         SupervisorRequestMessagePayload(payload) => {payload},
                         SupervisorResponseMessagePayload(_) |
                         SupervisorExceptionMessagePayload(_) => {
@@ -1659,7 +1659,7 @@ impl Supervisor {
                 .join(worker.name())
                 .join(WORK_FOLDER)
                 .join(CAST_FOLDER)
-                .join(message.clone().unwrap().work())
+                .join(message.clone().unwrap().work)
                 .join(CONFIG_FOLDER),
             _ => self
                 .params
@@ -1681,7 +1681,7 @@ impl Supervisor {
                 .join(worker.name())
                 .join(WORK_FOLDER)
                 .join(CAST_FOLDER)
-                .join(message.clone().unwrap().work())
+                .join(message.clone().unwrap().work)
                 .join(WORK_FOLDER),
             _ => self
                 .params
@@ -1760,7 +1760,7 @@ impl Supervisor {
                         .to_string(),
                 );
                 let message = message.unwrap();
-                let payload = match message.payload() {
+                let payload = match &message.payload {
                     SupervisorRequestMessagePayload(payload) => payload,
                     SupervisorResponseMessagePayload(_) | SupervisorExceptionMessagePayload(_) => {
                         return Err(InvalidMessageType);

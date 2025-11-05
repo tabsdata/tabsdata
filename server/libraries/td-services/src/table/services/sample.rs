@@ -6,20 +6,22 @@ use crate::table::layers::find_data_version_location_at;
 use crate::table::layers::sample::get_table_sample;
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
-use td_objects::crudl::{ReadRequest, RequestContext};
+use td_objects::dxo::collection::defs::CollectionDB;
+use td_objects::dxo::crudl::{ReadRequest, RequestContext};
+use td_objects::dxo::table::defs::TableDBWithNames;
 use td_objects::rest_urls::FileFormat;
+use td_objects::rest_urls::params::TableSampleAtName;
 use td_objects::sql::DaoQueries;
+use td_objects::stream::BoxedSyncStream;
 use td_objects::tower_service::authz::{
     AuthzOn, CollAdmin, CollDev, CollExec, CollRead, InterCollRead,
 };
 use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlSelectService};
-use td_objects::types::basic::{
-    CollectionId, CollectionIdName, SampleLen, SampleOffset, Sql, TableName,
-};
-use td_objects::types::collection::CollectionDB;
-use td_objects::types::stream::BoxedSyncStream;
-use td_objects::types::table::{TableDBWithNames, TableSampleAtName};
+use td_objects::types::i64::{SampleLen, SampleOffset};
+use td_objects::types::id::CollectionId;
+use td_objects::types::id_name::CollectionIdName;
+use td_objects::types::string::{Sql, TableName};
 use td_storage::Storage;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
@@ -76,7 +78,9 @@ mod tests {
     use td_common::absolute_path::AbsolutePath;
     use td_database::sql::DbPool;
     use td_error::TdError;
-    use td_objects::crudl::RequestContext;
+    use td_objects::dxo::crudl::RequestContext;
+    use td_objects::dxo::function::defs::FunctionRegister;
+    use td_objects::dxo::table::defs::TableDB;
     use td_objects::rest_urls::{
         AtTimeParam, FileFormatParam, SampleOffsetLenParam, SqlParam, TableParam,
     };
@@ -89,12 +93,10 @@ mod tests {
         seed_table_data_version, seed_table_data_version_with_data,
     };
     use td_objects::test_utils::seed_transaction::seed_transaction;
-    use td_objects::types::basic::{
-        AccessTokenId, AtTime, BundleId, CollectionName, Decorator, FunctionRunStatus, RoleId,
-        StorageVersion, TableName, TableNameDto, TransactionKey, UserId,
-    };
-    use td_objects::types::function::FunctionRegister;
-    use td_objects::types::table::TableDB;
+    use td_objects::types::id::{AccessTokenId, BundleId, RoleId, UserId};
+    use td_objects::types::string::{CollectionName, StorageVersion, TableNameDto, TransactionKey};
+    use td_objects::types::timestamp::AtTime;
+    use td_objects::types::typed_enum::{Decorator, FunctionRunStatus};
     use td_storage::location::StorageLocation;
     use td_storage::{MountDef, Storage};
     use td_tower::ctx_service::RawOneshot;
@@ -106,11 +108,14 @@ mod tests {
     #[tokio::test]
     async fn test_tower_metadata_sample_service(db: DbPool) {
         use crate::table::layers::storage::resolve_table_location;
+        use td_objects::dxo::table::defs::TableDBWithNames;
+        use td_objects::dxo::table_data_version::defs::TableDataVersionDBWithNames;
         use td_objects::tower_service::from::TryIntoService;
         use td_objects::tower_service::from::combine;
-        use td_objects::types::basic::{Sql, TableId, TableIdName, TableStatus, TriggeredOn};
-        use td_objects::types::execution::TableDataVersionDBWithNames;
-        use td_objects::types::table::TableDBWithNames;
+        use td_objects::types::id::TableId;
+        use td_objects::types::id_name::TableIdName;
+        use td_objects::types::string::Sql;
+        use td_objects::types::timestamp::TriggeredOn;
 
         use td_tower::metadata::type_of_val;
 
@@ -154,16 +159,24 @@ mod tests {
             type_of_val(&With::<TableSampleAtName>::extract::<TableIdName>),
             type_of_val(&With::<TableSampleAtName>::extract::<AtTime>),
             // Only active or frozen tables
-            type_of_val(&TableStatus::active_or_frozen),
             // Find Table ID, looking at the version at the time
             type_of_val(&combine::<CollectionIdName, TableIdName>),
-            type_of_val(&By::<(CollectionIdName, TableIdName)>::select_version::<TableDBWithNames>),
+            type_of_val(
+                &By::<(CollectionIdName, TableIdName)>::select_version::<
+                    { TableDBWithNames::Available },
+                    TableDBWithNames,
+                >,
+            ),
             type_of_val(&With::<TableDBWithNames>::extract::<TableId>),
             // Only committed transactions, at the triggered on time
-            type_of_val(&FunctionRunStatus::committed),
             type_of_val(&With::<AtTime>::convert_to::<TriggeredOn, _>),
             // Find the latest data version of the table ID, at that time
-            type_of_val(&By::<TableId>::select_version_optional::<TableDataVersionDBWithNames>),
+            type_of_val(
+                &By::<TableId>::select_version_optional::<
+                    { TableDataVersionDBWithNames::Committed },
+                    TableDataVersionDBWithNames,
+                >,
+            ),
             // Resolve the location of the data version. This takes into account versions without
             // data changes (in which the previous version is resolved)
             type_of_val(&resolve_table_location),
@@ -236,7 +249,7 @@ mod tests {
             for table in &created_tables {
                 let table = TableName::try_from(table)?;
                 let table_version = DaoQueries::default()
-                    .select_by::<TableDB>(&(collection.id(), &table))?
+                    .select_by::<TableDB>(&(&collection.id, &table))?
                     .build_query_as()
                     .fetch_one(&db)
                     .await
@@ -255,12 +268,12 @@ mod tests {
 
                     let (path, _) = StorageLocation::try_from(&storage_location)
                         .unwrap()
-                        .builder(function_version.data_location())
-                        .collection(table_data_version.collection_id())
-                        .data(table_data_version.id())
+                        .builder(&function_version.data_location)
+                        .collection(&table_data_version.collection_id)
+                        .data(&table_data_version.id)
                         .table(
-                            table_data_version.table_id(),
-                            table_data_version.table_version_id(),
+                            &table_data_version.table_id,
+                            &table_data_version.table_version_id,
                         )
                         .build();
 
@@ -364,7 +377,7 @@ mod tests {
         let bytes_with_ids = get_sample(
             db.clone(),
             storage.clone(),
-            format!("~{}", collection.id()).as_str(),
+            format!("~{}", collection.id).as_str(),
             created_tables[0].as_str(),
             &at_times[0],
             0,
@@ -376,7 +389,7 @@ mod tests {
         let bytes_with_names = get_sample(
             db.clone(),
             storage.clone(),
-            collection.name(),
+            &collection.name,
             created_tables[0].as_str(),
             &at_times[0],
             0,
@@ -396,7 +409,7 @@ mod tests {
         let bytes_with_ids = get_sample(
             db.clone(),
             storage.clone(),
-            format!("~{}", collection.id()).as_str(),
+            format!("~{}", collection.id).as_str(),
             created_tables[0].as_str(),
             &at_times[1],
             0,
@@ -408,7 +421,7 @@ mod tests {
         let bytes_with_names = get_sample(
             db.clone(),
             storage.clone(),
-            collection.name(),
+            &collection.name,
             created_tables[0].as_str(),
             &at_times[1],
             0,
@@ -432,7 +445,7 @@ mod tests {
         let bytes_with_ids = get_sample(
             db.clone(),
             storage.clone(),
-            format!("~{}", collection.id()).as_str(),
+            format!("~{}", collection.id).as_str(),
             created_tables[0].as_str(),
             &at_times[2],
             0,
@@ -444,7 +457,7 @@ mod tests {
         let bytes_with_names = get_sample(
             db.clone(),
             storage.clone(),
-            collection.name(),
+            &collection.name,
             created_tables[0].as_str(),
             &at_times[2],
             0,
@@ -468,7 +481,7 @@ mod tests {
         let bytes_with_ids = get_sample(
             db.clone(),
             storage.clone(),
-            format!("~{}", collection.id()).as_str(),
+            format!("~{}", collection.id).as_str(),
             created_tables[0].as_str(),
             &at_times[3],
             0,
@@ -480,7 +493,7 @@ mod tests {
         let bytes_with_names = get_sample(
             db.clone(),
             storage.clone(),
-            collection.name(),
+            &collection.name,
             created_tables[0].as_str(),
             &at_times[3],
             0,
@@ -503,7 +516,7 @@ mod tests {
         let bytes = get_sample(
             db.clone(),
             storage.clone(),
-            format!("~{}", collection.id()).as_str(),
+            format!("~{}", collection.id).as_str(),
             created_tables[0].as_str(),
             &at_times[3],
             1,
@@ -522,7 +535,7 @@ mod tests {
         let bytes = get_sample(
             db.clone(),
             storage.clone(),
-            format!("~{}", collection.id()).as_str(),
+            format!("~{}", collection.id).as_str(),
             created_tables[0].as_str(),
             &at_times[3],
             0,

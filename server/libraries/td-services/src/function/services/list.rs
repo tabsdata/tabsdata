@@ -4,16 +4,15 @@
 
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
-use td_objects::crudl::{ListRequest, ListResponse, RequestContext};
+use td_objects::dxo::crudl::{ListRequest, ListResponse, RequestContext};
+use td_objects::dxo::function::defs::{Function, FunctionDBWithNames};
 use td_objects::rest_urls::AtTimeParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{CollAdmin, CollDev, CollExec, CollRead};
 use td_objects::tower_service::from::{ExtractNameService, ExtractService, TryIntoService, With};
 use td_objects::tower_service::sql::{By, SqlListService};
-use td_objects::types::basic::{
-    AtTime, FunctionStatus, VisibleCollections, VisibleFunctionsCollections,
-};
-use td_objects::types::function::Function;
+use td_objects::types::timestamp::AtTime;
+use td_objects::types::visible_collections::{VisibleCollections, VisibleFunctionsCollections};
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -36,8 +35,14 @@ fn service() {
         // convert them to allowed function collections
         from_fn(With::<VisibleCollections>::convert_to::<VisibleFunctionsCollections, _>),
         // list
-        from_fn(FunctionStatus::active_or_frozen),
-        from_fn(By::<()>::list_versions_at::<AtTimeParam, VisibleFunctionsCollections, Function>),
+        from_fn(
+            By::<()>::list_versions_at::<
+                AtTimeParam,
+                VisibleFunctionsCollections,
+                { FunctionDBWithNames::Available },
+                Function,
+            >
+        ),
     )
 }
 
@@ -49,18 +54,21 @@ mod tests {
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::TdError;
-    use td_objects::crudl::{ListParams, ListParamsBuilder, RequestContext};
+    use td_objects::dxo::crudl::{ListParams, ListParamsBuilder};
+    use td_objects::dxo::function::defs::{FunctionRegister, FunctionUpdate};
     use td_objects::rest_urls::FunctionParam;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_function::seed_function;
     use td_objects::test_utils::seed_role::seed_role;
     use td_objects::test_utils::seed_user::seed_user;
     use td_objects::test_utils::seed_user_role::seed_user_role;
-    use td_objects::types::basic::{
-        AccessTokenId, AtTime, BundleId, CollectionName, Decorator, Description, FunctionName,
-        RoleId, RoleName, UserEnabled, UserId, UserName,
-    };
-    use td_objects::types::function::{FunctionRegister, FunctionUpdate};
+    use td_objects::types::bool::UserEnabled;
+    use td_objects::types::id::{AccessTokenId, BundleId, RoleId, UserId};
+    use td_objects::types::string::Description;
+    use td_objects::types::string::RoleName;
+    use td_objects::types::string::UserName;
+    use td_objects::types::string::{CollectionName, FunctionName};
+    use td_objects::types::typed_enum::Decorator;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -79,13 +87,15 @@ mod tests {
                 // get allowed collections
                 type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead>::visible_collections),
                 // convert them to allowed function collections
-                type_of_val(&With::<VisibleCollections>::convert_to::<VisibleFunctionsCollections, _>),
+                type_of_val(
+                    &With::<VisibleCollections>::convert_to::<VisibleFunctionsCollections, _>,
+                ),
                 // list
-                type_of_val(&FunctionStatus::active_or_frozen),
                 type_of_val(
                     &By::<()>::list_versions_at::<
                         AtTimeParam,
                         VisibleFunctionsCollections,
+                        { FunctionDBWithNames::Available },
                         Function,
                     >,
                 ),
@@ -154,7 +164,7 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
                 FunctionParam::builder()
-                    .try_collection(format!("{}", collection.name()))?
+                    .try_collection(format!("{}", collection.name))?
                     .try_function("function_1")?
                     .build()?,
                 update.clone(),
@@ -172,7 +182,7 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).delete(
                 FunctionParam::builder()
-                    .try_collection(format!("{}", collection.name()))?
+                    .try_collection(format!("{}", collection.name))?
                     .try_function("function_2")?
                     .build()?,
             );
@@ -213,7 +223,7 @@ mod tests {
             .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
-        let data = response.data();
+        let data = response.data;
 
         assert_eq!(data.len(), 0);
 
@@ -232,10 +242,10 @@ mod tests {
             .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
-        let data = response.data();
+        let data = response.data;
 
         assert_eq!(data.len(), 1);
-        assert_eq!(data[0].name(), &FunctionName::try_from("function_1")?);
+        assert_eq!(data[0].name, FunctionName::try_from("function_1")?);
 
         // t2 -> function_1 and function_2
         let request =
@@ -249,11 +259,11 @@ mod tests {
             .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
-        let data = response.data();
+        let data = response.data;
 
         assert_eq!(data.len(), 2);
-        assert_eq!(data[0].name(), &FunctionName::try_from("function_1")?);
-        assert_eq!(data[1].name(), &FunctionName::try_from("function_2")?);
+        assert_eq!(data[0].name, FunctionName::try_from("function_1")?);
+        assert_eq!(data[1].name, FunctionName::try_from("function_2")?);
 
         // t3 -> function_2 and function_3
         let request =
@@ -267,11 +277,11 @@ mod tests {
             .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
-        let data = response.data();
+        let data = response.data;
 
         assert_eq!(data.len(), 2);
-        assert_eq!(data[0].name(), &FunctionName::try_from("function_2")?);
-        assert_eq!(data[1].name(), &FunctionName::try_from("function_3")?);
+        assert_eq!(data[0].name, FunctionName::try_from("function_2")?);
+        assert_eq!(data[1].name, FunctionName::try_from("function_3")?);
 
         // t4 -> function_3
         let request =
@@ -285,10 +295,10 @@ mod tests {
             .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
-        let data = response.data();
+        let data = response.data;
 
         assert_eq!(data.len(), 1);
-        assert_eq!(data[0].name(), &FunctionName::try_from("function_3")?);
+        assert_eq!(data[0].name, FunctionName::try_from("function_3")?);
 
         // t5 -> function_3 and function_5
         let request =
@@ -302,11 +312,11 @@ mod tests {
             .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
-        let data = response.data();
+        let data = response.data;
 
         assert_eq!(data.len(), 2);
-        assert_eq!(data[0].name(), &FunctionName::try_from("function_3")?);
-        assert_eq!(data[1].name(), &FunctionName::try_from("function_5")?);
+        assert_eq!(data[0].name, FunctionName::try_from("function_3")?);
+        assert_eq!(data[1].name, FunctionName::try_from("function_5")?);
         Ok(())
     }
 
@@ -326,7 +336,7 @@ mod tests {
             Description::try_from("any user")?,
         )
         .await;
-        let _user_role = seed_user_role(&db, user.id(), role.id()).await;
+        let _user_role = seed_user_role(&db, &user.id, &role.id).await;
 
         // Create collection
         let collection = seed_collection(
@@ -382,14 +392,14 @@ mod tests {
             .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
-        let data = response.data();
+        let data = response.data;
 
         assert_eq!(data.len(), 2);
-        assert_eq!(data[0].name(), &FunctionName::try_from("function_1")?);
-        assert_eq!(data[1].name(), &FunctionName::try_from("function_2")?);
+        assert_eq!(data[0].name, FunctionName::try_from("function_1")?);
+        assert_eq!(data[1].name, FunctionName::try_from("function_2")?);
 
         // No functions should be listed for unauthorized user
-        let request = RequestContext::with(AccessTokenId::default(), user.id(), role.id()).list(
+        let request = RequestContext::with(AccessTokenId::default(), user.id, role.id).list(
             AtTimeParam::builder().at(AtTime::default()).build()?,
             ListParams::default(),
         );
@@ -399,7 +409,7 @@ mod tests {
             .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
-        let data = response.data();
+        let data = response.data;
 
         assert_eq!(data.len(), 0);
         Ok(())

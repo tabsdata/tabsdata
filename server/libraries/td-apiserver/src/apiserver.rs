@@ -65,7 +65,9 @@ use td_authz::AuthzContext;
 use td_database::sql::DbPool;
 use td_error::{ApiError, api_error};
 use td_objects::sql::DaoQueries;
-use td_objects::types::basic::{ApiServerAddresses, InternalServerAddresses, NonEmptyAddresses};
+use td_objects::types::addresses::{
+    ApiServerAddresses, InternalServerAddresses, NonEmptyAddresses,
+};
 use td_services::auth::session::Sessions;
 use td_services::execution::services::runtime_info::RuntimeContext;
 use td_services::{Context, Services};
@@ -122,25 +124,26 @@ impl ApiServerInstanceBuilder {
         storage: Arc<Storage>,
         runtime_context: Arc<RuntimeContext>,
     ) -> Self {
-        // to verify up front configuration is OK.
-        let password_hash_config = config.password();
-        password_hash_config.password_hasher();
-
         let context = Context {
             db: db.clone(),
             queries: queries.clone(),
-            server_addresses: Arc::new(config.addresses().clone()),
-            jwt_config: Arc::new(config.jwt().clone()),
+            server_addresses: Arc::new(config.addresses.clone()),
+            jwt_config: Arc::new(config.jwt.clone()),
             auth_context: Arc::new(AuthzContext::default()),
             sessions: Arc::new(Sessions::default()),
-            password_settings: Arc::new(password_hash_config.clone()),
-            ssl_folder: Arc::new(config.ssl_folder().clone()),
+            password_settings: {
+                // to verify up front configuration is OK.
+                let password_hash_config = config.password.clone();
+                let _ = password_hash_config.password_hasher();
+                Arc::new(password_hash_config)
+            },
+            ssl_folder: Arc::new(config.ssl_folder.clone()),
             storage: storage.clone(),
             runtime_context: runtime_context.clone(),
-            transaction_by: Arc::new(config.transaction_by().clone()),
+            transaction_by: Arc::new(config.transaction_by.clone()),
         };
         let services = Services::build(&context);
-        let extended_context = ExtendedContext::build(&context, config.extended_config());
+        let extended_context = ExtendedContext::build(&context, &config.extended_config);
         let extended_services = ExtendedServices::build(&extended_context);
 
         Self {
@@ -241,14 +244,14 @@ impl ApiServerInstanceBuilder {
             // Default layers
             let router = router
                 .layer(TimeoutLayer::new(Duration::from_secs(
-                    *self.config.request_timeout() as u64,
+                    self.config.request_timeout as u64,
                 )))
                 .layer(CorsService::layer())
                 .layer(TraceService::layer())
                 .layer(CompressionService::layer());
 
-            ServerBuilder::new(self.config.addresses().clone(), router)
-                .tls(self.config.ssl_folder())
+            ServerBuilder::new(self.config.addresses.clone(), router)
+                .tls(&self.config.ssl_folder)
                 .build()
                 .await
         }?;
@@ -274,12 +277,12 @@ impl ApiServerInstanceBuilder {
             // Default layers
             let router = router
                 .layer(TimeoutLayer::new(Duration::from_secs(
-                    *self.config.request_timeout() as u64,
+                    self.config.request_timeout as u64,
                 )))
                 .layer(CorsService::layer())
                 .layer(TraceService::layer());
 
-            ServerBuilder::new(self.config.internal_addresses().clone(), router.into())
+            ServerBuilder::new(self.config.internal_addresses.clone(), router.into())
                 .build()
                 .await
         }?;

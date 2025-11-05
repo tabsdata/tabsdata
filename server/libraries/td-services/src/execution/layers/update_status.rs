@@ -6,17 +6,19 @@ use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
 use td_error::TdError;
 use td_error::td_error;
-use td_objects::crudl::{assert_one, handle_sql_err};
+use td_objects::dxo::crudl::{assert_one, handle_sql_err};
+use td_objects::dxo::function_requirement::defs::FunctionRequirementDBWithNames;
+use td_objects::dxo::function_run::defs::{
+    CommitFunctionRunDB, FunctionRunDB, FunctionRunToCommitDB, UpdateFunctionRunDB,
+};
+use td_objects::dxo::request::FunctionOutput;
+use td_objects::dxo::request::v2::WrittenTableV2;
+use td_objects::dxo::table_data_version::defs::{TableDataVersionDB, UpdateTableDataVersionDB};
+use td_objects::dxo::worker::defs::{CallbackRequest, UpdateWorkerDB, WorkerDB};
 use td_objects::sql::recursive::RecursiveQueries;
 use td_objects::sql::{DaoQueries, SelectBy, UpdateBy};
-use td_objects::types::basic::{FunctionRunId, FunctionRunStatus, WorkerId};
-use td_objects::types::execution::{
-    CallbackRequest, CommitFunctionRunDB, FunctionRequirementDBWithNames, FunctionRunDB,
-    TableDataVersionDB, UpdateFunctionRunDB, UpdateTableDataVersionDB, WorkerDB,
-};
-use td_objects::types::execution::{FunctionRunToCommitDB, UpdateWorkerDB};
-use td_objects::types::worker::FunctionOutput;
-use td_objects::types::worker::v2::WrittenTableV2;
+use td_objects::types::id::{FunctionRunId, WorkerId};
+use td_objects::types::typed_enum::FunctionRunStatus;
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, ReqCtx, SrvCtx};
 
 #[td_error]
@@ -44,7 +46,7 @@ pub async fn update_worker_status(
 
     // Worker status update is never conditional, we want to know exactly what got reported,
     // as it doesn't affect execution flow, it's just informational.
-    let worker_id = WorkerId::try_from(callback.id())?;
+    let worker_id = WorkerId::try_from(&callback.id)?;
     let _ = queries
         .update_by::<_, WorkerDB>(update.deref(), &(&worker_id))?
         .build()
@@ -72,19 +74,19 @@ pub async fn update_function_run_status(
             let ctx = ctx.clone();
             let update = update.clone();
             async move {
-                match (current.status(), update.status()) {
+                match (&current.status, &update.status) {
                     // Final status.
                     (FunctionRunStatus::Committed, _) => {
-                        Some(Err(UpdateStatusRunError::AlreadyCommitted(*current.id())))
+                        Some(Err(UpdateStatusRunError::AlreadyCommitted(current.id)))
                     }
 
                     (FunctionRunStatus::Yanked, FunctionRunStatus::Yanked) => {
-                        ctx.warning(UpdateStatusRunError::AlreadyYanked(*current.id()))
+                        ctx.warning(UpdateStatusRunError::AlreadyYanked(current.id))
                             .await;
                         None
                     }
                     (FunctionRunStatus::Yanked, _) => {
-                        Some(Err(UpdateStatusRunError::AlreadyYanked(*current.id())))
+                        Some(Err(UpdateStatusRunError::AlreadyYanked(current.id)))
                     }
 
                     (
@@ -97,43 +99,43 @@ pub async fn update_function_run_status(
                         // No-op already canceled status transition.
                         | FunctionRunStatus::Canceled,
                     ) => {
-                        ctx.warning(UpdateStatusRunError::AlreadyCanceled(*current.id()))
+                        ctx.warning(UpdateStatusRunError::AlreadyCanceled(current.id))
                             .await;
                         None
                     }
                     (FunctionRunStatus::Canceled, _) => {
-                        Some(Err(UpdateStatusRunError::AlreadyCanceled(*current.id())))
+                        Some(Err(UpdateStatusRunError::AlreadyCanceled(current.id)))
                     }
 
                     // Mutable status
                     (FunctionRunStatus::Scheduled, FunctionRunStatus::RunRequested) => {
-                        Some(Ok(current.id()))
+                        Some(Ok(current.id))
                     }
                     (FunctionRunStatus::ReScheduled, FunctionRunStatus::RunRequested) => {
-                        Some(Ok(current.id()))
+                        Some(Ok(current.id))
                     }
                     (FunctionRunStatus::RunRequested, FunctionRunStatus::Running) => {
-                        Some(Ok(current.id()))
+                        Some(Ok(current.id))
                     }
-                    (FunctionRunStatus::Running, FunctionRunStatus::Done) => Some(Ok(current.id())),
+                    (FunctionRunStatus::Running, FunctionRunStatus::Done) => Some(Ok(current.id)),
                     (
                         FunctionRunStatus::RunRequested | FunctionRunStatus::Running,
                         FunctionRunStatus::Error,
-                    ) => Some(Ok(current.id())),
+                    ) => Some(Ok(current.id)),
                     (
                         FunctionRunStatus::RunRequested | FunctionRunStatus::Running,
                         FunctionRunStatus::Failed,
-                    ) => Some(Ok(current.id())),
+                    ) => Some(Ok(current.id)),
 
                     // Recover status, only for failed function runs, otherwise just no-op.
                     (
                         FunctionRunStatus::Failed | FunctionRunStatus::OnHold,
                         FunctionRunStatus::ReScheduled,
-                    ) => Some(Ok(current.id())),
+                    ) => Some(Ok(current.id)),
                     (_, FunctionRunStatus::ReScheduled) => None,
 
                     // Cancel status.
-                    (_, FunctionRunStatus::Canceled) => Some(Ok(current.id())),
+                    (_, FunctionRunStatus::Canceled) => Some(Ok(current.id)),
 
                     // No-op for transitions between the same states
                     (current, new) if current == new => None,
@@ -141,9 +143,9 @@ pub async fn update_function_run_status(
                     // Error in transition, not safe to proceed.
                     _ => Some(Err(
                         UpdateStatusRunError::UnexpectedFunctionRunStatusTransition(
-                            *current.id(),
-                            current.status().clone(),
-                            update.status().clone(),
+                            current.id,
+                            current.status.clone(),
+                            update.status.clone(),
                         ),
                     )),
                 }
@@ -167,21 +169,21 @@ pub async fn update_function_run_status(
 
     // TODO this is not getting chunked
     let _ = queries
-        .update_all_by::<_, FunctionRunDB>(update.deref(), &(function_run_ids))?
+        .update_all_by::<_, FunctionRunDB>(update.deref(), &function_run_ids)?
         .build()
         .execute(&mut *conn)
         .await
         .map_err(handle_sql_err)?;
 
     // Publish function runs if needed, including downstream publishing.
-    if *update.status() == FunctionRunStatus::Done {
+    if update.status == FunctionRunStatus::Done {
         let to_commit: Vec<FunctionRunToCommitDB> = queries
             .select_by::<FunctionRunToCommitDB>(&())?
             .build_query_as()
             .fetch_all(&mut *conn)
             .await
             .map_err(handle_sql_err)?;
-        let to_commit: Vec<_> = to_commit.iter().map(|f| f.id()).collect();
+        let to_commit: Vec<_> = to_commit.iter().map(|f| f.id).collect();
 
         let update = CommitFunctionRunDB::default();
         // TODO this is not getting chunked
@@ -196,7 +198,7 @@ pub async fn update_function_run_status(
     // Downstream updates.
     let mut downstream_function_run_updates = HashMap::new();
     for current in function_run_ids.iter() {
-        let downstream_status = match update.status() {
+        let downstream_status = match update.status {
             FunctionRunStatus::Canceled => Some(FunctionRunStatus::Canceled),
             FunctionRunStatus::Yanked => Some(FunctionRunStatus::Yanked),
             FunctionRunStatus::ReScheduled => Some(FunctionRunStatus::ReScheduled),
@@ -206,8 +208,8 @@ pub async fn update_function_run_status(
 
         if let Some(downstream_status) = downstream_status {
             let function_runs: Vec<FunctionRequirementDBWithNames> = queries
-                .select_recursive_versions_at::<FunctionRequirementDBWithNames, FunctionRunDB, _>(
-                    None, None, None, None, *current,
+                .select_recursive_versions_at::<{ FunctionRequirementDBWithNames::All }, FunctionRequirementDBWithNames, { FunctionRunDB::All }, FunctionRunDB>(
+                    None, None, current,
                 )?
                 .build_query_as()
                 .fetch_all(&mut *conn)
@@ -215,8 +217,8 @@ pub async fn update_function_run_status(
                 .map_err(handle_sql_err)?;
             let function_run_ids: Vec<_> = function_runs
                 .iter()
-                .map(|f| *f.function_run_id())
-                .filter(|id| id != *current) // current is already in the required state
+                .map(|f| f.function_run_id)
+                .filter(|id| id != current) // current is already in the required state
                 .collect();
 
             downstream_function_run_updates
@@ -247,12 +249,11 @@ pub async fn update_table_data_version_status(
     Input(function_run_id): Input<FunctionRunId>,
     Input(callback): Input<CallbackRequest>,
 ) -> Result<(), TdError> {
-    if let Some(context) = callback.context() {
+    if let Some(context) = &callback.context {
         let futures: Vec<_> = match context {
-            FunctionOutput::V1(_) => unreachable!(),
             FunctionOutput::V2(output) => {
                 output
-                    .output()
+                    .output
                     .iter()
                     .map(|written| {
                         let queries = queries.clone();
@@ -271,9 +272,9 @@ pub async fn update_table_data_version_status(
 
                             let update = UpdateTableDataVersionDB::builder()
                                 .has_data(Some(has_data.is_some().into()))
-                                .column_count(has_data.map(|info| info.column_count().into()))
-                                .row_count(has_data.map(|info| info.row_count().into()))
-                                .schema_hash(has_data.map(|info| info.schema_hash().into()))
+                                .column_count(has_data.map(|info| info.column_count.clone()))
+                                .row_count(has_data.map(|info| info.row_count.clone()))
+                                .schema_hash(has_data.map(|info| info.schema_hash.clone()))
                                 .build()?;
 
                             let mut conn = connection.lock().await;
@@ -310,7 +311,16 @@ pub(crate) mod tests {
     use std::sync::Arc;
     use td_database::sql::DbPool;
     use td_error::TdError;
-    use td_objects::crudl::handle_sql_err;
+    use td_objects::dxo::collection::defs::CollectionDB;
+    use td_objects::dxo::crudl::handle_sql_err;
+    use td_objects::dxo::execution::defs::{ExecutionDB, ExecutionDBWithStatus};
+    use td_objects::dxo::function::defs::FunctionRegister;
+    use td_objects::dxo::function_run::defs::FunctionRunDB;
+    use td_objects::dxo::table::defs::TableDB;
+    use td_objects::dxo::table_data_version::defs::{
+        TableDataVersionDB, TableDataVersionDBWithFunction,
+    };
+    use td_objects::dxo::transaction::defs::{TransactionDB, TransactionDBWithStatus};
     use td_objects::sql::{DaoQueries, SelectBy};
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_execution::seed_execution;
@@ -319,19 +329,15 @@ pub(crate) mod tests {
     use td_objects::test_utils::seed_function_run::seed_function_run;
     use td_objects::test_utils::seed_table_data_version::seed_table_data_version;
     use td_objects::test_utils::seed_transaction::seed_transaction;
-    use td_objects::types::basic::{
-        BundleId, CollectionName, Decorator, DependencyPos, ExecutionStatus, FunctionName,
-        FunctionRunStatus, FunctionRuntimeValues, TableDependencyDto, TableName, TableNameDto,
-        TransactionStatus, UserId, VersionPos,
+    use td_objects::types::composed::TableDependencyDto;
+    use td_objects::types::i32::{DependencyPos, VersionPos};
+    use td_objects::types::id::{BundleId, UserId};
+    use td_objects::types::string::{
+        CollectionName, FunctionName, FunctionRuntimeValues, TableName, TableNameDto,
     };
-    use td_objects::types::collection::CollectionDB;
-    use td_objects::types::execution::{
-        ExecutionDB, FunctionRunDB, TableDataVersionDB, TableDataVersionDBWithFunction,
-        TransactionDB,
+    use td_objects::types::typed_enum::{
+        Decorator, ExecutionStatus, FunctionRunStatus, TransactionStatus,
     };
-    use td_objects::types::execution::{ExecutionDBWithStatus, TransactionDBWithStatus};
-    use td_objects::types::function::FunctionRegister;
-    use td_objects::types::table::TableDB;
 
     #[derive(Debug, Clone, Eq, PartialEq, Hash)]
     pub(crate) struct TestExecution {
@@ -520,7 +526,7 @@ pub(crate) mod tests {
                     .await;
 
                     let tables: Vec<TableDB> = queries
-                        .select_by::<TableDB>(&(function_versions.get(f).unwrap().id()))
+                        .select_by::<TableDB>(&(&function_versions.get(f).unwrap().id))
                         .unwrap()
                         .build_query_as()
                         .fetch_all(&db)
@@ -547,7 +553,7 @@ pub(crate) mod tests {
                         &function_run,
                         tables
                             .iter()
-                            .find(|f| f.name() == &TableName::try_from(&default_table).unwrap())
+                            .find(|f| f.name == TableName::try_from(&default_table).unwrap())
                             .unwrap(),
                         None,
                         None,
@@ -588,14 +594,14 @@ pub(crate) mod tests {
                         .flat_map(|e| e.transactions.iter().map(move |t| &t.functions))
                         .flatten()
                         .find(|&f| {
-                            let collection = d.collection().as_ref().unwrap_or(&f.collection);
+                            let collection = d.collection.as_ref().unwrap_or(&f.collection);
                             f.collection == *collection
-                                && f.tables.iter().any(|tbl| tbl == d.table())
+                                && f.tables.iter().any(|tbl| *tbl == d.table)
                         })
                         .unwrap();
 
                     let tables: Vec<TableDB> = queries
-                        .select_by::<TableDB>(&(function_versions.get(dependency_f).unwrap().id()))
+                        .select_by::<TableDB>(&(&function_versions.get(dependency_f).unwrap().id))
                         .unwrap()
                         .build_query_as()
                         .fetch_all(&db)
@@ -603,12 +609,12 @@ pub(crate) mod tests {
                         .unwrap();
                     let tables = tables
                         .iter()
-                        .map(|tdv| (tdv.name(), tdv))
+                        .map(|tdv| (&tdv.name, tdv))
                         .collect::<HashMap<_, _>>();
 
                     let table_data_versions: Vec<TableDataVersionDB> = queries
                         .select_by::<TableDataVersionDBWithFunction>(
-                            &(function_versions.get(dependency_f).unwrap().id()),
+                            &(&function_versions.get(dependency_f).unwrap().id),
                         )
                         .unwrap()
                         .build_query_as()
@@ -617,7 +623,7 @@ pub(crate) mod tests {
                         .unwrap();
                     let table_data_versions = table_data_versions
                         .iter()
-                        .map(|tdv| (tdv.name(), tdv))
+                        .map(|tdv| (&tdv.name, tdv))
                         .collect::<HashMap<_, _>>();
 
                     let req = seed_function_requirement(
@@ -626,12 +632,10 @@ pub(crate) mod tests {
                         executions.get(e).unwrap(),
                         transactions.get(t).unwrap(),
                         function_runs.get(f).unwrap(),
-                        tables
-                            .get(&TableName::try_from(d.table()).unwrap())
-                            .unwrap(),
+                        tables.get(&TableName::try_from(&d.table).unwrap()).unwrap(),
                         Some(function_runs.get(dependency_f).unwrap()),
                         table_data_versions
-                            .get(&TableName::try_from(d.table()).unwrap())
+                            .get(&TableName::try_from(&d.table).unwrap())
                             .cloned(),
                         Some(&DependencyPos::try_from(0).unwrap()),
                         &VersionPos::try_from(0).unwrap(),
@@ -654,23 +658,21 @@ pub(crate) mod tests {
         // Assert execution
         for test_execution in test_executions {
             let executions: Vec<ExecutionDBWithStatus> = queries
-                .select_by::<ExecutionDBWithStatus>(
-                    &(executions.get(test_execution).unwrap().id()),
-                )?
+                .select_by::<ExecutionDBWithStatus>(&(executions.get(test_execution).unwrap().id))?
                 .build_query_as()
                 .fetch_all(&db)
                 .await
                 .map_err(handle_sql_err)?;
             assert_eq!(executions.len(), 1);
             let execution = &executions[0];
-            assert_eq!(*execution.status(), test_execution.expected_status);
+            assert_eq!(execution.status, test_execution.expected_status);
         }
 
         // Assert transactions
         for test_transaction in test_executions.iter().flat_map(|e| &e.transactions) {
             let transactions: Vec<TransactionDBWithStatus> = queries
                 .select_by::<TransactionDBWithStatus>(
-                    &transactions.get(test_transaction).unwrap().id(),
+                    &transactions.get(test_transaction).unwrap().id,
                 )?
                 .build_query_as()
                 .fetch_all(&db)
@@ -678,7 +680,7 @@ pub(crate) mod tests {
                 .map_err(handle_sql_err)?;
             assert_eq!(transactions.len(), 1);
             let transaction = &transactions[0];
-            assert_eq!(*transaction.status(), test_transaction.expected_status);
+            assert_eq!(transaction.status, test_transaction.expected_status);
         }
 
         // Assert function runs and table data versions
@@ -691,24 +693,24 @@ pub(crate) mod tests {
 
             // Assert all function_runs are in expected state
             let function_runs: Vec<FunctionRunDB> = queries
-                .select_by::<FunctionRunDB>(&(function_runs.get(test_function).unwrap().id()))?
+                .select_by::<FunctionRunDB>(&(&function_runs.get(test_function).unwrap().id))?
                 .build_query_as()
                 .fetch_all(&db)
                 .await
                 .map_err(handle_sql_err)?;
             assert_eq!(function_runs.len(), 1);
             let function_run = &function_runs[0];
-            assert_eq!(*function_run.status(), test_function.expected_status);
+            assert_eq!(function_run.status, test_function.expected_status);
 
             // Assert all table_data_versions are in expected state
             let table_data_versions: Vec<TableDataVersionDBWithFunction> = queries
-                .select_by::<TableDataVersionDBWithFunction>(&(function_version.id()))?
+                .select_by::<TableDataVersionDBWithFunction>(&(function_version.id))?
                 .build_query_as()
                 .fetch_all(&db)
                 .await
                 .map_err(handle_sql_err)?;
             for table_data_version in &table_data_versions {
-                assert_eq!(*table_data_version.status(), test_function.expected_status);
+                assert_eq!(table_data_version.status, test_function.expected_status);
             }
         }
 

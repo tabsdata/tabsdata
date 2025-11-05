@@ -4,9 +4,9 @@
 
 use crate::inter_coll_permission::InterCollectionPermissionError;
 use td_error::TdError;
-use td_objects::types::IdOrName;
-use td_objects::types::basic::{CollectionId, CollectionIdName, ToCollectionId};
-use td_objects::types::permission::InterCollectionPermissionDBWithNames;
+use td_objects::dxo::inter_collection_permission::defs::InterCollectionPermissionDBWithNames;
+use td_objects::types::id::{CollectionId, ToCollectionId};
+use td_objects::types::id_name::{CollectionIdName, IdOrName};
 use td_tower::extractors::Input;
 
 pub async fn assert_collection_in_permission(
@@ -14,12 +14,12 @@ pub async fn assert_collection_in_permission(
     Input(permission): Input<InterCollectionPermissionDBWithNames>,
 ) -> Result<(), TdError> {
     if let Some(collection_id) = collection_id_name.id()
-        && collection_id != permission.from_collection_id()
+        && collection_id != &permission.from_collection_id
     {
         Err(InterCollectionPermissionError::CollectionPermissionMismatch)?
     }
     if let Some(collection_name) = collection_id_name.name()
-        && collection_name != permission.from_collection()
+        && collection_name != &permission.from_collection
     {
         Err(InterCollectionPermissionError::CollectionPermissionMismatch)?
     }

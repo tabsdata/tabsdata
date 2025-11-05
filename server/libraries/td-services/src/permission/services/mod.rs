@@ -5,17 +5,15 @@
 use crate::permission::services::create::CreatePermissionService;
 use crate::permission::services::delete::DeletePermissionService;
 use crate::permission::services::list::ListPermissionService;
-use getset::Getters;
 use ta_services::factory::ServiceFactory;
 
 mod create;
 mod delete;
 mod list;
 
-#[derive(ServiceFactory, Getters)]
-#[getset(get = "pub")]
+#[derive(ServiceFactory)]
 pub struct PermissionServices {
-    create: CreatePermissionService,
-    delete: DeletePermissionService,
-    list: ListPermissionService,
+    pub create: CreatePermissionService,
+    pub delete: DeletePermissionService,
+    pub list: ListPermissionService,
 }

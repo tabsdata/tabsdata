@@ -17,12 +17,12 @@ mod routes {
     };
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
-    use td_objects::crudl::{ListParams, RequestContext};
+    use td_objects::dxo::crudl::{ListParams, RequestContext};
+    use td_objects::dxo::user_role::defs::{UserRole, UserRoleCreate};
     use td_objects::rest_urls::{
         CREATE_USER_ROLE, DELETE_USER_ROLE, GET_USER_ROLE, LIST_USER_ROLES, RoleParam,
         UserRoleParam,
     };
-    use td_objects::types::role::{UserRole, UserRoleCreate};
     use td_services::user_role::services::UserRoleServices;
     use tower::ServiceExt;
 
@@ -37,7 +37,7 @@ mod routes {
         Json(request): Json<UserRoleCreate>,
     ) -> Result<CreateStatus<UserRole>, ErrorStatus> {
         let request = context.create(role_param, request);
-        let response = state.create().service().await.oneshot(request).await?;
+        let response = state.create.service().await.oneshot(request).await?;
         Ok(CreateStatus::CREATED(response))
     }
 
@@ -49,7 +49,7 @@ mod routes {
         Path(user_role_param): Path<UserRoleParam>,
     ) -> Result<DeleteStatus<NoContent>, ErrorStatus> {
         let request = context.delete(user_role_param);
-        let response = state.delete().service().await.oneshot(request).await?;
+        let response = state.delete.service().await.oneshot(request).await?;
         Ok(DeleteStatus::OK(response))
     }
 
@@ -62,7 +62,7 @@ mod routes {
         Path(role_param): Path<RoleParam>,
     ) -> Result<ListStatus<UserRole>, ErrorStatus> {
         let request = context.list(role_param, query_params);
-        let response = state.list().service().await.oneshot(request).await?;
+        let response = state.list.service().await.oneshot(request).await?;
         Ok(ListStatus::OK(response))
     }
 
@@ -74,7 +74,7 @@ mod routes {
         Path(user_role_param): Path<UserRoleParam>,
     ) -> Result<GetStatus<UserRole>, ErrorStatus> {
         let request = context.read(user_role_param);
-        let response = state.read().service().await.oneshot(request).await?;
+        let response = state.read.service().await.oneshot(request).await?;
         Ok(GetStatus::OK(response))
     }
 }

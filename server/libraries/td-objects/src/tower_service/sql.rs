@@ -954,6 +954,7 @@ mod tests {
     struct FooName;
 
     #[Dao]
+    #[derive(Eq, PartialEq)]
     #[dao(sql_table = "foo")]
     struct FooDao {
         id: FooId,
@@ -961,6 +962,7 @@ mod tests {
     }
 
     #[Dto]
+    #[derive(Eq, PartialEq)]
     #[dto(list(on = FooDao))]
     #[td_type(builder(try_from = FooDao))]
     struct FooDto {

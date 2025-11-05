@@ -8,7 +8,8 @@ use crate::permission::layers::{
 };
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext, refresh_authz_context};
-use td_objects::crudl::{DeleteRequest, RequestContext};
+use td_objects::dxo::crudl::{DeleteRequest, RequestContext};
+use td_objects::dxo::permission::defs::{PermissionDB, PermissionDBWithNames};
 use td_objects::rest_urls::RolePermissionParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, SecAdmin, System};
@@ -16,10 +17,8 @@ use td_objects::tower_service::from::{
     ExtractNameService, ExtractService, TryIntoService, UnwrapService, With,
 };
 use td_objects::tower_service::sql::{By, SqlDeleteService, SqlSelectService};
-use td_objects::types::basic::{
-    CollectionId, EntityId, PermissionId, PermissionIdName, RoleIdName,
-};
-use td_objects::types::permission::{PermissionDB, PermissionDBWithNames};
+use td_objects::types::id::{CollectionId, EntityId, PermissionId};
+use td_objects::types::id_name::{PermissionIdName, RoleIdName};
 use td_tower::default_services::{Do, Else, If, TransactionProvider, conditional};
 use td_tower::from_fn::from_fn;
 use td_tower::{layers, service};
@@ -78,18 +77,17 @@ mod tests {
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::{TdError, assert_service_error};
-    use td_objects::crudl::RequestContext;
+    use td_objects::dxo::crudl::RequestContext;
+    use td_objects::dxo::permission::defs::PermissionCreate;
     use td_objects::rest_urls::RoleParam;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_permission::{get_permission, seed_permission};
     use td_objects::test_utils::seed_role::seed_role;
     use td_objects::tower_service::authz::AuthzError;
-    use td_objects::types::IdOrName;
-    use td_objects::types::basic::{
-        AccessTokenId, CollectionName, Description, EntityName, PermissionType, RoleId, RoleIdName,
-        RoleName, UserId,
-    };
-    use td_objects::types::permission::PermissionCreate;
+    use td_objects::types::id::{AccessTokenId, RoleId, UserId};
+    use td_objects::types::id_name::IdOrName;
+    use td_objects::types::string::{CollectionName, Description, EntityName, RoleName};
+    use td_objects::types::typed_enum::PermissionType;
     use td_security::{
         ENCODED_ID_CA_ALL_SEC_ADMIN, ENCODED_ID_SA_SYS_ADMIN, ENCODED_ID_SS_SEC_ADMIN,
     };
@@ -147,7 +145,7 @@ mod tests {
         .delete(
             RolePermissionParam::builder()
                 .role(RoleIdName::try_from("king")?)
-                .permission(PermissionIdName::try_from(seeded.id().to_string())?)
+                .permission(PermissionIdName::try_from(seeded.id.to_string())?)
                 .build()?,
         );
 
@@ -156,7 +154,7 @@ mod tests {
             .await;
         service.raw_oneshot(request).await?;
 
-        let not_found = get_permission(&db, seeded.id()).await;
+        let not_found = get_permission(&db, &seeded.id).await;
         assert!(not_found.is_err());
         Ok(())
     }
@@ -169,7 +167,7 @@ mod tests {
         let coll0 = seed_collection(&db, &CollectionName::try_from("c0")?, &UserId::admin()).await;
         let coll_admin_role =
             seed_role(&db, RoleName::try_from("r0")?, Description::try_from("d")?).await;
-        let entity_id: EntityId = coll0.id().try_into()?;
+        let entity_id: EntityId = coll0.id.try_into()?;
         seed_permission(
             &db,
             PermissionType::CollectionAdmin,
@@ -184,11 +182,11 @@ mod tests {
         let request = RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            coll_admin_role.id(),
+            coll_admin_role.id,
         )
         .create(
             RoleParam::builder()
-                .role(RoleIdName::from_id(role.id()))
+                .role(RoleIdName::from_id(role.id))
                 .build()?,
             PermissionCreate::builder()
                 .permission_type(PermissionType::CollectionDev)
@@ -211,7 +209,7 @@ mod tests {
         let coll0 = seed_collection(&db, &CollectionName::try_from("c0")?, &UserId::admin()).await;
         let coll_admin_role =
             seed_role(&db, RoleName::try_from("r0")?, Description::try_from("d")?).await;
-        let entity_id: EntityId = coll0.id().try_into()?;
+        let entity_id: EntityId = coll0.id.try_into()?;
         seed_permission(
             &db,
             PermissionType::CollectionAdmin,
@@ -227,11 +225,11 @@ mod tests {
         let request = RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            coll_admin_role.id(),
+            coll_admin_role.id,
         )
         .create(
             RoleParam::builder()
-                .role(RoleIdName::from_id(role.id()))
+                .role(RoleIdName::from_id(role.id))
                 .build()?,
             PermissionCreate::builder()
                 .permission_type(PermissionType::CollectionDev)
@@ -258,7 +256,7 @@ mod tests {
         let coll0 = seed_collection(&db, &CollectionName::try_from("c0")?, &UserId::admin()).await;
         let coll_admin_role =
             seed_role(&db, RoleName::try_from("r0")?, Description::try_from("d")?).await;
-        let entity_id: EntityId = coll0.id().try_into()?;
+        let entity_id: EntityId = coll0.id.try_into()?;
         seed_permission(
             &db,
             PermissionType::CollectionAdmin,
@@ -272,11 +270,11 @@ mod tests {
         let request = RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            coll_admin_role.id(),
+            coll_admin_role.id,
         )
         .create(
             RoleParam::builder()
-                .role(RoleIdName::from_id(coll_admin_role.id()))
+                .role(RoleIdName::from_id(coll_admin_role.id))
                 .build()?,
             PermissionCreate::builder()
                 .permission_type(PermissionType::CollectionDev)
@@ -302,7 +300,7 @@ mod tests {
     ) -> Result<(), TdError> {
         let coll0 = seed_collection(&db, &CollectionName::try_from("c0")?, &UserId::admin()).await;
         let role = seed_role(&db, RoleName::try_from("r0")?, Description::try_from("d")?).await;
-        let entity_id: EntityId = coll0.id().try_into()?;
+        let entity_id: EntityId = coll0.id.try_into()?;
         seed_permission(
             &db,
             PermissionType::CollectionAdmin,
@@ -320,11 +318,11 @@ mod tests {
         )
         .await;
 
-        let request = RequestContext::with(AccessTokenId::default(), UserId::admin(), role.id())
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin(), role.id)
             .delete(
                 RolePermissionParam::builder()
                     .role(RoleIdName::try_from("r0")?)
-                    .permission(PermissionIdName::try_from(coll_dev_perm.id().to_string())?)
+                    .permission(PermissionIdName::try_from(coll_dev_perm.id.to_string())?)
                     .build()?,
             );
 
@@ -333,7 +331,7 @@ mod tests {
             .await;
         assert!(service.raw_oneshot(request).await.is_ok());
 
-        let not_found = get_permission(&db, coll_dev_perm.id()).await;
+        let not_found = get_permission(&db, &coll_dev_perm.id).await;
         assert!(not_found.is_err());
         Ok(())
     }
@@ -343,7 +341,7 @@ mod tests {
     async fn test_delete_permission_incorrect_role_err(db: DbPool) -> Result<(), TdError> {
         let coll0 = seed_collection(&db, &CollectionName::try_from("c0")?, &UserId::admin()).await;
         let role = seed_role(&db, RoleName::try_from("r0")?, Description::try_from("d")?).await;
-        let entity_id: EntityId = coll0.id().try_into()?;
+        let entity_id: EntityId = coll0.id.try_into()?;
         seed_permission(
             &db,
             PermissionType::CollectionAdmin,
@@ -361,11 +359,11 @@ mod tests {
         )
         .await;
 
-        let request = RequestContext::with(AccessTokenId::default(), UserId::admin(), role.id())
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin(), role.id)
             .delete(
                 RolePermissionParam::builder()
                     .role(RoleIdName::try_from("r_incorrect")?)
-                    .permission(PermissionIdName::try_from(coll_dev_perm.id().to_string())?)
+                    .permission(PermissionIdName::try_from(coll_dev_perm.id.to_string())?)
                     .build()?,
             );
 
@@ -394,7 +392,7 @@ mod tests {
             &db,
             PermissionType::CollectionDev,
             Some(EntityName::try_from("c0")?),
-            Some(coll0.id().try_into()?),
+            Some(coll0.id.try_into()?),
             &role0,
         )
         .await;
@@ -402,16 +400,16 @@ mod tests {
             &db,
             PermissionType::CollectionDev,
             Some(EntityName::try_from("c1")?),
-            Some(coll1.id().try_into()?),
+            Some(coll1.id.try_into()?),
             &role1,
         )
         .await;
 
-        let request = RequestContext::with(AccessTokenId::default(), UserId::admin(), role0.id())
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin(), role0.id)
             .delete(
                 RolePermissionParam::builder()
                     .role(RoleIdName::try_from("r1")?)
-                    .permission(PermissionIdName::try_from(perm1.id().to_string())?)
+                    .permission(PermissionIdName::try_from(perm1.id.to_string())?)
                     .build()?,
             );
 
@@ -443,11 +441,11 @@ mod tests {
         )
         .await;
 
-        let request = RequestContext::with(AccessTokenId::default(), UserId::admin(), role.id())
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin(), role.id)
             .delete(
                 RolePermissionParam::builder()
                     .role(RoleIdName::try_from("r0")?)
-                    .permission(PermissionIdName::try_from(coll_dev_perm.id().to_string())?)
+                    .permission(PermissionIdName::try_from(coll_dev_perm.id.to_string())?)
                     .build()?,
             );
 
@@ -489,12 +487,12 @@ mod tests {
             )
             .delete(
                 RolePermissionParam::builder()
-                    .role(RoleIdName::from_id(permission.role_id()))
-                    .permission(PermissionIdName::from_id(permission.id()))
+                    .role(RoleIdName::from_id(permission.role_id))
+                    .permission(PermissionIdName::from_id(permission.id))
                     .build()?,
             );
 
-            if fixed_permissions.contains(permission.id().to_string().as_str()) {
+            if fixed_permissions.contains(permission.id.to_string().as_str()) {
                 assert_service_error(service, request, |err| match err {
                     PermissionError::PermissionIsFixed => {}
                     other => panic!("Expected 'PermissionIsFixed', got {other:?}"),

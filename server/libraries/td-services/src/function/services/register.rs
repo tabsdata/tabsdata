@@ -8,7 +8,15 @@ use crate::function::layers::{
 };
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
-use td_objects::crudl::{CreateRequest, RequestContext};
+use td_objects::dxo::bundle::defs::BundleDB;
+use td_objects::dxo::collection::defs::CollectionDB;
+use td_objects::dxo::crudl::{CreateRequest, RequestContext};
+use td_objects::dxo::dependency::defs::DependencyDB;
+use td_objects::dxo::function::defs::{
+    Function, FunctionBuilder, FunctionDB, FunctionDBBuilder, FunctionDBWithNames, FunctionRegister,
+};
+use td_objects::dxo::table::defs::TableDB;
+use td_objects::dxo::trigger::defs::TriggerDBWithNames;
 use td_objects::rest_urls::CollectionParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev};
@@ -18,19 +26,14 @@ use td_objects::tower_service::from::{
 };
 use td_objects::tower_service::sql::SqlAssertNotExistsService;
 use td_objects::tower_service::sql::{By, SqlDeleteService, SqlSelectService, insert};
-use td_objects::types::basic::{
-    AtTime, BundleId, CollectionId, CollectionIdName, CollectionName, DataLocation, FunctionId,
-    FunctionName, FunctionStatus, ReuseFrozen, StorageVersion, TableDependencyDto, TableNameDto,
-    TableTriggerDto,
+use td_objects::types::bool::ReuseFrozen;
+use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
+use td_objects::types::id::{BundleId, CollectionId, FunctionId};
+use td_objects::types::id_name::CollectionIdName;
+use td_objects::types::string::{
+    CollectionName, DataLocation, FunctionName, StorageVersion, TableNameDto,
 };
-use td_objects::types::collection::CollectionDB;
-use td_objects::types::dependency::DependencyDB;
-use td_objects::types::function::{
-    BundleDB, Function, FunctionBuilder, FunctionDB, FunctionDBBuilder, FunctionDBWithNames,
-    FunctionRegister,
-};
-use td_objects::types::table::TableDB;
-use td_objects::types::trigger::TriggerDBWithNames;
+use td_objects::types::timestamp::AtTime;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -69,11 +72,13 @@ fn service() {
         from_fn(With::<FunctionRegister>::extract::<FunctionName>),
         // Check function name does not exist in collection at the time of register.
         from_fn(combine::<CollectionId, FunctionName>),
-        from_fn(FunctionStatus::active),
         from_fn(With::<RequestContext>::extract::<AtTime>),
         // Validate function does not exist
         from_fn(
-            By::<(CollectionId, FunctionName)>::assert_version_not_exists::<FunctionDBWithNames>
+            By::<(CollectionId, FunctionName)>::assert_version_not_exists::<
+                { FunctionDBWithNames::Available },
+                FunctionDBWithNames,
+            >
         ),
         // Get location and storage version.
         from_fn(With::<StorageVersion>::default),
@@ -123,21 +128,20 @@ mod tests {
     use super::*;
     use crate::function::services::tests::assert_register;
     use std::collections::HashMap;
-    use std::ops::Deref;
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::TdError;
     use td_execution::version_resolver::VersionResolverError;
-    use td_objects::crudl::handle_sql_err;
+    use td_objects::dxo::crudl::handle_sql_err;
     use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_function::seed_function;
     use td_objects::test_utils::seed_inter_collection_permission::seed_inter_collection_permission;
     use td_objects::tower_service::authz::AuthzError;
     use td_objects::tower_service::sql::SqlError;
-    use td_objects::types::basic::{
-        AccessTokenId, BundleId, Decorator, FunctionRuntimeValues, RoleId, ToCollectionId, UserId,
-    };
+    use td_objects::types::id::{AccessTokenId, RoleId, ToCollectionId, UserId};
+    use td_objects::types::string::FunctionRuntimeValues;
+    use td_objects::types::typed_enum::Decorator;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -148,15 +152,17 @@ mod tests {
             build_dependency_versions, build_table_versions, build_tables_trigger_versions,
             build_trigger_versions,
         };
+        use td_objects::dxo::dependency::defs::{DependencyDB, DependencyDBBuilder};
+        use td_objects::dxo::inter_collection_access::defs::{
+            InterCollectionAccess, InterCollectionAccessBuilder,
+        };
+        use td_objects::dxo::table::defs::{TableDB, TableDBBuilder};
+        use td_objects::dxo::trigger::defs::{TriggerDB, TriggerDBBuilder};
         use td_objects::tower_service::authz::InterColl;
         use td_objects::tower_service::from::{
             ConvertIntoMapService, TryIntoService, UpdateService, VecBuildService, With,
         };
         use td_objects::tower_service::sql::insert_vec;
-        use td_objects::types::dependency::{DependencyDB, DependencyDBBuilder};
-        use td_objects::types::permission::{InterCollectionAccess, InterCollectionAccessBuilder};
-        use td_objects::types::table::{TableDB, TableDBBuilder};
-        use td_objects::types::trigger::{TriggerDB, TriggerDBBuilder};
 
         use td_tower::metadata::type_of_val;
 
@@ -192,10 +198,10 @@ mod tests {
                 type_of_val(&With::<FunctionRegister>::extract::<FunctionName>),
                 // Check function name does not exist in collection.
                 type_of_val(&combine::<CollectionId, FunctionName>),
-                type_of_val(&FunctionStatus::active),
                 type_of_val(&With::<RequestContext>::extract::<AtTime>),
                 type_of_val(
                     &By::<(CollectionId, FunctionName)>::assert_version_not_exists::<
+                        { FunctionDBWithNames::Available },
                         FunctionDBWithNames,
                     >,
                 ),
@@ -674,8 +680,8 @@ mod tests {
         if with_permission {
             seed_inter_collection_permission(
                 &db,
-                collection_1.id(),
-                &ToCollectionId::try_from(collection_2.id())?,
+                &collection_1.id,
+                &ToCollectionId::try_from(collection_2.id)?,
             )
             .await;
         }
@@ -898,8 +904,8 @@ mod tests {
 
         seed_inter_collection_permission(
             &db,
-            collection_1.id(),
-            &ToCollectionId::try_from(collection_2.id())?,
+            &collection_1.id,
+            &ToCollectionId::try_from(collection_2.id)?,
         )
         .await;
 
@@ -1026,17 +1032,17 @@ mod tests {
         assert!(res.is_ok());
 
         let tables: Vec<TableDB> = DaoQueries::default()
-            .select_by::<TableDB>(&(res.unwrap().id()))?
+            .select_by::<TableDB>(&(res.unwrap().id))?
             .build_query_as()
             .fetch_all(&db)
             .await
             .map_err(handle_sql_err)?;
         let map: HashMap<String, TableDB> = tables
             .into_iter()
-            .map(|table| (table.name().to_string(), table))
+            .map(|table| (table.name.to_string(), table))
             .collect();
-        assert!(!map.get("table0").unwrap().private().deref());
-        assert!(map.get("_table0").unwrap().private().deref());
+        assert!(!*map.get("table0").unwrap().private);
+        assert!(*map.get("_table0").unwrap().private);
         Ok(())
     }
 

@@ -4,14 +4,15 @@
 
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
-use td_objects::crudl::{ListRequest, ListResponse, RequestContext};
+use td_objects::dxo::crudl::{ListRequest, ListResponse, RequestContext};
+use td_objects::dxo::table::defs::{Table, TableDBRead};
 use td_objects::rest_urls::AtTimeParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{CollAdmin, CollDev, CollExec, CollRead};
 use td_objects::tower_service::from::{ExtractNameService, ExtractService, TryIntoService, With};
 use td_objects::tower_service::sql::{By, SqlListService};
-use td_objects::types::basic::{AtTime, TableStatus, VisibleCollections, VisibleTablesCollections};
-use td_objects::types::table::Table;
+use td_objects::types::timestamp::AtTime;
+use td_objects::types::visible_collections::{VisibleCollections, VisibleTablesCollections};
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -34,8 +35,14 @@ fn service() {
         // convert them to allowed table collections
         from_fn(With::<VisibleCollections>::convert_to::<VisibleTablesCollections, _>),
         // list
-        from_fn(TableStatus::active_or_frozen),
-        from_fn(By::<()>::list_versions_at::<AtTimeParam, VisibleTablesCollections, Table>),
+        from_fn(
+            By::<()>::list_versions_at::<
+                AtTimeParam,
+                VisibleTablesCollections,
+                { TableDBRead::Available },
+                Table,
+            >
+        ),
     )
 }
 
@@ -47,18 +54,20 @@ mod tests {
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::TdError;
-    use td_objects::crudl::{ListParams, ListParamsBuilder, RequestContext};
+    use td_objects::dxo::crudl::{ListParams, ListParamsBuilder};
+    use td_objects::dxo::function::defs::{FunctionRegister, FunctionUpdate};
     use td_objects::rest_urls::{FunctionParam, TableParam};
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_function::seed_function;
     use td_objects::test_utils::seed_role::seed_role;
     use td_objects::test_utils::seed_user::seed_user;
     use td_objects::test_utils::seed_user_role::seed_user_role;
-    use td_objects::types::basic::{
-        AccessTokenId, AtTime, BundleId, CollectionName, Decorator, Description, RoleId, RoleName,
-        TableName, TableNameDto, UserEnabled, UserId, UserName,
+    use td_objects::types::bool::UserEnabled;
+    use td_objects::types::id::{AccessTokenId, BundleId, RoleId, UserId};
+    use td_objects::types::string::{
+        CollectionName, Description, RoleName, TableName, TableNameDto, UserName,
     };
-    use td_objects::types::function::{FunctionRegister, FunctionUpdate};
+    use td_objects::types::typed_enum::Decorator;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -79,9 +88,13 @@ mod tests {
                 // convert them to allowed table collections
                 type_of_val(&With::<VisibleCollections>::convert_to::<VisibleTablesCollections, _>),
                 // list
-                type_of_val(&TableStatus::active_or_frozen),
                 type_of_val(
-                    &By::<()>::list_versions_at::<AtTimeParam, VisibleTablesCollections, Table>,
+                    &By::<()>::list_versions_at::<
+                        AtTimeParam,
+                        VisibleTablesCollections,
+                        { TableDBRead::Available },
+                        Table,
+                    >,
                 ),
             ]);
     }
@@ -136,7 +149,7 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
                 FunctionParam::builder()
-                    .try_collection(format!("{}", collection.name()))?
+                    .try_collection(format!("{}", collection.name))?
                     .try_function("joaquin")?
                     .build()?,
                 update.clone(),
@@ -152,7 +165,7 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).delete(
                 TableParam::builder()
-                    .try_collection(format!("{}", collection.name()))?
+                    .try_collection(format!("{}", collection.name))?
                     .try_table("table_2")?
                     .build()?,
             );
@@ -177,7 +190,7 @@ mod tests {
         let service = TableListService::with_defaults(db.clone()).service().await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
-        let data = response.data();
+        let data = response.data;
 
         assert_eq!(data.len(), 0);
 
@@ -187,18 +200,17 @@ mod tests {
                 AtTimeParam::builder().at(t1).build()?,
                 ListParamsBuilder::default()
                     .order_by("name".to_string())
-                    .build()
-                    .unwrap(),
+                    .build()?,
             );
 
         let service = TableListService::with_defaults(db.clone()).service().await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
-        let data = response.data();
+        let data = response.data;
 
         assert_eq!(data.len(), 2);
-        assert_eq!(data[0].name(), &TableName::try_from("table_1")?);
-        assert_eq!(data[1].name(), &TableName::try_from("table_2")?);
+        assert_eq!(data[0].name, TableName::try_from("table_1")?);
+        assert_eq!(data[1].name, TableName::try_from("table_2")?);
 
         // t2 -> table_1
         let request =
@@ -210,10 +222,10 @@ mod tests {
         let service = TableListService::with_defaults(db.clone()).service().await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
-        let data = response.data();
+        let data = response.data;
 
         assert_eq!(data.len(), 1);
-        assert_eq!(data[0].name(), &TableName::try_from("table_1")?);
+        assert_eq!(data[0].name, TableName::try_from("table_1")?);
         Ok(())
     }
 
@@ -233,7 +245,7 @@ mod tests {
             Description::try_from("any user")?,
         )
         .await;
-        let _user_role = seed_user_role(&db, user.id(), role.id()).await;
+        let _user_role = seed_user_role(&db, &user.id, &role.id).await;
 
         // Create a collection
         let collection = seed_collection(
@@ -272,14 +284,14 @@ mod tests {
         let service = TableListService::with_defaults(db.clone()).service().await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
-        let data = response.data();
+        let data = response.data;
 
         assert_eq!(data.len(), 2);
-        assert_eq!(data[0].name(), &TableName::try_from("table_1")?);
-        assert_eq!(data[1].name(), &TableName::try_from("table_2")?);
+        assert_eq!(data[0].name, TableName::try_from("table_1")?);
+        assert_eq!(data[1].name, TableName::try_from("table_2")?);
 
         // No tables are visible to authorized users
-        let request = RequestContext::with(AccessTokenId::default(), user.id(), role.id()).list(
+        let request = RequestContext::with(AccessTokenId::default(), user.id, role.id).list(
             AtTimeParam::builder().at(AtTime::default()).build()?,
             ListParams::default(),
         );
@@ -287,7 +299,7 @@ mod tests {
         let service = TableListService::with_defaults(db.clone()).service().await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
-        let data = response.data();
+        let data = response.data;
 
         assert_eq!(data.len(), 0);
         Ok(())

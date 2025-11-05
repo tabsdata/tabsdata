@@ -7,7 +7,12 @@ use crate::table::layers::delete::{
 };
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
-use td_objects::crudl::{DeleteRequest, RequestContext};
+use td_objects::dxo::collection::defs::CollectionDB;
+use td_objects::dxo::crudl::{DeleteRequest, RequestContext};
+use td_objects::dxo::dependency::defs::DependencyDB;
+use td_objects::dxo::function::defs::FunctionDB;
+use td_objects::dxo::table::defs::{TableDB, TableDBBuilder, TableDBWithNames};
+use td_objects::dxo::trigger::defs::TriggerDB;
 use td_objects::rest_urls::TableParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev};
@@ -18,15 +23,10 @@ use td_objects::tower_service::from::{
 use td_objects::tower_service::sql::{
     By, SqlFindService, SqlSelectAllService, SqlSelectService, insert, insert_vec,
 };
-use td_objects::types::basic::{
-    AtTime, CollectionId, CollectionIdName, CollectionName, DependencyStatus, FunctionId,
-    FunctionStatus, TableId, TableIdName, TableStatus, TableVersionId, TriggerStatus,
-};
-use td_objects::types::collection::CollectionDB;
-use td_objects::types::dependency::DependencyDB;
-use td_objects::types::function::FunctionDB;
-use td_objects::types::table::{TableDB, TableDBBuilder, TableDBWithNames};
-use td_objects::types::trigger::TriggerDB;
+use td_objects::types::id::{CollectionId, FunctionId, TableId, TableVersionId};
+use td_objects::types::id_name::{CollectionIdName, TableIdName};
+use td_objects::types::string::CollectionName;
+use td_objects::types::timestamp::AtTime;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -56,25 +56,26 @@ fn service() {
         // Get table. Extract table id, table version id
         from_fn(combine::<CollectionIdName, TableIdName>),
         from_fn(With::<RequestContext>::extract::<AtTime>),
-        from_fn(TableStatus::frozen),
-        from_fn(By::<(CollectionIdName, TableIdName)>::select_version::<TableDBWithNames>),
+        from_fn(
+            By::<(CollectionIdName, TableIdName)>::select_version::<
+                { TableDBWithNames::Frozen },
+                TableDBWithNames,
+            >
+        ),
         from_fn(With::<TableDBWithNames>::extract::<TableId>),
         from_fn(With::<TableDBWithNames>::extract::<TableVersionId>),
         // Insert into function_versions(sql) entries with status=Frozen,
         // for all functions with status=Active that have the table as dependency
         // at the current time.
-        from_fn(DependencyStatus::active),
-        from_fn(By::<TableId>::select_all_versions::<DependencyDB>),
+        from_fn(By::<TableId>::select_all_versions::<{ DependencyDB::Active }, DependencyDB>),
         from_fn(With::<DependencyDB>::extract_vec::<FunctionId>),
-        from_fn(FunctionStatus::active),
-        from_fn(By::<FunctionId>::find_versions::<FunctionDB>),
+        from_fn(By::<FunctionId>::find_versions::<{ FunctionDB::Active }, FunctionDB>),
         from_fn(build_frozen_functions),
         from_fn(insert_vec::<FunctionDB>),
         // Insert into trigger_versions(sql) entries with status=Deleted,
         // for all triggers that have the table as dependency
         // at the current time.
-        from_fn(TriggerStatus::active_or_frozen),
-        from_fn(By::<TableId>::select_all_versions::<TriggerDB>),
+        from_fn(By::<TableId>::select_all_versions::<{ TriggerDB::Available }, TriggerDB>),
         from_fn(build_deleted_triggers),
         from_fn(insert_vec::<TriggerDB>),
         // Insert into table_versions(sql) status=Deleted.
@@ -94,15 +95,15 @@ mod tests {
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::TdError;
-    use td_objects::crudl::RequestContext;
+    use td_objects::dxo::crudl::RequestContext;
+    use td_objects::dxo::function::defs::{FunctionRegister, FunctionUpdate};
     use td_objects::rest_urls::FunctionParam;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_function::seed_function;
-    use td_objects::types::basic::{
-        AccessTokenId, BundleId, Decorator, FunctionRuntimeValues, RoleId, TableDependencyDto,
-        TableName, TableNameDto, UserId,
-    };
-    use td_objects::types::function::{FunctionRegister, FunctionUpdate};
+    use td_objects::types::composed::TableDependencyDto;
+    use td_objects::types::id::{AccessTokenId, BundleId, RoleId, UserId};
+    use td_objects::types::string::{FunctionRuntimeValues, TableName, TableNameDto};
+    use td_objects::types::typed_enum::Decorator;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -130,27 +131,30 @@ mod tests {
                 // Get table. Extract table id, table version id
                 type_of_val(&combine::<CollectionIdName, TableIdName>),
                 type_of_val(&With::<RequestContext>::extract::<AtTime>),
-                type_of_val(&TableStatus::frozen),
                 type_of_val(
-                    &By::<(CollectionIdName, TableIdName)>::select_version::<TableDBWithNames>,
+                    &By::<(CollectionIdName, TableIdName)>::select_version::<
+                        { TableDBWithNames::Frozen },
+                        TableDBWithNames,
+                    >,
                 ),
                 type_of_val(&With::<TableDBWithNames>::extract::<TableId>),
                 type_of_val(&With::<TableDBWithNames>::extract::<TableVersionId>),
                 // Insert into function_versions(sql) entries with status=Frozen,
                 // for all functions with status=Active that have the table as dependency
                 // at the current time.
-                type_of_val(&DependencyStatus::active),
-                type_of_val(&By::<TableId>::select_all_versions::<DependencyDB>),
+                type_of_val(
+                    &By::<TableId>::select_all_versions::<{ DependencyDB::Active }, DependencyDB>,
+                ),
                 type_of_val(&With::<DependencyDB>::extract_vec::<FunctionId>),
-                type_of_val(&FunctionStatus::active),
-                type_of_val(&By::<FunctionId>::find_versions::<FunctionDB>),
+                type_of_val(&By::<FunctionId>::find_versions::<{ FunctionDB::Active }, FunctionDB>),
                 type_of_val(&build_frozen_functions),
                 type_of_val(&insert_vec::<FunctionDB>),
                 // Insert into trigger_versions(sql) entries with status=Deleted,
                 // for all triggers that have the table as dependency
                 // at the current time.
-                type_of_val(&TriggerStatus::active_or_frozen),
-                type_of_val(&By::<TableId>::select_all_versions::<TriggerDB>),
+                type_of_val(
+                    &By::<TableId>::select_all_versions::<{ TriggerDB::Available }, TriggerDB>,
+                ),
                 type_of_val(&build_deleted_triggers),
                 type_of_val(&insert_vec::<TriggerDB>),
                 // Insert into table_versions(sql) status=Deleted.
@@ -208,7 +212,7 @@ mod tests {
         )
         .update(
             FunctionParam::builder()
-                .try_collection(format!("~{}", collection.id()))?
+                .try_collection(format!("~{}", collection.id))?
                 .try_function("joaquin_workout")?
                 .build()?,
             update.clone(),
@@ -228,7 +232,7 @@ mod tests {
         )
         .delete(
             TableParam::builder()
-                .try_collection(format!("~{}", collection.id()))?
+                .try_collection(format!("~{}", collection.id))?
                 .try_table("super_table")?
                 .build()?,
         );
@@ -309,7 +313,7 @@ mod tests {
         )
         .update(
             FunctionParam::builder()
-                .try_collection(format!("~{}", collection.id()))?
+                .try_collection(format!("~{}", collection.id))?
                 .try_function("joaquin_workout")?
                 .build()?,
             update.clone(),
@@ -329,7 +333,7 @@ mod tests {
         )
         .delete(
             TableParam::builder()
-                .try_collection(format!("~{}", collection.id()))?
+                .try_collection(format!("~{}", collection.id))?
                 .try_table("super_table")?
                 .build()?,
         );

@@ -6,8 +6,10 @@ use crate::function::layers::register::data_location;
 use crate::function::layers::upload::upload_function_write_to_storage;
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
-use td_objects::crudl::CreateRequest;
-use td_objects::crudl::RequestContext;
+use td_objects::dxo::bundle::defs::{Bundle, BundleBuilder, BundleDB, BundleDBBuilder};
+use td_objects::dxo::collection::defs::CollectionDB;
+use td_objects::dxo::crudl::{CreateRequest, RequestContext};
+use td_objects::dxo::function_upload::FunctionUpload;
 use td_objects::rest_urls::CollectionParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev};
@@ -16,13 +18,9 @@ use td_objects::tower_service::from::{
     SetService, TryIntoService, With,
 };
 use td_objects::tower_service::sql::{By, SqlSelectService, insert};
-use td_objects::types::basic::{
-    BundleHash, BundleId, CollectionId, CollectionIdName, StorageVersion,
-};
-use td_objects::types::collection::CollectionDB;
-use td_objects::types::function::{
-    Bundle, BundleBuilder, BundleDB, BundleDBBuilder, FunctionUpload,
-};
+use td_objects::types::id::{BundleId, CollectionId};
+use td_objects::types::id_name::CollectionIdName;
+use td_objects::types::string::{BundleHash, StorageVersion};
 use td_storage::Storage;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
@@ -84,10 +82,11 @@ mod tests {
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::TdError;
-    use td_objects::crudl::handle_sql_err;
+    use td_objects::dxo::crudl::handle_sql_err;
     use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_collection::seed_collection;
-    use td_objects::types::basic::{AccessTokenId, CollectionName, DataLocation, RoleId, UserId};
+    use td_objects::types::id::{AccessTokenId, RoleId, UserId};
+    use td_objects::types::string::{CollectionName, DataLocation};
     use td_storage::location::StorageLocation;
     use td_tower::ctx_service::RawOneshot;
 
@@ -159,7 +158,7 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
                 CollectionParam::builder()
-                    .try_collection(format!("{}", collection.name()))?
+                    .try_collection(format!("{}", collection.name))?
                     .build()?,
                 function_upload,
             );
@@ -180,18 +179,18 @@ mod tests {
 
         assert_eq!(bundle_db.len(), 1);
         let bundle = &bundle_db[0];
-        assert_eq!(bundle.id(), response.id());
-        assert_eq!(bundle.collection_id(), collection.id());
+        assert_eq!(bundle.id, response.id);
+        assert_eq!(bundle.collection_id, collection.id);
         let hash = hex::encode(&Sha256::digest(payload)[..]);
-        assert_eq!(bundle.hash().to_string(), hash);
-        assert_eq!(*bundle.created_by_id(), UserId::admin());
+        assert_eq!(bundle.hash.to_string(), hash);
+        assert_eq!(bundle.created_by_id, UserId::admin());
 
         // Assert storage
         let data_location = DataLocation::default();
         let (bundle_location, _) = StorageLocation::current()
             .builder(&data_location)
-            .collection(collection.id())
-            .function(bundle.id())
+            .collection(&collection.id)
+            .function(&bundle.id)
             .build();
         let content = context.storage.read(&bundle_location).await?;
         let content = String::from_utf8(content).unwrap();

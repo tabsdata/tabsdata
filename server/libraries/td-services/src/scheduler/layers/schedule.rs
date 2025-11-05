@@ -15,21 +15,22 @@ use td_common::server::{
     WorkerMessageQueue,
 };
 use td_error::{TdError, td_error};
-use td_objects::crudl::handle_sql_err;
-use td_objects::rest_urls::{BASE_URL, UPDATE_FUNCTION_RUN};
-use td_objects::sql::{DaoQueries, FindBy, SelectBy, UpdateBy};
-use td_objects::types::basic::{
-    FunctionRunId, FunctionRunStatus, InternalServerAddresses, WorkerId, WorkerStatus,
+use td_objects::dxo::crudl::handle_sql_err;
+use td_objects::dxo::function_requirement::defs::FunctionRequirementDBWithNames;
+use td_objects::dxo::function_run::defs::{
+    FunctionRunDB, FunctionRunToExecuteDB, UpdateFunctionRunDB,
 };
-use td_objects::types::execution::TableDataVersionDBWithNames;
-use td_objects::types::execution::{
-    FunctionRequirementDBWithNames, FunctionRunDB, FunctionRunToExecuteDB, UpdateFunctionRunDB,
-    UpdateWorkerMessageStatusDB, WorkerDB, WorkerMessageStatus,
-};
-use td_objects::types::worker::v2::{
+use td_objects::dxo::request::v2::{
     FunctionInfoV2, FunctionInputV2, InputTable, InputTableVersion, OutputTable, OutputTableVersion,
 };
-use td_objects::types::worker::{EnvPrefix, FunctionInput, Location};
+use td_objects::dxo::request::{EnvPrefix, FunctionInput, Location};
+use td_objects::dxo::table_data_version::defs::TableDataVersionDBWithNames;
+use td_objects::dxo::worker::defs::{UpdateWorkerMessageStatusDB, WorkerDB};
+use td_objects::rest_urls::{BASE_URL, UPDATE_FUNCTION_RUN};
+use td_objects::sql::{DaoQueries, FindBy, SelectBy, UpdateBy};
+use td_objects::types::addresses::InternalServerAddresses;
+use td_objects::types::id::{FunctionRunId, WorkerId};
+use td_objects::types::typed_enum::{FunctionRunStatus, WorkerMessageStatus, WorkerStatus};
 use td_storage::Storage;
 use td_storage::location::StorageLocation;
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
@@ -69,7 +70,7 @@ pub async fn create_locked_workers<T: WorkerMessageQueue>(
                 // Build callback
                 // This is loopback address, because this endpoint is only available to the server.
                 let server_address = server_addresses.first();
-                let function_run_id = f.id().to_string();
+                let function_run_id = f.id.to_string();
                 let endpoint = UPDATE_FUNCTION_RUN.replace("{function_run_id}", &function_run_id);
                 let callback_url = format!("http://{server_address}{BASE_URL}{endpoint}");
                 let callback_url =
@@ -88,16 +89,16 @@ pub async fn create_locked_workers<T: WorkerMessageQueue>(
                 let mut get_states = HashSet::new();
 
                 // Build storage location
-                let storage_location = StorageLocation::try_from(f.storage_version()).unwrap();
+                let storage_location = StorageLocation::try_from(&f.storage_version).unwrap();
 
                 // Bundle location
                 let (path, _) = storage_location
-                    .builder(f.data_location())
-                    .collection(f.collection_id())
-                    .function(f.bundle_id())
+                    .builder(&f.data_location)
+                    .collection(&f.collection_id)
+                    .function(&f.bundle_id)
                     .build();
                 let (external_path, mount_def) = storage.to_external_uri(&path)?;
-                let env_prefix = EnvPrefix::try_from(mount_def.id())?;
+                let env_prefix = EnvPrefix::try_from(&mount_def.id)?;
                 get_states.insert(env_prefix.clone());
                 let bundle_location = Location::builder()
                     .uri(external_path)
@@ -106,13 +107,13 @@ pub async fn create_locked_workers<T: WorkerMessageQueue>(
 
                 // Function run content location
                 let (path, _) = storage_location
-                    .builder(f.data_location())
-                    .collection(f.collection_id())
-                    .transaction(f.transaction_id())
-                    .function_version(f.function_version_id())
+                    .builder(&f.data_location)
+                    .collection(&f.collection_id)
+                    .transaction(&f.transaction_id)
+                    .function_version(&f.function_version_id)
                     .build();
                 let (external_path, mount_def) = storage.to_external_uri(&path)?;
-                let env_prefix = EnvPrefix::try_from(mount_def.id())?;
+                let env_prefix = EnvPrefix::try_from(&mount_def.id)?;
                 get_states.insert(env_prefix.clone());
                 let function_run_location = Location::builder()
                     .uri(external_path)
@@ -121,22 +122,22 @@ pub async fn create_locked_workers<T: WorkerMessageQueue>(
 
                 // Build message info
                 let info = FunctionInfoV2::builder()
-                    .collection_id(f.collection_id())
-                    .collection(f.collection())
-                    .function_version_id(f.function_version_id())
-                    .function(f.name())
-                    .function_run_id(f.id())
+                    .collection_id(f.collection_id)
+                    .collection(f.collection.clone())
+                    .function_version_id(f.function_version_id)
+                    .function(f.name.clone())
+                    .function_run_id(f.id)
                     .function_bundle(bundle_location)
-                    .try_triggered_on(f.triggered_on().timestamp_millis())?
-                    .transaction_id(f.transaction_id())
-                    .execution_id(f.execution_id())
-                    .execution_name(f.execution().clone())
+                    .try_triggered_on(f.triggered_on.timestamp_millis())?
+                    .transaction_id(f.transaction_id)
+                    .execution_id(f.execution_id)
+                    .execution_name(f.execution.clone())
                     .function_data(function_run_location)
                     .build()?;
 
                 // Build input tables
                 let requirements: Vec<FunctionRequirementDBWithNames> = queries
-                    .select_by::<FunctionRequirementDBWithNames>(&(f.id()))?
+                    .select_by::<FunctionRequirementDBWithNames>(&(&f.id))?
                     .build_query_as()
                     .fetch_all(&mut *conn)
                     .await
@@ -144,88 +145,82 @@ pub async fn create_locked_workers<T: WorkerMessageQueue>(
 
                 let mut input_tables_map = HashMap::new();
                 for req in requirements.iter() {
-                    if let (Some(dependency_pos), Some(input_idx)) = (
-                        req.requirement_dependency_pos(),
-                        req.requirement_input_idx(),
-                    ) {
-                        let (found_data_version, location) = match req
-                            .requirement_table_data_version_id()
-                        {
-                            Some(data_version_id) => {
-                                let found_data_version: TableDataVersionDBWithNames = queries
-                                    .select_by::<TableDataVersionDBWithNames>(&data_version_id)?
-                                    .build_query_as()
-                                    .fetch_one(&mut *conn)
-                                    .await
-                                    .map_err(handle_sql_err)?;
+                    if let (Some(dependency_pos), Some(input_idx)) =
+                        (&req.requirement_dependency_pos, &req.requirement_input_idx)
+                    {
+                        let (found_data_version, location) =
+                            match req.requirement_table_data_version_id {
+                                Some(data_version_id) => {
+                                    let found_data_version: TableDataVersionDBWithNames = queries
+                                        .select_by::<TableDataVersionDBWithNames>(&data_version_id)?
+                                        .build_query_as()
+                                        .fetch_one(&mut *conn)
+                                        .await
+                                        .map_err(handle_sql_err)?;
 
-                                if let Some(with_data_data_version_id) =
-                                    found_data_version.with_data_table_data_version_id()
-                                {
-                                    let data_version_with_data =
-                                        if with_data_data_version_id == found_data_version.id() {
-                                            Cow::Borrowed(&found_data_version)
-                                        } else {
-                                            let res = queries
-                                                .select_by::<TableDataVersionDBWithNames>(
-                                                    &with_data_data_version_id,
-                                                )?
-                                                .build_query_as()
-                                                .fetch_one(&mut *conn)
-                                                .await
-                                                .map_err(handle_sql_err)?;
-                                            Cow::Owned(res)
-                                        };
+                                    if let Some(with_data_data_version_id) =
+                                        found_data_version.with_data_table_data_version_id
+                                    {
+                                        let data_version_with_data =
+                                            if with_data_data_version_id == found_data_version.id {
+                                                Cow::Borrowed(&found_data_version)
+                                            } else {
+                                                let res = queries
+                                                    .select_by::<TableDataVersionDBWithNames>(
+                                                        &with_data_data_version_id,
+                                                    )?
+                                                    .build_query_as()
+                                                    .fetch_one(&mut *conn)
+                                                    .await
+                                                    .map_err(handle_sql_err)?;
+                                                Cow::Owned(res)
+                                            };
 
-                                    let (path, _) = storage_location
-                                        .builder(data_version_with_data.data_location())
-                                        .collection(data_version_with_data.collection_id())
-                                        .data(data_version_with_data.id())
-                                        .table(
-                                            data_version_with_data.table_id(),
-                                            data_version_with_data.table_version_id(),
-                                        )
-                                        .build();
-                                    let (external_path, mount_def) =
-                                        storage.to_external_uri(&path)?;
-                                    let env_prefix = EnvPrefix::try_from(mount_def.id())?;
-                                    get_states.insert(env_prefix.clone());
-                                    let location = Location::builder()
-                                        .uri(external_path)
-                                        .env_prefix(env_prefix)
-                                        .build()?;
-                                    (Some(found_data_version), Some(location))
-                                } else {
-                                    (None, None)
+                                        let (path, _) = storage_location
+                                            .builder(&data_version_with_data.data_location)
+                                            .collection(&data_version_with_data.collection_id)
+                                            .data(&data_version_with_data.id)
+                                            .table(
+                                                &data_version_with_data.table_id,
+                                                &data_version_with_data.table_version_id,
+                                            )
+                                            .build();
+                                        let (external_path, mount_def) =
+                                            storage.to_external_uri(&path)?;
+                                        let env_prefix = EnvPrefix::try_from(&mount_def.id)?;
+                                        get_states.insert(env_prefix.clone());
+                                        let location = Location::builder()
+                                            .uri(external_path)
+                                            .env_prefix(env_prefix)
+                                            .build()?;
+                                        (Some(found_data_version), Some(location))
+                                    } else {
+                                        (None, None)
+                                    }
                                 }
-                            }
-                            None => (None, None),
-                        };
+                                None => (None, None),
+                            };
 
                         let input_table = InputTableVersion::builder()
-                            .name(req.requirement_table())
-                            .collection_id(req.collection_id())
-                            .collection(req.collection())
-                            .table_id(req.requirement_table_id())
-                            .table_version_id(req.requirement_table_version_id())
-                            .execution_id(found_data_version.as_ref().map(|v| *v.execution_id()))
-                            .transaction_id(
-                                found_data_version.as_ref().map(|v| *v.transaction_id()),
-                            )
-                            .function_run_id(
-                                found_data_version.as_ref().map(|v| *v.function_run_id()),
-                            )
+                            .name(req.requirement_table.clone())
+                            .collection_id(req.collection_id)
+                            .collection(req.collection.clone())
+                            .table_id(req.requirement_table_id)
+                            .table_version_id(req.requirement_table_version_id)
+                            .execution_id(found_data_version.as_ref().map(|v| v.execution_id))
+                            .transaction_id(found_data_version.as_ref().map(|v| v.transaction_id))
+                            .function_run_id(found_data_version.as_ref().map(|v| v.function_run_id))
                             .triggered_on(
                                 found_data_version
                                     .as_ref()
-                                    .map(|v| v.triggered_on().timestamp_millis().try_into())
+                                    .map(|v| v.triggered_on.timestamp_millis().try_into())
                                     .transpose()?,
                             )
-                            .table_data_version_id(found_data_version.as_ref().map(|v| *v.id()))
+                            .table_data_version_id(found_data_version.as_ref().map(|v| v.id))
                             .location(location)
                             .input_idx(input_idx)
                             .table_pos(dependency_pos)
-                            .version_pos(req.requirement_version_pos())
+                            .version_pos(req.requirement_version_pos.clone())
                             .build()?;
 
                         input_tables_map
@@ -237,7 +232,7 @@ pub async fn create_locked_workers<T: WorkerMessageQueue>(
 
                 // Build output tables
                 let tables: Vec<TableDataVersionDBWithNames> = queries
-                    .select_by::<TableDataVersionDBWithNames>(&(f.id()))?
+                    .select_by::<TableDataVersionDBWithNames>(&(f.id))?
                     .build_query_as()
                     .fetch_all(&mut *conn)
                     .await
@@ -246,13 +241,13 @@ pub async fn create_locked_workers<T: WorkerMessageQueue>(
                 let mut output_tables_map = HashMap::new();
                 for table in tables.iter() {
                     let (path, _) = StorageLocation::current()
-                        .builder(f.data_location())
-                        .collection(table.collection_id())
-                        .data(table.id())
-                        .table(table.table_id(), table.table_version_id())
+                        .builder(&f.data_location)
+                        .collection(&table.collection_id)
+                        .data(&table.id)
+                        .table(&table.table_id, &table.table_version_id)
                         .build();
                     let (external_path, mount_def) = storage.to_external_uri(&path)?;
-                    let env_prefix = EnvPrefix::try_from(mount_def.id())?;
+                    let env_prefix = EnvPrefix::try_from(&mount_def.id)?;
                     get_states.insert(env_prefix.clone());
                     let location = Location::builder()
                         .uri(external_path)
@@ -260,17 +255,17 @@ pub async fn create_locked_workers<T: WorkerMessageQueue>(
                         .build()?;
 
                     let input_table = OutputTableVersion::builder()
-                        .name(table.name())
-                        .collection_id(table.collection_id())
-                        .collection(table.collection())
-                        .table_id(table.table_id())
-                        .table_version_id(table.table_version_id())
-                        .table_data_version_id(table.id())
+                        .name(table.name.clone())
+                        .collection_id(table.collection_id)
+                        .collection(table.collection.clone())
+                        .table_id(table.table_id)
+                        .table_version_id(table.table_version_id)
+                        .table_data_version_id(table.id)
                         .location(location)
-                        .table_pos(table.function_param_pos())
+                        .table_pos(table.function_param_pos.clone())
                         .build()?;
 
-                    output_tables_map.insert(**table.function_param_pos(), input_table);
+                    output_tables_map.insert(*table.function_param_pos, input_table);
                 }
 
                 // Build system/user tables
@@ -296,7 +291,7 @@ pub async fn create_locked_workers<T: WorkerMessageQueue>(
                     (system_tables, user_tables)
                 }
                 let (system_input, input) = partition_and_sort(input_tables_map, |mut tables| {
-                    tables.sort_by_key(|t| **t.version_pos());
+                    tables.sort_by_key(|t| *t.version_pos);
                     InputTable::new(tables)
                 });
                 let (system_output, output) =
@@ -310,7 +305,7 @@ pub async fn create_locked_workers<T: WorkerMessageQueue>(
                     .system_output(system_output)
                     .output(output)
                     .build()?;
-                let function_input = FunctionInput::V2(function_input_v2);
+                let function_input = FunctionInput::V2(Box::new(function_input_v2));
 
                 // Build message payload
                 // TODO ADD get_states to states
@@ -327,18 +322,18 @@ pub async fn create_locked_workers<T: WorkerMessageQueue>(
 
                 // Create worker message
                 let message = WorkerDB::builder()
-                    .collection_id(f.collection_id())
-                    .execution_id(f.execution_id())
-                    .transaction_id(f.transaction_id())
-                    .function_run_id(f.id())
-                    .function_version_id(f.function_version_id())
+                    .collection_id(f.collection_id)
+                    .execution_id(f.execution_id)
+                    .transaction_id(f.transaction_id)
+                    .function_run_id(f.id)
+                    .function_version_id(f.function_version_id)
                     .message_status(WorkerMessageStatus::Locked)
                     .status(WorkerStatus::RunRequested)
                     .build()?;
 
                 // Add it to the queue
                 message_queue
-                    .put(message.id().to_string(), message_payload)
+                    .put(message.id.to_string(), message_payload)
                     .await?;
                 Ok::<_, TdError>(message)
             }
@@ -366,14 +361,13 @@ pub async fn unlock_workers<T: WorkerMessageQueue>(
         .filter_map(|m| {
             let message = if let SupervisorMessagePayload::SupervisorRequestMessagePayload(
                 message,
-            ) = m.payload()
+            ) = &m.payload
             {
                 Some(message)
             } else {
                 error!(
                     "Scheduled locked message [{}] is not a SupervisorRequestMessagePayload: {:?}",
-                    m.id(),
-                    m.payload()
+                    m.id, m.payload
                 );
                 None
             }?;
@@ -381,16 +375,14 @@ pub async fn unlock_workers<T: WorkerMessageQueue>(
             let function_input = message.context().as_ref().or_else(|| {
                 error!(
                     "Scheduled locked message [{}] has no context: {:?}",
-                    m.id(),
-                    m.payload()
+                    m.id, m.payload
                 );
                 None
             })?;
 
             let function_run_id = match function_input {
                 FunctionInput::V0(_) => unreachable!(), // TODO
-                FunctionInput::V1(_) => unreachable!(), // TODO
-                FunctionInput::V2(context) => Some(context.info().function_run_id()),
+                FunctionInput::V2(context) => Some(context.info.function_run_id),
             }?;
 
             Some((function_run_id, m))
@@ -412,7 +404,7 @@ pub async fn unlock_workers<T: WorkerMessageQueue>(
             .map_err(handle_sql_err)?
     };
     let found_function_runs: HashMap<_, _> =
-        found_function_runs.iter().map(|f| (f.id(), f)).collect();
+        found_function_runs.iter().map(|f| (f.id, f)).collect();
 
     // Rollback all message for function runs that are not found
     let not_found_runs = function_run_ids
@@ -425,8 +417,7 @@ pub async fn unlock_workers<T: WorkerMessageQueue>(
         async move {
             trace!(
                 "Function run [{}] is not found for locked message [{}] in queue",
-                message.id(),
-                id
+                message.id, id
             );
             rollback_queue(message_queue.deref(), message, id).await?;
 
@@ -437,15 +428,13 @@ pub async fn unlock_workers<T: WorkerMessageQueue>(
     // Split in valid and invalid function runs
     let (valid_runs, invalid_runs): (Vec<_>, Vec<_>) =
         found_function_runs.into_iter().partition_map(|(id, f)| {
-            if matches!(f.status(), FunctionRunStatus::RunRequested) {
+            if matches!(f.status, FunctionRunStatus::RunRequested) {
                 Either::Left(id)
             } else {
-                let message = function_run_ids[f.id()];
+                let message = function_run_ids[&f.id];
                 error!(
                     "Scheduled locked message [{}] for function run [{}] is not in RR state: {}",
-                    message.id(),
-                    f.id(),
-                    f.status()
+                    message.id, f.id, f.status
                 );
                 Either::Right(id)
             }
@@ -456,45 +445,40 @@ pub async fn unlock_workers<T: WorkerMessageQueue>(
         let message_queue = message_queue.clone();
         let queries = queries.clone();
         let connection = connection.clone();
-        let message = function_run_ids[id];
+        let message = function_run_ids[&id];
         async move {
             let mut conn = connection.lock().await;
             let conn = conn.get_mut_connection()?;
 
             let update = UpdateWorkerMessageStatusDB::unlocked()?;
             // TODO the queue should use this typed too
-            let message_id = WorkerId::try_from(message.id().as_str())?;
+            let message_id = WorkerId::try_from(message.id.as_str())?;
             match queries
                 .update_by::<_, WorkerDB>(&update, &(&message_id))?
                 .build()
                 .execute(&mut *conn)
                 .await
             {
-                Ok(_) => match message_queue.commit(message.id()).await {
+                Ok(_) => match message_queue.commit(&message.id).await {
                     Ok(_) => {
                         trace!(
                             "Scheduled locked message [{}] for function run [{}] is committed",
-                            message.id(),
-                            id
+                            message.id, id
                         );
                     }
                     Err(e) => {
                         error!(
                             "Scheduled locked message [{}] for function run [{}] commit failed: {}",
-                            message.id(),
-                            id,
-                            e
+                            message.id, id, e
                         );
-                        rollback_query(queries.deref(), conn, message, id).await?;
-                        rollback_queue(message_queue.deref(), message, id).await?;
+                        rollback_query(queries.deref(), conn, message, &id).await?;
+                        rollback_queue(message_queue.deref(), message, &id).await?;
                     }
                 },
                 Err(e) => {
                     error!(
                         "Scheduled locked message [{}] for function run [{}] commit failed: {}",
-                        message.id(),
-                        id,
-                        e
+                        message.id, id, e
                     );
                 }
             }
@@ -508,13 +492,13 @@ pub async fn unlock_workers<T: WorkerMessageQueue>(
         let message_queue = message_queue.clone();
         let queries = queries.clone();
         let connection = connection.clone();
-        let message = function_run_ids[id];
+        let message = function_run_ids[&id];
         async move {
             let mut conn = connection.lock().await;
             let conn = conn.get_mut_connection()?;
 
-            rollback_query(queries.deref(), conn, message, id).await?;
-            rollback_queue(message_queue.deref(), message, id).await?;
+            rollback_query(queries.deref(), conn, message, &id).await?;
+            rollback_queue(message_queue.deref(), message, &id).await?;
 
             Ok::<_, TdError>(())
         }
@@ -545,16 +529,13 @@ async fn rollback_query(
         Ok(_) => {
             error!(
                 "Rolled back status to scheduled for locked message [{}] for function run [{}] in DB",
-                message.id(),
-                function_run_id
+                message.id, function_run_id
             );
         }
         Err(e) => {
             error!(
                 "Failed to rollback status to scheduled for locked message [{}] for function run [{}]: {}",
-                message.id(),
-                function_run_id,
-                e
+                message.id, function_run_id, e
             );
         }
     }
@@ -567,20 +548,17 @@ async fn rollback_queue<T: WorkerMessageQueue>(
     message: &SupervisorMessage<FunctionInput>,
     function_run_id: &FunctionRunId,
 ) -> Result<(), TdError> {
-    match message_queue.rollback(message.id()).await {
+    match message_queue.rollback(&message.id).await {
         Ok(_) => {
             error!(
                 "Rolled back locked message [{}] for function run [{}] in queue",
-                message.id(),
-                function_run_id
+                message.id, function_run_id
             );
         }
         Err(e) => {
             error!(
                 "Failed to rollback locked message [{}] for function run [{}]: {}",
-                message.id(),
-                function_run_id,
-                e
+                message.id, function_run_id, e
             );
         }
     }

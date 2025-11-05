@@ -27,10 +27,8 @@ mod tests {
     use petgraph::graph::{DiGraph, Graph};
     use ta_execution::graphs::ExecutionGraph;
     use td_error::TdError;
-    use td_objects::types::execution::{GraphDependency, GraphEdge, GraphNode, GraphOutput};
-    use td_objects::types::test_utils::execution::{
-        FUNCTION_NAMES, TABLE_NAMES, function_node, table_node,
-    };
+    use td_objects::execution::graph::{GraphDependency, GraphEdge, GraphNode, GraphOutput};
+    use td_objects::test_utils::graph::{FUNCTION_NAMES, TABLE_NAMES, function_node, table_node};
 
     #[test]
     fn test_triggered_functions_index() -> Result<(), TdError> {

@@ -11,15 +11,24 @@ use ta_execution::transaction::{TransactionMap, TransactionMapper};
 use td_error::TdError;
 use td_execution::planner::ExecutionPlanner;
 use td_execution::version_resolver::VersionResolver;
-use td_objects::crudl::handle_sql_err;
-use td_objects::sql::{DaoQueries, FindBy, UpdateBy};
-use td_objects::types::basic::{Dot, FunctionRunStatus, InputIdx, Trigger, VersionPos};
-use td_objects::types::execution::{
-    ExecutionDB, ExecutionResponse, FunctionRequirementDB, FunctionRunDB, FunctionRunDBBuilder,
-    FunctionVersionResponseBuilder, GraphEdge, ResolvedVersion, TableDataVersionDB,
-    TableVersionResponseBuilder, TransactionDB, TransactionDBBuilder, UpdateFunctionRunDB,
+use td_objects::dxo::crudl::handle_sql_err;
+use td_objects::dxo::execution::defs::{
+    ExecutionDB, ExecutionResponse, FunctionNodeResponseBuilder, TableNodeResponseBuilder,
 };
-use td_objects::types::table_ref::Versions;
+use td_objects::dxo::function_requirement::defs::FunctionRequirementDB;
+use td_objects::dxo::function_run::defs::{
+    FunctionRunDB, FunctionRunDBBuilder, UpdateFunctionRunDB,
+};
+use td_objects::dxo::table_data_version::defs::{
+    ExecutionTableDataVersionReadBuilder, TableDataVersionDB,
+};
+use td_objects::dxo::transaction::defs::{TransactionDB, TransactionDBBuilder};
+use td_objects::execution::graph::{GraphEdge, ResolvedVersion};
+use td_objects::sql::{DaoQueries, FindBy, UpdateBy};
+use td_objects::table_ref::Versions;
+use td_objects::types::i32::{InputIdx, VersionPos};
+use td_objects::types::string::Dot;
+use td_objects::types::typed_enum::{FunctionRunStatus, Trigger};
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
 use te_execution::transaction::TransactionBy;
 
@@ -73,8 +82,8 @@ pub async fn build_function_runs(
     let manual_trigger_function_run = function_run_builder
         .deref()
         .clone()
-        .collection_id(manual_trigger.collection_id())
-        .function_version_id(manual_trigger.function_version_id())
+        .collection_id(manual_trigger.collection_id)
+        .function_version_id(manual_trigger.function_version_id)
         .transaction_id(transaction_id)
         .trigger(Trigger::Manual)
         .build()?;
@@ -87,8 +96,8 @@ pub async fn build_function_runs(
             function_run_builder
                 .deref()
                 .clone()
-                .collection_id(f.collection_id())
-                .function_version_id(f.function_version_id())
+                .collection_id(f.collection_id)
+                .function_version_id(f.function_version_id)
                 .transaction_id(transaction_id)
                 .trigger(Trigger::Dependency)
                 .build()
@@ -108,7 +117,7 @@ pub async fn build_table_data_versions(
 ) -> Result<Vec<TableDataVersionDB>, TdError> {
     let function_runs_map: HashMap<_, _> = function_runs
         .iter()
-        .map(|f| (f.function_version_id(), f))
+        .map(|f| (f.function_version_id, f))
         .collect();
 
     let new_table_data_versions = template
@@ -117,15 +126,15 @@ pub async fn build_table_data_versions(
         .map(|(f, t, edge)| {
             let (transaction_id, _) = transaction_map.get(&transaction_by.key(f)?)?;
             TableDataVersionDB::builder()
-                .collection_id(f.collection_id())
-                .table_id(t.table_id())
-                .name(t.name())
-                .table_version_id(t.table_version_id())
-                .function_version_id(t.function_version_id())
-                .execution_id(execution.id())
+                .collection_id(f.collection_id)
+                .table_id(t.table_id)
+                .name(t.name.clone())
+                .table_version_id(t.table_version_id)
+                .function_version_id(t.function_version_id)
+                .execution_id(execution.id)
                 .transaction_id(transaction_id)
-                .function_run_id(function_runs_map[f.function_version_id()].id())
-                .function_param_pos(edge.output_pos().cloned())
+                .function_run_id(function_runs_map[&f.function_version_id].id)
+                .function_param_pos(edge.output_pos().cloned().expect("must have output pos"))
                 .build()
                 .map_err(TdError::from)
         })
@@ -144,7 +153,7 @@ pub async fn build_execution_plan(
         .versioned(|table, versions, self_dependency| {
             let queries = queries.clone();
             let connection = connection.clone();
-            let triggered_on = execution.triggered_on().clone();
+            let triggered_on = execution.triggered_on.clone();
             async move {
                 let mut conn = connection.lock().await;
                 let conn = conn.get_mut_connection()?;
@@ -158,12 +167,18 @@ pub async fn build_execution_plan(
                 };
 
                 let found = VersionResolver::builder()
-                    .table_id(table.table_id())
+                    .table_id(&table.table_id)
                     .versions(&lookup_versions)
                     .triggered_on(&triggered_on)
                     .build()?
                     .resolve(queries.deref(), &mut *conn)
                     .await?;
+
+                let found = found
+                    .into_iter()
+                    .map(|v| v.map(|v| ExecutionTableDataVersionReadBuilder::try_from(&v)?.build()))
+                    .map(|opt| opt.transpose())
+                    .collect::<Result<Vec<_>, _>>()?;
 
                 let versions = versions.clone();
                 let resolved_version = ResolvedVersion::builder()
@@ -190,7 +205,7 @@ pub async fn update_initial_function_run_status(
 
     let function_reqs_upstream = function_reqs
         .iter()
-        .filter_map(|req| req.requirement_function_run_id().as_ref())
+        .filter_map(|req| req.requirement_function_run_id)
         .unique()
         .collect::<Vec<_>>();
 
@@ -206,15 +221,15 @@ pub async fn update_initial_function_run_status(
         // collect all upstream runs for this function_run
         let upstream_runs = function_reqs
             .iter()
-            .filter(|req| req.function_run_id() == fr.id())
-            .filter_map(|req| *req.requirement_function_run_id())
-            .filter_map(|id| function_runs_upstream.iter().find(|ufr| *ufr.id() == id))
+            .filter(|req| req.function_run_id == fr.id)
+            .filter_map(|req| req.requirement_function_run_id)
+            .filter_map(|id| function_runs_upstream.iter().find(|ufr| ufr.id == id))
             .collect::<Vec<_>>();
 
         // and update status accordingly
         if upstream_runs.iter().any(|ufr| {
             matches!(
-                ufr.status(),
+                ufr.status,
                 FunctionRunStatus::Failed | FunctionRunStatus::OnHold
             )
         }) {
@@ -222,7 +237,7 @@ pub async fn update_initial_function_run_status(
             function_run_updates
                 .entry(FunctionRunStatus::OnHold)
                 .or_insert_with(HashSet::new)
-                .extend(std::iter::once(*fr.id()));
+                .extend(std::iter::once(fr.id));
         }
     }
 
@@ -231,7 +246,7 @@ pub async fn update_initial_function_run_status(
         let function_run_ids: Vec<_> = function_run_ids.iter().collect();
         // TODO this is not getting chunked
         let _ = queries
-            .update_all_by::<_, FunctionRunDB>(&update, &(function_run_ids))?
+            .update_all_by::<_, FunctionRunDB>(&update, &function_run_ids)?
             .build()
             .execute(&mut *conn)
             .await
@@ -252,14 +267,14 @@ pub async fn build_function_requirements(
 
     let function_runs_map: HashMap<_, _> = function_runs
         .iter()
-        .map(|f| (f.function_version_id(), f))
+        .map(|f| (f.function_version_id, f))
         .collect();
 
     let mut input_idx = 0;
     for (function, table, edge) in plan.function_version_requirements() {
-        let is_multiple_versions = edge.versions().original().is_multiple();
+        let is_multiple_versions = edge.versions().original.is_multiple();
 
-        for (version_pos, version) in edge.versions().inner().iter().enumerate() {
+        for (version_pos, version) in edge.versions().inner.iter().enumerate() {
             // If single version, we set version_pos to -1 to indicate so.
             // There should always be a single inner version in that case.
             let version_pos = if is_multiple_versions {
@@ -272,14 +287,14 @@ pub async fn build_function_requirements(
             let mut builder = FunctionRequirementDB::builder();
             builder
                 // current
-                .collection_id(function.collection_id())
-                .execution_id(execution.id())
+                .collection_id(function.collection_id)
+                .execution_id(execution.id)
                 .transaction_id(transaction_id)
-                .function_run_id(function_runs_map[function.function_version_id()].id())
+                .function_run_id(function_runs_map[&function.function_version_id].id)
                 // condition
-                .requirement_table_id(table.table_id())
-                .requirement_function_version_id(table.function_version_id())
-                .requirement_table_version_id(table.table_version_id())
+                .requirement_table_id(table.table_id)
+                .requirement_function_version_id(table.function_version_id)
+                .requirement_table_version_id(table.table_version_id)
                 .requirement_version_pos(VersionPos::try_from(version_pos)?);
 
             if let Some(dependency) = edge.dependency_pos() {
@@ -291,8 +306,8 @@ pub async fn build_function_requirements(
 
             if let Some(version) = version {
                 builder
-                    .requirement_function_run_id(*version.function_run_id())
-                    .requirement_table_data_version_id(*version.id());
+                    .requirement_function_run_id(version.function_run_id)
+                    .requirement_table_data_version_id(version.id);
             }
 
             conditions.push(builder.build()?);
@@ -314,8 +329,8 @@ pub async fn build_response(
         .iter()
         .map(|f| {
             Ok((
-                *f.function_version_id(),
-                FunctionVersionResponseBuilder::try_from(*f)?.build()?,
+                f.function_version_id,
+                FunctionNodeResponseBuilder::try_from(*f)?.build()?,
             ))
         })
         .collect::<Result<HashMap<_, _>, TdError>>()?;
@@ -323,7 +338,7 @@ pub async fn build_response(
     let triggered_functions_set = plan.triggered_functions();
     let triggered_functions = triggered_functions_set
         .iter()
-        .map(|f| *f.function_version_id())
+        .map(|f| f.function_version_id)
         .collect::<HashSet<_>>();
 
     let manual_trigger = plan.manual_trigger_function();
@@ -335,7 +350,7 @@ pub async fn build_response(
         .try_fold(HashMap::new(), |mut acc, f| {
             let (transaction_id, _) = transaction_map.get(&transaction_by.key(f)?)?;
             let entry: &mut HashSet<_> = acc.entry(*transaction_id).or_default();
-            entry.insert(*f.function_version_id());
+            entry.insert(f.function_version_id);
             Ok::<_, TdError>(acc)
         })?;
 
@@ -345,8 +360,8 @@ pub async fn build_response(
         .iter()
         .map(|t| {
             Ok((
-                *t.table_version_id(),
-                TableVersionResponseBuilder::try_from(*t)?.build()?,
+                t.table_version_id,
+                TableNodeResponseBuilder::try_from(*t)?.build()?,
             ))
         })
         .collect::<Result<HashMap<_, _>, TdError>>()?;
@@ -354,15 +369,15 @@ pub async fn build_response(
     let output_tables_set = plan.output_tables();
     let created_tables = output_tables_set
         .iter()
-        .map(|(_, t, _)| *t.table_version_id())
+        .map(|(_, t, _)| t.table_version_id)
         .collect::<HashSet<_>>();
 
     let (system_tables, user_tables): (HashSet<_>, HashSet<_>) =
         all_tables_set.iter().partition_map(|t| {
-            if **t.system() {
-                Either::Left(*t.table_version_id())
+            if *t.system {
+                Either::Left(t.table_version_id)
             } else {
-                Either::Right(*t.table_version_id())
+                Either::Right(t.table_version_id)
             }
         });
 
@@ -399,21 +414,21 @@ pub async fn build_response(
                     }
                 }
             };
-            Ok((*f.function_version_id(), *t.table_version_id(), edge))
+            Ok((f.function_version_id, t.table_version_id, edge))
         })
         .collect::<Result<Vec<_>, TdError>>()?;
 
-    let triggered_on = execution.triggered_on();
+    let triggered_on = &execution.triggered_on;
     let dot = Dot::try_from(plan.dot().to_string())?;
 
     let response = ExecutionResponse::builder()
-        .id(execution.id())
-        .name(execution.name().clone())
+        .id(execution.id)
+        .name(execution.name.clone())
         .triggered_on(triggered_on)
         .dot(dot)
         .all_functions(all_functions)
         .triggered_functions(triggered_functions)
-        .manual_trigger(manual_trigger.function_version_id())
+        .manual_trigger(manual_trigger.function_version_id)
         .transactions(transactions)
         .all_tables(all_tables)
         .created_tables(created_tables)

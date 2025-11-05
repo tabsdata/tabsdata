@@ -7,7 +7,7 @@ use futures_util::FutureExt;
 use std::path::PathBuf;
 use td_common::server::SSL_CERT_PEM_FILE;
 use td_error::{TdError, td_error};
-use td_objects::types::stream::BoxedSyncStream;
+use td_objects::stream::BoxedSyncStream;
 use td_tower::extractors::SrvCtx;
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;

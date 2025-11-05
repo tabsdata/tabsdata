@@ -291,6 +291,7 @@ mod tests {
 
     // partitioning by id means there are no groups, each entry is independent
     #[Dao]
+    #[derive(Eq, PartialEq)]
     #[dao(
         sql_table = "test_table",
         versioned(order_by = "defined_on", partition_by = "id"),

@@ -82,7 +82,7 @@ strum = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 url = { workspace = true }
-utoipa = { workspace = true, features = ["axum_extras", "preserve_order", "uuid"] }
+utoipa = { workspace = true, features = ["axum_extras", "preserve_order", "url", "uuid"] }
 tracing = { workspace = true }
 
 [dev-dependencies]

@@ -5,7 +5,7 @@
 use crate::auth::layers::cert_download::get_certificate_pem_file;
 use std::path::PathBuf;
 use ta_services::factory::service_factory;
-use td_objects::types::stream::BoxedSyncStream;
+use td_objects::stream::BoxedSyncStream;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
 

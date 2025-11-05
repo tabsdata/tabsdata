@@ -5,7 +5,7 @@
 use futures_util::TryStreamExt;
 use sync_wrapper::SyncStream;
 use td_error::TdError;
-use td_objects::types::stream::BoxedSyncStream;
+use td_objects::stream::BoxedSyncStream;
 use td_storage::{SPath, Storage};
 use td_tower::extractors::{Input, SrvCtx};
 

@@ -11,7 +11,13 @@ use crate::auth::layers::set_session_expiration::set_session_expiration;
 use crate::auth::session::Sessions;
 use ta_services::factory::service_factory;
 use td_error::TdError;
-use td_objects::crudl::{RequestContext, UpdateRequest};
+use td_objects::dxo::auth::defs::{
+    RoleChange, SessionDB, SessionDBBuilder, SessionRoleChangeDB, SessionRoleChangeDBBuilder,
+    TokenResponseX,
+};
+use td_objects::dxo::crudl::{RequestContext, UpdateRequest};
+use td_objects::dxo::user::defs::UserDB;
+use td_objects::dxo::user_role::defs::UserRoleDBWithNames;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::from::{
     BuildService, DefaultService, ExtractDataService, ExtractService, SetService, With, builder,
@@ -19,13 +25,9 @@ use td_objects::tower_service::from::{
 };
 use td_objects::tower_service::sql::SqlUpdateService;
 use td_objects::tower_service::sql::{By, SqlSelectService, insert};
-use td_objects::types::auth::SessionRoleChangeDB;
-use td_objects::types::auth::SessionRoleChangeDBBuilder;
-use td_objects::types::auth::{RoleChange, SessionDB, SessionDBBuilder, TokenResponseX};
-use td_objects::types::basic::AtTime;
-use td_objects::types::basic::{AccessTokenId, RoleId, RoleName, UserId};
-use td_objects::types::role::UserRoleDBWithNames;
-use td_objects::types::user::UserDB;
+use td_objects::types::id::{AccessTokenId, RoleId, UserId};
+use td_objects::types::string::RoleName;
+use td_objects::types::timestamp::AtTime;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -95,9 +97,11 @@ mod tests {
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::assert_service_error;
-    use td_objects::crudl::RequestContext;
-    use td_objects::types::auth::Login;
-    use td_objects::types::basic::{Password, SessionStatus, UserId, UserName};
+    use td_objects::dxo::auth::defs::Login;
+    use td_objects::dxo::crudl::RequestContext;
+    use td_objects::types::id::UserId;
+    use td_objects::types::string::{Password, UserName};
+    use td_objects::types::typed_enum::SessionStatus;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -160,7 +164,7 @@ mod tests {
         let res = service.raw_oneshot(request).await;
         assert!(res.is_ok());
         let token_response = res.unwrap();
-        let access_token = token_response.access_token();
+        let access_token = &token_response.access_token;
         let original_access_token_id = *decode_token(&context.jwt_config, access_token)?.jti();
 
         let service = auth_services.role_change.service().await;
@@ -175,7 +179,7 @@ mod tests {
         let res = service.raw_oneshot(request).await;
         assert!(res.is_ok());
         let token_response = res?;
-        let access_token = token_response.access_token();
+        let access_token = &token_response.access_token;
         let access_token_id = *decode_token(&context.jwt_config, access_token)?.jti();
 
         assert_session(&db, &Some(access_token_id.into())).await;
@@ -183,7 +187,7 @@ mod tests {
         let session = get_session(&db, &original_access_token_id.into()).await;
         match session {
             Some(session) => {
-                assert_eq!(session.status(), &SessionStatus::InvalidRoleChange);
+                assert_eq!(session.status, SessionStatus::InvalidRoleChange);
             }
             None => {
                 panic!("Session not found");
@@ -208,7 +212,7 @@ mod tests {
         let res = service.raw_oneshot(request).await;
         assert!(res.is_ok());
         let token_response = res.unwrap();
-        let access_token = token_response.access_token();
+        let access_token = &token_response.access_token;
         let access_token_id = *decode_token(&context.jwt_config, access_token)?.jti();
 
         let service = auth_services.role_change.service().await;

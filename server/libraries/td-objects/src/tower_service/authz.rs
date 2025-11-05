@@ -117,11 +117,12 @@
 //!   ...
 //! ```
 
-use crate::crudl::{RequestContext, handle_sql_err};
+use crate::dxo::collection::defs::CollectionDB;
+use crate::dxo::crudl::{RequestContext, handle_sql_err};
+use crate::dxo::inter_collection_access::defs::InterCollectionAccess;
 use crate::sql::{DaoQueries, FindBy};
-use crate::types::basic::{CollectionId, RoleId, ToCollectionId, UserId, VisibleCollections};
-use crate::types::collection::CollectionDB;
-use crate::types::permission::InterCollectionAccess;
+use crate::types::id::{CollectionId, RoleId, ToCollectionId, UserId};
+use crate::types::visible_collections::VisibleCollections;
 use async_trait::async_trait;
 use itertools::Itertools;
 use sqlx::SqliteConnection;
@@ -892,7 +893,7 @@ impl<
             Ok(())
         } else {
             if let Some(role_permissions) = authz_context
-                .role_permissions(conn, request_context.role_id())
+                .role_permissions(conn, &request_context.role_id)
                 .await?
             {
                 for perm in role_permissions.deref() {
@@ -921,13 +922,13 @@ impl<
             }
 
             // scope: User, SystemOrUserId, Requester required permission
-            let user_id: UserId = *request_context.user_id();
+            let user_id = request_context.user_id;
             if required_permissions.contains(&Permission::User(AuthzEntity::On(user_id))) {
                 return Ok(());
             }
 
             // scope: Role, SystemOrRoleId, Requester required permission
-            let role_id: RoleId = *request_context.role_id();
+            let role_id = request_context.role_id;
             if required_permissions.contains(&Permission::Role(AuthzEntity::On(role_id))) {
                 return Ok(());
             }
@@ -948,7 +949,7 @@ impl<
         let inter_collection_access_list = inter_collection_access_list
             .deref()
             .iter()
-            .filter(|access| access.source().deref() != access.target().deref())
+            .filter(|access| *access.source != *access.target)
             .collect::<HashSet<_>>();
         if inter_collection_access_list.is_empty() {
             return Ok(());
@@ -958,13 +959,13 @@ impl<
             if let Some(collections) = authz_context
                 .inter_collections_permissions_value_can_read_key(
                     conn,
-                    inter_collection_access.source(),
+                    &inter_collection_access.source,
                 )
                 .await?
             {
                 if !collections
                     .deref()
-                    .contains(inter_collection_access.target())
+                    .contains(&inter_collection_access.target)
                 {
                     no_access.push(inter_collection_access);
                 }
@@ -977,10 +978,9 @@ impl<
         }
         let collection_ids = no_access
             .iter()
-            .flat_map(|access| vec![access.source().deref(), access.target().deref()])
+            .flat_map(|access| vec![*access.source, *access.target])
             .map(CollectionId::from)
             .collect::<Vec<_>>();
-        let collection_ids = collection_ids.iter().collect::<Vec<_>>();
         let collections: Vec<CollectionDB> = DaoQueries::default()
             .find_by::<CollectionDB>(&collection_ids)?
             .build_query_as()
@@ -990,7 +990,7 @@ impl<
 
         let collection_id_name_map: HashMap<_, _> = collections
             .into_iter()
-            .map(|collection| (**collection.id(), collection.name().to_string()))
+            .map(|collection| (*collection.id, collection.name.to_string()))
             .collect();
         let no_access = no_access
             .into_iter()
@@ -998,10 +998,10 @@ impl<
                 format!(
                     "collection '{}' cannot access collection '{}'",
                     collection_id_name_map
-                        .get(access.target().deref())
+                        .get(&access.target)
                         .unwrap_or(&"<Unknown>".to_string()),
                     collection_id_name_map
-                        .get(access.source().deref())
+                        .get(&access.source)
                         .unwrap_or(&"<Unknown>".to_string()),
                 )
             })
@@ -1018,21 +1018,22 @@ impl<
         let mut conn = conn.lock().await;
         let conn = conn.get_mut_connection()?;
         authz_context
-            .visible_collections(conn, request_context.role_id())
+            .visible_collections(conn, &request_context.role_id)
             .await
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::crudl::RequestContext;
+    use super::*;
+    use crate::dxo::crudl::RequestContext;
+    use crate::dxo::inter_collection_access::defs::InterCollectionAccess;
     use crate::tower_service::authz::{
         AuthzContextT, AuthzEntity, AuthzError, AuthzRequirements, AuthzScope, CollAdmin, CollDev,
         CollExec, CollRead, InterColl, InterCollRead, NoPermissions, Permission, Requester,
         SecAdmin, SysAdmin,
     };
-    use crate::types::basic::{AccessTokenId, CollectionId, RoleId, ToCollectionId, UserId};
-    use crate::types::permission::InterCollectionAccess;
+    use crate::types::id::{AccessTokenId, CollectionId, RoleId, ToCollectionId, UserId};
     use async_trait::async_trait;
     use sqlx::SqliteConnection;
     use std::collections::HashMap;

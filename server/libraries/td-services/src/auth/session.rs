@@ -9,10 +9,12 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use td_common::provider::{CachedProvider, Provider};
 use td_error::{TdError, td_error};
-use td_objects::crudl::{handle_delete_error, handle_select_error};
+use td_objects::dxo::auth::defs::{SessionDB, SessionDBWithNames};
+use td_objects::dxo::crudl::{handle_delete_error, handle_select_error};
 use td_objects::sql::{DaoQueries, DeleteBy, SelectBy};
-use td_objects::types::auth::{SessionDB, SessionDBWithNames};
-use td_objects::types::basic::{AccessTokenId, AtTime, SessionStatus};
+use td_objects::types::id::AccessTokenId;
+use td_objects::types::timestamp::AtTime;
+use td_objects::types::typed_enum::SessionStatus;
 use tracing::debug;
 
 pub type Session = SessionDBWithNames;
@@ -79,8 +81,9 @@ impl<'a> Provider<'a, HashMap<AccessTokenId, Arc<Session>>, &'a mut SqliteConnec
         &'a self,
         conn: &'a mut SqliteConnection,
     ) -> Result<Arc<HashMap<AccessTokenId, Arc<Session>>>, TdError> {
-        let status = &(&SessionStatus::Active);
-        let mut query_builder = self.queries.select_by::<SessionDBWithNames>(status)?;
+        let mut query_builder = self
+            .queries
+            .select_by::<SessionDBWithNames>(&SessionStatus::Active)?;
 
         // if we get a connection in the call we use it, else we use one from the DbPool
         // we have to acquire one regardless
@@ -92,7 +95,7 @@ impl<'a> Provider<'a, HashMap<AccessTokenId, Arc<Session>>, &'a mut SqliteConnec
         Ok(Arc::new(
             sessions
                 .into_iter()
-                .map(|s| (*s.access_token_id(), Arc::new(s)))
+                .map(|s| (s.access_token_id, Arc::new(s)))
                 .collect(),
         ))
     }

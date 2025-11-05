@@ -9,7 +9,7 @@ use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::hash::Hash;
 use ta_execution::graphs::ExecutionGraph;
-use td_objects::types::execution::{FunctionVersionNode, GraphEdge, GraphNode, TableVersionNode};
+use td_objects::execution::graph::{FunctionNode, GraphEdge, GraphNode, TableNode};
 use te_execution::planner::TriggerPlanner;
 
 /// The `ExecutionPlanner` trait is used to define the execution plan for the type implementing it.
@@ -24,35 +24,33 @@ pub trait ExecutionPlanner<V: Eq + Hash>: TriggerPlanner<V> {
     /// This is useful to convert relative versions to absolute versions.
     async fn versioned<'a, VV, T, E, Fut>(&'a self, transform: T) -> Result<Self::Planner<VV>, E>
     where
-        T: Fn(&'a TableVersionNode, &'a V, bool) -> Fut + Send + Clone + 'a,
+        T: Fn(&'a TableNode, &'a V, bool) -> Fut + Send + Clone + 'a,
         V: Sync + 'a,
         Fut: Future<Output = Result<VV, E>> + Send,
         VV: Eq + Hash + Send + Clone,
         E: Send;
 
     /// Returns all the nodes(functions) present in the plan (including the main function).
-    fn functions(&self) -> HashSet<&FunctionVersionNode>;
+    fn functions(&self) -> HashSet<&FunctionNode>;
 
     /// Returns all the edges(tables) present in the plan.
-    fn tables(&self) -> HashSet<&TableVersionNode>;
+    fn tables(&self) -> HashSet<&TableNode>;
 
     /// Returns the output tables that are output of triggered functions. Output tables are tables
     /// with a `GraphEdge::Output` edge. Not all tables are output tables, as some of them are
     /// not getting created (if the function is not triggered).
-    fn output_tables(&self) -> HashSet<(&FunctionVersionNode, &TableVersionNode, &GraphEdge<V>)>;
+    fn output_tables(&self) -> HashSet<(&FunctionNode, &TableNode, &GraphEdge<V>)>;
 
     /// Returns the manual trigger function. This is the main function that triggers the execution.
-    fn manual_trigger_function(&self) -> &FunctionVersionNode;
+    fn manual_trigger_function(&self) -> &FunctionNode;
 
     /// Returns all the functions that are triggered by the planner (it does NOT include the main function).
-    fn triggered_functions(&self) -> HashSet<&FunctionVersionNode>;
+    fn triggered_functions(&self) -> HashSet<&FunctionNode>;
 
     /// Returns the functions that are triggered with the versions required before being able to
     /// execute them (it includes the main function, if it had any dependency). Requirements
     /// are the edges with `GraphEdge::Dependency` or `GraphEdge::Trigger`.
-    fn function_version_requirements(
-        &self,
-    ) -> HashSet<(&FunctionVersionNode, &TableVersionNode, &GraphEdge<V>)>;
+    fn function_version_requirements(&self) -> HashSet<(&FunctionNode, &TableNode, &GraphEdge<V>)>;
 }
 
 #[async_trait]
@@ -61,7 +59,7 @@ impl<V: Eq + Hash> ExecutionPlanner<V> for ExecutionGraph<V> {
 
     async fn versioned<'a, VV, T, E, Fut>(&'a self, transform: T) -> Result<Self::Planner<VV>, E>
     where
-        T: Fn(&'a TableVersionNode, &'a V, bool) -> Fut + Send + Clone + 'a,
+        T: Fn(&'a TableNode, &'a V, bool) -> Fut + Send + Clone + 'a,
         V: Sync + 'a,
         Fut: Future<Output = Result<VV, E>> + Send,
         VV: Eq + Hash + Send,
@@ -85,7 +83,7 @@ impl<V: Eq + Hash> ExecutionPlanner<V> for ExecutionGraph<V> {
                         dependency,
                     } => (
                         &self.inner()[edge.source()],
-                        **dependency.self_dependency(),
+                        *dependency.self_dependency,
                         versions,
                     ),
                 };
@@ -123,7 +121,7 @@ impl<V: Eq + Hash> ExecutionPlanner<V> for ExecutionGraph<V> {
         Ok(ExecutionGraph::new(new_graph, *self.trigger_index()))
     }
 
-    fn functions(&self) -> HashSet<&FunctionVersionNode> {
+    fn functions(&self) -> HashSet<&FunctionNode> {
         self.inner()
             .node_references()
             .filter_map(|(_, node)| match node {
@@ -133,7 +131,7 @@ impl<V: Eq + Hash> ExecutionPlanner<V> for ExecutionGraph<V> {
             .collect()
     }
 
-    fn tables(&self) -> HashSet<&TableVersionNode> {
+    fn tables(&self) -> HashSet<&TableNode> {
         self.inner()
             .node_references()
             .filter_map(|(_, node)| match node {
@@ -143,7 +141,7 @@ impl<V: Eq + Hash> ExecutionPlanner<V> for ExecutionGraph<V> {
             .collect()
     }
 
-    fn output_tables(&self) -> HashSet<(&FunctionVersionNode, &TableVersionNode, &GraphEdge<V>)> {
+    fn output_tables(&self) -> HashSet<(&FunctionNode, &TableNode, &GraphEdge<V>)> {
         self.triggered_functions_index()
             .iter()
             .chain(std::iter::once(self.trigger_index()))
@@ -165,14 +163,14 @@ impl<V: Eq + Hash> ExecutionPlanner<V> for ExecutionGraph<V> {
             .collect()
     }
 
-    fn manual_trigger_function(&self) -> &FunctionVersionNode {
+    fn manual_trigger_function(&self) -> &FunctionNode {
         match &self.inner()[*self.trigger_index()] {
             GraphNode::Function(function) => function,
             _ => unreachable!(),
         }
     }
 
-    fn triggered_functions(&self) -> HashSet<&FunctionVersionNode> {
+    fn triggered_functions(&self) -> HashSet<&FunctionNode> {
         self.triggered_functions_index()
             .iter()
             .filter(|index| *index != self.trigger_index())
@@ -186,9 +184,7 @@ impl<V: Eq + Hash> ExecutionPlanner<V> for ExecutionGraph<V> {
             .collect()
     }
 
-    fn function_version_requirements(
-        &self,
-    ) -> HashSet<(&FunctionVersionNode, &TableVersionNode, &GraphEdge<V>)> {
+    fn function_version_requirements(&self) -> HashSet<(&FunctionNode, &TableNode, &GraphEdge<V>)> {
         self.triggered_functions_index()
             .iter()
             .chain(std::iter::once(self.trigger_index()))
@@ -217,7 +213,7 @@ mod tests {
     use std::collections::HashSet;
     use ta_execution::test_utils::graph::test_graph;
     use td_error::TdError;
-    use td_objects::types::test_utils::execution::{
+    use td_objects::test_utils::graph::{
         FUNCTION_NAMES, FUNCTIONS, TABLE_NAMES, function_node, table_node,
     };
 
@@ -275,10 +271,10 @@ mod tests {
                     unreachable!()
                 };
                 FUNCTIONS
-                    .get(node.name())
+                    .get(&node.name)
                     .unwrap()
                     .iter()
-                    .map(|table| (function_node(node.name()), table_node(table)))
+                    .map(|table| (function_node(&node.name), table_node(table)))
             })
             .collect();
 

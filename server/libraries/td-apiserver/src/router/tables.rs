@@ -17,17 +17,18 @@ mod routes {
     use ta_apiserver::status::ok_status::{DeleteStatus, GetStatus, ListStatus, NoContent};
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
-    use td_objects::crudl::{ListParams, RequestContext};
+    use td_objects::dxo::crudl::{ListParams, RequestContext};
+    use td_objects::dxo::table::defs::Table;
+    use td_objects::dxo::table_data_version::defs::TableDataVersion;
+    use td_objects::rest_urls::params::{
+        CollectionAtName, TableAtIdName, TableSampleAtName, TableSchema,
+    };
     use td_objects::rest_urls::{
         AtTimeParam, CollectionParam, DOWNLOAD_TABLE, FileFormatParam, LIST_TABLE_DATA_VERSIONS,
         LIST_TABLES, LIST_TABLES_BY_COLL, SAMPLE_TABLE, SCHEMA_TABLE, SampleOffsetLenParam,
         SqlParam, TABLE_DELETE, TableParam,
     };
-    use td_objects::types::execution::TableDataVersion;
-    use td_objects::types::stream::BoxedSyncStream;
-    use td_objects::types::table::{
-        CollectionAtName, Table, TableAtIdName, TableSampleAtName, TableSchema,
-    };
+    use td_objects::stream::BoxedSyncStream;
     use td_services::table::services::TableServices;
     use td_tower::ctx_service::RawOneshot;
     use tower::ServiceExt;
@@ -43,7 +44,7 @@ mod routes {
         Path(table_path): Path<TableParam>,
     ) -> Result<DeleteStatus<NoContent>, ErrorStatus> {
         let request = context.delete(table_path);
-        let response = state.delete().service().await.oneshot(request).await?;
+        let response = state.delete.service().await.oneshot(request).await?;
         Ok(DeleteStatus::OK(response))
     }
 
@@ -75,12 +76,7 @@ mod routes {
     ) -> Result<ParquetFile, ErrorStatus> {
         let name = TableAtIdName::new(table_param, at_param);
         let request = context.read(name);
-        let response = tables
-            .download()
-            .service()
-            .await
-            .raw_oneshot(request)
-            .await?;
+        let response = tables.download.service().await.raw_oneshot(request).await?;
         Ok(ParquetFile(response))
     }
 
@@ -93,7 +89,7 @@ mod routes {
         Query(at_param): Query<AtTimeParam>,
     ) -> Result<ListStatus<Table>, ErrorStatus> {
         let request = context.list(at_param, query_params);
-        let response = state.list().service().await.oneshot(request).await?;
+        let response = state.list.service().await.oneshot(request).await?;
         Ok(ListStatus::OK(response))
     }
 
@@ -109,7 +105,7 @@ mod routes {
         let name = CollectionAtName::new(collection_param, at_param);
         let request = context.list(name, query_params);
         let response = state
-            .list_by_collection()
+            .list_by_collection
             .service()
             .await
             .oneshot(request)
@@ -129,7 +125,7 @@ mod routes {
         let name = TableAtIdName::new(table_param, at_param);
         let request = context.list(name, query_params);
         let response = state
-            .list_data_versions()
+            .list_data_versions
             .service()
             .await
             .oneshot(request)
@@ -169,7 +165,7 @@ mod routes {
             sql_param,
         );
         let request = context.read(name);
-        let stream = tables.sample().service().await.raw_oneshot(request).await?;
+        let stream = tables.sample.service().await.raw_oneshot(request).await?;
         Ok(CsvFile(stream))
     }
 
@@ -183,7 +179,7 @@ mod routes {
     ) -> Result<GetStatus<TableSchema>, ErrorStatus> {
         let name = TableAtIdName::new(table_param, at_param);
         let request = context.read(name);
-        let response = state.schema().service().await.oneshot(request).await?;
+        let response = state.schema.service().await.oneshot(request).await?;
         Ok(GetStatus::OK(response))
     }
 }
