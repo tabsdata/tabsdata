@@ -15,6 +15,7 @@ from pathlib import Path
 import cpuinfo
 import psutil
 import tzlocal
+import yaml
 from archspec import cpu
 from setuptools import build_meta as _backend
 
@@ -288,27 +289,21 @@ def _capture_git_information(repository_path):
     }
 
 
-def _render_metadata_block():
+def _render_build():
     try:
         build_metadata = _capture_build_information()
         rust_metadata = _capture_rust_information()
         python_metadata = _capture_python_information()
         node_metadata = _capture_node_information()
         system_metadata = _capture_system_information()
-        lines = [
-            f"X-Build-Date-UTC: {build_metadata.get('build_date_utc', '?')}",
-            f"X-Build-Date-Local: {build_metadata.get('build_date_local', '?')}",
-            f"X-Build-Timestamp-UTC: {build_metadata.get('build_timestamp_utc', '?')}",
-            (
-                "X-Build-Timestamp-Local:"
-                f" {build_metadata.get('build_timestamp_local', '?')}"
-            ),
-            f"X-Build-Timezone-Name: {build_metadata.get('build_timezone_name', '?')}",
-            (
-                "X-Build-Timezone-Offset:"
-                f" {build_metadata.get('build_timezone_offset', '?')}"
-            ),
-        ]
+        metadata = {
+            "X-Build-Date-UTC": build_metadata.get("build_date_utc", "?"),
+            "X-Build-Date-Local": build_metadata.get("build_date_local", "?"),
+            "X-Build-Timestamp-UTC": build_metadata.get("build_timestamp_utc", "?"),
+            "X-Build-Timestamp-Local": build_metadata.get("build_timestamp_local", "?"),
+            "X-Build-Timezone-Name": build_metadata.get("build_timezone_name", "?"),
+            "X-Build-Timezone-Offset": build_metadata.get("build_timezone_offset", "?"),
+        }
         solution_path = _get_solution_path()
         for (
             repository_name,
@@ -318,95 +313,88 @@ def _render_metadata_block():
             repo_path = solution_path / repository_name
             git_metadata = _capture_git_information(repo_path)
             if git_metadata is None:
-                lines.append(f"X-Git-{repository_prefix}-Exists: false")
+                metadata[f"X-Git-{repository_prefix}-Exists"] = "false"
                 continue
-            lines.append(f"X-Git-{repository_prefix}-Exists: true")
-            lines.append(f"X-Git-{repository_prefix}-Name: {repository_name}")
-            lines.append(
-                f"X-Git-{repository_prefix}-Description: {repository_description}"
+            metadata[f"X-Git-{repository_prefix}-Exists"] = "true"
+            metadata[f"X-Git-{repository_prefix}-Name"] = repository_name
+            metadata[f"X-Git-{repository_prefix}-Description"] = repository_description
+            metadata[f"X-Git-{repository_prefix}-Branch"] = git_metadata.get(
+                "branch", "?"
             )
-            lines.append(
-                f"X-Git-{repository_prefix}-Branch: {git_metadata.get('branch', '?')}"
+            metadata[f"X-Git-{repository_prefix}-Tag"] = git_metadata.get("tag", "?")
+            metadata[f"X-Git-{repository_prefix}-Commit-Short-Hash"] = git_metadata.get(
+                "short_hash", "?"
             )
-            lines.append(
-                f"X-Git-{repository_prefix}-Tag: {git_metadata.get('tag', '?')}"
+            metadata[f"X-Git-{repository_prefix}-Commit-Long-Hash"] = git_metadata.get(
+                "long_hash", "?"
             )
-            lines.append(
-                f"X-Git-{repository_prefix}-Commit-Short-Hash:"
-                f" {git_metadata.get('short_hash', '?')}"
+            metadata[f"X-Git-{repository_prefix}-Commit-Date"] = git_metadata.get(
+                "commit_date", "?"
             )
-            lines.append(
-                f"X-Git-{repository_prefix}-Commit-Long-Hash:"
-                f" {git_metadata.get('long_hash', '?')}"
-            )
-            lines.append(
-                f"X-Git-{repository_prefix}-Commit-Date:"
-                f" {git_metadata.get('commit_date', '?')}"
-            )
-            lines.append(
-                f"X-Git-{repository_prefix}-Commit-Timestamp:"
-                f" {git_metadata.get('commit_timestamp', '?')}"
+            metadata[f"X-Git-{repository_prefix}-Commit-Timestamp"] = git_metadata.get(
+                "commit_timestamp", "?"
             )
             author_name = git_metadata.get("commit_author_name", "")
             author_email = git_metadata.get("commit_author_email", "")
             if author_name and author_email:
-                lines.append(
-                    f"X-Git-{repository_prefix}-Commit-Author: {author_name}"
-                    f" <{author_email}>"
+                metadata[f"X-Git-{repository_prefix}-Commit-Author"] = (
+                    f"{author_name} <{author_email}>"
                 )
             elif author_name:
-                lines.append(f"X-Git-{repository_prefix}-Commit-Author: {author_name}")
+                metadata[f"X-Git-{repository_prefix}-Commit-Author"] = author_name
             else:
-                lines.append(f"X-Git-{repository_prefix}-Commit-Author: ?")
-            commit_message = git_metadata.get("commit_message", "?")
-            if commit_message and commit_message != "?":
+                metadata[f"X-Git-{repository_prefix}-Commit-Author"] = "-"
+            commit_message = git_metadata.get("commit_message", "-")
+            if commit_message and commit_message != "-":
                 commit_message = commit_message.replace("\n", " ").replace("\r", "")[
                     :200
                 ]
             else:
-                commit_message = "?"
-            lines.append(f"X-Git-{repository_prefix}-Commit-Message: {commit_message}")
-            lines.append(
-                f"X-Git-{repository_prefix}-Commit-Count:"
-                f" {git_metadata.get('commit_count', '?')}"
+                commit_message = "-"
+            metadata[f"X-Git-{repository_prefix}-Commit-Message"] = commit_message
+            metadata[f"X-Git-{repository_prefix}-Commit-Count"] = git_metadata.get(
+                "commit_count", "?"
             )
-            lines.append(
-                f"X-Git-{repository_prefix}-Describe:"
-                f" {git_metadata.get('describe', '?')}"
+            metadata[f"X-Git-{repository_prefix}-Describe"] = git_metadata.get(
+                "describe", "?"
             )
-            lines.append(
-                f"X-Git-{repository_prefix}-Dirty: {git_metadata.get('dirty', '?')}"
+            metadata[f"X-Git-{repository_prefix}-Dirty"] = git_metadata.get(
+                "dirty", "?"
             )
-        lines.extend(
-            [
-                f"X-Rust-Semver: {rust_metadata.get('rust_version', '?')}",
-                f"X-Rust-Channel: {rust_metadata.get('rust_channel', '?')}",
-                f"X-Rust-Host-Triple: {rust_metadata.get('rust_host_triple', '?')}",
-                f"X-Rust-Commit-Hash: {rust_metadata.get('rust_commit_hash', '?')}",
-                f"X-Rust-Commit-Date: {rust_metadata.get('rust_commit_date', '?')}",
-                f"X-Rust-LLVM-Version: {rust_metadata.get('llvm_version', '?')}",
-                f"X-Python-Version: {python_metadata.get('python_version', '?')}",
-                (
-                    "X-Python-Implementation:"
-                    f" {python_metadata.get('python_implementation', '?')}"
-                ),
-                f"X-Node-Version: {node_metadata.get('node_version', '?')}",
-                f"X-System-Hostname: {system_metadata.get('hostname', '?')}",
-                f"X-System-User: {system_metadata.get('user', '?')}",
-                f"X-System-OS-Name: {system_metadata.get('os_name', '?')}",
-                f"X-System-OS-Version: {system_metadata.get('os_version', '?')}",
-                f"X-System-CPU-Vendor: {system_metadata.get('cpu_vendor', '?')}",
-                f"X-System-CPU-Brand: {system_metadata.get('cpu_brand', '?')}",
-                f"X-System-CPU-Name: {system_metadata.get('cpu_name', '?')}",
-                (
-                    "X-System-CPU-Core-Count:"
-                    f" {system_metadata.get('cpu_core_count', '?')}"
-                ),
-                f"X-System-CPU-Frequency: {system_metadata.get('cpu_frequency', '?')}",
-                f"X-System-Total-Memory: {system_metadata.get('total_memory', '?')}",
-            ]
+        metadata.update(
+            {
+                "X-Rust-Semver": rust_metadata.get("rust_version", "?"),
+                "X-Rust-Channel": rust_metadata.get("rust_channel", "?"),
+                "X-Rust-Host-Triple": rust_metadata.get("rust_host_triple", "?"),
+                "X-Rust-Commit-Hash": rust_metadata.get("rust_commit_hash", "?"),
+                "X-Rust-Commit-Date": rust_metadata.get("rust_commit_date", "?"),
+                "X-Rust-LLVM-Version": rust_metadata.get("llvm_version", "?"),
+            }
         )
-        return "\n".join(lines)
+        metadata.update(
+            {
+                "X-Python-Version": python_metadata.get("python_version", "?"),
+                "X-Python-Implementation": python_metadata.get(
+                    "python_implementation", "?"
+                ),
+            }
+        )
+        metadata["X-Node-Version"] = node_metadata.get("node_version", "?")
+        metadata.update(
+            {
+                "X-System-Hostname": system_metadata.get("hostname", "?"),
+                "X-System-User": system_metadata.get("user", "?"),
+                "X-System-OS-Name": system_metadata.get("os_name", "?"),
+                "X-System-OS-Version": system_metadata.get("os_version", "?"),
+                "X-System-CPU-Vendor": system_metadata.get("cpu_vendor", "?"),
+                "X-System-CPU-Brand": system_metadata.get("cpu_brand", "?"),
+                "X-System-CPU-Name": system_metadata.get("cpu_name", "?"),
+                "X-System-CPU-Core-Count": system_metadata.get("cpu_core_count", "?"),
+                "X-System-CPU-Frequency": system_metadata.get("cpu_frequency", "?"),
+                "X-System-Total-Memory": system_metadata.get("total_memory", "?"),
+            }
+        )
+        return metadata
     except Exception as exception:
         raise RuntimeError(
             f"Failed to render metadata block: {exception}"
@@ -417,7 +405,7 @@ def _merge_metadata_contents(original_text):
     marker = "X-Build-Date-UTC:"
     if marker in original_text:
         return original_text
-    block = _render_metadata_block()
+    block = _render_build()
     stripped = original_text.rstrip("\n")
     return f"{block}\n{stripped}\n"
 
@@ -530,6 +518,28 @@ def build_editable(wheel_directory, config_settings=None, metadata_directory=Non
 
 def inject_wheel_metadata(wheel_path):
     _inject_wheel_metadata(wheel_path)
+
+
+def write_build_manifest(output_path):
+    try:
+        build = _render_build()
+        build_file = Path(output_path)
+        build_file.parent.mkdir(parents=True, exist_ok=True)
+        current_year = datetime.now().year
+        build_content = yaml.dump(
+            build,
+            default_flow_style=False,
+            default_style=None,
+            sort_keys=False,
+            allow_unicode=True,
+        )
+        header = f"#\n# Copyright {current_year} Tabs Data Inc.\n#\n\n"
+        yaml_content = header + build_content
+        build_file.write_text(yaml_content, encoding="utf-8")
+    except Exception as exception:
+        raise RuntimeError(
+            f"Failed to write build manifest to {output_path}: {exception}"
+        ) from exception
 
 
 build_sdist = _backend.build_sdist

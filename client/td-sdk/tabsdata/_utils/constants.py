@@ -30,3 +30,9 @@ TABSDATA_PACKAGES = (
 TRUE_VALUES = {"1", "true", "yes", "y", "on"}
 
 NO_VERSION = "♾️"
+
+COPYRIGHT_HEADER = "#\n# Copyright {} Tabs Data Inc.\n#\n\n"
+
+INTERNAL_ERROR_MESSAGE = (
+    "Internal error: {}. Contact Tabsdata for help and to report it."
+)

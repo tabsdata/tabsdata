@@ -207,8 +207,8 @@ pub fn show_build_metadata() {
         format!("{:<width$}", content, width = width)
     }
 
-    let version = env::var("TD_VERSION").unwrap_or_else(|_| "?".to_string());
-    let build_type = env::var("TD_VERGEN_BUILD_TYPE").unwrap_or_else(|_| "?".to_string());
+    let version = env::var("TD_VERSION").unwrap_or_else(|_| "-".to_string());
+    let build_type = env::var("TD_VERGEN_BUILD_TYPE").unwrap_or_else(|_| "-".to_string());
     let _is_python = build_type == "Python";
     let is_rust = build_type == "Rust";
 
@@ -234,10 +234,10 @@ pub fn show_build_metadata() {
                     dt_local.format("%Y-%m-%d").to_string(),
                 )
             } else {
-                ("?".to_string(), "?".to_string())
+                ("-".to_string(), "-".to_string())
             }
         } else {
-            ("?".to_string(), "?".to_string())
+            ("-".to_string(), "-".to_string())
         };
 
     // Rust Information

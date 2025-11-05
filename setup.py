@@ -292,13 +292,6 @@ class CustomBDistWheel(_bdist_wheel):
 
     def run(self):
         super().run()
-        # noinspection PyBroadException
-        try:
-            dist_dir = Path(self.dist_dir or ".")
-            for wheel_path in dist_dir.glob("*.whl"):
-                tdabout.inject_wheel_metadata(wheel_path)
-        except Exception:
-            logger.exception("Failed to inject wheel metadata", exc_info=True)
 
 
 # noinspection DuplicatedCode
@@ -660,6 +653,14 @@ console_scripts: list[str] = [
     "tdvenv = tabsdata._tabsserver.pyenv_creation:main",
 ]
 console_scripts.extend(load_console_scripts())
+
+build_manifest_path = os.path.join(
+    package_assets_folder,
+    "manifest",
+    "BUILD",
+)
+logger.debug(f"Generating build manifest at: {build_manifest_path}")
+tdabout.write_build_manifest(build_manifest_path)
 
 
 def build_extras_require(root: str) -> dict[str, list[str]]:
