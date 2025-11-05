@@ -1,12 +1,12 @@
 //
-// Copyright 2025. Tabs Data Inc.
+// Copyright 2025 Tabs Data Inc.
 //
 
-use crate::types::basic::{BuildManifest, PythonVersion, TabsdataVersion};
+use crate::types::string::{BuildManifest, PythonVersion, TabsdataVersion};
 
 #[td_type::Dto]
 pub struct ServerVersion {
-    version: TabsdataVersion,
+    pub version: TabsdataVersion,
 }
 
 impl Default for ServerVersion {
@@ -17,16 +17,16 @@ impl Default for ServerVersion {
     }
 }
 
-#[derive(Default)]
 #[td_type::Dto]
+#[derive(Default)]
 pub struct PythonVersions {
     #[builder(default)]
-    versions: Vec<PythonVersion>,
+    pub versions: Vec<PythonVersion>,
 }
 
 #[td_type::Dto]
 pub struct RuntimeInfo {
-    version: TabsdataVersion,
-    build_manifest: BuildManifest,
-    python_versions: Vec<PythonVersion>,
+    pub version: TabsdataVersion,
+    pub build_manifest: BuildManifest,
+    pub python_versions: Vec<PythonVersion>,
 }

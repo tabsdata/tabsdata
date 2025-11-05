@@ -2,12 +2,10 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use td_type::Dto;
-
-#[Dto]
+#[td_type::Dto]
 pub struct ApiStatus {
-    status: HealthStatus,
-    latency_as_nanos: u128,
+    pub status: HealthStatus,
+    pub latency_as_nanos: u128,
 }
 
 #[td_type::typed_enum]

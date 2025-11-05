@@ -8,11 +8,17 @@ use proc_macro::TokenStream;
 mod dao;
 mod dlo;
 mod dto;
+mod dxo;
 mod type_builder;
 mod typed_types;
 mod url;
 
-#[proc_macro_derive(DaoType, attributes(td_type, dao, sqlx))]
+#[proc_macro_attribute]
+pub fn dxo(attr: TokenStream, item: TokenStream) -> TokenStream {
+    dxo::dxo(attr, item)
+}
+
+#[proc_macro_derive(DaoType, attributes(inherits, td_type, dao, sqlx))]
 pub fn dao_type(input: TokenStream) -> TokenStream {
     dao::dao_type(input)
 }
@@ -23,7 +29,7 @@ pub fn Dao(args: TokenStream, item: TokenStream) -> TokenStream {
     dao::dao(args, item)
 }
 
-#[proc_macro_derive(DloType, attributes(td_type, dlo))]
+#[proc_macro_derive(DloType, attributes(inherits, td_type, dlo))]
 pub fn dlo_type(input: TokenStream) -> TokenStream {
     dlo::dlo_type(input)
 }
@@ -34,7 +40,7 @@ pub fn Dlo(args: TokenStream, item: TokenStream) -> TokenStream {
     dlo::dlo(args, item)
 }
 
-#[proc_macro_derive(DtoType, attributes(td_type, dto))]
+#[proc_macro_derive(DtoType, attributes(inherits, td_type, dto))]
 pub fn dto_type(input: TokenStream) -> TokenStream {
     dto::dto_type(input)
 }
