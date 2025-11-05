@@ -45,6 +45,7 @@ import tabsdata._utils.tableframe._reflection as td_reflection
 # noinspection PyProtectedMember
 import tabsdata._utils.tableframe._translator as td_translator
 import tabsdata.tableframe.dataframe.frame as td_frame
+import tabsdata.tableframe.dq.engine as td_dq_engine
 
 # noinspection PyProtectedMember
 import tabsdata.tableframe.expr.expr as td_expr
@@ -2748,6 +2749,12 @@ class TableFrame:
             idx=self._idx,
             properties=None,
         )
+
+    """> Expansion Namespaces """
+
+    @property
+    def dq(self) -> td_dq_engine.DataQualityEngine:
+        return td_dq_engine.DataQualityEngine(self)
 
 
 TdType = TypeVar("TdType", "TableFrame", "td_typing.Series", "td_expr.Expr")

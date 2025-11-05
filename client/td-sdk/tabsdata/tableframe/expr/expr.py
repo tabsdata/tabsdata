@@ -20,15 +20,6 @@ import polars as pl
 from accessify import accessify
 
 # noinspection PyProtectedMember
-from polars._typing import (
-    ClosedInterval,
-    FillNullStrategy,
-    NumericLiteral,
-    RankMethod,
-    TemporalLiteral,
-)
-
-# noinspection PyProtectedMember
 import tabsdata._utils.tableframe._common as td_common
 
 # noinspection PyProtectedMember
@@ -581,10 +572,16 @@ class Expr:
     def clip(
         self,
         lower_bound: (
-            NumericLiteral | TemporalLiteral | td_typing.IntoExprColumn | None
+            td_typing.NumericLiteral
+            | td_typing.TemporalLiteral
+            | td_typing.IntoExprColumn
+            | None
         ) = None,
         upper_bound: (
-            NumericLiteral | TemporalLiteral | td_typing.IntoExprColumn | None
+            td_typing.NumericLiteral
+            | td_typing.TemporalLiteral
+            | td_typing.IntoExprColumn
+            | None
         ) = None,
     ) -> Expr:
         """
@@ -870,7 +867,7 @@ class Expr:
     def fill_null(
         self,
         value: Any | Expr | None = None,
-        strategy: FillNullStrategy | None = None,
+        strategy: td_typing.FillNullStrategy | None = None,
         limit: int | None = None,
     ) -> Expr:
         """
@@ -1141,7 +1138,7 @@ class Expr:
         self,
         lower_bound: td_typing.IntoExpr,
         upper_bound: td_typing.IntoExpr,
-        closed: ClosedInterval = "both",
+        closed: td_typing.ClosedInterval = "both",
     ) -> Expr:
         """
         If an expression is between the given bounds.
@@ -1844,7 +1841,7 @@ class Expr:
     @pydoc(categories="aggregation")
     def rank(
         self,
-        method: RankMethod = "average",
+        method: td_typing.RankMethod = "average",
         *,
         descending: bool = False,
         seed: int | None = None,

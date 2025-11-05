@@ -23,6 +23,7 @@ pillow==12.0.0
 pip-tools==7.5.1
 platformdirs==4.5.0
 polars==1.34.0
+pycountries==1.2.1
 PyYAML==6.0.3
 pyarrow==21.0.0
 py-cpuinfo==9.0.0

@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+from datetime import date, datetime, time, timedelta
+from decimal import Decimal
 from typing import TYPE_CHECKING, Literal, Mapping, Sequence, TypeAlias, Union
 
 import polars as pl
@@ -65,6 +67,26 @@ JoinStrategy: TypeAlias = Literal[
     "cross",
     "outer",
 ]
+
+# noinspection DuplicatedCode
+ClosedInterval: TypeAlias = Literal[
+    "left",
+    "right",
+    "both",
+    "none",
+]
+FillNullStrategy: TypeAlias = Literal[
+    "forward",
+    "backward",
+    "min",
+    "max",
+    "mean",
+    "zero",
+    "one",
+]
+NumericLiteral: TypeAlias = Union[int, float, Decimal]
+RankMethod: TypeAlias = Literal["average", "min", "max", "dense", "ordinal", "random"]
+TemporalLiteral: TypeAlias = Union[date, time, datetime, timedelta]
 
 # noinspection DuplicatedCode
 Schema: TypeAlias = td_schema.Schema
