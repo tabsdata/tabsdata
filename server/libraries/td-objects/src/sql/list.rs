@@ -2,11 +2,10 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::crudl::ListParams;
-use crate::types::basic::LikeFilter;
-use crate::types::parse::IDENTIFIER_PATTERN;
+use crate::dxo::crudl::ListParams;
+use crate::parse::IDENTIFIER_PATTERN;
+use crate::types::string::LikeFilter;
 use crate::types::{ListQuery, SqlEntity};
-use getset::Getters;
 use itertools::Itertools;
 use regex::Regex;
 use std::marker::PhantomData;
@@ -426,21 +425,19 @@ impl Pagination {
     }
 }
 
-#[derive(Getters)]
-#[getset(get = "pub")]
 pub struct ListQueryParams<D: ListQuery> {
-    len: usize,
-    conditions: AndConditions<D>,
-    natural_order: Order,
-    order: Option<Order>,
-    pagination: Option<Pagination>,
+    pub len: usize,
+    pub conditions: AndConditions<D>,
+    pub natural_order: Order,
+    pub order: Option<Order>,
+    pub pagination: Option<Pagination>,
 }
 
 impl<D: ListQuery> TryFrom<&ListParams> for ListQueryParams<D> {
     type Error = TdError;
     fn try_from(value: &ListParams) -> Result<Self, Self::Error> {
         let conditions = value
-            .filter()
+            .filter
             .iter()
             .map(String::as_str)
             .map(Condition::parse)
@@ -475,7 +472,7 @@ impl<D: ListQuery> TryFrom<&ListParams> for ListQueryParams<D> {
             .collect::<Vec<_>>()
             .into();
 
-        let order = match value.order_by() {
+        let order = match &value.order_by {
             Some(o) => {
                 let o = o.parse()?;
                 match o {
@@ -505,7 +502,7 @@ impl<D: ListQuery> TryFrom<&ListParams> for ListQueryParams<D> {
         };
 
         // Column value applies to order-by column, or natural-order-by column if order-by is empty.
-        let pagination = match (value.previous(), value.next(), value.pagination_id()) {
+        let pagination = match (&value.previous, &value.next, &value.pagination_id) {
             (Some(_), Some(_), _) => Err(ListError::PreviousAndNext),
             (Some(_), _, None) => Err(ListError::MissingPaginationParams),
             (_, Some(_), None) => Err(ListError::MissingPaginationParams),
@@ -530,7 +527,7 @@ impl<D: ListQuery> TryFrom<&ListParams> for ListQueryParams<D> {
         }?;
 
         Ok(ListQueryParams {
-            len: *value.len(),
+            len: value.len,
             conditions,
             natural_order,
             order,
@@ -542,7 +539,8 @@ impl<D: ListQuery> TryFrom<&ListParams> for ListQueryParams<D> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::crudl::ListParamsBuilder;
+    use crate::dxo::crudl::ListParamsBuilder;
+    use std::any::Any;
 
     #[td_type::Dao]
     struct TestDao {
@@ -575,6 +573,10 @@ mod tests {
 
         fn from_display(s: impl ToString) -> Result<Self, TdError> {
             Ok(s.to_string())
+        }
+
+        fn as_any(&self) -> &dyn Any {
+            self
         }
     }
 
@@ -673,7 +675,7 @@ mod tests {
                 Box::new("LIKE".try_into().unwrap()),
             )]),
         ]);
-        assert_eq!(list_query.conditions(), &expect);
+        assert_eq!(list_query.conditions, expect);
 
         let list_params = ListParamsBuilder::default()
             .len(0usize)

@@ -2,10 +2,11 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use crate::sql::Queries;
 use crate::sql::cte::{ranked_versions_at, select_ranked_versions_at};
-use crate::sql::{Queries, QueryError};
-use crate::types::{DataAccessObject, PartitionBy, Recursive, SqlEntity, VersionedAt};
+use crate::types::{DataAccessObject, Recursive, SqlEntity, States, Versioned};
 use std::ops::Deref;
+use td_error::TdError;
 use tracing::trace;
 
 const LATEST_REFERENCE_VERSIONS_CTE: &str = "latest_reference_versions";
@@ -102,18 +103,15 @@ pub trait RecursiveQueries {
     /// FROM
     ///     recursive_versions rd;
     /// ```
-    fn select_recursive_versions_at<'a, D, R, E>(
+    fn select_recursive_versions_at<'a, const DS: u8, D, const RS: u8, R>(
         &self,
-        d_defined_on: Option<&'a <D as VersionedAt>::Order>,
-        d_status: Option<&'a [&'a <D as VersionedAt>::Condition]>,
-        r_defined_on: Option<&'a <R as VersionedAt>::Order>,
-        r_status: Option<&'a [&'a <R as VersionedAt>::Condition]>,
-        direct_reference_entity: &'a E,
-    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>
+        d_defined_on: Option<&'a <D as Versioned>::Order>,
+        r_defined_on: Option<&'a <R as Versioned>::Order>,
+        direct_reference_entity: &'a dyn SqlEntity, // has to be in R
+    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, TdError>
     where
-        D: DataAccessObject + Recursive + PartitionBy + VersionedAt,
-        R: DataAccessObject + PartitionBy + VersionedAt,
-        E: SqlEntity, // has to be in R
+        D: DataAccessObject + Recursive + Versioned + States<DS>,
+        R: DataAccessObject + Versioned + States<RS>,
     {
         let mut query_builder = sqlx::QueryBuilder::default();
 
@@ -124,17 +122,17 @@ pub trait RecursiveQueries {
             &mut query_builder,
             r_defined_on,
         );
-        select_ranked_versions_at::<R>(LATEST_REFERENCE_VERSIONS_CTE, &mut query_builder, r_status);
+        select_ranked_versions_at::<RS, R>(LATEST_REFERENCE_VERSIONS_CTE, &mut query_builder)?;
         query_builder.push(",");
         ranked_versions_at::<D>(
             LATEST_RECURSION_VERSIONS_CTE,
             &mut query_builder,
             d_defined_on,
         );
-        select_ranked_versions_at::<D>(LATEST_RECURSION_VERSIONS_CTE, &mut query_builder, d_status);
+        select_ranked_versions_at::<DS, D>(LATEST_RECURSION_VERSIONS_CTE, &mut query_builder)?;
         query_builder.push(",");
 
-        recursive_versions_sql::<D, R, E>(&mut query_builder, direct_reference_entity)?;
+        recursive_versions_sql::<D, R>(&mut query_builder, direct_reference_entity)?;
         query_builder.push(" ");
 
         // Build query to select the data from the generated CTEs
@@ -157,30 +155,19 @@ pub trait RecursiveQueries {
 }
 
 /// CTE to find all the versions recursively of a given object.
-fn recursive_versions_sql<'a, D, R, E>(
+fn recursive_versions_sql<'a, D, R>(
     query_builder: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>,
-    direct_reference_entity: &'a E,
-) -> Result<(), QueryError>
+    direct_reference_entity: &'a dyn SqlEntity, // has to be in R
+) -> Result<(), TdError>
 where
-    D: Recursive + PartitionBy,
+    D: Recursive + Versioned,
     R: DataAccessObject,
-    E: SqlEntity, // has to be in R
 {
     // Starting point to find recursive versions
-    let starting_at = R::sql_field_for_type(direct_reference_entity.type_name()).ok_or(
-        QueryError::TypeNotFound(
-            direct_reference_entity.type_name().to_string(),
-            R::sql_table().to_string(),
-        ),
-    )?;
+    let starting_at = R::sql_field_for_type(direct_reference_entity.type_id())?;
 
     // Baseline to find initial versions
-    let recursion_ref = R::sql_field_for_type(std::any::type_name::<D::Recursive>()).ok_or(
-        QueryError::TypeNotFound(
-            std::any::type_name::<D::Recursive>().to_string(),
-            R::sql_table().to_string(),
-        ),
-    )?;
+    let recursion_ref = R::sql_field_for_type(std::any::TypeId::of::<D::Recursive>())?;
 
     // And columns to recurse on the initial found versions
     let recurse_up = D::recurse_up();
@@ -274,12 +261,12 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dxo::dependency::defs::{DependencyDB, DependencyDBWithNames};
+    use crate::dxo::function::defs::FunctionDB;
+    use crate::dxo::trigger::defs::{TriggerDB, TriggerDBWithNames};
     use crate::sql::{DaoQueries, Insert};
-    use crate::types::basic::AtTime;
-    use crate::types::basic::{CollectionId, FunctionId};
-    use crate::types::dependency::{DependencyDB, DependencyDBWithNames};
-    use crate::types::function::FunctionDB;
-    use crate::types::trigger::{TriggerDB, TriggerDBWithNames};
+    use crate::types::id::{CollectionId, FunctionId};
+    use crate::types::timestamp::AtTime;
     use chrono::{DateTime, Utc};
     use sqlx::Execute;
     use std::sync::LazyLock;
@@ -293,8 +280,11 @@ mod tests {
     #[td_type::typed(string)]
     struct TestPartition;
 
-    #[td_type::typed(string)]
-    struct TestStatus;
+    #[td_type::typed_enum]
+    enum TestStatus {
+        #[typed_enum(rename = "A")]
+        Active,
+    }
 
     #[td_type::typed(string)]
     struct TestRecursion;
@@ -303,9 +293,12 @@ mod tests {
     #[Dao]
     #[dao(
         sql_table = "test_table",
-        partition_by = "id",
-        versioned_at(order_by = "defined_on", condition_by = "status"),
-        recursive(up = "current", down = "downstream")
+        versioned(order_by = "defined_on", partition_by = "id"),
+        recursive(up = "current", down = "downstream"),
+        states(
+            All = &[],
+            Active = &[&TestStatus::Active],
+        )
     )]
     struct TestDao {
         id: TestId,
@@ -318,8 +311,11 @@ mod tests {
     #[Dao]
     #[dao(
         sql_table = "test_table_reference",
-        partition_by = "reference_id",
-        versioned_at(order_by = "defined_on", condition_by = "status")
+        versioned(order_by = "defined_on", partition_by = "reference_id"),
+        states(
+            All = &[],
+            Active = &[&TestStatus::Active],
+        )
     )]
     struct RecursionReference {
         id: TestId,
@@ -429,7 +425,7 @@ mod tests {
         let mut query_builder = sqlx::QueryBuilder::default();
 
         let id = &TestId::try_from("AAA").unwrap();
-        recursive_versions_sql::<TestDao, RecursionReference, _>(&mut query_builder, id).unwrap();
+        recursive_versions_sql::<TestDao, RecursionReference>(&mut query_builder, id).unwrap();
         let query = query_builder.build();
 
         let expected = "recursive_versions AS (\
@@ -493,8 +489,8 @@ mod tests {
     fn test_select_active_recursive_versions_at_none_sql() {
         let id = TestId::try_from("AAA").unwrap();
         let mut query_builder = DaoQueries::default()
-            .select_recursive_versions_at::<TestDao, RecursionReference, _>(
-                None, None, None, None, &id,
+            .select_recursive_versions_at::<{TestDao::All}, TestDao, { RecursionReference::All }, RecursionReference>(
+                None, None, &id,
             )
             .unwrap();
         let query = query_builder.build();
@@ -589,11 +585,9 @@ mod tests {
         let at = time(0);
         let id = TestRecursion::try_from("ref_X").unwrap();
         let mut query_builder = DaoQueries::default()
-            .select_recursive_versions_at::<TestDao, RecursionReference, _>(
+            .select_recursive_versions_at::<{TestDao::All}, TestDao, { RecursionReference::All }, RecursionReference>(
                 Some(&at),
-                None,
                 Some(&at),
-                None,
                 &id,
             )
             .unwrap();
@@ -689,8 +683,8 @@ mod tests {
     async fn test_select_active_versions_none_fetch_all(db: DbPool) {
         let id = TestId::try_from("MMM").unwrap();
         let mut query_builder = DaoQueries::default()
-            .select_recursive_versions_at::<TestDao, RecursionReference, _>(
-                None, None, None, None, &id,
+            .select_recursive_versions_at::<{TestDao::All}, TestDao, { RecursionReference::All }, RecursionReference>(
+                None, None, &id,
             )
             .unwrap();
         let result: Vec<TestDao> = query_builder.build_query_as().fetch_all(&db).await.unwrap();
@@ -710,8 +704,8 @@ mod tests {
     async fn test_select_active_versions_none_fetch_all_upstream(db: DbPool) {
         let id = TestId::try_from("NNN").unwrap();
         let mut query_builder = DaoQueries::default()
-            .select_recursive_versions_at::<TestDao, RecursionReference, _>(
-                None, None, None, None, &id,
+            .select_recursive_versions_at::<{TestDao::All}, TestDao, { RecursionReference::All }, RecursionReference>(
+                None, None, &id,
             )
             .unwrap();
         let result: Vec<TestDao> = query_builder.build_query_as().fetch_all(&db).await.unwrap();
@@ -734,11 +728,9 @@ mod tests {
         let at = time(1);
         let id = TestId::try_from("MMM").unwrap();
         let mut query_builder = DaoQueries::default()
-            .select_recursive_versions_at::<TestDao, RecursionReference, _>(
+            .select_recursive_versions_at::<{TestDao::All}, TestDao, { RecursionReference::All }, RecursionReference>(
                 Some(&at),
-                None,
                 Some(&at),
-                None,
                 &id,
             )
             .unwrap();
@@ -757,13 +749,10 @@ mod tests {
         let at = time(2);
         let id = TestId::try_from("MMM").unwrap();
         // PPP is D at time 2, so it will stop the recursion
-        let status = &[&TestStatus::try_from("A").unwrap()];
         let mut query_builder = DaoQueries::default()
-            .select_recursive_versions_at::<TestDao, RecursionReference, _>(
+            .select_recursive_versions_at::<{TestDao::Active}, TestDao, { RecursionReference::Active }, RecursionReference>(
                 Some(&at),
-                Some(status),
                 Some(&at),
-                Some(status),
                 &id,
             )
             .unwrap();
@@ -780,8 +769,8 @@ mod tests {
     async fn test_select_active_versions_none_last_in_stream(db: DbPool) {
         let id = TestId::try_from("SSS").unwrap();
         let mut query_builder = DaoQueries::default()
-            .select_recursive_versions_at::<TestDao, RecursionReference, _>(
-                None, None, None, None, &id,
+            .select_recursive_versions_at::<{TestDao::All}, TestDao, { RecursionReference::All }, RecursionReference>(
+                None, None, &id,
             )
             .unwrap();
         let result: Vec<TestDao> = query_builder.build_query_as().fetch_all(&db).await.unwrap();
@@ -796,8 +785,8 @@ mod tests {
         // OOO is active, but PPP has the same partition_id and is deleted
         let id = TestId::try_from("OOO").unwrap();
         let mut query_builder = DaoQueries::default()
-            .select_recursive_versions_at::<TestDao, RecursionReference, _>(
-                None, None, None, None, &id,
+            .select_recursive_versions_at::<{TestDao::All}, TestDao, { RecursionReference::All }, RecursionReference>(
+                None, None, &id,
             )
             .unwrap();
         let result: Vec<TestDao> = query_builder.build_query_as().fetch_all(&db).await.unwrap();
@@ -842,8 +831,8 @@ mod tests {
 
         let id = TestId::try_from(format!("YYY{:04}", 0))?;
         let mut query_builder = DaoQueries::default()
-            .select_recursive_versions_at::<TestDao, RecursionReference, _>(
-                None, None, None, None, &id,
+            .select_recursive_versions_at::<{TestDao::All}, TestDao, { RecursionReference::All }, RecursionReference>(
+                None, None, &id,
             )?;
         let result: Vec<TestDao> = query_builder.build_query_as().fetch_all(&db).await.unwrap();
         assert_eq!(result.len(), size);
@@ -856,32 +845,61 @@ mod tests {
     #[td_test::test(sqlx)]
     #[tokio::test]
     async fn test_select_active_versions_at_types(db: DbPool) -> Result<(), TdError> {
-        async fn test_query<D, R, E>(db: &DbPool, recursion_ref: &E) -> Result<(), TdError>
+        async fn test_query<const DS: u8, D, const RS: u8, R>(
+            db: &DbPool,
+            recursion_ref: &dyn SqlEntity,
+        ) -> Result<(), TdError>
         where
-            D: DataAccessObject + Recursive + PartitionBy + VersionedAt,
-            R: DataAccessObject + PartitionBy + VersionedAt,
-            E: SqlEntity,
+            D: DataAccessObject + Recursive + Versioned + States<DS>,
+            R: DataAccessObject + Versioned + States<RS>,
         {
-            let mut query_builder = DaoQueries::default().select_recursive_versions_at::<D, R, E>(
-                None,
-                None,
-                None,
-                None,
-                recursion_ref,
-            )?;
+            let mut query_builder = DaoQueries::default()
+                .select_recursive_versions_at::<DS, D, RS, R>(None, None, recursion_ref)?;
             let _result: Vec<D> = query_builder.build_query_as().fetch_all(db).await.unwrap();
             Ok(())
         }
 
-        test_query::<DependencyDB, FunctionDB, _>(&db, &FunctionId::default()).await?;
-        test_query::<DependencyDB, FunctionDB, _>(&db, &CollectionId::default()).await?;
-        test_query::<DependencyDBWithNames, FunctionDB, _>(&db, &FunctionId::default()).await?;
-        test_query::<DependencyDBWithNames, FunctionDB, _>(&db, &CollectionId::default()).await?;
+        test_query::<{ DependencyDB::Active }, DependencyDB, { FunctionDB::Available }, FunctionDB>(&db, &FunctionId::default()).await?;
+        test_query::<{ DependencyDB::Active }, DependencyDB, { FunctionDB::Available }, FunctionDB>(&db, &CollectionId::default()).await?;
+        test_query::<
+            { DependencyDBWithNames::Active },
+            DependencyDBWithNames,
+            { FunctionDB::Available },
+            FunctionDB,
+        >(&db, &FunctionId::default())
+        .await?;
+        test_query::<
+            { DependencyDBWithNames::Active },
+            DependencyDBWithNames,
+            { FunctionDB::Available },
+            FunctionDB,
+        >(&db, &CollectionId::default())
+        .await?;
 
-        test_query::<TriggerDB, FunctionDB, _>(&db, &FunctionId::default()).await?;
-        test_query::<TriggerDB, FunctionDB, _>(&db, &CollectionId::default()).await?;
-        test_query::<TriggerDBWithNames, FunctionDB, _>(&db, &FunctionId::default()).await?;
-        test_query::<TriggerDBWithNames, FunctionDB, _>(&db, &CollectionId::default()).await?;
+        test_query::<{ TriggerDB::Active }, TriggerDB, { FunctionDB::Available }, FunctionDB>(
+            &db,
+            &FunctionId::default(),
+        )
+        .await?;
+        test_query::<{ TriggerDB::Active }, TriggerDB, { FunctionDB::Available }, FunctionDB>(
+            &db,
+            &CollectionId::default(),
+        )
+        .await?;
+        test_query::<
+            { TriggerDBWithNames::Active },
+            TriggerDBWithNames,
+            { FunctionDB::Available },
+            FunctionDB,
+        >(&db, &FunctionId::default())
+        .await?;
+        test_query::<
+            { TriggerDBWithNames::Active },
+            TriggerDBWithNames,
+            { FunctionDB::Available },
+            FunctionDB,
+        >(&db, &CollectionId::default())
+        .await?;
 
         Ok(())
     }

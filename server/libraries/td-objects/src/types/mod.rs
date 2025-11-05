@@ -2,159 +2,150 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use std::fmt::{Debug, Display};
+use std::any::TypeId;
+use std::fmt::Debug;
 
-pub mod basic;
-
-pub mod auth;
-pub mod collection;
-pub mod dependency;
-pub mod execution;
-pub mod function;
-pub mod parse;
-pub mod permission;
-pub mod role;
-pub mod runtime_info;
-pub mod stream;
-pub mod system;
-pub mod table;
-pub mod table_ref;
-pub mod trigger;
-pub mod user;
-pub mod worker;
+pub mod addresses;
+pub mod bool;
+pub mod composed;
+pub mod i16;
+pub mod i32;
+pub mod i64;
+pub mod id;
+pub mod id_name;
+pub mod option;
+pub mod other;
+pub mod string;
+pub mod timestamp;
+pub mod typed_enum;
+pub mod visible_collections;
 
 #[cfg(test)]
 mod tests;
 
-#[cfg(feature = "test-utils")]
-pub mod test_utils;
-
 /// A trait for types that can be used as SQL entities.
-pub trait SqlEntity: Send + Sync + Debug {
+pub trait SqlEntity: Debug + Send + Sync {
     fn push_bind<'a>(&'a self, builder: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>);
+
     fn push_bind_unseparated<'a>(
         &'a self,
         builder: &mut sqlx::query_builder::Separated<'_, 'a, sqlx::Sqlite, &str>,
     );
+
     fn as_display(&self) -> String;
     fn from_display(s: impl ToString) -> Result<Self, td_error::TdError>
     where
         Self: Sized;
 
-    fn type_name(&self) -> &str {
-        std::any::type_name::<Self>()
+    fn as_dyn(&self) -> &dyn SqlEntity
+    where
+        Self: Sized,
+    {
+        self as &dyn SqlEntity
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any;
+    fn type_id(&self) -> TypeId {
+        self.as_any().type_id()
     }
 }
 
-impl<T> SqlEntity for Option<T>
+impl<T> SqlEntity for &T
 where
-    T: SqlEntity + Display,
+    T: SqlEntity,
 {
     fn push_bind<'a>(&'a self, builder: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>) {
-        if let Some(value) = self {
-            value.push_bind(builder);
-        } else {
-            builder.push_bind(None::<String>);
-        }
+        (**self).push_bind(builder)
     }
 
     fn push_bind_unseparated<'a>(
         &'a self,
         builder: &mut sqlx::query_builder::Separated<'_, 'a, sqlx::Sqlite, &str>,
     ) {
-        if let Some(value) = self {
-            value.push_bind_unseparated(builder);
-        } else {
-            builder.push_bind_unseparated(None::<String>);
-        }
+        (**self).push_bind_unseparated(builder)
     }
 
     fn as_display(&self) -> String {
-        if let Some(value) = self {
-            value.to_string()
-        } else {
-            "".to_string()
-        }
+        (**self).as_display()
     }
 
-    fn from_display(s: impl ToString) -> Result<Self, td_error::TdError> {
-        let s = s.to_string();
-        if s.is_empty() {
-            Ok(None)
-        } else {
-            T::from_display(s).map(Some)
-        }
+    fn from_display(_s: impl ToString) -> Result<Self, td_error::TdError>
+    where
+        Self: Sized,
+    {
+        unreachable!("Cannot create reference from display string")
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        (**self).as_any()
     }
 }
 
-impl<T> SqlEntity for T
+pub trait AsDynSqlEntities: Send + Sync {
+    fn as_dyn_entities(&self) -> Vec<&dyn SqlEntity>;
+}
+
+// Slice of references
+impl AsDynSqlEntities for [&dyn SqlEntity] {
+    fn as_dyn_entities(&self) -> Vec<&dyn SqlEntity> {
+        self.to_vec()
+    }
+}
+
+impl<const N: usize> AsDynSqlEntities for [&dyn SqlEntity; N] {
+    fn as_dyn_entities(&self) -> Vec<&dyn SqlEntity> {
+        self.to_vec()
+    }
+}
+
+impl<T> AsDynSqlEntities for [T]
 where
-    T: IdOrName,
+    T: AsDynSqlEntities,
 {
-    fn push_bind<'a>(&'a self, builder: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>) {
-        if let Some(id) = self.id() {
-            id.push_bind(builder);
-        } else if let Some(name) = self.name() {
-            name.push_bind(builder);
-        } else {
-            panic!("No ID or Name found");
-        }
-    }
-
-    fn push_bind_unseparated<'a>(
-        &'a self,
-        builder: &mut sqlx::query_builder::Separated<'_, 'a, sqlx::Sqlite, &str>,
-    ) {
-        if let Some(id) = self.id() {
-            id.push_bind_unseparated(builder);
-        } else if let Some(name) = self.name() {
-            name.push_bind_unseparated(builder);
-        } else {
-            panic!("No ID or Name found");
-        }
-    }
-
-    fn as_display(&self) -> String {
-        if let Some(id) = self.id() {
-            format!("~{}", id.as_display())
-        } else if let Some(name) = self.name() {
-            name.as_display()
-        } else {
-            panic!("No ID or Name found");
-        }
-    }
-
-    fn from_display(s: impl ToString) -> Result<Self, td_error::TdError> {
-        let s = s.to_string();
-        if s.starts_with("~") {
-            let id = T::Id::from_display(s.trim_start_matches('~'))?;
-            Ok(T::from_id(id))
-        } else {
-            let name = T::Name::from_display(s)?;
-            Ok(T::from_name(name))
-        }
-    }
-
-    fn type_name(&self) -> &str {
-        if let Some(id) = self.id() {
-            std::any::type_name_of_val(id)
-        } else if let Some(name) = self.name() {
-            std::any::type_name_of_val(name)
-        } else {
-            panic!("No ID or Name found");
-        }
+    fn as_dyn_entities(&self) -> Vec<&dyn SqlEntity> {
+        self.iter()
+            .flat_map(AsDynSqlEntities::as_dyn_entities)
+            .collect()
     }
 }
 
-pub trait IdOrName: SqlEntity + Display + Send + Sync {
-    type Id: SqlEntity;
-    fn id(&self) -> Option<&Self::Id>;
-    fn from_id(id: impl Into<Self::Id>) -> Self;
-
-    type Name: SqlEntity;
-    fn name(&self) -> Option<&Self::Name>;
-    fn from_name(name: impl Into<Self::Name>) -> Self;
+impl<T, const N: usize> AsDynSqlEntities for [T; N]
+where
+    T: AsDynSqlEntities,
+{
+    fn as_dyn_entities(&self) -> Vec<&dyn SqlEntity> {
+        self.iter()
+            .flat_map(AsDynSqlEntities::as_dyn_entities)
+            .collect()
+    }
 }
+
+impl<T> AsDynSqlEntities for Vec<T>
+where
+    T: AsDynSqlEntities,
+{
+    fn as_dyn_entities(&self) -> Vec<&dyn SqlEntity> {
+        self.iter()
+            .flat_map(AsDynSqlEntities::as_dyn_entities)
+            .collect()
+    }
+}
+
+macro_rules! impl_dyn_tuples {
+    (
+        [$($T:ident),*]
+    ) => {
+        #[allow(non_snake_case, unused_parens)]
+        impl<$($T: SqlEntity),*> AsDynSqlEntities for ($($T),*) {
+            fn as_dyn_entities(&self) -> Vec<&dyn SqlEntity> {
+                let ($($T),*) = self;
+                vec![$($T.as_dyn()),*]
+            }
+        }
+    };
+}
+
+all_the_tuples!(impl_dyn_tuples);
 
 pub trait DataAccessObject:
     for<'a> sqlx::FromRow<'a, sqlx::sqlite::SqliteRow> + Send + Sync + Unpin + std::fmt::Debug
@@ -165,7 +156,7 @@ pub trait DataAccessObject:
     fn order_by() -> &'static str;
     fn fields() -> &'static [&'static str];
     fn immutable_fields() -> &'static [&'static str];
-    fn sql_field_for_type(val: &str) -> Option<&'static str>;
+    fn sql_field_for_type(type_id: TypeId) -> Result<&'static str, td_error::TdError>;
     fn values_query_builder(
         &self,
         sql: String,
@@ -226,21 +217,20 @@ pub trait ComposedString {
     fn compose(&self) -> String;
 }
 
-pub trait VersionedAt {
+pub trait States<const S: u8> {
+    fn state() -> &'static [&'static dyn SqlEntity];
+}
+
+pub trait Versioned {
     type Order: SqlEntity;
     fn order_by() -> &'static str;
 
-    type Condition: SqlEntity;
-    fn condition_by() -> &'static str;
-}
-
-pub trait PartitionBy {
-    type PartitionBy: SqlEntity;
+    type Partition: SqlEntity;
     fn partition_by() -> &'static str;
 }
 
 pub trait Recursive {
-    type Recursive: SqlEntity;
+    type Recursive: SqlEntity + 'static;
     fn recurse_up() -> &'static str;
     fn recurse_down() -> &'static str;
 }

@@ -2,14 +2,15 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::crudl::{ListParams, ListRequest, ListResponse, ListResponseBuilder, handle_sql_err};
+use crate::dxo::crudl::{
+    ListParams, ListRequest, ListResponse, ListResponseBuilder, handle_sql_err,
+};
 use crate::sql::cte::CteQueries;
 use crate::sql::list::ListQueryParams;
 use crate::sql::{
-    DaoQueries, DeleteBy, FindBy, Insert, ListBy, ListFilterGenerator, QueryError, SelectBy,
-    UpdateBy,
+    DaoQueries, DeleteBy, FindBy, Insert, ListBy, ListFilterGenerator, SelectBy, UpdateBy,
 };
-use crate::types::{DataAccessObject, ListQuery, PartitionBy, SqlEntity, VersionedAt};
+use crate::types::{AsDynSqlEntities, DataAccessObject, ListQuery, States, Versioned};
 use async_trait::async_trait;
 use std::marker::PhantomData;
 use std::ops::Deref;
@@ -37,32 +38,25 @@ pub enum SqlError {
     UpdateAllError(String, #[source] sqlx::Error) = 7,
 }
 
-macro_rules! formatted_entity {
-    ($D:ty;) => {{
-        let columns = String::new();
-        let values = String::new();
-        let table = <$D>::sql_table().to_string();
-        Ok((columns, values, table))
-    }};
-    ($D:ty; $($E:ident),* $(,)?) => {{
-        formatted_entity!($D; $(( $E, $E )),*)
-    }};
-    ($D:ty; $(( $E:ident, $E_ty:ty )),* $(,)?) => {{
-        let columns: Vec<&str> = vec![$(
-            <$D>::sql_field_for_type($E.type_name())
-                .ok_or(QueryError::TypeNotFound(
-                    $E.type_name().to_string(),
-                    <$D>::sql_table().to_string(),
-                ))?,
-        )*];
-        let columns = columns.join(", ");
-        let values: Vec<String> = vec![$(
-            format!("{}", $E.as_display()),
-        )*];
-        let values = values.join(", ");
-        let table = <$D>::sql_table().to_string();
-        Ok((columns, values, table))
-    }};
+pub fn formatted_entity<D, E>(entities: &E) -> Result<(String, String, String), TdError>
+where
+    D: DataAccessObject,
+    for<'a> E: AsDynSqlEntities + 'a,
+{
+    let dyn_entities = entities.as_dyn_entities();
+
+    let columns = dyn_entities
+        .iter()
+        .map(|e| D::sql_field_for_type(e.type_id()))
+        .collect::<Result<Vec<_>, _>>()?;
+    let columns = columns.join(", ");
+
+    let values: Vec<String> = dyn_entities.iter().map(|e| e.as_display()).collect();
+    let values = values.join(", ");
+
+    let table = D::sql_table().to_string();
+
+    Ok((columns, values, table))
 }
 
 pub struct By<E> {
@@ -83,8 +77,8 @@ pub async fn insert<D: DataAccessObject>(
         .execute(&mut *conn)
         .await
         .map_err(|e| {
-            formatted_entity!(D;)
-                .map(|(_, _, table)| TdError::from(SqlError::InsertError(table, e)))
+            formatted_entity::<D, _>(&())
+                .map(|(_, _, table)| SqlError::InsertError(table, e).into())
         })
         .map_err(|e| e.unwrap_or_else(|e| e))?;
     Ok(())
@@ -105,8 +99,8 @@ pub async fn insert_vec<D: DataAccessObject>(
             .execute(&mut *conn)
             .await
             .map_err(|e| {
-                formatted_entity!(D;)
-                    .map(|(_, _, table)| TdError::from(SqlError::InsertError(table, e)))
+                formatted_entity::<D, _>(&())
+                    .map(|(_, _, table)| SqlError::InsertError(table, e).into())
             })
             .map_err(|e| e.unwrap_or_else(|e| e))?;
     }
@@ -123,134 +117,113 @@ pub trait SqlSelectService<E> {
     where
         D: DataAccessObject;
 
-    async fn select_version<D>(
+    async fn select_version<const S: u8, D>(
         connection: Connection,
         queries: SrvCtx<DaoQueries>,
         natural_order_by: Input<D::Order>,
-        status: Input<Vec<D::Condition>>,
         by: Input<E>,
     ) -> Result<D, TdError>
     where
-        D: DataAccessObject + PartitionBy + VersionedAt;
+        D: DataAccessObject + Versioned + States<S>;
 
-    async fn select_version_optional<D>(
+    async fn select_version_optional<const S: u8, D>(
         connection: Connection,
         queries: SrvCtx<DaoQueries>,
         natural_order_by: Input<D::Order>,
-        status: Input<Vec<D::Condition>>,
         by: Input<E>,
     ) -> Result<Option<D>, TdError>
     where
-        D: DataAccessObject + PartitionBy + VersionedAt;
+        D: DataAccessObject + Versioned + States<S>;
 }
 
-macro_rules! impl_select {
-    (
-        [$($E:ident),*]
-    ) => {
-        #[allow(non_snake_case, unused_parens)]
-        #[async_trait]
-        impl<$($E),*> SqlSelectService<($($E),*)> for By<($($E),*)>
-        where
-            $(for<'a> $E: SqlEntity + 'a),*
-        {
-            async fn select<D>(
-                Connection(connection): Connection,
-                SrvCtx(queries): SrvCtx<DaoQueries>,
-                Input(by): Input<($($E),*)>,
-            ) -> Result<D, TdError>
-            where
-                D: DataAccessObject,
-            {
-                let mut conn = connection.lock().await;
-                let conn = conn.get_mut_connection()?;
+#[async_trait]
+impl<E> SqlSelectService<E> for By<E>
+where
+    for<'a> E: AsDynSqlEntities + 'a,
+{
+    async fn select<D>(
+        Connection(connection): Connection,
+        SrvCtx(queries): SrvCtx<DaoQueries>,
+        Input(by): Input<E>,
+    ) -> Result<D, TdError>
+    where
+        D: DataAccessObject,
+    {
+        let mut conn = connection.lock().await;
+        let conn = conn.get_mut_connection()?;
 
-                let ($($E),*) = by.deref();
-                let result = queries
-                    .select_by::<D>(&($($E),*))?
-                    .build_query_as()
-                    .fetch_one(&mut *conn)
-                    .await
-                    .map_err(|e| {
-                        formatted_entity!(D; $($E),*).map(|(columns, values, table)| {
-                            TdError::from(SqlError::SelectError(columns, values, table, e))
-                        })
-                    })
-                    .map_err(|e| e.unwrap_or_else(|e| e))?;
+        let by = by.deref();
+        let result = queries
+            .select_by::<D>(by)?
+            .build_query_as()
+            .fetch_one(&mut *conn)
+            .await
+            .map_err(|e| {
+                formatted_entity::<D, _>(by).and_then(|(columns, values, table)| {
+                    Err(SqlError::SelectError(columns, values, table, e))?
+                })
+            })
+            .map_err(|e| e.unwrap_or_else(|e| e))?;
 
-                Ok(result)
-            }
+        Ok(result)
+    }
 
-            async fn select_version<D>(
-                Connection(connection): Connection,
-                SrvCtx(queries): SrvCtx<DaoQueries>,
-                Input(natural_order_by): Input<D::Order>,
-                Input(status): Input<Vec<D::Condition>>,
-                Input(by): Input<($($E),*)>,
-            ) -> Result<D, TdError>
-            where
-                D: DataAccessObject + PartitionBy + VersionedAt,
-            {
-                let mut conn = connection.lock().await;
-                let conn = conn.get_mut_connection()?;
+    async fn select_version<const S: u8, D>(
+        Connection(connection): Connection,
+        SrvCtx(queries): SrvCtx<DaoQueries>,
+        Input(natural_order_by): Input<D::Order>,
+        Input(by): Input<E>,
+    ) -> Result<D, TdError>
+    where
+        D: DataAccessObject + Versioned + States<S>,
+    {
+        let mut conn = connection.lock().await;
+        let conn = conn.get_mut_connection()?;
 
-                let ($($E),*) = by.deref();
-                let result = queries
-                    .select_versions_at::<D>(
-                        Some(&*natural_order_by),
-                        Some(&status.iter().collect::<Vec<_>>()[..]),
-                        &($($E),*)
-                    )?
-                    .build_query_as()
-                    .fetch_one(&mut *conn)
-                    .await
-                    .map_err(|e| {
-                        formatted_entity!(D; $($E),*).map(|(columns, values, table)| {
-                            TdError::from(SqlError::SelectError(columns, values, table, e))
-                        })
-                    })
-                    .map_err(|e| e.unwrap_or_else(|e| e))?;
+        let by = by.deref();
+        let result = queries
+            .select_versions_at::<S, D>(Some(&*natural_order_by), by)?
+            .build_query_as()
+            .fetch_one(&mut *conn)
+            .await
+            .map_err(|e| {
+                formatted_entity::<D, _>(by).and_then(|(columns, values, table)| {
+                    Err(SqlError::SelectError(columns, values, table, e))?
+                })
+            })
+            .map_err(|e| e.unwrap_or_else(|e| e))?;
 
-                Ok(result)
-            }
+        Ok(result)
+    }
 
-            async fn select_version_optional<D>(
-                Connection(connection): Connection,
-                SrvCtx(queries): SrvCtx<DaoQueries>,
-                Input(natural_order_by): Input<D::Order>,
-                Input(status): Input<Vec<D::Condition>>,
-                Input(by): Input<($($E),*)>,
-            ) -> Result<Option<D>, TdError>
-            where
-                D: DataAccessObject + PartitionBy + VersionedAt,
-            {
-                let mut conn = connection.lock().await;
-                let conn = conn.get_mut_connection()?;
+    async fn select_version_optional<const S: u8, D>(
+        Connection(connection): Connection,
+        SrvCtx(queries): SrvCtx<DaoQueries>,
+        Input(natural_order_by): Input<D::Order>,
+        Input(by): Input<E>,
+    ) -> Result<Option<D>, TdError>
+    where
+        D: DataAccessObject + Versioned + States<S>,
+    {
+        let mut conn = connection.lock().await;
+        let conn = conn.get_mut_connection()?;
 
-                let ($($E),*) = by.deref();
-                let result = queries
-                    .select_versions_at::<D>(
-                        Some(&*natural_order_by),
-                        Some(&status.iter().collect::<Vec<_>>()[..]),
-                        &($($E),*)
-                    )?
-                    .build_query_as()
-                    .fetch_optional(&mut *conn)
-                    .await
-                    .map_err(|e| {
-                        formatted_entity!(D; $($E),*).map(|(columns, values, table)| {
-                            TdError::from(SqlError::SelectError(columns, values, table, e))
-                        })
-                    })
-                    .map_err(|e| e.unwrap_or_else(|e| e))?;
+        let by = by.deref();
+        let result = queries
+            .select_versions_at::<S, D>(Some(&*natural_order_by), by)?
+            .build_query_as()
+            .fetch_optional(&mut *conn)
+            .await
+            .map_err(|e| {
+                formatted_entity::<D, _>(by).and_then(|(columns, values, table)| {
+                    Err(SqlError::SelectError(columns, values, table, e))?
+                })
+            })
+            .map_err(|e| e.unwrap_or_else(|e| e))?;
 
-                Ok(result)
-            }
-        }
-    };
+        Ok(result)
+    }
 }
-
-all_the_tuples!(impl_select);
 
 #[async_trait]
 pub trait SqlSelectAllService<E> {
@@ -262,91 +235,76 @@ pub trait SqlSelectAllService<E> {
     where
         D: DataAccessObject;
 
-    async fn select_all_versions<D>(
+    async fn select_all_versions<const S: u8, D>(
         connection: Connection,
         queries: SrvCtx<DaoQueries>,
         natural_order_by: Input<D::Order>,
-        status: Input<Vec<D::Condition>>,
         by: Input<E>,
     ) -> Result<Vec<D>, TdError>
     where
-        D: DataAccessObject + PartitionBy + VersionedAt;
+        D: DataAccessObject + Versioned + States<S>;
 }
 
-macro_rules! impl_select_all {
-    (
-        [$($E:ident),*]
-    ) => {
-        #[allow(non_snake_case, unused_parens)]
-        #[async_trait]
-        impl<$($E),*> SqlSelectAllService<($($E),*)> for By<($($E),*)>
-        where
-            $(for<'a> $E: SqlEntity + 'a),*
-        {
-            async fn select_all<D>(
-                Connection(connection): Connection,
-                SrvCtx(queries): SrvCtx<DaoQueries>,
-                Input(by): Input<($($E),*)>,
-            ) -> Result<Vec<D>, TdError>
-            where
-                D: DataAccessObject,
-            {
-                let mut conn = connection.lock().await;
-                let conn = conn.get_mut_connection()?;
+#[async_trait]
+impl<E> SqlSelectAllService<E> for By<E>
+where
+    for<'a> E: AsDynSqlEntities + 'a,
+{
+    async fn select_all<D>(
+        Connection(connection): Connection,
+        SrvCtx(queries): SrvCtx<DaoQueries>,
+        Input(by): Input<E>,
+    ) -> Result<Vec<D>, TdError>
+    where
+        D: DataAccessObject,
+    {
+        let mut conn = connection.lock().await;
+        let conn = conn.get_mut_connection()?;
 
-                let ($($E),*) = by.deref();
-                let result = queries
-                    .select_by::<D>(&($($E),*))?
-                    .build_query_as()
-                    .fetch_all(&mut *conn)
-                    .await
-                    .map_err(|e| {
-                        formatted_entity!(D; $($E),*).map(|(columns, values, table)| {
-                            TdError::from(SqlError::SelectError(columns, values, table, e))
-                        })
-                    })
-                    .map_err(|e| e.unwrap_or_else(|e| e))?;
+        let by = by.deref();
+        let result = queries
+            .select_by::<D>(by)?
+            .build_query_as()
+            .fetch_all(&mut *conn)
+            .await
+            .map_err(|e| {
+                formatted_entity::<D, _>(by).and_then(|(columns, values, table)| {
+                    Err(SqlError::SelectError(columns, values, table, e))?
+                })
+            })
+            .map_err(|e| e.unwrap_or_else(|e| e))?;
 
-                Ok(result)
-            }
+        Ok(result)
+    }
 
-            async fn select_all_versions<D>(
-                Connection(connection): Connection,
-                SrvCtx(queries): SrvCtx<DaoQueries>,
-                Input(natural_order_by): Input<D::Order>,
-                Input(status): Input<Vec<D::Condition>>,
-                Input(by): Input<($($E),*)>,
-            ) -> Result<Vec<D>, TdError>
-            where
-                D: DataAccessObject + PartitionBy + VersionedAt,
-            {
-                let mut conn = connection.lock().await;
-                let conn = conn.get_mut_connection()?;
+    async fn select_all_versions<const S: u8, D>(
+        Connection(connection): Connection,
+        SrvCtx(queries): SrvCtx<DaoQueries>,
+        Input(natural_order_by): Input<D::Order>,
+        Input(by): Input<E>,
+    ) -> Result<Vec<D>, TdError>
+    where
+        D: DataAccessObject + Versioned + States<S>,
+    {
+        let mut conn = connection.lock().await;
+        let conn = conn.get_mut_connection()?;
 
-                let ($($E),*) = by.deref();
-                let result = queries
-                    .select_versions_at::<D>(
-                        Some(&*natural_order_by),
-                        Some(&status.iter().collect::<Vec<_>>()[..]),
-                        &($($E),*)
-                    )?
-                    .build_query_as()
-                    .fetch_all(&mut *conn)
-                    .await
-                    .map_err(|e| {
-                        formatted_entity!(D; $($E),*).map(|(columns, values, table)| {
-                            TdError::from(SqlError::SelectError(columns, values, table, e))
-                        })
-                    })
-                    .map_err(|e| e.unwrap_or_else(|e| e))?;
+        let by = by.deref();
+        let result = queries
+            .select_versions_at::<S, D>(Some(&*natural_order_by), by)?
+            .build_query_as()
+            .fetch_all(&mut *conn)
+            .await
+            .map_err(|e| {
+                formatted_entity::<D, _>(by).and_then(|(columns, values, table)| {
+                    Err(SqlError::SelectError(columns, values, table, e))?
+                })
+            })
+            .map_err(|e| e.unwrap_or_else(|e| e))?;
 
-                Ok(result)
-            }
-        }
-    };
+        Ok(result)
+    }
 }
-
-all_the_tuples!(impl_select_all);
 
 #[async_trait]
 pub trait SqlFindService<E> {
@@ -358,21 +316,20 @@ pub trait SqlFindService<E> {
     where
         D: DataAccessObject;
 
-    async fn find_versions<D>(
+    async fn find_versions<const S: u8, D>(
         connection: Connection,
         queries: SrvCtx<DaoQueries>,
         natural_order_by: Input<D::Order>,
-        status: Input<Vec<D::Condition>>,
         by: Input<Vec<E>>,
     ) -> Result<Vec<D>, TdError>
     where
-        D: DataAccessObject + PartitionBy + VersionedAt;
+        D: DataAccessObject + Versioned + States<S>;
 }
 
 #[async_trait]
 impl<E> SqlFindService<E> for By<E>
 where
-    for<'a> E: SqlEntity + 'a,
+    for<'a> E: AsDynSqlEntities + 'a,
 {
     async fn find<D>(
         Connection(connection): Connection,
@@ -385,37 +342,32 @@ where
         let mut conn = connection.lock().await;
         let conn = conn.get_mut_connection()?;
 
-        let by: Vec<_> = by.iter().collect();
+        let by = by.as_slice();
         let result = queries
-            .find_by::<D>(&(by))?
+            .find_by::<D>(by)?
             .build_query_as()
             .fetch_all(&mut *conn)
             .await
-            .map_err(|e| TdError::from(SqlError::FindError(D::sql_table().to_string(), e)))?;
+            .map_err(|e| SqlError::FindError(D::sql_table().to_string(), e))?;
 
         Ok(result)
     }
 
-    async fn find_versions<D>(
+    async fn find_versions<const S: u8, D>(
         Connection(connection): Connection,
         SrvCtx(queries): SrvCtx<DaoQueries>,
         Input(natural_order_by): Input<D::Order>,
-        Input(status): Input<Vec<D::Condition>>,
         Input(by): Input<Vec<E>>,
     ) -> Result<Vec<D>, TdError>
     where
-        D: DataAccessObject + PartitionBy + VersionedAt,
+        D: DataAccessObject + Versioned + States<S>,
     {
         let mut conn = connection.lock().await;
         let conn = conn.get_mut_connection()?;
 
-        let by: Vec<_> = by.iter().collect();
+        let by = by.deref();
         let result = queries
-            .find_versions_at::<D>(
-                Some(&*natural_order_by),
-                Some(&status.iter().collect::<Vec<_>>()[..]),
-                &(by),
-            )?
+            .find_versions_at::<S, D>(Some(&*natural_order_by), by)?
             .build_query_as()
             .fetch_all(&mut *conn)
             .await
@@ -436,50 +388,41 @@ pub trait SqlAssertExistsService<E> {
         D: DataAccessObject;
 }
 
-macro_rules! impl_assert_exists {
-    (
-        [$($E:ident),*]
-    ) => {
-        #[allow(non_snake_case, unused_parens)]
-        #[async_trait]
-        impl<$($E),*> SqlAssertExistsService<($($E),*)> for By<($($E),*)>
-        where
-            $(for<'a> $E: SqlEntity + 'a),*
-        {
-            async fn assert_exists<D>(
-                Connection(connection): Connection,
-                SrvCtx(queries): SrvCtx<DaoQueries>,
-                Input(by): Input<($($E),*)>,
-            ) -> Result<(), TdError>
-            where
-                D: DataAccessObject,
-            {
-                let mut conn = connection.lock().await;
-                let conn = conn.get_mut_connection()?;
+#[async_trait]
+impl<E> SqlAssertExistsService<E> for By<E>
+where
+    for<'a> E: AsDynSqlEntities + 'a,
+{
+    async fn assert_exists<D>(
+        Connection(connection): Connection,
+        SrvCtx(queries): SrvCtx<DaoQueries>,
+        Input(by): Input<E>,
+    ) -> Result<(), TdError>
+    where
+        D: DataAccessObject,
+    {
+        let mut conn = connection.lock().await;
+        let conn = conn.get_mut_connection()?;
 
-                let ($($E),*) = by.deref();
-                let result: Vec<D> = queries
-                    .select_by::<D>(&($($E),*))?
-                    .build_query_as()
-                    .fetch_all(&mut *conn)
-                    .await
-                    .map_err(handle_sql_err)?;
+        let by = by.deref();
+        let result: Vec<D> = queries
+            .select_by::<D>(by)?
+            .build_query_as()
+            .fetch_all(&mut *conn)
+            .await
+            .map_err(handle_sql_err)?;
 
-                if result.is_empty() {
-                    Err(
-                        formatted_entity!(D; $($E),*).and_then(|(columns, values, table)| {
-                            Err(SqlError::CouldNotFindEntity(columns, values, table))
-                        })?
-                    )
-                } else {
-                    Ok(())
-                }
-            }
+        if result.is_empty() {
+            Err(
+                formatted_entity::<D, _>(by).and_then(|(columns, values, table)| {
+                    Err(SqlError::CouldNotFindEntity(columns, values, table))?
+                })?,
+            )
+        } else {
+            Ok(())
         }
-    };
+    }
 }
-
-all_the_tuples!(impl_assert_exists);
 
 #[async_trait]
 pub trait SqlAssertNotExistsService<E> {
@@ -491,97 +434,82 @@ pub trait SqlAssertNotExistsService<E> {
     where
         D: DataAccessObject;
 
-    async fn assert_version_not_exists<D>(
+    async fn assert_version_not_exists<const S: u8, D>(
         connection: Connection,
         queries: SrvCtx<DaoQueries>,
         natural_order_by: Input<D::Order>,
-        status: Input<Vec<D::Condition>>,
         by: Input<E>,
     ) -> Result<(), TdError>
     where
-        D: DataAccessObject + PartitionBy + VersionedAt;
+        D: DataAccessObject + Versioned + States<S>;
 }
 
-macro_rules! impl_assert_not_exists {
-    (
-        [$($E:ident),*]
-    ) => {
-        #[allow(non_snake_case, unused_parens)]
-        #[async_trait]
-        impl<$($E),*> SqlAssertNotExistsService<($($E),*)> for By<($($E),*)>
-        where
-            $(for<'a> $E: SqlEntity + 'a),*
-        {
-            async fn assert_not_exists<D>(
-                Connection(connection): Connection,
-                SrvCtx(queries): SrvCtx<DaoQueries>,
-                Input(by): Input<($($E),*)>,
-            ) -> Result<(), TdError>
-            where
-                D: DataAccessObject,
-            {
-                let mut conn = connection.lock().await;
-                let conn = conn.get_mut_connection()?;
+#[async_trait]
+impl<E> SqlAssertNotExistsService<E> for By<E>
+where
+    for<'a> E: AsDynSqlEntities + 'a,
+{
+    async fn assert_not_exists<D>(
+        Connection(connection): Connection,
+        SrvCtx(queries): SrvCtx<DaoQueries>,
+        Input(by): Input<E>,
+    ) -> Result<(), TdError>
+    where
+        D: DataAccessObject,
+    {
+        let mut conn = connection.lock().await;
+        let conn = conn.get_mut_connection()?;
 
-                let ($($E),*) = by.deref();
-                let result: Vec<D> = queries
-                    .select_by::<D>(&($($E),*))?
-                    .build_query_as()
-                    .fetch_all(&mut *conn)
-                    .await
-                    .map_err(handle_sql_err)?;
+        let by = by.deref();
+        let result: Vec<D> = queries
+            .select_by::<D>(by)?
+            .build_query_as()
+            .fetch_all(&mut *conn)
+            .await
+            .map_err(handle_sql_err)?;
 
-                if !result.is_empty() {
-                    Err(
-                        formatted_entity!(D; $($E),*).and_then(|(columns, values, table)| {
-                            Err(SqlError::EntityAlreadyExists(columns, values, table))
-                        })?
-                    )
-                } else {
-                    Ok(())
-                }
-            }
-
-            async fn assert_version_not_exists<D>(
-                Connection(connection): Connection,
-                SrvCtx(queries): SrvCtx<DaoQueries>,
-                Input(natural_order_by): Input<D::Order>,
-                Input(status): Input<Vec<D::Condition>>,
-                Input(by): Input<($($E),*)>,
-            ) -> Result<(), TdError>
-            where
-                D: DataAccessObject + PartitionBy + VersionedAt,
-            {
-                let mut conn = connection.lock().await;
-                let conn = conn.get_mut_connection()?;
-
-                let ($($E),*) = by.deref();
-                let result: Vec<D> = queries
-                    .select_versions_at::<D>(
-                        Some(&*natural_order_by),
-                        Some(&status.iter().collect::<Vec<_>>()[..]),
-                        &($($E),*)
-                    )?
-                    .build_query_as()
-                    .fetch_all(&mut *conn)
-                    .await
-                    .map_err(handle_sql_err)?;
-
-                if !result.is_empty() {
-                    Err(
-                        formatted_entity!(D; $($E),*).and_then(|(columns, values, table)| {
-                            Err(SqlError::EntityAlreadyExists(columns, values, table))
-                        })?
-                    )
-                } else {
-                    Ok(())
-                }
-            }
+        if !result.is_empty() {
+            Err(
+                formatted_entity::<D, _>(by).and_then(|(columns, values, table)| {
+                    Err(SqlError::EntityAlreadyExists(columns, values, table))?
+                })?,
+            )
+        } else {
+            Ok(())
         }
-    };
-}
+    }
 
-all_the_tuples!(impl_assert_not_exists);
+    async fn assert_version_not_exists<const S: u8, D>(
+        Connection(connection): Connection,
+        SrvCtx(queries): SrvCtx<DaoQueries>,
+        Input(natural_order_by): Input<D::Order>,
+        Input(by): Input<E>,
+    ) -> Result<(), TdError>
+    where
+        D: DataAccessObject + Versioned + States<S>,
+    {
+        let mut conn = connection.lock().await;
+        let conn = conn.get_mut_connection()?;
+
+        let by = by.deref();
+        let result: Vec<D> = queries
+            .select_versions_at::<S, D>(Some(&*natural_order_by), by)?
+            .build_query_as()
+            .fetch_all(&mut *conn)
+            .await
+            .map_err(handle_sql_err)?;
+
+        if !result.is_empty() {
+            Err(
+                formatted_entity::<D, _>(by).and_then(|(columns, values, table)| {
+                    Err(SqlError::EntityAlreadyExists(columns, values, table))?
+                })?,
+            )
+        } else {
+            Ok(())
+        }
+    }
+}
 
 #[async_trait]
 pub trait SqlUpdateService<E> {
@@ -606,76 +534,65 @@ pub trait SqlUpdateService<E> {
         D: DataAccessObject;
 }
 
-macro_rules! impl_update {
-    (
-        [$($E:ident),*]
-    ) => {
-        #[allow(non_snake_case, unused_parens)]
-        #[async_trait]
-        impl<$($E),*> SqlUpdateService<($($E),*)> for By<($($E),*)>
-        where
-            $(for<'a> $E: SqlEntity + 'a),*
-        {
-            async fn update<U, D>(
-                Connection(connection): Connection,
-                SrvCtx(queries): SrvCtx<DaoQueries>,
-                Input(update): Input<U>,
-                Input(by): Input<($($E),*)>,
-            ) -> Result<(), TdError>
-            where
-                U: DataAccessObject,
-                D: DataAccessObject,
-            {
-                let mut conn = connection.lock().await;
-                let conn = conn.get_mut_connection()?;
+#[async_trait]
+impl<E> SqlUpdateService<E> for By<E>
+where
+    for<'a> E: AsDynSqlEntities + 'a,
+{
+    async fn update<U, D>(
+        Connection(connection): Connection,
+        SrvCtx(queries): SrvCtx<DaoQueries>,
+        Input(update): Input<U>,
+        Input(by): Input<E>,
+    ) -> Result<(), TdError>
+    where
+        U: DataAccessObject,
+        D: DataAccessObject,
+    {
+        let mut conn = connection.lock().await;
+        let conn = conn.get_mut_connection()?;
 
-                let ($($E),*) = by.deref();
-                queries
-                    .update_by::<U, D>(update.deref(), &($($E),*))?
-                    .build()
-                    .execute(&mut *conn)
-                    .await
-                    .map_err(|e| {
-                        formatted_entity!(D; $($E),*).map(|(columns, values, table)| {
-                            TdError::from(SqlError::UpdateError(columns, values, table, e))
-                        })
-                    })
-                    .map_err(|e| e.unwrap_or_else(|e| e))?;
-                Ok(())
-            }
+        let by = by.deref();
+        queries
+            .update_by::<U, D>(update.deref(), by)?
+            .build()
+            .execute(&mut *conn)
+            .await
+            .map_err(|e| {
+                formatted_entity::<D, _>(by).and_then(|(columns, values, table)| {
+                    Err(SqlError::UpdateError(columns, values, table, e))?
+                })
+            })
+            .map_err(|e| e.unwrap_or_else(|e| e))?;
 
-            async fn update_all<U, D>(
-                Connection(connection): Connection,
-                SrvCtx(queries): SrvCtx<DaoQueries>,
-                Input(update): Input<U>,
-                Input(by): Input<Vec<($($E),*)>>,
-            ) -> Result<(), TdError>
-            where
-                U: DataAccessObject,
-                D: DataAccessObject,
-            {
-                let mut conn = connection.lock().await;
-                let conn = conn.get_mut_connection()?;
+        Ok(())
+    }
 
-                // TODO this is not getting chunked. If there are too many we can have issues.
-                let lookup: Vec<_> = by.iter().map(|($($E),*)| ($($E),*)).collect();
-                queries
-                    .update_all_by::<U, D>(update.deref(), &lookup)?
-                    .build()
-                    .execute(&mut *conn)
-                    .await
-                    .map_err(|e| {
-                        formatted_entity!(D;)
-                            .map(|(_, _, table)| TdError::from(SqlError::UpdateAllError(table, e)))
-                    })
-                    .map_err(|e| e.unwrap_or_else(|e| e))?;
-                Ok(())
-            }
-        }
-    };
+    async fn update_all<U, D>(
+        Connection(connection): Connection,
+        SrvCtx(queries): SrvCtx<DaoQueries>,
+        Input(update): Input<U>,
+        Input(by): Input<Vec<E>>,
+    ) -> Result<(), TdError>
+    where
+        U: DataAccessObject,
+        D: DataAccessObject,
+    {
+        let mut conn = connection.lock().await;
+        let conn = conn.get_mut_connection()?;
+
+        // TODO this is not getting chunked. If there are too many we can have issues.
+        let by = by.as_slice();
+        queries
+            .update_all_by::<U, D>(update.deref(), by)?
+            .build()
+            .execute(&mut *conn)
+            .await
+            .map_err(|e| TdError::from(SqlError::UpdateAllError(D::sql_table().to_string(), e)))?;
+
+        Ok(())
+    }
 }
-
-all_the_tuples!(impl_update);
 
 #[async_trait]
 pub trait SqlListService<E> {
@@ -691,12 +608,11 @@ pub trait SqlListService<E> {
         F: ListFilterGenerator,
         T: ListQuery + Send + Sync;
 
-    async fn list_at<N, F, T>(
+    async fn list_at<N, F, const S: u8, T>(
         connection: Connection,
         queries: SrvCtx<DaoQueries>,
         request: Input<ListRequest<N>>,
-        natural_order_by: Input<<<T as ListQuery>::Dao as VersionedAt>::Order>,
-        status: Input<Vec<<<T as ListQuery>::Dao as VersionedAt>::Condition>>,
+        natural_order_by: Input<<<T as ListQuery>::Dao as Versioned>::Order>,
         list_filter_generator: Input<F>,
         by: Input<E>,
     ) -> Result<ListResponse<T>, TdError>
@@ -704,14 +620,13 @@ pub trait SqlListService<E> {
         N: Send + Sync + Clone,
         F: ListFilterGenerator,
         T: ListQuery,
-        T::Dao: VersionedAt;
+        T::Dao: Versioned + States<S>;
 
-    async fn list_versions_at<N, F, T>(
+    async fn list_versions_at<N, F, const S: u8, T>(
         connection: Connection,
         queries: SrvCtx<DaoQueries>,
         request: Input<ListRequest<N>>,
-        natural_order_by: Input<<<T as ListQuery>::Dao as VersionedAt>::Order>,
-        status: Input<Vec<<<T as ListQuery>::Dao as VersionedAt>::Condition>>,
+        natural_order_by: Input<<<T as ListQuery>::Dao as Versioned>::Order>,
         list_filter_generator: Input<F>,
         by: Input<E>,
     ) -> Result<ListResponse<T>, TdError>
@@ -719,197 +634,192 @@ pub trait SqlListService<E> {
         N: Send + Sync + Clone,
         F: ListFilterGenerator,
         T: ListQuery,
-        T::Dao: PartitionBy + VersionedAt;
+        T::Dao: Versioned + States<S>;
 }
 
-macro_rules! impl_list {
-    (
-        [$($E:ident),*]
-    ) => {
-        #[allow(non_snake_case, unused_parens)]
-        #[async_trait]
-        impl<$($E),*> SqlListService<($($E),*)> for By<($($E),*)>
-        where
-            $(for<'a> $E: SqlEntity + 'a),*
-        {
-            async fn list<N, F, T>(
-                Connection(connection): Connection,
-                SrvCtx(queries): SrvCtx<DaoQueries>,
-                Input(request): Input<ListRequest<N>>,
-                Input(list_filter_generator): Input<F>,
-                Input(by): Input<($($E),*)>,
-            ) -> Result<ListResponse<T>, TdError>
-            where
-                N: Send + Sync + Clone,
-                F: ListFilterGenerator,
-                T: ListQuery,
-            {
-                let mut conn = connection.lock().await;
-                let conn = conn.get_mut_connection()?;
+#[async_trait]
+impl<E> SqlListService<E> for By<E>
+where
+    for<'a> E: AsDynSqlEntities + 'a,
+{
+    async fn list<N, F, T>(
+        Connection(connection): Connection,
+        SrvCtx(queries): SrvCtx<DaoQueries>,
+        Input(request): Input<ListRequest<N>>,
+        Input(list_filter_generator): Input<F>,
+        Input(by): Input<E>,
+    ) -> Result<ListResponse<T>, TdError>
+    where
+        N: Send + Sync + Clone,
+        F: ListFilterGenerator,
+        T: ListQuery,
+    {
+        let mut conn = connection.lock().await;
+        let conn = conn.get_mut_connection()?;
 
-                let query_params = ListQueryParams::<T>::try_from(request.list_params())?;
+        let query_params = ListQueryParams::<T>::try_from(&request.list_params)?;
 
-                let ($($E),*) = by.deref();
-                let result: Vec<T::Dao> = queries
-                    .list_by::<T, F>(&query_params, &list_filter_generator, &($($E),*)).await?
-                    .build_query_as()
-                    .persistent(true)
-                    .fetch_all(&mut *conn)
-                    .await
-                    .map_err(|e| {
-                        formatted_entity!(T::Dao; $($E),*).map(|(columns, values, table)| {
-                            TdError::from(SqlError::SelectError(columns, values, table, e))
-                        })
-                    })
-                    .map_err(|e| e.unwrap_or_else(|e| e))?;
+        let by = by.deref();
+        let result: Vec<T::Dao> = queries
+            .list_by::<T, F>(&query_params, &list_filter_generator, by)
+            .await?
+            .build_query_as()
+            .persistent(true)
+            .fetch_all(&mut *conn)
+            .await
+            .map_err(|e| {
+                formatted_entity::<T::Dao, _>(by).and_then(|(columns, values, table)| {
+                    Err(SqlError::SelectError(columns, values, table, e))?
+                })
+            })
+            .map_err(|e| e.unwrap_or_else(|e| e))?;
 
-                let mut result = result
-                    .iter()
-                    .map(T::try_from_dao).collect::<Result<Vec<T>, TdError>>()?;
+        let mut result = result
+            .iter()
+            .map(T::try_from_dao)
+            .collect::<Result<Vec<T>, TdError>>()?;
 
-                if let Some(_) = request.list_params().previous() {
-                    result.reverse();
-                }
-
-                let (previous, previous_pagination_id) = compute_previous(request.list_params(), &query_params, &result);
-                let (next, next_pagination_id) = compute_next(request.list_params(), &query_params, &result);
-
-                let list_response = ListResponseBuilder::default()
-                    .list_params(request.list_params().clone())
-                    .data(result)
-                    .previous_page(previous, previous_pagination_id)
-                    .next_page(next, next_pagination_id)
-                    .build()
-                    .unwrap();
-
-                Ok(list_response)
-            }
-
-            async fn list_at<N, F, T>(
-                Connection(connection): Connection,
-                SrvCtx(queries): SrvCtx<DaoQueries>,
-                Input(request): Input<ListRequest<N>>,
-                Input(natural_order_by): Input<<<T as ListQuery>::Dao as VersionedAt>::Order>,
-                Input(status): Input<Vec<<<T as ListQuery>::Dao as VersionedAt>::Condition>>,
-                Input(list_filter_generator): Input<F>,
-                Input(by): Input<($($E),*)>,
-            ) -> Result<ListResponse<T>, TdError>
-            where
-                N: Send + Sync + Clone,
-                F: ListFilterGenerator,
-                T: ListQuery,
-                T::Dao: VersionedAt,
-            {
-                let mut conn = connection.lock().await;
-                let conn = conn.get_mut_connection()?;
-
-                let query_params = ListQueryParams::<T>::try_from(request.list_params())?;
-
-                let ($($E),*) = by.deref();
-                let result: Vec<T::Dao> = queries
-                    .list_by_at::<T, F>(
-                        &query_params,
-                        Some(&*natural_order_by),
-                        Some(&status.iter().collect::<Vec<_>>()[..]),
-                        &list_filter_generator,
-                        &($($E),*)
-                    ).await?
-                    .build_query_as()
-                    .persistent(true)
-                    .fetch_all(&mut *conn)
-                    .await
-                    .map_err(|e| {
-                        formatted_entity!(T::Dao; $($E),*).map(|(columns, values, table)| {
-                            TdError::from(SqlError::SelectError(columns, values, table, e))
-                        })
-                    })
-                    .map_err(|e| e.unwrap_or_else(|e| e))?;
-
-                let mut result = result
-                    .iter()
-                    .map(T::try_from_dao).collect::<Result<Vec<T>, TdError>>()?;
-
-                if let Some(_) = request.list_params().previous() {
-                    result.reverse();
-                }
-
-                let (previous, previous_pagination_id) = compute_previous(request.list_params(), &query_params, &result);
-                let (next, next_pagination_id) = compute_next(request.list_params(), &query_params, &result);
-
-                let list_response = ListResponseBuilder::default()
-                    .list_params(request.list_params().clone())
-                    .data(result)
-                    .previous_page(previous, previous_pagination_id)
-                    .next_page(next, next_pagination_id)
-                    .build()
-                    .unwrap();
-
-                Ok(list_response)
-            }
-
-            async fn list_versions_at<N, F, T>(
-                Connection(connection): Connection,
-                SrvCtx(queries): SrvCtx<DaoQueries>,
-                Input(request): Input<ListRequest<N>>,
-                Input(natural_order_by): Input<<<T as ListQuery>::Dao as VersionedAt>::Order>,
-                Input(status): Input<Vec<<<T as ListQuery>::Dao as VersionedAt>::Condition>>,
-                Input(list_filter_generator): Input<F>,
-                Input(by): Input<($($E),*)>,
-            ) -> Result<ListResponse<T>, TdError>
-            where
-                N: Send + Sync + Clone,
-                F: ListFilterGenerator,
-                T: ListQuery,
-                T::Dao: PartitionBy + VersionedAt,
-            {
-                let mut conn = connection.lock().await;
-                let conn = conn.get_mut_connection()?;
-
-                let query_params = ListQueryParams::<T>::try_from(request.list_params())?;
-
-                let ($($E),*) = by.deref();
-                let result: Vec<T::Dao> = queries
-                    .list_versions_by_at::<T, F>(
-                        &query_params,
-                        Some(&*natural_order_by),
-                        Some(&status.iter().collect::<Vec<_>>()[..]),
-                        &list_filter_generator,
-                        &($($E),*)
-                    ).await?
-                    .build_query_as()
-                    .persistent(true)
-                    .fetch_all(&mut *conn)
-                    .await
-                    .map_err(|e| {
-                        formatted_entity!(T::Dao; $($E),*).map(|(columns, values, table)| {
-                            TdError::from(SqlError::SelectError(columns, values, table, e))
-                        })
-                    })
-                    .map_err(|e| e.unwrap_or_else(|e| e))?;
-
-                let mut result = result
-                    .iter()
-                    .map(T::try_from_dao).collect::<Result<Vec<T>, TdError>>()?;
-
-                if let Some(_) = request.list_params().previous() {
-                    result.reverse();
-                }
-
-                let (previous, previous_pagination_id) = compute_previous(request.list_params(), &query_params, &result);
-                let (next, next_pagination_id) = compute_next(request.list_params(), &query_params, &result);
-
-                let list_response = ListResponseBuilder::default()
-                    .list_params(request.list_params().clone())
-                    .data(result)
-                    .previous_page(previous, previous_pagination_id)
-                    .next_page(next, next_pagination_id)
-                    .build()
-                    .unwrap();
-
-                Ok(list_response)
-            }
+        if request.list_params.previous.is_some() {
+            result.reverse();
         }
-    };
+
+        let (previous, previous_pagination_id) =
+            compute_previous(&request.list_params, &query_params, &result);
+        let (next, next_pagination_id) = compute_next(&request.list_params, &query_params, &result);
+
+        let list_response = ListResponseBuilder::default()
+            .list_params(request.list_params.clone())
+            .data(result)
+            .previous_page(previous, previous_pagination_id)
+            .next_page(next, next_pagination_id)
+            .build()?;
+
+        Ok(list_response)
+    }
+
+    async fn list_at<N, F, const S: u8, T>(
+        Connection(connection): Connection,
+        SrvCtx(queries): SrvCtx<DaoQueries>,
+        Input(request): Input<ListRequest<N>>,
+        Input(natural_order_by): Input<<<T as ListQuery>::Dao as Versioned>::Order>,
+        Input(list_filter_generator): Input<F>,
+        Input(by): Input<E>,
+    ) -> Result<ListResponse<T>, TdError>
+    where
+        N: Send + Sync + Clone,
+        F: ListFilterGenerator,
+        T: ListQuery,
+        T::Dao: Versioned + States<S>,
+    {
+        let mut conn = connection.lock().await;
+        let conn = conn.get_mut_connection()?;
+
+        let query_params = ListQueryParams::<T>::try_from(&request.list_params)?;
+
+        let by = by.deref();
+        let result: Vec<T::Dao> = queries
+            .list_by_at::<T, S, F>(
+                &query_params,
+                Some(&*natural_order_by),
+                &list_filter_generator,
+                by,
+            )
+            .await?
+            .build_query_as()
+            .persistent(true)
+            .fetch_all(&mut *conn)
+            .await
+            .map_err(|e| {
+                formatted_entity::<T::Dao, _>(by).and_then(|(columns, values, table)| {
+                    Err(SqlError::SelectError(columns, values, table, e))?
+                })
+            })
+            .map_err(|e| e.unwrap_or_else(|e| e))?;
+
+        let mut result = result
+            .iter()
+            .map(T::try_from_dao)
+            .collect::<Result<Vec<T>, TdError>>()?;
+
+        if request.list_params.previous.is_some() {
+            result.reverse();
+        }
+
+        let (previous, previous_pagination_id) =
+            compute_previous(&request.list_params, &query_params, &result);
+        let (next, next_pagination_id) = compute_next(&request.list_params, &query_params, &result);
+
+        let list_response = ListResponseBuilder::default()
+            .list_params(request.list_params.clone())
+            .data(result)
+            .previous_page(previous, previous_pagination_id)
+            .next_page(next, next_pagination_id)
+            .build()?;
+
+        Ok(list_response)
+    }
+
+    async fn list_versions_at<N, F, const S: u8, T>(
+        Connection(connection): Connection,
+        SrvCtx(queries): SrvCtx<DaoQueries>,
+        Input(request): Input<ListRequest<N>>,
+        Input(natural_order_by): Input<<<T as ListQuery>::Dao as Versioned>::Order>,
+        Input(list_filter_generator): Input<F>,
+        Input(by): Input<E>,
+    ) -> Result<ListResponse<T>, TdError>
+    where
+        N: Send + Sync + Clone,
+        F: ListFilterGenerator,
+        T: ListQuery,
+        T::Dao: Versioned + States<S>,
+    {
+        let mut conn = connection.lock().await;
+        let conn = conn.get_mut_connection()?;
+
+        let query_params = ListQueryParams::<T>::try_from(&request.list_params)?;
+
+        let by = by.deref();
+        let result: Vec<T::Dao> = queries
+            .list_versions_by_at::<T, S, F>(
+                &query_params,
+                Some(&*natural_order_by),
+                &list_filter_generator,
+                by,
+            )
+            .await?
+            .build_query_as()
+            .persistent(true)
+            .fetch_all(&mut *conn)
+            .await
+            .map_err(|e| {
+                formatted_entity::<T::Dao, _>(by).and_then(|(columns, values, table)| {
+                    Err(SqlError::SelectError(columns, values, table, e))?
+                })
+            })
+            .map_err(|e| e.unwrap_or_else(|e| e))?;
+
+        let mut result = result
+            .iter()
+            .map(T::try_from_dao)
+            .collect::<Result<Vec<T>, TdError>>()?;
+
+        if request.list_params.previous.is_some() {
+            result.reverse();
+        }
+
+        let (previous, previous_pagination_id) =
+            compute_previous(&request.list_params, &query_params, &result);
+        let (next, next_pagination_id) = compute_next(&request.list_params, &query_params, &result);
+
+        let list_response = ListResponseBuilder::default()
+            .list_params(request.list_params.clone())
+            .data(result)
+            .previous_page(previous, previous_pagination_id)
+            .next_page(next, next_pagination_id)
+            .build()?;
+
+        Ok(list_response)
+    }
 }
 
 /// Determine previous info for listing pagination
@@ -918,7 +828,7 @@ fn compute_previous<T: ListQuery>(
     query_params: &ListQueryParams<T>,
     result: &[T],
 ) -> (Option<String>, Option<String>) {
-    let first = match (list_params.previous(), list_params.next(), result.first()) {
+    let first = match (&list_params.previous, &list_params.next, result.first()) {
         (None, None, _) => None,
         (None, Some(_), Some(first)) => Some(first),
         (Some(_), _, Some(first)) => Some(first),
@@ -929,9 +839,9 @@ fn compute_previous<T: ListQuery>(
         None => (None, None),
         Some(first) => {
             let order = query_params
-                .order()
+                .order
                 .as_ref()
-                .unwrap_or(query_params.natural_order())
+                .unwrap_or(&query_params.natural_order)
                 .field()
                 .to_string();
             let order = Some(order);
@@ -949,17 +859,17 @@ fn compute_next<T: ListQuery>(
     query_params: &ListQueryParams<T>,
     result: &[T],
 ) -> (Option<String>, Option<String>) {
-    match (result.len() < *list_params.len(), result.last()) {
-        // If the the result length is less than the requested length, no more pages => no next page
+    match (result.len() < list_params.len, result.last()) {
+        // If the result length is less than the requested length, no more pages => no next page
         (true, _) => (None, None),
         // not result data => no next page
         (false, None) => (None, None),
         // result length eq requested length and result data => use the last data item to get next info
         (false, Some(last)) => {
             let order = query_params
-                .order()
+                .order
                 .as_ref()
-                .unwrap_or(query_params.natural_order())
+                .unwrap_or(&query_params.natural_order)
                 .field()
                 .to_string();
             let order = Some(order);
@@ -970,8 +880,6 @@ fn compute_next<T: ListQuery>(
         }
     }
 }
-
-all_the_tuples!(impl_list);
 
 #[async_trait]
 pub trait SqlDeleteService<E> {
@@ -984,53 +892,45 @@ pub trait SqlDeleteService<E> {
         D: DataAccessObject;
 }
 
-macro_rules! impl_delete {
-    (
-        [$($E:ident),*]
-    ) => {
-        #[allow(non_snake_case, unused_parens)]
-        #[async_trait]
-        impl<$($E),*> SqlDeleteService<($($E),*)> for By<($($E),*)>
-        where
-            $(for<'a> $E: SqlEntity + 'a),*
-        {
-            async fn delete<D>(
-                Connection(connection): Connection,
-                SrvCtx(queries): SrvCtx<DaoQueries>,
-                Input(by): Input<($($E),*)>,
-            ) -> Result<(), TdError>
-            where
-                D: DataAccessObject,
-            {
-                let mut conn = connection.lock().await;
-                let conn = conn.get_mut_connection()?;
+#[async_trait]
+impl<E> SqlDeleteService<E> for By<E>
+where
+    for<'a> E: AsDynSqlEntities + 'a,
+{
+    async fn delete<D>(
+        Connection(connection): Connection,
+        SrvCtx(queries): SrvCtx<DaoQueries>,
+        Input(by): Input<E>,
+    ) -> Result<(), TdError>
+    where
+        D: DataAccessObject,
+    {
+        let mut conn = connection.lock().await;
+        let conn = conn.get_mut_connection()?;
 
-                let ($($E),*) = by.deref();
-                queries
-                    .delete_by::<D>(&($($E),*))?
-                    .build()
-                    .execute(&mut *conn)
-                    .await
-                    .map_err(|e| {
-                        formatted_entity!(D; $($E),*).map(|(columns, values, table)| {
-                            TdError::from(SqlError::DeleteError(columns, values, table, e))
-                        })
-                    })
-                    .map_err(|e| e.unwrap_or_else(|e| e))?;
-                Ok(())
-            }
-        }
-    };
+        let by = by.deref();
+        queries
+            .delete_by::<D>(by)?
+            .build()
+            .execute(&mut *conn)
+            .await
+            .map_err(|e| {
+                formatted_entity::<D, _>(by).and_then(|(columns, values, table)| {
+                    Err(SqlError::DeleteError(columns, values, table, e))?
+                })
+            })
+            .map_err(|e| e.unwrap_or_else(|e| e))?;
+
+        Ok(())
+    }
 }
-
-all_the_tuples!(impl_delete);
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::crudl::{ListParams, RequestContext};
+    use crate::dxo::crudl::{ListParams, RequestContext};
     use crate::sql::{DaoQueries, NoListFilter};
-    use crate::types::basic::{AccessTokenId, RoleId, UserId};
+    use crate::types::id::{AccessTokenId, RoleId, UserId};
     use std::sync::LazyLock;
     use td_database::sql::DbPool;
     use td_error::TdError;
@@ -1362,7 +1262,7 @@ mod tests {
             Input::new(()),
         )
         .await?;
-        let list = list.data();
+        let list = list.data;
         assert_eq!(list.len(), 2);
         let mario = FooDtoBuilder::try_from(&*MARIO)?.build()?;
         assert!(list.contains(&mario));
@@ -1473,10 +1373,9 @@ mod tests {
         // previous list params with no data
         let list_params = ListParams::builder()
             .order_by(Some("name".to_string()))
-            .previous(data[0].id().to_string())
+            .previous(data[0].id.to_string())
             .pagination_id(Some(data[0].pagination_value()))
-            .build()
-            .unwrap();
+            .build()?;
         let list_query_params = ListQueryParams::<MyDto>::try_from(&list_params)?;
         assert_eq!(
             compute_previous::<MyDto>(&list_params, &list_query_params, &[]),
@@ -1486,10 +1385,9 @@ mod tests {
         // previous list params with data
         let list_params = ListParams::builder()
             .order_by(Some("name".to_string()))
-            .previous(data[1].id().to_string())
+            .previous(data[1].id.to_string())
             .pagination_id(Some(data[1].pagination_value()))
-            .build()
-            .unwrap();
+            .build()?;
         let list_query_params = ListQueryParams::<MyDto>::try_from(&list_params)?;
         assert_eq!(
             compute_previous::<MyDto>(&list_params, &list_query_params, &data[0..1]),
@@ -1563,10 +1461,9 @@ mod tests {
         // next list params with no data
         let list_params = ListParams::builder()
             .order_by(Some("name".to_string()))
-            .next(data[3].id().to_string())
+            .next(data[3].id.to_string())
             .pagination_id(Some(data[3].pagination_value()))
-            .build()
-            .unwrap();
+            .build()?;
         let list_query_params = ListQueryParams::<MyDto>::try_from(&list_params)?;
         assert_eq!(
             compute_next::<MyDto>(&list_params, &list_query_params, &[]),
@@ -1577,10 +1474,9 @@ mod tests {
         let list_params = ListParams::builder()
             .order_by(Some("name".to_string()))
             .len(10_usize)
-            .next(data[3].id().to_string())
+            .next(data[3].id.to_string())
             .pagination_id(Some(data[3].pagination_value()))
-            .build()
-            .unwrap();
+            .build()?;
         let list_query_params = ListQueryParams::<MyDto>::try_from(&list_params)?;
         assert_eq!(
             compute_next::<MyDto>(&list_params, &list_query_params, &data),
@@ -1591,10 +1487,9 @@ mod tests {
         let list_params = ListParams::builder()
             .order_by(Some("name".to_string()))
             .len(2_usize)
-            .next(data[1].id().to_string())
+            .next(data[1].id.to_string())
             .pagination_id(Some(data[1].pagination_value()))
-            .build()
-            .unwrap();
+            .build()?;
         let list_query_params = ListQueryParams::<MyDto>::try_from(&list_params)?;
         assert_eq!(
             compute_next::<MyDto>(&list_params, &list_query_params, &data[2..]),
@@ -1650,11 +1545,11 @@ mod tests {
                 .build()?,
         );
         let res = list(&db, req).await;
-        assert_eq!(res.len(), &2);
-        assert!(res.previous_pagination_id().is_none());
-        assert!(res.previous().is_none());
-        assert_eq!(res.next_pagination_id(), &Some("1".to_string()));
-        assert_eq!(res.next(), &Some("B".to_string()));
+        assert_eq!(res.len, 2);
+        assert!(res.previous_pagination_id.is_none());
+        assert!(res.previous.is_none());
+        assert_eq!(res.next_pagination_id, Some("1".to_string()));
+        assert_eq!(res.next, Some("B".to_string()));
 
         // next, second full page
         let req = request(
@@ -1666,11 +1561,11 @@ mod tests {
                 .build()?,
         );
         let res = list(&db, req).await;
-        assert_eq!(res.len(), &2);
-        assert_eq!(res.previous_pagination_id(), &Some("2".to_string()));
-        assert_eq!(res.previous(), &Some("C".to_string()));
-        assert_eq!(res.next_pagination_id(), &Some("3".to_string()));
-        assert_eq!(res.next(), &Some("D".to_string()));
+        assert_eq!(res.len, 2);
+        assert_eq!(res.previous_pagination_id, Some("2".to_string()));
+        assert_eq!(res.previous, Some("C".to_string()));
+        assert_eq!(res.next_pagination_id, Some("3".to_string()));
+        assert_eq!(res.next, Some("D".to_string()));
 
         // next, third partial page
         let req = request(
@@ -1682,11 +1577,11 @@ mod tests {
                 .build()?,
         );
         let res = list(&db, req).await;
-        assert_eq!(res.len(), &1);
-        assert_eq!(res.previous_pagination_id(), &Some("4".to_string()));
-        assert_eq!(res.previous(), &Some("E".to_string()));
-        assert!(res.next_pagination_id().is_none());
-        assert!(res.next().is_none());
+        assert_eq!(res.len, 1);
+        assert_eq!(res.previous_pagination_id, Some("4".to_string()));
+        assert_eq!(res.previous, Some("E".to_string()));
+        assert!(res.next_pagination_id.is_none());
+        assert!(res.next.is_none());
 
         // previous, second full page
         let req = request(
@@ -1698,11 +1593,11 @@ mod tests {
                 .build()?,
         );
         let res = list(&db, req).await;
-        assert_eq!(res.len(), &2);
-        assert_eq!(res.previous_pagination_id(), &Some("2".to_string()));
-        assert_eq!(res.previous(), &Some("C".to_string()));
-        assert_eq!(res.next_pagination_id(), &Some("3".to_string()));
-        assert_eq!(res.next(), &Some("D".to_string()));
+        assert_eq!(res.len, 2);
+        assert_eq!(res.previous_pagination_id, Some("2".to_string()));
+        assert_eq!(res.previous, Some("C".to_string()));
+        assert_eq!(res.next_pagination_id, Some("3".to_string()));
+        assert_eq!(res.next, Some("D".to_string()));
 
         // previous, first full page
         let req = request(
@@ -1714,11 +1609,11 @@ mod tests {
                 .build()?,
         );
         let res = list(&db, req).await;
-        assert_eq!(res.len(), &2);
-        assert_eq!(res.previous_pagination_id(), &Some("0".to_string()));
-        assert_eq!(res.previous(), &Some("A".to_string()));
-        assert_eq!(res.next_pagination_id(), &Some("1".to_string()));
-        assert_eq!(res.next(), &Some("B".to_string()));
+        assert_eq!(res.len, 2);
+        assert_eq!(res.previous_pagination_id, Some("0".to_string()));
+        assert_eq!(res.previous, Some("A".to_string()));
+        assert_eq!(res.next_pagination_id, Some("1".to_string()));
+        assert_eq!(res.next, Some("B".to_string()));
 
         // previous, non-existing page
         let req = request(
@@ -1730,11 +1625,11 @@ mod tests {
                 .build()?,
         );
         let res = list(&db, req).await;
-        assert_eq!(res.len(), &0);
-        assert!(res.previous_pagination_id().is_none());
-        assert!(res.previous().is_none());
-        assert!(res.next_pagination_id().is_none());
-        assert!(res.next().is_none());
+        assert_eq!(res.len, 0);
+        assert!(res.previous_pagination_id.is_none());
+        assert!(res.previous.is_none());
+        assert!(res.next_pagination_id.is_none());
+        assert!(res.next.is_none());
 
         Ok(())
     }
@@ -1773,11 +1668,11 @@ mod tests {
                 .build()?,
         );
         let res = list(&db, req).await;
-        assert_eq!(res.len(), &2);
-        assert!(res.previous_pagination_id().is_none());
-        assert!(res.previous().is_none());
-        assert_eq!(res.next_pagination_id(), &Some("3".to_string()));
-        assert_eq!(res.next(), &Some("D".to_string()));
+        assert_eq!(res.len, 2);
+        assert!(res.previous_pagination_id.is_none());
+        assert!(res.previous.is_none());
+        assert_eq!(res.next_pagination_id, Some("3".to_string()));
+        assert_eq!(res.next, Some("D".to_string()));
 
         // next, second full page
         let req = request(
@@ -1789,11 +1684,11 @@ mod tests {
                 .build()?,
         );
         let res = list(&db, req).await;
-        assert_eq!(res.len(), &2);
-        assert_eq!(res.previous_pagination_id(), &Some("2".to_string()));
-        assert_eq!(res.previous(), &Some("C".to_string()));
-        assert_eq!(res.next_pagination_id(), &Some("1".to_string()));
-        assert_eq!(res.next(), &Some("B".to_string()));
+        assert_eq!(res.len, 2);
+        assert_eq!(res.previous_pagination_id, Some("2".to_string()));
+        assert_eq!(res.previous, Some("C".to_string()));
+        assert_eq!(res.next_pagination_id, Some("1".to_string()));
+        assert_eq!(res.next, Some("B".to_string()));
 
         // next, third partial page
         let req = request(
@@ -1805,11 +1700,11 @@ mod tests {
                 .build()?,
         );
         let res = list(&db, req).await;
-        assert_eq!(res.len(), &1);
-        assert_eq!(res.previous_pagination_id(), &Some("0".to_string()));
-        assert_eq!(res.previous(), &Some("A".to_string()));
-        assert!(res.next_pagination_id().is_none());
-        assert!(res.next().is_none());
+        assert_eq!(res.len, 1);
+        assert_eq!(res.previous_pagination_id, Some("0".to_string()));
+        assert_eq!(res.previous, Some("A".to_string()));
+        assert!(res.next_pagination_id.is_none());
+        assert!(res.next.is_none());
 
         // previous, second full page
         let req = request(
@@ -1821,11 +1716,11 @@ mod tests {
                 .build()?,
         );
         let res = list(&db, req).await;
-        assert_eq!(res.len(), &2);
-        assert_eq!(res.previous_pagination_id(), &Some("2".to_string()));
-        assert_eq!(res.previous(), &Some("C".to_string()));
-        assert_eq!(res.next_pagination_id(), &Some("1".to_string()));
-        assert_eq!(res.next(), &Some("B".to_string()));
+        assert_eq!(res.len, 2);
+        assert_eq!(res.previous_pagination_id, Some("2".to_string()));
+        assert_eq!(res.previous, Some("C".to_string()));
+        assert_eq!(res.next_pagination_id, Some("1".to_string()));
+        assert_eq!(res.next, Some("B".to_string()));
 
         // previous, first full page
         let req = request(
@@ -1837,11 +1732,11 @@ mod tests {
                 .build()?,
         );
         let res = list(&db, req).await;
-        assert_eq!(res.len(), &2);
-        assert_eq!(res.previous_pagination_id(), &Some("4".to_string()));
-        assert_eq!(res.previous(), &Some("E".to_string()));
-        assert_eq!(res.next_pagination_id(), &Some("3".to_string()));
-        assert_eq!(res.next(), &Some("D".to_string()));
+        assert_eq!(res.len, 2);
+        assert_eq!(res.previous_pagination_id, Some("4".to_string()));
+        assert_eq!(res.previous, Some("E".to_string()));
+        assert_eq!(res.next_pagination_id, Some("3".to_string()));
+        assert_eq!(res.next, Some("D".to_string()));
 
         // previous, non-existing page
         let req = request(
@@ -1853,11 +1748,11 @@ mod tests {
                 .build()?,
         );
         let res = list(&db, req).await;
-        assert_eq!(res.len(), &0);
-        assert!(res.previous_pagination_id().is_none());
-        assert!(res.previous().is_none());
-        assert!(res.next_pagination_id().is_none());
-        assert!(res.next().is_none());
+        assert_eq!(res.len, 0);
+        assert!(res.previous_pagination_id.is_none());
+        assert!(res.previous.is_none());
+        assert!(res.next_pagination_id.is_none());
+        assert!(res.next.is_none());
 
         Ok(())
     }

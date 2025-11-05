@@ -9,12 +9,13 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use td_error::display_vec::DisplayVec;
 use td_error::{TdError, display_vec, td_error};
-use td_objects::crudl::handle_sql_err;
+use td_objects::dxo::crudl::handle_sql_err;
+use td_objects::dxo::table_data_version::defs::ActiveTableDataVersionDB;
 use td_objects::sql::DaoQueries;
 use td_objects::sql::cte::TableQueries;
-use td_objects::types::basic::{TableDataVersionId, TableId, TriggeredOn};
-use td_objects::types::execution::ActiveTableDataVersionDB;
-use td_objects::types::table_ref::{Version, Versions};
+use td_objects::table_ref::{Version, Versions};
+use td_objects::types::id::{TableDataVersionId, TableId};
+use td_objects::types::timestamp::TriggeredOn;
 
 #[td_error]
 pub enum VersionResolverError {
@@ -53,9 +54,8 @@ impl<'a> VersionResolver<'a> {
         let versions = match versions {
             Versions::None => {
                 let v = queries
-                    .select_table_data_versions_at::<ActiveTableDataVersionDB>(
+                    .select_table_data_versions_at::<{ ActiveTableDataVersionDB::All }, ActiveTableDataVersionDB>(
                         Some(triggered_on),
-                        None,
                         table_id,
                         versions,
                     )?
@@ -69,9 +69,8 @@ impl<'a> VersionResolver<'a> {
                 Version::Fixed(version) => {
                     // We fail if fixed not found.
                     let v = queries
-                        .select_table_data_versions_at::<ActiveTableDataVersionDB>(
+                        .select_table_data_versions_at::<{ ActiveTableDataVersionDB::All }, ActiveTableDataVersionDB>(
                             Some(triggered_on),
-                            None,
                             table_id,
                             versions,
                         )?
@@ -87,9 +86,8 @@ impl<'a> VersionResolver<'a> {
                 }
                 Version::Head(_) | Version::Initial(_) => {
                     let v = queries
-                        .select_table_data_versions_at::<ActiveTableDataVersionDB>(
+                        .select_table_data_versions_at::<{ ActiveTableDataVersionDB::All }, ActiveTableDataVersionDB>(
                             Some(triggered_on),
-                            None,
                             table_id,
                             versions,
                         )?
@@ -119,9 +117,8 @@ impl<'a> VersionResolver<'a> {
                 let fixed_versions = if !fixed_versions.is_empty() {
                     let version_list = fixed_versions.values().cloned().collect();
                     let found: Vec<ActiveTableDataVersionDB> = queries
-                        .select_table_data_versions_at::<ActiveTableDataVersionDB>(
+                        .select_table_data_versions_at::<{ ActiveTableDataVersionDB::All }, ActiveTableDataVersionDB>(
                             Some(triggered_on),
-                            None,
                             table_id,
                             &Versions::List(version_list),
                         )?
@@ -129,7 +126,7 @@ impl<'a> VersionResolver<'a> {
                         .fetch_all(&mut *conn)
                         .await
                         .map_err(handle_sql_err)?;
-                    let found: HashMap<_, _> = found.into_iter().map(|v| (*v.id(), v)).collect();
+                    let found: HashMap<_, _> = found.into_iter().map(|v| (*v.id, v)).collect();
 
                     let (absolute_versions, not_found): (HashMap<_, _>, Vec<_>) =
                         fixed_versions.iter().partition_map(|(i, v)| {
@@ -165,9 +162,8 @@ impl<'a> VersionResolver<'a> {
 
                         let versions = if let Some((min, max)) = minmax {
                             let mut found = queries
-                                .select_table_data_versions_at::<ActiveTableDataVersionDB>(
+                                .select_table_data_versions_at::<{ ActiveTableDataVersionDB::All }, ActiveTableDataVersionDB>(
                                     Some(triggered_on),
-                                    None,
                                     table_id,
                                     &Versions::Range(min, max), // range always older to newer
                                 )?
@@ -227,9 +223,8 @@ impl<'a> VersionResolver<'a> {
                     Version::Head(_) | Version::Initial(_) => Some(from),
                     Version::Fixed(id) => {
                         let relative: Option<i32> = queries
-                            .find_relative_offset::<ActiveTableDataVersionDB>(
+                            .find_relative_offset::<{ ActiveTableDataVersionDB::All }, ActiveTableDataVersionDB>(
                                 Some(triggered_on),
-                                None,
                                 table_id,
                                 &Versions::Single(from.clone()),
                             )?
@@ -251,9 +246,8 @@ impl<'a> VersionResolver<'a> {
                     Version::Head(_) | Version::Initial(_) => Some(to),
                     Version::Fixed(id) => {
                         let relative: Option<i32> = queries
-                            .find_relative_offset::<ActiveTableDataVersionDB>(
+                            .find_relative_offset::<{ ActiveTableDataVersionDB::All }, ActiveTableDataVersionDB>(
                                 Some(triggered_on),
-                                None,
                                 table_id,
                                 &Versions::Single(to.clone()),
                             )?
@@ -300,9 +294,8 @@ impl<'a> VersionResolver<'a> {
                 } else {
                     // And fetch the versions.
                     let mut found: Vec<_> = queries
-                        .select_table_data_versions_at::<ActiveTableDataVersionDB>(
+                        .select_table_data_versions_at::<{ ActiveTableDataVersionDB::All }, ActiveTableDataVersionDB>(
                             Some(triggered_on),
-                            None,
                             table_id,
                             versions,
                         )?
@@ -347,6 +340,9 @@ mod tests {
     use super::*;
     use td_database::sql::DbPool;
     use td_error::TdError;
+    use td_objects::dxo::function::defs::FunctionRegister;
+    use td_objects::dxo::table::defs::TableDB;
+    use td_objects::dxo::table_data_version::defs::ActiveTableDataVersionDB;
     use td_objects::sql::{DaoQueries, SelectBy};
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_execution::seed_execution;
@@ -354,12 +350,9 @@ mod tests {
     use td_objects::test_utils::seed_function_run::seed_function_run;
     use td_objects::test_utils::seed_table_data_version::seed_table_data_version;
     use td_objects::test_utils::seed_transaction::seed_transaction;
-    use td_objects::types::basic::{
-        BundleId, CollectionName, Decorator, FunctionRunStatus, TableDataVersionId, TableName,
-        TableNameDto, TransactionKey, UserId,
-    };
-    use td_objects::types::function::FunctionRegister;
-    use td_objects::types::table::TableDB;
+    use td_objects::types::id::{BundleId, UserId};
+    use td_objects::types::string::{CollectionName, TableName, TableNameDto, TransactionKey};
+    use td_objects::types::typed_enum::{Decorator, FunctionRunStatus};
     use td_security::ENCODED_ID_SYSTEM;
 
     // Tables create N times, where N is the number of versions. Returning a map of table name to
@@ -421,7 +414,7 @@ mod tests {
                 .await;
 
                 let table_version = DaoQueries::default()
-                    .select_by::<TableDB>(&(collection.id(), &table_name))
+                    .select_by::<TableDB>(&(collection.id, &table_name))
                     .unwrap()
                     .build_query_as()
                     .fetch_one(db)
@@ -438,7 +431,7 @@ mod tests {
                 )
                 .await;
                 let table_data_version = DaoQueries::default()
-                    .select_by::<ActiveTableDataVersionDB>(&(table_data_version.id()))
+                    .select_by::<ActiveTableDataVersionDB>(&(table_data_version.id))
                     .unwrap()
                     .build_query_as()
                     .fetch_one(db)
@@ -458,13 +451,13 @@ mod tests {
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 1)])).await;
 
-        let table_id = table_data_versions.get(&table_name).unwrap()[0].table_id();
+        let table_id = table_data_versions.get(&table_name).unwrap()[0].table_id;
         let versions = Versions::None;
         let triggered_on = TriggeredOn::now();
 
         let mut conn = db.acquire().await.unwrap();
         let versions_found = VersionResolver::builder()
-            .table_id(table_id)
+            .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
@@ -473,9 +466,9 @@ mod tests {
         assert_eq!(versions_found.len(), 1);
         assert!(versions_found[0].is_some());
         let version_found = versions_found[0].as_ref().unwrap();
-        assert_eq!(version_found.table_id(), table_id);
-        assert_eq!(*version_found.has_data(), None);
-        assert!(*version_found.triggered_on() < triggered_on);
+        assert_eq!(version_found.table_id, table_id);
+        assert_eq!(version_found.has_data, None);
+        assert!(version_found.triggered_on < triggered_on);
         Ok(())
     }
 
@@ -495,13 +488,13 @@ mod tests {
         )
         .await;
 
-        let table_id = table_data_versions.get(&table_name).unwrap()[0].table_id();
+        let table_id = table_data_versions.get(&table_name).unwrap()[0].table_id;
         let versions = Versions::None;
         let triggered_on = TriggeredOn::now();
 
         let mut conn = db.acquire().await.unwrap();
         let versions_found = VersionResolver::builder()
-            .table_id(table_id)
+            .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
@@ -510,9 +503,9 @@ mod tests {
         assert_eq!(versions_found.len(), 1);
         assert!(versions_found[0].is_some());
         let version_found = versions_found[0].as_ref().unwrap();
-        assert_eq!(version_found.table_id(), table_id);
-        assert_eq!(*version_found.has_data(), None);
-        assert!(*version_found.triggered_on() < triggered_on);
+        assert_eq!(version_found.table_id, table_id);
+        assert_eq!(version_found.has_data, None);
+        assert!(version_found.triggered_on < triggered_on);
         Ok(())
     }
 
@@ -529,17 +522,17 @@ mod tests {
         // Assert both versions are for the same table_id but are different versions.
         let version_1 = &table_data_versions.get(&table_name).unwrap()[0];
         let version_2 = &table_data_versions.get(&table_name).unwrap()[1];
-        assert_ne!(version_1.id(), version_2.id());
-        assert_eq!(version_1.table_id(), version_2.table_id());
-        assert!(version_1.triggered_on() < version_2.triggered_on());
+        assert_ne!(version_1.id, version_2.id);
+        assert_eq!(version_1.table_id, version_2.table_id);
+        assert!(version_1.triggered_on < version_2.triggered_on);
 
         // Get table_id
-        let table_id = version_1.table_id();
+        let table_id = version_1.table_id;
 
         // Check the first version is found if its trigger_on is used.
-        let triggered_on = version_1.triggered_on();
+        let triggered_on = &version_1.triggered_on;
         let versions_found = VersionResolver::builder()
-            .table_id(table_id)
+            .table_id(&table_id)
             .versions(&versions)
             .triggered_on(triggered_on)
             .build()?
@@ -548,12 +541,12 @@ mod tests {
         assert_eq!(versions_found.len(), 1);
         assert!(versions_found[0].is_some());
         let version_found = versions_found[0].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_1.id());
+        assert_eq!(version_found.id, version_1.id);
 
         // And that the second version is found if its trigger_on is used.
-        let triggered_on = version_2.triggered_on();
+        let triggered_on = &version_2.triggered_on;
         let versions_found = VersionResolver::builder()
-            .table_id(table_id)
+            .table_id(&table_id)
             .versions(&versions)
             .triggered_on(triggered_on)
             .build()?
@@ -562,12 +555,12 @@ mod tests {
         assert_eq!(versions_found.len(), 1);
         assert!(versions_found[0].is_some());
         let version_found = versions_found[0].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_2.id());
+        assert_eq!(version_found.id, version_2.id);
 
         // And the second one if current triggered_on is used.
         let triggered_on = TriggeredOn::now();
         let versions_found = VersionResolver::builder()
-            .table_id(table_id)
+            .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
@@ -576,7 +569,7 @@ mod tests {
         assert_eq!(versions_found.len(), 1);
         assert!(versions_found[0].is_some());
         let version_found = versions_found[0].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_2.id());
+        assert_eq!(version_found.id, version_2.id);
         Ok(())
     }
 
@@ -593,21 +586,21 @@ mod tests {
         let version_1 = &table_data_versions.get(&table_name).unwrap()[0];
         let version_2 = &table_data_versions.get(&table_name).unwrap()[1];
         let version_3 = &table_data_versions.get(&table_name).unwrap()[2];
-        assert_ne!(version_1.id(), version_2.id());
-        assert_ne!(version_1.id(), version_3.id());
-        assert_ne!(version_2.id(), version_3.id());
-        assert_eq!(version_1.table_id(), version_2.table_id());
-        assert_eq!(version_1.table_id(), version_3.table_id());
-        assert!(version_1.triggered_on() < version_2.triggered_on());
-        assert!(version_2.triggered_on() < version_3.triggered_on());
+        assert_ne!(version_1.id, version_2.id);
+        assert_ne!(version_1.id, version_3.id);
+        assert_ne!(version_2.id, version_3.id);
+        assert_eq!(version_1.table_id, version_2.table_id);
+        assert_eq!(version_1.table_id, version_3.table_id);
+        assert!(version_1.triggered_on < version_2.triggered_on);
+        assert!(version_2.triggered_on < version_3.triggered_on);
 
         // Get table_id
-        let table_id = version_1.table_id();
+        let table_id = version_1.table_id;
 
         // Check the latest version is found with HEAD.
         let (versions, triggered_on) = (Versions::Single(Version::Head(0)), TriggeredOn::now());
         let versions_found = VersionResolver::builder()
-            .table_id(table_id)
+            .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
@@ -616,13 +609,13 @@ mod tests {
         assert_eq!(versions_found.len(), 1);
         assert!(versions_found[0].is_some());
         let version_found = versions_found[0].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_3.id());
+        assert_eq!(version_found.id, version_3.id);
 
         // But not if using a previous triggered_on
         let (versions, triggered_on) =
-            (Versions::Single(Version::Head(0)), version_2.triggered_on());
+            (Versions::Single(Version::Head(0)), &version_2.triggered_on);
         let versions_found = VersionResolver::builder()
-            .table_id(table_id)
+            .table_id(&table_id)
             .versions(&versions)
             .triggered_on(triggered_on)
             .build()?
@@ -631,12 +624,12 @@ mod tests {
         assert_eq!(versions_found.len(), 1);
         assert!(versions_found[0].is_some());
         let version_found = versions_found[0].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_2.id());
+        assert_eq!(version_found.id, version_2.id);
 
         // And then get HEAD~1
         let (versions, triggered_on) = (Versions::Single(Version::Head(-1)), TriggeredOn::now());
         let versions_found = VersionResolver::builder()
-            .table_id(table_id)
+            .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
@@ -645,12 +638,12 @@ mod tests {
         assert_eq!(versions_found.len(), 1);
         assert!(versions_found[0].is_some());
         let version_found = versions_found[0].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_2.id());
+        assert_eq!(version_found.id, version_2.id);
 
         // And then get HEAD~2
         let (versions, triggered_on) = (Versions::Single(Version::Head(-2)), TriggeredOn::now());
         let versions_found = VersionResolver::builder()
-            .table_id(table_id)
+            .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
@@ -659,12 +652,12 @@ mod tests {
         assert_eq!(versions_found.len(), 1);
         assert!(versions_found[0].is_some());
         let version_found = versions_found[0].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_1.id());
+        assert_eq!(version_found.id, version_1.id);
 
         // And then get HEAD~3 (which should be None)
         let (versions, triggered_on) = (Versions::Single(Version::Head(-3)), TriggeredOn::now());
         let versions_found = VersionResolver::builder()
-            .table_id(table_id)
+            .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
@@ -689,21 +682,21 @@ mod tests {
         let version_1 = &table_data_versions.get(&table_name).unwrap()[0];
         let version_2 = &table_data_versions.get(&table_name).unwrap()[1];
         let version_3 = &table_data_versions.get(&table_name).unwrap()[2];
-        assert_ne!(version_1.id(), version_2.id());
-        assert_ne!(version_1.id(), version_3.id());
-        assert_ne!(version_2.id(), version_3.id());
-        assert_eq!(version_1.table_id(), version_2.table_id());
-        assert_eq!(version_1.table_id(), version_3.table_id());
-        assert!(version_1.triggered_on() < version_2.triggered_on());
-        assert!(version_2.triggered_on() < version_3.triggered_on());
+        assert_ne!(version_1.id, version_2.id);
+        assert_ne!(version_1.id, version_3.id);
+        assert_ne!(version_2.id, version_3.id);
+        assert_eq!(version_1.table_id, version_2.table_id);
+        assert_eq!(version_1.table_id, version_3.table_id);
+        assert!(version_1.triggered_on < version_2.triggered_on);
+        assert!(version_2.triggered_on < version_3.triggered_on);
 
         // Get table_id
-        let table_id = version_1.table_id();
+        let table_id = version_1.table_id;
 
         // Check the latest version is found with INITIAL.
         let (versions, triggered_on) = (Versions::Single(Version::Initial(0)), TriggeredOn::now());
         let versions_found = VersionResolver::builder()
-            .table_id(table_id)
+            .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
@@ -712,15 +705,15 @@ mod tests {
         assert_eq!(versions_found.len(), 1);
         assert!(versions_found[0].is_some());
         let version_found = versions_found[0].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_1.id());
+        assert_eq!(version_found.id, version_1.id);
 
         // But not if using a previous triggered_on
         let (versions, triggered_on) = (
             Versions::Single(Version::Initial(1)),
-            version_2.triggered_on(),
+            &version_2.triggered_on,
         );
         let versions_found = VersionResolver::builder()
-            .table_id(table_id)
+            .table_id(&table_id)
             .versions(&versions)
             .triggered_on(triggered_on)
             .build()?
@@ -729,12 +722,12 @@ mod tests {
         assert_eq!(versions_found.len(), 1);
         assert!(versions_found[0].is_some());
         let version_found = versions_found[0].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_2.id());
+        assert_eq!(version_found.id, version_2.id);
 
         // And then get INITIAL~1
         let (versions, triggered_on) = (Versions::Single(Version::Initial(1)), TriggeredOn::now());
         let versions_found = VersionResolver::builder()
-            .table_id(table_id)
+            .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
@@ -743,12 +736,12 @@ mod tests {
         assert_eq!(versions_found.len(), 1);
         assert!(versions_found[0].is_some());
         let version_found = versions_found[0].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_2.id());
+        assert_eq!(version_found.id, version_2.id);
 
         // And then get INITIAL~2
         let (versions, triggered_on) = (Versions::Single(Version::Initial(2)), TriggeredOn::now());
         let versions_found = VersionResolver::builder()
-            .table_id(table_id)
+            .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
@@ -757,12 +750,12 @@ mod tests {
         assert_eq!(versions_found.len(), 1);
         assert!(versions_found[0].is_some());
         let version_found = versions_found[0].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_3.id());
+        assert_eq!(version_found.id, version_3.id);
 
         // And then get INITIAL~3 (which should be None)
         let (versions, triggered_on) = (Versions::Single(Version::Initial(3)), TriggeredOn::now());
         let versions_found = VersionResolver::builder()
-            .table_id(table_id)
+            .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
@@ -786,20 +779,20 @@ mod tests {
         // Assert all versions are for the same table_id but are different versions.
         let version_1 = &table_data_versions.get(&table_name).unwrap()[0];
         let version_2 = &table_data_versions.get(&table_name).unwrap()[1];
-        assert_ne!(version_1.id(), version_2.id());
-        assert_eq!(version_1.table_id(), version_2.table_id());
-        assert!(version_1.triggered_on() < version_2.triggered_on());
+        assert_ne!(version_1.id, version_2.id);
+        assert_eq!(version_1.table_id, version_2.table_id);
+        assert!(version_1.triggered_on < version_2.triggered_on);
 
         // Get table_id
-        let table_id = version_1.table_id();
+        let table_id = version_1.table_id;
 
         // Check fixed versions are found with its ids.
         let (versions, triggered_on) = (
-            Versions::Single(Version::Fixed(*version_1.id())),
+            Versions::Single(Version::Fixed(version_1.id)),
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
-            .table_id(table_id)
+            .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
@@ -808,14 +801,14 @@ mod tests {
         assert_eq!(versions_found.len(), 1);
         assert!(versions_found[0].is_some());
         let version_found = versions_found[0].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_1.id());
+        assert_eq!(version_found.id, version_1.id);
 
         let (versions, triggered_on) = (
-            Versions::Single(Version::Fixed(*version_2.id())),
+            Versions::Single(Version::Fixed(version_2.id)),
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
-            .table_id(table_id)
+            .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
@@ -824,7 +817,7 @@ mod tests {
         assert_eq!(versions_found.len(), 1);
         assert!(versions_found[0].is_some());
         let version_found = versions_found[0].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_2.id());
+        assert_eq!(version_found.id, version_2.id);
 
         // But an error is found if the id is not found.
         let not_found_id = TableDataVersionId::default();
@@ -833,7 +826,7 @@ mod tests {
             TriggeredOn::now(),
         );
         let res = VersionResolver::builder()
-            .table_id(table_id)
+            .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
@@ -866,12 +859,12 @@ mod tests {
         // Assert all versions are for the same table_id but are different versions.
         let version_1 = &table_data_versions.get(&table_name).unwrap()[0];
         let version_2 = &table_data_versions.get(&table_name).unwrap()[1];
-        assert_ne!(version_1.id(), version_2.id());
-        assert_eq!(version_1.table_id(), version_2.table_id());
-        assert!(version_1.triggered_on() < version_2.triggered_on());
+        assert_ne!(version_1.id, version_2.id);
+        assert_eq!(version_1.table_id, version_2.table_id);
+        assert!(version_1.triggered_on < version_2.triggered_on);
 
         // Get table_id
-        let table_id = version_1.table_id();
+        let table_id = version_1.table_id;
 
         // Check versions found.
         let (versions, triggered_on) = (
@@ -886,7 +879,7 @@ mod tests {
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
-            .table_id(table_id)
+            .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
@@ -896,21 +889,21 @@ mod tests {
         // HEAD
         assert!(versions_found[0].is_some());
         let version_found = versions_found[0].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_2.id());
+        assert_eq!(version_found.id, version_2.id);
         // HEAD~1
         assert!(versions_found[1].is_some());
         let version_found = versions_found[1].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_1.id());
+        assert_eq!(version_found.id, version_1.id);
         // HEAD~2 (None, only 2 versions)
         assert!(versions_found[2].is_none());
         // INITIAL
         assert!(versions_found[3].is_some());
         let version_found = versions_found[3].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_1.id());
+        assert_eq!(version_found.id, version_1.id);
         // INITIAL~1
         assert!(versions_found[4].is_some());
         let version_found = versions_found[4].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_2.id());
+        assert_eq!(version_found.id, version_2.id);
         // INITIAL~2 (None, only 2 versions)
         assert!(versions_found[5].is_none());
         Ok(())
@@ -928,23 +921,23 @@ mod tests {
         // Assert all versions are for the same table_id but are different versions.
         let version_1 = &table_data_versions.get(&table_name).unwrap()[0];
         let version_2 = &table_data_versions.get(&table_name).unwrap()[1];
-        assert_ne!(version_1.id(), version_2.id());
-        assert_eq!(version_1.table_id(), version_2.table_id());
-        assert!(version_1.triggered_on() < version_2.triggered_on());
+        assert_ne!(version_1.id, version_2.id);
+        assert_eq!(version_1.table_id, version_2.table_id);
+        assert!(version_1.triggered_on < version_2.triggered_on);
 
         // Get table_id
-        let table_id = version_1.table_id();
+        let table_id = version_1.table_id;
 
         // Check fixed versions are found with its ids.
         let (versions, triggered_on) = (
             Versions::List(vec![
-                Version::Fixed(*version_1.id()),
-                Version::Fixed(*version_2.id()),
+                Version::Fixed(version_1.id),
+                Version::Fixed(version_2.id),
             ]),
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
-            .table_id(table_id)
+            .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
@@ -954,11 +947,11 @@ mod tests {
         // Version 1
         assert!(versions_found[0].is_some());
         let version_found = versions_found[0].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_1.id());
+        assert_eq!(version_found.id, version_1.id);
         // Version 2
         assert!(versions_found[1].is_some());
         let version_found = versions_found[1].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_2.id());
+        assert_eq!(version_found.id, version_2.id);
         Ok(())
     }
 
@@ -974,25 +967,25 @@ mod tests {
         // Assert all versions are for the same table_id but are different versions.
         let version_1 = &table_data_versions.get(&table_name).unwrap()[0];
         let version_2 = &table_data_versions.get(&table_name).unwrap()[1];
-        assert_ne!(version_1.id(), version_2.id());
-        assert_eq!(version_1.table_id(), version_2.table_id());
-        assert!(version_1.triggered_on() < version_2.triggered_on());
+        assert_ne!(version_1.id, version_2.id);
+        assert_eq!(version_1.table_id, version_2.table_id);
+        assert!(version_1.triggered_on < version_2.triggered_on);
 
         // Get table_id
-        let table_id = version_1.table_id();
+        let table_id = version_1.table_id;
 
         // Check all versions are found.
         let (versions, triggered_on) = (
             Versions::List(vec![
                 Version::Head(-1),
-                Version::Fixed(*version_1.id()),
+                Version::Fixed(version_1.id),
                 Version::Head(0),
                 Version::Initial(0),
             ]),
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
-            .table_id(table_id)
+            .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
@@ -1002,19 +995,19 @@ mod tests {
         // HEAD~1
         assert!(versions_found[0].is_some());
         let version_found = versions_found[0].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_1.id());
+        assert_eq!(version_found.id, version_1.id);
         // Fixed 1
         assert!(versions_found[1].is_some());
         let version_found = versions_found[1].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_1.id());
+        assert_eq!(version_found.id, version_1.id);
         // HEAD
         assert!(versions_found[2].is_some());
         let version_found = versions_found[2].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_2.id());
+        assert_eq!(version_found.id, version_2.id);
         // INITIAL
         assert!(versions_found[3].is_some());
         let version_found = versions_found[3].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_1.id());
+        assert_eq!(version_found.id, version_1.id);
         Ok(())
     }
 
@@ -1030,12 +1023,12 @@ mod tests {
         // Assert all versions are for the same table_id but are different versions.
         let version_1 = &table_data_versions.get(&table_name).unwrap()[0];
         let version_2 = &table_data_versions.get(&table_name).unwrap()[1];
-        assert_ne!(version_1.id(), version_2.id());
-        assert_eq!(version_1.table_id(), version_2.table_id());
-        assert!(version_1.triggered_on() < version_2.triggered_on());
+        assert_ne!(version_1.id, version_2.id);
+        assert_eq!(version_1.table_id, version_2.table_id);
+        assert!(version_1.triggered_on < version_2.triggered_on);
 
         // Get table_id
-        let table_id = version_1.table_id();
+        let table_id = version_1.table_id;
 
         // Check fixed versions are not found.
         let not_found_id_1 = TableDataVersionId::default();
@@ -1048,7 +1041,7 @@ mod tests {
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
-            .table_id(table_id)
+            .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
@@ -1084,16 +1077,16 @@ mod tests {
         let version_1 = &table_data_versions.get(&table_name).unwrap()[0];
         let version_2 = &table_data_versions.get(&table_name).unwrap()[1];
         let version_3 = &table_data_versions.get(&table_name).unwrap()[2];
-        assert_ne!(version_1.id(), version_2.id());
-        assert_ne!(version_1.id(), version_3.id());
-        assert_ne!(version_2.id(), version_3.id());
-        assert_eq!(version_1.table_id(), version_2.table_id());
-        assert_eq!(version_1.table_id(), version_3.table_id());
-        assert!(version_1.triggered_on() < version_2.triggered_on());
-        assert!(version_2.triggered_on() < version_3.triggered_on());
+        assert_ne!(version_1.id, version_2.id);
+        assert_ne!(version_1.id, version_3.id);
+        assert_ne!(version_2.id, version_3.id);
+        assert_eq!(version_1.table_id, version_2.table_id);
+        assert_eq!(version_1.table_id, version_3.table_id);
+        assert!(version_1.triggered_on < version_2.triggered_on);
+        assert!(version_2.triggered_on < version_3.triggered_on);
 
         // Get table_id
-        let table_id = version_1.table_id();
+        let table_id = version_1.table_id;
 
         // Check fixed versions are found with its ids.
         let (versions, triggered_on) = (
@@ -1101,7 +1094,7 @@ mod tests {
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
-            .table_id(table_id)
+            .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
@@ -1111,15 +1104,15 @@ mod tests {
         // HEAD~2
         assert!(versions_found[0].is_some());
         let version_found = versions_found[0].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_1.id());
+        assert_eq!(version_found.id, version_1.id);
         // HEAD~1
         assert!(versions_found[1].is_some());
         let version_found = versions_found[1].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_2.id());
+        assert_eq!(version_found.id, version_2.id);
         // HEAD
         assert!(versions_found[2].is_some());
         let version_found = versions_found[2].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_3.id());
+        assert_eq!(version_found.id, version_3.id);
         Ok(())
     }
 
@@ -1136,16 +1129,16 @@ mod tests {
         let version_1 = &table_data_versions.get(&table_name).unwrap()[0];
         let version_2 = &table_data_versions.get(&table_name).unwrap()[1];
         let version_3 = &table_data_versions.get(&table_name).unwrap()[2];
-        assert_ne!(version_1.id(), version_2.id());
-        assert_ne!(version_1.id(), version_3.id());
-        assert_ne!(version_2.id(), version_3.id());
-        assert_eq!(version_1.table_id(), version_2.table_id());
-        assert_eq!(version_1.table_id(), version_3.table_id());
-        assert!(version_1.triggered_on() < version_2.triggered_on());
-        assert!(version_2.triggered_on() < version_3.triggered_on());
+        assert_ne!(version_1.id, version_2.id);
+        assert_ne!(version_1.id, version_3.id);
+        assert_ne!(version_2.id, version_3.id);
+        assert_eq!(version_1.table_id, version_2.table_id);
+        assert_eq!(version_1.table_id, version_3.table_id);
+        assert!(version_1.triggered_on < version_2.triggered_on);
+        assert!(version_2.triggered_on < version_3.triggered_on);
 
         // Get table_id
-        let table_id = version_1.table_id();
+        let table_id = version_1.table_id;
 
         // Check fixed versions are found with its ids.
         let (versions, triggered_on) = (
@@ -1153,7 +1146,7 @@ mod tests {
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
-            .table_id(table_id)
+            .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
@@ -1163,15 +1156,15 @@ mod tests {
         // INITIAL
         assert!(versions_found[0].is_some());
         let version_found = versions_found[0].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_1.id());
+        assert_eq!(version_found.id, version_1.id);
         // INITIAL~1
         assert!(versions_found[1].is_some());
         let version_found = versions_found[1].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_2.id());
+        assert_eq!(version_found.id, version_2.id);
         // INITIAL~2
         assert!(versions_found[2].is_some());
         let version_found = versions_found[2].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_3.id());
+        assert_eq!(version_found.id, version_3.id);
         Ok(())
     }
 
@@ -1188,16 +1181,16 @@ mod tests {
         let version_1 = &table_data_versions.get(&table_name).unwrap()[0];
         let version_2 = &table_data_versions.get(&table_name).unwrap()[1];
         let version_3 = &table_data_versions.get(&table_name).unwrap()[2];
-        assert_ne!(version_1.id(), version_2.id());
-        assert_ne!(version_1.id(), version_3.id());
-        assert_ne!(version_2.id(), version_3.id());
-        assert_eq!(version_1.table_id(), version_2.table_id());
-        assert_eq!(version_1.table_id(), version_3.table_id());
-        assert!(version_1.triggered_on() < version_2.triggered_on());
-        assert!(version_2.triggered_on() < version_3.triggered_on());
+        assert_ne!(version_1.id, version_2.id);
+        assert_ne!(version_1.id, version_3.id);
+        assert_ne!(version_2.id, version_3.id);
+        assert_eq!(version_1.table_id, version_2.table_id);
+        assert_eq!(version_1.table_id, version_3.table_id);
+        assert!(version_1.triggered_on < version_2.triggered_on);
+        assert!(version_2.triggered_on < version_3.triggered_on);
 
         // Get table_id
-        let table_id = version_1.table_id();
+        let table_id = version_1.table_id;
 
         // Check fixed versions are found with its ids.
         let (versions, triggered_on) = (
@@ -1205,7 +1198,7 @@ mod tests {
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
-            .table_id(table_id)
+            .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
@@ -1215,15 +1208,15 @@ mod tests {
         // INITIAL
         assert!(versions_found[0].is_some());
         let version_found = versions_found[0].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_1.id());
+        assert_eq!(version_found.id, version_1.id);
         // INITIAL~1 or HEAD~1
         assert!(versions_found[1].is_some());
         let version_found = versions_found[1].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_2.id());
+        assert_eq!(version_found.id, version_2.id);
         // HEAD
         assert!(versions_found[2].is_some());
         let version_found = versions_found[2].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_3.id());
+        assert_eq!(version_found.id, version_3.id);
 
         // And the inverse returns nothing
         let (versions, triggered_on) = (
@@ -1231,7 +1224,7 @@ mod tests {
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
-            .table_id(table_id)
+            .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
@@ -1254,16 +1247,16 @@ mod tests {
         let version_1 = &table_data_versions.get(&table_name).unwrap()[0];
         let version_2 = &table_data_versions.get(&table_name).unwrap()[1];
         let version_3 = &table_data_versions.get(&table_name).unwrap()[2];
-        assert_ne!(version_1.id(), version_2.id());
-        assert_ne!(version_1.id(), version_3.id());
-        assert_ne!(version_2.id(), version_3.id());
-        assert_eq!(version_1.table_id(), version_2.table_id());
-        assert_eq!(version_1.table_id(), version_3.table_id());
-        assert!(version_1.triggered_on() < version_2.triggered_on());
-        assert!(version_2.triggered_on() < version_3.triggered_on());
+        assert_ne!(version_1.id, version_2.id);
+        assert_ne!(version_1.id, version_3.id);
+        assert_ne!(version_2.id, version_3.id);
+        assert_eq!(version_1.table_id, version_2.table_id);
+        assert_eq!(version_1.table_id, version_3.table_id);
+        assert!(version_1.triggered_on < version_2.triggered_on);
+        assert!(version_2.triggered_on < version_3.triggered_on);
 
         // Get table_id
-        let table_id = version_1.table_id();
+        let table_id = version_1.table_id;
 
         // Check fixed versions are found with its ids.
         let (versions, triggered_on) = (
@@ -1271,7 +1264,7 @@ mod tests {
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
-            .table_id(table_id)
+            .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
@@ -1281,15 +1274,15 @@ mod tests {
         // INITIAL
         assert!(versions_found[0].is_some());
         let version_found = versions_found[0].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_1.id());
+        assert_eq!(version_found.id, version_1.id);
         // INITIAL~1 or HEAD~1
         assert!(versions_found[1].is_some());
         let version_found = versions_found[1].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_2.id());
+        assert_eq!(version_found.id, version_2.id);
         // HEAD
         assert!(versions_found[2].is_some());
         let version_found = versions_found[2].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_3.id());
+        assert_eq!(version_found.id, version_3.id);
         Ok(())
     }
 
@@ -1305,12 +1298,12 @@ mod tests {
         // Assert all versions are for the same table_id but are different versions.
         let version_1 = &table_data_versions.get(&table_name).unwrap()[0];
         let version_2 = &table_data_versions.get(&table_name).unwrap()[1];
-        assert_ne!(version_1.id(), version_2.id());
-        assert_eq!(version_1.table_id(), version_2.table_id());
-        assert!(version_1.triggered_on() < version_2.triggered_on());
+        assert_ne!(version_1.id, version_2.id);
+        assert_eq!(version_1.table_id, version_2.table_id);
+        assert!(version_1.triggered_on < version_2.triggered_on);
 
         // Get table_id
-        let table_id = version_1.table_id();
+        let table_id = version_1.table_id;
 
         // Check fixed versions are found with its ids.
         let (versions, triggered_on) = (
@@ -1318,7 +1311,7 @@ mod tests {
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
-            .table_id(table_id)
+            .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
@@ -1330,11 +1323,11 @@ mod tests {
         // HEAD~1
         assert!(versions_found[1].is_some());
         let version_found = versions_found[1].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_1.id());
+        assert_eq!(version_found.id, version_1.id);
         // HEAD
         assert!(versions_found[2].is_some());
         let version_found = versions_found[2].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_2.id());
+        assert_eq!(version_found.id, version_2.id);
         Ok(())
     }
 
@@ -1350,12 +1343,12 @@ mod tests {
         // Assert all versions are for the same table_id but are different versions.
         let version_1 = &table_data_versions.get(&table_name).unwrap()[0];
         let version_2 = &table_data_versions.get(&table_name).unwrap()[1];
-        assert_ne!(version_1.id(), version_2.id());
-        assert_eq!(version_1.table_id(), version_2.table_id());
-        assert!(version_1.triggered_on() < version_2.triggered_on());
+        assert_ne!(version_1.id, version_2.id);
+        assert_eq!(version_1.table_id, version_2.table_id);
+        assert!(version_1.triggered_on < version_2.triggered_on);
 
         // Get table_id
-        let table_id = version_1.table_id();
+        let table_id = version_1.table_id;
 
         // And the inverse returns nothing
         let (versions, triggered_on) = (
@@ -1363,7 +1356,7 @@ mod tests {
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
-            .table_id(table_id)
+            .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
@@ -1385,12 +1378,12 @@ mod tests {
         // Assert all versions are for the same table_id but are different versions.
         let version_1 = &table_data_versions.get(&table_name).unwrap()[0];
         let version_2 = &table_data_versions.get(&table_name).unwrap()[1];
-        assert_ne!(version_1.id(), version_2.id());
-        assert_eq!(version_1.table_id(), version_2.table_id());
-        assert!(version_1.triggered_on() < version_2.triggered_on());
+        assert_ne!(version_1.id, version_2.id);
+        assert_eq!(version_1.table_id, version_2.table_id);
+        assert!(version_1.triggered_on < version_2.triggered_on);
 
         // Get table_id
-        let table_id = version_1.table_id();
+        let table_id = version_1.table_id;
 
         // And the inverse returns nothing
         let (versions, triggered_on) = (
@@ -1398,7 +1391,7 @@ mod tests {
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
-            .table_id(table_id)
+            .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
@@ -1421,27 +1414,24 @@ mod tests {
         let version_1 = &table_data_versions.get(&table_name).unwrap()[0];
         let version_2 = &table_data_versions.get(&table_name).unwrap()[1];
         let version_3 = &table_data_versions.get(&table_name).unwrap()[2];
-        assert_ne!(version_1.id(), version_2.id());
-        assert_ne!(version_1.id(), version_3.id());
-        assert_ne!(version_2.id(), version_3.id());
-        assert_eq!(version_1.table_id(), version_2.table_id());
-        assert_eq!(version_1.table_id(), version_3.table_id());
-        assert!(version_1.triggered_on() < version_2.triggered_on());
-        assert!(version_2.triggered_on() < version_3.triggered_on());
+        assert_ne!(version_1.id, version_2.id);
+        assert_ne!(version_1.id, version_3.id);
+        assert_ne!(version_2.id, version_3.id);
+        assert_eq!(version_1.table_id, version_2.table_id);
+        assert_eq!(version_1.table_id, version_3.table_id);
+        assert!(version_1.triggered_on < version_2.triggered_on);
+        assert!(version_2.triggered_on < version_3.triggered_on);
 
         // Get table_id
-        let table_id = version_1.table_id();
+        let table_id = version_1.table_id;
 
         // Check fixed versions are found with its ids.
         let (versions, triggered_on) = (
-            Versions::Range(
-                Version::Fixed(*version_1.id()),
-                Version::Fixed(*version_3.id()),
-            ),
+            Versions::Range(Version::Fixed(version_1.id), Version::Fixed(version_3.id)),
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
-            .table_id(table_id)
+            .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
@@ -1451,15 +1441,15 @@ mod tests {
         // HEAD~2
         assert!(versions_found[0].is_some());
         let version_found = versions_found[0].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_1.id());
+        assert_eq!(version_found.id, version_1.id);
         // HEAD~1
         assert!(versions_found[1].is_some());
         let version_found = versions_found[1].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_2.id());
+        assert_eq!(version_found.id, version_2.id);
         // HEAD
         assert!(versions_found[2].is_some());
         let version_found = versions_found[2].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_3.id());
+        assert_eq!(version_found.id, version_3.id);
         Ok(())
     }
 
@@ -1476,27 +1466,24 @@ mod tests {
         let version_1 = &table_data_versions.get(&table_name).unwrap()[0];
         let version_2 = &table_data_versions.get(&table_name).unwrap()[1];
         let version_3 = &table_data_versions.get(&table_name).unwrap()[2];
-        assert_ne!(version_1.id(), version_2.id());
-        assert_ne!(version_1.id(), version_3.id());
-        assert_ne!(version_2.id(), version_3.id());
-        assert_eq!(version_1.table_id(), version_2.table_id());
-        assert_eq!(version_1.table_id(), version_3.table_id());
-        assert!(version_1.triggered_on() < version_2.triggered_on());
-        assert!(version_2.triggered_on() < version_3.triggered_on());
+        assert_ne!(version_1.id, version_2.id);
+        assert_ne!(version_1.id, version_3.id);
+        assert_ne!(version_2.id, version_3.id);
+        assert_eq!(version_1.table_id, version_2.table_id);
+        assert_eq!(version_1.table_id, version_3.table_id);
+        assert!(version_1.triggered_on < version_2.triggered_on);
+        assert!(version_2.triggered_on < version_3.triggered_on);
 
         // Get table_id
-        let table_id = version_1.table_id();
+        let table_id = version_1.table_id;
 
         // Check versions found is empty: range is inverted.
         let (versions, triggered_on) = (
-            Versions::Range(
-                Version::Fixed(*version_3.id()),
-                Version::Fixed(*version_1.id()),
-            ),
+            Versions::Range(Version::Fixed(version_3.id), Version::Fixed(version_1.id)),
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
-            .table_id(table_id)
+            .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
@@ -1518,12 +1505,12 @@ mod tests {
         // Assert all versions are for the same table_id but are different versions.
         let version_1 = &table_data_versions.get(&table_name).unwrap()[0];
         let version_2 = &table_data_versions.get(&table_name).unwrap()[1];
-        assert_ne!(version_1.id(), version_2.id());
-        assert_eq!(version_1.table_id(), version_2.table_id());
-        assert!(version_1.triggered_on() < version_2.triggered_on());
+        assert_ne!(version_1.id, version_2.id);
+        assert_eq!(version_1.table_id, version_2.table_id);
+        assert!(version_1.triggered_on < version_2.triggered_on);
 
         // Get table_id
-        let table_id = version_1.table_id();
+        let table_id = version_1.table_id;
 
         // Check version is found.
         let (versions, triggered_on) = (
@@ -1531,7 +1518,7 @@ mod tests {
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
-            .table_id(table_id)
+            .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
@@ -1540,7 +1527,7 @@ mod tests {
         assert_eq!(versions_found.len(), 1);
         assert!(versions_found[0].is_some());
         let version_found = versions_found[0].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_1.id());
+        assert_eq!(version_found.id, version_1.id);
         Ok(())
     }
 
@@ -1556,12 +1543,12 @@ mod tests {
         // Assert all versions are for the same table_id but are different versions.
         let version_1 = &table_data_versions.get(&table_name).unwrap()[0];
         let version_2 = &table_data_versions.get(&table_name).unwrap()[1];
-        assert_ne!(version_1.id(), version_2.id());
-        assert_eq!(version_1.table_id(), version_2.table_id());
-        assert!(version_1.triggered_on() < version_2.triggered_on());
+        assert_ne!(version_1.id, version_2.id);
+        assert_eq!(version_1.table_id, version_2.table_id);
+        assert!(version_1.triggered_on < version_2.triggered_on);
 
         // Get table_id
-        let table_id = version_1.table_id();
+        let table_id = version_1.table_id;
 
         // Check version is found.
         let (versions, triggered_on) = (
@@ -1569,7 +1556,7 @@ mod tests {
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
-            .table_id(table_id)
+            .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
@@ -1578,7 +1565,7 @@ mod tests {
         assert_eq!(versions_found.len(), 1);
         assert!(versions_found[0].is_some());
         let version_found = versions_found[0].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_2.id());
+        assert_eq!(version_found.id, version_2.id);
         Ok(())
     }
 
@@ -1594,12 +1581,12 @@ mod tests {
         // Assert all versions are for the same table_id but are different versions.
         let version_1 = &table_data_versions.get(&table_name).unwrap()[0];
         let version_2 = &table_data_versions.get(&table_name).unwrap()[1];
-        assert_ne!(version_1.id(), version_2.id());
-        assert_eq!(version_1.table_id(), version_2.table_id());
-        assert!(version_1.triggered_on() < version_2.triggered_on());
+        assert_ne!(version_1.id, version_2.id);
+        assert_eq!(version_1.table_id, version_2.table_id);
+        assert!(version_1.triggered_on < version_2.triggered_on);
 
         // Get table_id
-        let table_id = version_1.table_id();
+        let table_id = version_1.table_id;
 
         // Check version is found.
         let (versions, triggered_on) = (
@@ -1607,7 +1594,7 @@ mod tests {
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
-            .table_id(table_id)
+            .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
@@ -1630,12 +1617,12 @@ mod tests {
         // Assert all versions are for the same table_id but are different versions.
         let version_1 = &table_data_versions.get(&table_name).unwrap()[0];
         let version_2 = &table_data_versions.get(&table_name).unwrap()[1];
-        assert_ne!(version_1.id(), version_2.id());
-        assert_eq!(version_1.table_id(), version_2.table_id());
-        assert!(version_1.triggered_on() < version_2.triggered_on());
+        assert_ne!(version_1.id, version_2.id);
+        assert_eq!(version_1.table_id, version_2.table_id);
+        assert!(version_1.triggered_on < version_2.triggered_on);
 
         // Get table_id
-        let table_id = version_1.table_id();
+        let table_id = version_1.table_id;
 
         // Check version is found.
         let (versions, triggered_on) = (
@@ -1643,7 +1630,7 @@ mod tests {
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
-            .table_id(table_id)
+            .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
@@ -1666,23 +1653,20 @@ mod tests {
         // Assert all versions are for the same table_id but are different versions.
         let version_1 = &table_data_versions.get(&table_name).unwrap()[0];
         let version_2 = &table_data_versions.get(&table_name).unwrap()[1];
-        assert_ne!(version_1.id(), version_2.id());
-        assert_eq!(version_1.table_id(), version_2.table_id());
-        assert!(version_1.triggered_on() < version_2.triggered_on());
+        assert_ne!(version_1.id, version_2.id);
+        assert_eq!(version_1.table_id, version_2.table_id);
+        assert!(version_1.triggered_on < version_2.triggered_on);
 
         // Get table_id
-        let table_id = version_1.table_id();
+        let table_id = version_1.table_id;
 
         // Check version is found.
         let (versions, triggered_on) = (
-            Versions::Range(
-                Version::Fixed(*version_1.id()),
-                Version::Fixed(*version_1.id()),
-            ),
+            Versions::Range(Version::Fixed(version_1.id), Version::Fixed(version_1.id)),
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
-            .table_id(table_id)
+            .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
@@ -1691,7 +1675,7 @@ mod tests {
         assert_eq!(versions_found.len(), 1);
         assert!(versions_found[0].is_some());
         let version_found = versions_found[0].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_1.id());
+        assert_eq!(version_found.id, version_1.id);
         Ok(())
     }
 
@@ -1707,20 +1691,20 @@ mod tests {
         // Assert all versions are for the same table_id but are different versions.
         let version_1 = &table_data_versions.get(&table_name).unwrap()[0];
         let version_2 = &table_data_versions.get(&table_name).unwrap()[1];
-        assert_ne!(version_1.id(), version_2.id());
-        assert_eq!(version_1.table_id(), version_2.table_id());
-        assert!(version_1.triggered_on() < version_2.triggered_on());
+        assert_ne!(version_1.id, version_2.id);
+        assert_eq!(version_1.table_id, version_2.table_id);
+        assert!(version_1.triggered_on < version_2.triggered_on);
 
         // Get table_id
-        let table_id = version_1.table_id();
+        let table_id = version_1.table_id;
 
         // Check versions are found.
         let (versions, triggered_on) = (
-            Versions::Range(Version::Fixed(*version_1.id()), Version::Head(0)),
+            Versions::Range(Version::Fixed(version_1.id), Version::Head(0)),
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
-            .table_id(table_id)
+            .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
@@ -1730,11 +1714,11 @@ mod tests {
         // Fixed
         assert!(versions_found[0].is_some());
         let version_found = versions_found[0].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_1.id());
+        assert_eq!(version_found.id, version_1.id);
         // HEAD
         assert!(versions_found[1].is_some());
         let version_found = versions_found[1].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_2.id());
+        assert_eq!(version_found.id, version_2.id);
         Ok(())
     }
 
@@ -1750,20 +1734,20 @@ mod tests {
         // Assert all versions are for the same table_id but are different versions.
         let version_1 = &table_data_versions.get(&table_name).unwrap()[0];
         let version_2 = &table_data_versions.get(&table_name).unwrap()[1];
-        assert_ne!(version_1.id(), version_2.id());
-        assert_eq!(version_1.table_id(), version_2.table_id());
-        assert!(version_1.triggered_on() < version_2.triggered_on());
+        assert_ne!(version_1.id, version_2.id);
+        assert_eq!(version_1.table_id, version_2.table_id);
+        assert!(version_1.triggered_on < version_2.triggered_on);
 
         // Get table_id
-        let table_id = version_1.table_id();
+        let table_id = version_1.table_id;
 
         // Check versions are found.
         let (versions, triggered_on) = (
-            Versions::Range(Version::Fixed(*version_1.id()), Version::Initial(1)),
+            Versions::Range(Version::Fixed(version_1.id), Version::Initial(1)),
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
-            .table_id(table_id)
+            .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
@@ -1773,11 +1757,11 @@ mod tests {
         // Fixed
         assert!(versions_found[0].is_some());
         let version_found = versions_found[0].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_1.id());
+        assert_eq!(version_found.id, version_1.id);
         // INITIAL
         assert!(versions_found[1].is_some());
         let version_found = versions_found[1].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_2.id());
+        assert_eq!(version_found.id, version_2.id);
         Ok(())
     }
 
@@ -1793,20 +1777,20 @@ mod tests {
         // Assert all versions are for the same table_id but are different versions.
         let version_1 = &table_data_versions.get(&table_name).unwrap()[0];
         let version_2 = &table_data_versions.get(&table_name).unwrap()[1];
-        assert_ne!(version_1.id(), version_2.id());
-        assert_eq!(version_1.table_id(), version_2.table_id());
-        assert!(version_1.triggered_on() < version_2.triggered_on());
+        assert_ne!(version_1.id, version_2.id);
+        assert_eq!(version_1.table_id, version_2.table_id);
+        assert!(version_1.triggered_on < version_2.triggered_on);
 
         // Get table_id
-        let table_id = version_1.table_id();
+        let table_id = version_1.table_id;
 
         // Check versions are found.
         let (versions, triggered_on) = (
-            Versions::Range(Version::Head(-1), Version::Fixed(*version_1.id())),
+            Versions::Range(Version::Head(-1), Version::Fixed(version_1.id)),
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
-            .table_id(table_id)
+            .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
@@ -1816,7 +1800,7 @@ mod tests {
         // HEAD and fixed
         assert!(versions_found[0].is_some());
         let version_found = versions_found[0].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_1.id());
+        assert_eq!(version_found.id, version_1.id);
         Ok(())
     }
 
@@ -1832,12 +1816,12 @@ mod tests {
         // Assert all versions are for the same table_id but are different versions.
         let version_1 = &table_data_versions.get(&table_name).unwrap()[0];
         let version_2 = &table_data_versions.get(&table_name).unwrap()[1];
-        assert_ne!(version_1.id(), version_2.id());
-        assert_eq!(version_1.table_id(), version_2.table_id());
-        assert!(version_1.triggered_on() < version_2.triggered_on());
+        assert_ne!(version_1.id, version_2.id);
+        assert_eq!(version_1.table_id, version_2.table_id);
+        assert!(version_1.triggered_on < version_2.triggered_on);
 
         // Get table_id
-        let table_id = version_1.table_id();
+        let table_id = version_1.table_id;
 
         // Check version is found.
         let (versions, triggered_on) = (
@@ -1845,7 +1829,7 @@ mod tests {
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
-            .table_id(table_id)
+            .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
@@ -1854,7 +1838,7 @@ mod tests {
         assert_eq!(versions_found.len(), 1);
         assert!(versions_found[0].is_some());
         let version_found = versions_found[0].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_1.id());
+        assert_eq!(version_found.id, version_1.id);
         Ok(())
     }
 
@@ -1870,20 +1854,20 @@ mod tests {
         // Assert all versions are for the same table_id but are different versions.
         let version_1 = &table_data_versions.get(&table_name).unwrap()[0];
         let version_2 = &table_data_versions.get(&table_name).unwrap()[1];
-        assert_ne!(version_1.id(), version_2.id());
-        assert_eq!(version_1.table_id(), version_2.table_id());
-        assert!(version_1.triggered_on() < version_2.triggered_on());
+        assert_ne!(version_1.id, version_2.id);
+        assert_eq!(version_1.table_id, version_2.table_id);
+        assert!(version_1.triggered_on < version_2.triggered_on);
 
         // Get table_id
-        let table_id = version_1.table_id();
+        let table_id = version_1.table_id;
 
         // Check versions are found.
         let (versions, triggered_on) = (
-            Versions::Range(Version::Initial(0), Version::Fixed(*version_1.id())),
+            Versions::Range(Version::Initial(0), Version::Fixed(version_1.id)),
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
-            .table_id(table_id)
+            .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
@@ -1893,7 +1877,7 @@ mod tests {
         // HEAD and fixed
         assert!(versions_found[0].is_some());
         let version_found = versions_found[0].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_1.id());
+        assert_eq!(version_found.id, version_1.id);
         Ok(())
     }
 
@@ -1909,20 +1893,20 @@ mod tests {
         // Assert all versions are for the same table_id but are different versions.
         let version_1 = &table_data_versions.get(&table_name).unwrap()[0];
         let version_2 = &table_data_versions.get(&table_name).unwrap()[1];
-        assert_ne!(version_1.id(), version_2.id());
-        assert_eq!(version_1.table_id(), version_2.table_id());
-        assert!(version_1.triggered_on() < version_2.triggered_on());
+        assert_ne!(version_1.id, version_2.id);
+        assert_eq!(version_1.table_id, version_2.table_id);
+        assert!(version_1.triggered_on < version_2.triggered_on);
 
         // Get table_id
-        let table_id = version_1.table_id();
+        let table_id = version_1.table_id;
 
         // Check versions are found.
         let (versions, triggered_on) = (
-            Versions::Range(Version::Head(-5), Version::Fixed(*version_1.id())),
+            Versions::Range(Version::Head(-5), Version::Fixed(version_1.id)),
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
-            .table_id(table_id)
+            .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
@@ -1937,7 +1921,7 @@ mod tests {
         // Fixed
         assert!(versions_found[4].is_some());
         let version_found = versions_found[4].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_1.id());
+        assert_eq!(version_found.id, version_1.id);
         Ok(())
     }
 
@@ -1948,7 +1932,7 @@ mod tests {
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 1)])).await;
 
-        let table_id = table_data_versions.get(&table_name).unwrap()[0].table_id();
+        let table_id = table_data_versions.get(&table_name).unwrap()[0].table_id;
 
         // Assert invalid range errors are returned.
         let (versions, triggered_on) = (
@@ -1957,7 +1941,7 @@ mod tests {
         );
         let mut conn = db.acquire().await.unwrap();
         let versions_found = VersionResolver::builder()
-            .table_id(table_id)
+            .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
             .error_on_desc_range(true)

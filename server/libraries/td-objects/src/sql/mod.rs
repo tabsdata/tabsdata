@@ -2,35 +2,18 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-// IMPL NOTES:
-//
-// * The `Queries` classes of function/dependency/table/trigger are a placeholder
-//   in preparation for SQL generation for different DBs.
-//
-// *  the `Queries` classes of function/dependency/table/trigger modules could be
-//    refactored into a Generic component providing that SQL building for the
-//    'current' and 'at_time' methods.
 pub mod cte;
 pub mod list;
 pub mod recursive;
 
 use crate::sql::cte::LATEST_VERSIONS_CTE;
 use crate::sql::cte::{ranked_versions_at, select_ranked_versions_at};
-use crate::sql::list::{ListError, ListQueryParams, Order, Pagination};
-use crate::types::{DataAccessObject, ListQuery, PartitionBy, SqlEntity, VersionedAt};
+use crate::sql::list::{ListQueryParams, Order, Pagination};
+use crate::types::{AsDynSqlEntities, DataAccessObject, ListQuery, SqlEntity, States, Versioned};
 use async_trait::async_trait;
 use std::ops::Deref;
-use td_error::td_error;
+use td_error::TdError;
 use tracing::trace;
-
-#[td_error]
-pub enum QueryError {
-    #[error("List query error: {0:?}")]
-    ListQueryError(#[from] ListError) = 0,
-
-    #[error("Type [{0:?}] not found in [{1:?}] ")]
-    TypeNotFound(String, String) = 5000,
-}
 
 /// Struct holding the Queries.
 pub struct DaoQueries(Box<dyn Queries + Send + Sync>);
@@ -67,7 +50,7 @@ pub trait Insert<'a> {
     fn insert<D: DataAccessObject>(
         &self,
         dao: &'a D,
-    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>;
+    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, TdError>;
 }
 
 impl<'a, Q> Insert<'a> for Q
@@ -77,7 +60,7 @@ where
     fn insert<D: DataAccessObject>(
         &self,
         dao: &'a D,
-    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError> {
+    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, TdError> {
         let table = D::sql_table();
         let fields = D::fields();
         let sql = format!("INSERT INTO {} ({}) ", table, fields.join(", "));
@@ -89,164 +72,125 @@ where
     }
 }
 
-/// Macro to generate the WHERE clause for the query functions.
-/// The macro is recursive and uses a muncher to process the input.
-/// The input is a list of columns to filter by. The columns can be single values or arrays.
-/// The arrays are used to create OR groups. For example, ([E1, E2]) will generate a E1 OR E2 clause.
-/// The macro will generate a WHERE clause with AND groups for the single values and OR groups for the arrays.
-/// For example, ([E1, E2], E3) will generate (E1 OR E2) AND E3.
-/// It returns whether the WHERE clause was empty or not, so subsequent WHERE clauses can be added.
-#[macro_export]
-macro_rules! gen_where_clause {
-    // Cases for when there's no condition to add (empty input).
-    ($query_builder:expr_2021, $D:ty, ) => { true };
-    ($query_builder:expr_2021, $D:ty, $vect:ident: []) => { true };
+pub fn gen_where_clause<'a, D, E>(
+    query_builder: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>,
+    groups: &'a [E],
+) -> Result<bool, TdError>
+where
+    D: DataAccessObject,
+    E: AsDynSqlEntities,
+{
+    let mut with_where = false; // true if WHERE clause was added
 
-    // Case for when there's at least one condition.
-    ($query_builder:expr_2021, $D:ty, $($rest:tt)+) => {{
-        $query_builder.push(" WHERE ");
-        let mut first = true;
-        gen_where_clause!(@munch $query_builder, $D, first, $($rest)+);
-        first
-    }};
+    for group in groups {
+        let entities = group.as_dyn_entities();
 
-    // Binding
-    (@bind $query_builder:expr_2021, $D:ty, $E:ident) => {{
-        let column = <$D>::sql_field_for_type($E.type_name())
-            .ok_or(QueryError::TypeNotFound(
-                std::any::type_name::<$E>().to_string(),
-                <$D>::sql_table().to_string(),
-            ))?;
-        $E.push_bind($query_builder.push(format!("{} = ", column)));
-    }};
-
-    // Base case: nothing to do here
-    (@munch $query_builder:expr_2021, $D:ty, $first:ident) => {};
-
-    // Single identifier (normal case). AND group.
-    (@munch $query_builder:expr_2021, $D:ty, $first:ident, $E:ident $(, $($rest:tt)*)?) => {{
-        if !$first { $query_builder.push(" AND "); }
-        $first = false;
-        gen_where_clause!(@bind $query_builder, $D, $E);
-        gen_where_clause!(@munch $query_builder, $D, $first $(, $($rest)*)?);
-    }};
-
-    // Case for an empty array (no expansion needed)
-    (@munch $query_builder:expr_2021, $first:ident, []) => {};
-
-    // AND/OR group. Joining arrays.
-    (@munch $query_builder:expr_2021, $D:ty, $first:ident, $vect:ident: [ $($inner:ident),* ] $(, $($rest:tt)*)?) => {{
-        if !$first { $query_builder.push(" AND "); }
-        $first = false;
-
-        let mut or_first = true;
-        for ($($inner),*) in $vect.iter() {
-            if !or_first { $query_builder.push(" OR "); }
-            or_first = false;
-
-            $query_builder.push("(");
-            let mut and_first = true;
-            $(
-                if !and_first { $query_builder.push(" AND "); }
-                and_first = false;
-                gen_where_clause!(@bind $query_builder, $D, $inner);
-            )*
-            $query_builder.push(")");
+        if entities.is_empty() {
+            continue;
         }
-        gen_where_clause!(@munch $query_builder, $D, $first $(, $($rest)*)?);
-    }};
+
+        if with_where {
+            query_builder.push(" OR ");
+        } else {
+            query_builder.push(" WHERE ");
+            with_where = true;
+        }
+
+        query_builder.push("(");
+
+        let mut first_entity = true;
+        for entity in entities {
+            if !first_entity {
+                query_builder.push(" AND ");
+            }
+            first_entity = false;
+
+            let column = <D>::sql_field_for_type(entity.type_id())?;
+            entity.push_bind(query_builder.push(format!("{} = ", column)));
+        }
+
+        query_builder.push(")");
+    }
+
+    Ok(with_where)
 }
 
 pub trait SelectBy<'a, E> {
     fn select_by<D: DataAccessObject>(
         &self,
-        e: &'a E,
-    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>;
+        where_: &'a E,
+    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, TdError>;
 }
 
-macro_rules! impl_select_by {
-    (
-        [$($E:ident),*]
-    ) => {
-        #[allow(non_snake_case, unused_parens, unused_variables, unused_mut, unused_assignments)]
-        impl<'a, Q, $($E),*> SelectBy<'a, ($(&'a $E),*)> for Q
-        where
-            Q: Deref<Target = dyn Queries>,
-            $($E: SqlEntity),*
-        {
-            fn select_by<D: DataAccessObject>(&self, ($($E),*): &'a ($(&'a $E),*)) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError> {
-                let table = D::sql_table();
-                let fields = D::fields();
-                let sql = format!("SELECT {} FROM {}", fields.join(", "), table);
-                let mut query_builder = sqlx::QueryBuilder::new(sql);
-                gen_where_clause!(query_builder, D, $($E),*);
-                query_builder.push(" ");
-                query_builder.push(D::order_by());
-                trace!("select_{}: sql: {}", table, query_builder.sql());
-                Ok(query_builder)
-            }
-        }
-    };
+impl<'a, Q, E> SelectBy<'a, E> for Q
+where
+    E: AsDynSqlEntities,
+    Q: Deref<Target = dyn Queries>,
+{
+    fn select_by<D: DataAccessObject>(
+        &self,
+        where_: &'a E,
+    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, TdError> {
+        let table = D::sql_table();
+        let fields = D::fields();
+        let sql = format!("SELECT {} FROM {}", fields.join(", "), table);
+        let mut query_builder = sqlx::QueryBuilder::new(sql);
+        gen_where_clause::<D, E>(&mut query_builder, std::slice::from_ref(where_))?;
+        query_builder.push(" ");
+        query_builder.push(D::order_by());
+        trace!("select_{}: sql: {}", table, query_builder.sql());
+        Ok(query_builder)
+    }
 }
-
-all_the_tuples!(impl_select_by);
 
 pub trait FindBy<'a, E> {
     fn find_by<D: DataAccessObject>(
         &self,
-        e: &'a [E],
-    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>;
+        where_: &'a [E],
+    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, TdError>;
 }
 
-macro_rules! impl_find_by {
-    (
-        [$($E:ident),*]
-    ) => {
-        #[allow(non_snake_case, unused_parens, unused_variables, unused_mut, unused_assignments)]
-        impl<'a, Q, $($E),*> FindBy<'a, ($(&'a $E),*)> for Q
-        where
-            Q: Deref<Target = dyn Queries>,
-            $($E: SqlEntity),*
-        {
-            fn find_by<D: DataAccessObject>(&self, e: &'a [ ($(&'a $E),*) ]) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError> {
-                let table = D::sql_table();
-                let fields = D::fields();
-                let sql = format!("SELECT {} FROM {}", fields.join(", "), table);
-                let mut query_builder = sqlx::QueryBuilder::new(sql);
-                if e.is_empty() {
-                    // Safeguard so empty lookups don't find all rows
-                    query_builder.push(" WHERE 1 = 0");
-                } else {
-                    gen_where_clause!(query_builder, D, e: [ $($E),* ]);
-                }
-                trace!("find_by_{}: sql: {}", table, query_builder.sql());
-                Ok(query_builder)
-            }
+impl<'a, Q, E> FindBy<'a, E> for Q
+where
+    Q: Deref<Target = dyn Queries>,
+    E: AsDynSqlEntities,
+{
+    fn find_by<D: DataAccessObject>(
+        &self,
+        where_: &'a [E],
+    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, TdError> {
+        let table = D::sql_table();
+        let fields = D::fields();
+        let sql = format!("SELECT {} FROM {}", fields.join(", "), table);
+        let mut query_builder = sqlx::QueryBuilder::new(sql);
+        if where_.is_empty() {
+            // Safeguard so empty lookups don't find all rows
+            query_builder.push(" WHERE 1 = 0");
+        } else {
+            gen_where_clause::<D, E>(&mut query_builder, where_)?;
         }
-    };
+        trace!("find_by_{}: sql: {}", table, query_builder.sql());
+        Ok(query_builder)
+    }
 }
 
-all_the_tuples!(impl_find_by);
-
-#[async_trait]
 pub trait ListFilterGenerator: Send + Sync {
-    async fn where_clause<'a, D: DataAccessObject>(
+    fn where_clause<'a, D: DataAccessObject>(
         &'a self,
-        first: bool,
+        with_where: bool,
         query_builder: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>,
-    ) -> Result<bool, QueryError>;
+    ) -> Result<bool, TdError>;
 }
 
 pub type NoListFilter = ();
 
-#[async_trait]
 impl ListFilterGenerator for NoListFilter {
-    async fn where_clause<'a, D: DataAccessObject>(
+    fn where_clause<'a, D: DataAccessObject>(
         &'a self,
-        first: bool,
+        with_where: bool,
         _query_builder: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>,
-    ) -> Result<bool, QueryError> {
-        Ok(first)
+    ) -> Result<bool, TdError> {
+        Ok(with_where)
     }
 }
 
@@ -256,189 +200,185 @@ pub trait ListBy<'a, E> {
         &self,
         list_query_params: &'a ListQueryParams<T>,
         list_filter_generator: &'a F,
-        e: &'a E,
-    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>
+        where_: &'a E,
+    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, TdError>
     where
         T: ListQuery + 'a,
         F: ListFilterGenerator + 'a;
 
-    async fn list_by_at<T, F>(
+    async fn list_by_at<T, const S: u8, F>(
         &self,
         list_query_params: &'a ListQueryParams<T>,
-        natural_order_by: Option<&'a <<T as ListQuery>::Dao as VersionedAt>::Order>,
-        condition: Option<&'a [&'a <<T as ListQuery>::Dao as VersionedAt>::Condition]>,
+        natural_order_by: Option<&'a <<T as ListQuery>::Dao as Versioned>::Order>,
         list_filter_generator: &'a F,
-        e: &'a E,
-    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>
+        where_: &'a E,
+    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, TdError>
     where
         T: ListQuery + 'a,
         F: ListFilterGenerator + 'a,
-        T::Dao: VersionedAt;
+        T::Dao: Versioned + States<S>;
 
-    async fn list_versions_by_at<T, F>(
+    async fn list_versions_by_at<T, const S: u8, F>(
         &self,
         list_query_params: &'a ListQueryParams<T>,
-        natural_order_by: Option<&'a <<T as ListQuery>::Dao as VersionedAt>::Order>,
-        status: Option<&'a [&'a <<T as ListQuery>::Dao as VersionedAt>::Condition]>,
+        natural_order_by: Option<&'a <<T as ListQuery>::Dao as Versioned>::Order>,
         list_filter_generator: &'a F,
-        e: &'a E,
-    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>
+        where_: &'a E,
+    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, TdError>
     where
         T: ListQuery + 'a,
         F: ListFilterGenerator + 'a,
-        T::Dao: PartitionBy + VersionedAt;
+        T::Dao: Versioned + States<S>;
 }
 
-// TODO remove duplicate code and tests for versions
-macro_rules! impl_list_by {
-    (
-        [$($E:ident),*]
-    ) => {
-        #[async_trait]
-        #[allow(non_snake_case, unused_parens, unused_variables, unused_mut, unused_assignments)]
-        impl<'a, Q, $($E),*> ListBy<'a, ($(&'a $E),*)> for Q
-        where
-            Q: Deref<Target = dyn Queries> + Send + Sync,
-            $($E: SqlEntity),*
-        {
-            async fn list_by<T, F>(
-                &self,
-                query_params: &'a ListQueryParams<T>,
-                list_filter_generator: &'a F,
-                ($($E),*): &'a ($(&'a $E),*),
-            ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>
-            where
-                T: ListQuery + 'a,
-                F: ListFilterGenerator + 'a,
-            {
-                let table = T::list_on();
-                let fields = T::fields();
-                let sql = format!("SELECT {} FROM {}", fields.join(", "), table);
-                let mut query_builder = sqlx::QueryBuilder::new(sql);
+#[async_trait]
+impl<'a, Q, E> ListBy<'a, E> for Q
+where
+    Q: Deref<Target = dyn Queries> + Send + Sync,
+    E: AsDynSqlEntities + Send + Sync,
+{
+    async fn list_by<T, F>(
+        &self,
+        query_params: &'a ListQueryParams<T>,
+        list_filter_generator: &'a F,
+        where_: &'a E,
+    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, TdError>
+    where
+        T: ListQuery + 'a,
+        F: ListFilterGenerator + 'a,
+    {
+        let table = T::list_on();
+        let fields = T::fields();
+        let sql = format!("SELECT {} FROM {}", fields.join(", "), table);
+        let mut query_builder = sqlx::QueryBuilder::new(sql);
 
-                let mut first = gen_where_clause!(query_builder, T::Dao, $($E),*);
-                first = list_filter_generator.where_clause::<T::Dao>(first, &mut query_builder).await?;
-                first = query_params_where(first, query_params, &mut query_builder);
+        let mut with_where =
+            gen_where_clause::<T::Dao, _>(&mut query_builder, std::slice::from_ref(where_))?;
+        with_where =
+            list_filter_generator.where_clause::<T::Dao>(with_where, &mut query_builder)?;
+        query_params_where(with_where, query_params, &mut query_builder);
 
-                trace!("list_{}: sql: {}", table, query_builder.sql());
-                Ok(query_builder)
+        trace!("list_{}: sql: {}", table, query_builder.sql());
+        Ok(query_builder)
+    }
+
+    async fn list_by_at<T, const S: u8, F>(
+        &self,
+        query_params: &'a ListQueryParams<T>,
+        natural_order_by: Option<&'a <<T as ListQuery>::Dao as Versioned>::Order>,
+        list_filter_generator: &'a F,
+        where_: &'a E,
+    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, TdError>
+    where
+        T: ListQuery + 'a,
+        T::Dao: Versioned + States<S>,
+        F: ListFilterGenerator + 'a,
+    {
+        let table = T::list_on();
+        let fields = T::fields();
+        let sql = format!("SELECT {} FROM {}", fields.join(", "), table);
+        let mut query_builder = sqlx::QueryBuilder::new(sql);
+
+        let mut with_where =
+            gen_where_clause::<T::Dao, _>(&mut query_builder, std::slice::from_ref(where_))?;
+
+        if let Some(natural_order_by) = natural_order_by {
+            if with_where {
+                query_builder.push(" AND ");
+            } else {
+                query_builder.push(" WHERE ");
+                with_where = true;
             }
 
-            async fn list_by_at<T, F>(
-                &self,
-                query_params: &'a ListQueryParams<T>,
-                natural_order_by: Option<&'a <<T as ListQuery>::Dao as VersionedAt>::Order>,
-                status: Option<&'a [&'a <<T as ListQuery>::Dao as VersionedAt>::Condition]>,
-                list_filter_generator: &'a F,
-                ($($E),*): &'a ($(&'a $E),*),
-            ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>
-            where
-                T: ListQuery + 'a,
-                T::Dao: VersionedAt,
-                F: ListFilterGenerator + 'a,
-            {
-                let table = T::list_on();
-                let fields = T::fields();
-                let sql = format!("SELECT {} FROM {}", fields.join(", "), table);
-                let mut query_builder = sqlx::QueryBuilder::new(sql);
-
-                let mut first = gen_where_clause!(query_builder, T::Dao, $($E),*);
-
-                if let Some(natural_order_by) = natural_order_by {
-                    if first {
-                        query_builder.push(" WHERE ");
-                    } else {
-                        query_builder.push(" AND ");
-                    }
-                    first = false;
-
-                    query_builder.push(format!(
-                        "{} <= ",
-                        <T::Dao as VersionedAt>::order_by()
-                    ));
-                    natural_order_by.push_bind(&mut query_builder);
-                }
-
-                if let Some(status) = status {
-                    if first {
-                        query_builder.push(" WHERE ");
-                    } else {
-                        query_builder.push(" AND ");
-                    }
-                    first = false;
-
-                    query_builder.push("(");
-                    let mut separated = query_builder.separated(" OR ");
-                    for status in status {
-                        separated.push(format!("{} = ", T::Dao::condition_by()));
-                        status.push_bind_unseparated(&mut separated);
-                    }
-                    query_builder.push(")");
-                }
-
-                first = list_filter_generator.where_clause::<T::Dao>(first, &mut query_builder).await?;
-                first = query_params_where(first, &query_params, &mut query_builder);
-
-                trace!("list_at_{}: sql: {}", table, query_builder.sql());
-                Ok(query_builder)
-            }
-
-            async fn list_versions_by_at<T, F>(
-                &self,
-                query_params: &'a ListQueryParams<T>,
-                natural_order_by: Option<&'a <<T as ListQuery>::Dao as VersionedAt>::Order>,
-                status: Option<&'a [&'a <<T as ListQuery>::Dao as VersionedAt>::Condition]>,
-                list_filter_generator: &'a F,
-                ($($E),*): &'a ($(&'a $E),*),
-            ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>
-            where
-                T: ListQuery + 'a,
-                T::Dao: PartitionBy + VersionedAt,
-                F: ListFilterGenerator + 'a,
-            {
-                let mut query_builder = sqlx::QueryBuilder::default();
-
-                // Build CTEs to find needed data (note natural order is needed to find the latest version, before listing)
-                query_builder.push("WITH ");
-                ranked_versions_at::<T::Dao>(LATEST_VERSIONS_CTE, &mut query_builder, natural_order_by);
-                select_ranked_versions_at::<T::Dao>(LATEST_VERSIONS_CTE, &mut query_builder, status);
-
-
-                let fields = T::fields();
-                let select = format!("SELECT {} FROM {}", fields.join(", "), LATEST_VERSIONS_CTE);
-                query_builder.push(select);
-
-                let mut first = gen_where_clause!(query_builder, T::Dao, $($E),*);
-                first = list_filter_generator.where_clause::<T::Dao>(first, &mut query_builder).await?;
-                first = query_params_where(first, &query_params, &mut query_builder);
-
-                trace!("list_versions_at_{}: sql: {}", T::list_on(), query_builder.sql());
-                Ok(query_builder)
-            }
+            query_builder.push(format!("{} <= ", <T::Dao as Versioned>::order_by()));
+            natural_order_by.push_bind(&mut query_builder);
         }
-    };
+
+        let state = <T::Dao as States<S>>::state();
+        if !state.is_empty() {
+            if with_where {
+                query_builder.push(" AND ");
+            } else {
+                query_builder.push(" WHERE ");
+                with_where = true;
+            }
+
+            query_builder.push("(");
+            let mut separated = query_builder.separated(" OR ");
+            for state in state {
+                let field = T::Dao::sql_field_for_type(state.type_id())?;
+                separated.push(format!("{field} = "));
+                state.push_bind_unseparated(&mut separated);
+            }
+            query_builder.push(")");
+        }
+
+        with_where =
+            list_filter_generator.where_clause::<T::Dao>(with_where, &mut query_builder)?;
+        query_params_where(with_where, query_params, &mut query_builder);
+
+        trace!("list_at_{}: sql: {}", table, query_builder.sql());
+        Ok(query_builder)
+    }
+
+    async fn list_versions_by_at<T, const S: u8, F>(
+        &self,
+        query_params: &'a ListQueryParams<T>,
+        natural_order_by: Option<&'a <<T as ListQuery>::Dao as Versioned>::Order>,
+        list_filter_generator: &'a F,
+        where_: &'a E,
+    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, TdError>
+    where
+        T: ListQuery + 'a,
+        T::Dao: Versioned + States<S>,
+        F: ListFilterGenerator + 'a,
+    {
+        let mut query_builder = sqlx::QueryBuilder::default();
+
+        // Build CTEs to find needed data (note natural order is needed to find the latest version, before listing)
+        query_builder.push("WITH ");
+        ranked_versions_at::<T::Dao>(LATEST_VERSIONS_CTE, &mut query_builder, natural_order_by);
+        select_ranked_versions_at::<S, T::Dao>(LATEST_VERSIONS_CTE, &mut query_builder)?;
+
+        let fields = T::fields();
+        let select = format!("SELECT {} FROM {}", fields.join(", "), LATEST_VERSIONS_CTE);
+        query_builder.push(select);
+
+        let mut with_where =
+            gen_where_clause::<T::Dao, _>(&mut query_builder, std::slice::from_ref(where_))?;
+        with_where =
+            list_filter_generator.where_clause::<T::Dao>(with_where, &mut query_builder)?;
+        query_params_where(with_where, query_params, &mut query_builder);
+
+        trace!(
+            "list_versions_at_{}: sql: {}",
+            T::list_on(),
+            query_builder.sql()
+        );
+        Ok(query_builder)
+    }
 }
 
 fn query_params_where<'a, T>(
-    first: bool,
+    with_where: bool,
     query_params: &'a ListQueryParams<T>,
     query_builder: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>,
 ) -> bool
 where
     T: ListQuery,
 {
-    let mut first = first;
+    let mut with_where = with_where;
     query_params
-        .conditions() // And
+        .conditions // And
         .conditions() // Or
         .iter()
         .for_each(|or| {
-            if first {
-                query_builder.push(" WHERE ");
-            } else {
+            if with_where {
                 query_builder.push(" AND ");
+            } else {
+                query_builder.push(" WHERE ");
+                with_where = true;
             }
-            first = false;
 
             query_builder.push("(");
             let mut or_separated = query_builder.separated(" OR ");
@@ -469,22 +409,22 @@ where
             query_builder.push(")");
         });
 
-    let mut order = query_params.order().clone();
-    let mut natural_order = query_params.natural_order().clone();
-    if let Some(pagination) = query_params.pagination() {
-        if first {
-            query_builder.push(" WHERE ");
-        } else {
+    let mut order = query_params.order.clone();
+    let mut natural_order = query_params.natural_order.clone();
+    if let Some(pagination) = &query_params.pagination {
+        if with_where {
             query_builder.push(" AND ");
+        } else {
+            query_builder.push(" WHERE ");
+            with_where = true;
         }
-        first = false;
 
         query_builder.push("(");
 
         let pagination_field = query_params
-            .order()
+            .order
             .as_ref()
-            .unwrap_or(query_params.natural_order());
+            .unwrap_or(&query_params.natural_order);
         let range_operator = match (pagination_field, pagination) {
             (Order::Asc(_), Pagination::Previous(_, _)) => "<",
             (Order::Asc(_), Pagination::Next(_, _)) => ">",
@@ -509,7 +449,7 @@ where
         query_builder.push("(");
 
         // field = value
-        query_builder.push(format!("{} = ", T::map_dao_field(pagination_field.field()),));
+        query_builder.push(format!("{} = ", T::map_dao_field(pagination_field.field())));
         pagination.column_value().push_bind(query_builder);
 
         // natural_field OP value
@@ -543,103 +483,94 @@ where
 
     query_builder
         .push(" LIMIT ")
-        .push_bind(*query_params.len() as i64);
+        .push_bind(query_params.len as i64);
 
-    first
+    with_where
 }
-
-all_the_tuples!(impl_list_by);
 
 // D is needed to get the fields types for the WHERE clauses
 pub trait UpdateBy<'a, E> {
     fn update_by<U: DataAccessObject, D: DataAccessObject>(
         &self,
         dao: &'a U,
-        e: &'a E,
-    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>;
+        where_: &'a E,
+    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, TdError>;
 
     fn update_all_by<U: DataAccessObject, D: DataAccessObject>(
         &self,
         dao: &'a U,
-        e: &'a [E],
-    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>;
+        where_: &'a [E],
+    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, TdError>;
 }
 
-macro_rules! impl_update_by {
-    (
-        [$($E:ident),*]
-    ) => {
-        #[allow(non_snake_case, unused_parens, unused_variables, unused_mut, unused_assignments)]
-        impl<'a, Q, $($E),*> UpdateBy<'a, ($(&'a $E),*)> for Q
-        where
-            Q: Deref<Target = dyn Queries>,
-            $($E: SqlEntity),*
-        {
-            fn update_by<U: DataAccessObject, D: DataAccessObject>(&self, dao: &'a U, ($($E),*): &'a ($(&'a $E),*)) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError> {
-                let table = U::sql_table();
-                let fields = U::fields();
-                let sql = format!("UPDATE {} SET ", table);
-                let mut query_builder = dao.tuples_query_builder(sql, fields);
-                gen_where_clause!(query_builder, D, $($E),*);
-                trace!("update_{}: sql: {}", table, query_builder.sql());
-                Ok(query_builder)
-            }
+impl<'a, Q, E> UpdateBy<'a, E> for Q
+where
+    Q: Deref<Target = dyn Queries>,
+    E: AsDynSqlEntities,
+{
+    fn update_by<U: DataAccessObject, D: DataAccessObject>(
+        &self,
+        dao: &'a U,
+        where_: &'a E,
+    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, TdError> {
+        let table = U::sql_table();
+        let fields = U::fields();
+        let sql = format!("UPDATE {} SET ", table);
+        let mut query_builder = dao.tuples_query_builder(sql, fields);
+        gen_where_clause::<D, E>(&mut query_builder, std::slice::from_ref(where_))?;
+        trace!("update_{}: sql: {}", table, query_builder.sql());
+        Ok(query_builder)
+    }
 
-            fn update_all_by<U: DataAccessObject, D: DataAccessObject>(&self, dao: &'a U, e: &'a [ ($(&'a $E),*) ]) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError> {
-                let table = D::sql_table();
-                let fields = U::fields();
-                let sql = format!("UPDATE {} SET ", table);
-                let mut query_builder = dao.tuples_query_builder(sql, fields);
-                if e.is_empty() {
-                    // Safeguard so empty lookups don't update all rows
-                    query_builder.push(" WHERE 1 = 0");
-                } else {
-                    gen_where_clause!(query_builder, D, e: [ $($E),* ]);
-                }
-                trace!("update_all_{}: sql: {}", table, query_builder.sql());
-                Ok(query_builder)
-            }
+    fn update_all_by<U: DataAccessObject, D: DataAccessObject>(
+        &self,
+        dao: &'a U,
+        where_: &'a [E],
+    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, TdError> {
+        let table = D::sql_table();
+        let fields = U::fields();
+        let sql = format!("UPDATE {} SET ", table);
+        let mut query_builder = dao.tuples_query_builder(sql, fields);
+        if where_.is_empty() {
+            // Safeguard so empty lookups don't update all rows
+            query_builder.push(" WHERE 1 = 0");
+        } else {
+            gen_where_clause::<D, E>(&mut query_builder, where_)?;
         }
-    };
+        trace!("update_all_{}: sql: {}", table, query_builder.sql());
+        Ok(query_builder)
+    }
 }
-
-all_the_tuples!(impl_update_by);
 
 pub trait DeleteBy<'a, E> {
     fn delete_by<D: DataAccessObject>(
         &self,
-        e: &'a E,
-    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>;
+        where_: &'a E,
+    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, TdError>;
 }
 
-macro_rules! impl_delete_by {
-    (
-        [$($E:ident),*]
-    ) => {
-        #[allow(non_snake_case, unused_parens, unused_variables, unused_mut, unused_assignments)]
-        impl<'a, Q, $($E),*> DeleteBy<'a, ($(&'a $E),*)> for Q
-        where
-            Q: Deref<Target = dyn Queries>,
-            $($E: SqlEntity),*
-        {
-            fn delete_by<D: DataAccessObject>(&self, ($($E),*): &'a ($(&'a $E),*)) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError> {
-                let table = D::sql_table();
-                let sql = format!("DELETE FROM {}", table);
-                let mut query_builder = sqlx::QueryBuilder::new(sql);
-                gen_where_clause!(query_builder, D, $($E),*);
-                trace!("delete_{}: sql: {}", table, query_builder.sql());
-                Ok(query_builder)
-            }
-        }
-    };
+impl<'a, Q, E> DeleteBy<'a, E> for Q
+where
+    Q: Deref<Target = dyn Queries>,
+    E: AsDynSqlEntities,
+{
+    fn delete_by<D: DataAccessObject>(
+        &self,
+        where_: &'a E,
+    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, TdError> {
+        let table = D::sql_table();
+        let sql = format!("DELETE FROM {}", table);
+        let mut query_builder = sqlx::QueryBuilder::new(sql);
+        gen_where_clause::<D, E>(&mut query_builder, std::slice::from_ref(where_))?;
+        trace!("delete_{}: sql: {}", table, query_builder.sql());
+        Ok(query_builder)
+    }
 }
-
-all_the_tuples!(impl_delete_by);
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::crudl::ListParams;
+    use crate::dxo::crudl::ListParams;
     use sqlx::Execute;
     use td_database::sql::DbPool;
     use td_error::TdError;
@@ -762,14 +693,14 @@ mod tests {
         #[td_test::test(sqlx(fixture = "test_queries"))]
         #[tokio::test]
         async fn test_dao_select_by_where(db: DbPool) -> Result<(), TdError> {
-            let by = &(TestName::try_from("mario")?);
+            let by = TestName::try_from("mario")?;
             let mut query_builder = DaoQueries::default().select_by::<TestDao>(&by)?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table WHERE name = ? ORDER BY 1 DESC"
+                "SELECT id, name, modified_on FROM test_table WHERE (name = ?) ORDER BY 1 DESC"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -782,8 +713,8 @@ mod tests {
         #[tokio::test]
         async fn test_dao_select_by_where_tuple(db: DbPool) -> Result<(), TdError> {
             let by = (
-                &TestId::try_from("00000000000000000000000004")?,
-                &TestName::try_from("mario")?,
+                TestId::try_from("00000000000000000000000004")?,
+                TestName::try_from("mario")?,
             );
             let mut query_builder = DaoQueries::default().select_by::<TestDao>(&by)?;
             let query = query_builder.build_query_as();
@@ -791,7 +722,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table WHERE id = ? AND name = ? ORDER BY 1 DESC"
+                "SELECT id, name, modified_on FROM test_table WHERE (id = ? AND name = ?) ORDER BY 1 DESC"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -803,7 +734,7 @@ mod tests {
         #[td_test::test(sqlx(fixture = "test_queries"))]
         #[tokio::test]
         async fn test_dao_find_by(db: DbPool) -> Result<(), TdError> {
-            let find_by: [&TestId; 0] = [];
+            let find_by: [TestId; 0] = [];
             let mut query_builder = DaoQueries::default().find_by::<TestDao>(&find_by)?;
             let query = query_builder.build_query_as();
 
@@ -821,7 +752,7 @@ mod tests {
         #[td_test::test(sqlx(fixture = "test_queries"))]
         #[tokio::test]
         async fn test_dao_find_by_where(db: DbPool) -> Result<(), TdError> {
-            let by = [&TestName::try_from("mario")?];
+            let by = [TestName::try_from("mario")?];
             let mut query_builder = DaoQueries::default().find_by::<TestDao>(&by)?;
             let query = query_builder.build_query_as();
 
@@ -841,8 +772,8 @@ mod tests {
         #[tokio::test]
         async fn test_dao_find_by_where_tuple(db: DbPool) -> Result<(), TdError> {
             let by = [(
-                &TestId::try_from("00000000000000000000000004")?,
-                &TestName::try_from("mario")?,
+                TestId::try_from("00000000000000000000000004")?,
+                TestName::try_from("mario")?,
             )];
             let mut query_builder = DaoQueries::default().find_by::<TestDao>(&by)?;
             let query = query_builder.build_query_as();
@@ -864,12 +795,12 @@ mod tests {
         async fn test_dao_find_by_where_multiple_tuple(db: DbPool) -> Result<(), TdError> {
             let by = [
                 (
-                    &TestId::try_from("00000000000000000000000004")?,
-                    &TestName::try_from("mario")?,
+                    TestId::try_from("00000000000000000000000004")?,
+                    TestName::try_from("mario")?,
                 ),
                 (
-                    &TestId::try_from("00000000000000000000000008")?,
-                    &TestName::try_from("luigi")?,
+                    TestId::try_from("00000000000000000000000008")?,
+                    TestName::try_from("luigi")?,
                 ),
             ];
             let mut query_builder = DaoQueries::default().find_by::<TestDao>(&by)?;
@@ -928,7 +859,7 @@ mod tests {
         #[td_test::test(sqlx(fixture = "test_queries"))]
         #[tokio::test]
         async fn test_dao_update_by_where(db: DbPool) -> Result<(), TdError> {
-            let by = &(TestName::try_from("mario")?);
+            let by = TestName::try_from("mario")?;
             let update_dao = UpdateDao::builder().try_name("peach")?.build()?;
             let mut query_builder =
                 DaoQueries::default().update_by::<_, TestDao>(&update_dao, &by)?;
@@ -937,7 +868,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "UPDATE test_table SET name = COALESCE(?, name) WHERE name = ?"
+                "UPDATE test_table SET name = COALESCE(?, name) WHERE (name = ?)"
             );
 
             let result = query.execute(&db).await.unwrap();
@@ -964,8 +895,8 @@ mod tests {
         #[tokio::test]
         async fn test_dao_update_by_where_tuple(db: DbPool) -> Result<(), TdError> {
             let by = (
-                &TestId::try_from("00000000000000000000000004")?,
-                &TestName::try_from("mario")?,
+                TestId::try_from("00000000000000000000000004")?,
+                TestName::try_from("mario")?,
             );
             let update_dao = UpdateDao::builder().try_name("peach")?.build()?;
             let mut query_builder =
@@ -975,7 +906,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "UPDATE test_table SET name = COALESCE(?, name) WHERE id = ? AND name = ?"
+                "UPDATE test_table SET name = COALESCE(?, name) WHERE (id = ? AND name = ?)"
             );
 
             let result = query.execute(&db).await.unwrap();
@@ -1022,12 +953,12 @@ mod tests {
         #[td_test::test(sqlx(fixture = "test_queries"))]
         #[tokio::test]
         async fn test_dao_delete_by_where(db: DbPool) -> Result<(), TdError> {
-            let by = &(TestName::try_from("mario")?);
+            let by = TestName::try_from("mario")?;
             let mut query_builder = DaoQueries::default().delete_by::<TestDao>(&by)?;
             let query = query_builder.build();
 
             let query_str = query.sql();
-            assert_eq!(query_str, "DELETE FROM test_table WHERE name = ?");
+            assert_eq!(query_str, "DELETE FROM test_table WHERE (name = ?)");
 
             let result = query.execute(&db).await.unwrap();
             assert_eq!(result.rows_affected(), 1);
@@ -1053,8 +984,8 @@ mod tests {
         #[tokio::test]
         async fn test_dao_delete_by_where_tuple(db: DbPool) -> Result<(), TdError> {
             let by = (
-                &TestId::try_from("00000000000000000000000004")?,
-                &TestName::try_from("mario")?,
+                TestId::try_from("00000000000000000000000004")?,
+                TestName::try_from("mario")?,
             );
             let mut query_builder = DaoQueries::default().delete_by::<TestDao>(&by)?;
             let query = query_builder.build();
@@ -1062,7 +993,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "DELETE FROM test_table WHERE id = ? AND name = ?"
+                "DELETE FROM test_table WHERE (id = ? AND name = ?)"
             );
 
             let result = query.execute(&db).await.unwrap();
@@ -1088,7 +1019,7 @@ mod tests {
 
     mod list {
         use super::*;
-        use crate::crudl::ListParamsBuilder;
+        use crate::dxo::crudl::ListParamsBuilder;
         use std::sync::LazyLock;
         use td_type::Dto;
 
@@ -1140,9 +1071,8 @@ mod tests {
                 .order_by("name-".to_string())
                 .next("C".to_string())
                 .pagination_id("4".to_string())
-                .build()
-                .unwrap();
-            let where_clause = &TestName::try_from("A")?;
+                .build()?;
+            let where_clause = TestName::try_from("A")?;
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
             let mut query_builder = DaoQueries::default()
                 .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &where_clause)
@@ -1152,9 +1082,9 @@ mod tests {
             let query_str = query.sql();
             assert!(
                 query_str
-                    == r#"SELECT id, name, modified_on FROM test_table WHERE name = ? AND (modified_on > ?) AND (name LIKE ? ESCAPE '\' ) AND (name < ? OR (name = ? AND modified_on < ?)) ORDER BY name DESC, modified_on DESC LIMIT ?"#
+                    == r#"SELECT id, name, modified_on FROM test_table WHERE (name = ?) AND (modified_on > ?) AND (name LIKE ? ESCAPE '\' ) AND (name < ? OR (name = ? AND modified_on < ?)) ORDER BY name DESC, modified_on DESC LIMIT ?"#
                     || query_str
-                        == r#"SELECT id, name, modified_on FROM test_table WHERE name = ? AND (name LIKE ? ESCAPE '\' ) AND (modified_on > ?) AND (name < ? OR (name = ? AND modified_on < ?)) ORDER BY name DESC, modified_on DESC LIMIT ?"#
+                        == r#"SELECT id, name, modified_on FROM test_table WHERE (name = ?) AND (name LIKE ? ESCAPE '\' ) AND (modified_on > ?) AND (name < ? OR (name = ? AND modified_on < ?)) ORDER BY name DESC, modified_on DESC LIMIT ?"#
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -1427,8 +1357,7 @@ mod tests {
 
             let list_params = ListParamsBuilder::default()
                 .filter(vec!["name:btw:B::C".to_string()])
-                .build()
-                .unwrap();
+                .build()?;
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
             let mut query_builder = DaoQueries::default()
                 .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
@@ -1496,8 +1425,8 @@ mod tests {
             }
 
             let list_params = ListParamsBuilder::default()
-                .previous(FIXTURE_DAOS[1].id().to_string())
-                .pagination_id(FIXTURE_DAOS[1].id().to_string())
+                .previous(FIXTURE_DAOS[1].id.to_string())
+                .pagination_id(FIXTURE_DAOS[1].id.to_string())
                 .build()
                 .unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
@@ -1532,8 +1461,8 @@ mod tests {
             }
 
             let list_params = ListParamsBuilder::default()
-                .next(FIXTURE_DAOS[2].id().to_string())
-                .pagination_id(FIXTURE_DAOS[2].id().to_string())
+                .next(FIXTURE_DAOS[2].id.to_string())
+                .pagination_id(FIXTURE_DAOS[2].id.to_string())
                 .build()
                 .unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
@@ -1568,8 +1497,8 @@ mod tests {
             }
 
             let list_params = ListParamsBuilder::default()
-                .next(FIXTURE_DAOS[1].id().to_string())
-                .pagination_id(FIXTURE_DAOS[1].id().to_string())
+                .next(FIXTURE_DAOS[1].id.to_string())
+                .pagination_id(FIXTURE_DAOS[1].id.to_string())
                 .build()
                 .unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
@@ -1604,8 +1533,8 @@ mod tests {
             }
 
             let list_params = ListParamsBuilder::default()
-                .previous(FIXTURE_DAOS[2].id().to_string())
-                .pagination_id(FIXTURE_DAOS[2].id().to_string())
+                .previous(FIXTURE_DAOS[2].id.to_string())
+                .pagination_id(FIXTURE_DAOS[2].id.to_string())
                 .build()?;
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
             let mut query_builder = DaoQueries::default()
@@ -1642,7 +1571,7 @@ mod tests {
             let list_params = ListParamsBuilder::default()
                 .order_by("name+".to_string())
                 .next("A".to_string())
-                .pagination_id(FIXTURE_DAOS[1].id().to_string())
+                .pagination_id(FIXTURE_DAOS[1].id.to_string())
                 .build()
                 .unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
@@ -1683,8 +1612,8 @@ mod tests {
 
             let list_params = ListParamsBuilder::default()
                 .order_by("id+".to_string())
-                .previous(FIXTURE_DAOS[0].id().to_string())
-                .pagination_id(FIXTURE_DAOS[0].id().to_string())
+                .previous(FIXTURE_DAOS[0].id.to_string())
+                .pagination_id(FIXTURE_DAOS[0].id.to_string())
                 .build()
                 .unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
@@ -1723,7 +1652,7 @@ mod tests {
             let list_params = ListParamsBuilder::default()
                 .order_by("name+".to_string())
                 .previous("A".to_string())
-                .pagination_id(FIXTURE_DAOS[1].id().to_string())
+                .pagination_id(FIXTURE_DAOS[1].id.to_string())
                 .build()
                 .unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
@@ -1760,7 +1689,7 @@ mod tests {
             let list_params = ListParamsBuilder::default()
                 .order_by("name-".to_string())
                 .next("B".to_string())
-                .pagination_id(FIXTURE_DAOS[0].id().to_string())
+                .pagination_id(FIXTURE_DAOS[0].id.to_string())
                 .build()
                 .unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
@@ -1800,8 +1729,8 @@ mod tests {
 
             let list_params = ListParamsBuilder::default()
                 .order_by("id-".to_string())
-                .previous(FIXTURE_DAOS[0].id().to_string())
-                .pagination_id(FIXTURE_DAOS[0].id().to_string())
+                .previous(FIXTURE_DAOS[0].id.to_string())
+                .pagination_id(FIXTURE_DAOS[0].id.to_string())
                 .build()
                 .unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
@@ -1841,7 +1770,7 @@ mod tests {
             let list_params = ListParamsBuilder::default()
                 .order_by("name-".to_string())
                 .previous("B".to_string())
-                .pagination_id(FIXTURE_DAOS[0].id().to_string())
+                .pagination_id(FIXTURE_DAOS[0].id.to_string())
                 .build()
                 .unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
