@@ -2,8 +2,8 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::types::basic::CollectionName;
-use crate::types::table_ref::{TableRef, Version, VersionedTableRef, Versions};
+use crate::table_ref::{TableRef, Version, VersionedTableRef, Versions};
+use crate::types::string::CollectionName;
 use constcat::concat;
 use regex::Regex;
 use std::sync::LazyLock;
@@ -281,8 +281,8 @@ pub fn parse_email(s: impl Into<String>) -> Result<String, TdError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::basic::TableNameDto;
-    use crate::types::table_ref::Version;
+    use crate::table_ref::Version;
+    use crate::types::string::TableNameDto;
     use td_common::id;
 
     #[test]
@@ -507,7 +507,7 @@ mod tests {
         ];
         valid_tables.into_iter().for_each(|table| {
             let parsed = parse_versioned_table_ref::<TableNameDto, _>(table).unwrap();
-            println!("{} -> {} - {}", table, parsed, parsed.versions());
+            println!("{} -> {} - {}", table, parsed, parsed.versions);
         });
     }
 

@@ -2,17 +2,19 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use crate::dxo::execution::defs::ExecutionDB;
+use crate::dxo::function::defs::FunctionDB;
 use crate::sql::{DaoQueries, Insert};
-use crate::types::basic::{ExecutionName, TriggeredOn, UserId};
-use crate::types::execution::ExecutionDB;
-use crate::types::function::FunctionDB;
+use crate::types::id::UserId;
+use crate::types::string::ExecutionName;
+use crate::types::timestamp::TriggeredOn;
 use td_database::sql::DbPool;
 
 pub async fn seed_execution(db: &DbPool, function_version: &FunctionDB) -> ExecutionDB {
     let execution_db = ExecutionDB::builder()
         .name(ExecutionName::try_from("test_execution").unwrap())
-        .collection_id(function_version.collection_id())
-        .function_version_id(function_version.id())
+        .collection_id(function_version.collection_id)
+        .function_version_id(function_version.id)
         .triggered_on(TriggeredOn::now())
         .triggered_by_id(UserId::admin())
         .build()
@@ -33,10 +35,12 @@ pub async fn seed_execution(db: &DbPool, function_version: &FunctionDB) -> Execu
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dxo::function::defs::FunctionRegister;
     use crate::test_utils::seed_collection::seed_collection;
     use crate::test_utils::seed_function::seed_function;
-    use crate::types::basic::{BundleId, CollectionName, Decorator, UserId};
-    use crate::types::function::FunctionRegister;
+    use crate::types::id::{BundleId, UserId};
+    use crate::types::string::CollectionName;
+    use crate::types::typed_enum::Decorator;
     use td_database::sql::DbPool;
     use td_security::ENCODED_ID_SYSTEM;
 
@@ -76,15 +80,15 @@ mod tests {
 
         let execution = seed_execution(&db, &function_version).await;
         assert_eq!(
-            *execution.name(),
+            execution.name,
             Some(ExecutionName::try_from("test_execution").unwrap())
         );
-        assert_eq!(execution.collection_id(), collection.id());
-        assert_eq!(execution.function_version_id(), function_version.id());
+        assert_eq!(execution.collection_id, collection.id);
+        assert_eq!(execution.function_version_id, function_version.id);
         assert_eq!(
-            **execution.triggered_by_id(),
-            **function_version.defined_by_id()
+            **execution.triggered_by_id,
+            **function_version.defined_by_id
         );
-        assert!(*execution.triggered_on() < TriggeredOn::now());
+        assert!(execution.triggered_on < TriggeredOn::now());
     }
 }

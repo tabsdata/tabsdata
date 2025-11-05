@@ -2,9 +2,11 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use crate::dxo::collection::defs::{CollectionCreateDB, CollectionDB, CollectionDBBuilder};
 use crate::sql::{DaoQueries, Insert};
-use crate::types::basic::{AtTime, CollectionName, Description, UserId};
-use crate::types::collection::{CollectionCreateDB, CollectionDB, CollectionDBBuilder};
+use crate::types::id::UserId;
+use crate::types::string::{CollectionName, Description};
+use crate::types::timestamp::AtTime;
 use td_database::sql::DbPool;
 
 pub async fn seed_collection(
@@ -14,11 +16,11 @@ pub async fn seed_collection(
 ) -> CollectionDB {
     let created_on = AtTime::now();
     let collection = CollectionCreateDB::builder()
-        .name(collection_name)
+        .name(collection_name.clone())
         .description(Description::default())
-        .created_on(&created_on)
+        .created_on(created_on.clone())
         .created_by_id(created_by)
-        .modified_on(&created_on)
+        .modified_on(created_on.clone())
         .modified_by_id(created_by)
         .build()
         .unwrap();
@@ -55,18 +57,18 @@ mod tests {
         .await;
 
         let found: CollectionDB = DaoQueries::default()
-            .select_by::<CollectionDB>(&collection.id())
+            .select_by::<CollectionDB>(&collection.id)
             .unwrap()
             .build_query_as()
             .fetch_one(&db)
             .await
             .unwrap();
-        assert_eq!(found.id(), collection.id());
-        assert_eq!(found.name(), collection.name());
-        assert_eq!(found.description(), collection.description());
-        assert_eq!(found.created_on(), collection.created_on());
-        assert_eq!(found.created_by_id(), collection.created_by_id());
-        assert_eq!(found.modified_on(), collection.modified_on());
-        assert_eq!(found.modified_by_id(), collection.modified_by_id());
+        assert_eq!(found.id, collection.id);
+        assert_eq!(found.name, collection.name);
+        assert_eq!(found.description, collection.description);
+        assert_eq!(found.created_on, collection.created_on);
+        assert_eq!(found.created_by_id, collection.created_by_id);
+        assert_eq!(found.modified_on, collection.modified_on);
+        assert_eq!(found.modified_by_id, collection.modified_by_id);
     }
 }

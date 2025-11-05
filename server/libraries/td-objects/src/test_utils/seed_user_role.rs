@@ -2,11 +2,11 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::crudl::{ReadRequest, RequestContext, handle_sql_err};
+use crate::dxo::crudl::{ReadRequest, RequestContext, handle_sql_err};
+use crate::dxo::user_role::defs::{UserRoleDB, UserRoleDBBuilder};
 use crate::sql::{DaoQueries, Insert, SelectBy};
 use crate::types::SqlEntity;
-use crate::types::basic::{AccessTokenId, RoleId, UserId};
-use crate::types::role::{UserRoleDB, UserRoleDBBuilder};
+use crate::types::id::{AccessTokenId, RoleId, UserId};
 use td_database::sql::DbPool;
 use td_error::TdError;
 
@@ -17,10 +17,10 @@ pub async fn seed_user_role(db: &DbPool, user: &UserId, role: &RoleId) -> UserRo
         RoleId::sec_admin(),
     )
     .read("");
-    let request_context = request_context.context();
+    let request_context = request_context.context;
 
     let builder = UserRoleDB::builder();
-    let builder = UserRoleDBBuilder::try_from((request_context, builder)).unwrap();
+    let builder = UserRoleDBBuilder::try_from((&request_context, builder)).unwrap();
     let builder = UserRoleDBBuilder::from((user, builder));
     let builder = UserRoleDBBuilder::from((role, builder));
     let user_role_db = builder.build().unwrap();
@@ -43,7 +43,7 @@ where
 {
     let queries = DaoQueries::default();
     queries
-        .select_by::<UserRoleDB>(&by)?
+        .select_by::<UserRoleDB>(by)?
         .build_query_as()
         .fetch_one(db)
         .await
@@ -55,7 +55,8 @@ pub mod tests {
     use super::*;
     use crate::test_utils::seed_role::seed_role;
     use crate::test_utils::seed_user::seed_user;
-    use crate::types::basic::{Description, RoleName, UserEnabled, UserName};
+    use crate::types::bool::UserEnabled;
+    use crate::types::string::{Description, RoleName, UserName};
 
     #[td_test::test(sqlx)]
     #[tokio::test]
@@ -73,14 +74,14 @@ pub mod tests {
         )
         .await;
 
-        let user_role = seed_user_role(&db, user.id(), role.id()).await;
+        let user_role = seed_user_role(&db, &user.id, &role.id).await;
 
-        let found = get_user_role(&db, role.id()).await.unwrap();
-        assert_eq!(user_role.id(), found.id());
-        assert_eq!(user_role.user_id(), found.user_id());
-        assert_eq!(user_role.role_id(), found.role_id());
-        assert_eq!(user_role.added_on(), found.added_on());
-        assert_eq!(user_role.added_by_id(), found.added_by_id());
-        assert_eq!(user_role.fixed(), found.fixed());
+        let found = get_user_role(&db, &role.id).await.unwrap();
+        assert_eq!(user_role.id, found.id);
+        assert_eq!(user_role.user_id, found.user_id);
+        assert_eq!(user_role.role_id, found.role_id);
+        assert_eq!(user_role.added_on, found.added_on);
+        assert_eq!(user_role.added_by_id, found.added_by_id);
+        assert_eq!(user_role.fixed, found.fixed);
     }
 }

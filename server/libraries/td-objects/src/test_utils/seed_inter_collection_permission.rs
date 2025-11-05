@@ -2,11 +2,13 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::crudl::{ReadRequest, RequestContext, handle_sql_err};
+use crate::dxo::crudl::{ReadRequest, RequestContext, handle_sql_err};
+use crate::dxo::inter_collection_permission::defs::{
+    InterCollectionPermissionDB, InterCollectionPermissionDBBuilder,
+};
 use crate::sql::{DaoQueries, Insert, SelectBy};
-use crate::types::SqlEntity;
-use crate::types::basic::{AccessTokenId, CollectionId, RoleId, ToCollectionId, UserId};
-use crate::types::permission::{InterCollectionPermissionDB, InterCollectionPermissionDBBuilder};
+use crate::types::AsDynSqlEntities;
+use crate::types::id::{AccessTokenId, CollectionId, RoleId, ToCollectionId, UserId};
 use td_database::sql::DbPool;
 use td_error::TdError;
 
@@ -21,13 +23,14 @@ pub async fn seed_inter_collection_permission(
         RoleId::sec_admin(),
     )
     .read("");
-    let request_context = request_context.context();
+    let request_context = request_context.context;
 
     let mut builder = InterCollectionPermissionDB::builder();
     builder
         .from_collection_id(from_collection)
         .to_collection_id(to_collection);
-    let builder = InterCollectionPermissionDBBuilder::try_from((request_context, builder)).unwrap();
+    let builder =
+        InterCollectionPermissionDBBuilder::try_from((&request_context, builder)).unwrap();
     let builder = InterCollectionPermissionDBBuilder::from((from_collection, builder));
 
     let permission_db = builder.build().unwrap();
@@ -49,11 +52,11 @@ pub async fn get_inter_collection_permissions<E>(
     by: &E,
 ) -> Result<Vec<InterCollectionPermissionDB>, TdError>
 where
-    E: SqlEntity,
+    E: AsDynSqlEntities,
 {
     let queries = DaoQueries::default();
     queries
-        .select_by::<InterCollectionPermissionDB>(&by)?
+        .select_by::<InterCollectionPermissionDB>(by)?
         .build_query_as()
         .fetch_all(db)
         .await
@@ -64,7 +67,7 @@ where
 pub mod tests {
     use super::*;
     use crate::test_utils::seed_collection::seed_collection;
-    use crate::types::basic::CollectionName;
+    use crate::types::string::CollectionName;
 
     #[tokio::test]
     async fn test_seed_inter_collection_permission() {
@@ -83,15 +86,15 @@ pub mod tests {
         .await;
         let permission = seed_inter_collection_permission(
             &db,
-            c0.id(),
-            &ToCollectionId::try_from(c1.id()).unwrap(),
+            &c0.id,
+            &ToCollectionId::try_from(&c1.id).unwrap(),
         )
         .await;
 
-        let found = get_inter_collection_permissions(&db, permission.id())
+        let found = get_inter_collection_permissions(&db, &permission.id)
             .await
             .unwrap();
         assert_eq!(found.len(), 1);
-        assert_eq!(permission.id(), found[0].id());
+        assert_eq!(permission.id, found[0].id);
     }
 }

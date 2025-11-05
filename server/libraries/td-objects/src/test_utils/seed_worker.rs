@@ -2,11 +2,12 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use crate::dxo::execution::defs::ExecutionDB;
+use crate::dxo::function_run::defs::FunctionRunDB;
+use crate::dxo::transaction::defs::TransactionDB;
+use crate::dxo::worker::defs::WorkerDB;
 use crate::sql::{DaoQueries, Insert};
-use crate::types::basic::WorkerStatus;
-use crate::types::execution::{
-    ExecutionDB, FunctionRunDB, TransactionDB, WorkerDB, WorkerMessageStatus,
-};
+use crate::types::typed_enum::{WorkerMessageStatus, WorkerStatus};
 use td_database::sql::DbPool;
 
 pub async fn seed_worker(
@@ -17,11 +18,11 @@ pub async fn seed_worker(
     status: WorkerMessageStatus,
 ) -> WorkerDB {
     let worker_db = WorkerDB::builder()
-        .collection_id(execution.collection_id())
-        .execution_id(execution.id())
-        .transaction_id(transaction.id())
-        .function_run_id(function_run.id())
-        .function_version_id(function_run.function_version_id())
+        .collection_id(execution.collection_id)
+        .execution_id(execution.id)
+        .transaction_id(transaction.id)
+        .function_run_id(function_run.id)
+        .function_version_id(function_run.function_version_id)
         .message_status(status)
         .started_on(None)
         .ended_on(None)
@@ -44,14 +45,15 @@ pub async fn seed_worker(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dxo::function::defs::FunctionRegister;
     use crate::test_utils::seed_collection::seed_collection;
     use crate::test_utils::seed_execution::seed_execution;
     use crate::test_utils::seed_function::seed_function;
     use crate::test_utils::seed_function_run::seed_function_run;
     use crate::test_utils::seed_transaction::seed_transaction;
-    use crate::types::basic::TransactionKey;
-    use crate::types::basic::{BundleId, CollectionName, Decorator, FunctionRunStatus, UserId};
-    use crate::types::function::FunctionRegister;
+    use crate::types::id::{BundleId, UserId};
+    use crate::types::string::{CollectionName, TransactionKey};
+    use crate::types::typed_enum::{Decorator, FunctionRunStatus};
     use td_database::sql::DbPool;
 
     #[td_test::test(sqlx)]
@@ -112,14 +114,11 @@ mod tests {
         )
         .await;
 
-        assert_eq!(worker.collection_id(), collection.id());
-        assert_eq!(worker.execution_id(), execution.id());
-        assert_eq!(worker.transaction_id(), transaction.id());
-        assert_eq!(worker.function_run_id(), function_run.id());
-        assert_eq!(
-            worker.function_version_id(),
-            function_run.function_version_id()
-        );
-        assert_eq!(*worker.message_status(), WorkerMessageStatus::Locked);
+        assert_eq!(worker.collection_id, collection.id);
+        assert_eq!(worker.execution_id, execution.id);
+        assert_eq!(worker.transaction_id, transaction.id);
+        assert_eq!(worker.function_run_id, function_run.id);
+        assert_eq!(worker.function_version_id, function_run.function_version_id);
+        assert_eq!(worker.message_status, WorkerMessageStatus::Locked);
     }
 }

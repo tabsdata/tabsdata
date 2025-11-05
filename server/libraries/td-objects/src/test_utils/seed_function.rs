@@ -2,17 +2,17 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::crudl::{ReadRequest, RequestContext};
+use crate::dxo::collection::defs::CollectionDB;
+use crate::dxo::crudl::{ReadRequest, RequestContext};
+use crate::dxo::dependency::defs::DependencyDBBuilder;
+use crate::dxo::function::defs::{FunctionDB, FunctionDBBuilder, FunctionRegister};
+use crate::dxo::table::defs::{TableDBBuilder, TableDBWithNames};
+use crate::dxo::trigger::defs::TriggerDBBuilder;
 use crate::sql::{DaoQueries, Insert, SelectBy};
-use crate::types::basic::{
-    AccessTokenId, DataLocation, DependencyPos, DependencyStatus, RoleId, StorageVersion,
-    TableFunctionParamPos, TableId, TableName, TableStatus, TriggerStatus, UserId,
-};
-use crate::types::collection::CollectionDB;
-use crate::types::dependency::DependencyDBBuilder;
-use crate::types::function::{FunctionDB, FunctionDBBuilder, FunctionRegister};
-use crate::types::table::{TableDBBuilder, TableDBWithNames};
-use crate::types::trigger::TriggerDBBuilder;
+use crate::types::i32::{DependencyPos, TableFunctionParamPos};
+use crate::types::id::{AccessTokenId, RoleId, TableId, UserId};
+use crate::types::string::{DataLocation, StorageVersion, TableName};
+use crate::types::typed_enum::{DependencyStatus, TableStatus, TriggerStatus};
 use td_database::sql::DbPool;
 
 pub async fn seed_function(
@@ -26,14 +26,14 @@ pub async fn seed_function(
         RoleId::sec_admin(),
     )
     .read("");
-    let request_context = request_context.context();
+    let request_context = request_context.context;
 
     let queries = DaoQueries::default();
 
     // Function version builder
     let builder = FunctionDBBuilder::try_from(function_create).unwrap();
-    let builder = FunctionDBBuilder::try_from((request_context, builder)).unwrap();
-    let mut builder = FunctionDBBuilder::from((collection.id(), builder));
+    let builder = FunctionDBBuilder::try_from((&request_context, builder)).unwrap();
+    let mut builder = FunctionDBBuilder::from((&collection.id, builder));
     let function_db = builder
         .data_location(DataLocation::default())
         .storage_version(StorageVersion::default())
@@ -51,9 +51,9 @@ pub async fn seed_function(
 
     // Dependencies, tables, triggers
     // Very similar to build_table_versions
-    if let Some(tables) = function_create.tables() {
+    if let Some(tables) = &function_create.tables {
         let builder = TableDBBuilder::try_from(&function_db).unwrap();
-        let builder = TableDBBuilder::try_from((request_context, builder)).unwrap();
+        let builder = TableDBBuilder::try_from((&request_context, builder)).unwrap();
 
         for (pos, table_name) in tables.iter().enumerate() {
             let table = builder
@@ -76,24 +76,24 @@ pub async fn seed_function(
     }
 
     // Very similar to build_dependency_versions
-    if let Some(dependency_tables) = function_create.dependencies() {
+    if let Some(dependency_tables) = &function_create.dependencies {
         let builder = DependencyDBBuilder::try_from(&function_db).unwrap();
-        let builder = DependencyDBBuilder::try_from((request_context, builder)).unwrap();
+        let builder = DependencyDBBuilder::try_from((&request_context, builder)).unwrap();
 
         for (pos, dependency_table) in dependency_tables.iter().enumerate() {
             let (table_collection, table_name) = {
                 let collection = dependency_table
-                    .collection()
-                    .as_ref()
-                    .unwrap_or(collection.name());
+                    .collection
+                    .clone()
+                    .unwrap_or(collection.name.clone());
                 (
                     collection,
-                    TableName::try_from(dependency_table.table()).unwrap(),
+                    TableName::try_from(dependency_table.table.clone()).unwrap(),
                 )
             };
 
             let table_db: TableDBWithNames = queries
-                .select_by::<TableDBWithNames>(&(table_collection, &table_name))
+                .select_by::<TableDBWithNames>(&(table_collection, table_name))
                 .unwrap()
                 .build_query_as()
                 .fetch_one(db)
@@ -102,10 +102,10 @@ pub async fn seed_function(
 
             let dependency = builder
                 .clone()
-                .table_collection_id(table_db.collection_id())
-                .table_function_id(table_db.function_id())
-                .table_id(table_db.table_id())
-                .table_versions(dependency_table.versions())
+                .table_collection_id(table_db.collection_id)
+                .table_function_id(table_db.function_id)
+                .table_id(table_db.table_id)
+                .table_versions(dependency_table.versions.clone())
                 .dep_pos(DependencyPos::try_from(pos as i32).unwrap())
                 .status(DependencyStatus::Active)
                 .system(false)
@@ -123,24 +123,24 @@ pub async fn seed_function(
     }
 
     // Very similar to build_trigger_versions
-    if let Some(trigger_tables) = function_create.triggers() {
+    if let Some(trigger_tables) = &function_create.triggers {
         let builder = TriggerDBBuilder::try_from(&function_db).unwrap();
-        let builder = TriggerDBBuilder::try_from((request_context, builder)).unwrap();
+        let builder = TriggerDBBuilder::try_from((&request_context, builder)).unwrap();
 
         for trigger_table in trigger_tables {
             let (table_collection, table_name) = {
                 let collection = trigger_table
-                    .collection()
-                    .as_ref()
-                    .unwrap_or(collection.name());
+                    .collection
+                    .clone()
+                    .unwrap_or(collection.name.clone());
                 (
                     collection,
-                    TableName::try_from(trigger_table.table()).unwrap(),
+                    TableName::try_from(trigger_table.table.clone()).unwrap(),
                 )
             };
 
             let table_db: TableDBWithNames = queries
-                .select_by::<TableDBWithNames>(&(table_collection, &table_name))
+                .select_by::<TableDBWithNames>(&(table_collection, table_name))
                 .unwrap()
                 .build_query_as()
                 .fetch_one(db)
@@ -149,9 +149,9 @@ pub async fn seed_function(
 
             let trigger = builder
                 .clone()
-                .trigger_by_collection_id(table_db.collection_id())
-                .trigger_by_function_id(table_db.function_id())
-                .trigger_by_table_id(table_db.table_id())
+                .trigger_by_collection_id(table_db.collection_id)
+                .trigger_by_function_id(table_db.function_id)
+                .trigger_by_table_id(table_db.table_id)
                 .status(TriggerStatus::Active)
                 .system(false)
                 .build()
@@ -175,7 +175,9 @@ mod tests {
     use super::*;
     use crate::sql::SelectBy;
     use crate::test_utils::seed_collection::seed_collection;
-    use crate::types::basic::{BundleId, CollectionName, Decorator, UserId};
+    use crate::types::id::{BundleId, UserId};
+    use crate::types::string::CollectionName;
+    use crate::types::typed_enum::Decorator;
     use td_security::ENCODED_ID_SYSTEM;
 
     #[td_test::test(sqlx)]
@@ -213,24 +215,24 @@ mod tests {
         let function = seed_function(&db, &collection, &create).await;
 
         let found: FunctionDB = DaoQueries::default()
-            .select_by::<FunctionDB>(&(function.id()))
+            .select_by::<FunctionDB>(&function.id)
             .unwrap()
             .build_query_as()
             .fetch_one(&db)
             .await
             .unwrap();
-        assert_eq!(function.id(), found.id());
-        assert_eq!(function.collection_id(), found.collection_id());
-        assert_eq!(function.name(), found.name());
-        assert_eq!(function.description(), found.description());
-        assert_eq!(function.runtime_values(), found.runtime_values());
-        assert_eq!(function.function_id(), found.function_id());
-        assert_eq!(function.data_location(), found.data_location());
-        assert_eq!(function.storage_version(), found.storage_version());
-        assert_eq!(function.bundle_id(), found.bundle_id());
-        assert_eq!(function.snippet(), found.snippet());
-        assert_eq!(function.defined_on(), found.defined_on());
-        assert_eq!(function.defined_by_id(), found.defined_by_id());
-        assert_eq!(function.status(), found.status());
+        assert_eq!(function.id, found.id);
+        assert_eq!(function.collection_id, found.collection_id);
+        assert_eq!(function.name, found.name);
+        assert_eq!(function.description, found.description);
+        assert_eq!(function.runtime_values, found.runtime_values);
+        assert_eq!(function.function_id, found.function_id);
+        assert_eq!(function.data_location, found.data_location);
+        assert_eq!(function.storage_version, found.storage_version);
+        assert_eq!(function.bundle_id, found.bundle_id);
+        assert_eq!(function.snippet, found.snippet);
+        assert_eq!(function.defined_on, found.defined_on);
+        assert_eq!(function.defined_by_id, found.defined_by_id);
+        assert_eq!(function.status, found.status);
     }
 }

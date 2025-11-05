@@ -2,9 +2,11 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use crate::dxo::execution::defs::ExecutionDB;
+use crate::dxo::transaction::defs::TransactionDB;
 use crate::sql::{DaoQueries, Insert};
-use crate::types::basic::{TransactionId, TransactionKey};
-use crate::types::execution::{ExecutionDB, TransactionDB};
+use crate::types::id::TransactionId;
+use crate::types::string::TransactionKey;
 use td_database::sql::DbPool;
 
 pub async fn seed_transaction(
@@ -14,13 +16,13 @@ pub async fn seed_transaction(
 ) -> TransactionDB {
     let transaction_db = TransactionDB::builder()
         .id(TransactionId::default())
-        .collection_id(execution.collection_id())
-        .execution_id(execution.id())
+        .collection_id(execution.collection_id)
+        .execution_id(execution.id)
         .try_transaction_by("ANY")
         .unwrap()
-        .transaction_key(transaction_key)
-        .triggered_on(execution.triggered_on())
-        .triggered_by_id(execution.triggered_by_id())
+        .transaction_key(transaction_key.clone())
+        .triggered_on(execution.triggered_on.clone())
+        .triggered_by_id(execution.triggered_by_id)
         .build()
         .unwrap();
 
@@ -39,11 +41,13 @@ pub async fn seed_transaction(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dxo::function::defs::FunctionRegister;
     use crate::test_utils::seed_collection::seed_collection;
     use crate::test_utils::seed_execution::seed_execution;
     use crate::test_utils::seed_function::seed_function;
-    use crate::types::basic::{BundleId, CollectionName, Decorator, UserId};
-    use crate::types::function::FunctionRegister;
+    use crate::types::id::{BundleId, UserId};
+    use crate::types::string::CollectionName;
+    use crate::types::typed_enum::Decorator;
     use td_database::sql::DbPool;
     use td_security::ENCODED_ID_SYSTEM;
 
@@ -86,10 +90,10 @@ mod tests {
         let transaction_key = TransactionKey::try_from("ANY").unwrap();
         let transaction = seed_transaction(&db, &execution, &transaction_key).await;
 
-        assert_eq!(transaction.collection_id(), execution.collection_id());
-        assert_eq!(transaction.execution_id(), execution.id());
-        assert_eq!(*transaction.transaction_key(), transaction_key);
-        assert_eq!(transaction.triggered_on(), transaction.triggered_on());
-        assert_eq!(transaction.triggered_by_id(), execution.triggered_by_id());
+        assert_eq!(transaction.collection_id, execution.collection_id);
+        assert_eq!(transaction.execution_id, execution.id);
+        assert_eq!(transaction.transaction_key, transaction_key);
+        assert_eq!(transaction.triggered_on, transaction.triggered_on);
+        assert_eq!(transaction.triggered_by_id, execution.triggered_by_id);
     }
 }

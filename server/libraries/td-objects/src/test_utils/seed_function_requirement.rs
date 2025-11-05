@@ -2,13 +2,15 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use crate::dxo::collection::defs::CollectionDB;
+use crate::dxo::execution::defs::ExecutionDB;
+use crate::dxo::function_requirement::defs::FunctionRequirementDB;
+use crate::dxo::function_run::defs::FunctionRunDB;
+use crate::dxo::table::defs::TableDB;
+use crate::dxo::table_data_version::defs::TableDataVersionDB;
+use crate::dxo::transaction::defs::TransactionDB;
 use crate::sql::{DaoQueries, Insert};
-use crate::types::basic::{DependencyPos, VersionPos};
-use crate::types::collection::CollectionDB;
-use crate::types::execution::{
-    ExecutionDB, FunctionRequirementDB, FunctionRunDB, TableDataVersionDB, TransactionDB,
-};
-use crate::types::table::TableDB;
+use crate::types::i32::{DependencyPos, VersionPos};
 use td_database::sql::DbPool;
 
 #[allow(clippy::too_many_arguments)]
@@ -25,17 +27,17 @@ pub async fn seed_function_requirement(
     requirement_version_pos: &VersionPos,
 ) -> FunctionRequirementDB {
     let function_requirement_db = FunctionRequirementDB::builder()
-        .collection_id(collection.id())
-        .execution_id(execution.id())
-        .transaction_id(transaction.id())
-        .function_run_id(function_run.id())
-        .requirement_table_id(requirement_table.table_id())
-        .requirement_function_version_id(requirement_table.function_version_id())
-        .requirement_table_version_id(requirement_table.id())
-        .requirement_function_run_id(requirement_function_run.map(|f| *f.id()))
-        .requirement_table_data_version_id(requirement_table_data_version.map(|f| *f.id()))
+        .collection_id(collection.id)
+        .execution_id(execution.id)
+        .transaction_id(transaction.id)
+        .function_run_id(function_run.id)
+        .requirement_table_id(requirement_table.table_id)
+        .requirement_function_version_id(requirement_table.function_version_id)
+        .requirement_table_version_id(requirement_table.id)
+        .requirement_function_run_id(requirement_function_run.map(|f| f.id))
+        .requirement_table_data_version_id(requirement_table_data_version.map(|f| f.id))
         .requirement_dependency_pos(requirement_dependency_pos.cloned())
-        .requirement_version_pos(requirement_version_pos)
+        .requirement_version_pos(requirement_version_pos.clone())
         .build()
         .unwrap();
 
@@ -54,6 +56,7 @@ pub async fn seed_function_requirement(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dxo::function::defs::FunctionRegister;
     use crate::sql::SelectBy;
     use crate::test_utils::seed_collection::seed_collection;
     use crate::test_utils::seed_execution::seed_execution;
@@ -61,11 +64,9 @@ mod tests {
     use crate::test_utils::seed_function_run::seed_function_run;
     use crate::test_utils::seed_table_data_version::seed_table_data_version;
     use crate::test_utils::seed_transaction::seed_transaction;
-    use crate::types::basic::{
-        BundleId, CollectionName, Decorator, FunctionRunStatus, TableNameDto, TransactionKey,
-        UserId,
-    };
-    use crate::types::function::FunctionRegister;
+    use crate::types::id::{BundleId, UserId};
+    use crate::types::string::{CollectionName, TableNameDto, TransactionKey};
+    use crate::types::typed_enum::{Decorator, FunctionRunStatus};
     use td_database::sql::DbPool;
     use td_security::ENCODED_ID_SYSTEM;
 
@@ -117,7 +118,7 @@ mod tests {
         .await;
 
         let requirement_tables = queries
-            .select_by::<TableDB>(&(function.id()))
+            .select_by::<TableDB>(&function.id)
             .unwrap()
             .build_query_as()
             .fetch_all(&db)
@@ -185,37 +186,34 @@ mod tests {
         )
         .await;
 
-        assert_eq!(requirement.collection_id(), collection.id());
-        assert_eq!(requirement.execution_id(), execution.id());
-        assert_eq!(requirement.transaction_id(), transaction.id());
-        assert_eq!(requirement.function_run_id(), function_run.id());
+        assert_eq!(requirement.collection_id, collection.id);
+        assert_eq!(requirement.execution_id, execution.id);
+        assert_eq!(requirement.transaction_id, transaction.id);
+        assert_eq!(requirement.function_run_id, function_run.id);
+        assert_eq!(requirement.requirement_table_id, requirement_table.table_id);
         assert_eq!(
-            requirement.requirement_table_id(),
-            requirement_table.table_id()
+            requirement.requirement_function_version_id,
+            requirement_table.function_version_id
         );
         assert_eq!(
-            requirement.requirement_function_version_id(),
-            requirement_table.function_version_id()
+            requirement.requirement_table_version_id,
+            requirement_table.id
         );
         assert_eq!(
-            requirement.requirement_table_version_id(),
-            requirement_table.id()
+            requirement.requirement_function_run_id,
+            Some(requirement_function_run.id)
         );
         assert_eq!(
-            *requirement.requirement_function_run_id(),
-            Some(*requirement_function_run.id())
+            requirement.requirement_table_data_version_id,
+            Some(requirement_table_data_version.id)
         );
         assert_eq!(
-            *requirement.requirement_table_data_version_id(),
-            Some(*requirement_table_data_version.id())
-        );
-        assert_eq!(
-            *requirement.requirement_dependency_pos(),
+            requirement.requirement_dependency_pos,
             Some(DependencyPos::try_from(0).unwrap())
         );
         assert_eq!(
-            requirement.requirement_version_pos(),
-            &VersionPos::try_from(0).unwrap()
+            requirement.requirement_version_pos,
+            VersionPos::try_from(0).unwrap()
         );
     }
 }

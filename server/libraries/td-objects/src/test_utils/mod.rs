@@ -2,6 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+pub mod graph;
 pub mod seed_collection;
 pub mod seed_execution;
 pub mod seed_function;

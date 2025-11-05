@@ -2,11 +2,12 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::crudl::{ReadRequest, RequestContext, handle_sql_err};
+use crate::dxo::crudl::{ReadRequest, RequestContext, handle_sql_err};
+use crate::dxo::role::defs::{RoleCreate, RoleDB, RoleDBBuilder};
 use crate::sql::{DaoQueries, Insert, SelectBy};
 use crate::types::SqlEntity;
-use crate::types::basic::{AccessTokenId, Description, RoleId, RoleName, UserId};
-use crate::types::role::{RoleCreate, RoleDB, RoleDBBuilder};
+use crate::types::id::{AccessTokenId, RoleId, UserId};
+use crate::types::string::{Description, RoleName};
 use td_database::sql::DbPool;
 use td_error::TdError;
 
@@ -23,10 +24,10 @@ pub async fn seed_role(db: &DbPool, name: RoleName, description: Description) ->
         RoleId::sec_admin(),
     )
     .read("");
-    let request_context = request_context.context();
+    let request_context = request_context.context;
 
     let builder = RoleDBBuilder::try_from(&role_create).unwrap();
-    let builder = RoleDBBuilder::try_from((request_context, builder)).unwrap();
+    let builder = RoleDBBuilder::try_from((&request_context, builder)).unwrap();
     let role_db = builder.build().unwrap();
 
     let queries = DaoQueries::default();
@@ -47,7 +48,7 @@ where
 {
     let queries = DaoQueries::default();
     queries
-        .select_by::<RoleDB>(&by)?
+        .select_by::<RoleDB>(by)?
         .build_query_as()
         .fetch_one(db)
         .await
@@ -72,13 +73,13 @@ pub mod tests {
         let found = get_role(&db, &RoleName::try_from("joaquin").unwrap())
             .await
             .unwrap();
-        assert_eq!(role.id(), found.id());
-        assert_eq!(role.name(), found.name());
-        assert_eq!(role.description(), found.description());
-        assert_eq!(role.created_on(), found.created_on());
-        assert_eq!(role.created_by_id(), found.created_by_id());
-        assert_eq!(role.modified_on(), found.modified_on());
-        assert_eq!(role.modified_by_id(), found.modified_by_id());
-        assert_eq!(role.fixed(), found.fixed());
+        assert_eq!(role.id, found.id);
+        assert_eq!(role.name, found.name);
+        assert_eq!(role.description, found.description);
+        assert_eq!(role.created_on, found.created_on);
+        assert_eq!(role.created_by_id, found.created_by_id);
+        assert_eq!(role.modified_on, found.modified_on);
+        assert_eq!(role.modified_by_id, found.modified_by_id);
+        assert_eq!(role.fixed, found.fixed);
     }
 }

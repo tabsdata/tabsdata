@@ -1,12 +1,12 @@
 //
-// Copyright 202∞ Tabs Data Inc.
+// Copyright 2025 Tabs Data Inc.
 //
 
+use crate::parse::{parse_table_ref, parse_versioned_table_ref, parse_versions};
 use crate::types::ComposedString;
-use crate::types::basic::{CollectionName, TableDataVersionId};
-use crate::types::parse::{parse_table_ref, parse_versioned_table_ref, parse_versions};
+use crate::types::id::TableDataVersionId;
+use crate::types::string::CollectionName;
 use derive_new::new;
-use getset::Getters;
 use std::fmt::{Display, Formatter};
 use td_error::TdError;
 
@@ -131,12 +131,11 @@ impl From<&Versions> for Versions {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, new, Getters)]
-#[getset(get = "pub")]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, new)]
 pub struct VersionedTableRef<T> {
-    collection: Option<CollectionName>,
-    table: T,
-    versions: Versions,
+    pub collection: Option<CollectionName>,
+    pub table: T,
+    pub versions: Versions,
 }
 
 impl<T, E> ComposedString for VersionedTableRef<T>
@@ -181,11 +180,10 @@ where
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, new, getset::Getters)]
-#[getset(get = "pub")]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, new)]
 pub struct TableRef<T> {
-    collection: Option<CollectionName>,
-    table: T,
+    pub collection: Option<CollectionName>,
+    pub table: T,
 }
 
 impl<T, E> ComposedString for TableRef<T>
@@ -230,7 +228,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::basic::TableName;
+    use crate::types::string::TableName;
     use td_common::id;
 
     #[test]

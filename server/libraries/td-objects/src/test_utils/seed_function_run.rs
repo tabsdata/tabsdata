@@ -2,11 +2,13 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use crate::dxo::collection::defs::CollectionDB;
+use crate::dxo::execution::defs::ExecutionDB;
+use crate::dxo::function::defs::FunctionDB;
+use crate::dxo::function_run::defs::FunctionRunDB;
+use crate::dxo::transaction::defs::TransactionDB;
 use crate::sql::{DaoQueries, Insert};
-use crate::types::basic::{FunctionRunStatus, Trigger};
-use crate::types::collection::CollectionDB;
-use crate::types::execution::{ExecutionDB, FunctionRunDB, TransactionDB};
-use crate::types::function::FunctionDB;
+use crate::types::typed_enum::{FunctionRunStatus, Trigger};
 use td_database::sql::DbPool;
 
 pub async fn seed_function_run(
@@ -18,14 +20,14 @@ pub async fn seed_function_run(
     status: &FunctionRunStatus,
 ) -> FunctionRunDB {
     let function_db = FunctionRunDB::builder()
-        .collection_id(collection.id())
-        .function_version_id(function_version.id())
-        .execution_id(execution.id())
-        .transaction_id(transaction.id())
-        .triggered_on(transaction.triggered_on())
-        .triggered_by_id(transaction.triggered_by_id())
+        .collection_id(collection.id)
+        .function_version_id(function_version.id)
+        .execution_id(execution.id)
+        .transaction_id(transaction.id)
+        .triggered_on(transaction.triggered_on.clone())
+        .triggered_by_id(transaction.triggered_by_id)
         .trigger(Trigger::Manual)
-        .status(status)
+        .status(status.clone())
         .build()
         .unwrap();
 
@@ -44,12 +46,14 @@ pub async fn seed_function_run(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dxo::function::defs::FunctionRegister;
     use crate::test_utils::seed_collection::seed_collection;
     use crate::test_utils::seed_execution::seed_execution;
     use crate::test_utils::seed_function::seed_function;
     use crate::test_utils::seed_transaction::seed_transaction;
-    use crate::types::basic::{BundleId, CollectionName, Decorator, TransactionKey, UserId};
-    use crate::types::function::FunctionRegister;
+    use crate::types::id::{BundleId, UserId};
+    use crate::types::string::{CollectionName, TransactionKey};
+    use crate::types::typed_enum::Decorator;
     use td_database::sql::DbPool;
     use td_security::ENCODED_ID_SYSTEM;
 
@@ -102,12 +106,12 @@ mod tests {
         )
         .await;
 
-        assert_eq!(function_run.collection_id(), collection.id());
-        assert_eq!(function_run.function_version_id(), function_version.id());
-        assert_eq!(function_run.execution_id(), execution.id());
-        assert_eq!(function_run.transaction_id(), transaction.id());
-        assert_eq!(function_run.triggered_on(), transaction.triggered_on());
-        assert_eq!(*function_run.trigger(), Trigger::Manual);
-        assert_eq!(*function_run.status(), FunctionRunStatus::Scheduled);
+        assert_eq!(function_run.collection_id, collection.id);
+        assert_eq!(function_run.function_version_id, function_version.id);
+        assert_eq!(function_run.execution_id, execution.id);
+        assert_eq!(function_run.transaction_id, transaction.id);
+        assert_eq!(function_run.triggered_on, transaction.triggered_on);
+        assert_eq!(function_run.trigger, Trigger::Manual);
+        assert_eq!(function_run.status, FunctionRunStatus::Scheduled);
     }
 }

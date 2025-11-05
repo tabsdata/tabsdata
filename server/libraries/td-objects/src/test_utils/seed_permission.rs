@@ -2,12 +2,14 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::crudl::{ReadRequest, RequestContext, handle_sql_err};
+use crate::dxo::crudl::{ReadRequest, RequestContext, handle_sql_err};
+use crate::dxo::permission::defs::{PermissionCreate, PermissionDB, PermissionDBBuilder};
+use crate::dxo::role::defs::RoleDB;
 use crate::sql::{DaoQueries, Insert, SelectBy};
 use crate::types::SqlEntity;
-use crate::types::basic::{AccessTokenId, EntityId, EntityName, PermissionType, RoleId, UserId};
-use crate::types::permission::{PermissionCreate, PermissionDB, PermissionDBBuilder};
-use crate::types::role::RoleDB;
+use crate::types::id::{AccessTokenId, EntityId, RoleId, UserId};
+use crate::types::string::EntityName;
+use crate::types::typed_enum::PermissionType;
 use td_database::sql::DbPool;
 use td_error::TdError;
 
@@ -19,7 +21,7 @@ pub async fn seed_permission(
     role_db: &RoleDB,
 ) -> PermissionDB {
     let permission_create = PermissionCreate::builder()
-        .permission_type(&permission_type)
+        .permission_type(permission_type.clone())
         .entity_name(entity_name)
         .build()
         .unwrap();
@@ -30,10 +32,10 @@ pub async fn seed_permission(
         RoleId::sec_admin(),
     )
     .read("");
-    let request_context = request_context.context();
+    let request_context = request_context.context;
 
     let builder = PermissionDBBuilder::try_from(&permission_create).unwrap();
-    let builder = PermissionDBBuilder::try_from((request_context, builder)).unwrap();
+    let builder = PermissionDBBuilder::try_from((&request_context, builder)).unwrap();
     let mut builder = PermissionDBBuilder::try_from((role_db, builder)).unwrap();
 
     let permission_entity_type = permission_type.on_entity_type();
@@ -60,7 +62,7 @@ where
 {
     let queries = DaoQueries::default();
     queries
-        .select_by::<PermissionDB>(&by)?
+        .select_by::<PermissionDB>(by)?
         .build_query_as()
         .fetch_one(db)
         .await
@@ -72,7 +74,7 @@ mod tests {
     use super::*;
     use crate::test_utils::seed_permission::seed_permission;
     use crate::test_utils::seed_role::seed_role;
-    use crate::types::basic::{Description, RoleName};
+    use crate::types::string::{Description, RoleName};
 
     #[tokio::test]
     async fn test_seed_permission() {
@@ -92,14 +94,14 @@ mod tests {
         )
         .await;
 
-        let found = get_permission(&db, permission.id()).await.unwrap();
-        assert_eq!(permission.id(), found.id());
-        assert_eq!(permission.role_id(), found.role_id());
-        assert_eq!(permission.permission_type(), found.permission_type());
-        assert_eq!(permission.entity_type(), found.entity_type());
-        assert_eq!(permission.entity_id(), found.entity_id());
-        assert_eq!(permission.granted_by_id(), found.granted_by_id());
-        assert_eq!(permission.granted_on(), found.granted_on());
-        assert_eq!(permission.fixed(), found.fixed());
+        let found = get_permission(&db, &permission.id).await.unwrap();
+        assert_eq!(permission.id, found.id);
+        assert_eq!(permission.role_id, found.role_id);
+        assert_eq!(permission.permission_type, found.permission_type);
+        assert_eq!(permission.entity_type, found.entity_type);
+        assert_eq!(permission.entity_id, found.entity_id);
+        assert_eq!(permission.granted_by_id, found.granted_by_id);
+        assert_eq!(permission.granted_on, found.granted_on);
+        assert_eq!(permission.fixed, found.fixed);
     }
 }

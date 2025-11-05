@@ -2,19 +2,26 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::types::basic::{
-    AtTime, BundleId, CollectionId, CollectionName, DataLocation, Decorator, DependencyId,
-    DependencyPos, DependencyStatus, DependencyVersionId, Description, FunctionId, FunctionName,
-    FunctionStatus, FunctionVersionId, Snippet, StorageVersion, TableId, TableName, TableStatus,
-    TableVersionId, TableVersions, TriggerId, TriggerStatus, TriggerVersionId, UserId, UserName,
+use crate::dxo::dependency::defs::DependencyDBWithNames;
+use crate::dxo::function::defs::FunctionDBWithNames;
+use crate::dxo::table::defs::TableDBWithNames;
+use crate::dxo::trigger::defs::TriggerDBWithNames;
+use crate::execution::graph::{FunctionNode, TableNode};
+use crate::types::composed::TableVersions;
+use crate::types::i32::DependencyPos;
+use crate::types::id::{
+    BundleId, CollectionId, DependencyId, DependencyVersionId, FunctionId, FunctionVersionId,
+    TableId, TableVersionId, TriggerId, TriggerVersionId, UserId,
 };
-use crate::types::dependency::DependencyDBWithNames;
-use crate::types::execution::{FunctionVersionNode, TableVersionNode};
-use crate::types::function::FunctionDBWithNames;
-use crate::types::table::TableDBWithNames;
-use crate::types::trigger::TriggerDBWithNames;
+use crate::types::string::{
+    CollectionName, DataLocation, Description, FunctionName, FunctionRuntimeValues, Snippet,
+    StorageVersion, TableName, UserName,
+};
+use crate::types::timestamp::AtTime;
+use crate::types::typed_enum::{
+    Decorator, DependencyStatus, FunctionStatus, TableStatus, TriggerStatus,
+};
 use std::collections::HashMap;
-use std::ops::Deref;
 use std::sync::LazyLock;
 
 static COLLECTION_ID: LazyLock<CollectionId> = LazyLock::new(CollectionId::default);
@@ -85,29 +92,29 @@ static TABLE_VERSION_IDS: LazyLock<HashMap<TableName, TableVersionId>> = LazyLoc
     map
 });
 
-pub fn function_node(function: &FunctionName) -> FunctionVersionNode {
-    FunctionVersionNode::builder()
+pub fn function_node(function: &FunctionName) -> FunctionNode {
+    FunctionNode::builder()
         .collection_id(*COLLECTION_ID)
-        .collection(&*COLLECTION_NAME)
+        .collection(COLLECTION_NAME.clone())
         .function_version_id(FUNCTION_VERSION_IDS.get(function).unwrap())
-        .name(function)
+        .name(function.clone())
         .build()
         .unwrap()
 }
 
-pub fn table_node(table: &TableName) -> TableVersionNode {
+pub fn table_node(table: &TableName) -> TableNode {
     let function = FUNCTIONS
         .iter()
         .find(|(_, tables)| tables.contains(table))
         .map(|(function, _)| function)
         .unwrap();
-    TableVersionNode::builder()
+    TableNode::builder()
         .collection_id(*COLLECTION_ID)
-        .collection(&*COLLECTION_NAME)
+        .collection(COLLECTION_NAME.clone())
         .function_version_id(FUNCTION_VERSION_IDS.get(function).unwrap())
         .table_id(TABLE_IDS.get(table).unwrap())
         .table_version_id(TABLE_VERSION_IDS.get(table).unwrap())
-        .name(table)
+        .name(table.clone())
         .system(false)
         .build()
         .unwrap()
@@ -118,7 +125,7 @@ pub async fn table(function: &FunctionName, table: &TableName) -> TableDBWithNam
         .id(TABLE_VERSION_IDS.get(table).unwrap())
         .collection_id(*COLLECTION_ID)
         .table_id(TABLE_IDS.get(table).unwrap())
-        .name(table)
+        .name(table.clone())
         .function_id(FunctionId::default())
         .function_version_id(FUNCTION_VERSION_IDS.get(function).unwrap())
         .function_param_pos(None)
@@ -128,8 +135,8 @@ pub async fn table(function: &FunctionName, table: &TableName) -> TableDBWithNam
         .defined_by_id(UserId::default())
         .status(TableStatus::Active)
         .system(false)
-        .collection(COLLECTION_NAME.deref())
-        .function(function)
+        .collection(COLLECTION_NAME.clone())
+        .function(function.clone())
         .defined_by(UserName::try_from("joaquin").unwrap())
         .build()
         .unwrap()
@@ -158,9 +165,9 @@ pub async fn dependency(
             .status(DependencyStatus::Active)
             .defined_on(AtTime::now())
             .defined_by_id(UserId::default())
-            .collection(&*COLLECTION_NAME)
+            .collection(COLLECTION_NAME.clone())
             .trigger_by_collection(CollectionName::try_from("test").unwrap())
-            .table_collection(&*COLLECTION_NAME)
+            .table_collection(COLLECTION_NAME.clone())
             .system(false)
             .build()
             .unwrap(),
@@ -168,7 +175,7 @@ pub async fn dependency(
             .id(TABLE_VERSION_IDS.get(table).unwrap())
             .collection_id(*COLLECTION_ID)
             .table_id(TABLE_IDS.get(table).unwrap())
-            .name(table)
+            .name(table.clone())
             .function_id(FUNCTION_IDS.get(table_function).unwrap())
             .function_version_id(FUNCTION_VERSION_IDS.get(table_function).unwrap())
             .function_param_pos(None)
@@ -178,18 +185,19 @@ pub async fn dependency(
             .defined_by_id(UserId::default())
             .status(TableStatus::Active)
             .system(false)
-            .collection(COLLECTION_NAME.deref())
-            .function(function)
+            .collection(COLLECTION_NAME.clone())
+            .function(function.clone())
             .defined_by(UserName::try_from("joaquin").unwrap())
             .build()
             .unwrap(),
         FunctionDBWithNames::builder()
             .id(FUNCTION_VERSION_IDS.get(function).unwrap())
             .collection_id(*COLLECTION_ID)
-            .name(function)
+            .name(function.clone())
             .description(Description::default())
             .decorator(Decorator::Publisher)
             .connector(None)
+            .runtime_values(FunctionRuntimeValues::default())
             .function_id(FUNCTION_IDS.get(function).unwrap())
             .data_location(DataLocation::default())
             .storage_version(StorageVersion::default())
@@ -198,7 +206,7 @@ pub async fn dependency(
             .defined_on(AtTime::now())
             .defined_by_id(UserId::default())
             .status(FunctionStatus::Active)
-            .collection(COLLECTION_NAME.deref())
+            .collection(COLLECTION_NAME.clone())
             .defined_by(UserName::try_from("joaquin").unwrap())
             .build()
             .unwrap(),
@@ -226,8 +234,8 @@ pub async fn trigger(
             .status(TriggerStatus::Active)
             .defined_on(AtTime::now())
             .defined_by_id(UserId::default())
-            .collection(&*COLLECTION_NAME)
-            .trigger_by_collection(&*COLLECTION_NAME)
+            .collection(COLLECTION_NAME.clone())
+            .trigger_by_collection(COLLECTION_NAME.clone())
             .system(false)
             .build()
             .unwrap(),
@@ -235,7 +243,7 @@ pub async fn trigger(
             .id(TABLE_VERSION_IDS.get(table).unwrap())
             .collection_id(*COLLECTION_ID)
             .table_id(TABLE_IDS.get(table).unwrap())
-            .name(table)
+            .name(table.clone())
             .function_id(FUNCTION_IDS.get(table_function).unwrap())
             .function_version_id(FUNCTION_VERSION_IDS.get(table_function).unwrap())
             .function_param_pos(None)
@@ -245,18 +253,19 @@ pub async fn trigger(
             .defined_by_id(UserId::default())
             .status(TableStatus::Active)
             .system(false)
-            .collection(COLLECTION_NAME.deref())
-            .function(function)
+            .collection(COLLECTION_NAME.clone())
+            .function(function.clone())
             .defined_by(UserName::try_from("joaquin").unwrap())
             .build()
             .unwrap(),
         FunctionDBWithNames::builder()
             .id(FUNCTION_VERSION_IDS.get(function).unwrap())
             .collection_id(*COLLECTION_ID)
-            .name(function)
+            .name(function.clone())
             .description(Description::default())
             .decorator(Decorator::Publisher)
             .connector(None)
+            .runtime_values(FunctionRuntimeValues::default())
             .function_id(FUNCTION_IDS.get(function).unwrap())
             .data_location(DataLocation::default())
             .storage_version(StorageVersion::default())
@@ -265,7 +274,7 @@ pub async fn trigger(
             .defined_on(AtTime::now())
             .defined_by_id(UserId::default())
             .status(FunctionStatus::Active)
-            .collection(COLLECTION_NAME.deref())
+            .collection(COLLECTION_NAME.clone())
             .defined_by(UserName::try_from("joaquin").unwrap())
             .build()
             .unwrap(),

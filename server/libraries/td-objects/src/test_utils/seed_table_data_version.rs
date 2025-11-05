@@ -2,11 +2,15 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use crate::dxo::collection::defs::CollectionDB;
+use crate::dxo::execution::defs::ExecutionDB;
+use crate::dxo::function_run::defs::FunctionRunDB;
+use crate::dxo::table::defs::TableDB;
+use crate::dxo::table_data_version::defs::TableDataVersionDB;
+use crate::dxo::transaction::defs::TransactionDB;
 use crate::sql::{DaoQueries, Insert};
-use crate::types::basic::{HasData, TableFunctionParamPos};
-use crate::types::collection::CollectionDB;
-use crate::types::execution::{ExecutionDB, FunctionRunDB, TableDataVersionDB, TransactionDB};
-use crate::types::table::TableDB;
+use crate::types::bool::HasData;
+use crate::types::i32::TableFunctionParamPos;
 use td_database::sql::DbPool;
 
 pub async fn seed_table_data_version_with_data(
@@ -61,15 +65,15 @@ pub async fn _seed_table_data_version(
     let queries = DaoQueries::default();
 
     let table_data_version_db = TableDataVersionDB::builder()
-        .collection_id(collection.id())
-        .table_id(table.table_id())
-        .name(table.name())
-        .table_version_id(table.id())
-        .function_version_id(table.function_version_id())
+        .collection_id(collection.id)
+        .table_id(table.table_id)
+        .name(table.name.clone())
+        .table_version_id(table.id)
+        .function_version_id(table.function_version_id)
         .has_data(has_data.cloned())
-        .execution_id(execution.id())
-        .transaction_id(transaction.id())
-        .function_run_id(function_run.id())
+        .execution_id(execution.id)
+        .transaction_id(transaction.id)
+        .function_run_id(function_run.id)
         .function_param_pos(TableFunctionParamPos::try_from(0).unwrap())
         .build()
         .unwrap();
@@ -88,17 +92,16 @@ pub async fn _seed_table_data_version(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dxo::function::defs::FunctionRegister;
     use crate::sql::SelectBy;
     use crate::test_utils::seed_collection::seed_collection;
     use crate::test_utils::seed_execution::seed_execution;
     use crate::test_utils::seed_function::seed_function;
     use crate::test_utils::seed_function_run::seed_function_run;
     use crate::test_utils::seed_transaction::seed_transaction;
-    use crate::types::basic::{
-        BundleId, CollectionName, Decorator, FunctionRunStatus, TableName, TableNameDto,
-        TransactionKey, UserId,
-    };
-    use crate::types::function::FunctionRegister;
+    use crate::types::id::{BundleId, UserId};
+    use crate::types::string::{CollectionName, TableName, TableNameDto, TransactionKey};
+    use crate::types::typed_enum::{Decorator, FunctionRunStatus};
     use td_database::sql::DbPool;
     use td_security::ENCODED_ID_SYSTEM;
 
@@ -154,7 +157,7 @@ mod tests {
         .await;
 
         let table_version = DaoQueries::default()
-            .select_by::<TableDB>(&(collection.id(), &TableName::try_from(table_name).unwrap()))
+            .select_by::<TableDB>(&(collection.id, TableName::try_from(table_name).unwrap()))
             .unwrap()
             .build_query_as()
             .fetch_one(&db)
@@ -171,15 +174,12 @@ mod tests {
         )
         .await;
 
-        assert_eq!(table_data_version.collection_id(), collection.id());
-        assert_eq!(table_data_version.table_version_id(), table_version.id());
-        assert_eq!(
-            table_data_version.function_version_id(),
-            function_version.id()
-        );
-        assert_eq!(*table_data_version.has_data(), None);
-        assert_eq!(table_data_version.execution_id(), execution.id());
-        assert_eq!(table_data_version.transaction_id(), transaction.id());
-        assert_eq!(table_data_version.function_run_id(), function_run.id());
+        assert_eq!(table_data_version.collection_id, collection.id);
+        assert_eq!(table_data_version.table_version_id, table_version.id);
+        assert_eq!(table_data_version.function_version_id, function_version.id);
+        assert_eq!(table_data_version.has_data, None);
+        assert_eq!(table_data_version.execution_id, execution.id);
+        assert_eq!(table_data_version.transaction_id, transaction.id);
+        assert_eq!(table_data_version.function_run_id, function_run.id);
     }
 }
