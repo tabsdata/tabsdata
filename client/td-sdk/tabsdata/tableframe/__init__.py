@@ -44,6 +44,7 @@ from polars.datatypes.group import (
     UNSIGNED_INTEGER_DTYPES,
 )
 
+from tabsdata._utils.tableframe._constants import SysCol
 from tabsdata._utils.tableframe.builders import (
     empty,
     from_dict,
@@ -66,6 +67,7 @@ __all__ = [
     # from tabsdata.tableframe...
     "Column",
     "Schema",
+    "SysCol",
     "col",
     "concat",
     "lit",

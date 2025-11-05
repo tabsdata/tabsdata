@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from enum import Enum
+from enum import Enum, StrEnum
 from typing import Any
 
 import polars as pl
@@ -153,6 +153,14 @@ class StandardSystemColumns(Enum):
     TD_VER_TRANSACTION = "$td.ver.transaction"
     TD_VER_VERSION = "$td.ver.version"
     TD_VER_TIMESTAMP = "$td.ver.timestamp"
+
+
+# User facing enum for a subset standard system columns.
+class SysCol(StrEnum):
+    VER_EXECUTION = StandardSystemColumns.TD_VER_EXECUTION.value
+    VER_TRANSACTION = StandardSystemColumns.TD_VER_TRANSACTION.value
+    VER_VERSION = StandardSystemColumns.TD_VER_VERSION.value
+    VER_TIMESTAMP = StandardSystemColumns.TD_VER_TIMESTAMP.value
 
 
 class StandardVolatileSystemColumns(Enum):
