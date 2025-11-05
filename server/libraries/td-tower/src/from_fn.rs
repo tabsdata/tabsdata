@@ -2,24 +2,23 @@
 //  Copyright 2024 Tabs Data Inc.
 //
 
-//! A layer that wraps a function and creates a service. Very similar to [`tower::service_fn`] or
-//! [`axum::middleware::from_fn`], but in a more generic form. Useful for creating services
-//! in a reusable way.
+//! A generic layer to wrap a function as a `tower::Service`. Similar to
+//! [`tower::service_fn`] or [`axum::middleware::from_fn`], but more reusable.
+//!
+//! Useful for creating services from async functions that operate on extracted inputs.
 
 use crate::error::FromHandlerError;
 use crate::extractors::{FromHandler, Input};
 use crate::handler::{Handler, IntoHandler};
-use futures::future::BoxFuture;
-use std::fmt::{Debug, Formatter};
-use std::{any::type_name, fmt, future::Future, marker::PhantomData, pin::Pin, task};
-use tower::{Service, ServiceBuilder, util::BoxCloneService};
+use futures_util::future::BoxFuture;
+use std::marker::PhantomData;
+use std::task;
+use td_error::TdError;
+use tower::util::BoxCloneSyncService;
+use tower::{Service, ServiceBuilder};
 use tower_layer::Layer;
 
-/// Creates a new `FromFnLayer` with the given function.
-///
-/// # Arguments
-///
-/// * `f` - A function that takes an input and returns a future.
+/// Creates a new `FromFnLayer` from a function.
 pub fn from_fn<F, T>(f: F) -> FromFnLayer<F, T> {
     FromFnLayer {
         f,
@@ -27,117 +26,63 @@ pub fn from_fn<F, T>(f: F) -> FromFnLayer<F, T> {
     }
 }
 
-/// A layer that wraps a function and creates a service.
-///
-/// # Type Parameters
-///
-/// * `F` - The function type.
-/// * `T` - The type of the function's output.
+/// A layer that wraps a function and produces a service.
 #[must_use]
+#[derive(Clone)]
 pub struct FromFnLayer<F, T> {
     f: F,
-    _extractor: PhantomData<fn() -> T>,
-}
-
-impl<F, T> Clone for FromFnLayer<F, T>
-where
-    F: Clone,
-{
-    fn clone(&self) -> Self {
-        Self {
-            f: self.f.clone(),
-            _extractor: self._extractor,
-        }
-    }
+    _extractor: PhantomData<T>,
 }
 
 impl<I, F, T> Layer<I> for FromFnLayer<F, T>
 where
     F: Clone,
+    I: Service<Handler, Error = TdError> + Clone + Send + Sync + 'static,
+    I::Response: IntoHandler,
+    I::Future: Send + 'static,
 {
-    type Service = FromFn<F, I, T>;
+    type Service = FromFn<F, T>;
 
     fn layer(&self, inner: I) -> Self::Service {
+        let boxed_inner = BoxCloneSyncService::new(
+            ServiceBuilder::new()
+                .map_response(IntoHandler::into_handler)
+                .service(inner),
+        );
+
         FromFn {
             f: self.f.clone(),
-            inner,
+            inner: boxed_inner,
             _extractor: PhantomData,
         }
     }
 }
 
-impl<F, T> Debug for FromFnLayer<F, T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.debug_struct("FromFnLayer")
-            // Write out the type name, without quoting it as `&type_name::<F>()` would
-            .field("f", &format_args!("{}", type_name::<F>()))
-            .finish()
-    }
-}
-
-/// A service created from a function and an inner service.
-///
-/// # Type Parameters
-///
-/// * `F` - The function type.
-/// * `I` - The inner service type.
-/// * `T` - The type of the function's output.
-pub struct FromFn<F, I, T> {
+/// Service created from a function and an inner service.
+#[derive(Clone)]
+pub struct FromFn<F, T> {
     f: F,
-    inner: I,
-    _extractor: PhantomData<fn() -> T>,
+    inner: BoxCloneSyncService<Handler, Handler, TdError>,
+    _extractor: PhantomData<T>,
 }
 
-impl<F, I, T> Clone for FromFn<F, I, T>
-where
-    F: Clone,
-    I: Clone,
-{
-    fn clone(&self) -> Self {
-        Self {
-            f: self.f.clone(),
-            inner: self.inner.clone(),
-            _extractor: self._extractor,
-        }
-    }
-}
-
-impl<F, I, T> Debug for FromFn<F, I, T>
-where
-    I: Debug,
-{
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.debug_struct("FromFnLayer")
-            .field("f", &format_args!("{}", type_name::<F>()))
-            .field("inner", &self.inner)
-            .finish()
-    }
-}
-
-/// This is the general impl of Service for all FromFn types.
-/// The framework will extract and inject values of the given types from the handler, so they
-/// can be used by the data conforming the tower.
-/// When `test_tower_metadata` feature is enabled, the function name is added to the metadata,
-/// and the function conforming the service is not executed. Therefore, not using the handler values.
+/// Implements `Service` for `FromFn` for tuples of inputs.
 macro_rules! impl_service {
     (
         [$($ty:ident),*]
     ) => {
         #[allow(non_snake_case, unused_mut, unused_parens, unused_variables)]
-        impl<F, Fut, Out, Err, I, $($ty,)*> Service<Handler> for FromFn<F, I, ($($ty,)*)>
+        impl<F, Fut, Out, Err, $($ty,)*> Service<Handler> for FromFn<F, ($($ty,)*)>
         where
             F: FnMut($($ty,)*) -> Fut + Clone + Send + 'static,
             $( $ty: FromHandler + Send, )*
-            Fut: Future<Output = Result<Out, Err>> + Send + 'static,
+            Fut: std::future::Future<Output = Result<Out, Err>> + Send + 'static,
             Out: Send + Sync + 'static,
-            I: Service<Handler> + Clone + Send + 'static,
-            I::Response: IntoHandler,
-            I::Future: Send + 'static,
-            Err: From<I::Error> + From<FromHandlerError>
+            Err: From<TdError> + From<FromHandlerError>
         {
             type Response = Handler;
             type Error = Err;
-            type Future = ResponseFuture<Err>;
+            type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
 
             fn poll_ready(&mut self, cx: &mut task::Context<'_>) -> task::Poll<Result<(), Self::Error>> {
                 match self.inner.poll_ready(cx) {
@@ -149,56 +94,31 @@ macro_rules! impl_service {
 
             fn call(&mut self, mut handler: Handler) -> Self::Future {
                 let not_ready_inner = self.inner.clone();
-                let ready_inner = std::mem::replace(&mut self.inner, not_ready_inner);
-
+                let mut ready_inner = std::mem::replace(&mut self.inner, not_ready_inner);
                 let mut f = self.f.clone();
 
-                let future = Box::pin(async move {
+                Box::pin(async move {
                     #[cfg(not(feature = "test_tower_metadata"))]
                     {
-                        // Extract values from handler
-                        $(
-                            let $ty = $ty::from_handler(&handler)?;
-                        )*
-
-                        // Execute function and add result to handler
+                        $(let $ty = $ty::from_handler(&handler)?;)*
                         let res = f($($ty,)*).await?;
-                        let res = Input(std::sync::Arc::new(res));
-                        handler.insert(res);
+                        handler.insert(Input(std::sync::Arc::new(res)));
                     }
 
                     #[cfg(feature = "test_tower_metadata")]
                     {
                         use $crate::metadata::{type_of, type_of_val, MetadataMutex};
 
-                        // Add fn metadata, and skip actual execution
                         let Input(metadata) = MetadataMutex::from_handler(&handler)?;
                         let fn_name = type_of_val(&f);
                         metadata.add_fn_name(fn_name.clone()).await;
 
-                        // Add types to metadata
-                        $(
-                            let arg_type_name = type_of::<$ty>();
-                            metadata.used_type(fn_name.clone(), arg_type_name).await;
-                        )*
-
-                        let res_type_name = type_of::<Input<Out>>();
-                        metadata.created_type(fn_name.clone(), res_type_name).await;
+                        $(metadata.used_type(fn_name.clone(), type_of::<$ty>()).await;)*
+                        metadata.created_type(fn_name.clone(), type_of::<Input<Out>>()).await;
                     }
 
-                    let inner = ServiceBuilder::new()
-                        .boxed_clone()
-                        .map_response(IntoHandler::into_handler)
-                        .service(ready_inner);
-                    let next = Next { inner };
-
-                    handler = next.run(handler).await?;
-                    Ok(handler)
-                });
-
-                ResponseFuture::<Err> {
-                    inner: future
-                }
+                    Ok(ready_inner.call(handler).await?)
+                })
             }
         }
     };
@@ -221,62 +141,17 @@ macro_rules! all_the_tuples {
 
 all_the_tuples!(impl_service);
 
-/// The remainder of a tower stack, including the handler.
-#[derive(Debug, Clone)]
-pub struct Next<Err> {
-    inner: BoxCloneService<Handler, Handler, Err>,
-}
-
-impl<Err> Next<Err> {
-    /// Execute the remaining tower stack.
-    pub async fn run(mut self, handler: Handler) -> Result<Handler, Err> {
-        self.inner.call(handler).await
-    }
-}
-
-impl<Err> Service<Handler> for Next<Err> {
-    type Response = Handler;
-    type Error = Err;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
-
-    fn poll_ready(&mut self, cx: &mut task::Context<'_>) -> task::Poll<Result<(), Self::Error>> {
-        self.inner.poll_ready(cx)
-    }
-
-    fn call(&mut self, handler: Handler) -> Self::Future {
-        self.inner.call(handler)
-    }
-}
-
-/// A future that resolves to a handler.
-pub struct ResponseFuture<Err> {
-    inner: BoxFuture<'static, Result<Handler, Err>>,
-}
-
-impl<Err> Future for ResponseFuture<Err> {
-    type Output = Result<Handler, Err>;
-
-    fn poll(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> task::Poll<Self::Output> {
-        self.inner.as_mut().poll(cx)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::ctx_service::RawOneshot;
     use crate::default_services::{ServiceEntry, ServiceReturn};
     use crate::extractors::Input;
+
     #[cfg(feature = "test_tower_metadata")]
     use crate::metadata::{MetadataMutex, type_of_val};
 
-    #[derive(Debug, thiserror::Error)]
-    enum TestError {
-        #[error("Handler test error: {0}")]
-        HandlerError(#[from] FromHandlerError),
-    }
-
-    async fn add_one(Input(x): Input<i32>) -> Result<i32, TestError> {
+    async fn add_one(Input(x): Input<i32>) -> Result<i32, TdError> {
         Ok(*x + 1)
     }
 
@@ -326,7 +201,7 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
     async fn test_tower_metadata_fn_names() {
-        async fn test_layer_fn() -> Result<(), FromHandlerError> {
+        async fn test_layer_fn() -> Result<(), TdError> {
             // Note that this function is not called, as we are only interested in the metadata
             panic!("This should not be called");
         }

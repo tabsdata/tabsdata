@@ -10,7 +10,6 @@ use crate::error::{ConnectionError, FromHandlerError};
 use crate::extractors::{Connection, ConnectionType, Input, ReqCtx, SrvCtx};
 use crate::handler::{Handler, IntoHandler};
 use std::any::type_name;
-use std::fmt::Display;
 use std::future::Future;
 use std::marker::PhantomData;
 use std::pin::Pin;
@@ -77,16 +76,15 @@ where
     }
 }
 
-impl<S, Req, Res, Err> Service<Req> for InitService<S, Res>
+impl<S, Req, Res> Service<Req> for InitService<S, Res>
 where
-    S: Service<Handler, Response = Handler, Error = Err> + Clone + Send + 'static,
+    S: Service<Handler, Response = Handler, Error = TdError> + Clone + Send + 'static,
     S::Future: Send + 'static,
     Req: Send + Sync + 'static,
     Res: Send + Sync + 'static,
-    Err: From<FromHandlerError> + Display,
 {
     type Response = CtxResponse<Res>;
-    type Error = Err;
+    type Error = TdError;
     type Future =
         Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
 
@@ -469,8 +467,30 @@ pub struct ServiceReturn;
 impl Service<Handler> for ServiceReturn {
     type Response = Handler;
     // This error is not really used as this service cannot fail, but given that all the tower
-    // must implement From<FromHandlerError>, we can just use it here as well.
-    type Error = FromHandlerError;
+    // must implement From<TdError>, we can just use it here as well.
+    type Error = TdError;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
+
+    fn poll_ready(
+        &mut self,
+        _cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
+        std::task::Poll::Ready(Ok(()))
+    }
+
+    fn call(&mut self, handler: Handler) -> Self::Future {
+        Box::pin(async move { Ok(handler) })
+    }
+}
+
+#[derive(Default, Clone)]
+pub struct ServiceReturn2;
+
+impl Service<Handler> for ServiceReturn2 {
+    type Response = Handler;
+    // This error is not really used as this service cannot fail, but given that all the tower
+    // must implement From<TdError>, we can just use it here as well.
+    type Error = TdError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
     fn poll_ready(
@@ -500,14 +520,14 @@ impl Service<Handler> for ServiceReturn {
 /// ```rust
 /// use tower::ServiceBuilder;
 /// use td_tower::default_services::{conditional, Condition, Do, Else, If, ServiceReturn};
-/// use td_tower::error::FromHandlerError;
+/// use td_tower::error::TdError;
 /// use td_tower::from_fn::from_fn;
 ///
-/// async fn condition() -> Result<Condition, FromHandlerError> {
+/// async fn condition() -> Result<Condition, TdError> {
 ///    Ok(Condition(true))
 /// }
 ///
-/// async fn test() -> Result<(), FromHandlerError> {
+/// async fn test() -> Result<(), TdError> {
 ///   Ok(())
 /// }
 ///
@@ -615,21 +635,20 @@ where
 
 impl<C, DS, ES, I> Service<Handler> for ConditionalService<C, DS, ES, I>
 where
-    C: Service<Handler> + Clone + Send + 'static,
+    C: Service<Handler, Error = TdError> + Clone + Send + 'static,
     C::Future: Send,
     C::Response: IntoHandler,
-    DS: Service<Handler> + Clone + Send + 'static,
+    DS: Service<Handler, Error = TdError> + Clone + Send + 'static,
     DS::Future: Send,
     DS::Response: IntoHandler,
-    ES: Service<Handler> + Clone + Send + 'static,
+    ES: Service<Handler, Error = TdError> + Clone + Send + 'static,
     ES::Future: Send,
     ES::Response: IntoHandler,
-    I: Service<Handler> + Clone + Send + 'static,
+    I: Service<Handler, Error = TdError> + Clone + Send + 'static,
     I::Future: Send,
-    C::Error: From<I::Error> + From<DS::Error> + From<ES::Error> + From<FromHandlerError>,
 {
     type Response = I::Response;
-    type Error = C::Error;
+    type Error = TdError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
     fn poll_ready(
@@ -704,7 +723,7 @@ where
 
             match inner.call(handler).await {
                 Ok(response) => Ok(response),
-                Err(e) => Err(e.into()),
+                Err(e) => Err(e),
             }
         })
     }
@@ -757,7 +776,7 @@ mod tests {
             .layer(from_fn(|SrvCtx(c): SrvCtx<String>| async move {
                 // Clones context to output
                 let s = c.deref().clone();
-                Ok::<_, FromHandlerError>(s)
+                Ok::<_, TdError>(s)
             }))
             .service(ServiceReturn);
 
@@ -827,15 +846,15 @@ mod tests {
     async fn test_tower_metadata_service_conditional() {
         use crate::metadata::{MetadataMutex, type_of_val};
 
-        async fn if_fn() -> Result<Condition, FromHandlerError> {
+        async fn if_fn() -> Result<Condition, TdError> {
             Ok(Condition(true))
         }
 
-        async fn do_fn() -> Result<(), FromHandlerError> {
+        async fn do_fn() -> Result<(), TdError> {
             Ok(())
         }
 
-        async fn else_fn() -> Result<(), FromHandlerError> {
+        async fn else_fn() -> Result<(), TdError> {
             Ok(())
         }
 
@@ -856,7 +875,7 @@ mod tests {
             ))
             .service(ServiceReturn);
 
-        let res: Result<MetadataMutex, FromHandlerError> = service.raw_oneshot(()).await;
+        let res: Result<MetadataMutex, TdError> = service.raw_oneshot(()).await;
         let res = res.unwrap();
         let metadata = res.get();
         metadata.assert_service::<(), ()>(&[
@@ -873,25 +892,25 @@ mod tests {
             .layer(conditional(
                 If(ServiceBuilder::new()
                     .layer(from_fn(|condition: Input<bool>| async move {
-                        Ok::<_, FromHandlerError>(Condition(*condition.0))
+                        Ok::<_, TdError>(Condition(*condition.0))
                     }))
                     .service(ServiceReturn)),
                 Do(ServiceBuilder::new()
-                    .layer(from_fn(|| async { Ok("true".to_string()) }))
+                    .layer(from_fn(|| async { Ok::<_, TdError>("true".to_string()) }))
                     .service(ServiceReturn)),
                 Else(
                     ServiceBuilder::new()
-                        .layer(from_fn(|| async { Ok("false".to_string()) }))
+                        .layer(from_fn(|| async { Ok::<_, TdError>("false".to_string()) }))
                         .service(ServiceReturn),
                 ),
             ))
             .service(ServiceReturn);
 
-        let res: Result<String, FromHandlerError> = service.clone().raw_oneshot(true).await;
+        let res: Result<String, TdError> = service.clone().raw_oneshot(true).await;
         let res = res.unwrap();
         assert_eq!(res, "true");
 
-        let res: Result<String, FromHandlerError> = service.clone().raw_oneshot(false).await;
+        let res: Result<String, TdError> = service.clone().raw_oneshot(false).await;
         let res = res.unwrap();
         assert_eq!(res, "false");
     }

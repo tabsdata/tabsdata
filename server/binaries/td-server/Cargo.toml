@@ -46,10 +46,6 @@ name = "apisimple"
 path = "examples/server/apisimple.rs"
 
 [[example]]
-name = "towerservice"
-path = "examples/tower/service.rs"
-
-[[example]]
 name = "tableframe"
 path = "examples/tableframe/extension.rs"
 
