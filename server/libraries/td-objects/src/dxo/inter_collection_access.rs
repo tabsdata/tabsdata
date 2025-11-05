@@ -15,7 +15,7 @@ pub mod defs {
         builder(try_from = DependencyDBWithNames),
         builder(try_from = TriggerDBWithNames)
     )]
-    #[derive(Hash)]
+    #[derive(Eq, PartialEq, Hash)]
     pub struct InterCollectionAccess {
         #[td_type(
             builder(try_from = DependencyDB, field = "table_collection_id"),

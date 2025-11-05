@@ -115,6 +115,7 @@ pub mod defs {
     }
 
     #[td_type::Dto]
+    #[derive(Eq, PartialEq)]
     #[td_type(builder(try_from = FunctionNode))]
     pub struct FunctionNodeResponse {
         pub collection_id: CollectionId,
@@ -124,6 +125,7 @@ pub mod defs {
     }
 
     #[td_type::Dto]
+    #[derive(Eq, PartialEq)]
     #[td_type(builder(try_from = TableNode))]
     pub struct TableNodeResponse {
         pub collection_id: CollectionId,
@@ -135,12 +137,14 @@ pub mod defs {
 
     /// Represents the versions of a table to be included in the response.
     #[td_type::Dto]
+    #[derive(Eq, PartialEq)]
     pub struct ResolvedVersionResponse {
         pub inner: Vec<Option<TableDataVersionId>>,
         pub original: TableVersions,
     }
 
     #[td_type::Dto]
+    #[derive(Eq, PartialEq)]
     pub struct ExecutionResponse {
         // plan info
         pub id: ExecutionId,

@@ -2,41 +2,34 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::types::basic::{
-    AtTime, CollectionId, CollectionName, ColumnCount, DependencyPos, ExecutionId, ExecutionName,
-    FunctionName, FunctionRunId, FunctionVersionId, InputIdx, RowCount, SchemaHash,
-    TableDataVersionId, TableFunctionParamPos, TableId, TableName, TableVersionId, TransactionId,
-    VersionPos,
+use crate::dxo::request::{Location, Locations};
+use crate::types::i32::{DependencyPos, InputIdx, TableFunctionParamPos, VersionPos};
+use crate::types::i64::{ColumnCount, RowCount, TriggeredOnMillis};
+use crate::types::id::{
+    CollectionId, ExecutionId, FunctionRunId, FunctionVersionId, TableDataVersionId, TableId,
+    TableVersionId, TransactionId,
 };
-use crate::types::worker::{Location, Locations};
+use crate::types::string::{
+    CollectionName, ExecutionName, FunctionName, PartitionFileName, PartitionName, SchemaHash,
+    TableName,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use utoipa::ToSchema;
 
-#[td_type::typed(string)]
-pub struct PartitionName;
-
-#[td_type::typed(string)]
-pub struct PartitionFileName;
-
-#[td_type::typed(i64(default = default_triggered_on()))]
-pub struct TriggeredOnMillis;
-
-fn default_triggered_on() -> i64 {
-    AtTime::default().timestamp_millis()
-}
-
-#[td_type::Dlo]
+#[td_type::Dto]
+#[derive(Eq, PartialEq)]
 pub struct FunctionInputV2 {
-    info: FunctionInfoV2,
-    system_input: Vec<InputTable>,
-    input: Vec<InputTable>,
-    system_output: Vec<OutputTable>,
-    output: Vec<OutputTable>,
+    pub info: FunctionInfoV2,
+    pub system_input: Vec<InputTable>,
+    pub input: Vec<InputTable>,
+    pub system_output: Vec<OutputTable>,
+    pub output: Vec<OutputTable>,
 }
 
 impl Locations for FunctionInputV2 {
     fn locations(&self) -> Vec<&Location> {
-        let mut locations = vec![self.info.function_data(), self.info.function_bundle()];
+        let mut locations = vec![&self.info.function_data, &self.info.function_bundle];
         locations.extend(self.system_input.locations());
         locations.extend(self.input.locations());
         locations.extend(self.system_output.locations());
@@ -45,45 +38,47 @@ impl Locations for FunctionInputV2 {
     }
 }
 
-#[td_type::Dlo]
+#[td_type::Dto]
+#[derive(Eq, PartialEq)]
 pub struct FunctionInfoV2 {
-    collection_id: CollectionId,
-    collection: CollectionName,
-    function_version_id: FunctionVersionId,
-    function: FunctionName,
-    function_run_id: FunctionRunId,
-    function_bundle: Location,
-    triggered_on: TriggeredOnMillis,
-    transaction_id: TransactionId,
-    execution_id: ExecutionId,
-    execution_name: Option<ExecutionName>,
-    function_data: Location,
+    pub collection_id: CollectionId,
+    pub collection: CollectionName,
+    pub function_version_id: FunctionVersionId,
+    pub function: FunctionName,
+    pub function_run_id: FunctionRunId,
+    pub function_bundle: Location,
+    pub triggered_on: TriggeredOnMillis,
+    pub transaction_id: TransactionId,
+    pub execution_id: ExecutionId,
+    pub execution_name: Option<ExecutionName>,
+    pub function_data: Location,
     #[builder(default)]
-    scheduled_on: TriggeredOnMillis, // when the request yaml was created
+    pub scheduled_on: TriggeredOnMillis, // when the request yaml was created
 }
 
-#[td_type::Dlo]
+#[td_type::Dto]
+#[derive(Eq, PartialEq)]
 pub struct InputTableVersion {
-    name: TableName,
-    collection_id: CollectionId,
-    collection: CollectionName,
-    table_id: TableId,
-    table_version_id: TableVersionId,
+    pub name: TableName,
+    pub collection_id: CollectionId,
+    pub collection: CollectionName,
+    pub table_id: TableId,
+    pub table_version_id: TableVersionId,
     #[builder(default)]
-    execution_id: Option<ExecutionId>,
+    pub execution_id: Option<ExecutionId>,
     #[builder(default)]
-    transaction_id: Option<TransactionId>,
+    pub transaction_id: Option<TransactionId>,
     #[builder(default)]
-    function_run_id: Option<FunctionRunId>,
+    pub function_run_id: Option<FunctionRunId>,
     #[builder(default)]
-    triggered_on: Option<TriggeredOnMillis>,
+    pub triggered_on: Option<TriggeredOnMillis>,
     #[builder(default)]
-    table_data_version_id: Option<TableDataVersionId>,
+    pub table_data_version_id: Option<TableDataVersionId>,
     #[builder(default)]
-    location: Option<Location>,
-    input_idx: InputIdx,
-    table_pos: DependencyPos,
-    version_pos: VersionPos,
+    pub location: Option<Location>,
+    pub input_idx: InputIdx,
+    pub table_pos: DependencyPos,
+    pub version_pos: VersionPos,
 }
 
 impl Locations for InputTableVersion {
@@ -96,7 +91,8 @@ impl Locations for InputTableVersion {
     }
 }
 
-#[td_type::Dlo]
+#[td_type::Dto]
+#[derive(Eq, PartialEq)]
 pub struct InputPartitionTableVersion {
     name: TableName,
     collection_id: CollectionId,
@@ -120,7 +116,7 @@ impl Locations for InputPartitionTableVersion {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, ToSchema)]
 pub enum InputTable {
     Table(InputTableVersion),
     TableVersions(Vec<InputTableVersion>),
@@ -131,7 +127,7 @@ pub enum InputTable {
 impl InputTable {
     pub fn new(version: Vec<InputTableVersion>) -> InputTable {
         // -1 version pos marks that only a single table version is expected.
-        if version.len() == 1 && **version[0].version_pos() == -1 {
+        if version.len() == 1 && *version[0].version_pos == -1 {
             InputTable::Table(version.into_iter().next().unwrap())
         } else {
             InputTable::TableVersions(version)
@@ -154,7 +150,7 @@ impl Locations for InputTable {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, ToSchema)]
 pub enum OutputTable {
     Table(OutputTableVersion),
     PartitionedTable(OutputPartitionTableVersion),
@@ -163,25 +159,27 @@ pub enum OutputTable {
 impl Locations for OutputTable {
     fn locations(&self) -> Vec<&Location> {
         match self {
-            OutputTable::Table(t) => vec![t.location()],
-            OutputTable::PartitionedTable(t) => vec![t.base_location()],
+            OutputTable::Table(t) => vec![&t.location],
+            OutputTable::PartitionedTable(t) => vec![&t.base_location],
         }
     }
 }
 
-#[td_type::Dlo]
+#[td_type::Dto]
+#[derive(Eq, PartialEq)]
 pub struct OutputTableVersion {
-    name: TableName,
-    collection_id: CollectionId,
-    collection: CollectionName,
-    table_id: TableId,
-    table_version_id: TableVersionId,
-    table_data_version_id: TableDataVersionId,
-    location: Location,
-    table_pos: TableFunctionParamPos,
+    pub name: TableName,
+    pub collection_id: CollectionId,
+    pub collection: CollectionName,
+    pub table_id: TableId,
+    pub table_version_id: TableVersionId,
+    pub table_data_version_id: TableDataVersionId,
+    pub location: Location,
+    pub table_pos: TableFunctionParamPos,
 }
 
-#[td_type::Dlo]
+#[td_type::Dto]
+#[derive(Eq, PartialEq)]
 pub struct OutputPartitionTableVersion {
     name: TableName,
     collection_id: CollectionId,
@@ -195,17 +193,17 @@ pub struct OutputPartitionTableVersion {
 
 #[td_type::Dto]
 pub struct FunctionOutputV2 {
-    output: Vec<WrittenTableV2>,
+    pub output: Vec<WrittenTableV2>,
 }
 
 #[td_type::Dto]
 pub struct TableInfo {
-    column_count: ColumnCount,
-    row_count: RowCount,
-    schema_hash: SchemaHash,
+    pub column_count: ColumnCount,
+    pub row_count: RowCount,
+    pub schema_hash: SchemaHash,
 }
 
-#[derive(utoipa::ToSchema, Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, ToSchema)]
 pub enum WrittenTableV2 {
     NoData {
         table: TableName,
@@ -224,8 +222,9 @@ pub enum WrittenTableV2 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::basic::FunctionId;
-    use crate::types::worker::FunctionOutput;
+    use crate::dxo::request::FunctionOutput;
+    use crate::dxo::request::{EnvPrefix, FunctionInput};
+    use crate::types::id::FunctionId;
     use crate::types::worker::{EnvPrefix, FunctionInput};
     use itertools::Itertools;
     use std::collections::HashSet;
@@ -596,11 +595,11 @@ mod tests {
                 .locations()
                 .clone()
                 .into_iter()
-                .sorted_by_key(|k| k.uri())
+                .sorted_by_key(|k| &k.uri)
                 .collect::<Vec<_>>(),
             locations
                 .iter()
-                .sorted_by_key(|k| k.uri())
+                .sorted_by_key(|k| &k.uri)
                 .collect::<Vec<_>>()
         );
         assert_eq!(

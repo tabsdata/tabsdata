@@ -4,13 +4,13 @@
 
 #[td_type::dxo]
 pub mod defs {
+    use crate::dxo::request::FunctionOutput;
     use crate::types::id::{
         CollectionId, ExecutionId, FunctionRunId, FunctionVersionId, TransactionId, WorkerId,
     };
     use crate::types::string::{CollectionName, ExecutionName, FunctionName};
     use crate::types::timestamp::AtTime;
     use crate::types::typed_enum::{WorkerMessageStatus, WorkerStatus};
-    use crate::types::worker::FunctionOutput;
     use td_common::datetime::IntoDateTimeUtc;
     use td_common::execution_status::WorkerCallbackStatus;
     use td_common::server::ResponseMessagePayload;

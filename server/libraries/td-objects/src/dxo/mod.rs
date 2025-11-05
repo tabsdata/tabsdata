@@ -16,6 +16,7 @@ pub mod global_status;
 pub mod inter_collection_access;
 pub mod inter_collection_permission;
 pub mod permission;
+pub mod request;
 pub mod role;
 pub mod runtime_info;
 pub mod synchrotron;

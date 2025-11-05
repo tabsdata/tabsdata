@@ -76,13 +76,12 @@ pub mod defs {
             All = &[],
         )
     )]
-    #[derive(Hash)]
     #[inherits(TableDataVersionDBWithFunction)]
     pub struct ActiveTableDataVersionDB {}
 
     #[td_type::Dto]
     #[td_type(builder(try_from = ActiveTableDataVersionDB))]
-    #[derive(Hash)]
+    #[derive(Eq, PartialEq, Hash)]
     pub struct ExecutionTableDataVersionRead {
         pub id: TableDataVersionId,
         pub collection_id: CollectionId,

@@ -22,7 +22,6 @@ pub fn dto(_args: TokenStream, item: TokenStream) -> TokenStream {
 
     // Generate doc comments for fields
     let fields_with_docs = fields.iter().map(|field| {
-        let field_vis = &field.vis;
         let field_args = DtoFieldArguments::from_field(field).unwrap();
 
         // Generate doc comments based on field arguments
@@ -49,14 +48,13 @@ pub fn dto(_args: TokenStream, item: TokenStream) -> TokenStream {
 
         quote! {
             #(#doc_comments)*
-            #field_vis #field,
+            #field,
         }
     });
 
     let expanded = quote! {
-        #[derive(Debug, Clone, Eq, PartialEq, td_type::DtoType, derive_builder::Builder, getset::Getters, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+        #[derive(Debug, Clone, td_type::DtoType, derive_builder::Builder, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
         #[builder(try_setter, setter(into))]
-        #[getset(get = "pub")]
         #(#attrs)*
         #vis #struct_token #ident #impl_generics #where_clause {
             #(#fields_with_docs)*
@@ -66,13 +64,13 @@ pub fn dto(_args: TokenStream, item: TokenStream) -> TokenStream {
     expanded.into()
 }
 
-#[derive(FromDeriveInput)]
+#[derive(Debug, FromDeriveInput)]
 #[darling(attributes(dto))]
 struct DtoArguments {
     list: Option<ListArguments>,
 }
 
-#[derive(FromMeta)]
+#[derive(Debug, FromMeta)]
 struct ListArguments {
     #[darling(default)]
     on: Option<Ident>,
@@ -249,7 +247,7 @@ pub fn dto_type(input: TokenStream) -> TokenStream {
 
                 fn pagination_value(&self) -> String {
                     use crate::types::SqlEntity;
-                    self.#pagination_by().as_display()
+                    self.#pagination_by.as_display()
                 }
 
                 fn order_by_fields() -> &'static [&'static str] {
@@ -260,7 +258,7 @@ pub fn dto_type(input: TokenStream) -> TokenStream {
                     use crate::types::SqlEntity;
                     if let Some(ordered_by_field) = ordered_by_field {
                         match ordered_by_field.as_str() {
-                            #(stringify!(#order_by_fields) => Some(self.#order_by_fields().as_display()),)*
+                            #(stringify!(#order_by_fields) => Some(self.#order_by_fields.as_display()),)*
                             _ => None,
                         }
                     } else {

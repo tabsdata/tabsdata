@@ -42,6 +42,7 @@ pub mod defs {
     pub type FunctionUpdate = FunctionRegister;
 
     #[td_type::Dao]
+    #[derive(Eq, PartialEq)]
     #[dao(
         sql_table = "functions",
         versioned(

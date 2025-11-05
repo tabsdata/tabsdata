@@ -3,43 +3,93 @@
 //
 
 use crate::type_builder::{parse_input_item_struct, td_type};
-use darling::{FromDeriveInput, FromMeta};
+use darling::{FromAttributes, FromDeriveInput, FromMeta};
 use proc_macro::TokenStream;
 use proc_macro2::Ident;
 use quote::{ToTokens, format_ident, quote};
-use syn::{DeriveInput, Fields, ItemStruct, Type, parse_macro_input};
+use std::collections::HashMap;
+use syn::{DeriveInput, Expr, Fields, ItemStruct, Type, parse_macro_input};
 
 pub fn dao(_args: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as ItemStruct);
 
     // Expansion
     let expanded = quote! {
-        #[derive(Debug, Clone, Eq, PartialEq, td_type::DaoType, derive_builder::Builder, getset::Getters, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
+        #[derive(Debug, Clone, td_type::DaoType, derive_builder::Builder, sqlx::FromRow)]
         #[builder(try_setter, setter(into))]
-        #[getset(get = "pub")]
         #input
     };
 
     expanded.into()
 }
 
-#[derive(FromDeriveInput)]
+#[derive(Debug, FromDeriveInput, FromAttributes)]
 #[darling(attributes(dao))]
-struct DaoArguments {
+pub struct DaoArguments {
     sql_table: Option<String>,
     order_by: Option<String>,
-    partition_by: Option<String>,
-    versioned_at: Option<VersionedAtArguments>,
+    versioned: Option<VersionedArguments>,
     recursive: Option<DaoRecursiveArguments>,
+    #[darling(default)]
+    states: HashMap<Ident, Expr>,
 }
 
-#[derive(FromMeta)]
-struct VersionedAtArguments {
+impl ToTokens for DaoArguments {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        let mut args = Vec::new();
+        if let Some(sql_table) = &self.sql_table {
+            args.push(quote! { sql_table = #sql_table });
+        }
+        if let Some(order_by) = &self.order_by {
+            args.push(quote! { order_by = #order_by });
+        }
+        if let Some(versioned) = &self.versioned {
+            let order_by = &versioned.order_by;
+            let partition_by = &versioned.partition_by;
+            args.push(quote! { versioned(order_by = #order_by, partition_by = #partition_by) });
+        }
+        if let Some(recursive) = &self.recursive {
+            let up = &recursive.up;
+            let down = &recursive.down;
+            args.push(quote! { recursive(up = #up, down = #down) });
+        }
+        let states = self
+            .states
+            .iter()
+            .map(|(name, value)| {
+                quote! { #name = #value }
+            })
+            .collect::<Vec<_>>();
+        if !states.is_empty() {
+            args.push(quote! { states(#(#states),*) });
+        }
+
+        tokens.extend(quote! {
+            #[dao(#(#args,)*)]
+        });
+    }
+}
+
+impl DaoArguments {
+    pub fn override_with(self, other: DaoArguments) -> DaoArguments {
+        DaoArguments {
+            sql_table: other.sql_table.or(self.sql_table),
+            order_by: other.order_by.or(self.order_by),
+            versioned: other.versioned.or(self.versioned),
+            recursive: other.recursive.or(self.recursive),
+            states: other.states.into_iter().chain(self.states).collect(),
+        }
+    }
+}
+
+#[derive(Debug, FromMeta)]
+struct VersionedArguments {
     order_by: String,
-    condition_by: String,
+    #[darling(default)]
+    partition_by: String,
 }
 
-#[derive(FromMeta)]
+#[derive(Debug, FromMeta)]
 struct DaoRecursiveArguments {
     up: String,
     down: String,
@@ -82,13 +132,22 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
             quote! { "ORDER BY 1 DESC" }
         }
     };
-    let partition_by = match parsed_args.partition_by {
-        Some(partition_by) => {
-            let partition_by = partition_by.as_str();
-            let partition_by_type = type_for_field(fields, partition_by);
+    let versioned = match parsed_args.versioned {
+        Some(versioned) => {
+            let order_by = versioned.order_by.as_str();
+            let order_type = type_for_field(fields, order_by);
+
+            let partition_by = versioned.partition_by.as_str();
+            let partition_type = type_for_field(fields, partition_by);
+
             quote! {
-                impl #impl_generics crate::types::PartitionBy for #ident #ty_generics #where_clause {
-                    type PartitionBy = #partition_by_type;
+                impl #impl_generics crate::types::Versioned for #ident #ty_generics #where_clause {
+                    type Order = #order_type;
+                    fn order_by() -> &'static str {
+                        #order_by
+                    }
+
+                    type Partition = #partition_type;
                     fn partition_by() -> &'static str {
                         #partition_by
                     }
@@ -99,30 +158,32 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
             quote! {}
         }
     };
-    let versioned_at = match parsed_args.versioned_at {
-        Some(versioned_at) => {
-            let order_by = versioned_at.order_by.as_str();
-            let order_type = type_for_field(fields, order_by);
+    let states = if parsed_args.states.is_empty() {
+        quote! {}
+    } else {
+        let states_impls = parsed_args
+                .states
+                .iter()
+                .enumerate()
+                .map(|(i, (name, value))| {
+                    let i = i as u8;
+                    quote! {
+                        impl #impl_generics #ident #ty_generics #where_clause {
+                            #[allow(non_upper_case_globals)]
+                            pub const #name: u8 = #i;
+                        }
 
-            let condition_by = versioned_at.condition_by.as_str();
-            let condition_type = type_for_field(fields, condition_by);
-
-            quote! {
-                impl #impl_generics crate::types::VersionedAt for #ident #ty_generics #where_clause {
-                    type Order = #order_type;
-                    fn order_by() -> &'static str {
-                        #order_by
+                        impl #impl_generics crate::types::States<#i> for #ident #ty_generics #where_clause {
+                            fn state() -> &'static [&'static dyn crate::types::SqlEntity] {
+                                #value
+                            }
+                        }
                     }
+                })
+                .collect::<Vec<_>>();
 
-                    type Condition = #condition_type;
-                    fn condition_by() -> &'static str {
-                        #condition_by
-                    }
-                }
-            }
-        }
-        None => {
-            quote! {}
+        quote! {
+            #(#states_impls)*
         }
     };
     let recursive = match parsed_args.recursive {
@@ -176,12 +237,19 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
                 &[#(stringify!(#immutable_field_names)),*]
             }
 
-            fn sql_field_for_type(val: &str) -> Option<&'static str> {
+            fn sql_field_for_type(val: std::any::TypeId) -> Result<&'static str, td_error::TdError> {
                 match val {
                     #(
-                        v if v == std::any::type_name::<#field_types>() => Some(stringify!(#field_names)),
+                        v if v == std::any::TypeId::of::<#field_types>() => Ok(stringify!(#field_names)),
                     )*
-                    _ => None,
+                    _ => Err(
+                        td_error::api_error!(
+                            td_error::ApiError::InternalError,
+                            "SQL Entity with type id '{:?}' not found in: {}",
+                            val,
+                            std::any::type_name::<Self>(),
+                        )
+                    ),
                 }
             }
 
@@ -227,8 +295,8 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
         }
 
         #td_type
-        #partition_by
-        #versioned_at
+        #versioned
+        #states
         #recursive
     };
 

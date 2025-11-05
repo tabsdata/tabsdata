@@ -90,15 +90,20 @@ pub fn td_type(input: &DeriveInput, item: &ItemStruct) -> proc_macro2::TokenStre
 
     let expanded = quote! {
         impl #impl_generics #type_ #ty_generics #where_clause {
-
             pub fn builder() -> #builder_type #ty_generics {
                 #builder_type::default()
             }
 
-            pub fn to_builder(&self) -> #builder_type #ty_generics {
+            pub fn to_builder(self) -> #builder_type #ty_generics {
                 let mut builder = #builder_type::default();
-                builder #( .#field_names(self.#field_names.clone()) )*;
+                builder #( .#field_names(self.#field_names) )*;
                 builder
+            }
+        }
+
+        impl #impl_generics From<#type_ #ty_generics> for #builder_type #ty_generics {
+            fn from(from: #type_ #ty_generics) -> Self {
+                from.to_builder()
             }
         }
 
@@ -294,7 +299,7 @@ fn gen_from_fields_initializers(
                 let initializer = quote! {
                     .#field_name::<#field_type>(
                         from
-                        .#field_name()
+                        .#field_name
                         .clone()
                         .try_into()
                         .map_err(|e| #builder_error_type::ValidationError(format!("{}", e)))?,
@@ -310,7 +315,7 @@ fn gen_from_fields_initializers(
                 let initializer = quote! {
                     .#field_name::<#field_type>(
                         from
-                        .#renamed_field()
+                        .#renamed_field
                         .clone()
                         .try_into()
                         .map_err(|e| #builder_error_type::ValidationError(format!("{}", e)))?,
