@@ -6,6 +6,11 @@ import platform
 import subprocess
 import sys
 import warnings
+from importlib.metadata import PackageNotFoundError, requires, version
+
+from tabsdata._utils.constants import POLARS_MODULE_NAME, TABSDATA_MODULE_NAME
+
+STICKY_VERSION_PACKAGES = [POLARS_MODULE_NAME]
 
 
 class CompatibilityError(RuntimeError):
@@ -14,6 +19,57 @@ class CompatibilityError(RuntimeError):
             messages = [messages]
         self.messages = messages
         super().__init__("\n".join(messages))
+
+
+class PackageVersionError(RuntimeError):
+    def __init__(self, messages):
+        if isinstance(messages, str):
+            messages = [messages]
+        self.messages = messages
+        super().__init__("\n".join(messages))
+
+
+# noinspection PyBroadException
+def check_sticky_version_packages() -> None:
+    tabsdata_package_requires = requires(TABSDATA_MODULE_NAME)
+    for package in STICKY_VERSION_PACKAGES:
+        try:
+            check_sticky_version_package(package, tabsdata_package_requires)
+        except PackageVersionError:
+            raise
+        except Exception:
+            pass
+
+
+def check_sticky_version_package(package: str, tabsdata_package_requires) -> None:
+    if not tabsdata_package_requires:
+        return
+    package_required_version = None
+    for tabsdata_package_require in tabsdata_package_requires:
+        if tabsdata_package_require.startswith(f"{package}=="):
+            package_required_version = (
+                tabsdata_package_require.split("==")[1].split(";")[0].strip()
+            )
+            break
+    if package_required_version is None:
+        return
+    try:
+        package_current_version = version(package)
+    except PackageNotFoundError:
+        raise PackageVersionError(
+            f"Package '{package}' is required but not installed.\n"
+            "Please install it with:\n"
+            f"pip install {package}=={package_required_version}"
+        )
+    if package_current_version != package_required_version:
+        raise PackageVersionError(
+            f"Package '{package}' version mismatch: "
+            f"required {package_required_version} "
+            "but "
+            f"found {package_current_version}.\n"
+            "Please use the exact version with:\n"
+            f"pip install {package}=={package_required_version}"
+        )
 
 
 def check_load() -> None:
@@ -209,3 +265,8 @@ if __name__ == "__main__":  # noqa: C901
             file=sys.stderr,
         )
         sys.exit(1)
+    else:
+        try:
+            check_sticky_version_packages()
+        except PackageVersionError as error:
+            print(error.messages, file=sys.stderr)

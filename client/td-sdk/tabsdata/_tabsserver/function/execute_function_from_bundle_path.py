@@ -28,6 +28,7 @@ from tabsdata._tabsserver.function.response_utils import create_response
 from tabsdata._tabsserver.function.results_collection import ResultsCollection
 from tabsdata._tabsserver.function.store_results_utils import store_results
 from tabsdata._tabsserver.function.yaml_utils.exception_yaml import store_exception_yaml
+from tabsdata._utils.compatibility import check_sticky_version_packages
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,8 @@ def execute_bundled_function(
 
 
 def main():
+    check_sticky_version_packages()
+
     parser = argparse.ArgumentParser(
         description="Execute a python function from a file path"
     )

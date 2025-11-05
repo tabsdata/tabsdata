@@ -4,6 +4,7 @@
 
 import os
 import shutil
+import sys
 import textwrap
 from pathlib import Path
 
@@ -34,6 +35,10 @@ from tabsdata._cli.fn_group import fn
 from tabsdata._cli.role_group import role
 from tabsdata._cli.table_group import table
 from tabsdata._cli.user_group import user
+from tabsdata._utils.compatibility import (
+    PackageVersionError,
+    check_sticky_version_packages,
+)
 from tabsdata._utils.internal._about import tdabout
 from tabsdata.api.apiserver import DEFAULT_TABSDATA_DIRECTORY
 
@@ -306,4 +311,8 @@ def status(ctx: click.Context):
 
 
 if __name__ == "__main__":
+    try:
+        check_sticky_version_packages()
+    except PackageVersionError as error:
+        print(error.messages, file=sys.stderr)
     cli()
