@@ -2,8 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::types::i32::StatusCount;
-use crate::types::typed_enum::{FunctionRunStatus, GlobalStatus};
+use crate::types::basic::{FunctionRunStatus, GlobalStatus, StatusCount};
 use std::collections::HashMap;
 
 #[td_type::Dao]

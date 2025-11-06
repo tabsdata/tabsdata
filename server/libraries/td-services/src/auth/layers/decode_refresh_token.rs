@@ -5,8 +5,7 @@
 use crate::auth::AuthError;
 use crate::auth::jwt::{JwtConfig, decode_token};
 use td_error::TdError;
-use td_objects::types::id::RefreshTokenId;
-use td_objects::types::string::RefreshToken;
+use td_objects::types::basic::{RefreshToken, RefreshTokenId};
 use td_tower::extractors::{Input, SrvCtx};
 
 pub async fn decode_refresh_token(

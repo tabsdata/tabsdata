@@ -3,18 +3,14 @@
 //
 
 #[td_type::dxo]
-pub mod defs {
-    use crate::dxo::execution::defs::ExecutionDB;
-    use crate::dxo::worker::defs::UpdateWorkerExecution;
-    use crate::types::id::{
-        BundleId, CollectionId, ExecutionId, FunctionRunId, FunctionVersionId, TransactionId,
-        UserId,
+mod definitions {
+    use crate::dxo::execution::ExecutionDB;
+    use crate::dxo::worker::UpdateWorkerExecution;
+    use crate::types::basic::{
+        AtTime, BundleId, CollectionId, CollectionName, DataLocation, ExecutionId, ExecutionName,
+        FunctionName, FunctionRunId, FunctionRunStatus, FunctionVersionId, StorageVersion,
+        TransactionId, Trigger, TriggeredOn, UserId, UserName,
     };
-    use crate::types::string::{
-        CollectionName, DataLocation, ExecutionName, FunctionName, StorageVersion, UserName,
-    };
-    use crate::types::timestamp::{AtTime, TriggeredOn};
-    use crate::types::typed_enum::{FunctionRunStatus, Trigger};
     use td_error::TdError;
 
     #[td_type::Dao]

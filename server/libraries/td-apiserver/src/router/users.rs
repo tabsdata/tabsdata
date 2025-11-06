@@ -18,7 +18,7 @@ mod routes {
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
-    use td_objects::dxo::user::defs::{UserCreate, UserRead, UserUpdate};
+    use td_objects::dxo::user::{UserCreate, UserRead, UserUpdate};
     use td_objects::rest_urls::{
         CREATE_USER, DELETE_USER, GET_USER, LIST_USERS, UPDATE_USER, UserParam,
     };
@@ -102,7 +102,7 @@ mod tests {
     use td_database::sql::DbPool;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::rest_urls::{CREATE_USER, DELETE_USER, GET_USER, LIST_USERS, UPDATE_USER};
-    use td_objects::types::id::{AccessTokenId, RoleId, UserId};
+    use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
     use td_services::{Context, Services};
     use tower::ServiceExt;
 

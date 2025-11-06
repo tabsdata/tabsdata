@@ -7,24 +7,21 @@ use std::ops::Deref;
 use td_error::display_vec::DisplayVec;
 use td_error::{TdError, td_error};
 use td_execution::version_resolver::VersionResolver;
-use td_objects::dxo::collection::defs::CollectionDB;
+use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::handle_sql_err;
-use td_objects::dxo::dependency::defs::{DependencyDB, DependencyDBBuilder};
-use td_objects::dxo::table::defs::{TableDB, TableDBBuilder, TableDBWithNames};
-use td_objects::dxo::trigger::defs::{TriggerDB, TriggerDBBuilder, TriggerDBWithNames};
+use td_objects::dxo::dependency::{DependencyDB, DependencyDBBuilder};
+use td_objects::dxo::table::{TableDB, TableDBBuilder, TableDBWithNames};
+use td_objects::dxo::trigger::{TriggerDB, TriggerDBBuilder, TriggerDBWithNames};
 use td_objects::sql::cte::CteQueries;
 use td_objects::sql::{DaoQueries, FindBy};
-use td_objects::types::bool::ReuseFrozen;
+use td_objects::types::basic::{
+    AtTime, CollectionId, CollectionName, DataLocation, DependencyId, DependencyPos,
+    DependencyStatus, FunctionId, ReuseFrozen, TableFunctionParamPos, TableId, TableName,
+    TableNameDto, TableStatus, TriggerId, TriggerStatus, TriggerVersionId, TriggeredOn,
+};
 use td_objects::types::composed::{
     TableDependency, TableDependencyDto, TableTrigger, TableTriggerDto,
 };
-use td_objects::types::i32::{DependencyPos, TableFunctionParamPos};
-use td_objects::types::id::{
-    CollectionId, DependencyId, FunctionId, TableId, TriggerId, TriggerVersionId,
-};
-use td_objects::types::string::{CollectionName, DataLocation, TableName, TableNameDto};
-use td_objects::types::timestamp::{AtTime, TriggeredOn};
-use td_objects::types::typed_enum::{DependencyStatus, TableStatus, TriggerStatus};
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, ReqCtx, SrvCtx};
 
 #[td_error]

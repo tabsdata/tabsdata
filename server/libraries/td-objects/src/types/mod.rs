@@ -5,19 +5,13 @@
 use std::any::TypeId;
 use std::fmt::Debug;
 
+// Basic types reexported for convenience under basic module
+pub mod basic;
+
 pub mod addresses;
-pub mod bool;
 pub mod composed;
-pub mod i16;
-pub mod i32;
-pub mod i64;
-pub mod id;
-pub mod id_name;
 pub mod option;
-pub mod other;
-pub mod string;
-pub mod timestamp;
-pub mod typed_enum;
+pub mod status_count;
 pub mod visible_collections;
 
 #[cfg(test)]

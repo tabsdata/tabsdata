@@ -15,8 +15,8 @@ mod routes {
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
-    use td_objects::dxo::synchrotron::defs::SynchrotronResponse;
-    use td_objects::dxo::transaction::defs::Transaction;
+    use td_objects::dxo::synchrotron::SynchrotronResponse;
+    use td_objects::dxo::transaction::Transaction;
     use td_objects::rest_urls::{
         SYNCHROTRON_READ, TRANSACTION_CANCEL, TRANSACTION_RECOVER, TRANSACTIONS_LIST,
         TransactionParam,

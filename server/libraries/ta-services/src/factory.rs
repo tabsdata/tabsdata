@@ -2,9 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-pub use tm_services::FieldAccessors;
-pub use tm_services::ServiceFactory;
-pub use tm_services::service_factory;
+pub use tm_services::{FieldAccessors, ServiceFactory, service_factory};
 
 use std::sync::Arc;
 

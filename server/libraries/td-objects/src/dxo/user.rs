@@ -3,14 +3,14 @@
 //
 
 #[td_type::dxo]
-pub mod defs {
-    use crate::dxo::auth::defs::UserInfoUserRoleDB;
+mod definitions {
+    use crate::dxo::auth::UserInfoUserRoleDB;
     use crate::dxo::crudl::RequestContext;
-    use crate::dxo::permission::defs::Permission;
-    use crate::types::bool::{PasswordMustChange, UserEnabled};
-    use crate::types::id::{RoleId, UserId};
-    use crate::types::string::{Email, FullName, Password, PasswordHash, RoleName, UserName};
-    use crate::types::timestamp::{AtTime, PasswordChangeTime};
+    use crate::dxo::permission::Permission;
+    use crate::types::basic::{
+        AtTime, Email, FullName, Password, PasswordChangeTime, PasswordHash, PasswordMustChange,
+        RoleId, RoleName, UserEnabled, UserId, UserName,
+    };
 
     #[td_type::Dao]
     #[derive(Eq, PartialEq)]

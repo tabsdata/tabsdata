@@ -3,12 +3,12 @@
 //
 
 use crate::dxo::crudl::{ReadRequest, RequestContext, handle_sql_err};
-use crate::dxo::inter_collection_permission::defs::{
+use crate::dxo::inter_collection_permission::{
     InterCollectionPermissionDB, InterCollectionPermissionDBBuilder,
 };
 use crate::sql::{DaoQueries, Insert, SelectBy};
 use crate::types::AsDynSqlEntities;
-use crate::types::id::{AccessTokenId, CollectionId, RoleId, ToCollectionId, UserId};
+use crate::types::basic::{AccessTokenId, CollectionId, RoleId, ToCollectionId, UserId};
 use td_database::sql::DbPool;
 use td_error::TdError;
 
@@ -67,7 +67,7 @@ where
 pub mod tests {
     use super::*;
     use crate::test_utils::seed_collection::seed_collection;
-    use crate::types::string::CollectionName;
+    use crate::types::basic::CollectionName;
 
     #[tokio::test]
     async fn test_seed_inter_collection_permission() {

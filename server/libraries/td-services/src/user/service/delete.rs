@@ -6,15 +6,14 @@ use crate::user::layers::delete::delete_user_validate;
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
 use td_objects::dxo::crudl::{DeleteRequest, RequestContext};
-use td_objects::dxo::user::defs::UserDB;
-use td_objects::dxo::user_role::defs::UserRoleDB;
+use td_objects::dxo::user::UserDB;
+use td_objects::dxo::user_role::UserRoleDB;
 use td_objects::rest_urls::UserParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, SecAdmin, System};
 use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlDeleteService, SqlSelectService};
-use td_objects::types::id::UserId;
-use td_objects::types::id_name::UserIdName;
+use td_objects::types::basic::{UserId, UserIdName};
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -49,13 +48,11 @@ mod tests {
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::dxo::user::defs::UserDB;
+    use td_objects::dxo::user::UserDB;
     use td_objects::rest_urls::UserParam;
     use td_objects::sql::{DaoQueries, SelectBy};
     use td_objects::test_utils::seed_user::seed_user;
-    use td_objects::types::bool::UserEnabled;
-    use td_objects::types::id::{AccessTokenId, RoleId};
-    use td_objects::types::string::UserName;
+    use td_objects::types::basic::{AccessTokenId, RoleId, UserEnabled, UserName};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]

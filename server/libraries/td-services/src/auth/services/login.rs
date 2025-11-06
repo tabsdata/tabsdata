@@ -13,18 +13,17 @@ use crate::auth::layers::set_session_expiration::set_session_expiration;
 use crate::auth::session::Sessions;
 use ta_services::factory::service_factory;
 use td_error::TdError;
-use td_objects::dxo::auth::defs::{Login, SessionDB, SessionDBBuilder, TokenResponseX};
-use td_objects::dxo::user::defs::UserDB;
-use td_objects::dxo::user_role::defs::UserRoleDBWithNames;
+use td_objects::dxo::auth::{Login, SessionDB, SessionDBBuilder, TokenResponseX};
+use td_objects::dxo::user::UserDB;
+use td_objects::dxo::user_role::UserRoleDBWithNames;
 use td_objects::sql::DaoQueries;
-use td_objects::tower_service::from::DefaultService;
 use td_objects::tower_service::from::{
-    BuildService, ExtractService, SetService, With, builder, combine,
+    BuildService, DefaultService, ExtractService, SetService, With, builder, combine,
 };
 use td_objects::tower_service::sql::{By, SqlSelectService, insert};
-use td_objects::types::id::{RoleId, UserId};
-use td_objects::types::string::{Password, PasswordHash, RoleName, UserName};
-use td_objects::types::timestamp::AtTime;
+use td_objects::types::basic::{
+    AtTime, Password, PasswordHash, RoleId, RoleName, UserId, UserName,
+};
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -107,7 +106,7 @@ mod tests {
         use crate::auth::layers::refresh_sessions::refresh_sessions;
         use crate::auth::layers::set_session_expiration::set_session_expiration;
         use crate::auth::services::login::LoginService;
-        use td_objects::dxo::user::defs::UserDB;
+        use td_objects::dxo::user::UserDB;
         use td_objects::tower_service::from::{
             BuildService, DefaultService, ExtractService, SetService, With, builder, combine,
         };

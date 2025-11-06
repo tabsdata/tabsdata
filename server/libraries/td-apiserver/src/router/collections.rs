@@ -17,7 +17,7 @@ mod routes {
     };
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
-    use td_objects::dxo::collection::defs::{CollectionCreate, CollectionRead, CollectionUpdate};
+    use td_objects::dxo::collection::{CollectionCreate, CollectionRead, CollectionUpdate};
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::rest_urls::{
         CREATE_COLLECTION, CollectionParam, DELETE_COLLECTION, GET_COLLECTION, LIST_COLLECTIONS,
@@ -131,7 +131,7 @@ mod tests {
     use td_objects::rest_urls::{
         CREATE_COLLECTION, DELETE_COLLECTION, GET_COLLECTION, LIST_COLLECTIONS, UPDATE_COLLECTION,
     };
-    use td_objects::types::id::{AccessTokenId, RoleId, UserId};
+    use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
     use td_services::Context;
     use td_services::collection::service::CollectionServices;
     use tower::ServiceExt;

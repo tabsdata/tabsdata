@@ -21,8 +21,7 @@ use std::env::consts::OS;
 use std::path::{Path, PathBuf};
 use std::process;
 use sysinfo::{Pid, Process, Signal, System};
-use tracing::info;
-use tracing::warn;
+use tracing::{info, warn};
 
 #[allow(dead_code)]
 const OS_LINUX: &str = "linux";

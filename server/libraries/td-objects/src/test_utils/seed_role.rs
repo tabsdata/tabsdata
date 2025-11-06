@@ -3,11 +3,10 @@
 //
 
 use crate::dxo::crudl::{ReadRequest, RequestContext, handle_sql_err};
-use crate::dxo::role::defs::{RoleCreate, RoleDB, RoleDBBuilder};
+use crate::dxo::role::{RoleCreate, RoleDB, RoleDBBuilder};
 use crate::sql::{DaoQueries, Insert, SelectBy};
 use crate::types::SqlEntity;
-use crate::types::id::{AccessTokenId, RoleId, UserId};
-use crate::types::string::{Description, RoleName};
+use crate::types::basic::{AccessTokenId, Description, RoleId, RoleName, UserId};
 use td_database::sql::DbPool;
 use td_error::TdError;
 

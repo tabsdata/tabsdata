@@ -8,14 +8,12 @@ use crate::table::layers::delete::{
 };
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
-use td_objects::dxo::collection::defs::{
-    CollectionDB, CollectionDeleteDB, CollectionDeleteDBBuilder,
-};
+use td_objects::dxo::collection::{CollectionDB, CollectionDeleteDB, CollectionDeleteDBBuilder};
 use td_objects::dxo::crudl::{DeleteRequest, RequestContext};
-use td_objects::dxo::dependency::defs::DependencyDB;
-use td_objects::dxo::function::defs::FunctionDB;
-use td_objects::dxo::table::defs::TableDB;
-use td_objects::dxo::trigger::defs::TriggerDB;
+use td_objects::dxo::dependency::DependencyDB;
+use td_objects::dxo::function::FunctionDB;
+use td_objects::dxo::table::TableDB;
+use td_objects::dxo::trigger::TriggerDB;
 use td_objects::rest_urls::CollectionParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, SysAdmin, System};
@@ -26,9 +24,7 @@ use td_objects::tower_service::from::{
 use td_objects::tower_service::sql::{
     By, SqlFindService, SqlSelectAllService, SqlSelectService, SqlUpdateService, insert_vec,
 };
-use td_objects::types::id::{CollectionId, FunctionId, TableId};
-use td_objects::types::id_name::CollectionIdName;
-use td_objects::types::timestamp::AtTime;
+use td_objects::types::basic::{AtTime, CollectionId, CollectionIdName, FunctionId, TableId};
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -94,25 +90,23 @@ mod tests {
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::TdError;
-    use td_objects::dxo::collection::defs::CollectionCreateDB;
+    use td_objects::dxo::collection::CollectionCreateDB;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::dxo::dependency::defs::DependencyDBWithNames;
-    use td_objects::dxo::function::defs::{FunctionDBWithNames, FunctionRegister};
-    use td_objects::dxo::table::defs::TableDBWithNames;
-    use td_objects::dxo::trigger::defs::TriggerDBWithNames;
+    use td_objects::dxo::dependency::DependencyDBWithNames;
+    use td_objects::dxo::function::{FunctionDBWithNames, FunctionRegister};
+    use td_objects::dxo::table::TableDBWithNames;
+    use td_objects::dxo::trigger::TriggerDBWithNames;
     use td_objects::rest_urls::CollectionParam;
     use td_objects::sql::cte::CteQueries;
     use td_objects::sql::{DaoQueries, SelectBy};
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_function::seed_function;
-    use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
-    use td_objects::types::id::{AccessTokenId, BundleId, RoleId, UserId};
-    use td_objects::types::string::FunctionName;
-    use td_objects::types::string::{
-        CollectionName, FunctionRuntimeValues, TableName, TableNameDto,
+    use td_objects::types::basic::{
+        AccessTokenId, BundleId, CollectionName, Decorator, DependencyStatus, FunctionName,
+        FunctionRuntimeValues, FunctionStatus, RoleId, TableName, TableNameDto, TableStatus,
+        TriggerStatus, UserId,
     };
-    use td_objects::types::typed_enum::DependencyStatus;
-    use td_objects::types::typed_enum::{Decorator, FunctionStatus, TableStatus, TriggerStatus};
+    use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]

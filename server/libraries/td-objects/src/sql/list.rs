@@ -4,7 +4,7 @@
 
 use crate::dxo::crudl::ListParams;
 use crate::parse::IDENTIFIER_PATTERN;
-use crate::types::string::LikeFilter;
+use crate::types::basic::LikeFilter;
 use crate::types::{ListQuery, SqlEntity};
 use itertools::Itertools;
 use regex::Regex;

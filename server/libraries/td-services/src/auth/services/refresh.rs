@@ -9,7 +9,7 @@ use crate::auth::layers::refresh_sessions::refresh_sessions;
 use crate::auth::layers::set_session_expiration::set_session_expiration;
 use crate::auth::session::Sessions;
 use ta_services::factory::service_factory;
-use td_objects::dxo::auth::defs::{
+use td_objects::dxo::auth::{
     SessionDB, SessionDBBuilder, SessionNewTokenDB, SessionNewTokenDBBuilder, TokenResponseX,
 };
 use td_objects::dxo::crudl::{RequestContext, UpdateRequest};
@@ -19,9 +19,9 @@ use td_objects::tower_service::from::{
     combine,
 };
 use td_objects::tower_service::sql::{By, SqlSelectService, SqlUpdateService, insert};
-use td_objects::types::id::{AccessTokenId, RefreshTokenId, RoleId, UserId};
-use td_objects::types::string::RefreshToken;
-use td_objects::types::timestamp::AtTime;
+use td_objects::types::basic::{
+    AccessTokenId, AtTime, RefreshToken, RefreshTokenId, RoleId, UserId,
+};
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -80,9 +80,8 @@ mod tests {
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::TdError;
-    use td_objects::dxo::auth::defs::Login;
-    use td_objects::types::string::{Password, RoleName, UserName};
-    use td_objects::types::typed_enum::SessionStatus;
+    use td_objects::dxo::auth::Login;
+    use td_objects::types::basic::{Password, RoleName, SessionStatus, UserName};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]

@@ -3,11 +3,11 @@
 //
 
 use crate::types::SqlEntity;
-use crate::types::id::{
-    CollectionId, ExecutionId, FunctionId, InterCollectionPermissionId, PermissionId, RoleId,
-    TableId, TransactionId, UserId, WorkerId,
+use crate::types::basic::{
+    CollectionId, CollectionName, ExecutionId, FunctionId, FunctionName,
+    InterCollectionPermissionId, PermissionId, RoleId, RoleName, TableId, TableName, TransactionId,
+    UserId, UserName, WorkerId,
 };
-use crate::types::string::{CollectionName, FunctionName, RoleName, TableName, UserName};
 use std::fmt::Debug;
 
 // Trait definitions and implementations

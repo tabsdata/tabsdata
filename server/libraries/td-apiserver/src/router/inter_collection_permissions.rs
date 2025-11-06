@@ -16,7 +16,7 @@ mod routes {
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
-    use td_objects::dxo::inter_collection_permission::defs::{
+    use td_objects::dxo::inter_collection_permission::{
         InterCollectionPermission, InterCollectionPermissionCreate,
     };
     use td_objects::rest_urls::{

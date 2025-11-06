@@ -3,11 +3,9 @@
 //
 
 #[td_type::dxo]
-pub mod defs {
+mod definitions {
     use crate::dxo::crudl::RequestContext;
-    use crate::types::id::{BundleId, CollectionId, UserId};
-    use crate::types::string::BundleHash;
-    use crate::types::timestamp::AtTime;
+    use crate::types::basic::{AtTime, BundleHash, BundleId, CollectionId, UserId};
 
     #[td_type::Dao]
     #[dao(sql_table = "bundles")]

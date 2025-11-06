@@ -6,8 +6,7 @@ pub mod cte;
 pub mod list;
 pub mod recursive;
 
-use crate::sql::cte::LATEST_VERSIONS_CTE;
-use crate::sql::cte::{ranked_versions_at, select_ranked_versions_at};
+use crate::sql::cte::{LATEST_VERSIONS_CTE, ranked_versions_at, select_ranked_versions_at};
 use crate::sql::list::{ListQueryParams, Order, Pagination};
 use crate::types::{AsDynSqlEntities, DataAccessObject, ListQuery, SqlEntity, States, Versioned};
 use async_trait::async_trait;

@@ -5,7 +5,7 @@
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
-use td_objects::dxo::user::defs::{UserDBWithNames, UserRead, UserReadBuilder};
+use td_objects::dxo::user::{UserDBWithNames, UserRead, UserReadBuilder};
 use td_objects::rest_urls::UserParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, Requester, SecAdmin, SystemOrUserId};
@@ -13,8 +13,7 @@ use td_objects::tower_service::from::{
     BuildService, ExtractNameService, ExtractService, TryIntoService, With,
 };
 use td_objects::tower_service::sql::{By, SqlSelectService};
-use td_objects::types::id::UserId;
-use td_objects::types::id_name::UserIdName;
+use td_objects::types::basic::{UserId, UserIdName};
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -49,9 +48,7 @@ mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::rest_urls::UserParam;
     use td_objects::test_utils::seed_user::seed_user;
-    use td_objects::types::bool::UserEnabled;
-    use td_objects::types::id::{AccessTokenId, RoleId};
-    use td_objects::types::string::UserName;
+    use td_objects::types::basic::{AccessTokenId, RoleId, UserEnabled, UserName};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]

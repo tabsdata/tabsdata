@@ -4,8 +4,7 @@
 
 use crate::parse::{parse_table_ref, parse_versioned_table_ref, parse_versions};
 use crate::types::ComposedString;
-use crate::types::id::TableDataVersionId;
-use crate::types::string::CollectionName;
+use crate::types::basic::{CollectionName, TableDataVersionId};
 use derive_new::new;
 use std::fmt::{Display, Formatter};
 use td_error::TdError;
@@ -228,7 +227,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::string::TableName;
+    use crate::types::basic::TableName;
     use td_common::id;
 
     #[test]

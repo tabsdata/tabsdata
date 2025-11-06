@@ -3,13 +3,11 @@
 //
 
 use crate::dxo::crudl::{ReadRequest, RequestContext, handle_sql_err};
-use crate::dxo::permission::defs::{PermissionCreate, PermissionDB, PermissionDBBuilder};
-use crate::dxo::role::defs::RoleDB;
+use crate::dxo::permission::{PermissionCreate, PermissionDB, PermissionDBBuilder};
+use crate::dxo::role::RoleDB;
 use crate::sql::{DaoQueries, Insert, SelectBy};
 use crate::types::SqlEntity;
-use crate::types::id::{AccessTokenId, EntityId, RoleId, UserId};
-use crate::types::string::EntityName;
-use crate::types::typed_enum::PermissionType;
+use crate::types::basic::{AccessTokenId, EntityId, EntityName, PermissionType, RoleId, UserId};
 use td_database::sql::DbPool;
 use td_error::TdError;
 
@@ -74,7 +72,7 @@ mod tests {
     use super::*;
     use crate::test_utils::seed_permission::seed_permission;
     use crate::test_utils::seed_role::seed_role;
-    use crate::types::string::{Description, RoleName};
+    use crate::types::basic::{Description, RoleName};
 
     #[tokio::test]
     async fn test_seed_permission() {

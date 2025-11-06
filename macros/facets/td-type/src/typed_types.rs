@@ -1112,7 +1112,7 @@ pub fn typed_id_name(input: &ItemStruct, typed: Option<TypedIdName>) -> proc_mac
             }
         }
 
-        impl crate::types::id_name::IdOrName for #ident {
+        impl crate::types::basic::IdOrName for #ident {
             type Id = #id;
             fn id(&self) -> Option<&Self::Id> {
                 self.id.as_ref()
@@ -1132,7 +1132,7 @@ pub fn typed_id_name(input: &ItemStruct, typed: Option<TypedIdName>) -> proc_mac
 
         impl crate::types::SqlEntity for #ident {
             fn push_bind<'a>(&'a self, builder: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>) {
-                use crate::types::id_name::IdOrName;
+                use crate::types::basic::IdOrName;
                 if let Some(id) = self.id() {
                     id.push_bind(builder);
                 } else if let Some(name) = self.name() {
@@ -1146,7 +1146,7 @@ pub fn typed_id_name(input: &ItemStruct, typed: Option<TypedIdName>) -> proc_mac
                 &'a self,
                 builder: &mut sqlx::query_builder::Separated<'_, 'a, sqlx::Sqlite, &str>,
             ) {
-                use crate::types::id_name::IdOrName;
+                use crate::types::basic::IdOrName;
                 if let Some(id) = self.id() {
                     id.push_bind_unseparated(builder);
                 } else if let Some(name) = self.name() {
@@ -1157,7 +1157,7 @@ pub fn typed_id_name(input: &ItemStruct, typed: Option<TypedIdName>) -> proc_mac
             }
 
             fn as_display(&self) -> String {
-                use crate::types::id_name::IdOrName;
+                use crate::types::basic::IdOrName;
                 if let Some(id) = self.id() {
                     format!("~{}", id.as_display())
                 } else if let Some(name) = self.name() {
@@ -1168,7 +1168,7 @@ pub fn typed_id_name(input: &ItemStruct, typed: Option<TypedIdName>) -> proc_mac
             }
 
             fn from_display(s: impl ToString) -> Result<Self, td_error::TdError> {
-                use crate::types::id_name::IdOrName;
+                use crate::types::basic::IdOrName;
                 let s = s.to_string();
                 if s.starts_with("~") {
                     let id = #id::from_display(s.trim_start_matches('~'))?;
@@ -1180,7 +1180,7 @@ pub fn typed_id_name(input: &ItemStruct, typed: Option<TypedIdName>) -> proc_mac
             }
 
             fn type_id(&self) -> std::any::TypeId {
-                use crate::types::id_name::IdOrName;
+                use crate::types::basic::IdOrName;
                 if let Some(id) = self.id() {
                     id.type_id()
                 } else if let Some(name) = self.name() {

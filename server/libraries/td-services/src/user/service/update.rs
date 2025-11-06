@@ -9,7 +9,7 @@ use crate::user::layers::update::{
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
 use td_objects::dxo::crudl::{RequestContext, UpdateRequest};
-use td_objects::dxo::user::defs::{
+use td_objects::dxo::user::{
     UserDB, UserDBWithNames, UserRead, UserReadBuilder, UserUpdate, UserUpdateDB,
     UserUpdateDBBuilder,
 };
@@ -21,9 +21,7 @@ use td_objects::tower_service::from::{
     UpdateService, With,
 };
 use td_objects::tower_service::sql::{By, SqlSelectService, SqlUpdateService};
-use td_objects::types::id::UserId;
-use td_objects::types::id_name::UserIdName;
-use td_objects::types::timestamp::AtTime;
+use td_objects::types::basic::{AtTime, UserId, UserIdName};
 use td_security::config::PasswordHashingConfig;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
@@ -73,9 +71,9 @@ mod tests {
     use td_objects::rest_urls::UserParam;
     use td_objects::sql::{DaoQueries, SelectBy};
     use td_objects::test_utils::seed_user::seed_user;
-    use td_objects::types::bool::UserEnabled;
-    use td_objects::types::id::{AccessTokenId, RoleId};
-    use td_objects::types::string::{Email, FullName, Password, UserName};
+    use td_objects::types::basic::{
+        AccessTokenId, Email, FullName, Password, RoleId, UserEnabled, UserName,
+    };
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]

@@ -8,7 +8,7 @@ use ta_services::service::TdService;
 use td_error::assert_service_error;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::rest_urls::UserParam;
-use td_objects::types::id::{AccessTokenId, RoleId, UserId};
+use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
 
 #[tokio::test]
 async fn test_not_allowed_to_delete_themselves() {

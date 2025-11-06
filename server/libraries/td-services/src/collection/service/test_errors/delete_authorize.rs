@@ -10,8 +10,7 @@ use td_objects::dxo::crudl::RequestContext;
 use td_objects::rest_urls::CollectionParam;
 use td_objects::test_utils::seed_collection::seed_collection;
 use td_objects::tower_service::authz::AuthzError;
-use td_objects::types::id::{AccessTokenId, RoleId, UserId};
-use td_objects::types::string::CollectionName;
+use td_objects::types::basic::{AccessTokenId, CollectionName, RoleId, UserId};
 
 #[td_test::test(sqlx)]
 #[tokio::test]

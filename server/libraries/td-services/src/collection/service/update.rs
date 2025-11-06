@@ -7,7 +7,7 @@ use crate::collection::service::layer::update::{
 };
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
-use td_objects::dxo::collection::defs::{
+use td_objects::dxo::collection::{
     CollectionDB, CollectionDBWithNames, CollectionRead, CollectionReadBuilder, CollectionUpdate,
     CollectionUpdateDB, CollectionUpdateDBBuilder,
 };
@@ -20,8 +20,7 @@ use td_objects::tower_service::from::{
     UpdateService, With,
 };
 use td_objects::tower_service::sql::{By, SqlSelectService, SqlUpdateService};
-use td_objects::types::id::CollectionId;
-use td_objects::types::id_name::CollectionIdName;
+use td_objects::types::basic::{CollectionId, CollectionIdName};
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -72,9 +71,9 @@ mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::rest_urls::CollectionParam;
     use td_objects::test_utils::seed_collection::seed_collection;
-    use td_objects::types::id::{AccessTokenId, RoleId, UserId};
-    use td_objects::types::string::{CollectionName, Description, UserName};
-    use td_objects::types::timestamp::AtTime;
+    use td_objects::types::basic::{
+        AccessTokenId, AtTime, CollectionName, Description, RoleId, UserId, UserName,
+    };
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]

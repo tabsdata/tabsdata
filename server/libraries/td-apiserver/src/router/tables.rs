@@ -18,8 +18,8 @@ mod routes {
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
-    use td_objects::dxo::table::defs::Table;
-    use td_objects::dxo::table_data_version::defs::TableDataVersion;
+    use td_objects::dxo::table::Table;
+    use td_objects::dxo::table_data_version::TableDataVersion;
     use td_objects::rest_urls::params::{
         CollectionAtName, TableAtIdName, TableSampleAtName, TableSchema,
     };

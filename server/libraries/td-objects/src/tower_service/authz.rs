@@ -117,11 +117,11 @@
 //!   ...
 //! ```
 
-use crate::dxo::collection::defs::CollectionDB;
+use crate::dxo::collection::CollectionDB;
 use crate::dxo::crudl::{RequestContext, handle_sql_err};
-use crate::dxo::inter_collection_access::defs::InterCollectionAccess;
+use crate::dxo::inter_collection_access::InterCollectionAccess;
 use crate::sql::{DaoQueries, FindBy};
-use crate::types::id::{CollectionId, RoleId, ToCollectionId, UserId};
+use crate::types::basic::{CollectionId, RoleId, ToCollectionId, UserId};
 use crate::types::visible_collections::VisibleCollections;
 use async_trait::async_trait;
 use itertools::Itertools;
@@ -1027,13 +1027,13 @@ impl<
 mod tests {
     use super::*;
     use crate::dxo::crudl::RequestContext;
-    use crate::dxo::inter_collection_access::defs::InterCollectionAccess;
+    use crate::dxo::inter_collection_access::InterCollectionAccess;
     use crate::tower_service::authz::{
         AuthzContextT, AuthzEntity, AuthzError, AuthzRequirements, AuthzScope, CollAdmin, CollDev,
         CollExec, CollRead, InterColl, InterCollRead, NoPermissions, Permission, Requester,
         SecAdmin, SysAdmin,
     };
-    use crate::types::id::{AccessTokenId, CollectionId, RoleId, ToCollectionId, UserId};
+    use crate::types::basic::{AccessTokenId, CollectionId, RoleId, ToCollectionId, UserId};
     use async_trait::async_trait;
     use sqlx::SqliteConnection;
     use std::collections::HashMap;

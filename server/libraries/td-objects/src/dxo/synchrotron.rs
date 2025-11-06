@@ -3,11 +3,11 @@
 //
 
 #[td_type::dxo]
-pub mod defs {
-    use crate::dxo::transaction::defs::TransactionDBWithStatus;
-    use crate::types::id::{CollectionId, ExecutionId, TransactionId, UserId};
-    use crate::types::timestamp::TriggeredOn;
-    use crate::types::typed_enum::TransactionStatus;
+mod definitions {
+    use crate::dxo::transaction::TransactionDBWithStatus;
+    use crate::types::basic::{
+        CollectionId, ExecutionId, TransactionId, TransactionStatus, TriggeredOn, UserId,
+    };
 
     #[td_type::Dto]
     #[td_type(builder(try_from = TransactionDBWithStatus))]

@@ -4,10 +4,10 @@
 
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
-use td_objects::dxo::collection::defs::CollectionDB;
+use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::{ListRequest, ListResponse, RequestContext};
-use td_objects::dxo::table::defs::TableDBWithNames;
-use td_objects::dxo::table_data_version::defs::{TableDataVersion, TableDataVersionDBWithNames};
+use td_objects::dxo::table::TableDBWithNames;
+use td_objects::dxo::table_data_version::{TableDataVersion, TableDataVersionDBWithNames};
 use td_objects::rest_urls::params::TableAtIdName;
 use td_objects::sql::{DaoQueries, NoListFilter};
 use td_objects::tower_service::authz::{
@@ -17,9 +17,9 @@ use td_objects::tower_service::from::{
     ExtractNameService, ExtractService, TryIntoService, With, combine,
 };
 use td_objects::tower_service::sql::{By, SqlListService, SqlSelectService};
-use td_objects::types::id::{CollectionId, TableId};
-use td_objects::types::id_name::{CollectionIdName, TableIdName};
-use td_objects::types::timestamp::{AtTime, TriggeredOn};
+use td_objects::types::basic::{
+    AtTime, CollectionId, CollectionIdName, TableId, TableIdName, TriggeredOn,
+};
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -75,8 +75,8 @@ mod tests {
     use td_database::sql::DbPool;
     use td_error::TdError;
     use td_objects::dxo::crudl::ListParams;
-    use td_objects::dxo::function::defs::FunctionRegister;
-    use td_objects::dxo::table::defs::TableDB;
+    use td_objects::dxo::function::FunctionRegister;
+    use td_objects::dxo::table::TableDB;
     use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_execution::seed_execution;
@@ -84,10 +84,10 @@ mod tests {
     use td_objects::test_utils::seed_function_run::seed_function_run;
     use td_objects::test_utils::seed_table_data_version::seed_table_data_version;
     use td_objects::test_utils::seed_transaction::seed_transaction;
-    use td_objects::types::id::{AccessTokenId, BundleId, RoleId, UserId};
-    use td_objects::types::string::{CollectionName, TableName, TableNameDto, TransactionKey};
-    use td_objects::types::typed_enum::Decorator;
-    use td_objects::types::typed_enum::FunctionRunStatus;
+    use td_objects::types::basic::{
+        AccessTokenId, BundleId, CollectionName, Decorator, FunctionRunStatus, RoleId, TableName,
+        TableNameDto, TransactionKey, UserId,
+    };
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]

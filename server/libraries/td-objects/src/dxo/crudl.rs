@@ -2,8 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::types::id::{AccessTokenId, RoleId, UserId};
-use crate::types::timestamp::AtTime;
+use crate::types::basic::{AccessTokenId, AtTime, RoleId, UserId};
 use serde::{Deserialize, Serialize};
 use serde_valid::Validate;
 use sqlx::Error;
@@ -11,8 +10,7 @@ use sqlx::error::ErrorKind::{ForeignKeyViolation, UniqueViolation};
 use sqlx::sqlite::SqliteQueryResult;
 use std::fmt::Debug;
 use td_database::sql::DbError;
-use td_error::td_error;
-use td_error::{TdDomainError, TdError};
+use td_error::{TdDomainError, TdError, td_error};
 use td_tower::error::{ConnectionError, FromHandlerError};
 
 /// Request context for the logic layer.

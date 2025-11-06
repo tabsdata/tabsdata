@@ -7,8 +7,8 @@ use std::ops::Deref;
 use std::time::Duration;
 use td_common::time::UniqueUtc;
 use td_error::TdError;
-use td_objects::dxo::auth::defs::SessionDBBuilder;
-use td_objects::types::timestamp::AtTime;
+use td_objects::dxo::auth::SessionDBBuilder;
+use td_objects::types::basic::AtTime;
 use td_tower::extractors::{Input, SrvCtx};
 
 pub async fn set_session_expiration(

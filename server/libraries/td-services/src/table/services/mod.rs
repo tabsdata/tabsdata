@@ -34,16 +34,14 @@ pub struct TableServices {
 pub(crate) mod tests {
     use td_database::sql::DbPool;
     use td_error::TdError;
-    use td_objects::dxo::collection::defs::CollectionDB;
+    use td_objects::dxo::collection::CollectionDB;
     use td_objects::dxo::crudl::handle_sql_err;
-    use td_objects::dxo::dependency::defs::DependencyDB;
-    use td_objects::dxo::function::defs::FunctionDB;
-    use td_objects::dxo::table::defs::TableDB;
+    use td_objects::dxo::dependency::DependencyDB;
+    use td_objects::dxo::function::FunctionDB;
+    use td_objects::dxo::table::TableDB;
     use td_objects::sql::cte::CteQueries;
     use td_objects::sql::{DaoQueries, SelectBy};
-    use td_objects::types::id::UserId;
-    use td_objects::types::string::TableName;
-    use td_objects::types::typed_enum::{FunctionStatus, TableStatus};
+    use td_objects::types::basic::{FunctionStatus, TableName, TableStatus, UserId};
 
     pub async fn assert_delete(
         db: &DbPool,

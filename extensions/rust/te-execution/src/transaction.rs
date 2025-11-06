@@ -7,7 +7,7 @@ use strum::{Display, EnumString};
 use ta_execution::transaction::TransactionMapper;
 use td_error::TdError;
 use td_objects::execution::graph::FunctionNode;
-use td_objects::types::string::TransactionKey;
+use td_objects::types::basic::TransactionKey;
 
 /// `TransactionBy` is an enum that defines how to map a transaction to a key.
 /// It only supports mapping by function version ID.
@@ -32,8 +32,9 @@ mod tests {
     use crate::transaction::TransactionBy;
     use ta_execution::transaction::TransactionMapperError;
     use td_objects::execution::graph::FunctionNode;
-    use td_objects::types::id::{CollectionId, FunctionVersionId};
-    use td_objects::types::string::{CollectionName, FunctionName, TransactionKey};
+    use td_objects::types::basic::{
+        CollectionId, CollectionName, FunctionName, FunctionVersionId, TransactionKey,
+    };
 
     #[test]
     fn test_transaction_by_default() {

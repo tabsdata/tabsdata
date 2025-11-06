@@ -4,8 +4,7 @@
 
 use crate::env::{get_current_dir, to_absolute};
 use crate::logging::LogOutput::File;
-use crate::manifest::Inf;
-use crate::manifest::WORKER_INF_FILE;
+use crate::manifest::{Inf, WORKER_INF_FILE};
 use crate::settings::{LOG_WITH_ANSI, MANAGER, TRUE};
 use once_cell::sync::OnceCell;
 use opentelemetry_sdk::logs::SdkLoggerProvider;
@@ -55,8 +54,7 @@ pub const LOG_EXTENSION: &str = "log";
 pub const WORK_ENV: &str = "TD_URI_WORK";
 pub const PYTEST_VERSION: &str = "PYTEST_VERSION";
 
-use tracing_subscriber::reload::Handle;
-use tracing_subscriber::reload::Layer as ReloadLayer;
+use tracing_subscriber::reload::{Handle, Layer as ReloadLayer};
 use tracing_subscriber::util::SubscriberInitExt;
 
 static LOG_RELOAD_HANDLE: OnceCell<Handle<EnvFilter, Registry>> = OnceCell::new();

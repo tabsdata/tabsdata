@@ -6,10 +6,9 @@ use crate::collection::service::create::CreateCollectionService;
 use ta_services::service::TdService;
 use td_database::sql::DbPool;
 use td_error::assert_service_error;
-use td_objects::dxo::collection::defs::CollectionCreate;
+use td_objects::dxo::collection::CollectionCreate;
 use td_objects::dxo::crudl::RequestContext;
-use td_objects::types::id::{AccessTokenId, RoleId, UserId};
-use td_objects::types::string::{CollectionName, Description};
+use td_objects::types::basic::{AccessTokenId, CollectionName, Description, RoleId, UserId};
 
 #[td_test::test(sqlx)]
 #[tokio::test]

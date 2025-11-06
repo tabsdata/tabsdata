@@ -10,12 +10,11 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use td_error::TdError;
 use td_objects::dxo::crudl::handle_sql_err;
-use td_objects::dxo::inter_collection_permission::defs::InterCollectionPermissionDB;
-use td_objects::dxo::permission::defs::PermissionDB;
+use td_objects::dxo::inter_collection_permission::InterCollectionPermissionDB;
+use td_objects::dxo::permission::PermissionDB;
 use td_objects::sql::{DaoQueries, SelectBy};
 use td_objects::tower_service::authz::{AuthzEntity, Permission};
-use td_objects::types::id::{CollectionId, RoleId, ToCollectionId};
-use td_objects::types::typed_enum::PermissionType;
+use td_objects::types::basic::{CollectionId, PermissionType, RoleId, ToCollectionId};
 
 /// Provider that gets permissions and inter-permissions mapping from the database on every `get` call.
 pub struct SqlAuthzDataProvider;
@@ -121,8 +120,7 @@ mod tests {
     use td_error::TdError;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_inter_collection_permission::seed_inter_collection_permission;
-    use td_objects::types::id::{RoleId, ToCollectionId, UserId};
-    use td_objects::types::string::CollectionName;
+    use td_objects::types::basic::{CollectionName, RoleId, ToCollectionId, UserId};
 
     #[td_test::test(sqlx(migrator = td_schema::schema()))]
     #[tokio::test]

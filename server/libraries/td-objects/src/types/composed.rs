@@ -2,11 +2,10 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::dxo::table::defs::TableDBWithNames;
-use crate::table_ref::TableRef;
-use crate::table_ref::{VersionedTableRef, Versions};
+use crate::dxo::table::TableDBWithNames;
+use crate::table_ref::{TableRef, VersionedTableRef, Versions};
 use crate::types::ComposedString;
-use crate::types::string::{TableName, TableNameDto};
+use crate::types::basic::{TableName, TableNameDto};
 use td_error::TdError;
 
 #[td_type::typed(composed(inner = "VersionedTableRef::<TableName>"), try_from = TableDependencyDto)]

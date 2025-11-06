@@ -4,11 +4,11 @@
 
 use ta_services::factory::service_factory;
 use td_objects::dxo::crudl::ReadRequest;
-use td_objects::dxo::execution::defs::{
+use td_objects::dxo::execution::{
     Execution, ExecutionBuilder, ExecutionDBWithStatus, ExecutionDetails, ExecutionDetailsBuilder,
 };
-use td_objects::dxo::function::defs::{Function, FunctionBuilder, FunctionDBWithNames};
-use td_objects::dxo::function_run::defs::FunctionRunDB;
+use td_objects::dxo::function::{Function, FunctionBuilder, FunctionDBWithNames};
+use td_objects::dxo::function_run::FunctionRunDB;
 use td_objects::rest_urls::ExecutionParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::from::{
@@ -16,8 +16,7 @@ use td_objects::tower_service::from::{
     SetService, TryIntoService, VecBuildService, With, builder,
 };
 use td_objects::tower_service::sql::{By, SqlFindService, SqlSelectAllService, SqlSelectService};
-use td_objects::types::id::{ExecutionId, FunctionVersionId};
-use td_objects::types::id_name::ExecutionIdName;
+use td_objects::types::basic::{ExecutionId, ExecutionIdName, FunctionVersionId};
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -65,7 +64,7 @@ mod tests {
     use td_database::sql::DbPool;
     use td_error::TdError;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::types::id::{AccessTokenId, RoleId, UserId};
+    use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]

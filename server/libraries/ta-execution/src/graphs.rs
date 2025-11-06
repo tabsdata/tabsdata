@@ -13,15 +13,15 @@ use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use std::ops::Deref;
 use td_error::{TdError, td_error};
-use td_objects::dxo::dependency::defs::DependencyDBWithNames;
-use td_objects::dxo::function::defs::FunctionDBWithNames;
-use td_objects::dxo::table::defs::TableDBWithNames;
-use td_objects::dxo::trigger::defs::TriggerDBWithNames;
+use td_objects::dxo::dependency::DependencyDBWithNames;
+use td_objects::dxo::function::FunctionDBWithNames;
+use td_objects::dxo::table::TableDBWithNames;
+use td_objects::dxo::trigger::TriggerDBWithNames;
 use td_objects::execution::graph::{
     FunctionNode, GraphDependency, GraphEdge, GraphNode, GraphOutput,
 };
 use td_objects::table_ref::Versions;
-use td_objects::types::string::{FunctionName, TransactionByStr, TransactionKey};
+use td_objects::types::basic::{FunctionName, TransactionByStr, TransactionKey};
 
 #[td_error]
 enum GraphError {
@@ -327,10 +327,9 @@ mod tests {
     use crate::test_utils::graph::test_graph;
     use crate::test_utils::transaction::TestTransactionBy;
     use std::collections::HashSet;
-    use td_objects::test_utils::graph::dependency;
-    use td_objects::test_utils::graph::table;
-    use td_objects::test_utils::graph::trigger;
-    use td_objects::test_utils::graph::{FUNCTION_NAMES, TABLE_NAMES, function_node, table_node};
+    use td_objects::test_utils::graph::{
+        FUNCTION_NAMES, TABLE_NAMES, dependency, function_node, table, table_node, trigger,
+    };
 
     #[tokio::test]
     async fn test_graph_builder_build() {

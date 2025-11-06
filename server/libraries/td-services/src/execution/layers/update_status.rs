@@ -4,21 +4,19 @@
 
 use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
-use td_error::TdError;
-use td_error::td_error;
+use td_error::{TdError, td_error};
 use td_objects::dxo::crudl::{assert_one, handle_sql_err};
-use td_objects::dxo::function_requirement::defs::FunctionRequirementDBWithNames;
-use td_objects::dxo::function_run::defs::{
+use td_objects::dxo::function_requirement::FunctionRequirementDBWithNames;
+use td_objects::dxo::function_run::{
     CommitFunctionRunDB, FunctionRunDB, FunctionRunToCommitDB, UpdateFunctionRunDB,
 };
 use td_objects::dxo::request::FunctionOutput;
 use td_objects::dxo::request::v2::WrittenTableV2;
-use td_objects::dxo::table_data_version::defs::{TableDataVersionDB, UpdateTableDataVersionDB};
-use td_objects::dxo::worker::defs::{CallbackRequest, UpdateWorkerDB, WorkerDB};
+use td_objects::dxo::table_data_version::{TableDataVersionDB, UpdateTableDataVersionDB};
+use td_objects::dxo::worker::{CallbackRequest, UpdateWorkerDB, WorkerDB};
 use td_objects::sql::recursive::RecursiveQueries;
 use td_objects::sql::{DaoQueries, SelectBy, UpdateBy};
-use td_objects::types::id::{FunctionRunId, WorkerId};
-use td_objects::types::typed_enum::FunctionRunStatus;
+use td_objects::types::basic::{FunctionRunId, FunctionRunStatus, WorkerId};
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, ReqCtx, SrvCtx};
 
 #[td_error]
@@ -311,16 +309,14 @@ pub(crate) mod tests {
     use std::sync::Arc;
     use td_database::sql::DbPool;
     use td_error::TdError;
-    use td_objects::dxo::collection::defs::CollectionDB;
+    use td_objects::dxo::collection::CollectionDB;
     use td_objects::dxo::crudl::handle_sql_err;
-    use td_objects::dxo::execution::defs::{ExecutionDB, ExecutionDBWithStatus};
-    use td_objects::dxo::function::defs::FunctionRegister;
-    use td_objects::dxo::function_run::defs::FunctionRunDB;
-    use td_objects::dxo::table::defs::TableDB;
-    use td_objects::dxo::table_data_version::defs::{
-        TableDataVersionDB, TableDataVersionDBWithFunction,
-    };
-    use td_objects::dxo::transaction::defs::{TransactionDB, TransactionDBWithStatus};
+    use td_objects::dxo::execution::{ExecutionDB, ExecutionDBWithStatus};
+    use td_objects::dxo::function::FunctionRegister;
+    use td_objects::dxo::function_run::FunctionRunDB;
+    use td_objects::dxo::table::TableDB;
+    use td_objects::dxo::table_data_version::{TableDataVersionDB, TableDataVersionDBWithFunction};
+    use td_objects::dxo::transaction::{TransactionDB, TransactionDBWithStatus};
     use td_objects::sql::{DaoQueries, SelectBy};
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_execution::seed_execution;
@@ -329,15 +325,12 @@ pub(crate) mod tests {
     use td_objects::test_utils::seed_function_run::seed_function_run;
     use td_objects::test_utils::seed_table_data_version::seed_table_data_version;
     use td_objects::test_utils::seed_transaction::seed_transaction;
+    use td_objects::types::basic::{
+        BundleId, CollectionName, Decorator, DependencyPos, ExecutionStatus, FunctionName,
+        FunctionRunStatus, FunctionRuntimeValues, TableName, TableNameDto, TransactionStatus,
+        UserId, VersionPos,
+    };
     use td_objects::types::composed::TableDependencyDto;
-    use td_objects::types::i32::{DependencyPos, VersionPos};
-    use td_objects::types::id::{BundleId, UserId};
-    use td_objects::types::string::{
-        CollectionName, FunctionName, FunctionRuntimeValues, TableName, TableNameDto,
-    };
-    use td_objects::types::typed_enum::{
-        Decorator, ExecutionStatus, FunctionRunStatus, TransactionStatus,
-    };
 
     #[derive(Debug, Clone, Eq, PartialEq, Hash)]
     pub(crate) struct TestExecution {

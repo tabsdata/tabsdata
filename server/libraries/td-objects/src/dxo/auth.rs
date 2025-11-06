@@ -3,15 +3,12 @@
 //
 
 #[td_type::dxo]
-pub mod defs {
-    use crate::types::i64::AccessTokenExpiration;
-    use crate::types::id::{AccessTokenId, RefreshTokenId, RoleId, UserId};
-    use crate::types::string::{
-        AccessToken, NewPassword, OldPassword, Password, RefreshToken, RoleName, TokenType,
-        UserName,
+mod definitions {
+    use crate::types::basic::{
+        AccessToken, AccessTokenExpiration, AccessTokenId, AtTime, GrantType, NewPassword,
+        OldPassword, Password, RefreshToken, RefreshTokenId, RoleId, RoleName, SessionStatus,
+        TokenType, UserId, UserName,
     };
-    use crate::types::timestamp::AtTime;
-    use crate::types::typed_enum::{GrantType, SessionStatus};
 
     #[td_type::Dto]
     pub struct Login {

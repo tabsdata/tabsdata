@@ -6,7 +6,7 @@ use crate::collection::CollectionError;
 use async_trait::async_trait;
 use std::ops::Deref;
 use td_error::TdError;
-use td_objects::dxo::collection::defs::{CollectionUpdate, CollectionUpdateDBBuilder};
+use td_objects::dxo::collection::{CollectionUpdate, CollectionUpdateDBBuilder};
 use td_objects::tower_service::from::With;
 use td_tower::extractors::Input;
 

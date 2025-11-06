@@ -5,7 +5,7 @@
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
 use td_objects::dxo::crudl::{ListRequest, ListResponse, RequestContext};
-use td_objects::dxo::user::defs::UserRead;
+use td_objects::dxo::user::UserRead;
 use td_objects::sql::{DaoQueries, NoListFilter};
 use td_objects::tower_service::authz::{AuthzOn, SecAdmin, System};
 use td_objects::tower_service::from::{ExtractService, With};
@@ -39,9 +39,7 @@ mod tests {
     use td_database::sql::DbPool;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::test_utils::seed_user::seed_user;
-    use td_objects::types::bool::UserEnabled;
-    use td_objects::types::id::{AccessTokenId, RoleId};
-    use td_objects::types::string::UserName;
+    use td_objects::types::basic::{AccessTokenId, RoleId, UserEnabled, UserName};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]

@@ -403,15 +403,14 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dxo::dependency::defs::{DependencyDB, DependencyDBWithNames};
-    use crate::dxo::function::defs::{FunctionDB, FunctionDBWithNames};
-    use crate::dxo::table::defs::{TableDB, TableDBWithNames};
-    use crate::dxo::trigger::defs::{TriggerDB, TriggerDBWithNames};
+    use crate::dxo::dependency::{DependencyDB, DependencyDBWithNames};
+    use crate::dxo::function::{FunctionDB, FunctionDBWithNames};
+    use crate::dxo::table::{TableDB, TableDBWithNames};
+    use crate::dxo::trigger::{TriggerDB, TriggerDBWithNames};
     use crate::sql::cte::CteQueries;
     use crate::sql::{DaoQueries, Insert};
-    use crate::types::timestamp::AtTime;
-    use chrono::DateTime;
-    use chrono::Utc;
+    use crate::types::basic::AtTime;
+    use chrono::{DateTime, Utc};
     use sqlx::Execute;
     use std::sync::LazyLock;
     use td_database::sql::DbPool;

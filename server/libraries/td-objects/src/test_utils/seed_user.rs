@@ -3,12 +3,10 @@
 //
 
 use crate::dxo::crudl::{ReadRequest, RequestContext, handle_sql_err};
-use crate::dxo::user::defs::{UserCreate, UserDB, UserDBBuilder};
+use crate::dxo::user::{UserCreate, UserDB, UserDBBuilder};
 use crate::sql::{DaoQueries, Insert, SelectBy};
 use crate::types::SqlEntity;
-use crate::types::bool::UserEnabled;
-use crate::types::id::{AccessTokenId, RoleId, UserId};
-use crate::types::string::{Password, UserName};
+use crate::types::basic::{AccessTokenId, Password, RoleId, UserEnabled, UserId, UserName};
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_security::config::PasswordHashingConfig;

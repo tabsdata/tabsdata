@@ -18,7 +18,7 @@ mod routes {
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
-    use td_objects::dxo::worker::defs::Worker;
+    use td_objects::dxo::worker::Worker;
     use td_objects::rest_urls::{
         WORKER_LOGS, WORKERS_LIST, WorkerLogsParams, WorkerLogsQueryParams, WorkerParam,
     };

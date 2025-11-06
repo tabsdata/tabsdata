@@ -6,7 +6,7 @@ use crate::inter_coll_permission::layers::assert_collection_in_permission;
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext, refresh_authz_context};
 use td_objects::dxo::crudl::{DeleteRequest, RequestContext};
-use td_objects::dxo::inter_collection_permission::defs::{
+use td_objects::dxo::inter_collection_permission::{
     InterCollectionPermissionDB, InterCollectionPermissionDBWithNames,
 };
 use td_objects::rest_urls::InterCollectionPermissionParam;
@@ -14,8 +14,9 @@ use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, SecAdmin, System};
 use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlDeleteService, SqlSelectService};
-use td_objects::types::id::{CollectionId, InterCollectionPermissionId};
-use td_objects::types::id_name::{CollectionIdName, InterCollectionPermissionIdName};
+use td_objects::types::basic::{
+    CollectionId, CollectionIdName, InterCollectionPermissionId, InterCollectionPermissionIdName,
+};
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -74,9 +75,7 @@ mod tests {
         get_inter_collection_permissions, seed_inter_collection_permission,
     };
     use td_objects::tower_service::authz::AuthzError;
-    use td_objects::types::id::{AccessTokenId, RoleId, UserId};
-    use td_objects::types::id_name::IdOrName;
-    use td_objects::types::string::CollectionName;
+    use td_objects::types::basic::{AccessTokenId, CollectionName, IdOrName, RoleId, UserId};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]

@@ -16,7 +16,7 @@ mod routes {
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
-    use td_objects::dxo::permission::defs::{Permission, PermissionCreate};
+    use td_objects::dxo::permission::{Permission, PermissionCreate};
     use td_objects::rest_urls::{
         CREATE_PERMISSION, DELETE_PERMISSION, LIST_PERMISSIONS, RoleParam, RolePermissionParam,
     };

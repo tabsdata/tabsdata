@@ -3,19 +3,13 @@
 //
 
 #[td_type::dxo]
-pub mod defs {
-    use crate::types::bool::{DataChanged, HasData};
-    use crate::types::i32::TableFunctionParamPos;
-    use crate::types::i64::{ColumnCount, RowCount};
-    use crate::types::id::{
-        CollectionId, ExecutionId, FunctionRunId, FunctionVersionId, TableDataVersionId, TableId,
-        TableVersionId, TransactionId, UserId,
+mod definitions {
+    use crate::types::basic::{
+        AtTime, CollectionId, CollectionName, ColumnCount, DataChanged, DataLocation, ExecutionId,
+        FunctionName, FunctionRunId, FunctionRunStatus, FunctionVersionId, HasData, RowCount,
+        SchemaHash, StorageVersion, TableDataVersionId, TableFunctionParamPos, TableId, TableName,
+        TableVersionId, TransactionId, TriggeredOn, UserId, UserName,
     };
-    use crate::types::string::{
-        CollectionName, DataLocation, FunctionName, SchemaHash, StorageVersion, TableName, UserName,
-    };
-    use crate::types::timestamp::{AtTime, TriggeredOn};
-    use crate::types::typed_enum::FunctionRunStatus;
 
     #[td_type::Dao]
     #[dao(sql_table = "table_data_versions")]

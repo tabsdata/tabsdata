@@ -5,7 +5,7 @@
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
 use td_objects::dxo::crudl::{RequestContext, UpdateRequest};
-use td_objects::dxo::role::defs::{
+use td_objects::dxo::role::{
     Role, RoleBuilder, RoleDB, RoleDBUpdate, RoleDBUpdateBuilder, RoleDBWithNames, RoleUpdate,
 };
 use td_objects::rest_urls::RoleParam;
@@ -16,8 +16,7 @@ use td_objects::tower_service::from::{
     UpdateService, With,
 };
 use td_objects::tower_service::sql::{By, SqlSelectService, SqlUpdateService};
-use td_objects::types::id::RoleId;
-use td_objects::types::id_name::RoleIdName;
+use td_objects::types::basic::{RoleId, RoleIdName};
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -58,8 +57,7 @@ mod tests {
     use td_error::TdError;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::test_utils::seed_role::{get_role, seed_role};
-    use td_objects::types::id::{AccessTokenId, UserId};
-    use td_objects::types::string::{Description, RoleName};
+    use td_objects::types::basic::{AccessTokenId, Description, RoleName, UserId};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]

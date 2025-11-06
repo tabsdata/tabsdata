@@ -2,15 +2,15 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::dxo::collection::defs::CollectionDB;
-use crate::dxo::execution::defs::ExecutionDB;
-use crate::dxo::function_requirement::defs::FunctionRequirementDB;
-use crate::dxo::function_run::defs::FunctionRunDB;
-use crate::dxo::table::defs::TableDB;
-use crate::dxo::table_data_version::defs::TableDataVersionDB;
-use crate::dxo::transaction::defs::TransactionDB;
+use crate::dxo::collection::CollectionDB;
+use crate::dxo::execution::ExecutionDB;
+use crate::dxo::function_requirement::FunctionRequirementDB;
+use crate::dxo::function_run::FunctionRunDB;
+use crate::dxo::table::TableDB;
+use crate::dxo::table_data_version::TableDataVersionDB;
+use crate::dxo::transaction::TransactionDB;
 use crate::sql::{DaoQueries, Insert};
-use crate::types::i32::{DependencyPos, VersionPos};
+use crate::types::basic::{DependencyPos, VersionPos};
 use td_database::sql::DbPool;
 
 #[allow(clippy::too_many_arguments)]
@@ -56,7 +56,7 @@ pub async fn seed_function_requirement(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dxo::function::defs::FunctionRegister;
+    use crate::dxo::function::FunctionRegister;
     use crate::sql::SelectBy;
     use crate::test_utils::seed_collection::seed_collection;
     use crate::test_utils::seed_execution::seed_execution;
@@ -64,9 +64,10 @@ mod tests {
     use crate::test_utils::seed_function_run::seed_function_run;
     use crate::test_utils::seed_table_data_version::seed_table_data_version;
     use crate::test_utils::seed_transaction::seed_transaction;
-    use crate::types::id::{BundleId, UserId};
-    use crate::types::string::{CollectionName, TableNameDto, TransactionKey};
-    use crate::types::typed_enum::{Decorator, FunctionRunStatus};
+    use crate::types::basic::{
+        BundleId, CollectionName, Decorator, FunctionRunStatus, TableNameDto, TransactionKey,
+        UserId,
+    };
     use td_database::sql::DbPool;
     use td_security::ENCODED_ID_SYSTEM;
 

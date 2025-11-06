@@ -12,8 +12,7 @@ use ta_apiserver::status::error_status::ErrorStatus;
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
-use td_objects::types::id::AccessTokenId;
-use td_objects::types::string::AccessToken;
+use td_objects::types::basic::{AccessToken, AccessTokenId};
 use td_services::auth::AuthError;
 use td_services::auth::jwt::{JwtConfig, decode_token};
 use td_services::auth::session::{Session, SessionError, SessionProvider, Sessions};
@@ -119,14 +118,14 @@ mod tests {
     use super::*;
     use std::io::{self, Write};
     use std::sync::{Arc, Mutex};
-    use td_objects::types::id::{AccessTokenId, RefreshTokenId, RoleId, UserId};
-    use td_objects::types::string::{RoleName, UserName};
-    use td_objects::types::timestamp::AtTime;
-    use td_objects::types::typed_enum::SessionStatus;
+    use td_objects::types::basic::{
+        AccessTokenId, AtTime, RefreshTokenId, RoleId, RoleName, SessionStatus, UserId, UserName,
+    };
     use td_services::auth::session::Session;
     use tracing::info;
     use tracing::subscriber::set_default;
-    use tracing_subscriber::{fmt, layer::SubscriberExt, registry};
+    use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::{fmt, registry};
 
     struct WriterGuard {
         buffer: Arc<Mutex<Vec<u8>>>,

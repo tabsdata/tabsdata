@@ -5,15 +5,13 @@
 use crate::scheduler::layers::schedule::create_locked_workers;
 use ta_services::factory::service_factory;
 use td_common::server::{FileWorkerMessageQueue, WorkerMessageQueue};
-use td_objects::dxo::function_run::defs::{
-    FunctionRunDB, FunctionRunToExecuteDB, UpdateFunctionRunDB,
-};
-use td_objects::dxo::worker::defs::WorkerDB;
+use td_objects::dxo::function_run::{FunctionRunDB, FunctionRunToExecuteDB, UpdateFunctionRunDB};
+use td_objects::dxo::worker::WorkerDB;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::from::{ExtractVecService, With};
 use td_objects::tower_service::sql::{By, SqlSelectAllService, SqlUpdateService, insert_vec};
 use td_objects::types::addresses::InternalServerAddresses;
-use td_objects::types::id::FunctionRunId;
+use td_objects::types::basic::FunctionRunId;
 use td_storage::Storage;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
@@ -71,21 +69,20 @@ mod tests {
     use td_database::sql::DbPool;
     use td_error::TdError;
     use td_objects::dxo::crudl::{RequestContext, handle_sql_err};
-    use td_objects::dxo::execution::defs::ExecutionRequest;
-    use td_objects::dxo::function::defs::FunctionRegister;
+    use td_objects::dxo::execution::ExecutionRequest;
+    use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::request::v2::{InputTable, OutputTable};
     use td_objects::dxo::request::{EnvPrefix, FunctionInput};
-    use td_objects::dxo::table_data_version::defs::TableDataVersionDBWithNames;
+    use td_objects::dxo::table_data_version::TableDataVersionDBWithNames;
     use td_objects::rest_urls::FunctionParam;
     use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_function::seed_function;
-    use td_objects::types::composed::TableDependencyDto;
-    use td_objects::types::id::{AccessTokenId, BundleId, RoleId, UserId};
-    use td_objects::types::string::{
-        CollectionName, ExecutionName, FunctionRuntimeValues, TableName, TableNameDto,
+    use td_objects::types::basic::{
+        AccessTokenId, BundleId, CollectionName, Decorator, ExecutionName, FunctionRuntimeValues,
+        RoleId, TableName, TableNameDto, UserId, WorkerMessageStatus,
     };
-    use td_objects::types::typed_enum::{Decorator, WorkerMessageStatus};
+    use td_objects::types::composed::TableDependencyDto;
     use td_storage::SPath;
     use td_tower::ctx_service::RawOneshot;
     use tower::ServiceExt;

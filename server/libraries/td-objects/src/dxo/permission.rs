@@ -3,14 +3,13 @@
 //
 
 #[td_type::dxo]
-pub mod defs {
+mod definitions {
     use crate::dxo::crudl::RequestContext;
-    use crate::dxo::role::defs::RoleDB;
-    use crate::types::bool::Fixed;
-    use crate::types::id::{EntityId, PermissionId, RoleId, UserId};
-    use crate::types::string::{EntityName, RoleName, UserName};
-    use crate::types::timestamp::AtTime;
-    use crate::types::typed_enum::{PermissionEntityType, PermissionType};
+    use crate::dxo::role::RoleDB;
+    use crate::types::basic::{
+        AtTime, EntityId, EntityName, Fixed, PermissionEntityType, PermissionId, PermissionType,
+        RoleId, RoleName, UserId, UserName,
+    };
 
     #[td_type::Dao]
     #[dao(sql_table = "permissions")]

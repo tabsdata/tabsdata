@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::types::string::{BuildManifest, PythonVersion, TabsdataVersion};
+use crate::types::basic::{BuildManifest, PythonVersion, TabsdataVersion};
 
 #[td_type::Dto]
 pub struct ServerVersion {

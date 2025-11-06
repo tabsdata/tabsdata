@@ -15,7 +15,7 @@ mod routes {
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
-    use td_objects::dxo::function_run::defs::FunctionRun;
+    use td_objects::dxo::function_run::FunctionRun;
     use td_objects::rest_urls::{FUNCTION_RUN_GET, FUNCTION_RUN_LIST, FunctionRunParam};
     use td_services::function_run::services::FunctionRunServices;
     use tower::ServiceExt;

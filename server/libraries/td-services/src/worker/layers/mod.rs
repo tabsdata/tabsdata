@@ -12,7 +12,7 @@ pub(crate) mod tests {
     use td_common::server::WorkerName::FUNCTION;
     use td_common::server::{CAST_FOLDER, LOG_FOLDER, PROC_FOLDER, WORK_FOLDER, WORKSPACE_URI_ENV};
     use td_objects::rest_urls::LogsExtension;
-    use td_objects::types::id::WorkerId;
+    use td_objects::types::basic::WorkerId;
     use tokio::fs::File;
     use tokio::io::AsyncWriteExt;
 

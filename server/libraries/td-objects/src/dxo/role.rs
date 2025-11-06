@@ -3,12 +3,9 @@
 //
 
 #[td_type::dxo]
-pub mod defs {
+mod definitions {
     use crate::dxo::crudl::RequestContext;
-    use crate::types::bool::Fixed;
-    use crate::types::id::{RoleId, UserId};
-    use crate::types::string::{Description, RoleName, UserName};
-    use crate::types::timestamp::AtTime;
+    use crate::types::basic::{AtTime, Description, Fixed, RoleId, RoleName, UserId, UserName};
 
     #[td_type::Dao]
     #[dao(sql_table = "roles")]

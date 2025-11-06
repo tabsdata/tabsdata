@@ -3,16 +3,14 @@
 //
 
 #[td_type::dxo]
-pub mod defs {
-    use crate::dxo::execution::defs::ExecutionDB;
-    use crate::types::i32::StatusCount;
-    use crate::types::id::{CollectionId, ExecutionId, TransactionId, UserId};
-    use crate::types::other::FunctionRunStatusCount;
-    use crate::types::string::{
-        CollectionName, ExecutionName, TransactionByStr, TransactionKey, UserName,
+mod definitions {
+    use crate::dxo::execution::ExecutionDB;
+    use crate::types::basic::{
+        AtTime, CollectionId, CollectionName, ExecutionId, ExecutionName, FunctionRunStatus,
+        StatusCount, TransactionByStr, TransactionId, TransactionKey, TransactionStatus,
+        TriggeredOn, UserId, UserName,
     };
-    use crate::types::timestamp::{AtTime, TriggeredOn};
-    use crate::types::typed_enum::{FunctionRunStatus, TransactionStatus};
+    use crate::types::status_count::FunctionRunStatusCount;
     use std::collections::HashMap;
 
     #[td_type::Dao]

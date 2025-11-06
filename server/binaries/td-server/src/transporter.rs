@@ -2,8 +2,7 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use std::env;
-use std::process;
+use std::{env, process};
 use td_common::about;
 use td_common::attach::attach;
 use td_process::launcher::hooks;

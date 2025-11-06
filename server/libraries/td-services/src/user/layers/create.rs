@@ -5,9 +5,9 @@
 use async_trait::async_trait;
 use std::ops::Deref;
 use td_error::TdError;
-use td_objects::dxo::user::defs::{UserCreate, UserDBBuilder};
+use td_objects::dxo::user::{UserCreate, UserDBBuilder};
 use td_objects::tower_service::from::With;
-use td_objects::types::timestamp::AtTime;
+use td_objects::types::basic::AtTime;
 use td_security::config::PasswordHashingConfig;
 use td_security::password::create_password_hash;
 use td_tower::extractors::{Input, SrvCtx};

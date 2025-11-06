@@ -261,12 +261,11 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dxo::dependency::defs::{DependencyDB, DependencyDBWithNames};
-    use crate::dxo::function::defs::FunctionDB;
-    use crate::dxo::trigger::defs::{TriggerDB, TriggerDBWithNames};
+    use crate::dxo::dependency::{DependencyDB, DependencyDBWithNames};
+    use crate::dxo::function::FunctionDB;
+    use crate::dxo::trigger::{TriggerDB, TriggerDBWithNames};
     use crate::sql::{DaoQueries, Insert};
-    use crate::types::id::{CollectionId, FunctionId};
-    use crate::types::timestamp::AtTime;
+    use crate::types::basic::{AtTime, CollectionId, FunctionId};
     use chrono::{DateTime, Utc};
     use sqlx::Execute;
     use std::sync::LazyLock;

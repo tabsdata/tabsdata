@@ -6,17 +6,16 @@ use crate::permission::PermissionError;
 use async_trait::async_trait;
 use std::ops::Deref;
 use td_error::TdError;
-use td_objects::dxo::collection::defs::CollectionDB;
+use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::handle_sql_err;
-use td_objects::dxo::permission::defs::{
+use td_objects::dxo::permission::{
     PermissionCreate, PermissionDB, PermissionDBBuilder, PermissionDBWithNames,
 };
 use td_objects::sql::{DaoQueries, SelectBy};
 use td_objects::tower_service::from::With;
-use td_objects::types::id::EntityId;
-use td_objects::types::id_name::{IdOrName, RoleIdName};
-use td_objects::types::string::CollectionName;
-use td_objects::types::typed_enum::PermissionEntityType;
+use td_objects::types::basic::{
+    CollectionName, EntityId, IdOrName, PermissionEntityType, RoleIdName,
+};
 use td_tower::default_services::Condition;
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
 

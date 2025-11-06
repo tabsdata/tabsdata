@@ -3,20 +3,18 @@
 //
 
 use bytes::{Bytes, BytesMut};
-use futures_util::StreamExt;
 use futures_util::stream::FuturesOrdered;
-use futures_util::{TryStreamExt, stream};
+use futures_util::{stream, StreamExt, TryStreamExt};
 use glob::glob;
 use std::env;
 use std::path::PathBuf;
 use td_common::server::WorkerClass::EPHEMERAL;
 use td_common::server::WorkerName::FUNCTION;
-use td_common::server::{CAST_FOLDER, LOG_FOLDER, PROC_FOLDER, WORK_FOLDER, WORKSPACE_URI_ENV};
-use td_error::{TdError, td_error};
+use td_common::server::{CAST_FOLDER, LOG_FOLDER, PROC_FOLDER, WORKSPACE_URI_ENV, WORK_FOLDER};
+use td_error::{td_error, TdError};
 use td_objects::rest_urls::LogsExtension;
 use td_objects::stream::BoxedSyncStream;
-use td_objects::types::i16::LogsCastNumber;
-use td_objects::types::id::WorkerId;
+use td_objects::types::basic::{LogsCastNumber, WorkerId};
 use td_tower::extractors::Input;
 use tokio::fs::File;
 use tokio_util::codec::{BytesCodec, FramedRead};

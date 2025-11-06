@@ -6,11 +6,10 @@ use crate::SPath;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use std::ops::Deref;
-use td_objects::types::id::{
-    BundleId, CollectionId, FunctionVersionId, TableDataVersionId, TableId, TableVersionId,
-    TransactionId,
+use td_objects::types::basic::{
+    BundleId, CollectionId, DataLocation, FunctionVersionId, Partition, StorageVersion,
+    TableDataVersionId, TableId, TableVersionId, TransactionId,
 };
-use td_objects::types::string::{DataLocation, Partition, StorageVersion};
 
 /// The [`StorageLocation`] creates storage URIS for the different types of data tabsdata stores.
 ///
@@ -469,11 +468,10 @@ impl VersionLocationBuilder for V2LocationBuilder {
 mod tests {
     use super::*;
     use td_error::TdError;
-    use td_objects::types::id::{
-        BundleId, CollectionId, FunctionVersionId, TableDataVersionId, TableId, TableVersionId,
-        TransactionId,
+    use td_objects::types::basic::{
+        BundleId, CollectionId, DataLocation, FunctionVersionId, Partition, TableDataVersionId,
+        TableId, TableVersionId, TransactionId,
     };
-    use td_objects::types::string::{DataLocation, Partition};
 
     #[test]
     fn test_data_location_current_version() {

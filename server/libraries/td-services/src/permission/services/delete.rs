@@ -9,7 +9,7 @@ use crate::permission::layers::{
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext, refresh_authz_context};
 use td_objects::dxo::crudl::{DeleteRequest, RequestContext};
-use td_objects::dxo::permission::defs::{PermissionDB, PermissionDBWithNames};
+use td_objects::dxo::permission::{PermissionDB, PermissionDBWithNames};
 use td_objects::rest_urls::RolePermissionParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, SecAdmin, System};
@@ -17,8 +17,9 @@ use td_objects::tower_service::from::{
     ExtractNameService, ExtractService, TryIntoService, UnwrapService, With,
 };
 use td_objects::tower_service::sql::{By, SqlDeleteService, SqlSelectService};
-use td_objects::types::id::{CollectionId, EntityId, PermissionId};
-use td_objects::types::id_name::{PermissionIdName, RoleIdName};
+use td_objects::types::basic::{
+    CollectionId, EntityId, PermissionId, PermissionIdName, RoleIdName,
+};
 use td_tower::default_services::{Do, Else, If, TransactionProvider, conditional};
 use td_tower::from_fn::from_fn;
 use td_tower::{layers, service};
@@ -78,16 +79,16 @@ mod tests {
     use td_database::sql::DbPool;
     use td_error::{TdError, assert_service_error};
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::dxo::permission::defs::PermissionCreate;
+    use td_objects::dxo::permission::PermissionCreate;
     use td_objects::rest_urls::RoleParam;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_permission::{get_permission, seed_permission};
     use td_objects::test_utils::seed_role::seed_role;
     use td_objects::tower_service::authz::AuthzError;
-    use td_objects::types::id::{AccessTokenId, RoleId, UserId};
-    use td_objects::types::id_name::IdOrName;
-    use td_objects::types::string::{CollectionName, Description, EntityName, RoleName};
-    use td_objects::types::typed_enum::PermissionType;
+    use td_objects::types::basic::{
+        AccessTokenId, CollectionName, Description, EntityName, IdOrName, PermissionType, RoleId,
+        RoleName, UserId,
+    };
     use td_security::{
         ENCODED_ID_CA_ALL_SEC_ADMIN, ENCODED_ID_SA_SYS_ADMIN, ENCODED_ID_SS_SEC_ADMIN,
     };

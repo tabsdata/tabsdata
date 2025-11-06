@@ -5,15 +5,14 @@
 use std::ops::Deref;
 use td_error::{TdError, td_error};
 use td_objects::dxo::crudl::RequestContext;
-use td_objects::dxo::dependency::defs::{DependencyDB, DependencyDBBuilder};
-use td_objects::dxo::function::defs::{FunctionDB, FunctionDBBuilder};
-use td_objects::dxo::table::defs::{TableDB, TableDBBuilder};
-use td_objects::dxo::trigger::defs::{TriggerDB, TriggerDBBuilder};
-use td_objects::types::id::{
-    DependencyVersionId, FunctionVersionId, TableVersionId, TriggerVersionId,
+use td_objects::dxo::dependency::{DependencyDB, DependencyDBBuilder};
+use td_objects::dxo::function::{FunctionDB, FunctionDBBuilder};
+use td_objects::dxo::table::{TableDB, TableDBBuilder};
+use td_objects::dxo::trigger::{TriggerDB, TriggerDBBuilder};
+use td_objects::types::basic::{
+    CollectionName, DependencyStatus, DependencyVersionId, FunctionStatus, FunctionVersionId,
+    TableName, TableStatus, TableVersionId, TriggerStatus, TriggerVersionId,
 };
-use td_objects::types::string::{CollectionName, TableName};
-use td_objects::types::typed_enum::{DependencyStatus, FunctionStatus, TableStatus, TriggerStatus};
 use td_tower::extractors::Input;
 
 #[td_error]

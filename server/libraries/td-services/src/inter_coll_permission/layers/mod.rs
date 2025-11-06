@@ -4,9 +4,8 @@
 
 use crate::inter_coll_permission::InterCollectionPermissionError;
 use td_error::TdError;
-use td_objects::dxo::inter_collection_permission::defs::InterCollectionPermissionDBWithNames;
-use td_objects::types::id::{CollectionId, ToCollectionId};
-use td_objects::types::id_name::{CollectionIdName, IdOrName};
+use td_objects::dxo::inter_collection_permission::InterCollectionPermissionDBWithNames;
+use td_objects::types::basic::{CollectionId, CollectionIdName, IdOrName, ToCollectionId};
 use td_tower::extractors::Input;
 
 pub async fn assert_collection_in_permission(

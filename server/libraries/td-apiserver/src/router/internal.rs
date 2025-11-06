@@ -15,7 +15,7 @@ mod routes {
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::dxo::worker::defs::CallbackRequest;
+    use td_objects::dxo::worker::CallbackRequest;
     use td_objects::rest_urls::{FunctionRunIdParam, UPDATE_FUNCTION_RUN};
     use td_services::execution::services::ExecutionServices;
     use tower::ServiceExt;

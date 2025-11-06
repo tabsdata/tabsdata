@@ -43,22 +43,19 @@ pub(crate) mod tests {
     use chrono::DateTime;
     use td_database::sql::DbPool;
     use td_error::TdError;
-    use td_objects::dxo::collection::defs::CollectionDB;
+    use td_objects::dxo::collection::CollectionDB;
     use td_objects::dxo::crudl::handle_sql_err;
-    use td_objects::dxo::dependency::defs::DependencyDBWithNames;
-    use td_objects::dxo::function::defs::{Function, FunctionDB, FunctionRegister, FunctionUpdate};
-    use td_objects::dxo::table::defs::{TableDB, TableDBWithNames};
-    use td_objects::dxo::trigger::defs::TriggerDBWithNames;
+    use td_objects::dxo::dependency::DependencyDBWithNames;
+    use td_objects::dxo::function::{Function, FunctionDB, FunctionRegister, FunctionUpdate};
+    use td_objects::dxo::table::{TableDB, TableDBWithNames};
+    use td_objects::dxo::trigger::TriggerDBWithNames;
     use td_objects::sql::cte::CteQueries;
     use td_objects::sql::{DaoQueries, SelectBy};
     use td_objects::table_ref::TableRef;
-    use td_objects::types::composed::{TableDependency, TableTrigger, TableTriggerDto};
-    use td_objects::types::id::UserId;
-    use td_objects::types::string::TableName;
-    use td_objects::types::timestamp::AtTime;
-    use td_objects::types::typed_enum::{
-        DependencyStatus, FunctionStatus, TableStatus, TriggerStatus,
+    use td_objects::types::basic::{
+        AtTime, DependencyStatus, FunctionStatus, TableName, TableStatus, TriggerStatus, UserId,
     };
+    use td_objects::types::composed::{TableDependency, TableTrigger, TableTriggerDto};
 
     pub async fn assert_register(
         db: &DbPool,

@@ -2,25 +2,19 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::dxo::dependency::defs::DependencyDBWithNames;
-use crate::dxo::function::defs::FunctionDBWithNames;
-use crate::dxo::table::defs::TableDBWithNames;
-use crate::dxo::trigger::defs::TriggerDBWithNames;
+use crate::dxo::dependency::DependencyDBWithNames;
+use crate::dxo::function::FunctionDBWithNames;
+use crate::dxo::table::TableDBWithNames;
+use crate::dxo::trigger::TriggerDBWithNames;
 use crate::execution::graph::{FunctionNode, TableNode};
+use crate::types::basic::{
+    AtTime, BundleId, CollectionId, CollectionName, DataLocation, Decorator, DependencyId,
+    DependencyPos, DependencyStatus, DependencyVersionId, Description, FunctionId, FunctionName,
+    FunctionRuntimeValues, FunctionStatus, FunctionVersionId, Snippet, StorageVersion, TableId,
+    TableName, TableStatus, TableVersionId, TriggerId, TriggerStatus, TriggerVersionId, UserId,
+    UserName,
+};
 use crate::types::composed::TableVersions;
-use crate::types::i32::DependencyPos;
-use crate::types::id::{
-    BundleId, CollectionId, DependencyId, DependencyVersionId, FunctionId, FunctionVersionId,
-    TableId, TableVersionId, TriggerId, TriggerVersionId, UserId,
-};
-use crate::types::string::{
-    CollectionName, DataLocation, Description, FunctionName, FunctionRuntimeValues, Snippet,
-    StorageVersion, TableName, UserName,
-};
-use crate::types::timestamp::AtTime;
-use crate::types::typed_enum::{
-    Decorator, DependencyStatus, FunctionStatus, TableStatus, TriggerStatus,
-};
 use std::collections::HashMap;
 use std::sync::LazyLock;
 

@@ -6,10 +6,10 @@ use crate::rest_urls::{
     AtTimeParam, CollectionParam, FileFormat, FileFormatParam, FunctionParam, SampleOffsetLenParam,
     SqlParam, TableParam,
 };
-use crate::types::i64::{SampleLen, SampleOffset};
-use crate::types::id_name::{CollectionIdName, FunctionIdName, TableIdName};
-use crate::types::string::{SchemaFieldName, SchemaFieldType, Sql};
-use crate::types::timestamp::AtTime;
+use crate::types::basic::{
+    AtTime, CollectionIdName, FunctionIdName, SampleLen, SampleOffset, SchemaFieldName,
+    SchemaFieldType, Sql, TableIdName,
+};
 use polars::prelude::Field;
 use td_error::TdError;
 

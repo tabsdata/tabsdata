@@ -9,15 +9,15 @@ use crate::function::layers::{
 };
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
-use td_objects::dxo::bundle::defs::BundleDB;
-use td_objects::dxo::collection::defs::CollectionDB;
+use td_objects::dxo::bundle::BundleDB;
+use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::{RequestContext, UpdateRequest};
-use td_objects::dxo::dependency::defs::DependencyDB;
-use td_objects::dxo::function::defs::{
+use td_objects::dxo::dependency::DependencyDB;
+use td_objects::dxo::function::{
     Function, FunctionBuilder, FunctionDB, FunctionDBBuilder, FunctionDBWithNames, FunctionUpdate,
 };
-use td_objects::dxo::table::defs::TableDB;
-use td_objects::dxo::trigger::defs::TriggerDBWithNames;
+use td_objects::dxo::table::TableDB;
+use td_objects::dxo::trigger::TriggerDBWithNames;
 use td_objects::rest_urls::FunctionParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev};
@@ -28,12 +28,11 @@ use td_objects::tower_service::from::{
 use td_objects::tower_service::sql::{
     By, SqlDeleteService, SqlSelectAllService, SqlSelectService, insert,
 };
-use td_objects::types::bool::ReuseFrozen;
+use td_objects::types::basic::{
+    AtTime, BundleId, CollectionId, CollectionIdName, CollectionName, DataLocation, FunctionId,
+    FunctionIdName, FunctionVersionId, ReuseFrozen, StorageVersion, TableNameDto,
+};
 use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
-use td_objects::types::id::{BundleId, CollectionId, FunctionId, FunctionVersionId};
-use td_objects::types::id_name::{CollectionIdName, FunctionIdName};
-use td_objects::types::string::{CollectionName, DataLocation, StorageVersion, TableNameDto};
-use td_objects::types::timestamp::AtTime;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -142,8 +141,8 @@ mod tests {
     use td_database::sql::DbPool;
     use td_error::TdError;
     use td_objects::dxo::crudl::handle_sql_err;
-    use td_objects::dxo::function::defs::FunctionRegister;
-    use td_objects::dxo::trigger::defs::TriggerDB;
+    use td_objects::dxo::function::FunctionRegister;
+    use td_objects::dxo::trigger::TriggerDB;
     use td_objects::rest_urls::CollectionParam;
     use td_objects::sql::SelectBy;
     use td_objects::sql::cte::CteQueries;
@@ -151,11 +150,10 @@ mod tests {
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_function::seed_function;
     use td_objects::test_utils::seed_inter_collection_permission::seed_inter_collection_permission;
-    use td_objects::types::id::{AccessTokenId, RoleId, ToCollectionId, UserId};
-    use td_objects::types::string::FunctionRuntimeValues;
-    use td_objects::types::string::TableName;
-    use td_objects::types::typed_enum::Decorator;
-    use td_objects::types::typed_enum::TableStatus;
+    use td_objects::types::basic::{
+        AccessTokenId, Decorator, FunctionRuntimeValues, RoleId, TableName, TableStatus,
+        ToCollectionId, UserId,
+    };
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -166,16 +164,16 @@ mod tests {
             build_dependency_versions, build_table_versions, build_tables_trigger_versions,
             build_trigger_versions,
         };
-        use td_objects::dxo::dependency::defs::DependencyDBBuilder;
-        use td_objects::dxo::inter_collection_access::defs::{
+        use td_objects::dxo::dependency::DependencyDBBuilder;
+        use td_objects::dxo::inter_collection_access::{
             InterCollectionAccess, InterCollectionAccessBuilder,
         };
-        use td_objects::dxo::table::defs::TableDBBuilder;
-        use td_objects::dxo::trigger::defs::{TriggerDB, TriggerDBBuilder, TriggerDBWithNames};
+        use td_objects::dxo::table::TableDBBuilder;
+        use td_objects::dxo::trigger::{TriggerDB, TriggerDBBuilder, TriggerDBWithNames};
         use td_objects::tower_service::authz::InterColl;
         use td_objects::tower_service::from::{ConvertIntoMapService, VecBuildService};
         use td_objects::tower_service::sql::insert_vec;
-        use td_objects::types::bool::ReuseFrozen;
+        use td_objects::types::basic::ReuseFrozen;
 
         use td_tower::metadata::type_of_val;
 

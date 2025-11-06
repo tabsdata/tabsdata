@@ -4,8 +4,7 @@
 
 use crate::sql::ListFilterGenerator;
 use crate::types::DataAccessObject;
-use crate::types::bool::Private;
-use crate::types::id::CollectionId;
+use crate::types::basic::{CollectionId, Private};
 use async_trait::async_trait;
 use sqlx::{QueryBuilder, Sqlite};
 use std::collections::HashSet;

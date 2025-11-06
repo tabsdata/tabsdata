@@ -13,20 +13,20 @@ use std::ops::Deref;
 use td_authz::Authz;
 use td_error::{TdError, td_error};
 use td_objects::dxo::crudl::RequestContext;
-use td_objects::dxo::dependency::defs::{DependencyDB, DependencyDBBuilder};
-use td_objects::dxo::function::defs::FunctionDB;
-use td_objects::dxo::inter_collection_access::defs::{
+use td_objects::dxo::dependency::{DependencyDB, DependencyDBBuilder};
+use td_objects::dxo::function::FunctionDB;
+use td_objects::dxo::inter_collection_access::{
     InterCollectionAccess, InterCollectionAccessBuilder,
 };
-use td_objects::dxo::table::defs::{TableDB, TableDBBuilder};
-use td_objects::dxo::trigger::defs::{TriggerDB, TriggerDBBuilder};
+use td_objects::dxo::table::{TableDB, TableDBBuilder};
+use td_objects::dxo::trigger::{TriggerDB, TriggerDBBuilder};
 use td_objects::tower_service::authz::InterColl;
 use td_objects::tower_service::from::{
     ConvertIntoMapService, TryIntoService, UpdateService, VecBuildService, With,
 };
 use td_objects::tower_service::sql::insert_vec;
+use td_objects::types::basic::{CollectionName, TableNameDto};
 use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
-use td_objects::types::string::{CollectionName, TableNameDto};
 use td_tower::extractors::Input;
 use td_tower::from_fn::from_fn;
 use td_tower::{layer, layers};

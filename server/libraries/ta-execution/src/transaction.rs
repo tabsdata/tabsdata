@@ -6,11 +6,10 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::str::FromStr;
 use td_error::{TdError, td_error};
-use td_objects::dxo::execution::defs::ExecutionDB;
-use td_objects::dxo::transaction::defs::TransactionValue;
+use td_objects::dxo::execution::ExecutionDB;
+use td_objects::dxo::transaction::TransactionValue;
 use td_objects::execution::graph::FunctionNode;
-use td_objects::types::id::TransactionId;
-use td_objects::types::string::{TransactionByStr, TransactionKey};
+use td_objects::types::basic::{TransactionByStr, TransactionId, TransactionKey};
 
 #[td_error]
 pub enum TransactionMapperError {
@@ -86,7 +85,7 @@ impl<T: TransactionMapper> TransactionMap<T> {
 mod tests {
     use super::*;
     use crate::test_utils::transaction::TestTransactionBy;
-    use td_objects::dxo::execution::defs::ExecutionDB;
+    use td_objects::dxo::execution::ExecutionDB;
     use td_objects::test_utils::graph::{FUNCTION_NAMES, function_node};
 
     fn dummy_execution() -> ExecutionDB {

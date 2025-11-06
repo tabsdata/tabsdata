@@ -4,7 +4,7 @@
 
 use ta_services::factory::service_factory;
 use td_objects::dxo::crudl::{ListRequest, ListResponse};
-use td_objects::dxo::synchrotron::defs::SynchrotronResponse;
+use td_objects::dxo::synchrotron::SynchrotronResponse;
 use td_objects::sql::{DaoQueries, NoListFilter};
 use td_objects::tower_service::sql::{By, SqlListService};
 use td_tower::default_services::ConnectionProvider;
@@ -38,14 +38,14 @@ mod tests {
     use td_database::sql::DbPool;
     use td_error::TdError;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
-    use td_objects::dxo::function::defs::FunctionRegister;
+    use td_objects::dxo::function::FunctionRegister;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_execution::seed_execution;
     use td_objects::test_utils::seed_function::seed_function;
     use td_objects::test_utils::seed_transaction::seed_transaction;
-    use td_objects::types::id::{AccessTokenId, BundleId, RoleId, UserId};
-    use td_objects::types::string::{CollectionName, TransactionKey};
-    use td_objects::types::typed_enum::Decorator;
+    use td_objects::types::basic::{
+        AccessTokenId, BundleId, CollectionName, Decorator, RoleId, TransactionKey, UserId,
+    };
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]

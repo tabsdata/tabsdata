@@ -3,7 +3,7 @@
 //
 
 use crate::table_ref::{TableRef, Version, VersionedTableRef, Versions};
-use crate::types::string::CollectionName;
+use crate::types::basic::CollectionName;
 use constcat::concat;
 use regex::Regex;
 use std::sync::LazyLock;
@@ -282,7 +282,7 @@ pub fn parse_email(s: impl Into<String>) -> Result<String, TdError> {
 mod tests {
     use super::*;
     use crate::table_ref::Version;
-    use crate::types::string::TableNameDto;
+    use crate::types::basic::TableNameDto;
     use td_common::id;
 
     #[test]

@@ -4,8 +4,8 @@
 
 use crate::user::UserError;
 use td_error::TdError;
-use td_objects::dxo::user::defs::UserDB;
-use td_objects::types::id::UserId;
+use td_objects::dxo::user::UserDB;
+use td_objects::types::basic::UserId;
 use td_tower::extractors::Input;
 
 pub async fn delete_user_validate(

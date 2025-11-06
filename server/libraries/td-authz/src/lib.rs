@@ -10,7 +10,7 @@ use std::sync::Arc;
 use td_common::provider::{CachedProvider, Provider};
 use td_error::TdError;
 use td_objects::tower_service::authz::{AuthzContextT, NoPermissions, Permission};
-use td_objects::types::id::{CollectionId, RoleId, ToCollectionId};
+use td_objects::types::basic::{CollectionId, RoleId, ToCollectionId};
 use td_tower::extractors::{Connection, IntoMutSqlConnection, SrvCtx};
 
 mod sql;

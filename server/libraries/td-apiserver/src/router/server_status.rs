@@ -57,7 +57,7 @@ mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::system::{ApiStatus, HealthStatus};
     use td_objects::rest_urls::SERVER_STATUS;
-    use td_objects::types::id::{AccessTokenId, RoleId, UserId};
+    use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
     use td_services::{Context, Services};
     use tower::ServiceExt;
 

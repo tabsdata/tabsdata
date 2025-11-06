@@ -47,20 +47,19 @@ mod tests {
     use td_database::sql::DbPool;
     use td_error::TdError;
     use td_objects::dxo::crudl::{RequestContext, handle_sql_err};
-    use td_objects::dxo::execution::defs::ExecutionRequest;
-    use td_objects::dxo::function::defs::FunctionRegister;
+    use td_objects::dxo::execution::ExecutionRequest;
+    use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::request::FunctionInput;
-    use td_objects::dxo::worker::defs::WorkerDB;
+    use td_objects::dxo::worker::WorkerDB;
     use td_objects::rest_urls::FunctionParam;
     use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_function::seed_function;
-    use td_objects::types::composed::TableDependencyDto;
-    use td_objects::types::id::{AccessTokenId, BundleId, RoleId, UserId, WorkerId};
-    use td_objects::types::string::{
-        CollectionName, ExecutionName, FunctionRuntimeValues, TableNameDto,
+    use td_objects::types::basic::{
+        AccessTokenId, BundleId, CollectionName, Decorator, ExecutionName, FunctionRuntimeValues,
+        RoleId, TableNameDto, UserId, WorkerId, WorkerMessageStatus,
     };
-    use td_objects::types::typed_enum::{Decorator, WorkerMessageStatus};
+    use td_objects::types::composed::TableDependencyDto;
     use td_tower::ctx_service::RawOneshot;
     use tower::ServiceExt;
 

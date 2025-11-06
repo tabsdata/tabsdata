@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::dxo::table::defs::TableDBRead;
+use crate::dxo::table::TableDBRead;
 use crate::parse::{
     DATA_LOCATION_REGEX, parse_collection, parse_email, parse_entity, parse_execution,
     parse_function, parse_role, parse_table, parse_user,

@@ -4,16 +4,15 @@
 
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
-use td_objects::dxo::collection::defs::CollectionDB;
+use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::{ListRequest, ListResponse, RequestContext};
-use td_objects::dxo::inter_collection_permission::defs::InterCollectionPermission;
+use td_objects::dxo::inter_collection_permission::InterCollectionPermission;
 use td_objects::rest_urls::CollectionParam;
 use td_objects::sql::{DaoQueries, NoListFilter};
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, SecAdmin};
 use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlListService, SqlSelectService};
-use td_objects::types::id::CollectionId;
-use td_objects::types::id_name::CollectionIdName;
+use td_objects::types::basic::{CollectionId, CollectionIdName};
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -55,8 +54,7 @@ mod tests {
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_inter_collection_permission::seed_inter_collection_permission;
     use td_objects::tower_service::authz::AuthzError;
-    use td_objects::types::id::{AccessTokenId, RoleId, UserId};
-    use td_objects::types::string::CollectionName;
+    use td_objects::types::basic::{AccessTokenId, CollectionName, RoleId, UserId};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]

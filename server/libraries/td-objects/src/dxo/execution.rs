@@ -3,25 +3,18 @@
 //
 
 #[td_type::dxo]
-pub mod defs {
+mod definitions {
     use crate::dxo::crudl::RequestContext;
-    use crate::dxo::function::defs::Function;
-    use crate::dxo::function::defs::FunctionDBWithNames;
-    use crate::dxo::table_data_version::defs::ExecutionTableDataVersionRead;
-    use crate::execution::graph::GraphEdge;
-    use crate::execution::graph::{FunctionNode, TableNode};
+    use crate::dxo::function::{Function, FunctionDBWithNames};
+    use crate::dxo::table_data_version::ExecutionTableDataVersionRead;
+    use crate::execution::graph::{FunctionNode, GraphEdge, TableNode};
+    use crate::types::basic::{
+        AtTime, CollectionId, CollectionName, Dot, ExecutionId, ExecutionName, ExecutionStatus,
+        FunctionName, FunctionRunStatus, FunctionVersionId, StatusCount, TableDataVersionId,
+        TableName, TableVersionId, TransactionId, TriggeredOn, UserId, UserName,
+    };
     use crate::types::composed::TableVersions;
-    use crate::types::i32::StatusCount;
-    use crate::types::id::{
-        CollectionId, ExecutionId, FunctionVersionId, TableDataVersionId, TableVersionId,
-        TransactionId, UserId,
-    };
-    use crate::types::other::FunctionRunStatusCount;
-    use crate::types::string::{
-        CollectionName, Dot, ExecutionName, FunctionName, TableName, UserName,
-    };
-    use crate::types::timestamp::{AtTime, TriggeredOn};
-    use crate::types::typed_enum::{ExecutionStatus, FunctionRunStatus};
+    use crate::types::status_count::FunctionRunStatusCount;
     use std::collections::{HashMap, HashSet};
 
     #[td_type::Dto]

@@ -20,8 +20,7 @@ use std::marker::PhantomData;
 use std::path::PathBuf;
 use std::time::Duration;
 use td_common::env::get_current_dir;
-use td_common::manifest::Inf;
-use td_common::manifest::WORKER_INF_FILE;
+use td_common::manifest::{Inf, WORKER_INF_FILE};
 use td_common::status::ExitStatus;
 use tokio::runtime::Runtime;
 use tokio::time::sleep;
@@ -319,8 +318,7 @@ pub fn parse_extra_arguments(
 
 #[cfg(test)]
 mod tests {
-    use crate::launcher::cli::parse_extra_arguments;
-    use crate::launcher::cli::{Cli, CliParser, NoConfig, NoParams, Params};
+    use crate::launcher::cli::{Cli, CliParser, NoConfig, NoParams, Params, parse_extra_arguments};
     use crate::launcher::config::Config;
     use clap::Parser;
     use clap::error::Error;

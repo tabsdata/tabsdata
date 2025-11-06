@@ -1,8 +1,8 @@
 use ta_services::factory::service_factory;
-use td_objects::dxo::auth::defs::UserInfoUserRoleDB;
+use td_objects::dxo::auth::UserInfoUserRoleDB;
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
-use td_objects::dxo::permission::defs::{Permission, PermissionBuilder, PermissionDBWithNames};
-use td_objects::dxo::user::defs::{
+use td_objects::dxo::permission::{Permission, PermissionBuilder, PermissionDBWithNames};
+use td_objects::dxo::user::{
     UserDBWithNames, UserInfo, UserInfoBuilder, UserInfoRoleIdName, UserInfoRoleIdNameBuilder,
 };
 //
@@ -14,7 +14,7 @@ use td_objects::tower_service::from::{
     VecBuildService, With,
 };
 use td_objects::tower_service::sql::{By, SqlSelectAllService, SqlSelectService};
-use td_objects::types::id::{RoleId, UserId};
+use td_objects::types::basic::{RoleId, UserId};
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -65,9 +65,9 @@ mod tests {
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::TdError;
-    use td_objects::dxo::auth::defs::Login;
+    use td_objects::dxo::auth::Login;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::types::string::{Password, RoleName, UserName};
+    use td_objects::types::basic::{Password, RoleName, UserName};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]

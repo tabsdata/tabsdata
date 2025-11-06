@@ -8,8 +8,7 @@ use crate::status::error_status::ErrorStatus;
 use axum::extract::FromRequest;
 use axum::extract::rejection::JsonRejection;
 use axum::response::{IntoResponse, Response};
-use td_error::TdError;
-use td_error::td_error;
+use td_error::{TdError, td_error};
 use tracing::error;
 
 #[td_error]

@@ -7,10 +7,10 @@ use crate::execution::layers::update_status::{
 };
 use ta_services::factory::service_factory;
 use td_objects::dxo::crudl::UpdateRequest;
-use td_objects::dxo::function_run::defs::{
+use td_objects::dxo::function_run::{
     FunctionRunDB, UpdateFunctionRunDB, UpdateFunctionRunDBBuilder,
 };
-use td_objects::dxo::worker::defs::{
+use td_objects::dxo::worker::{
     CallbackRequest, UpdateWorkerDB, UpdateWorkerDBBuilder, UpdateWorkerExecution,
 };
 use td_objects::rest_urls::FunctionRunIdParam;
@@ -19,7 +19,7 @@ use td_objects::tower_service::from::{
     BuildService, ExtractDataService, ExtractNameService, ExtractService, TryIntoService, With,
 };
 use td_objects::tower_service::sql::{By, SqlSelectAllService};
-use td_objects::types::id::FunctionRunId;
+use td_objects::types::basic::FunctionRunId;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -71,23 +71,22 @@ mod tests {
     };
     use ta_services::service::TdService;
     use td_common::execution_status::WorkerCallbackStatus;
-    use td_common::server::ResponseMessagePayloadBuilder;
-    use td_common::server::{MessageAction, WorkerClass};
+    use td_common::server::{MessageAction, ResponseMessagePayloadBuilder, WorkerClass};
     use td_common::status::ExitStatus;
     use td_database::sql::DbPool;
     use td_error::TdError;
     use td_objects::dxo::crudl::{RequestContext, handle_sql_err};
-    use td_objects::dxo::function_run::defs::FunctionRunDBWithNames;
+    use td_objects::dxo::function_run::FunctionRunDBWithNames;
     use td_objects::dxo::request::FunctionOutput;
     use td_objects::dxo::request::v2::{FunctionOutputV2, TableInfo, WrittenTableV2};
-    use td_objects::dxo::table_data_version::defs::TableDataVersionDBWithNames;
+    use td_objects::dxo::table_data_version::TableDataVersionDBWithNames;
     use td_objects::sql::SelectBy;
+    use td_objects::types::basic::{
+        AccessTokenId, CollectionName, ColumnCount, ExecutionStatus, FunctionName,
+        FunctionRunStatus, RoleId, RowCount, SchemaHash, TableName, TableNameDto,
+        TransactionStatus, UserId, WorkerId,
+    };
     use td_objects::types::composed::TableDependencyDto;
-    use td_objects::types::i64::{ColumnCount, RowCount};
-    use td_objects::types::id::{AccessTokenId, RoleId, UserId, WorkerId};
-    use td_objects::types::string::{CollectionName, FunctionName, TableNameDto};
-    use td_objects::types::string::{SchemaHash, TableName};
-    use td_objects::types::typed_enum::{ExecutionStatus, FunctionRunStatus, TransactionStatus};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]

@@ -3,19 +3,17 @@
 //
 
 #[td_type::dxo]
-pub mod defs {
+mod definitions {
     use crate::dxo::crudl::RequestContext;
-    use crate::types::bool::ReuseFrozen;
+    use crate::types::basic::{
+        AtTime, BundleId, CollectionId, CollectionName, Connector, DataLocation, Decorator,
+        Description, FunctionId, FunctionName, FunctionRuntimeValues, FunctionStatus,
+        FunctionVersionId, ReuseFrozen, Snippet, StorageVersion, TableName, TableNameDto, UserId,
+        UserName,
+    };
     use crate::types::composed::{
         TableDependency, TableDependencyDto, TableTrigger, TableTriggerDto,
     };
-    use crate::types::id::{BundleId, CollectionId, FunctionId, FunctionVersionId, UserId};
-    use crate::types::string::{
-        CollectionName, Connector, DataLocation, Description, FunctionName, FunctionRuntimeValues,
-        Snippet, StorageVersion, TableName, TableNameDto, UserName,
-    };
-    use crate::types::timestamp::AtTime;
-    use crate::types::typed_enum::{Decorator, FunctionStatus};
 
     #[td_type::Dto]
     pub struct FunctionRegister {

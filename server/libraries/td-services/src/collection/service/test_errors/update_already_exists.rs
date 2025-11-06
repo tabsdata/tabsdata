@@ -6,13 +6,12 @@ use crate::collection::service::update::UpdateCollectionService;
 use ta_services::service::TdService;
 use td_database::sql::DbPool;
 use td_error::assert_service_error;
-use td_objects::dxo::collection::defs::CollectionUpdate;
+use td_objects::dxo::collection::CollectionUpdate;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::rest_urls::CollectionParam;
 use td_objects::test_utils::seed_collection::seed_collection;
 use td_objects::tower_service::sql::SqlError;
-use td_objects::types::id::{AccessTokenId, RoleId, UserId};
-use td_objects::types::string::CollectionName;
+use td_objects::types::basic::{AccessTokenId, CollectionName, RoleId, UserId};
 
 #[td_test::test(sqlx)]
 #[tokio::test]

@@ -3,14 +3,12 @@
 //
 
 #[td_type::dxo]
-pub mod defs {
-    use crate::types::i32::{DependencyPos, InputIdx, VersionPos};
-    use crate::types::id::{
-        CollectionId, ExecutionId, FunctionRunId, FunctionVersionId, RequirementId,
-        TableDataVersionId, TableId, TableVersionId, TransactionId,
+mod definitions {
+    use crate::types::basic::{
+        CollectionId, CollectionName, DependencyPos, ExecutionId, FunctionName, FunctionRunId,
+        FunctionRunStatus, FunctionVersionId, InputIdx, RequirementId, TableDataVersionId, TableId,
+        TableName, TableVersionId, TransactionId, VersionPos,
     };
-    use crate::types::string::{CollectionName, FunctionName, TableName};
-    use crate::types::typed_enum::FunctionRunStatus;
 
     #[td_type::Dao]
     #[dao(

@@ -18,7 +18,7 @@ mod routes {
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
-    use td_objects::dxo::role::defs::{Role, RoleCreate, RoleUpdate};
+    use td_objects::dxo::role::{Role, RoleCreate, RoleUpdate};
     use td_objects::rest_urls::{
         CREATE_ROLE, DELETE_ROLE, GET_ROLE, LIST_ROLES, RoleParam, UPDATE_ROLE,
     };

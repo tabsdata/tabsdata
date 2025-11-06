@@ -5,12 +5,10 @@
 use std::ops::Deref;
 use td_error::{TdError, td_error};
 use td_objects::dxo::crudl::handle_sql_err;
-use td_objects::dxo::function::defs::{FunctionDBWithNames, FunctionUpdate};
+use td_objects::dxo::function::{FunctionDBWithNames, FunctionUpdate};
 use td_objects::sql::DaoQueries;
 use td_objects::sql::cte::CteQueries;
-use td_objects::types::id::CollectionId;
-use td_objects::types::string::{CollectionName, FunctionName};
-use td_objects::types::timestamp::AtTime;
+use td_objects::types::basic::{AtTime, CollectionId, CollectionName, FunctionName};
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
 
 #[td_error]

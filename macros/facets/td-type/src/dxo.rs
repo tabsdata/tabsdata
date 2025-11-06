@@ -54,13 +54,15 @@ pub fn dxo(_attr: TokenStream, item: TokenStream) -> TokenStream {
     }
 
     // Generate the output module, keeping non-struct items intact
-    let vis = &input_mod.vis;
     let mod_token = &input_mod.mod_token;
     let input_mod_ident = &input_mod.ident;
+
+    // Making it always private, and re-exporting contents.
     let expanded = quote! {
-        #vis #mod_token #input_mod_ident {
+        #mod_token #input_mod_ident {
             #(#items)*
         }
+        pub use #input_mod_ident::*;
     };
     TokenStream::from(expanded)
 }

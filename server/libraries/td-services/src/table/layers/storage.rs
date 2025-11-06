@@ -6,7 +6,7 @@ use polars::prelude::PolarsError;
 use std::borrow::Cow;
 use td_error::{TdError, td_error};
 use td_objects::dxo::crudl::handle_sql_err;
-use td_objects::dxo::table_data_version::defs::TableDataVersionDBWithNames;
+use td_objects::dxo::table_data_version::TableDataVersionDBWithNames;
 use td_objects::sql::{DaoQueries, SelectBy};
 use td_storage::SPath;
 use td_storage::location::StorageLocation;
@@ -72,14 +72,14 @@ mod tests {
     use std::sync::Arc;
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
-    use td_objects::dxo::collection::defs::CollectionDB;
+    use td_objects::dxo::collection::CollectionDB;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::dxo::execution::defs::ExecutionDB;
-    use td_objects::dxo::function::defs::{FunctionDB, FunctionRegister};
-    use td_objects::dxo::function_run::defs::FunctionRunDB;
-    use td_objects::dxo::table::defs::TableDB;
-    use td_objects::dxo::table_data_version::defs::TableDataVersionDB;
-    use td_objects::dxo::transaction::defs::TransactionDB;
+    use td_objects::dxo::execution::ExecutionDB;
+    use td_objects::dxo::function::{FunctionDB, FunctionRegister};
+    use td_objects::dxo::function_run::FunctionRunDB;
+    use td_objects::dxo::table::TableDB;
+    use td_objects::dxo::table_data_version::TableDataVersionDB;
+    use td_objects::dxo::transaction::TransactionDB;
     use td_objects::rest_urls::FunctionParam;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_execution::seed_execution;
@@ -89,9 +89,10 @@ mod tests {
         seed_table_data_version, seed_table_data_version_with_data,
     };
     use td_objects::test_utils::seed_transaction::seed_transaction;
-    use td_objects::types::id::{AccessTokenId, BundleId, RoleId, UserId};
-    use td_objects::types::string::{CollectionName, TableName, TableNameDto, TransactionKey};
-    use td_objects::types::typed_enum::{Decorator, FunctionRunStatus};
+    use td_objects::types::basic::{
+        AccessTokenId, BundleId, CollectionName, Decorator, FunctionRunStatus, RoleId, TableName,
+        TableNameDto, TransactionKey, UserId,
+    };
     use td_tower::ctx_service::RawOneshot;
     use td_tower::extractors::ConnectionType;
 

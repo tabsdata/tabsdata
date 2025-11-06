@@ -2,17 +2,15 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use std::env;
-use std::process;
 use std::sync::Arc;
+use std::{env, process};
 use td_apiserver::apiserver::ApiServerInstanceBuilder;
 use td_apiserver::config::{Config, DbSchema, Params};
 use td_apiserver::scheduler_server::SchedulerBuilder;
-use td_common::about;
 use td_common::attach::attach;
-use td_common::logging;
 use td_common::server::FileWorkerMessageQueue;
 use td_common::status::ExitStatus;
+use td_common::{about, logging};
 use td_database::sql::DbError;
 use td_objects::sql::DaoQueries;
 use td_process::launcher::cli::Cli;

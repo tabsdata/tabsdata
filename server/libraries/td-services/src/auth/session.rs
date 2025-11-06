@@ -9,12 +9,10 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use td_common::provider::{CachedProvider, Provider};
 use td_error::{TdError, td_error};
-use td_objects::dxo::auth::defs::{SessionDB, SessionDBWithNames};
+use td_objects::dxo::auth::{SessionDB, SessionDBWithNames};
 use td_objects::dxo::crudl::{handle_delete_error, handle_select_error};
 use td_objects::sql::{DaoQueries, DeleteBy, SelectBy};
-use td_objects::types::id::AccessTokenId;
-use td_objects::types::timestamp::AtTime;
-use td_objects::types::typed_enum::SessionStatus;
+use td_objects::types::basic::{AccessTokenId, AtTime, SessionStatus};
 use tracing::debug;
 
 pub type Session = SessionDBWithNames;

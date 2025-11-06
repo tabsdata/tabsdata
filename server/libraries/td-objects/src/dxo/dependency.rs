@@ -3,18 +3,14 @@
 //
 
 #[td_type::dxo]
-pub mod defs {
+mod definitions {
     use crate::dxo::crudl::RequestContext;
-    use crate::dxo::function::defs::FunctionDB;
-    use crate::types::bool::System;
-    use crate::types::composed::TableVersions;
-    use crate::types::i32::DependencyPos;
-    use crate::types::id::{
-        CollectionId, DependencyId, DependencyVersionId, FunctionId, TableId, UserId,
+    use crate::dxo::function::FunctionDB;
+    use crate::types::basic::{
+        AtTime, CollectionId, CollectionName, DependencyId, DependencyPos, DependencyStatus,
+        DependencyVersionId, FunctionId, System, TableId, UserId,
     };
-    use crate::types::string::CollectionName;
-    use crate::types::timestamp::AtTime;
-    use crate::types::typed_enum::DependencyStatus;
+    use crate::types::composed::TableVersions;
 
     #[td_type::Dao]
     #[dao(

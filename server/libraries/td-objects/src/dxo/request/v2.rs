@@ -3,15 +3,11 @@
 //
 
 use crate::dxo::request::{Location, Locations};
-use crate::types::i32::{DependencyPos, InputIdx, TableFunctionParamPos, VersionPos};
-use crate::types::i64::{ColumnCount, RowCount, TriggeredOnMillis};
-use crate::types::id::{
-    CollectionId, ExecutionId, FunctionRunId, FunctionVersionId, TableDataVersionId, TableId,
-    TableVersionId, TransactionId,
-};
-use crate::types::string::{
-    CollectionName, ExecutionName, FunctionName, PartitionFileName, PartitionName, SchemaHash,
-    TableName,
+use crate::types::basic::{
+    CollectionId, CollectionName, ColumnCount, DependencyPos, ExecutionId, ExecutionName,
+    FunctionName, FunctionRunId, FunctionVersionId, InputIdx, PartitionFileName, PartitionName,
+    RowCount, SchemaHash, TableDataVersionId, TableFunctionParamPos, TableId, TableName,
+    TableVersionId, TransactionId, TriggeredOnMillis, VersionPos,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -222,9 +218,8 @@ pub enum WrittenTableV2 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dxo::request::FunctionOutput;
-    use crate::dxo::request::{EnvPrefix, FunctionInput};
-    use crate::types::id::FunctionId;
+    use crate::dxo::request::{EnvPrefix, FunctionInput, FunctionOutput};
+    use crate::types::basic::FunctionId;
     use itertools::Itertools;
     use std::collections::HashSet;
     use td_error::TdError;

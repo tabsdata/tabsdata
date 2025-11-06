@@ -6,15 +6,14 @@ use crate::execution::layers::update_status::update_function_run_status;
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
 use td_objects::dxo::crudl::{RequestContext, UpdateRequest};
-use td_objects::dxo::execution::defs::ExecutionDB;
-use td_objects::dxo::function_run::defs::{FunctionRunDB, UpdateFunctionRunDB};
+use td_objects::dxo::execution::ExecutionDB;
+use td_objects::dxo::function_run::{FunctionRunDB, UpdateFunctionRunDB};
 use td_objects::rest_urls::ExecutionParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollExec};
 use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlSelectAllService, SqlSelectService};
-use td_objects::types::id::{CollectionId, ExecutionId};
-use td_objects::types::id_name::ExecutionIdName;
+use td_objects::types::basic::{CollectionId, ExecutionId, ExecutionIdName};
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -59,10 +58,11 @@ mod tests {
     use td_database::sql::DbPool;
     use td_error::TdError;
     use td_objects::dxo::crudl::RequestContext;
+    use td_objects::types::basic::{
+        AccessTokenId, CollectionName, ExecutionStatus, FunctionName, FunctionRunStatus, RoleId,
+        TableNameDto, TransactionStatus, UserId,
+    };
     use td_objects::types::composed::TableDependencyDto;
-    use td_objects::types::id::{AccessTokenId, RoleId, UserId};
-    use td_objects::types::string::{CollectionName, FunctionName, TableNameDto};
-    use td_objects::types::typed_enum::{ExecutionStatus, FunctionRunStatus, TransactionStatus};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]

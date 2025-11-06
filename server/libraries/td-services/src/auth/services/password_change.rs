@@ -10,19 +10,19 @@ use crate::auth::layers::refresh_sessions::refresh_sessions;
 use crate::auth::session::Sessions;
 use ta_services::factory::service_factory;
 use td_error::TdError;
-use td_objects::dxo::auth::defs::{
+use td_objects::dxo::auth::{
     PasswordChange, SessionDB, SessionPasswordChangeDB, SessionPasswordChangeDBBuilder,
 };
-use td_objects::dxo::user::defs::{UserDB, UserDBBuilder};
+use td_objects::dxo::user::{UserDB, UserDBBuilder};
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::from::{
     BuildService, DefaultService, ExtractService, SetService, TryIntoService, With,
 };
 use td_objects::tower_service::sql::{By, SqlSelectService, SqlUpdateService};
-use td_objects::types::bool::PasswordMustChange;
-use td_objects::types::id::UserId;
-use td_objects::types::string::{NewPassword, OldPassword, PasswordHash, UserName};
-use td_objects::types::timestamp::{AtTime, PasswordChangeTime};
+use td_objects::types::basic::{
+    AtTime, NewPassword, OldPassword, PasswordChangeTime, PasswordHash, PasswordMustChange, UserId,
+    UserName,
+};
 use td_security::config::PasswordHashingConfig;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
@@ -96,9 +96,8 @@ mod tests {
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::assert_service_error;
-    use td_objects::dxo::auth::defs::{Login, PasswordChange};
-    use td_objects::types::string::{Password, RoleName};
-    use td_objects::types::typed_enum::SessionStatus;
+    use td_objects::dxo::auth::{Login, PasswordChange};
+    use td_objects::types::basic::{Password, RoleName, SessionStatus};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -110,7 +109,7 @@ mod tests {
         use crate::auth::layers::create_password_hash::create_password_hash;
         use crate::auth::layers::refresh_sessions::refresh_sessions;
         use crate::auth::services::password_change::PasswordChangeService;
-        use td_objects::dxo::auth::defs::{
+        use td_objects::dxo::auth::{
             PasswordChange, SessionDB, SessionPasswordChangeDB, SessionPasswordChangeDBBuilder,
         };
         use td_objects::tower_service::from::{

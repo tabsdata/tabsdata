@@ -6,12 +6,12 @@ use crate::function::layers::read::vec_create_table_dependency;
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
-use td_objects::dxo::dependency::defs::DependencyDBRead;
-use td_objects::dxo::function::defs::{
+use td_objects::dxo::dependency::DependencyDBRead;
+use td_objects::dxo::function::{
     Function, FunctionBuilder, FunctionDBWithNames, FunctionWithTables, FunctionWithTablesBuilder,
 };
-use td_objects::dxo::table::defs::{TableDBRead, TableDBWithNames};
-use td_objects::dxo::trigger::defs::TriggerDBWithNames;
+use td_objects::dxo::table::{TableDBRead, TableDBWithNames};
+use td_objects::dxo::trigger::TriggerDBWithNames;
 use td_objects::rest_urls::FunctionParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead};
@@ -20,11 +20,10 @@ use td_objects::tower_service::from::{
     SetService, TryIntoService, With, combine,
 };
 use td_objects::tower_service::sql::{By, SqlFindService, SqlSelectAllService, SqlSelectService};
+use td_objects::types::basic::{
+    AtTime, CollectionId, CollectionIdName, FunctionId, FunctionIdName, TableId, TableName,
+};
 use td_objects::types::composed::{TableDependency, TableTrigger};
-use td_objects::types::id::{CollectionId, FunctionId, TableId};
-use td_objects::types::id_name::{CollectionIdName, FunctionIdName};
-use td_objects::types::string::TableName;
-use td_objects::types::timestamp::AtTime;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -98,15 +97,14 @@ mod tests {
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::TdError;
-    use td_objects::dxo::function::defs::FunctionRegister;
+    use td_objects::dxo::function::FunctionRegister;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_function::seed_function;
-    use td_objects::types::composed::{TableDependency, TableDependencyDto};
-    use td_objects::types::id::{AccessTokenId, BundleId, RoleId, UserId};
-    use td_objects::types::string::{
-        CollectionName, FunctionRuntimeValues, TableNameDto, UserName,
+    use td_objects::types::basic::{
+        AccessTokenId, BundleId, CollectionName, Decorator, FunctionRuntimeValues, RoleId,
+        TableNameDto, UserId, UserName,
     };
-    use td_objects::types::typed_enum::Decorator;
+    use td_objects::types::composed::{TableDependency, TableDependencyDto};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]

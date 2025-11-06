@@ -4,7 +4,7 @@
 
 use crate::role::RoleError;
 use td_error::TdError;
-use td_objects::dxo::role::defs::RoleDBWithNames;
+use td_objects::dxo::role::RoleDBWithNames;
 use td_tower::extractors::Input;
 
 pub async fn assert_not_fixed(Input(role): Input<RoleDBWithNames>) -> Result<(), TdError> {

@@ -5,8 +5,8 @@
 use std::collections::HashMap;
 use std::ops::Deref;
 use td_error::TdError;
-use td_objects::dxo::dependency::defs::DependencyDBRead;
-use td_objects::dxo::table::defs::TableDBWithNames;
+use td_objects::dxo::dependency::DependencyDBRead;
+use td_objects::dxo::table::TableDBWithNames;
 use td_objects::table_ref::VersionedTableRef;
 use td_objects::types::composed::TableDependency;
 use td_tower::extractors::Input;

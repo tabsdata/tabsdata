@@ -9,16 +9,16 @@ use crate::execution::layers::template::{
 };
 use ta_services::factory::service_factory;
 use td_objects::dxo::crudl::ReadRequest;
-use td_objects::dxo::execution::defs::{ExecutionDB, ExecutionResponse};
-use td_objects::dxo::function::defs::FunctionDBWithNames;
-use td_objects::dxo::transaction::defs::TransactionDB;
+use td_objects::dxo::execution::{ExecutionDB, ExecutionResponse};
+use td_objects::dxo::function::FunctionDBWithNames;
+use td_objects::dxo::transaction::TransactionDB;
 use td_objects::rest_urls::ExecutionParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::from::{ExtractNameService, ExtractService, TryIntoService, With};
 use td_objects::tower_service::sql::{By, SqlSelectAllService, SqlSelectService};
-use td_objects::types::id::{ExecutionId, FunctionId, FunctionVersionId};
-use td_objects::types::id_name::ExecutionIdName;
-use td_objects::types::timestamp::{AtTime, TriggeredOn};
+use td_objects::types::basic::{
+    AtTime, ExecutionId, ExecutionIdName, FunctionId, FunctionVersionId, TriggeredOn,
+};
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -71,7 +71,7 @@ mod tests {
     use td_database::sql::DbPool;
     use td_error::TdError;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::types::id::{AccessTokenId, RoleId, UserId};
+    use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]

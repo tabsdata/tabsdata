@@ -5,8 +5,8 @@
 use crate::transporter::common::{parse_store, tweak_store};
 use crate::transporter::error::TransporterError;
 use bytes::Bytes;
-use object_store::path::Path;
-use object_store::{ObjectStore, PutPayload, path::Path as ObjectPath};
+use object_store::path::{Path, Path as ObjectPath};
+use object_store::{ObjectStore, PutPayload};
 use polars::prelude::{PlPath, PolarsError, PolarsResult, SinkTarget, SpecialEq};
 use polars_io::prelude::sync_on_close::SyncOnCloseType;
 use polars_io::utils::file::DynWriteable;

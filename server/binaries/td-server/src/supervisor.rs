@@ -4,15 +4,13 @@
 
 use clap::Parser;
 use path_slash::PathBufExt;
-use std::env;
 use std::env::set_var;
 use std::ffi::OsString;
-use std::process;
-use td_common::about;
+use std::{env, process};
 use td_common::attach::attach;
 use td_common::env::check_flag_env;
-use td_common::logging;
 use td_common::server::{INSTANCE_PATH_ENV, INSTANCE_URI_ENV, TD_DETACHED_SUBPROCESSES};
+use td_common::{about, logging};
 use td_process::launcher::hooks;
 use td_supervisor::services::supervisor;
 use td_supervisor::services::supervisor::{Arguments, prepend_slash};

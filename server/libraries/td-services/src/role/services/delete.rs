@@ -6,16 +6,15 @@ use crate::role::layers::assert_not_fixed;
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
 use td_objects::dxo::crudl::{DeleteRequest, RequestContext};
-use td_objects::dxo::permission::defs::PermissionDB;
-use td_objects::dxo::role::defs::{RoleDB, RoleDBWithNames};
-use td_objects::dxo::user_role::defs::UserRoleDB;
+use td_objects::dxo::permission::PermissionDB;
+use td_objects::dxo::role::{RoleDB, RoleDBWithNames};
+use td_objects::dxo::user_role::UserRoleDB;
 use td_objects::rest_urls::RoleParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, SecAdmin, System};
 use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlDeleteService, SqlSelectService};
-use td_objects::types::id::RoleId;
-use td_objects::types::id_name::RoleIdName;
+use td_objects::types::basic::{RoleId, RoleIdName};
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -57,19 +56,18 @@ mod tests {
     use td_database::sql::DbPool;
     use td_error::TdError;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::dxo::permission::defs::PermissionDBWithNames;
-    use td_objects::dxo::user_role::defs::UserRoleDBWithNames;
+    use td_objects::dxo::permission::PermissionDBWithNames;
+    use td_objects::dxo::user_role::UserRoleDBWithNames;
     use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_permission::seed_permission;
     use td_objects::test_utils::seed_role::seed_role;
     use td_objects::test_utils::seed_user::seed_user;
     use td_objects::test_utils::seed_user_role::seed_user_role;
     use td_objects::types::SqlEntity;
-    use td_objects::types::bool::UserEnabled;
-    use td_objects::types::id::{AccessTokenId, UserId};
-    use td_objects::types::id_name::IdOrName;
-    use td_objects::types::string::{Description, RoleName, UserName};
-    use td_objects::types::typed_enum::PermissionType;
+    use td_objects::types::basic::{
+        AccessTokenId, Description, IdOrName, PermissionType, RoleName, UserEnabled, UserId,
+        UserName,
+    };
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]

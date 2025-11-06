@@ -6,8 +6,8 @@ use crate::function::layers::register::data_location;
 use crate::function::layers::upload::upload_function_write_to_storage;
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
-use td_objects::dxo::bundle::defs::{Bundle, BundleBuilder, BundleDB, BundleDBBuilder};
-use td_objects::dxo::collection::defs::CollectionDB;
+use td_objects::dxo::bundle::{Bundle, BundleBuilder, BundleDB, BundleDBBuilder};
+use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
 use td_objects::dxo::function_upload::FunctionUpload;
 use td_objects::rest_urls::CollectionParam;
@@ -18,9 +18,9 @@ use td_objects::tower_service::from::{
     SetService, TryIntoService, With,
 };
 use td_objects::tower_service::sql::{By, SqlSelectService, insert};
-use td_objects::types::id::{BundleId, CollectionId};
-use td_objects::types::id_name::CollectionIdName;
-use td_objects::types::string::{BundleHash, StorageVersion};
+use td_objects::types::basic::{
+    BundleHash, BundleId, CollectionId, CollectionIdName, StorageVersion,
+};
 use td_storage::Storage;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
@@ -85,8 +85,7 @@ mod tests {
     use td_objects::dxo::crudl::handle_sql_err;
     use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_collection::seed_collection;
-    use td_objects::types::id::{AccessTokenId, RoleId, UserId};
-    use td_objects::types::string::{CollectionName, DataLocation};
+    use td_objects::types::basic::{AccessTokenId, CollectionName, DataLocation, RoleId, UserId};
     use td_storage::location::StorageLocation;
     use td_tower::ctx_service::RawOneshot;
 

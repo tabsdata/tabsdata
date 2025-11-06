@@ -3,11 +3,11 @@
 //
 
 #[td_type::dxo]
-pub mod defs {
+mod definitions {
     use crate::dxo::crudl::RequestContext;
-    use crate::types::id::{CollectionId, UserId};
-    use crate::types::string::{CollectionName, Description, UserName};
-    use crate::types::timestamp::AtTime;
+    use crate::types::basic::{
+        AtTime, CollectionId, CollectionName, Description, UserId, UserName,
+    };
     use td_common::id::Id;
 
     #[td_type::Dao]

@@ -4,7 +4,7 @@
 
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
-use td_objects::dxo::collection::defs::CollectionRead;
+use td_objects::dxo::collection::CollectionRead;
 use td_objects::dxo::crudl::{ListRequest, ListResponse, RequestContext};
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::NoPermissions;
@@ -44,9 +44,9 @@ mod tests {
     use td_objects::test_utils::seed_role::seed_role;
     use td_objects::test_utils::seed_user::seed_user;
     use td_objects::test_utils::seed_user_role::seed_user_role;
-    use td_objects::types::bool::UserEnabled;
-    use td_objects::types::id::{AccessTokenId, RoleId, UserId};
-    use td_objects::types::string::{CollectionName, Description, RoleName, UserName};
+    use td_objects::types::basic::{
+        AccessTokenId, CollectionName, Description, RoleId, RoleName, UserEnabled, UserId, UserName,
+    };
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]

@@ -3,10 +3,10 @@
 //
 
 #[td_type::dxo]
-pub mod defs {
-    use crate::dxo::dependency::defs::{DependencyDB, DependencyDBWithNames};
-    use crate::dxo::trigger::defs::{TriggerDB, TriggerDBWithNames};
-    use crate::types::id::{CollectionId, ToCollectionId};
+mod definitions {
+    use crate::dxo::dependency::{DependencyDB, DependencyDBWithNames};
+    use crate::dxo::trigger::{TriggerDB, TriggerDBWithNames};
+    use crate::types::basic::{CollectionId, ToCollectionId};
 
     #[td_type::Dlo]
     #[td_type(

@@ -6,7 +6,7 @@ use crate::table::layers::find_data_version_location_at;
 use crate::table::layers::schema::get_table_schema;
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
-use td_objects::dxo::collection::defs::CollectionDB;
+use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
 use td_objects::rest_urls::params::{TableAtIdName, TableSchema};
 use td_objects::sql::DaoQueries;
@@ -15,8 +15,7 @@ use td_objects::tower_service::authz::{
 };
 use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlSelectService};
-use td_objects::types::id::CollectionId;
-use td_objects::types::id_name::CollectionIdName;
+use td_objects::types::basic::{CollectionId, CollectionIdName};
 use td_storage::Storage;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
@@ -66,8 +65,8 @@ mod tests {
     use td_database::sql::DbPool;
     use td_error::TdError;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::dxo::function::defs::FunctionRegister;
-    use td_objects::dxo::table::defs::TableDB;
+    use td_objects::dxo::function::FunctionRegister;
+    use td_objects::dxo::table::TableDB;
     use td_objects::rest_urls::params::SchemaField;
     use td_objects::rest_urls::{AtTimeParam, TableParam};
     use td_objects::sql::SelectBy;
@@ -79,12 +78,10 @@ mod tests {
         seed_table_data_version, seed_table_data_version_with_data,
     };
     use td_objects::test_utils::seed_transaction::seed_transaction;
-    use td_objects::types::id::{AccessTokenId, BundleId, RoleId, UserId};
-    use td_objects::types::string::{
-        CollectionName, StorageVersion, TableName, TableNameDto, TransactionKey,
+    use td_objects::types::basic::{
+        AccessTokenId, AtTime, BundleId, CollectionName, Decorator, FunctionRunStatus, RoleId,
+        StorageVersion, TableName, TableNameDto, TransactionKey, UserId,
     };
-    use td_objects::types::timestamp::AtTime;
-    use td_objects::types::typed_enum::{Decorator, FunctionRunStatus};
     use td_storage::location::StorageLocation;
     use td_storage::{MountDef, Storage};
     use td_tower::ctx_service::RawOneshot;
@@ -96,13 +93,10 @@ mod tests {
     #[tokio::test]
     async fn test_tower_metadata_schema_service(db: DbPool) {
         use crate::table::layers::storage::resolve_table_location;
-        use td_objects::dxo::table::defs::TableDBWithNames;
-        use td_objects::dxo::table_data_version::defs::TableDataVersionDBWithNames;
-        use td_objects::tower_service::from::TryIntoService;
-        use td_objects::tower_service::from::combine;
-        use td_objects::types::id::TableId;
-        use td_objects::types::id_name::TableIdName;
-        use td_objects::types::timestamp::TriggeredOn;
+        use td_objects::dxo::table::TableDBWithNames;
+        use td_objects::dxo::table_data_version::TableDataVersionDBWithNames;
+        use td_objects::tower_service::from::{TryIntoService, combine};
+        use td_objects::types::basic::{TableId, TableIdName, TriggeredOn};
 
         use td_tower::metadata::type_of_val;
 

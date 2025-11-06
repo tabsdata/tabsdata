@@ -34,8 +34,8 @@ pub struct AuthServices {
 mod tests {
     use sqlx::FromRow;
     use td_database::sql::DbPool;
-    use td_objects::dxo::auth::defs::SessionDB;
-    use td_objects::types::id::AccessTokenId;
+    use td_objects::dxo::auth::SessionDB;
+    use td_objects::types::basic::AccessTokenId;
 
     pub async fn assert_session(db: &DbPool, access_token_id: &Option<AccessTokenId>) {
         #[derive(Debug, FromRow)]

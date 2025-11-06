@@ -5,9 +5,9 @@
 use crate::inter_coll_permission::layers::assert_collection_and_to_collection_are_different;
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext, refresh_authz_context};
-use td_objects::dxo::collection::defs::CollectionDB;
+use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
-use td_objects::dxo::inter_collection_permission::defs::{
+use td_objects::dxo::inter_collection_permission::{
     InterCollectionPermission, InterCollectionPermissionBuilder, InterCollectionPermissionCreate,
     InterCollectionPermissionDB, InterCollectionPermissionDBBuilder,
     InterCollectionPermissionDBWithNames,
@@ -20,11 +20,10 @@ use td_objects::tower_service::from::{
     TryIntoService, UpdateService, With, builder,
 };
 use td_objects::tower_service::sql::{By, SqlSelectService, insert};
-use td_objects::types::id::{
-    CollectionId, FromCollectionId, InterCollectionPermissionId, ToCollectionId,
+use td_objects::types::basic::{
+    CollectionId, CollectionIdName, CollectionName, FromCollectionId, InterCollectionPermissionId,
+    ToCollectionId, ToCollectionName,
 };
-use td_objects::types::id_name::CollectionIdName;
-use td_objects::types::string::{CollectionName, ToCollectionName};
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -111,7 +110,7 @@ mod tests {
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_inter_collection_permission::get_inter_collection_permissions;
     use td_objects::tower_service::authz::AuthzError;
-    use td_objects::types::id::{AccessTokenId, RoleId, UserId};
+    use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]

@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::types::timestamp::AtTime;
+use crate::types::basic::AtTime;
 
 #[td_type::typed(i64)]
 pub struct AccessTokenExpiration;

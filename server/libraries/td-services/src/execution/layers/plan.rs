@@ -12,23 +12,19 @@ use td_error::TdError;
 use td_execution::planner::ExecutionPlanner;
 use td_execution::version_resolver::VersionResolver;
 use td_objects::dxo::crudl::handle_sql_err;
-use td_objects::dxo::execution::defs::{
+use td_objects::dxo::execution::{
     ExecutionDB, ExecutionResponse, FunctionNodeResponseBuilder, TableNodeResponseBuilder,
 };
-use td_objects::dxo::function_requirement::defs::FunctionRequirementDB;
-use td_objects::dxo::function_run::defs::{
-    FunctionRunDB, FunctionRunDBBuilder, UpdateFunctionRunDB,
-};
-use td_objects::dxo::table_data_version::defs::{
+use td_objects::dxo::function_requirement::FunctionRequirementDB;
+use td_objects::dxo::function_run::{FunctionRunDB, FunctionRunDBBuilder, UpdateFunctionRunDB};
+use td_objects::dxo::table_data_version::{
     ExecutionTableDataVersionReadBuilder, TableDataVersionDB,
 };
-use td_objects::dxo::transaction::defs::{TransactionDB, TransactionDBBuilder};
+use td_objects::dxo::transaction::{TransactionDB, TransactionDBBuilder};
 use td_objects::execution::graph::{GraphEdge, ResolvedVersion};
 use td_objects::sql::{DaoQueries, FindBy, UpdateBy};
 use td_objects::table_ref::Versions;
-use td_objects::types::i32::{InputIdx, VersionPos};
-use td_objects::types::string::Dot;
-use td_objects::types::typed_enum::{FunctionRunStatus, Trigger};
+use td_objects::types::basic::{Dot, FunctionRunStatus, InputIdx, Trigger, VersionPos};
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
 use te_execution::transaction::TransactionBy;
 

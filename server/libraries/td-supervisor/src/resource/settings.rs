@@ -5,8 +5,7 @@
 use crate::services::tdserver::TD_KEEP;
 use include_dir::{Dir, DirEntry, include_dir};
 use std::fs::{File, create_dir_all, write};
-use std::io::Result;
-use std::io::Write;
+use std::io::{Result, Write};
 use std::path::{Path, PathBuf};
 use td_common::env::TABSDATA_HOME_DIR;
 use td_common::files::ROOT;

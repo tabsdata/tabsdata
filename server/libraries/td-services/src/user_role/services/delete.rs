@@ -6,16 +6,15 @@ use crate::user_role::layers::assert_not_fixed;
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
 use td_objects::dxo::crudl::{DeleteRequest, RequestContext};
-use td_objects::dxo::role::defs::RoleDB;
-use td_objects::dxo::user::defs::UserDB;
-use td_objects::dxo::user_role::defs::{UserRoleDB, UserRoleDBWithNames};
+use td_objects::dxo::role::RoleDB;
+use td_objects::dxo::user::UserDB;
+use td_objects::dxo::user_role::{UserRoleDB, UserRoleDBWithNames};
 use td_objects::rest_urls::UserRoleParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, SecAdmin, System};
 use td_objects::tower_service::from::{ExtractNameService, ExtractService, With, combine};
 use td_objects::tower_service::sql::{By, SqlDeleteService, SqlSelectService};
-use td_objects::types::id::{RoleId, UserId};
-use td_objects::types::id_name::{RoleIdName, UserIdName};
+use td_objects::types::basic::{RoleId, RoleIdName, UserId, UserIdName};
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -58,9 +57,7 @@ mod tests {
     use td_objects::test_utils::seed_role::seed_role;
     use td_objects::test_utils::seed_user::seed_user;
     use td_objects::test_utils::seed_user_role::{get_user_role, seed_user_role};
-    use td_objects::types::bool::UserEnabled;
-    use td_objects::types::id::AccessTokenId;
-    use td_objects::types::string::{Description, RoleName, UserName};
+    use td_objects::types::basic::{AccessTokenId, Description, RoleName, UserEnabled, UserName};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]

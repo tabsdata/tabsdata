@@ -3,16 +3,13 @@
 //
 
 #[td_type::dxo]
-pub mod defs {
+mod definitions {
     use crate::dxo::crudl::RequestContext;
-    use crate::dxo::function::defs::FunctionDB;
-    use crate::types::bool::System;
-    use crate::types::id::{
-        CollectionId, FunctionId, TableId, TriggerId, TriggerVersionId, UserId,
+    use crate::dxo::function::FunctionDB;
+    use crate::types::basic::{
+        AtTime, CollectionId, CollectionName, FunctionId, System, TableId, TriggerId,
+        TriggerStatus, TriggerVersionId, UserId,
     };
-    use crate::types::string::CollectionName;
-    use crate::types::timestamp::AtTime;
-    use crate::types::typed_enum::TriggerStatus;
 
     #[td_type::Dao]
     #[dao(

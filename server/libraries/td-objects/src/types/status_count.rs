@@ -2,8 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::types::i32::StatusCount;
-use crate::types::typed_enum::FunctionRunStatus;
+use crate::types::basic::{FunctionRunStatus, StatusCount};
 use std::collections::HashMap;
 use strum::IntoEnumIterator;
 

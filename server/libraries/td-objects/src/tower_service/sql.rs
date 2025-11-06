@@ -930,7 +930,7 @@ mod tests {
     use super::*;
     use crate::dxo::crudl::{ListParams, RequestContext};
     use crate::sql::{DaoQueries, NoListFilter};
-    use crate::types::id::{AccessTokenId, RoleId, UserId};
+    use crate::types::basic::{AccessTokenId, RoleId, UserId};
     use std::sync::LazyLock;
     use td_database::sql::DbPool;
     use td_error::TdError;

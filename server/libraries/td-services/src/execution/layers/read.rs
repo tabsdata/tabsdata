@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::ops::Deref;
 use ta_execution::transaction::TransactionMap;
 use td_error::TdError;
-use td_objects::dxo::transaction::defs::{TransactionDB, TransactionValueBuilder};
+use td_objects::dxo::transaction::{TransactionDB, TransactionValueBuilder};
 use td_tower::extractors::{Input, SrvCtx};
 use te_execution::transaction::TransactionBy;
 

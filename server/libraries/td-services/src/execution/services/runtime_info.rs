@@ -10,7 +10,7 @@ use td_common::server::{EtcContent, etc_service};
 use td_error::{TdError, td_error};
 use td_objects::dxo::crudl::ReadRequest;
 use td_objects::dxo::runtime_info::{PythonVersions, RuntimeInfo, ServerVersion};
-use td_objects::types::string::{BuildManifest, TabsdataVersion};
+use td_objects::types::basic::{BuildManifest, TabsdataVersion};
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
 use tracing::error;

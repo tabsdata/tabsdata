@@ -2,17 +2,15 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::dxo::execution::defs::ResolvedVersionResponse;
-use crate::dxo::function::defs::FunctionDBWithNames;
-use crate::dxo::table::defs::TableDBWithNames;
-use crate::dxo::table_data_version::defs::ExecutionTableDataVersionRead;
-use crate::types::bool::{SelfDependency, System};
-use crate::types::composed::TableVersions;
-use crate::types::i32::{DependencyPos, TableFunctionParamPos};
-use crate::types::id::{
-    CollectionId, FunctionVersionId, TableDataVersionId, TableId, TableVersionId,
+use crate::dxo::execution::ResolvedVersionResponse;
+use crate::dxo::function::FunctionDBWithNames;
+use crate::dxo::table::TableDBWithNames;
+use crate::dxo::table_data_version::ExecutionTableDataVersionRead;
+use crate::types::basic::{
+    CollectionId, CollectionName, DependencyPos, FunctionName, FunctionVersionId, SelfDependency,
+    System, TableDataVersionId, TableFunctionParamPos, TableId, TableName, TableVersionId,
 };
-use crate::types::string::{CollectionName, FunctionName, TableName};
+use crate::types::composed::TableVersions;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};

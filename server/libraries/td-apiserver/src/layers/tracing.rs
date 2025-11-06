@@ -77,7 +77,8 @@ mod tests {
     use std::sync::{Arc, Mutex};
     use tracing::subscriber::set_default;
     use tracing::{Instrument, info};
-    use tracing_subscriber::{fmt, layer::SubscriberExt, registry};
+    use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::{fmt, registry};
 
     struct WriterGuard {
         buffer: Arc<Mutex<Vec<u8>>>,

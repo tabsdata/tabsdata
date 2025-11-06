@@ -10,12 +10,11 @@ use std::fmt::Debug;
 use td_error::display_vec::DisplayVec;
 use td_error::{TdError, display_vec, td_error};
 use td_objects::dxo::crudl::handle_sql_err;
-use td_objects::dxo::table_data_version::defs::ActiveTableDataVersionDB;
+use td_objects::dxo::table_data_version::ActiveTableDataVersionDB;
 use td_objects::sql::DaoQueries;
 use td_objects::sql::cte::TableQueries;
 use td_objects::table_ref::{Version, Versions};
-use td_objects::types::id::{TableDataVersionId, TableId};
-use td_objects::types::timestamp::TriggeredOn;
+use td_objects::types::basic::{TableDataVersionId, TableId, TriggeredOn};
 
 #[td_error]
 pub enum VersionResolverError {
@@ -340,9 +339,9 @@ mod tests {
     use super::*;
     use td_database::sql::DbPool;
     use td_error::TdError;
-    use td_objects::dxo::function::defs::FunctionRegister;
-    use td_objects::dxo::table::defs::TableDB;
-    use td_objects::dxo::table_data_version::defs::ActiveTableDataVersionDB;
+    use td_objects::dxo::function::FunctionRegister;
+    use td_objects::dxo::table::TableDB;
+    use td_objects::dxo::table_data_version::ActiveTableDataVersionDB;
     use td_objects::sql::{DaoQueries, SelectBy};
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_execution::seed_execution;
@@ -350,9 +349,10 @@ mod tests {
     use td_objects::test_utils::seed_function_run::seed_function_run;
     use td_objects::test_utils::seed_table_data_version::seed_table_data_version;
     use td_objects::test_utils::seed_transaction::seed_transaction;
-    use td_objects::types::id::{BundleId, UserId};
-    use td_objects::types::string::{CollectionName, TableName, TableNameDto, TransactionKey};
-    use td_objects::types::typed_enum::{Decorator, FunctionRunStatus};
+    use td_objects::types::basic::{
+        BundleId, CollectionName, Decorator, FunctionRunStatus, TableName, TableNameDto,
+        TransactionKey, UserId,
+    };
     use td_security::ENCODED_ID_SYSTEM;
 
     // Tables create N times, where N is the number of versions. Returning a map of table name to

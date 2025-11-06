@@ -2,13 +2,13 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::dxo::collection::defs::CollectionDB;
-use crate::dxo::execution::defs::ExecutionDB;
-use crate::dxo::function::defs::FunctionDB;
-use crate::dxo::function_run::defs::FunctionRunDB;
-use crate::dxo::transaction::defs::TransactionDB;
+use crate::dxo::collection::CollectionDB;
+use crate::dxo::execution::ExecutionDB;
+use crate::dxo::function::FunctionDB;
+use crate::dxo::function_run::FunctionRunDB;
+use crate::dxo::transaction::TransactionDB;
 use crate::sql::{DaoQueries, Insert};
-use crate::types::typed_enum::{FunctionRunStatus, Trigger};
+use crate::types::basic::{FunctionRunStatus, Trigger};
 use td_database::sql::DbPool;
 
 pub async fn seed_function_run(
@@ -46,14 +46,12 @@ pub async fn seed_function_run(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dxo::function::defs::FunctionRegister;
+    use crate::dxo::function::FunctionRegister;
     use crate::test_utils::seed_collection::seed_collection;
     use crate::test_utils::seed_execution::seed_execution;
     use crate::test_utils::seed_function::seed_function;
     use crate::test_utils::seed_transaction::seed_transaction;
-    use crate::types::id::{BundleId, UserId};
-    use crate::types::string::{CollectionName, TransactionKey};
-    use crate::types::typed_enum::Decorator;
+    use crate::types::basic::{BundleId, CollectionName, Decorator, TransactionKey, UserId};
     use td_database::sql::DbPool;
     use td_security::ENCODED_ID_SYSTEM;
 

@@ -2,11 +2,9 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::dxo::collection::defs::{CollectionCreateDB, CollectionDB, CollectionDBBuilder};
+use crate::dxo::collection::{CollectionCreateDB, CollectionDB, CollectionDBBuilder};
 use crate::sql::{DaoQueries, Insert};
-use crate::types::id::UserId;
-use crate::types::string::{CollectionName, Description};
-use crate::types::timestamp::AtTime;
+use crate::types::basic::{AtTime, CollectionName, Description, UserId};
 use td_database::sql::DbPool;
 
 pub async fn seed_collection(

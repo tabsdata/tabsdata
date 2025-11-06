@@ -17,9 +17,9 @@ mod secure_routes {
     use ta_apiserver::status::ok_status::{GetStatus, NoContent, RawStatus, UpdateStatus};
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
-    use td_objects::dxo::auth::defs::{RefreshRequestX, RoleChange, TokenResponseX};
+    use td_objects::dxo::auth::{RefreshRequestX, RoleChange, TokenResponseX};
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::dxo::user::defs::UserInfo;
+    use td_objects::dxo::user::UserInfo;
     use td_objects::rest_urls::{AUTH_LOGOUT, AUTH_REFRESH, AUTH_ROLE_CHANGE, AUTH_USER_INFO};
     use td_services::auth::services::AuthServices;
     use td_tower::ctx_service::RawOneshot;
@@ -90,7 +90,7 @@ mod unsecure_routes {
     use ta_apiserver::status::ok_status::{NoContent, RawStatus, UpdateStatus};
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
-    use td_objects::dxo::auth::defs::{Login, PasswordChange, TokenResponseX};
+    use td_objects::dxo::auth::{Login, PasswordChange, TokenResponseX};
     use td_objects::rest_urls::{AUTH_LOGIN, AUTH_PASSWORD_CHANGE, CERT_DOWNLOAD};
     use td_objects::stream::BoxedSyncStream;
     use td_services::auth::services::AuthServices;

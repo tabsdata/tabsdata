@@ -4,15 +4,11 @@
 
 pub mod params;
 
-use crate::types::i16::LogsCastNumber;
-use crate::types::i64::{SampleLen, SampleOffset};
-use crate::types::id::FunctionRunId;
-use crate::types::id_name::{
-    CollectionIdName, ExecutionIdName, FunctionIdName, InterCollectionPermissionIdName,
-    PermissionIdName, RoleIdName, TableIdName, TransactionIdName, UserIdName, WorkerIdName,
+use crate::types::basic::{
+    AtTime, CollectionIdName, ExecutionIdName, FunctionIdName, FunctionRunId,
+    InterCollectionPermissionIdName, LogsCastNumber, PermissionIdName, RoleIdName, SampleLen,
+    SampleOffset, Sql, TableIdName, TransactionIdName, UserIdName, WorkerIdName,
 };
-use crate::types::string::Sql;
-use crate::types::timestamp::AtTime;
 use constcat::concat;
 use td_common::logging::LOG_EXTENSION;
 use td_common::server::{ERR_LOG_FILE_NAME, FN_LOG_FILE_NAME, OUT_LOG_FILE_NAME, TD_LOG_FILE_NAME};

@@ -17,9 +17,9 @@ mod routes {
     };
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
-    use td_objects::dxo::bundle::defs::Bundle;
+    use td_objects::dxo::bundle::Bundle;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
-    use td_objects::dxo::function::defs::{
+    use td_objects::dxo::function::{
         Function, FunctionRegister, FunctionUpdate, FunctionWithTables,
     };
     use td_objects::dxo::function_upload::FunctionUpload;

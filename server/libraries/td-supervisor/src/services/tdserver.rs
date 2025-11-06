@@ -34,16 +34,11 @@ use std::process::{Command, Output, exit};
 use std::thread::sleep;
 use std::{env, fs, io};
 use sysinfo::{Signal, System};
-use tabled::settings::Panel;
+use tabled::settings::object::{Columns, Rows};
+use tabled::settings::style::{HorizontalLine, Style, VerticalLine};
 use tabled::settings::themes::BorderCorrection;
-use tabled::{
-    Table, Tabled,
-    settings::{
-        Alignment, Modify,
-        object::{Columns, Rows},
-        style::{HorizontalLine, Style, VerticalLine},
-    },
-};
+use tabled::settings::{Alignment, Modify, Panel};
+use tabled::{Table, Tabled};
 use td_apiserver::config::DbSchema;
 use td_build::environment::ENV_VALUE_TD_UI_MODE_EXTERNAL;
 use td_build::version::TABSDATA_VERSION;

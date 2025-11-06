@@ -4,9 +4,9 @@
 
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
-use td_objects::dxo::collection::defs::CollectionDB;
+use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::{ListRequest, ListResponse, RequestContext};
-use td_objects::dxo::table::defs::{Table, TableDBRead};
+use td_objects::dxo::table::{Table, TableDBRead};
 use td_objects::rest_urls::params::CollectionAtName;
 use td_objects::sql::{DaoQueries, NoListFilter};
 use td_objects::tower_service::authz::{
@@ -14,9 +14,7 @@ use td_objects::tower_service::authz::{
 };
 use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlListService, SqlSelectService};
-use td_objects::types::id::CollectionId;
-use td_objects::types::id_name::CollectionIdName;
-use td_objects::types::timestamp::AtTime;
+use td_objects::types::basic::{AtTime, CollectionId, CollectionIdName};
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -63,13 +61,13 @@ mod tests {
     use td_database::sql::DbPool;
     use td_error::TdError;
     use td_objects::dxo::crudl::{ListParams, ListParamsBuilder};
-    use td_objects::dxo::function::defs::{FunctionRegister, FunctionUpdate};
+    use td_objects::dxo::function::{FunctionRegister, FunctionUpdate};
     use td_objects::rest_urls::{FunctionParam, TableParam};
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_function::seed_function;
-    use td_objects::types::id::{AccessTokenId, BundleId, RoleId, UserId};
-    use td_objects::types::string::{CollectionName, TableName, TableNameDto};
-    use td_objects::types::typed_enum::Decorator;
+    use td_objects::types::basic::{
+        AccessTokenId, BundleId, CollectionName, Decorator, RoleId, TableName, TableNameDto, UserId,
+    };
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]

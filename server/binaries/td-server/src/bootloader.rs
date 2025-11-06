@@ -2,11 +2,9 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use std::env;
-use std::process;
-use td_common::about;
+use std::{env, process};
 use td_common::attach::attach;
-use td_common::logging;
+use td_common::{about, logging};
 use td_process::launcher::hooks;
 use td_supervisor::services::bootloader;
 use tracing::{Level, info};

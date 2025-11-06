@@ -5,10 +5,9 @@
 use std::ops::Deref;
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
-use td_objects::dxo::function::defs::{FunctionDB, FunctionDBBuilder};
-use td_objects::dxo::table::defs::{TableDB, TableDBBuilder};
-use td_objects::types::id::{FunctionVersionId, TableVersionId};
-use td_objects::types::typed_enum::{FunctionStatus, TableStatus};
+use td_objects::dxo::function::{FunctionDB, FunctionDBBuilder};
+use td_objects::dxo::table::{TableDB, TableDBBuilder};
+use td_objects::types::basic::{FunctionStatus, FunctionVersionId, TableStatus, TableVersionId};
 use td_tower::extractors::Input;
 
 pub async fn build_deleted_functions(

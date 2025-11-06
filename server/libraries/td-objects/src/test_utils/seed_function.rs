@@ -2,17 +2,17 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::dxo::collection::defs::CollectionDB;
+use crate::dxo::collection::CollectionDB;
 use crate::dxo::crudl::{ReadRequest, RequestContext};
-use crate::dxo::dependency::defs::DependencyDBBuilder;
-use crate::dxo::function::defs::{FunctionDB, FunctionDBBuilder, FunctionRegister};
-use crate::dxo::table::defs::{TableDBBuilder, TableDBWithNames};
-use crate::dxo::trigger::defs::TriggerDBBuilder;
+use crate::dxo::dependency::DependencyDBBuilder;
+use crate::dxo::function::{FunctionDB, FunctionDBBuilder, FunctionRegister};
+use crate::dxo::table::{TableDBBuilder, TableDBWithNames};
+use crate::dxo::trigger::TriggerDBBuilder;
 use crate::sql::{DaoQueries, Insert, SelectBy};
-use crate::types::i32::{DependencyPos, TableFunctionParamPos};
-use crate::types::id::{AccessTokenId, RoleId, TableId, UserId};
-use crate::types::string::{DataLocation, StorageVersion, TableName};
-use crate::types::typed_enum::{DependencyStatus, TableStatus, TriggerStatus};
+use crate::types::basic::{
+    AccessTokenId, DataLocation, DependencyPos, DependencyStatus, RoleId, StorageVersion,
+    TableFunctionParamPos, TableId, TableName, TableStatus, TriggerStatus, UserId,
+};
 use td_database::sql::DbPool;
 
 pub async fn seed_function(
@@ -175,9 +175,7 @@ mod tests {
     use super::*;
     use crate::sql::SelectBy;
     use crate::test_utils::seed_collection::seed_collection;
-    use crate::types::id::{BundleId, UserId};
-    use crate::types::string::CollectionName;
-    use crate::types::typed_enum::Decorator;
+    use crate::types::basic::{BundleId, CollectionName, Decorator, UserId};
     use td_security::ENCODED_ID_SYSTEM;
 
     #[td_test::test(sqlx)]

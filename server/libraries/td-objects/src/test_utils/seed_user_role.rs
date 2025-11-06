@@ -3,10 +3,10 @@
 //
 
 use crate::dxo::crudl::{ReadRequest, RequestContext, handle_sql_err};
-use crate::dxo::user_role::defs::{UserRoleDB, UserRoleDBBuilder};
+use crate::dxo::user_role::{UserRoleDB, UserRoleDBBuilder};
 use crate::sql::{DaoQueries, Insert, SelectBy};
 use crate::types::SqlEntity;
-use crate::types::id::{AccessTokenId, RoleId, UserId};
+use crate::types::basic::{AccessTokenId, RoleId, UserId};
 use td_database::sql::DbPool;
 use td_error::TdError;
 
@@ -55,8 +55,7 @@ pub mod tests {
     use super::*;
     use crate::test_utils::seed_role::seed_role;
     use crate::test_utils::seed_user::seed_user;
-    use crate::types::bool::UserEnabled;
-    use crate::types::string::{Description, RoleName, UserName};
+    use crate::types::basic::{Description, RoleName, UserEnabled, UserName};
 
     #[td_test::test(sqlx)]
     #[tokio::test]
