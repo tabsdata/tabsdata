@@ -16,10 +16,12 @@ use sqlx::{
     Transaction,
 };
 use std::cmp::Ordering;
+use std::fmt::Display;
 use std::future::Future;
 use std::time::Duration;
 use td_error::td_error;
-use td_schema::{DB_VERSION_NAME, DB_VERSION_VALUE};
+use td_schema::{DB_EDITION_NAME, DB_VERSION_NAME, DB_VERSION_VALUE};
+use te_system::edition::{Compatible, Edition, TabsdataEdition};
 use tracing::log::LevelFilter;
 
 const SLOW_QUERIES_THRESHOLD: u64 = 5000;
@@ -131,8 +133,8 @@ pub type DbSchema = Migrator;
 pub enum DbError {
     #[error("Tabsdata database schema has not be created. It must be created")]
     DatabaseSchemaDoesNotExist = 5000,
-    #[error("Tabsdata database version is '{0}', it should be an integer")]
-    DatabaseNeedsUpgrade(String, usize) = 5001,
+    #[error("Tabsdata database must be upgraded: {0}")]
+    DatabaseNeedsUpgrade(String) = 5001,
     #[error(
         "Tabsdata database version is '{0}', binary database version is '{1}'. Binary must be upgraded"
     )]
@@ -155,6 +157,14 @@ pub enum DbError {
     DatabaseDoesNotExist = 5010,
     #[error("Failed to create database directory {0}: {1}")]
     FailedToCreateDatabaseDir(String, #[source] std::io::Error) = 5011,
+    #[error(
+        "Tabsdata instance edition is '{0}', and binary edition is '{1}'. This instance cannot run with '{1}' edition"
+    )]
+    InvalidEdition(String, String) = 5012,
+    #[error("Failed to create or upgrade the database tabsdata edition: {0}")]
+    FailedToCreateOrUpgradeDatabaseEdition(#[source] Error) = 5013,
+    #[error("Failed to upgrade the database tabsdata edition: {0}")]
+    CannotUpgradeEdition(String) = 5014,
 }
 
 /// Sqlite database connection provider using Sqlx.
@@ -282,14 +292,26 @@ impl DbPool {
             ro_pool,
             rw_pool,
         };
-        db.upgrade_db_version().await?;
+        db.upgrade().await?;
         Ok(db)
     }
 
-    fn map_db_version_error(err: Error) -> DbError {
+    pub async fn check(&self) -> Result<(), DbError> {
+        self.check_db_version().await?;
+        self.check_tabsdata_edition().await?;
+        Ok(())
+    }
+
+    pub async fn upgrade(&self) -> Result<(), DbError> {
+        self.upgrade_db_version().await?;
+        self.upgrade_tabsdata_edition().await?;
+        Ok(())
+    }
+
+    fn map_system_db_error(err: Error, row: impl Display) -> DbError {
         match &err {
             Error::RowNotFound => DbError::DatabaseCorrupted(
-                "Missing 'db_version' row in 'tabsdata_system'".to_string(),
+                format!("Missing '{row}' row in 'tabsdata_system'").to_string(),
             ),
             Error::Database(database_err) => {
                 if database_err.message().contains("no such table") {
@@ -302,14 +324,14 @@ impl DbPool {
         }
     }
 
-    pub async fn check_db_version(&self) -> Result<(), DbError> {
+    async fn check_db_version(&self) -> Result<(), DbError> {
         let res: String =
             sqlx::QueryBuilder::new("SELECT value FROM tabsdata_system WHERE name = ")
                 .push_bind(DB_VERSION_NAME)
                 .build_query_scalar()
                 .fetch_one(&self.ro_pool)
                 .await
-                .map_err(Self::map_db_version_error)?;
+                .map_err(|e| Self::map_system_db_error(e, DB_VERSION_NAME))?;
         let version = res.parse::<usize>().map_err(|_| {
             DbError::DatabaseCorrupted(format!(
                 "'{}' value '{}' must be an integer",
@@ -319,10 +341,10 @@ impl DbPool {
 
         match version.cmp(&DB_VERSION_VALUE) {
             Ordering::Equal => Ok(()),
-            Ordering::Less => Err(DbError::DatabaseNeedsUpgrade(
-                version.to_string(),
-                *DB_VERSION_VALUE,
-            )),
+            Ordering::Less => Err(DbError::DatabaseNeedsUpgrade(format!(
+                "Tabsdata database version is '{}', binary database version is '{}'",
+                version, *DB_VERSION_VALUE
+            ))),
             Ordering::Greater => Err(DbError::DatabaseIsNewer(
                 version.to_string(),
                 *DB_VERSION_VALUE,
@@ -330,12 +352,89 @@ impl DbPool {
         }
     }
 
-    pub async fn upgrade_db_version(&self) -> Result<(), DbError> {
+    async fn upgrade_db_version(&self) -> Result<(), DbError> {
         self.schema
             .run(&self.rw_pool)
             .await
             .map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
         Ok(())
+    }
+
+    async fn parse_tabsdata_edition(&self) -> Result<Option<String>, DbError> {
+        sqlx::QueryBuilder::new("SELECT value FROM tabsdata_system WHERE name = ")
+            .push_bind(DB_EDITION_NAME)
+            .build_query_scalar()
+            .fetch_optional(&self.ro_pool)
+            .await
+            .map_err(|e| Self::map_system_db_error(e, DB_EDITION_NAME))
+    }
+
+    async fn check_tabsdata_edition(&self) -> Result<(), DbError> {
+        let instance_edition = self.parse_tabsdata_edition().await?;
+        let runtime_edition = TabsdataEdition;
+
+        match instance_edition {
+            None => Err(DbError::DatabaseNeedsUpgrade(format!(
+                "instance edition is undefined, binary edition is '{}'",
+                runtime_edition.label(),
+            ))),
+            Some(instance_edition) => {
+                if !runtime_edition.is_compatible(&instance_edition) {
+                    Err(DbError::InvalidEdition(
+                        instance_edition,
+                        runtime_edition.label().to_string(),
+                    ))
+                } else if runtime_edition.requires_upgrade(&instance_edition) {
+                    Err(DbError::DatabaseNeedsUpgrade(format!(
+                        "instance edition is '{instance_edition}', binary edition is '{}'",
+                        runtime_edition.label()
+                    )))
+                } else {
+                    Ok(())
+                }
+            }
+        }
+    }
+
+    async fn upgrade_tabsdata_edition(&self) -> Result<(), DbError> {
+        let instance_edition = self.parse_tabsdata_edition().await?;
+        let runtime_edition = TabsdataEdition;
+
+        match instance_edition {
+            None => {
+                // if not set, set it to the runtime edition
+                sqlx::QueryBuilder::new("INSERT INTO tabsdata_system values (")
+                    .push_bind(DB_EDITION_NAME)
+                    .push(", ")
+                    .push_bind(runtime_edition.label())
+                    .push(")")
+                    .build()
+                    .execute(&self.rw_pool)
+                    .await
+                    .map_err(DbError::FailedToCreateOrUpgradeDatabaseEdition)?;
+                Ok(())
+            }
+            Some(instance_edition) => {
+                if !runtime_edition.is_compatible(&instance_edition) {
+                    Err(DbError::CannotUpgradeEdition(format!(
+                        "instance edition is '{instance_edition}' cannot be upgraded to '{}'",
+                        runtime_edition.label()
+                    )))
+                } else if runtime_edition.requires_upgrade(&instance_edition) {
+                    sqlx::QueryBuilder::new("UPDATE tabsdata_system SET value = ")
+                        .push_bind(runtime_edition.label())
+                        .push(" WHERE name = ")
+                        .push_bind(DB_EDITION_NAME)
+                        .build()
+                        .execute(&self.rw_pool)
+                        .await
+                        .map_err(DbError::FailedToCreateOrUpgradeDatabaseEdition)?;
+                    Ok(())
+                } else {
+                    Ok(())
+                }
+            }
+        }
     }
 
     /// Delegates to the read-only pool's [`Pool::acquire`] method.
@@ -506,6 +605,7 @@ mod tests {
     use crate::sql;
     use crate::sql::{Db, DbError, DbPool, remove_leading_file_protocol, remove_leading_slash};
     use std::time::Duration;
+    use te_system::edition::{Edition, TabsdataEdition};
     use testdir::testdir;
     use url::Url;
 
@@ -572,14 +672,16 @@ mod tests {
             .build()
             .unwrap();
         {
-            let db = DbPool::create(&config, schema).await.unwrap();
+            let db = DbPool::connect(&config, schema).await.unwrap();
+            db.upgrade_db_version().await.unwrap();
             sqlx::query("INSERT INTO foo values('a', 'A')")
                 .execute(&db)
                 .await
                 .unwrap();
         }
 
-        let db = DbPool::create(&config, schema).await.unwrap();
+        let db = DbPool::connect(&config, schema).await.unwrap();
+        db.upgrade_db_version().await.unwrap();
         let res = sqlx::query("SELECT * FROM foo")
             .fetch_all(&db)
             .await
@@ -650,7 +752,8 @@ mod tests {
             .unwrap();
 
         // tabsdata schema does not exist
-        let db = DbPool::create(&config, schema).await.unwrap();
+        let db = DbPool::connect(&config, schema).await.unwrap();
+        db.upgrade_db_version().await.unwrap();
         let res = db.check_db_version().await;
         assert!(matches!(res, Err(DbError::DatabaseSchemaDoesNotExist)));
     }
@@ -725,7 +828,7 @@ mod tests {
             .unwrap();
 
         let res = db.check_db_version().await;
-        assert!(matches!(res, Err(DbError::DatabaseNeedsUpgrade(_, _))));
+        assert!(matches!(res, Err(DbError::DatabaseNeedsUpgrade(_))));
     }
 
     #[tokio::test]
@@ -746,5 +849,40 @@ mod tests {
 
         let res = db.check_db_version().await;
         assert!(matches!(res, Err(DbError::DatabaseIsNewer(_, _))));
+    }
+
+    #[tokio::test]
+    async fn test_tabsdata_database_edition_upgrade() {
+        let schema = td_schema::schema();
+        let db_file = testdir!().join("test.db");
+        let config = sql::SqliteConfigBuilder::default()
+            .url(db_file.to_str().map(str::to_string))
+            .build()
+            .unwrap();
+
+        let db = DbPool::create(&config, schema).await.unwrap();
+        let db_edition = db.parse_tabsdata_edition().await.unwrap();
+        let runtime_edition = TabsdataEdition;
+        assert_eq!(db_edition.unwrap(), runtime_edition.label());
+    }
+
+    #[tokio::test]
+    async fn test_tabsdata_database_schema_invalid_edition() {
+        let schema = td_schema::schema();
+        let db_file = testdir!().join("test.db");
+        let config = sql::SqliteConfigBuilder::default()
+            .url(db_file.to_str().map(str::to_string))
+            .build()
+            .unwrap();
+
+        let db = DbPool::create(&config, schema).await.unwrap();
+
+        sqlx::query("UPDATE tabsdata_system set value = 'invalid' WHERE name = 'edition'")
+            .execute(&db)
+            .await
+            .unwrap();
+
+        let res = db.check_tabsdata_edition().await;
+        assert!(matches!(res, Err(DbError::InvalidEdition(_, _))));
     }
 }

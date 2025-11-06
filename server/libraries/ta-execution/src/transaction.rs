@@ -6,8 +6,10 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::str::FromStr;
 use td_error::{TdError, td_error};
+use td_objects::dxo::execution::defs::ExecutionDB;
+use td_objects::dxo::transaction::defs::TransactionValue;
 use td_objects::execution::graph::FunctionNode;
-use td_objects::types::id::{CollectionId, TransactionId};
+use td_objects::types::id::TransactionId;
 use td_objects::types::string::{TransactionByStr, TransactionKey};
 
 #[td_error]
@@ -34,7 +36,7 @@ pub trait TransactionMapper:
 /// TransactionMap is a map that stores transaction keys and their corresponding transaction IDs.
 /// It uses a generic TransactionMapper to determine the key for each function version node.
 pub struct TransactionMap<T: TransactionMapper> {
-    map: HashMap<TransactionKey, (TransactionId, CollectionId)>,
+    map: HashMap<TransactionKey, TransactionValue>,
     mapper: T, // CARE: transaction_by enum can have more than one form
 }
 
@@ -46,10 +48,7 @@ impl<T: TransactionMapper> TransactionMap<T> {
         }
     }
 
-    pub fn from_map(
-        map: HashMap<TransactionKey, (TransactionId, CollectionId)>,
-        mapper: T,
-    ) -> Self {
+    pub fn from_map(map: HashMap<TransactionKey, TransactionValue>, mapper: T) -> Self {
         Self { map, mapper }
     }
 
@@ -57,23 +56,26 @@ impl<T: TransactionMapper> TransactionMap<T> {
         &self.mapper
     }
 
-    pub fn add(&mut self, v: &FunctionNode) -> Result<&(TransactionId, CollectionId), TdError> {
-        Ok(self
-            .map
-            .entry(self.mapper.key(v)?.clone())
-            .or_insert_with(|| {
-                let transaction_id = TransactionId::default();
-                // This works because transactions last at most one collection.
-                let collection_id = v.collection_id;
-                (transaction_id, collection_id)
-            }))
+    pub fn add(&mut self, e: &ExecutionDB, v: &FunctionNode) -> Result<(), TdError> {
+        let key = self.mapper.key(v)?;
+        if !self.map.contains_key(&key) {
+            let value = TransactionValue {
+                id: TransactionId::default(),
+                collection_id: v.collection_id,
+                execution_id: e.id,
+                transaction_by: self.mapper.transaction_by()?,
+                transaction_key: key.clone(),
+            };
+            self.map.insert(key, value);
+        }
+        Ok(())
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &TransactionKey> {
         self.map.keys()
     }
 
-    pub fn get(&self, key: &TransactionKey) -> Result<&(TransactionId, CollectionId), TdError> {
+    pub fn get(&self, key: &TransactionKey) -> Result<&TransactionValue, TdError> {
         self.map
             .get(key)
             .ok_or(TransactionMapperError::MissingTransactionKey(key.clone()).into())
@@ -84,17 +86,33 @@ impl<T: TransactionMapper> TransactionMap<T> {
 mod tests {
     use super::*;
     use crate::test_utils::transaction::TestTransactionBy;
+    use td_objects::dxo::execution::defs::ExecutionDB;
     use td_objects::test_utils::graph::{FUNCTION_NAMES, function_node};
+
+    fn dummy_execution() -> ExecutionDB {
+        ExecutionDB {
+            id: Default::default(),
+            name: None,
+            collection_id: Default::default(),
+            function_version_id: Default::default(),
+            triggered_on: Default::default(),
+            triggered_by_id: Default::default(),
+        }
+    }
 
     #[test]
     fn test_add() -> Result<(), TdError> {
         let transaction_by = TestTransactionBy::default();
         let mut transaction_map = TransactionMap::empty(transaction_by);
         let function = function_node(&FUNCTION_NAMES[0]);
+        let execution = dummy_execution();
 
-        let id = *transaction_map.add(&function)?;
+        transaction_map.add(&execution, &function)?;
         let key = TransactionKey::try_from(FUNCTION_NAMES[0].to_string())?;
-        assert_eq!(id, *transaction_map.get(&key)?);
+        let val = transaction_map.map.get(&key).unwrap();
+        let val2 = transaction_map.get(&key)?;
+        assert_eq!(val.id, val2.id);
+        assert_eq!(val.transaction_key, val2.transaction_key);
         Ok(())
     }
 
@@ -103,8 +121,9 @@ mod tests {
         let transaction_by = TestTransactionBy::default();
         let mut transaction_map = TransactionMap::empty(transaction_by);
         let function = function_node(&FUNCTION_NAMES[0]);
+        let execution = dummy_execution();
 
-        transaction_map.add(&function)?;
+        transaction_map.add(&execution, &function)?;
         let key = TransactionKey::try_from("error")?;
         assert!(transaction_map.get(&key).is_err());
         Ok(())
@@ -124,8 +143,9 @@ mod tests {
         let transaction_by = TestTransactionBy::default();
         let mut transaction_map = TransactionMap::empty(transaction_by);
         let function = function_node(&FUNCTION_NAMES[0]);
+        let execution = dummy_execution();
 
-        transaction_map.add(&function)?;
+        transaction_map.add(&execution, &function)?;
         let keys: Vec<_> = transaction_map.iter().collect();
         assert_eq!(keys.len(), 1);
         assert_eq!(

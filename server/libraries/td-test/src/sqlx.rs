@@ -5,7 +5,7 @@
 use crate::{TestSetup, TestSetupExecution};
 use async_trait::async_trait;
 use sqlx::Executor;
-use td_database::sql::{DbPool, DbSchema};
+use td_database::sql::{Db, DbPool, DbSchema};
 
 pub struct SqlxTestSetup<'a> {
     schema: Option<&'static DbSchema>,
@@ -32,9 +32,16 @@ impl TestSetup<DbPool> for SqlxTestSetup<'_> {
             }
         });
 
-        let db = DbPool::create(&config, schema).await.unwrap();
+        let rw_pool = Db::schema().rw_pool(&config).await.unwrap();
+        let ro_pool = Db::schema().ro_connect(&config).await.unwrap();
+        let db = DbPool {
+            schema,
+            ro_pool,
+            rw_pool,
+        };
+        schema.run(&db.rw_pool).await.unwrap();
 
-        for fixture in self.fixtures.iter() {
+        for fixture in &self.fixtures {
             db.execute(*fixture).await.unwrap();
         }
 

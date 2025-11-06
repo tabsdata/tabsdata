@@ -65,13 +65,13 @@ fn main() {
                         match db_schema {
                             DbSchema::Create => {
                                 info!("Creating database");
-                                match db.check_db_version().await {
+                                match db.check().await {
                                     Ok(_) => {
                                         info!("Database already exists");
                                         return ExitStatus::GeneralError;
                                     }
                                     Err(DbError::DatabaseSchemaDoesNotExist) => {
-                                        if let Err(err) = db.upgrade_db_version().await {
+                                        if let Err(err) = db.upgrade().await {
                                             error!("Error creating database: {}", err);
                                             return ExitStatus::GeneralError;
                                         }
@@ -88,17 +88,17 @@ fn main() {
                             }
                             DbSchema::Upgrade => {
                                 info!("Upgrading database");
-                                match db.check_db_version().await {
-                                    Err(DbError::DatabaseNeedsUpgrade(_, _)) => {
-                                        if let Err(err) = db.upgrade_db_version().await {
+                                match db.check().await {
+                                    Ok(_) => {
+                                        info!("Database does not need to be upgraded");
+                                        return ExitStatus::NoAction;
+                                    }
+                                    Err(DbError::DatabaseNeedsUpgrade(_)) => {
+                                        if let Err(err) = db.upgrade().await {
                                             error!("Error upgrading database: {}", err);
                                             return ExitStatus::GeneralError;
                                         }
                                         info!("Database upgraded");
-                                    }
-                                    Ok(_) => {
-                                        info!("Database does not need to be upgraded");
-                                        return ExitStatus::NoAction;
                                     }
                                     Err(error) => {
                                         error!(
@@ -114,19 +114,19 @@ fn main() {
                             }
                             DbSchema::Auto => {
                                 info!("Creating or upgrading database");
-                                match db.check_db_version().await {
+                                match db.check().await {
                                     Ok(_) => {
                                         info!("Database exists and is up to date");
                                     }
                                     Err(DbError::DatabaseSchemaDoesNotExist) => {
-                                        if let Err(err) = db.upgrade_db_version().await {
+                                        if let Err(err) = db.upgrade().await {
                                             error!("Error creating database: {}", err);
                                             return ExitStatus::GeneralError;
                                         }
                                         info!("Database created");
                                     }
-                                    Err(DbError::DatabaseNeedsUpgrade(_, _)) => {
-                                        if let Err(err) = db.upgrade_db_version().await {
+                                    Err(DbError::DatabaseNeedsUpgrade(_)) => {
+                                        if let Err(err) = db.upgrade().await {
                                             error!("Error upgrading database: {}", err);
                                             return ExitStatus::GeneralError;
                                         }
@@ -143,7 +143,7 @@ fn main() {
                             }
                         }
                     }
-                    match db.check_db_version().await {
+                    match db.check().await {
                         Ok(_) => {
                             info!("Database is up to date, starting apiserver");
                         }

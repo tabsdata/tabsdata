@@ -20,8 +20,8 @@ pub mod defs {
     #[td_type(builder(try_from = ExecutionDB, skip_all))]
     pub struct TransactionDB {
         #[td_type(extractor)]
-        pub id: TransactionId, // no default as it has to be calculated depending on the execution
-        #[td_type(extractor)] // tied to its functions, not the execution
+        pub id: TransactionId,
+        #[td_type(extractor)]
         pub collection_id: CollectionId,
         #[td_type(builder(field = "id"))]
         pub execution_id: ExecutionId,
@@ -31,6 +31,18 @@ pub mod defs {
         pub triggered_on: TriggeredOn,
         #[td_type(builder(include))]
         pub triggered_by_id: UserId,
+    }
+
+    #[td_type::Dlo]
+    #[td_type(builder(try_from = TransactionDB))]
+    pub struct TransactionValue {
+        // no default as it has to be calculated depending on the execution
+        // tied to its functions, not the execution
+        pub id: TransactionId,
+        pub collection_id: CollectionId,
+        pub execution_id: ExecutionId,
+        pub transaction_by: TransactionByStr,
+        pub transaction_key: TransactionKey,
     }
 
     #[td_type::Dao]

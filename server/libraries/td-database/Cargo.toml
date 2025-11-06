@@ -54,6 +54,7 @@ td-error = { workspace = true }
 td-common = { workspace = true }
 td-schema = { workspace = true }
 td-security = { workspace = true }
+te-system = { workspace = true }
 
 # External dependencies
 

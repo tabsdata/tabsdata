@@ -140,7 +140,7 @@ panic = "abort"
 strip = "debuginfo"
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "toml", "te-tableframe"]
+ignored = ["openssl", "toml", "te-tableframe", "te-system"]
 
 # Internal dependencies
 

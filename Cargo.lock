@@ -7687,6 +7687,7 @@ dependencies = [
  "td-error",
  "td-schema",
  "td-security",
+ "te-system",
  "testdir",
  "thiserror 2.0.17",
  "tokio",

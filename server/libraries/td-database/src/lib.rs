@@ -10,7 +10,6 @@ pub mod test_utils;
 /// Creates a connection pool for the `tabsdata` database.
 ///
 /// If the database does not exist, it is created.
-/// Also, If the schema is out of date, it is updated.
 pub async fn db(config: &SqliteConfig) -> Result<DbPool, sql::DbError> {
     db_with_schema(config, td_schema::schema()).await
 }
@@ -41,8 +40,8 @@ mod tests {
         let db_file = testdir!().join("test.db").to_str().map(str::to_string);
         let config = SqliteConfigBuilder::default().url(db_file).build().unwrap();
         let db = crate::db(&config).await.unwrap();
-        assert!(db.upgrade_db_version().await.is_ok());
-        assert!(db.check_db_version().await.is_ok());
+        assert!(db.upgrade().await.is_ok());
+        assert!(db.check().await.is_ok());
     }
 
     #[derive(sqlx::FromRow)]

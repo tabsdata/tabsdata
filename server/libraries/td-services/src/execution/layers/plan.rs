@@ -34,15 +34,16 @@ use te_execution::transaction::TransactionBy;
 
 pub async fn build_transaction_map(
     SrvCtx(transaction_by): SrvCtx<TransactionBy>,
+    Input(execution): Input<ExecutionDB>,
     Input(template): Input<ExecutionGraph<Versions>>,
 ) -> Result<TransactionMap<TransactionBy>, TdError> {
     let mut transaction_map = TransactionMap::empty(transaction_by.deref().clone());
 
     let manual_trigger = template.manual_trigger_function();
-    transaction_map.add(manual_trigger)?;
+    transaction_map.add(&execution, manual_trigger)?;
 
     for function in template.triggered_functions() {
-        transaction_map.add(function)?;
+        transaction_map.add(&execution, function)?;
     }
 
     Ok(transaction_map)
@@ -55,14 +56,14 @@ pub async fn build_transactions(
     let transactions = transaction_map
         .iter()
         .map(|t| {
-            let (transaction_id, collection_id) = transaction_map.get(t)?;
+            let transaction = transaction_map.get(t)?;
             transaction_builder
                 .deref()
                 .clone()
-                .id(transaction_id)
-                .collection_id(collection_id)
-                .transaction_by(transaction_map.mapper().transaction_by()?)
-                .transaction_key(t)
+                .id(transaction.id)
+                .collection_id(transaction.collection_id)
+                .transaction_by(transaction.transaction_by.clone())
+                .transaction_key(transaction.transaction_key.clone())
                 .build()
                 .map_err(TdError::from)
         })
@@ -78,13 +79,13 @@ pub async fn build_function_runs(
     Input(function_run_builder): Input<FunctionRunDBBuilder>,
 ) -> Result<Vec<FunctionRunDB>, TdError> {
     let manual_trigger = template.manual_trigger_function();
-    let (transaction_id, _) = transaction_map.get(&transaction_by.key(manual_trigger)?)?;
+    let transaction = transaction_map.get(&transaction_by.key(manual_trigger)?)?;
     let manual_trigger_function_run = function_run_builder
         .deref()
         .clone()
         .collection_id(manual_trigger.collection_id)
         .function_version_id(manual_trigger.function_version_id)
-        .transaction_id(transaction_id)
+        .transaction_id(transaction.id)
         .trigger(Trigger::Manual)
         .build()?;
 
@@ -92,13 +93,13 @@ pub async fn build_function_runs(
         .triggered_functions()
         .iter()
         .map(|f| {
-            let (transaction_id, _) = transaction_map.get(&transaction_by.key(f)?)?;
+            let transaction = transaction_map.get(&transaction_by.key(f)?)?;
             function_run_builder
                 .deref()
                 .clone()
                 .collection_id(f.collection_id)
                 .function_version_id(f.function_version_id)
-                .transaction_id(transaction_id)
+                .transaction_id(transaction.id)
                 .trigger(Trigger::Dependency)
                 .build()
                 .map_err(TdError::from)
@@ -111,7 +112,6 @@ pub async fn build_function_runs(
 pub async fn build_table_data_versions(
     SrvCtx(transaction_by): SrvCtx<TransactionBy>,
     Input(transaction_map): Input<TransactionMap<TransactionBy>>,
-    Input(execution): Input<ExecutionDB>,
     Input(function_runs): Input<Vec<FunctionRunDB>>,
     Input(template): Input<ExecutionGraph<Versions>>,
 ) -> Result<Vec<TableDataVersionDB>, TdError> {
@@ -124,15 +124,15 @@ pub async fn build_table_data_versions(
         .output_tables()
         .iter()
         .map(|(f, t, edge)| {
-            let (transaction_id, _) = transaction_map.get(&transaction_by.key(f)?)?;
+            let transaction = transaction_map.get(&transaction_by.key(f)?)?;
             TableDataVersionDB::builder()
                 .collection_id(f.collection_id)
                 .table_id(t.table_id)
                 .name(t.name.clone())
                 .table_version_id(t.table_version_id)
                 .function_version_id(t.function_version_id)
-                .execution_id(execution.id)
-                .transaction_id(transaction_id)
+                .execution_id(transaction.execution_id)
+                .transaction_id(transaction.id)
                 .function_run_id(function_runs_map[&f.function_version_id].id)
                 .function_param_pos(edge.output_pos().cloned().expect("must have output pos"))
                 .build()
@@ -259,7 +259,6 @@ pub async fn update_initial_function_run_status(
 pub async fn build_function_requirements(
     SrvCtx(transaction_by): SrvCtx<TransactionBy>,
     Input(transaction_map): Input<TransactionMap<TransactionBy>>,
-    Input(execution): Input<ExecutionDB>,
     Input(function_runs): Input<Vec<FunctionRunDB>>,
     Input(plan): Input<ExecutionGraph<ResolvedVersion>>,
 ) -> Result<Vec<FunctionRequirementDB>, TdError> {
@@ -283,13 +282,13 @@ pub async fn build_function_requirements(
                 -1
             };
 
-            let (transaction_id, _) = transaction_map.get(&transaction_by.key(function)?)?;
+            let transaction = transaction_map.get(&transaction_by.key(function)?)?;
             let mut builder = FunctionRequirementDB::builder();
             builder
                 // current
                 .collection_id(function.collection_id)
-                .execution_id(execution.id)
-                .transaction_id(transaction_id)
+                .execution_id(transaction.execution_id)
+                .transaction_id(transaction.id)
                 .function_run_id(function_runs_map[&function.function_version_id].id)
                 // condition
                 .requirement_table_id(table.table_id)
@@ -348,8 +347,8 @@ pub async fn build_response(
         .into_iter()
         .chain(std::iter::once(manual_trigger))
         .try_fold(HashMap::new(), |mut acc, f| {
-            let (transaction_id, _) = transaction_map.get(&transaction_by.key(f)?)?;
-            let entry: &mut HashSet<_> = acc.entry(*transaction_id).or_default();
+            let transaction = transaction_map.get(&transaction_by.key(f)?)?;
+            let entry: &mut HashSet<_> = acc.entry(transaction.id).or_default();
             entry.insert(f.function_version_id);
             Ok::<_, TdError>(acc)
         })?;

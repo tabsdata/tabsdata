@@ -10,6 +10,8 @@ use std::sync::LazyLock;
 
 /// The name of the system table key for database version.
 pub const DB_VERSION_NAME: &str = "db_version";
+pub const DB_EDITION_NAME: &str = "edition";
+
 /// Version that the current migration expects to be using the database on.
 /// Taken from live migrations' folder.
 pub static DB_VERSION_VALUE: LazyLock<usize> = LazyLock::new(|| {
