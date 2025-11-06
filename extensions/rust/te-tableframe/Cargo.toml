@@ -17,10 +17,6 @@ repository = { workspace = true }
 rust-version = { workspace = true }
 version = { workspace = true }
 
-[[example]]
-name = "te-tableframe"
-path = "examples/te-tableframe.rs"
-
 [lib]
 
 [features]

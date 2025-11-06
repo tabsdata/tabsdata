@@ -16,6 +16,8 @@ const TABSDATA_SOLUTION_HOME: &str = "TABSDATA_SOLUTION_HOME";
 
 const VERGEN_ALREADY_RAN: &str = "TD_VERGEN_ALREADY_RAN";
 
+const LOG_CRATE_TD_BUILD: Option<&str> = option_env!("LOG_CRATE_TD_BUILD");
+
 pub struct GitRepository {
     pub name: &'static str,
     pub description: &'static str,
@@ -72,6 +74,7 @@ pub trait Stamper {
 
 impl Stamping {
     fn solution() -> PathBuf {
+        let log_crate_td_build = LOG_CRATE_TD_BUILD.unwrap_or("false") == "true";
         let tabsdata_solution_home = env::var(TABSDATA_SOLUTION_HOME)
             .ok()
             .map(PathBuf::from)
@@ -91,23 +94,29 @@ impl Stamping {
                         path_before_canonicalize, error
                     )
                 });
-        println!(
-            "cargo:warning=tabsdata solution home: {:?}",
-            tabsdata_solution_home
-        );
+        if log_crate_td_build {
+            println!(
+                "cargo:warning=tabsdata solution home: {:?}",
+                tabsdata_solution_home
+            );
+        }
         match std::fs::read_dir(&tabsdata_solution_home) {
             Ok(entries) => {
-                println!("cargo:warning=🪣 Contents of tabsdata solution home:");
+                if log_crate_td_build {
+                    println!("cargo:warning=🪣 Contents of tabsdata solution home:");
+                }
                 let mut items: Vec<_> = entries.filter_map(|e| e.ok()).collect();
                 items.sort_by_key(|e| e.path());
                 for entry in items {
                     let path = entry.path();
                     let file_type = if path.is_dir() { "folder" } else { "file" };
-                    println!(
-                        "cargo:warning=   📚 [{:6}] {}",
-                        file_type,
-                        path.file_name().unwrap_or_default().to_string_lossy()
-                    );
+                    if log_crate_td_build {
+                        println!(
+                            "cargo:warning=   📚 [{:6}] {}",
+                            file_type,
+                            path.file_name().unwrap_or_default().to_string_lossy()
+                        );
+                    }
                 }
             }
             Err(error) => {
@@ -123,10 +132,13 @@ impl Stamping {
 
 impl Stamper for Stamping {
     fn stamp() -> Result<()> {
+        let log_crate_td_build = LOG_CRATE_TD_BUILD.unwrap_or("false") == "true";
         if env::var(VERGEN_ALREADY_RAN).is_ok() {
-            println!(
-                "cargo:warning=Vergen already ran; skipping to avoid inconsistent metadata generation."
-            );
+            if log_crate_td_build {
+                println!(
+                    "cargo:warning=Vergen already ran; skipping to avoid inconsistent metadata generation."
+                );
+            }
             return Ok(());
         }
         let solution: PathBuf = Self::solution();
