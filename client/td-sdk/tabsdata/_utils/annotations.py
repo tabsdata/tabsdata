@@ -2,29 +2,82 @@
 #  Copyright 2025 Tabs Data Inc.
 #
 
+from __future__ import annotations
+
 import inspect
 import logging
+import warnings
 from dataclasses import dataclass
 from functools import wraps
-from typing import Callable, List, Literal, ParamSpec, TypeAlias, TypeVar, Union
-
-P = ParamSpec("P")
-T = TypeVar("T")
+from typing import Any, Callable, List, Literal, TypeAlias, Union, cast
 
 logger = logging.getLogger(__name__)
 
 
-def unstable() -> Callable[[Callable[P, T]], Callable[P, T]]:
-    def decorate(function: Callable[P, T]) -> Callable[P, T]:
-        @wraps(function)
-        def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
-            logger.warning(
-                f"Function '{function.__name__}' is under development, subject to "
-                "change, and deemed unstable."
-            )
-            return function(*args, **kwargs)
+class TabsdataDeprecationWarning(DeprecationWarning):
+    pass
 
-        wrapper.__signature__ = inspect.signature(function)
+
+def deprecation(
+    reason: str,
+    replacement: str | None = None,
+    since: str | None = None,
+) -> type[TabsdataDeprecationWarning]:
+    # noinspection PyUnusedLocal
+    def __str__(self) -> str:
+        message = []
+        if reason:
+            message.append(f"Reason: {reason}.")
+        if since:
+            message.append(f"Since: {since}.")
+        if replacement:
+            message.append(f"Use {replacement} instead.")
+        return " ".join(message)
+
+    return cast(
+        type[TabsdataDeprecationWarning],
+        type(
+            "TabsdataDeprecationWarning",
+            (TabsdataDeprecationWarning,),
+            {
+                "reason": reason,
+                "replacement": replacement,
+                "version": since,
+                "__str__": __str__,
+            },
+        ),
+    )
+
+
+class UnstableWarning(UserWarning):
+    pass
+
+
+def unstable(
+    reason: str = "This feature is experimental and may change without notice.",
+    category: type[Warning] = UnstableWarning,
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    def decorate(obj: Callable[..., Any]) -> Callable[..., Any]:
+        message = f"Component {obj.__name__} is unstable: {reason}"
+
+        if inspect.isclass(obj):
+            original_init = obj.__init__
+
+            @wraps(original_init)
+            def wrapped_init(self, *args: Any, **kwargs: Any) -> None:
+                warnings.warn(message, category, stacklevel=2)
+                logger.warning(message)
+                original_init(self, *args, **kwargs)
+
+            obj.__init__ = wrapped_init
+            return obj
+
+        @wraps(obj)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            warnings.warn(message, category, stacklevel=2)
+            logger.warning(message)
+            return obj(*args, **kwargs)
+
         return wrapper
 
     return decorate
