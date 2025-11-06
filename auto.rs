@@ -3,29 +3,13 @@
 //
 
 use std::env;
-use ta_tableframe::api::Extension;
-use te_tableframe::engine::TableFrameExtension;
+use te_system::edition::{Edition, TabsdataEdition};
 
 fn main() {
+    let edition = TabsdataEdition;
     println!("Name.......: {}", env!("CARGO_PKG_NAME"));
     println!("Version....: {}", env!("CARGO_PKG_VERSION"));
-    println!("Edition....: {}", edition());
+    println!("Edition....: {}", edition.name());
     println!("Description: {}", env!("CARGO_PKG_DESCRIPTION"));
-    println!("Summary....: {}", summary());
-}
-
-#[cfg(not(feature = "enterprise"))]
-fn edition() -> String {
-    use ta_tableframe::api::OPEN_SOURCE;
-    OPEN_SOURCE.to_string()
-}
-
-#[cfg(feature = "enterprise")]
-fn edition() -> String {
-    use ta_tableframe::api::ENTERPRISE;
-    ENTERPRISE.to_string()
-}
-
-fn summary() -> String {
-    TableFrameExtension.summary().unwrap()
+    println!("Summary....: {}", edition.summary());
 }

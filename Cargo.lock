@@ -7457,6 +7457,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ta-system"
+version = "1.5.0"
+dependencies = [
+ "openssl",
+ "td-build",
+]
+
+[[package]]
 name = "ta-tableframe"
 version = "1.5.0"
 dependencies = [
@@ -7495,9 +7503,8 @@ name = "tabsdata"
 version = "1.5.0"
 dependencies = [
  "openssl",
- "ta-tableframe",
  "td-build",
- "te-tableframe",
+ "te-system",
  "toml",
 ]
 
@@ -8025,7 +8032,6 @@ dependencies = [
  "strum",
  "supports-color",
  "sysinfo 0.37.2",
- "ta-tableframe",
  "tabled",
  "td-apiserver",
  "td-build",
@@ -8033,7 +8039,7 @@ dependencies = [
  "td-error",
  "td-process",
  "td-python",
- "te-tableframe",
+ "te-system",
  "tempfile",
  "terminal_size",
  "textwrap",
@@ -8163,6 +8169,14 @@ dependencies = [
  "openssl",
  "ta-services",
  "td-build",
+]
+
+[[package]]
+name = "te-system"
+version = "1.5.0"
+dependencies = [
+ "openssl",
+ "ta-system",
 ]
 
 [[package]]

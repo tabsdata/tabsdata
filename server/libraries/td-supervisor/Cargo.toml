@@ -59,8 +59,7 @@ tm-workspace = { workspace = true }
 td-apiserver = { workspace = true }
 td-common = { workspace = true }
 td-error = { workspace = true }
-te-tableframe = { workspace = true }
-ta-tableframe = { workspace = true }
+te-system = { workspace = true }
 td-process = { workspace = true }
 td-python = { workspace = true }
 
@@ -109,8 +108,7 @@ url = { workspace = true, features = ["serde"] }
 walkdir = { workspace = true }
 
 [dev-dependencies]
-ta-tableframe = { workspace = true, features = ["td-test"] }
-te-tableframe = { workspace = true, features = ["td-test"] }
+te-system = { workspace = true, features = ["td-test"] }
 td-common = { workspace = true, features = ["td-test"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]

@@ -34,7 +34,6 @@ use std::process::{Command, Output, exit};
 use std::thread::sleep;
 use std::{env, fs, io};
 use sysinfo::{Signal, System};
-use ta_tableframe::api::{ENTERPRISE, Extension};
 use tabled::settings::Panel;
 use tabled::settings::themes::BorderCorrection;
 use tabled::{
@@ -67,7 +66,7 @@ use td_process::monitor::processes::{ProcessDistilled, get_process_tree};
 use td_process::monitor::space::instance_space;
 use td_python::upgrade::{get_source_version, get_target_version, upgrade};
 use td_python::venv;
-use te_tableframe::engine::TableFrameExtension;
+use te_system::edition::{Edition, TabsdataEdition};
 use terminal_size::{Width, terminal_size};
 use textwrap::{Options, WordSeparator, fill};
 use thiserror::Error;
@@ -600,8 +599,8 @@ pub fn show_information() {
 
     information.push(format!("Version: {VERSION}"));
 
-    let edition = TableFrameExtension.edition();
-    information.push(format!("Edition: {edition}"));
+    let edition = TabsdataEdition;
+    information.push(format!("Edition: {}", edition.name()));
 
     let run_mode = run_mode();
     information.push(format!("Mode: {run_mode}"));
@@ -627,7 +626,7 @@ pub fn show_information() {
         80
     };
 
-    if edition == ENTERPRISE && UI_MODE == ENV_VALUE_TD_UI_MODE_EXTERNAL {
+    if edition.enterprise() && UI_MODE == ENV_VALUE_TD_UI_MODE_EXTERNAL {
         width = 100;
         let ui_dir = fs::canonicalize(Path::new(UI_DIR))
             .map(|path| path.to_string_lossy().into_owned())

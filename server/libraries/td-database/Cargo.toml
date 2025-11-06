@@ -5,6 +5,7 @@
 [package]
 description = "Tabsdata Database Features"
 name = "td-database"
+build = "build.rs"
 
 authors = { workspace = true }
 edition = { workspace = true }
@@ -36,6 +37,8 @@ ignored = ["openssl", "td-build", "td-database", "thiserror", "strum", "toml"]
 [build-dependencies]
 
 # Internal dependencies
+
+td-build = { workspace = true }
 
 # External dependencies
 

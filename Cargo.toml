@@ -36,6 +36,7 @@ members = [
     "server/libraries/ta-apiserver",
     "server/libraries/ta-execution",
     "server/libraries/ta-services",
+    "server/libraries/ta-system",
     "server/libraries/ta-tableframe",
     "server/libraries/td-apiserver",
     "server/libraries/td-authz",
@@ -58,6 +59,7 @@ members = [
     "extensions/rust/te-apiserver",
     "extensions/rust/te-execution",
     "extensions/rust/te-services",
+    "extensions/rust/te-system",
     "extensions/rust/te-tableframe",
     "server/binaries/td-server",
 ]
@@ -138,7 +140,7 @@ panic = "abort"
 strip = "debuginfo"
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "toml",  "te-tableframe"]
+ignored = ["openssl", "toml", "te-tableframe"]
 
 # Internal dependencies
 
@@ -182,6 +184,9 @@ path = "server/libraries/ta-execution"
 [workspace.dependencies.ta-services]
 path = "server/libraries/ta-services"
 
+[workspace.dependencies.ta-system]
+path = "server/libraries/ta-system"
+
 [workspace.dependencies.ta-tableframe]
 path = "server/libraries/ta-tableframe"
 
@@ -205,6 +210,9 @@ path = "server/libraries/td-execution"
 
 [workspace.dependencies.te-services]
 path = "extensions/rust/te-services"
+
+[workspace.dependencies.te-system]
+path = "extensions/rust/te-system"
 
 [workspace.dependencies.te-tableframe]
 path = "extensions/rust/te-tableframe"
@@ -634,8 +642,7 @@ toml = { workspace = true }
 
 ## Libraries
 
-te-tableframe = { workspace = true }
-ta-tableframe = { workspace = true }
+te-system = { workspace = true }
 
 # External dependencies
 
