@@ -18,6 +18,7 @@ from typing import (
 
 import polars as pl
 from accessify import accessify
+from typing_extensions import deprecated
 
 # noinspection PyProtectedMember
 import tabsdata._utils.tableframe._common as td_common
@@ -31,7 +32,7 @@ import tabsdata.tableframe.functions.datetime as td_datetime
 import tabsdata.tableframe.typing as td_typing
 
 # noinspection PyProtectedMember
-from tabsdata._utils.annotations import pydoc
+from tabsdata._utils.annotations import deprecation, pydoc
 from tabsdata.exceptions import ErrorCode, TableFrameError
 
 T = TypeVar("T")
@@ -2024,6 +2025,17 @@ class Expr:
         """
         return Expr(self._expr.round_sig_figs(digits))
 
+    @deprecated(
+        "Method 'shrink_dtype' is deprecated.",
+        category=deprecation(
+            reason=(
+                "It had no practical effect on expressions, because data type "
+                "shrinking only makes sense on materialized data."
+            ),
+            since="1.5.0",
+            replacement="No direct replacement. Implementation is left as no-op.",
+        ),
+    )
     @pydoc(categories="numeric")
     def shrink_dtype(self) -> Expr:
         """
