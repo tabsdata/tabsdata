@@ -3,16 +3,24 @@
 #
 from typing import cast
 
+import pytest
+
 import tabsdata as td
 import tabsdata.tableframe.typing as td_typing
-from tabsdata.tableframe.udf.function import UDF
+from tabsdata.tableframe.udf.function import (
+    SIGNATURE_LIST,
+    SIGNATURE_UNPACKED,
+    UDFList,
+    UDFUnpacked,
+)
 from tests_tabsdata.test_tabsdata.test_tableframe.common import pretty_polars
 
 pretty_polars()
 
 
-def test_multiple_outputs_from_multiple_inputs_on_batch():
-    class SumAndProductUDF(UDF):
+@pytest.mark.parametrize("signature", [SIGNATURE_LIST, SIGNATURE_UNPACKED])
+def test_multiple_outputs_from_multiple_inputs_on_batch(signature):
+    class SumAndProductUDFList(UDFList):
         def __init__(self):
             super().__init__([("sum", td.Int64), ("product", td.Int64)])
 
@@ -24,6 +32,26 @@ def test_multiple_outputs_from_multiple_inputs_on_batch():
                 s_product,
             ]
 
+    class SumAndProductUDFUnpacked(UDFUnpacked):
+        def __init__(self):
+            super().__init__([("sum", td.Int64), ("product", td.Int64)])
+
+        def on_batch(
+            self, series_0: td_typing.Series, series_1: td_typing.Series
+        ) -> list[td_typing.Series]:
+            s_sum = series_0 + series_1
+            s_product = series_0 * series_1
+            return [
+                s_sum,
+                s_product,
+            ]
+
+    udf_class = (
+        SumAndProductUDFList
+        if signature == SIGNATURE_LIST
+        else SumAndProductUDFUnpacked
+    )
+
     data = {"a": [1, 2, 3], "b": [4, 5, 6]}
     tf = td.TableFrame(data)
 
@@ -31,7 +59,7 @@ def test_multiple_outputs_from_multiple_inputs_on_batch():
     original_rows, original_cols = original_df.shape
     original_columns = set(original_df.columns)
 
-    sum_and_product_udf = SumAndProductUDF()
+    sum_and_product_udf = udf_class()
 
     # fmt: off
     result = tf.udf(td.col("a", "b"),
@@ -66,8 +94,9 @@ def test_multiple_outputs_from_multiple_inputs_on_batch():
         assert col in collected.columns
 
 
-def test_multiple_outputs_from_multiple_inputs_on_element():
-    class SumAndProductUDF(UDF):
+@pytest.mark.parametrize("signature", [SIGNATURE_LIST, SIGNATURE_UNPACKED])
+def test_multiple_outputs_from_multiple_inputs_on_element(signature):
+    class SumAndProductUDFList(UDFList):
         def __init__(self):
             super().__init__([("sum", td.Int64), ("product", td.Int64)])
 
@@ -79,6 +108,24 @@ def test_multiple_outputs_from_multiple_inputs_on_element():
                 v_product,
             ]
 
+    class SumAndProductUDFUnpacked(UDFUnpacked):
+        def __init__(self):
+            super().__init__([("sum", td.Int64), ("product", td.Int64)])
+
+        def on_element(self, value_0, value_1) -> list:
+            v_sum = value_0 + value_1
+            v_product = value_0 * value_1
+            return [
+                v_sum,
+                v_product,
+            ]
+
+    udf_class = (
+        SumAndProductUDFList
+        if signature == SIGNATURE_LIST
+        else SumAndProductUDFUnpacked
+    )
+
     data = {"a": [1, 2, 3], "b": [4, 5, 6]}
     tf = td.TableFrame(data)
 
@@ -86,7 +133,7 @@ def test_multiple_outputs_from_multiple_inputs_on_element():
     original_rows, original_cols = original_df.shape
     original_columns = set(original_df.columns)
 
-    sum_and_product_udf = SumAndProductUDF()
+    sum_and_product_udf = udf_class()
 
     # fmt: off
     result = tf.udf(td.col("a", "b"),
@@ -121,8 +168,9 @@ def test_multiple_outputs_from_multiple_inputs_on_element():
         assert col in collected.columns
 
 
-def test_multiple_outputs_from_multiple_inputs_on_batch_with_parameter():
-    class SumAndProductUDF(UDF):
+@pytest.mark.parametrize("signature", [SIGNATURE_LIST, SIGNATURE_UNPACKED])
+def test_multiple_outputs_from_multiple_inputs_on_batch_with_parameter(signature):
+    class SumAndProductUDFList(UDFList):
         def __init__(self, scale=3):
             super().__init__([("sum", td.Int64), ("product", td.Int64)])
             self.scale = scale
@@ -139,6 +187,31 @@ def test_multiple_outputs_from_multiple_inputs_on_batch_with_parameter():
                 s_product,
             ]
 
+    class SumAndProductUDFUnpacked(UDFUnpacked):
+        def __init__(self, scale=3):
+            super().__init__([("sum", td.Int64), ("product", td.Int64)])
+            self.scale = scale
+
+        def on_batch(
+            self, series_0: td_typing.Series, series_1: td_typing.Series
+        ) -> list[td_typing.Series]:
+            s_sum = cast(
+                td_typing.Series, cast(object, series_0 + series_1 + self.scale)
+            )
+            s_product = cast(
+                td_typing.Series, cast(object, series_0 * series_1 * self.scale)
+            )
+            return [
+                s_sum,
+                s_product,
+            ]
+
+    udf_class = (
+        SumAndProductUDFList
+        if signature == SIGNATURE_LIST
+        else SumAndProductUDFUnpacked
+    )
+
     data = {"a": [1, 2, 3], "b": [4, 5, 6]}
     tf = td.TableFrame(data)
 
@@ -146,7 +219,7 @@ def test_multiple_outputs_from_multiple_inputs_on_batch_with_parameter():
     original_rows, original_cols = original_df.shape
     original_columns = set(original_df.columns)
 
-    sum_and_product_udf = SumAndProductUDF
+    sum_and_product_udf = udf_class
 
     # fmt: off
     result = tf.udf(td.col("a", "b"),
@@ -181,8 +254,9 @@ def test_multiple_outputs_from_multiple_inputs_on_batch_with_parameter():
         assert col in collected.columns
 
 
-def test_multiple_outputs_from_multiple_inputs_on_element_with_parameter():
-    class SumAndProductUDF(UDF):
+@pytest.mark.parametrize("signature", [SIGNATURE_LIST, SIGNATURE_UNPACKED])
+def test_multiple_outputs_from_multiple_inputs_on_element_with_parameter(signature):
+    class SumAndProductUDFList(UDFList):
         def __init__(self, scale=3):
             super().__init__([("sum", td.Int64), ("product", td.Int64)])
             self.scale = scale
@@ -195,6 +269,25 @@ def test_multiple_outputs_from_multiple_inputs_on_element_with_parameter():
                 v_product,
             ]
 
+    class SumAndProductUDFUnpacked(UDFUnpacked):
+        def __init__(self, scale=3):
+            super().__init__([("sum", td.Int64), ("product", td.Int64)])
+            self.scale = scale
+
+        def on_element(self, value_0, value_1) -> list:
+            v_sum = value_0 + value_1 + self.scale
+            v_product = value_0 * value_1 * self.scale
+            return [
+                v_sum,
+                v_product,
+            ]
+
+    udf_class = (
+        SumAndProductUDFList
+        if signature == SIGNATURE_LIST
+        else SumAndProductUDFUnpacked
+    )
+
     data = {"a": [1, 2, 3], "b": [4, 5, 6]}
     tf = td.TableFrame(data)
 
@@ -202,7 +295,7 @@ def test_multiple_outputs_from_multiple_inputs_on_element_with_parameter():
     original_rows, original_cols = original_df.shape
     original_columns = set(original_df.columns)
 
-    sum_and_product_udf = SumAndProductUDF
+    sum_and_product_udf = udf_class
 
     # fmt: off
     result = tf.udf(td.col("a", "b"),

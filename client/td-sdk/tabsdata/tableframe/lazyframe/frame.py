@@ -1255,6 +1255,10 @@ class TableFrame:
         batches even when authoring row-wise logic. In both cases the returned series
         become new columns appended to the original `TableFrame`.
 
+        By default, both methods receive their inputs as a list. Override the
+        `signature` property in your UDF class to return "unpacked" to have each column
+        passed as a separate argument instead.
+
         Creating UDFs:
             1. Subclass :class:`tabsdata.tableframe.udf.function.UDF`.
             2. Implement ``__init__`` to call ``super().__init__(output_columns)`` where
@@ -1339,6 +1343,33 @@ class TableFrame:
             │ 30        ┆ 10           │
             └───────────┴──────────────┘
             >>> tf.udf(td.col("numerator", "denominator"), RatioUDF()).collect()
+            >>> print(tf)
+            ┌───────────┬──────────────┬──────┐
+            │ numerator ┆ denominator  ┆ ratio│
+            │ ---       ┆ ---          ┆ ---  │
+            │ i64       ┆ i64          ┆ f64  │
+            ╞═══════════╪══════════════╪══════╡
+            │ 10        ┆ 2            ┆ 5.0  │
+            │ 20        ┆ 5            ┆ 4.0  │
+            │ 30        ┆ 10           ┆ 3.0  │
+            └───────────┴──────────────┴──────┘
+
+            Using signature property to receive individual arguments:
+
+            >>> class RatioUnpackedUDF(tdf.UDF):
+            ...     def __init__(self):
+            ...         super().__init__(("ratio", tdf.Float64))
+            ...
+            ...     @property
+            ...     def signature(self):
+            ...         return "unpacked"
+            ...
+            ...     def on_element(self, numerator, denominator):
+            ...         return [numerator / denominator]
+            >>>
+            >>> tf = td.TableFrame({"numerator": [10, 20, 30],
+            >>>                     "denominator": [2, 5, 10],})
+            >>> tf.udf(td.col("numerator", "denominator"), RatioUnpackedUDF()).collect()
             >>> print(tf)
             ┌───────────┬──────────────┬──────┐
             │ numerator ┆ denominator  ┆ ratio│

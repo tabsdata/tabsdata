@@ -12,7 +12,12 @@ from polars._typing import PolarsDataType
 import tabsdata as td
 import tabsdata.tableframe.typing as td_typing
 from tabsdata.tableframe.lazyframe.properties import TableFramePropertiesBuilder
-from tabsdata.tableframe.udf.function import UDF
+from tabsdata.tableframe.udf.function import (
+    SIGNATURE_LIST,
+    SIGNATURE_UNPACKED,
+    UDFList,
+    UDFUnpacked,
+)
 from tests_tabsdata.test_tabsdata.test_tableframe.common import (
     load_normalized_complex_dataframe,
 )
@@ -20,7 +25,8 @@ from tests_tabsdata.test_tabsdata.test_tableframe.common import (
 
 @dataclass(frozen=True)
 class OperationSpec:
-    factory: Callable[[], UDF]
+    factory_list: Callable[[], UDFList]
+    factory_unpacked: Callable[[], UDFUnpacked]
     expr: Tuple[str, ...]
     base_names: Tuple[str, ...]
     base_dtypes: Tuple[PolarsDataType, ...]
@@ -124,7 +130,7 @@ def cast_scalar_to_dtype(value: Any, dtype: PolarsDataType | None) -> Any:
     return series.cast(dtype, strict=False)[0]
 
 
-class MassCenteringBatch(UDF):
+class MassCenteringBatchList(UDFList):
     def __init__(self) -> None:
         super().__init__([("mass_centered_default", td.Float64)])
 
@@ -135,7 +141,18 @@ class MassCenteringBatch(UDF):
         return [centered]
 
 
-class FlipperBucketElement(UDF):
+class MassCenteringBatchUnpacked(UDFUnpacked):
+    def __init__(self) -> None:
+        super().__init__([("mass_centered_default", td.Float64)])
+
+    def on_batch(self, series_0: td_typing.Series) -> List[td_typing.Series]:
+        mass = series_0.cast(td.Float64)
+        mean_value = mass.mean()
+        centered = mass - mean_value
+        return [centered]
+
+
+class FlipperBucketElementList(UDFList):
     def __init__(self) -> None:
         super().__init__([("flipper_label_default", td.Utf8)])
 
@@ -150,7 +167,22 @@ class FlipperBucketElement(UDF):
         return ["standard"]
 
 
-class BillRatioElement(UDF):
+class FlipperBucketElementUnpacked(UDFUnpacked):
+    def __init__(self) -> None:
+        super().__init__([("flipper_label_default", td.Utf8)])
+
+    def on_element(self, value_0) -> List[Any]:
+        length = value_0
+        if length is None:
+            return [None]
+        if length >= 215:
+            return ["giant"]
+        if length >= 195:
+            return ["long"]
+        return ["standard"]
+
+
+class BillRatioElementList(UDFList):
     def __init__(self) -> None:
         super().__init__([("bill_ratio_default", td.Float64)])
 
@@ -163,7 +195,20 @@ class BillRatioElement(UDF):
         return [cast_scalar_to_dtype(ratio, dtype)]
 
 
-class BillRatioBatch(UDF):
+class BillRatioElementUnpacked(UDFUnpacked):
+    def __init__(self) -> None:
+        super().__init__([("bill_ratio_default", td.Float64)])
+
+    def on_element(self, value_0, value_1) -> List[Any]:
+        length, depth = value_0, value_1
+        if length is None or depth is None or depth == 0:
+            return [None]
+        ratio = length / depth
+        dtype = self._schema.columns[0].dtype
+        return [cast_scalar_to_dtype(ratio, dtype)]
+
+
+class BillRatioBatchList(UDFList):
     def __init__(self) -> None:
         super().__init__([("bill_ratio_default_batch", td.Float64)])
 
@@ -174,7 +219,20 @@ class BillRatioBatch(UDF):
         return [ratio]
 
 
-class BillSumDiffElement(UDF):
+class BillRatioBatchUnpacked(UDFUnpacked):
+    def __init__(self) -> None:
+        super().__init__([("bill_ratio_default_batch", td.Float64)])
+
+    def on_batch(
+        self, series_0: td_typing.Series, series_1: td_typing.Series
+    ) -> List[td_typing.Series]:
+        length = series_0.cast(td.Float64)
+        depth = series_1.cast(td.Float64)
+        ratio = length / depth
+        return [ratio]
+
+
+class BillSumDiffElementList(UDFList):
     def __init__(self) -> None:
         super().__init__(
             [
@@ -193,7 +251,26 @@ class BillSumDiffElement(UDF):
         return [bill_sum, bill_gap]
 
 
-class BillSumDiffBatch(UDF):
+class BillSumDiffElementUnpacked(UDFUnpacked):
+    def __init__(self) -> None:
+        super().__init__(
+            [
+                ("bill_sum_default", td.Float64),
+                ("bill_gap_default", td.Float64),
+            ]
+        )
+
+    def on_element(self, value_0, value_1) -> List[Any]:
+        length, depth = value_0, value_1
+        if length is None or depth is None:
+            return [None, None]
+        schema_columns = list(self._schema)
+        bill_sum = cast_scalar_to_dtype(length + depth, schema_columns[0].dtype)
+        bill_gap = cast_scalar_to_dtype(length - depth, schema_columns[1].dtype)
+        return [bill_sum, bill_gap]
+
+
+class BillSumDiffBatchList(UDFList):
     def __init__(self) -> None:
         super().__init__(
             [
@@ -210,7 +287,26 @@ class BillSumDiffBatch(UDF):
         return [bill_sum, bill_gap]
 
 
-class IslandYearElement(UDF):
+class BillSumDiffBatchUnpacked(UDFUnpacked):
+    def __init__(self) -> None:
+        super().__init__(
+            [
+                ("bill_sum_default", td.Float64),
+                ("bill_gap_default", td.Float64),
+            ]
+        )
+
+    def on_batch(
+        self, series_0: td_typing.Series, series_1: td_typing.Series
+    ) -> List[td_typing.Series]:
+        length = series_0.cast(td.Float64)
+        depth = series_1.cast(td.Float64)
+        bill_sum = length + depth
+        bill_gap = length - depth
+        return [bill_sum, bill_gap]
+
+
+class IslandYearElementList(UDFList):
     def __init__(self) -> None:
         super().__init__(
             [
@@ -227,7 +323,24 @@ class IslandYearElement(UDF):
         return [tag, year >= 2008]
 
 
-class MassFlipperBatch(UDF):
+class IslandYearElementUnpacked(UDFUnpacked):
+    def __init__(self) -> None:
+        super().__init__(
+            [
+                ("island_year_default", td.Utf8),
+                ("is_recent_default", td.Boolean),
+            ]
+        )
+
+    def on_element(self, value_0, value_1) -> List[Any]:
+        island, year = value_0, value_1
+        if island is None or year is None:
+            return [None, None]
+        tag = f"{island.lower()}_{year}"
+        return [tag, year >= 2008]
+
+
+class MassFlipperBatchList(UDFList):
     def __init__(self) -> None:
         super().__init__(
             [
@@ -245,7 +358,27 @@ class MassFlipperBatch(UDF):
         return [ratio, heavy]
 
 
-class BodyCompositeBatch(UDF):
+class MassFlipperBatchUnpacked(UDFUnpacked):
+    def __init__(self) -> None:
+        super().__init__(
+            [
+                ("mass_per_flipper_default", td.Float64),
+                ("is_massive_default", td.Boolean),
+            ]
+        )
+
+    def on_batch(
+        self, series_0: td_typing.Series, series_1: td_typing.Series
+    ) -> List[td_typing.Series]:
+        mass = series_0.cast(td.Float64)
+        flipper = series_1.cast(td.Float64)
+        ratio = mass / flipper
+        mean_mass = mass.mean()
+        heavy = mass > mean_mass
+        return [ratio, heavy]
+
+
+class BodyCompositeBatchList(UDFList):
     def __init__(self) -> None:
         super().__init__(
             [
@@ -266,7 +399,33 @@ class BodyCompositeBatch(UDF):
         return [density, bill_sum, density_flag]
 
 
-class SpeciesInsightsElement(UDF):
+class BodyCompositeBatchUnpacked(UDFUnpacked):
+    def __init__(self) -> None:
+        super().__init__(
+            [
+                ("mass_density_default", td.Float64),
+                ("bill_sum_default", td.Float64),
+                ("density_flag_default", td.Boolean),
+            ]
+        )
+
+    def on_batch(
+        self,
+        series_0: td_typing.Series,
+        series_1: td_typing.Series,
+        series_2: td_typing.Series,
+    ) -> List[td_typing.Series]:
+        mass = series_0.cast(td.Float64)
+        length = series_1.cast(td.Float64)
+        depth = series_2.cast(td.Float64)
+        density = mass / (length * depth)
+        bill_sum = length + depth
+        density_mean = density.mean()
+        density_flag = density > density_mean
+        return [density, bill_sum, density_flag]
+
+
+class SpeciesInsightsElementList(UDFList):
     def __init__(self) -> None:
         super().__init__(
             [
@@ -278,6 +437,34 @@ class SpeciesInsightsElement(UDF):
 
     def on_element(self, values: List[Any]) -> List[Any]:
         species, island, sex = values
+        if species is None:
+            return [None, None, None]
+        parts = [species.lower()]
+        if island is not None:
+            parts.append(str(island).lower())
+        parts.append(str(sex).lower() if sex is not None else "unknown")
+        tag = "-".join(parts)
+        is_gentoo = species.lower() == "gentoo"
+        name_length = len(species)
+        schema_columns = list(self._schema)
+        tag = cast_scalar_to_dtype(tag, schema_columns[0].dtype)
+        is_gentoo = cast_scalar_to_dtype(is_gentoo, schema_columns[1].dtype)
+        name_length = cast_scalar_to_dtype(name_length, schema_columns[2].dtype)
+        return [tag, is_gentoo, name_length]
+
+
+class SpeciesInsightsElementUnpacked(UDFUnpacked):
+    def __init__(self) -> None:
+        super().__init__(
+            [
+                ("species_tag_default", td.Utf8),
+                ("is_gentoo_default", td.Boolean),
+                ("species_name_length_default", td.Int64),
+            ]
+        )
+
+    def on_element(self, value_0, value_1, value_2) -> List[Any]:
+        species, island, sex = value_0, value_1, value_2
         if species is None:
             return [None, None, None]
         parts = [species.lower()]
@@ -371,63 +558,72 @@ def expected_species_insights_element(df: pl.DataFrame) -> List[Any]:
 
 OPERATION_SPECS: Dict[str, OperationSpec] = {
     "mass_center_batch": OperationSpec(
-        factory=MassCenteringBatch,
+        factory_list=MassCenteringBatchList,
+        factory_unpacked=MassCenteringBatchUnpacked,
         expr=("body_mass_g",),
         base_names=("mass_centered_default",),
         base_dtypes=(td.Float64,),
         expected_row=expected_mass_center_batch,
     ),
     "flipper_bucket_element": OperationSpec(
-        factory=FlipperBucketElement,
+        factory_list=FlipperBucketElementList,
+        factory_unpacked=FlipperBucketElementUnpacked,
         expr=("flipper_length_mm",),
         base_names=("flipper_label_default",),
         base_dtypes=(td.Utf8,),
         expected_row=expected_flipper_bucket_element,
     ),
     "bill_ratio_element": OperationSpec(
-        factory=BillRatioElement,
+        factory_list=BillRatioElementList,
+        factory_unpacked=BillRatioElementUnpacked,
         expr=("bill_length_mm", "bill_depth_mm"),
         base_names=("bill_ratio_default",),
         base_dtypes=(td.Float64,),
         expected_row=expected_bill_ratio,
     ),
     "bill_ratio_batch": OperationSpec(
-        factory=BillRatioBatch,
+        factory_list=BillRatioBatchList,
+        factory_unpacked=BillRatioBatchUnpacked,
         expr=("bill_length_mm", "bill_depth_mm"),
         base_names=("bill_ratio_default_batch",),
         base_dtypes=(td.Float64,),
         expected_row=expected_bill_ratio,
     ),
     "bill_sum_diff_element": OperationSpec(
-        factory=BillSumDiffElement,
+        factory_list=BillSumDiffElementList,
+        factory_unpacked=BillSumDiffElementUnpacked,
         expr=("bill_length_mm", "bill_depth_mm"),
         base_names=("bill_sum_default", "bill_gap_default"),
         base_dtypes=(td.Float64, td.Float64),
         expected_row=expected_bill_sum_diff,
     ),
     "bill_sum_diff_batch": OperationSpec(
-        factory=BillSumDiffBatch,
+        factory_list=BillSumDiffBatchList,
+        factory_unpacked=BillSumDiffBatchUnpacked,
         expr=("bill_length_mm", "bill_depth_mm"),
         base_names=("bill_sum_default", "bill_gap_default"),
         base_dtypes=(td.Float64, td.Float64),
         expected_row=expected_bill_sum_diff,
     ),
     "island_year_element": OperationSpec(
-        factory=IslandYearElement,
+        factory_list=IslandYearElementList,
+        factory_unpacked=IslandYearElementUnpacked,
         expr=("island", "year"),
         base_names=("island_year_default", "is_recent_default"),
         base_dtypes=(td.Utf8, td.Boolean),
         expected_row=expected_island_year_element,
     ),
     "mass_flipper_batch": OperationSpec(
-        factory=MassFlipperBatch,
+        factory_list=MassFlipperBatchList,
+        factory_unpacked=MassFlipperBatchUnpacked,
         expr=("body_mass_g", "flipper_length_mm"),
         base_names=("mass_per_flipper_default", "is_massive_default"),
         base_dtypes=(td.Float64, td.Boolean),
         expected_row=expected_mass_flipper_batch,
     ),
     "body_composite_batch": OperationSpec(
-        factory=BodyCompositeBatch,
+        factory_list=BodyCompositeBatchList,
+        factory_unpacked=BodyCompositeBatchUnpacked,
         expr=("body_mass_g", "bill_length_mm", "bill_depth_mm"),
         base_names=(
             "mass_density_default",
@@ -438,7 +634,8 @@ OPERATION_SPECS: Dict[str, OperationSpec] = {
         expected_row=expected_body_composite_batch,
     ),
     "species_insights_element": OperationSpec(
-        factory=SpeciesInsightsElement,
+        factory_list=SpeciesInsightsElementList,
+        factory_unpacked=SpeciesInsightsElementUnpacked,
         expr=("species", "island", "sex"),
         base_names=(
             "species_tag_default",
@@ -741,12 +938,16 @@ def execute_udf_test(
     operation_key: str,
     method: str,
     payload: Any,
+    signature: str,
 ) -> None:
     data_frame, table_frame = penguin_table_frame
     baseline_df = table_frame
     baseline_columns = set(baseline_df._lf.columns)
     spec = OPERATION_SPECS[operation_key]
-    udf_instance = spec.factory()
+    factory = (
+        spec.factory_list if signature == SIGNATURE_LIST else spec.factory_unpacked
+    )
+    udf_instance = factory()
     udf_function = (
         udf_instance.with_columns(payload)
         if method == "all"
@@ -783,30 +984,36 @@ def execute_udf_test(
 
 
 @pytest.mark.parametrize("operation_key, method, payload", SINGLE_COLUMN_CASES)
+@pytest.mark.parametrize("signature", [SIGNATURE_LIST, SIGNATURE_UNPACKED])
 def test_single_column_udf_schema_variants(
     penguin_table_frame: Tuple[pl.DataFrame, td.TableFrame],
     operation_key: str,
     method: str,
     payload: Any,
+    signature: str,
 ) -> None:
-    execute_udf_test(penguin_table_frame, operation_key, method, payload)
+    execute_udf_test(penguin_table_frame, operation_key, method, payload, signature)
 
 
 @pytest.mark.parametrize("operation_key, method, payload", TWO_COLUMN_CASES)
+@pytest.mark.parametrize("signature", [SIGNATURE_LIST, SIGNATURE_UNPACKED])
 def test_two_column_udf_schema_variants(
     penguin_table_frame: Tuple[pl.DataFrame, td.TableFrame],
     operation_key: str,
     method: str,
     payload: Any,
+    signature: str,
 ) -> None:
-    execute_udf_test(penguin_table_frame, operation_key, method, payload)
+    execute_udf_test(penguin_table_frame, operation_key, method, payload, signature)
 
 
 @pytest.mark.parametrize("operation_key, method, payload", THREE_COLUMN_CASES)
+@pytest.mark.parametrize("signature", [SIGNATURE_LIST, SIGNATURE_UNPACKED])
 def test_three_column_udf_schema_variants(
     penguin_table_frame: Tuple[pl.DataFrame, td.TableFrame],
     operation_key: str,
     method: str,
     payload: Any,
+    signature: str,
 ) -> None:
-    execute_udf_test(penguin_table_frame, operation_key, method, payload)
+    execute_udf_test(penguin_table_frame, operation_key, method, payload, signature)

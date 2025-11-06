@@ -5,13 +5,13 @@
 import pytest
 
 import tabsdata as td
-from tabsdata.tableframe.udf.function import UDF
+from tabsdata.tableframe.udf.function import UDFList, UDFUnpacked
 from tests_tabsdata.test_tabsdata.test_tableframe.common import pretty_polars
 
 pretty_polars()
 
 
-class CombineInputsUDF(UDF):
+class CombineInputsUDFList(UDFList):
     def __init__(self, num_outputs=1):
         output_schema = [(f"out_{i}", td.String) for i in range(num_outputs)]
         super().__init__(output_schema)
@@ -22,34 +22,48 @@ class CombineInputsUDF(UDF):
         return [result_val] * self.num_outputs
 
 
-def test_udf_single_positional_expr():
+class CombineInputsUDFUnpacked(UDFUnpacked):
+    def __init__(self, num_outputs=1):
+        output_schema = [(f"out_{i}", td.String) for i in range(num_outputs)]
+        super().__init__(output_schema)
+        self.num_outputs = num_outputs
+
+    def on_element(self, *values) -> list:
+        result_val = "_".join(map(str, values))
+        return [result_val] * self.num_outputs
+
+
+@pytest.mark.parametrize("udf_class", [CombineInputsUDFList, CombineInputsUDFUnpacked])
+def test_udf_single_positional_expr(udf_class):
     data = {"a": [1, 2], "b": ["x", "y"]}
     tf = td.TableFrame(data)
-    result = tf.udf("a", CombineInputsUDF())
+    result = tf.udf("a", udf_class())
     collected = result.to_polars_df()
     assert "out_0" in collected.columns
     assert collected["out_0"].to_list() == ["1", "2"]
 
 
-def test_udf_multiple_positional_exprs():
+@pytest.mark.parametrize("udf_class", [CombineInputsUDFList, CombineInputsUDFUnpacked])
+def test_udf_multiple_positional_exprs(udf_class):
     data = {"a": [1, 2], "b": ["x", "y"]}
     tf = td.TableFrame(data)
-    result = tf.udf(["a", "b"], function=CombineInputsUDF())
+    result = tf.udf(["a", "b"], function=udf_class())
     collected = result.to_polars_df()
     assert "out_0" in collected.columns
     assert collected["out_0"].to_list() == ["1_x", "2_y"]
 
 
-def test_udf_list_of_positional_exprs():
+@pytest.mark.parametrize("udf_class", [CombineInputsUDFList, CombineInputsUDFUnpacked])
+def test_udf_list_of_positional_exprs(udf_class):
     data = {"a": [1, 2], "b": ["x", "y"]}
     tf = td.TableFrame(data)
-    result = tf.udf(["a", "b"], function=CombineInputsUDF())
+    result = tf.udf(["a", "b"], function=udf_class())
     collected = result.to_polars_df()
     assert "out_0" in collected.columns
     assert collected["out_0"].to_list() == ["1_x", "2_y"]
 
 
-class InitSystemColumnsUDF(UDF):
+class InitSystemColumnsUDFList(UDFList):
     def __init__(self):
         output_schema = [("$td.id", td.String)]
         super().__init__(output_schema)
@@ -59,7 +73,20 @@ class InitSystemColumnsUDF(UDF):
         return [columns_out]
 
 
-def test_system_column_ini_init():
+class InitSystemColumnsUDFUnpacked(UDFUnpacked):
+    def __init__(self):
+        output_schema = [("$td.id", td.String)]
+        super().__init__(output_schema)
+
+    def on_element(self, *values) -> list:
+        columns_out = "_".join(map(str, values))
+        return [columns_out]
+
+
+@pytest.mark.parametrize(
+    "udf_class", [InitSystemColumnsUDFList, InitSystemColumnsUDFUnpacked]
+)
+def test_system_column_ini_init(udf_class):
     data = {"a": [1, 2], "b": ["x", "y"]}
     tf = td.TableFrame(data)
     with pytest.raises(
@@ -69,11 +96,11 @@ def test_system_column_ini_init():
             "reserved system columns namespace"
         ),
     ):
-        result = tf.udf("a", function=InitSystemColumnsUDF())
+        result = tf.udf("a", function=udf_class())
         _ = result._lf.collect()
 
 
-class OutputSystemColumnsUDF(UDF):
+class OutputSystemColumnsUDFList(UDFList):
     def __init__(self):
         output_schema = [("td.id", td.String)]
         super().__init__(output_schema)
@@ -83,7 +110,20 @@ class OutputSystemColumnsUDF(UDF):
         return [columns_out]
 
 
-def test_system_column_in_output_columns():
+class OutputSystemColumnsUDFUnpacked(UDFUnpacked):
+    def __init__(self):
+        output_schema = [("td.id", td.String)]
+        super().__init__(output_schema)
+
+    def on_element(self, *values) -> list:
+        columns_out = "_".join(map(str, values))
+        return [columns_out]
+
+
+@pytest.mark.parametrize(
+    "udf_class", [OutputSystemColumnsUDFList, OutputSystemColumnsUDFUnpacked]
+)
+def test_system_column_in_output_columns(udf_class):
     data = {"a": [1, 2], "b": ["x", "y"]}
     tf = td.TableFrame(data)
     with pytest.raises(
@@ -93,7 +133,5 @@ def test_system_column_in_output_columns():
             "reserved system columns namespace"
         ),
     ):
-        result = tf.udf(
-            "a", function=OutputSystemColumnsUDF().with_columns(("$td.id", None))
-        )
+        result = tf.udf("a", function=udf_class().with_columns(("$td.id", None)))
         _ = result._lf.collect()

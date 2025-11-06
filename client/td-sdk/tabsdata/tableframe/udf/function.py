@@ -2,9 +2,9 @@
 #  Copyright 2025 Tabs Data Inc.
 #
 import copy
-from abc import ABC
+from abc import ABC, ABCMeta
 from dataclasses import dataclass
-from typing import Any, Union
+from typing import Any, Literal, Union, get_args, overload
 
 import polars as pl
 from polars._typing import PolarsDataType
@@ -13,6 +13,15 @@ import tabsdata.tableframe.dtypes as td_dtypes
 import tabsdata.tableframe.functions.col as td_col
 import tabsdata.tableframe.schema as td_schema
 import tabsdata.tableframe.typing as td_typing
+
+SIGNATURE = Literal[
+    "list",
+    "unpacked",
+]
+(
+    SIGNATURE_LIST,
+    SIGNATURE_UNPACKED,
+) = get_args(SIGNATURE)
 
 
 @dataclass
@@ -110,6 +119,11 @@ class UDF(ABC):
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
 
+        if ABC in cls.__bases__ or (
+            isinstance(cls, ABCMeta) and getattr(cls, "__abstractmethods__", None)
+        ):
+            return
+
         output_columns_implemented = cls.with_columns is not UDF.with_columns
         if output_columns_implemented:
             raise TypeError(
@@ -135,7 +149,34 @@ class UDF(ABC):
                 f" '{UDF.on_element.__name__}' and '{UDF.on_batch.__name__}' methods."
             )
 
+    @property
+    def signature(self) -> SIGNATURE:
+        """
+        Defines how parameters are passed to on_batch and on_element methods.
+
+        Returns:
+            "list": Parameters are passed as a single list (default).
+            "unpacked": Each parameter is passed as a separate argument.
+
+        Override this property in your UDF subclass to change the parameter style.
+        """
+        return SIGNATURE_LIST
+
+    # fmt: off
+    @overload
     def on_batch(self, series: list[td_typing.Series]) -> list[td_typing.Series]:
+        ...
+
+    # fmt: on
+
+    # fmt: off
+    @overload
+    def on_batch(self, *series: td_typing.Series) -> list[td_typing.Series]:
+        ...
+
+    # fmt: on
+
+    def on_batch(self, *args) -> list[td_typing.Series]:
         """
         Creating UDFs:
             1. Subclass :class:`tabsdata.tableframe.udf.function.UDF`.
@@ -160,11 +201,27 @@ class UDF(ABC):
             2. Pass it to TableFrame method udf().
             3. Optionally use :meth:`UDF.output_columns` to override output column names
                or data types after instantiation.
+            4. By default, `on_batch` receives a list of series. Override the
+               `signature` property to return "unpacked" to receive each series as a
+               separate argument instead.
         """
 
     pass
 
+    # fmt: off
+    @overload
     def on_element(self, values: list[Any]) -> list[Any]:
+        ...
+    # fmt: on
+
+    # fmt: off
+    @overload
+    def on_element(self, *values: Any) -> list[Any]:
+        ...
+
+    # fmt: on
+
+    def on_element(self, *args) -> list[Any]:
         """
         Creating UDFs:
             1. Subclass :class:`tabsdata.tableframe.udf.function.UDF`.
@@ -189,6 +246,9 @@ class UDF(ABC):
             2. Pass it to TableFrame method udf().
             3. Optionally use :meth:`UDF.output_columns` to override output column names
                or data types after instantiation.
+            4. By default, `on_element` receives a list of values. Override the
+               `signature` property to return "unpacked" to receive each value as a
+               separate argument instead.
         """
 
     pass
@@ -376,14 +436,20 @@ class UDF(ABC):
                 f"{self.__class__.__name__}.__init__() did not call super().__init__()."
                 " Subclasses must call super().__init__(columns)."
             )
-
+        signature = self.signature
+        if signature not in get_args(SIGNATURE):
+            raise ValueError(
+                f"Invalid signature: {signature}. Must be one of {get_args(SIGNATURE)}."
+            )
         if self._on_batch:
-            series_out = self.on_batch(series)
-
+            series_out = None
+            if signature == SIGNATURE_LIST:
+                series_out = self.on_batch(series)
+            elif signature == SIGNATURE_UNPACKED:
+                series_out = self.on_batch(*series)
             series_out_width = len(series_out)
             names = self._names(series_out_width)
             dtypes = self._dtypes(series_out_width)
-
             series_out_with_spec = []
             for column_out, name, dtype in zip(series_out, names, dtypes):
                 series_with_spec = column_out.alias(name).cast(dtype)
@@ -391,15 +457,17 @@ class UDF(ABC):
             return series_out_with_spec
         elif self._on_element:
             rows_out = []
+            row_out = None
             for values in zip(*series):
-                row_out = self.on_element(list(values))
+                if signature == SIGNATURE_LIST:
+                    row_out = self.on_element(list(values))
+                elif signature == SIGNATURE_UNPACKED:
+                    row_out = self.on_element(*values)
                 rows_out.append(row_out)
             columns_out = list(zip(*rows_out))
-
             columns_out_width = len(columns_out)
             names = self._names(columns_out_width)
             dtypes = self._dtypes(columns_out_width)
-
             series_out_with_spec = []
             for column_data, name, dtype in zip(columns_out, names, dtypes):
                 series_with_spec = td_typing.Series(
@@ -412,3 +480,47 @@ class UDF(ABC):
                 f"{self.__class__.__name__} "
                 "has neither on_batch nor on_element implemented."
             )
+
+
+class UDFList(UDF, ABC):
+    """
+    Abstract base class for UDFs that use list-style parameter passing.
+
+    When subclassing UDFList, implement on_batch or on_element
+    with list signature:
+        - on_batch(self, series: list[Series]) -> list[Series]
+        - on_element(self, values: list[Any]) -> list[Any]
+    """
+
+    def __init__(self, output_columns):
+        if self.__class__ is UDFList:
+            raise TypeError(
+                "Cannot instantiate UDFList directly. Create a subclass instead."
+            )
+        super().__init__(output_columns)
+
+    @property
+    def signature(self) -> SIGNATURE:
+        return SIGNATURE_LIST
+
+
+class UDFUnpacked(UDF, ABC):
+    """
+    Abstract base class for UDFs that use unpacked-style parameter passing.
+
+    When subclassing UDFUnpacked, implement on_batch or on_element
+    with unpacked signature:
+        - on_batch(self, col1: Series, col2: Series, ...) -> list[Series]
+        - on_element(self, val1: Any, val2: Any, ...) -> list[Any]
+    """
+
+    def __init__(self, output_columns):
+        if self.__class__ is UDFUnpacked:
+            raise TypeError(
+                "Cannot instantiate UDFUnpacked directly. Create a subclass instead."
+            )
+        super().__init__(output_columns)
+
+    @property
+    def signature(self) -> SIGNATURE:
+        return SIGNATURE_UNPACKED
