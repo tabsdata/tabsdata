@@ -12,13 +12,13 @@ build = "build.rs"
 
 [workspace.package]
 authors = [
-    "Aleix Lascorz Guiu   (tabsleix)     <aleix@tabsdata.com>",
-    "Alejandro Abdelnur   (tucu0)        <tucu@tabsdata.com>",
-    "Arvind Prabhakar     (aptabs)       <arvind@tabsdata.com>",
-    "David Sánchez Frías  (tabsdavid)    <david@tabsdata.com>",
-    "Dimas Cabré i Chacón (aoinokimi)    <dragon@tabsdata.com>",
-    "Joaquín Bo Díaz      (joaquin041)   <joaquin@tabsdata.com>",
-    "Shreyans Shrimal     (shreyasvan01) <shreyans@streamsets.com>"
+    "Aleix Lascorz Guiu    (tabsleix)     <aleix@tabsdata.com>",
+    "Alejandro Abdelnur    (tucu0)        <tucu@tabsdata.com>",
+    "Arvind Prabhakar      (aptabs)       <arvind@tabsdata.com>",
+    "David Sánchez Frías   (tabsdavid)    <david@tabsdata.com>",
+    "Dimas Cabré i Chacón  (aoinokimi)    <dragon@tabsdata.com>",
+    "Joaquín Bo Díaz       (joaquin041)   <joaquin@tabsdata.com>",
+    "Shreyas Vankayalapati (shreyasvan01) <shreyans@tabsdata.com>"
 ]
 edition = "2024"
 homepage = "https://www.tabsdata.com"
