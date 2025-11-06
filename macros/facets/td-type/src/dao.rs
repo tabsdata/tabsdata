@@ -158,6 +158,19 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
             quote! {}
         }
     };
+    // All state automatically added as 0
+    let all_state = quote! {
+        impl #impl_generics #ident #ty_generics #where_clause {
+            #[allow(non_upper_case_globals)]
+            pub const All: u8 = 0;
+        }
+
+        impl #impl_generics crate::types::States<0> for #ident #ty_generics #where_clause {
+            fn state() -> &'static [&'static dyn crate::types::SqlEntity] {
+                &[]
+            }
+        }
+    };
     let states = if parsed_args.states.is_empty() {
         quote! {}
     } else {
@@ -166,7 +179,7 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
                 .iter()
                 .enumerate()
                 .map(|(i, (name, value))| {
-                    let i = i as u8;
+                    let i = i as u8 + 1; // Start from 1
                     quote! {
                         impl #impl_generics #ident #ty_generics #where_clause {
                             #[allow(non_upper_case_globals)]
@@ -296,6 +309,7 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
 
         #td_type
         #versioned
+        #all_state
         #states
         #recursive
     };

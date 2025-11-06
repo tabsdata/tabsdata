@@ -24,7 +24,6 @@ pub mod defs {
             partition_by = "table_id",
         ),
         states(
-            All = &[],
             Active = &[&TableStatus::Active],
             Frozen = &[&TableStatus::Frozen],
             Available = &[&TableStatus::Active, &TableStatus::Frozen],

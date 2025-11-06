@@ -23,7 +23,6 @@ pub mod defs {
         ),
         recursive(up = "trigger_by_function_id", down = "function_id"),
         states(
-            All = &[],
             Active = &[&TriggerStatus::Active],
             Available = &[&TriggerStatus::Active, &TriggerStatus::Frozen],
             Frozen = &[&TriggerStatus::Frozen],

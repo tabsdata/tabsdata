@@ -297,7 +297,6 @@ mod tests {
         versioned(order_by = "defined_on", partition_by = "id"),
         recursive(up = "current", down = "downstream"),
         states(
-            All = &[],
             Active = &[&TestStatus::Active],
         )
     )]
@@ -314,7 +313,6 @@ mod tests {
         sql_table = "test_table_reference",
         versioned(order_by = "defined_on", partition_by = "reference_id"),
         states(
-            All = &[],
             Active = &[&TestStatus::Active],
         )
     )]

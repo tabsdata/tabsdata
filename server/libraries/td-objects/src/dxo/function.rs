@@ -50,7 +50,6 @@ pub mod defs {
             partition_by = "function_id",
         ),
         states(
-            All = &[],
             Active = &[&FunctionStatus::Active],
             Available = &[&FunctionStatus::Active, &FunctionStatus::Frozen],
             DownstreamTrigger = &[&FunctionStatus::Active],

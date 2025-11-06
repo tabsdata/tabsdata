@@ -70,12 +70,7 @@ pub mod defs {
     }
 
     #[td_type::Dao]
-    #[dao(
-        sql_table = "table_data_versions__active",
-        states(
-            All = &[],
-        )
-    )]
+    #[dao(sql_table = "table_data_versions__active")]
     #[inherits(TableDataVersionDBWithFunction)]
     pub struct ActiveTableDataVersionDB {}
 

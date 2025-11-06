@@ -21,10 +21,7 @@ pub mod defs {
     #[dao(
         sql_table = "function_runs",
         order_by = "triggered_on",
-        versioned(order_by = "triggered_on", partition_by = "id"),
-        states(
-            All = &[],
-        )
+        versioned(order_by = "triggered_on", partition_by = "id")
     )]
     #[td_type(builder(try_from = ExecutionDB, skip_all))]
     pub struct FunctionRunDB {

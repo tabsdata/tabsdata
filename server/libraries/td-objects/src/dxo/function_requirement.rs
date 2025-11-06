@@ -16,10 +16,7 @@ pub mod defs {
     #[dao(
         sql_table = "function_requirements",
         recursive(up = "requirement_function_run_id", down = "function_run_id"),
-        versioned(order_by = "id", partition_by = "id"),
-        states(
-            All = &[],
-        )
+        versioned(order_by = "id", partition_by = "id")
     )]
     pub struct FunctionRequirementDB {
         #[builder(default)]

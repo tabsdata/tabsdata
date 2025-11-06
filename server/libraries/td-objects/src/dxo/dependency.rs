@@ -23,7 +23,6 @@ pub mod defs {
         versioned(order_by = "defined_on", partition_by = "dependency_id"),
         recursive(up = "table_function_id", down = "function_id"),
         states(
-            All = &[],
             Active = &[&DependencyStatus::Active],
         )
     )]

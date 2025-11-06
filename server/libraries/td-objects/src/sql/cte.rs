@@ -438,7 +438,6 @@ mod tests {
         sql_table = "test_table",
         versioned(order_by = "defined_on", partition_by = "partition_id"),
         states(
-            All = &[],
             Active = &[&TestStatus::Active],
         )
     )]
