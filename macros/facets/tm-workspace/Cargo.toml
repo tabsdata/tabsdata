@@ -37,6 +37,9 @@ dummy = []
 
 quote = { workspace = true }
 rand = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_yaml = { workspace = true }
+syn = { workspace = true, features = ["full"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }

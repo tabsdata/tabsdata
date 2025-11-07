@@ -55,6 +55,7 @@ td-security = { workspace = true }
 ## Macros
 
 td-attach = { workspace = true }
+tm-workspace = { workspace = true }
 
 # External dependencies
 

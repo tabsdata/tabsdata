@@ -4,6 +4,7 @@
 
 use anyhow::Result;
 use chrono::Local;
+use serde::Deserialize;
 use std::env;
 use std::path::PathBuf;
 use sysinfo::System;
@@ -17,6 +18,11 @@ const TABSDATA_SOLUTION_HOME: &str = "TABSDATA_SOLUTION_HOME";
 const VERGEN_ALREADY_RAN: &str = "TD_VERGEN_ALREADY_RAN";
 
 const LOG_CRATE_TD_BUILD: Option<&str> = option_env!("LOG_CRATE_TD_BUILD");
+
+const REPOSITORIES_YAML: &str = include_str!(concat!(
+    workspace_root!(),
+    "/variant/resources/about/repositories.yaml"
+));
 
 pub struct GitRepository {
     pub name: &'static str,
@@ -50,42 +56,36 @@ impl GitRepository {
     }
 }
 
-macro_rules! define_repositories {
-    ($(($name:literal, $alternate_name:expr, $desc:literal, $prefix:literal)),* $(,)?) => {
-        pub const TABSDATA_REPOSITORIES: &[GitRepository] = &[
-            $(GitRepository::new($name, $alternate_name, $desc)),*
-        ];
-
-        #[macro_export]
-        macro_rules! invoke_add_git_sections {
-            ($sections:expr, $git_data:expr, $macro_name:ident) => {
-                $macro_name!($sections, $git_data, $($prefix),*);
-            };
-        }
-    };
+#[derive(Debug, Clone, Deserialize)]
+struct Repository {
+    name: String,
+    alternate_name: Option<String>,
+    description: String,
+    prefix: String,
 }
 
-#[cfg(not(feature = "enterprise"))]
-define_repositories!((
-    "tabsdata-os",
-    Some("tabsdata"),
-    "Tabsdata Open Source",
-    "TABSDATA_OS"
-),);
+#[derive(Debug, Deserialize)]
+struct Repositories {
+    repositories: Vec<Repository>,
+}
 
-#[cfg(feature = "enterprise")]
-define_repositories!(
-    ("tabsdata-ee", None, "Tabsdata Enterprise", "TABSDATA_EE"),
-    ("tabsdata-os", None, "Tabsdata Open Source", "TABSDATA_OS"),
-    (
-        "tabsdata-ui",
-        None,
-        "Tabsdata User Interface",
-        "TABSDATA_UI"
-    ),
-    ("tabsdata-ag", None, "Tabsdata Agent", "TABSDATA_AG"),
-    ("tabsdata-ci", None, "Tabsdata Automation", "TABSDATA_CI"),
-);
+fn load_repositories() -> Vec<Repository> {
+    let config: Repositories = serde_yaml::from_str(REPOSITORIES_YAML).expect(
+        format!(
+            "Failed to parse repositories metadata file: {}",
+            REPOSITORIES_YAML
+        )
+        .as_str(),
+    );
+    config.repositories
+}
+
+#[macro_export]
+macro_rules! invoke_add_git_sections {
+    ($sections:expr, $git_data:expr, $macro_name:ident) => {
+        tm_workspace::repositories_metadata!($sections, $git_data, $macro_name)
+    };
+}
 
 pub struct Stamping;
 
@@ -171,11 +171,12 @@ impl Stamper for Stamping {
             .build_timestamp(true)
             .build()?;
 
-        for repository in TABSDATA_REPOSITORIES {
-            let mut repository_path = solution.join(repository.name);
-            let repository_prefix = repository.name.to_uppercase().replace('-', "_");
+        let repositories = load_repositories();
+        for repository in &repositories {
+            let mut repository_path = solution.join(&repository.name);
+            let repository_prefix = &repository.prefix;
             if !repository_path.exists() {
-                if let Some(alternate_name) = repository.alternate_name {
+                if let Some(alternate_name) = &repository.alternate_name {
                     let alternate_repository_path = solution.join(alternate_name);
                     if alternate_repository_path.exists() {
                         repository_path = alternate_repository_path;
