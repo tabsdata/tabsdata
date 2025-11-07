@@ -660,7 +660,7 @@ build_manifest_path = os.path.join(
     "BUILD",
 )
 logger.debug(f"Generating build manifest at: {build_manifest_path}")
-tdabout.write_build_manifest(build_manifest_path)
+tdabout.write_build_manifest(ROOT, build_manifest_path)
 
 
 def build_extras_require(root: str) -> dict[str, list[str]]:

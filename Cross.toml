@@ -12,9 +12,9 @@ pre-build = [
 [target.x86_64-unknown-linux-musl.env]
 volumes = ["TABSDATA_SOLUTION_HOME"]
 passthrough = [
-    # >>> passthrough:MOUNS:BEGIN >>>
+    # >>> passthrough:MOUNTS:BEGIN >>>
     "TABSDATA_SOLUTION_HOME",
-    # >>> passthrough:MOUNS:END >>>
+    # >>> passthrough:MOUNTS:END >>>
     "TD_CROSS_BUILD=true",
     # >>> passthrough:MAKE:BEGIN >>>
     "TD_ON_GA",

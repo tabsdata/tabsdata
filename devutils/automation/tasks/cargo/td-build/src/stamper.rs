@@ -20,12 +20,21 @@ const LOG_CRATE_TD_BUILD: Option<&str> = option_env!("LOG_CRATE_TD_BUILD");
 
 pub struct GitRepository {
     pub name: &'static str,
+    pub alternate_name: Option<&'static str>,
     pub description: &'static str,
 }
 
 impl GitRepository {
-    pub const fn new(name: &'static str, description: &'static str) -> Self {
-        Self { name, description }
+    pub const fn new(
+        name: &'static str,
+        alternate_name: Option<&'static str>,
+        description: &'static str,
+    ) -> Self {
+        Self {
+            name,
+            alternate_name,
+            description,
+        }
     }
 
     pub fn suffix(&self) -> String {
@@ -42,9 +51,9 @@ impl GitRepository {
 }
 
 macro_rules! define_repositories {
-    ($(($name:literal, $desc:literal, $prefix:literal)),* $(,)?) => {
+    ($(($name:literal, $alternate_name:expr, $desc:literal, $prefix:literal)),* $(,)?) => {
         pub const TABSDATA_REPOSITORIES: &[GitRepository] = &[
-            $(GitRepository::new($name, $desc)),*
+            $(GitRepository::new($name, $alternate_name, $desc)),*
         ];
 
         #[macro_export]
@@ -56,12 +65,26 @@ macro_rules! define_repositories {
     };
 }
 
+#[cfg(not(feature = "enterprise"))]
+define_repositories!((
+    "tabsdata-os",
+    Some("tabsdata"),
+    "Tabsdata Open Source",
+    "TABSDATA_OS"
+),);
+
+#[cfg(feature = "enterprise")]
 define_repositories!(
-    ("tabsdata-ee", "Tabsdata Enterprise", "TABSDATA_EE"),
-    ("tabsdata-os", "Tabsdata Open Source", "TABSDATA_OS"),
-    ("tabsdata-ui", "Tabsdata User Interface", "TABSDATA_UI"),
-    ("tabsdata-ag", "Tabsdata Agent", "TABSDATA_AG"),
-    ("tabsdata-ci", "Tabsdata Automation", "TABSDATA_CI"),
+    ("tabsdata-ee", None, "Tabsdata Enterprise", "TABSDATA_EE"),
+    ("tabsdata-os", None, "Tabsdata Open Source", "TABSDATA_OS"),
+    (
+        "tabsdata-ui",
+        None,
+        "Tabsdata User Interface",
+        "TABSDATA_UI"
+    ),
+    ("tabsdata-ag", None, "Tabsdata Agent", "TABSDATA_AG"),
+    ("tabsdata-ci", None, "Tabsdata Automation", "TABSDATA_CI"),
 );
 
 pub struct Stamping;
@@ -149,14 +172,27 @@ impl Stamper for Stamping {
             .build()?;
 
         for repository in TABSDATA_REPOSITORIES {
-            let repository_path = solution.join(repository.name);
+            let mut repository_path = solution.join(repository.name);
             let repository_prefix = repository.name.to_uppercase().replace('-', "_");
             if !repository_path.exists() {
-                println!(
-                    "cargo:rustc-env=VERGEN_GIT_{}_EXISTS=false",
-                    repository_prefix
-                );
-                continue;
+                if let Some(alternate_name) = repository.alternate_name {
+                    let alternate_repository_path = solution.join(alternate_name);
+                    if alternate_repository_path.exists() {
+                        repository_path = alternate_repository_path;
+                    } else {
+                        println!(
+                            "cargo:rustc-env=VERGEN_GIT_{}_EXISTS=false",
+                            repository_prefix
+                        );
+                        continue;
+                    }
+                } else {
+                    println!(
+                        "cargo:rustc-env=VERGEN_GIT_{}_EXISTS=false",
+                        repository_prefix
+                    );
+                    continue;
+                }
             }
             println!(
                 "cargo:rustc-env=VERGEN_GIT_{}_EXISTS=true",

@@ -19,12 +19,16 @@ import yaml
 from archspec import cpu
 from setuptools import build_meta as _backend
 
-TABSDATA_REPOSITORIES = [
-    ("tabsdata-ee", "Tabsdata Enterprise", "TABSDATA_EE"),
-    ("tabsdata-os", "Tabsdata Open Source", "TABSDATA_OS"),
-    ("tabsdata-ui", "Tabsdata User Interface", "TABSDATA_UI"),
-    ("tabsdata-ag", "Tabsdata Agent", "TABSDATA_AG"),
-    ("tabsdata-ci", "Tabsdata Automation", "TABSDATA_CI"),
+TABSDATA_REPOSITORIES_ENTERPRISE = [
+    ("tabsdata-ee", None, "Tabsdata Enterprise", "TABSDATA_EE"),
+    ("tabsdata-os", None, "Tabsdata Open Source", "TABSDATA_OS"),
+    ("tabsdata-ui", None, "Tabsdata User Interface", "TABSDATA_UI"),
+    ("tabsdata-ag", None, "Tabsdata Agent", "TABSDATA_AG"),
+    ("tabsdata-ci", None, "Tabsdata Automation", "TABSDATA_CI"),
+]
+
+TABSDATA_REPOSITORIES_OPENSOURCE = [
+    ("tabsdata-os", "tabsdata", "Tabsdata Open Source", "TABSDATA_OS"),
 ]
 
 
@@ -289,7 +293,7 @@ def _capture_git_information(repository_path):
     }
 
 
-def _render_build():
+def _render_build(enterprise: bool = False):
     try:
         build_metadata = _capture_build_information()
         rust_metadata = _capture_rust_information()
@@ -305,13 +309,26 @@ def _render_build():
             "X-Build-Timezone-Offset": build_metadata.get("build_timezone_offset", "?"),
         }
         solution_path = _get_solution_path()
+        repositories = (
+            TABSDATA_REPOSITORIES_ENTERPRISE
+            if enterprise
+            else TABSDATA_REPOSITORIES_OPENSOURCE
+        )
         for (
             repository_name,
+            alternate_repository_name,
             repository_description,
             repository_prefix,
-        ) in TABSDATA_REPOSITORIES:
-            repo_path = solution_path / repository_name
-            git_metadata = _capture_git_information(repo_path)
+        ) in repositories:
+            repository_path = solution_path / repository_name
+            git_metadata = _capture_git_information(repository_path)
+            if git_metadata is None:
+                if alternate_repository_name is not None:
+                    # noinspection PyTypeChecker
+                    alternate_repository_path = (
+                        solution_path / alternate_repository_name
+                    )
+                    git_metadata = _capture_git_information(alternate_repository_path)
             if git_metadata is None:
                 metadata[f"X-Git-{repository_prefix}-Exists"] = "false"
                 continue
@@ -520,11 +537,26 @@ def inject_wheel_metadata(wheel_path):
     _inject_wheel_metadata(wheel_path)
 
 
-def write_build_manifest(output_path):
+def write_build_manifest(root_path, output_path):
     try:
-        build = _render_build()
+        feature_yaml_path = Path(root_path) / ".manifest" / "feature.yaml"
+        enterprise = False
+        if feature_yaml_path.exists():
+            # noinspection PyBroadException
+            try:
+                with open(feature_yaml_path, "r", encoding="utf-8") as f:
+                    features = yaml.safe_load(f)
+                    if features and isinstance(features, list):
+                        enterprise = "enterprise" in features
+            except Exception:
+                pass
+
+        build = _render_build(enterprise=enterprise)
+        build["X-Enterprise"] = "true" if enterprise else "false"
+
         build_file = Path(output_path)
         build_file.parent.mkdir(parents=True, exist_ok=True)
+
         current_year = datetime.now().year
         build_content = yaml.dump(
             build,

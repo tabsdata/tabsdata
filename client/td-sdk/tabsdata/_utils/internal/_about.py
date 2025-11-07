@@ -12,12 +12,16 @@ import yaml
 from tabsdata._utils.constants import TABSDATA_MODULE_NAME
 from tabsdata._utils.internal._resources import td_resource
 
-TABSDATA_REPOSITORIES = [
+TABSDATA_REPOSITORIES_ENTERPRISE = [
     ("tabsdata-ee", "Tabsdata Enterprise", "TABSDATA_EE"),
     ("tabsdata-os", "Tabsdata Open Source", "TABSDATA_OS"),
     ("tabsdata-ui", "Tabsdata User Interface", "TABSDATA_UI"),
     ("tabsdata-ag", "Tabsdata Agent", "TABSDATA_AG"),
     ("tabsdata-ci", "Tabsdata Automation", "TABSDATA_CI"),
+]
+
+TABSDATA_REPOSITORIES_OPENSOURCE = [
+    ("tabsdata-os", "Tabsdata Open Source", "TABSDATA_OS"),
 ]
 
 
@@ -46,12 +50,19 @@ def tdabout_from_metadata(package_name=TABSDATA_MODULE_NAME):
     env["VERGEN_BUILD_TIMEZONE_NAME"] = metadata.get("X-Build-Timezone-Name", "-")
     env["VERGEN_BUILD_TIMEZONE_OFFSET"] = metadata.get("X-Build-Timezone-Offset", "-")
 
+    enterprise = metadata.get("X-Enterprise", "false") == "true"
+    repositories = (
+        TABSDATA_REPOSITORIES_ENTERPRISE
+        if enterprise
+        else TABSDATA_REPOSITORIES_OPENSOURCE
+    )
+
     # Git Information
     for (
         repository_name,
         repository_description,
         repository_prefix,
-    ) in TABSDATA_REPOSITORIES:
+    ) in repositories:
         exists = metadata.get(f"X-Git-{repository_prefix}-Exists", "false")
         env[f"VERGEN_GIT_{repository_prefix}_EXISTS"] = exists
 
@@ -182,12 +193,19 @@ def tdabout_from_build(package_name=TABSDATA_MODULE_NAME):  # noqa: C901
     env["VERGEN_BUILD_TIMEZONE_NAME"] = metadata.get("X-Build-Timezone-Name", "-")
     env["VERGEN_BUILD_TIMEZONE_OFFSET"] = metadata.get("X-Build-Timezone-Offset", "-")
 
+    enterprise = metadata.get("X-Enterprise", "false") == "true"
+    repositories = (
+        TABSDATA_REPOSITORIES_ENTERPRISE
+        if enterprise
+        else TABSDATA_REPOSITORIES_OPENSOURCE
+    )
+
     # Git Information
     for (
         repository_name,
         repository_description,
         repository_prefix,
-    ) in TABSDATA_REPOSITORIES:
+    ) in repositories:
         exists = metadata.get(f"X-Git-{repository_prefix}-Exists", "false")
         env[f"VERGEN_GIT_{repository_prefix}_EXISTS"] = exists
 

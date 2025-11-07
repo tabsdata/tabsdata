@@ -215,6 +215,18 @@ pub fn show_build_metadata() {
     let header_line_about = "About";
     let header_line_version = format!("Tabsdata Version {}", version);
 
+    #[cfg(feature = "enterprise")]
+    let edition = "Enterprise";
+    #[cfg(not(feature = "enterprise"))]
+    let edition = "Open Source";
+    let header_line_edition = format!("Edition: {}", edition);
+
+    #[cfg(any(test, feature = "mock-env"))]
+    let mode = "Development (mock-env feature enabled)";
+    #[cfg(not(any(test, feature = "mock-env")))]
+    let mode = "Production";
+    let header_line_mode = format!("Mode: {}", mode);
+
     // Build Information
     let build_timezone_name = env::var("VERGEN_BUILD_TIMEZONE_NAME").unwrap_or_default();
     let build_timezone_offset = env::var("VERGEN_BUILD_TIMEZONE_OFFSET").unwrap_or_default();
@@ -274,14 +286,34 @@ pub fn show_build_metadata() {
     let cpu_frequency = format!("{} MHz", cpu_frequency_val);
     let total_memory = env::var("VERGEN_SYSINFO_TOTAL_MEMORY").unwrap_or_default();
 
+    let build_info_title = if is_rust {
+        "Build Information"
+    } else {
+        "Package Information"
+    };
+
+    let build_label = if is_rust { "Build" } else { "Package" };
+
+    let build_date_utc_label = format!("{} Date (UTC)", build_label);
+    let build_timestamp_utc_label = format!("{} Timestamp (UTC)", build_label);
+    let build_date_local_label = format!("{} Date (Local)", build_label);
+    let build_timestamp_local_label = format!("{} Timestamp (Local)", build_label);
+    let build_timezone_label = format!("{} Timezone", build_label);
+
     let mut sections = vec![(
-        "Build Information",
+        build_info_title,
         vec![
-            ("Build Date (UTC)", build_date_utc.trim()),
-            ("Build Timestamp (UTC)", build_timestamp_utc.trim()),
-            ("Build Date (Local)", build_date_local.as_str()),
-            ("Build Timestamp (Local)", build_timestamp_local.as_str()),
-            ("Build Timezone", build_timezone.as_str()),
+            (build_date_utc_label.as_str(), build_date_utc.trim()),
+            (
+                build_timestamp_utc_label.as_str(),
+                build_timestamp_utc.trim(),
+            ),
+            (build_date_local_label.as_str(), build_date_local.as_str()),
+            (
+                build_timestamp_local_label.as_str(),
+                build_timestamp_local.as_str(),
+            ),
+            (build_timezone_label.as_str(), build_timezone.as_str()),
         ],
     )];
 
@@ -371,7 +403,9 @@ pub fn show_build_metadata() {
     let max_header_length = header_line_about
         .chars()
         .count()
-        .max(header_line_version.chars().count());
+        .max(header_line_version.chars().count())
+        .max(header_line_edition.chars().count())
+        .max(header_line_mode.chars().count());
 
     let left_padding = 1;
     let right_padding = 1;
@@ -448,6 +482,38 @@ pub fn show_build_metadata() {
         header_version_padded
     };
     println!("{} {} {}", border_char, header_version_display, border_char);
+
+    let header_edition_length = header_line_edition.chars().count();
+    let header_edition_padding_left = (inner_width - header_edition_length) / 2;
+    let header_edition_content = format!(
+        "{}{}{}",
+        " ".repeat(header_edition_padding_left),
+        &header_line_edition,
+        " ".repeat(inner_width - header_edition_padding_left - header_edition_length)
+    );
+    let header_edition_padded = pad_to_width(&header_edition_content, inner_width);
+    let header_edition_display = if use_colors {
+        header_edition_padded.bright_magenta().bold().to_string()
+    } else {
+        header_edition_padded
+    };
+    println!("{} {} {}", border_char, header_edition_display, border_char);
+
+    let header_mode_length = header_line_mode.chars().count();
+    let header_mode_padding_left = (inner_width - header_mode_length) / 2;
+    let header_mode_content = format!(
+        "{}{}{}",
+        " ".repeat(header_mode_padding_left),
+        &header_line_mode,
+        " ".repeat(inner_width - header_mode_padding_left - header_mode_length)
+    );
+    let header_mode_padded = pad_to_width(&header_mode_content, inner_width);
+    let header_mode_display = if use_colors {
+        header_mode_padded.bright_magenta().bold().to_string()
+    } else {
+        header_mode_padded
+    };
+    println!("{} {} {}", border_char, header_mode_display, border_char);
 
     println!("{}", horizontal_line);
 

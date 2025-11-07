@@ -22,7 +22,7 @@ version = { workspace = true }
 ignored = ["openssl"]
 
 [features]
-
+enterprise = []
 td-test = ["dummy", "mock-env", "test-utils"]
 dummy = []
 mock-env = []
@@ -50,3 +50,8 @@ vergen-gix = { workspace = true, features = ["build", "cargo", "emit_and_set", "
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }
+
+[build-dependencies]
+tm-workspace = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_yaml = { workspace = true }
