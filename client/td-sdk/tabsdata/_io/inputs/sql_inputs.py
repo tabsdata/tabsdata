@@ -109,7 +109,7 @@ class MariaDBSource(SourcePlugin):
         """
         self._uri = uri
         self._parsed_uri = urlparse(uri)
-        if self._parsed_uri.scheme != MARIADB_SCHEME:
+        if self._parsed_uri.scheme.lower() != MARIADB_SCHEME:
             raise SourceConfigurationError(
                 ErrorCode.SOCE2, self._parsed_uri.scheme, MARIADB_SCHEME, self.uri
             )
@@ -277,7 +277,7 @@ class MySQLSource(SourcePlugin):
         """
         self._uri = uri
         self._parsed_uri = urlparse(uri)
-        if self._parsed_uri.scheme != MYSQL_SCHEME:
+        if self._parsed_uri.scheme.lower() != MYSQL_SCHEME:
             raise SourceConfigurationError(
                 ErrorCode.SOCE2, self._parsed_uri.scheme, MYSQL_SCHEME, self.uri
             )
@@ -445,7 +445,7 @@ class OracleSource(SourcePlugin):
         """
         self._uri = uri
         self._parsed_uri = urlparse(uri)
-        if self._parsed_uri.scheme != ORACLE_SCHEME:
+        if self._parsed_uri.scheme.lower() != ORACLE_SCHEME:
             raise SourceConfigurationError(
                 ErrorCode.SOCE2, self._parsed_uri.scheme, ORACLE_SCHEME, self.uri
             )
@@ -612,7 +612,7 @@ class PostgresSource(SourcePlugin):
         """
         self._uri = uri
         self._parsed_uri = urlparse(uri)
-        if self._parsed_uri.scheme not in POSTGRES_SCHEMES:
+        if self._parsed_uri.scheme.lower() not in POSTGRES_SCHEMES:
             raise SourceConfigurationError(
                 ErrorCode.SOCE2, self._parsed_uri.scheme, POSTGRES_SCHEMES, self.uri
             )

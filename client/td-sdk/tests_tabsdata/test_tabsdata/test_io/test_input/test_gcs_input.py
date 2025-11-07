@@ -50,6 +50,12 @@ def test_all_correct_uri_list():
     assert input.__repr__()
 
 
+def test_uri_uppercase():
+    uri = ["gs://path/to/data/data.csv".upper(), "gs://path/to/data/data2.csv"]
+    input = GCSSource(uri, GCS_CREDENTIALS)
+    assert input.uri == uri
+
+
 def test_uri_list_update_to_string():
     uri = [
         "gs://path/to/data/invoice-headers.csv",

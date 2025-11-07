@@ -169,7 +169,7 @@ class AzureSource(SourcePlugin):
 
         self._parsed_uri_list = [urlparse(single_uri) for single_uri in self._uri_list]
         for parsed_uri in self._parsed_uri_list:
-            if parsed_uri.scheme != AZURE_SCHEME:
+            if parsed_uri.scheme.lower() != AZURE_SCHEME:
                 raise SourceConfigurationError(
                     ErrorCode.SOCE29,
                     parsed_uri.scheme,
@@ -419,7 +419,7 @@ class GCSSource(SourcePlugin):
 
         self._parsed_uri_list = [urlparse(single_uri) for single_uri in self._uri_list]
         for parsed_uri in self._parsed_uri_list:
-            if parsed_uri.scheme != GCS_SCHEME:
+            if parsed_uri.scheme.lower() != GCS_SCHEME:
                 raise SourceConfigurationError(
                     ErrorCode.SOCE44,
                     parsed_uri.scheme,
@@ -904,7 +904,7 @@ class S3Source(SourcePlugin):
 
         self._parsed_uri_list = [urlparse(single_uri) for single_uri in self._uri_list]
         for parsed_uri in self._parsed_uri_list:
-            if parsed_uri.scheme != S3_SCHEME:
+            if parsed_uri.scheme.lower() != S3_SCHEME:
                 raise SourceConfigurationError(
                     ErrorCode.SOCE17,
                     parsed_uri.scheme,

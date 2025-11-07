@@ -544,6 +544,7 @@ def build_file_format(configuration: dict | str | FileFormat) -> FileFormat:
     if isinstance(configuration, FileFormat):
         return configuration
     elif isinstance(configuration, str):
+        configuration = configuration.lower()  # Make it case-insensitive
         if configuration not in STR_TO_FILE_FORMAT:
             raise FormatConfigurationError(
                 ErrorCode.FOCE4,

@@ -56,6 +56,13 @@ def test_all_correct_query_string_no_credentials():
     assert input.__repr__()
 
 
+def test_uri_upper():
+    uri = "mysql://DATABASE_IP:DATABASE_PORT/testing".upper()
+    query = "select * from INVOICE_HEADER where id > 0"
+    input = MySQLSource(uri, query)
+    assert input.uri == uri
+
+
 def test_wrong_scheme_raises_value_error():
     uri = "wrongscheme://path/to/query"
     query = "select * from INVOICE_HEADER where id > 0"

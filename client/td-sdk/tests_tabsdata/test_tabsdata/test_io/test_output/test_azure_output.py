@@ -43,6 +43,12 @@ def test_all_correct_implicit_format():
     assert output.__repr__()
 
 
+def test_uri_upper():
+    uri = "az://path/to/data/data.csv".upper()
+    output = AzureDestination(uri, AZURE_CREDENTIALS)
+    assert output.uri == uri
+
+
 def test_all_correct_uri_list():
     uri = ["az://path/to/data/data.csv", "az://path/to/data/data2.csv"]
     output = AzureDestination(uri, AZURE_CREDENTIALS)

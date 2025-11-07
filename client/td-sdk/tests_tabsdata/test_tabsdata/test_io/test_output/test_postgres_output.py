@@ -39,6 +39,14 @@ def test_all_correct_destination_table_list_postgresql():
     assert output.__repr__()
 
 
+def test_uri_upper():
+    uri = "postgresql://DATABASE_IP:DATABASE_PORT/testing"
+    destination_table = ["headers_table", "invoices_table"]
+    credentials = UserPasswordCredentials("admin", "admin")
+    output = PostgresDestination(uri, destination_table, credentials=credentials)
+    assert output.uri == uri
+
+
 def test_all_correct_destination_table_string():
     uri = "postgres://DATABASE_IP:DATABASE_PORT/testing"
     destination_table = "output_table"

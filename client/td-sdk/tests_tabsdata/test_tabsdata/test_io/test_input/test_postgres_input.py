@@ -61,6 +61,14 @@ def test_all_correct_query_string():
     assert input.__repr__()
 
 
+def test_uri_upper():
+    uri = "postgres://DATABASE_IP:DATABASE_PORT/testing"
+    query = "select * from INVOICE_HEADER where id > 0"
+    credentials = UserPasswordCredentials("admin", "admin")
+    input = PostgresSource(uri, query, credentials=credentials)
+    assert input.uri == uri
+
+
 def test_all_correct_query_string_no_credentials():
     uri = "postgres://DATABASE_IP:DATABASE_PORT/testing"
     query = "select * from INVOICE_HEADER where id > 0"

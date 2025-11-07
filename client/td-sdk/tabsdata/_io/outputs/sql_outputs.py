@@ -133,7 +133,7 @@ class MariaDBDestination(DestinationPlugin):
         """
         self._uri = uri
         self._parsed_uri = urlparse(uri)
-        if not self._parsed_uri.scheme.startswith(MARIADB_SCHEME):
+        if not self._parsed_uri.scheme.lower().startswith(MARIADB_SCHEME):
             raise DestinationConfigurationError(
                 ErrorCode.DECE2, self._parsed_uri.scheme, MARIADB_SCHEME, self.uri
             )
@@ -306,7 +306,7 @@ class MySQLDestination(DestinationPlugin):
         """
         self._uri = uri
         self._parsed_uri = urlparse(uri)
-        if not self._parsed_uri.scheme.startswith(MYSQL_SCHEME):
+        if not self._parsed_uri.scheme.lower().startswith(MYSQL_SCHEME):
             raise DestinationConfigurationError(
                 ErrorCode.DECE2, self._parsed_uri.scheme, MYSQL_SCHEME, self.uri
             )
@@ -478,7 +478,7 @@ class OracleDestination(DestinationPlugin):
         """
         self._uri = uri
         self._parsed_uri = urlparse(uri)
-        if not self._parsed_uri.scheme.startswith(ORACLE_SCHEME):
+        if not self._parsed_uri.scheme.lower().startswith(ORACLE_SCHEME):
             raise DestinationConfigurationError(
                 ErrorCode.DECE2, self._parsed_uri.scheme, ORACLE_SCHEME, self.uri
             )
@@ -652,7 +652,10 @@ class PostgresDestination(DestinationPlugin):
         self._uri = uri
         self._parsed_uri = urlparse(uri)
         if not any(
-            [self._parsed_uri.scheme.startswith(scheme) for scheme in POSTGRES_SCHEMES]
+            [
+                self._parsed_uri.scheme.lower().startswith(scheme)
+                for scheme in POSTGRES_SCHEMES
+            ]
         ):
             raise DestinationConfigurationError(
                 ErrorCode.DECE2, self._parsed_uri.scheme, POSTGRES_SCHEMES, self.uri

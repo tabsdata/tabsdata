@@ -52,6 +52,12 @@ def test_all_correct_uri_list():
     assert input.__repr__()
 
 
+def test_uri_upper():
+    uri = ["s3://path/to/data/data.csv".upper(), "s3://path/to/data/data2.csv"]
+    input = S3Source(uri, S3_CREDENTIALS)
+    assert input.uri == uri
+
+
 def test_uri_list_update_to_string():
     uri = [
         "s3://path/to/data/invoice-headers.csv",

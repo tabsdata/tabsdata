@@ -39,6 +39,14 @@ def test_all_correct_destination_table_string():
     assert output.__repr__()
 
 
+def test_uri_upper():
+    uri = "mysql://DATABASE_IP:DATABASE_PORT/testing".upper()
+    destination_table = "output_table"
+    credentials = UserPasswordCredentials("admin", "admin")
+    output = MySQLDestination(uri, destination_table, credentials=credentials)
+    assert output.uri == uri
+
+
 def test_all_correct_destination_table_string_no_credentials():
     uri = "mysql://DATABASE_IP:DATABASE_PORT/testing"
     destination_table = "output_table"

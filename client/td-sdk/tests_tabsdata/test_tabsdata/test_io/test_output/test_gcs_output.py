@@ -44,6 +44,12 @@ def test_all_correct_implicit_format():
     assert output.__repr__()
 
 
+def test_uri_upper():
+    uri = "gs://path/to/data/data.csv".upper()
+    output = GCSDestination(uri, GCS_CREDENTIALS)
+    assert output.uri == uri
+
+
 def test_all_correct_uri_list():
     uri = ["gs://path/to/data/data.csv", "gs://path/to/data/data2.csv"]
     output = GCSDestination(uri, GCS_CREDENTIALS)
