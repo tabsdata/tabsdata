@@ -41,4 +41,12 @@ pub enum PythonError {
     InvalidVersionFile(#[source] Error) = 5014,
     #[error("Error propagating venv environment variables: {0}")]
     EnvironmentVariablesPropagationError(#[source] TdError) = 5015,
+    #[error("Getting Python scripts folder failed: {0}")]
+    ScriptsFolderResolutionFailure(#[source] Error) = 5016,
+    #[error("Getting Python scripts folder finished with errors: {0}")]
+    ScriptsFolderResolutionError(ExitStatus) = 5017,
+    #[error("Python scripts folder does not exist: {0}")]
+    ScriptsFolderNotFound(PathBuf) = 5018,
+    #[error("Python binary not found in scripts folder: {0}")]
+    PythonBinaryNotFound(PathBuf) = 5019,
 }

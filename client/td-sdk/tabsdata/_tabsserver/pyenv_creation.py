@@ -488,10 +488,10 @@ def get_build_timestamp() -> str:
             with open(build, "r", encoding="utf-8") as f:
                 metadata = yaml.safe_load(f) or {}
         except Exception as exception:
-            print(f"Warning: Could not parse BUILD manifest: {exception}")
+            logger.warning(f"Warning: Could not parse BUILD manifest: {exception}")
     except Exception as exception:
-        print(f"Error: Could not locate BUILD manifest file: {exception}.")
-    return str(metadata.get(BUILD_TIMESTAMP_KEY, datetime.now(timezone.utc)))
+        logger.warning(f"Error: Could not locate BUILD manifest file: {exception}.")
+    return str(metadata.get(BUILD_TIMESTAMP_KEY, datetime.fromtimestamp(timestamp=0, tz=timezone.utc,)))
 
 
 def get_dict_hash(data):

@@ -9,6 +9,7 @@ use crate::error::PythonError::{
     VenvCreationError, VenvCreationPanic, VenvCreationParseError,
 };
 use crate::io::log_std_out_and_err;
+use crate::python::resolve_python_binary;
 use std::collections::HashMap;
 use std::env;
 use std::path::{Path, PathBuf};
@@ -117,8 +118,8 @@ pub fn create(
     requirements: Option<&PathBuf>,
     dump_std: bool,
 ) -> Result<PathBuf, TdError> {
-    let tdvenv = name_program(&PathBuf::from(TDVENV_PROGRAM));
-    let mut command = Command::new(tdvenv);
+    let tdvenv = resolve_python_binary(TDVENV_PROGRAM)?;
+    let mut command = Command::new(&tdvenv);
     if check_flag_env(TD_DETACHED_SUBPROCESSES) {
         #[cfg(windows)]
         {
@@ -132,7 +133,10 @@ pub fn create(
     if let Some(requirements) = requirements {
         command.arg(TDVENV_ARGUMENT_REQUIREMENTS).arg(requirements);
     }
-    let output = command.output().map_err(VenvCreationPanic)?;
+    let output = command.output().map_err(|error| {
+        error!("Failed to spawn tdvenv process {:?}: {:?}", tdvenv, error);
+        VenvCreationPanic(error)
+    })?;
     let mut dumped = false;
     if dump_std {
         dump(&output);
