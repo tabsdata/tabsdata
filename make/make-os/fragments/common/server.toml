@@ -92,6 +92,22 @@ script = [
                         exec --fail-on-error %{command}
                     else
                         output = exec --fail-on-error %{command}
+                        code = set ${output.code}
+                        if not eq ${code} 0
+                            error "🚫 Failed to start instance ${instance}."
+                            error "🛞👀 Result >>>>>"
+                            error "🛞👀 <out.i>"
+                            error "${output.stdout}"
+                            error "🛞👀 <out.f>"
+                            error "🛞👀 <err.i>"
+                            error "${output.stderr}"
+                            error "🛞👀 <err.f>"
+                            error "🛞👀 <code.i>"
+                            error "${output.code}"
+                            error "🛞👀 <code.f>"
+                            error "🛞👀 <<<<<"
+                            assert_fail
+                        end
                     end
                 end
             end
