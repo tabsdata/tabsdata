@@ -5,6 +5,7 @@
 [package]
 description = "Tabsdata Build Library"
 name = "td-build"
+build = "build.rs"
 
 authors = { workspace = true }
 edition = { workspace = true }

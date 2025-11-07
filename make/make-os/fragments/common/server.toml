@@ -188,8 +188,8 @@ script = [
 
                 debug "🚀 ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} status --instance ${instance}"
 
-                status_timeout = calc 3 * 60
-                status_sleep = set 5000
+                status_timeout = calc 5 * 60
+                status_sleep = set 10000
                 status_attempts = calc ${status_timeout} * 1000
                 status_attempts = calc ${status_attempts} / ${status_sleep}
 
@@ -237,7 +237,6 @@ script = [
                         status_exhausted = eq ${status_attempt} ${status_attempts}
                         if ${status_exhausted}
                             error "😡 Cancelling execution as supervisor did not start after ${status_timeout} seconds"
-
                             error "🛞👀 Supervisor status >>>>>"
                             error "🛞👀 <out.i>"
                             error "${output.stdout}"
@@ -249,8 +248,7 @@ script = [
                             error "${output.code}"
                             error "🛞👀 <code.f>"
                             error "🛞👀 <<<<<"
-
-                            exit 1
+                            assert_fail
                         end
                         sleep ${status_sleep}
                     end

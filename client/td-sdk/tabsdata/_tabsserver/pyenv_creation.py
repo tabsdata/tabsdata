@@ -89,7 +89,7 @@ HostPackageSource: TypeAlias = Literal[
     "Local",
 ]
 
-# Base environments are added the hash of this string to ensure that to function
+# Base environments are added the hash of this string to ensure that no function
 # environment accidentally resolves to a base environment.
 # !!! Do not change this string... never !!!
 BASE_ENV_SALT = "RekvSLlYqSt0VXJghaYhbQ5UyaofKk4h"
