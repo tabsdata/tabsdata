@@ -19,6 +19,7 @@ import shutil
 import subprocess
 import sysconfig
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Literal, Tuple, TypeAlias
 
@@ -68,6 +69,7 @@ from tabsdata._utils.debug import debug_enabled
 
 # noinspection PyProtectedMember
 from tabsdata._utils.id import encode_id
+from tabsdata._utils.internal._resources import td_resource
 
 # noinspection PyProtectedMember
 from tabsdata._utils.tableframe._constants import PYTEST_CONTEXT_ACTIVE
@@ -116,6 +118,9 @@ DEBUG_PACKAGES = [
     "pydevd_pycharm",
     "pygame",
 ]
+
+BUILD_MANIFEST_LOCATION = "assets/manifest/BUILD"
+BUILD_TIMESTAMP_KEY = "X-Build-Timestamp-UTC"
 
 
 def extract_package_name(requirement):
@@ -475,7 +480,24 @@ def found_requirements_tabsdata(
         development_packages[:] = list(dict.fromkeys(development_packages))
 
 
+def get_build_timestamp() -> str:
+    try:
+        build = td_resource(BUILD_MANIFEST_LOCATION)
+        metadata = {}
+        try:
+            with open(build, "r", encoding="utf-8") as f:
+                metadata = yaml.safe_load(f) or {}
+        except Exception as exception:
+            print(f"Warning: Could not parse BUILD manifest: {exception}")
+    except Exception as exception:
+        print(f"Error: Could not locate BUILD manifest file: {exception}.")
+    return str(metadata.get(BUILD_TIMESTAMP_KEY, datetime.now(timezone.utc)))
+
+
 def get_dict_hash(data):
+    # Add build timestamp to the data to ensure different hashes for different builds
+    # (specifically for local development environments)
+    data[BUILD_TIMESTAMP_KEY] = get_build_timestamp()
     # Convert the dictionary to a JSON string with sorted keys
     json_str = json.dumps(data, sort_keys=True)
     # Encode the JSON string to bytes
