@@ -1,0 +1,17 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[run]
+source = tabsdata_databricks
+omit =
+    test*
+    test*/**
+branch = True
+parallel = True
+disable_warnings = no-data-collected
+
+[report]
+skip_empty = True
+show_missing = True
+relative_files = True

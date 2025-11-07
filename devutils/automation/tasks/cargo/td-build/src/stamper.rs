@@ -70,14 +70,14 @@ struct Repositories {
 }
 
 fn load_repositories() -> Vec<Repository> {
-    let config: Repositories = serde_yaml::from_str(REPOSITORIES_YAML).expect(
+    let repositories: Repositories = serde_yaml::from_str(REPOSITORIES_YAML).expect(
         format!(
             "Failed to parse repositories metadata file: {}",
             REPOSITORIES_YAML
         )
         .as_str(),
     );
-    config.repositories
+    repositories.repositories
 }
 
 #[macro_export]

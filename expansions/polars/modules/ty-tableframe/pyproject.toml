@@ -55,6 +55,7 @@ skip_glob = ["*.pyi"]
 known_first_party = [
     "tabsdata",
     "tabsdata_agent",
+    "tabsdata_bigquery",
     "tabsdata_databricks",
     "tabsdata_example",
     "tabsdata_mongodb",
@@ -69,6 +70,7 @@ known_first_party = [
     "ty_tableframe",
     "tests_tabsdata",
     "tests_tabsdata_agent",
+    "tests_tabsdata_bigquery",
     "tests_tabsdata_databricks",
     "tests_tabsdata_example",
     "tests_tabsdata_mongodb",

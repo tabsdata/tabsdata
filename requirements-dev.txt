@@ -7,6 +7,7 @@
 # Third-party dev dependencies
 
 -r requirements/requirements-dev-third-party.txt
+-r connectors/python/tabsdata_bigquery/requirements/requirements-dev-third-party.txt
 -r connectors/python/tabsdata_databricks/requirements/requirements-dev-third-party.txt
 -r connectors/python/tabsdata_mongodb/requirements/requirements-dev-third-party.txt
 -r connectors/python/tabsdata_mssql/requirements/requirements-dev-third-party.txt
@@ -16,6 +17,7 @@
 # Third-party dependencies
 
 -r requirements/requirements-third-party.txt
+-r connectors/python/tabsdata_bigquery/requirements/requirements-third-party.txt
 -r connectors/python/tabsdata_databricks/requirements/requirements-third-party.txt
 -r connectors/python/tabsdata_mongodb/requirements/requirements-third-party.txt
 -r connectors/python/tabsdata_mssql/requirements/requirements-third-party.txt

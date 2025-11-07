@@ -8,6 +8,7 @@ POLARS_MODULE_NAME = "polars"
 TD_TABSDATA_DEV_PKG = "TD_TABSDATA_DEV_PKG"
 
 TABSDATA_CONNECTORS_NAMES = [
+    "bigquery",
     "databricks",
     "mongodb",
     "mssql",

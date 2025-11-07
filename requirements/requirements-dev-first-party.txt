@@ -2,6 +2,7 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
+tabsdata_bigquery[deps]==1.5.0
 tabsdata_databricks[deps]==1.5.0
 tabsdata_mongodb[deps]==1.5.0
 tabsdata_mssql[deps]==1.5.0

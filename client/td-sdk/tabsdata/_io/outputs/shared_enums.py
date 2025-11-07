@@ -3,6 +3,10 @@
 #
 
 from enum import Enum
+from typing import Literal, TypeAlias
+
+IfTableExistStrategySpec: TypeAlias = Literal["append", "replace"]
+SchemaStrategySpec: TypeAlias = Literal["update", "strict"]
 
 
 class IfTableExistsStrategy(Enum):

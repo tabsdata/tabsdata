@@ -13,6 +13,7 @@ __path__ = pkgutil.extend_path(__path__, __name__)
 import importlib.metadata
 import logging
 
+from tabsdata import typing
 from tabsdata._credentials import (
     AzureAccountKeyCredentials,
     GCPServiceAccountKeyCredentials,
@@ -112,6 +113,9 @@ from tabsdata.tableframe.functions.lit import lit
 from tabsdata.tableframe.lazyframe.frame import TableFrame
 
 # noinspection PyProtectedMember
+from tabsdata_bigquery._connector import BigQueryConn, BigQueryDest
+
+# noinspection PyProtectedMember
 from tabsdata_databricks._connector import DatabricksDestination
 
 # noinspection PyProtectedMember
@@ -175,6 +179,8 @@ __all__ = [
     # from secret.py
     "EnvironmentSecret",
     "HashiCorpSecret",
+    # from typing.py
+    "typing",
     # from tabsserver.function.execution_exceptions.py
     "CustomException",
     # from tableframe....
@@ -227,6 +233,9 @@ __all__ = [
     # Array,
     # Field,
     # Struct,
+    # From tabsdata_bigquery.connector
+    "BigQueryConn",
+    "BigQueryDest",
     # From tabsdata_databricks.connector
     "DatabricksDestination",
     # From tabsdata_mongodb.connector

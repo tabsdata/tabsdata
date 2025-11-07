@@ -5,6 +5,7 @@
 # Required packages to develop, test and build the project. They should not be installed by the client.
 
 -r requirements.txt
+-r connectors/python/tabsdata_bigquery/requirements.txt
 -r connectors/python/tabsdata_databricks/requirements.txt
 -r connectors/python/tabsdata_mongodb/requirements.txt
 -r connectors/python/tabsdata_mssql/requirements.txt
