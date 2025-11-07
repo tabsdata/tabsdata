@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 import os
 import uuid
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 
 import polars as pl
 
@@ -16,7 +16,10 @@ from tabsdata._io.inputs.sql_inputs import (
     _replace_initial_values,
     _validate_initial_values_type,
 )
-from tabsdata._io.outputs.shared_enums import IfTableExistsStrategy
+from tabsdata._io.outputs.shared_enums import (
+    IfTableExistsStrategy,
+    IfTableExistStrategySpec,
+)
 from tabsdata._io.plugin import DestinationPlugin, SourcePlugin
 from tabsdata._secret import Secret
 from tabsdata._tabsserver.function.offset_utils import OffsetReturn
@@ -288,7 +291,7 @@ class MSSQLDestination(DestinationPlugin):
         server: str | Secret = None,
         database: str | Secret = None,
         driver: str | Secret = None,
-        if_table_exists: Literal["append", "replace"] = "append",
+        if_table_exists: IfTableExistStrategySpec = "append",
         chunk_size: int = 50000,
         **kwargs,
     ):
@@ -410,7 +413,7 @@ class MSSQLDestination(DestinationPlugin):
             self._credentials = credentials
 
     @property
-    def if_table_exists(self) -> Literal["append", "replace"]:
+    def if_table_exists(self) -> IfTableExistStrategySpec:
         """
         Returns the value of the if_table_exists property.
         This property determines what to do if the table already exists.
@@ -418,7 +421,7 @@ class MSSQLDestination(DestinationPlugin):
         return self._if_table_exists
 
     @if_table_exists.setter
-    def if_table_exists(self, value: Literal["append", "replace"]):
+    def if_table_exists(self, value: IfTableExistStrategySpec):
         valid_values = [
             IfTableExistsStrategy.APPEND.value,
             IfTableExistsStrategy.REPLACE.value,

@@ -11,7 +11,6 @@ import subprocess
 import time
 import uuid
 from enum import Enum
-from typing import Literal
 from urllib.parse import urlparse, urlunparse
 
 import polars as pl
@@ -45,7 +44,12 @@ from tabsdata._io.constants import (
     URI_INDICATOR,
     SupportedAWSS3Regions,
 )
-from tabsdata._io.outputs.shared_enums import IfTableExistsStrategy, SchemaStrategy
+from tabsdata._io.outputs.shared_enums import (
+    IfTableExistsStrategy,
+    IfTableExistStrategySpec,
+    SchemaStrategy,
+    SchemaStrategySpec,
+)
 from tabsdata._io.plugin import DestinationPlugin
 from tabsdata._secret import _recursively_evaluate_secret, _recursively_load_secret
 from tabsdata._tabsserver.function.cloud_connectivity_utils import (
@@ -115,9 +119,9 @@ class AWSGlue(Catalog):
         definition: dict,
         tables: str | list[str],
         auto_create_at: list[str | None] | str | None = None,
-        if_table_exists: Literal["append", "replace"] = "append",
+        if_table_exists: IfTableExistStrategySpec = "append",
         partitioned_table: bool = False,
-        schema_strategy: Literal["update", "strict"] = "update",
+        schema_strategy: SchemaStrategySpec = "update",
         s3_credentials: S3Credentials = None,
         s3_region: str = None,
         **kwargs,
@@ -161,14 +165,14 @@ class AWSGlue(Catalog):
                 raise DestinationConfigurationError(ErrorCode.DECE39)
 
     @property
-    def if_table_exists(self) -> Literal["append", "replace"]:
+    def if_table_exists(self) -> IfTableExistStrategySpec:
         """
         str: The strategy to follow when the table already exists.
         """
         return self._if_table_exists
 
     @if_table_exists.setter
-    def if_table_exists(self, if_table_exists: Literal["append", "replace"]):
+    def if_table_exists(self, if_table_exists: IfTableExistStrategySpec):
         """
         Sets the strategy to follow when the table already exists.
 
@@ -196,14 +200,14 @@ class AWSGlue(Catalog):
                 raise DestinationConfigurationError(ErrorCode.DECE39)
 
     @property
-    def schema_strategy(self) -> Literal["update", "strict"]:
+    def schema_strategy(self) -> SchemaStrategySpec:
         """
         str: The strategy to follow when appending to a table with an existing schema.
         """
         return self._schema_strategy
 
     @schema_strategy.setter
-    def schema_strategy(self, schema_strategy: Literal["update", "strict"]):
+    def schema_strategy(self, schema_strategy: SchemaStrategySpec):
         """
         Sets the strategy to follow when appending to a table with an existing schema.
 

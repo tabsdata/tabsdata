@@ -8,13 +8,14 @@ import logging
 import os
 from pathlib import Path
 from timeit import default_timer as timer
-from typing import List, Literal, Union
+from typing import List, Union
 from urllib.parse import quote_plus
 
 import polars as pl
 from polars import BasePartitionContext
 
 from tabsdata._credentials import UserPasswordCredentials
+from tabsdata._io.outputs.shared_enums import IfTableExistStrategySpec
 from tabsdata._io.plugin import DestinationPlugin
 from tabsdata._tabsserver.function.store_results_utils import _get_matching_files
 
@@ -33,7 +34,7 @@ class MongoDBDestination(DestinationPlugin):
         collections_with_ids: tuple[str, str | None] | List[tuple[str, str | None]],
         credentials: UserPasswordCredentials = None,
         connection_options: dict = None,
-        if_collection_exists: Literal["append", "replace"] = "append",
+        if_collection_exists: IfTableExistStrategySpec = "append",
         use_trxs: bool = False,
         docs_per_trx: int = 1000,
         maintain_order: bool = False,
@@ -194,7 +195,7 @@ class MongoDBDestination(DestinationPlugin):
             )
 
     @property
-    def if_collection_exists(self) -> Literal["append", "replace"]:
+    def if_collection_exists(self) -> IfTableExistStrategySpec:
         return self._if_collection_exists
 
     @if_collection_exists.setter

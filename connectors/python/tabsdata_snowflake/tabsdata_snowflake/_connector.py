@@ -5,11 +5,14 @@
 import logging
 import os
 import uuid
-from typing import List, Literal
+from typing import List
 
 import polars as pl
 
-from tabsdata._io.outputs.shared_enums import IfTableExistsStrategy
+from tabsdata._io.outputs.shared_enums import (
+    IfTableExistsStrategy,
+    IfTableExistStrategySpec,
+)
 from tabsdata._io.plugin import DestinationPlugin
 from tabsdata._secret import _recursively_evaluate_secret
 from tabsdata._tabsserver.function.global_utils import convert_path_to_uri
@@ -50,7 +53,7 @@ class SnowflakeDestination(DestinationPlugin):
         self,
         connection_parameters: dict,
         destination_table: List[str] | str,
-        if_table_exists: Literal["append", "replace"] = "append",
+        if_table_exists: IfTableExistStrategySpec = "append",
         stage: str | None = None,
         **kwargs,
     ):
@@ -122,7 +125,7 @@ class SnowflakeDestination(DestinationPlugin):
             )
 
     @property
-    def if_table_exists(self) -> Literal["append", "replace"]:
+    def if_table_exists(self) -> IfTableExistStrategySpec:
         """
         Returns the value of the if_table_exists property.
         This property determines what to do if the table already exists.
@@ -130,7 +133,7 @@ class SnowflakeDestination(DestinationPlugin):
         return self._if_table_exists
 
     @if_table_exists.setter
-    def if_table_exists(self, value: Literal["append", "replace"]):
+    def if_table_exists(self, value: IfTableExistStrategySpec):
         valid_values = [
             IfTableExistsStrategy.APPEND.value,
             IfTableExistsStrategy.REPLACE.value,

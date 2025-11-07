@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 import os
 import uuid
-from typing import TYPE_CHECKING, List, Literal
+from typing import TYPE_CHECKING, List
 from urllib.parse import urlparse
 
 import polars as pl
@@ -22,7 +22,10 @@ from tabsdata._io.constants import (
     ORACLE_SCHEME,
     POSTGRES_SCHEMES,
 )
-from tabsdata._io.outputs.shared_enums import IfTableExistsStrategy
+from tabsdata._io.outputs.shared_enums import (
+    IfTableExistsStrategy,
+    IfTableExistStrategySpec,
+)
 from tabsdata._io.plugin import DestinationPlugin
 from tabsdata._tabsserver.function.sql_utils import add_mariadb_collation
 from tabsdata._utils.sql_utils import add_driver_to_uri, obtain_uri
@@ -60,7 +63,7 @@ class MariaDBDestination(DestinationPlugin):
         uri: str,
         destination_table: List[str] | str,
         credentials: UserPasswordCredentials = None,
-        if_table_exists: Literal["append", "replace"] = "append",
+        if_table_exists: IfTableExistStrategySpec = "append",
     ):
         """
         Initializes the MariaDBDestination with the given URI and destination table,
@@ -88,14 +91,14 @@ class MariaDBDestination(DestinationPlugin):
         self.if_table_exists = if_table_exists
 
     @property
-    def if_table_exists(self) -> Literal["append", "replace"]:
+    def if_table_exists(self) -> IfTableExistStrategySpec:
         """
         str: The strategy to follow when the table already exists.
         """
         return self._if_table_exists
 
     @if_table_exists.setter
-    def if_table_exists(self, if_table_exists: Literal["append", "replace"]):
+    def if_table_exists(self, if_table_exists: IfTableExistStrategySpec):
         """
         Sets the strategy to follow when the table already exists.
 
@@ -238,7 +241,7 @@ class MySQLDestination(DestinationPlugin):
         uri: str,
         destination_table: List[str] | str,
         credentials: UserPasswordCredentials = None,
-        if_table_exists: Literal["append", "replace"] = "append",
+        if_table_exists: IfTableExistStrategySpec = "append",
     ):
         """
         Initializes the MySQLDestination with the given URI and destination table,
@@ -261,14 +264,14 @@ class MySQLDestination(DestinationPlugin):
         self.if_table_exists = if_table_exists
 
     @property
-    def if_table_exists(self) -> Literal["append", "replace"]:
+    def if_table_exists(self) -> IfTableExistStrategySpec:
         """
         str: The strategy to follow when the table already exists.
         """
         return self._if_table_exists
 
     @if_table_exists.setter
-    def if_table_exists(self, if_table_exists: Literal["append", "replace"]):
+    def if_table_exists(self, if_table_exists: IfTableExistStrategySpec):
         """
         Sets the strategy to follow when the table already exists.
 
@@ -410,7 +413,7 @@ class OracleDestination(DestinationPlugin):
         uri: str,
         destination_table: List[str] | str,
         credentials: UserPasswordCredentials = None,
-        if_table_exists: Literal["append", "replace"] = "append",
+        if_table_exists: IfTableExistStrategySpec = "append",
     ):
         """
         Initializes the OracleDestination with the given URI and destination table,
@@ -433,14 +436,14 @@ class OracleDestination(DestinationPlugin):
         self.if_table_exists = if_table_exists
 
     @property
-    def if_table_exists(self) -> Literal["append", "replace"]:
+    def if_table_exists(self) -> IfTableExistStrategySpec:
         """
         str: The strategy to follow when the table already exists.
         """
         return self._if_table_exists
 
     @if_table_exists.setter
-    def if_table_exists(self, if_table_exists: Literal["append", "replace"]):
+    def if_table_exists(self, if_table_exists: IfTableExistStrategySpec):
         """
         Sets the strategy to follow when the table already exists.
 
@@ -583,7 +586,7 @@ class PostgresDestination(DestinationPlugin):
         uri: str,
         destination_table: List[str] | str,
         credentials: UserPasswordCredentials = None,
-        if_table_exists: Literal["append", "replace"] = "append",
+        if_table_exists: IfTableExistStrategySpec = "append",
     ):
         """
         Initializes the PostgresDestination with the given URI and destination table,
@@ -606,14 +609,14 @@ class PostgresDestination(DestinationPlugin):
         self.if_table_exists = if_table_exists
 
     @property
-    def if_table_exists(self) -> Literal["append", "replace"]:
+    def if_table_exists(self) -> IfTableExistStrategySpec:
         """
         str: The strategy to follow when the table already exists.
         """
         return self._if_table_exists
 
     @if_table_exists.setter
-    def if_table_exists(self, if_table_exists: Literal["append", "replace"]):
+    def if_table_exists(self, if_table_exists: IfTableExistStrategySpec):
         """
         Sets the strategy to follow when the table already exists.
 

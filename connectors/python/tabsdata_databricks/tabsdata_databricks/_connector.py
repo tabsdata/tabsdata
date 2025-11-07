@@ -7,11 +7,16 @@ from __future__ import annotations
 import logging
 import os
 import uuid
-from typing import TYPE_CHECKING, List, Literal
+from typing import TYPE_CHECKING, List
 
 import polars as pl
 
-from tabsdata._io.outputs.shared_enums import IfTableExistsStrategy, SchemaStrategy
+from tabsdata._io.outputs.shared_enums import (
+    IfTableExistsStrategy,
+    IfTableExistStrategySpec,
+    SchemaStrategy,
+    SchemaStrategySpec,
+)
 from tabsdata._io.plugin import DestinationPlugin
 from tabsdata._secret import DirectSecret, Secret
 
@@ -64,8 +69,8 @@ class DatabricksDestination(DestinationPlugin):
         schema: str | None = None,
         warehouse: str | None = None,
         warehouse_id: str | None = None,
-        if_table_exists: Literal["append", "replace"] = "append",
-        schema_strategy: Literal["update", "strict"] = "update",
+        if_table_exists: IfTableExistStrategySpec = "append",
+        schema_strategy: SchemaStrategySpec = "update",
         **kwargs,
     ):
         """
@@ -170,14 +175,14 @@ class DatabricksDestination(DestinationPlugin):
         self._host = host
 
     @property
-    def if_table_exists(self) -> Literal["append", "replace"]:
+    def if_table_exists(self) -> IfTableExistStrategySpec:
         """
         str: The strategy to follow when the table already exists.
         """
         return self._if_table_exists
 
     @if_table_exists.setter
-    def if_table_exists(self, if_table_exists: Literal["append", "replace"]):
+    def if_table_exists(self, if_table_exists: IfTableExistStrategySpec):
         """
         Sets the strategy to follow when the table already exists.
 
@@ -201,14 +206,14 @@ class DatabricksDestination(DestinationPlugin):
         self._if_table_exists = if_table_exists
 
     @property
-    def schema_strategy(self) -> Literal["update", "strict"]:
+    def schema_strategy(self) -> SchemaStrategySpec:
         """
         str: The strategy to follow when appending to a table with an existing schema.
         """
         return self._schema_strategy
 
     @schema_strategy.setter
-    def schema_strategy(self, schema_strategy: Literal["update", "strict"]):
+    def schema_strategy(self, schema_strategy: SchemaStrategySpec):
         """
         Sets the strategy to follow when appending to a table with an existing schema.
 
