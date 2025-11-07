@@ -6,6 +6,7 @@ use crate::dao::DaoArguments;
 use darling::FromAttributes;
 use proc_macro::TokenStream;
 use quote::quote;
+use std::collections::HashSet;
 use syn::{Attribute, Fields, Ident, Item, ItemMod, ItemStruct, Result, parse_macro_input};
 
 pub fn dxo(_attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -159,19 +160,55 @@ fn merge_dxo_attrs(base: &ItemStruct, child: &ItemStruct) -> Result<Vec<Attribut
     Ok(attrs)
 }
 
-/// Move fields from base struct into derived struct, keeping the order.
+/// Move fields from base struct into derived struct, keeping the order. Ignore
+/// fields marked with #[ignore].
 fn move_fields(base: &ItemStruct, derived: &mut ItemStruct) {
     match (&base.fields, &mut derived.fields) {
         (Fields::Named(base_named), Fields::Named(derived_named)) => {
+            // Collect all idents in derived struct with #[ignore]
+            let ignored_idents: HashSet<Ident> = derived_named
+                .named
+                .iter()
+                .filter_map(|f| {
+                    if f.attrs.iter().any(|attr| attr.path().is_ident("ignore")) {
+                        f.ident.clone()
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            // Filter out #[ignore] from both base and derived fields, and skip any field whose ident is in ignored_idents
+            let base_fields: Vec<_> = base_named
+                .named
+                .iter()
+                .filter(|f| {
+                    if let Some(ident) = &f.ident {
+                        !ignored_idents.contains(ident)
+                    } else {
+                        true
+                    }
+                })
+                .cloned()
+                .collect();
+            let derived_fields: Vec<_> = derived_named
+                .named
+                .iter()
+                .filter(|f| {
+                    if let Some(ident) = &f.ident {
+                        !ignored_idents.contains(ident)
+                            && !f.attrs.iter().any(|attr| attr.path().is_ident("ignore"))
+                    } else {
+                        true
+                    }
+                })
+                .cloned()
+                .collect();
+            // Now merge fields, keeping order: base fields first (overridden by derived if present), then any extra derived fields
             let mut new_fields = syn::punctuated::Punctuated::new();
-            let mut used_idents = std::collections::HashSet::new();
-            // For each base field, use derived's definition if present, else base's
-            for base_field in base_named.named.iter() {
+            let mut used_idents = HashSet::new();
+            for base_field in base_fields.iter() {
                 let ident = base_field.ident.as_ref();
-                let derived_field = derived_named
-                    .named
-                    .iter()
-                    .find(|d| d.ident.as_ref() == ident);
+                let derived_field = derived_fields.iter().find(|d| d.ident.as_ref() == ident);
                 let field = match derived_field {
                     Some(df) => df.clone(),
                     None => {
@@ -183,8 +220,7 @@ fn move_fields(base: &ItemStruct, derived: &mut ItemStruct) {
                 used_idents.insert(ident);
                 new_fields.push(field);
             }
-            // Add remaining derived fields not present in base
-            for derived_field in derived_named.named.iter() {
+            for derived_field in derived_fields.iter() {
                 let ident = derived_field.ident.as_ref();
                 if !used_idents.contains(&ident) {
                     new_fields.push(derived_field.clone());
@@ -193,20 +229,49 @@ fn move_fields(base: &ItemStruct, derived: &mut ItemStruct) {
             derived_named.named = new_fields;
         }
         (Fields::Unnamed(base_unnamed), Fields::Unnamed(derived_unnamed)) => {
+            // For unnamed fields, we can skip any derived field with #[ignore]
+            let ignored_indices: HashSet<_> = derived_unnamed
+                .unnamed
+                .iter()
+                .enumerate()
+                .filter_map(|(i, f)| {
+                    if f.attrs.iter().any(|attr| attr.path().is_ident("ignore")) {
+                        Some(i)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            let base_fields: Vec<_> = base_unnamed
+                .unnamed
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| !ignored_indices.contains(i))
+                .map(|(_, f)| f.clone())
+                .collect();
+            let derived_fields: Vec<_> = derived_unnamed
+                .unnamed
+                .iter()
+                .enumerate()
+                .filter(|(i, f)| {
+                    !ignored_indices.contains(i)
+                        && !f.attrs.iter().any(|attr| attr.path().is_ident("ignore"))
+                })
+                .map(|(_, f)| f.clone())
+                .collect();
+            // Now merge fields, keeping order: base fields first (overridden by derived if present), then any extra derived fields
             let mut new_fields = syn::punctuated::Punctuated::new();
-            let base_len = base_unnamed.unnamed.len();
-            // For each base field position, use derived's if present, else base's
-            for i in 0..base_len {
-                let field = derived_unnamed.unnamed.get(i).cloned().unwrap_or_else(|| {
-                    let mut bf = base_unnamed.unnamed[i].clone();
+            let base_len = base_fields.len();
+            for (i, base_field) in base_fields.iter().enumerate().take(base_len) {
+                let field = derived_fields.get(i).cloned().unwrap_or_else(|| {
+                    let mut bf = base_field.clone();
                     bf.attrs.clear();
                     bf
                 });
                 new_fields.push(field);
             }
-            // Add remaining derived fields
-            for i in base_len..derived_unnamed.unnamed.len() {
-                new_fields.push(derived_unnamed.unnamed[i].clone());
+            for derived_field in derived_fields.iter().skip(base_len) {
+                new_fields.push(derived_field.clone());
             }
             derived_unnamed.unnamed = new_fields;
         }

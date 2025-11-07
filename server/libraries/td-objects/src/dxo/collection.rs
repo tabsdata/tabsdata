@@ -38,9 +38,7 @@ mod definitions {
 
     #[td_type::Dao]
     #[dao(sql_table = "collections_active")]
-    #[td_type(
-        builder(try_from = CollectionCreateDB),
-    )]
+    #[td_type(builder(try_from = CollectionCreateDB))]
     pub struct CollectionDB {
         #[td_type(extractor)]
         pub id: CollectionId,

@@ -80,6 +80,13 @@ mod definitions {
     #[dao(sql_table = "tables__read")]
     #[inherits(TableDBWithNames)]
     pub struct TableDBRead {
+        #[ignore]
+        collection: CollectionName,
+        #[ignore]
+        function: FunctionName,
+
+        pub collection_name: CollectionName,
+        pub function_name: FunctionName,
         pub last_data_version: Option<TableDataVersionId>,
         // pub last_data_changed_version: Option<TableDataVersionId>,
     }
@@ -93,10 +100,8 @@ mod definitions {
         pub id: TableVersionId,
         #[dto(list(filter, filter_like, order_by))]
         pub name: TableName,
-        #[td_type(builder(include, field = "collection"))]
         #[dto(list(filter, filter_like, order_by))]
         pub collection_name: CollectionName,
-        #[td_type(builder(include, field = "function"))]
         #[dto(list(filter, filter_like, order_by))]
         pub function_name: FunctionName,
     }
