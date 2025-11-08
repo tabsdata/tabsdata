@@ -12,17 +12,27 @@ import yaml
 from tabsdata._utils.constants import TABSDATA_MODULE_NAME
 from tabsdata._utils.internal._resources import td_resource
 
-TABSDATA_REPOSITORIES_ENTERPRISE = [
-    ("tabsdata-ee", "Tabsdata Enterprise", "TABSDATA_EE"),
-    ("tabsdata-os", "Tabsdata Open Source", "TABSDATA_OS"),
-    ("tabsdata-ui", "Tabsdata User Interface", "TABSDATA_UI"),
-    ("tabsdata-ag", "Tabsdata Agent", "TABSDATA_AG"),
-    ("tabsdata-ci", "Tabsdata Automation", "TABSDATA_CI"),
-]
 
-TABSDATA_REPOSITORIES_OPENSOURCE = [
-    ("tabsdata-os", "Tabsdata Open Source", "TABSDATA_OS"),
-]
+def load_repositories():
+    # noinspection PyBroadException
+    try:
+        repositories_path = td_resource("resources/about/repositories.yaml")
+        with open(repositories_path, "r", encoding="utf-8") as f:
+            config = yaml.safe_load(f)
+        repositories = [
+            (
+                repository["name"],
+                repository["description"],
+                repository["prefix"],
+            )
+            for repository in config.get("repositories", [])
+        ]
+        return repositories
+    except Exception:
+        return []
+
+
+TABSDATA_REPOSITORIES = load_repositories()
 
 
 # noinspection DuplicatedCode
@@ -50,12 +60,7 @@ def tdabout_from_metadata(package_name=TABSDATA_MODULE_NAME):
     env["VERGEN_BUILD_TIMEZONE_NAME"] = metadata.get("X-Build-Timezone-Name", "-")
     env["VERGEN_BUILD_TIMEZONE_OFFSET"] = metadata.get("X-Build-Timezone-Offset", "-")
 
-    enterprise = metadata.get("X-Enterprise", "false") == "true"
-    repositories = (
-        TABSDATA_REPOSITORIES_ENTERPRISE
-        if enterprise
-        else TABSDATA_REPOSITORIES_OPENSOURCE
-    )
+    repositories = TABSDATA_REPOSITORIES
 
     # Git Information
     for (
@@ -193,12 +198,7 @@ def tdabout_from_build(package_name=TABSDATA_MODULE_NAME):  # noqa: C901
     env["VERGEN_BUILD_TIMEZONE_NAME"] = metadata.get("X-Build-Timezone-Name", "-")
     env["VERGEN_BUILD_TIMEZONE_OFFSET"] = metadata.get("X-Build-Timezone-Offset", "-")
 
-    enterprise = metadata.get("X-Enterprise", "false") == "true"
-    repositories = (
-        TABSDATA_REPOSITORIES_ENTERPRISE
-        if enterprise
-        else TABSDATA_REPOSITORIES_OPENSOURCE
-    )
+    repositories = TABSDATA_REPOSITORIES
 
     # Git Information
     for (

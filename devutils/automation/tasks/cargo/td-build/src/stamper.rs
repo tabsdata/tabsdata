@@ -70,13 +70,12 @@ struct Repositories {
 }
 
 fn load_repositories() -> Vec<Repository> {
-    let repositories: Repositories = serde_yaml::from_str(REPOSITORIES_YAML).expect(
-        format!(
+    let repositories: Repositories = serde_yaml::from_str(REPOSITORIES_YAML).unwrap_or_else(|_| {
+        panic!(
             "Failed to parse repositories metadata file: {}",
             REPOSITORIES_YAML
         )
-        .as_str(),
-    );
+    });
     repositories.repositories
 }
 

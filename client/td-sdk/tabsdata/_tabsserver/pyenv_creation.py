@@ -84,6 +84,8 @@ WINDOWS_OS_NAME = "nt"
 WINDOWS_URL_PREFIX = "/"
 BACK_SLASH = "\\"
 
+TD_BUILD_TIMESTAMP = "TD_BUILD_TIMESTAMP"
+
 HostPackageSource: TypeAlias = Literal[
     "Development",
     "Local",
@@ -481,6 +483,9 @@ def found_requirements_tabsdata(
 
 
 def get_build_timestamp() -> str:
+    td_build_timestamp = os.getenv(TD_BUILD_TIMESTAMP)
+    if td_build_timestamp:
+        return td_build_timestamp
     try:
         build = td_resource(BUILD_MANIFEST_LOCATION)
         metadata = {}
@@ -491,7 +496,12 @@ def get_build_timestamp() -> str:
             logger.warning(f"Warning: Could not parse BUILD manifest: {exception}")
     except Exception as exception:
         logger.warning(f"Error: Could not locate BUILD manifest file: {exception}.")
-    return str(metadata.get(BUILD_TIMESTAMP_KEY, datetime.fromtimestamp(timestamp=0, tz=timezone.utc,)))
+    return str(
+        metadata.get(
+            BUILD_TIMESTAMP_KEY,
+            datetime.now(tz=timezone.utc),
+        )
+    )
 
 
 def get_dict_hash(data):

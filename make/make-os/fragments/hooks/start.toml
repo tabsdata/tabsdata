@@ -93,4 +93,12 @@ script = [
     else
         cm_run_task permit
     end
+
+    td_override_build_timestamp = get_env TD_OVERRIDE_BUILD_TIMESTAMP
+    if eq ${td_override_build_timestamp} "true"
+        td_build_timestamp = current_time
+        set_env TD_BUILD_TIMESTAMP ${td_build_timestamp}
+        td_build_timestamp = get_env TD_BUILD_TIMESTAMP
+        info "🔩 TD_OVERRIDE_BUILD_TIMESTAMP is 'true'. Using 'TD_BUILD_TIMESTAMP': '${td_build_timestamp}'."
+    end
     ''']

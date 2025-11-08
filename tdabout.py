@@ -19,17 +19,38 @@ import yaml
 from archspec import cpu
 from setuptools import build_meta as _backend
 
-TABSDATA_REPOSITORIES_ENTERPRISE = [
-    ("tabsdata-ee", None, "Tabsdata Enterprise", "TABSDATA_EE"),
-    ("tabsdata-os", None, "Tabsdata Open Source", "TABSDATA_OS"),
-    ("tabsdata-ui", None, "Tabsdata User Interface", "TABSDATA_UI"),
-    ("tabsdata-ag", None, "Tabsdata Agent", "TABSDATA_AG"),
-    ("tabsdata-ci", None, "Tabsdata Automation", "TABSDATA_CI"),
-]
 
-TABSDATA_REPOSITORIES_OPENSOURCE = [
-    ("tabsdata-os", "tabsdata", "Tabsdata Open Source", "TABSDATA_OS"),
-]
+# noinspection DuplicatedCode
+def _root_folder() -> Path:
+    current_folder = Path(__file__).parent.absolute()
+    while True:
+        root_file = current_folder / ".root"
+        if root_file.exists() and root_file.is_file():
+            return current_folder
+        parent_folder = current_folder.parent
+        if current_folder == parent_folder:
+            return Path(".")
+        current_folder = parent_folder
+
+
+def _load_repositories(root):
+    manifest_repositories_path = (
+        root / "variant" / "resources" / "about" / "repositories.yaml"
+    )
+    if not manifest_repositories_path.exists():
+        return []
+    with open(manifest_repositories_path, "r", encoding="utf-8") as f:
+        config = yaml.safe_load(f)
+    repositories = [
+        (
+            repository["name"],
+            repository.get("alternate_name"),
+            repository["description"],
+            repository["prefix"],
+        )
+        for repository in config.get("repositories", [])
+    ]
+    return repositories
 
 
 # noinspection PyBroadException
@@ -293,7 +314,7 @@ def _capture_git_information(repository_path):
     }
 
 
-def _render_build(enterprise: bool = False):
+def _render_build(root_path):
     try:
         build_metadata = _capture_build_information()
         rust_metadata = _capture_rust_information()
@@ -309,11 +330,7 @@ def _render_build(enterprise: bool = False):
             "X-Build-Timezone-Offset": build_metadata.get("build_timezone_offset", "?"),
         }
         solution_path = _get_solution_path()
-        repositories = (
-            TABSDATA_REPOSITORIES_ENTERPRISE
-            if enterprise
-            else TABSDATA_REPOSITORIES_OPENSOURCE
-        )
+        repositories = _load_repositories(root_path)
         for (
             repository_name,
             alternate_repository_name,
@@ -322,13 +339,10 @@ def _render_build(enterprise: bool = False):
         ) in repositories:
             repository_path = solution_path / repository_name
             git_metadata = _capture_git_information(repository_path)
-            if git_metadata is None:
-                if alternate_repository_name is not None:
-                    # noinspection PyTypeChecker
-                    alternate_repository_path = (
-                        solution_path / alternate_repository_name
-                    )
-                    git_metadata = _capture_git_information(alternate_repository_path)
+            if git_metadata is None and alternate_repository_name is not None:
+                # noinspection PyTypeChecker
+                alternate_repository_path = solution_path / alternate_repository_name
+                git_metadata = _capture_git_information(alternate_repository_path)
             if git_metadata is None:
                 metadata[f"X-Git-{repository_prefix}-Exists"] = "false"
                 continue
@@ -422,7 +436,7 @@ def _merge_metadata_contents(original_text):
     marker = "X-Build-Date-UTC:"
     if marker in original_text:
         return original_text
-    block = _render_build()
+    block = _render_build(_root_folder())
     stripped = original_text.rstrip("\n")
     return f"{block}\n{stripped}\n"
 
@@ -551,7 +565,7 @@ def write_build_manifest(root_path, output_path):
             except Exception:
                 pass
 
-        build = _render_build(enterprise=enterprise)
+        build = _render_build(root_path)
         build["X-Enterprise"] = "true" if enterprise else "false"
 
         build_file = Path(output_path)

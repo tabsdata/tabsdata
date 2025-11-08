@@ -1,0 +1,9 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+repositories:
+  - name: tabsdata-os
+    alternate_name: tabsdata
+    description: Tabsdata Open Source
+    prefix: TABSDATA_OS
