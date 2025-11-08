@@ -2784,7 +2784,7 @@ class TableFrame:
     """> Expansion Namespaces """
 
     @property
-    def dq(self) -> td_dq_engine.DataQualityEngine:
+    def _dq(self) -> td_dq_engine.DataQualityEngine:
         return td_dq_engine.DataQualityEngine(self)
 
 
