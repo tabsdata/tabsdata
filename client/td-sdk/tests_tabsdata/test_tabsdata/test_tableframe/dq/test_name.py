@@ -31,7 +31,7 @@ def create_test_tableframe(column_names: list[str]) -> td.TableFrame:
 @pytest.mark.dq
 def test_name_simple_default_postfix():
     tf_i = create_test_tableframe(["age", "name"])
-    tf_o = tf_i.dq.is_null("age").tf()
+    tf_o = tf_i._dq.is_null("age").tf()
     df_o = tf_o._lf.collect()
 
     assert len(df_o.columns) == len(tf_i.columns()) + len(SystemColumns) + 1
@@ -44,7 +44,7 @@ def test_name_simple_default_postfix():
 @pytest.mark.dq
 def test_name_custom_postfix():
     tf_i = create_test_tableframe(["age", "name"])
-    tf_o = tf_i.dq.with_postfix("_check").is_null("age").tf()
+    tf_o = tf_i._dq.with_postfix("_check").is_null("age").tf()
     df_o = tf_o._lf.collect()
 
     assert len(df_o.columns) == len(tf_i.columns()) + len(SystemColumns) + 1
@@ -57,7 +57,7 @@ def test_name_custom_postfix():
 @pytest.mark.dq
 def test_name_explicit_dq_column_name():
     tf_i = create_test_tableframe(["age", "name"])
-    tf_o = tf_i.dq.is_null("age", dq_column_name="age_is_missing").tf()
+    tf_o = tf_i._dq.is_null("age", dq_column_name="age_is_missing").tf()
     df_o = tf_o._lf.collect()
 
     assert len(df_o.columns) == len(tf_i.columns()) + len(SystemColumns) + 1
@@ -70,7 +70,7 @@ def test_name_explicit_dq_column_name():
 @pytest.mark.dq
 def test_name_collision_in_dq_namespace():
     tf_i = create_test_tableframe(["age", "name"])
-    tf_o = tf_i.dq.is_null("age").is_null("age").tf()
+    tf_o = tf_i._dq.is_null("age").is_null("age").tf()
     df_o = tf_o._lf.collect()
 
     assert len(df_o.columns) == len(tf_i.columns()) + len(SystemColumns) + 2
@@ -85,7 +85,7 @@ def test_name_collision_in_dq_namespace():
 @pytest.mark.dq
 def test_name_collision_three_times():
     tf_i = create_test_tableframe(["age", "name"])
-    tf_o = tf_i.dq.is_null("age").is_null("age").is_null("age").tf()
+    tf_o = tf_i._dq.is_null("age").is_null("age").is_null("age").tf()
     df_o = tf_o._lf.collect()
 
     assert len(df_o.columns) == len(tf_i.columns()) + len(SystemColumns) + 3
@@ -102,7 +102,7 @@ def test_name_collision_three_times():
 def test_name_collision_with_explicit_name():
     tf_i = create_test_tableframe(["age", "name"])
     tf_o = (
-        tf_i.dq.is_null("age", dq_column_name="result")
+        tf_i._dq.is_null("age", dq_column_name="result")
         .is_null("name", dq_column_name="result")
         .tf()
     )
@@ -120,7 +120,7 @@ def test_name_collision_with_explicit_name():
 @pytest.mark.dq
 def test_name_collision_with_existing_data_column():
     tf_i = create_test_tableframe(["age", "age_dq"])
-    tf_o = tf_i.dq.is_null("age").tf()
+    tf_o = tf_i._dq.is_null("age").tf()
     df_o = tf_o._lf.collect()
 
     assert len(df_o.columns) == len(tf_i.columns()) + len(SystemColumns) + 1
@@ -134,7 +134,7 @@ def test_name_collision_with_existing_data_column():
 @pytest.mark.dq
 def test_name_collision_with_gaps_in_counters():
     tf_i = create_test_tableframe(["name", "name1", "name5"])
-    tf_o = tf_i.dq.is_null("name").is_null("name").is_null("name").tf()
+    tf_o = tf_i._dq.is_null("name").is_null("name").is_null("name").tf()
     df_o = tf_o._lf.collect()
 
     assert len(df_o.columns) == len(tf_i.columns()) + len(SystemColumns) + 3
@@ -151,7 +151,7 @@ def test_name_collision_with_gaps_in_counters():
 @pytest.mark.dq
 def test_name_collision_with_existing_dq_pattern_columns():
     tf_i = create_test_tableframe(["name", "name_dq", "name3_dq"])
-    tf_o = tf_i.dq.is_null("name").is_null("name").is_null("name").tf()
+    tf_o = tf_i._dq.is_null("name").is_null("name").is_null("name").tf()
     df_o = tf_o._lf.collect()
 
     assert len(df_o.columns) == len(tf_i.columns()) + len(SystemColumns) + 3
@@ -170,7 +170,7 @@ def test_name_collision_complex_scenario():
     tf_i = create_test_tableframe(
         ["name", "name_dq", "name1_dq", "name2", "name3_dq", "name5_dq"]
     )
-    tf_o = tf_i.dq.is_null("name").is_null("name").is_null("name").is_null("name").tf()
+    tf_o = tf_i._dq.is_null("name").is_null("name").is_null("name").is_null("name").tf()
     df_o = tf_o._lf.collect()
 
     assert len(df_o.columns) == len(tf_i.columns()) + len(SystemColumns) + 4
@@ -191,7 +191,7 @@ def test_name_collision_complex_scenario():
 @pytest.mark.dq
 def test_name_explicit_collision_with_data_column():
     tf_i = create_test_tableframe(["age", "result"])
-    tf_o = tf_i.dq.is_null("age", dq_column_name="result").tf()
+    tf_o = tf_i._dq.is_null("age", dq_column_name="result").tf()
     df_o = tf_o._lf.collect()
 
     assert len(df_o.columns) == len(tf_i.columns()) + len(SystemColumns) + 1
@@ -206,7 +206,7 @@ def test_name_explicit_collision_with_data_column():
 def test_name_explicit_collision_multiple_times():
     tf_i = create_test_tableframe(["age", "name", "check"])
     tf_o = (
-        tf_i.dq.is_null("age", dq_column_name="check")
+        tf_i._dq.is_null("age", dq_column_name="check")
         .is_null("name", dq_column_name="check")
         .is_null("age", dq_column_name="check")
         .tf()
@@ -228,7 +228,7 @@ def test_name_explicit_collision_multiple_times():
 def test_name_mixed_postfix_and_explicit():
     tf_i = create_test_tableframe(["age", "name"])
     tf_o = (
-        tf_i.dq.is_null("age")
+        tf_i._dq.is_null("age")
         .is_null("name", dq_column_name="name_check")
         .is_null("age")
         .is_null("name", dq_column_name="name_check")
@@ -250,7 +250,7 @@ def test_name_mixed_postfix_and_explicit():
 @pytest.mark.dq
 def test_name_custom_postfix_with_collision():
     tf_i = create_test_tableframe(["age", "age_check"])
-    tf_o = tf_i.dq.with_postfix("_check").is_null("age").is_null("age").tf()
+    tf_o = tf_i._dq.with_postfix("_check").is_null("age").is_null("age").tf()
     df_o = tf_o._lf.collect()
 
     assert len(df_o.columns) == len(tf_i.columns()) + len(SystemColumns) + 2
@@ -266,7 +266,7 @@ def test_name_custom_postfix_with_collision():
 def test_name_changing_postfix_midstream():
     tf_i = create_test_tableframe(["age", "name"])
     tf_o = (
-        tf_i.dq.is_null("age")
+        tf_i._dq.is_null("age")
         .with_postfix("_check")
         .is_null("name")
         .is_null("age")
@@ -288,7 +288,7 @@ def test_name_changing_postfix_midstream():
 def test_name_counters_persist_across_operations():
     tf_i = create_test_tableframe(["age", "name", "salary"])
     tf_o = (
-        tf_i.dq.is_null("age")
+        tf_i._dq.is_null("age")
         .is_null("name")
         .is_null("age")
         .is_null("salary")
@@ -316,7 +316,7 @@ def test_name_counters_persist_across_operations():
 def test_name_postfix_specific_counters():
     tf_i = create_test_tableframe(["name"])
     tf_o = (
-        tf_i.dq.with_postfix("_x")
+        tf_i._dq.with_postfix("_x")
         .is_null("name")
         .is_null("name")
         .with_postfix("_y")
@@ -343,7 +343,7 @@ def test_name_postfix_specific_counters():
 def test_name_postfix_specific_counters_complex():
     tf_i = create_test_tableframe(["name", "age"])
     tf_o = (
-        tf_i.dq.with_postfix("_x")
+        tf_i._dq.with_postfix("_x")
         .is_null("name")
         .is_null("age")
         .is_null("name")
@@ -378,7 +378,7 @@ def test_name_postfix_specific_counters_complex():
 def test_name_postfix_counters_with_existing_columns():
     tf_i = create_test_tableframe(["name", "name_x", "name1_y"])
     tf_o = (
-        tf_i.dq.with_postfix("_x")
+        tf_i._dq.with_postfix("_x")
         .is_null("name")
         .is_null("name")
         .with_postfix("_y")
@@ -404,7 +404,7 @@ def test_name_postfix_counters_with_existing_columns():
 def test_name_default_postfix_independence():
     tf_i = create_test_tableframe(["name"])
     tf_o = (
-        tf_i.dq.is_null("name")
+        tf_i._dq.is_null("name")
         .is_null("name")
         .with_postfix("_dq")
         .is_null("name")
@@ -431,7 +431,7 @@ def test_name_default_postfix_independence():
 def test_name_explicit_name_independent_from_postfix():
     tf_i = create_test_tableframe(["name"])
     tf_o = (
-        tf_i.dq.with_postfix("_x")
+        tf_i._dq.with_postfix("_x")
         .is_null("name")
         .is_null("name")
         .is_null("name", dq_column_name="name")
@@ -457,7 +457,7 @@ def test_name_postfix_collision_with_data_columns():
         ["name", "name_x", "name1_x", "name2_x", "name_y", "name2_y"]
     )
     tf_o = (
-        tf_i.dq.with_postfix("_x")
+        tf_i._dq.with_postfix("_x")
         .is_null("name")
         .is_null("name")
         .with_postfix("_y")

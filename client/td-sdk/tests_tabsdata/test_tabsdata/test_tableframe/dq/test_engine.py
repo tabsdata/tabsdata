@@ -89,7 +89,7 @@ def assert_dq_columns(
 @pytest.mark.dq
 def test_is_null_basic():
     tf = create_large_test_dataset(rows=3141)
-    dq = tf.dq.is_null("age")
+    dq = tf._dq.is_null("age")
 
     assert isinstance(dq, DataQualityEngine)
 
@@ -110,7 +110,7 @@ def test_is_null_basic():
 @pytest.mark.dq
 def test_is_null_custom_name():
     tf = create_large_test_dataset(rows=3141)
-    dq = tf.dq.is_null("salary", dq_column_name="salary_missing")
+    dq = tf._dq.is_null("salary", dq_column_name="salary_missing")
 
     assert isinstance(dq, DataQualityEngine)
 
@@ -131,7 +131,7 @@ def test_is_null_custom_name():
 @pytest.mark.dq
 def test_is_not_null_basic():
     tf = create_large_test_dataset(rows=3141)
-    dq = tf.dq.is_not_null("age")
+    dq = tf._dq.is_not_null("age")
 
     assert isinstance(dq, DataQualityEngine)
 
@@ -152,7 +152,7 @@ def test_is_not_null_basic():
 @pytest.mark.dq
 def test_is_nan_basic():
     tf = create_large_test_dataset(rows=3141)
-    dq = tf.dq.is_nan("salary")
+    dq = tf._dq.is_nan("salary")
 
     assert isinstance(dq, DataQualityEngine)
 
@@ -173,7 +173,7 @@ def test_is_nan_basic():
 @pytest.mark.dq
 def test_is_not_nan_basic():
     tf = create_large_test_dataset(rows=3141)
-    dq = tf.dq.is_not_nan("score")
+    dq = tf._dq.is_not_nan("score")
 
     assert isinstance(dq, DataQualityEngine)
 
@@ -194,7 +194,7 @@ def test_is_not_nan_basic():
 @pytest.mark.dq
 def test_is_null_or_nan_basic():
     tf = create_large_test_dataset(rows=3141)
-    dq = tf.dq.is_null_or_nan("temperature")
+    dq = tf._dq.is_null_or_nan("temperature")
 
     assert isinstance(dq, DataQualityEngine)
 
@@ -217,7 +217,7 @@ def test_is_null_or_nan_basic():
 @pytest.mark.dq
 def test_is_not_null_or_nan_basic():
     tf = create_large_test_dataset(rows=3141)
-    dq = tf.dq.is_not_null_or_nan("temperature")
+    dq = tf._dq.is_not_null_or_nan("temperature")
 
     assert isinstance(dq, DataQualityEngine)
 
@@ -240,7 +240,7 @@ def test_is_not_null_or_nan_basic():
 @pytest.mark.dq
 def test_is_in_basic():
     tf = create_large_test_dataset(rows=3141)
-    dq = tf.dq.is_in("category", ["A", "B"])
+    dq = tf._dq.is_in("category", ["A", "B"])
 
     assert isinstance(dq, DataQualityEngine)
 
@@ -261,7 +261,7 @@ def test_is_in_basic():
 @pytest.mark.dq
 def test_is_in_with_numeric():
     tf = create_large_test_dataset(rows=3141)
-    dq = tf.dq.is_in("rating", [1, 2, 5])
+    dq = tf._dq.is_in("rating", [1, 2, 5])
 
     assert isinstance(dq, DataQualityEngine)
 
@@ -282,7 +282,7 @@ def test_is_in_with_numeric():
 @pytest.mark.dq
 def test_is_positive_basic():
     tf = create_large_test_dataset(rows=3141)
-    dq = tf.dq.is_positive("amount")
+    dq = tf._dq.is_positive("amount")
 
     assert isinstance(dq, DataQualityEngine)
 
@@ -303,7 +303,7 @@ def test_is_positive_basic():
 @pytest.mark.dq
 def test_is_positive_or_zero_basic():
     tf = create_large_test_dataset(rows=3141)
-    dq = tf.dq.is_positive_or_zero("count")
+    dq = tf._dq.is_positive_or_zero("count")
 
     assert isinstance(dq, DataQualityEngine)
 
@@ -324,7 +324,7 @@ def test_is_positive_or_zero_basic():
 @pytest.mark.dq
 def test_is_negative_basic():
     tf = create_large_test_dataset(rows=3141)
-    dq = tf.dq.is_negative("amount")
+    dq = tf._dq.is_negative("amount")
 
     assert isinstance(dq, DataQualityEngine)
 
@@ -345,7 +345,7 @@ def test_is_negative_basic():
 @pytest.mark.dq
 def test_is_negative_or_zero_basic():
     tf = create_large_test_dataset(rows=3141)
-    dq = tf.dq.is_negative_or_zero("count")
+    dq = tf._dq.is_negative_or_zero("count")
 
     assert isinstance(dq, DataQualityEngine)
 
@@ -366,7 +366,7 @@ def test_is_negative_or_zero_basic():
 @pytest.mark.dq
 def test_is_zero_basic():
     tf = create_large_test_dataset(rows=3141)
-    dq = tf.dq.is_zero("balance")
+    dq = tf._dq.is_zero("balance")
 
     assert isinstance(dq, DataQualityEngine)
 
@@ -387,7 +387,7 @@ def test_is_zero_basic():
 @pytest.mark.dq
 def test_is_between_both_closed():
     tf = create_large_test_dataset(rows=3141)
-    dq = tf.dq.is_between("percentage", 25.0, 75.0, closed="both")
+    dq = tf._dq.is_between("percentage", 25.0, 75.0, closed="both")
 
     assert isinstance(dq, DataQualityEngine)
 
@@ -410,7 +410,7 @@ def test_is_between_both_closed():
 @pytest.mark.dq
 def test_is_between_left_closed():
     tf = create_large_test_dataset(rows=3141)
-    dq = tf.dq.is_between("percentage", 25.0, 75.0, closed="left")
+    dq = tf._dq.is_between("percentage", 25.0, 75.0, closed="left")
 
     assert isinstance(dq, DataQualityEngine)
 
@@ -433,7 +433,7 @@ def test_is_between_left_closed():
 @pytest.mark.dq
 def test_is_between_right_closed():
     tf = create_large_test_dataset(rows=3141)
-    dq = tf.dq.is_between("percentage", 25.0, 75.0, closed="right")
+    dq = tf._dq.is_between("percentage", 25.0, 75.0, closed="right")
 
     assert isinstance(dq, DataQualityEngine)
 
@@ -456,7 +456,7 @@ def test_is_between_right_closed():
 @pytest.mark.dq
 def test_is_between_none_closed():
     tf = create_large_test_dataset(rows=3141)
-    dq = tf.dq.is_between("percentage", 25.0, 75.0, closed="none")
+    dq = tf._dq.is_between("percentage", 25.0, 75.0, closed="none")
 
     assert isinstance(dq, DataQualityEngine)
 
@@ -479,7 +479,7 @@ def test_is_between_none_closed():
 @pytest.mark.dq
 def test_expr_boolean():
     tf = create_large_test_dataset(rows=3141)
-    dq = tf.dq.expr((td.col("age") > 50) & (td.col("age") < 70), "age_range_check")
+    dq = tf._dq.expr((td.col("age") > 50) & (td.col("age") < 70), "age_range_check")
 
     assert isinstance(dq, DataQualityEngine)
 
@@ -512,7 +512,7 @@ def test_expr_int_score():
         .otherwise(0)
         .cast(td.Int8)
     )
-    dq = tf.dq.expr(expr, "quality_score")
+    dq = tf._dq.expr(expr, "quality_score")
 
     assert isinstance(dq, DataQualityEngine)
 
@@ -562,7 +562,7 @@ def test_expr_complex_condition():
         & (td.col("salary").is_not_nan())
         & (td.col("salary") > 0)
     )
-    dq = tf.dq.expr(expr, "valid_salary")
+    dq = tf._dq.expr(expr, "valid_salary")
 
     assert isinstance(dq, DataQualityEngine)
 
@@ -591,7 +591,7 @@ def test_fn_batch_mode_boolean():
     def batch_fn(age, salary):
         return (age.is_not_null()) & (salary.is_not_null())
 
-    dq = tf.dq.fn(
+    dq = tf._dq.fn(
         data_column_names=["age", "salary"],
         dq_column_dtype=td.Boolean,
         fn=batch_fn,
@@ -642,7 +642,7 @@ def test_fn_batch_mode_int():
         )["age"]
         return fn_series
 
-    dq = tf.dq.fn(
+    dq = tf._dq.fn(
         data_column_names="age",
         dq_column_dtype=td.Int8,
         fn=batch_fn,
@@ -676,7 +676,7 @@ def test_fn_row_mode_boolean():
             return False
         return (age > 30) and (salary > 50000)
 
-    dq = tf.dq.fn(
+    dq = tf._dq.fn(
         data_column_names=["age", "salary"],
         dq_column_dtype=td.Boolean,
         fn=row_fn,
@@ -731,7 +731,7 @@ def test_fn_row_mode_int():
 
         return score
 
-    dq = tf.dq.fn(
+    dq = tf._dq.fn(
         data_column_names=["age", "salary"],
         dq_column_dtype=td.Int8,
         fn=row_fn,
@@ -759,7 +759,7 @@ def test_fn_single_column_string():
     def row_fn(category):
         return category == "A"
 
-    dq = tf.dq.fn(
+    dq = tf._dq.fn(
         data_column_names="category",
         dq_column_dtype=td.Boolean,
         fn=row_fn,
@@ -788,7 +788,7 @@ def test_chaining_multiple_operations():
     tf = create_large_test_dataset(rows=3141)
 
     dq = (
-        tf.dq.is_null("age")
+        tf._dq.is_null("age")
         .is_nan("salary")
         .is_positive("amount")
         .is_between("percentage", 0, 100)
@@ -814,7 +814,7 @@ def test_chaining_with_postfix():
     tf = create_large_test_dataset(rows=3141)
 
     dq = (
-        tf.dq.with_postfix("_check")
+        tf._dq.with_postfix("_check")
         .is_null("age")
         .is_positive("amount")
         .is_in("category", ["A", "B"])
@@ -837,7 +837,7 @@ def test_chaining_with_custom_names():
     tf = create_large_test_dataset(rows=3141)
 
     dq = (
-        tf.dq.is_null("age", dq_column_name="age_missing")
+        tf._dq.is_null("age", dq_column_name="age_missing")
         .is_positive("salary", dq_column_name="salary_positive")
         .is_in("category", ["A", "B"], dq_column_name="category_ab")
     )
@@ -859,7 +859,7 @@ def test_large_dataset_performance():
     tf = create_large_test_dataset(rows=314159)
 
     dq = (
-        tf.dq.is_null("age")
+        tf._dq.is_null("age")
         .is_not_null("salary")
         .is_nan("score")
         .is_not_nan("temperature")
@@ -888,7 +888,7 @@ def test_large_dataset_performance():
 @pytest.mark.dq
 def test_postfix_state_persistence():
     tf = create_large_test_dataset(rows=3141)
-    dq = tf.dq.with_postfix("_v1")
+    dq = tf._dq.with_postfix("_v1")
 
     assert isinstance(dq, DataQualityEngine)
     assert dq.postfix == "_v1"
@@ -909,7 +909,7 @@ def test_postfix_state_persistence():
 @pytest.mark.dq
 def test_with_no_postfix():
     tf = create_large_test_dataset(rows=3141)
-    dq = tf.dq.with_postfix(None).is_null("age")
+    dq = tf._dq.with_postfix(None).is_null("age")
 
     assert isinstance(dq, DataQualityEngine)
 
@@ -924,7 +924,7 @@ def test_with_no_postfix():
 @pytest.mark.dq
 def test_multiple_checks_same_column():
     tf = create_large_test_dataset(rows=3141)
-    dq = tf.dq.is_null("age").is_positive("age").is_between("age", 18, 65)
+    dq = tf._dq.is_null("age").is_positive("age").is_between("age", 18, 65)
 
     assert isinstance(dq, DataQualityEngine)
 
@@ -941,7 +941,7 @@ def test_multiple_checks_same_column():
 @pytest.mark.dq
 def test_edge_case_empty_collection():
     tf = create_large_test_dataset(rows=3141)
-    dq = tf.dq.is_in("category", [])
+    dq = tf._dq.is_in("category", [])
 
     assert isinstance(dq, DataQualityEngine)
 
@@ -966,7 +966,7 @@ def test_edge_case_all_nulls():
         idx=0,
         properties=TableFramePropertiesBuilder.empty(),
     )
-    dq = tf.dq.is_null("all_null_col")
+    dq = tf._dq.is_null("all_null_col")
 
     assert isinstance(dq, DataQualityEngine)
 
@@ -990,7 +990,7 @@ def test_edge_case_all_nans():
         idx=0,
         properties=TableFramePropertiesBuilder.empty(),
     )
-    dq = tf.dq.is_nan("all_nan_col")
+    dq = tf._dq.is_nan("all_nan_col")
 
     assert isinstance(dq, DataQualityEngine)
 
@@ -1007,7 +1007,7 @@ def test_mixed_data_types_validations():
     tf = create_large_test_dataset(rows=3141)
 
     dq = (
-        tf.dq.is_null("category")
+        tf._dq.is_null("category")
         .is_positive("amount")
         .is_in("rating", [1, 2, 3, 4, 5])
         .is_between("percentage", 0, 100)
@@ -1040,7 +1040,7 @@ def test_fn_with_nan_handling():
     def batch_fn(score):
         return score.is_not_nan() & score.is_not_null()
 
-    dq = tf.dq.fn(
+    dq = tf._dq.fn(
         data_column_names="score",
         dq_column_dtype=td.Boolean,
         fn=batch_fn,
@@ -1075,7 +1075,7 @@ def test_expr_with_multiple_columns():
         & (td.col("age") >= 18)
         & (td.col("salary") >= 30000)
     )
-    dq = tf.dq.expr(expr, "eligible")
+    dq = tf._dq.expr(expr, "eligible")
 
     assert isinstance(dq, DataQualityEngine)
 
@@ -1154,7 +1154,7 @@ def test_different_seeds_produce_different_data():
 def test_very_large_dataset():
     tf = create_large_test_dataset(rows=3141592)
 
-    dq = tf.dq.is_null("age").is_positive("salary").is_between("percentage", 25, 75)
+    dq = tf._dq.is_null("age").is_positive("salary").is_between("percentage", 25, 75)
 
     dq_tf = dq.tf()
     df = dq_tf._lf.collect()
@@ -1189,53 +1189,55 @@ def tf_for_expression_validation():
 class TestExprColumnValidation:
 
     def test_single_column_simple(self, tf_for_expression_validation):
-        dq = tf_for_expression_validation.dq.expr(pl.col("x1"), "column")
+        dq = tf_for_expression_validation._dq.expr(pl.col("x1"), "column")
         assert "column" in dq.tf().schema.names()
 
     def test_single_column_with_operation(self, tf_for_expression_validation):
-        dq = tf_for_expression_validation.dq.expr(pl.col("x1") + pl.col("x2"), "column")
+        dq = tf_for_expression_validation._dq.expr(
+            pl.col("x1") + pl.col("x2"), "column"
+        )
         assert "column" in dq.tf().schema.names()
 
     def test_single_column_boolean_expression(self, tf_for_expression_validation):
-        dq = tf_for_expression_validation.dq.expr(pl.col("amount") > 15, "column")
+        dq = tf_for_expression_validation._dq.expr(pl.col("amount") > 15, "column")
         assert "column" in dq.tf().schema.names()
 
     def test_single_column_regex_match(self, tf_for_expression_validation):
-        dq = tf_for_expression_validation.dq.expr(pl.col("^amount$"), "column")
+        dq = tf_for_expression_validation._dq.expr(pl.col("^amount$"), "column")
         assert "column" in dq.tf().schema.names()
 
     def test_multiple_columns_wildcard_all(self, tf_for_expression_validation):
         with pytest.raises(ValueError, match="must resolve to exactly one column"):
-            tf_for_expression_validation.dq.expr(pl.all(), "column")
+            tf_for_expression_validation._dq.expr(pl.all(), "column")
 
     def test_multiple_columns_wildcard_star(self, tf_for_expression_validation):
         with pytest.raises(ValueError, match="must resolve to exactly one column"):
-            tf_for_expression_validation.dq.expr(pl.col("*"), "column")
+            tf_for_expression_validation._dq.expr(pl.col("*"), "column")
 
     def test_multiple_columns_list(self, tf_for_expression_validation):
         with pytest.raises(ValueError, match="must resolve to exactly one column"):
-            tf_for_expression_validation.dq.expr(pl.col(["x1", "x2"]), "column")
+            tf_for_expression_validation._dq.expr(pl.col(["x1", "x2"]), "column")
 
     def test_multiple_columns_regex(self, tf_for_expression_validation):
         with pytest.raises(ValueError, match="must resolve to exactly one column"):
-            tf_for_expression_validation.dq.expr(pl.col("^x.*$"), "column")
+            tf_for_expression_validation._dq.expr(pl.col("^x.*$"), "column")
 
     def test_multiple_columns_exclude(self, tf_for_expression_validation):
         with pytest.raises(ValueError, match="must resolve to exactly one column"):
-            tf_for_expression_validation.dq.expr(pl.exclude("y"), "column")
+            tf_for_expression_validation._dq.expr(pl.exclude("y"), "column")
 
     def test_zero_columns_exclude_all(self, tf_for_expression_validation):
         with pytest.raises(ValueError, match="must resolve to exactly one column"):
-            tf_for_expression_validation.dq.expr(pl.exclude("*"), "column")
+            tf_for_expression_validation._dq.expr(pl.exclude("*"), "column")
 
     def test_zero_columns_nonexistent_regex(self, tf_for_expression_validation):
         with pytest.raises(ValueError, match="must resolve to exactly one column"):
-            tf_for_expression_validation.dq.expr(pl.col("^nonexistent.*$"), "column")
+            tf_for_expression_validation._dq.expr(pl.col("^nonexistent.*$"), "column")
 
     def test_error_message_shows_column_count(self, tf_for_expression_validation):
         with pytest.raises(ValueError, match="resolved to 2 columns"):
-            tf_for_expression_validation.dq.expr(pl.col(["x1", "x2"]), "column")
+            tf_for_expression_validation._dq.expr(pl.col(["x1", "x2"]), "column")
 
     def test_error_message_shows_column_names(self, tf_for_expression_validation):
         with pytest.raises(ValueError, match=r"\['x1', 'x2'\]"):
-            tf_for_expression_validation.dq.expr(pl.col(["x1", "x2"]), "column")
+            tf_for_expression_validation._dq.expr(pl.col(["x1", "x2"]), "column")

@@ -53,7 +53,7 @@ def test_valid_zip():
     )
     expected = [False, True, True, True, False, True]
 
-    dq = tf.dq.expr(is_valid_zip("country", "zip"), "valid_zip")
+    dq = tf._dq.expr(is_valid_zip("country", "zip"), "valid_zip")
     df = dq.tf()._lf.collect()
 
     assert "valid_zip" in df.columns
