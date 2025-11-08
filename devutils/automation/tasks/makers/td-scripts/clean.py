@@ -125,6 +125,7 @@ def clean_py(project_folder):
         "tdlocal",
         "local_development_artifacts",
         "client/td-sdk/tabsdata/assets",
+        "client/td-sdk/tabsdata/resources",
         "tabsdata_agent/assets",
         "SOURCETRACK.yaml",
         "tabsdata.libs",

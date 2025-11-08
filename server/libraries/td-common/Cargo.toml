@@ -30,7 +30,7 @@ test-utils = []
 tokio_console = ["console-subscriber"]
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "toml"]
+ignored = ["openssl", "toml", "tm-workspace"]
 
 # Build dependencies
 
