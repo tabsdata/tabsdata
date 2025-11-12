@@ -19,7 +19,7 @@ from uuid import uuid4
 
 import colorama
 import tqdm
-from setuptools import find_packages, setup
+from setuptools import find_namespace_packages, find_packages, setup
 from setuptools.command.bdist_egg import bdist_egg as _bdist_egg
 from setuptools.command.build import build as _build
 from setuptools.command.build_py import build_py as _build_py
@@ -843,55 +843,55 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
                 ],
             ),
             # tabsdata.extensions._features.api
-            *find_packages(
+            *find_namespace_packages(
                 where=os.path.join(
                     "client",
                     "td-lib",
                     "ta_features",
                 ),
-                include=["tabsdata.extensions._features.api*"],
+                include=["tabsdata.extensions*"],
             ),
             # tabsdata.extensions._tableframe.api
-            *find_packages(
+            *find_namespace_packages(
                 where=os.path.join(
                     "client",
                     "td-lib",
                     "ta_tableframe",
                 ),
-                include=["tabsdata.extensions._tableframe.api*"],
+                include=["tabsdata.extensions*"],
             ),
             # tabsdata.extensions._examples
-            *find_packages(
+            *find_namespace_packages(
                 where=os.path.join(
                     "extensions",
                     "python",
                     "td-lib",
                     "te_examples",
                 ),
-                include=["tabsdata.extensions._examples*"],
+                include=["tabsdata.extensions*"],
             ),
             # tabsdata.extensions._tableframe
-            *find_packages(
+            *find_namespace_packages(
                 where=os.path.join(
                     "extensions",
                     "python",
                     "td-lib",
                     "te_tableframe",
                 ),
-                include=["tabsdata.extensions._tableframe*"],
+                include=["tabsdata.extensions*"],
             ),
             # tabsdata.extensions.variant
-            *find_packages(
+            *find_namespace_packages(
                 where=os.path.join(
                     "extensions",
                     "python",
                     "td-lib",
                     "te_variant",
                 ),
-                include=["tabsdata.extensions.variant*"],
+                include=["tabsdata.extensions*"],
             ),
             # tabsdata.expansions.tableframe
-            *find_packages(
+            *find_namespace_packages(
                 where=os.path.join(
                     "expansions",
                     "polars",
@@ -899,7 +899,7 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
                     "ty-tableframe",
                     "python",
                 ),
-                include=["tabsdata.expansions.tableframe*"],
+                include=["tabsdata.expansions*"],
             ),
         ],
         package_dir={
@@ -908,50 +908,14 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
                 "td-sdk",
                 "tabsdata",
             ),
-            "tabsdata.extensions._features.api": os.path.join(
-                "client",
-                "td-lib",
-                "ta_features",
-                "tabsdata",
-                "extensions",
-                "_features",
-                "api",
-            ),
-            "tabsdata.extensions._tableframe.api": os.path.join(
-                "client",
-                "td-lib",
-                "ta_tableframe",
-                "tabsdata",
-                "extensions",
-                "_tableframe",
-                "api",
-            ),
-            "tabsdata.extensions._examples": os.path.join(
-                "extensions",
+            "tabsdata.expansions": os.path.join(
+                "expansions",
+                "polars",
+                "modules",
+                "ty-tableframe",
                 "python",
-                "td-lib",
-                "te_examples",
                 "tabsdata",
-                "extensions",
-                "_examples",
-            ),
-            "tabsdata.extensions._tableframe": os.path.join(
-                "extensions",
-                "python",
-                "td-lib",
-                "te_tableframe",
-                "tabsdata",
-                "extensions",
-                "_tableframe",
-            ),
-            "tabsdata.extensions.variant": os.path.join(
-                "extensions",
-                "python",
-                "td-lib",
-                "te_variant",
-                "tabsdata",
-                "extensions",
-                "variant",
+                "expansions",
             ),
             "tabsdata.expansions.tableframe": os.path.join(
                 "expansions",
@@ -962,6 +926,66 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
                 "tabsdata",
                 "expansions",
                 "tableframe",
+            ),
+            "tabsdata.extensions": os.path.join(
+                "client",
+                "td-lib",
+                "ta_features",
+                "tabsdata",
+                "extensions",
+            ),
+            "tabsdata.extensions._examples": os.path.join(
+                "extensions",
+                "python",
+                "td-lib",
+                "te_examples",
+                "tabsdata",
+                "extensions",
+                "_examples",
+            ),
+            "tabsdata.extensions._features": os.path.join(
+                "client",
+                "td-lib",
+                "ta_features",
+                "tabsdata",
+                "extensions",
+                "_features",
+            ),
+            "tabsdata.extensions._features.api": os.path.join(
+                "client",
+                "td-lib",
+                "ta_features",
+                "tabsdata",
+                "extensions",
+                "_features",
+                "api",
+            ),
+            "tabsdata.extensions._tableframe": os.path.join(
+                "extensions",
+                "python",
+                "td-lib",
+                "te_tableframe",
+                "tabsdata",
+                "extensions",
+                "_tableframe",
+            ),
+            "tabsdata.extensions._tableframe.api": os.path.join(
+                "client",
+                "td-lib",
+                "ta_tableframe",
+                "tabsdata",
+                "extensions",
+                "_tableframe",
+                "api",
+            ),
+            "tabsdata.extensions.variant": os.path.join(
+                "extensions",
+                "python",
+                "td-lib",
+                "te_variant",
+                "tabsdata",
+                "extensions",
+                "variant",
             ),
         },
         package_data={
