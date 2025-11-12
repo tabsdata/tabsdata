@@ -2,6 +2,8 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
+import os
+
 import polars as pl
 import pytest
 from pycountries import Country
@@ -39,6 +41,9 @@ def is_valid_zip(country_column_name: str, zip_column_name: str) -> pl.Expr:
 
 @pytest.mark.dq
 def test_valid_zip():
+    os.environ["RUST_BACKTRACE"] = "full"
+    os.environ["POLARS_VERBOSE"] = "1"
+
     lf = pl.LazyFrame(
         {
             "country": ["US", "USA", "CA", "ES", "US", None],

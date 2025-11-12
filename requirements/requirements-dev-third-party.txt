@@ -47,6 +47,7 @@ pygame
 pysentry-rs==0.3.12
 pytest-check==2.6.0
 pytest-cov==7.0.0
+pytest-env==1.1.5
 pytest-reporter-html1==0.9.5
 pytest-timeout==2.4.0
 pytest-xdist==3.8.0
