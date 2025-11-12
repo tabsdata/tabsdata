@@ -269,7 +269,7 @@ class Upgrade_1_3_0_to_1_4_0(Upgrade):
 if __name__ == "__main__":
     print(
         Upgrade_1_3_0_to_1_4_0().upgrade(
-            Path("/Users/dimas/.tabsdata/instances/tabsdata"),
+            Path("~/.tabsdata/instances/tabsdata").expanduser(),
             dry_run=True,
         )
     )
