@@ -3,12 +3,14 @@
 #
 
 import logging
+import os
 import tempfile
 from typing import Optional, Tuple
 
 import pandas as pd
 import polars as pl
 import requests
+from conftest import TESTING_RESOURCES_FOLDER
 
 import tabsdata as td
 from tabsdata._utils.temps import tabsdata_temp_folder
@@ -60,21 +62,27 @@ def load_simple_dataframe(
 def load_complex_dataframe(
     token: Optional[str] = None,
 ) -> Tuple[pl.LazyFrame, pl.DataFrame, td.TableFrame]:
-    data = (
-        "https://raw.githubusercontent.com/jeroenjanssens/"
-        "python-polars-the-definitive-guide/main/data/penguins.csv"
+    # data = (
+    #     "https://raw.githubusercontent.com/jeroenjanssens/"
+    #     "python-polars-the-definitive-guide/main/data/penguins.csv"
+    # )
+    # with tempfile.NamedTemporaryFile(
+    #     mode="w+b",
+    #     suffix=".csv",
+    #     delete=False,
+    #     dir=tabsdata_temp_folder(),
+    # ) as penguins:
+    #     response = requests.get(data)
+    #     response.raise_for_status()
+    #     penguins.write(response.content)
+
+    penguins = os.path.join(
+        TESTING_RESOURCES_FOLDER,
+        "_datasets",
+        "penguins.csv",
     )
-    with tempfile.NamedTemporaryFile(
-        mode="w+b",
-        suffix=".csv",
-        delete=False,
-        dir=tabsdata_temp_folder(),
-    ) as penguins:
-        response = requests.get(data)
-        response.raise_for_status()
-        penguins.write(response.content)
     lazy_frame = pl.scan_csv(
-        source=penguins.name,
+        source=penguins,
         file_cache_ttl=POLARS_FILE_CACHE_TTL,
     )
     data_frame = pl.DataFrame(lazy_frame.collect())
