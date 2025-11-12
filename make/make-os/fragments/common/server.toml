@@ -2,6 +2,170 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
+[tasks.__os__set_venv_env]
+plugin = "td-task-tracker"
+category = "04 - Test"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🧹 Setting environment variables for python virtual environments..."
+
+    conda_prefix_ = get_env CONDA_PREFIX
+    conda_default_env_ = get_env CONDA_DEFAULT_ENV
+    conda_shlvl_ = get_env CONDA_SHLVL
+    conda_prompt_modifier_ = get_env CONDA_PROMPT_MODIFIER
+    dyld_library_path_ = get_env DYLD_LIBRARY_PATH
+    ld_library_path_ = get_env LD_LIBRARY_PATH
+    path_ = get_env PATH
+
+    set_env _CONDA_PREFIX ${conda_prefix_}
+    set_env _CONDA_DEFAULT_ENV ${conda_default_env_}
+    set_env _CONDA_SHLVL ${conda_shlvl_}
+    set_env _CONDA_PROMPT_MODIFIER ${conda_prompt_modifier_}
+    set_env _DYLD_LIBRARY_PATH ${dyld_library_path_}
+    set_env _LD_LIBRARY_PATH ${ld_library_path_}
+    set_env _PATH ${path_}
+
+    unset_env CONDA_PREFIX
+    unset_env CONDA_DEFAULT_ENV
+    unset_env CONDA_SHLVL
+    unset_env CONDA_PROMPT_MODIFIER
+    if not is_empty ${conda_prefix_}
+        os = os_family
+        if eq ${os} "windows"
+            separator = set ";"
+        else
+            separator = set ":"
+        end
+        if not eq ${os} "windows"
+            if not is_empty ${dyld_library_path_}
+                dyld_library_path__ = array
+                dyld_library_path__elements = split ${dyld_library_path_} ${separator}
+                for dyld_library_path__element in ${dyld_library_path__elements}
+                    dyld_library_path__element = trim ${dyld_library_path__element}
+                    if not is_empty ${dyld_library_path__element}
+                        contains_conda = contains ${dyld_library_path__element} ${conda_prefix_}
+                        if not ${contains_conda}
+                            array_push ${dyld_library_path__} ${dyld_library_path__element}
+                        end
+                    end
+                end
+                dyld_library_path__ = array_join ${dyld_library_path__} ${separator}
+                set_env DYLD_LIBRARY_PATH ${dyld_library_path__}
+            end
+            if not is_empty ${ld_library_path_}
+                ld_library_path__ = array
+                ld_library_path__elements = split ${ld_library_path_} ${separator}
+                for ld_library_path__element in ${ld_library_path__elements}
+                    ld_library_path__element = trim ${ld_library_path__element}
+                    if not is_empty ${ld_library_path__element}
+                        contains_conda = contains ${ld_library_path__element} ${conda_prefix_}
+                        if not ${contains_conda}
+                            array_push ${ld_library_path__} ${ld_library_path__element}
+                        end
+                    end
+                end
+                ld_library_path__ = array_join ${ld_library_path__} ${separator}
+                set_env LD_LIBRARY_PATH ${ld_library_path__}
+            end
+        else
+            if not is_empty ${path_}
+                path__ = array
+                path__elements = split ${path_} ${separator}
+                for path__element in ${path__elements}
+                    path__element = trim ${path__element}
+                    if not is_empty ${path__element}
+                        contains_conda = contains ${path__element} ${conda_prefix_}
+                        if not ${contains_conda}
+                            array_push ${path__} ${path__element}
+                        end
+                    end
+                end
+                path__ = array_join ${path__} ${separator}
+                set_env PATH ${path__}
+            end
+        end
+    end
+    ''']
+
+[tasks.__os__reset_venv_env]
+plugin = "td-task-tracker"
+category = "04 - Test"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "♻️ Resetting environment variables for python virtual environments..."
+
+    _conda_prefix = get_env _CONDA_PREFIX
+    _conda_default_env = get_env _CONDA_DEFAULT_ENV
+    _conda_shlvl = get_env _CONDA_SHLVL
+    _conda_prompt_modifier = get_env _CONDA_PROMPT_MODIFIER
+    _dyld_library_path = get_env _DYLD_LIBRARY_PATH
+    _ld_library_path = get_env _LD_LIBRARY_PATH
+    _path = get_env _PATH
+
+    if not is_empty ${_conda_prefix}
+        set_env CONDA_PREFIX ${_conda_prefix}
+    end
+    if not is_empty ${_conda_default_env}
+        set_env CONDA_DEFAULT_ENV ${_conda_default_env}
+    end
+    if not is_empty ${_conda_shlvl}
+        set_env CONDA_SHLVL ${_conda_shlvl}
+    end
+    if not is_empty ${_conda_prompt_modifier}
+        set_env CONDA_PROMPT_MODIFIER ${_conda_prompt_modifier}
+    end
+    if not is_empty ${_dyld_library_path}
+        set_env DYLD_LIBRARY_PATH ${_dyld_library_path}
+    end
+    if not is_empty ${_ld_library_path}
+        set_env LD_LIBRARY_PATH ${_ld_library_path}
+    end
+    if not is_empty ${_path}
+        set_env PATH ${_path}
+    end
+
+    unset_env _CONDA_PREFIX
+    unset_env _CONDA_DEFAULT_ENV
+    unset_env _CONDA_SHLVL
+    unset_env _CONDA_PROMPT_MODIFIER
+    unset_env _DYLD_LIBRARY_PATH
+    unset_env _LD_LIBRARY_PATH
+    unset_env _PATH
+    ''']
+
+[tasks.__os__show_venv_env]
+plugin = "td-task-tracker"
+category = "04 - Test"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🔍 Current environment variables for python virtual environments..."
+
+    __conda_prefix = get_env CONDA_PREFIX
+    __conda_default_env = get_env CONDA_DEFAULT_ENV
+    __conda_shlvl = get_env CONDA_SHLVL
+    __dyld_library_path = get_env DYLD_LIBRARY_PATH
+    __ld_library_path = get_env LD_LIBRARY_PATH
+    __path = get_env PATH
+    debug "   CONDA_PREFIX=${__conda_prefix}"
+    debug "   CONDA_DEFAULT_ENV=${__conda_default_env}"
+    debug "   CONDA_SHLVL=${__conda_shlvl}"
+    debug "   DYLD_LIBRARY_PATH=${__dyld_library_path}"
+    debug "   LD_LIBRARY_PATH=${__ld_library_path}"
+    debug "   PATH=${__path}"
+    ''']
+
 [tasks.__os__ps_pytest_tabsdata_servers]
 plugin = "td-task-tracker"
 category = "04 - Test"
@@ -25,6 +189,14 @@ script = [
     !include_files ./make/make-os/libraries/log.ds
 
     debug "🔷 _____ Starting tabsdata testing servers..."
+
+    debug "🔴️ Before set..."
+    cm_run_task __os__show_venv_env
+
+    cm_run_task __os__set_venv_env
+
+    debug "🟢 After set..."
+    cm_run_task __os__show_venv_env
 
     if is_empty ${profile}
         build-folder = set "debug"
@@ -120,6 +292,14 @@ script = [
     end
 
     cm_run_task __os__ps_pytest_tabsdata_servers
+
+    debug "🟢️ Before reset..."
+    cm_run_task __os__show_venv_env
+
+    cm_run_task __os__reset_venv_env
+
+    debug "🔴 After reset..."
+    cm_run_task __os__show_venv_env
     ''']
 
 [tasks.__os__status_pytest_tabsdata_servers]
@@ -132,6 +312,14 @@ script = [
     !include_files ./make/make-os/libraries/log.ds
 
     debug "🔷 _____ Checking tabsdata testing servers..."
+
+    debug "🔴️ Before set..."
+    cm_run_task __os__show_venv_env
+
+    cm_run_task __os__set_venv_env
+
+    debug "🟢 After set..."
+    cm_run_task __os__show_venv_env
 
     if is_empty ${profile}
         build-folder = set "debug"
@@ -263,6 +451,14 @@ script = [
     end
 
     cm_run_task __os__ps_pytest_tabsdata_servers
+
+    debug "🟢️ Before reset..."
+    cm_run_task __os__show_venv_env
+
+    cm_run_task __os__reset_venv_env
+
+    debug "🔴 After reset..."
+    cm_run_task __os__show_venv_env
     ''']
 
 [tasks.__os__stop_pytest_tabsdata_servers]
@@ -275,6 +471,14 @@ script = [
     !include_files ./make/make-os/libraries/log.ds
 
     debug "🔷 _____ Stopping tabsdata testing servers..."
+
+    debug "🔴️ Before set..."
+    cm_run_task __os__show_venv_env
+
+    cm_run_task __os__set_venv_env
+
+    debug "🟢 After set..."
+    cm_run_task __os__show_venv_env
 
     if is_empty ${profile}
         build-folder = set "debug"
@@ -326,6 +530,14 @@ script = [
     end
 
     cm_run_task __os__ps_pytest_tabsdata_servers
+
+    debug "🟢️ Before reset..."
+    cm_run_task __os__show_venv_env
+
+    cm_run_task __os__reset_venv_env
+
+    debug "🔴 After reset..."
+    cm_run_task __os__show_venv_env
     ''']
 
 [tasks.__os__drop_pytest_tabsdata_servers]
