@@ -347,7 +347,7 @@ mod tests {
         );
         #[cfg(target_os = "windows")]
         assert_eq!(
-            resolved_config.database().url().as_ref().unwrap(),
+            resolved_config.database.url.as_ref().unwrap(),
             "file:///c:/test.db"
         );
         #[cfg(not(target_os = "windows"))]
@@ -362,7 +362,7 @@ mod tests {
                 .clone()
                 .storage
                 .unwrap()
-                .url()
+                .url
                 .as_ref()
                 .unwrap(),
             "file:///c:/storage"
