@@ -16,6 +16,7 @@ import tabsdata.tableframe.expr.expr as td_expr
 
 # noinspection PyProtectedMember
 import tabsdata.tableframe.typing as td_typing
+from tabsdata._utils.tableframe._constants import SysCol
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -25,12 +26,13 @@ def _new_col(
     check: bool,
     name: (
         str
+        | SysCol
         | td_typing.DataType
         | td_typing.PythonDataType
-        | Iterable[str]
+        | Iterable[str | SysCol]
         | Iterable[td_typing.DataType | td_typing.PythonDataType]
     ),
-    *more_names: str | td_typing.DataType | td_typing.PythonDataType,
+    *more_names: str | SysCol | td_typing.DataType | td_typing.PythonDataType,
 ) -> td_expr.Expr:
     if check:
         td_common.check_columns(name, *more_names)
@@ -40,12 +42,13 @@ def _new_col(
 def _create_col(
     name: (
         str
+        | SysCol
         | td_typing.DataType
         | td_typing.PythonDataType
-        | Iterable[str]
+        | Iterable[str | SysCol]
         | Iterable[td_typing.DataType | td_typing.PythonDataType]
     ),
-    *more_names: str | td_typing.DataType | td_typing.PythonDataType,
+    *more_names: str | SysCol | td_typing.DataType | td_typing.PythonDataType,
 ) -> td_expr.Expr:
     return td_expr.Expr(pl.col(name, *more_names))
 
@@ -76,12 +79,13 @@ class Col:
         self,
         name: (
             str
+            | SysCol
             | td_typing.DataType
             | td_typing.PythonDataType
-            | Iterable[str]
+            | Iterable[str | SysCol]
             | Iterable[td_typing.DataType | td_typing.PythonDataType]
         ),
-        *more_names: str | td_typing.DataType | td_typing.PythonDataType,
+        *more_names: str | SysCol | td_typing.DataType | td_typing.PythonDataType,
     ) -> td_expr.Expr:
         """
         Create a TableFrame column expression.

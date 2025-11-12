@@ -13,6 +13,9 @@ import pytest
 import tabsdata as td
 
 # noinspection PyProtectedMember
+import tabsdata._utils.tableframe._constants as td_constants
+
+# noinspection PyProtectedMember
 from tabsdata._utils.tableframe._helpers import SYSTEM_COLUMNS
 
 # noinspection PyProtectedMember
@@ -239,8 +242,15 @@ def test__setstate__():
 
 def test_alias():
     for name in SYSTEM_COLUMNS:
-        with pytest.raises(TabsDataException) as error:
+        is_namespaced_virtual = any(
+            name.startswith(prefix)
+            for prefix in td_constants.TD_NAMESPACED_VIRTUAL_COLUMN_PREFIXES
+        )
+        if is_namespaced_virtual:
             td.col("dame").alias(name)
+        else:
+            with pytest.raises(TabsDataException) as error:
+                td.col("dame").alias(name)
             assert error.value.error_code == ErrorCode.TF4
 
 

@@ -53,6 +53,9 @@ def check_column(name: str):
     ):
         raise TableFrameError(ErrorCode.TF3, name)
     if name in td_helpers.SYSTEM_COLUMNS:
+        for namespaced_prefix in td_constants.TD_NAMESPACED_VIRTUAL_COLUMN_PREFIXES:
+            if name.startswith(namespaced_prefix):
+                return
         raise TableFrameError(ErrorCode.TF4, name)
 
 

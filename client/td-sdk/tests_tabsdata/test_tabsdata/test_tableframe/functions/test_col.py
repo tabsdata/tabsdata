@@ -12,6 +12,9 @@ import pytest
 import tabsdata as td
 
 # noinspection PyProtectedMember
+import tabsdata._utils.tableframe._constants as td_constants
+
+# noinspection PyProtectedMember
 from tabsdata._utils.tableframe._helpers import system_columns
 from tabsdata.exceptions import ErrorCode, TabsDataException
 from tabsdata.tableframe.expr.expr import Expr
@@ -31,9 +34,16 @@ def test_regular_expression():
 
 def test_reserved_column():
     for name in system_columns():
-        with pytest.raises(TabsDataException) as error:
+        is_namespaced_virtual = any(
+            name.startswith(prefix)
+            for prefix in td_constants.TD_NAMESPACED_VIRTUAL_COLUMN_PREFIXES
+        )
+        if is_namespaced_virtual:
             td.col(name)
-            assert error.value.error_code == ErrorCode.TF4
+        else:
+            with pytest.raises(TabsDataException) as error:
+                td.col(name)
+                assert error.value.error_code == ErrorCode.TF4
 
 
 def test_common_column():
