@@ -2,6 +2,7 @@
 # Copyright 2024 Tabs Data Inc.
 #
 
+---
 version: 1
 disable_existing_loggers: False
 formatters:
@@ -9,11 +10,11 @@ formatters:
     format: "%(asctime)s - %(process)d - %(name)s - %(levelname)s - %(message)s"
 
 handlers:
-  log_file_handler:
+  file:
     class: logging.handlers.RotatingFileHandler
     level: DEBUG
     formatter: simple
-    filename: fn.log
+    filename: venv.log
     maxBytes: 10485760 # 10MB
     backupCount: 20
     encoding: utf8
@@ -25,4 +26,4 @@ loggers:
 
 root:
   level: DEBUG
-  handlers: [log_file_handler]
+  handlers: [file]

@@ -19,6 +19,7 @@ import shutil
 import subprocess
 import sysconfig
 import tempfile
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Literal, Tuple, TypeAlias
@@ -31,17 +32,18 @@ from yaml import MappingNode
 from yaml.constructor import ConstructorError
 
 from tabsdata.__spec import MIN_PYTHON_VERSION
-from tabsdata._tabsserver.function.global_utils import CURRENT_PLATFORM
+from tabsdata._tabsserver.function.global_utils import CURRENT_PLATFORM, setup_logging
 from tabsdata._tabsserver.server.instance import (
     DEFAULT_ENVIRONMENT_FOLDER,
     DEFAULT_INSTANCE,
     DEFAULT_INSTANCES_FOLDER,
     DEFAULT_TABSDATA_FOLDER,
     LOCK_FOLDER,
+    LOG_FOLDER,
     WORK_FOLDER,
     WORKSPACE_FOLDER,
 )
-from tabsdata._tabsserver.utils import TimeBlock
+from tabsdata._tabsserver.utils import ABSOLUTE_LOCATION, TimeBlock
 
 # noinspection PyProtectedMember
 from tabsdata._utils.bundle_utils import (
@@ -100,6 +102,7 @@ BASE_ENVIRONMENT_PREFIX = "."
 DEFAULT_ENVIRONMENT_TESTIMONY_FOLDER = os.path.join(
     DEFAULT_TABSDATA_FOLDER, "available_environments"
 )
+LOCK_EXTENSION = ".lock"
 
 WHEEL_EXTENSION = ".whl"
 TARGET_FOLDER = "target"
@@ -111,8 +114,19 @@ UV_EXECUTABLE = "uv"
 ENVIRONMENT_LOCK_TIMEOUT = 5  # 5 seconds
 MAXIMUM_LOCK_TIME = 60 * 30  # 30 minutes
 PYTHON_VERSION_LOCK_TIMEOUT = 10  # 10 seconds
+TESTIMONY_LOCK_TIMEOUT = 2 * 60  # 2 minutes
 
 TD_INHERIT_TABSDATA_PACKAGES = "TD_INHERIT_TABSDATA_PACKAGES"
+
+
+@dataclass
+class TestimonyData:
+    real_name: str
+    logical_name: str
+    last_used: str
+    last_used_timestamp: float
+    times_used: int
+
 
 DEBUG_PACKAGES = [
     "gTTS",
@@ -535,6 +549,9 @@ def get_dir_hash(directory):
 
     # Traverse the directory recursively and find all Python files
     for path in sorted(Path(directory).rglob("*"), key=lambda p: str(p).lower()):
+        # Skip files under folders 'target', to get consistent and deterministic hashes.
+        if "target" in path.parts:
+            continue
         if path.is_file() and include_in_hash(path):
             with open(path, "rb") as file:
                 while chunk := file.read(4096):
@@ -795,8 +812,6 @@ def create_virtual_environment(  # noqa: C901
                     install_dependencies,
                     check_module_availability,
                 )
-                if real_environment_created:
-                    store_testimony(logical_environment_name, real_environment_created)
                 logger.info(
                     f"Environment created: {logical_environment_name} with real "
                     f"name {real_environment_created}. Removing lock {lock_location}."
@@ -826,9 +841,95 @@ def store_testimony(logical_environment_name, real_environment_name):
     testimony_file = os.path.join(
         DEFAULT_ENVIRONMENT_TESTIMONY_FOLDER, logical_environment_name
     )
+    now = datetime.now(tz=timezone.utc)
+    testimony_data = TestimonyData(
+        real_name=real_environment_name,
+        logical_name=logical_environment_name,
+        last_used=now.isoformat(),
+        last_used_timestamp=now.timestamp(),
+        times_used=1,
+    )
     with open(testimony_file, "w") as f:
-        f.write(real_environment_name)
+        yaml.dump(asdict(testimony_data), f, default_flow_style=False, sort_keys=False)
     logger.info(f"Testimony file '{testimony_file}' stored successfully.")
+
+
+def read_testimony(logical_environment_name) -> TestimonyData:
+    testimony_file = os.path.join(
+        DEFAULT_ENVIRONMENT_TESTIMONY_FOLDER, logical_environment_name
+    )
+    if not os.path.exists(testimony_file):
+        raise FileNotFoundError(
+            f"Testimony file '{testimony_file}' does not exist for environment "
+            f"'{logical_environment_name}'"
+        )
+    try:
+        with open(testimony_file, "r") as f:
+            testimony_dict = yaml.safe_load(f)
+        if not isinstance(testimony_dict, dict):
+            raise ValueError(
+                f"Testimony file '{testimony_file}' does not contain a valid yaml."
+            )
+        return TestimonyData(**testimony_dict)
+    except TypeError as error:
+        raise ValueError(
+            f"Testimony file '{testimony_file}' is missing required fields: {error}"
+        ) from error
+    except yaml.YAMLError as error:
+        raise ValueError(
+            f"Failed to parse testimony file '{testimony_file}' as yaml: {error}"
+        ) from error
+    except Exception as error:
+        raise ValueError(
+            f"Error reading testimony file '{testimony_file}': {error}"
+        ) from error
+
+
+def update_testimony(logical_environment_name, real_environment_name):
+    logger.info(
+        f"Updating testimony of the environment '{logical_environment_name}' in "
+        f"'{DEFAULT_ENVIRONMENT_TESTIMONY_FOLDER}'"
+    )
+    os.makedirs(DEFAULT_ENVIRONMENT_TESTIMONY_FOLDER, exist_ok=True)
+    testimony_file = os.path.join(
+        DEFAULT_ENVIRONMENT_TESTIMONY_FOLDER, logical_environment_name
+    )
+    lock_file = f"{testimony_file}.lock"
+    lock = FileLock(lock_file, timeout=TESTIMONY_LOCK_TIMEOUT)
+    try:
+        logger.info(
+            f"Trying to acquire lock '{lock_file}' for testimony update of "
+            f"'{logical_environment_name}'."
+        )
+        with lock:
+            logger.info(
+                f"Lock '{lock_file}' acquired for testimony update of "
+                f"'{logical_environment_name}'. Updating it now."
+            )
+            existing_testimony = read_testimony(logical_environment_name)
+            now = datetime.now(tz=timezone.utc)
+            testimony_data = TestimonyData(
+                real_name=real_environment_name,
+                logical_name=logical_environment_name,
+                last_used=now.isoformat(),
+                last_used_timestamp=now.timestamp(),
+                times_used=existing_testimony.times_used + 1,
+            )
+            with open(testimony_file, "w") as f:
+                yaml.dump(
+                    asdict(testimony_data), f, default_flow_style=False, sort_keys=False
+                )
+            logger.info(
+                f"Testimony file '{testimony_file}' updated successfully. "
+                f"Removing lock {lock_file}."
+            )
+    except Timeout:
+        logger.warning(
+            f"Could not acquire lock '{lock_file}' for testimony update after "
+            f"{TESTIMONY_LOCK_TIMEOUT} seconds. This may indicate a stuck lock or "
+            "heavy concurrent access."
+        )
+        raise
 
 
 def delete_testimony(environment_name):
@@ -845,6 +946,22 @@ def delete_testimony(environment_name):
         logger.warning(f"Testimony file '{testimony_file}' not found.")
     else:
         logger.info(f"Testimony file '{testimony_file}' deleted successfully.")
+
+    logger.info(
+        f"Deleting testimony lock file of the environment '{environment_name}' in "
+        f"'{DEFAULT_ENVIRONMENT_TESTIMONY_FOLDER}'"
+    )
+    testimony_lock_file = os.path.join(
+        DEFAULT_ENVIRONMENT_TESTIMONY_FOLDER, f"{environment_name}{LOCK_EXTENSION}"
+    )
+    try:
+        os.remove(testimony_lock_file)
+    except FileNotFoundError:
+        logger.warning(f"Testimony lock file '{testimony_lock_file}' not found.")
+    else:
+        logger.info(
+            f"Testimony lock file '{testimony_lock_file}' deleted successfully."
+        )
 
 
 def check_if_testimony_exists(environment_name) -> bool:
@@ -897,6 +1014,7 @@ def atomic_environment_creation(
             f"Python virtual environment {logical_environment_name} already exists "
             f"with the real name {real_environment_name}."
         )
+        update_testimony(logical_environment_name, real_environment_name)
         return real_environment_name
     # Ensure we are working with a clean slate for the environment
     delete_virtual_environment(
@@ -1026,6 +1144,7 @@ def atomic_environment_creation(
         if not result:
             return None
 
+    store_testimony(logical_environment_name, real_environment_name)
     return real_environment_name
 
 
@@ -1586,6 +1705,33 @@ def main():  # noqa: C901
     )
     args = parser.parse_args()
 
+    instance, instance_path = extract_instance(args.instance)
+
+    # noinspection PyBroadException
+    try:
+        logs_folder = os.path.join(
+            instance_path.absolute(),
+            WORKSPACE_FOLDER,
+            WORK_FOLDER,
+            LOG_FOLDER,
+        )
+        logging_config = td_resource("resources/profile/workspace/config/logging.yaml")
+        if os.path.exists(logging_config):
+            setup_logging(
+                logging_config,
+                logs_folder=logs_folder,
+            )
+        else:
+            setup_logging(
+                default_path=os.path.join(
+                    ABSOLUTE_LOCATION,
+                    "logging.yaml",
+                ),
+                logs_folder=logs_folder,
+            )
+    except Exception:
+        setup_logging(os.path.join(ABSOLUTE_LOCATION, "logging.yaml"))
+
     inspect()
 
     # Note: tabsdata added the last one as then dependencies to other tabsdata
@@ -1653,8 +1799,6 @@ def main():  # noqa: C901
         with open(requirements_path, "w") as file:
             yaml.dump(requirements, file, default_flow_style=False)
         logger.debug(f"Temporary base requirements contents: {requirements}")
-
-        instance, instance_path = extract_instance(args.instance)
 
         requirements_description_file = requirements_file.name
         locks_folder = os.path.join(

@@ -245,6 +245,12 @@ class CustomBDistWheel(_bdist_wheel):
         _, _, plat = super().get_tag()
         return python_version_tag, python_version_abi, get_platname()
 
+    def run(self):
+        build_dir = os.path.join("target", "python", "build")
+        if os.path.exists(build_dir):
+            shutil.rmtree(build_dir)
+        super().run()
+
 
 class CustomBDistEgg(_bdist_egg):
     def __init__(self, dist):

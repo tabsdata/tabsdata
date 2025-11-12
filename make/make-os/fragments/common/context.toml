@@ -63,7 +63,7 @@ script = [
 
     debug "🔷 _____ Setting up tabsdata agent development package mode..."
 
-    set_env TD_TABSDATA_AGENT_DEV_PKG ${PROJECT_TABSDATA_AGENT_ROOT_FOLDER}
+    set_env TD_TABSDATA_AGENT_DEV_PKG ${PROJECT_TABSDATA_AG_ROOT_FOLDER}
     set_td_tabsdata_agent_dev_pkg = get_env TD_TABSDATA_AGENT_DEV_PKG
-    debug "🔅 tabsdata agent development python package location set to: ${set_td_tabsdata_dev_pkg}"
+    debug "🔅 tabsdata agent development python package location set to: ${set_td_tabsdata_agent_dev_pkg}"
     ''']

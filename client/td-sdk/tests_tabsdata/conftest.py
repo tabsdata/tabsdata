@@ -61,6 +61,7 @@ from tabsdata._tabsserver.function.sql_utils import MARIADB_COLLATION
 from tabsdata._tabsserver.pyenv_creation import (
     DEFAULT_ENVIRONMENT_TESTIMONY_FOLDER,
     delete_virtual_environment,
+    read_testimony,
 )
 
 # noinspection PyProtectedMember
@@ -1088,10 +1089,8 @@ def clean_python_virtual_environments():
             logger.debug(f"· {environment}")
         for environment in existing_virtual_environments:
             if PYTEST_DEFAULT_ENVIRONMENT_PREFIX in environment:
-                with open(
-                    os.path.join(DEFAULT_ENVIRONMENT_TESTIMONY_FOLDER, environment), "r"
-                ) as f:
-                    real_name = f.read()
+                testimony_data = read_testimony(environment)
+                real_name = testimony_data.real_name
                 logger.info(
                     f"Cleaning up environment {environment} with real name {real_name}"
                 )

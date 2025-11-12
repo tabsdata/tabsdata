@@ -66,6 +66,8 @@ BOOK_DEVELOPER_GUIDE_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/books/d
 
 MAKE_LIBRARIES_PATH = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/make/make-os/libraries", normalize = true }
 
+SPINNER_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/make/make-os/libraries/spin.py", normalize = true }
+
 BUMP_VERSION_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/bump_version.py", normalize = true }
 CLEAN_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/clean.py", normalize = true }
 COPY_ASSETS_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/copy_assets.py", normalize = true }

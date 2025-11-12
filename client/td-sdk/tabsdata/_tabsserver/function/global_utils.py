@@ -40,7 +40,7 @@ TDLOCAL_FOLDER_NAME = "tdlocal"
 def setup_logging(
     default_path,
     default_level=logging.INFO,
-    env_key="LOG_CFG",
+    env_key="TD_LOG_CFG",
     logs_folder=None,
 ):
     """Setup logging configuration"""

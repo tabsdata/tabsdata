@@ -22,6 +22,7 @@ VERSION_FILE = ".version"
 WORKSPACE_FOLDER = "workspace"
 WORK_FOLDER = "work"
 LOCK_FOLDER = "lock"
+LOG_FOLDER = "log"
 
 
 def get_version() -> Version:

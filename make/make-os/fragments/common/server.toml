@@ -91,7 +91,10 @@ script = [
                     if ${on_ga_true}
                         exec --fail-on-error %{command}
                     else
+                        spinner = spawn python ${SPINNER_SCRIPT} "Waiting for the instance ${instance} to start..."
                         output = exec --fail-on-error %{command}
+                        exec kill ${spinner}
+                        sleep 2000
                         code = set ${output.code}
                         if not eq ${code} 0
                             error "🚫 Failed to start instance ${instance}."
