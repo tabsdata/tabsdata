@@ -482,7 +482,7 @@ mod tests {
             table(&FUNCTION_NAMES[0], &TABLE_NAMES[0]).await,
             table(&FUNCTION_NAMES[1], &TABLE_NAMES[1]).await,
         ];
-        let input_tables = vec![
+        let input_tables = [
             // this creates cycles dependency wise (which is ok)
             dependency(&TABLE_NAMES[0], &FUNCTION_NAMES[1]).await,
             dependency(&TABLE_NAMES[1], &FUNCTION_NAMES[0]).await,
@@ -490,7 +490,7 @@ mod tests {
             dependency(&TABLE_NAMES[1], &FUNCTION_NAMES[1]).await,
         ];
         let input_tables = input_tables.iter().map(|t| (&t.0, &t.1, &t.2)).collect();
-        let trigger_graph = vec![trigger(&TABLE_NAMES[0], &FUNCTION_NAMES[1]).await];
+        let trigger_graph = [trigger(&TABLE_NAMES[0], &FUNCTION_NAMES[1]).await];
         let trigger_graph = trigger_graph.iter().map(|t| (&t.0, &t.1, &t.2)).collect();
 
         let builder = GraphBuilder::new(&output_tables, &trigger_graph, &input_tables);
@@ -506,7 +506,7 @@ mod tests {
             table(&FUNCTION_NAMES[1], &TABLE_NAMES[1]).await,
         ];
         let input_tables = vec![];
-        let trigger_graph = vec![
+        let trigger_graph = [
             // This creates a cycle trigger wise (which is not ok)
             trigger(&TABLE_NAMES[0], &FUNCTION_NAMES[1]).await,
             trigger(&TABLE_NAMES[1], &FUNCTION_NAMES[0]).await,
@@ -580,7 +580,7 @@ mod tests {
             table(&FUNCTION_NAMES[1], &TABLE_NAMES[1]).await,
         ];
         let input_tables = vec![];
-        let trigger_graph = vec![
+        let trigger_graph = [
             // This created a cycle if transaction is at function level, but not at a graph level
             trigger(&TABLE_NAMES[0], &FUNCTION_NAMES[1]).await,
             trigger(&TABLE_NAMES[1], &FUNCTION_NAMES[0]).await,
