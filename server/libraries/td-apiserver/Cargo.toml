@@ -78,6 +78,7 @@ axum-extra = { workspace = true, features = ["query"] }
 axum-server = { workspace = true, features = ["tls-rustls"] }
 chrono = { workspace = true }
 clap = { workspace = true }
+futures = { workspace = true }
 http = { workspace = true }
 nonempty = { workspace = true, features = ["serialize"] }
 reqwest = { workspace = true }

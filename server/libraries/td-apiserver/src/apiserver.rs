@@ -102,8 +102,18 @@ impl ApiServerInstance {
         Ok(InternalServerAddresses(NonEmptyAddresses::from_vec(addr)?))
     }
 
-    pub async fn run(self) -> Result<(), Box<dyn Error>> {
-        tokio::try_join!(self.internal.run(), self.api_v1.run()).map(|_| ())
+    pub async fn run(
+        self,
+        shutdown: tokio::sync::watch::Receiver<()>,
+    ) -> Result<(), Box<dyn Error>> {
+        let (res_internal, res_api) = tokio::join!(
+            self.internal.run(shutdown.clone()),
+            self.api_v1.run(shutdown.clone())
+        );
+
+        res_internal?;
+        res_api?;
+        Ok(())
     }
 }
 

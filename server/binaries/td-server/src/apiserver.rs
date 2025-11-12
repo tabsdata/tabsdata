@@ -9,6 +9,7 @@ use td_apiserver::config::{Config, DbSchema, Params};
 use td_apiserver::scheduler_server::SchedulerBuilder;
 use td_common::attach::attach;
 use td_common::server::FileWorkerMessageQueue;
+use td_common::signal::terminate;
 use td_common::status::ExitStatus;
 use td_common::{about, logging};
 use td_database::sql::DbError;
@@ -231,12 +232,35 @@ fn main() {
             .build()
             .await;
 
-            match tokio::try_join!(execution_server.run(), api_server.run()) {
-                Ok(_) => ExitStatus::Success,
-                Err(e) => {
-                    error!("Error running API Server: {}", e);
+            // Run servers until termination signal is received
+            let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
+            tokio::spawn({
+                let shutdown_tx = shutdown_tx.clone();
+                async move {
+                    terminate().await;
+                    info!("Terminate signal received in apiserver, shutting down...");
+                    let _ = shutdown_tx.send(());
+                }
+            });
+
+            match tokio::join!(
+                execution_server.run(shutdown_rx.clone()),
+                api_server.run(shutdown_rx.clone())
+            ) {
+                (Err(e1), Err(e2)) => {
+                    error!("Error running execution server: {}", e1);
+                    error!("Error running API server: {}", e2);
                     ExitStatus::GeneralError
                 }
+                (Err(e), _) => {
+                    error!("Error running execution server: {}", e);
+                    ExitStatus::GeneralError
+                }
+                (_, Err(e)) => {
+                    error!("Error running API server: {}", e);
+                    ExitStatus::GeneralError
+                }
+                _ => ExitStatus::Success,
             }
         },
         None,

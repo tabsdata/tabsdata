@@ -12,15 +12,15 @@ use async_trait::async_trait;
 use axum::Router;
 use axum_server::Handle;
 use axum_server::tls_rustls::RustlsConfig;
+use futures::StreamExt;
+use futures::stream::FuturesUnordered;
 use http::uri::Scheme;
 use rustls::crypto::{aws_lc_rs, ring};
-use std::error::Error;
 use std::fmt::Debug;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use td_common::server::{SSL_CERT_PEM_FILE, SSL_KEY_PEM_FILE};
-use td_common::signal::terminate;
 use td_objects::types::addresses::NonEmptyAddresses;
 use tokio::net::TcpListener;
 use tokio::task::{JoinError, JoinHandle};
@@ -146,29 +146,59 @@ impl ServerBuilder {
 
 #[async_trait]
 pub trait Server: Debug + Send {
-    async fn handles(self: Box<Self>) -> Vec<JoinHandle<Result<(), ServerError>>>;
+    async fn handles(
+        self: Box<Self>,
+        shutdown: tokio::sync::watch::Receiver<()>,
+    ) -> Vec<JoinHandle<Result<(), ServerError>>>;
 
     fn listeners(&self) -> &Vec<TcpListener>;
     fn scheme(&self) -> Scheme;
 }
 
 impl dyn Server {
-    pub async fn run(self: Box<Self>) -> Result<(), Box<dyn Error>> {
-        let handles = self.handles().await;
-        for handle in handles {
-            handle.await.map_err(|e| {
-                error!("Failed to join Server handle: {}", e);
-                ServerError::JoinHandle(e)
-            })??;
-        }
-        Ok(())
-    }
-}
+    pub async fn run(
+        self: Box<Self>,
+        shutdown: tokio::sync::watch::Receiver<()>,
+    ) -> Result<(), ServerError> {
+        let handles = self.handles(shutdown.clone()).await;
 
-async fn graceful_shutdown(dbg_listener: String, callback: impl Fn()) {
-    terminate().await;
-    debug!("Stopping Server listening on {:?}", dbg_listener);
-    callback();
+        // Wrap each handle in a future that also listens the shutdown signal
+        let mut futures = FuturesUnordered::new();
+
+        for mut handle in handles {
+            let mut shutdown = shutdown.clone();
+            futures.push(tokio::spawn(async move {
+                tokio::select! {
+                    res = &mut handle => res.map_err(|e| {
+                        error!("Failed to join server handle: {}", e);
+                        ServerError::JoinHandle(e)
+                    })?,
+                    _ = shutdown.changed() => {
+                        debug!("Shutdown signal received, aborting handle");
+                        handle.abort();
+                        Ok(())
+                    }
+                }
+            }));
+        }
+
+        // Await all futures, collect results
+        let mut run_result = Ok(());
+        while let Some(res) = futures.next().await {
+            match res {
+                Ok(Ok(())) => {} // handle finished successfully
+                Ok(Err(e)) => {
+                    error!("Server handle error: {}", e);
+                    run_result = Err(e); // store the last error, continue
+                }
+                Err(join_err) => {
+                    error!("Task panicked or was cancelled: {:?}", join_err);
+                    run_result = Err(ServerError::JoinHandle(join_err));
+                }
+            }
+        }
+        run_result
+    }
 }
 
 #[derive(Debug)]
@@ -179,17 +209,27 @@ pub struct PlainServer {
 
 #[async_trait]
 impl Server for PlainServer {
-    async fn handles(self: Box<Self>) -> Vec<JoinHandle<Result<(), ServerError>>> {
+    async fn handles(
+        self: Box<Self>,
+        shutdown: tokio::sync::watch::Receiver<()>,
+    ) -> Vec<JoinHandle<Result<(), ServerError>>> {
         let mut handles = Vec::new();
         for listener in self.listeners {
             let dbg_listener = format!("{listener:?}");
 
             let router = self.router.clone();
+            let mut shutdown = shutdown.clone();
             let handle = tokio::spawn(async move {
-                info!("Server listening on {:?}", dbg_listener);
+                info!("Server listening on {dbg_listener}");
 
                 axum::serve(listener, router)
-                    .with_graceful_shutdown(graceful_shutdown(dbg_listener.clone(), || {}))
+                    .with_graceful_shutdown({
+                        let dbg_listener = dbg_listener.clone();
+                        async move {
+                            shutdown.changed().await.ok();
+                            debug!("Stopping server listening on {dbg_listener}");
+                        }
+                    })
                     .await
                     .map_err(|e| {
                         error!("Failed to run Server listener: {}", e);
@@ -221,39 +261,50 @@ pub struct TlsServer {
 
 #[async_trait]
 impl Server for TlsServer {
-    async fn handles(self: Box<Self>) -> Vec<JoinHandle<Result<(), ServerError>>> {
+    async fn handles(
+        self: Box<Self>,
+        shutdown: tokio::sync::watch::Receiver<()>,
+    ) -> Vec<JoinHandle<Result<(), ServerError>>> {
         let mut handles = Vec::new();
+
         for listener in self.listeners {
             let dbg_listener = format!("{listener:?}");
 
-            let handle = Handle::new();
-            let _shutdown_future = graceful_shutdown(dbg_listener.clone(), {
-                let handle = handle.clone();
-                move || {
-                    // 10 seconds to gracefully shutdown after signal was received, else kill it.
-                    handle.graceful_shutdown(Some(Duration::from_secs(10)));
-                }
-            });
-
             let router = self.router.clone();
             let tls_config = self.tls_config.clone();
-            let handle = tokio::spawn(async move {
-                info!("Server listening on {:?} with TLS", dbg_listener);
+            let handle = Handle::new();
+            let mut shutdown = shutdown.clone();
+
+            let handle_task = tokio::spawn(async move {
+                info!("Server listening on {dbg_listener} with TLS");
+
                 let listener = listener
                     .into_std()
                     .map_err(|e| ServerError::StdTcpListener(dbg_listener.clone(), e))?;
-                axum_server::from_tcp_rustls(listener, tls_config)
-                    .handle(handle)
-                    .serve(router.into_make_service())
-                    .await
-                    .map_err(|e| {
-                        error!("Failed to run Server listener: {}", e);
-                        ServerError::Server(dbg_listener, e)
-                    })?;
-                Ok(())
+
+                let server = axum_server::from_tcp_rustls(listener, tls_config)
+                    .handle(handle.clone())
+                    .serve(router.into_make_service());
+
+                // Graceful shutdown via the shutdown signal
+                tokio::select! {
+                    res = server => {
+                        res.map_err(|e| {
+                            error!("Failed to run server listener: {dbg_listener}");
+                            ServerError::Server(dbg_listener.clone(), e)
+                        })
+                    }
+                    _ = shutdown.changed() => {
+                        debug!("Shutdown signal received, stopping listener {dbg_listener}");
+                        handle.graceful_shutdown(Some(Duration::from_secs(10)));
+                        Ok(())
+                    }
+                }
             });
-            handles.push(handle);
+
+            handles.push(handle_task);
         }
+
         handles
     }
 
@@ -267,7 +318,7 @@ impl Server for TlsServer {
 }
 
 #[cfg(test)]
-pub(crate) mod tests {
+mod tests {
     use super::*;
     use nonempty::nonempty;
     use reqwest::Client;
@@ -280,7 +331,6 @@ pub(crate) mod tests {
     use testdir::testdir;
     use tokio::fs;
     use tokio::io::AsyncWriteExt;
-    use tokio::net::TcpStream;
 
     #[router_ext(TestRouter)]
     mod routes {
@@ -297,26 +347,6 @@ pub(crate) mod tests {
         }
     }
 
-    pub(crate) async fn wait_for_server(
-        addr: SocketAddr,
-        timeout_millis: u64,
-        mut retries: usize,
-    ) -> Result<TcpStream, String> {
-        let wait_time = Duration::from_millis(timeout_millis);
-        loop {
-            match TcpStream::connect(addr).await {
-                Ok(client) => return Ok(client),
-                Err(e) => {
-                    if retries == 0 {
-                        panic!("Failed to connect to {addr}: {e}");
-                    }
-                    retries -= 1;
-                    tokio::time::sleep(wait_time).await;
-                }
-            }
-        }
-    }
-
     #[tokio::test]
     async fn test_server_run() {
         let server = ServerBuilder::new(
@@ -326,14 +356,18 @@ pub(crate) mod tests {
         .build()
         .await
         .unwrap();
+
         let addr = server.listeners().first().unwrap().local_addr().unwrap();
         let scheme = server.scheme();
 
-        tokio::spawn(async move {
-            server.run().await.unwrap();
+        let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
+        let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
+        let server_handle = tokio::spawn(async move {
+            let _ = ready_tx.send(());
+            server.run(shutdown_rx).await.unwrap();
         });
 
-        let _ = wait_for_server(addr, 100, 10).await;
+        ready_rx.await.expect("Failed to receive server readiness");
 
         let response = Client::new()
             .get(format!("{}://{}:{}/test", scheme, addr.ip(), addr.port()))
@@ -342,9 +376,11 @@ pub(crate) mod tests {
             .expect("Failed to send request");
 
         assert_eq!(response.status(), 200);
-
         let body = response.text().await.expect("Failed to read response body");
         assert_eq!(body, "\"test\"");
+
+        shutdown_tx.send(()).unwrap();
+        server_handle.await.unwrap();
     }
 
     #[tokio::test]
