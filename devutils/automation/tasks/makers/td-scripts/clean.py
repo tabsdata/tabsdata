@@ -29,24 +29,6 @@ def load(module_name) -> ModuleType:
     return module
 
 
-from pydantic import BaseModel, Field, SecretStr
-from typing import Annotated
-
-class MySQLConn(BaseModel):
-  host: Annotated[str, Field(description="Host")]
-  port: Annotated[int, Field(default=3306, ge=1, le=65535, description="Port")]
-  database: Annotated[str, Field(description="Database")]
-  user: Annotated[SecretStr, Field(description="User")]
-  password: Annotated[SecretStr, Field(description="Password")]
-
-  model_config = {
-      "json_schema_extra": {
-          "uri": MYSQL_CONN_URI,
-          "name": "mysql",
-          "label": "MySQL Connection"
-      }
-  }
-
 logger = load("log").get_logger()
 
 
