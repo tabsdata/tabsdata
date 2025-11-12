@@ -2188,7 +2188,7 @@ pub fn show_std_out_and_err(output: &Output) {
     match String::from_utf8(output.clone().stderr) {
         Ok(output) => {
             if !output.trim().is_empty() {
-                error!("\n\n{}", output);
+                info!("\n\n{}", output);
             }
         }
         Err(e) => {
