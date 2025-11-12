@@ -8,7 +8,8 @@
 
 # Global
 
-ansi2html==1.9.2    
+ansi2html==1.9.2
+azure-storage-blob==12.27.1
 black==25.9.0
 boto3==1.40.58
 build
