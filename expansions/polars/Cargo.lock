@@ -898,7 +898,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1002,7 +1002,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3215,9 +3215,9 @@ checksum = "135b12329e5e3ce057a9f972339ea52bc954fe1e9358ef27f95e89716fbc5424"
 
 [[package]]
 name = "hyper"
-version = "1.7.0"
+version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb3aa54a13a0dfe7fbe3a59e0c76093041720fdc77b110cc0fc260fafb4dc51e"
+checksum = "1744436df46f0bde35af3eda22aeaba453aada65d8f1c171cd8a5f59030bd69f"
 dependencies = [
  "atomic-waker",
  "bytes",
@@ -3254,9 +3254,9 @@ dependencies = [
 
 [[package]]
 name = "hyper-util"
-version = "0.1.17"
+version = "0.1.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c6995591a8f1380fcb4ba966a252a4b29188d51d2b89e3a252f5305be65aea8"
+checksum = "52e9a2a24dc5c6821e71a7030e1e14b7b632acac55c40e9d2e082c621261bb56"
 dependencies = [
  "base64",
  "bytes",
@@ -3521,7 +3521,7 @@ dependencies = [
  "portable-atomic",
  "portable-atomic-util",
  "serde_core",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3848,7 +3848,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4175,7 +4175,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d8fae84b431384b68627d0f9b3b1245fcf9f46f6c0e3dc902e9dce64edd1967"
 dependencies = [
  "libc",
- "windows-sys 0.48.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5219,7 +5219,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.52.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -5524,9 +5524,9 @@ dependencies = [
 
 [[package]]
 name = "rsa"
-version = "0.9.8"
+version = "0.9.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "78928ac1ed176a5ca1d17e578a1825f3d81ca54cf41053a592584b020cfd691b"
+checksum = "40a0376c50d0358279d9d643e4bf7b7be212f1f4ff1da9070a7b54d22ef75c88"
 dependencies = [
  "const-oid",
  "digest",
@@ -5606,7 +5606,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.11.0",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6429,7 +6429,7 @@ dependencies = [
 
 [[package]]
 name = "ta-tableframe"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "openssl",
  "td-build",
@@ -6445,7 +6445,7 @@ checksum = "df7f62577c25e07834649fc3b39fafdc597c0a3527dc1c60129201ccfcbaa50c"
 
 [[package]]
 name = "td-attach"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "darling 0.21.3",
  "openssl",
@@ -6457,7 +6457,7 @@ dependencies = [
 
 [[package]]
 name = "td-build"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -6476,7 +6476,7 @@ dependencies = [
 
 [[package]]
 name = "td-common"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -6528,7 +6528,7 @@ dependencies = [
 
 [[package]]
 name = "td-error"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "anyhow",
  "derive_builder",
@@ -6544,7 +6544,7 @@ dependencies = [
 
 [[package]]
 name = "td-security"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "argon2",
  "derive_builder",
@@ -6558,7 +6558,7 @@ dependencies = [
 
 [[package]]
 name = "te-tableframe"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "openssl",
  "ta-tableframe",
@@ -6574,7 +6574,7 @@ dependencies = [
  "getrandom 0.3.4",
  "once_cell",
  "rustix 1.1.2",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6710,7 +6710,7 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tm-error"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "openssl",
  "quote",
@@ -6719,7 +6719,7 @@ dependencies = [
 
 [[package]]
 name = "tm-workspace"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "openssl",
  "quote",
@@ -6998,7 +6998,7 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "ty-expansions"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "openssl",
  "ta-tableframe",
@@ -7009,7 +7009,7 @@ dependencies = [
 
 [[package]]
 name = "ty-tableframe"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "chrono",
  "dashmap",
@@ -7463,7 +7463,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
