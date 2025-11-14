@@ -65,7 +65,7 @@ ta-tableframe = { workspace = true }
 
 # External dependencies
 
-arrow = { workspace = true }
+# arrow = { workspace = true }
 chrono = { workspace = true }
 dashmap = { workspace = true }
 data-encoding = { workspace = true }

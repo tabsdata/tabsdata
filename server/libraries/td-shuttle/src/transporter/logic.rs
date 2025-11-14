@@ -305,8 +305,11 @@ fn importer_lazy_frame(
     importer_options: &ImporterOptions,
 ) -> Result<LazyFrame, PolarsError> {
     let url_str = url.to_string();
-    let cloud_config =
-        CloudOptions::from_untyped_config(&url_str, importer_options.location_configs())?;
+    let pl_path = PlPath::new(url_str.as_str());
+    let cloud_config = CloudOptions::from_untyped_config(
+        pl_path.cloud_scheme().as_ref(),
+        importer_options.location_configs(),
+    )?;
     let format = importer_options.format();
 
     let lazy_frame = match format {
@@ -423,8 +426,11 @@ fn write_imported_lazy_frame(
     importer_options: &ImporterOptions,
     lazy_frame: LazyFrame,
 ) -> Result<(), PolarsError> {
-    let cloud_options =
-        CloudOptions::from_untyped_config(url.as_ref(), importer_options.to_configs())?;
+    let pl_path = PlPath::new(url.as_ref());
+    let cloud_options = CloudOptions::from_untyped_config(
+        pl_path.cloud_scheme().as_ref(),
+        importer_options.to_configs(),
+    )?;
     match importer_options.to_format() {
         ToFormat::Parquet(parquet_write_options) => {
             let sink = lazy_frame.sink_parquet(

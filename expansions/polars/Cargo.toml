@@ -102,10 +102,6 @@ path = "../../extensions/rust/te-tableframe"
 # https://github.com/pola-rs/polars/issues/23902
 # https://github.com/pola-rs/polars/pull/23918
 
-[workspace.dependencies.arrow]
-package = "polars-arrow"
-version = "0.50.0"
-
 [workspace.dependencies.chrono]
 version = "0.4.42"
 
@@ -122,37 +118,37 @@ version = "2.4.0"
 version = "2.12.0"
 
 [workspace.dependencies.openssl]
-version = "0.10.74"
+version = "0.10.75"
 features = ["vendored"]
 
 [workspace.dependencies.polars]
-version = "0.50.0"
+version = "0.52.0"
 features = ["default", "fmt", "dtype-date", "dtype-struct", "timezones"]
 
 [workspace.dependencies.polars-plan]
-version = "0.50.0"
+version = "0.52.0"
 features = ["python"]
 
 [workspace.dependencies.polars-mem-engine]
-version = "0.50.0"
+version = "0.52.0"
 features = ["python"]
 
 # Note: Each pyo3-polars is tightly tied to a specific version of pyo3.
 # Pay attention to these any time you intend to upgrade pyo3 dependency version.
 
 [workspace.dependencies.pyo3]
-version = "0.25.1"
+version = "0.26.0"
 features = ["abi3-py312", "anyhow", "macros", "multiple-pymethods", "num-bigint", "num-complex", "num-rational", "rust_decimal", "serde", "smallvec"]
 
 [workspace.dependencies.pyo3-polars]
-version = "0.23.1"
+version = "0.25.0"
 features = ["derive"]
 
 [workspace.dependencies.pyo3-stub-gen]
-version = "0.13.1"
+version = "0.17.1"
 
 [workspace.dependencies.pyo3-stub-gen-derive]
-version = "0.13.1"
+version = "0.17.1"
 
 [workspace.dependencies.rayon]
 version = "1.11.0"

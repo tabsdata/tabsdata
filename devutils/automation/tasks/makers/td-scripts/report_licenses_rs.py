@@ -43,6 +43,7 @@ normalized_licenses = {
     "(Apache-2.0 OR ISC) AND ISC": "Apache License Version 2.0 or Internet Systems Consortium License, and Internet Systems Consortium License",                                               # noqa: E231,E241,E501
     "(Apache-2.0 OR MIT) AND BSD-3-Clause": "Apache License Version 2.0 or MIT License, and BSD Revised License (BSD-3-Clause)",                                                               # noqa: E231,E241,E501
     "(Apache-2.0 OR MIT) AND Unicode-3.0": "Apache License Version 2.0 or MIT License, and Unicode License Version 3.0",                                                                       # noqa: E231,E241,E501
+    "(Apache-2.0 OR MIT) AND Unicode-DFS-2016": "Apache License Version 2.0 or MIT License, and Unicode Data Files and Software 2016",                                                         # noqa: E231,E241,E501
     "(MIT OR Apache-2.0) AND Unicode-3.0": "MIT License or Apache License Version 2.0, and Unicode License Version 3.0",                                                                       # noqa: E231,E241,E501
     "(MIT OR CC0-1.0)": "MIT License, and Creative Commons Zero Version 1.0 Universal",                                                                                                        # noqa: E231,E241,E501
     "0BSD OR Apache-2.0 OR MIT": "BSD Zero-Clause License or Apache License Version 2.0 or MIT License",                                                                                       # noqa: E231,E241,E501
@@ -137,7 +138,19 @@ def get_custom_license(_c_name, c_license):
     exit(1)
 
 
-def ignore_dependency(dependency):
+def ignored_dependency(dependency):
+    # Build-time only dependencies that don't get included in final binaries.
+    # These come from pyo3-stub-gen which is only used to generate Python stub files.
+    build_dependencies = {
+        "malachite",
+        "malachite-base",
+        "malachite-bigint",
+        "malachite-nz",
+        "malachite-q",
+        "pyo3-stub-gen",
+        "pyo3-stub-gen-derive",
+    }
+
     return (
         dependency.startswith("ta-")
         or dependency.startswith("td-")
@@ -145,6 +158,7 @@ def ignore_dependency(dependency):
         or dependency.startswith("tm-")
         or dependency.startswith("ty-")
         or dependency == "tabsdata"
+        or dependency in build_dependencies
     )
 
 
@@ -221,9 +235,8 @@ csv_output = "\n".join(licenses_csv_data)
 
 csv_file = io.StringIO(csv_output)
 reader = csv.reader(csv_file)
-data = list(reader)  #
-
-data = [row for row in data if not ignore_dependency(row[0])]
+data = list(reader)
+data = [row for row in data if not ignored_dependency(row[0])]
 for row in data:
     dependency_name_tag = row[0]
     dependency_license_tag = row[2]

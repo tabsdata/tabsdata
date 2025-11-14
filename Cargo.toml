@@ -287,7 +287,7 @@ version = "0.8.6"
 version = "0.1.0"
 
 [workspace.dependencies.axum-extra]
-version = "0.10.3"
+version = "0.12.1"
 
 [workspace.dependencies.axum-server]
 version = "0.7.2"
@@ -299,7 +299,7 @@ version = "0.22.1"
 version = "1.10.1"
 
 [workspace.dependencies.clap]
-version = "4.5.50"
+version = "4.5.51"
 features = ["derive"]
 
 [workspace.dependencies.clap_derive]
@@ -312,7 +312,7 @@ version = "0.4.42"
 version = "3.0.0"
 
 [workspace.dependencies.config]
-version = "0.15.18"
+version = "0.15.19"
 features = ["yaml"]
 
 [workspace.dependencies.console]
@@ -326,7 +326,7 @@ version = "0.29.0"
 version = "0.3.2"
 
 [workspace.dependencies.console-subscriber]
-version = "0.4.1"
+version = "0.5.0"
 
 [workspace.dependencies.constcat]
 version = "0.6.1"
@@ -350,7 +350,7 @@ version = "6.0.0"
 version = "0.1.1"
 
 [workspace.dependencies.duct]
-version = "1.1.0"
+version = "1.1.1"
 
 [workspace.dependencies.dunce]
 version = "1.0.5"
@@ -392,7 +392,7 @@ version = "2.3.0"
 version = "0.1.64"
 
 [workspace.dependencies.ignore]
-version = "0.4.24"
+version = "0.4.25"
 
 [workspace.dependencies.include_dir]
 version = "0.7.4"
@@ -401,14 +401,14 @@ version = "0.7.4"
 version = "2.12.0"
 
 [workspace.dependencies.indicatif]
-version = "0.18.1"
+version = "0.18.3"
 features = ["default", "improved_unicode"]
 
 [workspace.dependencies.itertools]
 version = "0.14.0"
 
 [workspace.dependencies.jsonwebtoken]
-version = "10.1.0"
+version = "10.2.0"
 features = ["aws_lc_rs"]
 
 [workspace.dependencies.linemux]
@@ -439,7 +439,7 @@ features = ["aws", "azure", "gcp", "http"]
 version = "1.21.3"
 
 [workspace.dependencies.openssl]
-version = "0.10.74"
+version = "0.10.75"
 features = ["vendored"]
 
 [workspace.dependencies.opentelemetry_sdk]
@@ -462,11 +462,11 @@ features = ["serde", "serde_derive"]
 version = "0.5.0"
 
 [workspace.dependencies.polars]
-version = "0.50.0"
+version = "0.52.0"
 features = ["lazy", "polars-lazy", "async", "csv", "json", "parquet", "cloud", "aws", "azure", "gcp", "sql"]
 
 [workspace.dependencies.polars-io]
-version = "0.50.0"
+version = "0.52.0"
 features = ["cloud"]
 
 [workspace.dependencies.polars-parquet-format]
@@ -488,10 +488,10 @@ version = "0.12.24"
 version = "0.17.14"
 
 [workspace.dependencies.rustls]
-version = "0.23.34"
+version = "0.23.35"
 
 [workspace.dependencies.rust-embed]
-version = "8.8.0"
+version = "8.9.0"
 
 [workspace.dependencies.semver]
 version = "1.0.27"
@@ -551,7 +551,7 @@ version = "1.48.0"
 features = ["full"]
 
 [workspace.dependencies.tokio-util]
-version = "0.7.16"
+version = "0.7.17"
 
 [workspace.dependencies.toml]
 version = "0.9.8"
@@ -616,7 +616,7 @@ version = "2.5.0"
 version = "1.6.1"
 
 [workspace.dependencies.wildmatch]
-version = "2.5.0"
+version = "2.6.1"
 
 [workspace.dependencies.windows]
 version = "0.62.2"

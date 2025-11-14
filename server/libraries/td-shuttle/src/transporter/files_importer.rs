@@ -388,15 +388,17 @@ mod tests {
         );
         config.insert("AWS_REGION".to_string(), s3.region.to_string());
         let e_config = config.clone();
-        let cloud_options = CloudOptions::from_untyped_config(url_tf.as_str(), config)
-            .map_err(|e| {
-                eprintln!("CloudOptions::from_untyped_config failed:");
-                eprintln!("  URL: {}", url_tf.as_str());
-                eprintln!("  Config: {:?}", e_config);
-                eprintln!("  Error: {:?}", e);
-                e
-            })
-            .unwrap();
+        let pl_path = PlPath::new(url_tf.as_str());
+        let cloud_options =
+            CloudOptions::from_untyped_config(pl_path.cloud_scheme().as_ref(), config)
+                .map_err(|e| {
+                    eprintln!("CloudOptions::from_untyped_config failed:");
+                    eprintln!("  URL: {}", url_tf.as_str());
+                    eprintln!("  Config: {:?}", e_config);
+                    eprintln!("  Error: {:?}", e);
+                    e
+                })
+                .unwrap();
 
         let lf = LazyFrame::scan_parquet(
             PlPath::new(url_tf.to_string().as_str()),
@@ -524,15 +526,17 @@ mod tests {
             az.account_key.to_string(),
         );
         let e_config = config.clone();
-        let cloud_options = CloudOptions::from_untyped_config(url_tf.as_str(), config)
-            .map_err(|e| {
-                eprintln!("CloudOptions::from_untyped_config failed:");
-                eprintln!("  URL: {}", url_tf.as_str());
-                eprintln!("  Config: {:?}", e_config);
-                eprintln!("  Error: {:?}", e);
-                e
-            })
-            .unwrap();
+        let pl_path = PlPath::new(url_tf.as_str());
+        let cloud_options =
+            CloudOptions::from_untyped_config(pl_path.cloud_scheme().as_ref(), config)
+                .map_err(|e| {
+                    eprintln!("CloudOptions::from_untyped_config failed:");
+                    eprintln!("  URL: {}", url_tf.as_str());
+                    eprintln!("  Config: {:?}", e_config);
+                    eprintln!("  Error: {:?}", e);
+                    e
+                })
+                .unwrap();
 
         let lf = LazyFrame::scan_parquet(
             PlPath::new(url_tf.to_string().as_str()),
@@ -658,15 +662,17 @@ mod tests {
         );
 
         let e_config = config.clone();
-        let cloud_options = CloudOptions::from_untyped_config(url_tf.as_str(), config)
-            .map_err(|e| {
-                eprintln!("CloudOptions::from_untyped_config failed:");
-                eprintln!("  URL: {}", url_tf.as_str());
-                eprintln!("  Config: {:?}", e_config);
-                eprintln!("  Error: {:?}", e);
-                e
-            })
-            .unwrap();
+        let pl_path = PlPath::new(url_tf.as_str());
+        let cloud_options =
+            CloudOptions::from_untyped_config(pl_path.cloud_scheme().as_ref(), config)
+                .map_err(|e| {
+                    eprintln!("CloudOptions::from_untyped_config failed:");
+                    eprintln!("  URL: {}", url_tf.as_str());
+                    eprintln!("  Config: {:?}", e_config);
+                    eprintln!("  Error: {:?}", e);
+                    e
+                })
+                .unwrap();
 
         let lf = LazyFrame::scan_parquet(
             PlPath::new(url_tf.to_string().as_str()),
@@ -892,13 +898,16 @@ mod tests {
                 .sink_csv(
                     create_sink_target(&from_file.url(), &from_file.cloud_configs()).unwrap(),
                     CsvWriterOptions::default(),
-                    Some(
-                        CloudOptions::from_untyped_config(
-                            from_file.url().as_str(),
-                            from_file.cloud_configs(),
+                    {
+                        let pl_path = PlPath::new(from_file.url().as_str());
+                        Some(
+                            CloudOptions::from_untyped_config(
+                                pl_path.cloud_scheme().as_ref(),
+                                from_file.cloud_configs(),
+                            )
+                            .unwrap(),
                         )
-                        .unwrap(),
-                    ),
+                    },
                     sink_options.clone(),
                 )
                 .unwrap()
@@ -952,16 +961,20 @@ mod tests {
 
         let url_to = response.first().unwrap().to.clone();
         let e_cloud_configs = to_base.cloud_configs();
+        let pl_path = PlPath::new(url_to.as_str());
         let cloud_options = Some(
-            CloudOptions::from_untyped_config(url_to.as_str(), to_base.cloud_configs())
-                .map_err(|e| {
-                    eprintln!("CloudOptions::from_untyped_config failed in import function:");
-                    eprintln!("  URL: {}", url_to.as_str());
-                    eprintln!("  Config: {:?}", e_cloud_configs);
-                    eprintln!("  Error: {:?}", e);
-                    e
-                })
-                .unwrap(),
+            CloudOptions::from_untyped_config(
+                pl_path.cloud_scheme().as_ref(),
+                to_base.cloud_configs(),
+            )
+            .map_err(|e| {
+                eprintln!("CloudOptions::from_untyped_config failed in import function:");
+                eprintln!("  URL: {}", url_to.as_str());
+                eprintln!("  Config: {:?}", e_cloud_configs);
+                eprintln!("  Error: {:?}", e);
+                e
+            })
+            .unwrap(),
         );
         let lf = match format {
             ImportFormat::Binary => {

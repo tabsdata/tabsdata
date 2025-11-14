@@ -2,9 +2,9 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use arrow::legacy::error::PolarsResult;
 use grok::{Grok, Pattern, patterns};
 use polars::datatypes::{DataType, Field};
+use polars::prelude::PolarsResult;
 use pyo3::PyResult;
 use pyo3::exceptions::PyValueError;
 use std::collections::BTreeMap;
