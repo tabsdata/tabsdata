@@ -6,8 +6,9 @@
 requires = [
     "archspec==0.2.5",
     "colorama==0.4.6",
-    "psutil==7.1.0",
+    "psutil==7.1.3",
     "py-cpuinfo==9.0.0",
+    "PyYAML==6.0.3",
     "setuptools==78.1.1",
     "tqdm==4.67.1",
     "tzlocal==5.3.1"]

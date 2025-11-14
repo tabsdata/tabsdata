@@ -322,6 +322,8 @@ class TableFrameGroupBy:
         Aggregation operation that computes the mean value in the group for
         of all the non `group by` columns.
 
+        The behaviour un non-numeric columns is undefined.
+
         Examples:
 
         >>> import tabsdata as td
@@ -374,6 +376,8 @@ class TableFrameGroupBy:
         """
         Aggregation operation that computes the median value in the group for
         of all the non `group by` columns.
+
+        The behaviour un non-numeric columns is undefined.
 
         Examples:
 
@@ -533,6 +537,8 @@ class TableFrameGroupBy:
         """
         Aggregation operation that computes the sum for all values in the group for
         of all the non `group by` columns.
+
+        This operation is supported only on numeric columns.
 
         Examples:
 

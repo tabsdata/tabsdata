@@ -5,6 +5,7 @@
 """Helper functions that run at early initialization. That is, before project packages &
 modules are loaded.
 """
+
 import logging
 import os
 import sys

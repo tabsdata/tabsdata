@@ -296,7 +296,7 @@ version = "0.7.2"
 version = "0.22.1"
 
 [workspace.dependencies.bytes]
-version = "1.10.1"
+version = "1.11.0"
 
 [workspace.dependencies.clap]
 version = "4.5.51"

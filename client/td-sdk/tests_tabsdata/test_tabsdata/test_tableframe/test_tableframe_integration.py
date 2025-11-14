@@ -942,7 +942,7 @@ def test_group_by_n_unique():
 
 def test_group_by_sum():
     def fn(_library: pk, frame: ft):
-        return frame.group_by("ss").sum()
+        return frame.select("ss", "u", "i", "f", "ff", "b").group_by("ss").sum()
 
     api_tester(fn)
 
