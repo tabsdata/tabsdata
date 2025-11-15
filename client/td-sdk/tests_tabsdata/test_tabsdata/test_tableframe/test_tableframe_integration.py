@@ -938,7 +938,7 @@ def test_group_by_sum():
             "s": ["A", "B", "A", "B", "B", "C", "C", "C", "D", "F", None],
             "u": [1, 0, 2, 3, 4, 5, 6, 7, 8, 9, None],
             "i": [1, 0, 2, 3, 4, -1, -2, -3, -4, -5, None],
-            "i2": [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, None],
+            "j": [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, None],
             "b": [True, False, True, False, True, None, True, False, True, True, None],
         }
     ).lazy()
