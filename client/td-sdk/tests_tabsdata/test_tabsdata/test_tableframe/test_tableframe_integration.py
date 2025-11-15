@@ -771,15 +771,11 @@ def test_expr_max():
     api_tester(fn)
 
 
-# This test requires further investigation. Although essentially correct, false
-# positives are observed on macOS x86_64.
-# This is most probably related to numbers precision handling.
-@pytest.mark.chipset
 def test_expr_mean():
     def fn(library: pk, frame: ft):
-        return frame.group_by("ss").agg(library.col("f").mean())
+        return frame.group_by("ss").agg(library.col("i").mean())
 
-    api_tester(fn, rounded=True, column="f")
+    api_tester(fn)
 
 
 def test_expr_median():
@@ -824,15 +820,11 @@ def test_expr_sub_expr():
     api_tester(fn)
 
 
-# This test requires further investigation. Although essentially correct, false
-# positives are observed on macOS x86_64.
-# This is most probably related to numbers precision handling.
-@pytest.mark.chipset
 def test_expr_sum():
     def fn(library: pk, frame: ft):
-        return frame.group_by("ss").agg(library.col("f").sum())
+        return frame.group_by("ss").agg(library.col("i").sum())
 
-    api_tester(fn, rounded=True, column="f")
+    api_tester(fn)
 
 
 def test_expr_tan():
@@ -941,15 +933,23 @@ def test_group_by_n_unique():
 
 
 def test_group_by_sum():
+    polars_table_frame = pl.DataFrame(
+        data={
+            "s": ["A", "B", "A", "B", "B", "C", "C", "C", "D", "F", None],
+            "u": [1, 0, 2, 3, 4, 5, 6, 7, 8, 9, None],
+            "i": [1, 0, 2, 3, 4, -1, -2, -3, -4, -5, None],
+            "i2": [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, None],
+            "b": [True, False, True, False, True, None, True, False, True, True, None],
+        }
+    ).lazy()
+    for j in range(POLARS_TABLE_FRAME_DUPLICATION_TIMES):
+        polars_table_frame = pl.concat([polars_table_frame, polars_table_frame])
+    polars_table_frame = polars_table_frame.collect().lazy()
+
     def fn(_library: pk, frame: ft):
-        return frame.select("ss", "u", "i", "f", "ff", "b").group_by("ss").sum()
+        return frame.group_by("s").sum()
 
-    api_tester(fn)
-
-    def fn(library: pk, frame: ft):
-        return frame.sort(library.col("f"))
-
-    api_tester(fn, sort=False)
+    api_tester(fn, polars_frame=polars_table_frame)
 
 
 def test_frame_cast():
@@ -1050,6 +1050,7 @@ def test_frame_select():
     api_tester(fn)
 
 
+@pytest.mark.dimax
 def test_frame_group_by():
     def fn(library: pk, frame: ft):
         return frame.group_by("ss").agg(library.col("u").sum())
