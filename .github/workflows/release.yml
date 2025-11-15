@@ -62,7 +62,7 @@ on:
         required: false
         type: choice
         options: ['true', 'false']
-        default: 'true'
+        default: 'false'
       run_on_macos_arm_64:
         description: "Run on macOS (arm_64)"
         required: false
@@ -82,9 +82,9 @@ on:
         options: ['true', 'false']
         default: 'false'
 
-  schedule:
-     # Run at 02:00 UTC (03:00 AM Spain time) Monday to Friday
-    - cron: "0 2 * * 1-5"
+  # schedule:
+  #   # Run at 02:00 UTC (03:00 AM Spain time) Monday to Friday
+  #  - cron: "0 2 * * 1-5"
 
 jobs:
   cap-job:
