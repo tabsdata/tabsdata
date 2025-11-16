@@ -6429,7 +6429,7 @@ dependencies = [
 
 [[package]]
 name = "ta-tableframe"
-version = "1.5.0"
+version = "1.5.1"
 dependencies = [
  "openssl",
  "td-build",
@@ -6445,7 +6445,7 @@ checksum = "df7f62577c25e07834649fc3b39fafdc597c0a3527dc1c60129201ccfcbaa50c"
 
 [[package]]
 name = "td-attach"
-version = "1.5.0"
+version = "1.5.1"
 dependencies = [
  "darling 0.21.3",
  "openssl",
@@ -6457,7 +6457,7 @@ dependencies = [
 
 [[package]]
 name = "td-build"
-version = "1.5.0"
+version = "1.5.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -6476,7 +6476,7 @@ dependencies = [
 
 [[package]]
 name = "td-common"
-version = "1.5.0"
+version = "1.5.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -6528,7 +6528,7 @@ dependencies = [
 
 [[package]]
 name = "td-error"
-version = "1.5.0"
+version = "1.5.1"
 dependencies = [
  "anyhow",
  "derive_builder",
@@ -6544,7 +6544,7 @@ dependencies = [
 
 [[package]]
 name = "td-security"
-version = "1.5.0"
+version = "1.5.1"
 dependencies = [
  "argon2",
  "derive_builder",
@@ -6558,7 +6558,7 @@ dependencies = [
 
 [[package]]
 name = "te-tableframe"
-version = "1.5.0"
+version = "1.5.1"
 dependencies = [
  "openssl",
  "ta-tableframe",
@@ -6710,7 +6710,7 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tm-error"
-version = "1.5.0"
+version = "1.5.1"
 dependencies = [
  "openssl",
  "quote",
@@ -6719,7 +6719,7 @@ dependencies = [
 
 [[package]]
 name = "tm-workspace"
-version = "1.5.0"
+version = "1.5.1"
 dependencies = [
  "openssl",
  "quote",
@@ -6998,7 +6998,7 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "ty-expansions"
-version = "1.5.0"
+version = "1.5.1"
 dependencies = [
  "openssl",
  "ta-tableframe",
@@ -7009,7 +7009,7 @@ dependencies = [
 
 [[package]]
 name = "ty-tableframe"
-version = "1.5.0"
+version = "1.5.1"
 dependencies = [
  "chrono",
  "dashmap",

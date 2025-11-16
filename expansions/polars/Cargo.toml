@@ -6,7 +6,7 @@
 description = "Tabsdata Rust Polars Expansions"
 name = "ty-expansions"
 edition = "2024"
-version = "1.5.0"
+version = "1.5.1"
 license = "Apache 2.0"
 build = "build.rs"
 
@@ -27,7 +27,7 @@ publish = false
 readme = "../../README.md"
 repository = "https://github.com/tabsdata/tabsdata"
 rust-version = "1.90.0"
-version = "1.5.0"
+version = "1.5.1"
 
 [workspace]
 members = [
