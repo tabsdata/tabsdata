@@ -200,7 +200,7 @@ jobs:
     needs:
       - cap-job
       - describe-job
-    uses: tabsdata/tabsdata-ci/.github/workflows/make.yml@main
+    uses: tabsdata/tabsdata-ci/.github/workflows/make.yml@1.51.
     secrets:
       PAT_AOINOKIMI: ${{ secrets.PAT_AOINOKIMI }}
       S30__S3_ACCESS_KEY: ${{ secrets.S30__S3_ACCESS_KEY }}
