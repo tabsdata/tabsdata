@@ -85,8 +85,12 @@ script = [
     !include_files ./make/make-os/libraries/log.ds
 
     cd "${PROJECT_TABSDATA_ROOT_FOLDER}"
+
     debug "🚀 python ${LOCK_REQUIREMENTS_SCRIPT} ${PROJECT_TABSDATA_ROOT_FOLDER}"
     exec --fail-on-error python ${LOCK_REQUIREMENTS_SCRIPT} ${PROJECT_TABSDATA_ROOT_FOLDER}
+
+    debug "🚀 uv pip compile --no-header --no-annotate --format requirements.txt --quiet --output-file ./variant/resources/lock/requirements.txt ./requirements/requirements-third-party-all.txt"
+    exec --fail-on-error uv pip compile --no-header --no-annotate --format requirements.txt --quiet --output-file ./variant/resources/lock/requirements.txt ./requirements/requirements-third-party-all.txt
     ''']
 
 [tasks.__os__lock_py_connectors]

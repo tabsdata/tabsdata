@@ -586,6 +586,3 @@ def write_build_manifest(root_path, output_path):
         raise RuntimeError(
             f"Failed to write build manifest to {output_path}: {exception}"
         ) from exception
-
-
-build_sdist = _backend.build_sdist

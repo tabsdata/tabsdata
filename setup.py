@@ -29,6 +29,7 @@ from setuptools.command.sdist import sdist as _sdist
 from wheel.bdist_wheel import bdist_wheel as _bdist_wheel
 
 import tdabout
+import tdlock
 
 # noinspection DuplicatedCode
 colorama.init()
@@ -566,6 +567,11 @@ package_assets_folder = os.path.join(
     "assets",
 )
 
+package_resources_folder = os.path.join(
+    "variant",
+    "resources",
+)
+
 if (
     not os.path.exists(
         os.path.join(
@@ -664,6 +670,14 @@ build_manifest_path = os.path.join(
 )
 logger.debug(f"Generating build manifest at: {build_manifest_path}")
 tdabout.write_build_manifest(ROOT, build_manifest_path)
+
+requirements_lock_path = os.path.join(
+    package_resources_folder,
+    "lock",
+    "requirements.txt",
+)
+logger.debug(f"Generating requirements lock at: {requirements_lock_path}")
+tdlock.write_requirements_lock(ROOT, requirements_lock_path)
 
 
 def build_extras_require(root: str) -> dict[str, list[str]]:

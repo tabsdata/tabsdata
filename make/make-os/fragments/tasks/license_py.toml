@@ -12,11 +12,11 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    # debug "🚀 pip-compile --no-strip-extras --quiet ./requirements/requirements-third-party-all.txt --output-file ./target/requirements.txt"
-    # exec --fail-on-error pip-compile --no-strip-extras --quiet ./requirements/requirements-third-party-all.txt --output-file ./target/requirements.txt
+    # debug "🚀 pip-compile --quiet ./requirements/requirements-third-party-all.txt --output-file ./target/requirements.txt"
+    # exec --fail-on-error pip-compile --quiet ./requirements/requirements-third-party-all.txt --output-file ./target/requirements.txt
 
-    debug "🚀 uv pip compile --all-extras --format requirements.txt --no-strip-extras --quiet --output-file ./target/requirements.txt ./requirements/requirements-third-party-all.txt"
-    exec --fail-on-error uv pip compile --format requirements.txt --no-strip-extras --quiet --output-file ./target/requirements.txt ./requirements/requirements-third-party-all.txt
+    debug "🚀 uv pip compile --format requirements.txt --quiet --output-file ./target/requirements.txt ./requirements/requirements-third-party-all.txt"
+    exec --fail-on-error uv pip compile --format requirements.txt --quiet --output-file ./target/requirements.txt ./requirements/requirements-third-party-all.txt
 
     cd target
 
