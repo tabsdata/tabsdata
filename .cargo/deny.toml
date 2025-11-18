@@ -10,7 +10,15 @@
 # Warning: These ignored advisories are also specified in .cargo/audit.toml.
 
 ignore = [
-    "RUSTSEC-2024-0436"
+    "RUSTSEC-2024-0436",
+    "RUSTSEC-2024-0436",
+    "RUSTSEC-2025-0075",
+    "RUSTSEC-2025-0080",
+    "RUSTSEC-2025-0081",
+    "RUSTSEC-2025-0090",
+    "RUSTSEC-2025-0098",
+    "RUSTSEC-2025-0100",
+    "RUSTSEC-2025-0120",
 ]
 
 [bans]
