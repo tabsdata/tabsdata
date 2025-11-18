@@ -2,7 +2,7 @@
 Copyright 2025 Tabs Data Inc.
 -->
 
-![Tabsdata](resources/images/tabsdata.png =450x center)
+<p style="text-align:center;"><img src="resources/images/tabsdata.png" alt="Tabsdata" width="380"></p>
 
 # Tabsdata Developer Guide
 

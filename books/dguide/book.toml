@@ -5,11 +5,8 @@
 [book]
 authors = ["Tabs Data Inc."]
 language = "en"
-multilingual = false
 src = "src"
 title = "Tabsdata Developer Guide"
-
-[preprocessor.image-size]
 
 [output.html]
 additional-css = ["./theme/custom.css"]

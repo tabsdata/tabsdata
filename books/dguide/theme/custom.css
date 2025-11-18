@@ -11,3 +11,14 @@
 p {
     text-align: justify;
 }
+
+#menu-bar {
+    position: relative;
+}
+
+.menu-title {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    text-align: center;
+}
