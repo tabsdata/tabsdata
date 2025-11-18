@@ -14,8 +14,8 @@ logger.setLevel(logging.INFO)
 
 
 # noinspection PyPep8Naming
-class Upgrade_1_5_0_to_1_6_0(Upgrade):
-    source_version = Version("1.5.0")
+class Upgrade_1_5_1_to_1_6_0(Upgrade):
+    source_version = Version("1.5.1")
     target_version = Version("1.6.0")
 
     def upgrade(
