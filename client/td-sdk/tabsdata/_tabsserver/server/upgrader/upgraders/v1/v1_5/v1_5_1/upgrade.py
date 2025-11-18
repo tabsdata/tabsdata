@@ -41,19 +41,20 @@ class Upgrade_1_5_0_to_1_5_1(Upgrade):
         for requirements_file in config_folder.rglob("requirements.txt"):
             lines = requirements_file.read_text().splitlines()
             modified_lines = [
-                line for line in lines
+                line
+                for line in lines
                 if line.startswith(TABSDATA_MODULE_NAME) and "==" in line
             ]
             if not modified_lines:
                 continue
             if dry_run:
                 messages.append(
-                    f"[dry-run] Will strip versions from tabsdata requirements "
+                    "[dry-run] Will strip versions from tabsdata requirements "
                     f"in '{requirements_file}': {modified_lines}."
                 )
             else:
                 logger.debug(
-                    f"Stripping versions from tabsdata requirements "
+                    "Stripping versions from tabsdata requirements "
                     f"in '{requirements_file}'."
                 )
                 # noinspection PyBroadException
@@ -65,13 +66,13 @@ class Upgrade_1_5_0_to_1_5_1(Upgrade):
                         updated_lines.append(line)
                     requirements_file.write_text("\n".join(updated_lines))
                     messages.append(
-                        f"Stripped versions from tabsdata requirements "
+                        "Stripped versions from tabsdata requirements "
                         f"in '{requirements_file}': {modified_lines}."
                     )
                 except Exception:
                     logger.debug(
                         f"Error processing requirements file '{requirements_file}'; "
-                        f"skipping."
+                        "skipping."
                     )
         return messages
 
