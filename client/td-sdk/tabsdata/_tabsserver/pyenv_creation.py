@@ -643,8 +643,8 @@ def get_current_tabsdata_version():
     raise ValueError("Could not find the tabsdata module in the available modules.")
 
 
-def inject_tabsdata_version(required_modules: list[str]) -> list[str]:
-    """Inject the tabsdata version into the list of required modules"""
+def inject_tabsdata_version(required_modules: list[str]) -> list[str]:  # noqa: C901
+    """Inject tabsdata and dependencies versions into the list of required modules"""
     try:
         tabsdata_version = get_current_tabsdata_version()
     except ValueError:
@@ -656,41 +656,145 @@ def inject_tabsdata_version(required_modules: list[str]) -> list[str]:
         else:
             raise
 
-    previous_tabsdata_version = [
+    has_tabsdata = any(
+        TABSDATA_MODULE_NAME == extract_package_name(module)
+        for module in required_modules
+    )
+
+    if not has_tabsdata:
+        logger.info(
+            "Package tabsdata is not a required module. Injecting its current version."
+        )
+
+    tabsdata_modules = [
         module
         for module in required_modules
-        if TABSDATA_MODULE_NAME == extract_package_name(module)
+        if extract_package_name(module).startswith(TABSDATA_MODULE_NAME)
     ]
+
+    legacy_tabsdata_modules = [
+        module
+        for module in tabsdata_modules
+        if extract_package_name(module) not in TABSDATA_PACKAGES
+    ]
+
+    for legacy_module in legacy_tabsdata_modules:
+        logger.warning(
+            f"Removing module '{legacy_module}' as it is not a current tabsdata package"
+        )
+
+    original_tabsdata_packages = {
+        extract_package_name(module)
+        for module in tabsdata_modules
+        if extract_package_name(module) in TABSDATA_PACKAGES
+    }
+
     required_modules = [
         module
         for module in required_modules
-        if TABSDATA_MODULE_NAME != extract_package_name(module)
+        if not extract_package_name(module).startswith(TABSDATA_MODULE_NAME)
     ]
-    logger.debug(f"Injecting tabsdata version {tabsdata_version} into the requirements")
-    new_tabsdata_version = f"{TABSDATA_MODULE_NAME}=={tabsdata_version}"
-    required_modules.append(new_tabsdata_version)
-    if tabsdata_version is not None:
-        if previous_tabsdata_version:
-            previous_tabsdata_version = previous_tabsdata_version[0]
-            if previous_tabsdata_version != new_tabsdata_version:
-                logger.warning(
-                    f"Found previous tabsdata version '{previous_tabsdata_version}' in"
-                    " the requirements. Replacing it with the current version."
-                )
-            else:
+
+    requirements_lock_map = {}
+    try:
+        requirements_lock = td_resource("resources/lock/requirements.txt")
+        with open(requirements_lock, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                is_requirement = re.match(r"^\s*([A-Za-z0-9_.-]+)\s*==\s*(.+)", line)
+                if is_requirement:
+                    module = is_requirement.group(1)
+                    version = is_requirement.group(2)
+                    requirements_lock_map[module] = version
+                else:
+                    logger.warning(f"Unexpected requirement lock spec: {line}")
+    except Exception as e:
+        logger.warning(f"Requirements lock file does not exist or cannot be read: {e}")
+
+    required_modules_map = {}
+    for required_module in required_modules:
+        is_requirement = re.match(
+            r"^\s*([A-Za-z0-9_.-]+)(?:\s*==\s*(.+))?",
+            required_module,
+        )
+        if is_requirement:
+            module = is_requirement.group(1)
+            version = is_requirement.group(2)
+            required_modules_map[module] = version
+        else:
+            logger.warning(f"Unexpected required module spec: {required_module}")
+
+    for locked_module, locked_version in requirements_lock_map.items():
+        if locked_module in required_modules_map:
+            current_version = required_modules_map[locked_module]
+            if current_version != locked_version:
                 logger.info(
-                    "Injected tabsdata version is the same as the one already "
-                    "present in the requirements."
+                    f"Overriding version of '{locked_module}' "
+                    f"from '{current_version or 'unspecified'}' "
+                    f"to '{locked_version}'"
                 )
+                required_modules_map[locked_module] = locked_version
+        else:
+            logger.info(f"Adding '{locked_module}=={locked_version}' from lock file")
+            required_modules_map[locked_module] = locked_version
+
+    required_modules = []
+    for module, version in required_modules_map.items():
+        if version:
+            required_modules.append(f"{module}=={version}")
+        else:
+            required_modules.append(module)
+    required_modules = sorted(required_modules)
+
+    # noinspection PyListCreation
+    packages_to_inject = []
+
+    packages_to_inject.append(TABSDATA_MODULE_NAME)
+
+    if TABSDATA_AGENT_MODULE_NAME in original_tabsdata_packages:
+        packages_to_inject.append(TABSDATA_AGENT_MODULE_NAME)
+
+    for package in TABSDATA_PACKAGES:
+        if package not in [TABSDATA_MODULE_NAME, TABSDATA_AGENT_MODULE_NAME]:
+            packages_to_inject.append(package)
+
+    logger.info(
+        f"Injecting tabsdata packages {packages_to_inject} "
+        f"with version {tabsdata_version}"
+    )
+    for package in packages_to_inject:
+        if tabsdata_version is not None:
+            new_package_version = f"{package}=={tabsdata_version}"
+        else:
+            new_package_version = package
+        required_modules.append(new_package_version)
+
+    if tabsdata_version is not None:
+        current_tabsdata_modules = [
+            module
+            for module in tabsdata_modules
+            if module not in legacy_tabsdata_modules
+        ]
+        if current_tabsdata_modules:
+            logger.warning(
+                "Found tabsdata modules in the requirements: "
+                f"{current_tabsdata_modules}. "
+                "Replacing them with all current tabsdata packages with version "
+                f"{tabsdata_version}."
+            )
         else:
             logger.warning(
-                "Could not find the tabsdata module in the requirements. Injecting it"
-                " now."
+                "Could not find current tabsdata modules in the requirements. "
+                "Injecting all current tabsdata packages with version "
+                f"{tabsdata_version}."
             )
     else:
         logger.warning(
             "No tabsdata current version. Skipping version regularization..."
         )
+
     return required_modules
 
 
