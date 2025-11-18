@@ -28,6 +28,7 @@ import importlib_metadata
 import yaml
 from filelock import FileLock, Timeout
 from packaging.requirements import InvalidRequirement, Requirement
+from packaging.utils import canonicalize_name
 from yaml import MappingNode
 from yaml.constructor import ConstructorError
 
@@ -684,7 +685,7 @@ def inject_tabsdata_version(required_modules: list[str]) -> list[str]:  # noqa: 
         )
 
     original_tabsdata_packages = {
-        extract_package_name(module)
+        canonicalize_name(extract_package_name(module))
         for module in tabsdata_modules
         if extract_package_name(module) in TABSDATA_PACKAGES
     }
@@ -707,7 +708,8 @@ def inject_tabsdata_version(required_modules: list[str]) -> list[str]:  # noqa: 
                 if is_requirement:
                     module = is_requirement.group(1)
                     version = is_requirement.group(2)
-                    requirements_lock_map[module] = version
+                    canonical_module = canonicalize_name(module)
+                    requirements_lock_map[canonical_module] = version
                 else:
                     logger.warning(f"Unexpected requirement lock spec: {line}")
     except Exception as e:
@@ -722,7 +724,8 @@ def inject_tabsdata_version(required_modules: list[str]) -> list[str]:  # noqa: 
         if is_requirement:
             module = is_requirement.group(1)
             version = is_requirement.group(2)
-            required_modules_map[module] = version
+            canonical_module = canonicalize_name(module)
+            required_modules_map[canonical_module] = version
         else:
             logger.warning(f"Unexpected required module spec: {required_module}")
 
@@ -751,14 +754,17 @@ def inject_tabsdata_version(required_modules: list[str]) -> list[str]:  # noqa: 
     # noinspection PyListCreation
     packages_to_inject = []
 
-    packages_to_inject.append(TABSDATA_MODULE_NAME)
+    packages_to_inject.append(canonicalize_name(TABSDATA_MODULE_NAME))
 
-    if TABSDATA_AGENT_MODULE_NAME in original_tabsdata_packages:
-        packages_to_inject.append(TABSDATA_AGENT_MODULE_NAME)
+    if canonicalize_name(TABSDATA_AGENT_MODULE_NAME) in original_tabsdata_packages:
+        packages_to_inject.append(canonicalize_name(TABSDATA_AGENT_MODULE_NAME))
 
     for package in TABSDATA_PACKAGES:
-        if package not in [TABSDATA_MODULE_NAME, TABSDATA_AGENT_MODULE_NAME]:
-            packages_to_inject.append(package)
+        if canonicalize_name(package) not in [
+            canonicalize_name(TABSDATA_MODULE_NAME),
+            canonicalize_name(TABSDATA_AGENT_MODULE_NAME),
+        ]:
+            packages_to_inject.append(canonicalize_name(package))
 
     logger.info(
         f"Injecting tabsdata packages {packages_to_inject} "
