@@ -4,46 +4,6 @@
 
 from __future__ import annotations
 
-from polars import (
-    Boolean,
-    Categorical,
-    Date,
-    Datetime,
-    Decimal,
-    Duration,
-    Enum,
-    Float32,
-    Float64,
-    Int8,
-    Int16,
-    Int32,
-    Int64,
-    Int128,
-    Null,
-    String,
-    Time,
-    UInt8,
-    UInt16,
-    UInt32,
-    UInt64,
-)
-from polars.datatypes.classes import (
-    FloatType,
-    IntegerType,
-    NumericType,
-    SignedIntegerType,
-    TemporalType,
-    UnsignedIntegerType,
-)
-from polars.datatypes.group import (
-    FLOAT_DTYPES,
-    INTEGER_DTYPES,
-    NUMERIC_DTYPES,
-    SIGNED_INTEGER_DTYPES,
-    TEMPORAL_DTYPES,
-    UNSIGNED_INTEGER_DTYPES,
-)
-
 from tabsdata._utils.tableframe._constants import SysCol
 from tabsdata._utils.tableframe.builders import (
     empty,
@@ -56,6 +16,41 @@ from tabsdata._utils.tableframe.builders import (
     to_polars_lf,
 )
 from tabsdata.tableframe import selectors
+from tabsdata.tableframe.dtypes import (
+    FLOAT_DTYPES,
+    INTEGER_DTYPES,
+    NUMERIC_DTYPES,
+    SIGNED_INTEGER_DTYPES,
+    TEMPORAL_DTYPES,
+    UNSIGNED_INTEGER_DTYPES,
+    Boolean,
+    Categorical,
+    Date,
+    Datetime,
+    Decimal,
+    Duration,
+    Enum,
+    Float32,
+    Float64,
+    FloatType,
+    Int8,
+    Int16,
+    Int32,
+    Int64,
+    Int128,
+    IntegerType,
+    Null,
+    NumericType,
+    SignedIntegerType,
+    String,
+    TemporalType,
+    Time,
+    UInt8,
+    UInt16,
+    UInt32,
+    UInt64,
+    UnsignedIntegerType,
+)
 from tabsdata.tableframe.functions.col import Column, col
 from tabsdata.tableframe.functions.eager import concat
 from tabsdata.tableframe.functions.lit import lit
@@ -83,7 +78,6 @@ __all__ = [
     "to_pandas",
     "to_polars_df",
     "to_polars_lf",
-    # from polars (basic)...
     Boolean,
     Date,
     Datetime,
@@ -102,7 +96,6 @@ __all__ = [
     UInt16,
     UInt32,
     UInt64,
-    # from polars (advanced)...
     FLOAT_DTYPES,
     INTEGER_DTYPES,
     NUMERIC_DTYPES,

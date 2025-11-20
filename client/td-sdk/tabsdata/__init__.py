@@ -188,7 +188,6 @@ __all__ = [
     "concat",
     "lit",
     "TableFrame",
-    # from polars (basic)...
     Boolean,
     Date,
     Datetime,
@@ -208,7 +207,6 @@ __all__ = [
     UInt32,
     UInt64,
     Utf8,
-    # from polars (advanced)...
     FLOAT_DTYPES,
     INTEGER_DTYPES,
     NUMERIC_DTYPES,

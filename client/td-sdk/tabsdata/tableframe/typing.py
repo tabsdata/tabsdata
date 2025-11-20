@@ -6,14 +6,14 @@ from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
-from typing import TYPE_CHECKING, Literal, Mapping, Sequence, TypeAlias, Union
+from typing import TYPE_CHECKING, Literal, Mapping, Sequence, TypeAlias, Union, get_args
 
 import polars as pl
 
 # noinspection PyProtectedMember
 import polars._typing as pl_typing
-import polars.datatypes as pl_data_types
 
+import tabsdata.tableframe.dtypes as td_dtypes
 import tabsdata.tableframe.schema as td_schema
 
 if TYPE_CHECKING:
@@ -36,11 +36,6 @@ TableDictionary = Mapping[
             Sequence[object],
         ],
     ],
-]
-
-DataType: TypeAlias = Union[
-    pl_data_types.DataTypeClass,
-    pl.DataType,
 ]
 
 SelectorType: TypeAlias = "SelectorProxy"
@@ -114,9 +109,46 @@ Roll: TypeAlias = pl_typing.Roll
 # noinspection PyProtectedMember
 TimeUnit: TypeAlias = pl_typing.TimeUnit
 
-DataTypeClass: TypeAlias = pl_data_types.DataTypeClass
+DataType: TypeAlias = Union[
+    td_dtypes.Boolean,
+    td_dtypes.Categorical,
+    td_dtypes.Date,
+    td_dtypes.Datetime,
+    td_dtypes.Decimal,
+    td_dtypes.Duration,
+    td_dtypes.Enum,
+    td_dtypes.Float32,
+    td_dtypes.Float64,
+    td_dtypes.Int8,
+    td_dtypes.Int16,
+    td_dtypes.Int64,
+    td_dtypes.Int32,
+    td_dtypes.Int128,
+    td_dtypes.Null,
+    td_dtypes.String,
+    td_dtypes.Time,
+    td_dtypes.UInt8,
+    td_dtypes.UInt16,
+    td_dtypes.UInt32,
+    td_dtypes.UInt64,
+    td_dtypes.Utf8,
+    td_dtypes.FLOAT_DTYPES,
+    td_dtypes.INTEGER_DTYPES,
+    td_dtypes.NUMERIC_DTYPES,
+    td_dtypes.SIGNED_INTEGER_DTYPES,
+    td_dtypes.TEMPORAL_DTYPES,
+    td_dtypes.UNSIGNED_INTEGER_DTYPES,
+    td_dtypes.NumericType,
+    td_dtypes.IntegerType,
+    td_dtypes.SignedIntegerType,
+    td_dtypes.UnsignedIntegerType,
+    td_dtypes.FloatType,
+    td_dtypes.TemporalType,
+]
 
-SchemaInitDataType: TypeAlias = Union[DataType, DataTypeClass, PythonDataType]
+TF_DATA_TYPES: frozenset[type] = frozenset(get_args(DataType))
+
+SchemaInitDataType: TypeAlias = Union[DataType, PythonDataType]
 
 IntoExprColumn: TypeAlias = Union["Expr", Series, str]
 

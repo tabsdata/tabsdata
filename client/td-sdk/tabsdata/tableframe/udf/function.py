@@ -1,6 +1,7 @@
 #
 #  Copyright 2025 Tabs Data Inc.
 #
+
 import copy
 from abc import ABC, ABCMeta
 from dataclasses import dataclass
@@ -104,7 +105,7 @@ class UDF(ABC):
                 )
             if dtype is None:
                 raise ValueError(f"Column data type at index {i} cannot be None.")
-            if not isinstance(dtype, td_typing.DataType):
+            if dtype not in td_typing.TF_DATA_TYPES:
                 raise TypeError(
                     f"Column data type at index {i} must be a DataType; "
                     f"got {type(dtype).__name__} instead."
@@ -319,7 +320,7 @@ class UDF(ABC):
                     f"Column name at index {i} must be a string or None; "
                     f"got {type(c_alias).__name__} instead."
                 )
-            if c_cast is not None and not isinstance(c_cast, td_typing.DataType):
+            if c_cast is not None and c_cast not in td_typing.TF_DATA_TYPES:
                 raise TypeError(
                     f"Column data type at index {i} must be a DataType or None; "
                     f"got {type(c_cast).__name__} instead."
@@ -353,7 +354,7 @@ class UDF(ABC):
                     f"got {type(c_alias).__name__} instead."
                 )
 
-            if c_cast is not None and not isinstance(c_cast, td_typing.DataType):
+            if c_cast is not None and c_cast not in td_typing.TF_DATA_TYPES:
                 raise TypeError(
                     f"Column data type at index {i} must be a DataType or None; "
                     f"got {type(c_cast).__name__} instead."
