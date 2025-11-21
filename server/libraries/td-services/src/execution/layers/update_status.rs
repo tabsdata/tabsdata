@@ -270,8 +270,8 @@ pub async fn update_table_data_version_status(
 
                             let update = UpdateTableDataVersionDB::builder()
                                 .has_data(Some(has_data.is_some().into()))
-                                .column_count(has_data.map(|info| info.column_count.clone()))
-                                .row_count(has_data.map(|info| info.row_count.clone()))
+                                .column_count(has_data.map(|info| info.column_count))
+                                .row_count(has_data.map(|info| info.row_count))
                                 .schema_hash(has_data.map(|info| info.schema_hash.clone()))
                                 .build()?;
 

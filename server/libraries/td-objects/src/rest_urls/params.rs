@@ -100,8 +100,8 @@ impl TableSampleAtName {
             collection: table.collection.clone(),
             table: table.table.clone(),
             at: at.at.clone(),
-            offset: offset_len.offset.clone(),
-            len: offset_len.len.clone(),
+            offset: offset_len.offset,
+            len: offset_len.len,
             format: format.format.clone(),
             sql: sql.sql.clone(),
         }

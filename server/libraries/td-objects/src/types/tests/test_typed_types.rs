@@ -251,7 +251,7 @@ mod tests {
         struct NewTypedType;
 
         let typed = TypedType::default();
-        let new_typed: NewTypedType = typed.clone().try_into()?;
+        let new_typed: NewTypedType = typed.try_into()?;
         assert_eq!(*new_typed as i16, *typed);
         Ok(())
     }

@@ -225,7 +225,7 @@ pub async fn build_table_versions(
                 .clone()
                 .table_id(existing_version.table_id)
                 .name(existing_version.name.clone())
-                .function_param_pos(existing_version.function_param_pos.clone())
+                .function_param_pos(existing_version.function_param_pos)
                 .status(TableStatus::Frozen)
                 .build()?;
 
@@ -475,9 +475,9 @@ pub async fn build_dependency_versions(
                 .table_function_id(existing_version.function_id)
                 .table_id(existing_version.table_id)
                 .table_versions(existing_version.table_versions.clone())
-                .dep_pos(existing_version.dep_pos.clone())
+                .dep_pos(existing_version.dep_pos)
                 .status(DependencyStatus::Deleted)
-                .system(existing_version.system.clone())
+                .system(existing_version.system)
                 .build()?;
 
             new_dependency_versions.insert(
@@ -614,7 +614,7 @@ pub async fn build_trigger_versions(
             .trigger_by_function_id(*table_db.function_id)
             .trigger_by_table_id(table_db.table_id)
             .status(TriggerStatus::Active)
-            .system(table_db.system.clone())
+            .system(table_db.system)
             .build()?;
 
         new_trigger_versions.insert(
@@ -634,7 +634,7 @@ pub async fn build_trigger_versions(
                 .trigger_by_function_id(*existing_version.trigger_by_function_id)
                 .trigger_by_table_id(existing_version.trigger_by_table_id)
                 .status(TriggerStatus::Deleted)
-                .system(existing_version.system.clone())
+                .system(existing_version.system)
                 .build()?;
 
             new_trigger_versions.insert(

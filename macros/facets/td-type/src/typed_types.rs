@@ -370,7 +370,7 @@ pub fn typed_int<T: FromStr + ToTokens + PartialOrd>(
     let expanded = typed_numeric(input, typed, quote! { std::num::ParseIntError });
 
     let expanded = quote! {
-        #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, sqlx::Type, utoipa::ToSchema)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, sqlx::Type, utoipa::ToSchema)]
         #[sqlx(transparent)]
         #expanded
     };
@@ -385,7 +385,7 @@ pub fn typed_float<T: FromStr + ToTokens + PartialOrd>(
     let expanded = typed_numeric(input, typed, quote! { std::num::ParseFloatError });
 
     let expanded = quote! {
-        #[derive(Debug, Clone, PartialEq, PartialOrd, sqlx::Type, utoipa::ToSchema)]
+        #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, sqlx::Type, utoipa::ToSchema)]
         #[sqlx(transparent)]
         #expanded
     };
@@ -584,7 +584,7 @@ pub fn typed_bool(input: &ItemStruct, typed: Option<TypedBool>) -> proc_macro2::
 
     let expanded = quote! {
         #(#attrs)*
-        #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, sqlx::Type, utoipa::ToSchema)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, sqlx::Type, utoipa::ToSchema)]
         #[sqlx(transparent)]
         pub struct #name(bool);
 

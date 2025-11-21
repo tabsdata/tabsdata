@@ -20,7 +20,7 @@ pub async fn seed_user(db: &DbPool, name: &UserName, enabled: &UserEnabled) -> U
         .unwrap()
         .email(None)
         .password(Password::try_from("password").unwrap())
-        .enabled(enabled.clone())
+        .enabled(enabled)
         .build()
         .unwrap();
 

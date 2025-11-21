@@ -41,7 +41,7 @@ impl UpdateCreateUserDBBuilder for With<UserCreate> {
             ))?
             .try_password_set_on(&*request_time)?
             .password_must_change(true)
-            .enabled(create.enabled.clone());
+            .enabled(create.enabled);
         Ok(builder)
     }
 }

@@ -113,7 +113,7 @@ impl<'a> GraphBuilder<'a> {
             let target_index = add_if_absent(&mut graph, &mut node_map, target);
 
             let graph_output = GraphOutput::builder()
-                .output_pos(table.function_param_pos.clone())
+                .output_pos(table.function_param_pos)
                 .build()?;
             graph.add_edge(
                 source_index,
@@ -129,7 +129,7 @@ impl<'a> GraphBuilder<'a> {
             let target_index = add_if_absent(&mut graph, &mut node_map, target);
 
             let graph_dependency = GraphDependency::builder()
-                .dep_pos(dep.dep_pos.clone())
+                .dep_pos(dep.dep_pos)
                 .self_dependency(function.id == table.function_version_id)
                 .build()?;
             let versions = dep.table_versions.deref();

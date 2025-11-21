@@ -219,7 +219,7 @@ pub async fn create_locked_workers<T: WorkerMessageQueue>(
                             .location(location)
                             .input_idx(input_idx)
                             .table_pos(dependency_pos)
-                            .version_pos(req.requirement_version_pos.clone())
+                            .version_pos(req.requirement_version_pos)
                             .build()?;
 
                         input_tables_map
@@ -261,7 +261,7 @@ pub async fn create_locked_workers<T: WorkerMessageQueue>(
                         .table_version_id(table.table_version_id)
                         .table_data_version_id(table.id)
                         .location(location)
-                        .table_pos(table.function_param_pos.clone())
+                        .table_pos(table.function_param_pos)
                         .build()?;
 
                     output_tables_map.insert(*table.function_param_pos, input_table);

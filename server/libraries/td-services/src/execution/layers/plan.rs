@@ -295,7 +295,7 @@ pub async fn build_function_requirements(
             if let Some(dependency) = edge.dependency_pos() {
                 builder
                     .requirement_input_idx(InputIdx::try_from(input_idx)?)
-                    .requirement_dependency_pos(Some(dependency.clone()));
+                    .requirement_dependency_pos(Some(*dependency));
                 input_idx += 1;
             }
 

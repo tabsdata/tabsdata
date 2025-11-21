@@ -232,7 +232,7 @@ impl GraphNode {
                     .table_id(table.table_id)
                     .table_version_id(table.id)
                     .name(table.name.clone())
-                    .system(table.system.clone())
+                    .system(table.system)
                     .build()?,
             ),
         ))
@@ -251,7 +251,7 @@ impl GraphNode {
                     .table_id(table.table_id)
                     .table_version_id(table.id)
                     .name(table.name.clone())
-                    .system(table.system.clone())
+                    .system(table.system)
                     .build()?,
             ),
             GraphNode::Function(

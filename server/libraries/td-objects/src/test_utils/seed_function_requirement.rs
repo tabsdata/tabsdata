@@ -37,7 +37,7 @@ pub async fn seed_function_requirement(
         .requirement_function_run_id(requirement_function_run.map(|f| f.id))
         .requirement_table_data_version_id(requirement_table_data_version.map(|f| f.id))
         .requirement_dependency_pos(requirement_dependency_pos.cloned())
-        .requirement_version_pos(requirement_version_pos.clone())
+        .requirement_version_pos(requirement_version_pos)
         .build()
         .unwrap();
 
