@@ -6,480 +6,328 @@ pub mod apiserver;
 pub mod config;
 mod layers;
 pub mod router;
-pub mod scheduler_server;
+pub mod scheduler;
 
 use async_trait::async_trait;
-use axum::Router;
-use axum_server::Handle;
-use axum_server::tls_rustls::RustlsConfig;
-use futures::StreamExt;
-use futures::stream::FuturesUnordered;
-use http::uri::Scheme;
-use rustls::crypto::{aws_lc_rs, ring};
-use std::fmt::Debug;
-use std::net::SocketAddr;
-use std::path::{Path, PathBuf};
+use std::error::Error;
 use std::time::Duration;
-use td_common::server::{SSL_CERT_PEM_FILE, SSL_KEY_PEM_FILE};
-use td_objects::types::addresses::NonEmptyAddresses;
-use tokio::net::TcpListener;
-use tokio::task::{JoinError, JoinHandle};
+use td_common::signal::terminate;
+use td_common::status::ExitStatus;
+use tokio::sync::watch;
+use tokio::time;
 use tracing::{debug, error, info, warn};
 
-#[derive(Debug, thiserror::Error)]
-pub enum ServerError {
-    #[error("Failed to run Server in address [{0}]: {1}")]
-    Server(String, std::io::Error),
-    #[error("Failed to bind to address [{0}]: {1}")]
-    Bind(SocketAddr, std::io::Error),
-    #[error("Failed to convert listener [{0}] to std::net::TcpListener: {1}")]
-    StdTcpListener(String, std::io::Error),
-    #[error("Failed to join Server handles: {0}")]
-    JoinHandle(JoinError),
-    #[error("Failed to get the loopback port: {0}")]
-    LoopbackPort(std::io::Error),
-}
-
-/// Builder for [`Server`]. It will bind the addresses used and create the server on build.
-#[derive(Debug)]
-pub struct ServerBuilder {
-    addresses: NonEmptyAddresses,
-    router: Router,
-    ssl_folder: Option<PathBuf>,
-}
-
-impl ServerBuilder {
-    pub fn new<A: Into<NonEmptyAddresses>>(addresses: A, router: Router) -> Self {
-        Self {
-            addresses: addresses.into(),
-            router,
-            ssl_folder: None,
-        }
+/// Trait for runnable server components.
+/// All servers must implement this trait to be managed by ServerRunner.
+/// Each server should wrap its inner logic in tokio::select! to listen for shutdown signals
+/// and handle graceful shutdown. Else, the task will be force-aborted on shutdown.
+#[async_trait]
+pub trait ServerRunnable: Send + Sync {
+    fn name(&self) -> &'static str {
+        std::any::type_name::<Self>()
     }
 
-    pub fn tls<P: AsRef<Path>>(mut self, ssl_folder: P) -> Self {
-        self.ssl_folder = Some(ssl_folder.as_ref().to_path_buf());
+    async fn run(
+        self: Box<Self>,
+        shutdown: watch::Receiver<()>,
+    ) -> Result<(), Box<dyn Error + Send + Sync>>;
+}
+
+#[derive(Default)]
+pub struct ServerRunner {
+    pub servers: Vec<Box<dyn ServerRunnable>>,
+    pub graceful_timeout_secs: Option<Duration>,
+}
+
+impl ServerRunner {
+    pub fn server(mut self, server: impl ServerRunnable + 'static) -> Self {
+        self.servers.push(Box::new(server));
         self
     }
 
-    async fn bind_listeners(&self) -> Result<Vec<TcpListener>, ServerError> {
-        let mut listeners = Vec::new();
-        for addr in self.addresses.iter() {
-            match TcpListener::bind(addr).await {
-                Ok(listener) => listeners.push(listener),
-                Err(e) => Err(ServerError::Bind(*addr, e))?,
-            }
-        }
-        Ok(listeners)
+    pub fn graceful_timeout_secs(mut self, timeout: Duration) -> Self {
+        self.graceful_timeout_secs = Some(timeout);
+        self
     }
 
-    async fn load_tls(&self) -> Option<RustlsConfig> {
-        let ssl_folder = match &self.ssl_folder {
-            Some(folder) => {
-                debug!("A ssl folder was provided: '{}'", folder.display());
-                folder
-            }
-            None => {
-                warn!("A ssl folder was not provided. Protocol tls will not be available.");
-                return None;
-            }
-        };
+    pub async fn run(self) -> ExitStatus {
+        let (shutdown_tx, shutdown_rx) = shutdown_signal();
+        let mut tasks_set = Tasks::new();
 
-        let (key_path, cert_path) = if ssl_folder.exists() {
-            let key_path = ssl_folder.join(SSL_KEY_PEM_FILE);
-            let cert_path = ssl_folder.join(SSL_CERT_PEM_FILE);
-            info!(
-                "Loading tls certificates from: '{}' & '{}'",
-                cert_path.display(),
-                key_path.display()
-            );
-            (key_path, cert_path)
-        } else {
-            warn!(
-                "The ssl folder does no exist: '{:?}'. Protocol tls will not be available.",
-                self.ssl_folder
-            );
-            return None;
-        };
+        // Spawn all servers
+        for server in self.servers {
+            let server_name = server.name();
+            let shutdown_rx = shutdown_rx.clone();
 
-        if let Err(e) = aws_lc_rs::default_provider().install_default() {
-            warn!(
-                "Failed to install the aws-lc-rs tls cryptographic provider: {e:?}. Falling back to ring tls cryptographic provider."
-            );
-            if let Err(e) = ring::default_provider().install_default() {
-                info!(
-                    "Failed to install the ring tls cryptographic provider: {e:?}. Protocol tls will not be available."
-                );
-                return None;
-            } else {
-                info!("Successfully installed the ring tls cryptographic provider!");
-                println!("Successfully installed the ring tls cryptographic provider!");
-            }
-        } else {
-            info!("Successfully installed the aws-lc-rs tls cryptographic provider!");
-            println!("Successfully installed the aws-lc-rs tls cryptographic provider!");
+            tasks_set.spawn(async move {
+                debug!("Spawning server '{server_name}'");
+                let res = server.run(shutdown_rx).await;
+                debug!("Despawning finished server '{server_name}'");
+                (server_name, res)
+            });
         }
 
-        RustlsConfig::from_pem_file(cert_path, key_path)
-            .await
-            .map_err(|e| {
-                warn!("Error loading the tls certificates: {e}");
-            })
-            .ok()
-    }
+        // Monitor tasks
+        let mut any_error = false;
+        let mut cancellation_triggered = false;
 
-    pub async fn build(self) -> Result<Box<dyn Server>, ServerError> {
-        let listeners = self.bind_listeners().await?;
-        match self.load_tls().await {
-            Some(tls_config) => Ok(Box::new(TlsServer {
-                listeners,
-                tls_config,
-                router: self.router,
-            })),
-            _ => Ok(Box::new(PlainServer {
-                listeners,
-                router: self.router,
-            })),
-        }
-    }
-}
-
-#[async_trait]
-pub trait Server: Debug + Send {
-    async fn handles(
-        self: Box<Self>,
-        shutdown: tokio::sync::watch::Receiver<()>,
-    ) -> Vec<JoinHandle<Result<(), ServerError>>>;
-
-    fn listeners(&self) -> &Vec<TcpListener>;
-    fn scheme(&self) -> Scheme;
-}
-
-impl dyn Server {
-    pub async fn run(
-        self: Box<Self>,
-        shutdown: tokio::sync::watch::Receiver<()>,
-    ) -> Result<(), ServerError> {
-        let handles = self.handles(shutdown.clone()).await;
-
-        // Wrap each handle in a future that also listens the shutdown signal
-        let mut futures = FuturesUnordered::new();
-
-        for mut handle in handles {
-            let mut shutdown = shutdown.clone();
-            futures.push(tokio::spawn(async move {
-                tokio::select! {
-                    res = &mut handle => res.map_err(|e| {
-                        error!("Failed to join server handle: {}", e);
-                        ServerError::JoinHandle(e)
-                    })?,
-                    _ = shutdown.changed() => {
-                        debug!("Shutdown signal received, aborting handle");
-                        handle.abort();
-                        Ok(())
-                    }
+        while let Some(result) = tasks_set.join_next().await {
+            match result {
+                Ok((server_name, Ok(()))) => {
+                    debug!("Server '{server_name}' finished normally");
                 }
-            }));
-        }
-
-        // Await all futures, collect results
-        let mut run_result = Ok(());
-        while let Some(res) = futures.next().await {
-            match res {
-                Ok(Ok(())) => {} // handle finished successfully
-                Ok(Err(e)) => {
-                    error!("Server handle error: {}", e);
-                    run_result = Err(e); // store the last error, continue
+                Ok((server_name, Err(e))) => {
+                    any_error = true;
+                    error!("Server '{server_name}' failed with error: {e}");
+                    cancel_remaining(
+                        &mut tasks_set,
+                        &shutdown_tx,
+                        self.graceful_timeout_secs,
+                        &mut cancellation_triggered,
+                    )
+                    .await;
+                    break;
                 }
                 Err(join_err) => {
-                    error!("Task panicked or was cancelled: {:?}", join_err);
-                    run_result = Err(ServerError::JoinHandle(join_err));
+                    any_error = true;
+                    error!("Server panicked: {join_err}");
+                    cancel_remaining(
+                        &mut tasks_set,
+                        &shutdown_tx,
+                        self.graceful_timeout_secs,
+                        &mut cancellation_triggered,
+                    )
+                    .await;
+                    break;
                 }
             }
         }
-        run_result
-    }
-}
 
-#[derive(Debug)]
-pub struct PlainServer {
-    listeners: Vec<TcpListener>,
-    router: Router,
-}
-
-#[async_trait]
-impl Server for PlainServer {
-    async fn handles(
-        self: Box<Self>,
-        shutdown: tokio::sync::watch::Receiver<()>,
-    ) -> Vec<JoinHandle<Result<(), ServerError>>> {
-        let mut handles = Vec::new();
-        for listener in self.listeners {
-            let dbg_listener = format!("{listener:?}");
-
-            let router = self.router.clone();
-            let mut shutdown = shutdown.clone();
-            let handle = tokio::spawn(async move {
-                info!("Server listening on {dbg_listener}");
-
-                axum::serve(listener, router)
-                    .with_graceful_shutdown({
-                        let dbg_listener = dbg_listener.clone();
-                        async move {
-                            shutdown.changed().await.ok();
-                            debug!("Stopping server listening on {dbg_listener}");
-                        }
-                    })
-                    .await
-                    .map_err(|e| {
-                        error!("Failed to run Server listener: {}", e);
-                        ServerError::Server(dbg_listener, e)
-                    })?;
-                Ok(())
-            });
-
-            handles.push(handle);
+        if any_error {
+            error!("Server runner finished with errors");
+            ExitStatus::GeneralError
+        } else {
+            info!("Server runner finished successfully");
+            ExitStatus::Success
         }
-        handles
-    }
-
-    fn listeners(&self) -> &Vec<TcpListener> {
-        &self.listeners
-    }
-
-    fn scheme(&self) -> Scheme {
-        Scheme::HTTP
     }
 }
 
-#[derive(Debug)]
-pub struct TlsServer {
-    listeners: Vec<TcpListener>,
-    tls_config: RustlsConfig,
-    router: Router,
+// Helper to create shutdown signal receiver
+fn shutdown_signal() -> (watch::Sender<()>, watch::Receiver<()>) {
+    let (tx, rx) = watch::channel(());
+    let tx_clone = tx.clone();
+    tokio::spawn(async move {
+        terminate().await;
+        info!("Terminate signal received, sending shutdown...");
+        let _ = tx_clone.send(());
+    });
+    (tx, rx)
 }
 
-#[async_trait]
-impl Server for TlsServer {
-    async fn handles(
-        self: Box<Self>,
-        shutdown: tokio::sync::watch::Receiver<()>,
-    ) -> Vec<JoinHandle<Result<(), ServerError>>> {
-        let mut handles = Vec::new();
+type Tasks = tokio::task::JoinSet<(&'static str, Result<(), Box<dyn Error + Send + Sync>>)>;
 
-        for listener in self.listeners {
-            let dbg_listener = format!("{listener:?}");
+/// Trigger cancellation via token, wait for graceful shutdown, force-abort if timeout
+async fn cancel_remaining(
+    set: &mut Tasks,
+    shutdown_tx: &watch::Sender<()>,
+    graceful_timeout: Option<Duration>,
+    cancellation_triggered: &mut bool,
+) {
+    if !*cancellation_triggered {
+        debug!("Triggering cancellation for remaining tasks...");
+        let _ = shutdown_tx.send(());
+        *cancellation_triggered = true;
+    }
 
-            let router = self.router.clone();
-            let tls_config = self.tls_config.clone();
-            let handle = Handle::new();
-            let mut shutdown = shutdown.clone();
-
-            let handle_task = tokio::spawn(async move {
-                info!("Server listening on {dbg_listener} with TLS");
-
-                let listener = listener
-                    .into_std()
-                    .map_err(|e| ServerError::StdTcpListener(dbg_listener.clone(), e))?;
-
-                let server = axum_server::from_tcp_rustls(listener, tls_config)
-                    .handle(handle.clone())
-                    .serve(router.into_make_service());
-
-                // Graceful shutdown via the shutdown signal
-                tokio::select! {
-                    res = server => {
-                        res.map_err(|e| {
-                            error!("Failed to run server listener: {dbg_listener}");
-                            ServerError::Server(dbg_listener.clone(), e)
-                        })
+    match graceful_timeout {
+        Some(timeout) => match time::timeout(timeout, async {
+            while let Some(result) = set.join_next().await {
+                match result {
+                    Ok((server_name, Ok(_))) => {
+                        debug!("Server '{server_name}' exited gracefully after cancellation")
                     }
-                    _ = shutdown.changed() => {
-                        debug!("Shutdown signal received, stopping listener {dbg_listener}");
-                        handle.graceful_shutdown(Some(Duration::from_secs(10)));
-                        Ok(())
+                    Ok((server_name, Err(e))) => {
+                        error!("Server '{server_name}' exited after cancellation with error: {e}")
+                    }
+                    Err(e) => error!("Server failed during shutdown: {e}"),
+                }
+            }
+        })
+        .await
+        {
+            Ok(_) => info!("All remaining tasks exited gracefully after cancellation"),
+            Err(_) => {
+                warn!(
+                    "Graceful shutdown timed out after {timeout:?}, force-aborting remaining tasks..."
+                );
+                set.abort_all();
+                while let Some(result) = set.join_next().await {
+                    match result {
+                        Ok((server_name, Ok(_))) => {
+                            warn!("Server '{server_name}' completed gracefully after force-abort")
+                        }
+                        Ok((server_name, Err(e))) => {
+                            error!(
+                                "Server '{server_name}' failed after force-abort with error: {e}"
+                            )
+                        }
+                        Err(e) => {
+                            error!("Server failed after force-abort: {e}")
+                        }
                     }
                 }
-            });
-
-            handles.push(handle_task);
+                warn!("All remaining tasks force-aborted");
+            }
+        },
+        None => {
+            while let Some(result) = set.join_next().await {
+                match result {
+                    Ok((server_name, Ok(_))) => info!("Server '{server_name}' exited gracefully"),
+                    Ok((server_name, Err(e))) => {
+                        error!("Server '{server_name}' exited with error: {e}")
+                    }
+                    Err(e) => error!("Server failed during shutdown: {e}",),
+                }
+            }
+            debug!("All remaining tasks exited gracefully");
         }
-
-        handles
-    }
-
-    fn listeners(&self) -> &Vec<TcpListener> {
-        &self.listeners
-    }
-
-    fn scheme(&self) -> Scheme {
-        Scheme::HTTPS
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nonempty::nonempty;
-    use reqwest::Client;
-    use std::net::{Ipv4Addr, SocketAddr};
-    use ta_apiserver::router::RouterExtension;
-    use td_apiforge::router_ext;
-    use td_common::constants::TD_CROSS_BUILD;
-    use td_common::env::check_flag_env;
-    use td_objects::types::addresses::NonEmptyAddresses;
-    use testdir::testdir;
-    use tokio::fs;
-    use tokio::io::AsyncWriteExt;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use tokio::sync::watch;
+    use tokio::time::{Duration, sleep};
+    use tracing::Level;
+    use tracing_subscriber::FmtSubscriber;
 
-    #[router_ext(TestRouter)]
-    mod routes {
-        use ta_apiserver::status::error_status::ErrorStatus;
-        use ta_apiserver::status::ok_status::RawStatus;
-        use td_apiforge::apiserver_path;
+    // Setup logging for tests
+    fn init_tracing() {
+        let subscriber = FmtSubscriber::builder()
+            .with_max_level(Level::INFO)
+            .with_test_writer()
+            .finish();
+        let _ = tracing::subscriber::set_global_default(subscriber);
+    }
 
-        const PATH: &str = "/test";
-        const TEST_TAG: &str = "Test";
+    type RunBehavior = Arc<
+        dyn Fn(
+                watch::Receiver<()>,
+            ) -> tokio::task::JoinHandle<Result<(), Box<dyn Error + Send + Sync>>>
+            + Send
+            + Sync,
+    >;
 
-        #[apiserver_path(method = get, path = PATH, tag = TEST_TAG)]
-        async fn test() -> Result<RawStatus<String>, ErrorStatus> {
-            Ok(RawStatus::OK("test".to_string()))
+    struct MockServer {
+        run_behavior: RunBehavior,
+    }
+
+    #[async_trait]
+    impl ServerRunnable for MockServer {
+        async fn run(
+            self: Box<Self>,
+            shutdown: watch::Receiver<()>,
+        ) -> Result<(), Box<dyn Error + Send + Sync>> {
+            let fut = (self.run_behavior)(shutdown);
+            fut.await?
         }
     }
 
     #[tokio::test]
-    async fn test_server_run() {
-        let server = ServerBuilder::new(
-            NonEmptyAddresses::new(nonempty![SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 0)]),
-            TestRouter::router(()).into(),
-        )
-        .build()
-        .await
-        .unwrap();
+    async fn test_all_servers_success() {
+        init_tracing();
 
-        let addr = server.listeners().first().unwrap().local_addr().unwrap();
-        let scheme = server.scheme();
+        let servers: Vec<Box<dyn ServerRunnable>> = (0..3)
+            .map(|_| {
+                Box::new(MockServer {
+                    run_behavior: Arc::new(|mut shutdown| {
+                        tokio::spawn(async move {
+                            tokio::select! {
+                                _ = shutdown.changed() => Ok(()),
+                                _ = sleep(Duration::from_millis(50)) => Ok(()),
+                            }
+                        })
+                    }),
+                }) as Box<dyn ServerRunnable>
+            })
+            .collect();
 
-        let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
-        let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
-        let server_handle = tokio::spawn(async move {
-            let _ = ready_tx.send(());
-            server.run(shutdown_rx).await.unwrap();
-        });
-
-        ready_rx.await.expect("Failed to receive server readiness");
-
-        let response = Client::new()
-            .get(format!("{}://{}:{}/test", scheme, addr.ip(), addr.port()))
-            .send()
-            .await
-            .expect("Failed to send request");
-
-        assert_eq!(response.status(), 200);
-        let body = response.text().await.expect("Failed to read response body");
-        assert_eq!(body, "\"test\"");
-
-        shutdown_tx.send(()).unwrap();
-        server_handle.await.unwrap();
+        let runner = ServerRunner {
+            servers,
+            graceful_timeout_secs: Some(Duration::from_secs(1)),
+        };
+        let status = runner.run().await;
+        assert!(matches!(status, ExitStatus::Success));
     }
 
     #[tokio::test]
-    async fn test_tls_config_missing_files() {
-        let tls_path = testdir!();
-        let builder = ServerBuilder::new(
-            NonEmptyAddresses::new(nonempty![SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 0)]),
-            Router::new(),
-        )
-        .tls(tls_path);
-        let config = builder.load_tls().await;
-        assert!(config.is_none());
+    async fn test_server_error_triggers_cancel() {
+        init_tracing();
+
+        let error_flag = Arc::new(AtomicBool::new(false));
+
+        let servers: Vec<Box<dyn ServerRunnable>> = vec![
+            Box::new(MockServer {
+                run_behavior: {
+                    let error_flag = error_flag.clone();
+                    Arc::new(move |_shutdown| {
+                        tokio::spawn({
+                            let error_flag = error_flag.clone();
+                            async move {
+                                error_flag.store(true, Ordering::SeqCst);
+                                Err("server failed".into())
+                            }
+                        })
+                    })
+                },
+            }),
+            Box::new(MockServer {
+                run_behavior: Arc::new(|mut shutdown| {
+                    tokio::spawn(async move {
+                        tokio::select! {
+                            _ = shutdown.changed() => Ok(()),
+                            _ = sleep(Duration::from_secs(5)) => Ok(()),
+                        }
+                    })
+                }),
+            }),
+        ];
+
+        let runner = ServerRunner {
+            servers,
+            graceful_timeout_secs: Some(Duration::from_secs(1)),
+        };
+        let status = runner.run().await;
+
+        // Error from first server triggers cancellation of second
+        assert!(error_flag.load(Ordering::SeqCst));
+        assert!(matches!(status, ExitStatus::GeneralError));
     }
 
     #[tokio::test]
-    async fn test_tls_config_success() {
-        let tls_path = testdir!();
+    async fn test_graceful_timeout() {
+        init_tracing();
 
-        // Write dummy PEM files (obviously, completely invalid for real use)
-        let key_path = tls_path.join(SSL_KEY_PEM_FILE);
-        let test_key = r#"-----BEGIN PRIVATE KEY-----
-MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC8x26tzrTioLO8
-PqlcnhaKFkk+jAXc2gMzZk8/0PfIrGgtcCbf82r4OzWWUuMkJYBAHP/sljmDC1Bd
-HqNj0vmdBzOGmxoPZ0BaKmwRJ1sXskD7CuG/GM5oUzV/pe45aY+IaparAhNOkK5Y
-L0prV3P6FP484UqxSdZY4cw9ujhoE6lM+ScRsJxjqGBrhKYDEELXMGJPOOVqOyl1
-1sWsMhjTJ8X8o3A1LMPPzbF9rTICcPryUZxnuav4ND9+dX8DByv2/ddleQdX10OW
-g3Q9fi/oObBIDZF9NO92dyu4SvMBR2dBQPUXQV2GGXq8hLHfuucYacdAY4I18NyM
-0T2g46K9AgMBAAECggEABejaAeENQA/xox8KDGRwMQaaveAXxI64QsO9OjKc4yBk
-itGZN0cGjk/vhkMWKbjueh3+SVDNlZjafUPFhSKNs65N8l+Ix2Upz6Nxf8WjNXYc
-Jc+0z+zjSe2a6IylomX30I3XpXGlRZRuuhjRjqktmq1NZSip/tagehFSzww1PQAc
-yg5Q4Gd5Nq3ngHcMc+tTnYtAgK+r1c5nlNf3F6xdaO5olZAcH5kguDwz0KH9mUN6
-tmnQUjExojksMyyn6PTwph8wNZhPclFfMNgie0QMJyHEp69yKtWvfvmQjrUygTOz
-JYgOjUwV6i37RpEFhIDNUPdOxdJwDSY9qvMzsFejOQKBgQDlXmZ4R0Wl14BE6e1t
-fYbcq6heUbEo94bJtZvr1sV+8VnP2eMsG7fLxFih9yC2F4ojPS3s/ug0mkRWlDR/
-6vj12XiylQiJEwp98LWFn2x8JdSvFuSY78THwl7oHNFVLusQ5oN/gO8cN4aKOvlJ
-JUWNld3JfAuuYWCxIWJaHMP8OQKBgQDSspIxK6Q2d/gLPQ74Lgz6IBFk9r02ehlj
-bqM9Hy+X4TldiASyJtbvU78suWlBn4tuv5Yp9xFFsYCtMeWFXaPXtdN3IoBwduF8
-F9XGA3Czz0xrBekciaviXgTglxtr4UnGLpVk3SYg9JPm1wD0De28CIFa49BUksbz
-ZmqjpKaipQKBgQCutG6cYr0cCr76vqtH4HrejilaXiLwr0kNTrUKt7YKcM8V0EKG
-kD44iL9x7ogN6nQfTzQx9h7sIiy3PX+Xh2RF7nVOoNG1hrlRIA1DUCETlsUe7/MC
-wm5CMTyU045msav+XXX/ojd+aJSjqTPDkQ4fP+2E0GUdV7KMeH8vYAWvkQKBgEwY
-/sAPmRGrJsU4Wk28pCc6qc2jaBdi5gSJkx+iQdhDGirz025cpMhvoN6QYLm42+01
-+RBTEcPwJh9npBQVC/X+z895gJYd+baODUGlQHFQ77K/wb/y4Uey2WQcb2T5S2Hu
-tTpmvTyt2TVIdimvVivRjpa7LSU+leiXFvDfqOeZAoGAHqLBIXL02PVPBlitDRZa
-O09LIoG1amWrXq+Cb/zjCFTBIjlY1l4FCM61zbxjHNc8AxNprls1PEDj460+H1Wo
-336M0v1+uiHDK1XEB3ULHtxtYImBgfbv/vXu5V0wxfeKQfMuEhlgJ1k+9lm7/vjJ
-j5JcrAQs7+AoPMM8ql2UHbA=
------END PRIVATE KEY-----"#;
-        fs::File::create(&key_path)
-            .await
-            .unwrap()
-            .write_all(test_key.as_ref())
-            .await
-            .unwrap();
-        eprintln!("Key pem created in {key_path:?}");
+        let servers: Vec<Box<dyn ServerRunnable>> = vec![Box::new(MockServer {
+            run_behavior: Arc::new(|_shutdown| {
+                tokio::spawn(async move {
+                    sleep(Duration::from_secs(10)).await;
+                    Ok(())
+                })
+            }),
+        })];
 
-        let cert_path = tls_path.join(SSL_CERT_PEM_FILE);
-        let test_crt = r#"-----BEGIN CERTIFICATE-----
-MIIDDzCCAfegAwIBAgIURKOitwpZ+hf2kjUfGbCCI1uGRYEwDQYJKoZIhvcNAQEL
-BQAwFDESMBAGA1UEAwwJbG9jYWxob3N0MB4XDTI1MDYyMDEwNDExOFoXDTI1MDcy
-MDEwNDExOFowFDESMBAGA1UEAwwJbG9jYWxob3N0MIIBIjANBgkqhkiG9w0BAQEF
-AAOCAQ8AMIIBCgKCAQEAvMdurc604qCzvD6pXJ4WihZJPowF3NoDM2ZPP9D3yKxo
-LXAm3/Nq+Ds1llLjJCWAQBz/7JY5gwtQXR6jY9L5nQczhpsaD2dAWipsESdbF7JA
-+wrhvxjOaFM1f6XuOWmPiGqWqwITTpCuWC9Ka1dz+hT+POFKsUnWWOHMPbo4aBOp
-TPknEbCcY6hga4SmAxBC1zBiTzjlajspddbFrDIY0yfF/KNwNSzDz82xfa0yAnD6
-8lGcZ7mr+DQ/fnV/Awcr9v3XZXkHV9dDloN0PX4v6DmwSA2RfTTvdncruErzAUdn
-QUD1F0Fdhhl6vISx37rnGGnHQGOCNfDcjNE9oOOivQIDAQABo1kwVzAUBgNVHREE
-DTALgglsb2NhbGhvc3QwCwYDVR0PBAQDAgeAMBMGA1UdJQQMMAoGCCsGAQUFBwMB
-MB0GA1UdDgQWBBT8FtjAYGqWj7t3ItutFIcvP9k32zANBgkqhkiG9w0BAQsFAAOC
-AQEATZ3gLtqxabzUfXQePhS7v7gZ4gSZpU0F4h+kkiTcRYa59ean5SU8IIii9DqK
-6D5IE4Uc8312hgrZAg+/Y0iOSj89bROYcTRkHbC+yPRBBVuy0kZr3gmeKkFgMfyY
-KqL3o6nqLnb8FIQEFYRquuZWZIHy2BKwNPQMQo0njQjZKjbMdUcYD1WKpMIAiKOR
-rqJRg/HEdiANfvvg1Qz7XdUP/HLiCpy4nzv2/kYkH/6u3A/KQBWDfAL12iF78RY2
-jEHcboQd57qqDZUulA2XGxSoFBUjG7zXgx3u1757Z3HMcR1v+P/meXKIJ33ySe8U
-vRcg70teydPmY1fiAURFk3gl/g==
------END CERTIFICATE-----"#;
-        fs::File::create(&cert_path)
-            .await
-            .unwrap()
-            .write_all(test_crt.as_ref())
-            .await
-            .unwrap();
-        eprintln!("Certificate pem created in {cert_path:?}");
+        let runner = ServerRunner {
+            servers,
+            graceful_timeout_secs: Some(Duration::from_secs(1)),
+        };
+        let status = runner.run().await;
 
-        let builder = ServerBuilder::new(
-            NonEmptyAddresses::new(nonempty![SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 0)]),
-            Router::new(),
-        )
-        .tls(tls_path);
-        eprintln!("Builder is {builder:?}");
-        let config = builder.load_tls().await;
-        eprintln!("Config is {config:?}");
-        if check_flag_env(TD_CROSS_BUILD) {
-            eprintln!("Identified a cross runtime.");
-            eprintln!("Skipping tls load validation as execution runtime is cross.");
-        } else {
-            eprintln!("Identified a non-cross runtime.");
-            eprintln!("Proceeding the run tls load validation.");
-            assert!(config.is_some());
-        }
+        // The server will be force-aborted because it exceeds the 1 seconds timeout
+        assert!(matches!(status, ExitStatus::Success));
     }
 }

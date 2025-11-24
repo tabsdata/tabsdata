@@ -4,15 +4,13 @@
 
 use crate::scheduler::services::commit::ScheduleCommitService;
 use crate::scheduler::services::request::ScheduleRequestService;
-use getset::Getters;
 use ta_services::factory::ServiceFactory;
 
 mod commit;
 mod request;
 
-#[derive(ServiceFactory, Getters)]
-#[getset(get = "pub")]
+#[derive(ServiceFactory)]
 pub struct ScheduleServices {
-    request: ScheduleRequestService,
-    commit: ScheduleCommitService,
+    pub request: ScheduleRequestService,
+    pub commit: ScheduleCommitService,
 }

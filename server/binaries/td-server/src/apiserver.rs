@@ -3,13 +3,15 @@
 //
 
 use std::sync::Arc;
+use std::time::Duration;
 use std::{env, process};
-use td_apiserver::apiserver::ApiServerInstanceBuilder;
+use td_apiserver::ServerRunner;
+use td_apiserver::apiserver::internal::InternalServer;
+use td_apiserver::apiserver::{ApiServer, ApiServerCtx};
 use td_apiserver::config::{Config, DbSchema, Params};
-use td_apiserver::scheduler_server::SchedulerBuilder;
+use td_apiserver::scheduler::{CommitScheduler, RequestScheduler, SchedulerCtx};
 use td_common::attach::attach;
 use td_common::server::FileWorkerMessageQueue;
-use td_common::signal::terminate;
 use td_common::status::ExitStatus;
 use td_common::{about, logging};
 use td_database::sql::DbError;
@@ -159,6 +161,7 @@ fn main() {
                 }
             };
 
+            // Create storage
             let mount_defs = match config.storage_mounts() {
                 Ok(mount_def) => mount_def,
                 Err(e) => {
@@ -175,6 +178,7 @@ fn main() {
             };
             let storage = Arc::new(storage);
 
+            // Create worker message queue
             let worker_message_queue = match FileWorkerMessageQueue::new().await {
                 Ok(worker_message_queue) => worker_message_queue,
                 Err(e) => {
@@ -184,6 +188,7 @@ fn main() {
             };
             let worker_message_queue = Arc::new(worker_message_queue);
 
+            // Create runtime context
             let runtime_context = match RuntimeContext::new().await {
                 Ok(context) => Arc::new(context),
                 Err(e) => {
@@ -195,73 +200,58 @@ fn main() {
             // Create queries
             let queries = Arc::new(DaoQueries::default());
 
-            // Create and run the API server
-            let api_server = match ApiServerInstanceBuilder::new(
-                config,
+            // Create context
+            let server_context = ApiServerCtx::new(
+                config.clone(),
                 db.clone(),
                 queries.clone(),
                 storage.clone(),
-                runtime_context,
-            )
-            .build()
-            .await
-            {
+                runtime_context.clone(),
+            );
+
+            // Create required servers
+            let api_server = match ApiServer::new(&server_context).await {
                 Ok(api_server) => api_server,
                 Err(e) => {
                     error!("Error creating API Server: {}", e);
                     return ExitStatus::GeneralError;
                 }
             };
+            let internal_server = match InternalServer::new(&server_context).await {
+                Ok(internal_server) => internal_server,
+                Err(e) => {
+                    error!("Error creating Internal Server: {}", e);
+                    return ExitStatus::GeneralError;
+                }
+            };
 
-            // Create execution server
-            let internal_addresses = match api_server.internal_addresses().await {
+            // Create scheduler servers
+            let internal_addresses = match internal_server.addresses().await {
                 Ok(addresses) => Arc::new(addresses),
                 Err(e) => {
                     error!("Error retrieving internal addresses: {}", e);
                     return ExitStatus::GeneralError;
                 }
             };
-
-            let execution_server = SchedulerBuilder::new(
+            let scheduler_context = SchedulerCtx::new(
                 db.clone(),
                 queries.clone(),
                 storage.clone(),
                 worker_message_queue.clone(),
-                internal_addresses,
-            )
-            .build()
-            .await;
+                internal_addresses.clone(),
+            );
+            let request_scheduler_server = RequestScheduler::new(&scheduler_context).await;
+            let commit_scheduler_server = CommitScheduler::new(&scheduler_context).await;
 
-            // Run servers until termination signal is received
-            let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
-            tokio::spawn({
-                let shutdown_tx = shutdown_tx.clone();
-                async move {
-                    terminate().await;
-                    info!("Terminate signal received in apiserver, shutting down...");
-                    let _ = shutdown_tx.send(());
-                }
-            });
-
-            match tokio::join!(
-                execution_server.run(shutdown_rx.clone()),
-                api_server.run(shutdown_rx.clone())
-            ) {
-                (Err(e1), Err(e2)) => {
-                    error!("Error running execution server: {}", e1);
-                    error!("Error running API server: {}", e2);
-                    ExitStatus::GeneralError
-                }
-                (Err(e), _) => {
-                    error!("Error running execution server: {}", e);
-                    ExitStatus::GeneralError
-                }
-                (_, Err(e)) => {
-                    error!("Error running API server: {}", e);
-                    ExitStatus::GeneralError
-                }
-                _ => ExitStatus::Success,
-            }
+            // Start servers
+            ServerRunner::default()
+                .graceful_timeout_secs(Duration::from_secs(30))
+                .server(api_server)
+                .server(internal_server)
+                .server(request_scheduler_server)
+                .server(commit_scheduler_server)
+                .run()
+                .await
         },
         None,
         None,
