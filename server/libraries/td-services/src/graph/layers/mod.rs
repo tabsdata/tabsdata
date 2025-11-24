@@ -61,6 +61,7 @@ impl From<&TableId> for FunctionOrTable {
 // - FunctionOrTable: entrypoint for the trigger/dependency graph finder
 // - Recursion options: recursion options to find the graphs
 // Allows inter-collection authz checks is A = DO_AUTHZ
+// Generates all dependencies if D = ALL_DEPS, or only triggered functions dependencies if D = TRIGGER_ONLY_DEPS
 #[layer]
 pub fn generate_td_graph<A: DoAuthz, D: WithDependencies>() {
     layers!(

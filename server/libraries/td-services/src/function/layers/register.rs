@@ -34,9 +34,10 @@ pub enum RegisterFunctionError {
     SelfTrigger(TableTrigger) = 2,
     #[error("Trigger table '{0}' does not exist")]
     TriggerTableDoesNotExist(TableTrigger) = 3,
-
     #[error("Table '{0}' exists in collection '{1}' but is in frozen state: {2}")]
     FrozenTableAlreadyExists(TableName, CollectionName, String) = 4,
+    #[error("Cannot use private table '{0}/{1}' from another collection")]
+    PrivateTableDependency(CollectionName, TableName) = 5,
 }
 
 pub async fn data_location(
@@ -143,7 +144,7 @@ pub async fn build_table_versions(
     // Add iterators of new tables (system tables with negative pos)
     let user_tables = new_tables
         .as_deref()
-        .unwrap_or(Default::default())
+        .unwrap_or_default()
         .iter()
         .map(TableName::try_from)
         .collect::<Result<Vec<_>, _>>()?;
@@ -344,7 +345,7 @@ pub async fn build_dependency_versions(
     // Add iterators of new dependencies (dependency tables with negative pos)
     let user_dependencies = new_dependencies
         .as_deref()
-        .unwrap_or(Default::default())
+        .unwrap_or_default()
         .iter()
         .map(TableDependency::try_from)
         .collect::<Result<Vec<_>, _>>()?;
@@ -414,6 +415,14 @@ pub async fn build_dependency_versions(
                 dependency_table.clone(),
             )),
         }?;
+
+        // Validate that private tables are not being used from other collections
+        if *table_db.private && table_db.collection != *collection_in_context {
+            Err(RegisterFunctionError::PrivateTableDependency(
+                table_db.collection.clone(),
+                table_db.name.clone(),
+            ))?
+        }
 
         // Validate dependencies if we can (fixed versions should exist at registration time,
         // ranges should be older to newer, etc.). This avoids potential issues on trigger.
