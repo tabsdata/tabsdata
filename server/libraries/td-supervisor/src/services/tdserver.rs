@@ -170,7 +170,7 @@ enum Commands {
     Status(StatusArguments),
 
     #[command(about = "Tail the logs of a Tabsdata instance")]
-    Log(ControlArguments),
+    Log(LogArguments),
 
     #[command(
         name = "clean",
@@ -450,6 +450,24 @@ struct StatusOptionsArguments {
         long_help = "Option to show metrics on resources consumption too."
     )]
     metrics: bool,
+}
+
+#[derive(Debug, Clone, Getters, Args)]
+#[getset(get = "pub")]
+struct LogArguments {
+    #[command(flatten)]
+    control: ControlArguments,
+
+    #[command(flatten)]
+    options: LogOptionsArguments,
+}
+
+#[derive(Debug, Clone, Getters, Args)]
+#[getset(get = "pub")]
+struct LogOptionsArguments {
+    /// Option to show logs from start.
+    #[arg(long, name = "all", long_help = "Option to show all log contents.")]
+    all: bool,
 }
 
 #[derive(Debug, Clone, Getters, Args)]
@@ -1483,8 +1501,9 @@ fn wait(supervisor_work: PathBuf) -> bool {
     }
 }
 
-async fn command_log(arguments: ControlArguments) {
-    let supervisor_workspace = get_workspace_path_for_instance(&arguments.instance().clone());
+async fn command_log(arguments: LogArguments) {
+    let supervisor_workspace =
+        get_workspace_path_for_instance(&arguments.control().instance().clone());
 
     let mut lines = match MuxedLines::new() {
         Ok(l) => l,
@@ -1500,6 +1519,7 @@ async fn command_log(arguments: ControlArguments) {
         workspace: &PathBuf,
         known_files: &mut HashSet<PathBuf>,
         lines: &mut MuxedLines,
+        read_from_start: bool,
     ) {
         for entry in WalkDir::new(workspace).into_iter().filter_map(|e| e.ok()) {
             let entry_path = entry.path().to_path_buf();
@@ -1507,7 +1527,12 @@ async fn command_log(arguments: ControlArguments) {
                 && entry_path.extension().and_then(|ext| ext.to_str()) == Some("log")
                 && !known_files.contains(&entry_path)
             {
-                match lines.add_file(&entry_path).await {
+                let result = if read_from_start {
+                    lines.add_file_from_start(&entry_path).await
+                } else {
+                    lines.add_file(&entry_path).await
+                };
+                match result {
                     Ok(_) => {
                         info!("Watching new log file {:?}", entry_path);
                         known_files.insert(entry_path);
@@ -1523,12 +1548,21 @@ async fn command_log(arguments: ControlArguments) {
         }
     }
 
-    scan_for_new_log_files(&supervisor_workspace, &mut known_files, &mut lines).await;
+    scan_for_new_log_files(
+        &supervisor_workspace,
+        &mut known_files,
+        &mut lines,
+        arguments.options.all,
+    )
+    .await;
     let mut scan_interval = tokio::time::interval(Duration::from_secs(1));
     loop {
         tokio::select! {
             _ = scan_interval.tick() => {
-                scan_for_new_log_files(&supervisor_workspace, &mut known_files, &mut lines).await;
+                scan_for_new_log_files(
+                    &supervisor_workspace,
+                    &mut known_files, &mut lines,
+                    arguments.options.all).await;
             }
             result = lines.next_line() => {
                 if let Ok(Some(line)) = result {
