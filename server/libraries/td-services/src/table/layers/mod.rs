@@ -15,6 +15,7 @@ use td_tower::{layer, layers};
 pub mod delete;
 pub mod download;
 pub mod graph;
+pub mod list_data_versions;
 pub mod sample;
 pub mod schema;
 pub mod storage;
@@ -45,12 +46,12 @@ where
             >
         ),
         from_fn(With::<TableDBWithNames>::extract::<TableId>),
-        // Only committed transactions, at the triggered on time
+        // At the triggered on time
         from_fn(With::<AtTime>::convert_to::<TriggeredOn, _>),
         // Find the latest data version of the table ID, at that time
         from_fn(
             By::<TableId>::select_version_optional::<
-                { TableDataVersionDBWithNames::Committed },
+                { TableDataVersionDBWithNames::All },
                 TableDataVersionDBWithNames,
             >
         ),

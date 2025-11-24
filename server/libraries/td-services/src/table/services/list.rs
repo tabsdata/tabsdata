@@ -84,9 +84,10 @@ mod tests {
                 // convert them to allowed table collections
                 type_of_val(&With::<VisibleCollections>::convert_to::<VisibleTablesCollections, _>),
                 // list
+                type_of_val(&With::<ListRequest<AtTimeParam>>::extract::<ListParams>),
+                type_of_val(&With::<ListParams>::convert_to::<ListQueryParams<Table>, _>),
                 type_of_val(
                     &By::<()>::list_versions_at::<
-                        AtTimeParam,
                         VisibleTablesCollections,
                         { TableDBRead::Available },
                         Table,

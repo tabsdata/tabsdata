@@ -168,7 +168,7 @@ mod tests {
             // Find the latest data version of the table ID, at that time
             type_of_val(
                 &By::<TableId>::select_version_optional::<
-                    { TableDataVersionDBWithNames::Committed },
+                    { TableDataVersionDBWithNames::All },
                     TableDataVersionDBWithNames,
                 >,
             ),

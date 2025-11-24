@@ -4,11 +4,11 @@
 
 use crate::rest_urls::{
     AtTimeParam, CollectionParam, FileFormat, FileFormatParam, FunctionParam, SampleOffsetLenParam,
-    SqlParam, TableParam,
+    SqlParam, TableParam, UncommittedParam,
 };
 use crate::types::basic::{
     AtTime, CollectionIdName, FunctionIdName, SampleLen, SampleOffset, SchemaFieldName,
-    SchemaFieldType, Sql, TableIdName,
+    SchemaFieldType, Sql, TableIdName, UncommittedStatus,
 };
 use polars::prelude::Field;
 use td_error::TdError;
@@ -66,6 +66,30 @@ impl TableAtIdName {
             collection: table.collection.clone(),
             table: table.table.clone(),
             at: at.at.clone(),
+        }
+    }
+}
+
+#[td_type::Dlo]
+pub struct TableDataVersionAtIdName {
+    #[td_type(extractor)]
+    collection: CollectionIdName,
+    #[td_type(extractor)]
+    table: TableIdName,
+    #[td_type(extractor)]
+    at: AtTime,
+    #[builder(default)]
+    #[td_type(extractor)]
+    uncommitted: UncommittedStatus,
+}
+
+impl TableDataVersionAtIdName {
+    pub fn new(table: TableAtIdName, uncommitted_param: UncommittedParam) -> Self {
+        Self {
+            collection: table.collection.clone(),
+            table: table.table.clone(),
+            at: table.at.clone(),
+            uncommitted: uncommitted_param.uncommitted,
         }
     }
 }

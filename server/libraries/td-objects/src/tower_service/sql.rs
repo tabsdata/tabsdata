@@ -782,8 +782,8 @@ where
         result.reverse();
     }
 
-    let (previous, previous_pagination_id) = compute_previous(&list_params, &query_params, &result);
-    let (next, next_pagination_id) = compute_next(&list_params, &query_params, &result);
+    let (previous, previous_pagination_id) = compute_previous(list_params, query_params, &result);
+    let (next, next_pagination_id) = compute_next(list_params, query_params, &result);
 
     let list_response = ListResponseBuilder::default()
         .list_params(list_params.clone())

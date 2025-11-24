@@ -45,6 +45,9 @@ pub struct SysAdmin;
 #[td_type::typed(bool)]
 pub struct System;
 
+#[td_type::typed(bool(default = false))]
+pub struct UncommittedStatus;
+
 #[td_type::typed(bool(default = true))]
 pub struct UserEnabled;
 

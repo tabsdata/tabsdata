@@ -21,12 +21,12 @@ mod routes {
     use td_objects::dxo::table::{Table, TableGraphResponse};
     use td_objects::dxo::table_data_version::TableDataVersion;
     use td_objects::rest_urls::params::{
-        CollectionAtName, TableAtIdName, TableSampleAtName, TableSchema,
+        CollectionAtName, TableAtIdName, TableDataVersionAtIdName, TableSampleAtName, TableSchema,
     };
     use td_objects::rest_urls::{
         AtTimeParam, CollectionParam, DOWNLOAD_TABLE, FileFormatParam, LIST_TABLE_DATA_VERSIONS,
         LIST_TABLES, LIST_TABLES_BY_COLL, SAMPLE_TABLE, SCHEMA_TABLE, SampleOffsetLenParam,
-        SqlParam, TABLE_DELETE, TABLE_DEPENDENCY_GRAPH, TableParam,
+        SqlParam, TABLE_DELETE, TABLE_DEPENDENCY_GRAPH, TableParam, UncommittedParam,
     };
     use td_objects::stream::BoxedSyncStream;
     use td_services::table::services::TableServices;
@@ -121,8 +121,10 @@ mod routes {
         Path(table_param): Path<TableParam>,
         Query(query_params): Query<ListParams>,
         Query(at_param): Query<AtTimeParam>,
+        Query(uncommitted_status): Query<UncommittedParam>,
     ) -> Result<ListStatus<TableDataVersion>, ErrorStatus> {
         let name = TableAtIdName::new(table_param, at_param);
+        let name = TableDataVersionAtIdName::new(name, uncommitted_status);
         let request = context.list(name, query_params);
         let response = state
             .list_data_versions

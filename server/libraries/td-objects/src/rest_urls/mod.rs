@@ -7,7 +7,7 @@ pub mod params;
 use crate::types::basic::{
     AtTime, CollectionIdName, ExecutionIdName, FunctionIdName, FunctionRunId,
     InterCollectionPermissionIdName, LogsCastNumber, PermissionIdName, RoleIdName, SampleLen,
-    SampleOffset, Sql, TableIdName, TransactionIdName, UserIdName, WorkerIdName,
+    SampleOffset, Sql, TableIdName, TransactionIdName, UncommittedStatus, UserIdName, WorkerIdName,
 };
 use constcat::concat;
 use td_common::logging::LOG_EXTENSION;
@@ -213,6 +213,13 @@ pub struct SqlParam {
     #[td_type(extractor)]
     #[serde(default)]
     sql: Option<Sql>,
+}
+
+#[td_type::QueryParam]
+pub struct UncommittedParam {
+    #[td_type(extractor)]
+    #[serde(default)]
+    uncommitted: UncommittedStatus,
 }
 
 // Tables

@@ -2,13 +2,14 @@
 // Copyright 2025. Tabs Data Inc.
 //
 
+use crate::table::layers::list_data_versions::build_query_params;
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
 use td_objects::dxo::collection::CollectionDB;
-use td_objects::dxo::crudl::{ListRequest, ListResponse, RequestContext};
+use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
 use td_objects::dxo::table::TableDBWithNames;
 use td_objects::dxo::table_data_version::{TableDataVersion, TableDataVersionDBWithNames};
-use td_objects::rest_urls::params::TableAtIdName;
+use td_objects::rest_urls::params::TableDataVersionAtIdName;
 use td_objects::sql::{DaoQueries, NoListFilter};
 use td_objects::tower_service::authz::{
     AuthzOn, CollAdmin, CollDev, CollExec, CollRead, InterCollRead,
@@ -18,7 +19,7 @@ use td_objects::tower_service::from::{
 };
 use td_objects::tower_service::sql::{By, SqlListService, SqlSelectService};
 use td_objects::types::basic::{
-    AtTime, CollectionId, CollectionIdName, TableId, TableIdName, TriggeredOn,
+    AtTime, CollectionId, CollectionIdName, TableId, TableIdName, TriggeredOn, UncommittedStatus,
 };
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
@@ -26,7 +27,7 @@ use td_tower::layers;
 
 #[service_factory(
     name = TableListDataVersionsService,
-    request = ListRequest<TableAtIdName>,
+    request = ListRequest<TableDataVersionAtIdName>,
     response = ListResponse<TableDataVersion>,
     connection = ConnectionProvider,
     context = DaoQueries,
@@ -34,20 +35,22 @@ use td_tower::layers;
 )]
 fn service() {
     layers!(
-        from_fn(With::<ListRequest<TableAtIdName>>::extract::<RequestContext>),
-        from_fn(With::<ListRequest<TableAtIdName>>::extract_name::<TableAtIdName>),
+        from_fn(With::<ListRequest<TableDataVersionAtIdName>>::extract::<RequestContext>),
+        from_fn(
+            With::<ListRequest<TableDataVersionAtIdName>>::extract_name::<TableDataVersionAtIdName>
+        ),
         // find collection ID
-        from_fn(With::<TableAtIdName>::extract::<CollectionIdName>),
+        from_fn(With::<TableDataVersionAtIdName>::extract::<CollectionIdName>),
         from_fn(By::<CollectionIdName>::select::<CollectionDB>),
         from_fn(With::<CollectionDB>::extract::<CollectionId>),
         // check requester has collection permissions
         from_fn(AuthzOn::<CollectionId>::set),
         from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead, InterCollRead>::check),
         // extract at time (triggered on)
-        from_fn(With::<TableAtIdName>::extract::<AtTime>),
+        from_fn(With::<TableDataVersionAtIdName>::extract::<AtTime>),
         from_fn(With::<AtTime>::convert_to::<TriggeredOn, _>),
         // find table ID
-        from_fn(With::<TableAtIdName>::extract::<TableIdName>),
+        from_fn(With::<TableDataVersionAtIdName>::extract::<TableIdName>),
         from_fn(combine::<CollectionIdName, TableIdName>),
         from_fn(
             By::<(CollectionIdName, TableIdName)>::select_version::<
@@ -63,7 +66,7 @@ fn service() {
         from_fn(
             By::<TableId>::list_at::<
                 NoListFilter,
-                { TableDataVersionDBWithNames::Committed },
+                { TableDataVersionDBWithNames::All },
                 TableDataVersion,
             >
         ),
@@ -101,21 +104,27 @@ mod tests {
         TableListDataVersionsService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<ListRequest<TableAtIdName>, ListResponse<TableDataVersion>>(&[
-                type_of_val(&With::<ListRequest<TableAtIdName>>::extract::<RequestContext>),
-                type_of_val(&With::<ListRequest<TableAtIdName>>::extract_name::<TableAtIdName>),
+            .assert_service::<ListRequest<TableDataVersionAtIdName>, ListResponse<TableDataVersion>>(&[
+                type_of_val(
+                    &With::<ListRequest<TableDataVersionAtIdName>>::extract::<RequestContext>,
+                ),
+                type_of_val(
+                    &With::<ListRequest<TableDataVersionAtIdName>>::extract_name::<
+                        TableDataVersionAtIdName,
+                    >,
+                ),
                 // find collection ID
-                type_of_val(&With::<TableAtIdName>::extract::<CollectionIdName>),
+                type_of_val(&With::<TableDataVersionAtIdName>::extract::<CollectionIdName>),
                 type_of_val(&By::<CollectionIdName>::select::<CollectionDB>),
                 type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
                 // check requester has collection permissions
                 type_of_val(&AuthzOn::<CollectionId>::set),
                 type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead, InterCollRead>::check),
-                // extract attime
-                type_of_val(&With::<TableAtIdName>::extract::<AtTime>),
+                // extract at time (triggered on)
+                type_of_val(&With::<TableDataVersionAtIdName>::extract::<AtTime>),
                 type_of_val(&With::<AtTime>::convert_to::<TriggeredOn, _>),
                 // find table ID
-                type_of_val(&With::<TableAtIdName>::extract::<TableIdName>),
+                type_of_val(&With::<TableDataVersionAtIdName>::extract::<TableIdName>),
                 type_of_val(&combine::<CollectionIdName, TableIdName>),
                 type_of_val(
                     &By::<(CollectionIdName, TableIdName)>::select_version::<
@@ -124,14 +133,14 @@ mod tests {
                     >,
                 ),
                 type_of_val(&With::<TableDBWithNames>::extract::<TableId>),
-                // list
+                // list (set default filters if needed)
                 type_of_val(&With::<ListRequest<TableDataVersionAtIdName>>::extract::<ListParams>),
                 type_of_val(&With::<TableDataVersionAtIdName>::extract::<UncommittedStatus>),
                 type_of_val(&build_query_params),
                 type_of_val(
                     &By::<TableId>::list_at::<
                         NoListFilter,
-                        { TableDataVersionDBWithNames::Committed },
+                        { TableDataVersionDBWithNames::All },
                         TableDataVersion,
                     >,
                 ),
@@ -225,11 +234,36 @@ mod tests {
 
         let t2 = AtTime::now();
 
+        // Third uncommitted data_version
+        let execution = seed_execution(&db, &function_version).await;
+        let transaction = seed_transaction(&db, &execution, &transaction_key).await;
+        let function_run = seed_function_run(
+            &db,
+            &collection,
+            &function_version,
+            &execution,
+            &transaction,
+            &FunctionRunStatus::Done,
+        )
+        .await;
+
+        let v3 = seed_table_data_version(
+            &db,
+            &collection,
+            &execution,
+            &transaction,
+            &function_run,
+            &table_version,
+        )
+        .await;
+
+        let t3 = AtTime::now();
+
         // Actual test
         // t0 -> no versions
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
-                TableAtIdName::builder()
+                TableDataVersionAtIdName::builder()
                     .try_collection(format!("~{}", collection.id))?
                     .try_table(format!("{}", table_version.name))?
                     .at(t0)
@@ -249,7 +283,7 @@ mod tests {
         // t1 -> version v1
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
-                TableAtIdName::builder()
+                TableDataVersionAtIdName::builder()
                     .try_collection(format!("~{}", collection.id))?
                     .try_table(format!("{}", table_version.name))?
                     .at(t1)
@@ -270,7 +304,7 @@ mod tests {
         // t2 -> versions v1 and v2
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
-                TableAtIdName::builder()
+                TableDataVersionAtIdName::builder()
                     .try_collection(format!("~{}", collection.id))?
                     .try_table(format!("{}", table_version.name))?
                     .at(t2)
@@ -288,6 +322,53 @@ mod tests {
         assert_eq!(data.len(), 2);
         assert_eq!(data[0].id, v1.id);
         assert_eq!(data[1].id, v2.id);
+
+        // t3 -> versions v1 and v2 if uncommitted excluded
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
+                TableDataVersionAtIdName::builder()
+                    .try_collection(format!("~{}", collection.id))?
+                    .try_table(format!("{}", table_version.name))?
+                    .at(t3.clone())
+                    .uncommitted(false)
+                    .build()?,
+                ListParams::default(),
+            );
+
+        let service = TableListDataVersionsService::with_defaults(db.clone())
+            .service()
+            .await;
+        let response = service.raw_oneshot(request).await;
+        let response = response?;
+        let data = response.data;
+
+        assert_eq!(data.len(), 2);
+        assert_eq!(data[0].id, v1.id);
+        assert_eq!(data[1].id, v2.id);
+
+        // t3 -> version v3, v2 and v1 if uncommitted included
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
+                TableDataVersionAtIdName::builder()
+                    .try_collection(format!("~{}", collection.id))?
+                    .try_table(format!("{}", table_version.name))?
+                    .at(t3)
+                    .uncommitted(true)
+                    .build()?,
+                ListParams::default(),
+            );
+
+        let service = TableListDataVersionsService::with_defaults(db.clone())
+            .service()
+            .await;
+        let response = service.raw_oneshot(request).await;
+        let response = response?;
+        let data = response.data;
+
+        assert_eq!(data.len(), 3);
+        assert_eq!(data[0].id, v1.id);
+        assert_eq!(data[1].id, v2.id);
+        assert_eq!(data[2].id, v3.id);
 
         Ok(())
     }
