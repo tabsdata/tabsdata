@@ -57,7 +57,7 @@ impl Default for RuntimeContext {
 }
 
 #[td_error]
-pub enum RuntimeInfoError {
+enum RuntimeInfoError {
     #[error("Failed to Deserialize runtime info {0}, error: {1}")]
     ReadError(String, String) = 0,
 }

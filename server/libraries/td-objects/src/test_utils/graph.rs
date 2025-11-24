@@ -160,7 +160,6 @@ pub async fn dependency(
             .defined_on(AtTime::now())
             .defined_by_id(UserId::default())
             .collection(COLLECTION_NAME.clone())
-            .trigger_by_collection(CollectionName::try_from("test").unwrap())
             .table_collection(COLLECTION_NAME.clone())
             .system(false)
             .build()

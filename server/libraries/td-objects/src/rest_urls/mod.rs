@@ -392,3 +392,6 @@ pub struct FunctionRunParam {
 
 pub const FUNCTION_RUN_GET: &str = url!(FUNCTION_RUN);
 pub const FUNCTION_RUN_LIST: &str = url!("/function_runs");
+
+// Table graph
+pub const TABLE_DEPENDENCY_GRAPH: &str = url!(TABLE, "/dependency-graph");

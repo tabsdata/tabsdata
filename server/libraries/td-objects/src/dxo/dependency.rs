@@ -55,7 +55,6 @@ mod definitions {
     #[inherits(DependencyDB)]
     pub struct DependencyDBWithNames {
         pub collection: CollectionName,
-        pub trigger_by_collection: CollectionName,
         pub table_collection: CollectionName,
     }
 

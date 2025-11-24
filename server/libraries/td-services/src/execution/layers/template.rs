@@ -8,7 +8,7 @@ use td_error::{ApiError, TdError, api_error};
 use td_execution::{EXECUTION_GRAPH_DEPTH, ExecutionGraph, GraphBuilder, TransactionBy};
 use td_objects::dxo::crudl::handle_sql_err;
 use td_objects::dxo::dependency::DependencyDBWithNames;
-use td_objects::dxo::function::FunctionDBWithNames;
+use td_objects::dxo::function::{FunctionDB, FunctionDBWithNames};
 use td_objects::dxo::table::TableDBWithNames;
 use td_objects::dxo::trigger::TriggerDBWithNames;
 use td_objects::execution::graph::FunctionNodeBuilder;
@@ -25,7 +25,7 @@ pub async fn assert_function_status(
     if !matches!(function.status, FunctionStatus::Active) {
         Err(api_error!(
             ApiError::InputError,
-            "Function '{}' must be in an active status to execute. Current status: '{:?}'",
+            "Function '{}' must be in an active status to execute. Current status: '{}'",
             function.name,
             function.status
         ))?
@@ -49,7 +49,7 @@ pub async fn find_trigger_graph(
 
     // Find triggered functions at the given time
     let trigger_graph: Vec<TriggerDBWithNames> = queries
-        .select_recursive_versions_at_with::<{ TriggerDBWithNames::Active }, TriggerDBWithNames, { FunctionDBWithNames::DownstreamTrigger }, FunctionDBWithNames>(
+        .select_recursive_versions_at_with::<{ TriggerDBWithNames::Active }, TriggerDBWithNames, { FunctionDB::DownstreamTrigger }, FunctionDB>(
             Some(&at_time),
             Some(&at_time),
             function_id.deref(),

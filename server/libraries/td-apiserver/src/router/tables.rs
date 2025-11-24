@@ -18,7 +18,7 @@ mod routes {
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
-    use td_objects::dxo::table::Table;
+    use td_objects::dxo::table::{Table, TableGraphResponse};
     use td_objects::dxo::table_data_version::TableDataVersion;
     use td_objects::rest_urls::params::{
         CollectionAtName, TableAtIdName, TableSampleAtName, TableSchema,
@@ -26,7 +26,7 @@ mod routes {
     use td_objects::rest_urls::{
         AtTimeParam, CollectionParam, DOWNLOAD_TABLE, FileFormatParam, LIST_TABLE_DATA_VERSIONS,
         LIST_TABLES, LIST_TABLES_BY_COLL, SAMPLE_TABLE, SCHEMA_TABLE, SampleOffsetLenParam,
-        SqlParam, TABLE_DELETE, TableParam,
+        SqlParam, TABLE_DELETE, TABLE_DEPENDENCY_GRAPH, TableParam,
     };
     use td_objects::stream::BoxedSyncStream;
     use td_services::table::services::TableServices;
@@ -180,6 +180,18 @@ mod routes {
         let name = TableAtIdName::new(table_param, at_param);
         let request = context.read(name);
         let response = state.schema.service().await.oneshot(request).await?;
+        Ok(GetStatus::OK(response))
+    }
+
+    #[apiserver_path(method = get, path = TABLE_DEPENDENCY_GRAPH, tag = TABLES_TAG)]
+    #[doc = "Table dependency graph"]
+    pub async fn graph(
+        State(state): State<Arc<TableServices>>,
+        Extension(context): Extension<RequestContext>,
+        Path(table_path): Path<TableParam>,
+    ) -> Result<GetStatus<TableGraphResponse>, ErrorStatus> {
+        let request = context.read(table_path);
+        let response = state.graph.service().await.oneshot(request).await?;
         Ok(GetStatus::OK(response))
     }
 }

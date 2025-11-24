@@ -5,12 +5,16 @@
 #[td_type::dxo]
 mod definitions {
     use crate::dxo::crudl::RequestContext;
+    use crate::dxo::execution::{FunctionNodeResponse, TableNodeResponse};
     use crate::dxo::function::FunctionDB;
+    use crate::execution::graph::GraphEdge;
     use crate::types::basic::{
         AtTime, CollectionId, CollectionName, FunctionId, FunctionName, FunctionVersionId, Private,
         System, TableDataVersionId, TableFunctionParamPos, TableId, TableName, TableStatus,
         TableVersionId, UserId, UserName, Versioned,
     };
+    use crate::types::composed::TableVersions;
+    use std::collections::{HashMap, HashSet};
 
     #[td_type::Dao]
     #[dao(
@@ -104,5 +108,19 @@ mod definitions {
         pub collection_name: CollectionName,
         #[dto(list(filter, filter_like, order_by))]
         pub function_name: FunctionName,
+    }
+
+    #[td_type::Dto]
+    pub struct TableGraphResponse {
+        // central table
+        pub table: TableVersionId,
+        // functions info
+        pub all_functions: HashMap<FunctionVersionId, FunctionNodeResponse>,
+        // tables info
+        pub all_tables: HashMap<TableVersionId, TableNodeResponse>,
+        pub system_tables: HashSet<TableVersionId>,
+        pub user_tables: HashSet<TableVersionId>,
+        // relations info
+        pub relations: Vec<(FunctionVersionId, TableVersionId, GraphEdge<TableVersions>)>,
     }
 }

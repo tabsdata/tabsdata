@@ -6,6 +6,7 @@
 mod definitions {
     use crate::dxo::crudl::RequestContext;
     use crate::dxo::function::{Function, FunctionDBWithNames};
+    use crate::dxo::table::TableDBWithNames;
     use crate::dxo::table_data_version::ExecutionTableDataVersionRead;
     use crate::execution::graph::{FunctionNode, GraphEdge, TableNode};
     use crate::types::basic::{
@@ -113,21 +114,29 @@ mod definitions {
 
     #[td_type::Dto]
     #[derive(Eq, PartialEq)]
-    #[td_type(builder(try_from = FunctionNode))]
+    #[td_type(
+        builder(try_from = FunctionNode),
+        builder(try_from = FunctionDBWithNames),
+    )]
     pub struct FunctionNodeResponse {
         pub collection_id: CollectionId,
         pub collection: CollectionName,
+        #[td_type(builder(try_from = FunctionDBWithNames, field = "id"))]
         pub function_version_id: FunctionVersionId,
         pub name: FunctionName,
     }
 
     #[td_type::Dto]
     #[derive(Eq, PartialEq)]
-    #[td_type(builder(try_from = TableNode))]
+    #[td_type(
+        builder(try_from = TableNode),
+        builder(try_from = TableDBWithNames),
+    )]
     pub struct TableNodeResponse {
         pub collection_id: CollectionId,
         pub collection: CollectionName,
         pub function_version_id: FunctionVersionId,
+        #[td_type(builder(try_from = TableDBWithNames, field = "id"))]
         pub table_version_id: TableVersionId,
         pub name: TableName,
     }
