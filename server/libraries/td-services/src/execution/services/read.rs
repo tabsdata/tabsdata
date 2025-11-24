@@ -10,6 +10,7 @@ use crate::execution::layers::template::{
     build_execution_template, find_all_input_tables, find_trigger_graph,
 };
 use ta_services::factory::service_factory;
+use td_execution::TransactionBy;
 use td_objects::dxo::crudl::ReadRequest;
 use td_objects::dxo::execution::{ExecutionDB, ExecutionResponse};
 use td_objects::dxo::function::FunctionDBWithNames;
@@ -24,7 +25,6 @@ use td_objects::types::basic::{
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
-use te_execution::transaction::TransactionBy;
 
 // Very similar to trigger, but without triggering. It selects entities needed to build an execution plan.
 #[service_factory(

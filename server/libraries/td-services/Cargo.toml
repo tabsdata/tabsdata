@@ -47,7 +47,6 @@ ignored = ["openssl", "td-services", "thiserror"]
 
 ## Libraries
 
-ta-execution = { workspace = true }
 ta-services = { workspace = true }
 td-authz = { workspace = true }
 td-common = { workspace = true }
@@ -61,8 +60,6 @@ td-tableframe = { workspace = true }
 td-tower = { workspace = true }
 
 ## Extensions
-
-te-execution = { workspace = true }
 
 # External dependencies
 

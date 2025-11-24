@@ -129,7 +129,7 @@ mod tests {
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::TdError;
-    use td_execution::version_resolver::VersionResolverError;
+    use td_execution::VersionResolverError;
     use td_objects::dxo::crudl::handle_sql_err;
     use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_collection::seed_collection;

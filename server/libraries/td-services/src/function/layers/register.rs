@@ -6,7 +6,7 @@ use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
 use td_error::display_vec::DisplayVec;
 use td_error::{TdError, td_error};
-use td_execution::version_resolver::VersionResolver;
+use td_execution::VersionResolver;
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::handle_sql_err;
 use td_objects::dxo::dependency::{DependencyDB, DependencyDBBuilder};

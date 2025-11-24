@@ -13,6 +13,7 @@ use strum::{Display, EnumString, ParseError};
 use ta_services::factory::FieldAccessors;
 use td_database::sql::SqliteConfig;
 use td_error::{TdError, td_error};
+use td_execution::TransactionBy;
 use td_objects::types::addresses::{
     ApiServerAddresses, InternalServerAddresses, NonEmptyAddresses,
 };
@@ -20,7 +21,6 @@ use td_security::config::PasswordHashingConfig;
 use td_services::auth::jwt::JwtConfig;
 use td_storage::{MountDef, StorageError};
 use te_apiserver::config::{ExtendedConfig, ExtendedParams};
-use te_execution::transaction::TransactionBy;
 
 #[derive(Clone, Serialize, Deserialize, FieldAccessors)]
 pub struct Config {
