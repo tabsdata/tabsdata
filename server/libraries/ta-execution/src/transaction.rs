@@ -96,6 +96,7 @@ mod tests {
             function_version_id: Default::default(),
             triggered_on: Default::default(),
             triggered_by_id: Default::default(),
+            depth: None,
         }
     }
 

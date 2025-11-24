@@ -33,6 +33,9 @@ pub static DB_VERSION_VALUE: LazyLock<usize> = LazyLock::new(|| {
 ///
 /// The schema is defined in the `src/schemas/tabsdata` directory using Sqlx migration files
 /// created with sqlx CLI: `sqlx migrate add --source resources/schemas/tabsdata/live -r <file_name>`.
+///
+/// Note: If you find yourself adding new migrations which are not taken into account,
+/// make sure to do a cargo clean, as macro expansion might be cached.
 pub fn schema() -> &'static Migrator {
     static SCHEMA: Migrator = sqlx::migrate!("resources/schemas/tabsdata/live");
     &SCHEMA

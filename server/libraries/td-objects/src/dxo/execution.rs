@@ -9,9 +9,10 @@ mod definitions {
     use crate::dxo::table_data_version::ExecutionTableDataVersionRead;
     use crate::execution::graph::{FunctionNode, GraphEdge, TableNode};
     use crate::types::basic::{
-        AtTime, CollectionId, CollectionName, Dot, ExecutionId, ExecutionName, ExecutionStatus,
-        FunctionName, FunctionRunStatus, FunctionVersionId, StatusCount, TableDataVersionId,
-        TableName, TableVersionId, TransactionId, TriggeredOn, UserId, UserName,
+        AtTime, CollectionId, CollectionName, Depth, Dot, ExecutionId, ExecutionName,
+        ExecutionStatus, FunctionName, FunctionRunStatus, FunctionVersionId, StatusCount,
+        TableDataVersionId, TableName, TableVersionId, TransactionId, TriggeredOn, UserId,
+        UserName,
     };
     use crate::types::composed::TableVersions;
     use crate::types::status_count::FunctionRunStatusCount;
@@ -45,6 +46,9 @@ mod definitions {
         pub triggered_on: TriggeredOn,
         #[td_type(updater(try_from = RequestContext, field = "user_id"))]
         pub triggered_by_id: UserId,
+
+        #[td_type(setter)]
+        pub depth: Option<Depth>, // Added in v3
     }
 
     #[td_type::Dao]

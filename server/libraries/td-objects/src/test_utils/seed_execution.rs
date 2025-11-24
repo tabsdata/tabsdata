@@ -5,7 +5,7 @@
 use crate::dxo::execution::ExecutionDB;
 use crate::dxo::function::FunctionDB;
 use crate::sql::{DaoQueries, Insert};
-use crate::types::basic::{ExecutionName, TriggeredOn, UserId};
+use crate::types::basic::{Depth, ExecutionName, TriggeredOn, UserId};
 use td_database::sql::DbPool;
 
 pub async fn seed_execution(db: &DbPool, function_version: &FunctionDB) -> ExecutionDB {
@@ -15,6 +15,7 @@ pub async fn seed_execution(db: &DbPool, function_version: &FunctionDB) -> Execu
         .function_version_id(function_version.id)
         .triggered_on(TriggeredOn::now())
         .triggered_by_id(UserId::admin())
+        .depth(Depth::ZERO)
         .build()
         .unwrap();
 

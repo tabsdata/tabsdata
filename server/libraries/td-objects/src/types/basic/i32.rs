@@ -5,6 +5,13 @@
 #[td_type::typed(i32(default = 0))]
 pub struct DependencyPos;
 
+#[td_type::typed(i32(min = 0, default = 0))]
+pub struct Depth;
+
+impl Depth {
+    pub const ZERO: Self = Self(0);
+}
+
 #[td_type::typed(i32)]
 pub struct StatusCount;
 
