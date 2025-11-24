@@ -5,10 +5,11 @@
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
 use td_objects::dxo::collection::CollectionRead;
-use td_objects::dxo::crudl::{ListRequest, ListResponse, RequestContext};
+use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
 use td_objects::sql::DaoQueries;
+use td_objects::sql::list::ListQueryParams;
 use td_objects::tower_service::authz::NoPermissions;
-use td_objects::tower_service::from::{ExtractService, With};
+use td_objects::tower_service::from::{ExtractService, TryIntoService, With};
 use td_objects::tower_service::sql::{By, SqlListService};
 use td_objects::types::visible_collections::VisibleCollections;
 use td_tower::default_services::ConnectionProvider;
@@ -27,7 +28,9 @@ fn service() {
     layers!(
         from_fn(With::<ListRequest<()>>::extract::<RequestContext>),
         from_fn(Authz::<NoPermissions>::visible_collections),
-        from_fn(By::<()>::list::<(), VisibleCollections, CollectionRead>),
+        from_fn(With::<ListRequest<()>>::extract::<ListParams>),
+        from_fn(With::<ListParams>::convert_to::<ListQueryParams<CollectionRead>, _>),
+        from_fn(By::<()>::list::<VisibleCollections, CollectionRead>),
     )
 }
 
@@ -61,7 +64,9 @@ mod tests {
             .assert_service::<ListRequest<()>, ListResponse<CollectionRead>>(&[
                 type_of_val(&With::<ListRequest<()>>::extract::<RequestContext>),
                 type_of_val(&Authz::<NoPermissions>::visible_collections),
-                type_of_val(&By::<()>::list::<(), VisibleCollections, CollectionRead>),
+                type_of_val(&With::<ListRequest<()>>::extract::<ListParams>),
+                type_of_val(&With::<ListParams>::convert_to::<ListQueryParams<CollectionRead>, _>),
+                type_of_val(&By::<()>::list::<VisibleCollections, CollectionRead>),
             ]);
     }
 

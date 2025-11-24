@@ -3,9 +3,11 @@
 //
 
 use ta_services::factory::service_factory;
-use td_objects::dxo::crudl::{ListRequest, ListResponse};
+use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse};
 use td_objects::dxo::transaction::Transaction;
+use td_objects::sql::list::ListQueryParams;
 use td_objects::sql::{DaoQueries, NoListFilter};
+use td_objects::tower_service::from::{ExtractService, TryIntoService, With};
 use td_objects::tower_service::sql::{By, SqlListService};
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
@@ -23,7 +25,9 @@ fn service() {
         // No need for authz for this service.
 
         // List all transactions in the system.
-        from_fn(By::<()>::list::<(), NoListFilter, Transaction>),
+        from_fn(With::<ListRequest<()>>::extract::<ListParams>),
+        from_fn(With::<ListParams>::convert_to::<ListQueryParams<Transaction>, _>),
+        from_fn(By::<()>::list::<NoListFilter, Transaction>),
     )
 }
 
@@ -55,7 +59,9 @@ mod tests {
             .await
             .assert_service::<ListRequest<()>, ListResponse<Transaction>>(&[
                 // List all transactions in the system.
-                type_of_val(&By::<()>::list::<(), NoListFilter, Transaction>),
+                type_of_val(&With::<ListRequest<()>>::extract::<ListParams>),
+                type_of_val(&With::<ListParams>::convert_to::<ListQueryParams<Transaction>, _>),
+                type_of_val(&By::<()>::list::<NoListFilter, Transaction>),
             ]);
     }
 

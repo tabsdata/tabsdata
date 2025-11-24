@@ -2,9 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::dxo::crudl::{
-    ListParams, ListRequest, ListResponse, ListResponseBuilder, handle_sql_err,
-};
+use crate::dxo::crudl::{ListParams, ListResponse, ListResponseBuilder, handle_sql_err};
 use crate::sql::cte::CteQueries;
 use crate::sql::list::ListQueryParams;
 use crate::sql::{
@@ -596,42 +594,42 @@ where
 
 #[async_trait]
 pub trait SqlListService<E> {
-    async fn list<N, F, T>(
+    async fn list<F, T>(
         connection: Connection,
         queries: SrvCtx<DaoQueries>,
-        request: Input<ListRequest<N>>,
+        list_params: Input<ListParams>,
+        query_params: Input<ListQueryParams<T>>,
         list_filter_generator: Input<F>,
         by: Input<E>,
     ) -> Result<ListResponse<T>, TdError>
     where
-        N: Send + Sync + Clone,
         F: ListFilterGenerator,
         T: ListQuery + Send + Sync;
 
-    async fn list_at<N, F, const S: u8, T>(
+    async fn list_at<F, const S: u8, T>(
         connection: Connection,
         queries: SrvCtx<DaoQueries>,
-        request: Input<ListRequest<N>>,
+        list_params: Input<ListParams>,
+        query_params: Input<ListQueryParams<T>>,
         natural_order_by: Input<<<T as ListQuery>::Dao as Versioned>::Order>,
         list_filter_generator: Input<F>,
         by: Input<E>,
     ) -> Result<ListResponse<T>, TdError>
     where
-        N: Send + Sync + Clone,
         F: ListFilterGenerator,
         T: ListQuery,
         T::Dao: Versioned + States<S>;
 
-    async fn list_versions_at<N, F, const S: u8, T>(
+    async fn list_versions_at<F, const S: u8, T>(
         connection: Connection,
         queries: SrvCtx<DaoQueries>,
-        request: Input<ListRequest<N>>,
+        list_params: Input<ListParams>,
+        query_params: Input<ListQueryParams<T>>,
         natural_order_by: Input<<<T as ListQuery>::Dao as Versioned>::Order>,
         list_filter_generator: Input<F>,
         by: Input<E>,
     ) -> Result<ListResponse<T>, TdError>
     where
-        N: Send + Sync + Clone,
         F: ListFilterGenerator,
         T: ListQuery,
         T::Dao: Versioned + States<S>;
@@ -642,22 +640,20 @@ impl<E> SqlListService<E> for By<E>
 where
     for<'a> E: AsDynSqlEntities + 'a,
 {
-    async fn list<N, F, T>(
+    async fn list<F, T>(
         Connection(connection): Connection,
         SrvCtx(queries): SrvCtx<DaoQueries>,
-        Input(request): Input<ListRequest<N>>,
+        Input(list_params): Input<ListParams>,
+        Input(query_params): Input<ListQueryParams<T>>,
         Input(list_filter_generator): Input<F>,
         Input(by): Input<E>,
     ) -> Result<ListResponse<T>, TdError>
     where
-        N: Send + Sync + Clone,
         F: ListFilterGenerator,
         T: ListQuery,
     {
         let mut conn = connection.lock().await;
         let conn = conn.get_mut_connection()?;
-
-        let query_params = ListQueryParams::<T>::try_from(&request.list_params)?;
 
         let by = by.deref();
         let result: Vec<T::Dao> = queries
@@ -674,47 +670,30 @@ where
             })
             .map_err(|e| e.unwrap_or_else(|e| e))?;
 
-        let mut result = result
+        let result = result
             .iter()
             .map(T::try_from_dao)
             .collect::<Result<Vec<T>, TdError>>()?;
-
-        if request.list_params.previous.is_some() {
-            result.reverse();
-        }
-
-        let (previous, previous_pagination_id) =
-            compute_previous(&request.list_params, &query_params, &result);
-        let (next, next_pagination_id) = compute_next(&request.list_params, &query_params, &result);
-
-        let list_response = ListResponseBuilder::default()
-            .list_params(request.list_params.clone())
-            .data(result)
-            .previous_page(previous, previous_pagination_id)
-            .next_page(next, next_pagination_id)
-            .build()?;
-
+        let list_response = build_list_response(&list_params, &query_params, result)?;
         Ok(list_response)
     }
 
-    async fn list_at<N, F, const S: u8, T>(
+    async fn list_at<F, const S: u8, T>(
         Connection(connection): Connection,
         SrvCtx(queries): SrvCtx<DaoQueries>,
-        Input(request): Input<ListRequest<N>>,
+        Input(list_params): Input<ListParams>,
+        Input(query_params): Input<ListQueryParams<T>>,
         Input(natural_order_by): Input<<<T as ListQuery>::Dao as Versioned>::Order>,
         Input(list_filter_generator): Input<F>,
         Input(by): Input<E>,
     ) -> Result<ListResponse<T>, TdError>
     where
-        N: Send + Sync + Clone,
         F: ListFilterGenerator,
         T: ListQuery,
         T::Dao: Versioned + States<S>,
     {
         let mut conn = connection.lock().await;
         let conn = conn.get_mut_connection()?;
-
-        let query_params = ListQueryParams::<T>::try_from(&request.list_params)?;
 
         let by = by.deref();
         let result: Vec<T::Dao> = queries
@@ -736,47 +715,30 @@ where
             })
             .map_err(|e| e.unwrap_or_else(|e| e))?;
 
-        let mut result = result
+        let result = result
             .iter()
             .map(T::try_from_dao)
             .collect::<Result<Vec<T>, TdError>>()?;
-
-        if request.list_params.previous.is_some() {
-            result.reverse();
-        }
-
-        let (previous, previous_pagination_id) =
-            compute_previous(&request.list_params, &query_params, &result);
-        let (next, next_pagination_id) = compute_next(&request.list_params, &query_params, &result);
-
-        let list_response = ListResponseBuilder::default()
-            .list_params(request.list_params.clone())
-            .data(result)
-            .previous_page(previous, previous_pagination_id)
-            .next_page(next, next_pagination_id)
-            .build()?;
-
+        let list_response = build_list_response(&list_params, &query_params, result)?;
         Ok(list_response)
     }
 
-    async fn list_versions_at<N, F, const S: u8, T>(
+    async fn list_versions_at<F, const S: u8, T>(
         Connection(connection): Connection,
         SrvCtx(queries): SrvCtx<DaoQueries>,
-        Input(request): Input<ListRequest<N>>,
+        Input(list_params): Input<ListParams>,
+        Input(query_params): Input<ListQueryParams<T>>,
         Input(natural_order_by): Input<<<T as ListQuery>::Dao as Versioned>::Order>,
         Input(list_filter_generator): Input<F>,
         Input(by): Input<E>,
     ) -> Result<ListResponse<T>, TdError>
     where
-        N: Send + Sync + Clone,
         F: ListFilterGenerator,
         T: ListQuery,
         T::Dao: Versioned + States<S>,
     {
         let mut conn = connection.lock().await;
         let conn = conn.get_mut_connection()?;
-
-        let query_params = ListQueryParams::<T>::try_from(&request.list_params)?;
 
         let by = by.deref();
         let result: Vec<T::Dao> = queries
@@ -798,28 +760,39 @@ where
             })
             .map_err(|e| e.unwrap_or_else(|e| e))?;
 
-        let mut result = result
+        let result = result
             .iter()
             .map(T::try_from_dao)
             .collect::<Result<Vec<T>, TdError>>()?;
-
-        if request.list_params.previous.is_some() {
-            result.reverse();
-        }
-
-        let (previous, previous_pagination_id) =
-            compute_previous(&request.list_params, &query_params, &result);
-        let (next, next_pagination_id) = compute_next(&request.list_params, &query_params, &result);
-
-        let list_response = ListResponseBuilder::default()
-            .list_params(request.list_params.clone())
-            .data(result)
-            .previous_page(previous, previous_pagination_id)
-            .next_page(next, next_pagination_id)
-            .build()?;
-
+        let list_response = build_list_response(&list_params, &query_params, result)?;
         Ok(list_response)
     }
+}
+
+/// Build ListResponse from list results
+fn build_list_response<T>(
+    list_params: &ListParams,
+    query_params: &ListQueryParams<T>,
+    mut result: Vec<T>,
+) -> Result<ListResponse<T>, TdError>
+where
+    T: ListQuery,
+{
+    if list_params.previous.is_some() {
+        result.reverse();
+    }
+
+    let (previous, previous_pagination_id) = compute_previous(&list_params, &query_params, &result);
+    let (next, next_pagination_id) = compute_next(&list_params, &query_params, &result);
+
+    let list_response = ListResponseBuilder::default()
+        .list_params(list_params.clone())
+        .data(result)
+        .previous_page(previous, previous_pagination_id)
+        .next_page(next, next_pagination_id)
+        .build()?;
+
+    Ok(list_response)
 }
 
 /// Determine previous info for listing pagination
@@ -928,6 +901,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dxo::crudl::ListRequest;
     use crate::dxo::crudl::{ListParams, RequestContext};
     use crate::sql::{DaoQueries, NoListFilter};
     use crate::types::basic::{AccessTokenId, RoleId, UserId};
@@ -1254,12 +1228,15 @@ mod tests {
             UserId::admin(),
             RoleId::sys_admin(),
         )
-        .list((), ListParams::default());
+        .list::<()>((), ListParams::default());
+        let list_params = list_request.list_params;
+        let query_params = ListQueryParams::try_from(&list_params)?;
 
-        let list = By::<()>::list::<(), NoListFilter, FooDto>(
+        let list = By::<()>::list::<NoListFilter, FooDto>(
             connection,
             SrvCtx::new(DaoQueries::default()),
-            Input::new(list_request),
+            Input::new(list_params),
+            Input::new(query_params),
             Input::new(()),
             Input::new(()),
         )
@@ -1525,18 +1502,25 @@ mod tests {
             .list((), params)
         }
 
-        async fn list(db: &DbPool, request: ListRequest<()>) -> ListResponse<FooDto2> {
+        async fn list(
+            db: &DbPool,
+            request: ListRequest<()>,
+        ) -> Result<ListResponse<FooDto2>, TdError> {
             let connection =
                 Connection::new(ConnectionType::PoolConnection(db.acquire().await.unwrap()).into());
-            By::<()>::list::<(), NoListFilter, FooDto2>(
+
+            let list_params = request.list_params;
+            let query_params = ListQueryParams::try_from(&list_params)?;
+            let response = By::<()>::list::<NoListFilter, FooDto2>(
                 connection,
                 SrvCtx::new(DaoQueries::default()),
-                Input::new(request),
+                Input::new(list_params),
+                Input::new(query_params),
                 Input::new(()),
                 Input::new(()),
             )
-            .await
-            .unwrap()
+            .await?;
+            Ok(response)
         }
 
         // default, first full page
@@ -1546,7 +1530,7 @@ mod tests {
                 .order_by(Some("name".to_string()))
                 .build()?,
         );
-        let res = list(&db, req).await;
+        let res = list(&db, req).await?;
         assert_eq!(res.len, 2);
         assert!(res.previous_pagination_id.is_none());
         assert!(res.previous.is_none());
@@ -1562,7 +1546,7 @@ mod tests {
                 .pagination_id(Some("1".to_string()))
                 .build()?,
         );
-        let res = list(&db, req).await;
+        let res = list(&db, req).await?;
         assert_eq!(res.len, 2);
         assert_eq!(res.previous_pagination_id, Some("2".to_string()));
         assert_eq!(res.previous, Some("C".to_string()));
@@ -1578,7 +1562,7 @@ mod tests {
                 .pagination_id(Some("3".to_string()))
                 .build()?,
         );
-        let res = list(&db, req).await;
+        let res = list(&db, req).await?;
         assert_eq!(res.len, 1);
         assert_eq!(res.previous_pagination_id, Some("4".to_string()));
         assert_eq!(res.previous, Some("E".to_string()));
@@ -1594,7 +1578,7 @@ mod tests {
                 .pagination_id(Some("4".to_string()))
                 .build()?,
         );
-        let res = list(&db, req).await;
+        let res = list(&db, req).await?;
         assert_eq!(res.len, 2);
         assert_eq!(res.previous_pagination_id, Some("2".to_string()));
         assert_eq!(res.previous, Some("C".to_string()));
@@ -1610,7 +1594,7 @@ mod tests {
                 .pagination_id(Some("2".to_string()))
                 .build()?,
         );
-        let res = list(&db, req).await;
+        let res = list(&db, req).await?;
         assert_eq!(res.len, 2);
         assert_eq!(res.previous_pagination_id, Some("0".to_string()));
         assert_eq!(res.previous, Some("A".to_string()));
@@ -1626,7 +1610,7 @@ mod tests {
                 .pagination_id(Some("A".to_string()))
                 .build()?,
         );
-        let res = list(&db, req).await;
+        let res = list(&db, req).await?;
         assert_eq!(res.len, 0);
         assert!(res.previous_pagination_id.is_none());
         assert!(res.previous.is_none());
@@ -1648,18 +1632,25 @@ mod tests {
             .list((), params)
         }
 
-        async fn list(db: &DbPool, request: ListRequest<()>) -> ListResponse<FooDto2> {
+        async fn list(
+            db: &DbPool,
+            request: ListRequest<()>,
+        ) -> Result<ListResponse<FooDto2>, TdError> {
             let connection =
                 Connection::new(ConnectionType::PoolConnection(db.acquire().await.unwrap()).into());
-            By::<()>::list::<(), NoListFilter, FooDto2>(
+
+            let list_params = request.list_params;
+            let query_params = ListQueryParams::try_from(&list_params)?;
+            let response = By::<()>::list::<NoListFilter, FooDto2>(
                 connection,
                 SrvCtx::new(DaoQueries::default()),
-                Input::new(request),
+                Input::new(list_params),
+                Input::new(query_params),
                 Input::new(()),
                 Input::new(()),
             )
-            .await
-            .unwrap()
+            .await?;
+            Ok(response)
         }
 
         // default, first full page
@@ -1669,7 +1660,7 @@ mod tests {
                 .order_by(Some("name-".to_string()))
                 .build()?,
         );
-        let res = list(&db, req).await;
+        let res = list(&db, req).await?;
         assert_eq!(res.len, 2);
         assert!(res.previous_pagination_id.is_none());
         assert!(res.previous.is_none());
@@ -1685,7 +1676,7 @@ mod tests {
                 .pagination_id(Some("3".to_string()))
                 .build()?,
         );
-        let res = list(&db, req).await;
+        let res = list(&db, req).await?;
         assert_eq!(res.len, 2);
         assert_eq!(res.previous_pagination_id, Some("2".to_string()));
         assert_eq!(res.previous, Some("C".to_string()));
@@ -1701,7 +1692,7 @@ mod tests {
                 .pagination_id(Some("1".to_string()))
                 .build()?,
         );
-        let res = list(&db, req).await;
+        let res = list(&db, req).await?;
         assert_eq!(res.len, 1);
         assert_eq!(res.previous_pagination_id, Some("0".to_string()));
         assert_eq!(res.previous, Some("A".to_string()));
@@ -1717,7 +1708,7 @@ mod tests {
                 .pagination_id(Some("0".to_string()))
                 .build()?,
         );
-        let res = list(&db, req).await;
+        let res = list(&db, req).await?;
         assert_eq!(res.len, 2);
         assert_eq!(res.previous_pagination_id, Some("2".to_string()));
         assert_eq!(res.previous, Some("C".to_string()));
@@ -1733,7 +1724,7 @@ mod tests {
                 .pagination_id(Some("2".to_string()))
                 .build()?,
         );
-        let res = list(&db, req).await;
+        let res = list(&db, req).await?;
         assert_eq!(res.len, 2);
         assert_eq!(res.previous_pagination_id, Some("4".to_string()));
         assert_eq!(res.previous, Some("E".to_string()));
@@ -1749,7 +1740,7 @@ mod tests {
                 .pagination_id(Some("4".to_string()))
                 .build()?,
         );
-        let res = list(&db, req).await;
+        let res = list(&db, req).await?;
         assert_eq!(res.len, 0);
         assert!(res.previous_pagination_id.is_none());
         assert!(res.previous.is_none());

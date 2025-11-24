@@ -5,12 +5,15 @@
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
 use td_objects::dxo::collection::CollectionDB;
-use td_objects::dxo::crudl::{ListRequest, ListResponse, RequestContext};
+use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
 use td_objects::dxo::function::{Function, FunctionDBWithNames};
 use td_objects::rest_urls::params::FunctionAtIdName;
+use td_objects::sql::list::ListQueryParams;
 use td_objects::sql::{DaoQueries, NoListFilter};
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead};
-use td_objects::tower_service::from::{ExtractNameService, ExtractService, With, combine};
+use td_objects::tower_service::from::{
+    ExtractNameService, ExtractService, TryIntoService, With, combine,
+};
 use td_objects::tower_service::sql::{By, SqlListService, SqlSelectService};
 use td_objects::types::basic::{
     AtTime, CollectionId, CollectionIdName, FunctionId, FunctionIdName,
@@ -52,13 +55,10 @@ fn service() {
         from_fn(With::<FunctionDBWithNames>::extract::<FunctionId>),
         // List (all active versions at the time). Here we want the history, so we do not want
         // to query the versioned view.
+        from_fn(With::<ListRequest<FunctionAtIdName>>::extract::<ListParams>),
+        from_fn(With::<ListParams>::convert_to::<ListQueryParams<Function>, _>),
         from_fn(
-            By::<FunctionId>::list_at::<
-                FunctionAtIdName,
-                NoListFilter,
-                { FunctionDBWithNames::Available },
-                Function,
-            >
+            By::<FunctionId>::list_at::<NoListFilter, { FunctionDBWithNames::Available }, Function>
         ),
     )
 }
@@ -116,9 +116,10 @@ mod tests {
                 type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
                 // List (all active versions at the time). Here we want the history, so we do not want
                 // to query the versioned view.
+                type_of_val(&With::<ListRequest<FunctionAtIdName>>::extract::<ListParams>),
+                type_of_val(&With::<ListParams>::convert_to::<ListQueryParams<Function>, _>),
                 type_of_val(
                     &By::<FunctionId>::list_at::<
-                        FunctionAtIdName,
                         NoListFilter,
                         { FunctionDBWithNames::Available },
                         Function,

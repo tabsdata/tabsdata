@@ -173,6 +173,7 @@ pub struct ListRequest<N: Clone> {
     pub context: RequestContext,
     #[td_type(extractor)]
     pub name: Name<N>,
+    #[td_type(extractor)]
     pub list_params: ListParams,
 }
 

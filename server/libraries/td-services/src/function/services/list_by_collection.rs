@@ -5,12 +5,13 @@
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
 use td_objects::dxo::collection::CollectionDB;
-use td_objects::dxo::crudl::{ListRequest, ListResponse, RequestContext};
+use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
 use td_objects::dxo::function::{Function, FunctionDBWithNames};
 use td_objects::rest_urls::params::CollectionAtName;
+use td_objects::sql::list::ListQueryParams;
 use td_objects::sql::{DaoQueries, NoListFilter};
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead};
-use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
+use td_objects::tower_service::from::{ExtractNameService, ExtractService, TryIntoService, With};
 use td_objects::tower_service::sql::{By, SqlListService, SqlSelectService};
 use td_objects::types::basic::{AtTime, CollectionId, CollectionIdName};
 use td_tower::default_services::ConnectionProvider;
@@ -39,9 +40,10 @@ fn service() {
         // extract attime (natural order)
         from_fn(With::<CollectionAtName>::extract::<AtTime>),
         // list
+        from_fn(With::<ListRequest<CollectionAtName>>::extract::<ListParams>),
+        from_fn(With::<ListParams>::convert_to::<ListQueryParams<Function>, _>),
         from_fn(
             By::<CollectionId>::list_versions_at::<
-                CollectionAtName,
                 NoListFilter,
                 { FunctionDBWithNames::Available },
                 Function,
@@ -92,9 +94,10 @@ mod tests {
                 // extract attime (natural order)
                 type_of_val(&With::<CollectionAtName>::extract::<AtTime>),
                 // list
+                type_of_val(&With::<ListRequest<CollectionAtName>>::extract::<ListParams>),
+                type_of_val(&With::<ListParams>::convert_to::<ListQueryParams<Function>, _>),
                 type_of_val(
                     &By::<CollectionId>::list_versions_at::<
-                        CollectionAtName,
                         NoListFilter,
                         { FunctionDBWithNames::Available },
                         Function,

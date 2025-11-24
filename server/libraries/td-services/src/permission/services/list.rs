@@ -4,13 +4,14 @@
 
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
-use td_objects::dxo::crudl::{ListRequest, ListResponse, RequestContext};
+use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
 use td_objects::dxo::permission::Permission;
 use td_objects::dxo::role::RoleDB;
 use td_objects::rest_urls::RoleParam;
+use td_objects::sql::list::ListQueryParams;
 use td_objects::sql::{DaoQueries, NoListFilter};
 use td_objects::tower_service::authz::{AuthzOn, Requester, SecAdmin, SystemOrRoleId};
-use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
+use td_objects::tower_service::from::{ExtractNameService, ExtractService, TryIntoService, With};
 use td_objects::tower_service::sql::{By, SqlListService, SqlSelectService};
 use td_objects::types::basic::{RoleId, RoleIdName};
 use td_tower::default_services::ConnectionProvider;
@@ -34,7 +35,9 @@ fn service() {
         from_fn(With::<RoleDB>::extract::<RoleId>),
         from_fn(AuthzOn::<SystemOrRoleId>::set),
         from_fn(Authz::<SecAdmin, Requester>::check),
-        from_fn(By::<RoleId>::list::<RoleParam, NoListFilter, Permission>),
+        from_fn(With::<ListRequest<RoleParam>>::extract::<ListParams>),
+        from_fn(With::<ListParams>::convert_to::<ListQueryParams<Permission>, _>),
+        from_fn(By::<RoleId>::list::<NoListFilter, Permission>),
     )
 }
 
@@ -69,7 +72,9 @@ mod tests {
                 type_of_val(&With::<RoleDB>::extract::<RoleId>),
                 type_of_val(&AuthzOn::<SystemOrRoleId>::set),
                 type_of_val(&Authz::<SecAdmin, Requester>::check),
-                type_of_val(&By::<RoleId>::list::<RoleParam, NoListFilter, Permission>),
+                type_of_val(&With::<ListRequest<RoleParam>>::extract::<ListParams>),
+                type_of_val(&With::<ListParams>::convert_to::<ListQueryParams<Permission>, _>),
+                type_of_val(&By::<RoleId>::list::<NoListFilter, Permission>),
             ]);
     }
 

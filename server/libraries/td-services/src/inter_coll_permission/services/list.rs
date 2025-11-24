@@ -5,12 +5,13 @@
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
 use td_objects::dxo::collection::CollectionDB;
-use td_objects::dxo::crudl::{ListRequest, ListResponse, RequestContext};
+use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
 use td_objects::dxo::inter_collection_permission::InterCollectionPermission;
 use td_objects::rest_urls::CollectionParam;
+use td_objects::sql::list::ListQueryParams;
 use td_objects::sql::{DaoQueries, NoListFilter};
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, SecAdmin};
-use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
+use td_objects::tower_service::from::{ExtractNameService, ExtractService, TryIntoService, With};
 use td_objects::tower_service::sql::{By, SqlListService, SqlSelectService};
 use td_objects::types::basic::{CollectionId, CollectionIdName};
 use td_tower::default_services::TransactionProvider;
@@ -37,9 +38,9 @@ fn service() {
         from_fn(AuthzOn::<CollectionId>::set),
         from_fn(Authz::<SecAdmin, CollAdmin>::check),
         // get list of permissions
-        from_fn(
-            By::<CollectionId>::list::<CollectionParam, NoListFilter, InterCollectionPermission>
-        ),
+        from_fn(With::<ListRequest<CollectionParam>>::extract::<ListParams>),
+        from_fn(With::<ListParams>::convert_to::<ListQueryParams<InterCollectionPermission>, _>),
+        from_fn(By::<CollectionId>::list::<NoListFilter, InterCollectionPermission>),
     )
 }
 
@@ -80,7 +81,9 @@ mod tests {
                 type_of_val(&Authz::<SecAdmin, CollAdmin>::check),
 
                 // get list of permissions
-                type_of_val(&By::<CollectionId>::list::<CollectionParam, NoListFilter, InterCollectionPermission>),
+                type_of_val(&With::<ListRequest<CollectionParam>>::extract::<ListParams>),
+                type_of_val(&With::<ListParams>::convert_to::<ListQueryParams<InterCollectionPermission>, _>),
+                type_of_val(&By::<CollectionId>::list::<NoListFilter, InterCollectionPermission>),
             ]);
     }
 

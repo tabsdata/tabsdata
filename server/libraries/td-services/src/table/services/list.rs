@@ -4,10 +4,11 @@
 
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
-use td_objects::dxo::crudl::{ListRequest, ListResponse, RequestContext};
+use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
 use td_objects::dxo::table::{Table, TableDBRead};
 use td_objects::rest_urls::AtTimeParam;
 use td_objects::sql::DaoQueries;
+use td_objects::sql::list::ListQueryParams;
 use td_objects::tower_service::authz::{CollAdmin, CollDev, CollExec, CollRead};
 use td_objects::tower_service::from::{ExtractNameService, ExtractService, TryIntoService, With};
 use td_objects::tower_service::sql::{By, SqlListService};
@@ -35,13 +36,10 @@ fn service() {
         // convert them to allowed table collections
         from_fn(With::<VisibleCollections>::convert_to::<VisibleTablesCollections, _>),
         // list
+        from_fn(With::<ListRequest<AtTimeParam>>::extract::<ListParams>),
+        from_fn(With::<ListParams>::convert_to::<ListQueryParams<Table>, _>),
         from_fn(
-            By::<()>::list_versions_at::<
-                AtTimeParam,
-                VisibleTablesCollections,
-                { TableDBRead::Available },
-                Table,
-            >
+            By::<()>::list_versions_at::<VisibleTablesCollections, { TableDBRead::Available }, Table>
         ),
     )
 }

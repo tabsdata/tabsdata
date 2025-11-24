@@ -404,6 +404,7 @@ where
     }
 }
 
+#[derive(Debug)]
 pub enum Pagination {
     Previous(Box<dyn SqlEntity>, Box<dyn SqlEntity>),
     Next(Box<dyn SqlEntity>, Box<dyn SqlEntity>),
@@ -425,6 +426,7 @@ impl Pagination {
     }
 }
 
+#[derive(Debug)]
 pub struct ListQueryParams<D: ListQuery> {
     pub len: usize,
     pub conditions: AndConditions<D>,

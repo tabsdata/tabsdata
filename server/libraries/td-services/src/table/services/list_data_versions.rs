@@ -56,10 +56,12 @@ fn service() {
             >
         ),
         from_fn(With::<TableDBWithNames>::extract::<TableId>),
-        // list
+        // list (set default filters if needed)
+        from_fn(With::<ListRequest<TableDataVersionAtIdName>>::extract::<ListParams>),
+        from_fn(With::<TableDataVersionAtIdName>::extract::<UncommittedStatus>),
+        from_fn(build_query_params),
         from_fn(
             By::<TableId>::list_at::<
-                TableAtIdName,
                 NoListFilter,
                 { TableDataVersionDBWithNames::Committed },
                 TableDataVersion,
@@ -123,9 +125,11 @@ mod tests {
                 ),
                 type_of_val(&With::<TableDBWithNames>::extract::<TableId>),
                 // list
+                type_of_val(&With::<ListRequest<TableDataVersionAtIdName>>::extract::<ListParams>),
+                type_of_val(&With::<TableDataVersionAtIdName>::extract::<UncommittedStatus>),
+                type_of_val(&build_query_params),
                 type_of_val(
                     &By::<TableId>::list_at::<
-                        TableAtIdName,
                         NoListFilter,
                         { TableDataVersionDBWithNames::Committed },
                         TableDataVersion,

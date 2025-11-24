@@ -4,11 +4,12 @@
 
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
-use td_objects::dxo::crudl::{ListRequest, ListResponse, RequestContext};
+use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
 use td_objects::dxo::role::Role;
+use td_objects::sql::list::ListQueryParams;
 use td_objects::sql::{DaoQueries, NoListFilter};
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, SecAdmin, System};
-use td_objects::tower_service::from::{ExtractService, With};
+use td_objects::tower_service::from::{ExtractService, TryIntoService, With};
 use td_objects::tower_service::sql::{By, SqlListService};
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
@@ -27,7 +28,9 @@ fn service() {
         from_fn(With::<ListRequest<()>>::extract::<RequestContext>),
         from_fn(AuthzOn::<System>::set),
         from_fn(Authz::<SecAdmin, CollAdmin>::check),
-        from_fn(By::<()>::list::<(), NoListFilter, Role>),
+        from_fn(With::<ListRequest<()>>::extract::<ListParams>),
+        from_fn(With::<ListParams>::convert_to::<ListQueryParams<Role>, _>),
+        from_fn(By::<()>::list::<NoListFilter, Role>),
     )
 }
 
@@ -56,7 +59,9 @@ mod tests {
                 type_of_val(&With::<ListRequest<()>>::extract::<RequestContext>),
                 type_of_val(&AuthzOn::<System>::set),
                 type_of_val(&Authz::<SecAdmin, CollAdmin>::check),
-                type_of_val(&By::<()>::list::<(), NoListFilter, Role>),
+                type_of_val(&With::<ListRequest<()>>::extract::<ListParams>),
+                type_of_val(&With::<ListParams>::convert_to::<ListQueryParams<Role>, _>),
+                type_of_val(&By::<()>::list::<NoListFilter, Role>),
             ]);
     }
 
