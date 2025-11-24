@@ -17,7 +17,6 @@ import platform
 import re
 import shutil
 import subprocess
-import sysconfig
 import tempfile
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
