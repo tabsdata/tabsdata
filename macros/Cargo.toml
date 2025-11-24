@@ -92,20 +92,11 @@ path = "helpers/td-shared"
 
 # External dependencies
 
-[workspace.dependencies.axum]
-version = "0.8.6"
-
 [workspace.dependencies.darling]
 version = "0.21.3"
 
-[workspace.dependencies.derive_builder]
-version = "0.20.2"
-
 [workspace.dependencies.duct]
 version = "1.1.1"
-
-[workspace.dependencies.getset]
-version = "0.1.6"
 
 [workspace.dependencies.openssl]
 version = "0.10.75"
@@ -140,9 +131,6 @@ version = "0.9.8"
 [workspace.dependencies.utoipa]
 version = "5.4.0"
 features = ["axum_extras", "preserve_order"]
-
-[workspace.dependencies.walkdir]
-version = "2.5.0"
 
 [build-dependencies]
 

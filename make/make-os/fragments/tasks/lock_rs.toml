@@ -19,12 +19,6 @@ script = [
 
     debug "🚀 cargo update --verbose -p planus --precise 1.1.1"
     exit_code = exec --get-exit-code cargo update --verbose -p planus --precise 1.1.1
-
-    debug "🚀 cargo update --verbose -p hyper-util --precise 0.1.17"
-    exit_code = exec --get-exit-code cargo update --verbose -p hyper-util --precise 0.1.17
-
-    debug "🚀 cargo update --verbose -p hyper --precise 1.7.0"
-    exit_code = exec --get-exit-code cargo update --verbose -p hyper --precise 1.7.0
     ''']
 
 
@@ -45,12 +39,6 @@ script = [
 
     debug "🚀 cargo update --verbose -p planus --precise 1.1.1"
     exit_code = exec --get-exit-code cargo update --verbose -p planus --precise 1.1.1
-
-    debug "🚀 cargo update --verbose -p hyper-util --precise 0.1.17"
-    exit_code = exec --get-exit-code cargo update --verbose -p hyper-util --precise 0.1.17
-
-    debug "🚀 cargo update --verbose -p hyper --precise 1.7.0"
-    exit_code = exec --get-exit-code cargo update --verbose -p hyper --precise 1.7.0
     ''']
 
 [tasks.__os__lock_rs_expansions]
@@ -70,10 +58,4 @@ script = [
 
     debug "🚀 cargo update --verbose -p planus --precise 1.1.1"
     exit_code = exec --get-exit-code cargo update --verbose -p planus --precise 1.1.1
-
-    debug "🚀 cargo update --verbose -p hyper-util --precise 0.1.17"
-    exit_code = exec --get-exit-code cargo update --verbose -p hyper-util --precise 0.1.17
-
-    debug "🚀 cargo update --verbose -p hyper --precise 1.7.0"
-    exit_code = exec --get-exit-code cargo update --verbose -p hyper --precise 1.7.0
     ''']

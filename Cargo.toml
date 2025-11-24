@@ -277,16 +277,16 @@ version = "0.1.89"
 version = "0.3.0"
 
 [workspace.dependencies.axum]
-version = "0.8.6"
+version = "0.8.7"
 
 [workspace.dependencies.axum-embed]
 version = "0.1.0"
 
 [workspace.dependencies.axum-extra]
-version = "0.12.1"
+version = "0.12.2"
 
 [workspace.dependencies.axum-server]
-version = "0.7.2"
+version = "0.7.3"
 
 [workspace.dependencies.base64]
 version = "0.22.1"
@@ -365,9 +365,6 @@ version = "0.74.1"
 
 [workspace.dependencies.glob]
 version = "0.3.3"
-
-[workspace.dependencies.graphviz-rust]
-version = "0.9.6"
 
 [workspace.dependencies.hex]
 version = "0.4.3"
