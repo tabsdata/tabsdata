@@ -130,9 +130,9 @@ class TestimonyData:
 
 
 DEBUG_PACKAGES = [
-    "gTTS",
+    "gtts",
     "pydevd",
-    "pydevd_pycharm",
+    "pydevd-pycharm",
     "pygame",
 ]
 
@@ -1503,30 +1503,22 @@ def get_tabsdata_package_metadata(
         )
     try:
         packages = {
-            dist.metadata["Name"]: dist.version
+            canonicalize_name(dist.metadata["Name"]): dist.version
             for dist in importlib.metadata.distributions()
         }
-        if module not in packages:
+        if canonicalize_name(module) not in packages:
             return (
                 None,
                 None,
             )
-        distribution = importlib.metadata.distribution(module)
-        site_packages = pathlib.Path(sysconfig.get_paths()["purelib"])
-        direct_url_file = pathlib.Path(
-            os.path.join(
-                site_packages,
-                f"{module}-{distribution.version}.dist-info",
-                "direct_url.json",
-            )
-        )
-        if not direct_url_file.exists():
+        distribution = importlib.metadata.distribution(canonicalize_name(module))
+        direct_url_content = distribution.read_text("direct_url.json")
+        if direct_url_content is None:
             return (
                 "Package",
                 None,
             )
-        with direct_url_file.open() as f:
-            direct_url_data = json.load(f)
+        direct_url_data = json.loads(direct_url_content)
         provider, location = extract_from_direct_url_data(direct_url_data)
         return (
             provider,

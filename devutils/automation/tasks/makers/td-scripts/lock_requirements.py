@@ -12,6 +12,8 @@ from os import getcwd
 from pathlib import Path
 from types import ModuleType
 
+from packaging.utils import canonicalize_name
+
 # noinspection PyPackageRequirements
 from tomlkit import array, dumps, parse, table
 
@@ -189,7 +191,7 @@ def lock_requirements_dev_first_party(
     ]
 
     for c_r, c_n in sorted(connectors):
-        dev_lines.append(f"{c_n}[deps]=={TABSDATA_VERSION}\n")
+        dev_lines.append(f"{canonicalize_name(c_n)}[deps]=={TABSDATA_VERSION}\n")
 
     with open(
         os.path.join(root, "requirements", "requirements-dev-first-party.txt"), "w"
@@ -210,7 +212,7 @@ def lock_requirements_first_party(
     ]
 
     for c_r, c_n in sorted(connectors):
-        dev_lines.append(f"{c_n}=={TABSDATA_VERSION}\n")
+        dev_lines.append(f"{canonicalize_name(c_n)}=={TABSDATA_VERSION}\n")
 
     with open(
         os.path.join(root, "requirements", "requirements-first-party.txt"), "w"

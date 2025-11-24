@@ -17,11 +17,11 @@ TABSDATA_CONNECTORS_NAMES = [
 ]
 
 TABSDATA_CONNECTORS = {
-    f"tabsdata_{name}": {"is_dev_env": f"TD_TABSDATA_{name.upper()}_DEV_PKG"}
+    f"tabsdata-{name}": {"is_dev_env": f"TD_TABSDATA_{name.upper()}_DEV_PKG"}
     for name in TABSDATA_CONNECTORS_NAMES
 }
 
-TABSDATA_AGENT_MODULE_NAME = "tabsdata_agent"
+TABSDATA_AGENT_MODULE_NAME = "tabsdata-agent"
 TD_TABSDATA_AGENT_DEV_PKG = "TD_TABSDATA_AGENT_DEV_PKG"
 
 TABSDATA_PACKAGES = (

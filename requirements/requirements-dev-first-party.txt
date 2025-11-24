@@ -2,9 +2,9 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
-tabsdata_bigquery[deps]==1.6.0
-tabsdata_databricks[deps]==1.6.0
-tabsdata_mongodb[deps]==1.6.0
-tabsdata_mssql[deps]==1.6.0
-tabsdata_salesforce[deps]==1.6.0
-tabsdata_snowflake[deps]==1.6.0
+tabsdata-bigquery[deps]==1.6.0
+tabsdata-databricks[deps]==1.6.0
+tabsdata-mongodb[deps]==1.6.0
+tabsdata-mssql[deps]==1.6.0
+tabsdata-salesforce[deps]==1.6.0
+tabsdata-snowflake[deps]==1.6.0
