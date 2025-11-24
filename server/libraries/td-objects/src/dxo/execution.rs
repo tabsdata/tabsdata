@@ -11,9 +11,9 @@ mod definitions {
     use crate::execution::graph::{FunctionNode, GraphEdge, TableNode};
     use crate::types::basic::{
         AtTime, CollectionId, CollectionName, Depth, Dot, ExecutionId, ExecutionName,
-        ExecutionStatus, FunctionName, FunctionRunStatus, FunctionVersionId, StatusCount,
-        TableDataVersionId, TableName, TableVersionId, TransactionId, TriggeredOn, UserId,
-        UserName,
+        ExecutionStatus, FunctionName, FunctionOnly, FunctionRunStatus, FunctionVersionId,
+        StatusCount, TableDataVersionId, TableName, TableVersionId, TransactionId, TriggeredOn,
+        UserId, UserName,
     };
     use crate::types::composed::TableVersions;
     use crate::types::status_count::FunctionRunStatusCount;
@@ -22,6 +22,10 @@ mod definitions {
     #[td_type::Dto]
     pub struct ExecutionRequest {
         name: Option<ExecutionName>,
+        #[builder(default)]
+        #[serde(default)]
+        #[td_type(extractor)]
+        function_only: FunctionOnly,
     }
 
     #[td_type::Dao]

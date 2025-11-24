@@ -22,6 +22,9 @@ pub struct Fixed;
 pub struct FixedRole;
 
 #[td_type::typed(bool(default = false))]
+pub struct FunctionOnly;
+
+#[td_type::typed(bool(default = false))]
 pub struct HasData;
 
 #[td_type::typed(bool(default = false))]

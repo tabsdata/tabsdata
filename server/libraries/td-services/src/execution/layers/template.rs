@@ -16,7 +16,7 @@ use td_objects::sql::DaoQueries;
 use td_objects::sql::cte::CteQueries;
 use td_objects::sql::recursive::{RecursionOptions, RecursiveQueries};
 use td_objects::table_ref::Versions;
-use td_objects::types::basic::{AtTime, Depth, FunctionId, FunctionStatus};
+use td_objects::types::basic::{AtTime, Depth, FunctionId, FunctionOnly, FunctionStatus};
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
 
 pub async fn assert_function_status(
@@ -33,8 +33,14 @@ pub async fn assert_function_status(
     Ok(())
 }
 
-pub async fn seed_trigger_graph_depth() -> Result<Option<Depth>, TdError> {
-    Ok(EXECUTION_GRAPH_DEPTH)
+pub async fn seed_trigger_graph_depth(
+    Input(function_only): Input<FunctionOnly>,
+) -> Result<Option<Depth>, TdError> {
+    if **function_only {
+        Ok(Some(Depth::ZERO))
+    } else {
+        Ok(EXECUTION_GRAPH_DEPTH)
+    }
 }
 
 pub async fn find_trigger_graph(

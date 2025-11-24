@@ -120,7 +120,7 @@ mod tests {
     #[td_test::test(sqlx)]
     #[tokio::test]
     async fn test_read_execution(db: DbPool) -> Result<(), TdError> {
-        let execution = test_execute(db.clone(), false, false, true).await?;
+        let execution = test_execute(db.clone(), false, false, true, false).await?;
 
         let service = ExecutionReadService::with_defaults(db.clone())
             .service()

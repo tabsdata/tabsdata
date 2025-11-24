@@ -37,7 +37,7 @@ use td_objects::tower_service::from::{
 };
 use td_objects::tower_service::sql::{By, SqlSelectService, insert, insert_vec};
 use td_objects::types::basic::{
-    AtTime, CollectionId, CollectionIdName, Depth, FunctionId, FunctionIdName,
+    AtTime, CollectionId, CollectionIdName, Depth, FunctionId, FunctionIdName, FunctionOnly,
 };
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
@@ -80,6 +80,7 @@ fn service() {
         from_fn(Authz::<CollAdmin, CollExec>::check),
         from_fn(With::<FunctionDBWithNames>::extract::<FunctionId>),
         // Find trigger graph
+        from_fn(With::<ExecutionRequest>::extract::<FunctionOnly>),
         from_fn(seed_trigger_graph_depth),
         from_fn(find_trigger_graph),
         // Find all input tables
@@ -204,6 +205,7 @@ pub(crate) mod tests {
                     type_of_val(&Authz::<CollAdmin, CollExec>::check),
                     type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
                     // Find trigger graph
+                    type_of_val(&With::<ExecutionRequest>::extract::<FunctionOnly>),
                     type_of_val(&seed_trigger_graph_depth),
                     type_of_val(&find_trigger_graph),
                     // Find all input tables
@@ -257,7 +259,7 @@ pub(crate) mod tests {
     async fn test_execute_dependencies_different_collections_permissions_ok(
         db: DbPool,
     ) -> Result<(), TdError> {
-        let _ = test_execute(db, true, false, true).await?;
+        let _ = test_execute(db, true, false, true, false).await?;
         Ok(())
     }
 
@@ -266,7 +268,7 @@ pub(crate) mod tests {
     async fn test_execute_dependencies_different_collections_permissions_forbidden(
         db: DbPool,
     ) -> Result<(), TdError> {
-        let _ = test_execute(db, true, false, false).await;
+        let _ = test_execute(db, true, false, false, false).await;
         Ok(())
     }
 
@@ -275,7 +277,7 @@ pub(crate) mod tests {
     async fn test_execute_trigger_different_collections_permissions_ok(
         db: DbPool,
     ) -> Result<(), TdError> {
-        let _ = test_execute(db, false, true, true).await;
+        let _ = test_execute(db, false, true, true, false).await;
         Ok(())
     }
 
@@ -284,7 +286,14 @@ pub(crate) mod tests {
     async fn test_execute_trigger_different_collections_permissions_forbidden(
         db: DbPool,
     ) -> Result<(), TdError> {
-        let _ = test_execute(db, false, true, false).await;
+        let _ = test_execute(db, false, true, false, false).await;
+        Ok(())
+    }
+
+    #[td_test::test(sqlx)]
+    #[tokio::test]
+    async fn test_execute_single_function(db: DbPool) -> Result<(), TdError> {
+        let _ = test_execute(db, true, false, true, true).await?;
         Ok(())
     }
 
@@ -310,6 +319,7 @@ pub(crate) mod tests {
         deps_diff_collection: bool,
         triggers_diff_collection: bool,
         with_permission: bool,
+        single_function: bool,
     ) -> Result<ExecutionResponse, TdError> {
         let collection_0 = seed_collection(&db, &COLLECTION_NAMES[0], &UserId::admin()).await;
         let collection_1 = seed_collection(&db, &COLLECTION_NAMES[1], &UserId::admin()).await;
@@ -337,6 +347,12 @@ pub(crate) mod tests {
             )
             .await;
         }
+
+        let graph_depth = if single_function {
+            Some(Depth::ZERO)
+        } else {
+            EXECUTION_GRAPH_DEPTH
+        };
 
         // Trigger function without permission restrictions (collection_0), which triggers function_1
         // and function_2. These will trigger function_3, depending on the test.
@@ -441,6 +457,7 @@ pub(crate) mod tests {
                     .build()?,
                 ExecutionRequest::builder()
                     .name(Some(ExecutionName::try_from("test_execution")?))
+                    .function_only(single_function)
                     .build()?,
             );
 
@@ -450,7 +467,7 @@ pub(crate) mod tests {
         let response = service.raw_oneshot(request).await;
 
         // Test assertions
-        let expected_all_functions = match EXECUTION_GRAPH_DEPTH {
+        let expected_all_functions = match graph_depth {
             Some(depth) => FUNCTION_NAMES
                 .iter()
                 .take(*depth as usize + 1)
@@ -474,7 +491,7 @@ pub(crate) mod tests {
             all_functions.sort();
             assert_eq!(expected_all_functions, all_functions);
 
-            let expected_triggered_functions = match EXECUTION_GRAPH_DEPTH {
+            let expected_triggered_functions = match graph_depth {
                 // skipping manual trigger, which is the first one in this test
                 Some(depth) => FUNCTION_NAMES
                     .iter()
@@ -503,7 +520,7 @@ pub(crate) mod tests {
                 TableName::try_from("collection_2/table_3")?,
                 TableName::try_from("collection_2/table_4")?,
             ];
-            let expected_all_tables = match EXECUTION_GRAPH_DEPTH {
+            let expected_all_tables = match graph_depth {
                 Some(depth) => all_tables_with_collection
                     .into_iter()
                     .take(*depth as usize + 1)
@@ -631,7 +648,7 @@ pub(crate) mod tests {
                 .fetch_all(&db)
                 .await
                 .map_err(handle_sql_err)?;
-            let expected_num_function_requirements = if EXECUTION_GRAPH_DEPTH.is_some() {
+            let expected_num_function_requirements = if graph_depth.is_some() {
                 0
             } else {
                 6 // because of the 4 dependencies + 2 triggers
