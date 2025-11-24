@@ -194,7 +194,7 @@ pub async fn create_locked_workers<T: WorkerMessageQueue>(
                                             .build()?;
                                         (Some(found_data_version), Some(location))
                                     } else {
-                                        (None, None)
+                                        (Some(found_data_version), None)
                                     }
                                 }
                                 None => (None, None),
