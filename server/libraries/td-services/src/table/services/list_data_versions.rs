@@ -48,7 +48,7 @@ fn service() {
         from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead, InterCollRead>::check),
         // extract at time (triggered on)
         from_fn(With::<TableDataVersionAtIdName>::extract::<AtTime>),
-        from_fn(With::<AtTime>::convert_to::<TriggeredOn, _>),
+        from_fn(With::<AtTime>::try_convert_to::<TriggeredOn, _>),
         // find table ID
         from_fn(With::<TableDataVersionAtIdName>::extract::<TableIdName>),
         from_fn(combine::<CollectionIdName, TableIdName>),
@@ -122,7 +122,7 @@ mod tests {
                 type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead, InterCollRead>::check),
                 // extract at time (triggered on)
                 type_of_val(&With::<TableDataVersionAtIdName>::extract::<AtTime>),
-                type_of_val(&With::<AtTime>::convert_to::<TriggeredOn, _>),
+                type_of_val(&With::<AtTime>::try_convert_to::<TriggeredOn, _>),
                 // find table ID
                 type_of_val(&With::<TableDataVersionAtIdName>::extract::<TableIdName>),
                 type_of_val(&combine::<CollectionIdName, TableIdName>),

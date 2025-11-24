@@ -3,11 +3,11 @@
 //
 
 use crate::table::layers::storage::resolve_table_location;
+use td_objects::dxo::Extractor;
 use td_objects::dxo::table::TableDBWithNames;
 use td_objects::dxo::table_data_version::TableDataVersionDBWithNames;
 use td_objects::tower_service::from::{ExtractService, TryIntoService, With, combine};
 use td_objects::tower_service::sql::{By, SqlSelectService};
-use td_objects::types::Extractor;
 use td_objects::types::basic::{AtTime, CollectionIdName, TableId, TableIdName, TriggeredOn};
 use td_tower::from_fn::from_fn;
 use td_tower::{layer, layers};
@@ -47,7 +47,7 @@ where
         ),
         from_fn(With::<TableDBWithNames>::extract::<TableId>),
         // At the triggered on time
-        from_fn(With::<AtTime>::convert_to::<TriggeredOn, _>),
+        from_fn(With::<AtTime>::try_convert_to::<TriggeredOn, _>),
         // Find the latest data version of the table ID, at that time
         from_fn(
             By::<TableId>::select_version_optional::<

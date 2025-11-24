@@ -29,7 +29,7 @@ fn service() {
         from_fn(With::<ListRequest<()>>::extract::<RequestContext>),
         from_fn(Authz::<NoPermissions>::visible_collections),
         from_fn(With::<ListRequest<()>>::extract::<ListParams>),
-        from_fn(With::<ListParams>::convert_to::<ListQueryParams<CollectionRead>, _>),
+        from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<CollectionRead>, _>),
         from_fn(By::<()>::list::<VisibleCollections, CollectionRead>),
     )
 }
@@ -65,7 +65,9 @@ mod tests {
                 type_of_val(&With::<ListRequest<()>>::extract::<RequestContext>),
                 type_of_val(&Authz::<NoPermissions>::visible_collections),
                 type_of_val(&With::<ListRequest<()>>::extract::<ListParams>),
-                type_of_val(&With::<ListParams>::convert_to::<ListQueryParams<CollectionRead>, _>),
+                type_of_val(
+                    &With::<ListParams>::try_convert_to::<ListQueryParams<CollectionRead>, _>,
+                ),
                 type_of_val(&By::<()>::list::<VisibleCollections, CollectionRead>),
             ]);
     }

@@ -4,9 +4,10 @@
 
 use std::ops::Deref;
 use td_error::TdError;
+use td_objects::dxo::TryUpdater;
 use td_objects::dxo::crudl::RequestContext;
-use td_objects::dxo::function::{FunctionDB, FunctionDBBuilder};
-use td_objects::dxo::table::{TableDB, TableDBBuilder};
+use td_objects::dxo::function::FunctionDB;
+use td_objects::dxo::table::TableDB;
 use td_objects::types::basic::{FunctionStatus, FunctionVersionId, TableStatus, TableVersionId};
 use td_tower::extractors::Input;
 
@@ -17,7 +18,9 @@ pub async fn build_deleted_functions(
     let deleted = functions
         .iter()
         .map(|v| {
-            FunctionDBBuilder::try_from((request_context.deref(), v.clone().to_builder()))?
+            v.clone()
+                .to_builder()
+                .try_update_from(request_context.deref())?
                 .id(FunctionVersionId::default())
                 .status(FunctionStatus::Deleted)
                 .build()
@@ -33,7 +36,9 @@ pub async fn build_deleted_tables(
     let deleted = tables
         .iter()
         .map(|v| {
-            TableDBBuilder::try_from((request_context.deref(), v.clone().to_builder()))?
+            v.clone()
+                .to_builder()
+                .try_update_from(request_context.deref())?
                 .id(TableVersionId::default())
                 .status(TableStatus::Deleted)
                 .build()

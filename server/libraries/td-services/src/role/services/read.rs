@@ -34,7 +34,7 @@ fn service() {
         from_fn(With::<ReadRequest<RoleParam>>::extract_name::<RoleParam>),
         from_fn(With::<RoleParam>::extract::<RoleIdName>),
         from_fn(By::<RoleIdName>::select::<RoleDBWithNames>),
-        from_fn(With::<RoleDBWithNames>::convert_to::<RoleBuilder, _>),
+        from_fn(With::<RoleDBWithNames>::try_convert_to::<RoleBuilder, _>),
         from_fn(With::<RoleBuilder>::build::<Role, _>),
     )
 }
@@ -66,7 +66,7 @@ mod tests {
                 type_of_val(&With::<ReadRequest<RoleParam>>::extract_name::<RoleParam>),
                 type_of_val(&With::<RoleParam>::extract::<RoleIdName>),
                 type_of_val(&By::<RoleIdName>::select::<RoleDBWithNames>),
-                type_of_val(&With::<RoleDBWithNames>::convert_to::<RoleBuilder, _>),
+                type_of_val(&With::<RoleDBWithNames>::try_convert_to::<RoleBuilder, _>),
                 type_of_val(&With::<RoleBuilder>::build::<Role, _>),
             ]);
     }

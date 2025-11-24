@@ -34,10 +34,10 @@ fn service() {
         // get allowed collections
         from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead>::visible_collections),
         // convert them to allowed function collections
-        from_fn(With::<VisibleCollections>::convert_to::<VisibleFunctionsCollections, _>),
+        from_fn(With::<VisibleCollections>::try_convert_to::<VisibleFunctionsCollections, _>),
         // list
         from_fn(With::<ListRequest<AtTimeParam>>::extract::<ListParams>),
-        from_fn(With::<ListParams>::convert_to::<ListQueryParams<Function>, _>),
+        from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<Function>, _>),
         from_fn(
             By::<()>::list_versions_at::<
                 VisibleFunctionsCollections,
@@ -87,11 +87,11 @@ mod tests {
                 type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead>::visible_collections),
                 // convert them to allowed function collections
                 type_of_val(
-                    &With::<VisibleCollections>::convert_to::<VisibleFunctionsCollections, _>,
+                    &With::<VisibleCollections>::try_convert_to::<VisibleFunctionsCollections, _>,
                 ),
                 // list
                 type_of_val(&With::<ListRequest<AtTimeParam>>::extract::<ListParams>),
-                type_of_val(&With::<ListParams>::convert_to::<ListQueryParams<Function>, _>),
+                type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<Function>, _>),
                 type_of_val(
                     &By::<()>::list_versions_at::<
                         VisibleFunctionsCollections,

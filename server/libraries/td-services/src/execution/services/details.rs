@@ -38,7 +38,7 @@ fn service() {
         from_fn(With::<ExecutionDBWithStatus>::extract::<ExecutionId>),
         // Initialize builder.
         from_fn(builder::<ExecutionDetailsBuilder>),
-        from_fn(With::<ExecutionDBWithStatus>::convert_to::<ExecutionBuilder, _>),
+        from_fn(With::<ExecutionDBWithStatus>::try_convert_to::<ExecutionBuilder, _>),
         from_fn(With::<ExecutionBuilder>::build::<Execution, _>),
         from_fn(With::<Execution>::set::<ExecutionDetailsBuilder>),
         // Find all function runs.
@@ -85,7 +85,7 @@ mod tests {
                 type_of_val(&With::<ExecutionDBWithStatus>::extract::<ExecutionId>),
                 // Initialize builder
                 type_of_val(&builder::<ExecutionDetailsBuilder>),
-                type_of_val(&With::<ExecutionDBWithStatus>::convert_to::<ExecutionBuilder, _>),
+                type_of_val(&With::<ExecutionDBWithStatus>::try_convert_to::<ExecutionBuilder, _>),
                 type_of_val(&With::<ExecutionBuilder>::build::<Execution, _>),
                 type_of_val(&With::<Execution>::set::<ExecutionDetailsBuilder>),
                 // Find all function runs.

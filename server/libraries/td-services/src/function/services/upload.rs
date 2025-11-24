@@ -59,14 +59,14 @@ fn service() {
         from_fn(With::<BundleId>::default),
         from_fn(upload_function_write_to_storage),
         // Build BundleDB
-        from_fn(With::<RequestContext>::convert_to::<BundleDBBuilder, _>),
+        from_fn(With::<RequestContext>::try_convert_to::<BundleDBBuilder, _>),
         from_fn(With::<BundleId>::set::<BundleDBBuilder>),
         from_fn(With::<CollectionId>::set::<BundleDBBuilder>),
         from_fn(With::<BundleHash>::set::<BundleDBBuilder>),
         from_fn(With::<BundleDBBuilder>::build::<BundleDB, _>),
         from_fn(insert::<BundleDB>),
         // Build response
-        from_fn(With::<BundleDB>::convert_to::<BundleBuilder, _>),
+        from_fn(With::<BundleDB>::try_convert_to::<BundleBuilder, _>),
         from_fn(With::<BundleBuilder>::build::<Bundle, _>),
     )
 }
@@ -129,14 +129,14 @@ mod tests {
                 type_of_val(&With::<BundleId>::default),
                 type_of_val(&upload_function_write_to_storage),
                 // Build BundleDB
-                type_of_val(&With::<RequestContext>::convert_to::<BundleDBBuilder, _>),
+                type_of_val(&With::<RequestContext>::try_convert_to::<BundleDBBuilder, _>),
                 type_of_val(&With::<BundleId>::set::<BundleDBBuilder>),
                 type_of_val(&With::<CollectionId>::set::<BundleDBBuilder>),
                 type_of_val(&With::<BundleHash>::set::<BundleDBBuilder>),
                 type_of_val(&With::<BundleDBBuilder>::build::<BundleDB, _>),
                 type_of_val(&insert::<BundleDB>),
                 // Build response
-                type_of_val(&With::<BundleDB>::convert_to::<BundleBuilder, _>),
+                type_of_val(&With::<BundleDB>::try_convert_to::<BundleBuilder, _>),
                 type_of_val(&With::<BundleBuilder>::build::<Bundle, _>),
             ]);
         Ok(())

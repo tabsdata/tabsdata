@@ -29,7 +29,7 @@ fn service() {
         from_fn(AuthzOn::<System>::set),
         from_fn(Authz::<SecAdmin>::check),
         from_fn(With::<ListRequest<()>>::extract::<ListParams>),
-        from_fn(With::<ListParams>::convert_to::<ListQueryParams<UserRead>, _>),
+        from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<UserRead>, _>),
         from_fn(By::<()>::list::<NoListFilter, UserRead>),
     )
 }
@@ -59,7 +59,7 @@ mod tests {
                 type_of_val(&AuthzOn::<System>::set),
                 type_of_val(&Authz::<SecAdmin>::check),
                 type_of_val(&With::<ListRequest<()>>::extract::<ListParams>),
-                type_of_val(&With::<ListParams>::convert_to::<ListQueryParams<UserRead>, _>),
+                type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<UserRead>, _>),
                 type_of_val(&By::<()>::list::<NoListFilter, UserRead>),
             ]);
     }

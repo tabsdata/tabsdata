@@ -2,10 +2,9 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use crate::dxo::TryUpdater;
 use crate::dxo::crudl::{ReadRequest, RequestContext, handle_sql_err};
-use crate::dxo::inter_collection_permission::{
-    InterCollectionPermissionDB, InterCollectionPermissionDBBuilder,
-};
+use crate::dxo::inter_collection_permission::InterCollectionPermissionDB;
 use crate::sql::{DaoQueries, Insert, SelectBy};
 use crate::types::AsDynSqlEntities;
 use crate::types::basic::{AccessTokenId, CollectionId, RoleId, ToCollectionId, UserId};
@@ -25,15 +24,13 @@ pub async fn seed_inter_collection_permission(
     .read("");
     let request_context = request_context.context;
 
-    let mut builder = InterCollectionPermissionDB::builder();
-    builder
+    let permission_db = InterCollectionPermissionDB::builder()
+        .try_update_from(&request_context)
+        .unwrap()
         .from_collection_id(from_collection)
-        .to_collection_id(to_collection);
-    let builder =
-        InterCollectionPermissionDBBuilder::try_from((&request_context, builder)).unwrap();
-    let builder = InterCollectionPermissionDBBuilder::from((from_collection, builder));
-
-    let permission_db = builder.build().unwrap();
+        .to_collection_id(to_collection)
+        .build()
+        .unwrap();
 
     let queries = DaoQueries::default();
     queries

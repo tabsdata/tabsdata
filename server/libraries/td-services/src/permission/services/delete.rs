@@ -51,7 +51,7 @@ fn service() {
                 // a permission on a single collection can also be deleted by a collection admin
                 from_fn(With::<PermissionDBWithNames>::extract::<Option<EntityId>>),
                 from_fn(With::<EntityId>::unwrap_option),
-                from_fn(With::<EntityId>::convert_to::<CollectionId, _>),
+                from_fn(With::<EntityId>::try_convert_to::<CollectionId, _>),
                 from_fn(AuthzOn::<CollectionId>::set),
                 from_fn(Authz::<SecAdmin, CollAdmin>::check),
             ))),
@@ -115,7 +115,7 @@ mod tests {
             type_of_val(&is_permission_with_names_on_a_single_collection),
             type_of_val(&With::<PermissionDBWithNames>::extract::<Option<EntityId>>),
             type_of_val(&With::<EntityId>::unwrap_option),
-            type_of_val(&With::<EntityId>::convert_to::<CollectionId, _>),
+            type_of_val(&With::<EntityId>::try_convert_to::<CollectionId, _>),
             type_of_val(&AuthzOn::<CollectionId>::set),
             type_of_val(&Authz::<SecAdmin, CollAdmin>::check),
             type_of_val(&AuthzOn::<System>::set),

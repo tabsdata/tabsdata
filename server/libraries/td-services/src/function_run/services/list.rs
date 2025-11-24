@@ -26,7 +26,7 @@ fn service() {
 
         // List all function runs in the system.
         from_fn(With::<ListRequest<()>>::extract::<ListParams>),
-        from_fn(With::<ListParams>::convert_to::<ListQueryParams<FunctionRun>, _>),
+        from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<FunctionRun>, _>),
         from_fn(By::<()>::list::<NoListFilter, FunctionRun>),
     )
 }
@@ -61,7 +61,7 @@ mod tests {
             .await
             .assert_service::<ListRequest<()>, ListResponse<FunctionRun>>(&[
                 type_of_val(&With::<ListRequest<()>>::extract::<ListParams>),
-                type_of_val(&With::<ListParams>::convert_to::<ListQueryParams<FunctionRun>, _>),
+                type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<FunctionRun>, _>),
                 type_of_val(&By::<()>::list::<NoListFilter, FunctionRun>),
             ]);
     }

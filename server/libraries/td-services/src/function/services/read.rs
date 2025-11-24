@@ -59,9 +59,9 @@ fn service() {
         // Read function with tables, triggers and dependencies
         from_fn(With::<FunctionDBWithNames>::extract::<FunctionId>),
         // Convert to function read
-        from_fn(With::<FunctionDBWithNames>::convert_to::<FunctionBuilder, _>),
+        from_fn(With::<FunctionDBWithNames>::try_convert_to::<FunctionBuilder, _>),
         from_fn(With::<FunctionBuilder>::build::<Function, _>),
-        from_fn(With::<Function>::convert_to::<FunctionWithTablesBuilder, _>),
+        from_fn(With::<Function>::try_convert_to::<FunctionWithTablesBuilder, _>),
         // Read tables
         from_fn(By::<FunctionId>::select_all_versions::<{ TableDBRead::Active }, TableDBRead>),
         from_fn(With::<TableDBRead>::vec_convert_to::<TableName, _>),
@@ -138,9 +138,9 @@ mod tests {
                 // Read function with tables, triggers and dependencies
                 type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
                 // Convert to function read
-                type_of_val(&With::<FunctionDBWithNames>::convert_to::<FunctionBuilder, _>),
+                type_of_val(&With::<FunctionDBWithNames>::try_convert_to::<FunctionBuilder, _>),
                 type_of_val(&With::<FunctionBuilder>::build::<Function, _>),
-                type_of_val(&With::<Function>::convert_to::<FunctionWithTablesBuilder, _>),
+                type_of_val(&With::<Function>::try_convert_to::<FunctionWithTablesBuilder, _>),
                 // Read tables
                 type_of_val(
                     &By::<FunctionId>::select_all_versions::<{ TableDBRead::Active }, TableDBRead>,

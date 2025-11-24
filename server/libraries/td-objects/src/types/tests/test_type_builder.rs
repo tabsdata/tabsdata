@@ -4,7 +4,7 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::types::{DataAccessObject, Extractor};
+    use crate::dxo::{DataAccessObject, Extractor, TryUpdater};
     use td_type::{Dao, Dlo, DloType, Dto};
 
     #[Dao]
@@ -476,13 +476,13 @@ mod tests {
         let dto = TestDto::builder().id(123).build()?;
 
         let now = chrono::Utc::now();
-        let mut dao_builder = TestDao::builder();
-        dao_builder
+        let dao = TestDao::builder()
+            .try_update_from(&dto)?
             .name("dlo")
             .description(Some("desc".to_string()))
             .modified(now)
-            .active(false);
-        let dao = TestDaoBuilder::try_from((&dto, dao_builder))?.build()?;
+            .active(false)
+            .build()?;
 
         assert_eq!(dao.id, 123);
         assert_eq!(dao.name, "dlo");
@@ -529,8 +529,8 @@ mod tests {
 
         let dto = TestDto::builder().id(123).build()?;
 
-        let builder = TestDaoBuilder::try_from(&dlo)?;
-        let dao = TestDaoBuilder::try_from((&dto, builder))?
+        let dao = TestDaoBuilder::try_from(&dlo)?
+            .try_update_from(&dto)?
             .active(true)
             .build()?;
 
@@ -579,8 +579,9 @@ mod tests {
             .build()?;
 
         let dto = TestDto::builder().id(123).build()?;
-        let builder = TestDaoBuilder::try_from(&dlo)?;
-        let dao = TestDaoBuilder::try_from((&dto, builder))?.build()?;
+        let dao = TestDaoBuilder::try_from(&dlo)?
+            .try_update_from(&dto)?
+            .build()?;
 
         assert_eq!(dao.id, 123);
         assert_eq!(dao.name, "dlo");

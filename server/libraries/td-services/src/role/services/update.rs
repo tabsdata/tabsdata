@@ -36,7 +36,7 @@ fn service() {
         from_fn(Authz::<SecAdmin>::check),
         from_fn(With::<UpdateRequest<RoleParam, RoleUpdate>>::extract_name::<RoleParam>),
         from_fn(With::<UpdateRequest<RoleParam, RoleUpdate>>::extract_data::<RoleUpdate>),
-        from_fn(With::<RoleUpdate>::convert_to::<RoleDBUpdateBuilder, _>),
+        from_fn(With::<RoleUpdate>::try_convert_to::<RoleDBUpdateBuilder, _>),
         from_fn(With::<RequestContext>::update::<RoleDBUpdateBuilder, _>),
         from_fn(With::<RoleDBUpdateBuilder>::build::<RoleDBUpdate, _>),
         from_fn(With::<RoleParam>::extract::<RoleIdName>),
@@ -44,7 +44,7 @@ fn service() {
         from_fn(With::<RoleDBWithNames>::extract::<RoleId>),
         from_fn(By::<RoleId>::update::<RoleDBUpdate, RoleDB>),
         from_fn(By::<RoleId>::select::<RoleDBWithNames>),
-        from_fn(With::<RoleDBWithNames>::convert_to::<RoleBuilder, _>),
+        from_fn(With::<RoleDBWithNames>::try_convert_to::<RoleBuilder, _>),
         from_fn(With::<RoleBuilder>::build::<Role, _>),
     )
 }
@@ -81,7 +81,7 @@ mod tests {
                 type_of_val(
                     &With::<UpdateRequest<RoleParam, RoleUpdate>>::extract_data::<RoleUpdate>,
                 ),
-                type_of_val(&With::<RoleUpdate>::convert_to::<RoleDBUpdateBuilder, _>),
+                type_of_val(&With::<RoleUpdate>::try_convert_to::<RoleDBUpdateBuilder, _>),
                 type_of_val(&With::<RequestContext>::update::<RoleDBUpdateBuilder, _>),
                 type_of_val(&With::<RoleDBUpdateBuilder>::build::<RoleDBUpdate, _>),
                 type_of_val(&With::<RoleParam>::extract::<RoleIdName>),
@@ -89,7 +89,7 @@ mod tests {
                 type_of_val(&With::<RoleDBWithNames>::extract::<RoleId>),
                 type_of_val(&By::<RoleId>::update::<RoleDBUpdate, RoleDB>),
                 type_of_val(&By::<RoleId>::select::<RoleDBWithNames>),
-                type_of_val(&With::<RoleDBWithNames>::convert_to::<RoleBuilder, _>),
+                type_of_val(&With::<RoleDBWithNames>::try_convert_to::<RoleBuilder, _>),
                 type_of_val(&With::<RoleBuilder>::build::<Role, _>),
             ]);
     }

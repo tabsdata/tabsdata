@@ -2,8 +2,9 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use crate::dxo::TryUpdater;
 use crate::dxo::crudl::{ReadRequest, RequestContext, handle_sql_err};
-use crate::dxo::user::{UserCreate, UserDB, UserDBBuilder};
+use crate::dxo::user::{UserCreate, UserDB};
 use crate::sql::{DaoQueries, Insert, SelectBy};
 use crate::types::SqlEntity;
 use crate::types::basic::{AccessTokenId, Password, RoleId, UserEnabled, UserId, UserName};
@@ -32,8 +33,7 @@ pub async fn seed_user(db: &DbPool, name: &UserName, enabled: &UserEnabled) -> U
     .read("");
     let request_context = request_context.context;
 
-    let mut builder = UserDB::builder();
-    builder
+    let user_db = UserDB::builder()
         .name(create.name)
         .full_name(create.full_name)
         .email(create.email.clone())
@@ -45,9 +45,11 @@ pub async fn seed_user(db: &DbPool, name: &UserName, enabled: &UserEnabled) -> U
         .try_password_set_on(request_context.time.clone())
         .unwrap()
         .password_must_change(false)
-        .enabled(create.enabled);
-    let builder = UserDBBuilder::try_from((&request_context, builder)).unwrap();
-    let user_db = builder.build().unwrap();
+        .enabled(create.enabled)
+        .try_update_from(&request_context)
+        .unwrap()
+        .build()
+        .unwrap();
 
     let queries = DaoQueries::default();
     queries

@@ -141,7 +141,7 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
             let partition_type = type_for_field(fields, partition_by);
 
             quote! {
-                impl #impl_generics crate::types::Versioned for #ident #ty_generics #where_clause {
+                impl #impl_generics crate::dxo::Versioned for #ident #ty_generics #where_clause {
                     type Order = #order_type;
                     fn order_by() -> &'static str {
                         #order_by
@@ -165,7 +165,7 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
             pub const All: u8 = 0;
         }
 
-        impl #impl_generics crate::types::States<0> for #ident #ty_generics #where_clause {
+        impl #impl_generics crate::dxo::States<0> for #ident #ty_generics #where_clause {
             fn state() -> &'static [&'static dyn crate::types::SqlEntity] {
                 &[]
             }
@@ -186,7 +186,7 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
                             pub const #name: u8 = #i;
                         }
 
-                        impl #impl_generics crate::types::States<#i> for #ident #ty_generics #where_clause {
+                        impl #impl_generics crate::dxo::States<#i> for #ident #ty_generics #where_clause {
                             fn state() -> &'static [&'static dyn crate::types::SqlEntity] {
                                 #value
                             }
@@ -211,7 +211,7 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
             }
 
             quote! {
-                impl #impl_generics crate::types::Recursive for #ident #ty_generics #where_clause {
+                impl #impl_generics crate::dxo::Recursive for #ident #ty_generics #where_clause {
                     type Recursive = #up_type;
 
                     fn recurse_up() -> &'static str {
@@ -231,7 +231,7 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
 
     let builder_type = format_ident!("{}Builder", &item.ident);
     let expanded = quote! {
-        impl #impl_generics crate::types::DataAccessObject for #ident #ty_generics #where_clause {
+        impl #impl_generics crate::dxo::DataAccessObject for #ident #ty_generics #where_clause {
             type Builder = #builder_type #ty_generics;
 
             fn sql_table() -> &'static str {

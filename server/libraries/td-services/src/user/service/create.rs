@@ -59,7 +59,7 @@ fn service() {
         from_fn(insert::<UserRoleDB>),
         from_fn(With::<UserDB>::extract::<UserId>),
         from_fn(By::<UserId>::select::<UserDBWithNames>),
-        from_fn(With::<UserDBWithNames>::convert_to::<UserReadBuilder, _>),
+        from_fn(With::<UserDBWithNames>::try_convert_to::<UserReadBuilder, _>),
         from_fn(With::<UserReadBuilder>::build::<UserRead, _>),
     )
 }
@@ -105,7 +105,7 @@ mod tests {
                 type_of_val(&insert::<UserRoleDB>),
                 type_of_val(&With::<UserDB>::extract::<UserId>),
                 type_of_val(&By::<UserId>::select::<UserDBWithNames>),
-                type_of_val(&With::<UserDBWithNames>::convert_to::<UserReadBuilder, _>),
+                type_of_val(&With::<UserDBWithNames>::try_convert_to::<UserReadBuilder, _>),
                 type_of_val(&With::<UserReadBuilder>::build::<UserRead, _>),
             ]);
     }

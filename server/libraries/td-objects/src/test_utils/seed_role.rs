@@ -2,6 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use crate::dxo::TryUpdater;
 use crate::dxo::crudl::{ReadRequest, RequestContext, handle_sql_err};
 use crate::dxo::role::{RoleCreate, RoleDB, RoleDBBuilder};
 use crate::sql::{DaoQueries, Insert, SelectBy};
@@ -25,9 +26,12 @@ pub async fn seed_role(db: &DbPool, name: RoleName, description: Description) ->
     .read("");
     let request_context = request_context.context;
 
-    let builder = RoleDBBuilder::try_from(&role_create).unwrap();
-    let builder = RoleDBBuilder::try_from((&request_context, builder)).unwrap();
-    let role_db = builder.build().unwrap();
+    let role_db = RoleDBBuilder::try_from(&role_create)
+        .unwrap()
+        .try_update_from(&request_context)
+        .unwrap()
+        .build()
+        .unwrap();
 
     let queries = DaoQueries::default();
     queries

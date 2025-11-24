@@ -2,6 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use crate::dxo::TryUpdater;
 use crate::dxo::crudl::{ReadRequest, RequestContext, handle_sql_err};
 use crate::dxo::permission::{PermissionCreate, PermissionDB, PermissionDBBuilder};
 use crate::dxo::role::RoleDB;
@@ -32,9 +33,12 @@ pub async fn seed_permission(
     .read("");
     let request_context = request_context.context;
 
-    let builder = PermissionDBBuilder::try_from(&permission_create).unwrap();
-    let builder = PermissionDBBuilder::try_from((&request_context, builder)).unwrap();
-    let mut builder = PermissionDBBuilder::try_from((role_db, builder)).unwrap();
+    let mut builder = PermissionDBBuilder::try_from(&permission_create).unwrap();
+    let builder = builder
+        .try_update_from(&request_context)
+        .unwrap()
+        .try_update_from(role_db)
+        .unwrap();
 
     let permission_entity_type = permission_type.on_entity_type();
     builder.entity_type(permission_entity_type);

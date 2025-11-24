@@ -2,10 +2,11 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use crate::dxo::ListQuery;
 use crate::dxo::crudl::ListParams;
 use crate::parse::IDENTIFIER_PATTERN;
+use crate::types::SqlEntity;
 use crate::types::basic::LikeFilter;
-use crate::types::{ListQuery, SqlEntity};
 use itertools::Itertools;
 use regex::Regex;
 use std::marker::PhantomData;

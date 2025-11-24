@@ -219,12 +219,11 @@ fn gen_updated_from(from: &Ident, target: &ItemStruct, skip_all: bool) -> proc_m
     let (_, ty_generics, where_clause) = target.generics.split_for_impl();
 
     let expanded = quote! {
-        impl TryFrom<(& #from #ty_generics, #builder #ty_generics)> for #builder #ty_generics #where_clause {
+        impl crate::dxo::TryUpdater<#from #ty_generics> for #builder #ty_generics #where_clause {
             type Error = #builder_error_type;
-            fn try_from(value: (& #from #ty_generics, #builder #ty_generics)) -> Result<Self, Self::Error> {
-                let (from, mut this) = value;
-                this #(#initializers)*;
-                Ok(this)
+            fn try_update_from(&mut self, from: & #from #ty_generics) -> Result<&mut Self, Self::Error> {
+                self #(#initializers)*;
+                Ok(self)
             }
         }
     };
@@ -244,7 +243,7 @@ fn gen_td_type_field_getset(target: &ItemStruct) -> proc_macro2::TokenStream {
             let field_name = field.ident.as_ref().unwrap();
             let field_type = &field.ty;
             expanded.extend(quote! {
-                impl #impl_generics crate::types::Extractor<#field_type> for #to #ty_generics #where_clause {
+                impl #impl_generics crate::dxo::Extractor<#field_type> for #to #ty_generics #where_clause {
                     fn extract(&self) -> #field_type {
                         self.#field_name.clone()
                     }
@@ -257,11 +256,10 @@ fn gen_td_type_field_getset(target: &ItemStruct) -> proc_macro2::TokenStream {
             let builder_type = format_ident!("{}Builder", to);
 
             expanded.extend(quote! {
-                impl From<(&#field_type, #builder_type #ty_generics)> for #builder_type #ty_generics #where_clause {
-                    fn from(value: (&#field_type, #builder_type #ty_generics)) -> Self {
-                        let (from, mut this) = value;
-                        this.#field_name::<#field_type>(from.clone());
-                        this
+                impl crate::dxo::Setter<#field_type> for #builder_type #ty_generics #where_clause {
+                    fn set(&mut self, value: &#field_type) -> &mut Self {
+                        self.#field_name::<#field_type>(value.clone());
+                        self
                     }
                 }
             });

@@ -34,10 +34,10 @@ fn service() {
         // get allowed collections
         from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead>::visible_collections),
         // convert them to allowed table collections
-        from_fn(With::<VisibleCollections>::convert_to::<VisibleTablesCollections, _>),
+        from_fn(With::<VisibleCollections>::try_convert_to::<VisibleTablesCollections, _>),
         // list
         from_fn(With::<ListRequest<AtTimeParam>>::extract::<ListParams>),
-        from_fn(With::<ListParams>::convert_to::<ListQueryParams<Table>, _>),
+        from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<Table>, _>),
         from_fn(
             By::<()>::list_versions_at::<VisibleTablesCollections, { TableDBRead::Available }, Table>
         ),
@@ -82,10 +82,12 @@ mod tests {
                 // get allowed collections
                 type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead>::visible_collections),
                 // convert them to allowed table collections
-                type_of_val(&With::<VisibleCollections>::convert_to::<VisibleTablesCollections, _>),
+                type_of_val(
+                    &With::<VisibleCollections>::try_convert_to::<VisibleTablesCollections, _>,
+                ),
                 // list
                 type_of_val(&With::<ListRequest<AtTimeParam>>::extract::<ListParams>),
-                type_of_val(&With::<ListParams>::convert_to::<ListQueryParams<Table>, _>),
+                type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<Table>, _>),
                 type_of_val(
                     &By::<()>::list_versions_at::<
                         VisibleTablesCollections,

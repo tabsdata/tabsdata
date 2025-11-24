@@ -2,9 +2,10 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use crate::do_authz::DO_AUTHZ;
 use crate::function::layers::register::{data_location, validate_tables_do_not_exist};
 use crate::function::layers::{
-    DO_AUTHZ, check_private_tables, register_dependencies, register_tables, register_triggers,
+    check_private_tables, register_dependencies, register_tables, register_triggers,
 };
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
@@ -82,7 +83,7 @@ fn service() {
         from_fn(With::<StorageVersion>::default),
         from_fn(data_location),
         // Insert into function_versions(sql) status=Active.
-        from_fn(With::<FunctionRegister>::convert_to::<FunctionDBBuilder, _>),
+        from_fn(With::<FunctionRegister>::try_convert_to::<FunctionDBBuilder, _>),
         from_fn(With::<RequestContext>::update::<FunctionDBBuilder, _>),
         from_fn(With::<CollectionId>::set::<FunctionDBBuilder>),
         from_fn(With::<StorageVersion>::set::<FunctionDBBuilder>),
@@ -116,7 +117,7 @@ fn service() {
         register_triggers::<_, DO_AUTHZ>(),
         // Response
         from_fn(By::<FunctionId>::select::<FunctionDBWithNames>),
-        from_fn(With::<FunctionDBWithNames>::convert_to::<FunctionBuilder, _>),
+        from_fn(With::<FunctionDBWithNames>::try_convert_to::<FunctionBuilder, _>),
         from_fn(With::<FunctionBuilder>::build::<Function, _>),
     )
 }
@@ -207,7 +208,7 @@ mod tests {
                 type_of_val(&With::<StorageVersion>::default),
                 type_of_val(&data_location),
                 // Insert into function_versions(sql) status=Active.
-                type_of_val(&With::<FunctionRegister>::convert_to::<FunctionDBBuilder, _>),
+                type_of_val(&With::<FunctionRegister>::try_convert_to::<FunctionDBBuilder, _>),
                 type_of_val(&With::<RequestContext>::update::<FunctionDBBuilder, _>),
                 type_of_val(&With::<CollectionId>::set::<FunctionDBBuilder>),
                 type_of_val(&With::<StorageVersion>::set::<FunctionDBBuilder>),
@@ -237,14 +238,14 @@ mod tests {
                 type_of_val(&With::<FunctionRegister>::extract::<ReuseFrozen>),
                 // Insert into table_versions(sql) current function tables status=Active.
                 // Reuse table_id for tables that existed (had status=Frozen)
-                type_of_val(&With::<FunctionDB>::convert_to::<TableDBBuilder, _>),
+                type_of_val(&With::<FunctionDB>::try_convert_to::<TableDBBuilder, _>),
                 type_of_val(&With::<RequestContext>::update::<TableDBBuilder, _>),
                 type_of_val(&build_table_versions),
                 type_of_val(&insert_vec::<TableDB>),
                 type_of_val(&build_tables_trigger_versions),
                 type_of_val(&insert_vec::<TriggerDB>),
                 // Insert into dependency_versions(sql) current function table dependencies status=Active.
-                type_of_val(&With::<FunctionDB>::convert_to::<DependencyDBBuilder, _>),
+                type_of_val(&With::<FunctionDB>::try_convert_to::<DependencyDBBuilder, _>),
                 type_of_val(&With::<RequestContext>::update::<DependencyDBBuilder, _>),
                 type_of_val(&build_dependency_versions),
                 // inter collections check for dependencies
@@ -257,7 +258,7 @@ mod tests {
                 type_of_val(&Authz::<InterColl>::check_inter_collection),
                 type_of_val(&insert_vec::<DependencyDB>),
                 // Insert into trigger_versions(sql) current function trigger status=Active.
-                type_of_val(&With::<FunctionDB>::convert_to::<TriggerDBBuilder, _>),
+                type_of_val(&With::<FunctionDB>::try_convert_to::<TriggerDBBuilder, _>),
                 type_of_val(&With::<RequestContext>::update::<TriggerDBBuilder, _>),
                 type_of_val(&build_trigger_versions),
                 // inter collections check for trigger
@@ -269,7 +270,7 @@ mod tests {
                 type_of_val(&insert_vec::<TriggerDB>),
                 // Response
                 type_of_val(&By::<FunctionId>::select::<FunctionDBWithNames>),
-                type_of_val(&With::<FunctionDBWithNames>::convert_to::<FunctionBuilder, _>),
+                type_of_val(&With::<FunctionDBWithNames>::try_convert_to::<FunctionBuilder, _>),
                 type_of_val(&With::<FunctionBuilder>::build::<Function, _>),
             ]);
     }

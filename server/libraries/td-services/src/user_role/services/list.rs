@@ -36,7 +36,7 @@ fn service() {
         from_fn(By::<RoleIdName>::select::<RoleDB>),
         from_fn(With::<RoleDB>::extract::<RoleId>),
         from_fn(With::<ListRequest<RoleParam>>::extract::<ListParams>),
-        from_fn(With::<ListParams>::convert_to::<ListQueryParams<UserRole>, _>),
+        from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<UserRole>, _>),
         from_fn(By::<RoleId>::list::<NoListFilter, UserRole>),
     )
 }
@@ -74,7 +74,7 @@ mod tests {
                 type_of_val(&By::<RoleIdName>::select::<RoleDB>),
                 type_of_val(&With::<RoleDB>::extract::<RoleId>),
                 type_of_val(&With::<ListRequest<RoleParam>>::extract::<ListParams>),
-                type_of_val(&With::<ListParams>::convert_to::<ListQueryParams<UserRole>, _>),
+                type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<UserRole>, _>),
                 type_of_val(&By::<RoleId>::list::<NoListFilter, UserRole>),
             ]);
     }

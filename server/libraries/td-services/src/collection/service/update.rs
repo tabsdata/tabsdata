@@ -52,13 +52,13 @@ fn service() {
             >
         ),
         from_fn(update_collection_validate),
-        from_fn(With::<CollectionDB>::convert_to::<CollectionUpdateDBBuilder, _>),
+        from_fn(With::<CollectionDB>::try_convert_to::<CollectionUpdateDBBuilder, _>),
         from_fn(With::<RequestContext>::update::<CollectionUpdateDBBuilder, _>),
         from_fn(With::<CollectionUpdate>::update_collection_update_db_builder),
         from_fn(With::<CollectionUpdateDBBuilder>::build::<CollectionUpdateDB, _>),
         from_fn(By::<CollectionId>::update::<CollectionUpdateDB, CollectionDB>),
         from_fn(By::<CollectionId>::select::<CollectionDBWithNames>),
-        from_fn(With::<CollectionDBWithNames>::convert_to::<CollectionReadBuilder, _>),
+        from_fn(With::<CollectionDBWithNames>::try_convert_to::<CollectionReadBuilder, _>),
         from_fn(With::<CollectionReadBuilder>::build::<CollectionRead, _>),
     )
 }
@@ -107,13 +107,15 @@ mod tests {
                     >,
                 ),
                 type_of_val(&update_collection_validate),
-                type_of_val(&With::<CollectionDB>::convert_to::<CollectionUpdateDBBuilder, _>),
+                type_of_val(&With::<CollectionDB>::try_convert_to::<CollectionUpdateDBBuilder, _>),
                 type_of_val(&With::<RequestContext>::update::<CollectionUpdateDBBuilder, _>),
                 type_of_val(&With::<CollectionUpdate>::update_collection_update_db_builder),
                 type_of_val(&With::<CollectionUpdateDBBuilder>::build::<CollectionUpdateDB, _>),
                 type_of_val(&By::<CollectionId>::update::<CollectionUpdateDB, CollectionDB>),
                 type_of_val(&By::<CollectionId>::select::<CollectionDBWithNames>),
-                type_of_val(&With::<CollectionDBWithNames>::convert_to::<CollectionReadBuilder, _>),
+                type_of_val(
+                    &With::<CollectionDBWithNames>::try_convert_to::<CollectionReadBuilder, _>,
+                ),
                 type_of_val(&With::<CollectionReadBuilder>::build::<CollectionRead, _>),
             ]);
     }

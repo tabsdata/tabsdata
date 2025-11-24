@@ -41,7 +41,7 @@ fn service() {
         from_fn(
             With::<CreateRequest<RoleParam, PermissionCreate>>::extract_data::<PermissionCreate>
         ),
-        from_fn(With::<PermissionCreate>::convert_to::<PermissionDBBuilder, _>),
+        from_fn(With::<PermissionCreate>::try_convert_to::<PermissionDBBuilder, _>),
         from_fn(With::<RequestContext>::update::<PermissionDBBuilder, _>),
         from_fn(With::<RoleParam>::extract::<RoleIdName>),
         from_fn(By::<RoleIdName>::select::<RoleDB>),
@@ -54,7 +54,7 @@ fn service() {
             Do(service!(layers!(
                 // a permission on a single collection can also be created by a collection admin
                 from_fn(With::<PermissionDB>::extract::<EntityId>),
-                from_fn(With::<EntityId>::convert_to::<CollectionId, _>),
+                from_fn(With::<EntityId>::try_convert_to::<CollectionId, _>),
                 from_fn(AuthzOn::<CollectionId>::set),
                 from_fn(Authz::<SecAdmin, CollAdmin>::check),
             ))),
@@ -67,7 +67,7 @@ fn service() {
         from_fn(insert::<PermissionDB>),
         from_fn(With::<PermissionDB>::extract::<PermissionId>),
         from_fn(By::<PermissionId>::select::<PermissionDBWithNames>),
-        from_fn(With::<PermissionDBWithNames>::convert_to::<PermissionBuilder, _>),
+        from_fn(With::<PermissionDBWithNames>::try_convert_to::<PermissionBuilder, _>),
         from_fn(With::<PermissionBuilder>::build::<Permission, _>),
         // refresh the permissions authz cache
         from_fn(refresh_authz_context),
@@ -114,7 +114,7 @@ mod tests {
                         PermissionCreate,
                     >,
                 ),
-                type_of_val(&With::<PermissionCreate>::convert_to::<PermissionDBBuilder, _>),
+                type_of_val(&With::<PermissionCreate>::try_convert_to::<PermissionDBBuilder, _>),
                 type_of_val(&With::<RequestContext>::update::<PermissionDBBuilder, _>),
                 type_of_val(&With::<RoleParam>::extract::<RoleIdName>),
                 type_of_val(&By::<RoleIdName>::select::<RoleDB>),
@@ -122,7 +122,7 @@ mod tests {
                 type_of_val(&With::<PermissionDBBuilder>::build_permission_db),
                 type_of_val(&is_permission_on_a_single_collection),
                 type_of_val(&With::<PermissionDB>::extract::<EntityId>),
-                type_of_val(&With::<EntityId>::convert_to::<CollectionId, _>),
+                type_of_val(&With::<EntityId>::try_convert_to::<CollectionId, _>),
                 type_of_val(&AuthzOn::<CollectionId>::set),
                 type_of_val(&Authz::<SecAdmin, CollAdmin>::check),
                 type_of_val(&AuthzOn::<System>::set),
@@ -130,7 +130,7 @@ mod tests {
                 type_of_val(&insert::<PermissionDB>),
                 type_of_val(&With::<PermissionDB>::extract::<PermissionId>),
                 type_of_val(&By::<PermissionId>::select::<PermissionDBWithNames>),
-                type_of_val(&With::<PermissionDBWithNames>::convert_to::<PermissionBuilder, _>),
+                type_of_val(&With::<PermissionDBWithNames>::try_convert_to::<PermissionBuilder, _>),
                 type_of_val(&With::<PermissionBuilder>::build::<Permission, _>),
                 type_of_val(&refresh_authz_context),
             ]);

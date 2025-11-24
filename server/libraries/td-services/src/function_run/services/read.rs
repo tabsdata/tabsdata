@@ -62,7 +62,7 @@ fn service() {
         from_fn(combine::<ExecutionId, FunctionVersionId>),
         from_fn(By::<(ExecutionId, FunctionVersionId)>::select::<FunctionRunDBWithNames>),
         // Build FunctionRun
-        from_fn(With::<FunctionRunDBWithNames>::convert_to::<FunctionRunBuilder, _>),
+        from_fn(With::<FunctionRunDBWithNames>::try_convert_to::<FunctionRunBuilder, _>),
         from_fn(With::<FunctionRunBuilder>::build::<FunctionRun, _>),
     )
 }
@@ -128,7 +128,9 @@ mod tests {
                     &By::<(ExecutionId, FunctionVersionId)>::select::<FunctionRunDBWithNames>,
                 ),
                 // Build FunctionRun
-                type_of_val(&With::<FunctionRunDBWithNames>::convert_to::<FunctionRunBuilder, _>),
+                type_of_val(
+                    &With::<FunctionRunDBWithNames>::try_convert_to::<FunctionRunBuilder, _>,
+                ),
                 type_of_val(&With::<FunctionRunBuilder>::build::<FunctionRun, _>),
             ]);
     }

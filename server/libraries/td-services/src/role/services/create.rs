@@ -33,13 +33,13 @@ fn service() {
         from_fn(AuthzOn::<System>::set),
         from_fn(Authz::<SecAdmin>::check),
         from_fn(With::<CreateRequest<(), RoleCreate>>::extract_data::<RoleCreate>),
-        from_fn(With::<RoleCreate>::convert_to::<RoleDBBuilder, _>),
+        from_fn(With::<RoleCreate>::try_convert_to::<RoleDBBuilder, _>),
         from_fn(With::<RequestContext>::update::<RoleDBBuilder, _>),
         from_fn(With::<RoleDBBuilder>::build::<RoleDB, _>),
         from_fn(insert::<RoleDB>),
         from_fn(With::<RoleDB>::extract::<RoleId>),
         from_fn(By::<RoleId>::select::<RoleDBWithNames>),
-        from_fn(With::<RoleDBWithNames>::convert_to::<RoleBuilder, _>),
+        from_fn(With::<RoleDBWithNames>::try_convert_to::<RoleBuilder, _>),
         from_fn(With::<RoleBuilder>::build::<Role, _>),
     )
 }
@@ -70,13 +70,13 @@ mod tests {
                 type_of_val(&AuthzOn::<System>::set),
                 type_of_val(&Authz::<SecAdmin>::check),
                 type_of_val(&With::<CreateRequest<(), RoleCreate>>::extract_data::<RoleCreate>),
-                type_of_val(&With::<RoleCreate>::convert_to::<RoleDBBuilder, _>),
+                type_of_val(&With::<RoleCreate>::try_convert_to::<RoleDBBuilder, _>),
                 type_of_val(&With::<RequestContext>::update::<RoleDBBuilder, _>),
                 type_of_val(&With::<RoleDBBuilder>::build::<RoleDB, _>),
                 type_of_val(&insert::<RoleDB>),
                 type_of_val(&With::<RoleDB>::extract::<RoleId>),
                 type_of_val(&By::<RoleId>::select::<RoleDBWithNames>),
-                type_of_val(&With::<RoleDBWithNames>::convert_to::<RoleBuilder, _>),
+                type_of_val(&With::<RoleDBWithNames>::try_convert_to::<RoleBuilder, _>),
                 type_of_val(&With::<RoleBuilder>::build::<Role, _>),
             ]);
     }

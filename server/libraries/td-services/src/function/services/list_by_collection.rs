@@ -41,7 +41,7 @@ fn service() {
         from_fn(With::<CollectionAtName>::extract::<AtTime>),
         // list
         from_fn(With::<ListRequest<CollectionAtName>>::extract::<ListParams>),
-        from_fn(With::<ListParams>::convert_to::<ListQueryParams<Function>, _>),
+        from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<Function>, _>),
         from_fn(
             By::<CollectionId>::list_versions_at::<
                 NoListFilter,
@@ -95,7 +95,7 @@ mod tests {
                 type_of_val(&With::<CollectionAtName>::extract::<AtTime>),
                 // list
                 type_of_val(&With::<ListRequest<CollectionAtName>>::extract::<ListParams>),
-                type_of_val(&With::<ListParams>::convert_to::<ListQueryParams<Function>, _>),
+                type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<Function>, _>),
                 type_of_val(
                     &By::<CollectionId>::list_versions_at::<
                         NoListFilter,

@@ -32,7 +32,7 @@ pub fn dlo_type(input: TokenStream) -> TokenStream {
 
     let builder_type = format_ident!("{}Builder", &item.ident);
     let expanded = quote! {
-        impl #impl_generics crate::types::DataLogicObject for #ident #ty_generics #where_clause {
+        impl #impl_generics crate::dxo::DataLogicObject for #ident #ty_generics #where_clause {
             type Builder = #builder_type #ty_generics;
         }
 

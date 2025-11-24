@@ -2,6 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use crate::dxo::TryUpdater;
 use crate::dxo::collection::CollectionDB;
 use crate::dxo::crudl::{ReadRequest, RequestContext};
 use crate::dxo::dependency::DependencyDBBuilder;
@@ -31,10 +32,11 @@ pub async fn seed_function(
     let queries = DaoQueries::default();
 
     // Function version builder
-    let builder = FunctionDBBuilder::try_from(function_create).unwrap();
-    let builder = FunctionDBBuilder::try_from((&request_context, builder)).unwrap();
-    let mut builder = FunctionDBBuilder::from((&collection.id, builder));
+    let mut builder = FunctionDBBuilder::try_from(function_create).unwrap();
     let function_db = builder
+        .try_update_from(&request_context)
+        .unwrap()
+        .collection_id(collection.id)
         .data_location(DataLocation::default())
         .storage_version(StorageVersion::default())
         .build()
@@ -52,8 +54,8 @@ pub async fn seed_function(
     // Dependencies, tables, triggers
     // Very similar to build_table_versions
     if let Some(tables) = &function_create.tables {
-        let builder = TableDBBuilder::try_from(&function_db).unwrap();
-        let builder = TableDBBuilder::try_from((&request_context, builder)).unwrap();
+        let mut builder = TableDBBuilder::try_from(&function_db).unwrap();
+        let builder = builder.try_update_from(&request_context).unwrap();
 
         for (pos, table_name) in tables.iter().enumerate() {
             let table = builder
@@ -77,8 +79,8 @@ pub async fn seed_function(
 
     // Very similar to build_dependency_versions
     if let Some(dependency_tables) = &function_create.dependencies {
-        let builder = DependencyDBBuilder::try_from(&function_db).unwrap();
-        let builder = DependencyDBBuilder::try_from((&request_context, builder)).unwrap();
+        let mut builder = DependencyDBBuilder::try_from(&function_db).unwrap();
+        let builder = builder.try_update_from(&request_context).unwrap();
 
         for (pos, dependency_table) in dependency_tables.iter().enumerate() {
             let (table_collection, table_name) = {
@@ -124,8 +126,8 @@ pub async fn seed_function(
 
     // Very similar to build_trigger_versions
     if let Some(trigger_tables) = &function_create.triggers {
-        let builder = TriggerDBBuilder::try_from(&function_db).unwrap();
-        let builder = TriggerDBBuilder::try_from((&request_context, builder)).unwrap();
+        let mut builder = TriggerDBBuilder::try_from(&function_db).unwrap();
+        let builder = builder.try_update_from(&request_context).unwrap();
 
         for trigger_table in trigger_tables {
             let (table_collection, table_name) = {

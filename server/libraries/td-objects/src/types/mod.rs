@@ -2,15 +2,14 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use std::any::TypeId;
-use std::fmt::Debug;
-
 // Basic types reexported for convenience under basic module
 pub mod basic;
 
 pub mod addresses;
 pub mod composed;
+pub mod graph;
 pub mod option;
+pub mod recursion;
 pub mod status_count;
 pub mod visible_collections;
 
@@ -18,7 +17,7 @@ pub mod visible_collections;
 mod tests;
 
 /// A trait for types that can be used as SQL entities.
-pub trait SqlEntity: Debug + Send + Sync {
+pub trait SqlEntity: std::fmt::Debug + Send + Sync {
     fn push_bind<'a>(&'a self, builder: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>);
 
     fn push_bind_unseparated<'a>(
@@ -39,7 +38,7 @@ pub trait SqlEntity: Debug + Send + Sync {
     }
 
     fn as_any(&self) -> &dyn std::any::Any;
-    fn type_id(&self) -> TypeId {
+    fn type_id(&self) -> std::any::TypeId {
         self.as_any().type_id()
     }
 }
@@ -141,90 +140,10 @@ macro_rules! impl_dyn_tuples {
 
 all_the_tuples!(impl_dyn_tuples);
 
-pub trait DataAccessObject:
-    for<'a> sqlx::FromRow<'a, sqlx::sqlite::SqliteRow> + Send + Sync + Unpin + std::fmt::Debug
-{
-    type Builder;
-
-    fn sql_table() -> &'static str;
-    fn order_by() -> &'static str;
-    fn fields() -> &'static [&'static str];
-    fn immutable_fields() -> &'static [&'static str];
-    fn sql_field_for_type(type_id: TypeId) -> Result<&'static str, td_error::TdError>;
-    fn values_query_builder(
-        &self,
-        sql: String,
-        bindings: &[&str],
-    ) -> sqlx::QueryBuilder<'_, sqlx::Sqlite>;
-    fn tuples_query_builder(
-        &self,
-        sql: String,
-        bindings: &[&str],
-    ) -> sqlx::QueryBuilder<'_, sqlx::Sqlite>;
-}
-
-pub trait DataLogicObject {
-    type Builder;
-}
-
-pub trait DataTransferObject {
-    type Builder;
-}
-
-pub trait ListQuery: DataTransferObject + Clone + Send + Sync {
-    type Dao: DataAccessObject;
-
-    fn list_on() -> &'static str {
-        Self::Dao::sql_table()
-    }
-
-    fn fields() -> &'static [&'static str] {
-        Self::Dao::fields()
-    }
-
-    fn map_sql_entity_value(
-        name: &str,
-        filter_value: &str,
-    ) -> Result<Option<Box<dyn SqlEntity>>, td_error::TdError>;
-
-    fn try_from_dao(dao: &Self::Dao) -> Result<Self, td_error::TdError>
-    where
-        Self: Sized;
-    fn map_dao_field(name: &str) -> String;
-    fn pagination_by() -> &'static str;
-    fn pagination_value(&self) -> String;
-    fn order_by_fields() -> &'static [&'static str];
-    fn order_by_str_value(&self, ordered_by_field: &Option<String>) -> Option<String>;
-    fn filter_by_fields() -> &'static [&'static str];
-    fn filter_by_like_fields() -> &'static [&'static str];
-}
-
-pub trait Extractor<T> {
-    fn extract(&self) -> T;
-}
-
 pub trait ComposedString {
     fn parse(s: impl Into<String>) -> Result<Self, td_error::TdError>
     where
         Self: Sized;
 
     fn compose(&self) -> String;
-}
-
-pub trait States<const S: u8> {
-    fn state() -> &'static [&'static dyn SqlEntity];
-}
-
-pub trait Versioned {
-    type Order: SqlEntity;
-    fn order_by() -> &'static str;
-
-    type Partition: SqlEntity;
-    fn partition_by() -> &'static str;
-}
-
-pub trait Recursive {
-    type Recursive: SqlEntity + 'static;
-    fn recurse_up() -> &'static str;
-    fn recurse_down() -> &'static str;
 }

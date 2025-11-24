@@ -129,7 +129,7 @@ mod tests {
                 ),
                 type_of_val(&With::<TableDBWithNames>::extract::<TableId>),
                 // Only committed transactions, at the triggered on time
-                type_of_val(&With::<AtTime>::convert_to::<TriggeredOn, _>),
+                type_of_val(&With::<AtTime>::try_convert_to::<TriggeredOn, _>),
                 // Find the latest data version of the table ID, at that time
                 type_of_val(
                     &By::<TableId>::select_version_optional::<

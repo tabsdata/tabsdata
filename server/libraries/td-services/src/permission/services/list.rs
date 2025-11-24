@@ -36,7 +36,7 @@ fn service() {
         from_fn(AuthzOn::<SystemOrRoleId>::set),
         from_fn(Authz::<SecAdmin, Requester>::check),
         from_fn(With::<ListRequest<RoleParam>>::extract::<ListParams>),
-        from_fn(With::<ListParams>::convert_to::<ListQueryParams<Permission>, _>),
+        from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<Permission>, _>),
         from_fn(By::<RoleId>::list::<NoListFilter, Permission>),
     )
 }
@@ -73,7 +73,7 @@ mod tests {
                 type_of_val(&AuthzOn::<SystemOrRoleId>::set),
                 type_of_val(&Authz::<SecAdmin, Requester>::check),
                 type_of_val(&With::<ListRequest<RoleParam>>::extract::<ListParams>),
-                type_of_val(&With::<ListParams>::convert_to::<ListQueryParams<Permission>, _>),
+                type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<Permission>, _>),
                 type_of_val(&By::<RoleId>::list::<NoListFilter, Permission>),
             ]);
     }

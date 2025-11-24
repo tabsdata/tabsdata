@@ -35,7 +35,7 @@ fn service() {
         from_fn(With::<UserDBWithNames>::extract::<UserId>),
         from_fn(AuthzOn::<SystemOrUserId>::set),
         from_fn(Authz::<SecAdmin, Requester>::check),
-        from_fn(With::<UserDBWithNames>::convert_to::<UserReadBuilder, _>),
+        from_fn(With::<UserDBWithNames>::try_convert_to::<UserReadBuilder, _>),
         from_fn(With::<UserReadBuilder>::build::<UserRead, _>),
     )
 }
@@ -68,7 +68,7 @@ mod tests {
                 type_of_val(&With::<UserDBWithNames>::extract::<UserId>),
                 type_of_val(&AuthzOn::<SystemOrUserId>::set),
                 type_of_val(&Authz::<SecAdmin, Requester>::check),
-                type_of_val(&With::<UserDBWithNames>::convert_to::<UserReadBuilder, _>),
+                type_of_val(&With::<UserDBWithNames>::try_convert_to::<UserReadBuilder, _>),
                 type_of_val(&With::<UserReadBuilder>::build::<UserRead, _>),
             ]);
     }

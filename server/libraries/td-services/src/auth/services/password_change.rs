@@ -61,10 +61,10 @@ fn service() {
             from_fn(assert_user_enabled),
             // create new password hash
             from_fn(create_password_hash::<NewPassword>),
-            from_fn(With::<UserDB>::convert_to::<UserDBBuilder, _>),
+            from_fn(With::<UserDB>::try_convert_to::<UserDBBuilder, _>),
             from_fn(With::<PasswordHash>::set::<UserDBBuilder>),
             // update password change time
-            from_fn(With::<AtTime>::convert_to::<PasswordChangeTime, _>),
+            from_fn(With::<AtTime>::try_convert_to::<PasswordChangeTime, _>),
             from_fn(With::<PasswordChangeTime>::set::<UserDBBuilder>),
             // reset the password must change flag
             from_fn(With::<PasswordMustChange>::default),
@@ -132,9 +132,9 @@ mod tests {
                 type_of_val(&assert_current_password::<OldPassword>),
                 type_of_val(&assert_user_enabled),
                 type_of_val(&create_password_hash::<NewPassword>),
-                type_of_val(&With::<UserDB>::convert_to::<UserDBBuilder, _>),
+                type_of_val(&With::<UserDB>::try_convert_to::<UserDBBuilder, _>),
                 type_of_val(&With::<PasswordHash>::set::<UserDBBuilder>),
-                type_of_val(&With::<AtTime>::convert_to::<PasswordChangeTime, _>),
+                type_of_val(&With::<AtTime>::try_convert_to::<PasswordChangeTime, _>),
                 type_of_val(&With::<PasswordChangeTime>::set::<UserDBBuilder>),
                 type_of_val(&With::<PasswordMustChange>::default),
                 type_of_val(&With::<PasswordMustChange>::set::<UserDBBuilder>),

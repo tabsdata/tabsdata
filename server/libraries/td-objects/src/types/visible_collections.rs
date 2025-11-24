@@ -2,8 +2,8 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use crate::dxo::DataAccessObject;
 use crate::sql::ListFilterGenerator;
-use crate::types::DataAccessObject;
 use crate::types::basic::{CollectionId, Private};
 use async_trait::async_trait;
 use sqlx::{QueryBuilder, Sqlite};

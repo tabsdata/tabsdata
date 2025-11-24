@@ -80,7 +80,7 @@ fn service() {
         from_fn(insert_vec::<TriggerDB>),
         // Insert into table_versions(sql) status=Deleted.
         from_fn(By::<TableVersionId>::select::<TableDB>),
-        from_fn(With::<TableDB>::convert_to::<TableDBBuilder, _>),
+        from_fn(With::<TableDB>::try_convert_to::<TableDBBuilder, _>),
         from_fn(With::<RequestContext>::update::<TableDBBuilder, _>),
         from_fn(build_deleted_table),
         from_fn(insert::<TableDB>),
@@ -160,7 +160,7 @@ mod tests {
                 type_of_val(&insert_vec::<TriggerDB>),
                 // Insert into table_versions(sql) status=Deleted.
                 type_of_val(&By::<TableVersionId>::select::<TableDB>),
-                type_of_val(&With::<TableDB>::convert_to::<TableDBBuilder, _>),
+                type_of_val(&With::<TableDB>::try_convert_to::<TableDBBuilder, _>),
                 type_of_val(&With::<RequestContext>::update::<TableDBBuilder, _>),
                 type_of_val(&build_deleted_table),
                 type_of_val(&insert::<TableDB>),

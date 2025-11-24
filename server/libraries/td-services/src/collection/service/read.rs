@@ -34,7 +34,7 @@ fn service() {
         from_fn(With::<ReadRequest<CollectionParam>>::extract_name::<CollectionParam>),
         from_fn(With::<CollectionParam>::extract::<CollectionIdName>),
         from_fn(By::<CollectionIdName>::select::<CollectionDBWithNames>),
-        from_fn(With::<CollectionDBWithNames>::convert_to::<CollectionReadBuilder, _>),
+        from_fn(With::<CollectionDBWithNames>::try_convert_to::<CollectionReadBuilder, _>),
         from_fn(With::<CollectionReadBuilder>::build::<CollectionRead, _>),
     )
 }
@@ -68,7 +68,9 @@ mod tests {
                 type_of_val(&With::<ReadRequest<CollectionParam>>::extract_name::<CollectionParam>),
                 type_of_val(&With::<CollectionParam>::extract::<CollectionIdName>),
                 type_of_val(&By::<CollectionIdName>::select::<CollectionDBWithNames>),
-                type_of_val(&With::<CollectionDBWithNames>::convert_to::<CollectionReadBuilder, _>),
+                type_of_val(
+                    &With::<CollectionDBWithNames>::try_convert_to::<CollectionReadBuilder, _>,
+                ),
                 type_of_val(&With::<CollectionReadBuilder>::build::<CollectionRead, _>),
             ]);
     }

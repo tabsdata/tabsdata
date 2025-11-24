@@ -39,7 +39,9 @@ fn service() {
         from_fn(Authz::<SecAdmin, CollAdmin>::check),
         // get list of permissions
         from_fn(With::<ListRequest<CollectionParam>>::extract::<ListParams>),
-        from_fn(With::<ListParams>::convert_to::<ListQueryParams<InterCollectionPermission>, _>),
+        from_fn(
+            With::<ListParams>::try_convert_to::<ListQueryParams<InterCollectionPermission>, _>
+        ),
         from_fn(By::<CollectionId>::list::<NoListFilter, InterCollectionPermission>),
     )
 }
@@ -82,7 +84,7 @@ mod tests {
 
                 // get list of permissions
                 type_of_val(&With::<ListRequest<CollectionParam>>::extract::<ListParams>),
-                type_of_val(&With::<ListParams>::convert_to::<ListQueryParams<InterCollectionPermission>, _>),
+                type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<InterCollectionPermission>, _>),
                 type_of_val(&By::<CollectionId>::list::<NoListFilter, InterCollectionPermission>),
             ]);
     }

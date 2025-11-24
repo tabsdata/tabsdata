@@ -56,7 +56,7 @@ fn service() {
         // List (all active versions at the time). Here we want the history, so we do not want
         // to query the versioned view.
         from_fn(With::<ListRequest<FunctionAtIdName>>::extract::<ListParams>),
-        from_fn(With::<ListParams>::convert_to::<ListQueryParams<Function>, _>),
+        from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<Function>, _>),
         from_fn(
             By::<FunctionId>::list_at::<NoListFilter, { FunctionDBWithNames::Available }, Function>
         ),
@@ -117,7 +117,7 @@ mod tests {
                 // List (all active versions at the time). Here we want the history, so we do not want
                 // to query the versioned view.
                 type_of_val(&With::<ListRequest<FunctionAtIdName>>::extract::<ListParams>),
-                type_of_val(&With::<ListParams>::convert_to::<ListQueryParams<Function>, _>),
+                type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<Function>, _>),
                 type_of_val(
                     &By::<FunctionId>::list_at::<
                         NoListFilter,

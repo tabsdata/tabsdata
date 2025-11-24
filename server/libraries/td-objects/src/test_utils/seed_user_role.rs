@@ -3,7 +3,8 @@
 //
 
 use crate::dxo::crudl::{ReadRequest, RequestContext, handle_sql_err};
-use crate::dxo::user_role::{UserRoleDB, UserRoleDBBuilder};
+use crate::dxo::user_role::UserRoleDB;
+use crate::dxo::{Setter, TryUpdater};
 use crate::sql::{DaoQueries, Insert, SelectBy};
 use crate::types::SqlEntity;
 use crate::types::basic::{AccessTokenId, RoleId, UserId};
@@ -19,11 +20,13 @@ pub async fn seed_user_role(db: &DbPool, user: &UserId, role: &RoleId) -> UserRo
     .read("");
     let request_context = request_context.context;
 
-    let builder = UserRoleDB::builder();
-    let builder = UserRoleDBBuilder::try_from((&request_context, builder)).unwrap();
-    let builder = UserRoleDBBuilder::from((user, builder));
-    let builder = UserRoleDBBuilder::from((role, builder));
-    let user_role_db = builder.build().unwrap();
+    let user_role_db = UserRoleDB::builder()
+        .try_update_from(&request_context)
+        .unwrap()
+        .set(user)
+        .set(role)
+        .build()
+        .unwrap();
 
     let queries = DaoQueries::default();
     queries

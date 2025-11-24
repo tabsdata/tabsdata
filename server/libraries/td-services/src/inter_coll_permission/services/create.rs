@@ -60,18 +60,18 @@ fn service() {
         from_fn(With::<CollectionParam>::extract::<CollectionIdName>),
         from_fn(By::<CollectionIdName>::select::<CollectionDB>),
         from_fn(With::<CollectionDB>::extract::<CollectionId>),
-        from_fn(With::<CollectionId>::convert_to::<FromCollectionId, _>), //stashing the collection ID we are adding the permission
+        from_fn(With::<CollectionId>::try_convert_to::<FromCollectionId, _>), //stashing the collection ID we are adding the permission
         // check request is sec_admin or coll_admin for the FROM collection
         from_fn(AuthzOn::<CollectionId>::set),
         from_fn(Authz::<SecAdmin, CollAdmin>::check),
         // find collection ID for the TO collection
         from_fn(With::<InterCollectionPermissionCreate>::extract::<ToCollectionName>),
-        from_fn(With::<ToCollectionName>::convert_to::<CollectionName, _>),
+        from_fn(With::<ToCollectionName>::try_convert_to::<CollectionName, _>),
         from_fn(By::<CollectionName>::select::<CollectionDB>),
         from_fn(With::<CollectionDB>::extract::<CollectionId>),
-        from_fn(With::<CollectionId>::convert_to::<ToCollectionId, _>),
+        from_fn(With::<CollectionId>::try_convert_to::<ToCollectionId, _>),
         // restore CollectionId from request name as we dropped it get the ToCollectionId
-        from_fn(With::<FromCollectionId>::convert_to::<CollectionId, _>),
+        from_fn(With::<FromCollectionId>::try_convert_to::<CollectionId, _>),
         from_fn(assert_collection_and_to_collection_are_different),
         // create permission DAO
         from_fn(builder::<InterCollectionPermissionDBBuilder>),
@@ -87,7 +87,7 @@ fn service() {
         from_fn(With::<InterCollectionPermissionDB>::extract::<InterCollectionPermissionId>),
         from_fn(By::<InterCollectionPermissionId>::select::<InterCollectionPermissionDBWithNames>),
         from_fn(
-            With::<InterCollectionPermissionDBWithNames>::convert_to::<
+            With::<InterCollectionPermissionDBWithNames>::try_convert_to::<
                 InterCollectionPermissionBuilder,
                 _,
             >
@@ -135,7 +135,7 @@ mod tests {
                 type_of_val(&With::<CollectionParam>::extract::<CollectionIdName>),
                 type_of_val(&By::<CollectionIdName>::select::<CollectionDB>),
                 type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
-                type_of_val(&With::<CollectionId>::convert_to::<FromCollectionId, _>), //stashing the collection ID we are adding the permission
+                type_of_val(&With::<CollectionId>::try_convert_to::<FromCollectionId, _>), //stashing the collection ID we are adding the permission
 
                 // check request is sec_admin or coll_admin for the FROM collection
                 type_of_val(&AuthzOn::<CollectionId>::set),
@@ -143,13 +143,13 @@ mod tests {
 
                 // find collection ID for the TO collection
                 type_of_val(&With::<InterCollectionPermissionCreate>::extract::<ToCollectionName>),
-                type_of_val(&With::<ToCollectionName>::convert_to::<CollectionName, _>),
+                type_of_val(&With::<ToCollectionName>::try_convert_to::<CollectionName, _>),
                 type_of_val(&By::<CollectionName>::select::<CollectionDB>),
                 type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
-                type_of_val(&With::<CollectionId>::convert_to::<ToCollectionId, _>),
+                type_of_val(&With::<CollectionId>::try_convert_to::<ToCollectionId, _>),
 
                 // restore CollectionId from request name as we dropped it get the ToCollectionId
-                type_of_val(&With::<FromCollectionId>::convert_to::<CollectionId, _>),
+                type_of_val(&With::<FromCollectionId>::try_convert_to::<CollectionId, _>),
 
                 type_of_val(&assert_collection_and_to_collection_are_different),
 
@@ -165,7 +165,7 @@ mod tests {
                 // Fetch DAO with Names and create DTO response
                 type_of_val(&With::<InterCollectionPermissionDB>::extract::<InterCollectionPermissionId>),
                 type_of_val(&By::<InterCollectionPermissionId>::select::<InterCollectionPermissionDBWithNames>),
-                type_of_val(&With::<InterCollectionPermissionDBWithNames>::convert_to::<InterCollectionPermissionBuilder, _>),
+                type_of_val(&With::<InterCollectionPermissionDBWithNames>::try_convert_to::<InterCollectionPermissionBuilder, _>),
                 type_of_val(&With::<InterCollectionPermissionBuilder>::build::<InterCollectionPermission, _>),
 
                 // refresh the inter collections authz cache

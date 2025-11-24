@@ -34,13 +34,13 @@ fn service() {
         from_fn(AuthzOn::<System>::set),
         from_fn(Authz::<SysAdmin>::check),
         from_fn(With::<CreateRequest<(), CollectionCreate>>::extract_data::<CollectionCreate>),
-        from_fn(With::<CollectionCreate>::convert_to::<CollectionCreateDBBuilder, _>),
+        from_fn(With::<CollectionCreate>::try_convert_to::<CollectionCreateDBBuilder, _>),
         from_fn(With::<RequestContext>::update::<CollectionCreateDBBuilder, _>),
         from_fn(With::<CollectionCreateDBBuilder>::build::<CollectionCreateDB, _>),
         from_fn(insert::<CollectionCreateDB>),
         from_fn(With::<CollectionCreateDB>::extract::<CollectionId>),
         from_fn(By::<CollectionId>::select::<CollectionDBWithNames>),
-        from_fn(With::<CollectionDBWithNames>::convert_to::<CollectionReadBuilder, _>),
+        from_fn(With::<CollectionDBWithNames>::try_convert_to::<CollectionReadBuilder, _>),
         from_fn(With::<CollectionReadBuilder>::build::<CollectionRead, _>),
     )
 }
@@ -75,13 +75,17 @@ mod tests {
                 type_of_val(
                     &With::<CreateRequest<(), CollectionCreate>>::extract_data::<CollectionCreate>,
                 ),
-                type_of_val(&With::<CollectionCreate>::convert_to::<CollectionCreateDBBuilder, _>),
+                type_of_val(
+                    &With::<CollectionCreate>::try_convert_to::<CollectionCreateDBBuilder, _>,
+                ),
                 type_of_val(&With::<RequestContext>::update::<CollectionCreateDBBuilder, _>),
                 type_of_val(&With::<CollectionCreateDBBuilder>::build::<CollectionCreateDB, _>),
                 type_of_val(&insert::<CollectionCreateDB>),
                 type_of_val(&With::<CollectionCreateDB>::extract::<CollectionId>),
                 type_of_val(&By::<CollectionId>::select::<CollectionDBWithNames>),
-                type_of_val(&With::<CollectionDBWithNames>::convert_to::<CollectionReadBuilder, _>),
+                type_of_val(
+                    &With::<CollectionDBWithNames>::try_convert_to::<CollectionReadBuilder, _>,
+                ),
                 type_of_val(&With::<CollectionReadBuilder>::build::<CollectionRead, _>),
             ]);
     }

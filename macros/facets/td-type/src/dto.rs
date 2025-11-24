@@ -208,11 +208,11 @@ pub fn dto_type(input: TokenStream) -> TokenStream {
         let field_dao_mapping = field_dao_mapping.values();
 
         quote! {
-            impl #impl_generics crate::types::ListQuery for #ident #ty_generics #where_clause {
+            impl #impl_generics crate::dxo::ListQuery for #ident #ty_generics #where_clause {
                 type Dao = #list_on;
 
                 fn try_from_dao(dao: &Self::Dao) -> Result<Self, td_error::TdError> {
-                    let builder = <#ident as crate::types::DataTransferObject>::Builder::try_from(dao)?;
+                    let builder = <#ident as crate::dxo::DataTransferObject>::Builder::try_from(dao)?;
                     builder.build().map_err(Into::into)
                 }
 
@@ -282,7 +282,7 @@ pub fn dto_type(input: TokenStream) -> TokenStream {
 
     let builder_type = format_ident!("{}Builder", &item.ident);
     let expanded = quote! {
-        impl #impl_generics crate::types::DataTransferObject for #ident #ty_generics #where_clause {
+        impl #impl_generics crate::dxo::DataTransferObject for #ident #ty_generics #where_clause {
             type Builder = #builder_type #ty_generics;
         }
 

@@ -50,14 +50,14 @@ fn service() {
         from_fn(update_user_validate),
         from_fn(update_user_validate_password_change),
         from_fn(update_user_validate_enabled),
-        from_fn(With::<UserDB>::convert_to::<UserUpdateDBBuilder, _>),
+        from_fn(With::<UserDB>::try_convert_to::<UserUpdateDBBuilder, _>),
         from_fn(With::<RequestContext>::update::<UserUpdateDBBuilder, _>),
         from_fn(With::<UserUpdate>::update_user_update_db_builder),
         from_fn(With::<UserUpdateDBBuilder>::build::<UserUpdateDB, _>),
         from_fn(With::<UserDB>::extract::<UserId>),
         from_fn(By::<UserId>::update::<UserUpdateDB, UserDB>),
         from_fn(By::<UserId>::select::<UserDBWithNames>),
-        from_fn(With::<UserDBWithNames>::convert_to::<UserReadBuilder, _>),
+        from_fn(With::<UserDBWithNames>::try_convert_to::<UserReadBuilder, _>),
         from_fn(With::<UserReadBuilder>::build::<UserRead, _>),
     )
 }
@@ -104,14 +104,14 @@ mod tests {
                 type_of_val(&update_user_validate),
                 type_of_val(&update_user_validate_password_change),
                 type_of_val(&update_user_validate_enabled),
-                type_of_val(&With::<UserDB>::convert_to::<UserUpdateDBBuilder, _>),
+                type_of_val(&With::<UserDB>::try_convert_to::<UserUpdateDBBuilder, _>),
                 type_of_val(&With::<RequestContext>::update::<UserUpdateDBBuilder, _>),
                 type_of_val(&With::<UserUpdate>::update_user_update_db_builder),
                 type_of_val(&With::<UserUpdateDBBuilder>::build::<UserUpdateDB, _>),
                 type_of_val(&With::<UserDB>::extract::<UserId>),
                 type_of_val(&By::<UserId>::update::<UserUpdateDB, UserDB>),
                 type_of_val(&By::<UserId>::select::<UserDBWithNames>),
-                type_of_val(&With::<UserDBWithNames>::convert_to::<UserReadBuilder, _>),
+                type_of_val(&With::<UserDBWithNames>::try_convert_to::<UserReadBuilder, _>),
                 type_of_val(&With::<UserReadBuilder>::build::<UserRead, _>),
             ]);
     }

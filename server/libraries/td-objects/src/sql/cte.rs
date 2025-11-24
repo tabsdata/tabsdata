@@ -2,9 +2,10 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use crate::dxo::{DataAccessObject, States, Versioned};
 use crate::sql::{Queries, gen_where_clause};
 use crate::table_ref::{Version, Versions};
-use crate::types::{AsDynSqlEntities, DataAccessObject, SqlEntity, States, Versioned};
+use crate::types::{AsDynSqlEntities, SqlEntity};
 use std::ops::Deref;
 use td_error::TdError;
 use tracing::trace;

@@ -42,7 +42,7 @@ fn service() {
         from_fn(With::<UserDB>::extract::<UserId>),
         from_fn(combine::<RoleId, UserId>),
         from_fn(By::<(RoleId, UserId)>::select::<UserRoleDBWithNames>),
-        from_fn(With::<UserRoleDBWithNames>::convert_to::<UserRoleBuilder, _>),
+        from_fn(With::<UserRoleDBWithNames>::try_convert_to::<UserRoleBuilder, _>),
         from_fn(With::<UserRoleBuilder>::build::<UserRole, _>),
     )
 }
@@ -82,7 +82,7 @@ mod tests {
                 type_of_val(&With::<UserDB>::extract::<UserId>),
                 type_of_val(&combine::<RoleId, UserId>),
                 type_of_val(&By::<(RoleId, UserId)>::select::<UserRoleDBWithNames>),
-                type_of_val(&With::<UserRoleDBWithNames>::convert_to::<UserRoleBuilder, _>),
+                type_of_val(&With::<UserRoleDBWithNames>::try_convert_to::<UserRoleBuilder, _>),
                 type_of_val(&With::<UserRoleBuilder>::build::<UserRole, _>),
             ]);
     }

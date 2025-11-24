@@ -4,11 +4,12 @@
 
 use std::ops::Deref;
 use td_error::{TdError, td_error};
+use td_objects::dxo::TryUpdater;
 use td_objects::dxo::crudl::RequestContext;
-use td_objects::dxo::dependency::{DependencyDB, DependencyDBBuilder};
-use td_objects::dxo::function::{FunctionDB, FunctionDBBuilder};
+use td_objects::dxo::dependency::DependencyDB;
+use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::table::{TableDB, TableDBBuilder};
-use td_objects::dxo::trigger::{TriggerDB, TriggerDBBuilder};
+use td_objects::dxo::trigger::TriggerDB;
 use td_objects::types::basic::{
     CollectionName, DependencyStatus, DependencyVersionId, FunctionStatus, FunctionVersionId,
     TableName, TableStatus, TableVersionId, TriggerStatus, TriggerVersionId,
@@ -28,7 +29,9 @@ pub async fn build_frozen_functions(
     let frozen_versions = dependant_versions_found
         .iter()
         .map(|v| {
-            FunctionDBBuilder::try_from((request_context.deref(), v.clone().to_builder()))?
+            v.clone()
+                .to_builder()
+                .try_update_from(request_context.deref())?
                 .id(FunctionVersionId::default())
                 .status(FunctionStatus::Frozen)
                 .build()
@@ -44,7 +47,9 @@ pub async fn build_deleted_triggers(
     let deleted_versions = triggers
         .iter()
         .map(|t| {
-            TriggerDBBuilder::try_from((request_context.deref(), t.clone().to_builder()))?
+            t.clone()
+                .to_builder()
+                .try_update_from(request_context.deref())?
                 .id(TriggerVersionId::default())
                 .status(TriggerStatus::Deleted)
                 .build()
@@ -60,7 +65,9 @@ pub async fn build_deleted_dependencies(
     let deleted_versions = deps
         .iter()
         .map(|d| {
-            DependencyDBBuilder::try_from((request_context.deref(), d.clone().to_builder()))?
+            d.clone()
+                .to_builder()
+                .try_update_from(request_context.deref())?
                 .id(DependencyVersionId::default())
                 .status(DependencyStatus::Deleted)
                 .build()

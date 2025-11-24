@@ -45,17 +45,17 @@ fn service() {
             >
         ),
         // Convert callback request to status update request.
-        from_fn(With::<CallbackRequest>::convert_to::<UpdateWorkerExecution, _>),
+        from_fn(With::<CallbackRequest>::try_convert_to::<UpdateWorkerExecution, _>),
         // Extract function_run_id. We assume it's correct as the callback is constructed by the server.
         from_fn(With::<FunctionRunIdParam>::extract::<FunctionRunId>),
         // Find function run (we will always have 1).
         from_fn(By::<FunctionRunId>::select_all::<FunctionRunDB>),
         // Update worker status.
-        from_fn(With::<UpdateWorkerExecution>::convert_to::<UpdateWorkerDBBuilder, _>),
+        from_fn(With::<UpdateWorkerExecution>::try_convert_to::<UpdateWorkerDBBuilder, _>),
         from_fn(With::<UpdateWorkerDBBuilder>::build::<UpdateWorkerDB, _>),
         from_fn(update_worker_status),
         // Update function run status.
-        from_fn(With::<UpdateWorkerExecution>::convert_to::<UpdateFunctionRunDBBuilder, _>),
+        from_fn(With::<UpdateWorkerExecution>::try_convert_to::<UpdateFunctionRunDBBuilder, _>),
         from_fn(With::<UpdateFunctionRunDBBuilder>::build::<UpdateFunctionRunDB, _>),
         from_fn(update_function_run_status),
         // Update table data versions status.
@@ -111,18 +111,20 @@ mod tests {
                     >,
                 ),
                 // Convert callback request to status update request.
-                type_of_val(&With::<CallbackRequest>::convert_to::<UpdateWorkerExecution, _>),
+                type_of_val(&With::<CallbackRequest>::try_convert_to::<UpdateWorkerExecution, _>),
                 // Extract function_run_id. We assume it's correct as the callback is constructed by the server.
                 type_of_val(&With::<FunctionRunIdParam>::extract::<FunctionRunId>),
                 // Find function run (we will always have 1).
                 type_of_val(&By::<FunctionRunId>::select_all::<FunctionRunDB>),
                 // Update worker status.
-                type_of_val(&With::<UpdateWorkerExecution>::convert_to::<UpdateWorkerDBBuilder, _>),
+                type_of_val(
+                    &With::<UpdateWorkerExecution>::try_convert_to::<UpdateWorkerDBBuilder, _>,
+                ),
                 type_of_val(&With::<UpdateWorkerDBBuilder>::build::<UpdateWorkerDB, _>),
                 type_of_val(&update_worker_status),
                 // Update function run status.
                 type_of_val(
-                    &With::<UpdateWorkerExecution>::convert_to::<UpdateFunctionRunDBBuilder, _>,
+                    &With::<UpdateWorkerExecution>::try_convert_to::<UpdateFunctionRunDBBuilder, _>,
                 ),
                 type_of_val(&With::<UpdateFunctionRunDBBuilder>::build::<UpdateFunctionRunDB, _>),
                 type_of_val(&update_function_run_status),

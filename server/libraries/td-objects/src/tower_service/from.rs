@@ -3,7 +3,7 @@
 //
 
 use crate::dxo::crudl::{Data, IntoData, IntoName, Name};
-use crate::types::Extractor;
+use crate::dxo::{Extractor, Setter, TryUpdater};
 use async_trait::async_trait;
 use std::marker::PhantomData;
 use std::ops::Deref;
@@ -15,8 +15,30 @@ pub struct With<T> {
 }
 
 #[async_trait]
+pub trait IntoService<T> {
+    async fn convert_to<F>(input: Input<T>) -> Result<F, TdError>
+    where
+        for<'a> T: Send + Sync + 'a,
+        F: for<'a> From<&'a T>;
+}
+
+#[async_trait]
+impl<T> IntoService<T> for With<T>
+where
+    T: Send + Sync,
+{
+    async fn convert_to<F>(Input(input): Input<T>) -> Result<F, TdError>
+    where
+        for<'a> T: Send + Sync + 'a,
+        F: for<'a> From<&'a T>,
+    {
+        Ok(F::from(input.deref()))
+    }
+}
+
+#[async_trait]
 pub trait TryIntoService<T> {
-    async fn convert_to<F, E>(input: Input<T>) -> Result<F, TdError>
+    async fn try_convert_to<F, E>(input: Input<T>) -> Result<F, TdError>
     where
         for<'a> T: Send + Sync + 'a,
         F: for<'a> TryFrom<&'a T, Error = E>,
@@ -28,7 +50,7 @@ impl<T> TryIntoService<T> for With<T>
 where
     T: Send + Sync,
 {
-    async fn convert_to<F, E>(Input(input): Input<T>) -> Result<F, TdError>
+    async fn try_convert_to<F, E>(Input(input): Input<T>) -> Result<F, TdError>
     where
         for<'a> T: Send + Sync + 'a,
         F: for<'a> TryFrom<&'a T, Error = E>,
@@ -159,7 +181,7 @@ pub trait UpdateService<T> {
     async fn update<F, E>(try_from: Input<T>, updater: Input<F>) -> Result<F, TdError>
     where
         for<'a> T: Send + Sync + 'a,
-        for<'a> F: TryFrom<(&'a T, F), Error = E> + Clone + Send + Sync,
+        F: TryUpdater<T, Error = E> + Clone + Send + Sync,
         E: Into<TdError>;
 }
 
@@ -171,10 +193,14 @@ where
     async fn update<F, E>(Input(try_from): Input<T>, Input(updater): Input<F>) -> Result<F, TdError>
     where
         for<'a> T: Send + Sync + 'a,
-        for<'a> F: TryFrom<(&'a T, F), Error = E> + Clone + Send + Sync,
+        F: TryUpdater<T, Error = E> + Clone + Send + Sync,
         E: Into<TdError>,
     {
-        F::try_from((try_from.deref(), updater.deref().clone())).map_err(Into::into)
+        let mut updater = updater.deref().clone();
+        updater
+            .try_update_from(try_from.deref())
+            .map_err(Into::into)?;
+        Ok(updater)
     }
 }
 
@@ -237,7 +263,7 @@ pub trait VecUpdateService<T> {
     ) -> Result<Vec<F>, TdError>
     where
         for<'a> T: Send + Sync + 'a,
-        for<'a> F: TryFrom<(&'a T, F), Error = E> + Clone + Send + Sync,
+        F: TryUpdater<T, Error = E> + Clone + Send + Sync,
         E: Into<TdError>;
 }
 
@@ -252,12 +278,16 @@ where
     ) -> Result<Vec<F>, TdError>
     where
         for<'a> T: Send + Sync + 'a,
-        for<'a> F: TryFrom<(&'a T, F), Error = E> + Clone + Send + Sync,
+        F: TryUpdater<T, Error = E> + Clone + Send + Sync,
         E: Into<TdError>,
     {
         try_from
             .iter()
-            .map(|item| F::try_from((item, updater.deref().clone())).map_err(Into::into))
+            .map(|item| {
+                let mut updater = updater.deref().clone();
+                updater.try_update_from(item).map_err(Into::into)?;
+                Ok(updater)
+            })
             .collect()
     }
 }
@@ -267,7 +297,7 @@ pub trait SetService<T> {
     async fn set<F>(from: Input<T>, setter: Input<F>) -> Result<F, TdError>
     where
         for<'a> T: Send + Sync + 'a,
-        for<'a> F: From<(&'a T, F)> + Clone + Send + Sync;
+        F: Setter<T> + Clone + Send + Sync;
 }
 
 #[async_trait]
@@ -278,9 +308,11 @@ where
     async fn set<F>(Input(from): Input<T>, Input(setter): Input<F>) -> Result<F, TdError>
     where
         for<'a> T: Send + Sync + 'a,
-        for<'a> F: From<(&'a T, F)> + Clone + Send + Sync,
+        F: Setter<T> + Clone + Send + Sync,
     {
-        Ok(F::from((from.deref(), setter.deref().clone())))
+        let mut setter = setter.deref().clone();
+        setter.set(from.deref());
+        Ok(setter)
     }
 }
 
@@ -370,7 +402,7 @@ mod tests {
     #[tokio::test]
     async fn test_with_convert_to() -> Result<(), TdError> {
         let input = Input::new(Foo::builder().value(1).build()?);
-        let result = With::<Foo>::convert_to::<VarBuilder, _>(input).await?;
+        let result = With::<Foo>::try_convert_to::<VarBuilder, _>(input).await?;
         assert_eq!(result.value, Some(1));
         Ok(())
     }

@@ -48,7 +48,7 @@ fn service() {
         from_fn(With::<CollectionParam>::extract::<CollectionIdName>),
         from_fn(By::<CollectionIdName>::select::<CollectionDB>),
         // Build deleted collection
-        from_fn(With::<CollectionDB>::convert_to::<CollectionDeleteDBBuilder, _>),
+        from_fn(With::<CollectionDB>::try_convert_to::<CollectionDeleteDBBuilder, _>),
         from_fn(With::<RequestContext>::update::<CollectionDeleteDBBuilder, _>),
         from_fn(With::<CollectionDeleteDBBuilder>::build::<CollectionDeleteDB, _>),
         // Update collection
@@ -127,7 +127,7 @@ mod tests {
                 type_of_val(&With::<CollectionParam>::extract::<CollectionIdName>),
                 type_of_val(&By::<CollectionIdName>::select::<CollectionDB>),
                 // Build deleted collection
-                type_of_val(&With::<CollectionDB>::convert_to::<CollectionDeleteDBBuilder, _>),
+                type_of_val(&With::<CollectionDB>::try_convert_to::<CollectionDeleteDBBuilder, _>),
                 type_of_val(&With::<RequestContext>::update::<CollectionDeleteDBBuilder, _>),
                 type_of_val(&With::<CollectionDeleteDBBuilder>::build::<CollectionDeleteDB, _>),
                 // Update collection

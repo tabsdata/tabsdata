@@ -2,10 +2,9 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use crate::do_authz::SKIP_AUTHZ;
 use crate::function::layers::delete::build_deleted_function_version;
-use crate::function::layers::{
-    SKIP_AUTHZ, register_dependencies, register_tables, register_triggers,
-};
+use crate::function::layers::{register_dependencies, register_tables, register_triggers};
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
 use td_objects::dxo::collection::CollectionDB;
@@ -66,7 +65,7 @@ fn service() {
         from_fn(With::<FunctionDBWithNames>::extract::<FunctionVersionId>),
         // Insert into function_versions(sql) status=Deleted.
         from_fn(By::<FunctionVersionId>::select::<FunctionDB>),
-        from_fn(With::<FunctionDB>::convert_to::<FunctionDBBuilder, _>),
+        from_fn(With::<FunctionDB>::try_convert_to::<FunctionDBBuilder, _>),
         from_fn(With::<RequestContext>::update::<FunctionDBBuilder, _>),
         from_fn(build_deleted_function_version),
         from_fn(insert::<FunctionDB>),
@@ -158,7 +157,7 @@ mod tests {
                 type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionVersionId>),
                 // Insert into function_versions(sql) status=Deleted.
                 type_of_val(&By::<FunctionVersionId>::select::<FunctionDB>),
-                type_of_val(&With::<FunctionDB>::convert_to::<FunctionDBBuilder, _>),
+                type_of_val(&With::<FunctionDB>::try_convert_to::<FunctionDBBuilder, _>),
                 type_of_val(&With::<RequestContext>::update::<FunctionDBBuilder, _>),
                 type_of_val(&build_deleted_function_version),
                 type_of_val(&insert::<FunctionDB>),
@@ -180,7 +179,7 @@ mod tests {
                 type_of_val(&With::<ReuseFrozen>::default),
                 // Insert into table_versions(sql) current function tables status=Active.
                 // Reuse table_id for tables that existed (had status=Frozen)
-                type_of_val(&With::<FunctionDB>::convert_to::<TableDBBuilder, _>),
+                type_of_val(&With::<FunctionDB>::try_convert_to::<TableDBBuilder, _>),
                 type_of_val(&With::<RequestContext>::update::<TableDBBuilder, _>),
                 type_of_val(&build_table_versions),
                 type_of_val(&insert_vec::<TableDB>),
@@ -188,12 +187,12 @@ mod tests {
                 type_of_val(&build_tables_trigger_versions),
                 type_of_val(&insert_vec::<TriggerDB>),
                 // Build dependency_versions(sql) current function table dependencies status=Active.
-                type_of_val(&With::<FunctionDB>::convert_to::<DependencyDBBuilder, _>),
+                type_of_val(&With::<FunctionDB>::try_convert_to::<DependencyDBBuilder, _>),
                 type_of_val(&With::<RequestContext>::update::<DependencyDBBuilder, _>),
                 type_of_val(&build_dependency_versions),
                 type_of_val(&insert_vec::<DependencyDB>),
                 // Insert into trigger_versions(sql) current function trigger status=Active.
-                type_of_val(&With::<FunctionDB>::convert_to::<TriggerDBBuilder, _>),
+                type_of_val(&With::<FunctionDB>::try_convert_to::<TriggerDBBuilder, _>),
                 type_of_val(&With::<RequestContext>::update::<TriggerDBBuilder, _>),
                 type_of_val(&build_trigger_versions),
                 type_of_val(&insert_vec::<TriggerDB>),

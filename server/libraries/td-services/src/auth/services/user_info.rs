@@ -39,7 +39,7 @@ fn service() {
         // get user current role permissions
         from_fn(By::<RoleId>::select_all::<PermissionDBWithNames>),
         // set user data
-        from_fn(With::<UserDBWithNames>::convert_to::<UserInfoBuilder, _>),
+        from_fn(With::<UserDBWithNames>::try_convert_to::<UserInfoBuilder, _>),
         // set current role
         from_fn(With::<RoleId>::set::<UserInfoBuilder>),
         // set permissions of current role
@@ -91,7 +91,7 @@ mod tests {
                 // get user current role permissions
                 type_of_val(&By::<RoleId>::select_all::<PermissionDBWithNames>),
                 // set user data
-                type_of_val(&With::<UserDBWithNames>::convert_to::<UserInfoBuilder, _>),
+                type_of_val(&With::<UserDBWithNames>::try_convert_to::<UserInfoBuilder, _>),
                 // set current role
                 type_of_val(&With::<RoleId>::set::<UserInfoBuilder>),
                 // set permissions of current role
