@@ -91,7 +91,13 @@ script = [
     if eq ${make_task} "docs"
         noop
     else
-        cm_run_task permit
+        td_run_permit = get_env TD_RUN_PERMIT
+        if eq ${td_run_permit} "false"
+            warn "✈️ Skipping permit"
+            echo ""
+        else
+            cm_run_task permit
+        end
     end
 
     td_override_build_timestamp = get_env TD_OVERRIDE_BUILD_TIMESTAMP
