@@ -49,6 +49,8 @@ pub mod user;
 pub mod user_role;
 pub mod worker;
 
+pub mod do_authz;
+
 #[derive(ServiceFactory, FieldAccessors, FromRef, Clone)]
 pub struct Services {
     auth: Arc<AuthServices>,
