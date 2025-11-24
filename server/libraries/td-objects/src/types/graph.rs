@@ -242,7 +242,6 @@ impl Display for ResolvedVersion {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

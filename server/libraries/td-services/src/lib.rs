@@ -38,6 +38,7 @@ pub mod collection;
 pub mod execution;
 pub mod function;
 pub mod function_run;
+pub mod graph;
 pub mod inter_coll_permission;
 pub mod permission;
 pub mod role;

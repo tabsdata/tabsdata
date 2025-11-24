@@ -2,13 +2,17 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::table::layers::graph::{build_response, find_dependency_graph};
+use crate::do_authz::SKIP_AUTHZ;
+use crate::graph::layers::{ALL_DEPS, FunctionOrTable, generate_td_graph};
+use crate::table::layers::flow::{build_response, with_recursion_options};
 use ta_services::factory::service_factory;
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
-use td_objects::dxo::table::{TableDBWithNames, TableGraphResponse};
+use td_objects::dxo::table::{TableDBWithNames, TableFlowGraphResponse};
 use td_objects::rest_urls::TableParam;
 use td_objects::sql::DaoQueries;
-use td_objects::tower_service::from::{ExtractNameService, ExtractService, With, combine};
+use td_objects::tower_service::from::{
+    ExtractNameService, ExtractService, IntoService, With, combine,
+};
 use td_objects::tower_service::sql::{By, SqlSelectService};
 use td_objects::types::basic::{AtTime, CollectionIdName, TableId, TableIdName};
 use td_tower::default_services::ConnectionProvider;
@@ -16,9 +20,9 @@ use td_tower::from_fn::from_fn;
 use td_tower::layers;
 
 #[service_factory(
-    name = TableDependencyGraphService,
+    name = TableFlowGraphService,
     request = ReadRequest<TableParam>,
-    response = TableGraphResponse,
+    response = TableFlowGraphResponse,
     connection = ConnectionProvider,
     context = DaoQueries,
 )]
@@ -30,7 +34,7 @@ fn service() {
         from_fn(With::<RequestContext>::extract::<AtTime>),
         from_fn(With::<TableParam>::extract::<CollectionIdName>),
         from_fn(With::<TableParam>::extract::<TableIdName>),
-        // Find table
+        // Find main table
         from_fn(combine::<CollectionIdName, TableIdName>),
         from_fn(
             By::<(CollectionIdName, TableIdName)>::select_version::<
@@ -38,10 +42,12 @@ fn service() {
                 TableDBWithNames,
             >
         ),
+        // Generate td graph
         from_fn(With::<TableDBWithNames>::extract::<TableId>),
-        // Find dependency graph
-        from_fn(find_dependency_graph),
-        // // Build response
+        from_fn(With::<TableId>::convert_to::<FunctionOrTable>),
+        from_fn(with_recursion_options),
+        generate_td_graph::<_, SKIP_AUTHZ, ALL_DEPS>(),
+        // Build response
         from_fn(build_response),
     )
 }
@@ -64,7 +70,8 @@ mod tests {
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionName, FunctionRuntimeValues,
         RoleId, TableName, TableNameDto, UserId,
     };
-    use td_objects::types::composed::TableDependencyDto;
+    use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
+    use td_objects::types::graph::GraphEdge;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -78,10 +85,10 @@ mod tests {
         };
         use td_tower::metadata::type_of_val;
 
-        TableDependencyGraphService::with_defaults(db)
+        TableFlowGraphService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<ReadRequest<TableParam>, TableGraphResponse>(&[
+            .assert_service::<ReadRequest<TableParam>, TableFlowGraphResponse>(&[
                 // Extract from request.
                 type_of_val(&With::<ReadRequest<TableParam>>::extract_name::<TableParam>),
                 type_of_val(&With::<ReadRequest<TableParam>>::extract::<RequestContext>),
@@ -155,7 +162,7 @@ mod tests {
         let function_0 = seed_function(&db, &collection_0, &create).await;
 
         // Actual test
-        let service = TableDependencyGraphService::with_defaults(db.clone())
+        let service = TableFlowGraphService::with_defaults(db.clone())
             .service()
             .await;
         let request =
@@ -207,8 +214,19 @@ mod tests {
         assert!(response.system_tables.is_empty());
         assert_eq!(expected_tables.len(), response.user_tables.len());
 
-        // All relations created are dependencies
-        assert!(response.relations.is_empty());
+        // Assert relations
+        let relations = response.relations;
+        assert_eq!(relations.len(), 2);
+        for (f, t, edge) in relations {
+            let t = response.all_tables.get(&t).map(|t| t.name.clone()).unwrap();
+            // function_0 depends on table_0 and creates table_0
+            if f == function_0.id && t == expected_tables[0] {
+                assert!(matches!(
+                    edge,
+                    GraphEdge::Output { .. } | GraphEdge::Dependency { .. }
+                ));
+            }
+        }
         Ok(())
     }
 
@@ -240,7 +258,7 @@ mod tests {
             .try_snippet("foo snippet")?
             .decorator(Decorator::Publisher)
             .dependencies(Some(vec![TableDependencyDto::try_from("table_0")?]))
-            .triggers(None)
+            .triggers(vec![TableTriggerDto::try_from("table_0")?])
             .tables(vec![
                 TableNameDto::try_from("table_1")?,
                 TableNameDto::try_from("table_2")?,
@@ -267,7 +285,7 @@ mod tests {
         let function_2 = seed_function(&db, &collection_0, &create).await;
 
         // Actual test
-        let service = TableDependencyGraphService::with_defaults(db.clone())
+        let service = TableFlowGraphService::with_defaults(db.clone())
             .service()
             .await;
         let request =
@@ -321,26 +339,40 @@ mod tests {
         assert!(response.system_tables.is_empty());
         assert_eq!(expected_tables.len(), response.user_tables.len());
 
-        // All relations created are dependencies
-        let expected_relations = [
-            (function_0.id, vec![TableName::try_from("table_0")?]),
-            (function_1.id, vec![TableName::try_from("table_0")?]),
-            (function_2.id, vec![TableName::try_from("table_0")?]),
-        ];
-        let relations = response
-            .relations
-            .iter()
-            .map(|(f_id, t_id, _)| {
-                let table_name = response
-                    .all_tables
-                    .get(t_id)
-                    .map(|t| t.name.clone())
-                    .unwrap();
-                (*f_id, table_name)
-            })
-            .into_group_map();
-        let relations = relations.into_iter().sorted().collect::<Vec<_>>();
-        assert_eq!(relations, expected_relations);
+        // Assert relations
+        let relations = response.relations;
+        assert_eq!(relations.len(), 8);
+        for (f, t, edge) in relations {
+            let t = response.all_tables.get(&t).map(|t| t.name.clone()).unwrap();
+            // function_0 depends on table_0 and creates table_0
+            if f == function_0.id && t == expected_tables[0] {
+                assert!(matches!(
+                    edge,
+                    GraphEdge::Output { .. } | GraphEdge::Dependency { .. }
+                ));
+            }
+            // function_1 depends on and gets triggered by table_0 and creates table_1 and table_2
+            if f == function_1.id && t == expected_tables[0] {
+                assert!(matches!(
+                    edge,
+                    GraphEdge::Dependency { .. } | GraphEdge::Trigger { .. }
+                ));
+            }
+            if f == function_1.id && t == expected_tables[1] {
+                assert!(matches!(edge, GraphEdge::Output { .. }));
+            }
+            if f == function_1.id && t == expected_tables[2] {
+                assert!(matches!(edge, GraphEdge::Output { .. }));
+            }
+
+            // function_2 depends on table_0 and creates table_3
+            if f == function_2.id && t == expected_tables[0] {
+                assert!(matches!(edge, GraphEdge::Dependency { .. }));
+            }
+            if f == function_2.id && t == expected_tables[3] {
+                assert!(matches!(edge, GraphEdge::Output { .. }));
+            }
+        }
         Ok(())
     }
 
@@ -399,7 +431,7 @@ mod tests {
         let function_2 = seed_function(&db, &collection_0, &create).await;
 
         // Actual test
-        let service = TableDependencyGraphService::with_defaults(db.clone())
+        let service = TableFlowGraphService::with_defaults(db.clone())
             .service()
             .await;
         let request =
@@ -447,29 +479,29 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(tables, expected_tables);
 
-        // All tables are user in this test
-        assert!(response.system_tables.is_empty());
-        assert_eq!(expected_tables.len(), response.user_tables.len());
-
-        // All relations created are dependencies
-        let expected_relations = [
-            (function_0.id, vec![TableName::try_from("table_0")?]),
-            (function_2.id, vec![TableName::try_from("table_0")?]),
-        ];
-        let relations = response
-            .relations
-            .iter()
-            .map(|(f_id, t_id, _)| {
-                let table_name = response
-                    .all_tables
-                    .get(t_id)
-                    .map(|t| t.name.clone())
-                    .unwrap();
-                (*f_id, table_name)
-            })
-            .into_group_map();
-        let relations = relations.into_iter().sorted().collect::<Vec<_>>();
-        assert_eq!(relations, expected_relations);
+        // Assert relations
+        let relations = response.relations;
+        assert_eq!(relations.len(), 4);
+        for (f, t, edge) in relations {
+            let t = response.all_tables.get(&t).map(|t| t.name.clone()).unwrap();
+            // function_0 depends on table_0 and creates table_0
+            if f == function_0.id && t == expected_tables[0] {
+                assert!(matches!(
+                    edge,
+                    GraphEdge::Output { .. } | GraphEdge::Dependency { .. }
+                ));
+            }
+            // function_2 depends on table_0 and creates table_3
+            if f == function_2.id && t == expected_tables[0] {
+                assert!(matches!(
+                    edge,
+                    GraphEdge::Dependency { .. } | GraphEdge::Trigger { .. }
+                ));
+            }
+            if f == function_2.id && t == expected_tables[1] {
+                assert!(matches!(edge, GraphEdge::Output { .. }));
+            }
+        }
         Ok(())
     }
 }

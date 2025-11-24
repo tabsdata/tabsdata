@@ -7,13 +7,13 @@ mod definitions {
     use crate::dxo::crudl::RequestContext;
     use crate::dxo::execution::{FunctionNodeResponse, TableNodeResponse};
     use crate::dxo::function::FunctionDB;
-    use crate::execution::graph::GraphEdge;
     use crate::types::basic::{
         AtTime, CollectionId, CollectionName, FunctionId, FunctionName, FunctionVersionId, Private,
         System, TableDataVersionId, TableFunctionParamPos, TableId, TableName, TableStatus,
         TableVersionId, UserId, UserName, Versioned,
     };
     use crate::types::composed::TableVersions;
+    use crate::types::graph::GraphEdge;
     use std::collections::{HashMap, HashSet};
 
     #[td_type::Dao]
@@ -73,6 +73,8 @@ mod definitions {
         pub table_id: TableId,
         #[td_type(extractor)]
         pub name: TableName,
+        #[td_type(extractor)]
+        pub function_id: FunctionId,
 
         pub system: System,
         pub defined_by: UserName,
@@ -111,8 +113,7 @@ mod definitions {
     }
 
     #[td_type::Dto]
-    pub struct TableGraphResponse {
-        // central table
+    pub struct TableFlowGraphResponse {
         pub table: TableVersionId,
         // functions info
         pub all_functions: HashMap<FunctionVersionId, FunctionNodeResponse>,

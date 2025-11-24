@@ -14,7 +14,7 @@ use td_tower::{layer, layers};
 
 pub mod delete;
 pub mod download;
-pub mod graph;
+pub mod flow;
 pub mod list_data_versions;
 pub mod sample;
 pub mod schema;
