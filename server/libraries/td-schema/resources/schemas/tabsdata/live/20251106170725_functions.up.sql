@@ -3,4 +3,4 @@
 --
 
 ALTER TABLE executions
-    ADD COLUMN depth INTEGER NULL;
+    ADD COLUMN recursion_options TEXT NULL;

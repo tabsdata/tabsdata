@@ -7,6 +7,7 @@ use crate::sql::Queries;
 use crate::sql::cte::{ranked_versions_at, select_ranked_versions_at};
 use crate::types::SqlEntity;
 use crate::types::basic::Depth;
+use crate::types::recursion::RecursionOptions;
 use std::ops::Deref;
 use td_error::TdError;
 use tracing::trace;
@@ -16,15 +17,6 @@ const LATEST_RECURSION_VERSIONS_CTE: &str = "latest_recursion_versions";
 const RECURSIVE_VERSIONS_CTE: &str = "recursive_versions";
 
 impl<Q: Deref<Target = dyn Queries>> RecursiveQueries for Q {}
-
-#[derive(Debug, Clone, Copy, Default)]
-pub struct RecursionOptions {
-    /// Maximum recursive depth when going upstream (toward ancestors)
-    pub max_upstream_depth: Option<Depth>,
-
-    /// Maximum recursive depth when going downstream (toward descendants)
-    pub max_downstream_depth: Option<Depth>,
-}
 
 pub trait RecursiveQueries {
     /// Builds all CTEs and select queries to get the recursive versions of a given object with a
@@ -128,10 +120,7 @@ pub trait RecursiveQueries {
             d_defined_on,
             r_defined_on,
             direct_reference_entity,
-            RecursionOptions {
-                max_upstream_depth: Some(Depth::ZERO),
-                max_downstream_depth: None,
-            },
+            &RecursionOptions::new(Some(Depth::ZERO), None),
         )
     }
 
@@ -140,7 +129,7 @@ pub trait RecursiveQueries {
         d_defined_on: Option<&'a <D as Versioned>::Order>,
         r_defined_on: Option<&'a <R as Versioned>::Order>,
         direct_reference_entity: &'a dyn SqlEntity, // has to be in R
-        options: RecursionOptions,
+        options: &RecursionOptions,
     ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, TdError>
     where
         D: DataAccessObject + Recursive + Versioned + States<DS>,
@@ -191,7 +180,7 @@ pub trait RecursiveQueries {
 fn recursive_versions_sql<'a, D, R>(
     query_builder: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>,
     direct_reference_entity: &'a dyn SqlEntity,
-    options: RecursionOptions,
+    options: &RecursionOptions,
 ) -> Result<(), TdError>
 where
     D: Recursive + Versioned,
@@ -223,7 +212,7 @@ where
         " AND EXISTS (SELECT 1 FROM {LATEST_REFERENCE_VERSIONS_CTE} fx WHERE fx.{recursion_ref} = d.{recurse_up})"
     ));
 
-    if let Some(max_up) = options.max_upstream_depth {
+    if let Some(max_up) = options.max_upstream_depth() {
         query_builder.push(format!(" AND 0 < {max_up} "));
     }
 
@@ -243,7 +232,7 @@ where
         "
     ));
 
-    if let Some(max_up) = options.max_upstream_depth {
+    if let Some(max_up) = options.max_upstream_depth() {
         query_builder.push(format!(" AND r.depth_up < {max_up} "));
     }
 
@@ -270,7 +259,7 @@ where
         " AND EXISTS (SELECT 1 FROM {LATEST_REFERENCE_VERSIONS_CTE} fx WHERE fx.{recursion_ref} = d.{recurse_down})"
     ));
 
-    if let Some(max_down) = options.max_downstream_depth {
+    if let Some(max_down) = options.max_downstream_depth() {
         query_builder.push(format!(" AND 0 < {max_down} "));
     }
 
@@ -290,7 +279,7 @@ where
         "
     ));
 
-    if let Some(max_down) = options.max_downstream_depth {
+    if let Some(max_down) = options.max_downstream_depth() {
         query_builder.push(format!(" AND r.depth_down < {max_down} "));
     }
 
@@ -479,10 +468,7 @@ mod tests {
         recursive_versions_sql::<TestDao, RecursionReference>(
             &mut query_builder,
             id,
-            RecursionOptions {
-                max_upstream_depth: None,
-                max_downstream_depth: None,
-            },
+            &RecursionOptions::new(None, None),
         )
         .unwrap();
         let query = query_builder.build();
@@ -542,10 +528,10 @@ mod tests {
         recursive_versions_sql::<TestDao, RecursionReference>(
             &mut query_builder,
             id,
-            RecursionOptions {
-                max_upstream_depth: Some(Depth::try_from(2).unwrap()),
-                max_downstream_depth: Some(Depth::try_from(3).unwrap()),
-            },
+            &RecursionOptions::new(
+                Some(Depth::try_from(2).unwrap()),
+                Some(Depth::try_from(3).unwrap()),
+            ),
         )
         .unwrap();
         let query = query_builder.build();
@@ -800,10 +786,10 @@ mod tests {
         let id = TestId::try_from("SSS").unwrap();
         let mut query_builder = DaoQueries::default()
             .select_recursive_versions_at_with::<{ TestDao::All }, TestDao, { RecursionReference::All }, RecursionReference>(
-                None, None, &id, RecursionOptions {
-                    max_upstream_depth: None,
-                    max_downstream_depth: Some(Depth::ZERO),
-                }
+                None, None, &id, &RecursionOptions::new(
+                     None,
+                     Some(Depth::ZERO),
+                )
             )
             .unwrap();
         let result: Vec<TestDao> = query_builder.build_query_as().fetch_all(&db).await.unwrap();
@@ -863,11 +849,10 @@ mod tests {
         let id = TestId::try_from("SSS").unwrap();
         let mut query_builder = DaoQueries::default()
             .select_recursive_versions_at_with::<{ TestDao::All }, TestDao, { RecursionReference::All }, RecursionReference>(
-                None, None, &id,RecursionOptions {
-                    max_upstream_depth: Some(Depth::try_from(1).unwrap()),
-                    max_downstream_depth: None,
-                }
-            )
+                None, None, &id, &RecursionOptions::new(
+                    Some(Depth::try_from(1).unwrap()),
+                    None
+                ))
             .unwrap();
         let result: Vec<TestDao> = query_builder.build_query_as().fetch_all(&db).await.unwrap();
         // SSS: EEE (direct upstream)

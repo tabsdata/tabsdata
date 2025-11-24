@@ -3,4 +3,4 @@
 --
 
 ALTER TABLE executions
-    DROP COLUMN depth;
+    DROP COLUMN recursion_options;

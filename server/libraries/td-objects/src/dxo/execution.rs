@@ -10,12 +10,13 @@ mod definitions {
     use crate::dxo::table_data_version::ExecutionTableDataVersionRead;
     use crate::execution::graph::{FunctionNode, GraphEdge, TableNode};
     use crate::types::basic::{
-        AtTime, CollectionId, CollectionName, Depth, Dot, ExecutionId, ExecutionName,
-        ExecutionStatus, FunctionName, FunctionOnly, FunctionRunStatus, FunctionVersionId,
-        StatusCount, TableDataVersionId, TableName, TableVersionId, TransactionId, TriggeredOn,
-        UserId, UserName,
+        AtTime, CollectionId, CollectionName, Dot, ExecutionId, ExecutionName, ExecutionStatus,
+        FunctionName, FunctionOnly, FunctionRunStatus, FunctionVersionId, StatusCount, System,
+        TableDataVersionId, TableName, TableVersionId, TransactionId, TriggeredOn, UserId,
+        UserName,
     };
     use crate::types::composed::TableVersions;
+    use crate::types::recursion::RecursionOptions;
     use crate::types::status_count::FunctionRunStatusCount;
     use std::collections::{HashMap, HashSet};
 
@@ -52,8 +53,16 @@ mod definitions {
         #[td_type(updater(try_from = RequestContext, field = "user_id"))]
         pub triggered_by_id: UserId,
 
-        #[td_type(setter)]
-        pub depth: Option<Depth>, // Added in v3
+        pub recursion_options: sqlx::types::Json<Option<RecursionOptions>>, // Added in v3
+    }
+
+    // custom setter to convert to json
+    impl Setter<RecursionOptions> for ExecutionDBBuilder {
+        fn set(&mut self, value: &RecursionOptions) -> &mut Self {
+            let recursion_options = sqlx::types::Json::from(Some(value.clone()));
+            self.recursion_options = Some(recursion_options);
+            self
+        }
     }
 
     #[td_type::Dao]
@@ -83,6 +92,9 @@ mod definitions {
     #[dto(list(on = ExecutionDBWithStatus))]
     #[inherits(ExecutionDBWithStatus)]
     pub struct Execution {
+        #[ignore]
+        pub recursion_options: sqlx::types::Json<Option<RecursionOptions>>, // Added in v3
+
         #[dto(list(filter, filter_like, order_by))]
         pub id: ExecutionId,
         #[dto(list(filter, filter_like))]

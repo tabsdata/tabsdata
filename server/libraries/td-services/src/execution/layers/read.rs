@@ -5,21 +5,23 @@
 use std::collections::HashMap;
 use std::ops::Deref;
 use td_error::TdError;
-use td_execution::{EXECUTION_GRAPH_DEPTH, TransactionBy, TransactionMap};
+use td_execution::{EXECUTION_GRAPH_OPTIONS, TransactionBy};
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::transaction::{TransactionDB, TransactionValueBuilder};
-use td_objects::types::basic::Depth;
+use td_objects::transaction::map::TransactionMap;
+use td_objects::types::recursion::RecursionOptions;
 use td_tower::extractors::{Input, SrvCtx};
 
-pub async fn seed_existing_trigger_graph_depth(
+pub async fn with_existing_recursion_options(
     Input(execution): Input<ExecutionDB>,
-) -> Result<Option<Depth>, TdError> {
+) -> Result<RecursionOptions, TdError> {
     // We are using the depth defined, if any, or defaulting to EXECUTION_GRAPH_DEPTH.
-    let depth = match execution.depth {
-        Some(d) => Some(d),
-        None => EXECUTION_GRAPH_DEPTH,
-    };
-    Ok(depth)
+    let options = execution
+        .recursion_options
+        .as_ref()
+        .clone()
+        .unwrap_or(EXECUTION_GRAPH_OPTIONS);
+    Ok(options)
 }
 
 // Similar to build_transaction_map, but using already existing transactions instead of creating new ones.
