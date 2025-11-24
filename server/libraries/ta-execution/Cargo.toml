@@ -51,7 +51,6 @@ td-objects = { workspace = true }
 
 # External dependencies
 
-getset = { workspace = true }
 petgraph = { workspace = true }
 strum = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }

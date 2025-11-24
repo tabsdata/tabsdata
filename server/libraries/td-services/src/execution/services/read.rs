@@ -3,7 +3,9 @@
 //
 
 use crate::execution::layers::plan::{build_execution_plan, build_response};
-use crate::execution::layers::read::build_existing_transaction_map;
+use crate::execution::layers::read::{
+    build_existing_transaction_map, seed_existing_trigger_graph_depth,
+};
 use crate::execution::layers::template::{
     build_execution_template, find_all_input_tables, find_trigger_graph,
 };
@@ -47,6 +49,7 @@ fn service() {
         from_fn(By::<FunctionVersionId>::select::<FunctionDBWithNames>),
         from_fn(With::<FunctionDBWithNames>::extract::<FunctionId>),
         // Find trigger graph
+        from_fn(seed_existing_trigger_graph_depth),
         from_fn(find_trigger_graph),
         // Find all input tables
         from_fn(find_all_input_tables),
@@ -97,6 +100,7 @@ mod tests {
                 type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
                 // Create execution template.
                 // Find trigger graph
+                type_of_val(&seed_existing_trigger_graph_depth),
                 type_of_val(&find_trigger_graph),
                 // Find all input tables
                 type_of_val(&find_all_input_tables),

@@ -3,7 +3,6 @@
 //
 
 use crate::transaction::TransactionMapper;
-use getset::Getters;
 use petgraph::Graph;
 use petgraph::algo::toposort;
 use petgraph::dot::{Config, Dot};
@@ -154,11 +153,9 @@ impl<'a> GraphBuilder<'a> {
 /// be `Versions::None` for the output and trigger edges (which is the version being planned).
 /// And any Versions for the dependency nodes.
 /// For 3, it also contains further information to resolve the dependency later on.
-#[derive(Getters)]
-#[getset(get = "pub")]
 pub struct ExecutionGraph<V> {
-    inner: Graph<GraphNode, GraphEdge<V>>,
-    trigger_index: NodeIndex,
+    pub inner: Graph<GraphNode, GraphEdge<V>>,
+    pub trigger_index: NodeIndex,
 }
 
 impl<V> ExecutionGraph<V> {
@@ -220,8 +217,6 @@ impl<V: Display> ExecutionGraph<V> {
 }
 
 /// Represents a partial graph used for validation.
-#[derive(Getters)]
-#[getset(get = "pub")]
 pub struct PartialGraph<F> {
     inner: Graph<F, ()>,
 }
@@ -235,8 +230,8 @@ impl<F> PartialGraph<F> {
         let mut node_map = HashMap::new();
 
         // Add nodes we want to keep (function nodes)
-        for node_idx in original.inner().node_indices() {
-            let node = &original.inner()[node_idx];
+        for node_idx in original.inner.node_indices() {
+            let node = &original.inner[node_idx];
             if let GraphNode::Function(node) = node {
                 let new_idx = new_graph.add_node(node);
                 node_map.insert(node_idx, new_idx);
@@ -244,19 +239,19 @@ impl<F> PartialGraph<F> {
         }
 
         // Rewire edges
-        for node_idx in original.inner().node_indices() {
-            let node = &original.inner()[node_idx];
+        for node_idx in original.inner.node_indices() {
+            let node = &original.inner[node_idx];
             if let GraphNode::Table(_) = node {
                 // For each ignored node, connect its predecessors to successors
                 let preds: Vec<_> = original
-                    .inner()
+                    .inner
                     .edges_directed(node_idx, petgraph::Direction::Incoming)
                     .filter(|edge| !matches!(edge.weight(), GraphEdge::Dependency { .. }))
                     .map(|edge| edge.source())
                     .collect();
 
                 let succs: Vec<_> = original
-                    .inner()
+                    .inner
                     .edges_directed(node_idx, petgraph::Direction::Outgoing)
                     .filter(|edge| !matches!(edge.weight(), GraphEdge::Dependency { .. }))
                     .map(|edge| edge.target())
@@ -287,17 +282,17 @@ impl<F> PartialGraph<F> {
         let mut new_graph = DiGraph::new();
 
         let mut node_map = HashMap::new();
-        for node in trigger_graph.inner().node_indices() {
-            let key = transaction_mapper.key(trigger_graph.inner()[node])?;
+        for node in trigger_graph.inner.node_indices() {
+            let key = transaction_mapper.key(trigger_graph.inner[node])?;
             node_map
                 .entry(key.clone())
                 .or_insert_with(|| new_graph.add_node(key));
         }
 
         let mut edge_map = HashMap::new();
-        for edge in trigger_graph.inner().edge_references() {
-            let source_key = transaction_mapper.key(trigger_graph.inner()[edge.source()])?;
-            let target_key = transaction_mapper.key(trigger_graph.inner()[edge.target()])?;
+        for edge in trigger_graph.inner.edge_references() {
+            let source_key = transaction_mapper.key(trigger_graph.inner[edge.source()])?;
+            let target_key = transaction_mapper.key(trigger_graph.inner[edge.target()])?;
             let source = node_map[&source_key];
             let target = node_map[&target_key];
             if source != target && !edge_map.contains_key(&(source, target)) {
@@ -336,7 +331,7 @@ mod tests {
         let (graph, trigger_function) = test_graph().await;
         assert_eq!(
             GraphNode::Function(trigger_function),
-            graph.inner()[graph.trigger_index]
+            graph.inner[graph.trigger_index]
         );
         assert_eq!(
             graph.inner.node_count(),
@@ -363,7 +358,7 @@ mod tests {
             });
 
         for node in graph.inner.node_indices() {
-            let node = &graph.inner()[node];
+            let node = &graph.inner[node];
             match node {
                 GraphNode::Function(_) => assert!(function_nodes.remove(node)),
                 GraphNode::Table(_) => assert!(table_nodes.remove(node)),
@@ -459,7 +454,7 @@ mod tests {
         ]);
 
         for node in trigger_graph.inner.node_indices() {
-            let node = &trigger_graph.inner()[node];
+            let node = &trigger_graph.inner[node];
             assert!(function_nodes.remove(node));
         }
         assert!(function_nodes.is_empty());
@@ -535,7 +530,7 @@ mod tests {
         ]);
 
         for node in transaction_graph.inner.node_indices() {
-            let node = &transaction_graph.inner()[node];
+            let node = &transaction_graph.inner[node];
             assert!(function_nodes.remove(node));
         }
         assert!(function_nodes.is_empty());
@@ -560,7 +555,7 @@ mod tests {
         assert_eq!(transaction_graph.inner.edge_count(), 0);
 
         let node = transaction_graph.inner.node_indices().next().unwrap();
-        let node = &transaction_graph.inner()[node];
+        let node = &transaction_graph.inner[node];
         assert_eq!(*node, TransactionKey::try_from("S").unwrap());
     }
 

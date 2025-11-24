@@ -39,8 +39,6 @@ td-objects = { workspace = true }
 
 # External dependencies
 
-async-trait = { workspace = true }
-petgraph = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 strum = { workspace = true, features = ["derive"] }
 

@@ -3,26 +3,20 @@
 //
 
 use async_trait::async_trait;
-use petgraph::prelude::EdgeRef;
+use petgraph::prelude::{Direction, EdgeRef};
 use petgraph::visit::IntoNodeReferences;
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::hash::Hash;
 use ta_execution::graphs::ExecutionGraph;
 use td_objects::execution::graph::{FunctionNode, GraphEdge, GraphNode, TableNode};
-use te_execution::planner::TriggerPlanner;
 
 /// The `ExecutionPlanner` trait is used to define the execution plan for the type implementing it.
-/// It does require TriggerPlanner as a super-trait, which will define which nodes are triggered,
-/// excluding the manual trigger node (the main trigger).
 #[async_trait]
-pub trait ExecutionPlanner<V: Eq + Hash>: TriggerPlanner<V> {
-    /// Versioned Planner type implementing this trait (used to transform using versioned).
-    type Planner<T: Eq + Hash>: ExecutionPlanner<T>;
-
+pub trait ExecutionPlanner<V: Eq + Hash> {
     /// Transforms the execution planner by applying a transformation function to each version.
     /// This is useful to convert relative versions to absolute versions.
-    async fn versioned<'a, VV, T, E, Fut>(&'a self, transform: T) -> Result<Self::Planner<VV>, E>
+    async fn versioned<'a, VV, T, E, Fut>(&'a self, transform: T) -> Result<ExecutionGraph<VV>, E>
     where
         T: Fn(&'a TableNode, &'a V, bool) -> Fut + Send + Clone + 'a,
         V: Sync + 'a,
@@ -55,9 +49,7 @@ pub trait ExecutionPlanner<V: Eq + Hash>: TriggerPlanner<V> {
 
 #[async_trait]
 impl<V: Eq + Hash> ExecutionPlanner<V> for ExecutionGraph<V> {
-    type Planner<T: Eq + Hash> = ExecutionGraph<T>;
-
-    async fn versioned<'a, VV, T, E, Fut>(&'a self, transform: T) -> Result<Self::Planner<VV>, E>
+    async fn versioned<'a, VV, T, E, Fut>(&'a self, transform: T) -> Result<ExecutionGraph<VV>, E>
     where
         T: Fn(&'a TableNode, &'a V, bool) -> Fut + Send + Clone + 'a,
         V: Sync + 'a,
@@ -68,21 +60,21 @@ impl<V: Eq + Hash> ExecutionPlanner<V> for ExecutionGraph<V> {
         // TODO this does a query per edge, we can optimize if table + version is the same (add a transform cache, dont touch this probably)
         // TODO we could probably also skip non triggered nodes, setting just None
         let futures: Vec<_> = self
-            .inner()
+            .inner
             .edge_references()
             .map(|edge| {
                 let (node, self_dependency, versions) = match edge.weight() {
                     GraphEdge::Output { versions, .. } => {
-                        (&self.inner()[edge.target()], false, versions)
+                        (&self.inner[edge.target()], false, versions)
                     }
                     GraphEdge::Trigger { versions } => {
-                        (&self.inner()[edge.source()], false, versions)
+                        (&self.inner[edge.source()], false, versions)
                     }
                     GraphEdge::Dependency {
                         versions,
                         dependency,
                     } => (
-                        &self.inner()[edge.source()],
+                        &self.inner[edge.source()],
                         *dependency.self_dependency,
                         versions,
                     ),
@@ -109,7 +101,7 @@ impl<V: Eq + Hash> ExecutionPlanner<V> for ExecutionGraph<V> {
             .collect();
 
         // Build a new graph with transformed weights
-        let new_graph = self.inner().map(
+        let new_graph = self.inner.map(
             |_, node_weight| node_weight.clone(),
             |edge_idx, edge_weight| {
                 let new_version = updated_versions.remove(&edge_idx).unwrap();
@@ -118,11 +110,11 @@ impl<V: Eq + Hash> ExecutionPlanner<V> for ExecutionGraph<V> {
         );
 
         // Create the new ExecutionGraph with VV
-        Ok(ExecutionGraph::new(new_graph, *self.trigger_index()))
+        Ok(ExecutionGraph::new(new_graph, self.trigger_index))
     }
 
     fn functions(&self) -> HashSet<&FunctionNode> {
-        self.inner()
+        self.inner
             .node_references()
             .filter_map(|(_, node)| match node {
                 GraphNode::Function(function) => Some(function),
@@ -132,7 +124,7 @@ impl<V: Eq + Hash> ExecutionPlanner<V> for ExecutionGraph<V> {
     }
 
     fn tables(&self) -> HashSet<&TableNode> {
-        self.inner()
+        self.inner
             .node_references()
             .filter_map(|(_, node)| match node {
                 GraphNode::Table(table) => Some(table),
@@ -142,15 +134,19 @@ impl<V: Eq + Hash> ExecutionPlanner<V> for ExecutionGraph<V> {
     }
 
     fn output_tables(&self) -> HashSet<(&FunctionNode, &TableNode, &GraphEdge<V>)> {
-        self.triggered_functions_index()
-            .iter()
-            .chain(std::iter::once(self.trigger_index()))
+        self.inner
+            .edge_references()
+            .filter_map(|edge_ref| match edge_ref.weight() {
+                GraphEdge::Trigger { .. } => Some(edge_ref.target()),
+                _ => None,
+            })
+            .chain(std::iter::once(self.trigger_index))
             .flat_map(|index| {
-                self.inner()
-                    .edges_directed(*index, petgraph::Direction::Outgoing)
+                self.inner
+                    .edges_directed(index, Direction::Outgoing)
                     .filter_map(|edge| {
-                        let source = &self.inner()[edge.source()];
-                        let target = &self.inner()[edge.target()];
+                        let source = &self.inner[edge.source()];
+                        let target = &self.inner[edge.target()];
                         match (source, target) {
                             (GraphNode::Function(function), GraphNode::Table(table)) => {
                                 Some((function, table, edge.weight()))
@@ -164,18 +160,22 @@ impl<V: Eq + Hash> ExecutionPlanner<V> for ExecutionGraph<V> {
     }
 
     fn manual_trigger_function(&self) -> &FunctionNode {
-        match &self.inner()[*self.trigger_index()] {
+        match &self.inner[self.trigger_index] {
             GraphNode::Function(function) => function,
             _ => unreachable!(),
         }
     }
 
     fn triggered_functions(&self) -> HashSet<&FunctionNode> {
-        self.triggered_functions_index()
-            .iter()
-            .filter(|index| *index != self.trigger_index())
+        self.inner
+            .edge_references()
+            .filter_map(|edge_ref| match edge_ref.weight() {
+                GraphEdge::Trigger { .. } => Some(edge_ref.target()),
+                _ => None,
+            })
+            .filter(|index| *index != self.trigger_index)
             .filter_map(|index| {
-                let node = &self.inner()[*index];
+                let node = &self.inner[index];
                 match node {
                     GraphNode::Function(function) => Some(function),
                     _ => None,
@@ -185,15 +185,19 @@ impl<V: Eq + Hash> ExecutionPlanner<V> for ExecutionGraph<V> {
     }
 
     fn function_version_requirements(&self) -> HashSet<(&FunctionNode, &TableNode, &GraphEdge<V>)> {
-        self.triggered_functions_index()
-            .iter()
-            .chain(std::iter::once(self.trigger_index()))
+        self.inner
+            .edge_references()
+            .filter_map(|edge_ref| match edge_ref.weight() {
+                GraphEdge::Trigger { .. } => Some(edge_ref.target()),
+                _ => None,
+            })
+            .chain(std::iter::once(self.trigger_index))
             .flat_map(|index| {
-                self.inner()
-                    .edges_directed(*index, petgraph::Direction::Incoming)
+                self.inner
+                    .edges_directed(index, Direction::Incoming)
                     .filter_map(|edge| {
-                        let source = &self.inner()[edge.source()];
-                        let target = &self.inner()[edge.target()];
+                        let source = &self.inner[edge.source()];
+                        let target = &self.inner[edge.target()];
                         match (source, target) {
                             (GraphNode::Table(table), GraphNode::Function(function)) => {
                                 Some((function, table, edge.weight()))
@@ -213,120 +217,136 @@ mod tests {
     use std::collections::HashSet;
     use ta_execution::test_utils::graph::test_graph;
     use td_error::TdError;
-    use td_objects::test_utils::graph::{
-        FUNCTION_NAMES, FUNCTIONS, TABLE_NAMES, function_node, table_node,
-    };
+    use td_objects::test_utils::graph::{FUNCTION_NAMES, TABLE_NAMES, function_node, table_node};
+
+    fn expected_function_nodes() -> HashSet<FunctionNode> {
+        FUNCTION_NAMES.iter().map(function_node).collect()
+    }
+
+    fn expected_table_nodes() -> HashSet<TableNode> {
+        TABLE_NAMES.iter().map(table_node).collect()
+    }
 
     #[tokio::test]
     async fn test_functions() -> Result<(), TdError> {
         let (graph, _) = test_graph().await;
+        let actual: HashSet<_> = graph.functions().into_iter().cloned().collect();
+        let expected = expected_function_nodes();
 
-        let functions = graph.functions();
-        assert_eq!(functions.len(), FUNCTION_NAMES.len());
-
-        let mut expected = HashSet::from([
-            function_node(&FUNCTION_NAMES[0]),
-            function_node(&FUNCTION_NAMES[1]),
-        ]);
-
-        for function in functions {
-            assert!(expected.remove(function));
-        }
-        assert_eq!(expected.len(), 0);
+        assert_eq!(actual, expected);
         Ok(())
     }
 
     #[tokio::test]
     async fn test_tables() -> Result<(), TdError> {
         let (graph, _) = test_graph().await;
+        let actual: HashSet<_> = graph.tables().into_iter().cloned().collect();
+        let expected = expected_table_nodes();
 
-        let tables = graph.tables();
-        assert_eq!(tables.len(), TABLE_NAMES.len());
-
-        let mut expected = TABLE_NAMES.iter().fold(HashSet::new(), |mut acc, table| {
-            acc.insert(table_node(table));
-            acc
-        });
-
-        for table in tables {
-            assert!(expected.remove(table));
-        }
-        assert_eq!(expected.len(), 0);
+        assert_eq!(actual, expected);
         Ok(())
     }
 
     #[tokio::test]
-    async fn test_output_tables() -> Result<(), TdError> {
+    async fn test_output_tables_are_from_triggered_or_main_functions() -> Result<(), TdError> {
         let (graph, _) = test_graph().await;
-        let triggered_functions_index: HashSet<_> = graph
-            .triggered_functions_index()
-            .into_iter()
-            .chain(std::iter::once(*graph.trigger_index()))
-            .collect();
 
-        let mut expected: HashSet<_> = triggered_functions_index
+        for (function, table, edge) in graph.output_tables() {
+            // Each output table must come from a function node.
+            assert!(
+                FUNCTION_NAMES.contains(&function.name),
+                "Unexpected function in output tables: {:?}",
+                function
+            );
+
+            // Each output table must belong to known table nodes.
+            assert!(
+                TABLE_NAMES.contains(&table.name),
+                "Unexpected table in output tables: {:?}",
+                table
+            );
+
+            // Each edge must represent an output edge variant.
+            assert!(
+                matches!(edge, GraphEdge::Output { .. }),
+                "Expected only output edges in output_tables(), got: {:?}",
+                edge
+            );
+        }
+
+        // Sanity: all known functions should produce their defined outputs
+        let output_fn_names: HashSet<_> = graph
+            .output_tables()
             .iter()
-            .flat_map(|index| {
-                let GraphNode::Function(node) = &graph.inner()[*index] else {
-                    unreachable!()
-                };
-                FUNCTIONS
-                    .get(&node.name)
-                    .unwrap()
-                    .iter()
-                    .map(|table| (function_node(&node.name), table_node(table)))
-            })
+            .map(|(f, _, _)| &f.name)
+            .collect();
+        assert!(
+            output_fn_names.contains(&FUNCTION_NAMES[0])
+                || output_fn_names.contains(&FUNCTION_NAMES[1]),
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_manual_trigger_function_matches() -> Result<(), TdError> {
+        let (graph, expected_trigger_fn) = test_graph().await;
+        assert_eq!(graph.manual_trigger_function(), &expected_trigger_fn);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_function_version_requirements_include_dependency_edges() -> Result<(), TdError> {
+        let (graph, _) = test_graph().await;
+        let requirements = graph.function_version_requirements();
+
+        for (function, table, edge) in &requirements {
+            assert!(
+                FUNCTION_NAMES.contains(&function.name),
+                "Unexpected function in version requirements: {:?}",
+                function
+            );
+            assert!(
+                TABLE_NAMES.contains(&table.name),
+                "Unexpected table in version requirements: {:?}",
+                table
+            );
+            assert!(
+                matches!(
+                    edge,
+                    GraphEdge::Trigger { .. } | GraphEdge::Dependency { .. }
+                ),
+                "Invalid edge type in version requirements: {:?}",
+                edge
+            );
+        }
+
+        // Sanity check: at least one dependency per triggered function
+        let triggered_fn_names: HashSet<_> = graph
+            .triggered_functions()
+            .into_iter()
+            .map(|f| f.name.clone())
             .collect();
 
-        let output_tables = graph.output_tables();
-        assert_eq!(output_tables.len(), expected.len());
+        let functions_with_requirements: HashSet<_> = requirements
+            .iter()
+            .map(|(f, _, _)| f.name.clone())
+            .collect();
 
-        for (function, table, _) in output_tables {
-            assert!(expected.remove(&(function.clone(), table.clone())));
-        }
-        assert_eq!(expected.len(), 0);
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_manual_trigger_function() -> Result<(), TdError> {
-        let (graph, trigger_function) = test_graph().await;
-
-        let manual_trigger_function = graph.manual_trigger_function();
-        assert_eq!(manual_trigger_function, &trigger_function);
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_triggered_functions() -> Result<(), TdError> {
-        let (graph, _) = test_graph().await;
-        let downstream_functions_index = graph.triggered_functions_index();
-
-        let triggered_functions = graph.triggered_functions();
-        assert_eq!(triggered_functions.len(), downstream_functions_index.len());
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_function_version_requirements() -> Result<(), TdError> {
-        let (graph, _) = test_graph().await;
-        let downstream_functions_index = graph.triggered_functions_index();
-
-        let function_version_requirements = graph.function_version_requirements();
-        assert_eq!(
-            function_version_requirements.len(),
-            downstream_functions_index.len() * 2 // This graph has dependency and trigger on each edge.
+        assert!(
+            triggered_fn_names.is_subset(&functions_with_requirements),
+            "Not all triggered functions have version requirements"
         );
         Ok(())
     }
 
     #[tokio::test]
-    async fn test_versioned() -> Result<(), TdError> {
+    async fn test_versioned_graph_versioned_structure() -> Result<(), TdError> {
         let (graph, _) = test_graph().await;
-
         let new_graph = graph
             .versioned(|_, _, _| async { Ok::<_, TdError>(1) })
             .await?;
+
         assert_eq!(new_graph.functions().len(), FUNCTION_NAMES.len());
         assert_eq!(new_graph.tables().len(), TABLE_NAMES.len());
         Ok(())

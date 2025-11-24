@@ -14,10 +14,11 @@ use td_objects::dxo::trigger::TriggerDBWithNames;
 use td_objects::execution::graph::FunctionNodeBuilder;
 use td_objects::sql::DaoQueries;
 use td_objects::sql::cte::CteQueries;
-use td_objects::sql::recursive::RecursiveQueries;
+use td_objects::sql::recursive::{RecursionOptions, RecursiveQueries};
 use td_objects::table_ref::Versions;
-use td_objects::types::basic::{AtTime, FunctionId, FunctionStatus};
+use td_objects::types::basic::{AtTime, Depth, FunctionId, FunctionStatus};
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
+use te_execution::EXECUTION_GRAPH_DEPTH;
 use te_execution::transaction::TransactionBy;
 
 pub async fn assert_function_status(
@@ -34,21 +35,30 @@ pub async fn assert_function_status(
     Ok(())
 }
 
+pub async fn seed_trigger_graph_depth() -> Result<Option<Depth>, TdError> {
+    Ok(EXECUTION_GRAPH_DEPTH)
+}
+
 pub async fn find_trigger_graph(
     SrvCtx(queries): SrvCtx<DaoQueries>,
     Connection(connection): Connection,
     Input(at_time): Input<AtTime>,
-    Input(function): Input<FunctionId>,
+    Input(function_id): Input<FunctionId>,
+    Input(graph_depth): Input<Option<Depth>>,
 ) -> Result<Vec<TriggerDBWithNames>, TdError> {
     let mut conn = connection.lock().await;
     let conn = conn.get_mut_connection()?;
 
     // Find triggered functions at the given time
     let trigger_graph: Vec<TriggerDBWithNames> = queries
-        .select_recursive_versions_at::<{ TriggerDBWithNames::Active }, TriggerDBWithNames, { FunctionDBWithNames::DownstreamTrigger }, FunctionDBWithNames>(
+        .select_recursive_versions_at_with::<{ TriggerDBWithNames::Active }, TriggerDBWithNames, { FunctionDBWithNames::DownstreamTrigger }, FunctionDBWithNames>(
             Some(&at_time),
             Some(&at_time),
-            function.deref(),
+            function_id.deref(),
+            RecursionOptions {
+                max_upstream_depth: Some(Depth::ZERO),
+                max_downstream_depth: *graph_depth.clone(),
+            }
         )?
         .build_query_as()
         .fetch_all(&mut *conn)
@@ -94,7 +104,6 @@ pub async fn find_all_input_tables(
 
 pub async fn build_execution_template(
     SrvCtx(queries): SrvCtx<DaoQueries>,
-    SrvCtx(transaction_by): SrvCtx<TransactionBy>,
     Connection(connection): Connection,
     Input(at_time): Input<AtTime>,
     Input(trigger_function): Input<FunctionDBWithNames>,
@@ -231,8 +240,14 @@ pub async fn build_execution_template(
     let trigger = FunctionNodeBuilder::try_from(&*trigger_function)?.build()?;
     let graph = GraphBuilder::new(&output_tables, &trigger_graph, &dep_graph).build(trigger)?;
 
+    Ok(graph)
+}
+
+pub async fn validate_execution_template(
+    SrvCtx(transaction_by): SrvCtx<TransactionBy>,
+    Input(graph): Input<ExecutionGraph<Versions>>,
+) -> Result<(), TdError> {
     graph.validate_dag()?;
     graph.validate_transaction(transaction_by.deref())?;
-
-    Ok(graph)
+    Ok(())
 }

@@ -7355,7 +7355,6 @@ dependencies = [
 name = "ta-execution"
 version = "1.6.0"
 dependencies = [
- "getset",
  "openssl",
  "petgraph",
  "strum",
@@ -8075,9 +8074,7 @@ dependencies = [
 name = "te-execution"
 version = "1.6.0"
 dependencies = [
- "async-trait",
  "openssl",
- "petgraph",
  "serde",
  "strum",
  "ta-execution",

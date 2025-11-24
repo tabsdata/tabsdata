@@ -9,6 +9,7 @@ use crate::execution::layers::plan::{
 };
 use crate::execution::layers::template::{
     assert_function_status, build_execution_template, find_all_input_tables, find_trigger_graph,
+    seed_trigger_graph_depth, validate_execution_template,
 };
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
@@ -31,11 +32,11 @@ use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollExec, InterColl};
 use td_objects::tower_service::from::{
     BuildService, ConvertIntoMapService, ExtractDataService, ExtractNameService, ExtractService,
-    TryIntoService, UpdateService, VecBuildService, With, combine,
+    SetService, TryIntoService, UpdateService, VecBuildService, With, combine,
 };
 use td_objects::tower_service::sql::{By, SqlSelectService, insert, insert_vec};
 use td_objects::types::basic::{
-    AtTime, CollectionId, CollectionIdName, FunctionId, FunctionIdName,
+    AtTime, CollectionId, CollectionIdName, Depth, FunctionId, FunctionIdName,
 };
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
@@ -79,6 +80,7 @@ fn service() {
         from_fn(Authz::<CollAdmin, CollExec>::check),
         from_fn(With::<FunctionDBWithNames>::extract::<FunctionId>),
         // Find trigger graph
+        from_fn(seed_trigger_graph_depth),
         from_fn(find_trigger_graph),
         // Find all input tables
         from_fn(find_all_input_tables),
@@ -86,8 +88,9 @@ fn service() {
         from_fn(With::<DependencyDBWithNames>::vec_convert_to::<InterCollectionAccessBuilder, _>),
         from_fn(With::<InterCollectionAccessBuilder>::vec_build::<InterCollectionAccess, _>),
         from_fn(Authz::<InterColl>::check_inter_collection),
-        // Create execution template
+        // Create execution template and validate it
         from_fn(build_execution_template),
+        from_fn(validate_execution_template),
         // inter collection authz check
         from_fn(With::<TriggerDBWithNames>::vec_convert_to::<InterCollectionAccessBuilder, _>),
         from_fn(With::<InterCollectionAccessBuilder>::vec_build::<InterCollectionAccess, _>),
@@ -97,6 +100,7 @@ fn service() {
         from_fn(With::<FunctionDBWithNames>::convert_to::<ExecutionDBBuilder, _>),
         from_fn(With::<RequestContext>::update::<ExecutionDBBuilder, _>),
         from_fn(With::<ExecutionRequest>::update::<ExecutionDBBuilder, _>),
+        from_fn(With::<Option<Depth>>::set::<ExecutionDBBuilder>),
         from_fn(With::<ExecutionDBBuilder>::build::<ExecutionDB, _>),
         from_fn(insert::<ExecutionDB>),
         // Build transactions
@@ -127,16 +131,18 @@ fn service() {
 pub(crate) mod tests {
     use super::*;
     use std::collections::HashSet;
+    use std::sync::LazyLock;
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
     use td_error::TdError;
+    use td_execution::EXECUTION_GRAPH_DEPTH;
     use td_objects::dxo::crudl::handle_sql_err;
     use td_objects::dxo::execution::ExecutionDBWithStatus;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::function_requirement::FunctionRequirementDBWithNames;
     use td_objects::dxo::function_run::FunctionRunDBWithNames;
     use td_objects::dxo::table::TableDB;
-    use td_objects::dxo::table_data_version::TableDataVersionDBWithFunction;
+    use td_objects::dxo::table_data_version::TableDataVersionDBWithNames;
     use td_objects::dxo::transaction::TransactionDBWithStatus;
     use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_collection::seed_collection;
@@ -198,6 +204,7 @@ pub(crate) mod tests {
                     type_of_val(&Authz::<CollAdmin, CollExec>::check),
                     type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
                     // Find trigger graph
+                    type_of_val(&seed_trigger_graph_depth),
                     type_of_val(&find_trigger_graph),
                     // Find all input tables
                     type_of_val(&find_all_input_tables),
@@ -205,8 +212,9 @@ pub(crate) mod tests {
                     type_of_val(&With::<DependencyDBWithNames>::vec_convert_to::<InterCollectionAccessBuilder, _>),
                     type_of_val(&With::<InterCollectionAccessBuilder>::vec_build::<InterCollectionAccess, _>),
                     type_of_val(&Authz::<InterColl>::check_inter_collection),
-                    // Create execution template
+                    // Create execution template and validate it
                     type_of_val(&build_execution_template),
+                    type_of_val(&validate_execution_template),
                     // inter collection authz check
                     type_of_val(&With::<TriggerDBWithNames>::vec_convert_to::<InterCollectionAccessBuilder, _>),
                     type_of_val(&With::<InterCollectionAccessBuilder>::vec_build::<InterCollectionAccess, _>),
@@ -216,6 +224,7 @@ pub(crate) mod tests {
                     type_of_val(&With::<FunctionDBWithNames>::convert_to::<ExecutionDBBuilder, _>),
                     type_of_val(&With::<RequestContext>::update::<ExecutionDBBuilder, _>),
                     type_of_val(&With::<ExecutionRequest>::update::<ExecutionDBBuilder, _>),
+                    type_of_val(&With::<RecursionOptions>::set::<ExecutionDBBuilder>),
                     type_of_val(&With::<ExecutionDBBuilder>::build::<ExecutionDB, _>),
                     type_of_val(&insert::<ExecutionDB>),
                     // Build transactions
@@ -279,18 +288,32 @@ pub(crate) mod tests {
         Ok(())
     }
 
+    static COLLECTION_NAMES: LazyLock<Vec<CollectionName>> = LazyLock::new(|| {
+        vec![
+            CollectionName::try_from("collection_0").unwrap(),
+            CollectionName::try_from("collection_1").unwrap(),
+            CollectionName::try_from("collection_2").unwrap(),
+        ]
+    });
+
+    static FUNCTION_NAMES: LazyLock<Vec<FunctionName>> = LazyLock::new(|| {
+        vec![
+            FunctionName::try_from("function_0").unwrap(),
+            FunctionName::try_from("function_1").unwrap(),
+            FunctionName::try_from("function_2").unwrap(),
+            FunctionName::try_from("function_3").unwrap(),
+        ]
+    });
+
     pub(crate) async fn test_execute(
         db: DbPool,
         deps_diff_collection: bool,
         triggers_diff_collection: bool,
         with_permission: bool,
     ) -> Result<ExecutionResponse, TdError> {
-        let collection_name_0 = CollectionName::try_from("collection_0")?;
-        let collection_0 = seed_collection(&db, &collection_name_0, &UserId::admin()).await;
-        let collection_name_1 = CollectionName::try_from("collection_1")?;
-        let collection_1 = seed_collection(&db, &collection_name_1, &UserId::admin()).await;
-        let collection_name_2 = CollectionName::try_from("collection_2")?;
-        let collection_2 = seed_collection(&db, &collection_name_2, &UserId::admin()).await;
+        let collection_0 = seed_collection(&db, &COLLECTION_NAMES[0], &UserId::admin()).await;
+        let collection_1 = seed_collection(&db, &COLLECTION_NAMES[1], &UserId::admin()).await;
+        let collection_2 = seed_collection(&db, &COLLECTION_NAMES[2], &UserId::admin()).await;
 
         seed_inter_collection_permission(
             &db,
@@ -318,7 +341,7 @@ pub(crate) mod tests {
         // Trigger function without permission restrictions (collection_0), which triggers function_1
         // and function_2. These will trigger function_3, depending on the test.
         let create = FunctionRegister::builder()
-            .try_name("function_0")?
+            .name(FUNCTION_NAMES[0].clone())
             .try_description("foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("foo snippet")?
@@ -333,13 +356,16 @@ pub(crate) mod tests {
         let _ = seed_function(&db, &collection_0, &create).await;
 
         let create = FunctionRegister::builder()
-            .try_name("function_1")?
+            .name(FUNCTION_NAMES[1].clone())
             .try_description("foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("foo snippet")?
             .decorator(Decorator::Publisher)
             .dependencies(None)
-            .triggers(vec![TableTriggerDto::try_from("collection_0/table_0")?])
+            .triggers(vec![TableTriggerDto::try_from(format!(
+                "{}/table_0",
+                COLLECTION_NAMES[0],
+            ))?])
             .tables(vec![
                 TableNameDto::try_from("table_1")?,
                 TableNameDto::try_from("table_2")?,
@@ -352,13 +378,16 @@ pub(crate) mod tests {
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister::builder()
-            .try_name("function_2")?
+            .name(FUNCTION_NAMES[2].clone())
             .try_description("function_3 description")?
             .bundle_id(bundle_id)
             .try_snippet("function_3 snippet")?
             .decorator(Decorator::Publisher)
             .dependencies(None)
-            .triggers(vec![TableTriggerDto::try_from("collection_0/table_0")?])
+            .triggers(vec![TableTriggerDto::try_from(format!(
+                "{}/table_0",
+                COLLECTION_NAMES[0],
+            ))?])
             .tables(Some(vec![
                 TableNameDto::try_from("table_1")?,
                 TableNameDto::try_from("table_2")?,
@@ -370,18 +399,18 @@ pub(crate) mod tests {
         let _ = seed_function(&db, &collection_2, &create).await;
 
         let deps_collection = if deps_diff_collection {
-            "collection_1"
+            &COLLECTION_NAMES[1]
         } else {
-            "collection_2"
+            &COLLECTION_NAMES[2]
         };
         let triggers_collection = if triggers_diff_collection {
-            "collection_1"
+            &COLLECTION_NAMES[1]
         } else {
-            "collection_2"
+            &COLLECTION_NAMES[2]
         };
 
         let create = FunctionRegister::builder()
-            .try_name("function_3")?
+            .name(FUNCTION_NAMES[3].clone())
             .try_description("foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("foo snippet")?
@@ -407,8 +436,8 @@ pub(crate) mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
                 FunctionParam::builder()
-                    .try_collection(format!("{}", collection_0.name))?
-                    .try_function("function_0")?
+                    .try_collection(collection_0.name.to_string())?
+                    .try_function(FUNCTION_NAMES[0].to_string())?
                     .build()?,
                 ExecutionRequest::builder()
                     .name(Some(ExecutionName::try_from("test_execution")?))
@@ -420,7 +449,17 @@ pub(crate) mod tests {
             .await;
         let response = service.raw_oneshot(request).await;
 
-        if with_permission {
+        // Test assertions
+        let expected_all_functions = match EXECUTION_GRAPH_DEPTH {
+            Some(depth) => FUNCTION_NAMES
+                .iter()
+                .take(*depth as usize + 1)
+                .collect::<Vec<_>>(),
+            None => FUNCTION_NAMES.iter().collect::<Vec<_>>(),
+        };
+
+        // with 0 or 1 functions, there is not going to be an inter collection permission issue
+        if with_permission || expected_all_functions.len() <= 1 {
             let response = response?;
 
             // Check the response
@@ -430,61 +469,75 @@ pub(crate) mod tests {
             );
             assert!(response.triggered_on < TriggeredOn::now());
 
-            let all_functions_map = &response.all_functions;
-            let mut all_functions: Vec<_> = response
-                .all_functions
-                .values()
-                .map(|t| t.name.clone())
-                .collect();
+            let mut all_functions: Vec<_> =
+                response.all_functions.values().map(|t| &t.name).collect();
             all_functions.sort();
-            assert_eq!(
-                all_functions,
-                vec![
-                    FunctionName::try_from("function_0")?,
-                    FunctionName::try_from("function_1")?,
-                    FunctionName::try_from("function_2")?,
-                    FunctionName::try_from("function_3")?,
-                ]
-            );
-            let triggered_functions: Vec<_> = response
+            assert_eq!(expected_all_functions, all_functions);
+
+            let expected_triggered_functions = match EXECUTION_GRAPH_DEPTH {
+                // skipping manual trigger, which is the first one in this test
+                Some(depth) => FUNCTION_NAMES
+                    .iter()
+                    .skip(1)
+                    .take(*depth as usize)
+                    .collect::<Vec<_>>(),
+                None => FUNCTION_NAMES.iter().skip(1).collect::<Vec<_>>(),
+            };
+            let mut triggered_functions: Vec<_> = response
                 .triggered_functions
                 .iter()
-                .map(|t| &all_functions_map[t])
+                .map(|t| &response.all_functions[t].name)
                 .collect();
-            // it can vary depending on the execution
-            assert!(triggered_functions.is_empty() || triggered_functions.len() == 3);
-            let manual_trigger = &all_functions_map[&response.manual_trigger];
-            assert_eq!(manual_trigger.name, FunctionName::try_from("function_0")?);
+            triggered_functions.sort();
+            assert_eq!(expected_triggered_functions, triggered_functions);
 
-            let all_tables_map = &response.all_tables;
-            let mut all_tables: Vec<_> = all_tables_map
+            let manual_trigger = &response.all_functions[&response.manual_trigger];
+            assert_eq!(manual_trigger.name, FUNCTION_NAMES[0]);
+
+            let all_tables_with_collection = vec![
+                TableName::try_from("collection_0/table_0")?,
+                TableName::try_from("collection_1/table_1")?,
+                TableName::try_from("collection_1/table_2")?,
+                TableName::try_from("collection_2/table_1")?,
+                TableName::try_from("collection_2/table_2")?,
+                TableName::try_from("collection_2/table_3")?,
+                TableName::try_from("collection_2/table_4")?,
+            ];
+            let expected_all_tables = match EXECUTION_GRAPH_DEPTH {
+                Some(depth) => all_tables_with_collection
+                    .into_iter()
+                    .take(*depth as usize + 1)
+                    .collect::<Vec<_>>(),
+                None => all_tables_with_collection.into_iter().collect::<Vec<_>>(),
+            };
+
+            let mut all_tables: Vec<_> = response
+                .all_tables
                 .values()
                 .map(|t| TableName::try_from(format!("{}/{}", t.collection, t.name)).unwrap())
                 .collect();
             all_tables.sort();
-            assert_eq!(
-                all_tables,
-                vec![
-                    TableName::try_from("collection_0/table_0")?,
-                    TableName::try_from("collection_1/table_1")?,
-                    TableName::try_from("collection_1/table_2")?,
-                    TableName::try_from("collection_2/table_1")?,
-                    TableName::try_from("collection_2/table_2")?,
-                    TableName::try_from("collection_2/table_3")?,
-                    TableName::try_from("collection_2/table_4")?
-                ]
-            );
+            assert_eq!(expected_all_tables, all_tables);
+
             // In this test, all tables are user tables.
             assert_eq!(response.user_tables.len(), all_tables.len());
             assert_eq!(response.system_tables.len(), 0);
 
-            let created_tables: Vec<_> = response
+            // In our test, created tables are all of them.
+            let expected_created_tables = expected_all_tables;
+            let mut created_tables: Vec<_> = response
                 .created_tables
                 .iter()
-                .map(|t| &all_tables_map[t])
+                .map(|t| {
+                    TableName::try_from(format!(
+                        "{}/{}",
+                        &response.all_tables[t].collection, &response.all_tables[t].name
+                    ))
+                    .unwrap()
+                })
                 .collect();
-            // it can vary depending on the execution
-            assert!(created_tables.len() == 1 || created_tables.len() == 7);
+            created_tables.sort();
+            assert_eq!(expected_created_tables, created_tables);
 
             // Asser db
             let queries = DaoQueries::default();
@@ -517,7 +570,7 @@ pub(crate) mod tests {
 
             // FunctionRun
             let function: FunctionDBWithNames = queries
-                .select_by::<FunctionDBWithNames>(&(&FunctionName::try_from("function_0")?))?
+                .select_by::<FunctionDBWithNames>(&FUNCTION_NAMES[0])?
                 .build_query_as()
                 .fetch_one(&db)
                 .await
@@ -552,18 +605,23 @@ pub(crate) mod tests {
             }
 
             // TableDataVersion
-            let table_data_versions: Vec<TableDataVersionDBWithFunction> = queries
-                .select_by::<TableDataVersionDBWithFunction>(&())?
+            let table_data_versions: Vec<TableDataVersionDBWithNames> = queries
+                .select_by::<TableDataVersionDBWithNames>(&())?
                 .build_query_as()
                 .fetch_all(&db)
                 .await
                 .map_err(handle_sql_err)?;
-            // it can vary depending on the execution
-            assert!(table_data_versions.len() == 1 || table_data_versions.len() == 7);
+            assert_eq!(table_data_versions.len(), expected_created_tables.len());
             for table_data_version in table_data_versions {
                 assert_eq!(&table_data_version.execution_id, &response.id);
                 assert_eq!(table_data_version.has_data, None);
                 assert_eq!(table_data_version.status, FunctionRunStatus::Scheduled);
+                assert!(
+                    expected_created_tables.contains(&TableName::try_from(format!(
+                        "{}/{}",
+                        table_data_version.collection, table_data_version.name
+                    ))?)
+                );
             }
 
             // FunctionCondition
@@ -573,8 +631,15 @@ pub(crate) mod tests {
                 .fetch_all(&db)
                 .await
                 .map_err(handle_sql_err)?;
-            // it can vary depending on the execution
-            assert!(function_requirements.is_empty() || function_requirements.len() == 6);
+            let expected_num_function_requirements = if EXECUTION_GRAPH_DEPTH.is_some() {
+                0
+            } else {
+                6 // because of the 4 dependencies + 2 triggers
+            };
+            assert_eq!(
+                expected_num_function_requirements,
+                function_requirements.len()
+            );
 
             let mut function_idxs = HashSet::new();
             for function_condition in &function_requirements {
@@ -658,11 +723,10 @@ pub(crate) mod tests {
         upstream_status: FunctionRunStatus,
         expected_initial_status: FunctionRunStatus,
     ) -> Result<(), TdError> {
-        let collection_name = CollectionName::try_from("collection")?;
-        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
+        let collection = seed_collection(&db, &COLLECTION_NAMES[0], &UserId::admin()).await;
 
         let create = FunctionRegister::builder()
-            .try_name("function_0")?
+            .name(FUNCTION_NAMES[0].clone())
             .try_description("foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("foo snippet")?
@@ -677,7 +741,7 @@ pub(crate) mod tests {
         let function_0 = seed_function(&db, &collection, &create).await;
 
         let create = FunctionRegister::builder()
-            .try_name("function_1")?
+            .name(FUNCTION_NAMES[1].clone())
             .try_description("foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("foo snippet")?
@@ -692,7 +756,7 @@ pub(crate) mod tests {
         let function_1 = seed_function(&db, &collection, &create).await;
 
         let create = FunctionRegister::builder()
-            .try_name("function_2")?
+            .name(FUNCTION_NAMES[2].clone())
             .try_description("foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("foo snippet")?
@@ -773,12 +837,11 @@ pub(crate) mod tests {
         .await;
 
         // And then run function_2
-        let function_name = FunctionName::try_from("function_2")?;
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
                 FunctionParam::builder()
                     .try_collection(collection.name.to_string())?
-                    .try_function(function_name.to_string())?
+                    .try_function(FUNCTION_NAMES[2].to_string())?
                     .build()?,
                 ExecutionRequest::builder()
                     .name(Some(ExecutionName::try_from("test_execution")?))
@@ -792,7 +855,7 @@ pub(crate) mod tests {
 
         // there should only be one function run for function_2
         let function_run: FunctionRunDBWithNames = DaoQueries::default()
-            .select_by::<FunctionRunDBWithNames>(&(&function_name))?
+            .select_by::<FunctionRunDBWithNames>(&FUNCTION_NAMES[2])?
             .build_query_as()
             .fetch_one(&db)
             .await

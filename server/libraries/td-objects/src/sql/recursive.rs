@@ -4,6 +4,7 @@
 
 use crate::sql::Queries;
 use crate::sql::cte::{ranked_versions_at, select_ranked_versions_at};
+use crate::types::basic::Depth;
 use crate::types::{DataAccessObject, Recursive, SqlEntity, States, Versioned};
 use std::ops::Deref;
 use td_error::TdError;
@@ -14,6 +15,15 @@ const LATEST_RECURSION_VERSIONS_CTE: &str = "latest_recursion_versions";
 const RECURSIVE_VERSIONS_CTE: &str = "recursive_versions";
 
 impl<Q: Deref<Target = dyn Queries>> RecursiveQueries for Q {}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct RecursionOptions {
+    /// Maximum recursive depth when going upstream (toward ancestors)
+    pub max_upstream_depth: Option<Depth>,
+
+    /// Maximum recursive depth when going downstream (toward descendants)
+    pub max_downstream_depth: Option<Depth>,
+}
 
 pub trait RecursiveQueries {
     /// Builds all CTEs and select queries to get the recursive versions of a given object with a
@@ -113,10 +123,32 @@ pub trait RecursiveQueries {
         D: DataAccessObject + Recursive + Versioned + States<DS>,
         R: DataAccessObject + Versioned + States<RS>,
     {
+        self.select_recursive_versions_at_with::<DS, D, RS, R>(
+            d_defined_on,
+            r_defined_on,
+            direct_reference_entity,
+            RecursionOptions {
+                max_upstream_depth: Some(Depth::ZERO),
+                max_downstream_depth: None,
+            },
+        )
+    }
+
+    fn select_recursive_versions_at_with<'a, const DS: u8, D, const RS: u8, R>(
+        &self,
+        d_defined_on: Option<&'a <D as Versioned>::Order>,
+        r_defined_on: Option<&'a <R as Versioned>::Order>,
+        direct_reference_entity: &'a dyn SqlEntity, // has to be in R
+        options: RecursionOptions,
+    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, TdError>
+    where
+        D: DataAccessObject + Recursive + Versioned + States<DS>,
+        R: DataAccessObject + Versioned + States<RS>,
+    {
         let mut query_builder = sqlx::QueryBuilder::default();
 
         // Build CTEs to find needed data
-        query_builder.push("WITH ");
+        query_builder.push("WITH RECURSIVE ");
         ranked_versions_at::<R>(
             LATEST_REFERENCE_VERSIONS_CTE,
             &mut query_builder,
@@ -132,7 +164,7 @@ pub trait RecursiveQueries {
         select_ranked_versions_at::<DS, D>(LATEST_RECURSION_VERSIONS_CTE, &mut query_builder)?;
         query_builder.push(",");
 
-        recursive_versions_sql::<D, R>(&mut query_builder, direct_reference_entity)?;
+        recursive_versions_sql::<D, R>(&mut query_builder, direct_reference_entity, options)?;
         query_builder.push(" ");
 
         // Build query to select the data from the generated CTEs
@@ -157,103 +189,124 @@ pub trait RecursiveQueries {
 /// CTE to find all the versions recursively of a given object.
 fn recursive_versions_sql<'a, D, R>(
     query_builder: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>,
-    direct_reference_entity: &'a dyn SqlEntity, // has to be in R
+    direct_reference_entity: &'a dyn SqlEntity,
+    options: RecursionOptions,
 ) -> Result<(), TdError>
 where
     D: Recursive + Versioned,
     R: DataAccessObject,
 {
-    // Starting point to find recursive versions
     let starting_at = R::sql_field_for_type(direct_reference_entity.type_id())?;
-
-    // Baseline to find initial versions
     let recursion_ref = R::sql_field_for_type(std::any::TypeId::of::<D::Recursive>())?;
-
-    // And columns to recurse on the initial found versions
     let recurse_up = D::recurse_up();
     let recurse_down = D::recurse_down();
 
-    query_builder.push(format!("{RECURSIVE_VERSIONS_CTE} AS ("));
-    // Direct Version upstream
+    //
+    // ──────────────────────────────────────────────
+    // UPSTREAM RECURSION CTE
+    // ──────────────────────────────────────────────
+    //
     query_builder.push(format!(
-        r#"
+        "upstream_versions AS (
             SELECT
                 d.*,
-                CAST(d.{recurse_up} AS TEXT) AS path
-            FROM
-                {LATEST_RECURSION_VERSIONS_CTE} d
-            INNER JOIN
-                {LATEST_REFERENCE_VERSIONS_CTE} f ON f.{recursion_ref} = d.{recurse_up}
-            WHERE
-            EXISTS (
-                SELECT 1 FROM {LATEST_REFERENCE_VERSIONS_CTE} f
-                WHERE f.{recursion_ref} = d.{recurse_down}
-            )
-            AND
-            EXISTS (
-                SELECT 1 FROM {LATEST_REFERENCE_VERSIONS_CTE} f
-                WHERE f.{recursion_ref} = d.{recurse_up}
-            )
-        "#
+                CAST(d.{recurse_down} AS TEXT) AS path_up,
+                1 AS depth_up
+            FROM {LATEST_RECURSION_VERSIONS_CTE} d
+            INNER JOIN {LATEST_REFERENCE_VERSIONS_CTE} f
+                ON f.{recursion_ref} = d.{recurse_down}
+            WHERE f.{starting_at} = "
     ));
-    query_builder.push(format!("AND f.{starting_at} = "));
     direct_reference_entity.push_bind(query_builder);
-
-    query_builder.push(" UNION ALL ");
-
-    // Direct Version downstream
     query_builder.push(format!(
-        r#"
-        SELECT
-                d.*,
-                CAST(d.{recurse_down} AS TEXT) AS path
-            FROM
-                {LATEST_RECURSION_VERSIONS_CTE} d
-            INNER JOIN
-                {LATEST_REFERENCE_VERSIONS_CTE} f ON f.{recursion_ref} = d.{recurse_down}
-            WHERE
-            EXISTS (
-                SELECT 1 FROM {LATEST_REFERENCE_VERSIONS_CTE} f
-                WHERE f.{recursion_ref} = d.{recurse_down}
-            )
-            AND
-            EXISTS (
-                SELECT 1 FROM {LATEST_REFERENCE_VERSIONS_CTE} f
-                WHERE f.{recursion_ref} = d.{recurse_up}
-            )
-        "#
+        " AND EXISTS (SELECT 1 FROM {LATEST_REFERENCE_VERSIONS_CTE} fx WHERE fx.{recursion_ref} = d.{recurse_up})"
     ));
-    query_builder.push(format!("AND f.{starting_at} = "));
-    direct_reference_entity.push_bind(query_builder);
 
-    query_builder.push(" UNION ALL ");
+    if let Some(max_up) = options.max_upstream_depth {
+        query_builder.push(format!(" AND 0 < {max_up} "));
+    }
 
-    // And then all downstream recursive (preventing cycles).
-    // We also prevent advancing the recursion if the path already contains the current downstream.
-    // We also prevent advancing the recursion if the status is not valid (by checking against
-    // LATEST_REFERENCE_VERSIONS_CTE).
     query_builder.push(format!(
-        r#"
+        "
+            UNION ALL
             SELECT
                 d.*,
-                r.path || ',' || d.{recurse_down} AS path
-            FROM
-                {LATEST_RECURSION_VERSIONS_CTE} d
-            INNER JOIN
-                {RECURSIVE_VERSIONS_CTE} r ON r.{recurse_down} = d.{recurse_up}
-            WHERE instr(r.path, d.{recurse_down}) = 0
-            AND EXISTS (
-                SELECT 1 FROM {LATEST_REFERENCE_VERSIONS_CTE} f
-                WHERE f.{recursion_ref} = d.{recurse_down}
-            )
-            AND EXISTS (
-                SELECT 1 FROM {LATEST_REFERENCE_VERSIONS_CTE} f
-                WHERE f.{recursion_ref} = d.{recurse_up}
-            )
-        "#
+                r.path_up || ',' || d.{recurse_up} AS path_up,
+                r.depth_up + 1 AS depth_up
+            FROM {LATEST_RECURSION_VERSIONS_CTE} d
+            INNER JOIN upstream_versions r
+                ON r.{recurse_up} = d.{recurse_down}
+            WHERE instr(r.path_up, d.{recurse_up}) = 0
+              AND EXISTS (SELECT 1 FROM {LATEST_REFERENCE_VERSIONS_CTE} fx WHERE fx.{recursion_ref} = d.{recurse_down})
+              AND EXISTS (SELECT 1 FROM {LATEST_REFERENCE_VERSIONS_CTE} fy WHERE fy.{recursion_ref} = d.{recurse_up})
+        "
     ));
 
-    query_builder.push(")");
+    if let Some(max_up) = options.max_upstream_depth {
+        query_builder.push(format!(" AND r.depth_up < {max_up} "));
+    }
+
+    query_builder.push(") , "); // end of upstream CTE
+
+    //
+    // ──────────────────────────────────────────────
+    // DOWNSTREAM RECURSION CTE
+    // ──────────────────────────────────────────────
+    //
+    query_builder.push(format!(
+        "downstream_versions AS (
+            SELECT
+                d.*,
+                CAST(d.{recurse_up} AS TEXT) AS path_down,
+                1 AS depth_down
+            FROM {LATEST_RECURSION_VERSIONS_CTE} d
+            INNER JOIN {LATEST_REFERENCE_VERSIONS_CTE} f
+                ON f.{recursion_ref} = d.{recurse_up}
+            WHERE f.{starting_at} = "
+    ));
+    direct_reference_entity.push_bind(query_builder);
+    query_builder.push(format!(
+        " AND EXISTS (SELECT 1 FROM {LATEST_REFERENCE_VERSIONS_CTE} fx WHERE fx.{recursion_ref} = d.{recurse_down})"
+    ));
+
+    if let Some(max_down) = options.max_downstream_depth {
+        query_builder.push(format!(" AND 0 < {max_down} "));
+    }
+
+    query_builder.push(format!(
+        "
+            UNION ALL
+            SELECT
+                d.*,
+                r.path_down || ',' || d.{recurse_down} AS path_down,
+                r.depth_down + 1 AS depth_down
+            FROM {LATEST_RECURSION_VERSIONS_CTE} d
+            INNER JOIN downstream_versions r
+                ON r.{recurse_down} = d.{recurse_up}
+            WHERE instr(r.path_down, d.{recurse_down}) = 0
+              AND EXISTS (SELECT 1 FROM {LATEST_REFERENCE_VERSIONS_CTE} fx WHERE fx.{recursion_ref} = d.{recurse_down})
+              AND EXISTS (SELECT 1 FROM {LATEST_REFERENCE_VERSIONS_CTE} fy WHERE fy.{recursion_ref} = d.{recurse_up})
+        "
+    ));
+
+    if let Some(max_down) = options.max_downstream_depth {
+        query_builder.push(format!(" AND r.depth_down < {max_down} "));
+    }
+
+    query_builder.push("), "); // end of downstream CTE
+
+    //
+    // ──────────────────────────────────────────────
+    // FINAL MERGE QUERY
+    // ──────────────────────────────────────────────
+    //
+    query_builder.push(format!(
+        "{RECURSIVE_VERSIONS_CTE} AS (
+            SELECT * FROM upstream_versions
+            UNION ALL
+            SELECT * FROM downstream_versions
+        )",
+    ));
 
     Ok(())
 }
@@ -421,64 +474,125 @@ mod tests {
     #[test]
     fn test_recursive_active_versions_sql() {
         let mut query_builder = sqlx::QueryBuilder::default();
-
         let id = &TestId::try_from("AAA").unwrap();
-        recursive_versions_sql::<TestDao, RecursionReference>(&mut query_builder, id).unwrap();
+        recursive_versions_sql::<TestDao, RecursionReference>(
+            &mut query_builder,
+            id,
+            RecursionOptions {
+                max_upstream_depth: None,
+                max_downstream_depth: None,
+            },
+        )
+        .unwrap();
         let query = query_builder.build();
 
-        let expected = "recursive_versions AS (\
+        let expected = "upstream_versions AS (\
         \n            SELECT\
         \n                d.*,\
-        \n                CAST(d.current AS TEXT) AS path\
-        \n            FROM\
-        \n                latest_recursion_versions d\
-        \n            INNER JOIN\
-        \n                latest_reference_versions f ON f.reference_id = d.current\
-        \n            WHERE\
-        \n            EXISTS (\
-        \n                SELECT 1 FROM latest_reference_versions f\
-        \n                WHERE f.reference_id = d.downstream\
-        \n            )\
-        \n            AND\
-        \n            EXISTS (\
-        \n                SELECT 1 FROM latest_reference_versions f\
-        \n                WHERE f.reference_id = d.current\
-        \n            )\
-        \n        AND f.id = ? UNION ALL \
-        \n        SELECT\
-        \n                d.*,\
-        \n                CAST(d.downstream AS TEXT) AS path\
-        \n            FROM\
-        \n                latest_recursion_versions d\
-        \n            INNER JOIN\
-        \n                latest_reference_versions f ON f.reference_id = d.downstream\
-        \n            WHERE\
-        \n            EXISTS (\
-        \n                SELECT 1 FROM latest_reference_versions f\
-        \n                WHERE f.reference_id = d.downstream\
-        \n            )\
-        \n            AND\
-        \n            EXISTS (\
-        \n                SELECT 1 FROM latest_reference_versions f\
-        \n                WHERE f.reference_id = d.current\
-        \n            )\
-        \n        AND f.id = ? UNION ALL \
+        \n                CAST(d.downstream AS TEXT) AS path_up,\
+        \n                1 AS depth_up\
+        \n            FROM latest_recursion_versions d\
+        \n            INNER JOIN latest_reference_versions f\
+        \n                ON f.reference_id = d.downstream\
+        \n            WHERE f.id = ? AND EXISTS (SELECT 1 FROM latest_reference_versions fx WHERE fx.reference_id = d.current)\
+        \n            UNION ALL\
         \n            SELECT\
         \n                d.*,\
-        \n                r.path || ',' || d.downstream AS path\
-        \n            FROM\
-        \n                latest_recursion_versions d\
-        \n            INNER JOIN\
-        \n                recursive_versions r ON r.downstream = d.current\
-        \n            WHERE instr(r.path, d.downstream) = 0\
-        \n            AND EXISTS (\
-        \n                SELECT 1 FROM latest_reference_versions f\
-        \n                WHERE f.reference_id = d.downstream\
-        \n            )\
-        \n            AND EXISTS (\
-        \n                SELECT 1 FROM latest_reference_versions f\
-        \n                WHERE f.reference_id = d.current\
-        \n            )\
+        \n                r.path_up || ',' || d.current AS path_up,\
+        \n                r.depth_up + 1 AS depth_up\
+        \n            FROM latest_recursion_versions d\
+        \n            INNER JOIN upstream_versions r\
+        \n                ON r.current = d.downstream\
+        \n            WHERE instr(r.path_up, d.current) = 0\
+        \n              AND EXISTS (SELECT 1 FROM latest_reference_versions fx WHERE fx.reference_id = d.downstream)\
+        \n              AND EXISTS (SELECT 1 FROM latest_reference_versions fy WHERE fy.reference_id = d.current)\
+        \n        ) , downstream_versions AS (\
+        \n            SELECT\
+        \n                d.*,\
+        \n                CAST(d.current AS TEXT) AS path_down,\
+        \n                1 AS depth_down\
+        \n            FROM latest_recursion_versions d\
+        \n            INNER JOIN latest_reference_versions f\
+        \n                ON f.reference_id = d.current\
+        \n            WHERE f.id = ? AND EXISTS (SELECT 1 FROM latest_reference_versions fx WHERE fx.reference_id = d.downstream)\
+        \n            UNION ALL\
+        \n            SELECT\
+        \n                d.*,\
+        \n                r.path_down || ',' || d.downstream AS path_down,\
+        \n                r.depth_down + 1 AS depth_down\
+        \n            FROM latest_recursion_versions d\
+        \n            INNER JOIN downstream_versions r\
+        \n                ON r.downstream = d.current\
+        \n            WHERE instr(r.path_down, d.downstream) = 0\
+        \n              AND EXISTS (SELECT 1 FROM latest_reference_versions fx WHERE fx.reference_id = d.downstream)\
+        \n              AND EXISTS (SELECT 1 FROM latest_reference_versions fy WHERE fy.reference_id = d.current)\
+        \n        ), recursive_versions AS (\
+        \n            SELECT * FROM upstream_versions\
+        \n            UNION ALL\
+        \n            SELECT * FROM downstream_versions\
+        \n        )";
+        assert_eq!(query.sql(), expected);
+    }
+
+    #[test]
+    fn test_select_active_recursive_versions_some_depth() {
+        let mut query_builder = sqlx::QueryBuilder::default();
+        let id = &TestId::try_from("AAA").unwrap();
+        recursive_versions_sql::<TestDao, RecursionReference>(
+            &mut query_builder,
+            id,
+            RecursionOptions {
+                max_upstream_depth: Some(Depth::try_from(2).unwrap()),
+                max_downstream_depth: Some(Depth::try_from(3).unwrap()),
+            },
+        )
+        .unwrap();
+        let query = query_builder.build();
+
+        let expected = "upstream_versions AS (\
+        \n            SELECT\
+        \n                d.*,\
+        \n                CAST(d.downstream AS TEXT) AS path_up,\
+        \n                1 AS depth_up\
+        \n            FROM latest_recursion_versions d\
+        \n            INNER JOIN latest_reference_versions f\
+        \n                ON f.reference_id = d.downstream\
+        \n            WHERE f.id = ? AND EXISTS (SELECT 1 FROM latest_reference_versions fx WHERE fx.reference_id = d.current) AND 0 < 2 \
+        \n            UNION ALL\
+        \n            SELECT\
+        \n                d.*,\
+        \n                r.path_up || ',' || d.current AS path_up,\
+        \n                r.depth_up + 1 AS depth_up\
+        \n            FROM latest_recursion_versions d\
+        \n            INNER JOIN upstream_versions r\
+        \n                ON r.current = d.downstream\
+        \n            WHERE instr(r.path_up, d.current) = 0\
+        \n              AND EXISTS (SELECT 1 FROM latest_reference_versions fx WHERE fx.reference_id = d.downstream)\
+        \n              AND EXISTS (SELECT 1 FROM latest_reference_versions fy WHERE fy.reference_id = d.current)\
+        \n         AND r.depth_up < 2 ) , downstream_versions AS (\
+        \n            SELECT\
+        \n                d.*,\
+        \n                CAST(d.current AS TEXT) AS path_down,\
+        \n                1 AS depth_down\
+        \n            FROM latest_recursion_versions d\
+        \n            INNER JOIN latest_reference_versions f\
+        \n                ON f.reference_id = d.current\
+        \n            WHERE f.id = ? AND EXISTS (SELECT 1 FROM latest_reference_versions fx WHERE fx.reference_id = d.downstream) AND 0 < 3 \
+        \n            UNION ALL\
+        \n            SELECT\
+        \n                d.*,\
+        \n                r.path_down || ',' || d.downstream AS path_down,\
+        \n                r.depth_down + 1 AS depth_down\
+        \n            FROM latest_recursion_versions d\
+        \n            INNER JOIN downstream_versions r\
+        \n                ON r.downstream = d.current\
+        \n            WHERE instr(r.path_down, d.downstream) = 0\
+        \n              AND EXISTS (SELECT 1 FROM latest_reference_versions fx WHERE fx.reference_id = d.downstream)\
+        \n              AND EXISTS (SELECT 1 FROM latest_reference_versions fy WHERE fy.reference_id = d.current)\
+        \n         AND r.depth_down < 3 ), recursive_versions AS (\
+        \n            SELECT * FROM upstream_versions\
+        \n            UNION ALL\
+        \n            SELECT * FROM downstream_versions\
         \n        )";
         assert_eq!(query.sql(), expected);
     }
@@ -487,13 +601,13 @@ mod tests {
     fn test_select_active_recursive_versions_at_none_sql() {
         let id = TestId::try_from("AAA").unwrap();
         let mut query_builder = DaoQueries::default()
-            .select_recursive_versions_at::<{TestDao::All}, TestDao, { RecursionReference::All }, RecursionReference>(
+            .select_recursive_versions_at::<{ TestDao::All }, TestDao, { RecursionReference::All }, RecursionReference>(
                 None, None, &id,
             )
             .unwrap();
         let query = query_builder.build();
 
-        let expected = "WITH latest_reference_versions_ranked AS (\
+        let expected = "WITH RECURSIVE latest_reference_versions_ranked AS (\
         \n            SELECT\
         \n                v.*,\
         \n                ROW_NUMBER() OVER (PARTITION BY v.reference_id ORDER BY v.defined_on DESC, v.id DESC) AS rn,\
@@ -521,59 +635,50 @@ mod tests {
         \n                latest_recursion_versions_ranked rv\
         \n            WHERE\
         \n                rv.rn = 1\
-        \n        ),recursive_versions AS (\
+        \n        ),upstream_versions AS (\
         \n            SELECT\
         \n                d.*,\
-        \n                CAST(d.current AS TEXT) AS path\
-        \n            FROM\
-        \n                latest_recursion_versions d\
-        \n            INNER JOIN\
-        \n                latest_reference_versions f ON f.reference_id = d.current\
-        \n            WHERE\
-        \n            EXISTS (\
-        \n                SELECT 1 FROM latest_reference_versions f\
-        \n                WHERE f.reference_id = d.downstream\
-        \n            )\
-        \n            AND\
-        \n            EXISTS (\
-        \n                SELECT 1 FROM latest_reference_versions f\
-        \n                WHERE f.reference_id = d.current\
-        \n            )\
-        \n        AND f.id = ? UNION ALL \
-        \n        SELECT\
-        \n                d.*,\
-        \n                CAST(d.downstream AS TEXT) AS path\
-        \n            FROM\
-        \n                latest_recursion_versions d\
-        \n            INNER JOIN\
-        \n                latest_reference_versions f ON f.reference_id = d.downstream\
-        \n            WHERE\
-        \n            EXISTS (\
-        \n                SELECT 1 FROM latest_reference_versions f\
-        \n                WHERE f.reference_id = d.downstream\
-        \n            )\
-        \n            AND\
-        \n            EXISTS (\
-        \n                SELECT 1 FROM latest_reference_versions f\
-        \n                WHERE f.reference_id = d.current\
-        \n            )\
-        \n        AND f.id = ? UNION ALL \
+        \n                CAST(d.downstream AS TEXT) AS path_up,\
+        \n                1 AS depth_up\
+        \n            FROM latest_recursion_versions d\
+        \n            INNER JOIN latest_reference_versions f\
+        \n                ON f.reference_id = d.downstream\
+        \n            WHERE f.id = ? AND EXISTS (SELECT 1 FROM latest_reference_versions fx WHERE fx.reference_id = d.current) AND 0 < 0 \
+        \n            UNION ALL\
         \n            SELECT\
         \n                d.*,\
-        \n                r.path || ',' || d.downstream AS path\
-        \n            FROM\
-        \n                latest_recursion_versions d\
-        \n            INNER JOIN\
-        \n                recursive_versions r ON r.downstream = d.current\
-        \n            WHERE instr(r.path, d.downstream) = 0\
-        \n            AND EXISTS (\
-        \n                SELECT 1 FROM latest_reference_versions f\
-        \n                WHERE f.reference_id = d.downstream\
-        \n            )\
-        \n            AND EXISTS (\
-        \n                SELECT 1 FROM latest_reference_versions f\
-        \n                WHERE f.reference_id = d.current\
-        \n            )\
+        \n                r.path_up || ',' || d.current AS path_up,\
+        \n                r.depth_up + 1 AS depth_up\
+        \n            FROM latest_recursion_versions d\
+        \n            INNER JOIN upstream_versions r\
+        \n                ON r.current = d.downstream\
+        \n            WHERE instr(r.path_up, d.current) = 0\
+        \n              AND EXISTS (SELECT 1 FROM latest_reference_versions fx WHERE fx.reference_id = d.downstream)\
+        \n              AND EXISTS (SELECT 1 FROM latest_reference_versions fy WHERE fy.reference_id = d.current)\
+        \n         AND r.depth_up < 0 ) , downstream_versions AS (\
+        \n            SELECT\
+        \n                d.*,\
+        \n                CAST(d.current AS TEXT) AS path_down,\
+        \n                1 AS depth_down\
+        \n            FROM latest_recursion_versions d\
+        \n            INNER JOIN latest_reference_versions f\
+        \n                ON f.reference_id = d.current\
+        \n            WHERE f.id = ? AND EXISTS (SELECT 1 FROM latest_reference_versions fx WHERE fx.reference_id = d.downstream)\
+        \n            UNION ALL\
+        \n            SELECT\
+        \n                d.*,\
+        \n                r.path_down || ',' || d.downstream AS path_down,\
+        \n                r.depth_down + 1 AS depth_down\
+        \n            FROM latest_recursion_versions d\
+        \n            INNER JOIN downstream_versions r\
+        \n                ON r.downstream = d.current\
+        \n            WHERE instr(r.path_down, d.downstream) = 0\
+        \n              AND EXISTS (SELECT 1 FROM latest_reference_versions fx WHERE fx.reference_id = d.downstream)\
+        \n              AND EXISTS (SELECT 1 FROM latest_reference_versions fy WHERE fy.reference_id = d.current)\
+        \n        ), recursive_versions AS (\
+        \n            SELECT * FROM upstream_versions\
+        \n            UNION ALL\
+        \n            SELECT * FROM downstream_versions\
         \n        ) SELECT DISTINCT id, status, current, downstream, defined_on FROM recursive_versions ORDER BY 1 DESC";
         assert_eq!(query.sql(), expected);
     }
@@ -583,7 +688,7 @@ mod tests {
         let at = time(0);
         let id = TestRecursion::try_from("ref_X").unwrap();
         let mut query_builder = DaoQueries::default()
-            .select_recursive_versions_at::<{TestDao::All}, TestDao, { RecursionReference::All }, RecursionReference>(
+            .select_recursive_versions_at::<{ TestDao::All }, TestDao, { RecursionReference::All }, RecursionReference>(
                 Some(&at),
                 Some(&at),
                 &id,
@@ -591,7 +696,7 @@ mod tests {
             .unwrap();
         let query = query_builder.build();
 
-        let expected = "WITH latest_reference_versions_ranked AS (\
+        let expected = "WITH RECURSIVE latest_reference_versions_ranked AS (\
         \n            SELECT\
         \n                v.*,\
         \n                ROW_NUMBER() OVER (PARTITION BY v.reference_id ORDER BY v.defined_on DESC, v.id DESC) AS rn,\
@@ -619,59 +724,50 @@ mod tests {
         \n                latest_recursion_versions_ranked rv\
         \n            WHERE\
         \n                rv.rn = 1\
-        \n        ),recursive_versions AS (\
+        \n        ),upstream_versions AS (\
         \n            SELECT\
         \n                d.*,\
-        \n                CAST(d.current AS TEXT) AS path\
-        \n            FROM\
-        \n                latest_recursion_versions d\
-        \n            INNER JOIN\
-        \n                latest_reference_versions f ON f.reference_id = d.current\
-        \n            WHERE\
-        \n            EXISTS (\
-        \n                SELECT 1 FROM latest_reference_versions f\
-        \n                WHERE f.reference_id = d.downstream\
-        \n            )\
-        \n            AND\
-        \n            EXISTS (\
-        \n                SELECT 1 FROM latest_reference_versions f\
-        \n                WHERE f.reference_id = d.current\
-        \n            )\
-        \n        AND f.reference_id = ? UNION ALL \
-        \n        SELECT\
-        \n                d.*,\
-        \n                CAST(d.downstream AS TEXT) AS path\
-        \n            FROM\
-        \n                latest_recursion_versions d\
-        \n            INNER JOIN\
-        \n                latest_reference_versions f ON f.reference_id = d.downstream\
-        \n            WHERE\
-        \n            EXISTS (\
-        \n                SELECT 1 FROM latest_reference_versions f\
-        \n                WHERE f.reference_id = d.downstream\
-        \n            )\
-        \n            AND\
-        \n            EXISTS (\
-        \n                SELECT 1 FROM latest_reference_versions f\
-        \n                WHERE f.reference_id = d.current\
-        \n            )\
-        \n        AND f.reference_id = ? UNION ALL \
+        \n                CAST(d.downstream AS TEXT) AS path_up,\
+        \n                1 AS depth_up\
+        \n            FROM latest_recursion_versions d\
+        \n            INNER JOIN latest_reference_versions f\
+        \n                ON f.reference_id = d.downstream\
+        \n            WHERE f.reference_id = ? AND EXISTS (SELECT 1 FROM latest_reference_versions fx WHERE fx.reference_id = d.current) AND 0 < 0 \
+        \n            UNION ALL\
         \n            SELECT\
         \n                d.*,\
-        \n                r.path || ',' || d.downstream AS path\
-        \n            FROM\
-        \n                latest_recursion_versions d\
-        \n            INNER JOIN\
-        \n                recursive_versions r ON r.downstream = d.current\
-        \n            WHERE instr(r.path, d.downstream) = 0\
-        \n            AND EXISTS (\
-        \n                SELECT 1 FROM latest_reference_versions f\
-        \n                WHERE f.reference_id = d.downstream\
-        \n            )\
-        \n            AND EXISTS (\
-        \n                SELECT 1 FROM latest_reference_versions f\
-        \n                WHERE f.reference_id = d.current\
-        \n            )\
+        \n                r.path_up || ',' || d.current AS path_up,\
+        \n                r.depth_up + 1 AS depth_up\
+        \n            FROM latest_recursion_versions d\
+        \n            INNER JOIN upstream_versions r\
+        \n                ON r.current = d.downstream\
+        \n            WHERE instr(r.path_up, d.current) = 0\
+        \n              AND EXISTS (SELECT 1 FROM latest_reference_versions fx WHERE fx.reference_id = d.downstream)\
+        \n              AND EXISTS (SELECT 1 FROM latest_reference_versions fy WHERE fy.reference_id = d.current)\
+        \n         AND r.depth_up < 0 ) , downstream_versions AS (\
+        \n            SELECT\
+        \n                d.*,\
+        \n                CAST(d.current AS TEXT) AS path_down,\
+        \n                1 AS depth_down\
+        \n            FROM latest_recursion_versions d\
+        \n            INNER JOIN latest_reference_versions f\
+        \n                ON f.reference_id = d.current\
+        \n            WHERE f.reference_id = ? AND EXISTS (SELECT 1 FROM latest_reference_versions fx WHERE fx.reference_id = d.downstream)\
+        \n            UNION ALL\
+        \n            SELECT\
+        \n                d.*,\
+        \n                r.path_down || ',' || d.downstream AS path_down,\
+        \n                r.depth_down + 1 AS depth_down\
+        \n            FROM latest_recursion_versions d\
+        \n            INNER JOIN downstream_versions r\
+        \n                ON r.downstream = d.current\
+        \n            WHERE instr(r.path_down, d.downstream) = 0\
+        \n              AND EXISTS (SELECT 1 FROM latest_reference_versions fx WHERE fx.reference_id = d.downstream)\
+        \n              AND EXISTS (SELECT 1 FROM latest_reference_versions fy WHERE fy.reference_id = d.current)\
+        \n        ), recursive_versions AS (\
+        \n            SELECT * FROM upstream_versions\
+        \n            UNION ALL\
+        \n            SELECT * FROM downstream_versions\
         \n        ) SELECT DISTINCT id, status, current, downstream, defined_on FROM recursive_versions ORDER BY 1 DESC";
         assert_eq!(query.sql(), expected);
     }
@@ -681,7 +777,7 @@ mod tests {
     async fn test_select_active_versions_none_fetch_all(db: DbPool) {
         let id = TestId::try_from("MMM").unwrap();
         let mut query_builder = DaoQueries::default()
-            .select_recursive_versions_at::<{TestDao::All}, TestDao, { RecursionReference::All }, RecursionReference>(
+            .select_recursive_versions_at::<{ TestDao::All }, TestDao, { RecursionReference::All }, RecursionReference>(
                 None, None, &id,
             )
             .unwrap();
@@ -700,24 +796,22 @@ mod tests {
     #[td_test::test(sqlx(fixture = "test_recursive"))]
     #[tokio::test]
     async fn test_select_active_versions_none_fetch_all_upstream(db: DbPool) {
-        let id = TestId::try_from("NNN").unwrap();
+        let id = TestId::try_from("SSS").unwrap();
         let mut query_builder = DaoQueries::default()
-            .select_recursive_versions_at::<{TestDao::All}, TestDao, { RecursionReference::All }, RecursionReference>(
-                None, None, &id,
+            .select_recursive_versions_at_with::<{ TestDao::All }, TestDao, { RecursionReference::All }, RecursionReference>(
+                None, None, &id, RecursionOptions {
+                    max_upstream_depth: None,
+                    max_downstream_depth: Some(Depth::ZERO),
+                }
             )
             .unwrap();
         let result: Vec<TestDao> = query_builder.build_query_as().fetch_all(&db).await.unwrap();
-        // NNN: BBB -> BBB
-        //             CCC
-        //             DDD -> EEE
-        //             AAA (direct upstream)
-        assert_eq!(result.len(), 5);
+        // SSS: EEE -> DDD -> AAA
+        assert_eq!(result.len(), 3);
         // (order by ID DESC)
         assert_eq!(result[0], FIXTURE_TEST_DAOS[4]);
         assert_eq!(result[1], FIXTURE_TEST_DAOS[3]);
-        assert_eq!(result[2], FIXTURE_TEST_DAOS[2]);
-        assert_eq!(result[3], FIXTURE_TEST_DAOS[1]);
-        assert_eq!(result[4], FIXTURE_TEST_DAOS[0]);
+        assert_eq!(result[2], FIXTURE_TEST_DAOS[0]);
     }
 
     #[td_test::test(sqlx(fixture = "test_recursive"))]
@@ -726,7 +820,7 @@ mod tests {
         let at = time(1);
         let id = TestId::try_from("MMM").unwrap();
         let mut query_builder = DaoQueries::default()
-            .select_recursive_versions_at::<{TestDao::All}, TestDao, { RecursionReference::All }, RecursionReference>(
+            .select_recursive_versions_at::<{ TestDao::All }, TestDao, { RecursionReference::All }, RecursionReference>(
                 Some(&at),
                 Some(&at),
                 &id,
@@ -767,8 +861,11 @@ mod tests {
     async fn test_select_active_versions_none_last_in_stream(db: DbPool) {
         let id = TestId::try_from("SSS").unwrap();
         let mut query_builder = DaoQueries::default()
-            .select_recursive_versions_at::<{TestDao::All}, TestDao, { RecursionReference::All }, RecursionReference>(
-                None, None, &id,
+            .select_recursive_versions_at_with::<{ TestDao::All }, TestDao, { RecursionReference::All }, RecursionReference>(
+                None, None, &id,RecursionOptions {
+                    max_upstream_depth: Some(Depth::try_from(1).unwrap()),
+                    max_downstream_depth: None,
+                }
             )
             .unwrap();
         let result: Vec<TestDao> = query_builder.build_query_as().fetch_all(&db).await.unwrap();
@@ -783,7 +880,7 @@ mod tests {
         // OOO is active, but PPP has the same partition_id and is deleted
         let id = TestId::try_from("OOO").unwrap();
         let mut query_builder = DaoQueries::default()
-            .select_recursive_versions_at::<{TestDao::All}, TestDao, { RecursionReference::All }, RecursionReference>(
+            .select_recursive_versions_at::<{ TestDao::All }, TestDao, { RecursionReference::All }, RecursionReference>(
                 None, None, &id,
             )
             .unwrap();
@@ -829,7 +926,7 @@ mod tests {
 
         let id = TestId::try_from(format!("YYY{:04}", 0))?;
         let mut query_builder = DaoQueries::default()
-            .select_recursive_versions_at::<{TestDao::All}, TestDao, { RecursionReference::All }, RecursionReference>(
+            .select_recursive_versions_at::<{ TestDao::All }, TestDao, { RecursionReference::All }, RecursionReference>(
                 None, None, &id,
             )?;
         let result: Vec<TestDao> = query_builder.build_query_as().fetch_all(&db).await.unwrap();

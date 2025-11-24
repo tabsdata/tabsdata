@@ -6,9 +6,23 @@ use std::collections::HashMap;
 use std::ops::Deref;
 use ta_execution::transaction::TransactionMap;
 use td_error::TdError;
+use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::transaction::{TransactionDB, TransactionValueBuilder};
+use td_objects::types::basic::Depth;
 use td_tower::extractors::{Input, SrvCtx};
+use te_execution::EXECUTION_GRAPH_DEPTH;
 use te_execution::transaction::TransactionBy;
+
+pub async fn seed_existing_trigger_graph_depth(
+    Input(execution): Input<ExecutionDB>,
+) -> Result<Option<Depth>, TdError> {
+    // We are using the depth defined, if any, or defaulting to EXECUTION_GRAPH_DEPTH.
+    let depth = match execution.depth {
+        Some(d) => Some(d),
+        None => EXECUTION_GRAPH_DEPTH,
+    };
+    Ok(depth)
+}
 
 // Similar to build_transaction_map, but using already existing transactions instead of creating new ones.
 pub async fn build_existing_transaction_map(
