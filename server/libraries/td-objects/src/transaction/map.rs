@@ -2,14 +2,14 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use crate::dxo::execution::ExecutionDB;
+use crate::dxo::transaction::TransactionValue;
+use crate::types::basic::{TransactionByStr, TransactionId, TransactionKey};
+use crate::types::graph::FunctionNode;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::str::FromStr;
 use td_error::{TdError, td_error};
-use td_objects::dxo::execution::ExecutionDB;
-use td_objects::dxo::transaction::TransactionValue;
-use td_objects::execution::graph::FunctionNode;
-use td_objects::types::basic::{TransactionByStr, TransactionId, TransactionKey};
 
 #[td_error]
 pub enum TransactionMapperError {
@@ -84,9 +84,9 @@ impl<T: TransactionMapper> TransactionMap<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dxo::execution::ExecutionDB;
+    use crate::test_utils::graph::{FUNCTION_NAMES, function_node};
     use crate::test_utils::transaction::TestTransactionBy;
-    use td_objects::dxo::execution::ExecutionDB;
-    use td_objects::test_utils::graph::{FUNCTION_NAMES, function_node};
 
     fn dummy_execution() -> ExecutionDB {
         ExecutionDB {
@@ -96,7 +96,7 @@ mod tests {
             function_version_id: Default::default(),
             triggered_on: Default::default(),
             triggered_by_id: Default::default(),
-            depth: None,
+            recursion_options: Default::default(),
         }
     }
 

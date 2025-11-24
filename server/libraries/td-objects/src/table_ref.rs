@@ -6,11 +6,12 @@ use crate::parse::{parse_table_ref, parse_versioned_table_ref, parse_versions};
 use crate::types::ComposedString;
 use crate::types::basic::{CollectionName, TableDataVersionId};
 use derive_new::new;
+use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use td_error::TdError;
 
 /// It represents a version.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum Version {
     /// A fixed version.
     Fixed(TableDataVersionId),
@@ -52,7 +53,7 @@ impl Version {
 }
 
 /// It represents a set of versions.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum Versions {
     /// No versions
     None,

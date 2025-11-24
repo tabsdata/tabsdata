@@ -71,6 +71,7 @@ getset = { workspace = true }
 itertools = { workspace = true }
 nonempty = { workspace = true }
 paste = { workspace = true }
+petgraph = { workspace = true, features = ["serde-1"] }
 polars = { workspace = true }
 regex = { workspace = true }
 serde = { workspace = true, features = ["derive"] }

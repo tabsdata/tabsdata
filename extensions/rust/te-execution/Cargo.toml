@@ -33,7 +33,6 @@ ignored = ["openssl", "strum"]
 
 # Internal dependencies
 
-ta-execution = { workspace = true }
 td-error = { workspace = true }
 td-objects = { workspace = true }
 
@@ -45,7 +44,6 @@ strum = { workspace = true, features = ["derive"] }
 # Development dependencies
 
 [dev-dependencies]
-ta-execution = { workspace = true, features = ["td-test"] }
 td-objects = { workspace = true, features = ["td-test"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]

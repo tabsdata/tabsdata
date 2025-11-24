@@ -16,3 +16,4 @@ pub mod seed_transaction;
 pub mod seed_user;
 pub mod seed_user_role;
 pub mod seed_worker;
+pub mod transaction;

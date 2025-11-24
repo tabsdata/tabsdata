@@ -46,7 +46,6 @@ ignored = ["openssl", "strum", "thiserror"]
 
 ## Libraries
 
-ta-execution = { workspace = true }
 td-database = { workspace = true }
 te-execution = { workspace = true }
 td-error = { workspace = true }
@@ -55,9 +54,7 @@ td-test = { workspace = true }
 
 # External dependencies
 
-async-trait = { workspace = true }
 derive_builder = { workspace = true }
-futures = { workspace = true }
 itertools = { workspace = true }
 petgraph = { workspace = true }
 sqlx = { workspace = true }
@@ -68,7 +65,6 @@ tokio = { workspace = true, features = ["full"] }
 # Development dependencies
 
 [dev-dependencies]
-ta-execution = { workspace = true, features = ["td-test"] }
 td-objects = { workspace = true, features = ["td-test"] }
 td-security = { workspace = true, features = ["td-test"] }
 

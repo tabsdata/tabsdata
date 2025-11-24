@@ -42,4 +42,5 @@ impl TryFrom<&TableDBWithNames> for TableTrigger {
 pub struct TableTriggerDto;
 
 #[td_type::typed(composed(inner = "Versions"))]
+#[derive(Ord, PartialOrd)]
 pub struct TableVersions;

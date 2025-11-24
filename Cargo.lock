@@ -7352,20 +7352,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ta-execution"
-version = "1.6.0"
-dependencies = [
- "openssl",
- "petgraph",
- "strum",
- "ta-execution",
- "td-error",
- "td-objects",
- "thiserror 2.0.17",
- "tokio",
-]
-
-[[package]]
 name = "ta-services"
 version = "1.6.0"
 dependencies = [
@@ -7645,7 +7631,6 @@ dependencies = [
  "petgraph",
  "sqlx",
  "strum",
- "ta-execution",
  "td-database",
  "td-error",
  "td-objects",
@@ -7674,6 +7659,7 @@ dependencies = [
  "nonempty",
  "openssl",
  "paste",
+ "petgraph",
  "polars",
  "regex",
  "serde",
@@ -8075,7 +8061,6 @@ dependencies = [
  "openssl",
  "serde",
  "strum",
- "ta-execution",
  "td-error",
  "td-objects",
 ]

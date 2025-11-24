@@ -4,11 +4,10 @@
 
 #[td_type::dxo]
 mod definitions {
+    use crate::dxo::Setter;
     use crate::dxo::crudl::RequestContext;
     use crate::dxo::function::{Function, FunctionDBWithNames};
-    use crate::dxo::table::TableDBWithNames;
     use crate::dxo::table_data_version::ExecutionTableDataVersionRead;
-    use crate::execution::graph::{FunctionNode, GraphEdge, TableNode};
     use crate::types::basic::{
         AtTime, CollectionId, CollectionName, Dot, ExecutionId, ExecutionName, ExecutionStatus,
         FunctionName, FunctionOnly, FunctionRunStatus, FunctionVersionId, StatusCount, System,
@@ -16,6 +15,8 @@ mod definitions {
         UserName,
     };
     use crate::types::composed::TableVersions;
+    use crate::types::graph::GraphEdge;
+    use crate::types::graph::{FunctionNode, TableNode};
     use crate::types::recursion::RecursionOptions;
     use crate::types::status_count::FunctionRunStatusCount;
     use std::collections::{HashMap, HashSet};
@@ -129,11 +130,8 @@ mod definitions {
     }
 
     #[td_type::Dto]
-    #[derive(Eq, PartialEq)]
-    #[td_type(
-        builder(try_from = FunctionNode),
-        builder(try_from = FunctionDBWithNames),
-    )]
+    #[derive(Eq, PartialEq, Hash)]
+    #[td_type(builder(try_from = FunctionNode))]
     pub struct FunctionNodeResponse {
         pub collection_id: CollectionId,
         pub collection: CollectionName,
@@ -143,11 +141,8 @@ mod definitions {
     }
 
     #[td_type::Dto]
-    #[derive(Eq, PartialEq)]
-    #[td_type(
-        builder(try_from = TableNode),
-        builder(try_from = TableDBWithNames),
-    )]
+    #[derive(Eq, PartialEq, Hash)]
+    #[td_type(builder(try_from = TableNode))]
     pub struct TableNodeResponse {
         pub collection_id: CollectionId,
         pub collection: CollectionName,
@@ -155,11 +150,12 @@ mod definitions {
         #[td_type(builder(try_from = TableDBWithNames, field = "id"))]
         pub table_version_id: TableVersionId,
         pub name: TableName,
+        pub system: System,
     }
 
     /// Represents the versions of a table to be included in the response.
     #[td_type::Dto]
-    #[derive(Eq, PartialEq)]
+    #[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
     pub struct ResolvedVersionResponse {
         pub inner: Vec<Option<TableDataVersionId>>,
         pub original: TableVersions,
@@ -168,7 +164,6 @@ mod definitions {
     #[td_type::Dto]
     #[derive(Eq, PartialEq)]
     pub struct ExecutionResponse {
-        // plan info
         pub id: ExecutionId,
         pub name: Option<ExecutionName>,
         pub triggered_on: TriggeredOn,
@@ -185,44 +180,11 @@ mod definitions {
         pub system_tables: HashSet<TableVersionId>,
         pub user_tables: HashSet<TableVersionId>,
         // relations info
-        #[builder(setter(custom))]
         pub relations: Vec<(
             FunctionVersionId,
             TableVersionId,
             GraphEdge<ResolvedVersionResponse>,
         )>,
         pub relations_info: HashMap<TableDataVersionId, ExecutionTableDataVersionRead>,
-    }
-
-    impl ExecutionResponseBuilder {
-        // Override the relations setter to ensure consistent ordering for reliable comparisons.
-        pub fn relations<
-            VALUE: Into<
-                Vec<(
-                    FunctionVersionId,
-                    TableVersionId,
-                    GraphEdge<ResolvedVersionResponse>,
-                )>,
-            >,
-        >(
-            &mut self,
-            value: VALUE,
-        ) -> &mut Self {
-            let mut relations = value.into();
-            relations.sort_by(|a, b| {
-                let edge_order = |edge: &GraphEdge<ResolvedVersionResponse>| -> u8 {
-                    match edge {
-                        GraphEdge::Output { .. } => 0,
-                        GraphEdge::Trigger { .. } => 1,
-                        GraphEdge::Dependency { .. } => 2,
-                    }
-                };
-                a.0.cmp(&b.0)
-                    .then(a.1.cmp(&b.1))
-                    .then_with(|| edge_order(&a.2).cmp(&edge_order(&b.2)))
-            });
-            self.relations = Some(relations);
-            self
-        }
     }
 }

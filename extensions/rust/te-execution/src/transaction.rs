@@ -4,10 +4,10 @@
 
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
-use ta_execution::transaction::TransactionMapper;
 use td_error::TdError;
-use td_objects::execution::graph::FunctionNode;
+use td_objects::transaction::map::TransactionMapper;
 use td_objects::types::basic::TransactionKey;
+use td_objects::types::graph::FunctionNode;
 
 /// `TransactionBy` is an enum that defines how to map a transaction to a key.
 /// It only supports mapping by function version ID.
@@ -30,11 +30,11 @@ impl TransactionMapper for TransactionBy {
 mod tests {
     use super::*;
     use crate::transaction::TransactionBy;
-    use ta_execution::transaction::TransactionMapperError;
-    use td_objects::execution::graph::FunctionNode;
+    use td_objects::transaction::map::TransactionMapperError;
     use td_objects::types::basic::{
         CollectionId, CollectionName, FunctionName, FunctionVersionId, TransactionKey,
     };
+    use td_objects::types::graph::FunctionNode;
 
     #[test]
     fn test_transaction_by_default() {

@@ -2,17 +2,15 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::dxo::execution::ResolvedVersionResponse;
 use crate::dxo::function::FunctionDBWithNames;
 use crate::dxo::table::TableDBWithNames;
 use crate::dxo::table_data_version::ExecutionTableDataVersionRead;
 use crate::types::basic::{
     CollectionId, CollectionName, DependencyPos, FunctionName, FunctionVersionId, SelfDependency,
-    System, TableDataVersionId, TableFunctionParamPos, TableId, TableName, TableVersionId,
+    System, TableFunctionParamPos, TableId, TableName, TableVersionId,
 };
 use crate::types::composed::TableVersions;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::hash::Hash;
 use td_error::TdError;
@@ -30,6 +28,12 @@ pub struct FunctionNode {
     pub name: FunctionName,
 }
 
+impl Display for FunctionNode {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}/{}", self.collection, self.name)
+    }
+}
+
 /// Represents a table version to perform graph resolution.
 #[td_type::Dto]
 #[derive(Eq, PartialEq, Hash)]
@@ -45,9 +49,84 @@ pub struct TableNode {
     pub system: System,
 }
 
+impl Display for TableNode {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}/{}", self.collection, self.name)
+    }
+}
+
+/// Graph node representation. It can be a function or a table.
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize, ToSchema)]
+pub enum GraphNode<F = FunctionNode, T = TableNode> {
+    Function(F),
+    Table(T),
+}
+
+impl<F: Display, T: Display> Display for GraphNode<F, T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            GraphNode::Function(node) => write!(f, "{}", node),
+            GraphNode::Table(node) => write!(f, "{}", node),
+        }
+    }
+}
+
+impl GraphNode<FunctionNode, TableNode> {
+    pub fn output(table: &TableDBWithNames) -> Result<(Self, Self), TdError> {
+        Ok((
+            GraphNode::Function(
+                FunctionNode::builder()
+                    .collection_id(table.collection_id)
+                    .collection(table.collection.clone())
+                    .function_version_id(table.function_version_id)
+                    .name(table.function.clone())
+                    .build()?,
+            ),
+            GraphNode::Table(
+                TableNode::builder()
+                    .collection_id(table.collection_id)
+                    .collection(table.collection.clone())
+                    .function_version_id(table.function_version_id)
+                    .table_id(table.table_id)
+                    .table_version_id(table.id)
+                    .name(table.name.clone())
+                    .system(table.system)
+                    .build()?,
+            ),
+        ))
+    }
+
+    pub fn input(
+        table: &TableDBWithNames,
+        function: &FunctionDBWithNames,
+    ) -> Result<(Self, Self), TdError> {
+        Ok((
+            GraphNode::Table(
+                TableNode::builder()
+                    .collection_id(table.collection_id)
+                    .collection(table.collection.clone())
+                    .function_version_id(table.function_version_id)
+                    .table_id(table.table_id)
+                    .table_version_id(table.id)
+                    .name(table.name.clone())
+                    .system(table.system)
+                    .build()?,
+            ),
+            GraphNode::Function(
+                FunctionNode::builder()
+                    .collection_id(function.collection_id)
+                    .collection(function.collection.clone())
+                    .function_version_id(function.id)
+                    .name(function.name.clone())
+                    .build()?,
+            ),
+        ))
+    }
+}
+
 /// Adds contextual information to dependency graph edges.
 #[td_type::Dto]
-#[derive(Eq, PartialEq, Hash)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct GraphDependency {
     pub dep_pos: DependencyPos,
     pub self_dependency: SelfDependency,
@@ -55,13 +134,13 @@ pub struct GraphDependency {
 
 /// Adds contextual information to dependency graph edges.
 #[td_type::Dto]
-#[derive(Eq, PartialEq, Hash)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct GraphOutput {
     pub output_pos: Option<TableFunctionParamPos>,
 }
 
 /// Graph versions, which will always hold the versions of the table, either input or output.
-#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize, ToSchema)]
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize, ToSchema)]
 pub enum GraphEdge<V> {
     // Table create
     Output {
@@ -163,113 +242,13 @@ impl Display for ResolvedVersion {
     }
 }
 
-impl ResolvedVersion {
-    pub fn to_response(
-        &self,
-    ) -> Result<
-        (
-            ResolvedVersionResponse,
-            HashMap<TableDataVersionId, ExecutionTableDataVersionRead>,
-        ),
-        TdError,
-    > {
-        let mut resolved_info = HashMap::new();
-        let inner = self
-            .inner
-            .iter()
-            .map(|v| {
-                v.as_ref()
-                    .map(|t| {
-                        resolved_info.insert(t.id, t.clone());
-                        Ok::<_, TdError>(t.id)
-                    })
-                    .transpose()
-            })
-            .collect::<Result<_, _>>()?;
-
-        Ok((
-            ResolvedVersionResponse {
-                inner,
-                original: self.original.clone(),
-            },
-            resolved_info,
-        ))
-    }
-}
-
-/// Graph node representation. It can be a function or a table.
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub enum GraphNode {
-    Function(FunctionNode),
-    Table(TableNode),
-}
-
-impl Display for GraphNode {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            GraphNode::Function(node) => write!(f, "{}", node.name),
-            GraphNode::Table(node) => write!(f, "{}", node.name),
-        }
-    }
-}
-
-impl GraphNode {
-    pub fn output(table: &TableDBWithNames) -> Result<(Self, Self), TdError> {
-        Ok((
-            GraphNode::Function(
-                FunctionNode::builder()
-                    .collection_id(table.collection_id)
-                    .collection(table.collection.clone())
-                    .function_version_id(table.function_version_id)
-                    .name(table.function.clone())
-                    .build()?,
-            ),
-            GraphNode::Table(
-                TableNode::builder()
-                    .collection_id(table.collection_id)
-                    .collection(table.collection.clone())
-                    .function_version_id(table.function_version_id)
-                    .table_id(table.table_id)
-                    .table_version_id(table.id)
-                    .name(table.name.clone())
-                    .system(table.system)
-                    .build()?,
-            ),
-        ))
-    }
-
-    pub fn input(
-        table: &TableDBWithNames,
-        function: &FunctionDBWithNames,
-    ) -> Result<(Self, Self), TdError> {
-        Ok((
-            GraphNode::Table(
-                TableNode::builder()
-                    .collection_id(table.collection_id)
-                    .collection(table.collection.clone())
-                    .function_version_id(table.function_version_id)
-                    .table_id(table.table_id)
-                    .table_version_id(table.id)
-                    .name(table.name.clone())
-                    .system(table.system)
-                    .build()?,
-            ),
-            GraphNode::Function(
-                FunctionNode::builder()
-                    .collection_id(function.collection_id)
-                    .collection(function.collection.clone())
-                    .function_version_id(function.id)
-                    .name(function.name.clone())
-                    .build()?,
-            ),
-        ))
-    }
-}
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::graph::{FUNCTION_NAMES, TABLE_NAMES, dependency, table, trigger};
+    use crate::test_utils::graph::{
+        FUNCTION_NAMES, TABLE_NAMES, dependency, function, table, trigger,
+    };
 
     #[tokio::test]
     async fn test_graph_node_from_table() -> Result<(), TdError> {
@@ -299,7 +278,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_graph_node_from_dependency() -> Result<(), TdError> {
-        let (dependency, table, function) = dependency(&TABLE_NAMES[0], &FUNCTION_NAMES[0]).await;
+        let dependency = dependency(&TABLE_NAMES[0], &FUNCTION_NAMES[0]).await;
+        let table = table(&FUNCTION_NAMES[0], &TABLE_NAMES[0]).await;
+        let function = function(&FUNCTION_NAMES[0]).await;
         let (table_node, function_node) = GraphNode::input(&table, &function)?;
 
         if let GraphNode::Table(node) = table_node {
@@ -325,7 +306,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_graph_node_from_trigger() -> Result<(), TdError> {
-        let (trigger, table, function) = trigger(&TABLE_NAMES[0], &FUNCTION_NAMES[0]).await;
+        let trigger = trigger(&TABLE_NAMES[0], &FUNCTION_NAMES[0]).await;
+        let table = table(&FUNCTION_NAMES[0], &TABLE_NAMES[0]).await;
+        let function = function(&FUNCTION_NAMES[0]).await;
         let (table_node, function_node) = GraphNode::input(&table, &function)?;
 
         if let GraphNode::Table(node) = table_node {

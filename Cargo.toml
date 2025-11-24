@@ -34,7 +34,6 @@ members = [
     "devutils/automation/tasks/cargo/td-build",
     "devutils/automation/tasks/makers/td-xtask",
     "server/libraries/ta-apiserver",
-    "server/libraries/ta-execution",
     "server/libraries/ta-services",
     "server/libraries/ta-system",
     "server/libraries/ta-tableframe",
@@ -177,9 +176,6 @@ path = "macros/facets/tm-workspace"
 
 [workspace.dependencies.ta-apiserver]
 path = "server/libraries/ta-apiserver"
-
-[workspace.dependencies.ta-execution]
-path = "server/libraries/ta-execution"
 
 [workspace.dependencies.ta-services]
 path = "server/libraries/ta-services"

@@ -70,7 +70,7 @@ mod definitions {
 
     #[td_type::Dto]
     #[td_type(builder(try_from = ActiveTableDataVersionDB))]
-    #[derive(Eq, PartialEq, Hash)]
+    #[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
     pub struct ExecutionTableDataVersionRead {
         pub id: TableDataVersionId,
         pub collection_id: CollectionId,

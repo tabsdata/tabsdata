@@ -2,13 +2,14 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::execution::layers::plan::{build_execution_plan, build_response};
+use crate::do_authz::SKIP_AUTHZ;
+use crate::execution::layers::execution::{
+    build_execution_plan, build_response, resolve_execution_plan_versions,
+};
 use crate::execution::layers::read::{
-    build_existing_transaction_map, seed_existing_trigger_graph_depth,
+    build_existing_transaction_map, with_existing_recursion_options,
 };
-use crate::execution::layers::template::{
-    build_execution_template, find_all_input_tables, find_trigger_graph,
-};
+use crate::graph::layers::{FunctionOrTable, TRIGGER_ONLY_DEPS, generate_td_graph};
 use ta_services::factory::service_factory;
 use td_execution::TransactionBy;
 use td_objects::dxo::crudl::ReadRequest;
@@ -17,7 +18,9 @@ use td_objects::dxo::function::FunctionDBWithNames;
 use td_objects::dxo::transaction::TransactionDB;
 use td_objects::rest_urls::ExecutionParam;
 use td_objects::sql::DaoQueries;
-use td_objects::tower_service::from::{ExtractNameService, ExtractService, TryIntoService, With};
+use td_objects::tower_service::from::{
+    ExtractNameService, ExtractService, IntoService, TryIntoService, With,
+};
 use td_objects::tower_service::sql::{By, SqlSelectAllService, SqlSelectService};
 use td_objects::types::basic::{
     AtTime, ExecutionId, ExecutionIdName, FunctionId, FunctionVersionId, TriggeredOn,
@@ -43,24 +46,24 @@ fn service() {
         from_fn(With::<ExecutionParam>::extract::<ExecutionIdName>),
         from_fn(By::<ExecutionIdName>::select::<ExecutionDB>),
         from_fn(With::<ExecutionDB>::extract::<TriggeredOn>),
-        from_fn(With::<TriggeredOn>::convert_to::<AtTime, _>),
+        from_fn(With::<TriggeredOn>::try_convert_to::<AtTime, _>),
         // Find function that triggered the plan.
         from_fn(With::<ExecutionDB>::extract::<FunctionVersionId>),
         from_fn(By::<FunctionVersionId>::select::<FunctionDBWithNames>),
+        // Get recursion options
         from_fn(With::<FunctionDBWithNames>::extract::<FunctionId>),
-        // Find trigger graph
-        from_fn(seed_existing_trigger_graph_depth),
-        from_fn(find_trigger_graph),
-        // Find all input tables
-        from_fn(find_all_input_tables),
-        // Create execution template
-        from_fn(build_execution_template),
+        from_fn(With::<FunctionId>::convert_to::<FunctionOrTable>),
+        from_fn(with_existing_recursion_options),
+        // Find td graph
+        generate_td_graph::<_, SKIP_AUTHZ, TRIGGER_ONLY_DEPS>(),
+        // Build execution plan
+        from_fn(build_execution_plan),
         // Get transactions
         from_fn(With::<ExecutionDB>::extract::<ExecutionId>),
         from_fn(By::<ExecutionId>::select_all::<TransactionDB>),
         from_fn(build_existing_transaction_map),
         // Create execution plan
-        from_fn(build_execution_plan),
+        from_fn(resolve_execution_plan_versions),
         // Execution plan response
         from_fn(build_response),
     )
@@ -81,6 +84,12 @@ mod tests {
     #[td_test::test(sqlx)]
     #[tokio::test]
     async fn test_tower_metadata_read_execution(db: DbPool) {
+        use crate::graph::layers::build::{
+            build_td_graph, find_all_functions_map, find_all_tables_map,
+            find_functions_output_tables, find_recursive_trigger_graph,
+            find_triggered_functions_dependency_graph, main_function_id,
+            unique_triggered_function_ids,
+        };
         use td_tower::metadata::type_of_val;
 
         ExecutionReadService::with_defaults(db)
@@ -93,25 +102,38 @@ mod tests {
                 type_of_val(&With::<ExecutionParam>::extract::<ExecutionIdName>),
                 type_of_val(&By::<ExecutionIdName>::select::<ExecutionDB>),
                 type_of_val(&With::<ExecutionDB>::extract::<TriggeredOn>),
-                type_of_val(&With::<TriggeredOn>::convert_to::<AtTime, _>),
+                type_of_val(&With::<TriggeredOn>::try_convert_to::<AtTime, _>),
                 // Find function that triggered the plan.
                 type_of_val(&With::<ExecutionDB>::extract::<FunctionVersionId>),
                 type_of_val(&By::<FunctionVersionId>::select::<FunctionDBWithNames>),
+                // Get recursion options
                 type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
-                // Create execution template.
-                // Find trigger graph
-                type_of_val(&seed_existing_trigger_graph_depth),
-                type_of_val(&find_trigger_graph),
-                // Find all input tables
-                type_of_val(&find_all_input_tables),
-                // Create execution template
-                type_of_val(&build_execution_template),
+                type_of_val(&With::<FunctionId>::convert_to::<FunctionOrTable>),
+                type_of_val(&with_existing_recursion_options),
+                // Find td graph
+                // Find triggers
+                type_of_val(&find_recursive_trigger_graph),
+                // Find dependencies. For clarity, we always show the function, even if
+                // generating a table centered graph, the same way we show the tables of
+                // a function centered graph.
+                type_of_val(&main_function_id),
+                type_of_val(&unique_triggered_function_ids),
+                type_of_val(&find_triggered_functions_dependency_graph),
+                // Find output tables
+                type_of_val(&find_functions_output_tables),
+                // Find all tables and functions
+                type_of_val(&find_all_tables_map),
+                type_of_val(&find_all_functions_map),
+                // Create td graph and validate it
+                type_of_val(&build_td_graph),
+                // Build execution plan
+                type_of_val(&build_execution_plan),
                 // Get transactions
                 type_of_val(&With::<ExecutionDB>::extract::<ExecutionId>),
                 type_of_val(&By::<ExecutionId>::select_all::<TransactionDB>),
                 type_of_val(&build_existing_transaction_map),
                 // Create execution plan
-                type_of_val(&build_execution_plan),
+                type_of_val(&resolve_execution_plan_versions),
                 // Execution plan response
                 type_of_val(&build_response),
             ]);
