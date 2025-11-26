@@ -68,6 +68,28 @@ from tabsdata._io.outputs.table_outputs import TableOutput
 # noinspection PyProtectedMember
 from tabsdata._io.plugin import DestinationPlugin, SourcePlugin
 from tabsdata._secret import EnvironmentSecret, HashiCorpSecret
+from tabsdata._table_actions.classifiers import (
+    DoesNotMatch,
+    HasColumns,
+    HasColumnTypes,
+    HasLen,
+    IsIn,
+    IsInRange,
+    IsNan,
+    IsNegative,
+    IsNegativeOrZero,
+    IsNotIn,
+    IsNotNan,
+    IsNotNull,
+    IsNotNullNorNan,
+    IsNotZero,
+    IsNull,
+    IsNullOrNan,
+    IsPositive,
+    IsPositiveOrZero,
+    IsZero,
+    Matches,
+)
 
 # noinspection PyProtectedMember
 from tabsdata._tabsserver.function.execution_exceptions import CustomException
@@ -182,6 +204,27 @@ __all__ = [
     # from secret.py
     "EnvironmentSecret",
     "HashiCorpSecret",
+    # from table_actions.classifiers.py
+    "DoesNotMatch",
+    "HasColumns",
+    "HasColumnTypes",
+    "HasLen",
+    "IsIn",
+    "IsInRange",
+    "IsNan",
+    "IsNegative",
+    "IsNegativeOrZero",
+    "IsNotIn",
+    "IsNotNan",
+    "IsNotNull",
+    "IsNotNullNorNan",
+    "IsNotZero",
+    "IsNull",
+    "IsNullOrNan",
+    "IsPositive",
+    "IsPositiveOrZero",
+    "IsZero",
+    "Matches",
     # from typing.py
     "typing",
     # from tabsserver.function.execution_exceptions.py

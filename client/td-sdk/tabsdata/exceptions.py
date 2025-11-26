@@ -433,6 +433,363 @@ class ErrorCode(Enum):
             "'GCPCredentials' object, got '{}' instead"
         ),
     }
+    DQCE1 = {
+        "code": "DQCE-001",
+        "message": (
+            "The 'tags' parameter of a Classifier object must be a "
+            "'str', a 'list' of 'str', or None; got a list containing the object '{}' "
+            "of type '{}' instead. Please ensure that all objects in the list are of "
+            "type 'str'."
+        ),
+    }
+    DQCE2 = {
+        "code": "DQCE-002",
+        "message": (
+            "The 'tags' parameter of a Classifier object must be a "
+            "'str', a 'list' of 'str', or None; got object '{}' "
+            "of type '{}' instead."
+        ),
+    }
+    DQCE3 = {
+        "code": "DQCE-003",
+        "message": (
+            "The 'cols' parameter of a Classifier action must be a "
+            "'str', a 'list' of 'str', a 'tuple' with two 'str', a 'list' of 'tuple' "
+            "of two 'str' or None. Got the tuple '{}' that has {} elements instead of "
+            "2. Please ensure that the tuple has exactly 2 "
+            "elements of type 'str', the first representing the column to apply the "
+            "classifier to, and the second the column to store the result in."
+        ),
+    }
+    DQCE4 = {
+        "code": "DQCE-004",
+        "message": (
+            "The 'cols' parameter of a Classifier action must be a "
+            "'str', a 'list' of 'str', a 'tuple' with two 'str', a 'list' of 'tuple' "
+            "of two 'str' or None. Got the tuple '{}' that has an element that is not "
+            "a 'str'. Please ensure that the tuple has exactly 2 "
+            "elements of type 'str', the first representing the column to apply the "
+            "classifier to, and the second the column to store the result in."
+        ),
+    }
+    DQCE5 = {
+        "code": "DQCE-005",
+        "message": (
+            "The 'cols' parameter of a Classifier action must be a "
+            "'str', a 'list' of 'str', a 'tuple' with two 'str', a 'list' of 'tuple' "
+            "of two 'str' or None. Got a list with the tuple '{}' that has {} "
+            "elements instead of 2. Please ensure that the tuple has exactly 2 "
+            "elements of type 'str', the first representing the column to apply the "
+            "classifier to, and the second the column to store the result in."
+        ),
+    }
+    DQCE6 = {
+        "code": "DQCE-006",
+        "message": (
+            "The 'cols' parameter of a Classifier action must be a "
+            "'str', a 'list' of 'str', a 'tuple' with two 'str', a 'list' of 'tuple' "
+            "of two 'str' or None. Got a list with the tuple '{}' that has an element "
+            "that is not a 'str'. Please ensure that the tuple has exactly 2 "
+            "elements of type 'str', the first representing the column to apply the "
+            "classifier to, and the second the column to store the result in."
+        ),
+    }
+    DQCE7 = {
+        "code": "DQCE-006",
+        "message": (
+            "The 'cols' parameter of a Classifier action must be a "
+            "'str', a 'list' of 'str', a 'tuple' with two 'str', a 'list' of 'tuple' "
+            "of two 'str' or None. Got a list with the element '{}' of type '{}'. "
+            "Please ensure that all elements in the list are of type 'str' or all "
+            "elements in the list are of type 'tuple' of two 'str'."
+        ),
+    }
+    DQCE8 = {
+        "code": "DQCE-008",
+        "message": (
+            "The 'cols' parameter of a Classifier action must be a "
+            "'str', a 'list' of 'str', a 'tuple' with two 'str', a 'list' of 'tuple' "
+            "of two 'str' or None. Got a list with an element of type '{}' and another "
+            "of type '{}'. Please make sure that all elements in the list have "
+            "the same type."
+        ),
+    }
+    DQCE9 = {
+        "code": "DQCE-009",
+        "message": (
+            "The 'cols' parameter of a Classifier action must be a "
+            "'str', a 'list' of 'str', a 'tuple' with two 'str', a 'list' of 'tuple' "
+            "of two 'str' or None. Got value '{}' "
+            "of type '{}' instead."
+        ),
+    }
+    DQCE10 = {
+        "code": "DQCE-010",
+        "message": (
+            "The 'ignore_nulls' parameter of an IsNan classifier must be a "
+            "boolean. Got value '{}' of type '{}' instead."
+        ),
+    }
+    DQCE11 = {
+        "code": "DQCE-011",
+        "message": (
+            "The 'ignore_nulls' parameter of an IsNotNan classifier must be a "
+            "boolean. Got value '{}' of type '{}' instead."
+        ),
+    }
+    DQCE12 = {
+        "code": "DQCE-012",
+        "message": (
+            "The 'ignore_nulls' parameter of an IsZero classifier must be a "
+            "boolean. Got value '{}' of type '{}' instead."
+        ),
+    }
+    DQCE13 = {
+        "code": "DQCE-013",
+        "message": (
+            "The 'ignore_nulls' parameter of an IsNotZero classifier must be a "
+            "boolean. Got value '{}' of type '{}' instead."
+        ),
+    }
+    DQCE14 = {
+        "code": "DQCE-014",
+        "message": (
+            "The 'ignore_nulls' parameter of an IsPositive classifier must be a "
+            "boolean. Got value '{}' of type '{}' instead."
+        ),
+    }
+    DQCE15 = {
+        "code": "DQCE-015",
+        "message": (
+            "The 'ignore_nulls' parameter of an IsPositiveOrZero classifier must be a "
+            "boolean. Got value '{}' of type '{}' instead."
+        ),
+    }
+    DQCE16 = {
+        "code": "DQCE-016",
+        "message": (
+            "The 'ignore_nulls' parameter of an IsNegative classifier must be a "
+            "boolean. Got value '{}' of type '{}' instead."
+        ),
+    }
+    DQCE17 = {
+        "code": "DQCE-017",
+        "message": (
+            "The 'ignore_nulls' parameter of an IsNegativeOrZero classifier must be a "
+            "boolean. Got value '{}' of type '{}' instead."
+        ),
+    }
+    DQCE18 = {
+        "code": "DQCE-018",
+        "message": (
+            "The 'ignore_nulls' parameter of a Matches classifier must be a "
+            "boolean. Got value '{}' of type '{}' instead."
+        ),
+    }
+    DQCE19 = {
+        "code": "DQCE-019",
+        "message": (
+            "The 'regex' parameter of a Matches classifier must be a "
+            "string. Got value '{}' of type '{}' instead."
+        ),
+    }
+    DQCE20 = {
+        "code": "DQCE-020",
+        "message": (
+            "The 'ignore_nulls' parameter of a DoesNotMatch classifier must be a "
+            "boolean. Got value '{}' of type '{}' instead."
+        ),
+    }
+    DQCE21 = {
+        "code": "DQCE-021",
+        "message": (
+            "The 'regex' parameter of a DoesNotMatch classifier must be a "
+            "string. Got value '{}' of type '{}' instead."
+        ),
+    }
+    DQCE22 = {
+        "code": "DQCE-022",
+        "message": (
+            "The 'min' parameter of a HasLen classifier must be an "
+            "'int' or a 'float'. Got value '{}' of type '{}' instead."
+        ),
+    }
+    DQCE23 = {
+        "code": "DQCE-023",
+        "message": (
+            "The 'max' parameter of a HasLen classifier must be an "
+            "'int' or a 'float'. Got value '{}' of type '{}' instead."
+        ),
+    }
+    DQCE24 = {
+        "code": "DQCE-024",
+        "message": (
+            "The 'ignore_nulls' parameter of an IsInRange classifier must be a "
+            "boolean. Got value '{}' of type '{}' instead."
+        ),
+    }
+    DQCE25 = {
+        "code": "DQCE-025",
+        "message": (
+            "The 'min' parameter of an IsInRange classifier must be an "
+            "'int' or a 'float'. Got value '{}' of type '{}' instead."
+        ),
+    }
+    DQCE26 = {
+        "code": "DQCE-026",
+        "message": (
+            "The 'max' parameter of an IsInRange classifier must be an "
+            "'int' or a 'float'. Got value '{}' of type '{}' instead."
+        ),
+    }
+    DQCE27 = {
+        "code": "DQCE-027",
+        "message": (
+            "The 'closed' parameter of an IsInRange classifier must be one these "
+            "values: {}. Got value '{}' instead."
+        ),
+    }
+    DQCE28 = {
+        "code": "DQCE-028",
+        "message": (
+            "The 'ignore_nulls' parameter of a HasLen classifier must be a "
+            "boolean. Got value '{}' of type '{}' instead."
+        ),
+    }
+    DQCE29 = {
+        "code": "DQCE-029",
+        "message": (
+            "The 'ignore_nulls' parameter of an IsIn classifier must be a "
+            "boolean. Got value '{}' of type '{}' instead."
+        ),
+    }
+    DQCE30 = {
+        "code": "DQCE-030",
+        "message": (
+            "The 'set' parameter of an IsIn classifier must be a "
+            "collection, meaning an object of a class that implements the 'in' "
+            "operator. Got value '{}' of type '{}' instead."
+        ),
+    }
+    DQCE31 = {
+        "code": "DQCE-031",
+        "message": (
+            "The 'ignore_nulls' parameter of an IsNotIn classifier must be a "
+            "boolean. Got value '{}' of type '{}' instead."
+        ),
+    }
+    DQCE32 = {
+        "code": "DQCE-032",
+        "message": (
+            "The 'set' parameter of an IsNotIn classifier must be a "
+            "collection, meaning an object of a class that implements the 'in' "
+            "operator. Got value '{}' of type '{}' instead."
+        ),
+    }
+    DQCE33 = {
+        "code": "DQCE-033",
+        "message": (
+            "The 'cols' parameter of a HasColumns classifier must be a "
+            "'str' or a list of 'str'. Got a list containing value '{}' of type '{}' "
+            "instead."
+        ),
+    }
+    DQCE34 = {
+        "code": "DQCE-034",
+        "message": (
+            "The 'cols' parameter of a HasColumns classifier must be a "
+            "'str' or a list of 'str'. Got object '{}' of type '{}' "
+            "instead."
+        ),
+    }
+    DQCE35 = {
+        "code": "DQCE-035",
+        "message": (
+            "The 'mode' parameter of a HasColumns classifier must one of the "
+            "following 'str': {}. Got object '{}' instead."
+        ),
+    }
+    DQCE36 = {
+        "code": "DQCE-036",
+        "message": (
+            "The 'cols' parameter of a HasColumnTypes classifier must be a "
+            "tuple of 'str' and 'DataType' or a list of tuples of 'str' and "
+            "'DataType'. Got a single tuple, but the first element is '{}' of type "
+            "'{}'. Please ensure that the first element of the tuple is of type 'str' "
+            "and it represents the name of the column to check the type against."
+        ),
+    }
+    DQCE37 = {
+        "code": "DQCE-037",
+        "message": (
+            "The 'cols' parameter of a HasColumnTypes classifier must be a "
+            "tuple of 'str' and 'DataType' or a list of tuples of 'str' and "
+            "'DataType'. Got a single tuple, but the second element is '{}' of type "
+            "'{}'. Please ensure that the second element of the tuple is of type "
+            "'DataType' and it represents the type to check the column against."
+        ),
+    }
+    DQCE38 = {
+        "code": "DQCE-038",
+        "message": (
+            "The 'cols' parameter of a HasColumnTypes classifier must be a "
+            "tuple of 'str' and 'DataType' or a list of tuples of 'str' and "
+            "'DataType'. Got a list containing the object '{}' of type "
+            "'{}' instead."
+        ),
+    }
+    DQCE39 = {
+        "code": "DQCE-039",
+        "message": (
+            "The 'cols' parameter of a HasColumnTypes classifier must be a "
+            "tuple of 'str' and 'DataType' or a list of tuples of 'str' and "
+            "'DataType'. Got a list containing a tuple '{}' of length {} instead. "
+            "Please ensure that each tuple has exactly two elements, the first one "
+            "representing the name of the column to check and the second one being "
+            "the type to check against."
+        ),
+    }
+    DQCE40 = {
+        "code": "DQCE-040",
+        "message": (
+            "The 'cols' parameter of a HasColumnTypes classifier must be a "
+            "tuple of 'str' and 'DataType' or a list of tuples of 'str' and "
+            "'DataType'. Got a list of tuples containing tuple '{}', where the "
+            "first element is '{}' of type "
+            "'{}'. Please ensure that the first element of the tuple is of type 'str' "
+            "and it represents the name of the column to check the type against."
+        ),
+    }
+    DQCE41 = {
+        "code": "DQCE-041",
+        "message": (
+            "The 'cols' parameter of a HasColumnTypes classifier must be a "
+            "tuple of 'str' and 'DataType' or a list of tuples of 'str' and "
+            "'DataType'. Got a list of tuples containing tuple '{}', where the second "
+            "element is '{}' of type "
+            "'{}'. Please ensure that the second element of the tuple is of type "
+            "'DataType' and it represents the type to check the column against."
+        ),
+    }
+    DQCE42 = {
+        "code": "DQCE-042",
+        "message": (
+            "The 'cols' parameter of a HasColumnTypes classifier must be a "
+            "tuple of 'str' and 'DataType' or a list of tuples of 'str' and "
+            "'DataType'. Got object '{}' of type '{}' instead."
+        ),
+    }
+    DQCE43 = {
+        "code": "DQCE-043",
+        "message": (
+            "The 'cols' parameter of a HasColumnTypes classifier must be a "
+            "tuple of 'str' and 'DataType' or a list of tuples of 'str' and "
+            "'DataType'. Got tuple '{}' of length {} instead. "
+            "Please ensure that each tuple has exactly two elements, the first one "
+            "representing the name of the column to check and the second one being "
+            "the type to check against."
+        ),
+    }
     FCE1 = {
         "code": "FCE-001",
         "message": (
@@ -1164,6 +1521,15 @@ class CredentialsConfigurationError(TabsDataException):
     """
 
     CODE_PREFIX = "CCE"
+
+
+class DataQualityConfigurationError(TabsDataException):
+    """
+    Exception raised when the creation or modification of a DataQuality object or one of
+    its auxiliary objects fails.
+    """
+
+    CODE_PREFIX = "DQCE"
 
 
 class DecoratorConfigurationError(TabsDataException):
