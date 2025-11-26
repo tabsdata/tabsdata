@@ -29,7 +29,9 @@ def test_all_correct_with_no_input_no_output():
     assert isinstance(function, TabsdataFunction)
     assert function.output is None
     assert function.original_file == os.path.basename(__file__)
-    assert function.original_folder == os.path.dirname(os.path.abspath(__file__))
+    assert os.path.realpath(function.original_folder) == os.path.dirname(
+        os.path.realpath(__file__)
+    )
 
 
 def test_wrong_input_type_error():

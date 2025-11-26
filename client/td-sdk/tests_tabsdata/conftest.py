@@ -329,12 +329,17 @@ if not os.environ.get("TD_CLI_SHOW"):
 
 
 def pytest_addoption(parser):
-    parser.addoption(
-        "--performance-size",
-        help="Amount of records per table when running performance tests",
-        default=25000,
-        type=int,
-    )
+    # Check if option already exists to avoid conflicts when running multiple test
+    # suites in parallel.
+    try:
+        parser.addoption(
+            "--performance-size",
+            help="Amount of records per table when running performance tests",
+            default=25000,
+            type=int,
+        )
+    except ValueError:
+        pass
 
 
 def pytest_generate_tests(metafunc):

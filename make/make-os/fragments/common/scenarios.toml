@@ -6,19 +6,24 @@
 plugin = "td-task-tracker"
 category = "04 - Test"
 private = true
+dependencies = ["__os__set_mode_test_rs"]
 script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
+    set_env TD_FAIL_FAST_RS false
     arguments = split ${CARGO_MAKE_TASK_ARGS} ;
     for argument in ${arguments}
         if eq ${argument} "--fail-fast-rs"
             info "⌛️ Fail-Fast enabled. Groups of Rust tests will execute until some group has failures."
             set_env TD_FAIL_FAST_RS true
-        else
-            set_env TD_FAIL_FAST_RS false
         end
+    end
+    test_rs_parallel = get_env TD_TEST_RS_PARALLEL
+    if eq ${test_rs_parallel} "true"
+        info "⌛️ Fail-Fast enabled for parallel tests. All groups of Rust tests will execute even if some group has failures."
+        set_env TD_FAIL_FAST_RS true
     end
     set_env TD_TESTS_CODE_RS 0
     ''']
@@ -27,6 +32,7 @@ script = [
 plugin = "td-task-tracker"
 category = "04 - Test"
 private = true
+dependencies = ["__os__set_mode_test_rs"]
 script_runner = "@duckscript"
 script = [
     '''

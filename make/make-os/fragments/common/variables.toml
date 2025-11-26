@@ -2,6 +2,25 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
+[tasks.__os__set_mode_test_rs]
+plugin = "td-task-tracker"
+category = "02 - Tidy"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    test_rs_parallel = get_env TD_TEST_RS_PARALLEL
+    if eq ${test_rs_parallel} "false"
+        info "🚂 _____ The Rust tests will run in serial mode"
+        set_env TD_TEST_RS_PARALLEL false
+    else
+        info "🚆 _____ The Rust tests will run in parallel mode"
+        set_env TD_TEST_RS_PARALLEL true
+    end
+    ''']
+
 [tasks.__os__set_mode_test_py]
 plugin = "td-task-tracker"
 category = "02 - Tidy"
@@ -32,6 +51,15 @@ script = [
     end
     TD_COMPILE = get_env TD_COMPILE
     debug "🔅 Using td compile: '${TD_COMPILE}'"
+
+    test_py_parallel = get_env TD_TEST_PY_PARALLEL
+    if eq ${test_py_parallel} "false"
+        info "🚂 _____ The Python tests will run in serial mode"
+        set_env TD_TEST_PY_PARALLEL false
+    else
+        info "🚆 _____ The Python tests will run in parallel mode"
+        set_env TD_TEST_PY_PARALLEL true
+    end
     ''']
 
 [tasks.__os__set_mode_license]

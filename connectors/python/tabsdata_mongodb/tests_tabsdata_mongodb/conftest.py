@@ -146,9 +146,7 @@ def create_docker_mongodb_database_with_replica_set():
         logger.info("MongoDB container with replica set already exists")
         return
     else:
-        compose_file = os.path.join(
-            DEFAULT_PYTEST_MONGODB_DOCKER_COMPOSE_CONTAINER_NAME, "compose.yaml"
-        )
+        compose_file = os.path.join(os.path.dirname(__file__), "compose.yaml")
         subprocess.run(
             [
                 "docker",

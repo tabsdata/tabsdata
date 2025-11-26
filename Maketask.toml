@@ -402,14 +402,44 @@ run_task = [
 plugin = "td-task-tracker"
 category = "04 - Test"
 description = "Task 'test' for Rust projects"
+dependencies = ["__os__set_mode_test_rs"]
 run_task = [
     { name = [
         "__os__setup_test_rs",
-        "__os__test_rs_macros",
-        "__os__test_rs_modules",
-        "__os__test_rs_expansions",
+        "test_parallel_rs",
+        "__os__cleanup_test_rs"
+    ], condition = { env = { "TD_TEST_RS_PARALLEL" = "true" } } },
+    { name = [
+        "__os__setup_test_rs",
+        "test_serial_rs",
         "__os__cleanup_test_rs"
     ] }
+]
+
+[tasks.test_serial_rs]
+plugin = "td-task-tracker"
+category = "04 - Test"
+private = true
+run_task = [
+    { name = [
+        "__os__test_rs_macros",
+        "__os__test_rs_modules",
+        "__os__test_rs_expansions"
+    ] }
+]
+
+[tasks.test_parallel_rs]
+plugin = "td-task-tracker"
+category = "04 - Test"
+private = true
+run_task = [
+    { name = [
+        "__os__test_rs_macros",
+        "__os__test_rs_modules_standard",
+        "__os__test_rs_modules_logging",
+        "__os__test_rs_modules_tower",
+        "__os__test_rs_expansions"
+    ], parallel = true, fork = true}
 ]
 
 [tasks.test_py]
@@ -421,6 +451,25 @@ run_task = [
     { name = [
         "__os__setup_test_py",
         "__os__start_test_py",
+        "test_parallel_py",
+        "__os__stop_test_py",
+        "__os__cleanup_test_py"
+    ], condition = { env = { "TD_TEST_PY_PARALLEL" = "true" } } },
+    { name = [
+        "__os__setup_test_py",
+        "__os__start_test_py",
+        "test_serial_py",
+        "__os__stop_test_py",
+        "__os__cleanup_test_py"
+    ] }
+]
+
+[tasks.test_serial_py]
+plugin = "td-task-tracker"
+category = "04 - Test"
+private = true
+run_task = [
+    { name = [
         "__os__test_py_ta_features",
         "__os__test_py_ta_tableframe",
         "__os__test_py_te_examples",
@@ -428,11 +477,79 @@ run_task = [
         "__os__test_py_te_variant",
         "__os__test_py_ty_tableframe",
         "__os__test_py_tabsdata",
-        "__os__test_py_connectors",
-        "__os__stop_test_py",
-        "__os__cleanup_test_py"
+        "__os__test_py_connectors"
     ] }
 ]
+
+[tasks.test_parallel_py]
+plugin = "td-task-tracker"
+category = "04 - Test"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    verbose = get_env TD_VERBOSE
+
+    cd "${PROJECT_PY_TD_TABSDATA_FOLDER}"
+
+    td_temp = temp_dir
+    set_env COVERAGE_FILE ${td_temp}/.tabsdata/.coverage.${PYTEST_XDIST_WORKER}
+
+    report_folder = set "./target/reports/pytest/tabsdata"
+    rm -r ${report_folder}
+    mkdir ${report_folder}
+    report_file = set ${report_folder}/pytest.html
+
+    tests_folders = array
+
+    array_push ${tests_folders} ${PROJECT_PY_TA_FEATURES_FOLDER}/${TESTS_PY_TA_FEATURES_FOLDER}
+    array_push ${tests_folders} ${PROJECT_PY_TA_TABLEFRAME_FOLDER}/${TESTS_PY_TA_TABLEFRAME_FOLDER}
+    array_push ${tests_folders} ${PROJECT_PY_TE_EXAMPLES_FOLDER}/${TESTS_PY_TE_EXAMPLES_FOLDER}
+    array_push ${tests_folders} ${PROJECT_PY_TE_TABLEFRAME_FOLDER}/${TESTS_PY_TE_TABLEFRAME_FOLDER}
+    array_push ${tests_folders} ${PROJECT_PY_TE_VARIANT_FOLDER}/${TESTS_PY_TE_VARIANT_FOLDER}
+    array_push ${tests_folders} ${PROJECT_PY_TY_TABLEFRAME_FOLDER}/${TESTS_PY_TY_TABLEFRAME_FOLDER}
+    array_push ${tests_folders} ${PROJECT_PY_TD_TABSDATA_FOLDER}/${TESTS_PY_TD_TABSDATA_FOLDER}
+
+    connectors = glob_array ${OS_CONNECTORS_PY_ROOT_FOLDER}/tabsdata_*
+    for connector in ${connectors}
+        is_connector = is_dir ${connector}
+        if ${is_connector}
+            connector_name = basename ${connector}
+            connector_tests_folder_name = set tests_${connector_name}
+            connector_tests_folder_path = join_path ${connector} ${connector_tests_folder_name}
+            array_push ${tests_folders} ${connector_tests_folder_path}
+        end
+    end
+
+    pytest_tests_folders = array_join ${tests_folders} " "
+
+    if eq ${verbose} "false"
+        debug "🚀 pytest --import-mode=importlib -n 16 --dist=loadfile %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest --import-mode=importlib -n 16 --dist=loadfile %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m "${MARKERS}"
+    else
+        debug "🚀 pytest --import-mode=importlib -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest --import-mode=importlib -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m "${MARKERS}"
+    end
+    is_zero = eq ${exit_code} "0"
+    is_five = eq ${exit_code} "5"
+    if ${is_zero} or ${is_five}
+        info "⌛️ Tests finished with zero-or-five exit code: '${exit_code}'"
+    else
+        info "⌛️ Tests finished with non-zero-or-five exit code: '${exit_code}'"
+        TD_FAIL_FAST_PY = get_env TD_FAIL_FAST_PY
+        if not ${TD_FAIL_FAST_PY}
+            info "⌛️ Setting TD_TESTS_CODE_PY to ${exit_code}..."
+            set_env TD_TESTS_CODE_PY ${exit_code}
+        else
+            info "⌛️ Failing fast..."
+            code = exit ${exit_code}
+        end
+    end
+
+    exec --fail-on-error python ${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/report_coverage.py ./.coverage/json/coverage.json .
+    ''']
 
 [tasks.outdated]
 plugin = "td-task-tracker"
