@@ -11,7 +11,7 @@ use tracing::{Level, info};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-#[attach(signal = "bootloader")]
+#[attach(signal = "td_bootloader")]
 pub fn main() {
     hooks::panic();
 

@@ -484,12 +484,12 @@ logger.debug(f"Using tabsdata target release folder: '{target_release_folder}'")
 # local package.
 # Please, make sure you update this list in both places.
 base_binaries = [
-    "apiserver",
-    "bootloader",
-    "supervisor",
-    "tdabout",
     "tdserver",
-    "transporter",
+    "td_about",
+    "td_apiserver",
+    "td_bootloader",
+    "td_supervisor",
+    "td_transporter",
 ]
 
 # noinspection DuplicatedCode
@@ -646,20 +646,15 @@ os.makedirs(
 )
 
 console_scripts: list[str] = [
-    # Tabsdata CLI
     "td = tabsdata._cli.cli:cli",
-    # Tabsdata client tools
-    "x_oracle_check = tabsdata._tabsserver.tools.x_oracle_check:cli",
-    # Supervisor init workers
-    "tdcfgrsv = tabsdata._tabsserver.tools.config_resolver:main",
-    "tdsrvinf = tabsdata._tabsserver.tools.server_info:main",
-    "tdmntext = tabsdata._tabsserver.tools.mount_extractor:main",
-    # Supervisor regular workers
-    "janitor = tabsdata._tabsserver.tools.janitor:main",
-    # Supervisor tools
-    "tdinvoker = tabsdata._tabsserver.invoker:main",
-    "tdupgrader = tabsdata._tabsserver.server.upgrader.upgrader:main",
-    "tdvenv = tabsdata._tabsserver.pyenv_creation:main",
+    "tdorachk = tabsdata._tabsserver.tools.x_oracle_check:cli",
+    "td_cfgrsv = tabsdata._tabsserver.tools.config_resolver:main",
+    "td_invoker = tabsdata._tabsserver.invoker:main",
+    "td_janitor = tabsdata._tabsserver.tools.janitor:main",
+    "td_mntext = tabsdata._tabsserver.tools.mount_extractor:main",
+    "td_srvinf = tabsdata._tabsserver.tools.server_info:main",
+    "td_upgrader = tabsdata._tabsserver.server.upgrader.upgrader:main",
+    "td_venv = tabsdata._tabsserver.pyenv_creation:main",
 ]
 console_scripts.extend(load_console_scripts())
 

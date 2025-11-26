@@ -95,7 +95,7 @@ def ps():  # noqa: C901
 
     supervisors = {}
     for pid, process in processes.items():
-        if process["name"].lower() in ("supervisor", "supervisor.exe"):
+        if process["name"].lower() in ("td_supervisor", "td_supervisor.exe"):
             cmdline = process.get("cmdline", [])
             instance = "unknown"
             if "--instance" in cmdline:

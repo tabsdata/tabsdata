@@ -43,7 +43,7 @@ def tdabout_from_metadata(package_name=TABSDATA_MODULE_NAME):
         print(f"Error: Could not load tabsdata package metadata: {exception}.")
         return
 
-    tdabout_binary = shutil.which("tdabout")
+    tdabout_binary = shutil.which("td_about")
     if not tdabout_binary:
         print("Error: tdabout binary not found in PATH.")
         return
@@ -181,7 +181,7 @@ def tdabout_from_build(package_name=TABSDATA_MODULE_NAME):  # noqa: C901
     except Exception:
         version = "-"
 
-    tdabout_binary = shutil.which("tdabout")
+    tdabout_binary = shutil.which("td_about")
     if not tdabout_binary:
         print("Error: tdabout binary not found in PATH.")
         return

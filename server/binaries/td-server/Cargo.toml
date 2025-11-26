@@ -18,27 +18,27 @@ rust-version = { workspace = true }
 version = { workspace = true }
 
 [[bin]]
-name = "tdabout"
-path = "src/tdabout.rs"
-
-[[bin]]
 name = "tdserver"
 path = "src/tdserver.rs"
 
 [[bin]]
-name = "supervisor"
-path = "src/supervisor.rs"
+name = "td_about"
+path = "src/tdabout.rs"
 
 [[bin]]
-name = "bootloader"
-path = "src/bootloader.rs"
-
-[[bin]]
-name = "apiserver"
+name = "td_apiserver"
 path = "src/apiserver.rs"
 
 [[bin]]
-name = "transporter"
+name = "td_bootloader"
+path = "src/bootloader.rs"
+
+[[bin]]
+name = "td_supervisor"
+path = "src/supervisor.rs"
+
+[[bin]]
+name = "td_transporter"
 path = "src/transporter.rs"
 
 [features]

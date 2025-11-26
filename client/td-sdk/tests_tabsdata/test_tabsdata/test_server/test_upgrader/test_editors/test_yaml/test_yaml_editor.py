@@ -428,11 +428,11 @@ controllers:
       - name: bootloader
         kind: processor
         location: relative
-        program: bootloader
+        program: td_bootloader
       - name: server-information
         kind: processor
         location: system
-        program: tdsrvinf
+        program: td_srvinf
 """
         # fmt: off
         yaml = YAML()
@@ -464,7 +464,7 @@ controllers:
       - name: bootloader
         kind: processor
         location: relative
-        program: bootloader
+        program: td_bootloader
       - name: config-validator
         kind: processor
         location: relative
@@ -472,7 +472,7 @@ controllers:
       - name: server-information
         kind: processor
         location: system
-        program: tdsrvinf
+        program: td_srvinf
 """
         # fmt: on
         assert result == expected
@@ -497,12 +497,12 @@ controllers:
       - name: bootloader
         kind: processor
         location: relative
-        program: bootloader
+        program: td_bootloader
       # Server information
       - name: server-information
         kind: processor
         location: system
-        program: tdsrvinf
+        program: td_srvinf
 """
         # fmt: off
 
@@ -541,7 +541,7 @@ controllers:
       - name: bootloader
         kind: processor
         location: relative
-        program: bootloader
+        program: td_bootloader
       # Server information
       - name: config-validator
         kind: processor
@@ -550,7 +550,7 @@ controllers:
       - name: server-information
         kind: processor
         location: system
-        program: tdsrvinf
+        program: td_srvinf
 """
         # fmt: on
         assert result == expected
@@ -1844,7 +1844,7 @@ controllers:
       - name: janitor
         kind: processor
         location: system
-        program: janitor
+        program: td_janitor
 """
         # fmt: off
         yaml = YAML()
@@ -1859,7 +1859,7 @@ controllers:
                 "name": "aiagent",
                 "kind": "processor",
                 "location": "system",
-                "program": "aiagent",
+                "program": "td_aiagent",
             },
         }
 
@@ -1880,11 +1880,11 @@ controllers:
       - name: aiagent
         kind: processor
         location: system
-        program: aiagent
+        program: td_aiagent
       - name: janitor
         kind: processor
         location: system
-        program: janitor
+        program: td_janitor
 """
         # fmt: on
         assert result1 == expected

@@ -38,7 +38,7 @@ controllers:
       - name: bootloader
         kind: processor
         location: relative
-        program: bootloader
+        program: td_bootloader
         inherit:
           - instance
           - repository
@@ -47,7 +47,7 @@ controllers:
       - name: server-information
         kind: processor
         location: system
-        program: tdsrvinf
+        program: td_srvinf
         parameters:
           - etc: ${TD_PATH_INSTANCE}/workspace/work/etc
           - available-python-versions-file: available-python-versions.yaml
@@ -58,7 +58,7 @@ controllers:
       - name: apiserver-configuration-resolver
         kind: processor
         location: system
-        program: tdcfgrsv
+        program: td_cfgrsv
         parameters:
           - input: ${TD_PATH_CONFIG}/proc/regular/apiserver/config/config.yaml
           - strategies: env,hashicorp
@@ -74,7 +74,7 @@ controllers:
       - name: apiserver-mounts-options-extractor
         kind: processor
         location: system
-        program: tdmntext
+        program: td_mntext
         get-states:
           - state-type: blob
             state-key: apiserver-configuration
@@ -87,7 +87,7 @@ controllers:
       - name: apiserver
         kind: processor
         location: relative
-        program: apiserver
+        program: td_apiserver
         parameters:
           - stdin-config: true
           - database-url: file://${TD_URI_REPOSITORY}/database/tabsdata.db
@@ -98,7 +98,7 @@ controllers:
       - name: janitor
         kind: processor
         location: system
-        program: janitor
+        program: td_janitor
         parameters:
           - log-config-file: ${TD_PATH_CONFIG}/proc/regular/janitor/config/log.yaml
           - instance: ${TD_PATH_INSTANCE}
@@ -113,7 +113,7 @@ controllers:
       - name: function
         kind: processor
         location: system
-        program: tdinvoker
+        program: td_invoker
         concurrency: 8
         retries: 2
         arguments:

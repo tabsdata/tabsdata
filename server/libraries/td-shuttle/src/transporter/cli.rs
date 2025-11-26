@@ -227,7 +227,7 @@ pub(crate) mod tests {
         }
 
         let args = vec![
-            "transporter",
+            "td_transporter",
             "--request",
             request_file.to_str().unwrap(),
             "--report",

@@ -141,7 +141,7 @@ pub fn tdabout(version: &str) {
         );
     }
 
-    let status = Command::new("tdabout")
+    let status = Command::new("td_about")
         .status()
         .expect("Failed to execute tdabout");
 

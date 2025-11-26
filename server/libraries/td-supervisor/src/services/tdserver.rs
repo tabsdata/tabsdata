@@ -71,9 +71,10 @@ use tracing::{Level, error, info, warn};
 use url::Url;
 use walkdir::WalkDir;
 
-pub const SUPERVISOR: &str = "supervisor";
+pub const SUPERVISOR_NAME: &str = "supervisor";
+pub const SUPERVISOR_PROGRAM: &str = "td_supervisor";
 
-pub const APISERVER: &str = "apiserver";
+pub const APISERVER: &str = "td_apiserver";
 pub const APISERVER_ARGUMENT_DATABASE_URL: &str = "--database-url";
 pub const APISERVER_ARGUMENT_STORAGE_URL: &str = "--storage-url";
 pub const APISERVER_ARGUMENT_DB_SCHEMA: &str = "--db-schema";
@@ -1784,10 +1785,10 @@ fn build_instance_describer(
     let describer = TabsDataWorkerDescriberBuilder::default()
         .instance(instance)
         .class(REGULAR)
-        .name(SUPERVISOR.to_string())
+        .name(SUPERVISOR_NAME.to_string())
         .runtime(None)
         .location(Relative)
-        .program(PathBuf::from(SUPERVISOR))
+        .program(PathBuf::from(SUPERVISOR_PROGRAM))
         .set_state(None)
         .get_states(vec![])
         .arguments(forwarded_parameters)
@@ -2021,7 +2022,7 @@ fn status_hosted_instances() {
 }
 
 fn is_supervisor_process(process: &sysinfo::Process) -> bool {
-    let supervisor_program = name_program(Path::new(SUPERVISOR));
+    let supervisor_program = name_program(Path::new(SUPERVISOR_PROGRAM));
     let Some(supervisor_program_name) = supervisor_program
         .file_name()
         .and_then(|name| name.to_str())

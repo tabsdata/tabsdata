@@ -69,12 +69,12 @@ IGNORED_FOLDERS = (
     "venv",
 )
 BASE_BINARIES = [
-    "apiserver",
-    "bootloader",
-    "supervisor",
-    "tdabout",
     "tdserver",
-    "transporter",
+    "td_about",
+    "td_apiserver",
+    "td_bootloader",
+    "td_supervisor",
+    "td_transporter",
 ]
 LOCAL_PACKAGES_FOLDER = "local_packages"
 PLUGINS_FOLDER = "plugins"

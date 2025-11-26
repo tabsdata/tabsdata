@@ -21,7 +21,7 @@ use tracing::error;
 const VERSION_FILE: &str = ".version";
 const SEED_VERSION: &str = "0.9.0";
 
-pub const TDUPGRADER_PROGRAM: &str = "tdupgrader";
+pub const TDUPGRADER_PROGRAM: &str = "td_upgrader";
 pub const TDUPGRADER_ARGUMENT_INSTANCE: &str = "--instance";
 pub const TDUPGRADER_ARGUMENT_EXECUTE: &str = "--execute";
 

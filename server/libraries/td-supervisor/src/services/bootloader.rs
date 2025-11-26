@@ -25,7 +25,8 @@ use td_process::launcher::config::Config;
 use thiserror::Error;
 use tracing::{error, info};
 
-pub const BOOTLOADER: &str = "bootloader";
+pub const BOOTLOADER_CONFIG: &str = "bootloader";
+pub const BOOTLOADER: &str = "td_bootloader";
 
 pub const BOOTLOADER_ARGUMENT_INSTANCE: &str = "--instance";
 pub const BOOTLOADER_ARGUMENT_REPOSITORY: &str = "--repository";
@@ -255,7 +256,7 @@ impl Bootloader {
 
 pub fn start() {
     Cli::<Configuration, Arguments>::exec_async(
-        BOOTLOADER,
+        BOOTLOADER_CONFIG,
         |config, params| async move {
             let result = Bootloader::new().run(config, params).await;
             if let Err(e) = result {

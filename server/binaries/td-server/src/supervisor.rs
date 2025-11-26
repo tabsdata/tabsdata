@@ -18,7 +18,7 @@ use tracing::{Level, info};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-#[attach(signal = "supervisor")]
+#[attach(signal = "td_supervisor")]
 pub fn main() {
     hooks::panic();
 

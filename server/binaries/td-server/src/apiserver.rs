@@ -25,7 +25,7 @@ use tracing::{Level, error, info};
 const CONFIG_NAME: &str = "apiserver";
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-#[attach(signal = "apiserver")]
+#[attach(signal = "td_apiserver")]
 fn main() {
     hooks::panic();
 
