@@ -52,6 +52,7 @@ use crate::router::user_roles::UserRolesRouter;
 use crate::router::users::UsersRouter;
 use crate::router::workers::WorkersRouter;
 use axum::middleware::from_fn_with_state;
+use http::StatusCode;
 use std::time::Duration;
 use ta_apiserver::router::RouterExtension;
 use ta_apiserver::status::error_status::ErrorStatus;
@@ -152,9 +153,10 @@ impl ApiServerV1 {
 
             // Default layers
             let router = router
-                .layer(TimeoutLayer::new(Duration::from_secs(
-                    context.config.request_timeout as u64,
-                )))
+                .layer(TimeoutLayer::with_status_code(
+                    StatusCode::REQUEST_TIMEOUT,
+                    Duration::from_secs(context.config.request_timeout as u64),
+                ))
                 .layer(CorsService::layer())
                 .layer(TraceService::layer())
                 .layer(CompressionService::layer());

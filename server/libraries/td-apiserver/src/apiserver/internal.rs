@@ -11,6 +11,7 @@ use crate::layers::uri_filter::LoopbackIpFilterService;
 use crate::router::internal::InternalRouter;
 use async_trait::async_trait;
 use axum::middleware::from_fn;
+use http::StatusCode;
 use std::error::Error;
 use std::time::Duration;
 use ta_apiserver::router::RouterExtension;
@@ -60,9 +61,10 @@ impl InternalServer {
 
             // Default layers
             let router = router
-                .layer(TimeoutLayer::new(Duration::from_secs(
-                    context.config.request_timeout as u64,
-                )))
+                .layer(TimeoutLayer::with_status_code(
+                    StatusCode::REQUEST_TIMEOUT,
+                    Duration::from_secs(context.config.request_timeout as u64),
+                ))
                 .layer(CorsService::layer())
                 .layer(TraceService::layer());
 
