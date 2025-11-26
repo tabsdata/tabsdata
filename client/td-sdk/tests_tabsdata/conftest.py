@@ -18,8 +18,11 @@ check_assets()
 import os
 import pathlib
 import re
+import socket
 import sys
+import urllib.parse
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from time import sleep
 from typing import Any
@@ -63,6 +66,7 @@ from tabsdata._tabsserver.pyenv_creation import (
     read_testimony,
 )
 from tabsdata._tdfunction import TableInput, TableOutput
+from tabsdata._utils.constants import TRUE_VALUES
 
 # noinspection PyProtectedMember
 from tabsdata._utils.tableframe._generators import _id
@@ -146,6 +150,8 @@ HASHICORP_TESTING_URL = "http://127.0.0.1:8200"
 ROOT_PROJECT_DIR = os.path.dirname(
     os.path.dirname(os.path.dirname(ABSOLUTE_TEST_FOLDER_LOCATION))
 )
+
+VALID_MYSQL_PREFIXES = ["MYSQL0"]
 
 
 class TestInstance:
@@ -276,6 +282,7 @@ DB_PASSWORD = "p@ssw0rd#"
 DB_USER = "@dmIn"
 MARIADB_PORT = 3307
 MYSQL_PORT = 3306
+MYSQL_FORWARDED_PORT = "3306/tcp"
 ORACLE_PORT = 1521
 POSTGRES_PORT = 5432
 
@@ -431,7 +438,7 @@ def testing_mysql(tmp_path_factory, worker_id):
     if worker_id == "master":
         # not executing in with multiple workers, just produce the data and let
         # pytest's fixture caching do its job
-        yield create_docker_mysql_database()
+        yield create_docker_mysql_database(port=MYSQL_PORT)
     else:
         # get the temp directory shared by all workers
         root_tmp_dir = tmp_path_factory.getbasetemp().parent
@@ -439,8 +446,115 @@ def testing_mysql(tmp_path_factory, worker_id):
         fn = root_tmp_dir / "docker_mysql_creation"
         with FileLock(str(fn) + ".lock"):
             # only one worker will be able to create the database
-            create_docker_mysql_database()
+            create_docker_mysql_database(port=MYSQL_PORT)
         yield
+
+
+@dataclass
+class MySQLConfig:
+    host: str
+    port: int
+    user: str
+    password: str
+    database: str
+    uri: str
+    uri_with_credentials: str
+
+
+@pytest.fixture(scope="function")
+def mysql_config(tmp_path_factory, worker_id, request) -> MySQLConfig:
+    marker = request.node.get_closest_marker("mysql")
+    prefix = marker.kwargs.get("env_prefix", "MYSQL0") if marker else "MYSQL0"
+    if prefix not in VALID_MYSQL_PREFIXES:
+        raise Exception(
+            f"The prefix '{prefix}' is not valid. Valid prefixes are: "
+            f"{', '.join(VALID_MYSQL_PREFIXES)}. If you want to extend the list of "
+            "valid prefixes, please modify the 'VALID_MYSQL_PREFIXES' variable in the"
+            " 'conftest.py' file."
+        )
+    if os.environ.get(f"{prefix}__MYSQL_ENVS") in TRUE_VALUES:
+        uri = os.environ.get(f"{prefix}__MYSQL_URI")
+        if not uri:
+            raise Exception(
+                f"The environment variable {prefix}__MYSQL_URI is not set. Unable to "
+                "run "
+                "tests using the 'mysql_config' fixture."
+            )
+        pattern = (
+            r"^mysql://(?:([^:@/]+)(?::([^@/]*))?@)?([^:/]+):(\d+)(?:/([^/?#]+))?$"
+        )
+        match = re.match(pattern, uri)
+        if not match:
+            raise Exception(
+                f"The MYSQL URI '{uri}' is not valid. Unable to run tests using the "
+                "'mysql_config' fixture."
+            )
+        _, _, host, port, _ = match.groups()
+        user = os.environ.get(f"{prefix}__MYSQL_USER")
+        if not user:
+            raise Exception(
+                f"The environment variable {prefix}__MYSQL_USER is not set and the "
+                f"user is not part of the {prefix}__MYSQL_URI. Unable to "
+                "run tests using the 'mysql_config' fixture."
+            )
+        password = os.environ.get(f"{prefix}__MYSQL_PASSWORD")
+        if not password:
+            raise Exception(
+                f"The environment variable {prefix}__MYSQL_PASSWORD is not set and "
+                f"the password is not part of the {prefix}__MYSQL_URI. Unable to "
+                "run tests using the 'mysql_config' fixture."
+            )
+        database = os.environ.get(f"{prefix}__MYSQL_DATABASE")
+        if not database:
+            raise Exception(
+                f"The environment variable {prefix}__MYSQL_DATABASE is not set and "
+                f"the database is not part of the {prefix}__MYSQL_URI. Unable to "
+                "run tests using the 'mysql_config' fixture."
+            )
+        escaped_user = urllib.parse.quote(user)
+        escaped_password = urllib.parse.quote(password)
+        config = MySQLConfig(
+            host=host,
+            port=int(port),
+            user=user,
+            password=password,
+            database=database,
+            uri=uri,
+            uri_with_credentials=(
+                f"mysql://{escaped_user}:{escaped_password}@{host}:{port}/{database}"
+            ),
+        )
+        return config
+    else:
+        # Note: We are currently duplicating code because we are in the process of
+        # migrating tests to use this fixture instead of testing_mysql. Once all tests
+        # are migrated, we can remove testing_mysql and keep only this fixture.
+        name = os.environ.get(
+            f"{prefix}__MYSQL_DOCKER_CONTAINER_NAME",
+            DEFAULT_PYTEST_MYSQL_DOCKER_CONTAINER_NAME,
+        )
+        if worker_id == "master":
+            # not executing in with multiple workers, just produce the data and let
+            # pytest's fixture caching do its job
+            port = create_docker_mysql_database(name)
+        else:
+            # get the temp directory shared by all workers
+            root_tmp_dir = tmp_path_factory.getbasetemp().parent
+
+            fn = root_tmp_dir / "docker_mysql_creation"
+            with FileLock(str(fn) + ".lock"):
+                # only one worker will be able to create the database
+                port = create_docker_mysql_database(name)
+        config = MySQLConfig(
+            host=DB_HOST,
+            port=int(port),
+            user=DB_USER,
+            password=DB_PASSWORD,
+            database=DB_NAME,
+            uri=f"mysql://{DB_HOST}:{port}/{DB_NAME}",
+            uri_with_credentials=f"mysql://{urllib.parse.quote(DB_USER)}:{urllib.parse.quote(DB_PASSWORD)}@{DB_HOST}:{MYSQL_PORT}/{DB_NAME}",
+        )
+        return config
 
 
 def create_docker_postgres_database():
@@ -544,6 +658,13 @@ def testing_postgres(tmp_path_factory, worker_id):
             # only one worker will be able to create the database
             create_docker_postgres_database()
         yield
+
+
+def get_free_port():
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("", 0))
+        port = s.getsockname()[1]
+    return port
 
 
 @pytest.fixture(scope="session")
@@ -726,27 +847,41 @@ def gcs_client(tmp_path, gcs_config):
         del os.environ["GOOGLE_APPLICATION_CREDENTIALS"]
 
 
-def create_docker_mysql_database():
+def get_container_port_binding(container, port: str) -> int:
+    port_binding = container.attrs["NetworkSettings"]["Ports"].get(port)
+    if port_binding and len(port_binding) > 0:
+        return int(port_binding[0]["HostPort"])
+    else:
+        raise Exception(f"Port {port} is not bound in the container.")
+
+
+def create_docker_mysql_database(
+    name: str = DEFAULT_PYTEST_MYSQL_DOCKER_CONTAINER_NAME,
+    port: int = None,
+):
     logger.info("Starting MySQL container")
     client = docker.from_env()
-    if client.containers.list(
-        filters={"name": DEFAULT_PYTEST_MYSQL_DOCKER_CONTAINER_NAME}
-    ):
+    if containers := client.containers.list(filters={"name": name}):
         logger.info("MySQL container already exists")
-        return
+        container = containers[0]
+        return get_container_port_binding(container, MYSQL_FORWARDED_PORT)
     else:
-        client.containers.run(
-            "mysql:9.1.0",
-            name=DEFAULT_PYTEST_MYSQL_DOCKER_CONTAINER_NAME,
-            environment=[
-                "MYSQL_ROOT_PASSWORD=password",
-                f"MYSQL_DATABASE={DB_NAME}",
-                f"MYSQL_USER={DB_USER}",
-                f"MYSQL_PASSWORD={DB_PASSWORD}",
-            ],
-            ports={"3306/tcp": MYSQL_PORT},
-            detach=True,
-        )
+        port_lock = FileLock(os.path.join(tabsdata_temp_folder(), "free_port.lock"))
+        with port_lock:
+            if port is None:
+                port = get_free_port()
+            client.containers.run(
+                "mysql:9.1.0",
+                name=name,
+                environment=[
+                    "MYSQL_ROOT_PASSWORD=password",
+                    f"MYSQL_DATABASE={DB_NAME}",
+                    f"MYSQL_USER={DB_USER}",
+                    f"MYSQL_PASSWORD={DB_PASSWORD}",
+                ],
+                ports={MYSQL_FORWARDED_PORT: port},
+                detach=True,
+            )
         # Wait for the database to be ready
         retry = 0
         while True:
@@ -756,6 +891,7 @@ def create_docker_mysql_database():
                     user=DB_USER,
                     password=DB_PASSWORD,
                     database=DB_NAME,
+                    port=port,
                 )
                 break
             except mysql.connector.Error as err:
@@ -807,7 +943,7 @@ def create_docker_mysql_database():
         )
         mydb.commit()
         logger.info("MySQL container created successfully")
-        return
+        return port
 
 
 def create_docker_hashicorp_vault(s3_config: dict):
@@ -1065,13 +1201,25 @@ def pytest_sessionfinish(session, exitstatus):
 def clean_everything():
     clean_python_virtual_environments()
     try:
-        name_pattern = (
-            f"({DEFAULT_PYTEST_MARIADB_DOCKER_CONTAINER_NAME}"
-            f"|{DEFAULT_PYTEST_MYSQL_DOCKER_CONTAINER_NAME}"
-            f"|{DEFAULT_PYTEST_ORACLE_DOCKER_CONTAINER_NAME}"
-            f"|{DEFAULT_PYTEST_HASHICORP_DOCKER_CONTAINER_NAME}"
-            f"|{DEFAULT_PYTEST_POSTGRES_DOCKER_CONTAINER_NAME})"
-        )
+        docker_containters_to_clean = [
+            DEFAULT_PYTEST_MARIADB_DOCKER_CONTAINER_NAME,
+            DEFAULT_PYTEST_ORACLE_DOCKER_CONTAINER_NAME,
+            DEFAULT_PYTEST_HASHICORP_DOCKER_CONTAINER_NAME,
+            DEFAULT_PYTEST_POSTGRES_DOCKER_CONTAINER_NAME,
+        ]
+        for prefix in VALID_MYSQL_PREFIXES:
+            # Check for {prefix}__MYSQL_DOCKER_CONTAINER_NAME environment variables
+            mysql_env_var = f"{prefix}__MYSQL_DOCKER_CONTAINER_NAME"
+            if (
+                os.environ.get(f"{prefix}__MYSQL_DONT_KILL") not in TRUE_VALUES
+                and os.environ.get(f"{prefix}__MYSQL_ENVS") not in TRUE_VALUES
+            ):
+                mysql_container_name = os.environ.get(
+                    mysql_env_var,
+                    DEFAULT_PYTEST_MYSQL_DOCKER_CONTAINER_NAME,
+                )
+                docker_containters_to_clean.append(mysql_container_name)
+        name_pattern = "^(" + "|".join(docker_containters_to_clean) + ")$"
         remove_docker_containers(name_pattern)
     except Exception as e:
         logger.warning(
