@@ -28,6 +28,7 @@ from tabsdata._format import (
     NDJSONFormat,
     ParquetFormat,
 )
+from tabsdata._io.connections.connections import Conn
 from tabsdata._io.inputs.file_inputs import (
     AzureSource,
     GCSSource,
@@ -176,6 +177,8 @@ __all__ = [
     "GCPServiceAccountKeyCredentials",
     "S3AccessKeyCredentials",
     "UserPasswordCredentials",
+    # from connections.py
+    "Conn",
     # from secret.py
     "EnvironmentSecret",
     "HashiCorpSecret",
