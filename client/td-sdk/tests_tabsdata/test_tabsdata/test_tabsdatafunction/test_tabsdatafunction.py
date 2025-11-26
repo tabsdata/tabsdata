@@ -8,7 +8,7 @@ import pytest
 
 from tabsdata._io.inputs.file_inputs import LocalFileSource
 from tabsdata._io.outputs.sql_outputs import MySQLDestination
-from tabsdata._tabsdatafunction import TabsdataFunction
+from tabsdata._tdfunction import TabsdataFunction
 from tabsdata.exceptions import (
     ErrorCode,
     FunctionConfigurationError,

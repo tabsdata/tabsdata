@@ -11,11 +11,11 @@ from typing import TYPE_CHECKING
 import cloudpickle
 
 from tabsdata._io.plugin import DestinationPlugin, SourcePlugin
-from tabsdata._tabsdatafunction import TabsdataFunction
 from tabsdata._tabsserver.function.configuration_utils import load_function_config
 from tabsdata._tabsserver.function.response_utils import RESPONSE_FILE_NAME
 from tabsdata._tabsserver.function.status import Status
 from tabsdata._tabsserver.function.yaml_parsing import parse_request_yaml
+from tabsdata._tdfunction import TabsdataFunction
 from tabsdata._utils.bundle_utils import (
     CODE_FOLDER,
     CONFIG_ENTRY_POINT_FUNCTION_FILE_KEY,

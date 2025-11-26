@@ -18,7 +18,7 @@ import cloudpickle
 import yaml
 
 from tabsdata._io.plugin import DestinationPlugin, SourcePlugin
-from tabsdata._tabsdatafunction import TabsdataFunction
+from tabsdata._tdfunction import TabsdataFunction
 from tabsdata._utils.constants import TABSDATA_MODULE_NAME, TRUE_VALUES
 from tabsdata._utils.envs import is_env_enabled
 from tabsdata._utils.tableframe._constants import (

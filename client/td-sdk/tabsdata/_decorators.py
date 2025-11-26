@@ -32,7 +32,7 @@ from tabsdata._table_actions.actions import (
     OnTablesActionSpec,
     _build_actions_list_or_raise,
 )
-from tabsdata._tabsdatafunction import TabsdataFunction
+from tabsdata._tdfunction import TabsdataFunction
 from tabsdata.exceptions import DecoratorConfigurationError, ErrorCode
 
 P = ParamSpec("P")

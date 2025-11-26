@@ -19,7 +19,7 @@ import requests
 from tabsdata._io.inputs.table_inputs import TableInput
 from tabsdata._io.outputs.sql_outputs import verify_output_sql_drivers
 from tabsdata._io.outputs.table_outputs import TableOutput
-from tabsdata._tabsdatafunction import TabsdataFunction
+from tabsdata._tdfunction import TabsdataFunction
 from tabsdata._utils.bundle_utils import create_bundle_archive
 from tabsdata._utils.temps import tabsdata_temp_folder
 from tabsdata.api.apiserver import APIServer, obtain_connection

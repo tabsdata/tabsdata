@@ -10,7 +10,7 @@ import polars as pl
 
 import tabsdata as td
 from tabsdata import TableFrame
-from tabsdata._tabsdatafunction import (
+from tabsdata._tdfunction import (
     _clean_recursively_and_convert_to_datatype,
     _convert_recursively_to_tableframe,
     _recursively_obtain_datatype,

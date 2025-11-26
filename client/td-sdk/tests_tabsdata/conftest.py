@@ -56,13 +56,13 @@ import tabsdata as _td
 # noinspection PyProtectedMember
 import tabsdata._utils.tableframe._constants as td_constants
 from tabsdata._secret import HashiCorpSecret
-from tabsdata._tabsdatafunction import TableInput, TableOutput
 from tabsdata._tabsserver.function.sql_utils import MARIADB_COLLATION
 from tabsdata._tabsserver.pyenv_creation import (
     DEFAULT_ENVIRONMENT_TESTIMONY_FOLDER,
     delete_virtual_environment,
     read_testimony,
 )
+from tabsdata._tdfunction import TableInput, TableOutput
 
 # noinspection PyProtectedMember
 from tabsdata._utils.tableframe._generators import _id

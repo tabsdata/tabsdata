@@ -67,10 +67,10 @@ from tabsdata._io.outputs.table_outputs import TableOutput
 # noinspection PyProtectedMember
 from tabsdata._io.plugin import DestinationPlugin, SourcePlugin
 from tabsdata._secret import EnvironmentSecret, HashiCorpSecret
-from tabsdata._tabsdatafunction import TabsdataFunction
 
 # noinspection PyProtectedMember
 from tabsdata._tabsserver.function.execution_exceptions import CustomException
+from tabsdata._tdfunction import TabsdataFunction
 from tabsdata.tableframe.dtypes import (
     FLOAT_DTYPES,
     INTEGER_DTYPES,
@@ -247,7 +247,7 @@ __all__ = [
     "SalesforceTokenCredentials",
     # From tabsdata_snowflake.connector
     "SnowflakeDestination",
-    # From tabsdata._tabsdatafunction
+    # From tabsdata._tdfunction
     "TabsdataFunction",
 ]
 
