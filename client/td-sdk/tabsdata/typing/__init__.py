@@ -6,8 +6,12 @@ from tabsdata._io.outputs.shared_enums import (
     IfTableExistStrategySpec,
     SchemaStrategySpec,
 )
+from tabsdata._table_actions.actions import OnTablesAction
 
 __all__ = [
+    # from tabsdata._io.outputs.shared_enums
     "IfTableExistStrategySpec",
     "SchemaStrategySpec",
+    # from tabsdata._table_actions.actions
+    "OnTablesAction",
 ]

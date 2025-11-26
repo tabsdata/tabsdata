@@ -68,6 +68,38 @@ class ErrorCode(Enum):
             "'DestinationPlugin' object (except 'TableOutput'), got '{}' instead."
         ),
     }
+    DCE7 = {
+        "code": "DCE-007",
+        "message": (
+            "The 'on_input_tables' parameter of a 'transformer' decorator must be a "
+            "'OnTablesAction' object, a list of 'OnTablesAction' objects or None; "
+            "got object '{}' of type '{}' instead."
+        ),
+    }
+    DCE8 = {
+        "code": "DCE-008",
+        "message": (
+            "The 'on_output_tables' parameter of a 'transformer' decorator must be a "
+            "'OnTablesAction' object, a list of 'OnTablesAction' objects or None; "
+            "got object '{}' of type '{}' instead."
+        ),
+    }
+    DCE9 = {
+        "code": "DCE-009",
+        "message": (
+            "The 'on_tables' parameter of a 'publisher' decorator must be a "
+            "'OnTablesAction' object, a list of 'OnTablesAction' objects or None; "
+            "got object '{}' of type '{}' instead."
+        ),
+    }
+    DCE10 = {
+        "code": "DCE-010",
+        "message": (
+            "The 'on_tables' parameter of a 'subscriber' decorator must be a "
+            "'OnTablesAction' object, a list of 'OnTablesAction' objects or None; "
+            "got object '{}' of type '{}' instead."
+        ),
+    }
     DECE2 = {
         "code": "DECE-002",
         "message": (
@@ -434,22 +466,54 @@ class ErrorCode(Enum):
     FCE6 = {
         "code": "FCE-006",
         "message": (
-            "The 'name' parameter in TabsdataFunction be of type 'str'; got '{}'"
+            "The 'name' parameter of a TabsdataFunction be of type 'str'; got '{}'"
             " instead."
         ),
     }
     FCE7 = {
         "code": "FCE-007",
         "message": (
-            "The source in TabsdataFunction must be of type 'SourcePlugin' or None; "
+            "The source of a TabsdataFunction must be of type 'SourcePlugin' or None; "
             "got '{}' instead."
         ),
     }
     FCE8 = {
         "code": "FCE-008",
         "message": (
-            "The destination in TabsdataFunction must be of type 'DestinationPlugin' "
+            "The destination of a TabsdataFunction must be of type 'DestinationPlugin' "
             "or None; got '{}' instead."
+        ),
+    }
+    FCE9 = {
+        "code": "FCE-009",
+        "message": (
+            "The 'input_actions' parameter of a TabsdataFunction must be a "
+            "'OnTablesAction' object, a list of 'OnTablesAction' objects or None; "
+            "got object '{}' of type '{}' instead."
+        ),
+    }
+    FCE10 = {
+        "code": "FCE-010",
+        "message": (
+            "The 'output_actions' parameter of a TabsdataFunction must be a "
+            "'OnTablesAction' object, a list of 'OnTablesAction' objects or None; "
+            "got object '{}' of type '{}' instead."
+        ),
+    }
+    FCE11 = {
+        "code": "FCE-011",
+        "message": (
+            "The 'input_actions' parameter of a TabsdataFunction can only be used "
+            "when the function has a TableInput as input. Got the actions {} for a "
+            "function with input type {} instead."
+        ),
+    }
+    FCE12 = {
+        "code": "FCE-012",
+        "message": (
+            "The 'output_actions' parameter of a TabsdataFunction can only be used "
+            "when the function has a TableOutput as output. Got the actions {} for a "
+            "function with output type {} instead."
         ),
     }
     FOCE1 = {

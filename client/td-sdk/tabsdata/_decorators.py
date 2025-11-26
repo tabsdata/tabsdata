@@ -28,6 +28,10 @@ from tabsdata._io.outputs.sql_outputs import (
 )
 from tabsdata._io.outputs.table_outputs import TableOutput
 from tabsdata._io.plugin import DestinationPlugin, SourcePlugin
+from tabsdata._table_actions.actions import (
+    OnTablesActionSpec,
+    _build_actions_list_or_raise,
+)
 from tabsdata._tabsdatafunction import TabsdataFunction
 from tabsdata.exceptions import DecoratorConfigurationError, ErrorCode
 
@@ -44,6 +48,8 @@ def transformer(
     output_tables: TableOutput | str | List[str],
     name: str = None,
     trigger_by: str | List[str] | None = ALL_DEPS,
+    on_input_tables: OnTablesActionSpec = None,
+    on_output_tables: OnTablesActionSpec = None,
 ) -> callable:
     """
     Decorator to set the data and destination parameters of a function and
@@ -60,28 +66,28 @@ def transformer(
             the function to execute. It can be a table in the system, a list of
             tables, or None (in which case it must be triggered manually). Defaults to
             all dependencies.
-
+        on_input_tables (OnTablesAction | list[OnTablesAction] | None, optional):
+            Actions to perform on input tables before executing the function. Can be a
+            single action or a list of them. Defaults to None.
+        on_output_tables (OnTablesAction | list[OnTablesAction] | None, optional):
+            Actions to perform on output tables after executing the function.
+            Can be a single action or a list of them. Defaults to None.
     Returns:
         callable: The function converted to a TabsdataFunction.
     """
 
-    if not isinstance(input_tables, TableInput):
-        if not isinstance(input_tables, (str, list)):
-            raise DecoratorConfigurationError(ErrorCode.DCE1, type(input_tables))
-        if isinstance(input_tables, list) and not all(
-            isinstance(table, str) for table in input_tables
-        ):
-            raise DecoratorConfigurationError(ErrorCode.DCE1, type(input_tables))
-        input_tables = TableInput(input_tables)
-
-    if not isinstance(output_tables, TableOutput):
-        if not isinstance(output_tables, (str, list)):
-            raise DecoratorConfigurationError(ErrorCode.DCE2, type(output_tables))
-        if isinstance(output_tables, list) and not all(
-            isinstance(table, str) for table in output_tables
-        ):
-            raise DecoratorConfigurationError(ErrorCode.DCE2, type(output_tables))
-        output_tables = TableOutput(output_tables)
+    input_tables = _build_transformer_input(input_tables)
+    output_tables = _build_transformer_output(output_tables)
+    input_actions = _build_actions_list_or_raise(
+        on_input_tables,
+        ErrorCode.DCE7,
+        DecoratorConfigurationError,
+    )
+    output_actions = _build_actions_list_or_raise(
+        on_output_tables,
+        ErrorCode.DCE8,
+        DecoratorConfigurationError,
+    )
 
     # Note: this counterintuitive logic is to allow the user to pass None as a trigger
     # meaning "no triggers", while the API takes None as "all dependencies". In the
@@ -93,10 +99,42 @@ def transformer(
 
     def decorator_tabset(func):
         return TabsdataFunction(
-            func, name, input=input_tables, output=output_tables, trigger_by=trigger_by
+            func,
+            name,
+            input=input_tables,
+            output=output_tables,
+            trigger_by=trigger_by,
+            input_actions=input_actions,
+            output_actions=output_actions,
         )
 
     return decorator_tabset
+
+
+def _build_transformer_input(input_tables: TableInput | str | List[str]) -> TableInput:
+    if not isinstance(input_tables, TableInput):
+        if not isinstance(input_tables, (str, list)):
+            raise DecoratorConfigurationError(ErrorCode.DCE1, type(input_tables))
+        if isinstance(input_tables, list) and not all(
+            isinstance(table, str) for table in input_tables
+        ):
+            raise DecoratorConfigurationError(ErrorCode.DCE1, type(input_tables))
+        input_tables = TableInput(input_tables)
+    return input_tables
+
+
+def _build_transformer_output(
+    output_tables: TableOutput | str | List[str],
+) -> TableOutput:
+    if not isinstance(output_tables, TableOutput):
+        if not isinstance(output_tables, (str, list)):
+            raise DecoratorConfigurationError(ErrorCode.DCE2, type(output_tables))
+        if isinstance(output_tables, list) and not all(
+            isinstance(table, str) for table in output_tables
+        ):
+            raise DecoratorConfigurationError(ErrorCode.DCE2, type(output_tables))
+        output_tables = TableOutput(output_tables)
+    return output_tables
 
 
 def publisher(
@@ -113,6 +151,7 @@ def publisher(
     tables: TableOutput | str | List[str],
     name: str = None,
     trigger_by: str | List[str] | None = None,
+    on_tables: OnTablesActionSpec = None,
 ) -> callable:
     """
     Decorator to set the data and destination parameters of a function and
@@ -129,7 +168,9 @@ def publisher(
         trigger_by (str | list[str] | None, optional): The trigger that will cause
             the function to execute. It can be a table in the system, a list of
             tables, or None (in which case it must be triggered manually).
-
+        on_tables (OnTablesAction | list[OnTablesAction] | None, optional): Actions
+            to perform on output tables after executing the function. Can be a
+            single action or a list of them. Defaults to None.
     Returns:
         callable: The function converted to a TabsdataFunction.
     """
@@ -145,9 +186,20 @@ def publisher(
             raise DecoratorConfigurationError(ErrorCode.DCE4, type(tables))
         tables = TableOutput(tables)
 
+    output_actions = _build_actions_list_or_raise(
+        on_tables,
+        ErrorCode.DCE9,
+        DecoratorConfigurationError,
+    )
+
     def decorator_tabset(func):
         return TabsdataFunction(
-            func, name, input=source, output=tables, trigger_by=trigger_by
+            func,
+            name,
+            input=source,
+            output=tables,
+            trigger_by=trigger_by,
+            output_actions=output_actions,
         )
 
     return decorator_tabset
@@ -167,6 +219,7 @@ def subscriber(
     ),
     name: str = None,
     trigger_by: str | List[str] | None = ALL_DEPS,
+    on_tables: OnTablesActionSpec = None,
 ) -> callable:
     """
     Decorator to set the data and destination parameters of a function and
@@ -184,7 +237,9 @@ def subscriber(
             the function to execute. It can be a table in the system, a list of
             tables, or None (in which case it must be triggered manually). Defaults to
             all dependencies.
-
+        on_tables (OnTablesAction | list[OnTablesAction] | None, optional): Actions
+            to perform on input tables before executing the function. Can be a
+            single action or a list of them. Defaults to None.
     Returns:
         callable: The function converted to a TabsdataFunction.
     """
@@ -203,6 +258,10 @@ def subscriber(
     ):
         raise DecoratorConfigurationError(ErrorCode.DCE6, type(destination))
 
+    input_actions = _build_actions_list_or_raise(
+        on_tables, ErrorCode.DCE10, DecoratorConfigurationError
+    )
+
     # Note: this counterintuitive logic is to allow the user to pass None as a trigger
     # meaning "no triggers", while the API takes None as "all dependencies". In the
     # future this logic might be moved to another function.
@@ -213,7 +272,12 @@ def subscriber(
 
     def decorator_tabset(func):
         return TabsdataFunction(
-            func, name, input=tables, output=destination, trigger_by=trigger_by
+            func,
+            name,
+            input=tables,
+            output=destination,
+            trigger_by=trigger_by,
+            input_actions=input_actions,
         )
 
     return decorator_tabset

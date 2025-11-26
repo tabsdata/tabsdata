@@ -17,6 +17,11 @@ import tabsdata.tableframe.lazyframe.frame as td_frame
 from tabsdata._io.inputs.table_inputs import TableInput
 from tabsdata._io.outputs.table_outputs import TableOutput
 from tabsdata._io.plugin import DestinationPlugin, SourcePlugin
+from tabsdata._table_actions.actions import (
+    OnTablesAction,
+    OnTablesActionSpec,
+    _build_actions_list_or_raise,
+)
 from tabsdata._tableuri import build_table_uri_object
 
 # noinspection PyProtectedMember
@@ -51,6 +56,8 @@ class TabsdataFunction:
         input: SourcePlugin = None,
         output: DestinationPlugin = None,
         trigger_by: str | List[str] | None = None,
+        input_actions: OnTablesActionSpec = None,
+        output_actions: OnTablesActionSpec = None,
     ):
         """
         Initializes the TabsDataFunction with the given function, input, output and
@@ -69,7 +76,10 @@ class TabsdataFunction:
                 function to execute. It can be a table in the system, a list of
                 tables or None (in which case it will be inferred from the
                 dependencies).
-
+            input_actions (OnTablesActionSpec, optional): Actions to perform on the
+                input tables.
+            output_actions (OnTablesActionSpec, optional): Actions to perform on the
+                output tables.
         Raises:
             FunctionConfigurationError
             InputConfigurationError
@@ -84,6 +94,8 @@ class TabsdataFunction:
         )
         self.trigger_by = trigger_by
         self.name = name
+        self.input_actions = input_actions
+        self.output_actions = output_actions
 
     def __repr__(self) -> str:
         """
@@ -92,10 +104,22 @@ class TabsdataFunction:
         Returns:
             str: A string representation of the TabsDataFunction.
         """
+        information_to_give = [
+            f"type='{self.type}'",
+            f"input='{self.input}'",
+            f"output='{self.output}'",
+            f"original_file='{self.original_file}'",
+            f"original_folder='{self.original_folder}'",
+            f"trigger='{self.trigger_by}'",
+        ]
+        if self.input_actions:
+            information_to_give.append(f"input_actions='{self.input_actions}'")
+        if self.output_actions:
+            information_to_give.append(f"output_actions='{self.output_actions}'")
+        information_to_give_str = ", ".join(information_to_give)
         return (
-            f"{self.__class__.__name__}({self._func.__name__})(input='{self.input}',"
-            f" output='{self.output}', original_file='{self.original_file}',"
-            f" original_folder='{self.original_folder}', trigger='{self.trigger_by}')"
+            f"{self.__class__.__name__}({self._func.__name__})"
+            f"({information_to_give_str})"
         )
 
     def __call__(self, *args, **kwargs):
@@ -135,8 +159,6 @@ class TabsdataFunction:
         elif not table_input and table_output:
             return "publisher"
         else:
-            # This case should not happen, but we return "unrecognized" to avoid
-            # breaking the code if it ever changes.
             self._verify_valid_input_output()
             raise ValueError("Unable to determine function type.")
 
@@ -164,6 +186,7 @@ class TabsdataFunction:
         else:
             raise FunctionConfigurationError(ErrorCode.FCE7, type(input))
         self._verify_valid_input_output()
+        self._verify_valid_action_plugin_combination()
 
     @property
     def original_folder(self) -> str:
@@ -225,6 +248,7 @@ class TabsdataFunction:
         else:
             raise FunctionConfigurationError(ErrorCode.FCE8, type(output))
         self._verify_valid_input_output()
+        self._verify_valid_action_plugin_combination()
 
     @property
     def name(self) -> str:
@@ -283,6 +307,48 @@ class TabsdataFunction:
             if not trigger_uri.table:
                 raise FunctionConfigurationError(ErrorCode.FCE3, trigger)
 
+    @property
+    def input_actions(self) -> list[OnTablesAction]:
+        """
+        list[OnTablesAction]: Actions to perform on the input tables.
+        """
+        return self._input_actions
+
+    @input_actions.setter
+    def input_actions(self, actions: OnTablesActionSpec):
+        """
+        Sets the actions to perform on the input tables.
+
+        Args:
+            actions (OnTablesActionSpec): Actions to perform on the input
+                tables.
+        """
+        self._input_actions = _build_actions_list_or_raise(
+            actions, ErrorCode.FCE9, FunctionConfigurationError
+        )
+        self._verify_valid_action_plugin_combination()
+
+    @property
+    def output_actions(self) -> list[OnTablesAction]:
+        """
+        list[OnTablesAction]: Actions to perform on the output tables.
+        """
+        return self._output_actions
+
+    @output_actions.setter
+    def output_actions(self, actions: OnTablesActionSpec):
+        """
+        Sets the actions to perform on the output tables.
+
+        Args:
+            actions (OnTablesActionSpec): Actions to perform on the output
+                tables.
+        """
+        self._output_actions = _build_actions_list_or_raise(
+            actions, ErrorCode.FCE10, FunctionConfigurationError
+        )
+        self._verify_valid_action_plugin_combination()
+
     def _verify_valid_input_output(self):
         """
         Verifies that the input and output are valid for the function.
@@ -298,6 +364,38 @@ class TabsdataFunction:
             if is_not_table_input and is_not_table_output:
                 raise FunctionConfigurationError(
                     ErrorCode.FCE5, type(self.input), type(self.output)
+                )
+
+    def _verify_valid_action_plugin_combination(self):
+        """
+        Verifies that the input and output actions are valid for the function.
+
+        Raises:
+            FunctionConfigurationError
+        """
+        if hasattr(self, "_input") and hasattr(self, "_input_actions"):
+            if (
+                self.input
+                and not isinstance(self.input, TableInput)
+                and self.input_actions
+            ):
+                # raise error if input actions are provided for non-table input
+                raise FunctionConfigurationError(
+                    ErrorCode.FCE11,
+                    self.input_actions,
+                    type(self.input),
+                )
+        if hasattr(self, "_output") and hasattr(self, "_output_actions"):
+            if (
+                self.output
+                and not isinstance(self.output, TableOutput)
+                and self.output_actions
+            ):
+                # raise error if output actions are provided for non-table output
+                raise FunctionConfigurationError(
+                    ErrorCode.FCE12,
+                    self.output_actions,
+                    type(self.output),
                 )
 
 
