@@ -5,7 +5,6 @@
 import inspect
 import logging
 import os
-import urllib.parse
 from io import StringIO
 from unittest import mock
 
@@ -19,25 +18,22 @@ from tabsdata._utils.bundle_utils import create_bundle_archive
 from tests_tabsdata.bootest import TDLOCAL_FOLDER
 from tests_tabsdata.conftest import (
     ABSOLUTE_TEST_FOLDER_LOCATION,
-    DB_HOST,
-    DB_NAME,
-    DB_PASSWORD,
-    DB_USER,
     FUNCTION_DATA_FOLDER,
     LOCAL_PACKAGES_LIST,
-    MYSQL_PORT,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
     TESTING_RESOURCES_FOLDER,
     clean_polars_df,
     read_json_and_clean,
     write_v2_yaml_file,
 )
-from tests_tabsdata.testing_resources.test_input_sql.example import input_sql
+from tests_tabsdata.testing_resources.test_input_sql.example import (
+    testing_tabsdata_function as input_sql,
+)
 from tests_tabsdata.testing_resources.test_input_sql_initial_values.example import (
-    input_sql_initial_values,
+    testing_tabsdata_function as input_sql_initial_values,
 )
 from tests_tabsdata.testing_resources.test_input_sql_modified_params.example import (
-    input_sql_modified_params,
+    testing_tabsdata_function as input_sql_modified_params,
 )
 
 # noinspection PyUnresolvedReferences
@@ -46,12 +42,6 @@ from . import pytestmark  # noqa: F401
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-
-ESCAPED_USER = urllib.parse.quote(DB_USER)
-ESCAPED_PASSWORD = urllib.parse.quote(DB_PASSWORD)
-MYSQL_URI = (
-    f"mysql://{ESCAPED_USER}:{ESCAPED_PASSWORD}@{DB_HOST}:{MYSQL_PORT}/{DB_NAME}"
-)
 ROOT_PROJECT_DIR = os.path.dirname(
     os.path.dirname(os.path.dirname(ABSOLUTE_TEST_FOLDER_LOCATION))
 )
@@ -64,10 +54,13 @@ LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_input_sql(testing_mysql, tmp_path):
+def test_input_sql(tmp_path, mysql_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    testing_function = input_sql(
+        uri=mysql_config.uri, credentials=mysql_config.credentials
+    )
     context_archive = create_bundle_archive(
-        input_sql, local_packages=LOCAL_PACKAGES_LIST, save_location=tmp_path
+        testing_function, local_packages=LOCAL_PACKAGES_LIST, save_location=tmp_path
     )
 
     input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
@@ -125,10 +118,15 @@ def test_input_sql(testing_mysql, tmp_path):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_input_sql_initial_values(testing_mysql, tmp_path):
+def test_input_sql_initial_values(tmp_path, mysql_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    testing_function = input_sql_initial_values(
+        uri=mysql_config.uri,
+        credentials=mysql_config.credentials,
+        initial_values={"number": 2},
+    )
     context_archive = create_bundle_archive(
-        input_sql_initial_values,
+        testing_function,
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
@@ -190,10 +188,19 @@ def test_input_sql_initial_values(testing_mysql, tmp_path):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_input_sql_initial_values_stored_number_0(testing_mysql, tmp_path):
+def test_input_sql_initial_values_stored_number_0(tmp_path, mysql_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    # Note: the initial_values below is not an error, it is intentional. We are
+    # putting a 2 in the decorator but using a stored value of 0 in the tabsserver to
+    # make sure that the one in the tabsserver is used instead of the one in the
+    # decorator.
+    testing_function = input_sql_initial_values(
+        uri=mysql_config.uri,
+        credentials=mysql_config.credentials,
+        initial_values={"number": 2},
+    )
     context_archive = create_bundle_archive(
-        input_sql_initial_values,
+        testing_function,
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
@@ -261,10 +268,15 @@ def test_input_sql_initial_values_stored_number_0(testing_mysql, tmp_path):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_input_sql_initial_values_stored_number_2(testing_mysql, tmp_path):
+def test_input_sql_initial_values_stored_number_2(tmp_path, mysql_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    testing_function = input_sql_initial_values(
+        uri=mysql_config.uri,
+        credentials=mysql_config.credentials,
+        initial_values={"number": 2},
+    )
     context_archive = create_bundle_archive(
-        input_sql_initial_values,
+        testing_function,
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
@@ -332,10 +344,14 @@ def test_input_sql_initial_values_stored_number_2(testing_mysql, tmp_path):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_input_sql_modified_params(testing_mysql, tmp_path):
+def test_input_sql_modified_params(tmp_path, mysql_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    testing_function = input_sql_modified_params(
+        uri=mysql_config.uri,
+        credentials=mysql_config.credentials,
+    )
     context_archive = create_bundle_archive(
-        input_sql_modified_params,
+        testing_function,
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )

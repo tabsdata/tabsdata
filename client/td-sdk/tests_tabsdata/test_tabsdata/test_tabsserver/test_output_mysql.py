@@ -5,7 +5,6 @@
 import inspect
 import logging
 import os
-import urllib.parse
 from io import StringIO
 from unittest import mock
 
@@ -19,13 +18,8 @@ from tabsdata._utils.bundle_utils import create_bundle_archive
 from tests_tabsdata.bootest import TDLOCAL_FOLDER
 from tests_tabsdata.conftest import (
     ABSOLUTE_TEST_FOLDER_LOCATION,
-    DB_HOST,
-    DB_NAME,
-    DB_PASSWORD,
-    DB_USER,
     FUNCTION_DATA_FOLDER,
     LOCAL_PACKAGES_LIST,
-    MYSQL_PORT,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
     TESTING_RESOURCES_FOLDER,
     clean_polars_df,
@@ -33,25 +27,25 @@ from tests_tabsdata.conftest import (
     write_v2_yaml_file,
 )
 from tests_tabsdata.testing_resources.test_output_sql_driver_provided.example import (
-    output_sql_driver_provided,
+    testing_tabsdata_function as output_sql_driver_provided,
 )
 from tests_tabsdata.testing_resources.test_output_sql_list.example import (
-    output_sql_list,
+    testing_tabsdata_function as output_sql_list,
 )
 from tests_tabsdata.testing_resources.test_output_sql_list_none.example import (
-    output_sql_list_none,
+    testing_tabsdata_function as output_sql_list_none,
 )
 from tests_tabsdata.testing_resources.test_output_sql_modified_params.example import (
-    output_sql_modified_params,
+    testing_tabsdata_function as output_sql_modified_params,
 )
 from tests_tabsdata.testing_resources.test_output_sql_none.example import (
-    output_sql_none,
+    testing_tabsdata_function as output_sql_none,
 )
 from tests_tabsdata.testing_resources.test_output_sql_transaction.example import (
-    output_sql_transaction,
+    testing_tabsdata_function as output_sql_transaction,
 )
 from tests_tabsdata.testing_resources.test_output_sql_wrong_driver_fails.example import (
-    output_sql_wrong_driver_fails,
+    testing_tabsdata_function as output_sql_wrong_driver_fails,
 )
 
 # noinspection PyUnresolvedReferences
@@ -61,11 +55,6 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-ESCAPED_USER = urllib.parse.quote(DB_USER)
-ESCAPED_PASSWORD = urllib.parse.quote(DB_PASSWORD)
-MYSQL_URI = (
-    f"mysql://{ESCAPED_USER}:{ESCAPED_PASSWORD}@{DB_HOST}:{MYSQL_PORT}/{DB_NAME}"
-)
 ROOT_PROJECT_DIR = os.path.dirname(
     os.path.dirname(os.path.dirname(ABSOLUTE_TEST_FOLDER_LOCATION))
 )
@@ -78,10 +67,16 @@ LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_sql_list(tmp_path, testing_mysql):
+def test_output_sql_list(tmp_path, mysql_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    destination_tables = ["output_sql_list", "second_output_sql_list"]
+    testing_function = output_sql_list(
+        mysql_config.uri,
+        credentials=mysql_config.credentials,
+        destination_table=destination_tables,
+    )
     context_archive = create_bundle_archive(
-        output_sql_list, local_packages=LOCAL_PACKAGES_LIST, save_location=tmp_path
+        testing_function, local_packages=LOCAL_PACKAGES_LIST, save_location=tmp_path
     )
 
     input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
@@ -110,7 +105,7 @@ def test_output_sql_list(tmp_path, testing_mysql):
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
     output = pl.read_database_uri(
-        uri=MYSQL_URI,
+        uri=mysql_config.uri_with_credentials,
         query="SELECT * FROM output_sql_list",
     )
     output = clean_polars_df(output)
@@ -123,7 +118,7 @@ def test_output_sql_list(tmp_path, testing_mysql):
     assert output.equals(expected_output)
 
     output = pl.read_database_uri(
-        uri=MYSQL_URI,
+        uri=mysql_config.uri_with_credentials,
         query="SELECT * FROM second_output_sql_list",
     )
     output = clean_polars_df(output)
@@ -134,10 +129,19 @@ def test_output_sql_list(tmp_path, testing_mysql):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_sql_modified_params(tmp_path, testing_mysql):
+def test_output_sql_modified_params(tmp_path, mysql_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    destination_tables = [
+        "output_sql_modified_params",
+        "second_output_sql_modified_params",
+    ]
+    testing_function = output_sql_modified_params(
+        mysql_config.uri,
+        credentials=mysql_config.credentials,
+        destination_table=destination_tables,
+    )
     context_archive = create_bundle_archive(
-        output_sql_modified_params,
+        testing_function,
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
@@ -170,7 +174,7 @@ def test_output_sql_modified_params(tmp_path, testing_mysql):
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
     output = pl.read_database_uri(
-        uri=MYSQL_URI,
+        uri=mysql_config.uri_with_credentials,
         query="SELECT * FROM output_sql_modified_params",
     )
     output = clean_polars_df(output)
@@ -183,7 +187,7 @@ def test_output_sql_modified_params(tmp_path, testing_mysql):
     assert output.equals(expected_output)
 
     output = pl.read_database_uri(
-        uri=MYSQL_URI,
+        uri=mysql_config.uri_with_credentials,
         query="SELECT * FROM second_output_sql_modified_params",
     )
     output = clean_polars_df(output)
@@ -194,10 +198,19 @@ def test_output_sql_modified_params(tmp_path, testing_mysql):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_sql_wrong_driver_fails(tmp_path, testing_mysql):
+def test_output_sql_wrong_driver_fails(tmp_path, mysql_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    destination_table = [
+        "output_sql_wrong_driver_fails",
+        "second_output_sql_wrong_driver_fails",
+    ]
+    testing_function = output_sql_wrong_driver_fails(
+        mysql_config.uri,
+        credentials=mysql_config.credentials,
+        destination_table=destination_table,
+    )
     context_archive = create_bundle_archive(
-        output_sql_wrong_driver_fails,
+        testing_function,
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
@@ -234,10 +247,16 @@ def test_output_sql_wrong_driver_fails(tmp_path, testing_mysql):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_sql_driver_provided(tmp_path, testing_mysql):
+def test_output_sql_driver_provided(tmp_path, mysql_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    destination_table = "output_sql_driver_provided"
+    testing_function = output_sql_driver_provided(
+        mysql_config.uri,
+        credentials=mysql_config.credentials,
+        destination_table=destination_table,
+    )
     context_archive = create_bundle_archive(
-        output_sql_driver_provided,
+        testing_function,
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
@@ -270,7 +289,7 @@ def test_output_sql_driver_provided(tmp_path, testing_mysql):
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
     output = pl.read_database_uri(
-        uri=MYSQL_URI,
+        uri=mysql_config.uri_with_credentials,
         query="SELECT * FROM output_sql_driver_provided",
     )
     output = clean_polars_df(output)
@@ -287,10 +306,16 @@ def test_output_sql_driver_provided(tmp_path, testing_mysql):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_sql_list_none(tmp_path, testing_mysql):
+def test_output_sql_list_none(tmp_path, mysql_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    destination_tables = ["output_sql_list_none", "second_output_sql_list_none"]
+    testing_function = output_sql_list_none(
+        mysql_config.uri,
+        credentials=mysql_config.credentials,
+        destination_table=destination_tables,
+    )
     context_archive = create_bundle_archive(
-        output_sql_list_none, local_packages=LOCAL_PACKAGES_LIST, save_location=tmp_path
+        testing_function, local_packages=LOCAL_PACKAGES_LIST, save_location=tmp_path
     )
 
     input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
@@ -320,12 +345,12 @@ def test_output_sql_list_none(tmp_path, testing_mysql):
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
     with pytest.raises(Exception):
         pl.read_database_uri(
-            uri=MYSQL_URI,
+            uri=mysql_config.uri_with_credentials,
             query="SELECT * FROM output_sql_list_none",
         )
     with pytest.raises(Exception):
         pl.read_database_uri(
-            uri=MYSQL_URI,
+            uri=mysql_config.uri_with_credentials,
             query="SELECT * FROM second_output_sql_list_none",
         )
 
@@ -334,10 +359,16 @@ def test_output_sql_list_none(tmp_path, testing_mysql):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_sql_none(tmp_path, testing_mysql):
+def test_output_sql_none(tmp_path, mysql_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    destination_table = "output_sql_none"
+    testing_function = output_sql_none(
+        mysql_config.uri,
+        credentials=mysql_config.credentials,
+        destination_table=destination_table,
+    )
     context_archive = create_bundle_archive(
-        output_sql_none,
+        testing_function,
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
@@ -371,7 +402,7 @@ def test_output_sql_none(tmp_path, testing_mysql):
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
     with pytest.raises(Exception):
         pl.read_database_uri(
-            uri=MYSQL_URI,
+            uri=mysql_config.uri_with_credentials,
             query="SELECT * FROM output_sql_none",
         )
 
@@ -380,10 +411,16 @@ def test_output_sql_none(tmp_path, testing_mysql):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_sql_transaction(tmp_path, testing_mysql):
+def test_output_sql_transaction(tmp_path, mysql_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    destination_tables = ["output_sql_transaction", "second_output_sql_transaction"]
+    testing_function = output_sql_transaction(
+        mysql_config.uri,
+        credentials=mysql_config.credentials,
+        destination_table=destination_tables,
+    )
     context_archive = create_bundle_archive(
-        output_sql_transaction,
+        testing_function,
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
@@ -413,14 +450,14 @@ def test_output_sql_transaction(tmp_path, testing_mysql):
     )
     assert result != 0
     output = pl.read_database_uri(
-        uri=MYSQL_URI,
+        uri=mysql_config.uri_with_credentials,
         query="SELECT * FROM output_sql_transaction",
     )
     output = clean_polars_df(output)
     assert output.is_empty()
 
     output = pl.read_database_uri(
-        uri=MYSQL_URI,
+        uri=mysql_config.uri_with_credentials,
         query="SELECT * FROM second_output_sql_transaction",
     )
     output = clean_polars_df(output)

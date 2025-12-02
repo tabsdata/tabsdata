@@ -58,6 +58,7 @@ import tabsdata as _td
 
 # noinspection PyProtectedMember
 import tabsdata._utils.tableframe._constants as td_constants
+from tabsdata._credentials import Credentials, UserPasswordCredentials
 from tabsdata._secret import HashiCorpSecret
 from tabsdata._tabsserver.function.sql_utils import MARIADB_COLLATION
 from tabsdata._tabsserver.pyenv_creation import (
@@ -281,7 +282,6 @@ DB_NAME = "testing"
 DB_PASSWORD = "p@ssw0rd#"
 DB_USER = "@dmIn"
 MARIADB_PORT = 3307
-MYSQL_PORT = 3306
 MYSQL_FORWARDED_PORT = "3306/tcp"
 ORACLE_PORT = 1521
 POSTGRES_PORT = 5432
@@ -433,23 +433,6 @@ def testing_oracle(tmp_path_factory, worker_id):
         yield
 
 
-@pytest.fixture(scope="session")
-def testing_mysql(tmp_path_factory, worker_id):
-    if worker_id == "master":
-        # not executing in with multiple workers, just produce the data and let
-        # pytest's fixture caching do its job
-        yield create_docker_mysql_database(port=MYSQL_PORT)
-    else:
-        # get the temp directory shared by all workers
-        root_tmp_dir = tmp_path_factory.getbasetemp().parent
-
-        fn = root_tmp_dir / "docker_mysql_creation"
-        with FileLock(str(fn) + ".lock"):
-            # only one worker will be able to create the database
-            create_docker_mysql_database(port=MYSQL_PORT)
-        yield
-
-
 @dataclass
 class MySQLConfig:
     host: str
@@ -459,6 +442,7 @@ class MySQLConfig:
     database: str
     uri: str
     uri_with_credentials: str
+    credentials: Credentials
 
 
 @pytest.fixture(scope="function")
@@ -523,12 +507,10 @@ def mysql_config(tmp_path_factory, worker_id, request) -> MySQLConfig:
             uri_with_credentials=(
                 f"mysql://{escaped_user}:{escaped_password}@{host}:{port}/{database}"
             ),
+            credentials=UserPasswordCredentials(user, password),
         )
         return config
     else:
-        # Note: We are currently duplicating code because we are in the process of
-        # migrating tests to use this fixture instead of testing_mysql. Once all tests
-        # are migrated, we can remove testing_mysql and keep only this fixture.
         name = os.environ.get(
             f"{prefix}__MYSQL_DOCKER_CONTAINER_NAME",
             DEFAULT_PYTEST_MYSQL_DOCKER_CONTAINER_NAME,
@@ -552,7 +534,12 @@ def mysql_config(tmp_path_factory, worker_id, request) -> MySQLConfig:
             password=DB_PASSWORD,
             database=DB_NAME,
             uri=f"mysql://{DB_HOST}:{port}/{DB_NAME}",
-            uri_with_credentials=f"mysql://{urllib.parse.quote(DB_USER)}:{urllib.parse.quote(DB_PASSWORD)}@{DB_HOST}:{MYSQL_PORT}/{DB_NAME}",
+            uri_with_credentials=(
+                f"mysql://{urllib.parse.quote(DB_USER)}:"
+                f"{urllib.parse.quote(DB_PASSWORD)}@{DB_HOST}:{port}/{
+                                 DB_NAME}"
+            ),
+            credentials=UserPasswordCredentials(DB_USER, DB_PASSWORD),
         )
         return config
 
