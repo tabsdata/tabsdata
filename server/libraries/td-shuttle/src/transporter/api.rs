@@ -44,6 +44,28 @@ pub struct ImportRequest {
     parallelism: Option<usize>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CompressionAlgorithmSpec {
+    #[serde(rename = "auto")]
+    Auto,
+    #[serde(rename = "brotli")]
+    Brotli,
+    #[serde(rename = "bzip")]
+    Bzip,
+    #[serde(rename = "zip")]
+    Zip,
+    #[serde(rename = "deflate")]
+    Deflate,
+    #[serde(rename = "gzip")]
+    Gzip,
+    #[serde(rename = "lz4")]
+    Lz4,
+    #[serde(rename = "xz")]
+    Xz,
+    #[serde(rename = "zstd")]
+    Zstd,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Getters, Builder)]
 #[getset(get = "pub")]
 #[builder(setter(into))]
@@ -52,6 +74,8 @@ pub struct WildcardSource {
     initial_lastmod: Option<DateTime<Utc>>,
     #[getset(skip)]
     lastmod_info: Option<String>,
+    #[builder(default)]
+    decompression: Option<CompressionAlgorithmSpec>,
 }
 
 const LAST_MODIFIED_INFO_TYPE: &str = "last_modified_info";
@@ -399,16 +423,22 @@ impl ImportTarget {
 #[getset(get = "pub")]
 pub struct CopyRequest {
     pub source_target_pairs: Vec<(Location<Url>, Location<Url>)>,
+    pub decompression: Option<CompressionAlgorithmSpec>,
+    pub compression: Option<CompressionAlgorithmSpec>,
     pub parallelism: Option<usize>,
 }
 
 impl CopyRequest {
     pub fn new(
         source_target_pairs: Vec<(Location<Url>, Location<Url>)>,
+        decompression: Option<CompressionAlgorithmSpec>,
+        compression: Option<CompressionAlgorithmSpec>,
         parallelism: Option<usize>,
     ) -> Self {
         Self {
             source_target_pairs,
+            compression,
+            decompression,
             parallelism,
         }
     }
@@ -420,6 +450,10 @@ impl CopyRequest {
 pub struct WildcardCopyRequest {
     source: WildcardSource,
     target: Location<BaseUrl>,
+    #[builder(default)]
+    decompression: Option<CompressionAlgorithmSpec>,
+    #[builder(default)]
+    compression: Option<CompressionAlgorithmSpec>,
     parallelism: Option<usize>,
 }
 
@@ -862,8 +896,15 @@ impl ImportReport {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CopyType {
+    Compression,
+    RawParallel,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileCopyReport {
+    pub copy_type: CopyType,
     pub idx: usize,
     pub from: Url,
     pub size: u64,
@@ -973,6 +1014,7 @@ impl TransporterReport {
         TransporterReport::CopyV1(CopyReport {
             files: vec![
                 FileCopyReport {
+                    copy_type: CopyType::RawParallel,
                     idx: 0,
                     #[cfg(not(target_os = "windows"))]
                     from: Url::parse("file:///import-dir/file0.parquet").unwrap(),
@@ -991,6 +1033,7 @@ impl TransporterReport {
                     ),
                 },
                 FileCopyReport {
+                    copy_type: CopyType::RawParallel,
                     idx: 0,
                     #[cfg(not(target_os = "windows"))]
                     from: Url::parse("file:///import-dir/file1.parquet").unwrap(),
@@ -1016,6 +1059,7 @@ impl TransporterReport {
         TransporterReport::WildcardCopyV1(CopyReport {
             files: vec![
                 FileCopyReport {
+                    copy_type: CopyType::RawParallel,
                     idx: 0,
                     #[cfg(not(target_os = "windows"))]
                     from: Url::parse("file:///import-dir/file0.parquet").unwrap(),
@@ -1034,6 +1078,7 @@ impl TransporterReport {
                     ),
                 },
                 FileCopyReport {
+                    copy_type: CopyType::Compression,
                     idx: 0,
                     #[cfg(not(target_os = "windows"))]
                     from: Url::parse("file:///import-dir/file1.parquet").unwrap(),
@@ -1128,6 +1173,7 @@ impl TransporterRequest {
                 },
                 initial_lastmod: Some(Utc::now()),
                 lastmod_info: None,
+                decompression: None,
             },
             format: ImportFormat::Csv(ImportCsvOptions::default()),
             target: ImportTarget {
@@ -1158,6 +1204,7 @@ impl TransporterRequest {
                 },
                 initial_lastmod: Some(Utc::now()),
                 lastmod_info: Some("eyJWMSI6eyJpbml0aWFsX2xhc3RfbW9kaWZpZWQiOiIyMDI1LTA2LTIzVDA5OjEzOjU0LjU1NTA5MVoiLCJlbnRyaWVzIjp7fX19".to_string()),
+                decompression: None,
             },
             format: ImportFormat::Parquet,
             target: ImportTarget {
@@ -1185,6 +1232,7 @@ impl TransporterRequest {
                 },
                 initial_lastmod: None,
                 lastmod_info: None,
+                decompression: None,
             },
             format: ImportFormat::Csv(ImportCsvOptions::default()),
             target: ImportTarget {
@@ -1213,6 +1261,7 @@ impl TransporterRequest {
                 },
                 initial_lastmod: None,
                 lastmod_info: None,
+                decompression: None,
             },
             format: ImportFormat::Csv(ImportCsvOptions::default()),
             target: ImportTarget {
@@ -1261,6 +1310,8 @@ impl TransporterRequest {
                     },
                 ),
             ],
+            decompression: None,
+            compression: None,
             parallelism: None,
         })
     }
@@ -1303,6 +1354,8 @@ impl TransporterRequest {
                     },
                 ),
             ],
+            decompression: None,
+            compression: None,
             parallelism: None,
         })
     }
@@ -1345,6 +1398,8 @@ impl TransporterRequest {
                     },
                 ),
             ],
+            decompression: None,
+            compression: None,
             parallelism: None,
         })
     }
@@ -1385,6 +1440,8 @@ impl TransporterRequest {
                     },
                 ),
             ],
+            decompression: None,
+            compression: None,
             parallelism: None,
         })
     }
@@ -1425,6 +1482,8 @@ impl TransporterRequest {
                     },
                 ),
             ],
+            decompression: None,
+            compression: None,
             parallelism: None,
         })
     }
@@ -1463,6 +1522,8 @@ impl TransporterRequest {
                     },
                 ),
             ],
+            decompression: None,
+            compression: None,
             parallelism: None,
         })
     }
@@ -1505,6 +1566,8 @@ impl TransporterRequest {
                     },
                 ),
             ],
+            decompression: None,
+            compression: None,
             parallelism: None,
         })
     }
@@ -1522,6 +1585,7 @@ impl TransporterRequest {
                 },
                 initial_lastmod: Some(Utc::now()),
                 lastmod_info: None,
+                decompression: None,
             },
             target: Location::LocalFile {
                 #[cfg(not(target_os = "windows"))]
@@ -1531,6 +1595,8 @@ impl TransporterRequest {
                     Url::parse("file:///c:/target-dir/").unwrap(),
                 ),
             },
+            decompression: None,
+            compression: None,
             parallelism: Some(10),
         })
     }
@@ -1549,6 +1615,7 @@ impl TransporterRequest {
                 },
                 initial_lastmod: Some(Utc::now()),
                 lastmod_info: None,
+                decompression: None,
             },
             target: Location::LocalFile {
                 #[cfg(not(target_os = "windows"))]
@@ -1558,6 +1625,8 @@ impl TransporterRequest {
                     Url::parse("file:///c:/target-dir/").unwrap(),
                 ),
             },
+            decompression: None,
+            compression: None,
             parallelism: Some(5),
         })
     }
@@ -1566,7 +1635,7 @@ impl TransporterRequest {
         TransporterRequest::WildcardCopyV1(WildcardCopyRequest {
             source: WildcardSource {
                 location: Location::Azure {
-                    url: WildcardUrl(Url::parse("az://container/import-dir/file*.csv").unwrap()),
+                    url: WildcardUrl(Url::parse("az://container/import-dir/file*").unwrap()),
                     configs: AzureConfigs {
                         account_name: Value::Env("IMPORT_AZURE_ACCOUNT_NAME".into()),
                         account_key: Value::Env("IMPORT_AZURE_ACCOUNT_KEY".into()),
@@ -1575,6 +1644,7 @@ impl TransporterRequest {
                 },
                 initial_lastmod: Some(Utc::now()),
                 lastmod_info: None,
+                decompression: Some(CompressionAlgorithmSpec::Auto),
             },
             target: Location::LocalFile {
                 #[cfg(not(target_os = "windows"))]
@@ -1584,6 +1654,8 @@ impl TransporterRequest {
                     Url::parse("file:///c:/target-dir/").unwrap(),
                 ),
             },
+            decompression: Some(CompressionAlgorithmSpec::Auto),
+            compression: Some(CompressionAlgorithmSpec::Zstd),
             parallelism: Some(5),
         })
     }
@@ -1592,7 +1664,7 @@ impl TransporterRequest {
         TransporterRequest::WildcardCopyV1(WildcardCopyRequest {
             source: WildcardSource {
                 location: Location::GCS {
-                    url: WildcardUrl(Url::parse("gs://bucket/import-dir/file*.csv").unwrap()),
+                    url: WildcardUrl(Url::parse("gs://bucket/import-dir/file*.csv.gz").unwrap()),
                     configs: GcpConfigs {
                         service_account_key: Value::Env("IMPORT_GCP_SERVICE_ACCOUNT_KEY".into()),
                         extra_configs: None,
@@ -1600,6 +1672,7 @@ impl TransporterRequest {
                 },
                 initial_lastmod: Some(Utc::now()),
                 lastmod_info: None,
+                decompression: Some(CompressionAlgorithmSpec::Gzip),
             },
             target: Location::LocalFile {
                 #[cfg(not(target_os = "windows"))]
@@ -1609,6 +1682,8 @@ impl TransporterRequest {
                     Url::parse("file:///c:/target-dir/").unwrap(),
                 ),
             },
+            decompression: Some(CompressionAlgorithmSpec::Brotli),
+            compression: Some(CompressionAlgorithmSpec::Lz4),
             parallelism: None,
         })
     }

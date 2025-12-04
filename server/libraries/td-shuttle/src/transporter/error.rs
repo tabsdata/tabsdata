@@ -2,7 +2,8 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use crate::transporter::copy::Message;
+use crate::transporter::copy_compression::CompressionCopyError;
+use crate::transporter::copy_raw_parallel::Message;
 use std::ops::Range;
 use td_error::td_error;
 use tokio::sync::mpsc::error::SendError;
@@ -79,4 +80,6 @@ pub enum TransporterError {
     CouldNotDecodeLastModifiedInfo(String) = 5017,
     #[error("Could copy file to {0}, error: {1}")]
     CouldNotCopyFile(String, String) = 5018,
+    #[error("Could copy file: {0}")]
+    CouldNotCompressionCopyFile(#[from] CompressionCopyError) = 5019,
 }

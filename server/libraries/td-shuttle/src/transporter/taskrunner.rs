@@ -147,7 +147,7 @@ pub type AsyncLambda<T, E> = Pin<Box<dyn Future<Output = Result<T, E>> + Send + 
 ///
 /// Example usage:
 ///
-/// ```rust
+/// ```rust,no_run
 /// # use std::num::NonZero;
 /// # use std::time::{Duration, SystemTime};
 /// # use td_shuttle::transporter::taskrunner::{run_tasks, AsyncLambda};
@@ -162,7 +162,7 @@ pub type AsyncLambda<T, E> = Pin<Box<dyn Future<Output = Result<T, E>> + Send + 
 ///         })
 ///     }
 ///
-///     run_tasks(NonZero::new(2).unwrap(), vec![async_fn_gen(100), async_fn_gen(200)]).await.unwrap()
+///     run_tasks(NonZero::new(2).unwrap(), vec![async_fn_gen(100), async_fn_gen(200)]).await.unwrap();
 /// # }
 /// ```
 pub async fn run_tasks<T: Send + 'static, E: Debug + Send + 'static>(

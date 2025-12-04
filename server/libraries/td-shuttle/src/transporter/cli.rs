@@ -182,11 +182,12 @@ async fn run_impl(
 #[cfg(test)]
 pub(crate) mod tests {
     use crate::transporter::api::{
-        AwsConfigs, AzureConfigs, CopyRequest, GcpConfigs, Location, TransporterReport,
-        TransporterRequest, Value,
+        AwsConfigs, AzureConfigs, CompressionAlgorithmSpec, CopyRequest, GcpConfigs, Location,
+        TransporterReport, TransporterRequest, Value,
     };
     use crate::transporter::cli::{TransporterParams, run_impl, run_impl_report_to_file};
     use crate::transporter::common::create_store;
+    use crate::transporter::compression::{CompressionAlgorithm, async_writer};
     use crate::transporter::error::TransporterError;
     use clap::Parser;
     use std::fs::File;
@@ -197,10 +198,37 @@ pub(crate) mod tests {
         S3WithAccessKeySecretKeyReqs,
     };
     use testdir::testdir;
+    use tokio::io::AsyncWriteExt;
     use url::Url;
 
     #[tokio::test]
-    async fn test_run_with_input_output_files() {
+    async fn test_run_with_input_output_files_none_to_none() {
+        test_run_with_input_output_files(None, None).await
+    }
+
+    #[tokio::test]
+    async fn test_run_with_input_output_files_none_to_gzip() {
+        test_run_with_input_output_files(None, Some(CompressionAlgorithmSpec::Gzip)).await
+    }
+
+    #[tokio::test]
+    async fn test_run_with_input_output_files_gzip_to_none() {
+        test_run_with_input_output_files(Some(CompressionAlgorithmSpec::Gzip), None).await
+    }
+
+    #[tokio::test]
+    async fn test_run_with_input_output_files_gzip_to_lz4() {
+        test_run_with_input_output_files(
+            Some(CompressionAlgorithmSpec::Gzip),
+            Some(CompressionAlgorithmSpec::Lz4),
+        )
+        .await
+    }
+
+    async fn test_run_with_input_output_files(
+        decompression: Option<CompressionAlgorithmSpec>,
+        compression: Option<CompressionAlgorithmSpec>,
+    ) {
         let test_dir = testdir!();
         let request_file = test_dir.join("request.yaml");
         let report_file = test_dir.join("report.yaml");
@@ -208,7 +236,25 @@ pub(crate) mod tests {
         let target_file = test_dir.join("target.txt");
         let str = "Hello, World!";
         let data = str.as_bytes();
-        File::create(&source_file).unwrap().write_all(data).unwrap();
+        let data = match decompression {
+            None => data.to_vec(),
+            Some(CompressionAlgorithmSpec::Gzip) => {
+                let mut compressed_data = Vec::new();
+                {
+                    let algo = Some(CompressionAlgorithm::Gzip);
+                    let mut writer =
+                        async_writer(&algo, source_file.to_str().unwrap(), &mut compressed_data);
+                    writer.write_all(data).await.unwrap();
+                    writer.shutdown().await.unwrap();
+                }
+                compressed_data
+            }
+            _ => panic!("unexpected compression for the test"),
+        };
+        File::create(&source_file)
+            .unwrap()
+            .write_all(&data)
+            .unwrap();
         let source = Location::LocalFile {
             url: Url::from_file_path(&source_file).unwrap(),
         };
@@ -217,6 +263,8 @@ pub(crate) mod tests {
         };
         let request = TransporterRequest::CopyV1(CopyRequest {
             source_target_pairs: vec![(source, target.clone())],
+            decompression,
+            compression,
             parallelism: None,
         });
         let request_str = serde_yaml::to_string(&request).unwrap();
@@ -260,6 +308,8 @@ pub(crate) mod tests {
 
         let request = TransporterRequest::CopyV1(CopyRequest {
             source_target_pairs: vec![(source, target.clone())],
+            decompression: None,
+            compression: None,
             parallelism: None,
         });
         let response = run_impl(TransporterParams {

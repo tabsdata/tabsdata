@@ -65,6 +65,7 @@ td-test = { workspace = true }
 
 # External dependencies
 
+async-compression= { workspace = true, features = ["tokio", "all-algorithms"] }
 async-trait = { workspace = true }
 base64 = { workspace = true }
 bytes = { workspace = true }
@@ -89,11 +90,13 @@ strum = { workspace = true, features = ["derive"] }
 testdir = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
+tokio-util =  { workspace = true }
 tower = { workspace = true, features = [ "full"] }
 tracing = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 wildmatch = { workspace = true }
 uuid = {  workspace = true, features = ["v4"] }
+libflate = "2.2.0"
 
 [dev-dependencies]
 td-common = { workspace = true, features = ["td-test"] }

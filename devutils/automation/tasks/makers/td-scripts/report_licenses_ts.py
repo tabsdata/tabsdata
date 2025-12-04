@@ -92,6 +92,7 @@ normalized_licenses = {
     "BSD-3-CLAUSE": "BSD Revised License (BSD-3-Clause)",                                                                                                                                      # noqa: E231,E241,E501
     "BSD": "BSD Revised License (BSD-3-Clause)",                                                                                                                                               # noqa: E231,E241,E501
     "BSL-1.0": "Boost Software License Version 1.0",                                                                                                                                           # noqa: E231,E241,E501
+    "bzip2-1.0.6": "bzip2 and libbzip2 License, Version 1.0.6",                                                                                                                                # noqa: E231,E241,E501
     "CC-BY-4.0": "Creative Commons Attribution Version 4.0 International License",                                                                                                             # noqa: E231,E241,E501
     "CC0-1.0": "Creative Commons Zero Version 1.0 Universal",                                                                                                                                  # noqa: E231,E241,E501
     "CDLA-Permissive-2.0": "Community Data License Agreement Permissive Version 2.0",                                                                                                          # noqa: E231,E241,E501

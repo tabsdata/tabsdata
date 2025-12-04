@@ -220,7 +220,7 @@ fn convert_import_instructions_to_copy_request(
             )
         })
         .collect::<Vec<_>>();
-    CopyRequest::new(source_target_pairs, None)
+    CopyRequest::new(source_target_pairs, None, None, None)
 }
 
 fn convert_copy_report_to_import_reports(

@@ -270,6 +270,10 @@ version = "0.6.0"
 version = "0.5.3"
 features = ["std"]
 
+[workspace.dependencies.async-compression]
+version = "0.4.32"
+features = ["tokio", "all-algorithms"]
+
 [workspace.dependencies.async-trait]
 version = "0.1.89"
 
