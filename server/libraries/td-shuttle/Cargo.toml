@@ -72,10 +72,12 @@ chrono = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 clap_derive = { workspace = true }
 derive_builder = { workspace = true }
+futures =  { workspace = true }
 futures-util = { workspace = true }
 getset = { workspace = true }
 itertools = { workspace = true }
 object_store = { workspace = true, features = ["aws", "azure", "gcp", "http"] }
+pin-project-lite = { workspace = true }
 polars = { workspace = true, features = ["lazy", "polars-lazy", "async", "csv", "json", "parquet", "cloud", "aws", "azure", "gcp", "sql"] }
 polars-io = { workspace = true, features = ["cloud"]  }
 polars-parquet-format = { workspace = true }
@@ -87,6 +89,7 @@ strum = { workspace = true, features = ["derive"] }
 testdir = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
+tower = { workspace = true, features = [ "full"] }
 tracing = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 wildmatch = { workspace = true }

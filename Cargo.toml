@@ -454,6 +454,9 @@ features = ["serde", "serde_derive"]
 [workspace.dependencies.pico-args]
 version = "0.5.0"
 
+[workspace.dependencies.pin-project-lite]
+version = "0.2.16"
+
 [workspace.dependencies.polars]
 version = "0.52.0"
 features = ["lazy", "polars-lazy", "async", "csv", "json", "parquet", "cloud", "aws", "azure", "gcp", "sql"]
