@@ -13,3 +13,4 @@ pub mod files_importer;
 pub mod import;
 pub mod logic;
 pub mod taskrunner;
+pub mod wildcard_copy;

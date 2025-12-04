@@ -123,7 +123,7 @@ where
     }
 }
 
-/// Error returned by the [`run`] function.
+/// Error returned by the [`run_tasks`] function.
 #[derive(Debug)]
 pub enum RunError<E: Send + 'static> {
     /// It contains the index of the first task that failed and the corresponding error.
@@ -134,7 +134,7 @@ pub enum RunError<E: Send + 'static> {
     InternalError(String),
 }
 
-/// Async tasks signature for the [`run`] function.
+/// Async tasks signature for the [`run_tasks`] function.
 pub type AsyncLambda<T, E> = Pin<Box<dyn Future<Output = Result<T, E>> + Send + 'static>>;
 
 /// Runs a list of async tasks with a maximum concurrency limit.
@@ -150,7 +150,7 @@ pub type AsyncLambda<T, E> = Pin<Box<dyn Future<Output = Result<T, E>> + Send + 
 /// ```rust
 /// # use std::num::NonZero;
 /// # use std::time::{Duration, SystemTime};
-/// # use td_shuttle::transporter::taskrunner::{run, AsyncLambda};
+/// # use td_shuttle::transporter::taskrunner::{run_tasks, AsyncLambda};
 /// #
 /// # async fn f() {
 ///     fn async_fn_gen(sleep: u64) -> AsyncLambda<(), &'static str> {
@@ -162,10 +162,10 @@ pub type AsyncLambda<T, E> = Pin<Box<dyn Future<Output = Result<T, E>> + Send + 
 ///         })
 ///     }
 ///
-///     run(NonZero::new(2).unwrap(), vec![async_fn_gen(100), async_fn_gen(200)]).await.unwrap()
+///     run_tasks(NonZero::new(2).unwrap(), vec![async_fn_gen(100), async_fn_gen(200)]).await.unwrap()
 /// # }
 /// ```
-pub async fn run<T: Send + 'static, E: Debug + Send + 'static>(
+pub async fn run_tasks<T: Send + 'static, E: Debug + Send + 'static>(
     max_concurrency: NonZeroUsize,
     tasks: Vec<AsyncLambda<T, E>>,
 ) -> Result<Vec<T>, RunError<E>> {
@@ -247,7 +247,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_no_tasks() {
-        match run(
+        match run_tasks(
             NonZero::new(1).unwrap(),
             Vec::<AsyncLambda<usize, &str>>::new(),
         )
@@ -260,7 +260,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_one_task_ok() {
-        match run::<i32, &str>(NonZero::new(1).unwrap(), vec![Box::pin(async { Ok(42) })]).await {
+        match run_tasks::<i32, &str>(NonZero::new(1).unwrap(), vec![Box::pin(async { Ok(42) })])
+            .await
+        {
             Ok(res) if res.len() == 1 => assert_eq!(42, res[0]),
             Ok(res) => panic!("Unexpected result length: {}", res.len()),
             Err(e) => panic!("Unexpected error: {e:?}"),
@@ -276,7 +278,7 @@ mod tests {
             })
         }
 
-        match run(
+        match run_tasks(
             NonZero::new(2).unwrap(),
             vec![async_fn("a", 100), async_fn("b", 0)],
         )
@@ -298,7 +300,7 @@ mod tests {
             })
         }
 
-        match run(
+        match run_tasks(
             NonZero::new(2).unwrap(),
             vec![async_fn(100), async_fn(100), async_fn(100)],
         )
@@ -334,7 +336,7 @@ mod tests {
 
         let mut finished = Vec::with_capacity(5);
         finished.resize_with(5, || Arc::new(AtomicBool::new(false)));
-        let res = run(
+        let res = run_tasks(
             NonZero::new(5).unwrap(),
             vec![
                 async_fn("ok0", 10, finished[0].clone()),
@@ -379,7 +381,7 @@ mod tests {
 
         let mut finished = Vec::with_capacity(5);
         finished.resize_with(5, || Arc::new(AtomicBool::new(false)));
-        let res = run(
+        let res = run_tasks(
             NonZero::new(5).unwrap(),
             vec![
                 async_fn("ok0", 10, finished[0].clone()),

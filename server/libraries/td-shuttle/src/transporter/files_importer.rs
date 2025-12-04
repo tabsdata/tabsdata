@@ -4,7 +4,7 @@
 
 use crate::transporter::api::{
     CopyReport, CopyRequest, FileImportReport, FileImportReportBuilder, ImportFormat,
-    ImportRequest, ImportSource,
+    ImportRequest, WildcardSource,
 };
 use crate::transporter::args::{
     Format, ImporterLogReadOptions, ImporterNdJsonReadOptions, ImporterOptions,
@@ -46,7 +46,7 @@ fn extract_from_url<T>(url: &Url, extractor: impl Fn(&Url) -> T) -> T {
 ///
 /// For gs:// schemes, it returns gs://<bucket>
 ///
-fn base_url(source: &ImportSource) -> Url {
+fn base_url(source: &WildcardSource) -> Url {
     let url = source.location().url();
     extract_from_url(&url, |url| match url.scheme() {
         "file" => Url::parse(&crate::transporter::args::root_folder()).unwrap(),
@@ -60,7 +60,7 @@ fn base_url(source: &ImportSource) -> Url {
 /// Return the base path of the source location.
 ///
 /// This is where files will be searched for.
-pub fn base_path(source: &ImportSource) -> Result<String, TransporterError> {
+pub fn base_path(source: &WildcardSource) -> Result<String, TransporterError> {
     let url = source.location().url();
     extract_from_url(&url, |url| {
         let path = Path::new(url.path());
@@ -74,7 +74,7 @@ pub fn base_path(source: &ImportSource) -> Result<String, TransporterError> {
     })
 }
 
-pub fn file_pattern(source: &ImportSource) -> Result<String, TransporterError> {
+pub fn file_pattern(source: &WildcardSource) -> Result<String, TransporterError> {
     let url = source.location().url();
     extract_from_url(&url, |url| {
         let path = Path::new(url.path());
@@ -252,8 +252,8 @@ fn convert_copy_report_to_import_reports(
 #[cfg(test)]
 mod tests {
     use crate::transporter::api::{
-        AwsConfigs, AzureConfigs, BaseImportUrl, GcpConfigs, ImportCsvOptions, ImportFormat,
-        ImportRequestBuilder, ImportSourceBuilder, ImportTargetBuilder, Location, Value,
+        AwsConfigs, AzureConfigs, BaseUrl, GcpConfigs, ImportCsvOptions, ImportFormat,
+        ImportRequestBuilder, ImportTargetBuilder, Location, Value, WildcardSourceBuilder,
         WildcardUrl,
     };
     use crate::transporter::cloud::create_sink_target;
@@ -325,7 +325,7 @@ mod tests {
 
         let request = ImportRequestBuilder::default()
             .source(
-                ImportSourceBuilder::default()
+                WildcardSourceBuilder::default()
                     .location(Location::LocalFile {
                         url: WildcardUrl(url_r.clone()),
                     })
@@ -338,7 +338,7 @@ mod tests {
             .target(
                 ImportTargetBuilder::default()
                     .location(Location::S3 {
-                        url: BaseImportUrl(url_w.clone()),
+                        url: BaseUrl(url_w.clone()),
                         configs: AwsConfigs {
                             access_key: Value::Literal(s3.access_key.to_string()),
                             secret_key: Value::Literal(s3.secret_key.to_string()),
@@ -462,7 +462,7 @@ mod tests {
 
         let request = ImportRequestBuilder::default()
             .source(
-                ImportSourceBuilder::default()
+                WildcardSourceBuilder::default()
                     .location(Location::LocalFile {
                         url: WildcardUrl(url_r.clone()),
                     })
@@ -475,7 +475,7 @@ mod tests {
             .target(
                 ImportTargetBuilder::default()
                     .location(Location::Azure {
-                        url: BaseImportUrl(url_w.clone()),
+                        url: BaseUrl(url_w.clone()),
                         configs: AzureConfigs {
                             account_name: Value::Literal(az.account_name.to_string()),
                             account_key: Value::Literal(az.account_key.to_string()),
@@ -600,7 +600,7 @@ mod tests {
 
         let request = ImportRequestBuilder::default()
             .source(
-                ImportSourceBuilder::default()
+                WildcardSourceBuilder::default()
                     .location(Location::LocalFile {
                         url: WildcardUrl(url_r.clone()),
                     })
@@ -613,7 +613,7 @@ mod tests {
             .target(
                 ImportTargetBuilder::default()
                     .location(Location::GCS {
-                        url: BaseImportUrl(url_w.clone()),
+                        url: BaseUrl(url_w.clone()),
                         configs: GcpConfigs {
                             service_account_key: Value::Literal(
                                 gcp.service_account_key.to_string(),
@@ -740,7 +740,7 @@ mod tests {
 
         let request = ImportRequestBuilder::default()
             .source(
-                ImportSourceBuilder::default()
+                WildcardSourceBuilder::default()
                     .location(Location::LocalFile {
                         url: WildcardUrl(url_r.clone()),
                     })
@@ -753,7 +753,7 @@ mod tests {
             .target(
                 ImportTargetBuilder::default()
                     .location(Location::LocalFile {
-                        url: BaseImportUrl(url_w.clone()),
+                        url: BaseUrl(url_w.clone()),
                     })
                     .build()
                     .unwrap(),
@@ -827,7 +827,7 @@ mod tests {
     //noinspection DuplicatedCode
     async fn test_import(
         from_base: &Location<Url>,
-        to_base: &Location<BaseImportUrl>,
+        to_base: &Location<BaseUrl>,
         format: &ImportFormat,
     ) {
         let sink_options = SinkOptions {
@@ -836,7 +836,7 @@ mod tests {
             mkdir: true,
         };
 
-        let from_file = from_base.join(&id().to_string()).unwrap();
+        let from_file = from_base.set_file(&id().to_string()).unwrap();
 
         let col_int = Int64Chunked::from_iter((0i64..1000i64).map(Some))
             .into_series()
@@ -917,7 +917,7 @@ mod tests {
 
         let request = ImportRequestBuilder::default()
             .source(
-                ImportSourceBuilder::default()
+                WildcardSourceBuilder::default()
                     .location(&from_file)
                     .initial_lastmod(None)
                     .lastmod_info(None)
@@ -1015,7 +1015,7 @@ mod tests {
                 url: base_url.clone(),
             },
             &Location::LocalFile {
-                url: BaseImportUrl(base_url.clone()),
+                url: BaseUrl(base_url.clone()),
             },
             &ImportFormat::Csv(ImportCsvOptions::default()),
         )
@@ -1031,7 +1031,7 @@ mod tests {
                 url: base_url.clone(),
             },
             &Location::LocalFile {
-                url: BaseImportUrl(base_url.clone()),
+                url: BaseUrl(base_url.clone()),
             },
             &ImportFormat::Json,
         )
@@ -1047,7 +1047,7 @@ mod tests {
                 url: base_url.clone(),
             },
             &Location::LocalFile {
-                url: BaseImportUrl(base_url.clone()),
+                url: BaseUrl(base_url.clone()),
             },
             &ImportFormat::Log,
         )
@@ -1063,7 +1063,7 @@ mod tests {
                 url: base_url.clone(),
             },
             &Location::LocalFile {
-                url: BaseImportUrl(base_url.clone()),
+                url: BaseUrl(base_url.clone()),
             },
             &ImportFormat::Parquet,
         )
@@ -1079,7 +1079,7 @@ mod tests {
                 url: base_url.clone(),
             },
             &Location::LocalFile {
-                url: BaseImportUrl(base_url.clone()),
+                url: BaseUrl(base_url.clone()),
             },
             &ImportFormat::Binary,
         )
@@ -1105,7 +1105,7 @@ mod tests {
         test_import(
             &from_base,
             &Location::LocalFile {
-                url: BaseImportUrl(base_url.clone()),
+                url: BaseUrl(base_url.clone()),
             },
             &ImportFormat::Binary,
         )
@@ -1129,7 +1129,7 @@ mod tests {
         test_import(
             &from_base,
             &Location::LocalFile {
-                url: BaseImportUrl(base_url.clone()),
+                url: BaseUrl(base_url.clone()),
             },
             &ImportFormat::Binary,
         )
@@ -1152,7 +1152,7 @@ mod tests {
         test_import(
             &from_base,
             &Location::LocalFile {
-                url: BaseImportUrl(base_url.clone()),
+                url: BaseUrl(base_url.clone()),
             },
             &ImportFormat::Binary,
         )

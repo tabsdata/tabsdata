@@ -6,6 +6,7 @@ use crate::transporter::api::{ErrorReport, TransporterReport, TransporterRequest
 use crate::transporter::copy::copy;
 use crate::transporter::error::TransporterError;
 use crate::transporter::import::import;
+use crate::transporter::wildcard_copy::wildcard_copy;
 use serde::Serialize;
 use std::fs::File;
 use std::path::{Path, PathBuf};
@@ -169,6 +170,11 @@ async fn run_impl(
             .await
             .map(TransporterReport::CopyV1)
             .map_err(|err| TransporterReport::ErrorV1(ErrorReport::new(err.to_string()))),
+
+        TransporterRequest::WildcardCopyV1(request) => wildcard_copy(request)
+            .await
+            .map(TransporterReport::WildcardCopyV1)
+            .map_err(|err| TransporterReport::ErrorV1(ErrorReport::new(err.to_string()))),
     };
     res.map(Some)
 }
@@ -272,6 +278,9 @@ pub(crate) mod tests {
                 assert_eq!(written_data, data);
             }
             Ok(Some(TransporterReport::ImportV1(_))) => panic!("Unexpected import report"),
+            Ok(Some(TransporterReport::WildcardCopyV1(_))) => {
+                panic!("Unexpected wildcard copy report")
+            }
             Ok(Some(TransporterReport::ErrorV1(_))) => panic!("Unexpected error report"),
             Ok(None) => panic!("Expected a report"),
             Err(report) => panic!("Error: {report:?}"),

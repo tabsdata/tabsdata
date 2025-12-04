@@ -5,38 +5,61 @@
 use crate::transporter::api::{CopyReport, CopyRequest, FileCopyReport, Location};
 use crate::transporter::common::create_store;
 use crate::transporter::error::{TransporterError, range_to_string};
+use crate::transporter::taskrunner::{AsyncLambda, run_tasks};
 use bytes::Bytes;
 use futures_util::StreamExt;
 use futures_util::stream::FuturesOrdered;
 use object_store::path::Path;
 use object_store::{MultipartUpload, ObjectStore, PutPayload};
+use std::num::NonZeroUsize;
 use std::ops::Range;
 use td_common::time::UniqueUtc;
 use tokio::sync::mpsc::{Receiver, Sender, channel};
 use tracing::{debug, trace};
 use url::Url;
 
+fn copy_lambda(
+    idx: usize,
+    source: impl Into<Location<Url>>,
+    target: impl Into<Location<Url>>,
+) -> AsyncLambda<FileCopyReport, TransporterError> {
+    let source = source.into();
+    let target = target.into();
+    let buffer_size = target.buffer_size();
+    let (read_ahead, write_parallel) = source.read_write_ratio(&target);
+    Box::pin(async move {
+        let task =
+            CopyTask::new(idx, source, target, buffer_size, read_ahead, write_parallel).await?;
+        task.copy().await
+    })
+}
+
 pub async fn copy(request: CopyRequest) -> Result<CopyReport, TransporterError> {
-    let parallelism = request.parallelism().unwrap_or(3);
+    let parallelism = NonZeroUsize::new(request.parallelism().unwrap_or(3).max(1)).unwrap();
     debug!(
         "Starting copy of {} with parallelism of {}",
         request.source_target_pairs().len(),
         parallelism
     );
-    let mut reports = Vec::with_capacity(request.source_target_pairs().len());
-    for (idx, (source, target)) in request.source_target_pairs().iter().enumerate() {
-        let task = CopyTask::new(
-            idx,
-            source.clone(),
-            target.clone(),
-            target.buffer_size(),
-            parallelism,
-        )
-        .await?;
-        reports.push(task.copy().await?);
+    let req = request
+        .source_target_pairs()
+        .iter()
+        .enumerate()
+        .map(|(idx, (source, target))| copy_lambda(idx, source, target))
+        .collect::<Vec<_>>();
+    match run_tasks(parallelism, req).await {
+        Ok(reports) => {
+            debug!("Finished copy");
+            Ok(CopyReport::new(reports))
+        }
+        Err(err) => {
+            debug!("Copy failed: {:?}", err);
+            Err(TransporterError::CouldNotCreateImportInstructions(format!(
+                "Copy failed: {:?}",
+                err
+            )))
+        }
     }
-    debug!("Finished copy");
-    Ok(CopyReport::new(reports))
 }
 
 #[derive(Debug)]
@@ -48,7 +71,8 @@ struct CopyTask {
     target: Location<Url>,
     size: u64,
     ranges: Vec<(Range<u64>, bool)>,
-    parallelism: usize,
+    read_ahead: usize,
+    write_parallel: usize,
 }
 
 #[derive(Debug)]
@@ -64,7 +88,8 @@ impl CopyTask {
         source: Location<Url>,
         target: Location<Url>,
         buffer_size: usize,
-        parallelism: usize,
+        read_ahead: usize,
+        write_parallel: usize,
     ) -> Result<Self, TransporterError> {
         let buffer_size_u64 = buffer_size as u64;
         let (source_store, source_path) = create_store(&source)?;
@@ -107,7 +132,8 @@ impl CopyTask {
             target,
             size,
             ranges,
-            parallelism,
+            read_ahead,
+            write_parallel,
         };
         Ok(task)
     }
@@ -119,8 +145,8 @@ impl CopyTask {
             self.target.url()
         );
         let start = UniqueUtc::now_millis();
-        let (sender, receiver) = channel::<Message>(self.parallelism);
-        let writer = Writer::new(self.target.clone(), self.parallelism).await?;
+        let (sender, receiver) = channel::<Message>(self.read_ahead);
+        let writer = Writer::new(self.target.clone(), self.write_parallel).await?;
         let writer = tokio::spawn(async move { writer.write(receiver).await });
         self.read(sender).await?;
         match writer.await {
@@ -203,17 +229,20 @@ struct Writer {
     target: Location<Url>,
     target_store: Box<dyn ObjectStore>,
     target_path: Path,
-    parallelism: usize,
+    write_parallel: usize,
 }
 
 impl Writer {
-    pub async fn new(target: Location<Url>, parallelism: usize) -> Result<Self, TransporterError> {
+    pub async fn new(
+        target: Location<Url>,
+        write_parallel: usize,
+    ) -> Result<Self, TransporterError> {
         let (target_store, target_path) = create_store(&target)?;
         Ok(Self {
             target,
             target_store,
             target_path,
-            parallelism,
+            write_parallel,
         })
     }
 
@@ -230,7 +259,7 @@ impl Writer {
             })?;
         let mut blocks_writing = FuturesOrdered::new();
         loop {
-            while blocks_writing.len() >= self.parallelism {
+            while blocks_writing.len() >= self.write_parallel {
                 // Limit concurrent writes locking if passed parallelism
                 let _ = blocks_writing.next().await.unwrap();
             }
@@ -288,7 +317,7 @@ mod tests {
             url: Url::from_file_path(&target_file).unwrap(),
         };
         let before = UniqueUtc::now_millis();
-        let task = CopyTask::new(0, source.clone(), target.clone(), 2, 2)
+        let task = CopyTask::new(0, source.clone(), target.clone(), 2, 2, 2)
             .await
             .unwrap();
         let report = task.copy().await.unwrap();

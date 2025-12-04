@@ -23,12 +23,14 @@ use url::Url;
 pub enum TransporterRequest {
     ImportV1(ImportRequest),
     CopyV1(CopyRequest),
+    WildcardCopyV1(WildcardCopyRequest),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TransporterReport {
     ImportV1(ImportReport),
     CopyV1(CopyReport),
+    WildcardCopyV1(CopyReport),
     ErrorV1(ErrorReport),
 }
 
@@ -36,7 +38,7 @@ pub enum TransporterReport {
 #[getset(get = "pub")]
 #[builder(setter(into))]
 pub struct ImportRequest {
-    source: ImportSource,
+    source: WildcardSource,
     format: ImportFormat,
     target: ImportTarget,
     parallelism: Option<usize>,
@@ -45,7 +47,7 @@ pub struct ImportRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, Getters, Builder)]
 #[getset(get = "pub")]
 #[builder(setter(into))]
-pub struct ImportSource {
+pub struct WildcardSource {
     location: Location<WildcardUrl>,
     initial_lastmod: Option<DateTime<Utc>>,
     #[getset(skip)]
@@ -54,7 +56,7 @@ pub struct ImportSource {
 
 const LAST_MODIFIED_INFO_TYPE: &str = "last_modified_info";
 
-impl ImportSource {
+impl WildcardSource {
     pub fn lastmod_info(&self) -> Result<Option<LastModifiedInfoState>, TransporterError> {
         match &self.initial_lastmod {
             None => Ok(None),
@@ -357,7 +359,7 @@ impl LastModifiedInfoAccessor for LastModifiedInfoState {
 #[builder(setter(into))]
 #[getset(get = "pub")]
 pub struct ImportTarget {
-    location: Location<BaseImportUrl>,
+    location: Location<BaseUrl>,
 }
 
 impl ImportTarget {
@@ -366,27 +368,25 @@ impl ImportTarget {
         // and join will always succeed because we are joining a file name to a base URL.
         let file_name = source_url.file_name().unwrap();
         match &self.location {
-            Location::LocalFile {
-                url: BaseImportUrl(url),
-            } => Location::LocalFile {
+            Location::LocalFile { url: BaseUrl(url) } => Location::LocalFile {
                 url: url.join(file_name.as_str()).unwrap(),
             },
             Location::S3 {
-                url: BaseImportUrl(url),
+                url: BaseUrl(url),
                 configs,
             } => Location::S3 {
                 url: url.join(file_name.as_str()).unwrap(),
                 configs: configs.clone(),
             },
             Location::Azure {
-                url: BaseImportUrl(url),
+                url: BaseUrl(url),
                 configs,
             } => Location::Azure {
                 url: url.join(file_name.as_str()).unwrap(),
                 configs: configs.clone(),
             },
             Location::GCS {
-                url: BaseImportUrl(url),
+                url: BaseUrl(url),
                 configs,
             } => Location::GCS {
                 url: url.join(file_name.as_str()).unwrap(),
@@ -414,6 +414,15 @@ impl CopyRequest {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Getters, Builder)]
+#[getset(get = "pub")]
+#[builder(setter(into))]
+pub struct WildcardCopyRequest {
+    source: WildcardSource,
+    target: Location<BaseUrl>,
+    parallelism: Option<usize>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Location<L> {
     LocalFile { url: L },
@@ -431,6 +440,28 @@ impl<L> Location<L> {
             Location::GCS { .. } => 1024 * 1024 * 8,
         }
     }
+
+    /// Depending on the locations of the source and destination being local or remote,
+    /// it returns the number of read and write buffers to use.
+    ///
+    /// If the source is 'local' then reads are faster or same speed as the writes in the
+    /// destination. We have one extra read buffer per write buffer.
+    ///
+    /// If the destination is local then the writes are faster or same speed as the reads from
+    /// the source.
+    /// We have triple the read buffer per write buffer.
+    ///
+    /// If the source and destination are remotes, the the speeds of reads and writes are
+    /// similar.
+    /// We have double the read buffer per write buffer.
+    pub fn read_write_ratio<LL>(&self, other: &Location<LL>) -> (usize, usize) {
+        const BUFFERS: usize = 2;
+        match (self, other) {
+            (Location::LocalFile { .. }, _) => (BUFFERS + BUFFERS, BUFFERS),
+            (_, Location::LocalFile { .. }) => (3 * BUFFERS, BUFFERS),
+            (_, _) => (2 * BUFFERS, BUFFERS),
+        }
+    }
 }
 
 impl Location<Url> {
@@ -440,7 +471,7 @@ impl Location<Url> {
     /// If the URL does not have a trailing slash, the last path element of the URL is considered
     /// to be a file name and it will be removed before joining the new file name.
     ///
-    pub fn join(&self, file_name: &str) -> Result<Location<Url>, TransporterError> {
+    pub fn set_file(&self, file_name: &str) -> Result<Location<Url>, TransporterError> {
         let url = self.url();
         let joined_url = url.join(file_name).map_err(|_| {
             TransporterError::InvalidImporterFileUrl(format!(
@@ -483,6 +514,48 @@ impl From<&Location<Url>> for Location<WildcardUrl> {
             },
             Location::GCS { url, configs } => Location::GCS {
                 url: WildcardUrl(url.clone()),
+                configs: configs.clone(),
+            },
+        }
+    }
+}
+
+impl From<&Location<Url>> for Location<BaseUrl> {
+    fn from(location: &Location<Url>) -> Self {
+        match location {
+            Location::LocalFile { url } => Location::LocalFile {
+                url: BaseUrl(url.clone()),
+            },
+            Location::S3 { url, configs } => Location::S3 {
+                url: BaseUrl(url.clone()),
+                configs: configs.clone(),
+            },
+            Location::Azure { url, configs } => Location::Azure {
+                url: BaseUrl(url.clone()),
+                configs: configs.clone(),
+            },
+            Location::GCS { url, configs } => Location::GCS {
+                url: BaseUrl(url.clone()),
+                configs: configs.clone(),
+            },
+        }
+    }
+}
+
+impl<A: AsUrl> From<&Location<A>> for Location<Url> {
+    fn from(location: &Location<A>) -> Self {
+        match location {
+            Location::LocalFile { url } => Location::LocalFile { url: url.as_url() },
+            Location::S3 { url, configs } => Location::S3 {
+                url: url.as_url(),
+                configs: configs.clone(),
+            },
+            Location::Azure { url, configs } => Location::Azure {
+                url: url.as_url(),
+                configs: configs.clone(),
+            },
+            Location::GCS { url, configs } => Location::GCS {
+                url: url.as_url(),
                 configs: configs.clone(),
             },
         }
@@ -537,7 +610,7 @@ impl AsUrl for WildcardUrl {
         self.0.clone()
     }
 }
-impl AsUrl for BaseImportUrl {
+impl AsUrl for BaseUrl {
     fn as_url(&self) -> Url {
         self.0.clone()
     }
@@ -657,7 +730,7 @@ impl Display for WildcardUrl {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BaseImportUrl(pub Url);
+pub struct BaseUrl(pub Url);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Value {
@@ -834,6 +907,10 @@ impl TransporterReport {
         let mut samples = String::new();
         samples.push_str(&TransporterReport::sample_import().sample_yaml("# Import Report"));
         samples.push_str(&TransporterReport::sample_copy().sample_yaml("# Copy Report"));
+        samples.push_str(
+            &TransporterReport::sample_wildcard_copy().sample_yaml("# Wildcard Copy Report"),
+        );
+        samples.push_str(&TransporterReport::sample_error().sample_yaml("# Error Report"));
         samples
     }
 
@@ -891,6 +968,7 @@ impl TransporterReport {
             .unwrap(),
         )
     }
+
     fn sample_copy() -> Self {
         TransporterReport::CopyV1(CopyReport {
             files: vec![
@@ -933,7 +1011,57 @@ impl TransporterReport {
             ],
         })
     }
+
+    fn sample_wildcard_copy() -> Self {
+        TransporterReport::WildcardCopyV1(CopyReport {
+            files: vec![
+                FileCopyReport {
+                    idx: 0,
+                    #[cfg(not(target_os = "windows"))]
+                    from: Url::parse("file:///import-dir/file0.parquet").unwrap(),
+                    #[cfg(target_os = "windows")]
+                    from: Url::parse("file:///c:/import-dir/file0.parquet").unwrap(),
+                    size: 1024,
+                    #[cfg(not(target_os = "windows"))]
+                    to: Url::parse("file:///export-dir/file0.parquet").unwrap(),
+                    #[cfg(target_os = "windows")]
+                    to: Url::parse("file:///c:/export-dir/file0.parquet").unwrap(),
+                    started_at: DateTime::from(
+                        DateTime::parse_from_rfc3339("2024-01-01T00:00:00Z").unwrap(),
+                    ),
+                    ended_at: DateTime::from(
+                        DateTime::parse_from_rfc3339("2024-01-01T00:10:00Z").unwrap(),
+                    ),
+                },
+                FileCopyReport {
+                    idx: 0,
+                    #[cfg(not(target_os = "windows"))]
+                    from: Url::parse("file:///import-dir/file1.parquet").unwrap(),
+                    #[cfg(target_os = "windows")]
+                    from: Url::parse("file:///c:/import-dir/file1.parquet").unwrap(),
+                    size: 1024,
+                    #[cfg(not(target_os = "windows"))]
+                    to: Url::parse("file:///export-dir/file1.parquet").unwrap(),
+                    #[cfg(target_os = "windows")]
+                    to: Url::parse("file:///c:/export-dir/file1.parquet").unwrap(),
+                    started_at: DateTime::from(
+                        DateTime::parse_from_rfc3339("2024-01-01T00:10:01Z").unwrap(),
+                    ),
+                    ended_at: DateTime::from(
+                        DateTime::parse_from_rfc3339("2024-01-01T00:20:00Z").unwrap(),
+                    ),
+                },
+            ],
+        })
+    }
+
+    fn sample_error() -> Self {
+        TransporterReport::ErrorV1(ErrorReport::new(
+            "An error occurred during the copy process".into(),
+        ))
+    }
 }
+
 impl TransporterRequest {
     pub fn yaml_samples() -> String {
         let mut samples = String::new();
@@ -964,6 +1092,22 @@ impl TransporterRequest {
         samples.push_str(
             &Self::copy_local_to_gcp_env().sample_yaml("# Copy local to GCP with env credentials"),
         );
+
+        samples.push_str(
+            &Self::copy_wildcard_from_local()
+                .sample_yaml("# Copy with wildcard from local to local"),
+        );
+        samples.push_str(
+            &Self::copy_wildcard_from_aws().sample_yaml("# Copy with wildcard from S3 to local"),
+        );
+        samples.push_str(
+            &Self::copy_wildcard_from_azure()
+                .sample_yaml("# Copy with wildcard from Azure to local"),
+        );
+        samples.push_str(
+            &Self::copy_wildcard_from_gcp().sample_yaml("# Copy with wildcard from GCS to local"),
+        );
+
         samples
     }
 
@@ -973,7 +1117,7 @@ impl TransporterRequest {
 
     fn import_from_local() -> TransporterRequest {
         TransporterRequest::ImportV1(ImportRequest {
-            source: ImportSource {
+            source: WildcardSource {
                 location: Location::LocalFile {
                     #[cfg(not(target_os = "windows"))]
                     url: WildcardUrl(Url::parse("file:///import-dir/file*.parquet").unwrap()),
@@ -989,9 +1133,9 @@ impl TransporterRequest {
             target: ImportTarget {
                 location: Location::LocalFile {
                     #[cfg(not(target_os = "windows"))]
-                    url: BaseImportUrl(Url::parse("file:///export-dir").unwrap()),
+                    url: BaseUrl(Url::parse("file:///export-dir").unwrap()),
                     #[cfg(target_os = "windows")]
-                    url: crate::transporter::api::BaseImportUrl(
+                    url: crate::transporter::api::BaseUrl(
                         Url::parse("file:///c:/export-dir").unwrap(),
                     ),
                 },
@@ -1002,7 +1146,7 @@ impl TransporterRequest {
 
     fn import_from_aws() -> TransporterRequest {
         TransporterRequest::ImportV1(ImportRequest {
-            source: ImportSource {
+            source: WildcardSource {
                 location: Location::S3 {
                     url: WildcardUrl(Url::parse("s3://bucket/import-dir/file*.parquet").unwrap()),
                     configs: AwsConfigs {
@@ -1019,9 +1163,9 @@ impl TransporterRequest {
             target: ImportTarget {
                 location: Location::LocalFile {
                     #[cfg(not(target_os = "windows"))]
-                    url: BaseImportUrl(Url::parse("file:///export-dir").unwrap()),
+                    url: BaseUrl(Url::parse("file:///export-dir").unwrap()),
                     #[cfg(target_os = "windows")]
-                    url: crate::transporter::api::BaseImportUrl(Url::parse("file:///c:/export-dir").unwrap()),
+                    url: crate::transporter::api::BaseUrl(Url::parse("file:///c:/export-dir").unwrap()),
                 },
             },
             parallelism: None,
@@ -1030,7 +1174,7 @@ impl TransporterRequest {
 
     fn import_from_azure() -> TransporterRequest {
         TransporterRequest::ImportV1(ImportRequest {
-            source: ImportSource {
+            source: WildcardSource {
                 location: Location::Azure {
                     url: WildcardUrl(Url::parse("az://container/import-dir/file*.csv").unwrap()),
                     configs: AzureConfigs {
@@ -1046,9 +1190,9 @@ impl TransporterRequest {
             target: ImportTarget {
                 location: Location::LocalFile {
                     #[cfg(not(target_os = "windows"))]
-                    url: BaseImportUrl(Url::parse("file:///export-dir").unwrap()),
+                    url: BaseUrl(Url::parse("file:///export-dir").unwrap()),
                     #[cfg(target_os = "windows")]
-                    url: crate::transporter::api::BaseImportUrl(
+                    url: crate::transporter::api::BaseUrl(
                         Url::parse("file:///c:/export-dir").unwrap(),
                     ),
                 },
@@ -1059,7 +1203,7 @@ impl TransporterRequest {
 
     fn import_from_gcp() -> TransporterRequest {
         TransporterRequest::ImportV1(ImportRequest {
-            source: ImportSource {
+            source: WildcardSource {
                 location: Location::GCS {
                     url: WildcardUrl(Url::parse("gs://bucket/import-dir/file*.csv").unwrap()),
                     configs: GcpConfigs {
@@ -1074,9 +1218,9 @@ impl TransporterRequest {
             target: ImportTarget {
                 location: Location::LocalFile {
                     #[cfg(not(target_os = "windows"))]
-                    url: BaseImportUrl(Url::parse("file:///export-dir").unwrap()),
+                    url: BaseUrl(Url::parse("file:///export-dir").unwrap()),
                     #[cfg(target_os = "windows")]
-                    url: crate::transporter::api::BaseImportUrl(
+                    url: crate::transporter::api::BaseUrl(
                         Url::parse("file:///c:/export-dir").unwrap(),
                     ),
                 },
@@ -1364,6 +1508,110 @@ impl TransporterRequest {
             parallelism: None,
         })
     }
+
+    fn copy_wildcard_from_local() -> TransporterRequest {
+        TransporterRequest::WildcardCopyV1(WildcardCopyRequest {
+            source: WildcardSource {
+                location: Location::LocalFile {
+                    #[cfg(not(target_os = "windows"))]
+                    url: WildcardUrl(Url::parse("file:///source-dir/file*.parquet").unwrap()),
+                    #[cfg(target_os = "windows")]
+                    url: crate::transporter::api::WildcardUrl(
+                        Url::parse("file:///c:/source-dir/file*.parquet").unwrap(),
+                    ),
+                },
+                initial_lastmod: Some(Utc::now()),
+                lastmod_info: None,
+            },
+            target: Location::LocalFile {
+                #[cfg(not(target_os = "windows"))]
+                url: BaseUrl(Url::parse("file:///target-dir/").unwrap()),
+                #[cfg(target_os = "windows")]
+                url: crate::transporter::api::BaseUrl(
+                    Url::parse("file:///c:/target-dir/").unwrap(),
+                ),
+            },
+            parallelism: Some(10),
+        })
+    }
+
+    fn copy_wildcard_from_aws() -> TransporterRequest {
+        TransporterRequest::WildcardCopyV1(WildcardCopyRequest {
+            source: WildcardSource {
+                location: Location::S3 {
+                    url: WildcardUrl(Url::parse("s3://bucket/source-dir/file*.parquet").unwrap()),
+                    configs: AwsConfigs {
+                        access_key: Value::Env("IMPORT_AWS_ACCESS_KEY".into()),
+                        secret_key: Value::Env("IMPORT_AWS_SECRET_KEY".into()),
+                        region: Some(Value::Env("IMPORT_AWS_REGION".into())),
+                        extra_configs: None,
+                    },
+                },
+                initial_lastmod: Some(Utc::now()),
+                lastmod_info: None,
+            },
+            target: Location::LocalFile {
+                #[cfg(not(target_os = "windows"))]
+                url: BaseUrl(Url::parse("file:///target-dir/").unwrap()),
+                #[cfg(target_os = "windows")]
+                url: crate::transporter::api::BaseUrl(
+                    Url::parse("file:///c:/target-dir/").unwrap(),
+                ),
+            },
+            parallelism: Some(5),
+        })
+    }
+
+    fn copy_wildcard_from_azure() -> TransporterRequest {
+        TransporterRequest::WildcardCopyV1(WildcardCopyRequest {
+            source: WildcardSource {
+                location: Location::Azure {
+                    url: WildcardUrl(Url::parse("az://container/import-dir/file*.csv").unwrap()),
+                    configs: AzureConfigs {
+                        account_name: Value::Env("IMPORT_AZURE_ACCOUNT_NAME".into()),
+                        account_key: Value::Env("IMPORT_AZURE_ACCOUNT_KEY".into()),
+                        extra_configs: None,
+                    },
+                },
+                initial_lastmod: Some(Utc::now()),
+                lastmod_info: None,
+            },
+            target: Location::LocalFile {
+                #[cfg(not(target_os = "windows"))]
+                url: BaseUrl(Url::parse("file:///target-dir/").unwrap()),
+                #[cfg(target_os = "windows")]
+                url: crate::transporter::api::BaseUrl(
+                    Url::parse("file:///c:/target-dir/").unwrap(),
+                ),
+            },
+            parallelism: Some(5),
+        })
+    }
+
+    fn copy_wildcard_from_gcp() -> TransporterRequest {
+        TransporterRequest::WildcardCopyV1(WildcardCopyRequest {
+            source: WildcardSource {
+                location: Location::GCS {
+                    url: WildcardUrl(Url::parse("gs://bucket/import-dir/file*.csv").unwrap()),
+                    configs: GcpConfigs {
+                        service_account_key: Value::Env("IMPORT_GCP_SERVICE_ACCOUNT_KEY".into()),
+                        extra_configs: None,
+                    },
+                },
+                initial_lastmod: Some(Utc::now()),
+                lastmod_info: None,
+            },
+            target: Location::LocalFile {
+                #[cfg(not(target_os = "windows"))]
+                url: BaseUrl(Url::parse("file:///target-dir/").unwrap()),
+                #[cfg(target_os = "windows")]
+                url: crate::transporter::api::BaseUrl(
+                    Url::parse("file:///c:/target-dir/").unwrap(),
+                ),
+            },
+            parallelism: None,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -1411,7 +1659,7 @@ mod tests {
         let location = super::Location::LocalFile {
             url: Url::parse(local_base_url).unwrap(),
         };
-        let joined_location = location.join("file1.csv").unwrap();
+        let joined_location = location.set_file("file1.csv").unwrap();
         assert_eq!(joined_location.url().as_str(), expected_url);
         assert_eq!(location.cloud_configs(), joined_location.cloud_configs());
 
@@ -1424,7 +1672,7 @@ mod tests {
                 extra_configs: None,
             },
         };
-        let joined_location = location.join("file1.csv").unwrap();
+        let joined_location = location.set_file("file1.csv").unwrap();
         assert_eq!(
             joined_location.url().as_str(),
             "s3://bucket/import-dir/file1.csv"
@@ -1439,7 +1687,7 @@ mod tests {
                 extra_configs: None,
             },
         };
-        let joined_location = location.join("file1.csv").unwrap();
+        let joined_location = location.set_file("file1.csv").unwrap();
         assert_eq!(
             joined_location.url().as_str(),
             "az://container/import-dir/file1.csv"

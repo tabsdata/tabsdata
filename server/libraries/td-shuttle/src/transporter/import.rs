@@ -18,7 +18,7 @@ use wildmatch::WildMatch;
 
 /// A trait that defines the methods for finding files to import.
 #[async_trait]
-trait FileFinder {
+pub trait FileFinder {
     /// Returns the URL from which files will be imported. It may contain wildcards in the file name only.
     fn import_url(&self) -> Url;
 
@@ -220,7 +220,7 @@ impl FileFinder for PatternLastModFileFinder {
     }
 }
 
-fn import_files_finder(
+pub fn files_finder(
     location: &Location<WildcardUrl>,
     last_modified_info: Option<LastModifiedInfoState>,
 ) -> Box<dyn FileFinder + Send + Sync> {
@@ -266,7 +266,7 @@ async fn find_and_import<I: Importer>(
         },
     };
 
-    let mut finder = import_files_finder(location, lastmod_info);
+    let mut finder = files_finder(location, lastmod_info);
 
     let files_to_import = finder.find_files().await?;
     tracing::info!("Found {} files to import", files_to_import.len());
@@ -299,9 +299,9 @@ pub async fn import(request: ImportRequest) -> Result<ImportReport, TransporterE
 #[cfg(test)]
 mod tests {
     use crate::transporter::api::{
-        BaseImportUrl, FileImportReport, ImportFormat, ImportRequest, ImportRequestBuilder,
-        ImportSourceBuilder, ImportTargetBuilder, LastModifiedInfoAccessor, LastModifiedInfoState,
-        Location, WildcardUrl,
+        BaseUrl, FileImportReport, ImportFormat, ImportRequest, ImportRequestBuilder,
+        ImportTargetBuilder, LastModifiedInfoAccessor, LastModifiedInfoState, Location,
+        WildcardSourceBuilder, WildcardUrl,
     };
     use crate::transporter::error::TransporterError;
     use crate::transporter::files_importer::Importer;
@@ -598,7 +598,7 @@ mod tests {
         let file = dir.join("file*.csv");
         let url = Url::from_file_path(&file).unwrap();
 
-        let import_source = ImportSourceBuilder::default()
+        let import_source = WildcardSourceBuilder::default()
             .location(Location::LocalFile {
                 url: WildcardUrl(url.clone()),
             })
@@ -608,7 +608,7 @@ mod tests {
             .unwrap();
         let import_target = ImportTargetBuilder::default()
             .location(Location::LocalFile {
-                url: BaseImportUrl(url.clone()),
+                url: BaseUrl(url.clone()),
             })
             .build()
             .unwrap();
