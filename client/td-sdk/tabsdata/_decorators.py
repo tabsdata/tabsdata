@@ -28,8 +28,8 @@ from tabsdata._io.outputs.sql_outputs import (
 )
 from tabsdata._io.outputs.table_outputs import TableOutput
 from tabsdata._io.plugin import DestinationPlugin, SourcePlugin
+from tabsdata._table_actions._typing import OnTablesSpec
 from tabsdata._table_actions.actions import (
-    OnTablesActionSpec,
     _build_actions_list_or_raise,
 )
 from tabsdata._tdfunction import TabsdataFunction
@@ -48,8 +48,8 @@ def transformer(
     output_tables: TableOutput | str | List[str],
     name: str = None,
     trigger_by: str | List[str] | None = ALL_DEPS,
-    on_input_tables: OnTablesActionSpec = None,
-    on_output_tables: OnTablesActionSpec = None,
+    on_input_tables: OnTablesSpec = None,
+    on_output_tables: OnTablesSpec = None,
 ) -> callable:
     """
     Decorator to set the data and destination parameters of a function and
@@ -66,10 +66,10 @@ def transformer(
             the function to execute. It can be a table in the system, a list of
             tables, or None (in which case it must be triggered manually). Defaults to
             all dependencies.
-        on_input_tables (OnTablesAction | list[OnTablesAction] | None, optional):
+        on_input_tables (OnTablesSpec, optional):
             Actions to perform on input tables before executing the function. Can be a
             single action or a list of them. Defaults to None.
-        on_output_tables (OnTablesAction | list[OnTablesAction] | None, optional):
+        on_output_tables (OnTablesSpec, optional):
             Actions to perform on output tables after executing the function.
             Can be a single action or a list of them. Defaults to None.
     Returns:
@@ -151,7 +151,7 @@ def publisher(
     tables: TableOutput | str | List[str],
     name: str = None,
     trigger_by: str | List[str] | None = None,
-    on_tables: OnTablesActionSpec = None,
+    on_tables: OnTablesSpec = None,
 ) -> callable:
     """
     Decorator to set the data and destination parameters of a function and
@@ -168,7 +168,7 @@ def publisher(
         trigger_by (str | list[str] | None, optional): The trigger that will cause
             the function to execute. It can be a table in the system, a list of
             tables, or None (in which case it must be triggered manually).
-        on_tables (OnTablesAction | list[OnTablesAction] | None, optional): Actions
+        on_tables (OnTablesSpec, optional): Actions
             to perform on output tables after executing the function. Can be a
             single action or a list of them. Defaults to None.
     Returns:
@@ -219,7 +219,7 @@ def subscriber(
     ),
     name: str = None,
     trigger_by: str | List[str] | None = ALL_DEPS,
-    on_tables: OnTablesActionSpec = None,
+    on_tables: OnTablesSpec = None,
 ) -> callable:
     """
     Decorator to set the data and destination parameters of a function and
@@ -237,7 +237,7 @@ def subscriber(
             the function to execute. It can be a table in the system, a list of
             tables, or None (in which case it must be triggered manually). Defaults to
             all dependencies.
-        on_tables (OnTablesAction | list[OnTablesAction] | None, optional): Actions
+        on_tables (OnTablesSpec, optional): Actions
             to perform on input tables before executing the function. Can be a
             single action or a list of them. Defaults to None.
     Returns:

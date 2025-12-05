@@ -5,7 +5,8 @@
 import pytest
 
 import tabsdata.tableframe.dtypes as td_dtypes
-from tabsdata._table_actions.classifiers import (
+from tabsdata.dataquality._classifiers import (
+    Categorizer,
     DoesNotMatch,
     HasColumns,
     HasColumnTypes,
@@ -26,6 +27,7 @@ from tabsdata._table_actions.classifiers import (
     IsPositiveOrZero,
     IsZero,
     Matches,
+    Scale,
 )
 from tabsdata.exceptions import DataQualityConfigurationError, ErrorCode
 
@@ -538,3 +540,160 @@ def test_matches_classifier_wrong_ignore_nulls_type():
     with pytest.raises(DataQualityConfigurationError) as e:
         Matches(cols="column_a", regex="^test_.*", ignore_nulls="not_a_bool")
     assert e.value.error_code == ErrorCode.DQCE18
+
+
+def test_scale_class():
+    continents = Scale.linear(
+        6,
+        (1, 7),
+        ["North America", "South America", "Antarctica", "Europe", "Asia", "Oceania"],
+    )
+    assert continents.scale_type == "linear"
+    assert continents.buckets == 6
+    assert continents.scale_range == (1, 7)
+    assert continents.bucket_names == [
+        "North America",
+        "South America",
+        "Antarctica",
+        "Europe",
+        "Asia",
+        "Oceania",
+    ]
+
+
+def test_scale_wrong_bucket_type():
+    with pytest.raises(DataQualityConfigurationError) as e:
+        Scale.linear(
+            "hi",
+            (1, 7),
+            [
+                "North America",
+                "South America",
+                "Antarctica",
+                "Europe",
+                "Asia",
+                "Oceania",
+            ],
+        )
+    assert e.value.error_code == ErrorCode.DQCE52
+
+
+def test_scale_wrong_scale_range_type():
+    with pytest.raises(DataQualityConfigurationError) as e:
+        Scale.linear(
+            6,
+            7,
+            [
+                "North America",
+                "South America",
+                "Antarctica",
+                "Europe",
+                "Asia",
+                "Oceania",
+            ],
+        )
+    assert e.value.error_code == ErrorCode.DQCE48
+
+
+def test_scale_wrong_scale_range_length():
+    with pytest.raises(DataQualityConfigurationError) as e:
+        Scale.linear(
+            6,
+            (7,),
+            [
+                "North America",
+                "South America",
+                "Antarctica",
+                "Europe",
+                "Asia",
+                "Oceania",
+            ],
+        )
+    assert e.value.error_code == ErrorCode.DQCE49
+
+    with pytest.raises(DataQualityConfigurationError) as e:
+        Scale.linear(
+            6,
+            (7, 3, 2),
+            [
+                "North America",
+                "South America",
+                "Antarctica",
+                "Europe",
+                "Asia",
+                "Oceania",
+            ],
+        )
+    assert e.value.error_code == ErrorCode.DQCE49
+
+
+def test_scale_wrong_scale_range_tuple_element_type():
+    with pytest.raises(DataQualityConfigurationError) as e:
+        Scale.linear(
+            6,
+            (7, "hi"),
+            [
+                "North America",
+                "South America",
+                "Antarctica",
+                "Europe",
+                "Asia",
+                "Oceania",
+            ],
+        )
+    assert e.value.error_code == ErrorCode.DQCE50
+
+
+def test_scale_direct_instantiation_fails():
+    with pytest.raises(DataQualityConfigurationError) as e:
+        Scale(
+            "linear",
+            7,
+            (1, 7),
+            scale_tick=3,
+        )
+    assert e.value.error_code == ErrorCode.DQCE57
+
+
+def test_scale_wrong_bucket_names_length_raises_error():
+    with pytest.raises(DataQualityConfigurationError) as e:
+        Scale.linear(
+            7,
+            (1, 7),
+            [
+                "North America",
+                "South America",
+                "Antarctica",
+                "Europe",
+                "Asia",
+                "Oceania",
+            ],
+        )
+    assert e.value.error_code == ErrorCode.DQCE53
+    continents = Scale.linear(
+        6,
+        (1, 7),
+        ["North America", "South America", "Antarctica", "Europe", "Asia", "Oceania"],
+    )
+    with pytest.raises(DataQualityConfigurationError) as e:
+        continents.buckets = 7
+    assert e.value.error_code == ErrorCode.DQCE53
+    with pytest.raises(DataQualityConfigurationError) as e:
+        continents.bucket_names = ["wronglength"]
+    assert e.value.error_code == ErrorCode.DQCE53
+
+
+def test_categorizer_class():
+    continents = Scale.linear(
+        6,
+        (1, 7),
+        ["North America", "South America", "Antarctica", "Europe", "Asia", "Oceania"],
+    )
+    categorizer = Categorizer(scale=continents)
+    assert categorizer.scale == continents
+
+
+def test_categorizer_wrong_scale_type_raises_error():
+    with pytest.raises(DataQualityConfigurationError) as e:
+        Categorizer(scale="hi")
+    assert e.value.error_code == ErrorCode.DQCE56

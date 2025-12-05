@@ -790,6 +790,293 @@ class ErrorCode(Enum):
             "the type to check against."
         ),
     }
+    DQCE44 = {
+        "code": "DQCE-044",
+        "message": (
+            "The 'tags' parameter of an Operation object must be a "
+            "'str', a 'list' of 'str', or None; got a list containing the object '{}' "
+            "of type '{}' instead. Please ensure that all objects in the list are of "
+            "type 'str'."
+        ),
+    }
+    DQCE45 = {
+        "code": "DQCE-045",
+        "message": (
+            "The 'tags' parameter of an Operation object must be a "
+            "'str', a 'list' of 'str', or None; got object '{}' "
+            "of type '{}' instead."
+        ),
+    }
+    DQCE46 = {
+        "code": "DQCE-046",
+        "message": (
+            "The 'table' parameter of a Summary object must be a "
+            "'str', or None; got object '{}' "
+            "of type '{}' instead."
+        ),
+    }
+    DQCE47 = {
+        "code": "DQCE-047",
+        "message": (
+            "The 'scale_type' of a Scale object must be one of the following: {}. Got "
+            "object '{}' instead."
+        ),
+    }
+    DQCE48 = {
+        "code": "DQCE-048",
+        "message": (
+            "The 'scale_range' parameter of a Scale object must be a tuple with "
+            "exactly two elements of type 'int' or 'float'; got object '{}' "
+            "of type '{}' instead."
+        ),
+    }
+    DQCE49 = {
+        "code": "DQCE-049",
+        "message": (
+            "The 'scale_range' parameter of a Scale object must be a tuple with "
+            "exactly two elements of type 'int' or 'float'; got the tuple '{}' "
+            "with a length of '{}' instead."
+        ),
+    }
+    DQCE50 = {
+        "code": "DQCE-050",
+        "message": (
+            "The 'scale_range' parameter of a Scale object must be a tuple with "
+            "exactly two elements of type 'int' or 'float'; got the tuple '{}' "
+            "which has exactly two elements, but at least one of them has the wrong "
+            "type."
+        ),
+    }
+    DQCE51 = {
+        "code": "DQCE-051",
+        "message": (
+            "The 'scale_tick' parameter of a Scale object must be a an 'int', a "
+            "'float', or None; got '{}' of type '{}' instead."
+        ),
+    }
+    DQCE52 = {
+        "code": "DQCE-052",
+        "message": (
+            "The 'buckets' parameter of a Scale object must be a an 'int' between 2 "
+            "and 100; got '{}' of type '{}' instead."
+        ),
+    }
+    DQCE53 = {
+        "code": "DQCE-053",
+        "message": (
+            "When a Scale object has been provided both a 'buckets' parameter and a "
+            "'bucket_names' parameter, the length of the 'bucket_names' parameter "
+            "must equal the 'buckets' parameter. Got value {} for 'buckets', "
+            "and value '{}' of length {} for 'bucket_names' instead."
+        ),
+    }
+    DQCE54 = {
+        "code": "DQCE-054",
+        "message": (
+            "The 'bucket_names' parameter of a Scale object must be a list of 'str' "
+            "or None. Got the list {} containing the object '{}' of type '{}' instead."
+        ),
+    }
+    DQCE55 = {
+        "code": "DQCE-055",
+        "message": (
+            "The 'bucket_names' parameter of a Scale object must be a list of 'str' "
+            "or None; got object '{}' of type '{}' instead."
+        ),
+    }
+    DQCE56 = {
+        "code": "DQCE-056",
+        "message": (
+            "The 'scale' parameter of a Categorizer object must be a Scale object "
+            "; got object '{}' of type '{}' instead."
+        ),
+    }
+    DQCE57 = {
+        "code": "DQCE-057",
+        "message": (
+            "Direct instantiation of the class '{}' is not allowed. Use "
+            "ScaleType.linear(), ScaleType.quadratic(), ScaleType.exponential() "
+            "or ScaleType.log() to obtain an instance of this class"
+        ),
+    }
+    DQCE58 = {
+        "code": "DQCE-058",
+        "message": (
+            "Direct instantiation of the class '{}' is not allowed. Use "
+            "Criteria.all_ok(), Criteria.any_failed(), or Criteria.by_bucket() to "
+            "obtain an instance of this class"
+        ),
+    }
+    DQCE59 = {
+        "code": "DQCE-059",
+        "message": (
+            "The 'criteria_type' of a Criteria object must be one of the following: {}."
+            " Got object '{}' instead."
+        ),
+    }
+    DQCE60 = {
+        "code": "DQCE-060",
+        "message": (
+            "The 'buckets' parameter of a Criteria object must be a "
+            "collection, meaning an object of a class that implements the 'in' "
+            "operator; or None. Got value '{}' of type '{}' instead."
+        ),
+    }
+    DQCE61 = {
+        "code": "DQCE-061",
+        "message": (
+            "The 'buckets' parameter of a Criteria.by_buckets() object must be a "
+            "collection, meaning an object of a class that implements the 'in' "
+            "operator. Got value '{}' of type '{}' instead."
+        ),
+    }
+    DQCE62 = {
+        "code": "DQCE-062",
+        "message": (
+            "The 'to_table' parameter of a FilterOut object must be a "
+            "'str', or None. Got value '{}' of type '{}' instead."
+        ),
+    }
+    DQCE63 = {
+        "code": "DQCE-063",
+        "message": (
+            "The 'criteria' parameter of a FilterOut object must be a "
+            "Criteria object. Got value '{}' of type '{}' instead."
+        ),
+    }
+    DQCE64 = {
+        "code": "DQCE-064",
+        "message": (
+            "The 'to_table' parameter of a Select object must be a "
+            "'str'; got value '{}' of type '{}' instead."
+        ),
+    }
+    DQCE65 = {
+        "code": "DQCE-065",
+        "message": (
+            "The 'criteria' parameter of a Select object must be a "
+            "Criteria object. Got value '{}' of type '{}' instead."
+        ),
+    }
+    DQCE66 = {
+        "code": "DQCE-066",
+        "message": (
+            "The 'criteria' parameter of a Fail object must be a "
+            "Criteria object. Got value '{}' of type '{}' instead."
+        ),
+    }
+    DQCE67 = {
+        "code": "DQCE-067",
+        "message": (
+            "Direct instantiation of the class '{}' is not allowed. Use "
+            "Threshold.count(), Threshold.percent(), or Threshold.one() to "
+            "obtain an instance of this class"
+        ),
+    }
+    DQCE68 = {
+        "code": "DQCE-068",
+        "message": (
+            "The 'count' parameter of a Threshold object must be an 'int' greater "
+            "than zero or None; "
+            "got value '{}' of type '{}' instead."
+        ),
+    }
+    DQCE69 = {
+        "code": "DQCE-069",
+        "message": (
+            "The 'count' parameter of a Threshold object must be an 'int' greater "
+            "than zero or None; "
+            "got the 'int' '{}' that is not greater than zero."
+        ),
+    }
+    DQCE70 = {
+        "code": "DQCE-070",
+        "message": (
+            "The 'count' parameter of a Threshold.count() object must be an 'int' "
+            "greater than zero; "
+            "got a None instead."
+        ),
+    }
+    DQCE71 = {
+        "code": "DQCE-071",
+        "message": (
+            "The 'percent' parameter of a Threshold.percent() object must be a "
+            "'float' or 'int' "
+            "greater than zero and less than 100; "
+            "got a None instead."
+        ),
+    }
+    DQCE72 = {
+        "code": "DQCE-072",
+        "message": (
+            "The 'percent' parameter of a Threshold object must be a "
+            "'float' or 'int' "
+            "greater than zero and less than 100, or None. Got value {} instead, that "
+            "is not in the (0, 100) range."
+        ),
+    }
+    DQCE73 = {
+        "code": "DQCE-073",
+        "message": (
+            "The 'percent' parameter of a Threshold object must be a "
+            "'float' or 'int' "
+            "greater than zero and less than 100, or None. Got value '{}' of "
+            "type '{}' instead."
+        ),
+    }
+    DQCE74 = {
+        "code": "DQCE-074",
+        "message": (
+            "The 'threshold' parameter of a Fail object must be a "
+            "Threshold object. Got value '{}' of type '{}' instead."
+        ),
+    }
+    DQCE75 = {
+        "code": "DQCE-075",
+        "message": (
+            "The 'table' parameter of a DataQuality object must be a "
+            "'str'. Got value '{}' of type '{}' instead."
+        ),
+    }
+    DQCE76 = {
+        "code": "DQCE-076",
+        "message": (
+            "The 'classify' parameter of a DataQuality object must be a "
+            "Classifier object or a list of Classifier objects. Got value '{}' of "
+            "type '{}' instead."
+        ),
+    }
+    DQCE77 = {
+        "code": "DQCE-077",
+        "message": (
+            "The 'classify' parameter of a DataQuality object must be a "
+            "Classifier object or a list of Classifier objects. Got a list containing "
+            "value '{}' of type '{}' instead."
+        ),
+    }
+    DQCE78 = {
+        "code": "DQCE-078",
+        "message": (
+            "The 'operations' parameter of a DataQuality object must be an "
+            "Operation object or a list of Operation objects. Got value '{}' of "
+            "type '{}' instead."
+        ),
+    }
+    DQCE79 = {
+        "code": "DQCE-079",
+        "message": (
+            "The 'operations' parameter of a DataQuality object must be an "
+            "Operation object or a list of Operation objects. Got a list containing "
+            "value '{}' of type '{}' instead."
+        ),
+    }
+    DQCE80 = {
+        "code": "DQCE-080",
+        "message": (
+            "The 'buckets' parameter of a Scale object must be a an 'int' between 2 "
+            "and 100; got the 'int' {} that is outside of that range instead."
+        ),
+    }
     FCE1 = {
         "code": "FCE-001",
         "message": (

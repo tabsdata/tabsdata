@@ -5,26 +5,17 @@
 from __future__ import annotations
 
 from abc import ABC
-from typing import Collection, Literal, TypeAlias, Union
+from typing import TYPE_CHECKING, Collection, Literal, Self, get_args
 
+from tabsdata.dataquality._utils import _is_collection
 from tabsdata.exceptions import (
     DataQualityConfigurationError,
     ErrorCode,
 )
 from tabsdata.tableframe.typing import TF_DATA_TYPES, DataType
 
-ColsSpec: TypeAlias = Union[
-    str,
-    list[str],
-    tuple[str, str],
-    list[tuple[str, str]],
-    None,
-]
-TagsSpec: TypeAlias = Union[
-    str,
-    list[str],
-    None,
-]
+if TYPE_CHECKING:
+    from tabsdata.dataquality.typing._typing import ColsSpec, TagsSpec
 
 
 class Classifier(ABC):
@@ -143,6 +134,261 @@ class BoolClassifier(Classifier):
     """
 
     pass
+
+
+ScaleTypeSpec = Literal["exponential", "linear", "logarithmic", "quadratic"]
+
+
+class Scale:
+    """
+    Scale for `Categorizer` classifiers.
+    """
+
+    VALID_SCALE_TYPES = get_args(ScaleTypeSpec)
+
+    def __init__(
+        self,
+        scale_type: ScaleTypeSpec,
+        buckets: int,
+        scale_range: tuple[int, int] | tuple[float, float],
+        scale_tick: int | float | None,
+        bucket_names: list[str] = None,
+        **kwargs,
+    ):
+        if not kwargs.get("_internal"):
+            raise DataQualityConfigurationError(
+                ErrorCode.DQCE57, self.__class__.__name__
+            )
+        self.scale_type = scale_type
+        self.scale_range = scale_range
+        self.scale_tick = scale_tick
+        self.buckets = buckets
+        self.bucket_names = bucket_names
+
+    @property
+    def scale_type(self) -> ScaleTypeSpec:
+        return self._scale_type
+
+    @scale_type.setter
+    def scale_type(self, value: ScaleTypeSpec):
+        if value not in self.VALID_SCALE_TYPES:
+            raise DataQualityConfigurationError(
+                ErrorCode.DQCE47, ", ".join(self.VALID_SCALE_TYPES), value
+            )
+        self._scale_type = value
+
+    @property
+    def scale_range(self) -> tuple[int, int] | tuple[float, float]:
+        return self._scale_range
+
+    @scale_range.setter
+    def scale_range(self, value: tuple[int, int] | tuple[float | float]):
+        if not isinstance(value, tuple):
+            raise DataQualityConfigurationError(ErrorCode.DQCE48, value, type(value))
+        elif len(value) != 2:
+            raise DataQualityConfigurationError(ErrorCode.DQCE49, value, len(value))
+        elif not all(isinstance(v, (int, float)) for v in value):
+            raise DataQualityConfigurationError(ErrorCode.DQCE50, value)
+        self._scale_range = value
+
+    @property
+    def scale_tick(self) -> int | float | None:
+        return self._scale_tick
+
+    @scale_tick.setter
+    def scale_tick(self, value: int | float | None):
+        if value is not None and not isinstance(value, (int, float)):
+            raise DataQualityConfigurationError(ErrorCode.DQCE51, value, type(value))
+        self._scale_tick = value
+
+    @property
+    def buckets(self) -> int:
+        return self._buckets
+
+    @buckets.setter
+    def buckets(self, value: int):
+        if not isinstance(value, int):
+            raise DataQualityConfigurationError(ErrorCode.DQCE52, value, type(value))
+        if value < 2 or value > 100:
+            raise DataQualityConfigurationError(ErrorCode.DQCE80, value)
+        self._buckets = value
+        self._verify_buckets_and_bucket_names()
+
+    @property
+    def bucket_names(self) -> list[str] | None:
+        return self._bucket_names
+
+    @bucket_names.setter
+    def bucket_names(self, value: list[str] | None):
+        match value:
+            case None:
+                self._bucket_names = None
+            case list():
+                for v in value:
+                    if not isinstance(v, str):
+                        raise DataQualityConfigurationError(
+                            ErrorCode.DQCE54, value, v, type(v)
+                        )
+                self._bucket_names = value
+            case _:
+                raise DataQualityConfigurationError(
+                    ErrorCode.DQCE55, value, type(value)
+                )
+        self._verify_buckets_and_bucket_names()
+
+    def _verify_buckets_and_bucket_names(self):
+        if hasattr(self, "_buckets") and hasattr(self, "_bucket_names"):
+            buckets = self.buckets
+            bucket_names = self.bucket_names
+            if self.bucket_names is not None:
+                if len(bucket_names) != buckets:
+                    raise DataQualityConfigurationError(
+                        ErrorCode.DQCE53, buckets, bucket_names, len(bucket_names)
+                    )
+
+    @classmethod
+    def identity(
+        cls,
+        buckets: int,
+        scale_range: tuple[int, int] | tuple[float, float],
+        bucket_names: list[str] = None,
+    ) -> Self:
+        """
+        identity scale.
+
+        If bucket_names are provided, they  can be used with
+            `CategoryCriteria.by_name()`.
+        """
+        return cls(
+            scale_type="linear",
+            buckets=buckets,
+            scale_range=scale_range,
+            scale_tick=1,
+            bucket_names=bucket_names,
+            _internal=True,
+        )
+
+    @classmethod
+    def linear(
+        cls,
+        buckets: int,
+        scale_range: tuple[int, int] | tuple[float, float],
+        bucket_names: list[str] = None,
+    ) -> Self:
+        """
+        linear scale.
+
+        If bucket_names are provided, they  can be used with
+            `CategoryCriteria.by_name()`.
+        """
+        return cls(
+            scale_type="linear",
+            buckets=buckets,
+            scale_range=scale_range,
+            scale_tick=1,
+            bucket_names=bucket_names,
+            _internal=True,
+        )
+
+    @classmethod
+    def quadratic(
+        cls,
+        power: int | float,
+        buckets: int,
+        scale_range: tuple[int, int],
+        bucket_names: list[str] = None,
+    ) -> Self:
+        """
+        quadratic scale.
+
+        If bucket_names are provided, they  can be used with
+            `CategoryCriteria.by_name()`.
+        """
+        return cls(
+            scale_type="quadratic",
+            buckets=buckets,
+            scale_range=scale_range,
+            scale_tick=power,
+            bucket_names=bucket_names,
+            _internal=True,
+        )
+
+    @classmethod
+    def exponential(
+        cls,
+        base: float | int,
+        buckets: int,
+        scale_range: tuple[float, float],
+        bucket_names: list[str] = None,
+    ) -> Self:
+        """
+        exponential scale.
+
+        If bucket_names are provided, they  can be used with
+            `CategoryCriteria.by_name()`.
+        """
+        return cls(
+            scale_type="exponential",
+            buckets=buckets,
+            scale_range=scale_range,
+            scale_tick=base,
+            bucket_names=bucket_names,
+            _internal=True,
+        )
+
+    @classmethod
+    def logarithmic(
+        cls,
+        base: float | int,
+        buckets: int,
+        scale_range: tuple[float, float],
+        bucket_names: list[str] = None,
+    ) -> Self:
+        """
+        logarithmic scale.
+
+        If bucket_names are provided, they  can be used with
+            `CategoryCriteria.by_name()`.
+        """
+        return cls(
+            scale_type="logarithmic",
+            buckets=buckets,
+            scale_range=scale_range,
+            scale_tick=base,
+            bucket_names=bucket_names,
+            _internal=True,
+        )
+
+
+class Categorizer(Classifier):
+    """
+    Categorizer that bucketizes data based on the give scale.
+    """
+
+    def __init__(self, cols: ColsSpec = None, *, scale: Scale, tags: TagsSpec = None):
+        """
+        Create a categorizer that categorizes data based on the given scale.
+
+        Args:
+            cols(ColsSpec, optional): Column(s) to categorize.
+            scale(Scale): Scale to use for categorization.
+            tags(TagsSpec, optional): Tag(s) for the classification results. Tags allow
+                performing multiple actions, with each taking into account
+                only classifiers that have certain tag(s).
+
+        """
+        super().__init__(cols=cols, tags=tags)
+        self.scale = scale
+
+    @property
+    def scale(self) -> Scale:
+        return self._scale
+
+    @scale.setter
+    def scale(self, value: Scale):
+        if not isinstance(value, Scale):
+            raise DataQualityConfigurationError(ErrorCode.DQCE56, value, type(value))
+        self._scale = value
 
 
 class DoesNotMatch(BoolClassifier):
@@ -487,14 +733,6 @@ class IsIn(BoolClassifier):
         if not _is_collection(value):
             raise DataQualityConfigurationError(ErrorCode.DQCE30, value, type(value))
         self._set = value
-
-
-def _is_collection(value: Collection) -> bool:
-    return (
-        hasattr(value, "__contains__")
-        or hasattr(value, "__iter__")
-        or hasattr(value, "__getitem__")
-    )
 
 
 class IsInRange(BoolClassifier):

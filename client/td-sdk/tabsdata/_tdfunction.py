@@ -17,9 +17,9 @@ import tabsdata.tableframe.lazyframe.frame as td_frame
 from tabsdata._io.inputs.table_inputs import TableInput
 from tabsdata._io.outputs.table_outputs import TableOutput
 from tabsdata._io.plugin import DestinationPlugin, SourcePlugin
+from tabsdata._table_actions._typing import OnTablesSpec
 from tabsdata._table_actions.actions import (
     OnTablesAction,
-    OnTablesActionSpec,
     _build_actions_list_or_raise,
 )
 from tabsdata._tableuri import build_table_uri_object
@@ -56,8 +56,8 @@ class TabsdataFunction:
         input: SourcePlugin = None,
         output: DestinationPlugin = None,
         trigger_by: str | List[str] | None = None,
-        input_actions: OnTablesActionSpec = None,
-        output_actions: OnTablesActionSpec = None,
+        input_actions: OnTablesSpec = None,
+        output_actions: OnTablesSpec = None,
     ):
         """
         Initializes the TabsDataFunction with the given function, input, output and
@@ -76,9 +76,9 @@ class TabsdataFunction:
                 function to execute. It can be a table in the system, a list of
                 tables or None (in which case it will be inferred from the
                 dependencies).
-            input_actions (OnTablesActionSpec, optional): Actions to perform on the
+            input_actions (OnTablesSpec, optional): Actions to perform on the
                 input tables.
-            output_actions (OnTablesActionSpec, optional): Actions to perform on the
+            output_actions (OnTablesSpec, optional): Actions to perform on the
                 output tables.
         Raises:
             FunctionConfigurationError
@@ -315,12 +315,12 @@ class TabsdataFunction:
         return self._input_actions
 
     @input_actions.setter
-    def input_actions(self, actions: OnTablesActionSpec):
+    def input_actions(self, actions: OnTablesSpec):
         """
         Sets the actions to perform on the input tables.
 
         Args:
-            actions (OnTablesActionSpec): Actions to perform on the input
+            actions (OnTablesSpec): Actions to perform on the input
                 tables.
         """
         self._input_actions = _build_actions_list_or_raise(
@@ -336,12 +336,12 @@ class TabsdataFunction:
         return self._output_actions
 
     @output_actions.setter
-    def output_actions(self, actions: OnTablesActionSpec):
+    def output_actions(self, actions: OnTablesSpec):
         """
         Sets the actions to perform on the output tables.
 
         Args:
-            actions (OnTablesActionSpec): Actions to perform on the output
+            actions (OnTablesSpec): Actions to perform on the output
                 tables.
         """
         self._output_actions = _build_actions_list_or_raise(
