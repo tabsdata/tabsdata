@@ -30,7 +30,7 @@ from tests_tabsdata.conftest import (
     TESTING_RESOURCES_FOLDER,
     clean_polars_df,
     read_json_and_clean,
-    write_v2_yaml_file,
+    write_v2_function_yaml_file,
 )
 from tests_tabsdata.testing_resources.test_output_mariadb_driver_provided.example import (
     output_mariadb_driver_provided,
@@ -88,7 +88,7 @@ def test_output_mariadb_list(tmp_path, testing_mariadb):
         TESTING_RESOURCES_FOLDER, "test_output_mariadb_list", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         mock_dependency_location=[mock_parquet_table],
@@ -148,7 +148,7 @@ def test_output_mariadb_with_charset(tmp_path, testing_mariadb):
         "mock_table.parquet",
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         mock_dependency_location=[mock_parquet_table],
@@ -201,7 +201,7 @@ def test_output_mariadb_with_collation(tmp_path, testing_mariadb):
         "mock_table.parquet",
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         mock_dependency_location=[mock_parquet_table],
@@ -254,7 +254,7 @@ def test_output_mariadb_driver_provided(tmp_path, testing_mariadb):
         "mock_table.parquet",
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         mock_dependency_location=[mock_parquet_table],
@@ -307,7 +307,7 @@ def test_output_mariadb_list_single_element(tmp_path, testing_mariadb):
         "mock_table.parquet",
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         mock_dependency_location=[mock_parquet_table],
@@ -360,7 +360,7 @@ def test_output_mariadb_transaction(tmp_path, testing_mariadb):
         "mock_table.parquet",
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         mock_dependency_location=[mock_parquet_table],

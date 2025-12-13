@@ -32,7 +32,7 @@ from tests_tabsdata.conftest import (
     TESTING_RESOURCES_FOLDER,
     clean_polars_df,
     read_json_and_clean,
-    write_v2_yaml_file,
+    write_v2_function_yaml_file,
 )
 from tests_tabsdata.testing_resources.test_output_s3_catalog.example import (
     output_s3_catalog,
@@ -161,7 +161,7 @@ def test_output_s3_catalog(tmp_path, s3_client, s3_config):
         TESTING_RESOURCES_FOLDER, "test_output_s3_catalog", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
@@ -289,7 +289,7 @@ def test_output_s3_catalog_replace(tmp_path, s3_client, s3_config):
                 "mock_table.parquet",
             )
             function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-            write_v2_yaml_file(
+            write_v2_function_yaml_file(
                 input_yaml_file,
                 context_archive,
                 [mock_parquet_table],
@@ -412,7 +412,7 @@ def test_output_s3_catalog_append(tmp_path, s3_client, s3_config):
                 "mock_table.parquet",
             )
             function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-            write_v2_yaml_file(
+            write_v2_function_yaml_file(
                 input_yaml_file,
                 context_archive,
                 [mock_parquet_table],
@@ -526,7 +526,7 @@ def test_output_s3_catalog_no_auto_create_at_fails(tmp_path, s3_client, s3_confi
         TESTING_RESOURCES_FOLDER, "test_output_s3_catalog", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
@@ -626,7 +626,7 @@ def test_output_s3_catalog_schema_update(tmp_path, s3_client, s3_config):
         "mock_table.parquet",
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
@@ -750,7 +750,7 @@ def test_output_s3_catalog_schema_strict(tmp_path, s3_client, s3_config):
         "mock_table.parquet",
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
@@ -864,7 +864,7 @@ def test_output_s3_catalog_partition(tmp_path, s3_client, s3_config):
         "mock_table.parquet",
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
@@ -1005,7 +1005,7 @@ def test_output_s3_catalog_region_creds(tmp_path, s3_client, s3_config):
         "mock_table.parquet",
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],

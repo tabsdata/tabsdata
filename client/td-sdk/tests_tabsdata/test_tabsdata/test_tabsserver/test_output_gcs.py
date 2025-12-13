@@ -27,7 +27,7 @@ from tests_tabsdata.conftest import (
     TESTING_RESOURCES_FOLDER,
     clean_polars_df,
     read_json_and_clean,
-    write_v2_yaml_file,
+    write_v2_function_yaml_file,
 )
 from tests_tabsdata.testing_resources.test_output_gcs.example import (
     output_gcs as output_gcs_format_testing,
@@ -79,7 +79,7 @@ def test_output_gcs_parquet(tmp_path, gcs_config, gcs_client):
         TESTING_RESOURCES_FOLDER, "test_output_gcs", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
@@ -157,7 +157,7 @@ def test_output_gcs_csv(tmp_path, gcs_config, gcs_client):
         TESTING_RESOURCES_FOLDER, "test_output_gcs", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
@@ -233,7 +233,7 @@ def test_output_gcs_ndjson(tmp_path, gcs_config, gcs_client):
         TESTING_RESOURCES_FOLDER, "test_output_gcs", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],

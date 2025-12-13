@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 import os
 import uuid
-from typing import TypeAlias, Union
+from typing import TYPE_CHECKING
 
 import polars as pl
 
@@ -24,10 +24,11 @@ from tabsdata._io.outputs.shared_enums import (
 from tabsdata._io.plugin import DestinationPlugin, td_context
 from tabsdata._tableuri import build_table_uri_object
 
+if TYPE_CHECKING:
+    from tabsdata.typing import TableSpec
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-
-TableSpec: TypeAlias = Union[str, list[str], None]
 
 
 class BigQueryConn(Conn):

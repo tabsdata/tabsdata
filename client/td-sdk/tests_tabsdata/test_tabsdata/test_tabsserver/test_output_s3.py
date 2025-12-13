@@ -32,7 +32,7 @@ from tests_tabsdata.conftest import (
     TESTING_RESOURCES_FOLDER,
     clean_polars_df,
     read_json_and_clean,
-    write_v2_yaml_file,
+    write_v2_function_yaml_file,
 )
 from tests_tabsdata.testing_resources.test_output_s3.example import (
     output_s3 as output_s3_format_testing,
@@ -82,7 +82,7 @@ def test_output_s3_parquet(tmp_path, s3_client, s3_config):
         TESTING_RESOURCES_FOLDER, "test_output_s3", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
@@ -147,7 +147,7 @@ def test_output_s3_parquet_with_transaction_id(tmp_path, s3_client, s3_config):
         TESTING_RESOURCES_FOLDER, "test_output_s3", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
@@ -212,7 +212,7 @@ def test_output_s3_parquet_with_function_run_id(tmp_path, s3_client, s3_config):
         TESTING_RESOURCES_FOLDER, "test_output_s3", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
@@ -277,7 +277,7 @@ def test_output_s3_parquet_with_execution_id(tmp_path, s3_client, s3_config):
         TESTING_RESOURCES_FOLDER, "test_output_s3", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
@@ -345,7 +345,7 @@ def test_output_s3_parquet_with_export_timestamp(tmp_path, s3_client, s3_config)
         TESTING_RESOURCES_FOLDER, "test_output_s3", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
@@ -426,7 +426,7 @@ def test_output_s3_parquet_with_trigger_timestamp(tmp_path, s3_client, s3_config
         TESTING_RESOURCES_FOLDER, "test_output_s3", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
@@ -506,7 +506,7 @@ def test_output_s3_parquet_with_scheduler_timestamp(tmp_path, s3_client, s3_conf
         TESTING_RESOURCES_FOLDER, "test_output_s3", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
@@ -587,7 +587,7 @@ def test_output_s3_csv(tmp_path, s3_client, s3_config):
         TESTING_RESOURCES_FOLDER, "test_output_s3", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
@@ -652,7 +652,7 @@ def test_output_s3_ndjson(tmp_path, s3_client, s3_config):
         TESTING_RESOURCES_FOLDER, "test_output_s3", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
@@ -715,7 +715,7 @@ def test_output_s3_frame_list(tmp_path, s3_client, s3_config):
         TESTING_RESOURCES_FOLDER, "test_output_s3_frame_list", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],

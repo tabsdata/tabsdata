@@ -39,15 +39,14 @@ from tests_tabsdata.bootest import TDLOCAL_FOLDER
 from tests_tabsdata.conftest import (
     LOCAL_PACKAGES_LIST,
     MOCK_COLLECTION,
-    write_v2_yaml_file,
+    write_v2_function_yaml_file,
 )
 
 
 def pytest_configure(config):
-    """Register the tdfnrun marker."""
     config.addinivalue_line(
         "markers",
-        "tdfnrun: automatically add behaviours to 'tdfnrun' tests (mocks sys.stdin).",
+        "tdfnrun: automatically add behaviours to 'tdfnrun' tests.",
     )
 
 
@@ -388,7 +387,7 @@ def tdfnrun(
 
         log_folder = td_root / FunctionConstants.LOG_FOLDER_NAME.value
 
-        write_v2_yaml_file(
+        write_v2_function_yaml_file(
             filename=str(request_file),
             bundle_archive_location=bundle_file,
             mock_dependency_location=input_files,

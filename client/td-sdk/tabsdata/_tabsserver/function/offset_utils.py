@@ -21,7 +21,7 @@ from tabsdata._tabsserver.function.store_results_utils import (
 
 if TYPE_CHECKING:
     from tabsdata._tabsserver.function.execution_context import ExecutionContext
-    from tabsdata._tabsserver.function.yaml_parsing import InputYaml
+    from tabsdata._tabsserver.function.yaml_parsing import FunctionYaml
 
 logger = logging.getLogger(__name__)
 
@@ -197,7 +197,7 @@ class Offset:
         )
 
     def load_current_offset(
-        self, request: InputYaml, execution_context: ExecutionContext
+        self, request: FunctionYaml, execution_context: ExecutionContext
     ):
         """
         Load the current offset from the execution context.
@@ -271,7 +271,7 @@ class Offset:
             logger.debug("The offset has not changed.")
         return changed
 
-    def store(self, request: InputYaml, execution_context: ExecutionContext):
+    def store(self, request: FunctionYaml, execution_context: ExecutionContext):
         """
         Store the offset in the global variable.
 

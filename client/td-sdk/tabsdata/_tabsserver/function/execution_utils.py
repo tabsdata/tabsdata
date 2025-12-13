@@ -12,6 +12,7 @@ import polars as pl
 
 # noinspection PyProtectedMember
 import tabsdata._utils.tableframe._generators as td_generators
+from tabsdata._io.watchdog import SourceListenerContext
 from tabsdata._table_actions.actions import OnTablesAction
 from tabsdata._tabsserver.function import environment_import_utils
 from tabsdata._tabsserver.function.logging_utils import pad_string
@@ -26,7 +27,7 @@ from tabsdata._tabsserver.function.typing import (
     InputTableSpec,
     OutputTableSpec,
 )
-from tabsdata._tabsserver.function.yaml_parsing import Location
+from tabsdata._tabsserver.function.yaml_parsing import DataListenerYaml, Location
 from tabsdata._utils.tableframe._constants import EMPTY_VERSION
 
 # noinspection PyProtectedMember
@@ -58,6 +59,41 @@ def execute_function_from_config(
 
     result = execute_function(execution_context, parameters)
 
+    return result
+
+
+def execute_listener_from_config(
+    execution_context: ExecutionContext,
+):
+    environment_import_utils.update_syspath(execution_context.paths.code_folder)
+    # Decided to keep this logic with the code_folder to make it OS-agnostic. If we
+    # stored the function_file with the code_folder prefix, we would have to handle
+    # the path differently for different OSs.
+    result = execute_listener(execution_context)
+    return result
+
+
+def execute_listener(
+    execution_context: ExecutionContext,
+):
+    logger.info(pad_string("[Executing listener]"))
+
+    source = execution_context.source
+    listener = execution_context.source.listener
+    request: DataListenerYaml = execution_context.request
+    if not execution_context.source.allows_listener:
+        raise ValueError(
+            f"Requested a listener run for source {source}, but that "
+            "source does not allow listeners."
+        )
+    fn_state = request.fn_state
+    fn_status = request.fn_status
+    fn_trigger = request.fn_trigger
+    listener_context = SourceListenerContext(fn_state, fn_status, fn_trigger)
+    logger.debug(f"Listener context: {listener_context}")
+    logger.debug(f"Calling the 'listen' method of the provided listener {listener}")
+    result = listener.listen(listener_context)
+    logger.info("Listener executed successfully")
     return result
 
 

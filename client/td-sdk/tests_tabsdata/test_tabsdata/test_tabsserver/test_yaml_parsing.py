@@ -6,8 +6,10 @@ import os
 import pathlib
 import platform
 
+from tabsdata._io.watchdog import CallConfig
 from tabsdata._tabsserver.function.yaml_parsing import (
-    V2,
+    DataListenerYaml,
+    FunctionV2,
     Location,
     Table,
     TableVersions,
@@ -23,7 +25,7 @@ from tests_tabsdata.conftest import (
     MOCK_COLLECTION,
     MOCK_COLLECTION_ID,
     TESTING_RESOURCES_FOLDER,
-    write_v2_yaml_file,
+    write_v2_function_yaml_file,
 )
 
 # noinspection PyUnresolvedReferences
@@ -36,7 +38,7 @@ def test_parse_input_yaml():
         "example_file_input.yaml",
     )
     config = parse_request_yaml(input_yaml)
-    assert isinstance(config, V2)
+    assert isinstance(config, FunctionV2)
     assert config.info == {
         "function_bundle": {
             "uri": "file:///users/tucu/.tdserver/default/s/ID1/d/ID2/f/ID3.f",
@@ -115,6 +117,55 @@ def test_parse_input_yaml():
     assert second_output_table.env_prefix is None
 
 
+def test_parse_data_listener_input_yaml():
+    input_yaml = os.path.join(
+        TESTING_RESOURCES_FOLDER,
+        "example_data_listener_input.yaml",
+    )
+    config: DataListenerYaml = parse_request_yaml(input_yaml)
+    assert isinstance(config, DataListenerYaml)
+    assert config.function_bundle == Location(
+        {
+            "uri": "file:///foo",
+            "env_prefix": None,
+        }
+    )
+    assert config.function_bundle_uri == "file:///foo"
+    assert config.function_bundle_env_prefix is None
+
+    assert config.collection == "collection"
+    assert config.collection_id == "06DGHE4NM1RG3CK8OE7MA02V24"
+    assert config.function == "function"
+    assert config.function_version_id == "06DGHE4NMDQF3BKH73TLFLABAC"
+    assert config.config == {
+        "timeout_threshold_min": 60,
+        "size_threshold": 10000,
+        "start": 1765377873840,
+        "end": 1765377873841,
+    }
+
+    fn_trigger = config.fn_trigger
+    assert isinstance(fn_trigger, CallConfig)
+    assert fn_trigger.method == "POST"
+    assert fn_trigger.url == "http://localhost:2457/internal/fn_trigger"
+    assert fn_trigger.headers == []
+    assert fn_trigger.body is None
+
+    fn_state = config.fn_state
+    assert isinstance(fn_state, CallConfig)
+    assert fn_state.method == "GET"
+    assert fn_state.url == "http://localhost:2457/internal/fn_state"
+    assert fn_state.headers == [["content-type", "application/parquet"]]
+    assert fn_state.body is None
+
+    fn_status = config.fn_status
+    assert isinstance(fn_status, CallConfig)
+    assert fn_status.method == "GET"
+    assert fn_status.url == "http://localhost:2457/internal/fn_status"
+    assert fn_status.headers == []
+    assert fn_status.body is None
+
+
 def test_parse_minimal_input_yaml(tmp_path):
     """Test parsing a minimal input yaml file. An error in this test might signal
     that the write_v1_yaml_file function in conftest.py is not working properly,
@@ -131,13 +182,13 @@ def test_parse_minimal_input_yaml(tmp_path):
         else f"file://{context_file}"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         tmp_yaml_file,
         context_file,
         function_data_path=function_data_folder,
     )
     config = parse_request_yaml(tmp_yaml_file)
-    assert isinstance(config, V2)
+    assert isinstance(config, FunctionV2)
     assert config.info == {
         "collection": MOCK_COLLECTION,
         "collection_id": MOCK_COLLECTION_ID,

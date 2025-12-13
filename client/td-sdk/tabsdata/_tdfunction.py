@@ -14,9 +14,11 @@ import polars as pl
 # noinspection PyProtectedMember
 import tabsdata._utils.tableframe._helpers as td_helpers
 import tabsdata.tableframe.lazyframe.frame as td_frame
+from tabsdata._crontab import Crontab
 from tabsdata._io.inputs.table_inputs import TableInput
 from tabsdata._io.outputs.table_outputs import TableOutput
 from tabsdata._io.plugin import DestinationPlugin, SourcePlugin
+from tabsdata._io.watchdog import WatchDog
 from tabsdata._table_actions._typing import OnTablesSpec
 from tabsdata._table_actions.actions import (
     OnTablesAction,
@@ -185,6 +187,7 @@ class TabsdataFunction:
             raise FunctionConfigurationError(ErrorCode.FCE7, type(input))
         self._verify_valid_input_output()
         self._verify_valid_action_plugin_combination()
+        self._validate_trigger_by_and_inject()
 
     @property
     def original_folder(self) -> str:
@@ -270,40 +273,49 @@ class TabsdataFunction:
             raise FunctionConfigurationError(ErrorCode.FCE6, type(name))
 
     @property
-    def trigger_by(self) -> List[str] | None:
+    def trigger_by(self) -> list[str] | Crontab | WatchDog | None:
         """
         List[str]: The trigger(s) that will cause the function to execute. It must be
-            another table or tables in the system.
+            another table or tables in the system, a Crontab, or a Watchdog in the
+            case of a publisher.
         """
         return self._trigger_by
 
     @trigger_by.setter
-    def trigger_by(self, trigger_by: str | List[str] | None):
+    def trigger_by(self, trigger_by: str | list[str] | Crontab | WatchDog | None):
         """
         Sets the trigger(s) that will cause the function to execute
 
         Args:
-            trigger_by (str | List[str] | None): The trigger(s) that will
+            trigger_by (str | list[str] | WatchDog | Crontab | None): The trigger(s)
+                that will
                 cause the function to execute. It must be another table or tables in
-                the system. If None, all the tables in the dependencies will be used.
+                the system, a Crontab, or a Watchdog in the case of a publisher. If
+                None, all the tables in the dependencies will be used.
         """
         if isinstance(trigger_by, str):
             trigger_by = [trigger_by]
 
         if trigger_by is None:
             self._trigger_by = None
-            return
         elif isinstance(trigger_by, list):
+            self._trigger_by = trigger_by
+        elif isinstance(trigger_by, Crontab):
+            self._trigger_by = trigger_by
+        elif isinstance(trigger_by, WatchDog):
             self._trigger_by = trigger_by
         else:
             raise FunctionConfigurationError(ErrorCode.FCE2, type(trigger_by))
 
-        for trigger in self._trigger_by:
-            if not isinstance(trigger, str):
-                raise FunctionConfigurationError(ErrorCode.FCE2, type(trigger))
-            trigger_uri = build_table_uri_object(trigger)
-            if not trigger_uri.table:
-                raise FunctionConfigurationError(ErrorCode.FCE3, trigger)
+        if isinstance(self._trigger_by, list):
+            for trigger in self._trigger_by:
+                if not isinstance(trigger, str):
+                    raise FunctionConfigurationError(ErrorCode.FCE2, type(trigger))
+                trigger_uri = build_table_uri_object(trigger)
+                if not trigger_uri.table:
+                    raise FunctionConfigurationError(ErrorCode.FCE3, trigger)
+
+        self._validate_trigger_by_and_inject()
 
         # @property TODO: Uncomment this when reverting TD-1089
         # def input_actions(self) -> list[OnTablesAction]:
@@ -346,6 +358,26 @@ class TabsdataFunction:
             actions, ErrorCode.FCE10, FunctionConfigurationError
         )
         self._verify_valid_action_plugin_combination()
+
+    def _validate_trigger_by_and_inject(self):
+        if (
+            hasattr(self, "_trigger_by")
+            and hasattr(self, "_input")
+            and self.input
+            and self.trigger_by
+        ):
+            if isinstance(self.input, TableInput) and isinstance(
+                self.trigger_by, WatchDog
+            ):
+                raise FunctionConfigurationError(ErrorCode.FCE13)
+            if isinstance(self.trigger_by, WatchDog):
+                if not self.input.allows_listener:
+                    raise FunctionConfigurationError(
+                        ErrorCode.FCE14, self.input.__class__.__name__
+                    )
+                self.input._injected_watchdog = self.trigger_by
+            else:
+                self.input._injected_watchdog = None
 
     def _verify_valid_input_output(self):
         """

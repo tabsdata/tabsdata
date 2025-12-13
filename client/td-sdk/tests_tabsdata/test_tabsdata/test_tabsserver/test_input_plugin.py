@@ -24,7 +24,7 @@ from tests_tabsdata.conftest import (
     TESTING_RESOURCES_FOLDER,
     clean_polars_df,
     read_json_and_clean,
-    write_v2_yaml_file,
+    write_v2_function_yaml_file,
 )
 from tests_tabsdata.testing_resources.test_input_plugin.example import input_plugin
 from tests_tabsdata.testing_resources.test_input_plugin_from_pypi.example import (
@@ -68,7 +68,7 @@ def test_input_plugin(tmp_path):
     os.makedirs(response_folder, exist_ok=True)
     output_file = os.path.join(tmp_path, "output.parquet")
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file],
@@ -114,7 +114,7 @@ def test_input_plugin_multiple_inputs(tmp_path):
     os.makedirs(response_folder, exist_ok=True)
     output_file = os.path.join(tmp_path, "output.parquet")
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file],
@@ -161,7 +161,7 @@ def test_input_plugin_initial_values(tmp_path):
     output_file = os.path.join(tmp_path, "output.parquet")
     path_to_output_initial_values = os.path.join(tmp_path, "initial_values.parquet")
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file],
@@ -219,7 +219,7 @@ def test_input_plugin_initial_values_stored_number_2(tmp_path):
     )
     path_to_output_initial_values = os.path.join(tmp_path, "initial_values.parquet")
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file],
@@ -273,7 +273,7 @@ def test_input_plugin_from_pypi(tmp_path):
     os.makedirs(response_folder, exist_ok=True)
     output_file = os.path.join(tmp_path, "output.parquet")
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file],
@@ -310,7 +310,7 @@ def test_input_plugin_wrong_method_overwrite(tmp_path):
     os.makedirs(response_folder, exist_ok=True)
     output_file = os.path.join(tmp_path, "output.parquet")
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file],

@@ -4,9 +4,21 @@
 
 import pytest
 
-from tabsdata import LocalFileDestination, LocalFileSource, TableInput, TableOutput
+from tabsdata import (
+    LocalFileDestination,
+    LocalFileSource,
+    SourcePlugin,
+    TableInput,
+    TableOutput,
+)
+from tabsdata._crontab import Crontab
 from tabsdata._decorators import ALL_DEPS, publisher, subscriber, transformer
-from tabsdata.exceptions import DecoratorConfigurationError, ErrorCode
+from tabsdata._io.watchdog import WatchDog
+from tabsdata.exceptions import (
+    DecoratorConfigurationError,
+    ErrorCode,
+    FunctionConfigurationError,
+)
 
 # noinspection PyUnresolvedReferences
 from . import pytestmark  # noqa: F401
@@ -265,3 +277,133 @@ def test_subscriber_with_optional_parameters():
     assert isinstance(func.input, TableInput)
     assert isinstance(func.output, LocalFileDestination)
     assert func.trigger_by == ["trigger_table"]
+
+
+def test_subscriber_with_crontab_trigger():
+    crontab = Crontab("mask")
+
+    @subscriber(
+        TableInput("input"),
+        LocalFileDestination("output.csv"),
+        name="func_name",
+        trigger_by=crontab,
+    )
+    def func():
+        pass
+
+    assert func.trigger_by == crontab
+
+
+def test_transformer_with_crontab_trigger():
+    crontab = Crontab("mask")
+
+    @transformer(
+        TableInput("input"),
+        TableOutput("output"),
+        name="func_name",
+        trigger_by=crontab,
+    )
+    def func():
+        pass
+
+    assert func.trigger_by == crontab
+
+
+def test_publisher_with_crontab_trigger():
+    crontab = Crontab("mask")
+
+    @publisher(
+        LocalFileSource("input.csv"),
+        TableOutput("output"),
+        name="func_name",
+        trigger_by=crontab,
+    )
+    def func():
+        pass
+
+    assert func.trigger_by == crontab
+
+
+def test_subscriber_with_watchdog_trigger_raises_error():
+    watchdog = WatchDog()
+
+    with pytest.raises(FunctionConfigurationError) as e:
+
+        @subscriber(
+            TableInput("input"),
+            LocalFileDestination("output.csv"),
+            name="func_name",
+            trigger_by=watchdog,
+        )
+        def func():
+            pass
+
+    assert e.value.error_code == ErrorCode.FCE13
+
+
+def test_transformer_with_watchdog_trigger_raises_error():
+    watchdog = WatchDog()
+
+    with pytest.raises(FunctionConfigurationError) as e:
+
+        @transformer(
+            TableInput("input"),
+            TableOutput("output"),
+            name="func_name",
+            trigger_by=watchdog,
+        )
+        def func():
+            pass
+
+    assert e.value.error_code == ErrorCode.FCE13
+
+
+def test_publisher_with_watchdog_trigger():
+    watchdog = WatchDog()
+
+    class ValidWatchDogPlugin(SourcePlugin):
+
+        def __init__(self):
+            pass
+
+        @property
+        def allows_listener(self) -> bool:
+            return True
+
+    @publisher(
+        ValidWatchDogPlugin(),
+        TableOutput("output"),
+        name="func_name",
+        trigger_by=watchdog,
+    )
+    def func():
+        pass
+
+    assert func.trigger_by == watchdog
+    assert func.input._injected_watchdog == watchdog
+
+
+def test_publisher_with_watchdog_trigger_not_allowed_raises_error():
+    watchdog = WatchDog()
+
+    class InvalidWatchDogPlugin(SourcePlugin):
+
+        def __init__(self):
+            pass
+
+        @property
+        def allows_listener(self) -> bool:
+            return False
+
+    with pytest.raises(FunctionConfigurationError) as e:
+
+        @publisher(
+            InvalidWatchDogPlugin(),
+            TableOutput("output"),
+            name="func_name",
+            trigger_by=watchdog,
+        )
+        def func():
+            pass
+
+    assert e.value.error_code == ErrorCode.FCE14

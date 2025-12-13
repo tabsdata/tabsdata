@@ -28,7 +28,7 @@ from tests_tabsdata.conftest import (
     TESTING_RESOURCES_FOLDER,
     clean_polars_df,
     read_json_and_clean,
-    write_v2_yaml_file,
+    write_v2_function_yaml_file,
 )
 from tests_tabsdata.testing_resources.test_output_azure.example import (
     output_azure as output_azure_format_testing,
@@ -79,7 +79,7 @@ def test_output_azure_parquet(tmp_path, azure_client, azure_config):
         TESTING_RESOURCES_FOLDER, "test_output_azure", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
@@ -158,7 +158,7 @@ def test_output_azure_csv(tmp_path, azure_client, azure_config):
         TESTING_RESOURCES_FOLDER, "test_output_azure", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
@@ -235,7 +235,7 @@ def test_output_azure_ndjson(tmp_path, azure_client, azure_config):
         TESTING_RESOURCES_FOLDER, "test_output_azure", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],

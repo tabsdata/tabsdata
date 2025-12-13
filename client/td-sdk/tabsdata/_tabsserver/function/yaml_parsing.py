@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -11,6 +12,7 @@ from dataclasses import dataclass
 import yaml
 
 from tabsdata._format import CSVFormat
+from tabsdata._io.watchdog import CallConfig
 
 logger = logging.getLogger(__name__)
 
@@ -152,7 +154,7 @@ class TableVersions:
         return f"TableVersions(list_of_tables={self.list_of_table_objects})"
 
 
-class InputYaml(ABC):
+class FunctionYaml(ABC):
     """Just an abstract class to help with type hinting."""
 
     @property
@@ -271,7 +273,7 @@ class InputYaml(ABC):
         """Set the work section of the YAML file."""
 
 
-class V2(InputYaml):
+class FunctionV2(FunctionYaml):
     def __init__(self, content):
         self.content = content
 
@@ -368,7 +370,122 @@ class V2(InputYaml):
         self.content["work"] = value
 
     def __repr__(self):
-        return f"V2(content={self.content})"
+        return f"FunctionV2(content={self.content})"
+
+
+class DataListenerYaml(ABC):
+    """Just an abstract class to help with type hinting."""
+
+    @property
+    @abstractmethod
+    def collection(self) -> str:
+        """Return the collection of the request."""
+
+    @property
+    @abstractmethod
+    def collection_id(self) -> str:
+        """Return the collection ID of the request."""
+
+    @property
+    @abstractmethod
+    def config(self) -> dict:
+        """Return the listener config"""
+
+    @property
+    @abstractmethod
+    def fn_state(self) -> CallConfig:
+        """Endpoint information to obtain the state of the function"""
+
+    @property
+    @abstractmethod
+    def fn_status(self) -> CallConfig:
+        """Endpoint information to obtain the status of the function"""
+
+    @property
+    @abstractmethod
+    def fn_trigger(self) -> CallConfig:
+        """Endpoint information to trigger the function"""
+
+    @property
+    @abstractmethod
+    def function(self) -> str:
+        """Return the function of the request."""
+
+    @property
+    @abstractmethod
+    def function_version_id(self) -> str:
+        """Return the function version ID of the request."""
+
+    @property
+    @abstractmethod
+    def function_bundle(self) -> Location:
+        """Return the function bundle."""
+
+    @property
+    @abstractmethod
+    def function_bundle_env_prefix(self) -> str:
+        """Return the function bundle env prefix."""
+
+    @property
+    @abstractmethod
+    def function_bundle_uri(self) -> str:
+        """Return the function bundle URI."""
+
+
+class DataListenerV1(DataListenerYaml):
+    def __init__(self, content):
+        self.content = content
+
+    @property
+    def collection(self) -> str:
+        return self.info["collection"]
+
+    @property
+    def collection_id(self) -> str:
+        return self.info["collection_id"]
+
+    @property
+    def config(self) -> dict:
+        return json.loads(self.info.get("config", "{}"))
+
+    @property
+    def fn_state(self) -> CallConfig:
+        return CallConfig(**self.info.get("fn_state", {}))
+
+    @property
+    def fn_status(self) -> CallConfig:
+        return CallConfig(**self.info.get("fn_status", {}))
+
+    @property
+    def fn_trigger(self) -> CallConfig:
+        return CallConfig(**self.info.get("fn_trigger", {}))
+
+    @property
+    def function(self) -> str:
+        return self.info.get("function")
+
+    @property
+    def function_bundle(self) -> Location:
+        return Location(self.info.get("function_bundle"))
+
+    @property
+    def function_bundle_env_prefix(self) -> str:
+        return self.function_bundle.env_prefix if self.function_bundle else None
+
+    @property
+    def function_bundle_uri(self) -> str:
+        return self.function_bundle.uri if self.function_bundle else None
+
+    @property
+    def function_version_id(self) -> str:
+        return self.info["function_version_id"]
+
+    @property
+    def info(self) -> dict:
+        return self.content.get("info", {})
+
+    def __repr__(self):
+        return f"DataListenerV1(content={self.content})"
 
 
 def v2_table_constructor(loader, node):
@@ -380,10 +497,14 @@ def v2_table_versions_constructor(loader, node):
     return TableVersions(list_of_tables)
 
 
-def v2_constructor(loader, node):
+def v2_function_constructor(loader, node):
     loader.add_constructor("!Table", v2_table_constructor)
     loader.add_constructor("!TableVersions", v2_table_versions_constructor)
-    return V2(loader.construct_mapping(node))
+    return FunctionV2(loader.construct_mapping(node))
+
+
+def v1_data_listener_constructor(loader, node):
+    return DataListenerV1(loader.construct_mapping(node))
 
 
 def get_input_yaml_loader():
@@ -391,11 +512,14 @@ def get_input_yaml_loader():
     loader = yaml.SafeLoader
     # When more versions are added, they will be listed here, and each will have its
     # own constructor.
-    loader.add_constructor("!V2", v2_constructor)
+    loader.add_constructor("!FunctionV2", v2_function_constructor)
+    loader.add_constructor("!V2", v2_function_constructor)  # TODO: Only here for
+    #   backwards compatibility, remove ASAP
+    loader.add_constructor("!DataListenerInputV1", v1_data_listener_constructor)
     return loader
 
 
-def parse_request_yaml(yaml_file: str) -> InputYaml:
+def parse_request_yaml(yaml_file: str) -> FunctionYaml | DataListenerYaml:
     with open(yaml_file, "r") as file:
         return yaml.load(file, Loader=get_input_yaml_loader())
 
@@ -482,13 +606,24 @@ def get_response_dumper():
     return ResponseDumper
 
 
-def store_response_as_yaml(tables: list[Data | NoData], response_file: str):
+def store_function_response_as_yaml(tables: list[Data | NoData], response_file: str):
     with open(response_file, "w") as file:
         yaml.dump(
             V2ResponseFormat(
                 content={
                     "output": tables,
                 }
+            ),
+            file,
+            Dumper=get_response_dumper(),
+        )
+
+
+def store_data_listener_response_as_yaml(response_file: str, exit_status):
+    with open(response_file, "w") as file:
+        yaml.dump(
+            V2ResponseFormat(
+                content={"exit_status": exit_status},
             ),
             file,
             Dumper=get_response_dumper(),

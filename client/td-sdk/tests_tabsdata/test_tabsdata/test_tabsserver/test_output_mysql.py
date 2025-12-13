@@ -24,7 +24,7 @@ from tests_tabsdata.conftest import (
     TESTING_RESOURCES_FOLDER,
     clean_polars_df,
     read_json_and_clean,
-    write_v2_yaml_file,
+    write_v2_function_yaml_file,
 )
 from tests_tabsdata.testing_resources.test_output_sql_driver_provided.example import (
     testing_tabsdata_function as output_sql_driver_provided,
@@ -86,7 +86,7 @@ def test_output_sql_list(tmp_path, mysql_config):
         TESTING_RESOURCES_FOLDER, "test_output_sql_list", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         mock_dependency_location=[mock_parquet_table],
@@ -155,7 +155,7 @@ def test_output_sql_modified_params(tmp_path, mysql_config):
         "mock_table.parquet",
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         mock_dependency_location=[mock_parquet_table],
@@ -224,7 +224,7 @@ def test_output_sql_wrong_driver_fails(tmp_path, mysql_config):
         "mock_table.parquet",
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         mock_dependency_location=[mock_parquet_table],
@@ -270,7 +270,7 @@ def test_output_sql_driver_provided(tmp_path, mysql_config):
         "mock_table.parquet",
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         mock_dependency_location=[mock_parquet_table],
@@ -325,7 +325,7 @@ def test_output_sql_list_none(tmp_path, mysql_config):
         TESTING_RESOURCES_FOLDER, "test_output_sql_list_none", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         mock_dependency_location=[mock_parquet_table],
@@ -382,7 +382,7 @@ def test_output_sql_none(tmp_path, mysql_config):
         "mock_table.parquet",
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         mock_dependency_location=[mock_parquet_table],
@@ -432,7 +432,7 @@ def test_output_sql_transaction(tmp_path, mysql_config):
         TESTING_RESOURCES_FOLDER, "test_output_sql_transaction", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         mock_dependency_location=[mock_parquet_table],

@@ -16,9 +16,11 @@ from typing import Generator, List, cast
 import polars as pl
 import requests
 
+from tabsdata._crontab import Crontab
 from tabsdata._io.inputs.table_inputs import TableInput
 from tabsdata._io.outputs.sql_outputs import verify_output_sql_drivers
 from tabsdata._io.outputs.table_outputs import TableOutput
+from tabsdata._io.watchdog import WatchDog
 from tabsdata._tdfunction import TabsdataFunction
 from tabsdata._utils.bundle_utils import create_bundle_archive
 from tabsdata._utils.temps import tabsdata_temp_folder
@@ -449,6 +451,7 @@ class Collection:
             decorator_function_name,
             decorator_type,
             source_or_destination_name,
+            workers,
         ) = _create_archive(
             function_path,
             temporary_directory,
@@ -489,6 +492,7 @@ class Collection:
             reuse_frozen_tables=reuse_tables,
             decorator=decorator_type,
             plugin_name=source_or_destination_name,
+            workers=workers,
             raise_for_status=raise_for_status,
         )
         return Function(self.connection, self, function_name)
@@ -561,6 +565,7 @@ class Collection:
             decorator_new_function_name,
             decorator_type,
             source_or_destination_name,
+            workers,
         ) = _create_archive(
             function_path,
             temporary_directory,
@@ -599,6 +604,7 @@ class Collection:
             runtime_values=runtime_values,
             reuse_frozen_tables=reuse_tables,
             plugin_name=source_or_destination_name,
+            workers=workers,
             raise_for_status=raise_for_status,
         )
 
@@ -4542,7 +4548,15 @@ def _create_archive(
     string_dependencies: List[str] = (
         function.input._table_list if isinstance(function.input, TableInput) else []
     )
-    trigger_string_list = function.trigger_by
+    if isinstance(function.trigger_by, Crontab):
+        trigger_string_list = None
+        workers = {"C": function.trigger_by._to_dict()}
+    elif isinstance(function.trigger_by, WatchDog):
+        trigger_string_list = None
+        workers = {"W": function.trigger_by._to_dict()}
+    else:
+        trigger_string_list = function.trigger_by
+        workers = None
     try:
         function_snippet = inspect.getsource(function.original_function)
     except OSError:
@@ -4578,6 +4592,7 @@ def _create_archive(
         function_name,
         function_type,
         source_or_destination,
+        workers,
     )
 
 

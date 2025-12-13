@@ -27,7 +27,7 @@ from tests_tabsdata.conftest import (
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
     clean_polars_df,
     read_json_and_clean,
-    write_v2_yaml_file,
+    write_v2_function_yaml_file,
 )
 from tests_tabsdata_salesforce.conftest import (
     FAKE_CREDENTIALS,
@@ -75,7 +75,7 @@ def test_input_salesforce(tmp_path, sf_config):
     output_file = os.path.join(tmp_path, "output.parquet")
     path_to_output_initial_values = os.path.join(tmp_path, "initial_values.parquet")
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file],
@@ -128,7 +128,7 @@ def test_input_salesforce_initial_values(tmp_path, sf_config):
     second_output_file = os.path.join(tmp_path, "second_output_01.parquet")
     path_to_output_initial_values = os.path.join(tmp_path, "initial_values.parquet")
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[first_output_file, second_output_file],
@@ -192,7 +192,7 @@ def test_input_salesforce_initial_values(tmp_path, sf_config):
         tmp_path, "second_initial_values.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[first_output_file, second_output_file],
@@ -509,7 +509,7 @@ def test_input_salesforce_with_none(tmp_path, sf_config):
     output_file = os.path.join(tmp_path, "output.parquet")
     path_to_output_initial_values = os.path.join(tmp_path, "initial_values.parquet")
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file],
@@ -553,7 +553,7 @@ def test_input_salesforce_with_list_none(tmp_path, sf_config):
     output_file_2 = os.path.join(tmp_path, "output_2.parquet")
     path_to_output_initial_values = os.path.join(tmp_path, "initial_values.parquet")
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file_1, output_file_2],

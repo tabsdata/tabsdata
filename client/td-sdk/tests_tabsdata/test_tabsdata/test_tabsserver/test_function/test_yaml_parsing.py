@@ -11,7 +11,7 @@ import yaml
 from tabsdata._tabsserver.function.yaml_parsing import (
     Data,
     NoData,
-    store_response_as_yaml,
+    store_function_response_as_yaml,
 )
 from tabsdata._utils.temps import tabsdata_temp_folder
 
@@ -33,7 +33,7 @@ def test_store_response_as_yaml_generates_correct_yaml():
     with tempfile.TemporaryDirectory(dir=tabsdata_temp_folder()) as tmpdir:
         response_file = Path(tmpdir) / "response.yaml"
 
-        store_response_as_yaml(tables, response_file)
+        store_function_response_as_yaml(tables, response_file)
 
         class TestResponseLoader(yaml.SafeLoader):
             pass

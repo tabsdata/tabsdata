@@ -1,0 +1,35 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+# Example of an input.yaml for tabsserver main function. Used in
+# test_tabsserver/test_yaml_parsing.py::test_parse_data_listener_input_yaml
+
+!DataListenerInputV1
+info:
+  collection_id: 06DGHE4NM1RG3CK8OE7MA02V24
+  collection: collection
+  function_version_id: 06DGHE4NMDQF3BKH73TLFLABAC
+  function: function
+  function_bundle:
+    uri: file:///foo
+    env_prefix: null
+  scheduled_on: 1765377873843
+  fn_trigger:
+    method: POST
+    url: http://localhost:2457/internal/fn_trigger
+    headers: []
+    body: null
+  fn_state:
+    method: GET
+    url: http://localhost:2457/internal/fn_state
+    headers:
+    - - content-type
+      - application/parquet
+    body: null
+  fn_status:
+    method: GET
+    url: http://localhost:2457/internal/fn_status
+    headers: []
+    body: null
+  config: '{"timeout_threshold_min":60,"size_threshold":10000,"start":1765377873840,"end":1765377873841}'

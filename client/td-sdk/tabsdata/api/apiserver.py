@@ -609,6 +609,7 @@ class APIServer:
         runtime_values: str,
         reuse_frozen_tables: bool,
         plugin_name: str = None,
+        workers: dict = None,
         raise_for_status: bool = True,
     ):
         endpoint = f"/collections/{collection_name}/functions"
@@ -625,6 +626,7 @@ class APIServer:
             "reuse_frozen_tables",
             "runtime_values",
             "connector",
+            "workers",
         ]
         values = [
             function_name,
@@ -638,6 +640,7 @@ class APIServer:
             reuse_frozen_tables,
             runtime_values,
             plugin_name,
+            workers,
         ]
         data = self.get_params_dict(names, values)
         response = self.post(endpoint, json=data)
@@ -741,6 +744,7 @@ class APIServer:
         runtime_values: str = None,
         reuse_frozen_tables: bool = None,
         plugin_name: str = None,
+        workers: dict = None,
         raise_for_status: bool = True,
     ):
         endpoint = f"/collections/{collection_name}/functions/{function_name}"
@@ -758,6 +762,7 @@ class APIServer:
                 "runtime_values",
                 "reuse_frozen_tables",
                 "connector",
+                "workers",
             ],
             [
                 new_function_name,
@@ -771,6 +776,7 @@ class APIServer:
                 runtime_values,
                 reuse_frozen_tables,
                 plugin_name,
+                workers,
             ],
         )
         response = self.post(endpoint, json=data)

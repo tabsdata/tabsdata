@@ -32,7 +32,7 @@ from tabsdata._utils.bundle_utils import (
 )
 
 if TYPE_CHECKING:
-    from tabsdata._tabsserver.function.yaml_parsing import InputYaml
+    from tabsdata._tabsserver.function.yaml_parsing import FunctionYaml
 
 
 logger = logging.getLogger(__name__)
@@ -49,7 +49,7 @@ class ExecutionContext:
         paths: ExecutionPaths,
         work: str,
         function_config: dict = None,
-        request: InputYaml = None,
+        request: FunctionYaml = None,
         status: Status = None,
         mount_options_dict: dict = None,
     ):

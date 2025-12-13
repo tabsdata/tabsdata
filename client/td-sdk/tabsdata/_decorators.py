@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import logging
-from typing import List, ParamSpec, TypeVar
+from typing import TYPE_CHECKING, List, ParamSpec, TypeVar
 
 from tabsdata._io.inputs.file_inputs import AzureSource, LocalFileSource, S3Source
 from tabsdata._io.inputs.sql_inputs import (
@@ -35,6 +35,12 @@ from tabsdata._table_actions.actions import (
 from tabsdata._tdfunction import TabsdataFunction
 from tabsdata.exceptions import DecoratorConfigurationError, ErrorCode
 
+if TYPE_CHECKING:
+    from tabsdata.typing import (
+        PublisherTriggerBySpec,
+        SubscriberTriggerBySpec,
+        TransformerTriggerBySpec,
+    )
 P = ParamSpec("P")
 T = TypeVar("T")
 
@@ -47,7 +53,7 @@ def transformer(
     input_tables: TableInput | str | List[str],
     output_tables: TableOutput | str | List[str],
     name: str = None,
-    trigger_by: str | List[str] | None = ALL_DEPS,
+    trigger_by: TransformerTriggerBySpec = ALL_DEPS,
     # on_input_tables: OnTablesSpec = None, TODO: Uncomment this when reverting TD-1089
     on_output_tables: OnTablesSpec = None,
 ) -> callable:
@@ -62,10 +68,10 @@ def transformer(
             output of the function.
         name (str, optional): The name with which the function will be registered.
             If not provided, the current function name will be used.
-        trigger_by (str | list[str] | None, optional): The trigger that will cause
+        trigger_by (TransformerTriggerBySpec, optional): The trigger that will cause
             the function to execute. It can be a table in the system, a list of
-            tables, or None (in which case it must be triggered manually). Defaults to
-            all dependencies.
+            tables, None (in which case it must be triggered manually),
+            or a Crontab. Defaults to all dependencies.
         on_output_tables (OnTablesSpec, optional):
             Actions to perform on output tables after executing the function.
             Can be a single action or a list of them. Defaults to None.
@@ -147,7 +153,7 @@ def publisher(
     ),
     tables: TableOutput | str | List[str],
     name: str = None,
-    trigger_by: str | List[str] | None = None,
+    trigger_by: PublisherTriggerBySpec = None,
     on_tables: OnTablesSpec = None,
 ) -> callable:
     """
@@ -162,9 +168,9 @@ def publisher(
             output of the function.
         name (str, optional): The name with which the function will be registered.
             If not provided, the current function name will be used.
-        trigger_by (str | list[str] | None, optional): The trigger that will cause
+        trigger_by (PublisherTriggerBySpec, optional): The trigger that will cause
             the function to execute. It can be a table in the system, a list of
-            tables, or None (in which case it must be triggered manually).
+            tables, None (in which case it must be triggered manually), or a Crontab.
         on_tables (OnTablesSpec, optional): Actions
             to perform on output tables after executing the function. Can be a
             single action or a list of them. Defaults to None.
@@ -215,7 +221,7 @@ def subscriber(
         | DestinationPlugin
     ),
     name: str = None,
-    trigger_by: str | List[str] | None = ALL_DEPS,
+    trigger_by: SubscriberTriggerBySpec = ALL_DEPS,
     # on_tables: OnTablesSpec = None, TODO: Uncomment this when reverting TD-1089
 ) -> callable:
     """
@@ -230,10 +236,10 @@ def subscriber(
             | DestinationPlugin): Where to store the output of the function.
         name (str, optional): The name with which the function will be registered.
             If not provided, the current function name will be used.
-        trigger_by (str | list[str] | None, optional): The trigger that will cause
+        trigger_by (SubscriberTriggerBySpec, optional): The trigger that will cause
             the function to execute. It can be a table in the system, a list of
-            tables, or None (in which case it must be triggered manually). Defaults to
-            all dependencies.
+            tables, None (in which case it must be triggered manually),
+            or a Crontab. Defaults to all dependencies.
     Returns:
         callable: The function converted to a TabsdataFunction.
     """

@@ -19,7 +19,10 @@ from tabsdata._tabsserver.function.global_utils import (
     DEFAULT_DEVELOPMENT_LOCKS_LOCATION,
     setup_logging,
 )
-from tabsdata._tabsserver.function.yaml_parsing import parse_request_yaml
+from tabsdata._tabsserver.function.yaml_parsing import (
+    FunctionYaml,
+    parse_request_yaml,
+)
 from tabsdata._tabsserver.pyenv_creation import (
     create_virtual_environment,
     get_path_to_environment_bin,
@@ -150,6 +153,10 @@ def invoke(
     python_bin_file = get_path_to_environment_bin(python_environment)
     python_bin_folder = os.path.dirname(python_bin_file)
 
+    invocation_type = (
+        "function" if isinstance(request_content, FunctionYaml) else "listener"
+    )
+
     command_to_execute = [
         python_bin_file,
         "-m",
@@ -164,6 +171,8 @@ def invoke(
         response_folder,
         "--output-folder",
         output_folder,
+        "--invocation-type",
+        invocation_type,
     ]
     env = os.environ.copy()
 

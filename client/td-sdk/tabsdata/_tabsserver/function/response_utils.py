@@ -7,7 +7,12 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from .yaml_parsing import Data, NoData, store_response_as_yaml
+from .yaml_parsing import (
+    Data,
+    NoData,
+    store_data_listener_response_as_yaml,
+    store_function_response_as_yaml,
+)
 
 if TYPE_CHECKING:
     from tabsdata._tabsserver.function.execution_context import ExecutionContext
@@ -17,7 +22,7 @@ logger = logging.getLogger(__name__)
 RESPONSE_FILE_NAME = "response.yaml"
 
 
-def create_response(
+def create_function_execution_response(
     execution_context: ExecutionContext,
 ):
     modified_tables = execution_context.status.modified_tables
@@ -110,4 +115,13 @@ def create_response(
     response_file = execution_context.paths.response_file
     logger.debug(f"Response content: {response_content}")
     logger.debug(f"Response file: {response_file}")
-    store_response_as_yaml(response_content, response_file)
+    store_function_response_as_yaml(response_content, response_file)
+
+
+def create_data_listener_response(
+    execution_context: ExecutionContext,
+):
+    response_file = execution_context.paths.response_file
+    logger.debug(f"Response file: {response_file}")
+    logger.debug("Exit status: 0")
+    store_data_listener_response_as_yaml(response_file, 0)

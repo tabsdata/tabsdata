@@ -33,7 +33,7 @@ from tests_tabsdata.conftest import (
     clean_polars_df,
     get_lf,
     read_json_and_clean,
-    write_v2_yaml_file,
+    write_v2_function_yaml_file,
 )
 from tests_tabsdata_mssql.conftest import (
     DB_PASSWORD,
@@ -372,7 +372,7 @@ def test_output_mssql(tmp_path, mssql_connection, mssql_version):
         TESTING_RESOURCES_FOLDER, "test_output_mssql", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
@@ -442,7 +442,7 @@ def test_multiple_outputs_mssql(tmp_path, mssql_connection, mssql_version):
         "mock_table.parquet",
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
@@ -518,7 +518,7 @@ def test_output_mssql_with_none(tmp_path, mssql_connection, mssql_version):
         TESTING_RESOURCES_FOLDER, "test_output_mssql_none", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],

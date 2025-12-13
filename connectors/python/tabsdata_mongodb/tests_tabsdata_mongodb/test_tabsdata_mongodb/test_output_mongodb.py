@@ -28,7 +28,7 @@ from tests_tabsdata.conftest import (
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
     get_lf,
     read_json_and_clean,
-    write_v2_yaml_file,
+    write_v2_function_yaml_file,
 )
 from tests_tabsdata_mongodb.conftest import (
     DB_PASSWORD,
@@ -644,7 +644,7 @@ def test_output_mongodb(tmp_path, testing_mongodb):
         TESTING_RESOURCES_FOLDER, "test_output_mongodb", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
@@ -707,7 +707,7 @@ def test_multiple_outputs_mongodb(tmp_path, testing_mongodb):
         TESTING_RESOURCES_FOLDER, "test_multiple_outputs_mongodb", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
@@ -764,7 +764,7 @@ def test_output_mongodb_with_none(tmp_path, testing_mongodb):
         "mock_table.parquet",
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         mock_dependency_location=[mock_parquet_table],
@@ -811,7 +811,7 @@ def test_output_mongodb_with_list_none(tmp_path, testing_mongodb):
         TESTING_RESOURCES_FOLDER, "test_output_mongodb_list_none", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         mock_dependency_location=[mock_parquet_table],

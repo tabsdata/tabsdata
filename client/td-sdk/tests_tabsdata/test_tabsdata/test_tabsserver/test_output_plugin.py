@@ -24,7 +24,7 @@ from tests_tabsdata.conftest import (
     TESTING_RESOURCES_FOLDER,
     clean_polars_df,
     read_json_and_clean,
-    write_v2_yaml_file,
+    write_v2_function_yaml_file,
 )
 from tests_tabsdata.testing_resources.test_output_plugin.example import output_plugin
 from tests_tabsdata.testing_resources.test_output_plugin_multiple_outputs.example import (
@@ -69,7 +69,7 @@ def test_output_plugin(tmp_path):
         TESTING_RESOURCES_FOLDER, "test_output_plugin", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
@@ -136,7 +136,7 @@ def test_output_plugin_multiple_outputs(tmp_path):
         "mock_table.parquet",
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
@@ -204,7 +204,7 @@ def test_output_plugin_multiple_outputs_with_none(tmp_path):
         "mock_table.parquet",
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
@@ -242,7 +242,7 @@ def test_output_plugin_with_none(tmp_path):
         TESTING_RESOURCES_FOLDER, "test_output_plugin_with_none", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],

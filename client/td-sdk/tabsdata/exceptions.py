@@ -100,6 +100,34 @@ class ErrorCode(Enum):
             "got object '{}' of type '{}' instead."
         ),
     }
+    DCE11 = {
+        "code": "DCE-011",
+        "message": (
+            "The 'start' parameter of a Crontab object must be a datetime object "
+            "or None; got '{}' of type {} instead."
+        ),
+    }
+    DCE12 = {
+        "code": "DCE-012",
+        "message": (
+            "The 'end' parameter of a Crontab object must be a datetime object "
+            "or None; got '{}' of type {} instead."
+        ),
+    }
+    DCE13 = {
+        "code": "DCE-013",
+        "message": (
+            "The 'start' parameter of a Crontab object must be earlier than the 'end' "
+            "parameter. Got start='{}' and end='{}'."
+        ),
+    }
+    DCE14 = {
+        "code": "DCE-014",
+        "message": (
+            "The 'mask' parameter of a Crontab object must be a valid cron"
+            " specification; got '{}' instead."
+        ),
+    }
     DECE2 = {
         "code": "DECE-002",
         "message": (
@@ -1154,8 +1182,10 @@ class ErrorCode(Enum):
     FCE2 = {
         "code": "FCE-002",
         "message": (
-            "The 'trigger_by' parameter of a TabsDataFunction must be a str"
-            " or a list of strings, got an object of type '{}' instead."
+            "The 'trigger_by' parameter of a TabsDataFunction must be a str, "
+            "a list of strings, a Crontab, or a Watchdog in the case of a "
+            "publisher. Got an "
+            "object of type '{}' instead."
         ),
     }
     FCE3 = {
@@ -1225,6 +1255,23 @@ class ErrorCode(Enum):
             "The 'output_actions' parameter of a TabsdataFunction can only be used "
             "when the function has a TableOutput as output. Got the actions {} for a "
             "function with output type {} instead."
+        ),
+    }
+    FCE13 = {
+        "code": "FCE-013",
+        "message": (
+            "The 'trigger_by' parameter of a TabsdataFunction can only be a Watchdog "
+            "when the function is a publisher."
+        ),
+    }
+    FCE14 = {
+        "code": "FCE-014",
+        "message": (
+            "The 'trigger_by' parameter of a TabsdataFunction can only be a Watchdog "
+            "when the function is a publisher and the source allows listeners. The "
+            "current function was provided with a Watchdog as the trigger, but the "
+            "source {} does not allow listeners. You can check if a source allows "
+            "listeners through the 'source.allows_listeners' property."
         ),
     }
     FOCE1 = {
@@ -1847,6 +1894,41 @@ class ErrorCode(Enum):
         "code": "TUCE-015",
         "message": "A TableURI object must have a valid 'table' parameter.",
     }
+    WCE1 = {
+        "code": "WCE-001",
+        "message": (
+            "The 'timeout_mins' parameter of a Watchdog object must be a "
+            "positive integer or None; got '{}' of type {} instead."
+        ),
+    }
+    WCE2 = {
+        "code": "WCE-002",
+        "message": (
+            "The 'size' parameter of a Watchdog object must be a positive "
+            "integer or None; got '{}' of type {} instead."
+        ),
+    }
+    WCE3 = {
+        "code": "WCE-003",
+        "message": (
+            "The 'start' parameter of a Watchdog object must be a datetime object "
+            "or None; got '{}' of type {} instead."
+        ),
+    }
+    WCE4 = {
+        "code": "WCE-004",
+        "message": (
+            "The 'end' parameter of a Watchdog object must be a datetime object "
+            "or None; got '{}' of type {} instead."
+        ),
+    }
+    WCE5 = {
+        "code": "WCE-005",
+        "message": (
+            "The 'start' parameter of a Watchdog object must be earlier than the 'end' "
+            "parameter. Got start='{}' and end='{}'."
+        ),
+    }
 
 
 class TabsDataException(Exception):
@@ -1981,3 +2063,12 @@ class TableURIConfigurationError(TabsDataException):
     """
 
     CODE_PREFIX = "TUCE"
+
+
+class WatchDogConfigurationError(TabsDataException):
+    """
+    Exception raised when the creation or modification of a Watchdog object or one of
+    its auxiliary objects fails.
+    """
+
+    CODE_PREFIX = "WCE"

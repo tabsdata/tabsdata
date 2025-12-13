@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, List, Tuple, Union
 
 # noinspection PyProtectedMember
 import tabsdata._utils.tableframe._generators as td_generators
+from tabsdata._io.watchdog import SourceListener
 from tabsdata._tabsserver.function.execution_utils import load_sources
 from tabsdata._tabsserver.function.offset_utils import OffsetReturn
 from tabsdata._tabsserver.function.store_results_utils import (
@@ -293,6 +294,24 @@ class SourcePlugin:
                 the plugin.
         """
         self._initial_values = values
+
+    @property
+    def allows_listener(self) -> bool:
+        return False
+
+    @property
+    def listener(self) -> SourceListener:
+        if self.allows_listener:
+            raise NotImplementedError(
+                "The 'listener' property of the SourcePlugin {self} was called, but "
+                "this plugin has not reimplemented the listener method to be callable. "
+                "Please reimplement it."
+            )
+        else:
+            raise ValueError(
+                f"The 'listener' property of the SourcePlugin {self} was called, but "
+                "this plugin does not allow the implementation of listeners."
+            )
 
 
 class DestinationPlugin:

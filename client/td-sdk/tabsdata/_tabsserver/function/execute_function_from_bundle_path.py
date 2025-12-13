@@ -21,10 +21,16 @@ from tabsdata._tabsserver.function.execution_exceptions import (
     TABSDATA_ERROR_EXIT_STATUS,
     CustomException,
 )
-from tabsdata._tabsserver.function.execution_utils import execute_function_from_config
+from tabsdata._tabsserver.function.execution_utils import (
+    execute_function_from_config,
+    execute_listener_from_config,
+)
 from tabsdata._tabsserver.function.global_utils import ABSOLUTE_LOCATION, setup_logging
 from tabsdata._tabsserver.function.logging_utils import pad_string
-from tabsdata._tabsserver.function.response_utils import create_response
+from tabsdata._tabsserver.function.response_utils import (
+    create_data_listener_response,
+    create_function_execution_response,
+)
 from tabsdata._tabsserver.function.results_collection import ResultsCollection
 from tabsdata._tabsserver.function.store_results_utils import store_results
 from tabsdata._tabsserver.function.yaml_utils.exception_yaml import store_exception_yaml
@@ -43,7 +49,16 @@ def execute_bundled_function(
         results,
     )
     execution_context.store_status()
-    create_response(execution_context)
+    create_function_execution_response(execution_context)
+    return results
+
+
+def execute_listener(
+    execution_context: ExecutionContext,
+) -> ResultsCollection:
+    # Execute the listener
+    results = execute_listener_from_config(execution_context)
+    create_data_listener_response(execution_context)
     return results
 
 
@@ -93,13 +108,19 @@ def main():
         ),
         default=None,
     )
+    parser.add_argument(
+        "--invocation-type", choices=["function", "listener"], default="function"
+    )
     arguments = parser.parse_args()
     setup_logging(
         default_path=os.path.join(ABSOLUTE_LOCATION, "function_logging.yaml"),
         logs_folder=arguments.logs_folder,
     )
     try:
-        logger.info(pad_string("[Starting function execution]"))
+        if arguments.invocation_type == "function":
+            logger.info(pad_string("[Starting function execution]"))
+        else:
+            logger.info(pad_string("[Starting listener execution]"))
         raw_mount_options = sys.stdin.read()
         mount_options_dict = yaml.safe_load(raw_mount_options)
         execution_fs = ExecutionPaths(
@@ -113,19 +134,27 @@ def main():
             work=arguments.work,
             mount_options_dict=mount_options_dict,
         )
-        execute_bundled_function(execution_context)
-        logger.info(pad_string("[Exiting function execution]"))
-        logger.info("Function executed successfully. Exiting.")
+        if arguments.invocation_type == "function":
+            execute_bundled_function(execution_context)
+            logger.info(pad_string("[Exiting function execution]"))
+            logger.info("Function executed successfully. Exiting.")
+        else:
+            execute_listener(execution_context)
+            logger.info(pad_string("[Exiting listener execution]"))
+            logger.info("Listener executed successfully. Exiting.")
     except Exception as e:
-        logger.info(pad_string("[Exiting function execution]"))
-        logger.error(f"Error executing the function: {e}")
-        logger.error(traceback.format_exc())
-        is_user_error = isinstance(e, CustomException)
-        exit_status = (
-            TABSDATA_ERROR_EXIT_STATUS if is_user_error else GENERAL_ERROR_EXIT_STATUS
-        )
-        store_exception_yaml(e, exit_status, arguments.response_folder)
-        sys.exit(exit_status)
+        if arguments.invocation_type == "function":
+            logger.info(pad_string("[Exiting function execution]"))
+            logger.error(f"Error executing the function: {e}")
+            logger.error(traceback.format_exc())
+            is_user_error = isinstance(e, CustomException)
+            exit_status = (
+                TABSDATA_ERROR_EXIT_STATUS
+                if is_user_error
+                else GENERAL_ERROR_EXIT_STATUS
+            )
+            store_exception_yaml(e, exit_status, arguments.response_folder)
+            sys.exit(exit_status)
 
 
 if __name__ == "__main__":

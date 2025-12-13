@@ -26,7 +26,7 @@ from tests_tabsdata.conftest import (
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
     clean_polars_df,
     read_json_and_clean,
-    write_v2_yaml_file,
+    write_v2_function_yaml_file,
 )
 
 # noinspection PyPackageRequirements
@@ -216,7 +216,7 @@ def test_input_mssql(mssql_connection, tmp_path, mssql_version):
     output_file2 = os.path.join(tmp_path, "output2.parquet")
     path_to_output_initial_values = os.path.join(tmp_path, "initial_values.parquet")
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file1, output_file2],
@@ -299,7 +299,7 @@ def test_input_mssql_initial_values(mssql_connection, tmp_path, mssql_version):
     output_file2 = os.path.join(tmp_path, "output2.parquet")
     path_to_output_initial_values = os.path.join(tmp_path, "initial_values.parquet")
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file1, output_file2],
@@ -389,7 +389,7 @@ def test_input_mssql_initial_values_stored_number_0(
     )
     path_to_output_initial_values = os.path.join(tmp_path, "initial_values.parquet")
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file1, output_file2],
@@ -480,7 +480,7 @@ def test_input_mssql_initial_values_stored_number_2(
     )
     path_to_output_initial_values = os.path.join(tmp_path, "initial_values.parquet")
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file1, output_file2],

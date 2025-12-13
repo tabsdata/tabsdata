@@ -29,7 +29,7 @@ from tests_tabsdata.conftest import (
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
     clean_polars_df,
     read_json_and_clean,
-    write_v2_yaml_file,
+    write_v2_function_yaml_file,
 )
 from tests_tabsdata_snowflake.conftest import (
     TESTING_RESOURCES_FOLDER,
@@ -334,7 +334,7 @@ def test_output_snowflake(tmp_path, snowflake_connection, snowflake_config):
         TESTING_RESOURCES_FOLDER, "test_output_snowflake", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
@@ -406,7 +406,7 @@ def test_multiple_outputs_snowflake(tmp_path, snowflake_connection, snowflake_co
         "mock_table.parquet",
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
@@ -500,7 +500,7 @@ def test_output_snowflake_with_none(tmp_path, snowflake_connection, snowflake_co
         TESTING_RESOURCES_FOLDER, "test_output_snowflake_none", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
@@ -570,7 +570,7 @@ def test_output_snowflake_with_list_none(
         "mock_table.parquet",
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],

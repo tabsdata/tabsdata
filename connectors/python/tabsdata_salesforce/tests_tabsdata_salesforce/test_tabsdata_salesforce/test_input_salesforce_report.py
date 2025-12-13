@@ -27,7 +27,7 @@ from tests_tabsdata.conftest import (
     LOCAL_PACKAGES_LIST,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
     clean_polars_df,
-    write_v2_yaml_file,
+    write_v2_function_yaml_file,
 )
 from tests_tabsdata_salesforce.conftest import (
     FAKE_CREDENTIALS,
@@ -89,7 +89,7 @@ def test_input_salesforce_report_by_long_id(tmp_path, sf_config):
     output_file = os.path.join(tmp_path, "output.parquet")
     path_to_output_initial_values = os.path.join(tmp_path, "initial_values.parquet")
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file],
@@ -144,7 +144,7 @@ def test_input_salesforce_report_by_short_id(tmp_path, sf_config):
     output_file = os.path.join(tmp_path, "output.parquet")
     path_to_output_initial_values = os.path.join(tmp_path, "initial_values.parquet")
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file],
@@ -199,7 +199,7 @@ def test_input_salesforce_report_by_name(tmp_path, sf_config):
     output_file = os.path.join(tmp_path, "output.parquet")
     path_to_output_initial_values = os.path.join(tmp_path, "initial_values.parquet")
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file],
@@ -261,7 +261,7 @@ def test_input_salesforce_report_initial_values_by_label(tmp_path, sf_config):
     output_file = os.path.join(tmp_path, "output_01.parquet")
     path_to_output_initial_values = os.path.join(tmp_path, "initial_values.parquet")
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file],
@@ -315,7 +315,7 @@ def test_input_salesforce_report_initial_values_by_label(tmp_path, sf_config):
         tmp_path, "second_initial_values.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file],
@@ -370,7 +370,7 @@ def test_input_salesforce_report_initial_values_by_name(tmp_path, sf_config):
     output_file = os.path.join(tmp_path, "output_01.parquet")
     path_to_output_initial_values = os.path.join(tmp_path, "initial_values.parquet")
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file],
@@ -424,7 +424,7 @@ def test_input_salesforce_report_initial_values_by_name(tmp_path, sf_config):
         tmp_path, "second_initial_values.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file],

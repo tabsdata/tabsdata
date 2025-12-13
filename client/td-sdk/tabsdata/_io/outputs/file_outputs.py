@@ -69,7 +69,7 @@ from tabsdata._tabsserver.function.global_utils import (
     convert_path_to_uri,
 )
 from tabsdata._tabsserver.function.yaml_parsing import (
-    InputYaml,
+    FunctionYaml,
     TransporterAzure,
     TransporterEnv,
     TransporterGCS,
@@ -1293,7 +1293,7 @@ def _write_results_in_final_files(
         AzureDestination | GCSDestination | LocalFileDestination | S3Destination
     ),
     output_folder: str,
-    request: InputYaml,
+    request: FunctionYaml,
 ):
     logger.info(f"Storing results in file destination '{destination}'")
 
@@ -1526,7 +1526,7 @@ def _store_result_using_transporter(
         AzureDestination | GCSDestination | LocalFileDestination | S3Destination
     ),
     output_folder: str,
-    request: InputYaml,
+    request: FunctionYaml,
 ) -> str:
     logger.info(
         f"Storing result in destination file '{destination_path}' from intermediate"
@@ -1776,7 +1776,7 @@ TRIGGER_TIMESTAMP_PLACEHOLDER = "$TRIGGER_TIMESTAMP"
 TRANSACTION_ID_PLACEHOLDER = "$TRANSACTION_ID"
 
 
-def _replace_placeholders_in_path(path: str, request: InputYaml) -> str:
+def _replace_placeholders_in_path(path: str, request: FunctionYaml) -> str:
     new_path = path
     new_path = new_path.replace(EXECUTION_ID_PLACEHOLDER, str(request.execution_id))
     new_path = new_path.replace(

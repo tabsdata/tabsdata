@@ -29,7 +29,7 @@ from tests_tabsdata.conftest import (
     clean_polars_df,
     get_lf,
     read_json_and_clean,
-    write_v2_yaml_file,
+    write_v2_function_yaml_file,
 )
 from tests_tabsdata_bigquery.conftest import TESTING_RESOURCES_FOLDER
 from tests_tabsdata_bigquery.testing_resources.test_multiple_outputs_bigquery.example import (
@@ -424,7 +424,7 @@ def test_output_bigquery(tmp_path, bigquery_config, bigquery_client):
         TESTING_RESOURCES_FOLDER, "test_output_bigquery", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
@@ -496,7 +496,7 @@ def test_output_bigquery_replace(tmp_path, bigquery_config, bigquery_client):
         TESTING_RESOURCES_FOLDER, "test_output_bigquery", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
@@ -569,7 +569,7 @@ def test_output_bigquery_append(tmp_path, bigquery_config, bigquery_client):
         TESTING_RESOURCES_FOLDER, "test_output_bigquery", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
@@ -648,7 +648,7 @@ def test_output_bigquery_schema_strict(tmp_path, bigquery_config, bigquery_clien
                 TESTING_RESOURCES_FOLDER, "test_output_bigquery", mocked_table_name
             )
             function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-            write_v2_yaml_file(
+            write_v2_function_yaml_file(
                 input_yaml_file,
                 context_archive,
                 [mock_parquet_table],
@@ -729,7 +729,7 @@ def test_output_bigquery_schema_update(tmp_path, bigquery_config, bigquery_clien
                 TESTING_RESOURCES_FOLDER, "test_output_bigquery", mocked_table_name
             )
             function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-            write_v2_yaml_file(
+            write_v2_function_yaml_file(
                 input_yaml_file,
                 context_archive,
                 [mock_parquet_table],
@@ -800,7 +800,7 @@ def test_multiple_outputs_bigquery(tmp_path, bigquery_config, bigquery_client):
         TESTING_RESOURCES_FOLDER, "test_multiple_outputs_bigquery", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
@@ -874,7 +874,7 @@ def test_output_bigquery_with_none(tmp_path, bigquery_config, bigquery_client):
         TESTING_RESOURCES_FOLDER, "test_output_bigquery", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
@@ -940,7 +940,7 @@ def test_output_bigquery_none_table_name(tmp_path, bigquery_config, bigquery_cli
         TESTING_RESOURCES_FOLDER, "test_output_bigquery", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_yaml_file(
+    write_v2_function_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
