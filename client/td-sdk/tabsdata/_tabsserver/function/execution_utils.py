@@ -27,7 +27,7 @@ from tabsdata._utils.tableframe._constants import EMPTY_VERSION
 
 # noinspection PyProtectedMember
 from tabsdata._utils.tableframe._context import TableFrameContext
-from tabsdata.tableframe.lazyframe.frame import TableFrame
+from tabsdata.tableframe.lazyframe.frame import DataTable, TableFrame
 from tabsdata.tableframe.lazyframe.properties import TableFrameProperties
 
 if TYPE_CHECKING:
@@ -81,8 +81,59 @@ def pre_function_run(
     input_table_frames: list[TableFrame | None | list[TableFrame | None]],
 ) -> ResultsCollection | None:
     logger.info("Starting execution of function pre-processing")
+
+    input_table_frames = enrich_table_frames(execution_context, input_table_frames)
+
     logger.info("Finished execution of function pre-processing")
     return None
+
+
+def enrich_table_frames(
+    execution_context: ExecutionContext,
+    input_table_frames: list[TableFrame | None | list[TableFrame | None]],
+) -> list[TableFrame | None | list[TableFrame | None]]:
+    from tabsdata import TableInput
+
+    source = execution_context.source
+    if source is not None and isinstance(source, TableInput):
+        input_table_uris = source._build_table_uri_list
+
+        if len(input_table_frames) != len(input_table_uris):
+            raise ValueError(
+                "Mismatched lengths between input table frames "
+                f"({len(input_table_frames)}) "
+                f"and input tables ({len(input_table_uris)})"
+            )
+
+        for i, (table_frame, table_uri) in enumerate(
+            zip(input_table_frames, input_table_uris)
+        ):
+            data_table = DataTable(name=table_uri.table, position=i)
+            if table_frame is None:
+                logger.debug(f"Skipping enrichment for None TableFrame @ index: {i}")
+                continue
+            elif isinstance(table_frame, TableFrame):
+                logger.debug(f"Enriching TableFrame @ index: {i} with {data_table}")
+                table_frame._data_table = data_table
+            elif isinstance(table_frame, list):
+                for table_frame_item in table_frame:
+                    if table_frame_item is None:
+                        logger.debug(
+                            f"Skipping enrichment for None TableFrame item @ index: {i}"
+                        )
+                    else:
+                        logger.debug(
+                            f"Enriching TableFrame item @ index: {i} with {data_table}"
+                        )
+                        table_frame_item._data_table = data_table
+            else:
+                raise ValueError(
+                    f"Unexpected type found in input table frames: {type(table_frame)}"
+                )
+    else:
+        logger.debug("No input tables provided")
+
+    return input_table_frames
 
 
 def function_run(

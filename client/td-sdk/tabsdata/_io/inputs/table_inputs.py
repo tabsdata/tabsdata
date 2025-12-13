@@ -8,7 +8,7 @@ import logging
 from typing import TYPE_CHECKING, List
 
 from tabsdata._io.plugin import SourcePlugin
-from tabsdata._tableuri import build_table_uri_object
+from tabsdata._tableuri import TableURI, build_table_uri_object
 from tabsdata._tabsserver.function.native_tables_utils import (
     scan_tf_from_table,
 )
@@ -93,6 +93,16 @@ class TableInput(SourcePlugin):
             False otherwise.
         """
         return True
+
+    @property
+    def _build_table_uri_list(self) -> list[TableURI]:
+        """
+        Generates a list of TableURI's representing the internal list of tables.
+
+        Returns:
+            list[TableURI]: List of TableURI's.
+        """
+        return [build_table_uri_object(table) for table in self._table_list]
 
     def stream(
         self, working_dir: str

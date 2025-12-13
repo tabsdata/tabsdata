@@ -376,6 +376,7 @@ class TableFrame:
         instance._id = td_generators._id()
         instance._idx = computed_idx
         instance._properties = properties
+        instance._data_table = None
         lf = _arrange_columns(df_with_columns)
         instance._lf = lf
         return instance
@@ -426,6 +427,7 @@ class TableFrame:
 
         self._origin = origin
         self._properties = properties
+        self._data_table = None
         # noinspection PyProtectedMember
         self._id = td_generators._id()
         self._idx = idx
@@ -459,14 +461,6 @@ class TableFrame:
     @property
     def width(self) -> int:
         return self.schema.len()
-
-    @property
-    def data_table(self) -> DataTable | None:
-        return self._data_table
-
-    @data_table.setter
-    def data_table(self, data_table: DataTable | None) -> None:
-        self._data_table = data_table
 
     """> Special Functions """
 
