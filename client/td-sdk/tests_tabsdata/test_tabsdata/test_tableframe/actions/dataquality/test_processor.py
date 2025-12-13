@@ -1,9 +1,16 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
 import pytest
 
 from tabsdata._tableinfo import TableKind
 from tabsdata._tableuri import TableURI
 from tabsdata.dataquality import DataQuality, Filter, Select, Summary
-from tabsdata.exceptions import DataQualityConfigurationError
+from tabsdata.exceptions import (
+    DataQualityConfigurationError,
+    DataQualityProcessingError,
+)
 from tabsdata.tableframe._actions.dataquality.processor import DataQualityProcessor
 
 
@@ -45,6 +52,8 @@ class TestDataQualityProcessorTableNames:
         assert input_tables_names[0].collection == "collection"
         assert input_tables_names[0].table == "input1_select"
         assert input_tables_names[0].kind == TableKind.DQ_SELECT
+        assert input_tables_names[0].from_table == "input_table1"
+        assert input_tables_names[0].from_collection == "collection"
         assert output_tables_names == []
 
     def test_table_names_single_input_action_with_filter(self):
@@ -70,6 +79,8 @@ class TestDataQualityProcessorTableNames:
         assert input_tables_names[0].collection == "collection"
         assert input_tables_names[0].table == "input1_filter"
         assert input_tables_names[0].kind == TableKind.DQ_FILTER
+        assert input_tables_names[0].from_table == "input_table1"
+        assert input_tables_names[0].from_collection == "collection"
         assert output_tables_names == []
 
     def test_table_names_single_input_action_with_summary(self):
@@ -95,6 +106,8 @@ class TestDataQualityProcessorTableNames:
         assert input_tables_names[0].collection == "collection"
         assert input_tables_names[0].table == "input1_summary"
         assert input_tables_names[0].kind == TableKind.DQ_SUMMARY
+        assert input_tables_names[0].from_table == "input_table1"
+        assert input_tables_names[0].from_collection == "collection"
         assert output_tables_names == []
 
     def test_table_names_multiple_operations_in_single_action(self):
@@ -482,11 +495,11 @@ class TestDataQualityProcessorTableNames:
             output_actions=[],
         )
 
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(DataQualityProcessingError) as exception:
             processor.table_names()
 
-        assert "Unable to resolve table name" in str(exc_info.value)
-        assert "customers" in str(exc_info.value)
+        assert exception.value.code == "DQPE-001"
+        assert "customers" in str(exception.value)
 
     def test_name_collision_unresolved_table_not_found(self):
         input_tables = {
@@ -507,11 +520,11 @@ class TestDataQualityProcessorTableNames:
             output_actions=[],
         )
 
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(DataQualityProcessingError) as exception:
             processor.table_names()
 
-        assert "Unable to resolve table name" in str(exc_info.value)
-        assert "products" in str(exc_info.value)
+        assert exception.value.code == "DQPE-001"
+        assert "products" in str(exception.value)
 
     def test_name_collision_unresolved_wrong_collection(self):
         input_tables = {
@@ -532,11 +545,11 @@ class TestDataQualityProcessorTableNames:
             output_actions=[],
         )
 
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(DataQualityProcessingError) as exception:
             processor.table_names()
 
-        assert "Unable to resolve table name" in str(exc_info.value)
-        assert "collection_b/customers" in str(exc_info.value)
+        assert exception.value.code == "DQPE-001"
+        assert "collection_b/customers" in str(exception.value)
 
     def test_name_collision_unresolved_ambiguous_qualified_name(self):
         input_tables = {
@@ -558,10 +571,10 @@ class TestDataQualityProcessorTableNames:
             output_actions=[],
         )
 
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(DataQualityProcessingError) as exception:
             processor.table_names()
 
-        assert "Unable to resolve table name" in str(exc_info.value)
+        assert exception.value.code == "DQPE-001"
 
     def test_name_collision_unresolved_empty_input_tables(self):
         input_tables = {}
@@ -580,11 +593,11 @@ class TestDataQualityProcessorTableNames:
             output_actions=[],
         )
 
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(DataQualityProcessingError) as exception:
             processor.table_names()
 
-        assert "Unable to resolve table name" in str(exc_info.value)
-        assert "customers" in str(exc_info.value)
+        assert exception.value.code == "DQPE-001"
+        assert "customers" in str(exception.value)
 
     def test_output_table_resolved_successfully(self):
         output_tables = ["output1", "output2"]
@@ -628,11 +641,10 @@ class TestDataQualityProcessorTableNames:
             output_actions=[dq_action],
         )
 
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(DataQualityProcessingError) as exception:
             processor.table_names()
 
-        assert "Unable to resolve table name" in str(exc_info.value)
-        assert "output3" in str(exc_info.value)
+        assert "output3" in str(exception.value)
 
     def test_filter_with_none_to_table_does_not_produce_table(self):
 
@@ -1351,12 +1363,12 @@ class TestDataQualityProcessorTableNames:
             output_actions=[],
         )
 
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(DataQualityProcessingError) as exception:
             processor.table_names()
 
-        assert "Duplicate table names found" in str(exc_info.value)
-        assert "duplicate_name" in str(exc_info.value)
-        assert "appears 2 times" in str(exc_info.value)
+        assert exception.value.code == "DQPE-004"
+        assert "duplicate_name" in str(exception.value)
+        assert "appears 2 times" in str(exception.value)
 
     def test_select_rejects_none_to_table(self):
 
@@ -1453,11 +1465,11 @@ class TestDataQualityProcessorTableNames:
             output_actions=[],
         )
 
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(DataQualityProcessingError) as exception:
             processor.table_names()
 
-        assert "Duplicate table names found" in str(exc_info.value)
-        assert "shared_output" in str(exc_info.value)
+        assert exception.value.code == "DQPE-004"
+        assert "shared_output" in str(exception.value)
 
     def test_duplicate_validation_same_custom_name_in_output_actions(self):
         output_tables = ["output1"]
@@ -1479,11 +1491,11 @@ class TestDataQualityProcessorTableNames:
             output_actions=[dq_action],
         )
 
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(DataQualityProcessingError) as exception:
             processor.table_names()
 
-        assert "Duplicate table names found" in str(exc_info.value)
-        assert "duplicate_output" in str(exc_info.value)
+        assert exception.value.code == "DQPE-004"
+        assert "duplicate_output" in str(exception.value)
 
     def test_duplicate_validation_same_custom_name_across_output_actions(self):
         output_tables = ["output1", "output2"]
@@ -1512,11 +1524,11 @@ class TestDataQualityProcessorTableNames:
             output_actions=[dq_action1, dq_action2],
         )
 
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(DataQualityProcessingError) as exception:
             processor.table_names()
 
-        assert "Duplicate table names found" in str(exc_info.value)
-        assert "shared_name" in str(exc_info.value)
+        assert exception.value.code == "DQPE-004"
+        assert "shared_name" in str(exception.value)
 
     def test_duplicate_validation_same_name_across_input_and_output(self):
         input_tables = {"input1": TableURI(None, "source", None)}
@@ -1546,11 +1558,11 @@ class TestDataQualityProcessorTableNames:
             output_actions=[output_action],
         )
 
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(DataQualityProcessingError) as exception:
             processor.table_names()
 
-        assert "Duplicate table names found" in str(exc_info.value)
-        assert "conflict_name" in str(exc_info.value)
+        assert exception.value.code == "DQPE-004"
+        assert "conflict_name" in str(exception.value)
 
     def test_duplicate_validation_multiple_duplicates(self):
         input_tables = {"input1": TableURI(None, "source", None)}
@@ -1574,14 +1586,13 @@ class TestDataQualityProcessorTableNames:
             output_actions=[],
         )
 
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(DataQualityProcessingError) as exception:
             processor.table_names()
 
-        error_msg = str(exc_info.value)
-        assert "Duplicate table names found" in error_msg
-        assert "dup1" in error_msg
-        assert "dup2" in error_msg
-        assert "appears 2 times" in error_msg
+        assert exception.value.code == "DQPE-004"
+        assert "dup1" in str(exception.value)
+        assert "dup2" in str(exception.value)
+        assert "appears 2 times" in str(exception.value)
 
     def test_duplicate_validation_triple_duplicate(self):
         input_tables = {"input1": TableURI(None, "source", None)}
@@ -1604,12 +1615,12 @@ class TestDataQualityProcessorTableNames:
             output_actions=[],
         )
 
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(DataQualityProcessingError) as exception:
             processor.table_names()
 
-        assert "Duplicate table names found" in str(exc_info.value)
-        assert "triple" in str(exc_info.value)
-        assert "appears 3 times" in str(exc_info.value)
+        assert exception.value.code == "DQPE-004"
+        assert "triple" in str(exception.value)
+        assert "appears 3 times" in str(exception.value)
 
     def test_no_duplicate_validation_unique_names(self):
         input_tables = {"input1": TableURI(None, "source", None)}
@@ -1724,8 +1735,163 @@ class TestDataQualityProcessorTableNames:
             output_actions=[output_action1],
         )
 
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(DataQualityProcessingError) as exception:
             processor.table_names()
 
-        assert "Duplicate table names found" in str(exc_info.value)
-        assert "processed_data" in str(exc_info.value)
+        assert exception.value.code == "DQPE-004"
+        assert "processed_data" in str(exception.value)
+
+    def test_from_table_and_from_collection_with_different_collections(self):
+        input_tables = {
+            "table_a": TableURI("collection_a", "source_table_a", None),
+            "table_b": TableURI("collection_b", "source_table_b", None),
+            "table_c": TableURI(None, "source_table_c", None),
+        }
+
+        dq_action1 = DataQuality(
+            "table_a",
+            classify=[],
+            operations=[
+                Select(to_table="output_from_a"),
+                Filter(to_table="filtered_from_a"),
+            ],
+        )
+
+        dq_action2 = DataQuality(
+            "table_b",
+            classify=[],
+            operations=[
+                Summary(table="summary_from_b"),
+            ],
+        )
+
+        dq_action3 = DataQuality(
+            "table_c",
+            classify=[],
+            operations=[
+                Select(to_table="output_from_c"),
+            ],
+        )
+
+        processor = DataQualityProcessor(
+            collection="default_collection",
+            input_tables=input_tables,
+            output_tables=[],
+            input_actions=[dq_action1, dq_action2, dq_action3],
+            output_actions=[],
+        )
+
+        input_tables_names, output_tables_names = processor.table_names()
+
+        assert len(input_tables_names) == 4
+
+        assert input_tables_names[0].table == "output_from_a"
+        assert input_tables_names[0].from_table == "source_table_a"
+        assert input_tables_names[0].from_collection == "collection_a"
+        assert input_tables_names[0].collection == "default_collection"
+
+        assert input_tables_names[1].table == "filtered_from_a"
+        assert input_tables_names[1].from_table == "source_table_a"
+        assert input_tables_names[1].from_collection == "collection_a"
+        assert input_tables_names[1].collection == "default_collection"
+
+        assert input_tables_names[2].table == "summary_from_b"
+        assert input_tables_names[2].from_table == "source_table_b"
+        assert input_tables_names[2].from_collection == "collection_b"
+        assert input_tables_names[2].collection == "default_collection"
+
+        assert input_tables_names[3].table == "output_from_c"
+        assert input_tables_names[3].from_table == "source_table_c"
+        assert input_tables_names[3].from_collection == "default_collection"
+        assert input_tables_names[3].collection == "default_collection"
+
+    def test_from_table_and_from_collection_output_actions(self):
+        output_tables = ["output_table1", "output_table2"]
+
+        dq_action1 = DataQuality(
+            "output_table1",
+            classify=[],
+            operations=[
+                Select(to_table="validated_output1"),
+                Summary(table="summary_output1"),
+            ],
+        )
+
+        dq_action2 = DataQuality(
+            "output_table2",
+            classify=[],
+            operations=[
+                Filter(to_table="filtered_output2"),
+            ],
+        )
+
+        processor = DataQualityProcessor(
+            collection="my_collection",
+            input_tables={},
+            output_tables=output_tables,
+            input_actions=[],
+            output_actions=[dq_action1, dq_action2],
+        )
+
+        input_tables_names, output_tables_names = processor.table_names()
+
+        assert len(output_tables_names) == 3
+
+        assert output_tables_names[0].table == "validated_output1"
+        assert output_tables_names[0].from_table == "output_table1"
+        assert output_tables_names[0].from_collection == "my_collection"
+        assert output_tables_names[0].kind == TableKind.DQ_SELECT
+
+        assert output_tables_names[1].table == "summary_output1"
+        assert output_tables_names[1].from_table == "output_table1"
+        assert output_tables_names[1].from_collection == "my_collection"
+        assert output_tables_names[1].kind == TableKind.DQ_SUMMARY
+
+        assert output_tables_names[2].table == "filtered_output2"
+        assert output_tables_names[2].from_table == "output_table2"
+        assert output_tables_names[2].from_collection == "my_collection"
+        assert output_tables_names[2].kind == TableKind.DQ_FILTER
+
+    def test_from_table_and_from_collection_with_qualified_table_reference(self):
+        input_tables = {
+            "alias1": TableURI("sales", "transactions", "HEAD"),
+            "alias2": TableURI("inventory", "stock_levels", None),
+        }
+
+        dq_action1 = DataQuality(
+            "sales/transactions@HEAD",
+            classify=[],
+            operations=[
+                Select(to_table="clean_transactions"),
+            ],
+        )
+
+        dq_action2 = DataQuality(
+            "inventory/stock_levels",
+            classify=[],
+            operations=[
+                Filter(to_table="valid_stock"),
+            ],
+        )
+
+        processor = DataQualityProcessor(
+            collection="analytics",
+            input_tables=input_tables,
+            output_tables=[],
+            input_actions=[dq_action1, dq_action2],
+            output_actions=[],
+        )
+
+        input_tables_names, output_tables_names = processor.table_names()
+
+        assert len(input_tables_names) == 2
+
+        assert input_tables_names[0].table == "clean_transactions"
+        assert input_tables_names[0].from_table == "transactions"
+        assert input_tables_names[0].from_collection == "sales"
+        assert input_tables_names[0].collection == "analytics"
+
+        assert input_tables_names[1].table == "valid_stock"
+        assert input_tables_names[1].from_table == "stock_levels"
+        assert input_tables_names[1].from_collection == "inventory"
+        assert input_tables_names[1].collection == "analytics"

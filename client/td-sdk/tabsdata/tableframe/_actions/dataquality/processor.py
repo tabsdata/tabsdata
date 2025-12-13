@@ -9,6 +9,7 @@ from tabsdata._tableinfo import TableInfo, TableKind
 from tabsdata._tableuri import TableURI, build_table_uri_object
 from tabsdata.dataquality import DataQuality, Filter, Select, Summary
 from tabsdata.dataquality._operations import Operation
+from tabsdata.exceptions import DataQualityProcessingError, ErrorCode
 
 if TYPE_CHECKING:
     from tabsdata._io.outputs.table_outputs import TableOutput
@@ -51,9 +52,7 @@ class DataQualityProcessor:
         input_tables_map: dict[tuple[str, str], list[TableURI]] = {}
         for input_table in self.input_tables.values():
             collection = (
-                input_table.collection
-                if input_table.collection is not None
-                else self.collection
+                input_table.collection if input_table.collection else self.collection
             )
             table = input_table
             version = input_table.version
@@ -65,9 +64,7 @@ class DataQualityProcessor:
 
             for table_uri in input_tables_map[qualified_table]:
                 table_uri_collection = (
-                    table_uri.collection
-                    if table_uri.collection is not None
-                    else self.collection
+                    table_uri.collection if table_uri.collection else self.collection
                 )
                 table_uri_table = table_uri.table
                 table_uri_version = table_uri.version
@@ -153,16 +150,20 @@ class DataQualityProcessor:
     def table_names(self) -> tuple[list[TableInfo], list[TableInfo]]:
         input_actions_tables = []
         for action in self._input_actions:
-            table = self.resolve_input_table_name(action.table)
+            table, collection = self.resolve_input_table_and_collection_names(
+                action.table
+            )
             input_actions_tables.extend(
-                self.build_table_names(table, action.operations)
+                self.build_table_names(table, collection, action.operations)
             )
 
         output_actions_tables = []
         for action in self._output_actions:
-            table = self.resolve_output_table_name(action.table)
+            table, collection = self.resolve_output_table_and_collection_names(
+                action.table
+            )
             output_actions_tables.extend(
-                self.build_table_names(table, action.operations)
+                self.build_table_names(table, collection, action.operations)
             )
 
         self.validate_no_duplicate_table_names(
@@ -171,40 +172,41 @@ class DataQualityProcessor:
 
         return input_actions_tables, output_actions_tables
 
-    def resolve_input_table_name(self, action_table: str) -> str:
+    def resolve_input_table_and_collection_names(
+        self, action_table: str
+    ) -> tuple[str, str]:
         if action_table in self.input_tables:
             table_uri = self.input_tables[action_table]
-            return table_uri.table
+            return table_uri.table, (
+                self.collection if not table_uri.collection else table_uri.collection
+            )
 
         table_uri = build_table_uri_object(action_table)
-        collection = (
-            table_uri.collection
-            if table_uri.collection is not None
-            else self.collection
-        )
+        collection = table_uri.collection if table_uri.collection else self.collection
         table = table_uri.table
 
         qualified_table = (collection, table)
         if qualified_table in self.input_tables_map:
             table_uris = self.input_tables_map[qualified_table]
             if len(table_uris) == 1:
-                return table_uris[0].table
+                return table_uris[0].table, collection
 
-        raise ValueError(
-            f"Unable to resolve table name for action table '{action_table}'. "
-            "No matching table found in input_tables or input_tables_map."
-        )
+        raise DataQualityProcessingError(ErrorCode.DQPE1, action_table)
 
-    def resolve_output_table_name(self, action_table: str) -> str:
+    def resolve_output_table_and_collection_names(
+        self, action_table: str
+    ) -> tuple[str, str]:
         if action_table in self.output_tables:
-            return action_table
+            return action_table, self.collection
 
-        raise ValueError(
-            f"Unable to resolve table name for action table '{action_table}'. "
-            "No matching table found in input_tables or input_tables_map."
-        )
+        raise DataQualityProcessingError(ErrorCode.DQPE2, action_table)
 
-    def build_table_names(self, table: str, operations: list[Operation]):
+    def build_table_names(
+        self,
+        table: str,
+        collection: str,
+        operations: list[Operation],
+    ):
         table_names = []
         if operations:
             for operation in operations:
@@ -216,6 +218,8 @@ class DataQualityProcessor:
                                 self.table_name_for_filter(
                                     self._collection,
                                     table_name,
+                                    collection,
+                                    table,
                                 )
                             )
                     case Select():
@@ -224,6 +228,8 @@ class DataQualityProcessor:
                             self.table_name_for_select(
                                 self._collection,
                                 table_name,
+                                collection,
+                                table,
                             )
                         )
                     case Summary():
@@ -234,12 +240,13 @@ class DataQualityProcessor:
                                 self._collection,
                                 table_name,
                                 has_custom_table_name,
+                                collection,
+                                table,
                             )
                         )
                     case _:
-                        raise ValueError(
-                            "Unsupported type of data quality operation:"
-                            f" {type(operation)}"
+                        raise DataQualityProcessingError(
+                            ErrorCode.DQPE3, type(operation)
                         )
         return table_names
 
@@ -248,12 +255,16 @@ class DataQualityProcessor:
         cls,
         collection: str,
         table: str,
+        from_collection: str,
+        from_table: str,
     ) -> TableInfo:
         return cls.derived_table_name(
             collection=collection,
             table=table,
             kind=TableKind.DQ_FILTER,
             is_custom=True,
+            from_table=from_table,
+            from_collection=from_collection,
         )
 
     @classmethod
@@ -261,12 +272,16 @@ class DataQualityProcessor:
         cls,
         collection: str,
         table: str,
+        from_collection: str,
+        from_table: str,
     ) -> TableInfo:
         return cls.derived_table_name(
             collection=collection,
             table=table,
             kind=TableKind.DQ_SELECT,
             is_custom=True,
+            from_table=from_table,
+            from_collection=from_collection,
         )
 
     @classmethod
@@ -275,12 +290,16 @@ class DataQualityProcessor:
         collection: str,
         table: str,
         is_custom: bool,
+        from_collection: str,
+        from_table: str,
     ) -> TableInfo:
         return cls.derived_table_name(
             collection=collection,
             table=table,
             kind=TableKind.DQ_SUMMARY,
             is_custom=is_custom,
+            from_table=from_table,
+            from_collection=from_collection,
         )
 
     @classmethod
@@ -290,12 +309,16 @@ class DataQualityProcessor:
         table: str,
         kind: TableKind,
         is_custom: bool,
+        from_collection: str,
+        from_table: str,
     ) -> TableInfo:
         suffix = "" if (is_custom or kind.suffix is None) else kind.suffix
         return TableInfo(
-            collection=collection,
-            table=table + suffix,
+            from_table=from_table,
+            from_collection=from_collection,
             kind=kind,
+            table=table + suffix,
+            collection=collection,
         )
 
     @classmethod
@@ -321,9 +344,6 @@ class DataQualityProcessor:
                 duplicates_report.append(
                     f"  - Table '{collection}/{table}' appears {count} times"
                 )
-            error_message = (
-                "Duplicate table names found in data quality operations:\n"
-                + "\n".join(duplicates_report)
-                + "\n\nEach data quality operation must produce a unique table name."
+            raise DataQualityProcessingError(
+                ErrorCode.DQPE4, "\n".join(duplicates_report)
             )
-            raise ValueError(error_message)

@@ -6,15 +6,15 @@ from enum import Enum
 
 
 class TableKind(Enum):
-    COMMON = (
-        "common",
+    PRIMITIVE = (
+        "primitive",
         None,
-        "Common data table",
+        "Primitive data table",
     )
     DQ_FILTER = (
         "dq_filter",
         "_dq_filter",
-        "From data Quality Filter operation",
+        "From Data Quality Filter operation",
     )
     DQ_SELECT = (
         "dq_select",
@@ -46,46 +46,73 @@ class TableInfo:
 
     def __init__(
         self,
-        table: str,
+        from_table: str,
+        from_collection: str,
         kind: TableKind,
-        collection: str | None = None,
+        table: str,
+        collection: str,
     ):
         """
         Initialize a TableInfo object.
 
         Args:
-            table (str): The table name.
+            from_table (str): The table name from which the table is derived.
+            from_collection (str): The collection name from which the table is derived.
             kind (TableType): The table kind.
+            table (str): The table name.
             collection (str): The table collection.
         """
-        self.table = table
+        self.from_table = from_table
+        self.from_collection = from_collection
         self.kind = kind
+        self.table = table
         self.collection = collection
 
     @property
-    def table(self) -> str:
+    def from_table(self) -> str:
         """
-        str: The table name.
+        str: The table name from which the table is derived.
         """
-        return self._table
+        return self._from_table
 
-    @table.setter
-    def table(self, table: str):
+    @from_table.setter
+    def from_table(self, from_table: str):
         """
-        Set the table name.
+        Set the table name from which the table is derived.
 
         Args:
-            table (str): The table name.
+            from_table (str): The table name from which the table is derived.
         """
-        if table is None:
-            raise ValueError("Table name cannot be None")
-        elif isinstance(table, str):
-            table = table.strip()
-            if not table:
-                raise ValueError("Table name cannot be empty")
-            self._table = table
+        if isinstance(from_table, str):
+            from_table = from_table.strip()
+            if not from_table:
+                raise ValueError("Table name (from) cannot be empty")
+            self._from_table = from_table
         else:
-            raise ValueError("Table name must be an string")
+            raise ValueError("Table name (from) must be an string")
+
+    @property
+    def from_collection(self) -> str:
+        """
+        str: The collection name from which the table is derived.
+        """
+        return self._from_collection
+
+    @from_collection.setter
+    def from_collection(self, from_collection: str):
+        """
+        Set the collection name from which the table is derived.
+
+        Args:
+            from_collection (str): The collection name from which the table is derived.
+        """
+        if isinstance(from_collection, str):
+            from_collection = from_collection.strip()
+            if not from_collection:
+                raise ValueError("Collection name (from) cannot be empty")
+            self._from_collection = from_collection
+        else:
+            raise ValueError("Collection name (from) must be an string")
 
     @property
     def kind(self) -> TableKind:
@@ -108,6 +135,29 @@ class TableInfo:
             self._kind = kind
         else:
             raise ValueError("Table kind must be an TableKind")
+
+    @property
+    def table(self) -> str:
+        """
+        str: The table name.
+        """
+        return self._table
+
+    @table.setter
+    def table(self, table: str):
+        """
+        Set the table name.
+
+        Args:
+            table (str): The table name.
+        """
+        if isinstance(table, str):
+            table = table.strip()
+            if not table:
+                raise ValueError("Table name cannot be empty")
+            self._table = table
+        else:
+            raise ValueError("Table name must be an string")
 
     @property
     def collection(self) -> str:
@@ -133,3 +183,20 @@ class TableInfo:
             self._collection = collection
         else:
             raise ValueError("Table collection must be an string")
+
+    def __repr__(self) -> str:
+        """
+        Return a string representation of the TableInfo object.
+
+        Returns:
+            str: A string representation showing all key attributes.
+        """
+        return (
+            "TableInfo("
+            f"from_table={self.from_table!r}, "
+            f"from_collection={self.from_collection!r}, "
+            f"kind={self.kind!r}, "
+            f"table={self.table!r}, "
+            f"collection={self.collection!r}"
+            ")"
+        )

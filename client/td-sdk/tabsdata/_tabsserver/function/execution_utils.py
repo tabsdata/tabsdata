@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeAlias
 
 import polars as pl
 
@@ -41,6 +41,9 @@ logger = logging.getLogger(__name__)
 SOURCES_FOLDER = "sources"
 
 
+FunctionInputSpec: TypeAlias = list[TableFrame | None | list[TableFrame | None]]
+
+
 def execute_function_from_config(
     execution_context: ExecutionContext,
 ) -> ResultsCollection:
@@ -60,7 +63,7 @@ def execute_function_from_config(
 
 def execute_function(
     execution_context: ExecutionContext,
-    input_table_frames: list[TableFrame | None | list[TableFrame | None]],
+    input_table_frames: FunctionInputSpec,
 ) -> ResultsCollection:
     logger.info(pad_string("[Executing function]"))
 
@@ -81,7 +84,7 @@ def execute_function(
 
 def pre_function_run(
     execution_context: ExecutionContext,
-    input_table_frames: list[TableFrame | None | list[TableFrame | None]],
+    input_table_frames: FunctionInputSpec,
 ) -> ResultsCollection | None:
     logger.info("Starting execution of function pre-processing")
 
@@ -103,12 +106,12 @@ def pre_function_run(
 
 def enrich_table_frames(
     execution_context: ExecutionContext,
-    input_table_frames: list[TableFrame | None | list[TableFrame | None]],
-) -> list[TableFrame | None | list[TableFrame | None]]:
+    input_table_frames: FunctionInputSpec,
+) -> FunctionInputSpec:
     from tabsdata import TableInput
 
     source = execution_context.source
-    if source is not None and isinstance(source, TableInput):
+    if isinstance(source, TableInput):
         input_table_uris = source._table_uris_list
 
         if len(input_table_frames) != len(input_table_uris):
@@ -179,7 +182,7 @@ def filter_actions(actions: list[OnTablesAction]):
 
 def function_run(
     execution_context: ExecutionContext,
-    input_table_frames: list[TableFrame | None | list[TableFrame | None]],
+    input_table_frames: FunctionInputSpec,
 ) -> ResultsCollection:
     logger.info("Starting execution of function provided by the user")
     result = execution_context.user_provided_function(*input_table_frames)
@@ -230,7 +233,7 @@ def update_initial_values(execution_context: ExecutionContext, result):
 
 def obtain_user_provided_function_parameters(
     execution_context: ExecutionContext,
-) -> list[TableFrame | None | list[TableFrame | None]]:
+) -> FunctionInputSpec:
     logger.debug("Running the source plugin")
     # noinspection PyProtectedMember
     parameters = execution_context.source._run(execution_context)
@@ -242,7 +245,7 @@ def load_sources(
     local_sources: list | str | None,
     idx: td_generators.IdxGenerator | None = None,
     working_dir: str | None = None,
-) -> list[TableFrame | None | list[TableFrame | None]]:
+) -> FunctionInputSpec:
     """
     Given a list of sources, load them into tabsdata TableFrames.
     :param execution_context: The context of the function.

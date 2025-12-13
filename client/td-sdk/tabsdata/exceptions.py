@@ -1070,6 +1070,31 @@ class ErrorCode(Enum):
             "value '{}' of type '{}' instead."
         ),
     }
+    DQPE1 = {
+        "code": "DQPE-001",
+        "message": (
+            "Unable to resolve table name for action table '{}'."
+            "No matching table found in input_tables or input_tables_map."
+        ),
+    }
+    DQPE2 = {
+        "code": "DQPE-002",
+        "message": (
+            "Unable to resolve table name for action table '{}'. "
+            "No matching table found in output_tables."
+        ),
+    }
+    DQPE3 = {
+        "code": "DQPE-003",
+        "message": "Unsupported type of data quality operation: {}",
+    }
+    DQPE4 = {
+        "code": "DQPE-004",
+        "message": (
+            "Duplicate table names found in data quality operations:\n{}"
+            "\n\nEach data quality operation must produce a unique table name."
+        ),
+    }
     DQCE80 = {
         "code": "DQCE-080",
         "message": (
@@ -1817,6 +1842,15 @@ class DataQualityConfigurationError(TabsDataException):
     """
 
     CODE_PREFIX = "DQCE"
+
+
+class DataQualityProcessingError(TabsDataException):
+    """
+    Exception raised when processing the DataQuality specifications during a
+    function registration or execution.
+    """
+
+    CODE_PREFIX = "DQPE"
 
 
 class DecoratorConfigurationError(TabsDataException):
