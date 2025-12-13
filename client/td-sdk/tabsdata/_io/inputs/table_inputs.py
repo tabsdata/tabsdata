@@ -95,7 +95,7 @@ class TableInput(SourcePlugin):
         return True
 
     @property
-    def _build_table_uri_list(self) -> list[TableURI]:
+    def _table_uris_list(self) -> list[TableURI]:
         """
         Generates a list of TableURI's representing the internal list of tables.
 
@@ -103,6 +103,17 @@ class TableInput(SourcePlugin):
             list[TableURI]: List of TableURI's.
         """
         return [build_table_uri_object(table) for table in self._table_list]
+
+    @property
+    def _table_uris_map(self) -> dict[str, TableURI]:
+        """
+        Generates a map of table names to TableURI's representing the internal list of
+        tables.
+
+        Returns:
+            dict[str, TableURI]: Dictionary mapping table names to TableURI objects.
+        """
+        return {table: build_table_uri_object(table) for table in self._table_list}
 
     def stream(
         self, working_dir: str

@@ -9,7 +9,7 @@ import pytest
 
 import tabsdata as td
 from tabsdata.extensions._tableframe.extension import SystemColumns
-from tabsdata.tableframe.dq.engine import DataQualityEngine
+from tabsdata.tableframe._actions.dataquality.engine import DataQualityEngine
 from tabsdata.tableframe.lazyframe.properties import TableFramePropertiesBuilder
 from tests_tabsdata.test_tabsdata.test_tableframe.common import (
     pretty_pandas,

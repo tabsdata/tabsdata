@@ -46,7 +46,7 @@ class Table:
     ):
         self.data = data
 
-    # Ket for backward compatibility. Attribute 'table' is now 'name'.
+    # Kept for backward compatibility. Attribute 'table' is now 'name'.
     @property
     def table(self):
         return self.data.get("name")
@@ -122,7 +122,7 @@ class Table:
             f"table_id={self.table_id!r}",
             f"table_version_id={self.table_version_id!r}",
             f"execution_id={self.execution_id!r}",
-            f"transaction_id={self.execution_id!r}",
+            f"transaction_id={self.transaction_id!r}",
             f"triggered_on={self.triggered_on!r}",
             f"table_data_version_id={self.table_data_version_id!r}",
             f"location={self.location!r}",
@@ -145,7 +145,7 @@ class TableVersions:
     def list_of_table_objects(self):
         # This is a somewhat complicated solution to avoid an issue with PyYAML, where
         # it will slowly populate the parameters while parsing. If defined in the
-        # __init__, the Table will be built with an empty directory as the input.
+        # __init__, the Table will be built with an empty dictionary as the input.
         return [Table(table) for table in self.list_of_tables]
 
     def __repr__(self):
@@ -157,8 +157,38 @@ class InputYaml(ABC):
 
     @property
     @abstractmethod
-    def execution_id(self):
+    def collection(self) -> str:
+        """Return the collection of the request."""
+
+    @property
+    @abstractmethod
+    def collection_id(self) -> str:
+        """Return the collection ID of the request."""
+
+    @property
+    @abstractmethod
+    def execution_id(self) -> str:
         """Return the execution ID of the request."""
+
+    @property
+    @abstractmethod
+    def execution_name(self) -> str:
+        """Return the execution name of the request."""
+
+    @property
+    @abstractmethod
+    def function(self) -> str:
+        """Return the function of the request."""
+
+    @property
+    @abstractmethod
+    def function_bundle(self) -> Location:
+        """Return the function bundle."""
+
+    @property
+    @abstractmethod
+    def function_bundle_env_prefix(self) -> str:
+        """Return the function bundle env prefix."""
 
     @property
     @abstractmethod
@@ -172,8 +202,23 @@ class InputYaml(ABC):
 
     @property
     @abstractmethod
-    def function_run_id(self):
+    def function_data_env_prefix(self) -> str:
+        """Return the function data env prefix."""
+
+    @property
+    @abstractmethod
+    def function_data_uri(self) -> str:
+        """Return the function data URI."""
+
+    @property
+    @abstractmethod
+    def function_run_id(self) -> str:
         """Return the function run ID of the request."""
+
+    @property
+    @abstractmethod
+    def function_version_id(self) -> str:
+        """Return the function version ID of the request."""
 
     @property
     @abstractmethod
@@ -207,7 +252,7 @@ class InputYaml(ABC):
 
     @property
     @abstractmethod
-    def transaction_id(self):
+    def transaction_id(self) -> str:
         """Return the transaction ID of the request."""
 
     @property
@@ -222,7 +267,7 @@ class InputYaml(ABC):
 
     @work.setter
     @abstractmethod
-    def work(self, value):
+    def work(self, value) -> str:
         """Set the work section of the YAML file."""
 
 
@@ -231,31 +276,59 @@ class V2(InputYaml):
         self.content = content
 
     @property
-    def execution_id(self):
+    def collection(self) -> str:
+        return self.info["collection"]
+
+    @property
+    def collection_id(self) -> str:
+        return self.info["collection_id"]
+
+    @property
+    def execution_id(self) -> str:
         return self.info["execution_id"]
 
     @property
-    def function_bundle(self):
-        return self.info.get("function_bundle") if self.info else None
+    def execution_name(self):
+        return self.info["execution_name"]
 
     @property
-    def function_bundle_env_prefix(self):
-        return self.function_bundle.get("env_prefix") if self.function_bundle else None
+    def function(self) -> str:
+        return self.info.get("function")
 
     @property
-    def function_bundle_uri(self):
-        return self.function_bundle.get("uri") if self.function_bundle else None
+    def function_bundle(self) -> Location:
+        return Location(self.info.get("function_bundle")) if self.info else None
+
+    @property
+    def function_bundle_env_prefix(self) -> str:
+        return self.function_bundle.env_prefix if self.function_bundle else None
+
+    @property
+    def function_bundle_uri(self) -> str:
+        return self.function_bundle.uri if self.function_bundle else None
 
     @property
     def function_data(self) -> Location:
         return Location(self.info.get("function_data"))
 
     @property
-    def function_run_id(self):
+    def function_data_env_prefix(self) -> str:
+        return self.function_data.env_prefix if self.function_data else None
+
+    @property
+    def function_data_uri(self) -> str:
+        return self.function_data.uri if self.function_data else None
+
+    @property
+    def function_run_id(self) -> str:
         return self.info["function_run_id"]
 
     @property
-    def info(self):
+    def function_version_id(self) -> str:
+        return self.info["function_version_id"]
+
+    @property
+    def info(self) -> dict:
         return self.content.get("info", {})
 
     @property
@@ -279,7 +352,7 @@ class V2(InputYaml):
         return self.content.get("system_output")
 
     @property
-    def transaction_id(self):
+    def transaction_id(self) -> str:
         return self.info["transaction_id"]
 
     @property
@@ -710,35 +783,35 @@ def v1_import_format_representer(
 def v1_avro_format_representer(
     dumper: yaml.SafeDumper, avro_format: TransporterAvroFormat
 ) -> yaml.nodes.ScalarNode:
-    """Represent an S3 instance as a YAML mapping node."""
+    """Represent an Avro format instance as a YAML scalar node."""
     return dumper.represent_str("Binary")
 
 
 def v1_csv_format_representer(
     dumper: yaml.SafeDumper, csv_format: TransporterCSVFormat
 ) -> yaml.nodes.MappingNode:
-    """Represent an S3 instance as a YAML mapping node."""
+    """Represent a CSV format instance as a YAML mapping node."""
     return dumper.represent_mapping("!Csv", csv_format.content)
 
 
 def v1_log_format_representer(
     dumper: yaml.SafeDumper, log_format: TransporterLogFormat
 ) -> yaml.nodes.ScalarNode:
-    """Represent an S3 instance as a YAML mapping node."""
+    """Represent a Log format instance as a YAML scalar node."""
     return dumper.represent_str("Log")
 
 
 def v1_parquet_format_representer(
     dumper: yaml.SafeDumper, parquet_format: TransporterParquetFormat
 ) -> yaml.nodes.ScalarNode:
-    """Represent an S3 instance as a YAML mapping node."""
+    """Represent a Parquet format instance as a YAML scalar node."""
     return dumper.represent_str("Parquet")
 
 
 def v1_ndjson_format_representer(
     dumper: yaml.SafeDumper, ndjson_format: TransporterJsonFormat
 ) -> yaml.nodes.ScalarNode:
-    """Represent an S3 instance as a YAML mapping node."""
+    """Represent a Json format instance as a YAML scalar node."""
     return dumper.represent_str("Json")
 
 

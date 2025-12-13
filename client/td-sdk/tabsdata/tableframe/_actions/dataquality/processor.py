@@ -1,0 +1,329 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+from typing import TYPE_CHECKING, cast
+
+from tabsdata._table_actions.actions import OnTablesAction
+from tabsdata._tableinfo import TableInfo, TableKind
+from tabsdata._tableuri import TableURI, build_table_uri_object
+from tabsdata.dataquality import DataQuality, Filter, Select, Summary
+from tabsdata.dataquality._operations import Operation
+
+if TYPE_CHECKING:
+    from tabsdata._io.outputs.table_outputs import TableOutput
+    from tabsdata._tabsserver.function.execution_context import ExecutionContext
+
+
+class DataQualityProcessor:
+    def __init__(
+        self,
+        collection: str,
+        input_tables: dict[str, TableURI],
+        output_tables: list[str],
+        input_actions: list[OnTablesAction],
+        output_actions: list[OnTablesAction],
+    ):
+        self._collection: str = collection
+        self._input_tables: dict[str, TableURI] = input_tables
+        self._output_tables: set[str] = set(output_tables)
+        self.input_actions = input_actions
+        self.output_actions = output_actions
+
+    @property
+    def collection(self) -> str:
+        return self._collection
+
+    @collection.setter
+    def collection(self, collection: str):
+        self._collection = collection
+
+    @property
+    def input_tables(self) -> dict[str, TableURI]:
+        return self._input_tables
+
+    @input_tables.setter
+    def input_tables(self, input_tables: dict[str, TableURI]):
+        self._input_tables = input_tables
+
+    @property
+    def input_tables_map(self) -> dict[tuple[str, str], list[TableURI]]:
+        input_tables_map: dict[tuple[str, str], list[TableURI]] = {}
+        for input_table in self.input_tables.values():
+            collection = (
+                input_table.collection
+                if input_table.collection is not None
+                else self.collection
+            )
+            table = input_table
+            version = input_table.version
+
+            qualified_table = (collection, input_table.table)
+
+            if qualified_table not in input_tables_map:
+                input_tables_map[qualified_table] = []
+
+            for table_uri in input_tables_map[qualified_table]:
+                table_uri_collection = (
+                    table_uri.collection
+                    if table_uri.collection is not None
+                    else self.collection
+                )
+                table_uri_table = table_uri.table
+                table_uri_version = table_uri.version
+                if (
+                    collection == table_uri_collection
+                    and table == table_uri_table
+                    and version == table_uri_version
+                ):
+                    break
+            else:
+                input_tables_map[qualified_table].append(input_table)
+        return input_tables_map
+
+    @property
+    def output_tables(self) -> set[str]:
+        return self._output_tables
+
+    @output_tables.setter
+    def output_tables(self, output_tables: "TableOutput"):
+        self._output_tables = set(output_tables._table_list)
+
+    @property
+    def input_actions(self) -> list[DataQuality]:
+        return self._input_actions
+
+    @input_actions.setter
+    def input_actions(self, input_actions: list[OnTablesAction]):
+        self._input_actions = self.filter_dataquality_actions(input_actions)
+
+    @property
+    def output_actions(self) -> list[DataQuality]:
+        return self._output_actions
+
+    @output_actions.setter
+    def output_actions(self, output_actions: list[OnTablesAction]):
+        self._output_actions = self.filter_dataquality_actions(output_actions)
+
+    @classmethod
+    def from_execution_context(
+        cls,
+        context: "ExecutionContext",
+    ) -> "DataQualityProcessor":
+        from tabsdata._io.inputs.table_inputs import TableInput
+        from tabsdata._io.outputs.table_outputs import TableOutput
+
+        input_tables = (
+            cast(TableInput, context.source)._table_uris_map
+            if isinstance(context.source, TableInput)
+            else {}
+        )
+
+        output_tables = (
+            cast(TableOutput, context.destination)._table_list
+            if isinstance(context.destination, TableOutput)
+            else []
+        )
+
+        try:
+            input_actions = context.user_provided_function.input_actions
+        except AttributeError:
+            input_actions = []
+
+        try:
+            output_actions = context.user_provided_function.output_actions
+        except AttributeError:
+            output_actions = []
+
+        return cls(
+            collection=context.request.collection,
+            input_tables=input_tables,
+            output_tables=output_tables,
+            input_actions=input_actions,
+            output_actions=output_actions,
+        )
+
+    @classmethod
+    def filter_dataquality_actions(
+        cls,
+        actions: list[OnTablesAction],
+    ) -> list[DataQuality]:
+        return [action for action in actions or [] if isinstance(action, DataQuality)]
+
+    def table_names(self) -> tuple[list[TableInfo], list[TableInfo]]:
+        input_actions_tables = []
+        for action in self._input_actions:
+            table = self.resolve_input_table_name(action.table)
+            input_actions_tables.extend(
+                self.build_table_names(table, action.operations)
+            )
+
+        output_actions_tables = []
+        for action in self._output_actions:
+            table = self.resolve_output_table_name(action.table)
+            output_actions_tables.extend(
+                self.build_table_names(table, action.operations)
+            )
+
+        self.validate_no_duplicate_table_names(
+            input_actions_tables, output_actions_tables
+        )
+
+        return input_actions_tables, output_actions_tables
+
+    def resolve_input_table_name(self, action_table: str) -> str:
+        if action_table in self.input_tables:
+            table_uri = self.input_tables[action_table]
+            return table_uri.table
+
+        table_uri = build_table_uri_object(action_table)
+        collection = (
+            table_uri.collection
+            if table_uri.collection is not None
+            else self.collection
+        )
+        table = table_uri.table
+
+        qualified_table = (collection, table)
+        if qualified_table in self.input_tables_map:
+            table_uris = self.input_tables_map[qualified_table]
+            if len(table_uris) == 1:
+                return table_uris[0].table
+
+        raise ValueError(
+            f"Unable to resolve table name for action table '{action_table}'. "
+            "No matching table found in input_tables or input_tables_map."
+        )
+
+    def resolve_output_table_name(self, action_table: str) -> str:
+        if action_table in self.output_tables:
+            return action_table
+
+        raise ValueError(
+            f"Unable to resolve table name for action table '{action_table}'. "
+            "No matching table found in input_tables or input_tables_map."
+        )
+
+    def build_table_names(self, table: str, operations: list[Operation]):
+        table_names = []
+        if operations:
+            for operation in operations:
+                match operation:
+                    case Filter():
+                        if operation.to_table is not None:
+                            table_name = operation.to_table
+                            table_names.append(
+                                self.table_name_for_filter(
+                                    self._collection,
+                                    table_name,
+                                )
+                            )
+                    case Select():
+                        table_name = operation.to_table
+                        table_names.append(
+                            self.table_name_for_select(
+                                self._collection,
+                                table_name,
+                            )
+                        )
+                    case Summary():
+                        has_custom_table_name = operation.table is not None
+                        table_name = operation.table if has_custom_table_name else table
+                        table_names.append(
+                            self.table_name_for_summary(
+                                self._collection,
+                                table_name,
+                                has_custom_table_name,
+                            )
+                        )
+                    case _:
+                        raise ValueError(
+                            "Unsupported type of data quality operation:"
+                            f" {type(operation)}"
+                        )
+        return table_names
+
+    @classmethod
+    def table_name_for_filter(
+        cls,
+        collection: str,
+        table: str,
+    ) -> TableInfo:
+        return cls.derived_table_name(
+            collection=collection,
+            table=table,
+            kind=TableKind.DQ_FILTER,
+            is_custom=True,
+        )
+
+    @classmethod
+    def table_name_for_select(
+        cls,
+        collection: str,
+        table: str,
+    ) -> TableInfo:
+        return cls.derived_table_name(
+            collection=collection,
+            table=table,
+            kind=TableKind.DQ_SELECT,
+            is_custom=True,
+        )
+
+    @classmethod
+    def table_name_for_summary(
+        cls,
+        collection: str,
+        table: str,
+        is_custom: bool,
+    ) -> TableInfo:
+        return cls.derived_table_name(
+            collection=collection,
+            table=table,
+            kind=TableKind.DQ_SUMMARY,
+            is_custom=is_custom,
+        )
+
+    @classmethod
+    def derived_table_name(
+        cls,
+        collection: str,
+        table: str,
+        kind: TableKind,
+        is_custom: bool,
+    ) -> TableInfo:
+        suffix = "" if (is_custom or kind.suffix is None) else kind.suffix
+        return TableInfo(
+            collection=collection,
+            table=table + suffix,
+            kind=kind,
+        )
+
+    @classmethod
+    def validate_no_duplicate_table_names(
+        cls,
+        input_tables: list[TableInfo],
+        output_tables: list[TableInfo],
+    ) -> None:
+        all_tables = input_tables + output_tables
+        table_map: dict[tuple[str, str], list[int]] = {}
+        for idx, table_info in enumerate(all_tables):
+            key = (table_info.collection, table_info.table)
+            if key not in table_map:
+                table_map[key] = []
+            table_map[key].append(idx)
+        duplicates = {
+            key: indices for key, indices in table_map.items() if len(indices) > 1
+        }
+        if duplicates:
+            duplicates_report = []
+            for (collection, table), indices in duplicates.items():
+                count = len(indices)
+                duplicates_report.append(
+                    f"  - Table '{collection}/{table}' appears {count} times"
+                )
+            error_message = (
+                "Duplicate table names found in data quality operations:\n"
+                + "\n".join(duplicates_report)
+                + "\n\nEach data quality operation must produce a unique table name."
+            )
+            raise ValueError(error_message)

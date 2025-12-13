@@ -8,6 +8,7 @@ import platform
 
 from tabsdata._tabsserver.function.yaml_parsing import (
     V2,
+    Location,
     Table,
     TableVersions,
     parse_request_yaml,
@@ -19,6 +20,8 @@ from tests_tabsdata.conftest import (
     FAKE_TRANSACTION_ID,
     FAKE_TRIGGERED_TIME,
     FUNCTION_DATA_FOLDER,
+    MOCK_COLLECTION,
+    MOCK_COLLECTION_ID,
     TESTING_RESOURCES_FOLDER,
     write_v2_yaml_file,
 )
@@ -40,10 +43,12 @@ def test_parse_input_yaml():
             "env_prefix": None,
         }
     }
-    assert config.function_bundle == {
-        "uri": "file:///users/tucu/.tdserver/default/s/ID1/d/ID2/f/ID3.f",
-        "env_prefix": None,
-    }
+    assert config.function_bundle == Location(
+        {
+            "uri": "file:///users/tucu/.tdserver/default/s/ID1/d/ID2/f/ID3.f",
+            "env_prefix": None,
+        }
+    )
     assert (
         config.function_bundle_uri
         == "file:///users/tucu/.tdserver/default/s/ID1/d/ID2/f/ID3.f"
@@ -134,23 +139,27 @@ def test_parse_minimal_input_yaml(tmp_path):
     config = parse_request_yaml(tmp_yaml_file)
     assert isinstance(config, V2)
     assert config.info == {
+        "collection": MOCK_COLLECTION,
+        "collection_id": MOCK_COLLECTION_ID,
+        "execution_id": FAKE_EXECUTION_ID,
         "function_bundle": {
             "uri": expected_uri,
             "env_prefix": None,
         },
-        "execution_id": FAKE_EXECUTION_ID,
-        "transaction_id": FAKE_TRANSACTION_ID,
-        "function_run_id": FAKE_FUNCTION_RUN_ID,
-        "triggered_on": FAKE_TRIGGERED_TIME,
-        "scheduled_on": FAKE_SCHEDULED_TIME,
         "function_data": {
             "uri": pathlib.Path(function_data_folder).as_uri(),
             "env_prefix": None,
         },
+        "function_run_id": FAKE_FUNCTION_RUN_ID,
+        "scheduled_on": FAKE_SCHEDULED_TIME,
+        "transaction_id": FAKE_TRANSACTION_ID,
+        "triggered_on": FAKE_TRIGGERED_TIME,
     }
-    assert config.function_bundle == {
-        "uri": expected_uri,
-        "env_prefix": None,
-    }
+    assert config.function_bundle == Location(
+        {
+            "uri": expected_uri,
+            "env_prefix": None,
+        }
+    )
     assert config.function_bundle_uri == expected_uri
     assert config.function_bundle_env_prefix is None

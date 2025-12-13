@@ -44,8 +44,8 @@ import tabsdata._utils.tableframe._reflection as td_reflection
 
 # noinspection PyProtectedMember
 import tabsdata._utils.tableframe._translator as td_translator
+import tabsdata.tableframe._actions.dataquality.engine as td_dq_engine
 import tabsdata.tableframe.dataframe.frame as td_frame
-import tabsdata.tableframe.dq.engine as td_dq_engine
 
 # noinspection PyProtectedMember
 import tabsdata.tableframe.expr.expr as td_expr

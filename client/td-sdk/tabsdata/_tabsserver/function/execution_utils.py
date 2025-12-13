@@ -12,6 +12,7 @@ import polars as pl
 
 # noinspection PyProtectedMember
 import tabsdata._utils.tableframe._generators as td_generators
+from tabsdata._table_actions.actions import OnTablesAction
 from tabsdata._tabsserver.function import environment_import_utils
 from tabsdata._tabsserver.function.logging_utils import pad_string
 from tabsdata._tabsserver.function.native_tables_utils import (
@@ -27,6 +28,8 @@ from tabsdata._utils.tableframe._constants import EMPTY_VERSION
 
 # noinspection PyProtectedMember
 from tabsdata._utils.tableframe._context import TableFrameContext
+from tabsdata.dataquality import DataQuality
+from tabsdata.tableframe._actions.dataquality.processor import DataQualityProcessor
 from tabsdata.tableframe.lazyframe.frame import DataTable, TableFrame
 from tabsdata.tableframe.lazyframe.properties import TableFrameProperties
 
@@ -82,9 +85,19 @@ def pre_function_run(
 ) -> ResultsCollection | None:
     logger.info("Starting execution of function pre-processing")
 
+    # todo
     input_table_frames = enrich_table_frames(execution_context, input_table_frames)
 
+    check_actions(execution_context)
+
+    # todo
+    dq_processor = DataQualityProcessor.from_execution_context(execution_context)
+
     logger.info("Finished execution of function pre-processing")
+
+    # todo: remove; just to avoid temporary F841
+    _ = (input_table_frames, dq_processor)
+
     return None
 
 
@@ -96,7 +109,7 @@ def enrich_table_frames(
 
     source = execution_context.source
     if source is not None and isinstance(source, TableInput):
-        input_table_uris = source._build_table_uri_list
+        input_table_uris = source._table_uris_list
 
         if len(input_table_frames) != len(input_table_uris):
             raise ValueError(
@@ -136,6 +149,34 @@ def enrich_table_frames(
     return input_table_frames
 
 
+def check_actions(execution_context: ExecutionContext):
+    try:
+        input_actions = execution_context.user_provided_function.input_actions
+    except AttributeError:
+        input_actions = []
+    filter_actions(input_actions)
+    try:
+        output_actions = execution_context.user_provided_function.output_actions
+    except AttributeError:
+        output_actions = []
+    filter_actions(output_actions)
+
+
+def filter_actions(actions: list[OnTablesAction]):
+    if actions is not None:
+        for i, action in enumerate(actions):
+            if action is None:
+                raise ValueError(
+                    f"Configured actions contain 'None' at index {i}. "
+                    "No entry can be null."
+                )
+            if not isinstance(action, DataQuality):
+                raise ValueError(
+                    f"Configured actions contain an invalid type at index {i}: "
+                    f"expected DataQuality, but got {type(action).__name__}."
+                )
+
+
 def function_run(
     execution_context: ExecutionContext,
     input_table_frames: list[TableFrame | None | list[TableFrame | None]],
@@ -159,6 +200,7 @@ def post_function_run(
 ) -> ResultsCollection | None:
     logger.info("Starting execution of function post-processing")
     logger.info("Finished execution of function post-processing")
+
     return None
 
 

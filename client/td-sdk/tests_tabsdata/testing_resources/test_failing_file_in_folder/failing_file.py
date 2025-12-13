@@ -3,6 +3,7 @@
 #
 
 # This is a failing import statement intentionally placed for a test
+# noinspection PyUnresolvedReferences
 from doesntexist import doesntexist
 
 doesntexist()

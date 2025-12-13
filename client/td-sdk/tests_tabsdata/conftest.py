@@ -286,6 +286,8 @@ MYSQL_FORWARDED_PORT = "3306/tcp"
 ORACLE_PORT = 1521
 POSTGRES_PORT = 5432
 
+MOCK_COLLECTION = "td_collection"
+MOCK_COLLECTION_ID = 19
 FAKE_EXECUTION_ID = 24
 FAKE_FUNCTION_RUN_ID = 60
 FAKE_SCHEDULED_TIME = 1248067890123
@@ -1311,19 +1313,21 @@ def write_v2_yaml_file(
 ):
     content: dict[str, Any] = {
         "info": {
+            "collection": MOCK_COLLECTION,
+            "collection_id": MOCK_COLLECTION_ID,
+            "execution_id": FAKE_EXECUTION_ID,
             "function_bundle": {
                 "uri": pathlib.Path(bundle_archive_location).as_uri(),
                 "env_prefix": None,
             },
-            "function_run_id": FAKE_FUNCTION_RUN_ID,
-            "execution_id": FAKE_EXECUTION_ID,
-            "transaction_id": FAKE_TRANSACTION_ID,
-            "triggered_on": FAKE_TRIGGERED_TIME,
-            "scheduled_on": FAKE_SCHEDULED_TIME,
             "function_data": {
                 "uri": pathlib.Path(function_data_path).as_uri(),
                 "env_prefix": None,
             },
+            "function_run_id": FAKE_FUNCTION_RUN_ID,
+            "scheduled_on": FAKE_SCHEDULED_TIME,
+            "transaction_id": FAKE_TRANSACTION_ID,
+            "triggered_on": FAKE_TRIGGERED_TIME,
         },
         "input": [],
     }

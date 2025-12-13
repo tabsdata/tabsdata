@@ -2,7 +2,15 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
+import os
+
+from bootest import TDLOCAL_FOLDER
+from conftest import LOCAL_PACKAGES_LIST
+
 import tabsdata as td
+from tabsdata._utils.bundle_utils import create_bundle_archive
+
+DEFAULT_SAVE_LOCATION = TDLOCAL_FOLDER
 
 
 def testing_tabsdata_function(uri: str, credentials=None, destination_table=None):
@@ -30,7 +38,7 @@ def testing_tabsdata_function(uri: str, credentials=None, destination_table=None
 if __name__ == "__main__":
     os.makedirs(DEFAULT_SAVE_LOCATION, exist_ok=True)
     create_bundle_archive(
-        output_sql_wrong_driver_fails,
+        testing_tabsdata_function,
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=DEFAULT_SAVE_LOCATION,
     )

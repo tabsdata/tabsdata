@@ -34,6 +34,7 @@ class Operation(ABC):
     def tags(self) -> list[str]:
         return self._tags
 
+    # noinspection DuplicatedCode
     @tags.setter
     def tags(self, value: TagsSpec):
         if isinstance(value, str):
@@ -242,6 +243,7 @@ class Fail(Operation):
                 )
 
 
+# noinspection DuplicatedCode
 class Filter(Operation):
     """
     Creates a data quality filter within a `DataQuality` action Data Quality
@@ -310,6 +312,7 @@ class Filter(Operation):
                 )
 
 
+# noinspection DuplicatedCode
 class Select(Operation):
     """
     Creates a data quality selector within a `DataQuality` action
