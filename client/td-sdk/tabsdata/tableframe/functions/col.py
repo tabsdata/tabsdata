@@ -143,7 +143,8 @@ class Column:
     ----------
     name : str | None, optional
         The name of the column. Must be a valid string identifier for the
-        `TableFrame` schema, or None if no name is provided. Defaults to None.
+        `TableFrame` schema, or None if no name is provided.
+        Defaults to None.
     dtype : td_typing.DataType
         The expected data type for the column. This determines how values
         in the column will be interpreted, validated, and serialized.

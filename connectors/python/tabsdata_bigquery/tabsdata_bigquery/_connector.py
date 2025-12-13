@@ -63,19 +63,23 @@ class BigQueryConn(Conn):
                 authentication.
             project (str, optional): The default GCP project to use. If not provided,
                 the project must be specified in the table names provided in the
-                destination. Defaults to None.
+                destination.
+                Defaults to None.
             dataset (str, optional): The default BigQuery dataset to use. If not
                 provided, the dataset must be specified in the table names provided
-                in the destination. Defaults to None.
+                in the destination.
+                Defaults to None.
             enforce_connection_params (bool, optional): If True, enforce that project
                 and dataset are used to fully qualify table names in the destination if
                 provided. If set to False, the connection will allow the project and/or
-                dataset to be overriden by the table names provided in the destination.
+                dataset to be overridden by the table names provided in the destination.
                 Defaults to True.
             cx_dst_configs_gcs (dict, optional): Additional configuration parameters to
-                pass to the GCS client. Defaults to None.
+                pass to the GCS client.
+                Defaults to None.
             cx_dst_configs_bigquery (dict, optional): Additional configuration
-                parameters to pass to the BigQuery client. Defaults to None.
+                parameters to pass to the BigQuery client.
+                Defaults to None.
         """
         self.gcs_folder = gcs_folder
         self.credentials = credentials
@@ -213,7 +217,8 @@ class BigQueryDest(DestinationPlugin):
             tables (str | list[str] | None, optional): The table(s) to store the data
                 in. If multiple tables are provided, they must be provided as a list. If
                 None, the table names will be those of the input tables for the
-                function. Defaults to None.
+                function.
+                Defaults to None.
             if_table_exists ({'append', 'replace'}, optional): The strategy to
                 follow when the table already exists.
                 - ‘append’ will append to an existing table.

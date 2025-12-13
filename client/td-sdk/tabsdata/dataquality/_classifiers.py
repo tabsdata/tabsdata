@@ -48,9 +48,12 @@ class Classifier(ABC):
                 the results will be stored in columns named
                 'dq.<column_name>_<classifier_class>`.
                 Defaults to None.
-            tags (str | list[str] | None, optional): Tag(s) for the classification
-                results. Tags allow performing multiple actions, with each taking
-                into account only classifiers that have certain tag(s).
+            tags (str | list[str] | None, optional): Tag(s) for the classifier.
+                Tags can be used by DataQuality operations to select which classifiers
+                to operate on. If a DataQuality operation does not define a tag, it
+                operates on all defined classifiers. If a DataQuality operation defines
+                one or more tags, it will only operate on classifiers that have at least
+                one of those tags.
                 Defaults to None.
         """
         self.cols = cols
@@ -372,7 +375,7 @@ class Categorizer(Classifier):
         Args:
             cols(ColsSpec, optional): Column(s) to categorize.
             scale(Scale): Scale to use for categorization.
-            tags(TagsSpec, optional): Tag(s) for the classification results. Tags allow
+            tags(str | list[str] | None, optional): Tag(s) for the classification results. Tags allow
                 performing multiple actions, with each taking into account
                 only classifiers that have certain tag(s).
 
@@ -427,9 +430,12 @@ class DoesNotMatch(BoolClassifier):
                 classifying. If True, null values will not be classified.
                 Defaults to False.
             regex (str): The regex pattern to not match against.
-            tags (str | list[str] | None, optional): Tag(s) for the classification
-                results. Tags allow performing multiple actions, with each taking
-                into account only classifiers that have certain tag(s).
+            tags (str | list[str] | None, optional): Tag(s) for the classifier.
+                Tags can be used by DataQuality operations to select which classifiers
+                to operate on. If a DataQuality operation does not define a tag, it
+                operates on all defined classifiers. If a DataQuality operation defines
+                one or more tags, it will only operate on classifiers that have at least
+                one of those tags.
                 Defaults to None.
         """
         super().__init__(cols=cols, tags=tags)
@@ -480,9 +486,12 @@ class HasColumns(BoolClassifier):
             mode(Literal["at_least", "exact"], optional): Mode of checking columns. If
                 "at_least", checks that at least the given columns exist. If "exact",
                 checks that exactly the given columns exist. Defaults to "at_least".
-            tags (str | list[str] | None, optional): Tag(s) for the classification
-                results. Tags allow performing multiple actions, with each taking
-                into account only classifiers that have certain tag(s).
+            tags (str | list[str] | None, optional): Tag(s) for the classifier.
+                Tags can be used by DataQuality operations to select which classifiers
+                to operate on. If a DataQuality operation does not define a tag, it
+                operates on all defined classifiers. If a DataQuality operation defines
+                one or more tags, it will only operate on classifiers that have at least
+                one of those tags.
                 Defaults to None.
         """
         super().__init__(cols=cols, tags=tags)
@@ -541,9 +550,12 @@ class HasColumnTypes(BoolClassifier):
         Args:
             cols(list[tuple[str, DataType] | tuple[str, DataType]]):
                 Column name(s) and their expected data types to check for.
-            tags (str | list[str] | None, optional): Tag(s) for the classification
-                results. Tags allow performing multiple actions, with each taking
-                into account only classifiers that have certain tag(s).
+            tags (str | list[str] | None, optional): Tag(s) for the classifier.
+                Tags can be used by DataQuality operations to select which classifiers
+                to operate on. If a DataQuality operation does not define a tag, it
+                operates on all defined classifiers. If a DataQuality operation defines
+                one or more tags, it will only operate on classifiers that have at least
+                one of those tags.
                 Defaults to None.
         """
         super().__init__(cols=cols, tags=tags)
@@ -628,9 +640,12 @@ class HasLen(BoolClassifier):
                 Defaults to False.
             min (int | float, optional): Minimum length value. Defaults to -inf.
             max (int | float, optional): Maximum length value. Defaults to inf.
-            tags (str | list[str] | None, optional): Tag(s) for the classification
-                results. Tags allow performing multiple actions, with each taking
-                into account only classifiers that have certain tag(s).
+            tags (str | list[str] | None, optional): Tag(s) for the classifier.
+                Tags can be used by DataQuality operations to select which classifiers
+                to operate on. If a DataQuality operation does not define a tag, it
+                operates on all defined classifiers. If a DataQuality operation defines
+                one or more tags, it will only operate on classifiers that have at least
+                one of those tags.
                 Defaults to None.
         """
         super().__init__(cols=cols, tags=tags)
@@ -705,9 +720,12 @@ class IsIn(BoolClassifier):
                 classifying. If True, null values will not be classified.
                 Defaults to False.
             set (Collection): The set of values to check membership against.
-            tags (str | list[str] | None, optional): Tag(s) for the classification
-                results. Tags allow performing multiple actions, with each taking
-                into account only classifiers that have certain tag(s).
+            tags (str | list[str] | None, optional): Tag(s) for the classifier.
+                Tags can be used by DataQuality operations to select which classifiers
+                to operate on. If a DataQuality operation does not define a tag, it
+                operates on all defined classifiers. If a DataQuality operation defines
+                one or more tags, it will only operate on classifiers that have at least
+                one of those tags.
                 Defaults to None.
         """
         super().__init__(cols=cols, tags=tags)
@@ -779,9 +797,12 @@ class IsInRange(BoolClassifier):
             closed (Literal["both", "lower", "none", "upper"], optional): Whether the
                 interval is closed on the 'both', 'left', 'right' or 'none' sides.
                 Defaults to 'both'.
-            tags (str | list[str] | None, optional): Tag(s) for the classification
-                results. Tags allow performing multiple actions, with each taking
-                into account only classifiers that have certain tag(s).
+            tags (str | list[str] | None, optional): Tag(s) for the classifier.
+                Tags can be used by DataQuality operations to select which classifiers
+                to operate on. If a DataQuality operation does not define a tag, it
+                operates on all defined classifiers. If a DataQuality operation defines
+                one or more tags, it will only operate on classifiers that have at least
+                one of those tags.
                 Defaults to None.
         """
         super().__init__(cols=cols, tags=tags)
@@ -869,9 +890,12 @@ class IsNan(BoolClassifier):
             ignore_nulls (bool, optional): Whether to ignore null values when
                 classifying. If True, null values will not be classified.
                 Defaults to False.
-            tags (str | list[str] | None, optional): Tag(s) for the classification
-                results. Tags allow performing multiple actions, with each taking
-                into account only classifiers that have certain tag(s).
+            tags (str | list[str] | None, optional): Tag(s) for the classifier.
+                Tags can be used by DataQuality operations to select which classifiers
+                to operate on. If a DataQuality operation does not define a tag, it
+                operates on all defined classifiers. If a DataQuality operation defines
+                one or more tags, it will only operate on classifiers that have at least
+                one of those tags.
                 Defaults to None.
         """
         super().__init__(cols=cols, tags=tags)
@@ -922,9 +946,12 @@ class IsNegative(BoolClassifier):
             ignore_nulls (bool, optional): Whether to ignore null values when
                 classifying. If True, null values will not be classified.
                 Defaults to False.
-            tags (str | list[str] | None, optional): Tag(s) for the classification
-                results. Tags allow performing multiple actions, with each taking
-                into account only classifiers that have certain tag(s).
+            tags (str | list[str] | None, optional): Tag(s) for the classifier.
+                Tags can be used by DataQuality operations to select which classifiers
+                to operate on. If a DataQuality operation does not define a tag, it
+                operates on all defined classifiers. If a DataQuality operation defines
+                one or more tags, it will only operate on classifiers that have at least
+                one of those tags.
                 Defaults to None.
         """
         super().__init__(cols=cols, tags=tags)
@@ -975,9 +1002,12 @@ class IsNegativeOrZero(BoolClassifier):
             ignore_nulls (bool, optional): Whether to ignore null values when
                 classifying. If True, null values will not be classified.
                 Defaults to False.
-            tags (str | list[str] | None, optional): Tag(s) for the classification
-                results. Tags allow performing multiple actions, with each taking
-                into account only classifiers that have certain tag(s).
+            tags (str | list[str] | None, optional): Tag(s) for the classifier.
+                Tags can be used by DataQuality operations to select which classifiers
+                to operate on. If a DataQuality operation does not define a tag, it
+                operates on all defined classifiers. If a DataQuality operation defines
+                one or more tags, it will only operate on classifiers that have at least
+                one of those tags.
                 Defaults to None.
         """
         super().__init__(cols=cols, tags=tags)
@@ -1030,9 +1060,12 @@ class IsNotIn(BoolClassifier):
                 classifying. If True, null values will not be classified.
                 Defaults to False.
             set (Collection): The set of values to check membership against.
-            tags (str | list[str] | None, optional): Tag(s) for the classification
-                results. Tags allow performing multiple actions, with each taking
-                into account only classifiers that have certain tag(s).
+            tags (str | list[str] | None, optional): Tag(s) for the classifier.
+                Tags can be used by DataQuality operations to select which classifiers
+                to operate on. If a DataQuality operation does not define a tag, it
+                operates on all defined classifiers. If a DataQuality operation defines
+                one or more tags, it will only operate on classifiers that have at least
+                one of those tags.
                 Defaults to None.
         """
         super().__init__(cols=cols, tags=tags)
@@ -1094,9 +1127,12 @@ class IsNotNan(BoolClassifier):
             ignore_nulls (bool, optional): Whether to ignore null values when
                 classifying. If True, null values will not be classified.
                 Defaults to False.
-            tags (str | list[str] | None, optional): Tag(s) for the classification
-                results. Tags allow performing multiple actions, with each taking
-                into account only classifiers that have certain tag(s).
+            tags (str | list[str] | None, optional): Tag(s) for the classifier.
+                Tags can be used by DataQuality operations to select which classifiers
+                to operate on. If a DataQuality operation does not define a tag, it
+                operates on all defined classifiers. If a DataQuality operation defines
+                one or more tags, it will only operate on classifiers that have at least
+                one of those tags.
                 Defaults to None.
         """
         super().__init__(cols=cols, tags=tags)
@@ -1138,9 +1174,12 @@ class IsNotNull(BoolClassifier):
                 the results will be stored in columns named
                 'dq.<column_name>_<classifier_class>`.
                 Defaults to None.
-            tags (str | list[str] | None, optional): Tag(s) for the classification
-                results. Tags allow performing multiple actions, with each taking
-                into account only classifiers that have certain tag(s).
+            tags (str | list[str] | None, optional): Tag(s) for the classifier.
+                Tags can be used by DataQuality operations to select which classifiers
+                to operate on. If a DataQuality operation does not define a tag, it
+                operates on all defined classifiers. If a DataQuality operation defines
+                one or more tags, it will only operate on classifiers that have at least
+                one of those tags.
                 Defaults to None.
         """
         super().__init__(cols=cols, tags=tags)
@@ -1171,9 +1210,12 @@ class IsNotNullNorNan(BoolClassifier):
                 the results will be stored in columns named
                 'dq.<column_name>_<classifier_class>`.
                 Defaults to None.
-            tags (str | list[str] | None, optional): Tag(s) for the classification
-                results. Tags allow performing multiple actions, with each taking
-                into account only classifiers that have certain tag(s).
+            tags (str | list[str] | None, optional): Tag(s) for the classifier.
+                Tags can be used by DataQuality operations to select which classifiers
+                to operate on. If a DataQuality operation does not define a tag, it
+                operates on all defined classifiers. If a DataQuality operation defines
+                one or more tags, it will only operate on classifiers that have at least
+                one of those tags.
                 Defaults to None.
         """
         super().__init__(cols=cols, tags=tags)
@@ -1213,9 +1255,12 @@ class IsNotZero(BoolClassifier):
             ignore_nulls (bool, optional): Whether to ignore null values when
                 classifying. If True, null values will not be classified.
                 Defaults to False.
-            tags (str | list[str] | None, optional): Tag(s) for the classification
-                results. Tags allow performing multiple actions, with each taking
-                into account only classifiers that have certain tag(s).
+            tags (str | list[str] | None, optional): Tag(s) for the classifier.
+                Tags can be used by DataQuality operations to select which classifiers
+                to operate on. If a DataQuality operation does not define a tag, it
+                operates on all defined classifiers. If a DataQuality operation defines
+                one or more tags, it will only operate on classifiers that have at least
+                one of those tags.
                 Defaults to None.
         """
         super().__init__(cols=cols, tags=tags)
@@ -1257,9 +1302,12 @@ class IsNull(BoolClassifier):
                 the results will be stored in columns named
                 'dq.<column_name>_<classifier_class>`.
                 Defaults to None.
-            tags (str | list[str] | None, optional): Tag(s) for the classification
-                results. Tags allow performing multiple actions, with each taking
-                into account only classifiers that have certain tag(s).
+            tags (str | list[str] | None, optional): Tag(s) for the classifier.
+                Tags can be used by DataQuality operations to select which classifiers
+                to operate on. If a DataQuality operation does not define a tag, it
+                operates on all defined classifiers. If a DataQuality operation defines
+                one or more tags, it will only operate on classifiers that have at least
+                one of those tags.
                 Defaults to None.
         """
         super().__init__(cols=cols, tags=tags)
@@ -1290,9 +1338,12 @@ class IsNullOrNan(BoolClassifier):
                 the results will be stored in columns named
                 'dq.<column_name>_<classifier_class>`.
                 Defaults to None.
-            tags (str | list[str] | None, optional): Tag(s) for the classification
-                results. Tags allow performing multiple actions, with each taking
-                into account only classifiers that have certain tag(s).
+            tags (str | list[str] | None, optional): Tag(s) for the classifier.
+                Tags can be used by DataQuality operations to select which classifiers
+                to operate on. If a DataQuality operation does not define a tag, it
+                operates on all defined classifiers. If a DataQuality operation defines
+                one or more tags, it will only operate on classifiers that have at least
+                one of those tags.
                 Defaults to None.
         """
         super().__init__(cols=cols, tags=tags)
@@ -1332,9 +1383,12 @@ class IsPositive(BoolClassifier):
             ignore_nulls (bool, optional): Whether to ignore null values when
                 classifying. If True, null values will not be classified.
                 Defaults to False.
-            tags (str | list[str] | None, optional): Tag(s) for the classification
-                results. Tags allow performing multiple actions, with each taking
-                into account only classifiers that have certain tag(s).
+            tags (str | list[str] | None, optional): Tag(s) for the classifier.
+                Tags can be used by DataQuality operations to select which classifiers
+                to operate on. If a DataQuality operation does not define a tag, it
+                operates on all defined classifiers. If a DataQuality operation defines
+                one or more tags, it will only operate on classifiers that have at least
+                one of those tags.
                 Defaults to None.
         """
         super().__init__(cols=cols, tags=tags)
@@ -1385,9 +1439,12 @@ class IsPositiveOrZero(BoolClassifier):
             ignore_nulls (bool, optional): Whether to ignore null values when
                 classifying. If True, null values will not be classified.
                 Defaults to False.
-            tags (str | list[str] | None, optional): Tag(s) for the classification
-                results. Tags allow performing multiple actions, with each taking
-                into account only classifiers that have certain tag(s).
+            tags (str | list[str] | None, optional): Tag(s) for the classifier.
+                Tags can be used by DataQuality operations to select which classifiers
+                to operate on. If a DataQuality operation does not define a tag, it
+                operates on all defined classifiers. If a DataQuality operation defines
+                one or more tags, it will only operate on classifiers that have at least
+                one of those tags.
                 Defaults to None.
         """
         super().__init__(cols=cols, tags=tags)
@@ -1438,9 +1495,12 @@ class IsZero(BoolClassifier):
             ignore_nulls (bool, optional): Whether to ignore null values when
                 classifying. If True, null values will not be classified.
                 Defaults to False.
-            tags (str | list[str] | None, optional): Tag(s) for the classification
-                results. Tags allow performing multiple actions, with each taking
-                into account only classifiers that have certain tag(s).
+            tags (str | list[str] | None, optional): Tag(s) for the classifier.
+                Tags can be used by DataQuality operations to select which classifiers
+                to operate on. If a DataQuality operation does not define a tag, it
+                operates on all defined classifiers. If a DataQuality operation defines
+                one or more tags, it will only operate on classifiers that have at least
+                one of those tags.
                 Defaults to None.
         """
         super().__init__(cols=cols, tags=tags)
@@ -1493,9 +1553,12 @@ class Matches(BoolClassifier):
                 classifying. If True, null values will not be classified.
                 Defaults to False.
             regex (str): The regex pattern to match against.
-            tags (str | list[str] | None, optional): Tag(s) for the classification
-                results. Tags allow performing multiple actions, with each taking
-                into account only classifiers that have certain tag(s).
+            tags (str | list[str] | None, optional): Tag(s) for the classifier.
+                Tags can be used by DataQuality operations to select which classifiers
+                to operate on. If a DataQuality operation does not define a tag, it
+                operates on all defined classifiers. If a DataQuality operation defines
+                one or more tags, it will only operate on classifiers that have at least
+                one of those tags.
                 Defaults to None.
         """
         super().__init__(cols=cols, tags=tags)

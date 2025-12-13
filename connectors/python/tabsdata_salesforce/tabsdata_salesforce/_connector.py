@@ -175,13 +175,15 @@ class SalesforceSource(SourcePlugin):
                 It can be a single string or a list of strings.
             instance_url (str, optional): The URL of the instance to which we want to
                 connect. Only necessary when the username and password are associated
-                to more than one instance. Defaults to None.
+                to more than one instance.
+                Defaults to None.
             include_deleted (bool, optional): Whether to include deleted records in the
                 query results. Defaults to False.
             initial_last_modified (str, optional): The initial last modified date to use
                 in the queries. This is useful when we want to query only the records
-                that have been modified since a certain date. Defaults to None. If
-                provided, it must be a string in Salesforce datetime format (with
+                that have been modified since a certain date.
+                Defaults to None.
+                If provided, it must be a string in Salesforce datetime format (with
                 informed timezone) and the query must contain the token
                 $lastModified, which will be replaced by the latest 'last_modified'
                 value in each execution.
@@ -395,10 +397,12 @@ class SalesforceReportSource(SourcePlugin):
                 Defaults to None.
             instance_url (str, optional): The URL of the instance to which we want to
                 connect. Only necessary when the username and password are associated
-                to more than one instance. Defaults to None.
+                to more than one instance.
+                Defaults to None.
             last_modified_column (str, optional): The name of the column to use for
                 incremental loading based on the last modified date. If provided,
-                the report must contain this column. Defaults to None.
+                the report must contain this column.
+                Defaults to None.
             initial_last_modified (str, optional): The initial last modified date to
                 use for incremental loading. This is useful when we want to load only
                 the records that have been modified since a certain date. Defaults to

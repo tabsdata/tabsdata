@@ -74,7 +74,8 @@ def transformer(
             or a Crontab. Defaults to all dependencies.
         on_output_tables (OnTablesSpec, optional):
             Actions to perform on output tables after executing the function.
-            Can be a single action or a list of them. Defaults to None.
+            Can be a single action or a list of them.
+            Defaults to None.
     Returns:
         callable: The function converted to a TabsdataFunction.
     """
@@ -173,7 +174,8 @@ def publisher(
             tables, None (in which case it must be triggered manually), or a Crontab.
         on_tables (OnTablesSpec, optional): Actions
             to perform on output tables after executing the function. Can be a
-            single action or a list of them. Defaults to None.
+            single action or a list of them.
+            Defaults to None.
     Returns:
         callable: The function converted to a TabsdataFunction.
     """

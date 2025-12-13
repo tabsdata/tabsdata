@@ -12,24 +12,23 @@ from tabsdata.exceptions import DataQualityConfigurationError, ErrorCode
 
 class DataQuality(OnTablesAction):
     """
-    Data quality actions to perform on tables.
+    A data quality action on a table.
     """
 
     def __init__(
         self,
         table: str,
-        classify: Classifier | list[Classifier],
-        operations: Operation | list[Operation] = None,
+        classify: Classifier | list[Classifier],        #TODO I'd rename it to `classifiers`
+        operations: Operation | list[Operation] = None, #TODO I'd change it to require a value
     ):
         """
-        Initialize the DataQuality object.
+        Constructor.
+
         Args:
-            table(str): Name of the table to which the data quality applies.
-            classify(Classifier | list[Classifier]): One or more classifiers to
-                apply to the table.
-            operations(Operation | list[Operation], optional): The operations to
-                perform based on the results of the classifiers. Defaults to None,
-                in which case the Summary() operation will be performed.
+            table: Name of the table to apply the data quality action.
+            classify: Data quality classifiers to apply to the table.
+            operations: Data quality operations, based on the defined
+                classifiers, to perform on the table.
         """
         self.table = table
         self.classify = classify
@@ -37,6 +36,9 @@ class DataQuality(OnTablesAction):
 
     @property
     def table(self) -> str:
+        """
+        :return: the table the data quality action operates on.
+        """
         return self._table
 
     @table.setter
@@ -51,6 +53,9 @@ class DataQuality(OnTablesAction):
 
     @property
     def classify(self) -> list[Classifier]:
+        """
+        :return: the data quality classifiers.
+        """
         return self._classify
 
     @classify.setter
@@ -72,6 +77,9 @@ class DataQuality(OnTablesAction):
 
     @property
     def operations(self) -> list[Operation]:
+        """
+        :return: the data quality operations.
+        """
         if self._operations is None:
             return [Summary()]
         return self._operations
