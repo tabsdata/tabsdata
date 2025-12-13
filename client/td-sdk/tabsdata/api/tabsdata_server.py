@@ -11,7 +11,7 @@ import sys
 import tempfile
 from datetime import UTC, datetime, timedelta, timezone
 from enum import Enum
-from typing import Generator, List
+from typing import Generator, List, cast
 
 import polars as pl
 import requests
@@ -4521,24 +4521,24 @@ def _create_archive(
         )
 
         input_tables = (
-            function.input._table_uris_map
+            cast(TableInput, function.input)._table_uris_map
             if isinstance(function.input, TableInput)
             else {}
         )
         output_tables = tables
         input_actions = []  # TODO: Modify when TD-1089 is reverted
         output_actions = function.output_actions
-        processor = DataQualityProcessor(
+        dq_processor = DataQualityProcessor(
             collection=collection,
             input_tables=input_tables,
             output_tables=output_tables,
             input_actions=input_actions,
             output_actions=output_actions,
         )
-        input_dq_tables, output_dq_tables = processor.table_names()
-        total_dq_tables = [*input_dq_tables, *output_dq_tables]
-        total_dq_table_names = [table.table for table in total_dq_tables]
-        tables += total_dq_table_names
+        input_dq_tables, output_dq_tables = dq_processor.table_names()
+        dq_tables = [*input_dq_tables, *output_dq_tables]
+        dq_table_names = [table.table for table in dq_tables]
+        tables += dq_table_names
     string_dependencies: List[str] = (
         function.input._table_list if isinstance(function.input, TableInput) else []
     )

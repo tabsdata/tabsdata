@@ -40,6 +40,9 @@ def is_valid_zip(country_column_name: str, zip_column_name: str) -> pl.Expr:
 
 
 @pytest.mark.dq
+@pytest.mark.skip(
+    reason="Support for expressions in data quality is temporarily disabled."
+)
 def test_valid_zip():
     os.environ["RUST_BACKTRACE"] = "full"
     os.environ["POLARS_VERBOSE"] = "1"

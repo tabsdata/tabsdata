@@ -11,17 +11,23 @@ from typing import TYPE_CHECKING
 import cloudpickle
 
 from tabsdata._io.plugin import DestinationPlugin, SourcePlugin
+from tabsdata._table_actions.actions import OnTablesAction
 from tabsdata._tabsserver.function.configuration_utils import load_function_config
 from tabsdata._tabsserver.function.response_utils import RESPONSE_FILE_NAME
 from tabsdata._tabsserver.function.status import Status
 from tabsdata._tabsserver.function.yaml_parsing import parse_request_yaml
 from tabsdata._tdfunction import TabsdataFunction
 from tabsdata._utils.bundle_utils import (
+    ACTIONS_FOLDER,
     CODE_FOLDER,
     CONFIG_ENTRY_POINT_FUNCTION_FILE_KEY,
     CONFIG_ENTRY_POINT_KEY,
+    CONFIG_INPUT_ACTIONS_KEY,
     CONFIG_INPUTS_KEY,
+    CONFIG_OUTPUT_ACTIONS_KEY,
     CONFIG_OUTPUT_KEY,
+    INPUT_ACTIONS_KEY,
+    OUTPUT_ACTIONS_KEY,
     PLUGINS_FOLDER,
 )
 
@@ -100,6 +106,38 @@ class ExecutionContext:
                 ) as f:
                     self._destination_plugin = cloudpickle.load(f)
         return self._destination_plugin
+
+    @property
+    def input_actions(self) -> list[OnTablesAction] | None:
+        if not hasattr(self, "_input_actions"):
+            input_actions_file = self.function_config.input_actions.get(
+                INPUT_ACTIONS_KEY
+            )
+            if input_actions_file is None:
+                self._input_actions = []
+            else:
+                with open(
+                    os.path.join(self.paths.actions_folder, input_actions_file),
+                    "rb",
+                ) as f:
+                    self._input_actions = cloudpickle.load(f)
+        return self._input_actions
+
+    @property
+    def output_actions(self) -> list[OnTablesAction] | None:
+        if not hasattr(self, "_output_actions"):
+            output_actions_file = self.function_config.output_actions.get(
+                OUTPUT_ACTIONS_KEY
+            )
+            if output_actions_file is None:
+                self._output_actions = []
+            else:
+                with open(
+                    os.path.join(self.paths.actions_folder, output_actions_file),
+                    "rb",
+                ) as f:
+                    self._output_actions = cloudpickle.load(f)
+        return self._output_actions
 
     @property
     def function_config(self) -> FunctionConfig:
@@ -190,6 +228,20 @@ class FunctionConfig:
         """
         return self.function_config.get(CONFIG_OUTPUT_KEY, {})
 
+    @property
+    def input_actions(self) -> dict:
+        """
+        Get the input actions configuration.
+        """
+        return self.function_config.get(CONFIG_INPUT_ACTIONS_KEY, {})
+
+    @property
+    def output_actions(self) -> dict:
+        """
+        Get the output actions configuration.
+        """
+        return self.function_config.get(CONFIG_OUTPUT_ACTIONS_KEY, {})
+
     def __getitem__(self, item):
         """
         Get the item from the function configuration.
@@ -223,6 +275,7 @@ class ExecutionPaths:
         self.output_folder = output_folder
         self.code_folder = os.path.join(bundle_folder, CODE_FOLDER)
         self.plugins_folder = os.path.join(bundle_folder, PLUGINS_FOLDER)
+        self.actions_folder = os.path.join(bundle_folder, ACTIONS_FOLDER)
         self.parent_context = parent_context
 
     @property

@@ -16,7 +16,9 @@ from tabsdata._utils.bundle_utils import (
     CONFIG_ENTRY_POINT_FUNCTION_FILE_KEY,
     CONFIG_ENTRY_POINT_KEY,
     CONFIG_FILE_NAME,
+    CONFIG_INPUT_ACTIONS_KEY,
     CONFIG_INPUTS_KEY,
+    CONFIG_OUTPUT_ACTIONS_KEY,
     CONFIG_OUTPUT_KEY,
     LOCAL_PACKAGES_FOLDER,
     PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES_KEY,
@@ -39,6 +41,8 @@ from tabsdata.exceptions import ErrorCode, RegistrationError
 from tests_tabsdata.conftest import (
     ABSOLUTE_TEST_FOLDER_LOCATION,
     CORRECT_DESTINATION,
+    CORRECT_INPUT_ACTIONS,
+    CORRECT_OUTPUT_ACTIONS,
     CORRECT_SOURCE,
 )
 from tests_tabsdata.testing_resources.test_custom_requirements.example import (
@@ -65,6 +69,8 @@ class DummyFunction:
         original_folder=None,
         original_file=None,
         output=None,
+        input_actions=None,
+        output_actions=None,
     ):
         self.__name__ = name
         self.__module__ = module
@@ -74,6 +80,8 @@ class DummyFunction:
         self.original_file = original_file
         self.output = output
         self.original_function = BaseDummyFunction(name, module)
+        self.input_actions = input_actions
+        self.output_actions = output_actions
 
 
 def test_create_configuration_json(tmp_path):
@@ -93,6 +101,8 @@ def test_create_configuration_json(tmp_path):
             CONFIG_ENTRY_POINT_FUNCTION_FILE_KEY: "dummy_function.pkl",
         },
         CONFIG_OUTPUT_KEY: CORRECT_DESTINATION._to_dict(),
+        CONFIG_INPUT_ACTIONS_KEY: CORRECT_INPUT_ACTIONS,
+        CONFIG_OUTPUT_ACTIONS_KEY: CORRECT_OUTPUT_ACTIONS,
     }
     expected_load = {
         CONFIG_INPUTS_KEY: CORRECT_SOURCE._to_dict(),
@@ -100,6 +110,8 @@ def test_create_configuration_json(tmp_path):
             CONFIG_ENTRY_POINT_FUNCTION_FILE_KEY: "dummy_function.pkl",
         },
         CONFIG_OUTPUT_KEY: CORRECT_DESTINATION._to_dict(),
+        CONFIG_INPUT_ACTIONS_KEY: CORRECT_INPUT_ACTIONS,
+        CONFIG_OUTPUT_ACTIONS_KEY: CORRECT_OUTPUT_ACTIONS,
     }
     print(f"result: {result}")
     assert result == expected
@@ -124,6 +136,8 @@ def test_create_configuration_json_output_dict(tmp_path):
             CONFIG_ENTRY_POINT_FUNCTION_FILE_KEY: "dummy_function.pkl",
         },
         CONFIG_OUTPUT_KEY: CORRECT_DESTINATION._to_dict(),
+        CONFIG_INPUT_ACTIONS_KEY: CORRECT_INPUT_ACTIONS,
+        CONFIG_OUTPUT_ACTIONS_KEY: CORRECT_OUTPUT_ACTIONS,
     }
     expected_load = {
         CONFIG_INPUTS_KEY: CORRECT_SOURCE._to_dict(),
@@ -131,6 +145,8 @@ def test_create_configuration_json_output_dict(tmp_path):
             CONFIG_ENTRY_POINT_FUNCTION_FILE_KEY: "dummy_function.pkl",
         },
         CONFIG_OUTPUT_KEY: CORRECT_DESTINATION._to_dict(),
+        CONFIG_INPUT_ACTIONS_KEY: CORRECT_INPUT_ACTIONS,
+        CONFIG_OUTPUT_ACTIONS_KEY: CORRECT_OUTPUT_ACTIONS,
     }
     assert result == expected
     with open(save_location / CONFIG_FILE_NAME) as f:

@@ -1109,6 +1109,34 @@ class ErrorCode(Enum):
             "Available output table frames: {}."
         ),
     }
+    DQPE7 = {
+        "code": "DQPE-007",
+        "message": (
+            "Mismatch between table_infos and operations for input action table '{}'. "
+            "Expected equal lengths, but got {} table_infos and {} operations."
+        ),
+    }
+    DQPE8 = {
+        "code": "DQPE-008",
+        "message": (
+            "Mismatch between table_infos and operations for output action table '{}'. "
+            "Expected equal lengths, but got {} table_infos and {} operations."
+        ),
+    }
+    DQPE9 = {
+        "code": "DQPE-009",
+        "message": (
+            "Unsupported classifier type '{}' for action table '{}'. "
+            "This classifier type is not yet mapped to a DataQualityEngine method."
+        ),
+    }
+    DQPE10 = {
+        "code": "DQPE-010",
+        "message": (
+            "Quality column '{}' not found in classifier registry. "
+            "All quality columns must be registered in the DataQualityEngine."
+        ),
+    }
     DQCE80 = {
         "code": "DQCE-080",
         "message": (

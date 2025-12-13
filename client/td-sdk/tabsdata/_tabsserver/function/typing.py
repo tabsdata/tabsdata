@@ -13,10 +13,15 @@ from tabsdata.tableframe.lazyframe.frame import TableFrame
 class DerivedTableFrameStatus(Enum):
     INITIALIZED = auto()
     COMPUTED = auto()
+    HARVESTED = auto()
 
 
 InputTableSpec: TypeAlias = list[TableFrame | None | list[TableFrame | None]]
 OutputTableSpec: TypeAlias = list[TableFrame | None]
+
+SimpleTableSpec: TypeAlias = TableFrame | None
+OriginalTableSpec: TypeAlias = SimpleTableSpec | list[SimpleTableSpec]
+DerivedTableSpec: TypeAlias = SimpleTableSpec
 
 
 class DerivedTableFrame:
@@ -24,8 +29,8 @@ class DerivedTableFrame:
     def __init__(
         self,
         status: DerivedTableFrameStatus,
-        original_tf: InputTableSpec,
-        derived_tf: InputTableSpec,
+        original_tf: OriginalTableSpec,
+        derived_tf: DerivedTableSpec,
     ):
         self.status = status
         self.original_tf = original_tf
@@ -40,7 +45,7 @@ class DerivedTableFrame:
         self._status = status
 
     @property
-    def original_tf(self) -> list[TableFrame]:
+    def original_tf(self) -> list[SimpleTableSpec]:
         return self._original_tf
 
     @original_tf.setter
@@ -56,20 +61,18 @@ class DerivedTableFrame:
                 raise ValueError(f"Invalid type for original_tf: {type(original_tf)}")
 
     @property
-    def derived_tf(self) -> list[TableFrame]:
+    def derived_tf(self) -> SimpleTableSpec:
         return self._derived_tf
 
     @derived_tf.setter
-    def derived_tf(self, derived_tf: InputTableSpec):
+    def derived_tf(self, derived_tf: DerivedTableSpec):
         match derived_tf:
             case None:
-                self._derived_tf = []
+                self._derived_tf = None
             case TableFrame():
-                self._derived_tf = [derived_tf]
-            case list():
                 self._derived_tf = derived_tf
             case _:
                 raise ValueError(f"Invalid type for derived_tf: {type(derived_tf)}")
 
 
-DerivedTableSpec: TypeAlias = list[DerivedTableFrame | None]
+DerivedTableFrameSpec: TypeAlias = list[DerivedTableFrame | None]

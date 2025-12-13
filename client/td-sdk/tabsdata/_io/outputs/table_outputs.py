@@ -17,6 +17,7 @@ from tabsdata.exceptions import (
     DestinationConfigurationError,
     ErrorCode,
 )
+from tabsdata.tableframe._actions.dataquality.processor import DataQualityProcessor
 from tabsdata.tableframe.lazyframe.frame import TableFrame
 
 if TYPE_CHECKING:
@@ -98,12 +99,19 @@ def _store_results_in_table(
         f"Storing results in tables '{request_output_entry_list}' and "
         f"matching them with destination '{destination}'"
     )
+
     table_list = []
     destination_tables = (
         destination.table
         if isinstance(destination.table, list)
         else [destination.table]
     )
+    dq = DataQualityProcessor.from_execution_context(execution_context)
+    input_table_infos, output_table_infos = dq.table_names()
+    destination_tables.extend(
+        [table_info.table for table_info in input_table_infos + output_table_infos]
+    )
+
     # Note: destination.table is a list of strings, it can't be a single string because
     # when we serialised it we stored it as such even if it was a single one.
     if len(request_output_entry_list) != len(destination_tables):

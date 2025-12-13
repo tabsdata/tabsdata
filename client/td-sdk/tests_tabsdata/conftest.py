@@ -15,6 +15,8 @@ TESTING_RESOURCES_FOLDER = TESTING_RESOURCES_PATH
 enrich_sys_path()
 check_assets()
 
+pytest_plugins = ["tests_tabsdata.fntest"]
+
 import os
 import pathlib
 import re
@@ -132,6 +134,8 @@ logger.debug(f"ABSOLUTE_ROOT_FOLDER_LOCATION: {ABSOLUTE_ROOT_FOLDER_LOCATION}")
 
 CORRECT_SOURCE = TableInput("input")
 CORRECT_DESTINATION = TableOutput("output")
+CORRECT_INPUT_ACTIONS = {}
+CORRECT_OUTPUT_ACTIONS = {}
 
 PYTEST_DEFAULT_ENVIRONMENT_PREFIX = "pytest_exclusive_prefix_"
 DEFAULT_PYTEST_MARIADB_DOCKER_CONTAINER_NAME = "pytest_exclusive_mariadb_container"
@@ -513,6 +517,7 @@ def mysql_config(tmp_path_factory, worker_id, request) -> MySQLConfig:
         )
         return config
     else:
+        port = None
         name = os.environ.get(
             f"{prefix}__MYSQL_DOCKER_CONTAINER_NAME",
             DEFAULT_PYTEST_MYSQL_DOCKER_CONTAINER_NAME,
@@ -538,8 +543,7 @@ def mysql_config(tmp_path_factory, worker_id, request) -> MySQLConfig:
             uri=f"mysql://{DB_HOST}:{port}/{DB_NAME}",
             uri_with_credentials=(
                 f"mysql://{urllib.parse.quote(DB_USER)}:"
-                f"{urllib.parse.quote(DB_PASSWORD)}@{DB_HOST}:{port}/{
-                                 DB_NAME}"
+                f"{urllib.parse.quote(DB_PASSWORD)}@{DB_HOST}:{port}/{DB_NAME}"
             ),
             credentials=UserPasswordCredentials(DB_USER, DB_PASSWORD),
         )
@@ -733,6 +737,7 @@ def s3_client(s3_config):
     )
     client = session.client("s3")
 
+    # noinspection PyBroadException
     try:
         bucket_name = s3_config["BUCKET_NAME"]
 
@@ -1332,7 +1337,7 @@ def write_v2_yaml_file(
         "input": [],
     }
     if mock_dependency_location:
-        for mocked_table in mock_dependency_location:
+        for position, mocked_table in enumerate(mock_dependency_location):
             if isinstance(mocked_table, str):
                 uri = (
                     pathlib.Path(mocked_table).as_uri()
@@ -1340,46 +1345,49 @@ def write_v2_yaml_file(
                     else None
                 )
                 table_content = {
-                    "name": "mocked_table",
-                    "collection_id": "mocked_collection_id",
-                    "collection": "mocked_collection",
-                    "table_id": "mocked_table_id",
-                    "table_version_id": "mocked_table_version_id",
-                    "execution_id": "mocked_execution_id",
-                    "transaction_id": "mocked_transaction_id",
+                    "name": f"mocked_table_{position}",
+                    "collection_id": f"mocked_collection_id_{position}",
+                    "collection": f"mocked_collection_{position}",
+                    "table_id": f"mocked_table_id_{position}",
+                    "table_version_id": f"mocked_table_version_id_{position}",
+                    "execution_id": f"mocked_execution_id_{position}",
+                    "transaction_id": f"mocked_transaction_id_{position}",
                     "triggered_on": datetime.now(tz=timezone.utc),
-                    "table_data_version_id": "mocked_table_data_version_id",
+                    "table_data_version_id": f"mocked_table_data_version_id_{position}",
                     "location": {
                         "uri": uri,
                         "env_prefix": None,
                     },
-                    "input_idx": 314,
-                    "table_pos": 25,
-                    "version_pos": 19,
+                    "input_idx": 314 + position,
+                    "table_pos": 25 + position,
+                    "version_pos": 19 + position,
                 }
-
                 content["input"].append(MockTable(table_content))
             elif isinstance(mocked_table, list):
                 table_versions = []
-                for idx, table in enumerate(mocked_table):
+                for index, table in enumerate(mocked_table):
                     uri = pathlib.Path(table).as_uri() if table != "null" else None
                     table_content = {
-                        "name": f"mocked_table_{idx}",
-                        "collection_id": f"mocked_collection_id_{idx}",
-                        "collection": f"mocked_collection_{idx}",
-                        "table_id": f"mocked_table_id_{idx}",
-                        "table_version_id": f"mocked_table_version_id_{idx}",
-                        "execution_id": f"mocked_execution_id_{idx}",
-                        "transaction_id": f"mocked_transaction_id_{idx}",
+                        "name": f"mocked_table_{position}_{index}",
+                        "collection_id": f"mocked_collection_id_{position}_{index}",
+                        "collection": f"mocked_collection_{position}_{index}",
+                        "table_id": f"mocked_table_id_{position}_{index}",
+                        "table_version_id": (
+                            f"mocked_table_version_id_{position}_{index}"
+                        ),
+                        "execution_id": f"mocked_execution_id_{position}_{index}",
+                        "transaction_id": f"mocked_transaction_id_{position}_{index}",
                         "triggered_on": datetime.now(tz=timezone.utc),
-                        "table_data_version_id": f"mocked_table_data_version_id_{idx}",
+                        "table_data_version_id": (
+                            f"mocked_table_data_version_id_{position}_{index}"
+                        ),
                         "location": {
                             "uri": uri,
                             "env_prefix": None,
                         },
-                        "input_idx": 314 + idx,
-                        "table_pos": 25 + idx,
-                        "version_pos": 19 + idx,
+                        "input_idx": 314 + position * 1000 + index,
+                        "table_pos": 25 + position * 1000 + index,
+                        "version_pos": 19 + position * 1000 + index,
                     }
                     table_versions.append(table_content)
                 content["input"].append(MockTableVersions(table_versions))
@@ -1417,52 +1425,53 @@ def write_v2_yaml_file(
 
 def add_mock_table_location(mock_table_location):
     output = []
-    for mocked_table in mock_table_location:
+    for position, mocked_table in enumerate(mock_table_location):
         if isinstance(mocked_table, str):
             uri = (
                 pathlib.Path(mocked_table).as_uri() if mocked_table != "null" else None
             )
             table_content = {
-                "name": "mocked_table",
-                "collection_id": "mocked_collection_id",
-                "collection": "mocked_collection",
-                "table_id": "mocked_table_id",
-                "table_version_id": "mocked_table_version_id",
-                "execution_id": "mocked_execution_id",
-                "transaction_id": "mocked_transaction_id",
+                "name": f"mocked_table_{position}",
+                "collection_id": f"mocked_collection_id_{position}",
+                "collection": f"mocked_collection_{position}",
+                "table_id": f"mocked_table_id_{position}",
+                "table_version_id": f"mocked_table_version_id_{position}",
+                "execution_id": f"mocked_execution_id_{position}",
+                "transaction_id": f"mocked_transaction_id_{position}",
                 "triggered_on": datetime.now(tz=timezone.utc),
-                "table_data_version_id": "mocked_table_data_version_id",
+                "table_data_version_id": f"mocked_table_data_version_id_{position}",
                 "location": {
                     "uri": uri,
                     "env_prefix": None,
                 },
-                "input_idx": 314,
-                "table_pos": 25,
-                "version_pos": 19,
+                "input_idx": 314 + position,
+                "table_pos": 25 + position,
+                "version_pos": 19 + position,
             }
-
             output.append(MockTable(table_content))
         elif isinstance(mocked_table, list):
             table_versions = []
-            for idx, table in enumerate(mocked_table):
+            for index, table in enumerate(mocked_table):
                 uri = pathlib.Path(table).as_uri() if table != "null" else None
                 table_content = {
-                    "name": f"mocked_table_{idx}",
-                    "collection_id": f"mocked_collection_id_{idx}",
-                    "collection": f"mocked_collection_{idx}",
-                    "table_id": f"mocked_table_id_{idx}",
-                    "table_version_id": f"mocked_table_version_id_{idx}",
-                    "execution_id": f"mocked_execution_id_{idx}",
-                    "transaction_id": f"mocked_transaction_id_{idx}",
+                    "name": f"mocked_table_{position}_{index}",
+                    "collection_id": f"mocked_collection_id_{position}_{index}",
+                    "collection": f"mocked_collection_{position}_{index}",
+                    "table_id": f"mocked_table_id_{position}_{index}",
+                    "table_version_id": f"mocked_table_version_id_{position}_{index}",
+                    "execution_id": f"mocked_execution_id_{position}_{index}",
+                    "transaction_id": f"mocked_transaction_id_{position}_{index}",
                     "triggered_on": datetime.now(tz=timezone.utc),
-                    "table_data_version_id": f"mocked_table_data_version_id_{idx}",
+                    "table_data_version_id": (
+                        f"mocked_table_data_version_id_{position}_{index}"
+                    ),
                     "location": {
                         "uri": uri,
                         "env_prefix": None,
                     },
-                    "input_idx": 314 + idx,
-                    "table_pos": 25 + idx,
-                    "version_pos": 19 + idx,
+                    "input_idx": 314 + position * 1000 + index,
+                    "table_pos": 25 + position * 1000 + index,
+                    "version_pos": 19 + position * 1000 + index,
                 }
                 table_versions.append(table_content)
             output.append(MockTableVersions(table_versions))

@@ -61,7 +61,7 @@ def get_table_meta_info_from_lf(lf: pl.LazyFrame) -> dict:
     :return: Dictionary containing table information
     """
     lf = drop_system_columns(lf)
-    columns = lf.width
+    columns = lf.collect_schema().len()
     rows = lf.select(pl.len()).collect().to_series().item()
     schema_hash = arrow_schema_hash(get_arrow_schema(lf), sort_schema=True)
     return {"column_count": columns, "row_count": rows, "schema_hash": schema_hash}

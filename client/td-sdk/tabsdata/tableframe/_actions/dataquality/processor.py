@@ -1,23 +1,66 @@
 #
 # Copyright 2025 Tabs Data Inc.
 #
-
-from typing import TYPE_CHECKING, cast
+import logging
+from typing import TYPE_CHECKING, Callable, Tuple, cast
 
 from tabsdata._table_actions.actions import OnTablesAction
 from tabsdata._tableinfo import TableInfo, TableKind
 from tabsdata._tableuri import ExtendedTableURI, build_table_uri_object
 from tabsdata._tabsserver.function.typing import (
     DerivedTableFrame,
+    DerivedTableFrameStatus,
     InputTableSpec,
     OutputTableSpec,
 )
 from tabsdata.dataquality import DataQuality, Filter, Select, Summary
+from tabsdata.dataquality._classifiers import (
+    IsNotNull,
+    IsNull,
+)
 from tabsdata.dataquality._operations import Operation
 from tabsdata.exceptions import DataQualityProcessingError, ErrorCode
+from tabsdata.tableframe._actions.dataquality.engine import (
+    ClassifierFamily,
+    DataQualityEngine,
+)
+from tabsdata.tableframe.functions.eager import concat
+from tabsdata.tableframe.lazyframe.frame import TableFrame
 
 if TYPE_CHECKING:
     from tabsdata._tabsserver.function.execution_context import ExecutionContext
+
+
+CLASSIFIER_DQ_METHOD: dict[type, Callable] = {
+    IsNull: DataQualityEngine.is_null,
+    IsNotNull: DataQualityEngine.is_not_null,
+    # IsNan: DataQualityEngine.is_nan,
+    # IsNotNan: DataQualityEngine.is_not_nan,
+    # IsNullOrNan: DataQualityEngine.is_null_or_nan,
+    # IsZero: DataQualityEngine.is_zero,
+    # IsNotZero: DataQualityEngine.is_not_zero,
+    # IsPositive: DataQualityEngine.is_positive,
+    # IsPositiveOrZero: DataQualityEngine.is_positive_or_zero,
+    # IsNegative: DataQualityEngine.is_negative,
+    # IsNegativeOrZero: DataQualityEngine.is_negative_or_zero,
+    # IsIn: DataQualityEngine.is_in,
+    # IsNotIn: DataQualityEngine.is_not_in,
+    # IsInRange: DataQualityEngine.is_in_range,
+    # Matches: DataQualityEngine.matches,
+    # DoesNotMatch: DataQualityEngine.does_not_match,
+    # HasLen: DataQualityEngine.has_len,
+    # HasColumns: DataQualityEngine.has_columns,
+    # HasColumnTypes: DataQualityEngine.has_column_types,
+    # Categorizer: DataQualityEngine.categorize,
+}
+
+OPERATION_DQ_METHOD: dict[type, Callable] = {
+    Summary: DataQualityEngine.is_null,
+    Select: DataQualityEngine.is_not_null,
+    Filter: DataQualityEngine.is_not_null,
+}
+
+logger = logging.getLogger(__name__)
 
 
 class ExtendedTable:
@@ -413,9 +456,19 @@ class DataQualityProcessor:
                     ErrorCode.DQPE5, position, action.table, len(input_table_frames)
                 )
             tableframe = input_table_frames[position]
-            for table_info in table_infos:
+            derived_table_frame, dq_cols, dq_tags = self.compute(tableframe, action)
+            if len(table_infos) != len(action.operations):
+                raise DataQualityProcessingError(
+                    ErrorCode.DQPE7,
+                    action.table,
+                    len(table_infos),
+                    len(action.operations),
+                )
+            for table_info, operation in zip(table_infos, action.operations):
                 derived_table_frames.append(
-                    self.compute(tableframe, action, table_info)
+                    self.harvest(
+                        derived_table_frame, dq_cols, dq_tags, table_info, operation
+                    )
                 )
 
         for action in self.output_actions:
@@ -428,17 +481,104 @@ class DataQualityProcessor:
                     ErrorCode.DQPE6, position, action.table, len(output_table_frames)
                 )
             tableframe = output_table_frames[position]
-            for table_info in table_infos:
-                derived_table_frames.append(
-                    self.compute(tableframe, action, table_info)
+            derived_table_frame, dq_cols, dq_tags = self.compute(tableframe, action)
+            if len(table_infos) != len(action.operations):
+                raise DataQualityProcessingError(
+                    ErrorCode.DQPE8,
+                    action.table,
+                    len(table_infos),
+                    len(action.operations),
                 )
+            for table_info, operation in zip(table_infos, action.operations):
+                derived_table_frames.append(
+                    self.harvest(
+                        derived_table_frame, dq_cols, dq_tags, table_info, operation
+                    )
+                )
+
+    @classmethod
+    def to_tableframe(
+        cls,
+        tableframes: InputTableSpec | OutputTableSpec | None,
+    ) -> TableFrame | None:
+        tf: list[TableFrame] = []
+        match tableframes:
+            case None:
+                pass
+            case TableFrame():
+                tf.append(tableframes)
+            case list():
+                for tableframe in tableframes:
+                    if tableframe is None:
+                        continue
+                    elif isinstance(tableframe, TableFrame):
+                        tf.append(tableframe)
+                    elif isinstance(tableframe, list):
+                        for sub_tableframe in tableframe:
+                            if isinstance(sub_tableframe, TableFrame):
+                                tf.append(sub_tableframe)
+        if not tf:
+            return None
+        return concat(tf, how="diagonal_relaxed")
 
     @classmethod
     def compute(
         cls,
-        _tableframe: InputTableSpec | None,
-        _action: DataQuality,
+        tableframe: InputTableSpec | OutputTableSpec | None,
+        action: DataQuality,
+    ) -> Tuple[
+        DerivedTableFrame | None,
+        dict[str, ClassifierFamily] | None,
+        dict[str, set[str]] | None,
+    ]:
+        tf = cls.to_tableframe(tableframe)
+        if tf is None:
+            return None, None, None
+
+        dtf: DerivedTableFrame = DerivedTableFrame(
+            DerivedTableFrameStatus.INITIALIZED, tableframe, tf
+        )
+        dq = DataQualityEngine(tf)
+        classifiers = (
+            action.classify if isinstance(action.classify, list) else [action.classify]
+        )
+        for classifier in classifiers:
+            classifier_type = type(classifier)
+            method = CLASSIFIER_DQ_METHOD.get(classifier_type)
+
+            if method is None:
+                raise DataQualityProcessingError(
+                    ErrorCode.DQPE9,
+                    classifier_type.__name__,
+                    action.table,
+                )
+
+            dq = method(dq, classifier.cols, classifier.tags)
+
+        dtf.derived_tf = dq.tf()
+        dtf.status = DerivedTableFrameStatus.COMPUTED
+        return dtf, dq._cols, dq._tags
+
+    @classmethod
+    def harvest(
+        cls,
+        tableframe: DerivedTableFrame | None,
+        cols: dict[str, ClassifierFamily],
+        tags: dict[str, set[str]] | None,
         _table_info: TableInfo,
+        operation: Operation,
     ) -> DerivedTableFrame | None:
-        # ToDo
-        return None
+        if tableframe is None:
+            return None
+        tf = tableframe.derived_tf
+        if tf is None:
+            return None
+
+        dtf: DerivedTableFrame = DerivedTableFrame(
+            tableframe.status, tableframe.original_tf, None
+        )
+        dq = DataQualityEngine(tf, cols, tags)
+        dq = dq.summary(operation.tags)
+        dtf.derived_tf = dq.tf()
+        dtf.status = DerivedTableFrameStatus.HARVESTED
+        return dtf

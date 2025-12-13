@@ -22,7 +22,7 @@ from tabsdata._tabsserver.function.native_tables_utils import (
 from tabsdata._tabsserver.function.offset_utils import OffsetReturn
 from tabsdata._tabsserver.function.results_collection import ResultsCollection
 from tabsdata._tabsserver.function.typing import (
-    DerivedTableSpec,
+    DerivedTableFrameSpec,
     InputTableSpec,
     OutputTableSpec,
 )
@@ -71,7 +71,7 @@ def execute_function(
 
     enrich_table_frames(execution_context, input_table_frames)
     output_table_frames: OutputTableSpec = []
-    derived_table_frames: DerivedTableSpec = []
+    derived_table_frames: DerivedTableFrameSpec = []
     dq_processor = DataQualityProcessor.from_execution_context(execution_context)
 
     pre_function_run(
@@ -112,7 +112,7 @@ def pre_function_run(
     _dq_processor: DataQualityProcessor,
     _input_table_frames: InputTableSpec,
     _output_table_frames: OutputTableSpec,
-    _derived_table_frames: DerivedTableSpec,
+    _derived_table_frames: DerivedTableFrameSpec,
 ):
     logger.info("Starting execution of function pre-processing")
 
@@ -124,7 +124,7 @@ def function_run(
     _dq_processor: DataQualityProcessor,
     input_table_frames: InputTableSpec,
     output_table_frames: OutputTableSpec,
-    _derived_table_frames: DerivedTableSpec,
+    _derived_table_frames: DerivedTableFrameSpec,
 ):
     logger.info("Starting execution of function provided by the user")
 
@@ -149,7 +149,7 @@ def post_function_run(
     dq_processor: DataQualityProcessor,
     input_table_frames: InputTableSpec,
     output_table_frames: OutputTableSpec,
-    derived_table_frames: DerivedTableSpec,
+    derived_table_frames: DerivedTableFrameSpec,
 ):
     logger.info("Starting execution of function post-processing")
 
@@ -265,6 +265,12 @@ def obtain_user_provided_function_parameters(
     execution_context: ExecutionContext,
 ) -> InputTableSpec:
     logger.debug("Running the source plugin")
+
+    input_actions = execution_context.input_actions
+    output_actions = execution_context.output_actions
+    execution_context.user_provided_function.input_actions = input_actions
+    execution_context.user_provided_function.output_actions = output_actions
+
     # noinspection PyProtectedMember
     parameters = execution_context.source._run(execution_context)
     return parameters

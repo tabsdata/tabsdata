@@ -1050,7 +1050,6 @@ def test_frame_select():
     api_tester(fn)
 
 
-@pytest.mark.dimax
 def test_frame_group_by():
     def fn(library: pk, frame: ft):
         return frame.group_by("ss").agg(library.col("u").sum())

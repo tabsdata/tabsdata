@@ -77,7 +77,18 @@ BASE_BINARIES = [
     "td_transporter",
 ]
 LOCAL_PACKAGES_FOLDER = "local_packages"
+
 PLUGINS_FOLDER = "plugins"
+
+ACTIONS_FOLDER = "actions"
+
+CONFIG_INPUT_ACTIONS_KEY = "input_actions"
+INPUT_ACTIONS_KEY = "on-input-actions"
+INPUT_ACTIONS_FILE = "InputActions.pkl"
+
+CONFIG_OUTPUT_ACTIONS_KEY = "output_actions"
+OUTPUT_ACTIONS_KEY = "on-output-actions"
+OUTPUT_ACTIONS_FILE = "OutputActions.pkl"
 
 PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES_KEY = "ignoreUnavailablePackages"
 PYTHON_DEVELOPMENT_PACKAGES_KEY = "developmentPackages"
@@ -111,6 +122,14 @@ def create_configuration(function: TabsdataFunction, save_location: str):
     configuration[CONFIG_OUTPUT_KEY] = create_output_configuration(
         function, save_location
     )
+
+    configuration[CONFIG_INPUT_ACTIONS_KEY] = create_input_actions_configuration(
+        function, save_location
+    )
+    configuration[CONFIG_OUTPUT_ACTIONS_KEY] = create_output_actions_configuration(
+        function, save_location
+    )
+
     if save_location:
         with open(os.path.join(save_location, CONFIG_FILE_NAME), "w") as file:
             json.dump(configuration, file, cls=CustomJSONEncoder)
@@ -151,6 +170,45 @@ def generate_entry_point_field(function):
             f"{function.original_function.__name__}.pkl"
         ),
     }
+
+
+# noinspection PyUnresolvedReferences
+def create_input_actions_configuration(
+    function: TabsdataFunction, save_location: str
+) -> dict:
+    if not hasattr(function, "input_actions") or not function.input_actions:
+        return {}
+
+    actions_location = os.path.join(save_location, ACTIONS_FOLDER)
+    os.makedirs(actions_location, exist_ok=True)
+    with open(
+        os.path.join(
+            actions_location,
+            INPUT_ACTIONS_FILE,
+        ),
+        "wb",
+    ) as f:
+        cloudpickle.dump(function.input_actions, f)
+    return {INPUT_ACTIONS_KEY: INPUT_ACTIONS_FILE}
+
+
+def create_output_actions_configuration(
+    function: TabsdataFunction, save_location: str
+) -> dict:
+    if not hasattr(function, "output_actions") or not function.output_actions:
+        return {}
+
+    actions_location = os.path.join(save_location, ACTIONS_FOLDER)
+    os.makedirs(actions_location, exist_ok=True)
+    with open(
+        os.path.join(
+            actions_location,
+            OUTPUT_ACTIONS_FILE,
+        ),
+        "wb",
+    ) as f:
+        cloudpickle.dump(function.output_actions, f)
+    return {OUTPUT_ACTIONS_KEY: OUTPUT_ACTIONS_FILE}
 
 
 def create_tarball(source_dir: str, output_filename: str):

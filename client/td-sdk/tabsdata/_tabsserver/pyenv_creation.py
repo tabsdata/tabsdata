@@ -281,12 +281,19 @@ def verify_single_package_installable_for_environment(
         result = subprocess.run(
             pip_install_dry_run,
             shell=True,
+            capture_output=True,
         )
     if result.returncode == 0:
         logger.debug(f"Package {package} is installable with pip")
         return True
     else:
         logger.warning(f"Package {package} is not installable with pip")
+        logger.warning(
+            "Reason:"
+            f"\n'{str(result.returncode)}'"
+            f"\n'{str(result.stdout)}'"
+            f"\n'{str(result.stderr)}'"
+        )
         return False
 
 
@@ -329,6 +336,12 @@ def verify_batch_of_packages_installable_for_environment(
         logger.debug(
             f"Some of the {len(packages)} packages are not installable with uv pip:"
             f" ({packages}) "
+        )
+        logger.debug(
+            "Reason:"
+            f"\n'{str(result.returncode)}'"
+            f"\n'{str(result.stdout)}'"
+            f"\n'{str(result.stderr)}'"
         )
         return False
 
@@ -1169,6 +1182,12 @@ def atomic_environment_creation(
             f" {python_version} and environment name {logical_environment_name}. Please"
             " check err.log in the same folder for more details."
         )
+        logger.error(
+            "Reason:"
+            f"\n'{str(result.returncode)}'"
+            f"\n'{str(result.stdout)}'"
+            f"\n'{str(result.stderr)}'"
+        )
         return None
     else:
         logger.info(
@@ -1196,6 +1215,7 @@ def atomic_environment_creation(
         result = subprocess.run(
             pip_upgrade_command,
             shell=True,
+            capture_output=True,
         )
         logger.info(f"Result: {result}")
         # noinspection PyUnreachableCode
@@ -1203,6 +1223,12 @@ def atomic_environment_creation(
             logger.error(
                 "Failed to upgrade pip version for the virtual environment"
                 f" {logical_environment_name}"
+            )
+            logger.error(
+                "Reason:"
+                f"\n'{str(result.returncode)}'"
+                f"\n'{str(result.stdout)}'"
+                f"\n'{str(result.stderr)}'"
             )
             delete_virtual_environment(
                 logical_environment_name=logical_environment_name,
@@ -1321,11 +1347,18 @@ def install_requirements(
         result = subprocess.run(
             pip_install_requirements_command,
             shell=True,
+            capture_output=True,
         )
     if result.returncode != 0:
         logger.error(
             f"Failed to install the requirements {requirements} for the virtual"
             f" environment {logical_environment_name}"
+        )
+        logger.error(
+            "Reason:"
+            f"\n'{str(result.returncode)}'"
+            f"\n'{str(result.stdout)}'"
+            f"\n'{str(result.stderr)}'"
         )
         delete_virtual_environment(
             logical_environment_name=logical_environment_name,
@@ -1416,11 +1449,18 @@ def install_host_package(
         result = subprocess.run(
             pip_install_requirements_command,
             shell=True,
+            capture_output=True,
         )
         if result.returncode != 0:
             logger.error(
                 f"Failed to install the host package {package_archive} for the "
                 f"virtual environment {logical_environment_name}"
+            )
+            logger.error(
+                "Reason:"
+                f"\n'{str(result.returncode)}'"
+                f"\n'{str(result.stdout)}'"
+                f"\n'{str(result.stderr)}'"
             )
             delete_virtual_environment(
                 logical_environment_name=logical_environment_name,
@@ -1457,15 +1497,21 @@ def install_python_version(python_version: str) -> None:
         ],
     )
     logger.info(f"Running command: {command}")
-    result = subprocess.run(command, shell=True)
+    result = subprocess.run(
+        command,
+        shell=True,
+        capture_output=True,
+    )
     # On Windows, exit status 2 means that the Python version is already installed,
     ok_codes = (0, 2) if platform.system() == "Windows" else (0,)
     # Check if the Python version is not found
     if result.returncode not in ok_codes:
         logger.error(f"Failed to install Python version '{python_version}'.")
         logger.error(
-            f"RESULT: '{str(result.returncode)}' - '{str(result.stdout)}' -"
-            f" '{str(result.stderr)}'"
+            "Reason:"
+            f"\n'{str(result.returncode)}'"
+            f"\n'{str(result.stdout)}'"
+            f"\n'{str(result.stderr)}'"
         )
         logger.error("Please check the Python version number provided and try again.")
         return None
