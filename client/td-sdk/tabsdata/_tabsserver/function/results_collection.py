@@ -40,6 +40,9 @@ class ResultsCollection:
         for result in self.results:
             yield result
 
+    def to_list(self) -> List[VALID_SINGLE_RESULT]:
+        return [result.value for result in self]
+
     def check_collection_integrity(self):
         for result in self.results:
             result.check_integrity()

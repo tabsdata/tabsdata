@@ -45,18 +45,70 @@ def execute_function_from_config(
     # Decided to keep this logic with the code_folder to make it OS-agnostic. If we
     # stored the function_file with the code_folder prefix, we would have to handle
     # the path differently for different OSs.
+
     logger.info(pad_string("[Obtaining function parameters]"))
     parameters = obtain_user_provided_function_parameters(execution_context)
     logger.info("Function parameters obtained")
+
+    result = execute_function(execution_context, parameters)
+
+    return result
+
+
+def execute_function(
+    execution_context: ExecutionContext,
+    input_table_frames: list[TableFrame | None | list[TableFrame | None]],
+) -> ResultsCollection:
     logger.info(pad_string("[Executing function]"))
+
+    pre_result = pre_function_run(execution_context, input_table_frames)
+    result = function_run(execution_context, input_table_frames)
+    post_result = post_function_run(execution_context, result.to_list())
+
+    results = tuple(result.to_list())
+    if pre_result is not None:
+        results = results + tuple(pre_result.to_list())
+    if post_result is not None:
+        results = results + tuple(post_result.to_list())
+
+    logger.info("Executing function finished")
+
+    return ResultsCollection(results)
+
+
+def pre_function_run(
+    execution_context: ExecutionContext,
+    input_table_frames: list[TableFrame | None | list[TableFrame | None]],
+) -> ResultsCollection | None:
+    logger.info("Starting execution of function pre-processing")
+    logger.info("Finished execution of function pre-processing")
+    return None
+
+
+def function_run(
+    execution_context: ExecutionContext,
+    input_table_frames: list[TableFrame | None | list[TableFrame | None]],
+) -> ResultsCollection:
     logger.info("Starting execution of function provided by the user")
-    result = execution_context.user_provided_function(*parameters)
+    result = execution_context.user_provided_function(*input_table_frames)
     logger.info("Finished executing function provided by the user")
+
+    logger.info("Building the user-provided function result")
     if execution_context.status.offset.returns_values:
         result = update_initial_values(execution_context, result)
     result = ResultsCollection(result)
     result.check_collection_integrity()
+    logger.info("Finished building the user-provided function result")
+
     return result
+
+
+def post_function_run(
+    execution_context: ExecutionContext, output_table_frames: list[TableFrame | None]
+) -> ResultsCollection | None:
+    logger.info("Starting execution of function post-processing")
+    logger.info("Finished execution of function post-processing")
+    return None
 
 
 def update_initial_values(execution_context: ExecutionContext, result):

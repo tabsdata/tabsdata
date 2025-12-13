@@ -80,6 +80,36 @@ logger.setLevel(logging.INFO)
 IndexInput = Union[int, td_generators.IdxGenerator, None]
 
 
+class DataTable:
+    """
+    Stores metadata about the tabsdata table linked to a TableFrame.
+    """
+
+    def __init__(self, name: str, position: int) -> None:
+        """
+        Initialize a DataTable instance.
+
+        Args:
+            name: name of the linked table.
+            position: parameter position of the linked table in the running function.
+        """
+        self._name = name
+        self._position = position
+
+    @property
+    def name(self) -> str:
+        """Get the name of the data table."""
+        return self._name
+
+    @property
+    def position(self) -> int:
+        """Get the position of the data table."""
+        return self._position
+
+    def __repr__(self) -> str:
+        return f"DataTable(name={self._name!r}, position={self._position})"
+
+
 # These origins are currently shallowly used, and no relevant functional difference
 # should be perceived depending on mark in TableFrames. Currently, these marks are
 # mainly informative.
@@ -429,6 +459,14 @@ class TableFrame:
     @property
     def width(self) -> int:
         return self.schema.len()
+
+    @property
+    def data_table(self) -> DataTable | None:
+        return self._data_table
+
+    @data_table.setter
+    def data_table(self, data_table: DataTable | None) -> None:
+        self._data_table = data_table
 
     """> Special Functions """
 
