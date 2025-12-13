@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import TYPE_CHECKING, TypeAlias
+from typing import TYPE_CHECKING
 
 import polars as pl
 
@@ -21,9 +21,12 @@ from tabsdata._tabsserver.function.native_tables_utils import (
 )
 from tabsdata._tabsserver.function.offset_utils import OffsetReturn
 from tabsdata._tabsserver.function.results_collection import ResultsCollection
-from tabsdata._tabsserver.function.yaml_parsing import (
-    Location,
+from tabsdata._tabsserver.function.typing import (
+    DerivedTableSpec,
+    InputTableSpec,
+    OutputTableSpec,
 )
+from tabsdata._tabsserver.function.yaml_parsing import Location
 from tabsdata._utils.tableframe._constants import EMPTY_VERSION
 
 # noinspection PyProtectedMember
@@ -39,9 +42,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 SOURCES_FOLDER = "sources"
-
-
-FunctionInputSpec: TypeAlias = list[TableFrame | None | list[TableFrame | None]]
 
 
 def execute_function_from_config(
@@ -63,51 +63,138 @@ def execute_function_from_config(
 
 def execute_function(
     execution_context: ExecutionContext,
-    input_table_frames: FunctionInputSpec,
+    input_table_frames: InputTableSpec,
 ) -> ResultsCollection:
     logger.info(pad_string("[Executing function]"))
 
-    pre_result = pre_function_run(execution_context, input_table_frames)
-    result = function_run(execution_context, input_table_frames)
-    post_result = post_function_run(execution_context, result.to_list())
+    check_actions(execution_context)
 
-    results = tuple(result.to_list())
-    if pre_result is not None:
-        results = results + tuple(pre_result.to_list())
-    if post_result is not None:
-        results = results + tuple(post_result.to_list())
+    enrich_table_frames(execution_context, input_table_frames)
+    output_table_frames: OutputTableSpec = []
+    derived_table_frames: DerivedTableSpec = []
+    dq_processor = DataQualityProcessor.from_execution_context(execution_context)
+
+    pre_function_run(
+        execution_context,
+        dq_processor,
+        input_table_frames,
+        output_table_frames,
+        derived_table_frames,
+    )
+    function_run(
+        execution_context,
+        dq_processor,
+        input_table_frames,
+        output_table_frames,
+        derived_table_frames,
+    )
+    post_function_run(
+        execution_context,
+        dq_processor,
+        input_table_frames,
+        output_table_frames,
+        derived_table_frames,
+    )
 
     logger.info("Executing function finished")
+
+    otf = tuple(output_table_frames)
+    dtf = tuple(
+        derived_table_frame.derived_tf for derived_table_frame in derived_table_frames
+    )
+    results = otf + dtf
 
     return ResultsCollection(results)
 
 
 def pre_function_run(
-    execution_context: ExecutionContext,
-    input_table_frames: FunctionInputSpec,
-) -> ResultsCollection | None:
+    _execution_context: ExecutionContext,
+    _dq_processor: DataQualityProcessor,
+    _input_table_frames: InputTableSpec,
+    _output_table_frames: OutputTableSpec,
+    _derived_table_frames: DerivedTableSpec,
+):
     logger.info("Starting execution of function pre-processing")
-
-    # todo
-    input_table_frames = enrich_table_frames(execution_context, input_table_frames)
-
-    check_actions(execution_context)
-
-    # todo
-    dq_processor = DataQualityProcessor.from_execution_context(execution_context)
 
     logger.info("Finished execution of function pre-processing")
 
-    # todo: remove; just to avoid temporary F841
-    _ = (input_table_frames, dq_processor)
 
-    return None
+def function_run(
+    execution_context: ExecutionContext,
+    _dq_processor: DataQualityProcessor,
+    input_table_frames: InputTableSpec,
+    output_table_frames: OutputTableSpec,
+    _derived_table_frames: DerivedTableSpec,
+):
+    logger.info("Starting execution of function provided by the user")
+
+    result = execution_context.user_provided_function(*input_table_frames)
+
+    logger.info("Finished executing function provided by the user")
+
+    logger.info("Building the user-provided function result")
+
+    if execution_context.status.offset.returns_values:
+        result = update_initial_values(execution_context, result)
+    result = ResultsCollection(result)
+    result.check_collection_integrity()
+
+    logger.info("Finished building the user-provided function result")
+
+    output_table_frames.extend(result.to_list())
+
+
+def post_function_run(
+    _execution_context: ExecutionContext,
+    dq_processor: DataQualityProcessor,
+    input_table_frames: InputTableSpec,
+    output_table_frames: OutputTableSpec,
+    derived_table_frames: DerivedTableSpec,
+):
+    logger.info("Starting execution of function post-processing")
+
+    dq_processor.tables_data(
+        input_table_frames,
+        output_table_frames,
+        derived_table_frames,
+    )
+
+    logger.info("Finished execution of function post-processing")
+
+
+def check_actions(execution_context: ExecutionContext):
+    try:
+        # noinspection PyUnresolvedReferences
+        input_actions = execution_context.user_provided_function.input_actions
+    except AttributeError:
+        input_actions = []
+    filter_actions(input_actions)
+    try:
+        output_actions = execution_context.user_provided_function.output_actions
+    except AttributeError:
+        output_actions = []
+    filter_actions(output_actions)
+
+
+def filter_actions(actions: list[OnTablesAction]):
+    if actions is not None:
+        for i, action in enumerate(actions):
+            if action is None:
+                raise ValueError(
+                    f"Configured actions contain 'None' at index {i}. "
+                    "No entry can be null."
+                )
+            if not isinstance(action, DataQuality):
+                raise ValueError(
+                    f"Configured actions contain an invalid type at index {i}: "
+                    f"expected DataQuality, but got {type(action).__name__}."
+                )
 
 
 def enrich_table_frames(
     execution_context: ExecutionContext,
-    input_table_frames: FunctionInputSpec,
-) -> FunctionInputSpec:
+    input_table_frames: InputTableSpec,
+):
     from tabsdata import TableInput
 
     source = execution_context.source
@@ -149,63 +236,6 @@ def enrich_table_frames(
     else:
         logger.debug("No input tables provided")
 
-    return input_table_frames
-
-
-def check_actions(execution_context: ExecutionContext):
-    try:
-        input_actions = execution_context.user_provided_function.input_actions
-    except AttributeError:
-        input_actions = []
-    filter_actions(input_actions)
-    try:
-        output_actions = execution_context.user_provided_function.output_actions
-    except AttributeError:
-        output_actions = []
-    filter_actions(output_actions)
-
-
-def filter_actions(actions: list[OnTablesAction]):
-    if actions is not None:
-        for i, action in enumerate(actions):
-            if action is None:
-                raise ValueError(
-                    f"Configured actions contain 'None' at index {i}. "
-                    "No entry can be null."
-                )
-            if not isinstance(action, DataQuality):
-                raise ValueError(
-                    f"Configured actions contain an invalid type at index {i}: "
-                    f"expected DataQuality, but got {type(action).__name__}."
-                )
-
-
-def function_run(
-    execution_context: ExecutionContext,
-    input_table_frames: FunctionInputSpec,
-) -> ResultsCollection:
-    logger.info("Starting execution of function provided by the user")
-    result = execution_context.user_provided_function(*input_table_frames)
-    logger.info("Finished executing function provided by the user")
-
-    logger.info("Building the user-provided function result")
-    if execution_context.status.offset.returns_values:
-        result = update_initial_values(execution_context, result)
-    result = ResultsCollection(result)
-    result.check_collection_integrity()
-    logger.info("Finished building the user-provided function result")
-
-    return result
-
-
-def post_function_run(
-    execution_context: ExecutionContext, output_table_frames: list[TableFrame | None]
-) -> ResultsCollection | None:
-    logger.info("Starting execution of function post-processing")
-    logger.info("Finished execution of function post-processing")
-
-    return None
-
 
 def update_initial_values(execution_context: ExecutionContext, result):
     logger.info("New offset generated")
@@ -233,7 +263,7 @@ def update_initial_values(execution_context: ExecutionContext, result):
 
 def obtain_user_provided_function_parameters(
     execution_context: ExecutionContext,
-) -> FunctionInputSpec:
+) -> InputTableSpec:
     logger.debug("Running the source plugin")
     # noinspection PyProtectedMember
     parameters = execution_context.source._run(execution_context)
@@ -245,7 +275,7 @@ def load_sources(
     local_sources: list | str | None,
     idx: td_generators.IdxGenerator | None = None,
     working_dir: str | None = None,
-) -> FunctionInputSpec:
+) -> InputTableSpec:
     """
     Given a list of sources, load them into tabsdata TableFrames.
     :param execution_context: The context of the function.

@@ -6,28 +6,62 @@ from typing import TYPE_CHECKING, cast
 
 from tabsdata._table_actions.actions import OnTablesAction
 from tabsdata._tableinfo import TableInfo, TableKind
-from tabsdata._tableuri import TableURI, build_table_uri_object
+from tabsdata._tableuri import ExtendedTableURI, build_table_uri_object
+from tabsdata._tabsserver.function.typing import (
+    DerivedTableFrame,
+    InputTableSpec,
+    OutputTableSpec,
+)
 from tabsdata.dataquality import DataQuality, Filter, Select, Summary
 from tabsdata.dataquality._operations import Operation
 from tabsdata.exceptions import DataQualityProcessingError, ErrorCode
 
 if TYPE_CHECKING:
-    from tabsdata._io.outputs.table_outputs import TableOutput
     from tabsdata._tabsserver.function.execution_context import ExecutionContext
+
+
+class ExtendedTable:
+    def __init__(self, table: str, position: int):
+        self.table = table
+        self.position = position
+
+    def __hash__(self) -> int:
+        return hash(self.table)
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ExtendedTable):
+            return False
+        return self.table == other.table
+
+    @property
+    def table(self) -> str:
+        return self._table
+
+    @table.setter
+    def table(self, table: str):
+        self._table = table
+
+    @property
+    def position(self) -> int:
+        return self._position
+
+    @position.setter
+    def position(self, position: int):
+        self._position = position
 
 
 class DataQualityProcessor:
     def __init__(
         self,
         collection: str,
-        input_tables: dict[str, TableURI],
+        input_tables: dict[str, ExtendedTableURI],
         output_tables: list[str],
         input_actions: list[OnTablesAction],
         output_actions: list[OnTablesAction],
     ):
         self._collection: str = collection
-        self._input_tables: dict[str, TableURI] = input_tables
-        self._output_tables: set[str] = set(output_tables)
+        self._input_tables: dict[str, ExtendedTableURI] = input_tables
+        self.output_tables = output_tables
         self.input_actions = input_actions
         self.output_actions = output_actions
 
@@ -40,16 +74,16 @@ class DataQualityProcessor:
         self._collection = collection
 
     @property
-    def input_tables(self) -> dict[str, TableURI]:
+    def input_tables(self) -> dict[str, ExtendedTableURI]:
         return self._input_tables
 
     @input_tables.setter
-    def input_tables(self, input_tables: dict[str, TableURI]):
+    def input_tables(self, input_tables: dict[str, ExtendedTableURI]):
         self._input_tables = input_tables
 
     @property
-    def input_tables_map(self) -> dict[tuple[str, str], list[TableURI]]:
-        input_tables_map: dict[tuple[str, str], list[TableURI]] = {}
+    def input_tables_map(self) -> dict[tuple[str, str], list[ExtendedTableURI]]:
+        input_tables_map: dict[tuple[str, str], list[ExtendedTableURI]] = {}
         for input_table in self.input_tables.values():
             collection = (
                 input_table.collection if input_table.collection else self.collection
@@ -79,12 +113,15 @@ class DataQualityProcessor:
         return input_tables_map
 
     @property
-    def output_tables(self) -> set[str]:
+    def output_tables(self) -> dict[str, ExtendedTable]:
         return self._output_tables
 
     @output_tables.setter
-    def output_tables(self, output_tables: "TableOutput"):
-        self._output_tables = set(output_tables._table_list)
+    def output_tables(self, output_tables: list[str]):
+        self._output_tables = {
+            table: ExtendedTable(table, position)
+            for position, table in enumerate(output_tables)
+        }
 
     @property
     def input_actions(self) -> list[DataQuality]:
@@ -111,7 +148,7 @@ class DataQualityProcessor:
         from tabsdata._io.outputs.table_outputs import TableOutput
 
         input_tables = (
-            cast(TableInput, context.source)._table_uris_map
+            cast(TableInput, context.source)._extended_table_uris_map
             if isinstance(context.source, TableInput)
             else {}
         )
@@ -123,6 +160,7 @@ class DataQualityProcessor:
         )
 
         try:
+            # noinspection PyUnresolvedReferences
             input_actions = context.user_provided_function.input_actions
         except AttributeError:
             input_actions = []
@@ -150,20 +188,16 @@ class DataQualityProcessor:
     def table_names(self) -> tuple[list[TableInfo], list[TableInfo]]:
         input_actions_tables = []
         for action in self._input_actions:
-            table, collection = self.resolve_input_table_and_collection_names(
-                action.table
-            )
+            collection, table, position = self.resolve_input_table(action.table)
             input_actions_tables.extend(
-                self.build_table_names(table, collection, action.operations)
+                self.build_table_names(collection, table, position, action.operations)
             )
 
         output_actions_tables = []
         for action in self._output_actions:
-            table, collection = self.resolve_output_table_and_collection_names(
-                action.table
-            )
+            collection, table, position = self.resolve_output_table(action.table)
             output_actions_tables.extend(
-                self.build_table_names(table, collection, action.operations)
+                self.build_table_names(collection, table, position, action.operations)
             )
 
         self.validate_no_duplicate_table_names(
@@ -172,13 +206,13 @@ class DataQualityProcessor:
 
         return input_actions_tables, output_actions_tables
 
-    def resolve_input_table_and_collection_names(
-        self, action_table: str
-    ) -> tuple[str, str]:
+    def resolve_input_table(self, action_table: str) -> tuple[str, str, int]:
         if action_table in self.input_tables:
             table_uri = self.input_tables[action_table]
-            return table_uri.table, (
-                self.collection if not table_uri.collection else table_uri.collection
+            return (
+                self.collection if not table_uri.collection else table_uri.collection,
+                table_uri.table,
+                table_uri.position,
             )
 
         table_uri = build_table_uri_object(action_table)
@@ -189,24 +223,27 @@ class DataQualityProcessor:
         if qualified_table in self.input_tables_map:
             table_uris = self.input_tables_map[qualified_table]
             if len(table_uris) == 1:
-                return table_uris[0].table, collection
+                return collection, table_uris[0].table, table_uris[0].position
 
         raise DataQualityProcessingError(ErrorCode.DQPE1, action_table)
 
-    def resolve_output_table_and_collection_names(
-        self, action_table: str
-    ) -> tuple[str, str]:
+    def resolve_output_table(self, action_table: str) -> tuple[str, str, int]:
         if action_table in self.output_tables:
-            return action_table, self.collection
+            return (
+                self.collection,
+                action_table,
+                self.output_tables[action_table].position,
+            )
 
         raise DataQualityProcessingError(ErrorCode.DQPE2, action_table)
 
     def build_table_names(
         self,
-        table: str,
         collection: str,
+        table: str,
+        position: int | None,
         operations: list[Operation],
-    ):
+    ) -> list[TableInfo]:
         table_names = []
         if operations:
             for operation in operations:
@@ -218,6 +255,7 @@ class DataQualityProcessor:
                                 self.table_name_for_filter(
                                     self._collection,
                                     table_name,
+                                    position,
                                     collection,
                                     table,
                                 )
@@ -228,6 +266,7 @@ class DataQualityProcessor:
                             self.table_name_for_select(
                                 self._collection,
                                 table_name,
+                                position,
                                 collection,
                                 table,
                             )
@@ -239,6 +278,7 @@ class DataQualityProcessor:
                             self.table_name_for_summary(
                                 self._collection,
                                 table_name,
+                                position,
                                 has_custom_table_name,
                                 collection,
                                 table,
@@ -255,12 +295,14 @@ class DataQualityProcessor:
         cls,
         collection: str,
         table: str,
+        position: int,
         from_collection: str,
         from_table: str,
     ) -> TableInfo:
         return cls.derived_table_name(
             collection=collection,
             table=table,
+            position=position,
             kind=TableKind.DQ_FILTER,
             is_custom=True,
             from_table=from_table,
@@ -272,12 +314,14 @@ class DataQualityProcessor:
         cls,
         collection: str,
         table: str,
+        position: int,
         from_collection: str,
         from_table: str,
     ) -> TableInfo:
         return cls.derived_table_name(
             collection=collection,
             table=table,
+            position=position,
             kind=TableKind.DQ_SELECT,
             is_custom=True,
             from_table=from_table,
@@ -289,6 +333,7 @@ class DataQualityProcessor:
         cls,
         collection: str,
         table: str,
+        position: int,
         is_custom: bool,
         from_collection: str,
         from_table: str,
@@ -296,6 +341,7 @@ class DataQualityProcessor:
         return cls.derived_table_name(
             collection=collection,
             table=table,
+            position=position,
             kind=TableKind.DQ_SUMMARY,
             is_custom=is_custom,
             from_table=from_table,
@@ -307,6 +353,7 @@ class DataQualityProcessor:
         cls,
         collection: str,
         table: str,
+        position: int,
         kind: TableKind,
         is_custom: bool,
         from_collection: str,
@@ -319,6 +366,7 @@ class DataQualityProcessor:
             kind=kind,
             table=table + suffix,
             collection=collection,
+            position=position,
         )
 
     @classmethod
@@ -347,3 +395,50 @@ class DataQualityProcessor:
             raise DataQualityProcessingError(
                 ErrorCode.DQPE4, "\n".join(duplicates_report)
             )
+
+    # noinspection DuplicatedCode
+    def tables_data(
+        self,
+        input_table_frames: InputTableSpec,
+        output_table_frames: OutputTableSpec,
+        derived_table_frames: OutputTableSpec,
+    ):
+        for action in self.input_actions:
+            collection, table, position = self.resolve_input_table(action.table)
+            table_infos = self.build_table_names(
+                collection, table, position, action.operations
+            )
+            if position >= len(input_table_frames):
+                raise DataQualityProcessingError(
+                    ErrorCode.DQPE5, position, action.table, len(input_table_frames)
+                )
+            tableframe = input_table_frames[position]
+            for table_info in table_infos:
+                derived_table_frames.append(
+                    self.compute(tableframe, action, table_info)
+                )
+
+        for action in self.output_actions:
+            collection, table, position = self.resolve_output_table(action.table)
+            table_infos = self.build_table_names(
+                collection, table, position, action.operations
+            )
+            if position >= len(output_table_frames):
+                raise DataQualityProcessingError(
+                    ErrorCode.DQPE6, position, action.table, len(output_table_frames)
+                )
+            tableframe = output_table_frames[position]
+            for table_info in table_infos:
+                derived_table_frames.append(
+                    self.compute(tableframe, action, table_info)
+                )
+
+    @classmethod
+    def compute(
+        cls,
+        _tableframe: InputTableSpec | None,
+        _action: DataQuality,
+        _table_info: TableInfo,
+    ) -> DerivedTableFrame | None:
+        # ToDo
+        return None

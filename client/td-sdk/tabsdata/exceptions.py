@@ -1095,6 +1095,20 @@ class ErrorCode(Enum):
             "\n\nEach data quality operation must produce a unique table name."
         ),
     }
+    DQPE5 = {
+        "code": "DQPE-005",
+        "message": (
+            "Input table position {} is out of range for action table '{}'. "
+            "Available input table frames: {}."
+        ),
+    }
+    DQPE6 = {
+        "code": "DQPE-006",
+        "message": (
+            "Output table position {} is out of range for action table '{}'. "
+            "Available output table frames: {}."
+        ),
+    }
     DQCE80 = {
         "code": "DQCE-080",
         "message": (

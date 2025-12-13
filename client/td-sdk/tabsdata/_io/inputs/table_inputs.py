@@ -20,6 +20,7 @@ from tabsdata.exceptions import (
     ErrorCode,
     SourceConfigurationError,
 )
+from tabsdata.tableframe._actions.dataquality.processor import ExtendedTableURI
 
 if TYPE_CHECKING:
     from tabsdata._tabsserver.function.execution_context import ExecutionContext
@@ -105,6 +106,20 @@ class TableInput(SourcePlugin):
         return [build_table_uri_object(table) for table in self._table_list]
 
     @property
+    def _extended_table_uris_list(self) -> list[ExtendedTableURI]:
+        """
+        Generates a list of ExtendedTableURI's representing the internal list of tables
+        with position information from the original list.
+
+        Returns:
+            list[ExtendedTableURI]: List of ExtendedTableURI's with position.
+        """
+        return [
+            ExtendedTableURI(build_table_uri_object(table), position)
+            for position, table in enumerate(self._table_list)
+        ]
+
+    @property
     def _table_uris_map(self) -> dict[str, TableURI]:
         """
         Generates a map of table names to TableURI's representing the internal list of
@@ -114,6 +129,23 @@ class TableInput(SourcePlugin):
             dict[str, TableURI]: Dictionary mapping table names to TableURI objects.
         """
         return {table: build_table_uri_object(table) for table in self._table_list}
+
+    @property
+    def _extended_table_uris_map(self) -> dict[str, ExtendedTableURI]:
+        """
+        Generates a map of table names to ExtendedTableURI's representing the internal
+        list of tables. If duplicates exist, the first entry wins.
+
+        Returns:
+            dict[str, ExtendedTableURI]: Dictionary mapping table names to
+            ExtendedTableURI objects with position.
+        """
+        result: dict[str, ExtendedTableURI] = {}
+        for position, table in enumerate(self._table_list):
+            if table not in result:
+                table_uri = build_table_uri_object(table)
+                result[table] = ExtendedTableURI(table_uri, position)
+        return result
 
     def stream(
         self, working_dir: str

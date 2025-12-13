@@ -5,7 +5,7 @@
 import pytest
 
 from tabsdata._tableinfo import TableKind
-from tabsdata._tableuri import TableURI
+from tabsdata._tableuri import ExtendedTableURI, TableURI
 from tabsdata.dataquality import DataQuality, Filter, Select, Summary
 from tabsdata.exceptions import (
     DataQualityConfigurationError,
@@ -30,7 +30,16 @@ class TestDataQualityProcessorTableNames:
         assert output_tables_names == []
 
     def test_table_names_single_input_action_with_select(self):
-        input_tables = {"input1": TableURI(None, "input_table1", None)}
+        input_tables = {
+            "input1": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "input_table1",
+                    None,
+                ),
+                0,
+            )
+        }
 
         dq_action = DataQuality(
             "input1",
@@ -57,7 +66,16 @@ class TestDataQualityProcessorTableNames:
         assert output_tables_names == []
 
     def test_table_names_single_input_action_with_filter(self):
-        input_tables = {"input1": TableURI(None, "input_table1", None)}
+        input_tables = {
+            "input1": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "input_table1",
+                    None,
+                ),
+                0,
+            )
+        }
 
         dq_action = DataQuality(
             "input1",
@@ -84,7 +102,16 @@ class TestDataQualityProcessorTableNames:
         assert output_tables_names == []
 
     def test_table_names_single_input_action_with_summary(self):
-        input_tables = {"input1": TableURI(None, "input_table1", None)}
+        input_tables = {
+            "input1": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "input_table1",
+                    None,
+                ),
+                0,
+            )
+        }
 
         dq_action = DataQuality(
             "input1",
@@ -111,7 +138,16 @@ class TestDataQualityProcessorTableNames:
         assert output_tables_names == []
 
     def test_table_names_multiple_operations_in_single_action(self):
-        input_tables = {"input1": TableURI(None, "input_table1", None)}
+        input_tables = {
+            "input1": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "input_table1",
+                    None,
+                ),
+                0,
+            )
+        }
 
         dq_action = DataQuality(
             "input1",
@@ -147,8 +183,22 @@ class TestDataQualityProcessorTableNames:
 
     def test_table_names_multiple_input_actions(self):
         input_tables = {
-            "input1": TableURI(None, "input_table1", None),
-            "input2": TableURI(None, "input_table2", None),
+            "input1": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "input_table1",
+                    None,
+                ),
+                0,
+            ),
+            "input2": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "input_table2",
+                    None,
+                ),
+                1,
+            ),
         }
 
         dq_action1 = DataQuality(
@@ -183,7 +233,16 @@ class TestDataQualityProcessorTableNames:
         assert output_tables_names == []
 
     def test_table_names_simple_table_name_format(self):
-        input_tables = {"table": TableURI(None, "table", None)}
+        input_tables = {
+            "table": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "table",
+                    None,
+                ),
+                0,
+            )
+        }
 
         dq_action = DataQuality(
             "table",
@@ -209,7 +268,14 @@ class TestDataQualityProcessorTableNames:
 
     def test_table_names_collection_slash_table_format(self):
         input_tables = {
-            "alias": TableURI("collection", "table", None),
+            "alias": ExtendedTableURI(
+                TableURI(
+                    "collection",
+                    "table",
+                    None,
+                ),
+                0,
+            ),
         }
 
         dq_action = DataQuality(
@@ -235,7 +301,16 @@ class TestDataQualityProcessorTableNames:
         assert output_tables_names == []
 
     def test_table_names_table_at_version_format(self):
-        input_tables = {"alias": TableURI(None, "table", "HEAD")}
+        input_tables = {
+            "alias": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "table",
+                    "HEAD",
+                ),
+                0,
+            )
+        }
 
         dq_action = DataQuality(
             "table@HEAD",
@@ -261,7 +336,14 @@ class TestDataQualityProcessorTableNames:
 
     def test_table_names_full_uri_format(self):
         input_tables = {
-            "alias": TableURI("collection", "table", "HEAD~1"),
+            "alias": ExtendedTableURI(
+                TableURI(
+                    "collection",
+                    "table",
+                    "HEAD~1",
+                ),
+                0,
+            ),
         }
 
         dq_action = DataQuality(
@@ -287,7 +369,16 @@ class TestDataQualityProcessorTableNames:
         assert output_tables_names == []
 
     def test_table_names_version_with_carets_format(self):
-        input_tables = {"alias": TableURI(None, "table", "HEAD^^")}
+        input_tables = {
+            "alias": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "table",
+                    "HEAD^^",
+                ),
+                0,
+            )
+        }
 
         dq_action = DataQuality(
             "table@HEAD^^",
@@ -312,7 +403,16 @@ class TestDataQualityProcessorTableNames:
         assert output_tables_names == []
 
     def test_table_names_version_with_hash_format(self):
-        input_tables = {"alias1": TableURI(None, "table", "ABCDEFGHIJKLMNOPQRSTUVWXY0")}
+        input_tables = {
+            "alias1": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "table",
+                    "ABCDEFGHIJKLMNOPQRSTUVWXY0",
+                ),
+                0,
+            )
+        }
 
         dq_action = DataQuality(
             "table@ABCDEFGHIJKLMNOPQRSTUVWXY0",
@@ -338,8 +438,22 @@ class TestDataQualityProcessorTableNames:
 
     def test_name_collision_resolved_via_alias(self):
         input_tables = {
-            "table_a": TableURI(None, "customers", "HEAD"),
-            "table_b": TableURI(None, "customers", "HEAD~1"),
+            "table_a": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "customers",
+                    "HEAD",
+                ),
+                0,
+            ),
+            "table_b": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "customers",
+                    "HEAD~1",
+                ),
+                1,
+            ),
         }
 
         dq_action = DataQuality(
@@ -366,7 +480,14 @@ class TestDataQualityProcessorTableNames:
 
     def test_name_collision_resolved_via_qualified_name_single_match(self):
         input_tables = {
-            "alias": TableURI("collection_a", "customers", None),
+            "alias": ExtendedTableURI(
+                TableURI(
+                    "collection_a",
+                    "customers",
+                    None,
+                ),
+                0,
+            ),
         }
 
         dq_action = DataQuality(
@@ -393,8 +514,22 @@ class TestDataQualityProcessorTableNames:
 
     def test_name_collision_resolved_different_collections(self):
         input_tables = {
-            "table_a": TableURI("collection_a", "customers", None),
-            "table_b": TableURI("collection_b", "customers", None),
+            "table_a": ExtendedTableURI(
+                TableURI(
+                    "collection_a",
+                    "customers",
+                    None,
+                ),
+                0,
+            ),
+            "table_b": ExtendedTableURI(
+                TableURI(
+                    "collection_b",
+                    "customers",
+                    None,
+                ),
+                1,
+            ),
         }
 
         dq_action = DataQuality(
@@ -421,7 +556,14 @@ class TestDataQualityProcessorTableNames:
 
     def test_name_collision_resolved_using_default_collection(self):
         input_tables = {
-            "alias": TableURI(None, "customers", None),
+            "alias": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "customers",
+                    None,
+                ),
+                0,
+            ),
         }
 
         dq_action = DataQuality(
@@ -448,9 +590,30 @@ class TestDataQualityProcessorTableNames:
 
     def test_name_collision_resolved_with_version_via_alias(self):
         input_tables = {
-            "latest": TableURI(None, "customers", "HEAD"),
-            "previous": TableURI(None, "customers", "HEAD~1"),
-            "older": TableURI(None, "customers", "HEAD~2"),
+            "latest": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "customers",
+                    "HEAD",
+                ),
+                0,
+            ),
+            "previous": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "customers",
+                    "HEAD~1",
+                ),
+                1,
+            ),
+            "older": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "customers",
+                    "HEAD~2",
+                ),
+                2,
+            ),
         }
 
         dq_action = DataQuality(
@@ -477,8 +640,22 @@ class TestDataQualityProcessorTableNames:
 
     def test_name_collision_unresolved_multiple_versions_same_collection(self):
         input_tables = {
-            "alias1": TableURI(None, "customers", "HEAD"),
-            "alias2": TableURI(None, "customers", "HEAD~1"),
+            "alias1": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "customers",
+                    "HEAD",
+                ),
+                0,
+            ),
+            "alias2": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "customers",
+                    "HEAD~1",
+                ),
+                1,
+            ),
         }
 
         dq_action = DataQuality(
@@ -503,7 +680,14 @@ class TestDataQualityProcessorTableNames:
 
     def test_name_collision_unresolved_table_not_found(self):
         input_tables = {
-            "alias": TableURI(None, "customers", None),
+            "alias": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "customers",
+                    None,
+                ),
+                0,
+            ),
         }
 
         dq_action = DataQuality(
@@ -528,7 +712,14 @@ class TestDataQualityProcessorTableNames:
 
     def test_name_collision_unresolved_wrong_collection(self):
         input_tables = {
-            "alias": TableURI("collection_a", "customers", None),
+            "alias": ExtendedTableURI(
+                TableURI(
+                    "collection_a",
+                    "customers",
+                    None,
+                ),
+                0,
+            ),
         }
 
         dq_action = DataQuality(
@@ -553,8 +744,22 @@ class TestDataQualityProcessorTableNames:
 
     def test_name_collision_unresolved_ambiguous_qualified_name(self):
         input_tables = {
-            "alias1": TableURI("collection", "customers", "HEAD"),
-            "alias2": TableURI("collection", "customers", "HEAD~1"),
+            "alias1": ExtendedTableURI(
+                TableURI(
+                    "collection",
+                    "customers",
+                    "HEAD",
+                ),
+                0,
+            ),
+            "alias2": ExtendedTableURI(
+                TableURI(
+                    "collection",
+                    "customers",
+                    "HEAD~1",
+                ),
+                1,
+            ),
         }
 
         dq_action = DataQuality(
@@ -648,7 +853,16 @@ class TestDataQualityProcessorTableNames:
 
     def test_filter_with_none_to_table_does_not_produce_table(self):
 
-        input_tables = {"input1": TableURI(None, "customers", None)}
+        input_tables = {
+            "input1": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "customers",
+                    None,
+                ),
+                0,
+            )
+        }
 
         dq_action = DataQuality(
             "input1",
@@ -670,7 +884,16 @@ class TestDataQualityProcessorTableNames:
         assert output_tables_names == []
 
     def test_table_names_with_none_table_in_summary(self):
-        input_tables = {"input1": TableURI(None, "customers", None)}
+        input_tables = {
+            "input1": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "customers",
+                    None,
+                ),
+                0,
+            )
+        }
 
         dq_action = DataQuality(
             "input1",
@@ -696,9 +919,30 @@ class TestDataQualityProcessorTableNames:
 
     def test_table_names_complex_scenario_mixed_operations(self):
         input_tables = {
-            "customers_latest": TableURI("sales", "customers", "HEAD"),
-            "orders_latest": TableURI("sales", "orders", "HEAD"),
-            "products": TableURI(None, "products", None),
+            "customers_latest": ExtendedTableURI(
+                TableURI(
+                    "sales",
+                    "customers",
+                    "HEAD",
+                ),
+                0,
+            ),
+            "orders_latest": ExtendedTableURI(
+                TableURI(
+                    "sales",
+                    "orders",
+                    "HEAD",
+                ),
+                1,
+            ),
+            "products": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "products",
+                    None,
+                ),
+                2,
+            ),
         }
 
         output_tables = ["cleaned_customers", "cleaned_orders"]
@@ -764,7 +1008,14 @@ class TestDataQualityProcessorTableNames:
 
     def test_table_names_preserves_collection_in_result(self):
         input_tables = {
-            "table1": TableURI("custom_collection", "data", None),
+            "table1": ExtendedTableURI(
+                TableURI(
+                    "custom_collection",
+                    "data",
+                    None,
+                ),
+                0,
+            ),
         }
 
         dq_action = DataQuality(
@@ -791,7 +1042,14 @@ class TestDataQualityProcessorTableNames:
 
     def test_table_names_with_special_characters_in_names(self):
         input_tables = {
-            "alias": TableURI(None, "table_123", None),
+            "alias": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "table_123",
+                    None,
+                ),
+                0,
+            ),
         }
 
         dq_action = DataQuality(
@@ -817,7 +1075,16 @@ class TestDataQualityProcessorTableNames:
         assert output_tables_names == []
 
     def test_table_names_all_three_operation_types_together(self):
-        input_tables = {"input1": TableURI(None, "source_table", None)}
+        input_tables = {
+            "input1": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "source_table",
+                    None,
+                ),
+                0,
+            )
+        }
 
         dq_action = DataQuality(
             "input1",
@@ -867,7 +1134,16 @@ class TestDataQualityProcessorTableNames:
 
     def test_filter_with_none_to_table_produces_no_table(self):
 
-        input_tables = {"input1": TableURI(None, "source_table", None)}
+        input_tables = {
+            "input1": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "source_table",
+                    None,
+                ),
+                0,
+            )
+        }
 
         dq_action = DataQuality(
             "input1",
@@ -889,7 +1165,16 @@ class TestDataQualityProcessorTableNames:
         assert output_tables_names == []
 
     def test_table_names_summary_with_default_name(self):
-        input_tables = {"input1": TableURI(None, "source_table", None)}
+        input_tables = {
+            "input1": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "source_table",
+                    None,
+                ),
+                0,
+            )
+        }
 
         dq_action = DataQuality(
             "input1",
@@ -915,7 +1200,16 @@ class TestDataQualityProcessorTableNames:
 
     def test_table_names_mixed_custom_and_default_names(self):
 
-        input_tables = {"input1": TableURI(None, "source_data", None)}
+        input_tables = {
+            "input1": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "source_data",
+                    None,
+                ),
+                0,
+            )
+        }
 
         dq_action = DataQuality(
             "input1",
@@ -952,9 +1246,30 @@ class TestDataQualityProcessorTableNames:
     def test_table_names_many_input_actions_many_operations(self):
 
         input_tables = {
-            "table1": TableURI(None, "sales_data", None),
-            "table2": TableURI(None, "inventory_data", None),
-            "table3": TableURI(None, "customer_data", None),
+            "table1": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "sales_data",
+                    None,
+                ),
+                0,
+            ),
+            "table2": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "inventory_data",
+                    None,
+                ),
+                1,
+            ),
+            "table3": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "customer_data",
+                    None,
+                ),
+                2,
+            ),
         }
 
         dq_action1 = DataQuality(
@@ -1090,8 +1405,22 @@ class TestDataQualityProcessorTableNames:
     def test_table_names_many_input_and_output_actions(self):
 
         input_tables = {
-            "input1": TableURI(None, "raw_data1", None),
-            "input2": TableURI(None, "raw_data2", None),
+            "input1": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "raw_data1",
+                    None,
+                ),
+                0,
+            ),
+            "input2": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "raw_data2",
+                    None,
+                ),
+                1,
+            ),
         }
         output_tables = ["output1", "output2"]
 
@@ -1155,7 +1484,16 @@ class TestDataQualityProcessorTableNames:
         assert output_tables_names[2].table == "output2_summary"
 
     def test_table_names_many_operations_single_action_all_custom(self):
-        input_tables = {"input1": TableURI(None, "master_table", None)}
+        input_tables = {
+            "input1": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "master_table",
+                    None,
+                ),
+                0,
+            )
+        }
 
         dq_action = DataQuality(
             "input1",
@@ -1194,7 +1532,15 @@ class TestDataQualityProcessorTableNames:
     def test_table_names_five_actions_each_with_five_operations(self):
 
         input_tables = {
-            f"input{i}": TableURI(None, f"table_{i}", None) for i in range(1, 6)
+            f"input{i}": ExtendedTableURI(
+                TableURI(
+                    None,
+                    f"table_{i}",
+                    None,
+                ),
+                i - 1,
+            )
+            for i in range(1, 6)
         }
 
         actions = []
@@ -1238,10 +1584,38 @@ class TestDataQualityProcessorTableNames:
 
     def test_table_names_complex_real_world_scenario(self):
         input_tables = {
-            "raw_sales": TableURI("sales_db", "sales_transactions", "HEAD"),
-            "raw_inventory": TableURI("inventory_db", "inventory_levels", "HEAD~1"),
-            "raw_customers": TableURI(None, "customer_records", None),
-            "raw_products": TableURI(None, "product_catalog", "HEAD^^"),
+            "raw_sales": ExtendedTableURI(
+                TableURI(
+                    "sales_db",
+                    "sales_transactions",
+                    "HEAD",
+                ),
+                0,
+            ),
+            "raw_inventory": ExtendedTableURI(
+                TableURI(
+                    "inventory_db",
+                    "inventory_levels",
+                    "HEAD~1",
+                ),
+                1,
+            ),
+            "raw_customers": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "customer_records",
+                    None,
+                ),
+                2,
+            ),
+            "raw_products": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "product_catalog",
+                    "HEAD^^",
+                ),
+                3,
+            ),
         }
 
         output_tables = [
@@ -1344,7 +1718,16 @@ class TestDataQualityProcessorTableNames:
         assert output_tables_names[2].table == "customer_quality_metrics"
 
     def test_duplicate_validation_same_custom_name_in_input_actions(self):
-        input_tables = {"input1": TableURI(None, "source_table", None)}
+        input_tables = {
+            "input1": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "source_table",
+                    None,
+                ),
+                0,
+            )
+        }
 
         dq_action = DataQuality(
             "input1",
@@ -1378,7 +1761,16 @@ class TestDataQualityProcessorTableNames:
 
     def test_filter_and_select_behavior_with_to_table(self):
 
-        input_tables = {"input1": TableURI(None, "source_table", None)}
+        input_tables = {
+            "input1": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "source_table",
+                    None,
+                ),
+                0,
+            )
+        }
 
         dq_action_filter_with_table = DataQuality(
             "input1",
@@ -1437,8 +1829,22 @@ class TestDataQualityProcessorTableNames:
 
     def test_duplicate_validation_same_custom_name_across_input_actions(self):
         input_tables = {
-            "input1": TableURI(None, "table1", None),
-            "input2": TableURI(None, "table2", None),
+            "input1": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "table1",
+                    None,
+                ),
+                0,
+            ),
+            "input2": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "table2",
+                    None,
+                ),
+                1,
+            ),
         }
 
         dq_action1 = DataQuality(
@@ -1531,7 +1937,16 @@ class TestDataQualityProcessorTableNames:
         assert "shared_name" in str(exception.value)
 
     def test_duplicate_validation_same_name_across_input_and_output(self):
-        input_tables = {"input1": TableURI(None, "source", None)}
+        input_tables = {
+            "input1": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "source",
+                    None,
+                ),
+                0,
+            )
+        }
         output_tables = ["output1"]
 
         input_action = DataQuality(
@@ -1565,7 +1980,16 @@ class TestDataQualityProcessorTableNames:
         assert "conflict_name" in str(exception.value)
 
     def test_duplicate_validation_multiple_duplicates(self):
-        input_tables = {"input1": TableURI(None, "source", None)}
+        input_tables = {
+            "input1": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "source",
+                    None,
+                ),
+                0,
+            )
+        }
 
         dq_action = DataQuality(
             "input1",
@@ -1595,7 +2019,16 @@ class TestDataQualityProcessorTableNames:
         assert "appears 2 times" in str(exception.value)
 
     def test_duplicate_validation_triple_duplicate(self):
-        input_tables = {"input1": TableURI(None, "source", None)}
+        input_tables = {
+            "input1": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "source",
+                    None,
+                ),
+                0,
+            )
+        }
 
         dq_action = DataQuality(
             "input1",
@@ -1623,7 +2056,16 @@ class TestDataQualityProcessorTableNames:
         assert "appears 3 times" in str(exception.value)
 
     def test_no_duplicate_validation_unique_names(self):
-        input_tables = {"input1": TableURI(None, "source", None)}
+        input_tables = {
+            "input1": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "source",
+                    None,
+                ),
+                0,
+            )
+        }
         output_tables = ["output1"]
 
         input_action = DataQuality(
@@ -1661,8 +2103,22 @@ class TestDataQualityProcessorTableNames:
     def test_no_duplicate_validation_unique_names_from_different_sources(self):
 
         input_tables = {
-            "input1": TableURI(None, "source1", None),
-            "input2": TableURI(None, "source2", None),
+            "input1": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "source1",
+                    None,
+                ),
+                0,
+            ),
+            "input2": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "source2",
+                    None,
+                ),
+                1,
+            ),
         }
 
         dq_action1 = DataQuality(
@@ -1697,8 +2153,22 @@ class TestDataQualityProcessorTableNames:
 
     def test_duplicate_validation_complex_scenario(self):
         input_tables = {
-            "input1": TableURI(None, "raw_data1", None),
-            "input2": TableURI(None, "raw_data2", None),
+            "input1": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "raw_data1",
+                    None,
+                ),
+                0,
+            ),
+            "input2": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "raw_data2",
+                    None,
+                ),
+                1,
+            ),
         }
         output_tables = ["output1", "output2"]
 
@@ -1743,9 +2213,30 @@ class TestDataQualityProcessorTableNames:
 
     def test_from_table_and_from_collection_with_different_collections(self):
         input_tables = {
-            "table_a": TableURI("collection_a", "source_table_a", None),
-            "table_b": TableURI("collection_b", "source_table_b", None),
-            "table_c": TableURI(None, "source_table_c", None),
+            "table_a": ExtendedTableURI(
+                TableURI(
+                    "collection_a",
+                    "source_table_a",
+                    None,
+                ),
+                0,
+            ),
+            "table_b": ExtendedTableURI(
+                TableURI(
+                    "collection_b",
+                    "source_table_b",
+                    None,
+                ),
+                1,
+            ),
+            "table_c": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "source_table_c",
+                    None,
+                ),
+                2,
+            ),
         }
 
         dq_action1 = DataQuality(
@@ -1854,8 +2345,22 @@ class TestDataQualityProcessorTableNames:
 
     def test_from_table_and_from_collection_with_qualified_table_reference(self):
         input_tables = {
-            "alias1": TableURI("sales", "transactions", "HEAD"),
-            "alias2": TableURI("inventory", "stock_levels", None),
+            "alias1": ExtendedTableURI(
+                TableURI(
+                    "sales",
+                    "transactions",
+                    "HEAD",
+                ),
+                0,
+            ),
+            "alias2": ExtendedTableURI(
+                TableURI(
+                    "inventory",
+                    "stock_levels",
+                    None,
+                ),
+                1,
+            ),
         }
 
         dq_action1 = DataQuality(

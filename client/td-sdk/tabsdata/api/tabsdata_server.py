@@ -28,9 +28,6 @@ from tabsdata.api.status_utils.execution import execution_status_to_mapping
 from tabsdata.api.status_utils.function_run import function_run_status_to_mapping
 from tabsdata.api.status_utils.transaction import transaction_status_to_mapping
 from tabsdata.api.status_utils.worker import worker_status_to_mapping
-from tabsdata.tableframe._actions.dataquality.processor import (
-    DataQualityProcessor,
-)
 
 
 class FunctionType(Enum):
@@ -4518,24 +4515,30 @@ def _create_archive(
     tables: List[str] = (
         function_output._table_list if isinstance(function_output, TableOutput) else []
     )
+    if function.output_actions:
+        from tabsdata.tableframe._actions.dataquality.processor import (
+            DataQualityProcessor,
+        )
 
-    input_tables = (
-        function.input._table_uris_map if isinstance(function.input, TableInput) else {}
-    )
-    output_tables = tables
-    input_actions = []  # TODO: Modify when TD-1089 is reverted
-    output_actions = function.output_actions
-    processor = DataQualityProcessor(
-        collection=collection,
-        input_tables=input_tables,
-        output_tables=output_tables,
-        input_actions=input_actions,
-        output_actions=output_actions,
-    )
-    input_dq_tables, output_dq_tables = processor.table_names()
-    total_dq_tables = [*input_dq_tables, *output_dq_tables]
-    total_dq_table_names = [table.table for table in total_dq_tables]
-    tables += total_dq_table_names
+        input_tables = (
+            function.input._table_uris_map
+            if isinstance(function.input, TableInput)
+            else {}
+        )
+        output_tables = tables
+        input_actions = []  # TODO: Modify when TD-1089 is reverted
+        output_actions = function.output_actions
+        processor = DataQualityProcessor(
+            collection=collection,
+            input_tables=input_tables,
+            output_tables=output_tables,
+            input_actions=input_actions,
+            output_actions=output_actions,
+        )
+        input_dq_tables, output_dq_tables = processor.table_names()
+        total_dq_tables = [*input_dq_tables, *output_dq_tables]
+        total_dq_table_names = [table.table for table in total_dq_tables]
+        tables += total_dq_table_names
     string_dependencies: List[str] = (
         function.input._table_list if isinstance(function.input, TableInput) else []
     )

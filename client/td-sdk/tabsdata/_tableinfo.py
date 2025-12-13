@@ -51,6 +51,7 @@ class TableInfo:
         kind: TableKind,
         table: str,
         collection: str,
+        position: int,
     ):
         """
         Initialize a TableInfo object.
@@ -61,12 +62,14 @@ class TableInfo:
             kind (TableType): The table kind.
             table (str): The table name.
             collection (str): The table collection.
+            position (int): The table position in the decorator.
         """
         self.from_table = from_table
         self.from_collection = from_collection
         self.kind = kind
         self.table = table
         self.collection = collection
+        self.position = position
 
     @property
     def from_table(self) -> str:
@@ -184,6 +187,28 @@ class TableInfo:
         else:
             raise ValueError("Table collection must be an string")
 
+    @property
+    def position(self) -> int:
+        """
+        int: The table position.
+        """
+        return self._position
+
+    @position.setter
+    def position(self, position: int):
+        """
+        Set the table position.
+
+        Args:
+            position (int): The table position.
+        """
+        if isinstance(position, int):
+            if position < 0:
+                raise ValueError("Table position name cannot be negative")
+            self._position = position
+        else:
+            raise ValueError("Table position must be an integer")
+
     def __repr__(self) -> str:
         """
         Return a string representation of the TableInfo object.
@@ -197,6 +222,7 @@ class TableInfo:
             f"from_collection={self.from_collection!r}, "
             f"kind={self.kind!r}, "
             f"table={self.table!r}, "
-            f"collection={self.collection!r}"
+            f"collection={self.collection!r}, "
+            f"position={self.position!r}, "
             ")"
         )

@@ -413,6 +413,20 @@ class TableURI:
         return self.to_string()
 
 
+class ExtendedTableURI(TableURI):
+    def __init__(self, table_uri: TableURI, position: int):
+        super().__init__(table_uri.collection, table_uri.table, table_uri.version)
+        self.position = position
+
+    @property
+    def position(self) -> int:
+        return self._position
+
+    @position.setter
+    def position(self, position: int):
+        self._position = position
+
+
 def build_table_uri_object(uri: str | TableURI) -> TableURI:
     original_uri = uri
     if isinstance(uri, TableURI):
