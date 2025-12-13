@@ -5,10 +5,11 @@
 from __future__ import annotations
 
 from abc import ABC
-from typing import TYPE_CHECKING, Collection, Literal, Self, get_args
+from typing import TYPE_CHECKING, Literal, Optional, Self, get_args
 
 from tabsdata.dataquality._utils import _is_collection
 from tabsdata.exceptions import DataQualityConfigurationError, ErrorCode
+from tabsdata.typing._specs import BucketsSpec, TableSpec
 
 if TYPE_CHECKING:
     from tabsdata.dataquality.typing._typing import TagsSpec
@@ -50,7 +51,7 @@ class Operation(ABC):
         self._tags = value
 
 
-CriteriaTypeSpec = Literal["all_ok", "any_failed", "by_bucket"]
+CriteriaTypeSpec = Literal["all_ok", "any_failed", "in_buckets", "not_in_buckets"]
 
 
 class Criteria:
@@ -60,14 +61,25 @@ class Criteria:
 
     VALID_CRITERIA_TYPES = get_args(CriteriaTypeSpec)
 
-    def __init__(
-        self, criteria_type: CriteriaTypeSpec, buckets: Collection = None, **kwargs
+    def __init__(self):
+        raise DataQualityConfigurationError(ErrorCode.DQCE58, self.__class__.__name__)
+
+    def _init_boolean(
+        self,
+        criteria_type: CriteriaTypeSpec,
     ):
-        if not kwargs.get("_internal"):
-            raise DataQualityConfigurationError(
-                ErrorCode.DQCE58, self.__class__.__name__
-            )
         self.criteria_type = criteria_type
+        self.column_names = None
+        self.buckets = None
+
+    def _init_categories(
+        self,
+        criteria_type: CriteriaTypeSpec,
+        column_names: list[str],
+        buckets: BucketsSpec,
+    ):
+        self.criteria_type = criteria_type
+        self.column_names = column_names
         self.buckets = buckets
 
     @property
@@ -83,30 +95,64 @@ class Criteria:
         self._criteria_type = value
 
     @property
-    def buckets(self) -> Collection:
+    def column_names(self) -> list[str] | None:
+        return self._column_names
+
+    @column_names.setter
+    def column_names(self, column_names: Optional[TableSpec]):
+        if isinstance(column_names, str):
+            column_names = [column_names]
+        if not _is_collection(column_names) and column_names is not None:
+            raise DataQualityConfigurationError(
+                ErrorCode.DQCE60, column_names, type(column_names)
+            )
+        self._column_names = column_names
+
+    @property
+    def buckets(self) -> BucketsSpec:
         return self._buckets
 
     @buckets.setter
-    def buckets(self, value: Collection):
+    def buckets(self, value: BucketsSpec):
         if not _is_collection(value) and value is not None:
             raise DataQualityConfigurationError(ErrorCode.DQCE60, value, type(value))
         self._buckets = value
 
     @classmethod
     def all_ok(cls) -> Self:
-        return cls(criteria_type="all_ok", _internal=True)
+        c = cls.__new__(cls)
+        c._init_boolean(criteria_type="all_ok")
+        return c
 
     @classmethod
     def any_failed(cls) -> Self:
-        return cls(criteria_type="any_failed", _internal=True)
+        c = cls.__new__(cls)
+        c._init_boolean(criteria_type="any_failed")
+        return c
 
     @classmethod
-    def in_buckets(cls, buckets: Collection) -> Self:
+    def in_buckets(cls, column_names: TableSpec, buckets: BucketsSpec) -> Self:
+        if isinstance(column_names, str):
+            column_names = [column_names]
         if not _is_collection(buckets):
             raise DataQualityConfigurationError(
                 ErrorCode.DQCE61, buckets, type(buckets)
             )
-        return cls(criteria_type="by_bucket", buckets=buckets, _internal=True)
+        c = cls.__new__(cls)
+        c._init_categories("in_buckets", column_names, buckets)
+        return c
+
+    @classmethod
+    def not_in_buckets(cls, column_names: TableSpec, buckets: BucketsSpec) -> Self:
+        if isinstance(column_names, str):
+            column_names = [column_names]
+        if not _is_collection(buckets):
+            raise DataQualityConfigurationError(
+                ErrorCode.DQCE61, buckets, type(buckets)
+            )
+        c = cls.__new__(cls)
+        c._init_categories("not_in_buckets", column_names, buckets)
+        return c
 
 
 class Threshold:

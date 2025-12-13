@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 import os
 import uuid
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import polars as pl
 
@@ -200,7 +200,7 @@ class BigQueryDest(DestinationPlugin):
     def __init__(
         self,
         conn: BigQueryConn,
-        tables: TableSpec = None,
+        tables: Optional[TableSpec] = None,
         if_table_exists: IfTableExistStrategySpec = "append",
         schema_strategy: SchemaStrategySpec = "update",
     ):

@@ -1172,6 +1172,13 @@ class ErrorCode(Enum):
             "and 100; got the 'int' {} that is outside of that range instead."
         ),
     }
+    DQCE81 = {
+        "code": "DQCE-081",
+        "message": (
+            "The 'column_names' parameter of the 'Criteria.in_buckets' must be a "
+            "string or a list of strings; got '{}' instead."
+        ),
+    }
     FCE1 = {
         "code": "FCE-001",
         "message": (
