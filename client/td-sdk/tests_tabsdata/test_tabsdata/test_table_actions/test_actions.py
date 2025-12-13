@@ -2,6 +2,8 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
+import pytest
+
 from tabsdata import (
     MySQLSource,
     TabsdataFunction,
@@ -199,6 +201,7 @@ def test_example_publisher_with_filter_and_tags():
     assert action.operations == op_list
 
 
+@pytest.mark.skip("Un-skip this test when reverting TD-1089")
 def test_example_transformer():
     import tabsdata.dataquality as dq
 

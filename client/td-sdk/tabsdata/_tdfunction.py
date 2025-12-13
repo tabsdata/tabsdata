@@ -56,7 +56,7 @@ class TabsdataFunction:
         input: SourcePlugin = None,
         output: DestinationPlugin = None,
         trigger_by: str | List[str] | None = None,
-        input_actions: OnTablesSpec = None,
+        # input_actions: OnTablesSpec = None,TODO: Uncomment this when reverting TD-1089
         output_actions: OnTablesSpec = None,
     ):
         """
@@ -76,8 +76,6 @@ class TabsdataFunction:
                 function to execute. It can be a table in the system, a list of
                 tables or None (in which case it will be inferred from the
                 dependencies).
-            input_actions (OnTablesSpec, optional): Actions to perform on the
-                input tables.
             output_actions (OnTablesSpec, optional): Actions to perform on the
                 output tables.
         Raises:
@@ -94,7 +92,7 @@ class TabsdataFunction:
         )
         self.trigger_by = trigger_by
         self.name = name
-        self.input_actions = input_actions
+        # self.input_actions = input_actions TODO: Uncomment this when reverting TD-1089
         self.output_actions = output_actions
 
     def __repr__(self) -> str:
@@ -112,8 +110,8 @@ class TabsdataFunction:
             f"original_folder='{self.original_folder}'",
             f"trigger='{self.trigger_by}'",
         ]
-        if self.input_actions:
-            information_to_give.append(f"input_actions='{self.input_actions}'")
+        # if self.input_actions: TODO: Uncomment this when reverting TD-1089
+        #    information_to_give.append(f"input_actions='{self.input_actions}'")
         if self.output_actions:
             information_to_give.append(f"output_actions='{self.output_actions}'")
         information_to_give_str = ", ".join(information_to_give)
@@ -307,15 +305,15 @@ class TabsdataFunction:
             if not trigger_uri.table:
                 raise FunctionConfigurationError(ErrorCode.FCE3, trigger)
 
-    @property
-    def input_actions(self) -> list[OnTablesAction]:
+        # @property TODO: Uncomment this when reverting TD-1089
+        # def input_actions(self) -> list[OnTablesAction]:
         """
         list[OnTablesAction]: Actions to perform on the input tables.
         """
-        return self._input_actions
+        #    return self._input_actions
 
-    @input_actions.setter
-    def input_actions(self, actions: OnTablesSpec):
+        # @input_actions.setter TODO: Uncomment this when reverting TD-1089
+        # def input_actions(self, actions: OnTablesSpec):
         """
         Sets the actions to perform on the input tables.
 
@@ -323,10 +321,10 @@ class TabsdataFunction:
             actions (OnTablesSpec): Actions to perform on the input
                 tables.
         """
-        self._input_actions = _build_actions_list_or_raise(
-            actions, ErrorCode.FCE9, FunctionConfigurationError
-        )
-        self._verify_valid_action_plugin_combination()
+        # self._input_actions = _build_actions_list_or_raise(
+        #    actions, ErrorCode.FCE9, FunctionConfigurationError
+        # )
+        # self._verify_valid_action_plugin_combination()
 
     @property
     def output_actions(self) -> list[OnTablesAction]:

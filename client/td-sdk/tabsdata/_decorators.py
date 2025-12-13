@@ -48,7 +48,7 @@ def transformer(
     output_tables: TableOutput | str | List[str],
     name: str = None,
     trigger_by: str | List[str] | None = ALL_DEPS,
-    on_input_tables: OnTablesSpec = None,
+    # on_input_tables: OnTablesSpec = None, TODO: Uncomment this when reverting TD-1089
     on_output_tables: OnTablesSpec = None,
 ) -> callable:
     """
@@ -66,9 +66,6 @@ def transformer(
             the function to execute. It can be a table in the system, a list of
             tables, or None (in which case it must be triggered manually). Defaults to
             all dependencies.
-        on_input_tables (OnTablesSpec, optional):
-            Actions to perform on input tables before executing the function. Can be a
-            single action or a list of them. Defaults to None.
         on_output_tables (OnTablesSpec, optional):
             Actions to perform on output tables after executing the function.
             Can be a single action or a list of them. Defaults to None.
@@ -78,11 +75,11 @@ def transformer(
 
     input_tables = _build_transformer_input(input_tables)
     output_tables = _build_transformer_output(output_tables)
-    input_actions = _build_actions_list_or_raise(
-        on_input_tables,
-        ErrorCode.DCE7,
-        DecoratorConfigurationError,
-    )
+    # input_actions = _build_actions_list_or_raise(
+    #    on_input_tables,
+    #    ErrorCode.DCE7,
+    #    DecoratorConfigurationError,
+    # ) TODO: Uncomment this when reverting TD-1089
     output_actions = _build_actions_list_or_raise(
         on_output_tables,
         ErrorCode.DCE8,
@@ -104,7 +101,7 @@ def transformer(
             input=input_tables,
             output=output_tables,
             trigger_by=trigger_by,
-            input_actions=input_actions,
+            # input_actions=input_actions, TODO: Uncomment this when reverting TD-1089
             output_actions=output_actions,
         )
 
@@ -219,7 +216,7 @@ def subscriber(
     ),
     name: str = None,
     trigger_by: str | List[str] | None = ALL_DEPS,
-    on_tables: OnTablesSpec = None,
+    # on_tables: OnTablesSpec = None, TODO: Uncomment this when reverting TD-1089
 ) -> callable:
     """
     Decorator to set the data and destination parameters of a function and
@@ -237,9 +234,6 @@ def subscriber(
             the function to execute. It can be a table in the system, a list of
             tables, or None (in which case it must be triggered manually). Defaults to
             all dependencies.
-        on_tables (OnTablesSpec, optional): Actions
-            to perform on input tables before executing the function. Can be a
-            single action or a list of them. Defaults to None.
     Returns:
         callable: The function converted to a TabsdataFunction.
     """
@@ -258,9 +252,9 @@ def subscriber(
     ):
         raise DecoratorConfigurationError(ErrorCode.DCE6, type(destination))
 
-    input_actions = _build_actions_list_or_raise(
-        on_tables, ErrorCode.DCE10, DecoratorConfigurationError
-    )
+    # input_actions = _build_actions_list_or_raise(
+    #    on_tables, ErrorCode.DCE10, DecoratorConfigurationError
+    # ) TODO: Uncomment this when reverting TD-1089
 
     # Note: this counterintuitive logic is to allow the user to pass None as a trigger
     # meaning "no triggers", while the API takes None as "all dependencies". In the
@@ -277,7 +271,7 @@ def subscriber(
             input=tables,
             output=destination,
             trigger_by=trigger_by,
-            input_actions=input_actions,
+            # input_actions=input_actions, TODO: Uncomment this when reverting TD-1089
         )
 
     return decorator_tabset
