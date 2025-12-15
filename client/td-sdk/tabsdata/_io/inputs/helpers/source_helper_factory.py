@@ -20,17 +20,20 @@ from tabsdata._io.inputs.helpers.sqlalchemy_source_helper import SQLAlchemySourc
 # still providing type hints and autocompletion.
 if TYPE_CHECKING:
     from tabsdata._io.inputs.sql.mysql_input import MySQLSrc
+    from tabsdata._io.inputs.sql.postgres_input import PostgresSrc
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-def get_sql_source_helper(source: Union[MySQLSrc]) -> Union[SQLAlchemySourceHelper]:
+def get_sql_source_helper(
+    source: Union[MySQLSrc, PostgresSrc],
+) -> Union[SQLAlchemySourceHelper]:
     """
     Factory function to get the appropriate SQL source helper based on the source and
     loader type.
     Args:
-        source (Union[MySQLSrc]): The SQL source configuration.
+        source (Union[MySQLSrc, PostgresSrc]): The SQL source configuration.
 
     Returns:
         Union[SQLAlchemySourceHelper]: The appropriate SQL source helper instance.
@@ -52,12 +55,13 @@ def get_sql_source_helper(source: Union[MySQLSrc]) -> Union[SQLAlchemySourceHelp
     return helper
 
 
-def _get_sql_source_config(source: Union[MySQLSrc]) -> SQLSourceConfig:
+def _get_sql_source_config(source: Union[MySQLSrc, PostgresSrc]) -> SQLSourceConfig:
     # Runtime import for isinstance checks:
     # This second import inside the function is necessary for runtime type checking
     # (e.g., isinstance(source, MySQLSrc)), since the TYPE_CHECKING import at top of
     # file is not available at runtime.
     from tabsdata._io.inputs.sql.mysql_input import MySQLSrc as _MySQLSrc
+    from tabsdata._io.inputs.sql.postgres_input import PostgresSrc as _PostgresSrc
 
     if isinstance(source, _MySQLSrc):
         return SQLSourceConfig(
@@ -67,6 +71,22 @@ def _get_sql_source_config(source: Union[MySQLSrc]) -> SQLSourceConfig:
                 enforce_connection_params=source.conn.enforce_connection_params,
                 cx_src_configs_sql=source.conn.cx_src_configs_sql,
                 cx_dst_configs_sql=source.conn.cx_dst_configs_sql,
+            ),
+            queries=source.queries,
+            initial_values=source.initial_values,
+            transactional=source.transactional,
+            chunk_size=source.chunk_size,
+            loader=source.loader,
+            schema_overrides=source.schema_overrides,
+        )
+    elif isinstance(source, _PostgresSrc):
+        return SQLSourceConfig(
+            conn=SQLConnConfig(
+                uri=source.conn.uri,
+                credentials=source.conn.credentials,
+                enforce_connection_params=source.conn.enforce_connection_params,
+                cx_src_configs_sql=source.conn.cx_src_configs_postgres,
+                cx_dst_configs_sql=source.conn.cx_dst_configs_postgres,
             ),
             queries=source.queries,
             initial_values=source.initial_values,

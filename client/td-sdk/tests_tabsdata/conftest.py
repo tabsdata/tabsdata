@@ -735,6 +735,64 @@ def create_docker_postgres_database(
             ("Splinter",),
         ]
         mycursor.executemany(sql, val)
+        mycursor.execute("CREATE SCHEMA IF NOT EXISTS type_check_test_schema")
+        mycursor.execute("""
+            CREATE TABLE IF NOT EXISTS type_check_test_schema.all_postgres_types (
+                id SERIAL PRIMARY KEY,
+                c_smallint SMALLINT,
+                c_integer INTEGER,
+                c_bigint BIGINT,
+                c_decimal DECIMAL(10,2),
+                c_numeric NUMERIC(10,2),
+                c_real REAL,
+                c_double DOUBLE PRECISION,
+                c_money MONEY,
+                c_char CHAR(10),
+                c_varchar VARCHAR(50),
+                c_text TEXT,
+                c_bytea BYTEA,
+                c_boolean BOOLEAN,
+                c_date DATE,
+                c_time TIME,
+                c_timetz TIME WITH TIME ZONE,
+                c_timestamp TIMESTAMP,
+                c_timestamptz TIMESTAMP WITH TIME ZONE,
+                c_interval INTERVAL
+            )
+        """)
+        sql = """
+            INSERT INTO type_check_test_schema.all_postgres_types (
+                c_smallint, c_integer, c_bigint, c_decimal, c_numeric, c_real, c_double,
+                c_money, c_char, c_varchar, c_text, c_bytea, c_boolean, c_date, c_time, 
+                c_timetz, c_timestamp, c_timestamptz, c_interval
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s, %s, %s, %s,
+                %s, %s, %s
+            )
+        """
+        val = (
+            1,
+            42,
+            1234567890123,
+            12345.67,
+            23456.78,
+            3.14,
+            2.71828,
+            100.50,
+            "char10",
+            "varchar50",
+            "some text",
+            b"\\xDEADBEEF",
+            True,
+            "2024-01-01",
+            "12:34:56",
+            "13:45:01+02",
+            "2024-01-01 12:34:56",
+            "2024-01-01 12:34:56+02",
+            "1 year 2 months 3 days",
+        )
+        mycursor.execute(sql, val)
         mycursor.execute(
             "CREATE TABLE output_postgres_transaction (Duration INT, "
             "Pulse INT, Maxpulse INT, Calories FLOAT)"

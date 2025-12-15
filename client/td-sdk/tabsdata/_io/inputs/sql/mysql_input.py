@@ -7,8 +7,6 @@ from __future__ import annotations
 import logging
 from typing import Any, Literal, get_args
 
-import polars as pl
-
 from tabsdata._io.connections.mysql_connection import MySQLConn
 from tabsdata._io.inputs.helpers.helper_constants import _LoaderSpec
 from tabsdata._io.inputs.helpers.source_helper_factory import (
@@ -18,7 +16,11 @@ from tabsdata._io.inputs.sql.shared_types import QueriesSpec, SchemaOverrideSpec
 from tabsdata._io.inputs.sql_inputs import _validate_initial_values_type
 from tabsdata._io.plugin import SourcePlugin
 from tabsdata._tabsserver.function.offset_utils import OffsetReturn
-from tabsdata._utils.tableframe.builders import from_polars
+from tabsdata._utils.sql_utils import (
+    get_tableframes_from_sources,
+    validate_schema_overrides_dict,
+    validate_schema_overrides_list,
+)
 from tabsdata.exceptions import (
     ErrorCode,
     SourceConfigurationError,
@@ -270,9 +272,9 @@ class MySQLSrc(SourcePlugin):
                     ErrorCode.SOCE53, self.__class__.__name__, type(schema_overrides)
                 )
             if isinstance(schema_overrides, list):
-                _validate_schema_overrides_list(schema_overrides, self.queries)
+                validate_schema_overrides_list(schema_overrides, self.queries)
             else:
-                _validate_schema_overrides_dict(schema_overrides, self.queries)
+                validate_schema_overrides_dict(schema_overrides, self.queries)
 
         if isinstance(schema_overrides, dict):
             schema_overrides = [schema_overrides]
@@ -293,92 +295,7 @@ class MySQLSrc(SourcePlugin):
         local_sources = helper._chunk(working_dir=working_dir)
         logger.debug(f"Chunked sources in: {working_dir}")
 
-        table_frames: list[TableFrame] = []
-        # Concat batch files into single Lazyframe representing each query result
-        for idx, source in enumerate(local_sources):
-            if isinstance(source, list):
-                intermediate_lfs = [
-                    pl.scan_parquet(f) for f in source if isinstance(f, str)
-                ]
-
-                lf = pl.concat(intermediate_lfs)
-                tf = from_polars(lf)
-                table_frames.append(tf)
-                logger.debug(f"Created TableFrame {repr(tf)} for query {idx}")
-            else:
-                raise TypeError(
-                    "Each query result must be a list(str) of file paths containing"
-                    f" chunks of records, got {type(source)} instead."
-                )
+        table_frames = get_tableframes_from_sources(local_sources)
 
         logger.debug(f"Returning {len(table_frames)} TableFrames from {self}")
         return table_frames
-
-
-def _validate_schema_overrides_list(
-    schema_overrides: list[dict[str, DataType]], queries: str | list[str]
-):
-    not_dict_items = [item for item in schema_overrides if not isinstance(item, dict)]
-    if len(not_dict_items):
-        raise SourceConfigurationError(
-            ErrorCode.SOCE54, not_dict_items, [type(item) for item in not_dict_items]
-        )
-
-    not_str_keys = [
-        key
-        for item in schema_overrides
-        if isinstance(item, dict)
-        for key in item.keys()
-        if not isinstance(key, str)
-    ]
-    if len(not_str_keys):
-        raise SourceConfigurationError(
-            ErrorCode.SOCE55, not_str_keys, [type(key) for key in not_str_keys]
-        )
-
-    not_datatype_values = [
-        value
-        for item in schema_overrides
-        for value in item.values()
-        if value not in get_args(DataType)
-    ]
-    if len(not_datatype_values):
-        raise SourceConfigurationError(
-            ErrorCode.SOCE56,
-            not_datatype_values,
-            [type(value) for value in not_datatype_values],
-        )
-
-    if len(schema_overrides) != len(
-        queries if isinstance(queries, list) else [queries]
-    ):
-        raise SourceConfigurationError(
-            ErrorCode.SOCE57,
-            len(schema_overrides),
-            len(queries) if isinstance(queries, list) else 1,
-        )
-
-
-def _validate_schema_overrides_dict(
-    schema_overrides: dict[str, DataType], queries: str | list[str]
-):
-    not_str_keys = [key for key in schema_overrides.keys() if not isinstance(key, str)]
-    not_datatype_values = [
-        value for value in schema_overrides.values() if value not in get_args(DataType)
-    ]
-
-    if len(not_str_keys):
-        raise SourceConfigurationError(
-            ErrorCode.SOCE55, not_str_keys, [type(key) for key in not_str_keys]
-        )
-    if len(not_datatype_values):
-        raise SourceConfigurationError(
-            ErrorCode.SOCE56,
-            not_datatype_values,
-            [type(value) for value in not_datatype_values],
-        )
-
-    if isinstance(queries, list) and len(queries) > 1:
-        raise SourceConfigurationError(
-            ErrorCode.SOCE58, len(queries), type(schema_overrides)
-        )

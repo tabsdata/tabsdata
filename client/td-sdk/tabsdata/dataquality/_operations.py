@@ -90,10 +90,10 @@ class Criteria:
         self.buckets = None
 
     def _init_categories(
-            self,
-            criteria_type: CriteriaTypeSpec,
-            column_names: list[str],
-            buckets: BucketsSpec,
+        self,
+        criteria_type: CriteriaTypeSpec,
+        column_names: list[str],
+        buckets: BucketsSpec,
     ):
         self.criteria_type = criteria_type
         self.column_names = column_names
@@ -221,9 +221,7 @@ class Threshold:
     def __init__(self):
         self._absolute = None
         self._relative = None
-        raise DataQualityConfigurationError(
-            ErrorCode.DQCE67, self.__class__.__name__
-        )
+        raise DataQualityConfigurationError(ErrorCode.DQCE67, self.__class__.__name__)
 
     def __init__count(self, count: int):
         self.absolute = count
@@ -276,7 +274,7 @@ class Threshold:
         return t
 
     @classmethod
-    def percent(cls, percent: float|int) -> Self:
+    def percent(cls, percent: float | int) -> Self:
         """
         Percentage of rows that will fail the transaction.
         """
@@ -301,11 +299,11 @@ class Fail(Operation):
     """
 
     def __init__(
-            self,
-            threshold: Threshold,
-            criteria: Criteria = None,
-            *,
-            tags: TagsSpec = None,
+        self,
+        threshold: Threshold,
+        criteria: Criteria = None,
+        *,
+        tags: TagsSpec = None,
     ):
         """
         Creates a data quality fail operation.
@@ -377,11 +375,11 @@ class Filter(Operation):
     """
 
     def __init__(
-            self,
-            to_table: str | None = None,
-            criteria: Criteria = None,
-            *,
-            tags: TagsSpec = None,
+        self,
+        to_table: str | None = None,
+        criteria: Criteria = None,
+        *,
+        tags: TagsSpec = None,
     ):
         """
         Creates a data quality filter.
@@ -452,12 +450,13 @@ class Select(Operation):
 
     The table to which the select is being applied is not modified.
     """
+
     def __init__(
-            self,
-            to_table: str,
-            criteria: Criteria = None,
-            *,
-            tags: TagsSpec = None,
+        self,
+        to_table: str,
+        criteria: Criteria = None,
+        *,
+        tags: TagsSpec = None,
     ):
         """
         Creates a data quality selector.

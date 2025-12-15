@@ -1,0 +1,22 @@
+{
+  "id": "Int64",
+  "c_smallint": "Int64",
+  "c_integer": "Float64",
+  "c_bigint": "Int64",
+  "c_decimal": "Int64",
+  "c_numeric": "String",
+  "c_real": "Float64",
+  "c_double": "Float64",
+  "c_money": "String",
+  "c_char": "String",
+  "c_varchar": "String",
+  "c_text": "String",
+  "c_bytea": "Binary",
+  "c_boolean": "Boolean",
+  "c_date": "Date",
+  "c_time": "Time",
+  "c_timetz": "Time",
+  "c_timestamp": "Datetime",
+  "c_timestamptz": "Datetime",
+  "c_interval": "Duration"
+}

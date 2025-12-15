@@ -18,8 +18,10 @@ class DataQuality(OnTablesAction):
     def __init__(
         self,
         table: str,
-        classify: Classifier | list[Classifier],        #TODO I'd rename it to `classifiers`
-        operations: Operation | list[Operation] = None, #TODO I'd change it to require a value
+        classify: Classifier | list[Classifier],  # TODO I'd rename it to `classifiers`
+        operations: (
+            Operation | list[Operation]
+        ) = None,  # TODO I'd change it to require a value
     ):
         """
         Constructor.

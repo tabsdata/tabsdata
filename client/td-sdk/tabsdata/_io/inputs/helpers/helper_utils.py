@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 
 import numpy as np
 
-from tabsdata._io.constants import MYSQL_SCHEME
+from tabsdata._io.constants import MYSQL_SCHEME, POSTGRES_SCHEMES
 from tabsdata._io.inputs.helpers.helper_constants import POLARS_TO_NUMPY_DTYPE_MAP
 from tabsdata.tableframe.typing import DataType
 
@@ -33,7 +33,7 @@ def replace_initial_values_placeholder(
     logger.debug(
         f"Replacing initial values {initial_values.keys()} syntax in query: {query}"
     )
-    if conn_uri_scheme == MYSQL_SCHEME:
+    if conn_uri_scheme == MYSQL_SCHEME or conn_uri_scheme in POSTGRES_SCHEMES:
         for key in initial_values.keys():
             query = query.replace(f":{key}", f"%({key})s")
     # Future TODO: Add more database parameter styles here as needed

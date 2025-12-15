@@ -7,9 +7,15 @@ from __future__ import annotations
 import logging
 import urllib.parse
 from enum import Enum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, get_args
+
+import polars as pl
 
 from tabsdata._credentials import UserPasswordCredentials
+from tabsdata._utils.tableframe.builders import from_polars
+from tabsdata.exceptions import ErrorCode, SourceConfigurationError
+from tabsdata.tableframe import TableFrame
+from tabsdata.tableframe.typing import DataType
 
 if TYPE_CHECKING:
     from tabsdata._io.inputs.sql_inputs import (
@@ -25,13 +31,8 @@ if TYPE_CHECKING:
         PostgresDestination,
     )
 
-formatter = logging.Formatter("%(levelname)s: %(message)s")
-handler = logging.StreamHandler()
-handler.setFormatter(formatter)
 logger = logging.getLogger(__name__)
-logger.addHandler(handler)
-logger.setLevel(logging.WARNING)
-logger.propagate = False
+logger.setLevel(logging.DEBUG)
 
 
 MAX_USER_LENGTH = 16
@@ -168,3 +169,104 @@ def add_driver_to_uri(uri: str, log=False) -> str:
                 f" requires adding a driver: {known_prefixes}"
             )
     return uri
+
+
+def validate_schema_overrides_list(
+    schema_overrides: list[dict[str, DataType]], queries: str | list[str]
+):
+    not_dict_items = [item for item in schema_overrides if not isinstance(item, dict)]
+    if len(not_dict_items):
+        raise SourceConfigurationError(
+            ErrorCode.SOCE54, not_dict_items, [type(item) for item in not_dict_items]
+        )
+
+    not_str_keys = [
+        key
+        for item in schema_overrides
+        if isinstance(item, dict)
+        for key in item.keys()
+        if not isinstance(key, str)
+    ]
+    if len(not_str_keys):
+        raise SourceConfigurationError(
+            ErrorCode.SOCE55, not_str_keys, [type(key) for key in not_str_keys]
+        )
+
+    not_datatype_values = [
+        value
+        for item in schema_overrides
+        for value in item.values()
+        if value not in get_args(DataType)
+    ]
+    if len(not_datatype_values):
+        raise SourceConfigurationError(
+            ErrorCode.SOCE56,
+            not_datatype_values,
+            [type(value) for value in not_datatype_values],
+        )
+
+    if len(schema_overrides) != len(
+        queries if isinstance(queries, list) else [queries]
+    ):
+        raise SourceConfigurationError(
+            ErrorCode.SOCE57,
+            len(schema_overrides),
+            len(queries) if isinstance(queries, list) else 1,
+        )
+
+
+def validate_schema_overrides_dict(
+    schema_overrides: dict[str, DataType], queries: str | list[str]
+):
+    not_str_keys = [key for key in schema_overrides.keys() if not isinstance(key, str)]
+    not_datatype_values = [
+        value for value in schema_overrides.values() if value not in get_args(DataType)
+    ]
+
+    if len(not_str_keys):
+        raise SourceConfigurationError(
+            ErrorCode.SOCE55, not_str_keys, [type(key) for key in not_str_keys]
+        )
+    if len(not_datatype_values):
+        raise SourceConfigurationError(
+            ErrorCode.SOCE56,
+            not_datatype_values,
+            [type(value) for value in not_datatype_values],
+        )
+
+    if isinstance(queries, list) and len(queries) > 1:
+        raise SourceConfigurationError(
+            ErrorCode.SOCE58, len(queries), type(schema_overrides)
+        )
+
+
+def get_tableframes_from_sources(
+    local_sources: list[list[str]],
+) -> list[TableFrame]:
+    """
+    Given a list of sources, where each source is a list of parquet file paths,
+    concatenate the files for each source into a TableFrame.
+
+    Args:
+        local_sources (list[list[str]]): List of sources, each a list of parquet file
+        paths.
+    Returns:
+        list[TableFrame]: List of TableFrames, one per source.
+    """
+    table_frames: list[TableFrame] = []
+    for idx, source in enumerate(local_sources):
+        if isinstance(source, list):
+            intermediate_lfs = [
+                pl.scan_parquet(f) for f in source if isinstance(f, str)
+            ]
+            lf = pl.concat(intermediate_lfs)
+            tf = from_polars(lf)
+            table_frames.append(tf)
+            logger.debug(f"Created TableFrame {repr(tf)} for query {idx}")
+        else:
+            raise TypeError(
+                "Each query result must be a list(str) of file paths containing "
+                f"chunks of records, got {type(source)} instead."
+            )
+    logger.debug(f"Returning {len(table_frames)} TableFrames")
+    return table_frames

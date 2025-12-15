@@ -3,6 +3,7 @@
 #
 
 from tabsdata._io.inputs.sql.mysql_input import MySQLLoaderSpec
+from tabsdata._io.inputs.sql.postgres_input import PostgresLoaderSpec
 from tabsdata._io.inputs.sql.shared_types import (
     QueriesSpec,
     SchemaOverrideSpec,
@@ -26,6 +27,8 @@ __all__ = [
     "SchemaOverrideSpec",
     # from tabsdata._io.inputs.sql.mysql_input
     "MySQLLoaderSpec",
+    # from tabsdata._io.inputs.sql.postgres_input
+    "PostgresLoaderSpec",
     # from tabsdata._io.outputs.shared_enums
     "IfTableExistStrategySpec",
     "SchemaStrategySpec",

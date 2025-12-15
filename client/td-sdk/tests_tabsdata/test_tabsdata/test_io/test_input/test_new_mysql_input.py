@@ -1,6 +1,7 @@
 #
 # Copyright 2025 Tabs Data Inc.
 #
+
 import pytest
 
 from tabsdata._credentials import S3AccessKeyCredentials, UserPasswordCredentials
