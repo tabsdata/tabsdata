@@ -29,6 +29,7 @@ from tabsdata._format import (
     ParquetFormat,
 )
 from tabsdata._io.connections.connections import Conn
+from tabsdata._io.connections.mariadb_connection import MariaDBConn
 from tabsdata._io.connections.mysql_connection import MySQLConn
 from tabsdata._io.connections.postgres_connection import PostgresConn
 from tabsdata._io.inputs.file_inputs import (
@@ -37,6 +38,7 @@ from tabsdata._io.inputs.file_inputs import (
     LocalFileSource,
     S3Source,
 )
+from tabsdata._io.inputs.sql.mariadb_input import MariaDBSrc
 from tabsdata._io.inputs.sql.mysql_input import (
     MySQLSrc,
 )
@@ -157,6 +159,8 @@ __all__ = [
     "MySQLSrc",
     # from tabsdata._io.inputs.sql.postgres_input
     "PostgresSrc",
+    # from tabsdata._io.inputs.sql.mariadb_input
+    "MariaDBSrc",
     # from tabsdatafunction.py Outputs
     "AWSGlue",
     "AzureDestination",
@@ -193,6 +197,8 @@ __all__ = [
     "MySQLConn",
     # from tabsdata._io.connections.postgres_connection.py
     "PostgresConn",
+    # from tabsdata._io.connections.mariadb_connection.py
+    "MariaDBConn",
     # from secret.py
     "EnvironmentSecret",
     "HashiCorpSecret",

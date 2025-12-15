@@ -1448,6 +1448,116 @@ def create_docker_mariadb_database(
             ("Splinter",),
         ]
         mycursor.executemany(sql, val)
+        mycursor.execute("""
+                CREATE TABLE ALL_MARIADB_TYPES (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                c_tinyint TINYINT,
+                c_smallint SMALLINT,
+                c_mediumint MEDIUMINT,
+                c_int INT,
+                c_bigint BIGINT,
+                c_float FLOAT,
+                c_double DOUBLE,
+                c_decimal DECIMAL(10,2),
+                c_char CHAR(10),
+                c_varchar VARCHAR(50),
+                c_binary BINARY(8),
+                c_varbinary VARBINARY(16),
+                c_tinyblob TINYBLOB,
+                c_blob BLOB,
+                c_mediumblob MEDIUMBLOB,
+                c_longblob LONGBLOB,
+                c_tinytext TINYTEXT,
+                c_text TEXT,
+                c_mediumtext MEDIUMTEXT,
+                c_longtext LONGTEXT,
+                c_enum ENUM('A', 'B', 'C'),
+                c_set SET('X', 'Y', 'Z'),
+                c_date DATE,
+                c_datetime DATETIME,
+                c_timestamp TIMESTAMP NULL,
+                c_time TIME,
+                c_year YEAR
+            );
+            """)
+
+        sql = """
+            INSERT INTO ALL_MARIADB_TYPES (
+                c_tinyint, c_smallint, c_mediumint, c_int, c_bigint,
+                c_float, c_double, c_decimal, c_char, c_varchar,
+                c_binary, c_varbinary, c_tinyblob, c_blob, c_mediumblob, c_longblob,
+                c_tinytext, c_text, c_mediumtext, c_longtext,
+                c_enum, c_set, c_date, c_datetime, c_timestamp, c_time, c_year
+            ) VALUES (
+                %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s,
+                %s, %s, %s, %s, %s, %s, %s
+            )
+        """
+        val = [
+            (
+                1,
+                2,
+                1000,
+                10000,
+                100000,
+                1.23,
+                2.34,
+                12345.67,
+                "char1",
+                "varchar1",
+                b"binary1",
+                b"varbinary1",
+                b"tinyblob1",
+                b"blob1",
+                b"mediumblob1",
+                b"longblob1",
+                "tinytext1",
+                "text1",
+                "mediumtext1",
+                "longtext1",
+                "A",
+                "X,Y",
+                "2024-01-01",
+                "2024-01-01 12:34:56",
+                "2024-01-01 12:34:56",
+                "12:34:56",
+                2024,
+            ),
+            (
+                2,
+                200,
+                2000,
+                20000,
+                200000,
+                3.45,
+                4.56,
+                23456.78,
+                "char2",
+                "varchar2",
+                b"binary2",
+                b"varbinary2",
+                b"tinyblob2",
+                b"blob2",
+                b"mediumblob2",
+                b"longblob2",
+                "tinytext2",
+                "text2",
+                "mediumtext2",
+                "longtext2",
+                "B",
+                "Y,Z",
+                "2025-02-02",
+                "2025-02-02 23:45:01",
+                "2025-02-02 23:45:01",
+                "23:45:01",
+                2025,
+            ),
+        ]
+        mycursor.executemany(sql, val)
+
         mycursor.execute(
             "CREATE TABLE output_mariadb_transaction (Duration INT, "
             "Pulse INT, Maxpulse INT, Calories FLOAT)"
