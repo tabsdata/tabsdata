@@ -2,6 +2,11 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
+from tabsdata._io.inputs.sql.mysql_input import MySQLLoaderSpec
+from tabsdata._io.inputs.sql.shared_types import (
+    QueriesSpec,
+    SchemaOverrideSpec,
+)
 from tabsdata._io.outputs.shared_enums import (
     IfTableExistStrategySpec,
     SchemaStrategySpec,
@@ -16,6 +21,11 @@ from tabsdata.typing._specs import (
 )
 
 __all__ = [
+    # from tabsdata._io.inputs.sql.shared_types
+    "QueriesSpec",
+    "SchemaOverrideSpec",
+    # from tabsdata._io.inputs.sql.mysql_input
+    "MySQLLoaderSpec",
     # from tabsdata._io.outputs.shared_enums
     "IfTableExistStrategySpec",
     "SchemaStrategySpec",

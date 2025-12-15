@@ -26,6 +26,46 @@ class ErrorCode(Enum):
         "code": "CCE-003",
         "message": "The 'credentials' parameter must be one of {}, got '{}' instead.",
     }
+    CXCE1 = {
+        "code": "CXCE-001",
+        "message": "The 'uri' parameter in a {} must be a string, got '{}' instead.",
+    }
+    CXCE2 = {
+        "code": "CXCE-002",
+        "message": (
+            "Scheme '{}' not supported. The supported schemes are {}."
+            " The scheme is inferred from the URI, which should be of the form"
+            " 'scheme://path'. The URI provided was '{}'."
+        ),
+    }
+    CXCE3 = {
+        "code": "CXCE-003",
+        "message": (
+            "The 'credentials' parameter in a {} must be a "
+            "'UserPasswordCredentials' object or None, got '{}' instead."
+        ),
+    }
+    CXCE4 = {
+        "code": "CXCE-004",
+        "message": (
+            "The 'enforce_connection_params' parameter in a {} must be a "
+            "'bool', got '{}' instead."
+        ),
+    }
+    CXCE5 = {
+        "code": "CXCE-005",
+        "message": (
+            "The 'cx_src_configs_sql' parameter in a {} must be a "
+            "'dict' or None, got '{}' instead."
+        ),
+    }
+    CXCE6 = {
+        "code": "CXCE-006",
+        "message": (
+            "The 'cx_dst_configs_sql' parameter in a {} must be a "
+            "'dict' or None, got '{}' instead."
+        ),
+    }
     DCE1 = {
         "code": "DCE-001",
         "message": (
@@ -1711,6 +1751,93 @@ class ErrorCode(Enum):
             "'GCPCredentials' object, got '{}' instead"
         ),
     }
+    SOCE46 = {
+        "code": "SOCE-046",
+        "message": (
+            "The 'conn' parameter in a {} must be a {} instance got '{}' instead."
+        ),
+    }
+    SOCE47 = {
+        "code": "SOCE-047",
+        "message": (
+            "The 'queries' parameter in a {} must be a 'str' or a 'list[str]', got '{}'"
+            " instead."
+        ),
+    }
+    SOCE48 = {
+        "code": "SOCE-048",
+        "message": (
+            "The 'initial_values' parameter in a {} must be a 'dict' or 'None', got"
+            " '{}' instead."
+        ),
+    }
+    SOCE49 = {
+        "code": "SOCE-049",
+        "message": (
+            "The 'transactional' parameter in a {} must be a 'bool', got '{}' instead."
+        ),
+    }
+    SOCE50 = {
+        "code": "SOCE-050",
+        "message": (
+            "The 'chunk_size' parameter in a {} must be a 'int', got '{}' instead."
+        ),
+    }
+    SOCE51 = {
+        "code": "SOCE-051",
+        "message": (
+            "The 'chunk_size' parameter in a {} must be a positive 'int', got {}"
+            " instead."
+        ),
+    }
+    SOCE52 = {
+        "code": "SOCE-052",
+        "message": (
+            "The 'loader' parameter in a {} must be one of {}, got '{}' instead."
+        ),
+    }
+    SOCE53 = {
+        "code": "SOCE-053",
+        "message": (
+            "The 'schema_overrides' parameter in a {} must be either a 'dict', 'list',"
+            " or None, got '{}' instead."
+        ),
+    }
+    SOCE54 = {
+        "code": "SOCE-054",
+        "message": (
+            "All items in the 'schema_overrides' list must be a 'dict', got {} of types"
+            " '{}' instead."
+        ),
+    }
+    SOCE55 = {
+        "code": "SOCE-055",
+        "message": (
+            "All keys in the 'schema_overrides' dict must be of type 'str', got keys {}"
+            " of types '{}' instead."
+        ),
+    }
+    SOCE56 = {
+        "code": "SOCE-056",
+        "message": (
+            "All values in the 'schema_overrides' dict must be of type 'DataType', got"
+            " values {} of types '{}' instead."
+        ),
+    }
+    SOCE57 = {
+        "code": "SOCE-057",
+        "message": (
+            "The 'schema_overrides' parameter must be of the same size ({}) as the"
+            " number of queries ({})"
+        ),
+    }
+    SOCE58 = {
+        "code": "SOCE-058",
+        "message": (
+            "When the 'queries' parameter is a list, the 'schema_overrides' parameter"
+            " must also be a list of the same size ({}), got a '{}' instead."
+        ),
+    }
     TF1 = {
         "code": "TF-001",
         "message": "The input DataFrame is missing the required column(s) '{}'.",
@@ -1956,6 +2083,14 @@ class TabsDataException(Exception):
                 self.message,
             )
         super().__init__(self.message if self.message else "Unknown error")
+
+
+class ConnectionConfigurationError(TabsDataException):
+    """
+    Exception raised when the creation or modification of a Connection object fails.
+    """
+
+    CODE_PREFIX = "CXCE"
 
 
 class CredentialsConfigurationError(TabsDataException):

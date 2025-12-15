@@ -29,11 +29,15 @@ from tabsdata._format import (
     ParquetFormat,
 )
 from tabsdata._io.connections.connections import Conn
+from tabsdata._io.connections.mysql_connection import MySQLConn
 from tabsdata._io.inputs.file_inputs import (
     AzureSource,
     GCSSource,
     LocalFileSource,
     S3Source,
+)
+from tabsdata._io.inputs.sql.mysql_input import (
+    MySQLSrc,
 )
 from tabsdata._io.inputs.sql_inputs import (
     MariaDBSource,
@@ -147,6 +151,8 @@ __all__ = [
     "PostgresSource",
     "S3Source",
     "TableInput",
+    # from tabsdata._io.inputs.sql.mysql_input
+    "MySQLSrc",
     # from tabsdatafunction.py Outputs
     "AWSGlue",
     "AzureDestination",
@@ -179,6 +185,8 @@ __all__ = [
     "UserPasswordCredentials",
     # from connections.py
     "Conn",
+    # from tabsdata._io.connections.mysql_connection.py
+    "MySQLConn",
     # from secret.py
     "EnvironmentSecret",
     "HashiCorpSecret",
