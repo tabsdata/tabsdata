@@ -32,9 +32,11 @@ from tests_tabsdata.conftest import (
     read_json_and_clean,
     write_v2_function_yaml_file,
 )
-from tests_tabsdata.testing_resources.test_input_mariadb.example import input_mariadb
+from tests_tabsdata.testing_resources.test_input_mariadb.example import (
+    testing_tabsdata_function as input_mariadb,
+)
 from tests_tabsdata.testing_resources.test_input_mariadb_initial_values.example import (
-    input_mariadb_initial_values,
+    testing_tabsdata_function as input_mariadb_initial_values,
 )
 
 # noinspection PyUnresolvedReferences
@@ -61,10 +63,12 @@ LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_input_mariadb(testing_mariadb, tmp_path):
+def test_input_mariadb(mariadb_config, tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
-        input_mariadb, local_packages=LOCAL_PACKAGES_LIST, save_location=tmp_path
+        input_mariadb(mariadb_config.uri, credentials=mariadb_config.credentials),
+        local_packages=LOCAL_PACKAGES_LIST,
+        save_location=tmp_path,
     )
 
     input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
@@ -122,10 +126,12 @@ def test_input_mariadb(testing_mariadb, tmp_path):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_input_mariadb_initial_values(testing_mariadb, tmp_path):
+def test_input_mariadb_initial_values(mariadb_config, tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
-        input_mariadb_initial_values,
+        input_mariadb_initial_values(
+            mariadb_config.uri, credentials=mariadb_config.credentials
+        ),
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
@@ -187,10 +193,12 @@ def test_input_mariadb_initial_values(testing_mariadb, tmp_path):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_input_mariadb_initial_values_stored_number_0(testing_mariadb, tmp_path):
+def test_input_mariadb_initial_values_stored_number_0(mariadb_config, tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
-        input_mariadb_initial_values,
+        input_mariadb_initial_values(
+            mariadb_config.uri, credentials=mariadb_config.credentials
+        ),
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
@@ -258,10 +266,12 @@ def test_input_mariadb_initial_values_stored_number_0(testing_mariadb, tmp_path)
 @pytest.mark.slow
 @pytest.mark.mariadb
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_input_mariadb_initial_values_stored_number_2(testing_mariadb, tmp_path):
+def test_input_mariadb_initial_values_stored_number_2(mariadb_config, tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
-        input_mariadb_initial_values,
+        input_mariadb_initial_values(
+            mariadb_config.uri, credentials=mariadb_config.credentials
+        ),
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )

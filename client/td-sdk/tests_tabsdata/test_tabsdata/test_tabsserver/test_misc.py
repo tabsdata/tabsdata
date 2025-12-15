@@ -62,7 +62,7 @@ from tests_tabsdata.testing_resources.test_general_execution_exception.example i
     general_execution_exception,
 )
 from tests_tabsdata.testing_resources.test_initial_values_freeze.example import (
-    initial_values_freeze,
+    testing_tabsdata_function as initial_values_freeze,
 )
 from tests_tabsdata.testing_resources.test_initial_values_wrong_key_type.example import (
     testing_tabsdata_function as initial_values_wrong_key_type,
@@ -812,10 +812,10 @@ def test_failing_file_in_folder(tmp_path):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_initial_values_freeze(testing_mariadb, tmp_path):
+def test_initial_values_freeze(mariadb_config, tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
-        initial_values_freeze,
+        initial_values_freeze(mariadb_config.uri, mariadb_config.credentials),
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )

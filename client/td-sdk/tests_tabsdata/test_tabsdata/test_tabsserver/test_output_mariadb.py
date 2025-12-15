@@ -33,22 +33,22 @@ from tests_tabsdata.conftest import (
     write_v2_function_yaml_file,
 )
 from tests_tabsdata.testing_resources.test_output_mariadb_driver_provided.example import (
-    output_mariadb_driver_provided,
+    testing_tabsdata_function as output_mariadb_driver_provided,
 )
 from tests_tabsdata.testing_resources.test_output_mariadb_list.example import (
-    output_mariadb_list,
+    testing_tabsdata_function as output_mariadb_list,
 )
 from tests_tabsdata.testing_resources.test_output_mariadb_list_single_element.example import (
-    output_mariadb_list_single_element,
+    testing_tabsdata_function as output_mariadb_list_single_element,
 )
 from tests_tabsdata.testing_resources.test_output_mariadb_transaction.example import (
-    output_mariadb_transaction,
+    testing_tabsdata_function as output_mariadb_transaction,
 )
 from tests_tabsdata.testing_resources.test_output_mariadb_with_charset.example import (
-    output_mariadb_with_charset,
+    testing_tabsdata_function as output_mariadb_with_charset,
 )
 from tests_tabsdata.testing_resources.test_output_mariadb_with_collation.example import (
-    output_mariadb_with_collation,
+    testing_tabsdata_function as output_mariadb_with_collation,
 )
 
 # noinspection PyUnresolvedReferences
@@ -75,10 +75,17 @@ LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_mariadb_list(tmp_path, testing_mariadb):
+def test_output_mariadb_list(tmp_path, mariadb_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    destination_tables = ["output_mariadb_list", "second_output_mariadb_list"]
     context_archive = create_bundle_archive(
-        output_mariadb_list, local_packages=LOCAL_PACKAGES_LIST, save_location=tmp_path
+        output_mariadb_list(
+            mariadb_config.uri,
+            credentials=mariadb_config.credentials,
+            destination_tables=destination_tables,
+        ),
+        local_packages=LOCAL_PACKAGES_LIST,
+        save_location=tmp_path,
     )
 
     input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
@@ -107,7 +114,7 @@ def test_output_mariadb_list(tmp_path, testing_mariadb):
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
     output = pl.read_database_uri(
-        uri=MARIADB_URI,
+        uri=mariadb_config.uri_with_credentials,
         query="SELECT * FROM output_mariadb_list",
     )
     output = clean_polars_df(output)
@@ -120,7 +127,7 @@ def test_output_mariadb_list(tmp_path, testing_mariadb):
     assert output.equals(expected_output)
 
     output = pl.read_database_uri(
-        uri=MARIADB_URI,
+        uri=mariadb_config.uri_with_credentials,
         query="SELECT * FROM second_output_mariadb_list",
     )
     output = clean_polars_df(output)
@@ -131,10 +138,14 @@ def test_output_mariadb_list(tmp_path, testing_mariadb):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_mariadb_with_charset(tmp_path, testing_mariadb):
+def test_output_mariadb_with_charset(tmp_path, mariadb_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
-        output_mariadb_with_charset,
+        output_mariadb_with_charset(
+            mariadb_config.uri,
+            credentials=mariadb_config.credentials,
+            destination_tables=["output_mariadb_with_charset"],
+        ),
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
@@ -167,7 +178,7 @@ def test_output_mariadb_with_charset(tmp_path, testing_mariadb):
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
     output = pl.read_database_uri(
-        uri=MARIADB_URI,
+        uri=mariadb_config.uri_with_credentials,
         query="SELECT * FROM output_mariadb_with_charset",
     )
     output = clean_polars_df(output)
@@ -184,10 +195,14 @@ def test_output_mariadb_with_charset(tmp_path, testing_mariadb):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_mariadb_with_collation(tmp_path, testing_mariadb):
+def test_output_mariadb_with_collation(tmp_path, mariadb_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
-        output_mariadb_with_collation,
+        output_mariadb_with_collation(
+            mariadb_config.uri,
+            credentials=mariadb_config.credentials,
+            destination_tables=["output_mariadb_with_collation"],
+        ),
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
@@ -220,7 +235,7 @@ def test_output_mariadb_with_collation(tmp_path, testing_mariadb):
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
     output = pl.read_database_uri(
-        uri=MARIADB_URI,
+        uri=mariadb_config.uri_with_credentials,
         query="SELECT * FROM output_mariadb_with_collation",
     )
     output = clean_polars_df(output)
@@ -237,10 +252,14 @@ def test_output_mariadb_with_collation(tmp_path, testing_mariadb):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_mariadb_driver_provided(tmp_path, testing_mariadb):
+def test_output_mariadb_driver_provided(tmp_path, mariadb_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
-        output_mariadb_driver_provided,
+        output_mariadb_driver_provided(
+            mariadb_config.uri,
+            credentials=mariadb_config.credentials,
+            destination_tables=["output_mariadb_driver_provided"],
+        ),
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
@@ -273,7 +292,7 @@ def test_output_mariadb_driver_provided(tmp_path, testing_mariadb):
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
     output = pl.read_database_uri(
-        uri=MARIADB_URI,
+        uri=mariadb_config.uri_with_credentials,
         query="SELECT * FROM output_mariadb_driver_provided",
     )
     output = clean_polars_df(output)
@@ -290,10 +309,14 @@ def test_output_mariadb_driver_provided(tmp_path, testing_mariadb):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_mariadb_list_single_element(tmp_path, testing_mariadb):
+def test_output_mariadb_list_single_element(tmp_path, mariadb_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
-        output_mariadb_list_single_element,
+        output_mariadb_list_single_element(
+            mariadb_config.uri,
+            credentials=mariadb_config.credentials,
+            destination_tables=["output_mariadb_list_single_element"],
+        ),
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
@@ -326,7 +349,7 @@ def test_output_mariadb_list_single_element(tmp_path, testing_mariadb):
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
     output = pl.read_database_uri(
-        uri=MARIADB_URI,
+        uri=mariadb_config.uri_with_credentials,
         query="SELECT * FROM output_mariadb_list_single_element",
     )
     output = clean_polars_df(output)
@@ -343,10 +366,17 @@ def test_output_mariadb_list_single_element(tmp_path, testing_mariadb):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_mariadb_transaction(tmp_path, testing_mariadb):
+def test_output_mariadb_transaction(tmp_path, mariadb_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
-        output_mariadb_transaction,
+        output_mariadb_transaction(
+            mariadb_config.uri,
+            credentials=mariadb_config.credentials,
+            destination_tables=[
+                "output_mariadb_transaction",
+                "second_output_mariadb_transaction",
+            ],
+        ),
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
@@ -378,14 +408,14 @@ def test_output_mariadb_transaction(tmp_path, testing_mariadb):
     )
     assert result != 0
     output = pl.read_database_uri(
-        uri=MARIADB_URI,
+        uri=mariadb_config.uri_with_credentials,
         query="SELECT * FROM output_mariadb_transaction",
     )
     output = clean_polars_df(output)
     assert output.is_empty()
 
     output = pl.read_database_uri(
-        uri=MARIADB_URI,
+        uri=mariadb_config.uri_with_credentials,
         query="SELECT * FROM second_output_mariadb_transaction",
     )
     output = clean_polars_df(output)
