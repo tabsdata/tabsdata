@@ -19,22 +19,19 @@ from tabsdata._utils.bundle_utils import create_bundle_archive
 from tests_tabsdata.bootest import TDLOCAL_FOLDER
 from tests_tabsdata.conftest import (
     ABSOLUTE_TEST_FOLDER_LOCATION,
-    DB_HOST,
-    DB_NAME,
-    DB_PASSWORD,
-    DB_USER,
     FUNCTION_DATA_FOLDER,
     LOCAL_PACKAGES_LIST,
-    POSTGRES_PORT,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
     TESTING_RESOURCES_FOLDER,
     clean_polars_df,
     read_json_and_clean,
     write_v2_function_yaml_file,
 )
-from tests_tabsdata.testing_resources.test_input_postgres.example import input_postgres
+from tests_tabsdata.testing_resources.test_input_postgres.example import (
+    testing_tabsdata_function as input_postgres,
+)
 from tests_tabsdata.testing_resources.test_input_postgres_initial_values.example import (
-    input_postgres_initial_values,
+    testing_tabsdata_function as input_postgres_initial_values,
 )
 
 # noinspection PyUnresolvedReferences
@@ -43,12 +40,6 @@ from . import pytestmark  # noqa: F401
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-
-ESCAPED_USER = urllib.parse.quote(DB_USER)
-ESCAPED_PASSWORD = urllib.parse.quote(DB_PASSWORD)
-POSTGRES_URI = (
-    f"postgres://{ESCAPED_USER}:{ESCAPED_PASSWORD}@{DB_HOST}:{POSTGRES_PORT}/{DB_NAME}"
-)
 ROOT_PROJECT_DIR = os.path.dirname(
     os.path.dirname(os.path.dirname(ABSOLUTE_TEST_FOLDER_LOCATION))
 )
@@ -61,10 +52,12 @@ LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_input_postgres(testing_postgres, tmp_path):
+def test_input_postgres(postgres_config, tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
-        input_postgres, local_packages=LOCAL_PACKAGES_LIST, save_location=tmp_path
+        input_postgres(postgres_config.uri, postgres_config.credentials),
+        local_packages=LOCAL_PACKAGES_LIST,
+        save_location=tmp_path,
     )
 
     input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
@@ -122,10 +115,10 @@ def test_input_postgres(testing_postgres, tmp_path):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_input_postgres_initial_values(testing_postgres, tmp_path):
+def test_input_postgres_initial_values(postgres_config, tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
-        input_postgres_initial_values,
+        input_postgres_initial_values(postgres_config.uri, postgres_config.credentials),
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
@@ -187,10 +180,10 @@ def test_input_postgres_initial_values(testing_postgres, tmp_path):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_input_postgres_initial_values_stored_number_0(testing_postgres, tmp_path):
+def test_input_postgres_initial_values_stored_number_0(postgres_config, tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
-        input_postgres_initial_values,
+        input_postgres_initial_values(postgres_config.uri, postgres_config.credentials),
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
@@ -258,10 +251,10 @@ def test_input_postgres_initial_values_stored_number_0(testing_postgres, tmp_pat
 @pytest.mark.slow
 @pytest.mark.postgres
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_input_postgres_initial_values_stored_number_2(testing_postgres, tmp_path):
+def test_input_postgres_initial_values_stored_number_2(postgres_config, tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
-        input_postgres_initial_values,
+        input_postgres_initial_values(postgres_config.uri, postgres_config.credentials),
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )

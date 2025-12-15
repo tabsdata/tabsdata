@@ -19,13 +19,8 @@ from tabsdata._utils.bundle_utils import create_bundle_archive
 from tests_tabsdata.bootest import TDLOCAL_FOLDER
 from tests_tabsdata.conftest import (
     ABSOLUTE_TEST_FOLDER_LOCATION,
-    DB_HOST,
-    DB_NAME,
-    DB_PASSWORD,
-    DB_USER,
     FUNCTION_DATA_FOLDER,
     LOCAL_PACKAGES_LIST,
-    POSTGRES_PORT,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
     TESTING_RESOURCES_FOLDER,
     clean_polars_df,
@@ -33,19 +28,19 @@ from tests_tabsdata.conftest import (
     write_v2_function_yaml_file,
 )
 from tests_tabsdata.testing_resources.test_output_postgres_driver_provided.example import (
-    output_postgres_driver_provided,
+    testing_tabsdata_function as output_postgres_driver_provided,
 )
 from tests_tabsdata.testing_resources.test_output_postgres_list.example import (
-    output_postgres_list,
+    testing_tabsdata_function as output_postgres_list,
 )
 from tests_tabsdata.testing_resources.test_output_postgres_schema.example import (
-    output_postgres_schema,
+    testing_tabsdata_function as output_postgres_schema,
 )
 from tests_tabsdata.testing_resources.test_output_postgres_table_replace.example import (
-    output_postgres_table_replace,
+    testing_tabsdata_function as output_postgres_table_replace,
 )
 from tests_tabsdata.testing_resources.test_output_postgres_transaction.example import (
-    output_postgres_transaction,
+    testing_tabsdata_function as output_postgres_transaction,
 )
 
 # noinspection PyUnresolvedReferences
@@ -54,12 +49,6 @@ from . import pytestmark  # noqa: F401
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-
-ESCAPED_USER = urllib.parse.quote(DB_USER)
-ESCAPED_PASSWORD = urllib.parse.quote(DB_PASSWORD)
-POSTGRES_URI = (
-    f"postgres://{ESCAPED_USER}:{ESCAPED_PASSWORD}@{DB_HOST}:{POSTGRES_PORT}/{DB_NAME}"
-)
 ROOT_PROJECT_DIR = os.path.dirname(
     os.path.dirname(os.path.dirname(ABSOLUTE_TEST_FOLDER_LOCATION))
 )
@@ -72,10 +61,15 @@ LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_postgres_list(tmp_path, testing_postgres):
+def test_output_postgres_list(tmp_path, postgres_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    destination_tables = ["output_postgres_list", "second_output_postgres_list"]
     context_archive = create_bundle_archive(
-        output_postgres_list, local_packages=LOCAL_PACKAGES_LIST, save_location=tmp_path
+        output_postgres_list(
+            postgres_config.uri, postgres_config.credentials, destination_tables
+        ),
+        local_packages=LOCAL_PACKAGES_LIST,
+        save_location=tmp_path,
     )
 
     input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
@@ -104,7 +98,7 @@ def test_output_postgres_list(tmp_path, testing_postgres):
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
     output = pl.read_database_uri(
-        uri=POSTGRES_URI,
+        uri=postgres_config.uri_with_credentials,
         query="SELECT * FROM output_postgres_list",
     )
     output = clean_polars_df(output)
@@ -117,7 +111,7 @@ def test_output_postgres_list(tmp_path, testing_postgres):
     assert output.equals(expected_output)
 
     output = pl.read_database_uri(
-        uri=POSTGRES_URI,
+        uri=postgres_config.uri_with_credentials,
         query="SELECT * FROM second_output_postgres_list",
     )
     output = clean_polars_df(output)
@@ -128,10 +122,13 @@ def test_output_postgres_list(tmp_path, testing_postgres):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_postgres_driver_provided(tmp_path, testing_postgres):
+def test_output_postgres_driver_provided(tmp_path, postgres_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    destination_tables = "output_postgres_driver_provided"
     context_archive = create_bundle_archive(
-        output_postgres_driver_provided,
+        output_postgres_driver_provided(
+            postgres_config.uri, postgres_config.credentials, destination_tables
+        ),
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
@@ -164,7 +161,7 @@ def test_output_postgres_driver_provided(tmp_path, testing_postgres):
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
     output = pl.read_database_uri(
-        uri=POSTGRES_URI,
+        uri=postgres_config.uri_with_credentials,
         query="SELECT * FROM output_postgres_driver_provided",
     )
     output = clean_polars_df(output)
@@ -181,10 +178,16 @@ def test_output_postgres_driver_provided(tmp_path, testing_postgres):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_postgres_transaction(tmp_path, testing_postgres):
+def test_output_postgres_transaction(tmp_path, postgres_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    destination_tables = [
+        "output_postgres_transaction",
+        "second_output_postgres_transaction",
+    ]
     context_archive = create_bundle_archive(
-        output_postgres_transaction,
+        output_postgres_transaction(
+            postgres_config.uri, postgres_config.credentials, destination_tables
+        ),
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
@@ -217,14 +220,14 @@ def test_output_postgres_transaction(tmp_path, testing_postgres):
     assert result != 0
 
     output = pl.read_database_uri(
-        uri=POSTGRES_URI,
+        uri=postgres_config.uri_with_credentials,
         query="SELECT * FROM output_postgres_transaction",
     )
     output = clean_polars_df(output)
     assert output.is_empty()
 
     output = pl.read_database_uri(
-        uri=POSTGRES_URI,
+        uri=postgres_config.uri_with_credentials,
         query="SELECT * FROM second_output_postgres_transaction",
     )
     output = clean_polars_df(output)
@@ -235,10 +238,14 @@ def test_output_postgres_transaction(tmp_path, testing_postgres):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_postgres_table_replace(tmp_path, testing_postgres):
+def test_output_postgres_table_replace(tmp_path, postgres_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
-        output_postgres_table_replace,
+        output_postgres_table_replace(
+            postgres_config.uri,
+            postgres_config.credentials,
+            "output_postgres_table_replace",
+        ),
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
@@ -272,7 +279,7 @@ def test_output_postgres_table_replace(tmp_path, testing_postgres):
         assert result == 0
         assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
         output = pl.read_database_uri(
-            uri=POSTGRES_URI,
+            uri=postgres_config.uri_with_credentials,
             query="SELECT * FROM output_postgres_table_replace",
         )
         output = clean_polars_df(output)
@@ -289,10 +296,15 @@ def test_output_postgres_table_replace(tmp_path, testing_postgres):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_postgres_schema(tmp_path, testing_postgres):
+def test_output_postgres_schema(tmp_path, postgres_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    destination_tables = ["testing_schema.output_postgres_schema"]
     context_archive = create_bundle_archive(
-        output_postgres_schema,
+        output_postgres_schema(
+            postgres_config.uri,
+            postgres_config.credentials,
+            destination_tables,
+        ),
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
@@ -326,7 +338,7 @@ def test_output_postgres_schema(tmp_path, testing_postgres):
         assert result == 0
         assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
         output = pl.read_database_uri(
-            uri=POSTGRES_URI,
+            uri=postgres_config.uri_with_credentials,
             query="SELECT * FROM testing_schema.output_postgres_schema",
         )
         output = clean_polars_df(output)

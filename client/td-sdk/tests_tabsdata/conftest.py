@@ -157,6 +157,7 @@ ROOT_PROJECT_DIR = os.path.dirname(
 )
 
 VALID_MYSQL_PREFIXES = ["MYSQL0"]
+VALID_POSTGRES_PREFIXES = ["POSTGRES0"]
 
 
 class TestInstance:
@@ -289,6 +290,7 @@ MARIADB_PORT = 3307
 MYSQL_FORWARDED_PORT = "3306/tcp"
 ORACLE_PORT = 1521
 POSTGRES_PORT = 5432
+POSTGRES_FORWARDED_PORT = "5432/tcp"
 
 MOCK_COLLECTION = "td_collection"
 MOCK_COLLECTION_ID = 19
@@ -440,6 +442,111 @@ def testing_oracle(tmp_path_factory, worker_id):
 
 
 @dataclass
+class PostgresConfig:
+    host: str
+    port: int
+    user: str
+    password: str
+    database: str
+    uri: str
+    uri_with_credentials: str
+    credentials: Credentials
+
+
+@pytest.fixture(scope="function")
+def postgres_config(tmp_path_factory, worker_id, request) -> PostgresConfig:
+    marker = request.node.get_closest_marker("postgres")
+    prefix = marker.kwargs.get("env_prefix", "POSTGRES0") if marker else "POSTGRES0"
+    if prefix not in VALID_POSTGRES_PREFIXES:
+        raise Exception(
+            f"The prefix '{prefix}' is not valid. Valid prefixes are:"
+            f" {', '.join(VALID_POSTGRES_PREFIXES)}. If you want to extend the list of"
+            " valid prefixes, please modify the 'VALID_POSTGRES_PREFIXES' variable in"
+            " the 'conftest.py' file."
+        )
+    if os.environ.get(f"{prefix}__POSTGRES_ENVS") in TRUE_VALUES:
+        uri = os.environ.get(f"{prefix}__POSTGRES_URI")
+        if not uri:
+            raise Exception(
+                f"The environment variable {prefix}__POSTGRES_URI is not set. Unable to"
+                " run tests using the 'postgres_config' fixture."
+            )
+        pattern = r"^postgres://([^:/]+):(\d+)/(.*)$"
+        match = re.match(pattern, uri)
+        if not match:
+            raise Exception(
+                f"The POSTGRES URI '{uri}' is not valid. Unable to run tests using the "
+                "'postgres_config' fixture."
+            )
+        host, port, _ = match.groups()
+        user = os.environ.get(f"{prefix}__POSTGRES_USER")
+        if not user:
+            raise Exception(
+                f"The environment variable {prefix}__POSTGRES_USER is not set. Unable"
+                " to run tests using the 'postgres_config' fixture."
+            )
+        password = os.environ.get(f"{prefix}__POSTGRES_PASSWORD")
+        if not password:
+            raise Exception(
+                f"The environment variable {prefix}__POSTGRES_PASSWORD is not set."
+                " Unable to run tests using the 'postgres_config' fixture."
+            )
+        database = os.environ.get(f"{prefix}__POSTGRES_DATABASE")
+        if not database:
+            raise Exception(
+                f"The environment variable {prefix}__POSTGRES_DATABASE is not set."
+                " Unable to run tests using the 'postgres_config' fixture."
+            )
+        escaped_user = urllib.parse.quote(user)
+        escaped_password = urllib.parse.quote(password)
+        config = PostgresConfig(
+            host=host,
+            port=int(port),
+            user=user,
+            password=password,
+            database=database,
+            uri=uri,
+            uri_with_credentials=(
+                f"postgres://{escaped_user}:{escaped_password}@{host}:{port}/{database}"
+            ),
+            credentials=UserPasswordCredentials(user, password),
+        )
+        return config
+    else:
+        name = os.environ.get(
+            f"{prefix}__POSTGRES_DOCKER_CONTAINER_NAME",
+            DEFAULT_PYTEST_POSTGRES_DOCKER_CONTAINER_NAME,
+        )
+        if worker_id == "master":
+            # not executing in with multiple workers, just produce the data and let
+            # pytest's fixture caching do its job
+            port = create_docker_postgres_database(name)
+        else:
+            # get the temp directory shared by all workers
+            root_tmp_dir = tmp_path_factory.getbasetemp().parent
+
+            fn = root_tmp_dir / "docker_postgresql_creation"
+            with FileLock(str(fn) + ".lock"):
+                # only one worker will be able to create the database
+                port = create_docker_postgres_database(name)
+        config = PostgresConfig(
+            host=DB_HOST,
+            port=int(port),
+            user=DB_USER,
+            password=DB_PASSWORD,
+            database=DB_NAME,
+            uri=f"postgres://{DB_HOST}:{port}/{DB_NAME}",
+            uri_with_credentials=(
+                f"postgres://{urllib.parse.quote(DB_USER)}:"
+                f"{urllib.parse.quote(DB_PASSWORD)}@{DB_HOST}:{port}/{
+                                 DB_NAME}"
+            ),
+            credentials=UserPasswordCredentials(DB_USER, DB_PASSWORD),
+        )
+        return config
+
+
+@dataclass
 class MySQLConfig:
     host: str
     port: int
@@ -550,26 +657,32 @@ def mysql_config(tmp_path_factory, worker_id, request) -> MySQLConfig:
         return config
 
 
-def create_docker_postgres_database():
+def create_docker_postgres_database(
+    name: str = DEFAULT_PYTEST_POSTGRES_DOCKER_CONTAINER_NAME,
+    port: int = None,
+):
     logger.info("Starting Postgres container")
     client = docker.from_env()
-    if client.containers.list(
-        filters={"name": DEFAULT_PYTEST_POSTGRES_DOCKER_CONTAINER_NAME}
-    ):
+    if containers := client.containers.list(filters={"name": name}):
         logger.info("Postgres container already exists")
-        return
+        container = containers[0]
+        return get_container_port_binding(container, POSTGRES_FORWARDED_PORT)
     else:
-        client.containers.run(
-            "postgres:17.2",
-            name=DEFAULT_PYTEST_POSTGRES_DOCKER_CONTAINER_NAME,
-            environment=[
-                f"POSTGRES_DB={DB_NAME}",
-                f"POSTGRES_USER={DB_USER}",
-                f"POSTGRES_PASSWORD={DB_PASSWORD}",
-            ],
-            ports={"5432/tcp": POSTGRES_PORT},
-            detach=True,
-        )
+        port_lock = FileLock(os.path.join(tabsdata_temp_folder(), "free_port.lock"))
+        with port_lock:
+            if port is None:
+                port = get_free_port()
+            client.containers.run(
+                "postgres:17.2",
+                name=name,
+                environment=[
+                    f"POSTGRES_DB={DB_NAME}",
+                    f"POSTGRES_USER={DB_USER}",
+                    f"POSTGRES_PASSWORD={DB_PASSWORD}",
+                ],
+                ports={POSTGRES_FORWARDED_PORT: port},
+                detach=True,
+            )
         # Wait for the database to be ready
         retry = 0
         while True:
@@ -578,7 +691,7 @@ def create_docker_postgres_database():
                 "user": DB_USER,
                 "password": DB_PASSWORD,
                 "host": DB_HOST,
-                "port": str(POSTGRES_PORT),
+                "port": str(port),
             }
             try:
                 mydb = psycopg2.connect(**connection_params)
@@ -633,24 +746,7 @@ def create_docker_postgres_database():
         mycursor.execute("CREATE SCHEMA testing_schema")
         mydb.commit()
         logger.info("Postgres container created successfully")
-        return
-
-
-@pytest.fixture(scope="session")
-def testing_postgres(tmp_path_factory, worker_id):
-    if worker_id == "master":
-        # not executing in with multiple workers, just produce the data and let
-        # pytest's fixture caching do its job
-        yield create_docker_postgres_database()
-    else:
-        # get the temp directory shared by all workers
-        root_tmp_dir = tmp_path_factory.getbasetemp().parent
-
-        fn = root_tmp_dir / "docker_postgresql_creation"
-        with FileLock(str(fn) + ".lock"):
-            # only one worker will be able to create the database
-            create_docker_postgres_database()
-        yield
+        return port
 
 
 def get_free_port():
