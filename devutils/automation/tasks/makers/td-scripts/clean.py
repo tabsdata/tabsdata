@@ -7,7 +7,6 @@ import importlib
 import importlib.util
 import os
 import shutil
-import stat
 import sys
 import time
 from types import ModuleType
@@ -39,9 +38,7 @@ def rmtree_with_retry(path, max_retries=16, delay=3):
         try:
             shutil.rmtree(path)
             if attempt > 0:
-                logger.debug(
-                    f"✏️ Successfully removed folder {path} after {attempt + 1} attempts"
-                )
+                logger.debug(f"✏️ Removed folder {path} after {attempt + 1} attempts")
             else:
                 logger.debug(f"✏️ Successfully removed folder {path}")
             return

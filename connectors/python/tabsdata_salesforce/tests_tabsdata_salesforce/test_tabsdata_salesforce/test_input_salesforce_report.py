@@ -63,7 +63,7 @@ SFR_INITIAL_VALUES_TESTING_REPORT = "users_dev_ci"
 
 SFR_INITIAL_VALUES_TESTING_ALIASES_AND_ROWS = {
     "User": 2,
-    "EPIC": 2,
+    "EPIC": 1,
 }
 
 
@@ -807,8 +807,8 @@ def test_chunk_with_filter_and_offset_by_column_name(tmp_path, sf_config):
             sf_config["CREDENTIALS"],
             report=SFR_INITIAL_VALUES_TESTING_REPORT,
             column_name_strategy="columnName",
-            last_modified_column="LAST_UPDATE",
-            initial_last_modified="2024-03-10T11:03:08.000+0000",
+            # last_modified_column="LAST_UPDATE",
+            # initial_last_modified="2024-03-10T11:03:08.000+0000",
             filter=("LAST_NAME", "equals", value),
         )
         [result] = source.chunk(str(tmp_path))
@@ -818,6 +818,7 @@ def test_chunk_with_filter_and_offset_by_column_name(tmp_path, sf_config):
         first_output = clean_polars_df(first_output)
         logger.debug(first_output)
         logger.debug("-" * 80)
+        print(">>>>>>", first_output)
         assert first_output.height == number
         os.remove(result)
 

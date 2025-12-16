@@ -10,7 +10,7 @@ from typing_extensions import TypeAlias
 
 from tabsdata._table_actions.actions import OnTablesAction
 from tabsdata.dataquality._classifiers import Classifier
-from tabsdata.dataquality._operations import Operation, Summary
+from tabsdata.dataquality._operations import Operation
 from tabsdata.exceptions import DataQualityConfigurationError, ErrorCode
 
 ClassifiersSpec: TypeAlias = Union[Classifier, list[Classifier]]
