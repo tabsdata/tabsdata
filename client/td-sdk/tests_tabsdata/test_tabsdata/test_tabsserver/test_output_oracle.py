@@ -32,13 +32,13 @@ from tests_tabsdata.conftest import (
     write_v2_function_yaml_file,
 )
 from tests_tabsdata.testing_resources.test_output_oracle_driver_provided.example import (
-    output_oracle_driver_provided,
+    testing_tabsdata_function as output_oracle_driver_provided,
 )
 from tests_tabsdata.testing_resources.test_output_oracle_list.example import (
-    output_oracle_list,
+    testing_tabsdata_function as output_oracle_list,
 )
 from tests_tabsdata.testing_resources.test_output_oracle_transaction.example import (
-    output_oracle_transaction,
+    testing_tabsdata_function as output_oracle_transaction,
 )
 
 # noinspection PyUnresolvedReferences
@@ -63,10 +63,16 @@ LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_oracle_list(tmp_path, testing_oracle):
+def test_output_oracle_list(tmp_path, oracle_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
-        output_oracle_list, local_packages=LOCAL_PACKAGES_LIST, save_location=tmp_path
+        output_oracle_list(
+            oracle_config.uri,
+            destination_tables=["output_oracle_list", "second_output_oracle_list"],
+            credentials=oracle_config.credentials,
+        ),
+        local_packages=LOCAL_PACKAGES_LIST,
+        save_location=tmp_path,
     )
 
     input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
@@ -95,7 +101,7 @@ def test_output_oracle_list(tmp_path, testing_oracle):
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
     output = pl.read_database_uri(
-        uri=ORACLE_URI,
+        uri=oracle_config.uri_with_credentials,
         query="SELECT * FROM output_oracle_list",
     )
     output = clean_polars_df(output)
@@ -108,7 +114,7 @@ def test_output_oracle_list(tmp_path, testing_oracle):
     assert output.equals(expected_output)
 
     output = pl.read_database_uri(
-        uri=ORACLE_URI,
+        uri=oracle_config.uri_with_credentials,
         query="SELECT * FROM second_output_oracle_list",
     )
     output = clean_polars_df(output)
@@ -119,10 +125,14 @@ def test_output_oracle_list(tmp_path, testing_oracle):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_oracle_driver_provided(tmp_path, testing_oracle):
+def test_output_oracle_driver_provided(tmp_path, oracle_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
-        output_oracle_driver_provided,
+        output_oracle_driver_provided(
+            oracle_config.uri,
+            credentials=oracle_config.credentials,
+            destination_tables=["output_oracle_driver_provided"],
+        ),
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
@@ -155,7 +165,7 @@ def test_output_oracle_driver_provided(tmp_path, testing_oracle):
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
     output = pl.read_database_uri(
-        uri=ORACLE_URI,
+        uri=oracle_config.uri_with_credentials,
         query="SELECT * FROM output_oracle_driver_provided",
     )
     output = clean_polars_df(output)
@@ -172,10 +182,17 @@ def test_output_oracle_driver_provided(tmp_path, testing_oracle):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_output_oracle_transaction(tmp_path, testing_oracle):
+def test_output_oracle_transaction(tmp_path, oracle_config):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
-        output_oracle_transaction,
+        output_oracle_transaction(
+            oracle_config.uri,
+            credentials=oracle_config.credentials,
+            destination_tables=[
+                "output_oracle_transaction",
+                "second_output_oracle_transaction",
+            ],
+        ),
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
@@ -205,14 +222,14 @@ def test_output_oracle_transaction(tmp_path, testing_oracle):
     )
     assert result != 0
     output = pl.read_database_uri(
-        uri=ORACLE_URI,
+        uri=oracle_config.uri_with_credentials,
         query="SELECT * FROM output_oracle_transaction",
     )
     output = clean_polars_df(output)
     assert output.is_empty()
 
     output = pl.read_database_uri(
-        uri=ORACLE_URI,
+        uri=oracle_config.uri_with_credentials,
         query="SELECT * FROM second_output_oracle_transaction",
     )
     output = clean_polars_df(output)

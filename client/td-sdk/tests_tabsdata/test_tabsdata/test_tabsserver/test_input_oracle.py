@@ -31,9 +31,11 @@ from tests_tabsdata.conftest import (
     read_json_and_clean,
     write_v2_function_yaml_file,
 )
-from tests_tabsdata.testing_resources.test_input_oracle.example import input_oracle
+from tests_tabsdata.testing_resources.test_input_oracle.example import (
+    testing_tabsdata_function as input_oracle,
+)
 from tests_tabsdata.testing_resources.test_input_oracle_initial_values.example import (
-    input_oracle_initial_values,
+    testing_tabsdata_function as input_oracle_initial_values,
 )
 
 # noinspection PyUnresolvedReferences
@@ -58,10 +60,12 @@ LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_input_oracle(testing_oracle, tmp_path):
+def test_input_oracle(oracle_config, tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
-        input_oracle, local_packages=LOCAL_PACKAGES_LIST, save_location=tmp_path
+        input_oracle(oracle_config.uri, oracle_config.credentials),
+        local_packages=LOCAL_PACKAGES_LIST,
+        save_location=tmp_path,
     )
 
     input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
@@ -119,10 +123,10 @@ def test_input_oracle(testing_oracle, tmp_path):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_input_oracle_initial_values(testing_oracle, tmp_path):
+def test_input_oracle_initial_values(oracle_config, tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
-        input_oracle_initial_values,
+        input_oracle_initial_values(oracle_config.uri, oracle_config.credentials),
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
@@ -184,10 +188,10 @@ def test_input_oracle_initial_values(testing_oracle, tmp_path):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_input_oracle_initial_values_stored_number_0(testing_oracle, tmp_path):
+def test_input_oracle_initial_values_stored_number_0(oracle_config, tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
-        input_oracle_initial_values,
+        input_oracle_initial_values(oracle_config.uri, oracle_config.credentials),
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
@@ -255,10 +259,10 @@ def test_input_oracle_initial_values_stored_number_0(testing_oracle, tmp_path):
 @pytest.mark.slow
 @pytest.mark.oracle
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_input_oracle_initial_values_stored_number_2(testing_oracle, tmp_path):
+def test_input_oracle_initial_values_stored_number_2(oracle_config, tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
-        input_oracle_initial_values,
+        input_oracle_initial_values(oracle_config.uri, oracle_config.credentials),
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )

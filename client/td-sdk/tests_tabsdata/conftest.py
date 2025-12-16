@@ -159,6 +159,7 @@ ROOT_PROJECT_DIR = os.path.dirname(
 VALID_MYSQL_PREFIXES = ["MYSQL0"]
 VALID_MARIADB_PREFIXES = ["MARIADB0"]
 VALID_POSTGRES_PREFIXES = ["POSTGRES0"]
+VALID_ORACLE_PREFIXES = ["ORACLE0"]
 
 
 class TestInstance:
@@ -291,6 +292,9 @@ MARIADB_PORT = 3307
 MYSQL_FORWARDED_PORT = "3306/tcp"
 MARIADB_FORWARDED_PORT = "3306/tcp"
 ORACLE_PORT = 1521
+ORACLE_FORWARDED_PORT = "1521/tcp"
+ORACLE_DB_NAME = "FREE"
+ORACLE_DB_USER = "system"
 POSTGRES_PORT = 5432
 POSTGRES_FORWARDED_PORT = "5432/tcp"
 
@@ -409,21 +413,103 @@ def testing_hashicorp_vault(tmp_path_factory, worker_id, s3_config):
         yield
 
 
-@pytest.fixture(scope="session")
-def testing_oracle(tmp_path_factory, worker_id):
-    if worker_id == "master":
-        # not executing in with multiple workers, just produce the data and let
-        # pytest's fixture caching do its job
-        yield create_docker_oracle_database()
-    else:
-        # get the temp directory shared by all workers
-        root_tmp_dir = tmp_path_factory.getbasetemp().parent
+@dataclass
+class OracleConfig:
+    host: str
+    port: int
+    user: str
+    password: str
+    database: str
+    uri: str
+    uri_with_credentials: str
+    credentials: Credentials
 
-        fn = root_tmp_dir / "docker_oracle_creation"
-        with FileLock(str(fn) + ".lock"):
-            # only one worker will be able to create the database
-            create_docker_oracle_database()
-        yield
+
+@pytest.fixture(scope="function")
+def oracle_config(tmp_path_factory, worker_id, request) -> OracleConfig:
+    marker = request.node.get_closest_marker("oracle")
+    prefix = marker.kwargs.get("env_prefix", "ORACLE0") if marker else "ORACLE0"
+    if prefix not in VALID_ORACLE_PREFIXES:
+        raise Exception(
+            f"The prefix '{prefix}' is not valid. Valid prefixes are:"
+            f" {', '.join(VALID_ORACLE_PREFIXES)}. If you want to extend the list of"
+            " valid prefixes, please modify the 'VALID_ORACLE_PREFIXES' variable in"
+            " the 'conftest.py' file."
+        )
+    if os.environ.get(f"{prefix}__ORACLE_ENVS") in TRUE_VALUES:
+        uri = os.environ.get(f"{prefix}__ORACLE_URI")
+        if not uri:
+            raise Exception(
+                f"The environment variable {prefix}__ORACLE_URI is not set. Unable to"
+                " run tests using the 'oracle_config' fixture."
+            )
+        pattern = r"^oracle://([^:/]+):(\d+)/(.*)$"
+        match = re.match(pattern, uri)
+        if not match:
+            raise Exception(
+                f"The ORACLE URI '{uri}' is not valid. Unable to run tests using the "
+                "'oracle_config' fixture."
+            )
+        host, port, _ = match.groups()
+        user = os.environ.get(f"{prefix}__ORACLE_USER")
+        if not user:
+            raise Exception(
+                f"The environment variable {prefix}__ORACLE_USER is not set. Unable"
+                " to run tests using the 'oracle_config' fixture."
+            )
+        password = os.environ.get(f"{prefix}__ORACLE_PASSWORD")
+        if not password:
+            raise Exception(
+                f"The environment variable {prefix}__ORACLE_PASSWORD is not set."
+                " Unable to run tests using the 'oracle_config' fixture."
+            )
+        database = os.environ.get(f"{prefix}__ORACLE_DATABASE")
+        if not database:
+            raise Exception(
+                f"The environment variable {prefix}__ORACLE_DATABASE is not set."
+                " Unable to run tests using the 'oracle_config' fixture."
+            )
+        escaped_user = urllib.parse.quote(user)
+        escaped_password = urllib.parse.quote(password)
+        config = OracleConfig(
+            host=host,
+            port=int(port),
+            user=user,
+            password=password,
+            database=database,
+            uri=uri,
+            uri_with_credentials=(
+                f"oracle://{escaped_user}:{escaped_password}@{host}:{port}/{database}"
+            ),
+            credentials=UserPasswordCredentials(user, password),
+        )
+        return config
+    else:
+        name = os.environ.get(
+            f"{prefix}__ORACLE_DOCKER_CONTAINER_NAME",
+            DEFAULT_PYTEST_ORACLE_DOCKER_CONTAINER_NAME,
+        )
+        if worker_id == "master":
+            port = create_docker_oracle_database(name)
+        else:
+            root_tmp_dir = tmp_path_factory.getbasetemp().parent
+            fn = root_tmp_dir / "docker_oracle_creation"
+            with FileLock(str(fn) + ".lock"):
+                port = create_docker_oracle_database(name)
+        config = OracleConfig(
+            host=DB_HOST,
+            port=int(port),
+            user=ORACLE_DB_USER,
+            password=DB_PASSWORD,
+            database=ORACLE_DB_NAME,
+            uri=f"oracle://{DB_HOST}:{port}/{ORACLE_DB_NAME}",
+            uri_with_credentials=(
+                f"oracle://{urllib.parse.quote(ORACLE_DB_USER)}:"
+                f"{urllib.parse.quote(DB_PASSWORD)}@{DB_HOST}:{port}/{ORACLE_DB_NAME}"
+            ),
+            credentials=UserPasswordCredentials(ORACLE_DB_USER, DB_PASSWORD),
+        )
+        return config
 
 
 @dataclass
@@ -1571,29 +1657,35 @@ def create_docker_mariadb_database(
         return port
 
 
-def create_docker_oracle_database():
+def create_docker_oracle_database(
+    name: str = DEFAULT_PYTEST_ORACLE_DOCKER_CONTAINER_NAME,
+    port: int = None,
+):
     logger.info("Starting Oracle container")
     client = docker.from_env()
-    if client.containers.list(
-        filters={"name": DEFAULT_PYTEST_ORACLE_DOCKER_CONTAINER_NAME}
-    ):
+    if containers := client.containers.list(filters={"name": name}):
         logger.info("Oracle container already exists")
-        return
+        container = containers[0]
+        return get_container_port_binding(container, ORACLE_FORWARDED_PORT)
     else:
-        client.containers.run(
-            "container-registry.oracle.com/database/free:23.6.0.0-lite",
-            name=DEFAULT_PYTEST_ORACLE_DOCKER_CONTAINER_NAME,
-            environment=[
-                f"ORACLE_PWD={DB_PASSWORD}",
-            ],
-            ports={"1521/tcp": ORACLE_PORT},
-            detach=True,
-        )
+        port_lock = FileLock(os.path.join(tabsdata_temp_folder(), "free_port.lock"))
+        with port_lock:
+            if port is None:
+                port = get_free_port()
+            client.containers.run(
+                "container-registry.oracle.com/database/free:23.6.0.0-lite",
+                name=name,
+                environment=[
+                    f"ORACLE_PWD={DB_PASSWORD}",
+                ],
+                ports={ORACLE_FORWARDED_PORT: port},
+                detach=True,
+            )
         # Wait for the database to be ready
         retry = 0
         while True:
             try:
-                dsn_tns = oracledb.makedsn(DB_HOST, ORACLE_PORT, service_name="FREE")
+                dsn_tns = oracledb.makedsn(DB_HOST, port, service_name="FREE")
                 mydb = oracledb.connect(
                     user="system", password=DB_PASSWORD, dsn=dsn_tns
                 )
@@ -1648,7 +1740,7 @@ def create_docker_oracle_database():
         )
         mydb.commit()
         logger.info("Oracle container created successfully")
-        return
+        return port
 
 
 # noinspection PyUnusedLocal
