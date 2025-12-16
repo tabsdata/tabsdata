@@ -41,7 +41,7 @@ impl LoopbackIpFilterService {
             let mut request = request;
             request.extensions_mut().insert(request_context);
 
-            let log_span = span!(Level::INFO, "authorized_internal");
+            let log_span = span!(Level::INFO, "loopback_request");
             let future = next.run(request).instrument(log_span);
             Ok(future.await)
         } else {

@@ -5,13 +5,13 @@
 use std::sync::Arc;
 use std::time::Duration;
 use std::{env, process};
-use td_apiserver::ServerRunner;
 use td_apiserver::apiserver::internal::InternalServer;
 use td_apiserver::apiserver::{ApiServer, ApiServerCtx};
 use td_apiserver::config::{Config, DbSchema, Params};
-use td_apiserver::scheduler::{CommitScheduler, RequestScheduler, SchedulerCtx};
+use td_apiserver::scheduler::{FunctionDispatcher, FunctionRequester, SchedulerCtx};
 use td_common::attach::attach;
 use td_common::server::FileWorkerMessageQueue;
+use td_common::server_runner::ServerRunner;
 use td_common::status::ExitStatus;
 use td_common::{about, logging};
 use td_database::sql::DbError;
@@ -240,16 +240,16 @@ fn main() {
                 worker_message_queue.clone(),
                 internal_addresses.clone(),
             );
-            let request_scheduler_server = RequestScheduler::new(&scheduler_context).await;
-            let commit_scheduler_server = CommitScheduler::new(&scheduler_context).await;
+            let function_request_server = FunctionRequester::new(&scheduler_context).await;
+            let function_dispatch_server = FunctionDispatcher::new(&scheduler_context).await;
 
             // Start servers
             ServerRunner::default()
                 .graceful_timeout_secs(Duration::from_secs(30))
                 .server(api_server)
                 .server(internal_server)
-                .server(request_scheduler_server)
-                .server(commit_scheduler_server)
+                .server(function_request_server)
+                .server(function_dispatch_server)
                 .run()
                 .await
         },

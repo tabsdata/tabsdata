@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::scheduler::layers::schedule::unlock_workers;
+use crate::scheduler::layers::request::unlock_workers;
 use ta_services::factory::service_factory;
 use td_common::server::{FileWorkerMessageQueue, WorkerMessageQueue};
 use td_objects::sql::DaoQueries;
@@ -11,7 +11,7 @@ use td_tower::from_fn::from_fn;
 use td_tower::{layer, layers};
 
 #[service_factory(
-    name = ScheduleCommitService,
+    name = DispatchService,
     request = (),
     response = (),
     connection = TransactionProvider,
@@ -37,9 +37,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::SchedulerContext;
     use crate::execution::services::execute::ExecuteFunctionService;
-    use crate::scheduler::services::request::ScheduleRequestService;
+    use crate::scheduler::services::SchedulerContext;
+    use crate::scheduler::services::request::RequestService;
     use ta_services::factory::ServiceFactory;
     use ta_services::service::TdService;
     use td_common::files::{YAML_EXTENSION, get_files_in_folder_sorted_by_name};
@@ -69,7 +69,7 @@ mod tests {
     async fn test_tower_metadata_schedule_commit(db: DbPool) -> Result<(), TdError> {
         use td_tower::metadata::type_of_val;
 
-        ScheduleCommitService::with_defaults(db)
+        DispatchService::with_defaults(db)
             .metadata()
             .await
             .assert_service::<(), ()>(&[type_of_val(&unlock_workers::<FileWorkerMessageQueue>)]);
@@ -118,7 +118,7 @@ mod tests {
         let _ = service.raw_oneshot(request).await?;
 
         let context = SchedulerContext::with_defaults(db.clone());
-        ScheduleRequestService::build(&context)
+        RequestService::build(&context)
             .service()
             .await
             .oneshot(())
@@ -132,7 +132,7 @@ mod tests {
         let created_message = &created_messages[0];
 
         // Actual test
-        ScheduleCommitService::build(&context)
+        DispatchService::build(&context)
             .service()
             .await
             .oneshot(())

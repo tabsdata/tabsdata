@@ -17,6 +17,7 @@ pub mod name;
 pub mod os;
 pub mod provider;
 pub mod server;
+pub mod server_runner;
 pub mod settings;
 pub mod signal;
 pub mod status;

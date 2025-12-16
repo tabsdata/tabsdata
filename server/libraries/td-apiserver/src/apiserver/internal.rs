@@ -2,7 +2,6 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::ServerRunnable;
 use crate::apiserver::ApiServerCtx;
 use crate::apiserver::server::{Server, ServerBuilder, ServerError};
 use crate::layers::cors::CorsService;
@@ -16,6 +15,7 @@ use std::error::Error;
 use std::time::Duration;
 use ta_apiserver::router::RouterExtension;
 use ta_apiserver::status::error_status::ErrorStatus;
+use td_common::server_runner::ServerRunnable;
 use td_error::{ApiError, api_error};
 use td_objects::types::addresses::{InternalServerAddresses, NonEmptyAddresses};
 use tokio::sync::watch;

@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::scheduler::layers::schedule::create_locked_workers;
+use crate::scheduler::layers::request::create_locked_workers;
 use ta_services::factory::service_factory;
 use td_common::server::{FileWorkerMessageQueue, WorkerMessageQueue};
 use td_objects::dxo::function_run::{FunctionRunDB, FunctionRunToExecuteDB, UpdateFunctionRunDB};
@@ -19,7 +19,7 @@ use td_tower::{layer, layers};
 
 // TODO make factory accept generics so scheduler services can be used with different message queues.
 #[service_factory(
-    name = ScheduleRequestService,
+    name = RequestService,
     request = (),
     response = (),
     connection = TransactionProvider,
@@ -61,8 +61,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::SchedulerContext;
     use crate::execution::services::execute::ExecuteFunctionService;
+    use crate::scheduler::services::SchedulerContext;
     use ta_services::factory::ServiceFactory;
     use ta_services::service::TdService;
     use td_common::server::SupervisorMessagePayload;
@@ -93,7 +93,7 @@ mod tests {
     async fn test_tower_metadata_schedule_request(db: DbPool) -> Result<(), TdError> {
         use td_tower::metadata::type_of_val;
 
-        ScheduleRequestService::with_defaults(db)
+        RequestService::with_defaults(db)
             .metadata()
             .await
             .assert_service::<(), ()>(&[
@@ -155,7 +155,7 @@ mod tests {
 
         // Actual test
         let context = SchedulerContext::with_defaults(db.clone());
-        ScheduleRequestService::build(&context)
+        RequestService::build(&context)
             .service()
             .await
             .oneshot(())

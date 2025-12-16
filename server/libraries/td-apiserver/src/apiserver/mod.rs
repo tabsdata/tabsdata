@@ -2,7 +2,6 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::ServerRunnable;
 use crate::apiserver::server::ServerError;
 use crate::apiserver::v1::ApiServerV1;
 use crate::config::Config;
@@ -12,6 +11,7 @@ use std::sync::Arc;
 use ta_services::extension::ContextExt;
 use ta_services::factory::ServiceFactory;
 use td_authz::AuthzContext;
+use td_common::server_runner::ServerRunnable;
 use td_database::sql::DbPool;
 use td_objects::sql::DaoQueries;
 use td_services::auth::session::Sessions;

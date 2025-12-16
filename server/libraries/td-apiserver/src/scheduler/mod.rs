@@ -2,15 +2,15 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::ServerRunnable;
-use crate::scheduler::v1::{CommitSchedulerV1, RequestSchedulerV1};
+use crate::scheduler::v1::{FunctionDispatcherV1, FunctionRequesterV1};
 use async_trait::async_trait;
 use std::sync::Arc;
 use td_common::server::FileWorkerMessageQueue;
+use td_common::server_runner::ServerRunnable;
 use td_database::sql::DbPool;
 use td_objects::sql::DaoQueries;
 use td_objects::types::addresses::InternalServerAddresses;
-use td_services::SchedulerContext;
+use td_services::scheduler::services::SchedulerContext;
 use td_storage::Storage;
 use tokio::sync::watch;
 
@@ -40,46 +40,46 @@ impl SchedulerCtx {
     }
 }
 
-pub enum RequestScheduler {
-    V1(Box<RequestSchedulerV1>),
+pub enum FunctionRequester {
+    V1(Box<FunctionRequesterV1>),
 }
 
-impl RequestScheduler {
+impl FunctionRequester {
     pub async fn new(context: &SchedulerCtx) -> Self {
-        RequestScheduler::V1(Box::new(RequestSchedulerV1::new(context).await))
+        FunctionRequester::V1(Box::new(FunctionRequesterV1::new(context).await))
     }
 }
 
 #[async_trait]
-impl ServerRunnable for RequestScheduler {
+impl ServerRunnable for FunctionRequester {
     async fn run(
         self: Box<Self>,
         shutdown: watch::Receiver<()>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         match *self {
-            RequestScheduler::V1(srv) => srv.run(shutdown).await,
+            FunctionRequester::V1(srv) => srv.run(shutdown).await,
         }
     }
 }
 
-pub enum CommitScheduler {
-    V1(Box<CommitSchedulerV1>),
+pub enum FunctionDispatcher {
+    V1(Box<FunctionDispatcherV1>),
 }
 
-impl CommitScheduler {
+impl FunctionDispatcher {
     pub async fn new(context: &SchedulerCtx) -> Self {
-        CommitScheduler::V1(Box::new(CommitSchedulerV1::new(context).await))
+        FunctionDispatcher::V1(Box::new(FunctionDispatcherV1::new(context).await))
     }
 }
 
 #[async_trait]
-impl ServerRunnable for CommitScheduler {
+impl ServerRunnable for FunctionDispatcher {
     async fn run(
         self: Box<Self>,
         shutdown: watch::Receiver<()>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         match *self {
-            CommitScheduler::V1(srv) => srv.run(shutdown).await,
+            FunctionDispatcher::V1(srv) => srv.run(shutdown).await,
         }
     }
 }

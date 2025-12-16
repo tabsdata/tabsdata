@@ -5,7 +5,6 @@
 mod plain;
 mod tls;
 
-use crate::ServerRunnable;
 use crate::apiserver::server::plain::PlainServer;
 use crate::apiserver::server::tls::TlsServer;
 use async_trait::async_trait;
@@ -20,6 +19,7 @@ use std::fmt::Debug;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use td_common::server::{SSL_CERT_PEM_FILE, SSL_KEY_PEM_FILE};
+use td_common::server_runner::ServerRunnable;
 use td_objects::types::addresses::NonEmptyAddresses;
 use tokio::net::TcpListener;
 use tokio::sync::watch;
