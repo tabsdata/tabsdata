@@ -37,11 +37,12 @@ from tabsdata._utils.bundle_utils import REQUIREMENTS_FILE_NAME
 # noinspection PyProtectedMember
 from tabsdata._utils.tableframe._constants import PYTEST_CONTEXT_ACTIVE
 from tabsdata._utils.temps import tabsdata_temp_folder
+from tabsdata.expansions.foundation.symbols import REQUEST_FILE
 
 logger = logging.getLogger(__name__)
 time_block = TimeBlock()
 
-REQUEST_FILE_NAME = "request.yaml"
+REQUEST_FILE_NAME = REQUEST_FILE
 _ = execute_function_from_bundle_path
 
 

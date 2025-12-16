@@ -34,12 +34,37 @@ script = [
 plugin = "td-task-tracker"
 category = "08 - Linting"
 private = true
+run_task = [
+    { name = [
+        "__os__fmt_rs_expansions_python",
+        "__os__fmt_rs_expansions_polars"
+    ] }
+]
+
+[tasks.__os__fmt_rs_expansions_python]
+plugin = "td-task-tracker"
+category = "08 - Linting"
+private = true
 cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
 script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    debug "🚀 cargo fmt --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --all --check"
-    exec --fail-on-error cargo fmt --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --all --check
+    debug "🚀 cargo fmt --manifest-path ${PROJECT_RS_TO_EXPANSIONS_PYTHON_CARGO_TOML} --all --check"
+    exec --fail-on-error cargo fmt --manifest-path ${PROJECT_RS_TO_EXPANSIONS_PYTHON_CARGO_TOML} --all --check
+    ''']
+
+[tasks.__os__fmt_rs_expansions_polars]
+plugin = "td-task-tracker"
+category = "08 - Linting"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🚀 cargo fmt --manifest-path ${PROJECT_RS_TY_EXPANSIONS_POLARS_CARGO_TOML} --all --check"
+    exec --fail-on-error cargo fmt --manifest-path ${PROJECT_RS_TY_EXPANSIONS_POLARS_CARGO_TOML} --all --check
     ''']

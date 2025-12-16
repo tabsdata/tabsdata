@@ -7,6 +7,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from tabsdata.expansions.foundation.symbols import RESPONSE_FILE
+
 from .yaml_parsing import (
     Data,
     NoData,
@@ -19,7 +21,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-RESPONSE_FILE_NAME = "response.yaml"
+RESPONSE_FILE_NAME = RESPONSE_FILE
 
 
 def create_function_execution_response(

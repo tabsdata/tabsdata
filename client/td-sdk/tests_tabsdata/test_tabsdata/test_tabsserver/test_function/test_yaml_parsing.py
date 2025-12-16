@@ -14,6 +14,7 @@ from tabsdata._tabsserver.function.yaml_parsing import (
     store_function_response_as_yaml,
 )
 from tabsdata._utils.temps import tabsdata_temp_folder
+from tabsdata.expansions.foundation.symbols import RESPONSE_FILE
 
 # noinspection PyUnresolvedReferences
 from .. import pytestmark  # noqa: F401
@@ -31,7 +32,7 @@ def test_store_response_as_yaml_generates_correct_yaml():
     ]
 
     with tempfile.TemporaryDirectory(dir=tabsdata_temp_folder()) as tmpdir:
-        response_file = Path(tmpdir) / "response.yaml"
+        response_file = Path(tmpdir) / RESPONSE_FILE
 
         store_function_response_as_yaml(tables, response_file)
 

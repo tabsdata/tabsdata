@@ -45,13 +45,43 @@ script = [
 plugin = "td-task-tracker"
 category = "02 - Tidy"
 private = true
+run_task = [
+    { name = [
+        "__os__lock_rs_expansions_python",
+        "__os__lock_rs_expansions_polars"
+    ] }
+]
+
+[tasks.__os__lock_rs_expansions_python]
+plugin = "td-task-tracker"
+category = "02 - Tidy"
+private = true
 cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
 script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    cd "${PROJECT_RS_TY_EXPANSIONS_FOLDER}"
+    cd "${PROJECT_RS_TO_EXPANSIONS_PYTHON_FOLDER}"
+
+    debug "🚀 cargo generate-lockfile"
+    exec --fail-on-error cargo generate-lockfile
+
+    debug "🚀 cargo update --verbose -p planus --precise 1.1.1"
+    exit_code = exec --get-exit-code cargo update --verbose -p planus --precise 1.1.1
+    ''']
+
+[tasks.__os__lock_rs_expansions_polars]
+plugin = "td-task-tracker"
+category = "02 - Tidy"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    cd "${PROJECT_RS_TY_EXPANSIONS_POLARS_FOLDER}"
 
     debug "🚀 cargo generate-lockfile"
     exec --fail-on-error cargo generate-lockfile

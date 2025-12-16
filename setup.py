@@ -204,6 +204,21 @@ class CustomBuild(_build):
 
     def run(self):
         super().run()
+        # tabsdata.expansions.foundation -> tabsdata.libs
+        tabsdata_libs_path = os.path.join(
+            "expansions",
+            "python",
+            "modules",
+            "to-foundation",
+            "python",
+            "tabsdata.libs",
+        )
+        if os.path.exists(tabsdata_libs_path):
+            tabsdata_libs_folder = os.path.join(self.build_lib, "tabsdata.libs")
+            logger.info(f"Copying {tabsdata_libs_path} to {tabsdata_libs_folder}")
+            if os.path.exists(tabsdata_libs_folder):
+                shutil.rmtree(tabsdata_libs_folder)
+            shutil.copytree(tabsdata_libs_path, tabsdata_libs_folder)
         # tabsdata.expansions.tableframe -> tabsdata.libs
         tabsdata_libs_path = os.path.join(
             "expansions",
@@ -899,6 +914,17 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
                 ),
                 include=["tabsdata.extensions*"],
             ),
+            # tabsdata.expansions.foundation
+            *find_namespace_packages(
+                where=os.path.join(
+                    "expansions",
+                    "python",
+                    "modules",
+                    "to-foundation",
+                    "python",
+                ),
+                include=["tabsdata.expansions*"],
+            ),
             # tabsdata.expansions.tableframe
             *find_namespace_packages(
                 where=os.path.join(
@@ -919,12 +945,22 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
             ),
             "tabsdata.expansions": os.path.join(
                 "expansions",
-                "polars",
+                "python",
                 "modules",
-                "ty-tableframe",
+                "to-foundation",
                 "python",
                 "tabsdata",
                 "expansions",
+            ),
+            "tabsdata.expansions.foundation": os.path.join(
+                "expansions",
+                "python",
+                "modules",
+                "to-foundation",
+                "python",
+                "tabsdata",
+                "expansions",
+                "foundation",
             ),
             "tabsdata.expansions.tableframe": os.path.join(
                 "expansions",
@@ -1022,6 +1058,11 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
                     "cases",
                     "**",
                     "*",
+                ),
+            ],
+            "tabsdata.expansions.foundation": [
+                os.path.join(
+                    "_*",
                 ),
             ],
             "tabsdata.expansions.tableframe": [

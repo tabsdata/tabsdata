@@ -165,6 +165,7 @@ run_task = [
         "__os__clean_py_te_examples",
         "__os__clean_py_te_tableframe",
         "__os__clean_py_te_variant",
+        "__os__clean_py_to_foundation",
         "__os__clean_py_ty_tableframe",
         "__os__clean_py_tabsdata",
         "__os__clean_py_connectors",
@@ -216,6 +217,7 @@ run_task = [
         "__os__lock_py_te_examples",
         "__os__lock_py_te_tableframe",
         "__os__lock_py_te_variant",
+        "__os__lock_py_to_foundation",
         "__os__lock_py_ty_tableframe",
         "__os__lock_py_tabsdata",
         "__os__lock_py_connectors"
@@ -309,6 +311,7 @@ run_task = [
         "__os__build_py_te_examples",
         "__os__build_py_te_tableframe",
         "__os__build_py_te_variant",
+        "__os__build_py_to_foundation",
         "__os__build_py_ty_tableframe",
         "__os__build_py_tabsdata",
         "__os__build_py_connectors"
@@ -381,6 +384,7 @@ run_task = [
         "__os__egg_py_te_examples",
         "__os__egg_py_te_tableframe",
         "__os__egg_py_te_variant",
+        "__os__egg_py_to_foundation",
         "__os__egg_py_ty_tableframe",
         "__os__egg_py_tabsdata",
         "__os__egg_py_connectors"
@@ -472,6 +476,7 @@ run_task = [
     { name = [
         "__os__test_py_tabsdata",
         "__os__test_py_connectors",
+        "__os__test_py_to_foundation",
         "__os__test_py_ty_tableframe",
         "__os__test_py_ta_features",
         "__os__test_py_ta_tableframe",
@@ -509,6 +514,7 @@ script = [
     array_push ${tests_folders} ${PROJECT_PY_TE_EXAMPLES_FOLDER}/${TESTS_PY_TE_EXAMPLES_FOLDER}
     array_push ${tests_folders} ${PROJECT_PY_TE_TABLEFRAME_FOLDER}/${TESTS_PY_TE_TABLEFRAME_FOLDER}
     array_push ${tests_folders} ${PROJECT_PY_TE_VARIANT_FOLDER}/${TESTS_PY_TE_VARIANT_FOLDER}
+    array_push ${tests_folders} ${PROJECT_PY_TO_FOUNDATION_FOLDER}/${TESTS_PY_TO_FOUNDATION_FOLDER}
     array_push ${tests_folders} ${PROJECT_PY_TY_TABLEFRAME_FOLDER}/${TESTS_PY_TY_TABLEFRAME_FOLDER}
     array_push ${tests_folders} ${PROJECT_PY_TD_TABSDATA_FOLDER}/${TESTS_PY_TD_TABSDATA_FOLDER}
 

@@ -172,17 +172,62 @@ plugin = "td-task-tracker"
 category = "04 - Test"
 private = true
 dependencies = ["__os__set_mode_test_rs"]
+run_task = [
+    { name = [
+        "__os__test_rs_expansions_python",
+        "__os__test_rs_expansions_polars"
+    ] }
+]
+
+[tasks.__os__test_rs_expansions_python]
+plugin = "td-task-tracker"
+category = "04 - Test"
+private = true
+dependencies = ["__os__set_mode_test_rs"]
 cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
 script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --features ${expansions-test-features} --all-targets --tests"
-    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --features ${expansions-test-features} --all-targets --tests
+    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TO_EXPANSIONS_PYTHON_CARGO_TOML} --features ${expansions-test-features} --all-targets --tests"
+    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TO_EXPANSIONS_PYTHON_CARGO_TOML} --features ${expansions-test-features} --all-targets --tests
 
-    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} nextest run --build-jobs 16 --locked --no-fail-fast --test-threads 32 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --features ${expansions-test-features} --all-targets"
-    exit_code = exec --get-exit-code cargo %{td-toolchain-token}%{td-toolchain} nextest run --build-jobs 16 --locked --no-fail-fast --test-threads 32 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --features ${expansions-test-features} --all-targets
+    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} nextest run --build-jobs 16 --locked --no-fail-fast --test-threads 32 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TO_EXPANSIONS_PYTHON_CARGO_TOML} --features ${expansions-test-features} --all-targets"
+    exit_code = exec --get-exit-code cargo %{td-toolchain-token}%{td-toolchain} nextest run --build-jobs 16 --locked --no-fail-fast --test-threads 32 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TO_EXPANSIONS_PYTHON_CARGO_TOML} --features ${expansions-test-features} --all-targets
+
+    is_zero = eq ${exit_code} "0"
+    if ${is_zero}
+        info "⌛️ Tests finished with zero exit code: '${exit_code}'"
+    else
+        info "⌛️ Tests finished with non-zero exit code: '${exit_code}'"
+        TD_FAIL_FAST_RS = get_env TD_FAIL_FAST_RS
+        if not ${TD_FAIL_FAST_RS}
+            info "⌛️ Setting TD_TESTS_CODE_RS to ${exit_code}..."
+            set_env TD_TESTS_CODE_RS ${exit_code}
+        else
+            info "⌛️ Failing fast..."
+            code = exit ${exit_code}
+        end
+    end
+    ''']
+
+[tasks.__os__test_rs_expansions_polars]
+plugin = "td-task-tracker"
+category = "04 - Test"
+private = true
+dependencies = ["__os__set_mode_test_rs"]
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_POLARS_CARGO_TOML} --features ${expansions-test-features} --all-targets --tests"
+    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_POLARS_CARGO_TOML} --features ${expansions-test-features} --all-targets --tests
+
+    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} nextest run --build-jobs 16 --locked --no-fail-fast --test-threads 32 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_POLARS_CARGO_TOML} --features ${expansions-test-features} --all-targets"
+    exit_code = exec --get-exit-code cargo %{td-toolchain-token}%{td-toolchain} nextest run --build-jobs 16 --locked --no-fail-fast --test-threads 32 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_POLARS_CARGO_TOML} --features ${expansions-test-features} --all-targets
 
     is_zero = eq ${exit_code} "0"
     if ${is_zero}

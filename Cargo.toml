@@ -69,6 +69,7 @@ exclude = [
     "macros/facets/td-attach",
     "macros/facets/td-type",
     "macros/facets/tm-error",
+    "macros/facets/tm-pyo3",
     "macros/facets/tm-services",
     "macros/facets/tm-test",
     "macros/facets/tm-tower",
@@ -162,6 +163,9 @@ path = "macros/facets/tm-services"
 
 [workspace.dependencies.tm-error]
 path = "macros/facets/tm-error"
+
+[workspace.dependencies.tm-pyo3]
+path = "macros/facets/tm-pyo3"
 
 [workspace.dependencies.tm-test]
 path = "macros/facets/tm-test"

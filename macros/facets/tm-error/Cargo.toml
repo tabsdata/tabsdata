@@ -3,7 +3,7 @@
 #
 
 [package]
-description = "Tabsdata Error Utilities Macro"
+description = "Tabsdata Error Utilities Macros"
 name = "tm-error"
 
 authors = { workspace = true }

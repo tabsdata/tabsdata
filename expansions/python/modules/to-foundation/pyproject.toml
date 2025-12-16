@@ -1,0 +1,94 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[build-system]
+requires = [
+    "archspec==0.2.5",
+    "colorama==0.4.6",
+    "maturin==1.10.1",
+    "polars==1.35.2",
+    "psutil==7.1.3",
+    "py-cpuinfo==9.0.0",
+    "PyYAML==6.0.3",
+    "setuptools==78.1.1",
+    "tqdm==4.67.1",
+    "tzlocal==5.3.1"]
+build-backend = "maturin"
+
+[tool.flake8]
+exclude = ["*.pyi"]
+
+[project]
+name = "to-foundation"
+requires-python = ">=3.12"
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+]
+dynamic = ["version"]
+
+[tool.maturin]
+python-source = "python"
+module-name = "tabsdata.expansions.foundation._foundation"
+compatibility = "musllinux_1_1"
+
+[tool.black]
+line-length = 88
+preview = true
+extend-exclude = '\.pyi$'
+enable-unstable-feature = ["string_processing"]
+
+[tool.coverage.html]
+directory = "coverage_html_report"
+
+[tool.coverage.report]
+# Regexes for lines to exclude from consideration
+exclude_also = [
+    # Don't complain about abstract methods, they aren't run:
+    "@(abc\\.)?abstractmethod",
+]
+
+[tool.isort]
+profile = "black"
+skip_glob = ["*.pyi"]
+known_first_party = [
+    "tabsdata",
+    "tabsdata_agent",
+    "tabsdata_bigquery",
+    "tabsdata_databricks",
+    "tabsdata_example",
+    "tabsdata_mongodb",
+    "tabsdata_mssql",
+    "tabsdata_salesforce",
+    "tabsdata_snowflake",
+    "ta_features",
+    "ta_tableframe",
+    "te_examples",
+    "te_tableframe",
+    "te_variant",
+    "to_foundation",
+    "ty_tableframe",
+    "tests_tabsdata",
+    "tests_tabsdata_agent",
+    "tests_tabsdata_bigquery",
+    "tests_tabsdata_databricks",
+    "tests_tabsdata_example",
+    "tests_tabsdata_mongodb",
+    "tests_tabsdata_mssql",
+    "tests_tabsdata_salesforce",
+    "tests_tabsdata_snowflake",
+    "tests_ta_features",
+    "tests_ta_tableframe",
+    "tests_te_examples",
+    "tests_te_tableframe",
+    "tests_te_variant",
+    "tests_to_foundation",
+    "tests_ty_tableframe",
+]
+known_third_party = ["docker"]
+skip = ["docker/"]
+
+[tool.licensecheck]
+using = "requirements:requirements.txt"

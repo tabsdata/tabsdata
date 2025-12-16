@@ -30,7 +30,7 @@ const FUNCTIONS_MODULE_NAME: &str = "functions";
 const MOCKUP_MODULE_NAME: &str = "mockup";
 
 #[pymodule]
-fn _expressions(module: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _tableframe(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.setattr(PY_ATTRIBUTE_VERSION, env!("CARGO_PKG_VERSION"))?;
 
     let py = module.py();
@@ -62,6 +62,7 @@ fn _expressions(module: &Bound<'_, PyModule>) -> PyResult<()> {
     Ok(())
 }
 
+//noinspection DuplicatedCode
 fn register_py_module<'a>(
     module_name: &'a str,
     parent: &'a Bound<'a, PyModule>,

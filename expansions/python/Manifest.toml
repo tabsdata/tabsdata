@@ -1,0 +1,11 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[features]
+
+# Test compound feature for all features than should normally be always activated when running tests.
+td-test = ["dummy"]
+
+# Noop feature to simplify features passing to cargo make.
+dummy = []

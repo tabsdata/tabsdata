@@ -32,15 +32,51 @@ script = [
 plugin = "td-task-tracker"
 category = "01 - Clean"
 private = true
+run_task = [
+    { name = [
+        "__os__clean_rs_expansions_python",
+        "__os__clean_rs_expansions_polars"
+    ] }
+]
+
+[tasks.__os__clean_rs_expansions_python]
+plugin = "td-task-tracker"
+category = "01 - Clean"
+private = true
 script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} clean --locked --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML}"
-    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} clean --locked --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML}
+    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} clean --locked --manifest-path ${PROJECT_RS_TO_EXPANSIONS_PYTHON_CARGO_TOML}"
+    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} clean --locked --manifest-path ${PROJECT_RS_TO_EXPANSIONS_PYTHON_CARGO_TOML}
 
-    cd "${PROJECT_RS_TY_EXPANSIONS_FOLDER}/modules"
+    cd "${PROJECT_RS_TO_EXPANSIONS_PYTHON_FOLDER}/modules"
+    extensions = array .so .dll .dylib .pyd
+    for extension in ${extensions}
+        debug "Cleaning extension: ${extension}"
+        glob_files = glob_array ./**/*${extension}*
+        for file in ${glob_files}
+            debug "Cleaning file: ${file}"
+            rm "${file}"
+            output = exec python -c "import os, sys; os.unlink(sys.argv[1])" ${file}
+        end
+    end
+    ''']
+
+[tasks.__os__clean_rs_expansions_polars]
+plugin = "td-task-tracker"
+category = "01 - Clean"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} clean --locked --manifest-path ${PROJECT_RS_TY_EXPANSIONS_POLARS_CARGO_TOML}"
+    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} clean --locked --manifest-path ${PROJECT_RS_TY_EXPANSIONS_POLARS_CARGO_TOML}
+
+    cd "${PROJECT_RS_TY_EXPANSIONS_POLARS_FOLDER}/modules"
     extensions = array .so .dll .dylib .pyd
     for extension in ${extensions}
         debug "Cleaning extension: ${extension}"

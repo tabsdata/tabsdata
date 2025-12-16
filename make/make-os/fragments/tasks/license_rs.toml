@@ -42,8 +42,30 @@ category = "06 - Compliance"
 private = true
 run_task = [
     { name = [
-        # "__os__license_check_list_rs_expansions",
-        "__os__license_check_deny_rs_expansions"
+        "__os__license_check_rs_expansions_python",
+        "__os__license_check_rs_expansions_polars"
+    ] }
+]
+
+[tasks.__os__license_check_rs_expansions_python]
+plugin = "td-task-tracker"
+category = "06 - Compliance"
+private = true
+run_task = [
+    { name = [
+        # "__os__license_check_list_rs_expansions_python",
+        "__os__license_check_deny_rs_expansions_python"
+    ] }
+]
+
+[tasks.__os__license_check_rs_expansions_polars]
+plugin = "td-task-tracker"
+category = "06 - Compliance"
+private = true
+run_task = [
+    { name = [
+        # "__os__license_check_list_rs_expansions_polars",
+        "__os__license_check_deny_rs_expansions_polars"
     ] }
 ]
 
@@ -75,7 +97,7 @@ script = [
     exec --fail-on-error cargo license manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --all-features
     ''']
 
-[tasks.__os__license_check_list_rs_expansions]
+[tasks.__os__license_check_list_rs_expansions_python]
 plugin = "td-task-tracker"
 category = "06 - Compliance"
 private = true
@@ -85,8 +107,22 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    debug "🚀 cargo license manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --all-features"
-    exec --fail-on-error cargo license manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --all-features
+    debug "🚀 cargo license manifest-path ${PROJECT_RS_TO_EXPANSIONS_PYTHON_CARGO_TOML} --all-features"
+    exec --fail-on-error cargo license manifest-path ${PROJECT_RS_TO_EXPANSIONS_PYTHON_CARGO_TOML} --all-features
+    ''']
+
+[tasks.__os__license_check_list_rs_expansions_polars]
+plugin = "td-task-tracker"
+category = "06 - Compliance"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🚀 cargo license manifest-path ${PROJECT_RS_TY_EXPANSIONS_POLARS_CARGO_TOML} --all-features"
+    exec --fail-on-error cargo license manifest-path ${PROJECT_RS_TY_EXPANSIONS_POLARS_CARGO_TOML} --all-features
     ''']
 
 [tasks.__os__license_check_deny_rs_macros]
@@ -116,8 +152,9 @@ script = [
     exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} deny --locked %{td-target-token} %{td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} check --config ${DENY_TOML} --hide-inclusion-graph license
     ''']
 
-[tasks.__os__license_check_deny_rs_expansions]
+[tasks.__os__license_check_deny_rs_expansions_python]
 plugin = "td-task-tracker"
+category = "06 - Compliance"
 private = true
 cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
 script_runner = "@duckscript"
@@ -125,8 +162,22 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} deny --locked %{td-target-token} %{td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} check --config ${DENY_TOML} --hide-inclusion-graph license"
-    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} deny --locked %{td-target-token} %{td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} check --config ${DENY_TOML} --hide-inclusion-graph license
+    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} deny --locked %{td-target-token} %{td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TO_EXPANSIONS_PYTHON_CARGO_TOML} check --config ${DENY_TOML} --hide-inclusion-graph license"
+    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} deny --locked %{td-target-token} %{td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TO_EXPANSIONS_PYTHON_CARGO_TOML} check --config ${DENY_TOML} --hide-inclusion-graph license
+    ''']
+
+[tasks.__os__license_check_deny_rs_expansions_polars]
+plugin = "td-task-tracker"
+category = "06 - Compliance"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} deny --locked %{td-target-token} %{td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TY_EXPANSIONS_POLARS_CARGO_TOML} check --config ${DENY_TOML} --hide-inclusion-graph license"
+    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} deny --locked %{td-target-token} %{td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TY_EXPANSIONS_POLARS_CARGO_TOML} check --config ${DENY_TOML} --hide-inclusion-graph license
     ''']
 
 [tasks.__os__license_report_rs]

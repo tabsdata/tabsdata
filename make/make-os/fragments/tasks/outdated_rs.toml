@@ -34,12 +34,37 @@ script = [
 plugin = "td-task-tracker"
 category = "05 - Inspect"
 private = true
+run_task = [
+    { name = [
+        "__os__outdated_rs_expansions_python",
+        "__os__outdated_rs_expansions_polars"
+    ] }
+]
+
+[tasks.__os__outdated_rs_expansions_python]
+plugin = "td-task-tracker"
+category = "05 - Inspect"
+private = true
 cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
 script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    debug "🚀 cargo upgrade --dry-run --compatible allow --incompatible allow --pinned allow --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML}"
-    exec --fail-on-error cargo upgrade --dry-run --compatible allow --incompatible allow --pinned allow --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML}
+    debug "🚀 cargo upgrade --dry-run --compatible allow --incompatible allow --pinned allow --manifest-path ${PROJECT_RS_TO_EXPANSIONS_PYTHON_CARGO_TOML}"
+    exec --fail-on-error cargo upgrade --dry-run --compatible allow --incompatible allow --pinned allow --manifest-path ${PROJECT_RS_TO_EXPANSIONS_PYTHON_CARGO_TOML}
+    ''']
+
+[tasks.__os__outdated_rs_expansions_polars]
+plugin = "td-task-tracker"
+category = "05 - Inspect"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🚀 cargo upgrade --dry-run --compatible allow --incompatible allow --pinned allow --manifest-path ${PROJECT_RS_TY_EXPANSIONS_POLARS_CARGO_TOML}"
+    exec --fail-on-error cargo upgrade --dry-run --compatible allow --incompatible allow --pinned allow --manifest-path ${PROJECT_RS_TY_EXPANSIONS_POLARS_CARGO_TOML}
     ''']

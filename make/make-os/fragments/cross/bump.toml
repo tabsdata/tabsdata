@@ -22,6 +22,10 @@ script = [
         info "🚀 cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force \"*\""
         exec --fail-on-error cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force "*"
 
+        cd ${project}/expansions/python/
+        info "🚀 cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force \"*\""
+        exec --fail-on-error cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force "*"
+
         cd ${project}/expansions/polars/
         info "🚀 cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force \"*\""
         exec --fail-on-error cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force "*"
@@ -55,6 +59,10 @@ script = [
         exec --fail-on-error cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force "*"
 
         cd ${project}/
+        info "🚀 cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force \"*\""
+        exec --fail-on-error cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force "*"
+
+        cd ${project}/expansions/python/
         info "🚀 cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force \"*\""
         exec --fail-on-error cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force "*"
 

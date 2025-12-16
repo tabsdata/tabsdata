@@ -97,11 +97,6 @@ path = "../../extensions/rust/te-tableframe"
 
 # External dependencies
 
-# As the links below show, this is a necessary workaround until the aliasing of polars-arrow is
-# better encapsulated in polars.
-# https://github.com/pola-rs/polars/issues/23902
-# https://github.com/pola-rs/polars/pull/23918
-
 [workspace.dependencies.chrono]
 version = "0.4.42"
 

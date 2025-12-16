@@ -31,7 +31,7 @@ dynamic = ["version"]
 
 [tool.maturin]
 python-source = "python"
-module-name = "tabsdata.expansions.tableframe._expressions"
+module-name = "tabsdata.expansions.tableframe._tableframe"
 compatibility = "musllinux_1_1"
 
 [tool.black]
@@ -68,6 +68,7 @@ known_first_party = [
     "te_examples",
     "te_tableframe",
     "te_variant",
+    "to_foundation",
     "ty_tableframe",
     "tests_tabsdata",
     "tests_tabsdata_agent",
@@ -83,6 +84,7 @@ known_first_party = [
     "tests_te_examples",
     "tests_te_tableframe",
     "tests_te_variant",
+    "tests_to_foundation",
     "tests_ty_tableframe",
 ]
 known_third_party = ["docker"]

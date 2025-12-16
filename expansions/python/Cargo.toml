@@ -1,0 +1,152 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[package]
+description = "Tabsdata Rust PyO3 Expansions"
+name = "to-expansions"
+edition = "2024"
+version = "1.6.0"
+license = "Apache 2.0"
+build = "build.rs"
+
+[workspace.package]
+authors = [
+    "Aleix Lascorz Guiu    (tabsleix)     <aleix@tabsdata.com>",
+    "Alejandro Abdelnur    (tucu0)        <tucu@tabsdata.com>",
+    "Arvind Prabhakar      (aptabs)       <arvind@tabsdata.com>",
+    "David Sánchez Frías   (tabsdavid)    <david@tabsdata.com>",
+    "Dimas Cabré i Chacón  (aoinokimi)    <dragon@tabsdata.com>",
+    "Joaquín Bo Díaz       (joaquin041)   <joaquin@tabsdata.com>",
+    "Shreyas Vankayalapati (shreyasvan01) <shreyans@tabsdata.com>"
+]
+edition = "2024"
+homepage = "https://www.tabsdata.com"
+license = "Apache 2.0"
+publish = false
+readme = "../../README.md"
+repository = "https://github.com/tabsdata/tabsdata"
+rust-version = "1.91.1"
+version = "1.6.0"
+
+[workspace]
+members = [
+    "./modules/to-foundation",
+]
+
+[[bin]]
+name = "auto"
+path = "auto.rs"
+
+[profile.dev]
+codegen-units = 4096
+debug = true
+incremental = true
+lto = "off"
+opt-level = 0
+panic = "unwind"
+strip = "none"
+
+[profile.integration]
+inherits = "release"
+codegen-units = 16
+incremental = true
+lto = false
+opt-level = 0
+
+[profile.assembly]
+inherits = "release"
+codegen-units = 1
+debug = 0
+incremental = false
+lto = "fat"
+opt-level = "z"
+panic = "abort"
+strip = "debuginfo"
+
+[package.metadata.cargo-machete]
+ignored = ["openssl", "toml", "td-build", "ta-system", "te-system"]
+
+[features]
+
+# This feature enbles enterprise functionalities not available in the open source implementation.
+# It should be normally used only for cross-crates tests.
+enterprise = []
+
+td-test = ["dummy"]
+dummy = []
+
+# Internal dependencies
+
+## Libraries
+
+[workspace.dependencies.td-build]
+path = "../../devutils/automation/tasks/cargo/td-build"
+
+## Macros
+
+[workspace.dependencies.tm-pyo3]
+path = "../../macros/facets/tm-pyo3"
+
+[workspace.dependencies.ta-system]
+path = "../../server/libraries/ta-system"
+
+[workspace.dependencies.te-system]
+path = "../../extensions/rust/te-system"
+
+[workspace.dependencies.td-common]
+path = "../../server/libraries/td-common"
+
+[workspace.dependencies.td-error]
+path = "../../server/libraries/td-error"
+
+# External dependencies
+
+[workspace.dependencies.openssl]
+version = "0.10.75"
+features = ["vendored"]
+
+[workspace.dependencies.pyo3]
+version = "0.26.0"
+features = ["abi3-py312", "anyhow", "macros", "multiple-pymethods", "num-bigint", "num-complex", "num-rational", "rust_decimal", "serde", "smallvec"]
+
+[workspace.dependencies.pyo3-log]
+version = "0.13.2"
+
+[workspace.dependencies.pyo3-stub-gen]
+version = "0.17.2"
+
+[workspace.dependencies.pyo3-stub-gen-derive]
+version = "0.17.2"
+
+[workspace.dependencies.toml]
+version = "0.9.8"
+
+[workspace.dependencies.tracing]
+version = "0.1.41"
+
+[workspace.dependencies.tracing-subscriber]
+version = "0.3.20"
+
+[build-dependencies]
+
+# Internal dependencies
+
+td-build = { workspace = true }
+
+# External dependencies
+
+toml = { workspace = true }
+
+[dependencies]
+
+# Internal dependencies
+
+ta-system = { workspace = true }
+te-system = { workspace = true }
+
+
+# External dependencies
+
+[target.'cfg(target_os = "linux")'.dependencies]
+openssl = { workspace = true, features = ["vendored"] }

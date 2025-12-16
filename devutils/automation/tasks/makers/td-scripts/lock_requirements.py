@@ -78,6 +78,33 @@ def gather_connectors(root: str) -> list[tuple[str, str]]:
     return sorted(connectors)
 
 
+# noinspection DuplicatedCode
+def gather_python_modules(root: str) -> list[tuple[str, str]]:
+    polars_modules_folders = [
+        ("expansions", os.path.join(root, "expansions", "python", "modules")),
+    ]
+
+    polars_modules: list[tuple[str, str]] = []
+
+    for polars_modules_root, polars_modules_folder in polars_modules_folders:
+        if not os.path.isdir(polars_modules_folder):
+            continue
+
+        for entry in os.scandir(polars_modules_folder):
+            if entry.is_dir():
+                if not entry.name.startswith("to-"):
+                    raise ValueError(
+                        f"⛔️ Invalid python module folder name: {entry.name}"
+                    )
+                polars_modules.append((polars_modules_root, entry.name))
+                logger.debug(
+                    f"📦️ Inserting python module {entry.name} from"
+                    f" {polars_modules_root}"
+                )
+    return sorted(polars_modules)
+
+
+# noinspection DuplicatedCode
 def gather_polars_modules(root: str) -> list[tuple[str, str]]:
     polars_modules_folders = [
         ("expansions", os.path.join(root, "expansions", "polars", "modules")),
@@ -249,6 +276,7 @@ def lock_requirements_third_party_all(
 def lock_pyprojects(
     root: Path,
     connectors: list[tuple[str, str]],
+    python_modules: list[tuple[str, str]],
     polars_modules: list[tuple[str, str]],
 ):
     def lock_pyproject(module_folder: Path, connector_modules: set[str]):
@@ -320,6 +348,18 @@ def lock_pyprojects(
         )
         lock_pyproject(connector_folder, connector_names)
 
+    for base, name in python_modules:
+        polars_module_folder = Path(
+            os.path.join(
+                root,
+                base,
+                "python",
+                "modules",
+                name,
+            )
+        )
+        lock_pyproject(polars_module_folder, connector_names)
+
     for base, name in polars_modules:
         polars_module_folder = Path(
             os.path.join(
@@ -354,13 +394,14 @@ def lock_pytest_ini(root: str) -> None:
 def lock(root: str):
     year = datetime.now().year
     connectors = gather_connectors(root)
+    python_modules = gather_python_modules(root)
     polars_modules = gather_polars_modules(root)
     lock_requirements_dev(root, connectors, year)
     lock_requirements_test(root, connectors, year)
     lock_requirements_dev_first_party(root, connectors, year)
     lock_requirements_first_party(root, connectors, year)
     lock_requirements_third_party_all(root, connectors, year)
-    lock_pyprojects(Path(root), connectors, polars_modules)
+    lock_pyprojects(Path(root), connectors, python_modules, polars_modules)
     lock_pytest_ini(root)
 
     logger.info("🔑 Python connectors, dependencies and requirements locked!")
