@@ -7,8 +7,6 @@ from __future__ import annotations
 from abc import ABC
 from typing import TYPE_CHECKING, Literal, Optional, Self, get_args
 
-from sqlalchemy.sql.functions import count
-
 from tabsdata.dataquality._utils import _is_collection
 from tabsdata.exceptions import DataQualityConfigurationError, ErrorCode
 from tabsdata.typing._specs import BucketsSpec, TableSpec
@@ -263,14 +261,14 @@ class Threshold:
             raise DataQualityConfigurationError(ErrorCode.DQCE73, value, type(value))
 
     @classmethod
-    def count(cls, count: int) -> Self:
+    def count(cls, rows: int) -> Self:
         """
         Number of rows that will fail the transaction.
         """
-        if count is None:
+        if rows is None:
             raise DataQualityConfigurationError(ErrorCode.DQCE70)
         t = cls.__new__(cls)
-        t.__init__count(count)
+        t.__init__count(rows)
         return t
 
     @classmethod
@@ -526,8 +524,8 @@ class Summary(Operation):
         Creates a data quality summary.
 
         Args:
-            table (str, optional): Name of the data quality summary table. Default name is
-                   `<table_name>_dq_summary`
+            table (str, optional): Name of the data quality summary table. Default name
+                   is `<table_name>_dq_summary`.
             tags (str | list[str] | None, optional): Tag(s) for the operation.
                 Tags can be used by DataQuality operations to select which classifiers
                 to operate on. If a DataQuality operation does not define a tag, it

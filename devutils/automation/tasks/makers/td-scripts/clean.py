@@ -7,7 +7,9 @@ import importlib
 import importlib.util
 import os
 import shutil
+import stat
 import sys
+import time
 from types import ModuleType
 
 EXAMPLES_GUIDES_BOOK_PATH = (
@@ -32,6 +34,28 @@ def load(module_name) -> ModuleType:
 logger = load("log").get_logger()
 
 
+def rmtree_with_retry(path, max_retries=16, delay=3):
+    for attempt in range(max_retries):
+        try:
+            shutil.rmtree(path)
+            if attempt > 0:
+                logger.debug(f"✏️ Successfully removed folder {path} "
+                             f"after {attempt + 1} attempts")
+            else:
+                logger.debug(f"✏️ Successfully removed folder {path}")
+            return
+        except Exception as error:
+            if attempt < max_retries - 1:
+                logger.debug(f"✏️ Attempt {attempt + 1}/{max_retries} failed "
+                             f"removing folder {path}; "
+                             f"retrying in {delay}s...")
+                time.sleep(delay)
+            else:
+                logger.debug(f"✏️ Failed to remove folder {path} "
+                             f"after {max_retries} attempts: {error}")
+                raise
+
+
 def clean(project_folder, inclusion_patterns, exclusion_patterns):
     logger.debug(f"✏️ Cleaning project: {project_folder}")
 
@@ -54,8 +78,7 @@ def clean(project_folder, inclusion_patterns, exclusion_patterns):
             elif "target" in full_path and "deps" in full_path and pattern == "*.log.*":
                 logger.debug(f"✏️    - Skipping removal of reserved file: {full_path}")
             elif os.path.isdir(full_path):
-                logger.debug(f"✏️    - Removing directory: {full_path}")
-                shutil.rmtree(full_path)
+                rmtree_with_retry(full_path)
             elif os.path.isfile(full_path):
                 basename = os.path.basename(path)
                 if basename in exclusion_patterns:
@@ -66,8 +89,7 @@ def clean(project_folder, inclusion_patterns, exclusion_patterns):
 
     target_folder = os.path.join(project_folder, "target")
     if os.path.isdir(target_folder) and not os.listdir(target_folder):
-        logger.debug(f"✏️    - Removing directory: {target_folder}")
-        shutil.rmtree(target_folder)
+        rmtree_with_retry(target_folder)
 
 
 def clean_py(project_folder):

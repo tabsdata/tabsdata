@@ -280,7 +280,7 @@ def test_subscriber_with_optional_parameters():
 
 
 def test_subscriber_with_crontab_trigger():
-    crontab = Crontab("mask")
+    crontab = Crontab("25 19 * * 1,3,5")
 
     @subscriber(
         TableInput("input"),
@@ -295,7 +295,7 @@ def test_subscriber_with_crontab_trigger():
 
 
 def test_transformer_with_crontab_trigger():
-    crontab = Crontab("mask")
+    crontab = Crontab("25 19 * * 1,3,5")
 
     @transformer(
         TableInput("input"),
@@ -310,7 +310,7 @@ def test_transformer_with_crontab_trigger():
 
 
 def test_publisher_with_crontab_trigger():
-    crontab = Crontab("mask")
+    crontab = Crontab("25 19 * * 1,3,5")
 
     @publisher(
         LocalFileSource("input.csv"),

@@ -375,9 +375,9 @@ class Categorizer(Classifier):
         Args:
             cols(ColsSpec, optional): Column(s) to categorize.
             scale(Scale): Scale to use for categorization.
-            tags(str | list[str] | None, optional): Tag(s) for the classification results. Tags allow
-                performing multiple actions, with each taking into account
-                only classifiers that have certain tag(s).
+            tags(str | list[str] | None, optional): Tag(s) for the classification
+                results. Tags allow performing multiple actions, with each taking into
+                account only classifiers that have certain tag(s).
 
         """
         super().__init__(cols=cols, tags=tags)
