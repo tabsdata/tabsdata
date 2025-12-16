@@ -196,15 +196,19 @@ pub async fn resolve_execution_plan_versions(
                     let mut conn = connection.lock().await;
                     let conn = conn.get_mut_connection()?;
 
-                    let (versions, node, self_dependency) = match versions {
-                        GraphEdge::Output { versions, .. } => (versions, target, false),
-                        GraphEdge::Trigger { versions } => (versions, source, false),
+                    let (versions, function, table, self_dependency) = match versions {
+                        GraphEdge::Output { versions, .. } => (versions, source, target, false),
+                        GraphEdge::Trigger { versions } => (versions, target, source, false),
                         GraphEdge::Dependency {
                             versions,
                             dependency,
-                        } => (versions, source, *dependency.self_dependency),
+                        } => (versions, target, source, *dependency.self_dependency),
                     };
-                    let table = match node {
+                    let function = match function {
+                        GraphNode::Function(function) => function,
+                        _ => unreachable!(),
+                    };
+                    let table = match table {
                         GraphNode::Table(table) => table,
                         _ => unreachable!(),
                     };
@@ -218,6 +222,7 @@ pub async fn resolve_execution_plan_versions(
                     };
 
                     let found = VersionResolver::builder()
+                        .function_id(&function.function_id)
                         .table_id(&table.table_id)
                         .versions(&lookup_versions)
                         .triggered_on(&triggered_on)
@@ -262,45 +267,49 @@ pub async fn build_function_requirements(
 
     let mut input_idx = 0;
     for (function, table, edge) in execution_plan.function_table_input_versions() {
-        let is_multiple_versions = edge.versions().original.is_multiple();
+        let transaction = transaction_map.get(&transaction_by.key(function)?)?;
+        let mut builder = FunctionRequirementDB::builder();
+        builder
+            // current
+            .collection_id(function.collection_id)
+            .execution_id(transaction.execution_id)
+            .transaction_id(transaction.id)
+            .function_run_id(function_runs_map[&function.function_version_id].id)
+            // condition
+            .requirement_table_id(table.table_id)
+            .requirement_function_version_id(table.function_version_id)
+            .requirement_table_version_id(table.table_version_id);
 
-        for (version_pos, version) in edge.versions().inner.iter().enumerate() {
-            // If single version, we set version_pos to -1 to indicate so.
-            // There should always be a single inner version in that case.
-            let version_pos = if is_multiple_versions {
-                version_pos as i32
-            } else {
-                -1
-            };
-
-            let transaction = transaction_map.get(&transaction_by.key(function)?)?;
-            let mut builder = FunctionRequirementDB::builder();
+        if let Some(dependency) = edge.dependency_pos() {
             builder
-                // current
-                .collection_id(function.collection_id)
-                .execution_id(transaction.execution_id)
-                .transaction_id(transaction.id)
-                .function_run_id(function_runs_map[&function.function_version_id].id)
-                // condition
-                .requirement_table_id(table.table_id)
-                .requirement_function_version_id(table.function_version_id)
-                .requirement_table_version_id(table.table_version_id)
-                .requirement_version_pos(VersionPos::try_from(version_pos)?);
+                .requirement_input_idx(InputIdx::try_from(input_idx)?)
+                .requirement_dependency_pos(Some(*dependency));
+            input_idx += 1;
+        }
 
-            if let Some(dependency) = edge.dependency_pos() {
-                builder
-                    .requirement_input_idx(InputIdx::try_from(input_idx)?)
-                    .requirement_dependency_pos(Some(*dependency));
-                input_idx += 1;
-            }
-
-            if let Some(version) = version {
-                builder
-                    .requirement_function_run_id(version.function_run_id)
-                    .requirement_table_data_version_id(version.id);
-            }
-
+        if edge.versions().inner.is_empty() {
+            // If empty was resolved, we set version_pos to NO_VERSIONS to indicate so.
+            builder.requirement_version_pos(VersionPos::NO_VERSIONS);
             conditions.push(builder.build()?);
+        } else {
+            for (version_pos, version) in edge.versions().inner.iter().enumerate() {
+                // If single version, we set version_pos to SINGLE_VERSION to indicate so.
+                // There should always be a single inner version in that case.
+                let version_pos = if edge.versions().original.is_multiple() {
+                    VersionPos::try_from(version_pos as i32)?
+                } else {
+                    VersionPos::SINGLE_VERSION
+                };
+                builder.requirement_version_pos(version_pos);
+
+                if let Some(version) = version {
+                    builder
+                        .requirement_function_run_id(version.function_run_id)
+                        .requirement_table_data_version_id(version.id);
+                }
+
+                conditions.push(builder.build()?);
+            }
         }
     }
 

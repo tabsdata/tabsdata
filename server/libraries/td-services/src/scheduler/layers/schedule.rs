@@ -136,7 +136,7 @@ pub async fn create_locked_workers<T: WorkerMessageQueue>(
 
                 // Build input tables
                 let requirements: Vec<FunctionRequirementDBWithNames> = queries
-                    .select_by::<FunctionRequirementDBWithNames>(&(&f.id))?
+                    .select_by::<FunctionRequirementDBWithNames>(&f.id)?
                     .build_query_as()
                     .fetch_all(&mut *conn)
                     .await
@@ -231,7 +231,7 @@ pub async fn create_locked_workers<T: WorkerMessageQueue>(
 
                 // Build output tables
                 let tables: Vec<TableDataVersionDBWithNames> = queries
-                    .select_by::<TableDataVersionDBWithNames>(&(f.id))?
+                    .select_by::<TableDataVersionDBWithNames>(&f.id)?
                     .build_query_as()
                     .fetch_all(&mut *conn)
                     .await
@@ -453,7 +453,7 @@ pub async fn unlock_workers<T: WorkerMessageQueue>(
             // TODO the queue should use this typed too
             let message_id = WorkerId::try_from(message.id.as_str())?;
             match queries
-                .update_by::<_, WorkerDB>(&update, &(&message_id))?
+                .update_by::<_, WorkerDB>(&update, &message_id)?
                 .build()
                 .execute(&mut *conn)
                 .await

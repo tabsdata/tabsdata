@@ -93,6 +93,7 @@ mod tests {
             id: Default::default(),
             name: None,
             collection_id: Default::default(),
+            function_id: Default::default(),
             function_version_id: Default::default(),
             triggered_on: Default::default(),
             triggered_by_id: Default::default(),

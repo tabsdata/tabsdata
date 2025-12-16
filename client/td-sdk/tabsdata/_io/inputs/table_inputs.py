@@ -208,21 +208,30 @@ def _execute_table_importer(
             )
             tableframe_list.append(tf)
         elif isinstance(execution_context_input_entry, TableVersions):
-            logger.debug(
-                f"Matching TableVersions '{execution_context_input_entry}' with source"
-                f" '{source_table_str}'"
-            )
-            list_of_table_objects = execution_context_input_entry.list_of_table_objects
-            versioned_tableframes_list: list[TableFrame | None] = []
-            for table in list_of_table_objects:
-                _verify_source_tables_match(table, source_table_str)
-                tf = scan_tf_from_table(
-                    execution_context,
-                    table,
-                    fail_on_none_uri=False,
+            if execution_context_input_entry.is_empty:
+                logger.debug(
+                    f"{execution_context_input_entry} is empty, returning an empty "
+                    "list in its place."
                 )
-                versioned_tableframes_list.append(tf)
-            tableframe_list.append(versioned_tableframes_list)
+                tableframe_list.append([])
+            else:
+                logger.debug(
+                    f"Matching TableVersions '{execution_context_input_entry}' with"
+                    f" source '{source_table_str}'"
+                )
+                list_of_table_objects = (
+                    execution_context_input_entry.list_of_table_objects
+                )
+                versioned_tableframes_list: list[TableFrame | None] = []
+                for table in list_of_table_objects:
+                    _verify_source_tables_match(table, source_table_str)
+                    tf = scan_tf_from_table(
+                        execution_context,
+                        table,
+                        fail_on_none_uri=False,
+                    )
+                    versioned_tableframes_list.append(tf)
+                tableframe_list.append(versioned_tableframes_list)
         else:
             logger.error(
                 f"Invalid table type: {type(execution_context_input_entry)}. No data"

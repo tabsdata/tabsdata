@@ -27,6 +27,9 @@ pub struct FunctionOnly;
 #[td_type::typed(bool(default = false))]
 pub struct HasData;
 
+#[td_type::typed(bool)]
+pub struct IsEmptyVersions;
+
 #[td_type::typed(bool(default = false))]
 pub struct PasswordMustChange;
 

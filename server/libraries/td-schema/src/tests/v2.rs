@@ -9,6 +9,8 @@ use sqlx::SqlitePool;
 async fn test_functions() {
     let target_version = 2;
 
+    async fn setup(_pool: &SqlitePool) {}
+
     async fn pre_migration(pool: &SqlitePool) {
         let columns: Vec<(String,)> = sqlx::query_as("PRAGMA table_info(functions)")
             .fetch_all(pool)
@@ -41,5 +43,5 @@ async fn test_functions() {
         );
     }
 
-    run_migration_test(target_version, pre_migration, post_migration).await;
+    run_migration_test(target_version, setup, pre_migration, post_migration).await;
 }

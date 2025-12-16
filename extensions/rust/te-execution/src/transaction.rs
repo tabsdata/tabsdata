@@ -32,7 +32,7 @@ mod tests {
     use crate::transaction::TransactionBy;
     use td_objects::transaction::map::TransactionMapperError;
     use td_objects::types::basic::{
-        CollectionId, CollectionName, FunctionName, FunctionVersionId, TransactionKey,
+        CollectionId, CollectionName, FunctionId, FunctionName, FunctionVersionId, TransactionKey,
     };
     use td_objects::types::graph::FunctionNode;
 
@@ -49,6 +49,7 @@ mod tests {
         let function = FunctionNode::builder()
             .collection_id(CollectionId::default())
             .collection(CollectionName::try_from("test")?)
+            .function_id(FunctionId::default())
             .function_version_id(key)
             .name(FunctionName::try_from("name")?)
             .build()?;

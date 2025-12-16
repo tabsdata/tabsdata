@@ -10,8 +10,8 @@ mod definitions {
     use crate::dxo::table_data_version::ExecutionTableDataVersionRead;
     use crate::types::basic::{
         AtTime, CollectionId, CollectionName, Dot, ExecutionId, ExecutionName, ExecutionStatus,
-        FunctionName, FunctionOnly, FunctionRunStatus, FunctionVersionId, StatusCount, System,
-        TableDataVersionId, TableName, TableVersionId, TransactionId, TriggeredOn, UserId,
+        FunctionId, FunctionName, FunctionOnly, FunctionRunStatus, FunctionVersionId, StatusCount,
+        System, TableDataVersionId, TableName, TableVersionId, TransactionId, TriggeredOn, UserId,
         UserName,
     };
     use crate::types::composed::TableVersions;
@@ -31,7 +31,11 @@ mod definitions {
     }
 
     #[td_type::Dao]
-    #[dao(sql_table = "executions")]
+    #[dao(
+        sql_table = "executions",
+        order_by = "triggered_on",
+        versioned(order_by = "triggered_on", partition_by = "id")
+    )]
     #[td_type(
         builder(try_from = FunctionDBWithNames, skip_all),
         updater(try_from = RequestContext, skip_all),
@@ -45,6 +49,8 @@ mod definitions {
         pub name: Option<ExecutionName>,
         #[td_type(extractor, builder(include))]
         pub collection_id: CollectionId,
+        #[td_type(builder(include))]
+        pub function_id: FunctionId, // Added in v3
         #[td_type(builder(field = "id"))]
         #[td_type(extractor)]
         pub function_version_id: FunctionVersionId,

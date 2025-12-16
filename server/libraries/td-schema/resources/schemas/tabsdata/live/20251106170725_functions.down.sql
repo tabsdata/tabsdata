@@ -4,3 +4,5 @@
 
 ALTER TABLE executions
     DROP COLUMN recursion_options;
+ALTER TABLE executions
+    DROP COLUMN function_id;

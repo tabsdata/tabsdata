@@ -155,7 +155,11 @@ pub fn parse_version(s: impl Into<String>) -> Result<Version, TdError> {
 
 const UNNAMED_VERSION_PATTERN: &str =
     "(HEAD(\\^{0,10})|HEAD(~[0-9]{1,7})|INITIAL(\\^{0,10})|INITIAL(\\~[0-9]{1,7})|[A-Z0-9]{26})";
+const NEW_VERSION_PATTERN: &str = "NEW";
 const VERSIONS_PATTERN: &str = concat!(
+    "(?<new>",
+    NEW_VERSION_PATTERN,
+    ")|",
     "^((?<single>",
     UNNAMED_VERSION_PATTERN,
     ")|(?<list>(",
@@ -187,7 +191,9 @@ pub fn parse_versions(s: impl Into<String>) -> Result<Versions, TdError> {
         )
     })?;
 
-    if let Some(version) = captures.name("single") {
+    if captures.name("new").is_some() {
+        Ok(Versions::New)
+    } else if let Some(version) = captures.name("single") {
         Ok(Versions::Single(parse_version(version.as_str())?))
     } else if let Some(list) = captures.name("list") {
         let parsed_list = list
@@ -503,6 +509,7 @@ mod tests {
             "collection/table@INITIAL^^..HEAD",
             "collection/table@INITIAL^^^^,HEAD^,INITIAL",
             "collection/table@INITIAL^^..HEAD",
+            "collection/table@NEW",
             valid_table_with_id.as_str(),
         ];
         valid_tables.into_iter().for_each(|table| {
@@ -552,6 +559,8 @@ mod tests {
             "collection/table@INITIAL~1",
             "collection/table@INITIAL^^^^,INITIAL^,INITIAL",
             "collection/table@INITIAL^^..INITIAL",
+            "collection/table@NEW^",
+            "collection/table@NEW..HEAD^",
         ];
         invalid_table_refs.into_iter().for_each(|table| {
             let parsed = parse_table_ref::<TableNameDto, _>(table);

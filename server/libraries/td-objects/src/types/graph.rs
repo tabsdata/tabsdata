@@ -6,8 +6,8 @@ use crate::dxo::function::FunctionDBWithNames;
 use crate::dxo::table::TableDBWithNames;
 use crate::dxo::table_data_version::ExecutionTableDataVersionRead;
 use crate::types::basic::{
-    CollectionId, CollectionName, DependencyPos, FunctionName, FunctionVersionId, SelfDependency,
-    System, TableFunctionParamPos, TableId, TableName, TableVersionId,
+    CollectionId, CollectionName, DependencyPos, FunctionId, FunctionName, FunctionVersionId,
+    SelfDependency, System, TableFunctionParamPos, TableId, TableName, TableVersionId,
 };
 use crate::types::composed::TableVersions;
 use serde::{Deserialize, Serialize};
@@ -23,6 +23,7 @@ use utoipa::ToSchema;
 pub struct FunctionNode {
     pub collection_id: CollectionId,
     pub collection: CollectionName,
+    pub function_id: FunctionId,
     #[td_type(builder(field = "id"))]
     pub function_version_id: FunctionVersionId,
     pub name: FunctionName,
@@ -78,6 +79,7 @@ impl GraphNode<FunctionNode, TableNode> {
                 FunctionNode::builder()
                     .collection_id(table.collection_id)
                     .collection(table.collection.clone())
+                    .function_id(table.function_id)
                     .function_version_id(table.function_version_id)
                     .name(table.function.clone())
                     .build()?,
@@ -116,6 +118,7 @@ impl GraphNode<FunctionNode, TableNode> {
                 FunctionNode::builder()
                     .collection_id(function.collection_id)
                     .collection(function.collection.clone())
+                    .function_id(function.function_id)
                     .function_version_id(function.id)
                     .name(function.name.clone())
                     .build()?,

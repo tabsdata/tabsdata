@@ -7,7 +7,7 @@ use crate::sql::{Queries, gen_where_clause};
 use crate::table_ref::{Version, Versions};
 use crate::types::{AsDynSqlEntities, SqlEntity};
 use std::ops::Deref;
-use td_error::TdError;
+use td_error::{ApiError, TdError, api_error};
 use tracing::trace;
 
 pub const LATEST_VERSIONS_CTE: &str = "latest_versions";
@@ -307,25 +307,30 @@ where
         },
         Versions::List(versions) => {
             query_builder.push(" AND ");
-            let mut separated = query_builder.separated(" OR ");
-            versions.iter().for_each(|version| match version {
-                Version::Fixed(id) => {
-                    separated.push(" rv.id = ");
-                    separated.push_bind_unseparated(id);
-                }
-                Version::Head(back) => {
-                    // We are not really using this, as we do not know which of these is
-                    // present or not and we actually need it.
-                    separated.push(" rv.rn = ");
-                    separated.push_bind_unseparated((-back + 1) as i64);
-                }
-                Version::Initial(forward) => {
-                    // We are not really using this, as we do not know which of these is
-                    // present or not and we actually need it.
-                    separated.push(" rv.rn = total_count - ");
-                    separated.push_bind_unseparated(*forward as i64);
-                }
-            });
+            if versions.is_empty() {
+                // empty list, no versions
+                query_builder.push(" 1 = 0 ");
+            } else {
+                let mut separated = query_builder.separated(" OR ");
+                versions.iter().for_each(|version| match version {
+                    Version::Fixed(id) => {
+                        separated.push(" rv.id = ");
+                        separated.push_bind_unseparated(id);
+                    }
+                    Version::Head(back) => {
+                        // We are not really using this, as we do not know which of these is
+                        // present or not and we actually need it.
+                        separated.push(" rv.rn = ");
+                        separated.push_bind_unseparated((-back + 1) as i64);
+                    }
+                    Version::Initial(forward) => {
+                        // We are not really using this, as we do not know which of these is
+                        // present or not and we actually need it.
+                        separated.push(" rv.rn = total_count - ");
+                        separated.push_bind_unseparated(*forward as i64);
+                    }
+                });
+            }
         }
         Versions::Range(from, to) => {
             // Ranges only include versions between older-newer. So doing HEAD~0..HEAD~2 gives
@@ -372,6 +377,10 @@ where
             // Order by rn DESC, so the older versions come first
             query_builder.push(" ORDER BY rv.rn DESC ");
         }
+        Versions::New => Err(api_error!(
+            ApiError::InternalError,
+            "Cannot SELECT Versions::New directly, relative versions must be found beforehand and converted to another form of Versions"
+        ))?,
     }
 
     state_where::<S, D>(query_builder)?;

@@ -24,7 +24,7 @@ class Version:
     """
 
     VERSION_PATTERN = re.compile(
-        r"^(HEAD\^*|HEAD~[0-9]+|INITIAL\^*|INITIAL~[0-9]+|[A-Z0-9]{26})$"
+        r"^(HEAD\^*|HEAD~[0-9]+|INITIAL\^*|INITIAL~[0-9]+|NEW|[A-Z0-9]{26})$"
     )
 
     def __init__(self, version: str):

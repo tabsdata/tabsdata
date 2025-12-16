@@ -10,11 +10,12 @@ use std::fmt::Debug;
 use td_error::display_vec::DisplayVec;
 use td_error::{TdError, display_vec, td_error};
 use td_objects::dxo::crudl::handle_sql_err;
+use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::table_data_version::ActiveTableDataVersionDB;
 use td_objects::sql::DaoQueries;
-use td_objects::sql::cte::TableQueries;
+use td_objects::sql::cte::{CteQueries, TableQueries};
 use td_objects::table_ref::{Version, Versions};
-use td_objects::types::basic::{TableDataVersionId, TableId, TriggeredOn};
+use td_objects::types::basic::{FunctionId, TableDataVersionId, TableId, TriggeredOn};
 
 #[td_error]
 pub enum VersionResolverError {
@@ -29,6 +30,10 @@ pub enum VersionResolverError {
 #[derive(Debug, Builder)]
 #[builder(build_fn(error = "TdError"))]
 pub struct VersionResolver<'a> {
+    // This function is the one requesting the table versions. Some version resolving
+    // might need this version to find the versions required (like NEW, which needs all
+    // versions since the function requesting last executed).
+    function_id: &'a FunctionId,
     table_id: &'a TableId,
     versions: &'a Versions,
     triggered_on: &'a TriggeredOn,
@@ -52,29 +57,14 @@ impl<'a> VersionResolver<'a> {
         let (table_id, versions, triggered_on) = (self.table_id, self.versions, self.triggered_on);
         let versions = match versions {
             Versions::None => {
-                let v = queries
-                    .select_table_data_versions_at::<{ ActiveTableDataVersionDB::All }, ActiveTableDataVersionDB>(
-                        Some(triggered_on),
-                        table_id,
-                        versions,
-                    )?
-                    .build_query_as()
-                    .fetch_optional(&mut *conn)
-                    .await
-                    .map_err(handle_sql_err)?;
+                let v =
+                    optional_data_version(queries, conn, triggered_on, table_id, versions).await?;
                 vec![v]
             }
             Versions::Single(version) => match version {
                 Version::Fixed(version) => {
                     // We fail if fixed not found.
-                    let v = queries
-                        .select_table_data_versions_at::<{ ActiveTableDataVersionDB::All }, ActiveTableDataVersionDB>(
-                            Some(triggered_on),
-                            table_id,
-                            versions,
-                        )?
-                        .build_query_as()
-                        .fetch_one(&mut *conn)
+                    let v = data_version(queries, conn, triggered_on, table_id, versions)
                         .await
                         .map_err(|_| {
                             VersionResolverError::FixedTableDataVersionsNotFound(display_vec![
@@ -84,16 +74,8 @@ impl<'a> VersionResolver<'a> {
                     vec![Some(v)]
                 }
                 Version::Head(_) | Version::Initial(_) => {
-                    let v = queries
-                        .select_table_data_versions_at::<{ ActiveTableDataVersionDB::All }, ActiveTableDataVersionDB>(
-                            Some(triggered_on),
-                            table_id,
-                            versions,
-                        )?
-                        .build_query_as()
-                        .fetch_optional(&mut *conn)
-                        .await
-                        .map_err(handle_sql_err)?;
+                    let v = optional_data_version(queries, conn, triggered_on, table_id, versions)
+                        .await?;
                     vec![v]
                 }
             },
@@ -115,16 +97,14 @@ impl<'a> VersionResolver<'a> {
                 // Each fixed versions is queried by its id to find if it exists or not.
                 let fixed_versions = if !fixed_versions.is_empty() {
                     let version_list = fixed_versions.values().cloned().collect();
-                    let found: Vec<ActiveTableDataVersionDB> = queries
-                        .select_table_data_versions_at::<{ ActiveTableDataVersionDB::All }, ActiveTableDataVersionDB>(
-                            Some(triggered_on),
-                            table_id,
-                            &Versions::List(version_list),
-                        )?
-                        .build_query_as()
-                        .fetch_all(&mut *conn)
-                        .await
-                        .map_err(handle_sql_err)?;
+                    let found = all_data_version(
+                        queries,
+                        conn,
+                        triggered_on,
+                        table_id,
+                        &Versions::List(version_list),
+                    )
+                    .await?;
                     let found: HashMap<_, _> = found.into_iter().map(|v| (*v.id, v)).collect();
 
                     let (absolute_versions, not_found): (HashMap<_, _>, Vec<_>) =
@@ -160,16 +140,14 @@ impl<'a> VersionResolver<'a> {
                             .map(|(min, max)| (min.clone(), max.clone()));
 
                         let versions = if let Some((min, max)) = minmax {
-                            let mut found = queries
-                                .select_table_data_versions_at::<{ ActiveTableDataVersionDB::All }, ActiveTableDataVersionDB>(
-                                    Some(triggered_on),
-                                    table_id,
-                                    &Versions::Range(min, max), // range always older to newer
-                                )?
-                                .build_query_as()
-                                .fetch_all(&mut *conn)
-                                .await
-                                .map_err(handle_sql_err)?;
+                            let mut found = all_data_version(
+                                queries,
+                                conn,
+                                triggered_on,
+                                table_id,
+                                &Versions::Range(min, max), // range always older to newer
+                            )
+                            .await?;
 
                             // We know that this vec has all the versions in the range at most, so we can
                             // get the position by the index of the versions (or None if range is too short).
@@ -221,16 +199,9 @@ impl<'a> VersionResolver<'a> {
                 let relative_from = match from {
                     Version::Head(_) | Version::Initial(_) => Some(from),
                     Version::Fixed(id) => {
-                        let relative: Option<i32> = queries
-                            .find_relative_offset::<{ ActiveTableDataVersionDB::All }, ActiveTableDataVersionDB>(
-                                Some(triggered_on),
-                                table_id,
-                                &Versions::Single(from.clone()),
-                            )?
-                            .build_query_scalar()
-                            .fetch_optional(&mut *conn)
-                            .await
-                            .map_err(handle_sql_err)?;
+                        let relative =
+                            relative_offset(queries, conn, triggered_on, table_id, from.clone())
+                                .await?;
 
                         match relative {
                             Some(relative) => Some(&Version::Head((-relative + 1) as isize)),
@@ -244,16 +215,9 @@ impl<'a> VersionResolver<'a> {
                 let relative_to = match to {
                     Version::Head(_) | Version::Initial(_) => Some(to),
                     Version::Fixed(id) => {
-                        let relative: Option<i32> = queries
-                            .find_relative_offset::<{ ActiveTableDataVersionDB::All }, ActiveTableDataVersionDB>(
-                                Some(triggered_on),
-                                table_id,
-                                &Versions::Single(to.clone()),
-                            )?
-                            .build_query_scalar()
-                            .fetch_optional(&mut *conn)
-                            .await
-                            .map_err(handle_sql_err)?;
+                        let relative =
+                            relative_offset(queries, conn, triggered_on, table_id, to.clone())
+                                .await?;
 
                         match relative {
                             Some(relative) => Some(&Version::Head((-relative + 1) as isize)),
@@ -288,23 +252,16 @@ impl<'a> VersionResolver<'a> {
                     if self.error_on_desc_range {
                         Err(VersionResolverError::InvalidRange(self.versions.clone()))?
                     } else {
-                        vec![None; 0]
+                        vec![]
                     }
                 } else {
                     // And fetch the versions.
-                    let mut found: Vec<_> = queries
-                        .select_table_data_versions_at::<{ ActiveTableDataVersionDB::All }, ActiveTableDataVersionDB>(
-                            Some(triggered_on),
-                            table_id,
-                            versions,
-                        )?
-                        .build_query_as()
-                        .fetch_all(&mut *conn)
-                        .await
-                        .map_err(handle_sql_err)?
-                        .into_iter()
-                        .map(Some)
-                        .collect();
+                    let mut found =
+                        all_data_version(queries, conn, triggered_on, table_id, versions)
+                            .await?
+                            .into_iter()
+                            .map(Some)
+                            .collect::<Vec<_>>();
 
                     // In we didn't find enough versions, we fill with None the empty spots, if possible.
                     let found_size = found.len();
@@ -328,10 +285,166 @@ impl<'a> VersionResolver<'a> {
                     found
                 }
             }
+            Versions::New => {
+                // NEW refers to versions that started existing after the last execution of the
+                // current function. Previous versions to that time (even if they were never used
+                // by the function) are not considered new.
+                // This is useful to maintain consistency, even if removing/adding the table as
+                // a dependency, or depending on one table on NEW and (for example) HEAD.
+                let executions: Vec<ExecutionDB> = queries
+                    .select_versions_at::<{ ExecutionDB::All }, ExecutionDB>(
+                        Some(triggered_on),
+                        self.function_id, // need to use function_id to allow continuity through versions
+                    )?
+                    .build_query_as()
+                    .fetch_all(&mut *conn)
+                    .await
+                    .map_err(handle_sql_err)?;
+                // We get the latest-1 because the current ExecutionDB is already in place, and we
+                // need to ignore it.
+                let last_execution = executions
+                    .len()
+                    .checked_sub(2)
+                    .and_then(|n| executions.get(n));
+
+                match last_execution {
+                    // If there is a previous execution of the function, we can find the latest
+                    // data version of the table that existed up to that time.
+                    Some(last_execution) => {
+                        let last_table_data_version = optional_data_version(
+                            queries,
+                            conn,
+                            &last_execution.triggered_on,
+                            table_id,
+                            &Versions::None,
+                        )
+                        .await?;
+
+                        match last_table_data_version {
+                            // If there is such version, it means that from that point to the present
+                            // all versions are considered NEW.
+                            Some(v) => all_data_version(
+                                queries,
+                                conn,
+                                triggered_on,
+                                table_id,
+                                &Versions::Range(Version::Fixed(v.id), Version::Head(0)),
+                            )
+                            .await?
+                            .into_iter()
+                            // We need to remove the first element, given that Range bounds are included,
+                            // and we do not want the already used lower bound version as a New version.
+                            .skip(1)
+                            .map(Some)
+                            .collect::<Vec<_>>(),
+                            // But if there is not, it means that all data versions are NEW.
+                            None => all_data_version(
+                                queries,
+                                conn,
+                                triggered_on,
+                                table_id,
+                                &Versions::Range(Version::Initial(0), Version::Head(0)),
+                            )
+                            .await?
+                            .into_iter()
+                            .map(Some)
+                            .collect(),
+                        }
+                    }
+                    // And if there is no execution, we can also consider all versions as NEW.
+                    None => all_data_version(
+                        queries,
+                        conn,
+                        triggered_on,
+                        table_id,
+                        &Versions::Range(Version::Initial(0), Version::Head(0)),
+                    )
+                    .await?
+                    .into_iter()
+                    .map(Some)
+                    .collect(),
+                }
+            }
         };
 
         Ok(versions)
     }
+}
+
+async fn data_version(
+    queries: &DaoQueries,
+    conn: &mut SqliteConnection,
+    triggered_on: &TriggeredOn,
+    table_id: &TableId,
+    versions: &Versions,
+) -> Result<ActiveTableDataVersionDB, TdError> {
+    queries
+        .select_table_data_versions_at::<{ ActiveTableDataVersionDB::All }, ActiveTableDataVersionDB>(
+            Some(triggered_on),
+            table_id,
+            versions,
+        )?
+        .build_query_as()
+        .fetch_one(&mut *conn)
+        .await
+        .map_err(handle_sql_err)
+}
+
+async fn optional_data_version(
+    queries: &DaoQueries,
+    conn: &mut SqliteConnection,
+    triggered_on: &TriggeredOn,
+    table_id: &TableId,
+    versions: &Versions,
+) -> Result<Option<ActiveTableDataVersionDB>, TdError> {
+    queries
+        .select_table_data_versions_at::<{ ActiveTableDataVersionDB::All }, ActiveTableDataVersionDB>(
+            Some(triggered_on),
+            table_id,
+            versions,
+        )?
+        .build_query_as()
+        .fetch_optional(&mut *conn)
+        .await
+        .map_err(handle_sql_err)
+}
+
+async fn all_data_version(
+    queries: &DaoQueries,
+    conn: &mut SqliteConnection,
+    triggered_on: &TriggeredOn,
+    table_id: &TableId,
+    versions: &Versions,
+) -> Result<Vec<ActiveTableDataVersionDB>, TdError> {
+    queries
+        .select_table_data_versions_at::<{ ActiveTableDataVersionDB::All }, ActiveTableDataVersionDB>(
+            Some(triggered_on),
+            table_id,
+            versions,
+        )?
+        .build_query_as()
+        .fetch_all(&mut *conn)
+        .await
+        .map_err(handle_sql_err)
+}
+
+async fn relative_offset(
+    queries: &DaoQueries,
+    conn: &mut SqliteConnection,
+    triggered_on: &TriggeredOn,
+    table_id: &TableId,
+    version: Version,
+) -> Result<Option<i32>, TdError> {
+    queries
+        .find_relative_offset::<{ ActiveTableDataVersionDB::All }, ActiveTableDataVersionDB>(
+            Some(triggered_on),
+            table_id,
+            &Versions::Single(version),
+        )?
+        .build_query_scalar()
+        .fetch_optional(&mut *conn)
+        .await
+        .map_err(handle_sql_err)
 }
 
 #[cfg(test)]
@@ -457,6 +570,7 @@ mod tests {
 
         let mut conn = db.acquire().await.unwrap();
         let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
@@ -494,6 +608,7 @@ mod tests {
 
         let mut conn = db.acquire().await.unwrap();
         let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
@@ -532,6 +647,7 @@ mod tests {
         // Check the first version is found if its trigger_on is used.
         let triggered_on = &version_1.triggered_on;
         let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
             .triggered_on(triggered_on)
@@ -546,6 +662,7 @@ mod tests {
         // And that the second version is found if its trigger_on is used.
         let triggered_on = &version_2.triggered_on;
         let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
             .triggered_on(triggered_on)
@@ -560,6 +677,7 @@ mod tests {
         // And the second one if current triggered_on is used.
         let triggered_on = TriggeredOn::now();
         let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
@@ -600,6 +718,7 @@ mod tests {
         // Check the latest version is found with HEAD.
         let (versions, triggered_on) = (Versions::Single(Version::Head(0)), TriggeredOn::now());
         let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
@@ -615,6 +734,7 @@ mod tests {
         let (versions, triggered_on) =
             (Versions::Single(Version::Head(0)), &version_2.triggered_on);
         let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
             .triggered_on(triggered_on)
@@ -629,6 +749,7 @@ mod tests {
         // And then get HEAD~1
         let (versions, triggered_on) = (Versions::Single(Version::Head(-1)), TriggeredOn::now());
         let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
@@ -643,6 +764,7 @@ mod tests {
         // And then get HEAD~2
         let (versions, triggered_on) = (Versions::Single(Version::Head(-2)), TriggeredOn::now());
         let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
@@ -657,6 +779,7 @@ mod tests {
         // And then get HEAD~3 (which should be None)
         let (versions, triggered_on) = (Versions::Single(Version::Head(-3)), TriggeredOn::now());
         let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
@@ -696,6 +819,7 @@ mod tests {
         // Check the latest version is found with INITIAL.
         let (versions, triggered_on) = (Versions::Single(Version::Initial(0)), TriggeredOn::now());
         let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
@@ -713,6 +837,7 @@ mod tests {
             &version_2.triggered_on,
         );
         let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
             .triggered_on(triggered_on)
@@ -727,6 +852,7 @@ mod tests {
         // And then get INITIAL~1
         let (versions, triggered_on) = (Versions::Single(Version::Initial(1)), TriggeredOn::now());
         let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
@@ -741,6 +867,7 @@ mod tests {
         // And then get INITIAL~2
         let (versions, triggered_on) = (Versions::Single(Version::Initial(2)), TriggeredOn::now());
         let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
@@ -755,6 +882,7 @@ mod tests {
         // And then get INITIAL~3 (which should be None)
         let (versions, triggered_on) = (Versions::Single(Version::Initial(3)), TriggeredOn::now());
         let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
@@ -792,6 +920,7 @@ mod tests {
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
@@ -808,6 +937,7 @@ mod tests {
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
@@ -826,6 +956,7 @@ mod tests {
             TriggeredOn::now(),
         );
         let res = VersionResolver::builder()
+            .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
@@ -879,6 +1010,7 @@ mod tests {
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
@@ -937,6 +1069,7 @@ mod tests {
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
@@ -985,6 +1118,7 @@ mod tests {
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
@@ -1041,6 +1175,7 @@ mod tests {
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
@@ -1094,6 +1229,7 @@ mod tests {
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
@@ -1146,6 +1282,7 @@ mod tests {
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
@@ -1198,6 +1335,7 @@ mod tests {
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
@@ -1224,6 +1362,7 @@ mod tests {
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
@@ -1264,6 +1403,7 @@ mod tests {
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
@@ -1311,6 +1451,7 @@ mod tests {
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
@@ -1356,6 +1497,7 @@ mod tests {
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
@@ -1391,6 +1533,7 @@ mod tests {
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
@@ -1431,6 +1574,7 @@ mod tests {
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
@@ -1483,6 +1627,7 @@ mod tests {
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
@@ -1518,6 +1663,7 @@ mod tests {
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
@@ -1556,6 +1702,7 @@ mod tests {
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
@@ -1594,6 +1741,7 @@ mod tests {
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
@@ -1630,6 +1778,7 @@ mod tests {
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
@@ -1666,6 +1815,7 @@ mod tests {
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
@@ -1704,6 +1854,7 @@ mod tests {
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
@@ -1747,6 +1898,7 @@ mod tests {
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
@@ -1790,6 +1942,7 @@ mod tests {
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
@@ -1829,6 +1982,7 @@ mod tests {
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
@@ -1867,6 +2021,7 @@ mod tests {
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
@@ -1906,6 +2061,7 @@ mod tests {
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
@@ -1927,6 +2083,78 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
+    async fn test_resolve_empty_list(db: DbPool) -> Result<(), TdError> {
+        let table_name = TableNameDto::try_from("joaquin")?;
+        let table_data_versions =
+            seed_table_data_versions(&db, HashMap::from([(&table_name, 2)])).await;
+
+        let requester_collection = seed_collection(
+            &db,
+            &CollectionName::try_from("requester_collection")?,
+            &UserId::try_from(ENCODED_ID_SYSTEM)?,
+        )
+        .await;
+        let create = FunctionRegister::builder()
+            .try_name("requester")?
+            .try_description("function_foo description")?
+            .bundle_id(BundleId::default())
+            .try_snippet("function_foo snippet")?
+            .decorator(Decorator::Publisher)
+            .connector(None)
+            .dependencies(None)
+            .triggers(None)
+            .tables(None)
+            .try_runtime_values("mock runtime values")?
+            .reuse_frozen_tables(false)
+            .build()?;
+        // This function version is the one requesting the table data versions.
+        let requester_function = seed_function(&db, &requester_collection, &create).await;
+        // Create execution for function (meaning all previously created versions were already taken by this execution).
+        let _ = seed_execution(&db, &requester_function).await;
+        // Create 2nd execution for function (which would be, the current execution)
+        let _ = seed_execution(&db, &requester_function).await;
+
+        let mut conn = db.acquire().await.unwrap();
+
+        // Assert all versions are for the same table_id but are different versions.
+        let version_1 = &table_data_versions.get(&table_name).unwrap()[0];
+        let version_2 = &table_data_versions.get(&table_name).unwrap()[1];
+        assert_ne!(version_1.id, version_2.id);
+        assert_eq!(version_1.table_id, version_2.table_id);
+        assert!(version_1.triggered_on < version_2.triggered_on);
+
+        // Get table_id
+        let table_id = version_1.table_id;
+
+        // These are all versions that can resolve to an empty list, in this case, with 2
+        // version available.
+        let range_empty_cases = [
+            Versions::New,
+            Versions::Range(Version::Initial(3), Version::Head(0)),
+            Versions::Range(Version::Initial(3), Version::Head(-1)),
+            Versions::Range(Version::Fixed(version_1.id), Version::Head(-3)),
+            Versions::Range(Version::Head(0), Version::Fixed(version_1.id)),
+            Versions::Range(Version::Fixed(version_2.id), Version::Initial(0)),
+            Versions::Range(Version::Initial(3), Version::Fixed(version_1.id)),
+        ];
+        let triggered_on = TriggeredOn::now();
+
+        for versions in range_empty_cases {
+            let versions_found = VersionResolver::builder()
+                .function_id(&requester_function.function_id)
+                .table_id(&table_id)
+                .versions(&versions)
+                .triggered_on(&triggered_on)
+                .build()?
+                .resolve(&DaoQueries::default(), &mut conn)
+                .await?;
+            assert_eq!(versions_found.len(), 0, "versions: {:?}", versions);
+        }
+        Ok(())
+    }
+
+    #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_resolve_range_validate(db: DbPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
@@ -1941,6 +2169,7 @@ mod tests {
         );
         let mut conn = db.acquire().await.unwrap();
         let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
             .table_id(&table_id)
             .versions(&versions)
             .triggered_on(&triggered_on)
@@ -1955,6 +2184,201 @@ mod tests {
             version_error,
             VersionResolverError::InvalidRange(_)
         ));
+        Ok(())
+    }
+
+    #[td_test::test(sqlx)]
+    #[tokio::test]
+    async fn test_resolve_new_no_execution(db: DbPool) -> Result<(), TdError> {
+        // checks that all versions are resolved by NEW when there is no execution
+        let table_name = TableNameDto::try_from("joaquin")?;
+        let table_data_versions =
+            seed_table_data_versions(&db, HashMap::from([(&table_name, 2)])).await;
+
+        let requester_collection = seed_collection(
+            &db,
+            &CollectionName::try_from("requester_collection")?,
+            &UserId::try_from(ENCODED_ID_SYSTEM)?,
+        )
+        .await;
+        let create = FunctionRegister::builder()
+            .try_name("requester")?
+            .try_description("function_foo description")?
+            .bundle_id(BundleId::default())
+            .try_snippet("function_foo snippet")?
+            .decorator(Decorator::Publisher)
+            .connector(None)
+            .dependencies(None)
+            .triggers(None)
+            .tables(None)
+            .try_runtime_values("mock runtime values")?
+            .reuse_frozen_tables(false)
+            .build()?;
+        // This function version is the one requesting the table data versions
+        let requester_function = seed_function(&db, &requester_collection, &create).await;
+
+        let mut conn = db.acquire().await.unwrap();
+
+        // Assert all versions are for the same table_id but are different versions.
+        let version_1 = &table_data_versions.get(&table_name).unwrap()[0];
+        let version_2 = &table_data_versions.get(&table_name).unwrap()[1];
+        assert_ne!(version_1.id, version_2.id);
+        assert_eq!(version_1.table_id, version_2.table_id);
+        assert!(version_1.triggered_on < version_2.triggered_on);
+
+        // Get function_id and table_id
+        let function_id = requester_function.function_id;
+        let table_id = version_1.table_id;
+
+        // Check new versions are found for that function (no execution means all of them).
+        let (versions, triggered_on) = (Versions::New, TriggeredOn::now());
+        let versions_found = VersionResolver::builder()
+            .function_id(&function_id)
+            .table_id(&table_id)
+            .versions(&versions)
+            .triggered_on(&triggered_on)
+            .build()?
+            .resolve(&DaoQueries::default(), &mut conn)
+            .await?;
+
+        // No execution, gets all table versions
+        assert_eq!(versions_found.len(), 2);
+        assert!(versions_found[0].is_some());
+        let version_found = versions_found[0].as_ref().unwrap();
+        assert_eq!(version_found.id, version_1.id);
+        assert!(versions_found[1].is_some());
+        let version_found = versions_found[1].as_ref().unwrap();
+        assert_eq!(version_found.id, version_2.id);
+        Ok(())
+    }
+
+    #[td_test::test(sqlx)]
+    #[tokio::test]
+    async fn test_resolve_new_with_actual_execution(db: DbPool) -> Result<(), TdError> {
+        // checks that no versions are resolved by NEW when there is an execution
+        let table_name = TableNameDto::try_from("joaquin")?;
+        let table_data_versions =
+            seed_table_data_versions(&db, HashMap::from([(&table_name, 2)])).await;
+
+        let requester_collection = seed_collection(
+            &db,
+            &CollectionName::try_from("requester_collection")?,
+            &UserId::try_from(ENCODED_ID_SYSTEM)?,
+        )
+        .await;
+        let create = FunctionRegister::builder()
+            .try_name("requester")?
+            .try_description("function_foo description")?
+            .bundle_id(BundleId::default())
+            .try_snippet("function_foo snippet")?
+            .decorator(Decorator::Publisher)
+            .connector(None)
+            .dependencies(None)
+            .triggers(None)
+            .tables(None)
+            .try_runtime_values("mock runtime values")?
+            .reuse_frozen_tables(false)
+            .build()?;
+        // This function version is the one requesting the table data versions.
+        let requester_function = seed_function(&db, &requester_collection, &create).await;
+        // Create execution for function (meaning all previously created versions were already taken by this execution).
+        let _ = seed_execution(&db, &requester_function).await;
+        // Create 2nd execution for function (which would be, the current execution)
+        let _ = seed_execution(&db, &requester_function).await;
+
+        let mut conn = db.acquire().await.unwrap();
+
+        // Assert all versions are for the same table_id but are different versions.
+        let version_1 = &table_data_versions.get(&table_name).unwrap()[0];
+        let version_2 = &table_data_versions.get(&table_name).unwrap()[1];
+        assert_ne!(version_1.id, version_2.id);
+        assert_eq!(version_1.table_id, version_2.table_id);
+        assert!(version_1.triggered_on < version_2.triggered_on);
+
+        // Get function_id and table_id
+        let function_id = requester_function.function_id;
+        let table_id = version_1.table_id;
+
+        // Check versions are found.
+        let (versions, triggered_on) = (Versions::New, TriggeredOn::now());
+        let versions_found = VersionResolver::builder()
+            .function_id(&function_id)
+            .table_id(&table_id)
+            .versions(&versions)
+            .triggered_on(&triggered_on)
+            .build()?
+            .resolve(&DaoQueries::default(), &mut conn)
+            .await?;
+
+        // With execution, get no table versions
+        assert_eq!(versions_found.len(), 0);
+        Ok(())
+    }
+
+    #[td_test::test(sqlx)]
+    #[tokio::test]
+    async fn test_resolve_new_with_previous_execution(db: DbPool) -> Result<(), TdError> {
+        // checks that versions are resolved by NEW when there is an execution prior to them
+        let requester_collection = seed_collection(
+            &db,
+            &CollectionName::try_from("requester_collection")?,
+            &UserId::try_from(ENCODED_ID_SYSTEM)?,
+        )
+        .await;
+        let create = FunctionRegister::builder()
+            .try_name("requester")?
+            .try_description("function_foo description")?
+            .bundle_id(BundleId::default())
+            .try_snippet("function_foo snippet")?
+            .decorator(Decorator::Publisher)
+            .connector(None)
+            .dependencies(None)
+            .triggers(None)
+            .tables(None)
+            .try_runtime_values("mock runtime values")?
+            .reuse_frozen_tables(false)
+            .build()?;
+        // This function version is the one requesting the table data versions.
+        let requester_function = seed_function(&db, &requester_collection, &create).await;
+        // Create execution for function (meaning all previously created versions were already taken by this execution).
+        let _ = seed_execution(&db, &requester_function).await;
+
+        let table_name = TableNameDto::try_from("joaquin")?;
+        let table_data_versions =
+            seed_table_data_versions(&db, HashMap::from([(&table_name, 2)])).await;
+
+        let mut conn = db.acquire().await.unwrap();
+
+        // Assert all versions are for the same table_id but are different versions.
+        let version_1 = &table_data_versions.get(&table_name).unwrap()[0];
+        let version_2 = &table_data_versions.get(&table_name).unwrap()[1];
+        assert_ne!(version_1.id, version_2.id);
+        assert_eq!(version_1.table_id, version_2.table_id);
+        assert!(version_1.triggered_on < version_2.triggered_on);
+
+        // Get function_id and table_id
+        let function_id = requester_function.function_id;
+        let table_id = version_1.table_id;
+
+        // Check versions are found.
+        let (versions, triggered_on) = (Versions::New, TriggeredOn::now());
+        let versions_found = VersionResolver::builder()
+            .function_id(&function_id)
+            .table_id(&table_id)
+            .versions(&versions)
+            .triggered_on(&triggered_on)
+            .build()?
+            .resolve(&DaoQueries::default(), &mut conn)
+            .await?;
+
+        // With previous execution, get all table versions (all are new)
+        assert_eq!(versions_found.len(), 2);
+        assert!(versions_found[0].is_some());
+        let version_found = versions_found[0].as_ref().unwrap();
+        assert_eq!(version_found.id, version_1.id);
+        assert!(versions_found[1].is_some());
+        let version_found = versions_found[1].as_ref().unwrap();
+        assert_eq!(version_found.id, version_2.id);
         Ok(())
     }
 }

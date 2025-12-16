@@ -139,19 +139,26 @@ class Table:
 class TableVersions:
     def __init__(
         self,
-        list_of_tables: list[dict],
+        data: dict,
     ):
-        self.list_of_tables = list_of_tables
+        self.data = data
 
     @property
     def list_of_table_objects(self):
         # This is a somewhat complicated solution to avoid an issue with PyYAML, where
         # it will slowly populate the parameters while parsing. If defined in the
-        # __init__, the Table will be built with an empty dictionary as the input.
-        return [Table(table) for table in self.list_of_tables]
+        # __init__, the Table will be built with an empty directory as the input.
+        return [Table(table) for table in self.data.get("versions", [])]
+
+    @property
+    def is_empty(self) -> bool:
+        return self.data.get("is_empty", False)
 
     def __repr__(self):
-        return f"TableVersions(list_of_tables={self.list_of_table_objects})"
+        return (
+            f"TableVersions(list_of_tables={self.list_of_table_objects},"
+            f" is_empty={self.is_empty})"
+        )
 
 
 class FunctionYaml(ABC):
@@ -493,8 +500,7 @@ def v2_table_constructor(loader, node):
 
 
 def v2_table_versions_constructor(loader, node):
-    list_of_tables = loader.construct_sequence(node, deep=True)
-    return TableVersions(list_of_tables)
+    return TableVersions(loader.construct_mapping(node))
 
 
 def v2_function_constructor(loader, node):

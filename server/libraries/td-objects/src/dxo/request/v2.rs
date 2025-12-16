@@ -5,9 +5,9 @@
 use crate::dxo::request::{Location, Locations};
 use crate::types::basic::{
     CollectionId, CollectionName, ColumnCount, DependencyPos, ExecutionId, ExecutionName,
-    FunctionName, FunctionRunId, FunctionVersionId, InputIdx, PartitionFileName, PartitionName,
-    RowCount, SchemaHash, TableDataVersionId, TableFunctionParamPos, TableId, TableName,
-    TableVersionId, TransactionId, TriggeredOnMillis, VersionPos,
+    FunctionName, FunctionRunId, FunctionVersionId, InputIdx, IsEmptyVersions, PartitionFileName,
+    PartitionName, RowCount, SchemaHash, TableDataVersionId, TableFunctionParamPos, TableId,
+    TableName, TableVersionId, TransactionId, TriggeredOnMillis, VersionPos,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -115,18 +115,32 @@ impl Locations for InputPartitionTableVersion {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, ToSchema)]
 pub enum InputTable {
     Table(InputTableVersion),
-    TableVersions(Vec<InputTableVersion>),
+    TableVersions {
+        is_empty: IsEmptyVersions,
+        versions: Vec<InputTableVersion>,
+    },
     PartitionedTable(InputPartitionTableVersion),
-    PartitionedTableVersions(Vec<InputPartitionTableVersion>),
+    PartitionedTableVersions {
+        is_empty: IsEmptyVersions,
+        versions: Vec<InputPartitionTableVersion>,
+    },
 }
 
 impl InputTable {
-    pub fn new(version: Vec<InputTableVersion>) -> InputTable {
+    pub fn new(versions: Vec<InputTableVersion>) -> InputTable {
         // -1 version pos marks that only a single table version is expected.
-        if version.len() == 1 && *version[0].version_pos == -1 {
-            InputTable::Table(version.into_iter().next().unwrap())
+        if versions.len() == 1 && versions[0].version_pos == VersionPos::SINGLE_VERSION {
+            InputTable::Table(versions.into_iter().next().unwrap())
+        } else if versions.len() == 1 && versions[0].version_pos == VersionPos::NO_VERSIONS {
+            InputTable::TableVersions {
+                is_empty: IsEmptyVersions::TRUE,
+                versions,
+            }
         } else {
-            InputTable::TableVersions(version)
+            InputTable::TableVersions {
+                is_empty: IsEmptyVersions::FALSE,
+                versions,
+            }
         }
     }
 }
@@ -135,12 +149,12 @@ impl Locations for InputTable {
     fn locations(&self) -> Vec<&Location> {
         match self {
             InputTable::Table(table) => table.locations(),
-            InputTable::TableVersions(tables) => {
-                tables.iter().flat_map(|t| t.locations()).collect()
+            InputTable::TableVersions { versions, .. } => {
+                versions.iter().flat_map(|t| t.locations()).collect()
             }
             InputTable::PartitionedTable(table) => table.locations(),
-            InputTable::PartitionedTableVersions(tables) => {
-                tables.iter().flat_map(|t| t.locations()).collect()
+            InputTable::PartitionedTableVersions { versions, .. } => {
+                versions.iter().flat_map(|t| t.locations()).collect()
             }
         }
     }
@@ -327,7 +341,11 @@ mod tests {
             .build()?;
         assert_eq!(InputTable::Table(itv.clone()).locations(), vec![&location]);
         assert_eq!(
-            InputTable::TableVersions(vec![itv]).locations(),
+            InputTable::TableVersions {
+                is_empty: IsEmptyVersions::FALSE,
+                versions: vec![itv]
+            }
+            .locations(),
             vec![&location]
         );
 
@@ -355,7 +373,11 @@ mod tests {
             vec![&location]
         );
         assert_eq!(
-            InputTable::PartitionedTableVersions(vec![itv]).locations(),
+            InputTable::PartitionedTableVersions {
+                is_empty: IsEmptyVersions::FALSE,
+                versions: vec![itv]
+            }
+            .locations(),
             vec![&location]
         );
         Ok(())

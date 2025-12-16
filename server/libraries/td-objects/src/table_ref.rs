@@ -63,6 +63,8 @@ pub enum Versions {
     List(Vec<Version>),
     /// A range of versions. Always older to newer.
     Range(Version, Version),
+    /// Range of all versions available since last execution.
+    New,
 }
 
 impl Versions {
@@ -86,11 +88,15 @@ impl Versions {
                 to.shift_mut(pos);
                 Versions::Range(from, to)
             }
+            Versions::New => self.clone(),
         }
     }
 
     pub fn is_multiple(&self) -> bool {
-        matches!(self, Versions::List(_) | Versions::Range(_, _))
+        matches!(
+            self,
+            Versions::List(_) | Versions::Range(_, _) | Versions::New
+        )
     }
 }
 
@@ -121,6 +127,7 @@ impl Display for Versions {
                 write!(f, "{versions}")
             }
             Versions::Range(from, to) => write!(f, "{from}..{to}"),
+            Versions::New => write!(f, "NEW"),
         }
     }
 }

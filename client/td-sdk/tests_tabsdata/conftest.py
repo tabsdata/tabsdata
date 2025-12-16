@@ -1921,9 +1921,9 @@ def v1_mock_table_representer(
 
 def v1_mock_table_versions_representer(
     dumper: yaml.SafeDumper, mock_table_versions: MockTableVersions
-) -> yaml.nodes.SequenceNode:
+) -> yaml.nodes.MappingNode:
     """Represent a MockTable instance as a YAML mapping node."""
-    return dumper.represent_sequence("!TableVersions", mock_table_versions.content)
+    return dumper.represent_mapping("!TableVersions", mock_table_versions.content)
 
 
 def v1_listener_context_format_representer(
@@ -2028,7 +2028,11 @@ def write_v2_function_yaml_file(
                         "version_pos": 19 + position * 1000 + index,
                     }
                     table_versions.append(table_content)
-                content["input"].append(MockTableVersions(table_versions))
+                full_content = {
+                    "is_empty": False,
+                    "versions": table_versions,
+                }
+                content["input"].append(MockTableVersions(full_content))
             else:
                 raise ValueError(
                     f"Unexpected type {type(mocked_table)} for mock_dependency_location"
@@ -2156,7 +2160,11 @@ def add_mock_table_location(mock_table_location):
                     "version_pos": 19 + position * 1000 + index,
                 }
                 table_versions.append(table_content)
-            output.append(MockTableVersions(table_versions))
+            full_content = {
+                "is_empty": False,
+                "versions": table_versions,
+            }
+            output.append(MockTableVersions(full_content))
         else:
             raise ValueError(
                 f"Unexpected type {type(mocked_table)} for mock_table_location"

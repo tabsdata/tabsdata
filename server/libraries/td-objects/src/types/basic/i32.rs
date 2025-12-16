@@ -23,3 +23,8 @@ pub struct InputIdx;
 
 #[td_type::typed(i32(default = 0))]
 pub struct VersionPos;
+
+impl VersionPos {
+    pub const SINGLE_VERSION: Self = Self(-1);
+    pub const NO_VERSIONS: Self = Self(-2);
+}

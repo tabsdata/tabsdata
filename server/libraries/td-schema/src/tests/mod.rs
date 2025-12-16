@@ -79,8 +79,13 @@ pub(crate) async fn version_migration_setup(target_version: i64) -> VersionMigra
 
 /// Helper to run a migration test with pre- and post-lambdas.
 /// It automatically checks that the database version is correctly set up.
-pub async fn run_migration_test<Pre, Post>(target_version: i64, pre: Pre, post: Post)
-where
+pub async fn run_migration_test<Setup, Pre, Post>(
+    target_version: i64,
+    setup: Setup,
+    pre: Pre,
+    post: Post,
+) where
+    Setup: AsyncFn(&SqlitePool),
     Pre: AsyncFn(&SqlitePool),
     Post: AsyncFn(&SqlitePool),
 {
@@ -88,6 +93,9 @@ where
         pool,
         target_migrator,
     } = version_migration_setup(target_version).await;
+
+    // Run setup
+    setup(&pool).await;
 
     // Run pre-migration checks
     assert_eq!(
@@ -117,7 +125,7 @@ where
         .await
         .expect("Failed to undo target migration");
 
-    // Optionally re-run pre-migration checks
+    // Run pre-migration checks
     assert_eq!(
         db_version(&pool).await,
         target_version - 1,

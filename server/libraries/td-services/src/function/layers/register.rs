@@ -428,6 +428,7 @@ pub async fn build_dependency_versions(
         // ranges should be older to newer, etc.). This avoids potential issues on trigger.
         // A standalone function should be at least triggerable at the time it is registered.
         let _ = VersionResolver::builder()
+            .function_id(&function_id)
             .table_id(&table_db.table_id)
             .versions(&dependency_table.versions)
             .triggered_on(&TriggeredOn::try_from(&*at_time)?)
