@@ -19,7 +19,7 @@ def test_dq_transformer():
         on_output_tables=[
             dq.DataQuality(
                 table="table_o",
-                classify=[
+                classifiers=[
                     dq.IsNull("number01"),
                 ],
                 operations=[

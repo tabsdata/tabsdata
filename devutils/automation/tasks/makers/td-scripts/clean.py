@@ -39,20 +39,25 @@ def rmtree_with_retry(path, max_retries=16, delay=3):
         try:
             shutil.rmtree(path)
             if attempt > 0:
-                logger.debug(f"✏️ Successfully removed folder {path} "
-                             f"after {attempt + 1} attempts")
+                logger.debug(
+                    f"✏️ Successfully removed folder {path} after {attempt + 1} attempts"
+                )
             else:
                 logger.debug(f"✏️ Successfully removed folder {path}")
             return
         except Exception as error:
             if attempt < max_retries - 1:
-                logger.debug(f"✏️ Attempt {attempt + 1}/{max_retries} failed "
-                             f"removing folder {path}; "
-                             f"retrying in {delay}s...")
+                logger.debug(
+                    f"✏️ Attempt {attempt + 1}/{max_retries} failed "
+                    f"removing folder {path}; "
+                    f"retrying in {delay}s..."
+                )
                 time.sleep(delay)
             else:
-                logger.debug(f"✏️ Failed to remove folder {path} "
-                             f"after {max_retries} attempts: {error}")
+                logger.debug(
+                    f"✏️ Failed to remove folder {path} "
+                    f"after {max_retries} attempts: {error}"
+                )
                 raise
 
 

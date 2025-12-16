@@ -7,7 +7,7 @@ import random
 import polars as pl
 
 import tabsdata as td
-from tabsdata.dataquality import DataQuality, IsNotNull, IsNull
+from tabsdata.dataquality import DataQuality, IsNotNull, IsNull, Summary
 from tabsdata.tableframe.lazyframe.properties import TableFramePropertiesBuilder
 
 
@@ -145,8 +145,7 @@ def is_null_classifiers():
 
 def is_null_actions(table: str = "table00"):
     return DataQuality(
-        table=table,
-        classify=is_null_classifiers(),
+        table=table, classifiers=is_null_classifiers(), operations=Summary()
     )
 
 
@@ -236,8 +235,7 @@ def is_not_null_classifiers():
 
 def is_not_null_actions(table: str = "table00"):
     return DataQuality(
-        table=table,
-        classify=is_not_null_classifiers(),
+        table=table, classifiers=is_not_null_classifiers(), operations=Summary()
     )
 
 

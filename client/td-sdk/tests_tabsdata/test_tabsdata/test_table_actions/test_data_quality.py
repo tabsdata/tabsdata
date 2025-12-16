@@ -24,34 +24,24 @@ def test_data_quality_class():
     assert dq.operations == [operation]
 
 
-def test_data_quality_class_defaults():
-    classifier = Matches(regex="hi")
-    table = "my_table"
-    dq = DataQuality(table, classifier)
-    assert dq.table == table
-    assert dq.classify == [classifier]
-    assert len(dq.operations) == 1
-    assert isinstance(dq.operations[0], Summary)
-
-
 def test_data_quality_wrong_table_type():
     classifier = Matches(regex="hi")
     with pytest.raises(DataQualityConfigurationError) as e:
-        DataQuality(3, classifier)
+        DataQuality(3, classifier, Summary())
     assert e.value.error_code == ErrorCode.DQCE75
 
 
 def test_data_quality_wrong_classifier_type():
     table = "my_table"
     with pytest.raises(DataQualityConfigurationError) as e:
-        DataQuality(table, 3)
+        DataQuality(table, 3, Summary())
     assert e.value.error_code == ErrorCode.DQCE76
 
 
 def test_data_quality_wrong_classifier_list_type():
     table = "my_table"
     with pytest.raises(DataQualityConfigurationError) as e:
-        DataQuality(table, [3])
+        DataQuality(table, [3], Summary())
     assert e.value.error_code == ErrorCode.DQCE77
 
 

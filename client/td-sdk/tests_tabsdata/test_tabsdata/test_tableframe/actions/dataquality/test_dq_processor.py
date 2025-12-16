@@ -4,6 +4,7 @@
 
 import polars as pl
 import pytest
+from openai.types.responses.response_reasoning_item import Summary
 from test_tabsdata.test_tableframe.actions.dataquality.dq_helper import (
     dataset,
     is_not_null_actions,

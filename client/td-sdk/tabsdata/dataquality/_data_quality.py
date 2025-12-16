@@ -4,10 +4,17 @@
 
 from __future__ import annotations
 
+from typing import Union
+
+from typing_extensions import TypeAlias
+
 from tabsdata._table_actions.actions import OnTablesAction
 from tabsdata.dataquality._classifiers import Classifier
 from tabsdata.dataquality._operations import Operation, Summary
 from tabsdata.exceptions import DataQualityConfigurationError, ErrorCode
+
+ClassifiersSpec: TypeAlias = Union[Classifier, list[Classifier]]
+OperationsSpec: TypeAlias = Union[Operation, list[Operation]]
 
 
 class DataQuality(OnTablesAction):
@@ -18,22 +25,20 @@ class DataQuality(OnTablesAction):
     def __init__(
         self,
         table: str,
-        classify: Classifier | list[Classifier],  # TODO I'd rename it to `classifiers`
-        operations: (
-            Operation | list[Operation]
-        ) = None,  # TODO I'd change it to require a value
+        classifiers: ClassifiersSpec,
+        operations: OperationsSpec,
     ):
         """
         Constructor.
 
         Args:
             table: Name of the table to apply the data quality action.
-            classify: Data quality classifiers to apply to the table.
+            classifiers: Data quality classifiers to apply to the table.
             operations: Data quality operations, based on the defined
                 classifiers, to perform on the table.
         """
         self.table = table
-        self.classify = classify
+        self.classify = classifiers
         self.operations = operations
 
     @property
@@ -82,8 +87,6 @@ class DataQuality(OnTablesAction):
         """
         :return: the data quality operations.
         """
-        if self._operations is None:
-            return [Summary()]
         return self._operations
 
     @operations.setter
@@ -98,8 +101,6 @@ class DataQuality(OnTablesAction):
                             ErrorCode.DQCE79, v, type(v)
                         )
                 self._operations = operations
-            case None:
-                self._operations = None
             case _:
                 raise DataQualityConfigurationError(
                     ErrorCode.DQCE78, operations, type(operations)

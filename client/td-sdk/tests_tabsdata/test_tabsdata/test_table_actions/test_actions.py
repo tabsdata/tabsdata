@@ -66,7 +66,7 @@ def test_example_publisher():
         on_tables=[
             dq.DataQuality(
                 table="users",
-                classify=classify_list,
+                classifiers=classify_list,
                 operations=op_list,
             ),
         ],
@@ -120,7 +120,7 @@ def test_example_publisher_with_filter():
         tables=["users", "offices"],
         on_tables=dq.DataQuality(
             table="users",
-            classify=classify_list,
+            classifiers=classify_list,
             operations=op_list,
         ),
     )
@@ -180,7 +180,7 @@ def test_example_publisher_with_filter_and_tags():
         on_tables=[
             dq.DataQuality(
                 table="users",
-                classify=classify_list,
+                classifiers=classify_list,
                 operations=op_list,
             )
         ],
@@ -219,7 +219,7 @@ def test_example_transformer():
     input_actions = [
         dq.DataQuality(
             table="employees",
-            classify=[
+            classifiers=[
                 dq.IsNotNull(("zip", "zip_nn")),  # dq.zip_nn
                 dq.IsNotNull("country"),
             ],
@@ -230,7 +230,7 @@ def test_example_transformer():
         ),
         dq.DataQuality(
             table="employees",
-            classify=[dq.Categorizer("country", scale=continents)],
+            classifiers=[dq.Categorizer("country", scale=continents)],
             operations=[
                 dq.Summary(),
                 dq.Filter(to_table="employees_invalid"),
@@ -240,7 +240,7 @@ def test_example_transformer():
     output_actions = [
         dq.DataQuality(
             table="users_x",
-            classify=[
+            classifiers=[
                 dq.HasColumns(["id", "campus", "city", "state", "country"]),
                 dq.IsNull("country"),
                 dq.IsNull("id", tags="fail"),
