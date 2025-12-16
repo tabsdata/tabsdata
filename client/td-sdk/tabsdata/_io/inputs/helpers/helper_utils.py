@@ -8,7 +8,12 @@ from urllib.parse import urlparse
 
 import numpy as np
 
-from tabsdata._io.constants import MARIADB_SCHEME, MYSQL_SCHEME, POSTGRES_SCHEMES
+from tabsdata._io.constants import (
+    MARIADB_SCHEME,
+    MYSQL_SCHEME,
+    ORACLE_SCHEME,
+    POSTGRES_SCHEMES,
+)
 from tabsdata._io.inputs.helpers.helper_constants import POLARS_TO_NUMPY_DTYPE_MAP
 from tabsdata.tableframe.typing import DataType
 
@@ -40,6 +45,9 @@ def replace_initial_values_placeholder(
     ):
         for key in initial_values.keys():
             query = query.replace(f":{key}", f"%({key})s")
+    elif conn_uri_scheme == ORACLE_SCHEME:
+        # Oracle uses the same :key syntax, so no replacement is needed
+        pass
     # Future TODO: Add more database parameter styles here as needed
     else:
         raise ValueError(

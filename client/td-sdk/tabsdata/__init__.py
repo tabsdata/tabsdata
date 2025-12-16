@@ -31,6 +31,7 @@ from tabsdata._format import (
 from tabsdata._io.connections.connections import Conn
 from tabsdata._io.connections.mariadb_connection import MariaDBConn
 from tabsdata._io.connections.mysql_connection import MySQLConn
+from tabsdata._io.connections.oracle_connection import OracleConn
 from tabsdata._io.connections.postgres_connection import PostgresConn
 from tabsdata._io.inputs.file_inputs import (
     AzureSource,
@@ -42,6 +43,7 @@ from tabsdata._io.inputs.sql.mariadb_input import MariaDBSrc
 from tabsdata._io.inputs.sql.mysql_input import (
     MySQLSrc,
 )
+from tabsdata._io.inputs.sql.oracle_input import OracleSrc
 from tabsdata._io.inputs.sql.postgres_input import PostgresSrc
 from tabsdata._io.inputs.sql_inputs import (
     MariaDBSource,
@@ -161,6 +163,8 @@ __all__ = [
     "PostgresSrc",
     # from tabsdata._io.inputs.sql.mariadb_input
     "MariaDBSrc",
+    # from tabsdata._io.inputs.sql.oracle_input
+    "OracleSrc",
     # from tabsdatafunction.py Outputs
     "AWSGlue",
     "AzureDestination",
@@ -199,6 +203,8 @@ __all__ = [
     "PostgresConn",
     # from tabsdata._io.connections.mariadb_connection.py
     "MariaDBConn",
+    # from tabsdata._io.connections.oracle_connection.py
+    "OracleConn",
     # from secret.py
     "EnvironmentSecret",
     "HashiCorpSecret",

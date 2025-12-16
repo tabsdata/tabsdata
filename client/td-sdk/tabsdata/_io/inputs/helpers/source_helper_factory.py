@@ -21,6 +21,7 @@ from tabsdata._io.inputs.helpers.sqlalchemy_source_helper import SQLAlchemySourc
 if TYPE_CHECKING:
     from tabsdata._io.inputs.sql.mariadb_input import MariaDBSrc
     from tabsdata._io.inputs.sql.mysql_input import MySQLSrc
+    from tabsdata._io.inputs.sql.oracle_input import OracleSrc
     from tabsdata._io.inputs.sql.postgres_input import PostgresSrc
 
 logger = logging.getLogger(__name__)
@@ -28,13 +29,14 @@ logger.setLevel(logging.DEBUG)
 
 
 def get_sql_source_helper(
-    source: Union[MySQLSrc, PostgresSrc, MariaDBSrc],
+    source: Union[MySQLSrc, PostgresSrc, MariaDBSrc, OracleSrc],
 ) -> Union[SQLAlchemySourceHelper]:
     """
     Factory function to get the appropriate SQL source helper based on the source and
     loader type.
     Args:
-        source (Union[MySQLSrc, PostgresSrc, MariaDBSrc]): The SQL source configuration.
+        source (Union[MySQLSrc, PostgresSrc, MariaDBSrc, OracleSrc]): The SQL source
+        configuration.
 
     Returns:
         Union[SQLAlchemySourceHelper]: The appropriate SQL source helper instance.
@@ -57,7 +59,7 @@ def get_sql_source_helper(
 
 
 def _get_sql_source_config(
-    source: Union[MySQLSrc, PostgresSrc, MariaDBSrc],
+    source: Union[MySQLSrc, PostgresSrc, MariaDBSrc, OracleSrc],
 ) -> SQLSourceConfig:
     # Runtime import for isinstance checks:
     # This second import inside the function is necessary for runtime type checking
@@ -65,6 +67,7 @@ def _get_sql_source_config(
     # file is not available at runtime.
     from tabsdata._io.inputs.sql.mariadb_input import MariaDBSrc as _MariaDBSrc
     from tabsdata._io.inputs.sql.mysql_input import MySQLSrc as _MySQLSrc
+    from tabsdata._io.inputs.sql.oracle_input import OracleSrc as _OracleSrc
     from tabsdata._io.inputs.sql.postgres_input import PostgresSrc as _PostgresSrc
 
     if isinstance(source, _MySQLSrc):
@@ -107,6 +110,22 @@ def _get_sql_source_config(
                 enforce_connection_params=source.conn.enforce_connection_params,
                 cx_src_configs_sql=source.conn.cx_src_configs_mariadb,
                 cx_dst_configs_sql=source.conn.cx_dst_configs_mariadb,
+            ),
+            queries=source.queries,
+            initial_values=source.initial_values,
+            transactional=source.transactional,
+            chunk_size=source.chunk_size,
+            loader=source.loader,
+            schema_overrides=source.schema_overrides,
+        )
+    elif isinstance(source, _OracleSrc):
+        return SQLSourceConfig(
+            conn=SQLConnConfig(
+                uri=source.conn.uri,
+                credentials=source.conn.credentials,
+                enforce_connection_params=source.conn.enforce_connection_params,
+                cx_src_configs_sql=source.conn.cx_src_configs_oracle,
+                cx_dst_configs_sql=source.conn.cx_dst_configs_oracle,
             ),
             queries=source.queries,
             initial_values=source.initial_values,

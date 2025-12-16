@@ -1,0 +1,22 @@
+{
+  "ID": "Int64",
+  "C_NUMBER": "Int64",
+  "C_FLOAT": "Float64",
+  "C_BINARY_FLOAT": "Decimal",
+  "C_BINARY_DOUBLE": "Float64",
+  "C_CHAR": "String",
+  "C_VARCHAR2": "String",
+  "C_NCHAR": "String",
+  "C_NVARCHAR2": "String",
+  "C_DATE": "Datetime",
+  "C_TIMESTAMP": "Datetime",
+  "C_TIMESTAMP_TZ": "Datetime",
+  "C_TIMESTAMP_LTZ": "Datetime",
+  "C_INTERVAL_YM": "List",
+  "C_INTERVAL_DS": "Duration",
+  "C_CLOB": "String",
+  "C_NCLOB": "String",
+  "C_BLOB": "Binary",
+  "C_RAW": "Binary",
+  "C_LONG": "String"
+}
