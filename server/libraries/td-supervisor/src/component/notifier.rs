@@ -110,7 +110,7 @@ impl WorkerNotifier for Callback {
         );
         match self {
             Callback::Http(callback) => {
-                let request_payload = match &request_message.payload {
+                let request_payload = match request_message.payload {
                     SupervisorRequestMessagePayload(payload) => payload,
                     SupervisorResponseMessagePayload(_) | SupervisorExceptionMessagePayload(_) => {
                         return Err(InvalidMessageType);
@@ -182,8 +182,8 @@ impl WorkerNotifier for Callback {
                 };
                 let mut response_payload = ResponseMessagePayload {
                     id: request_message.id,
-                    class: request_payload.class().clone(),
-                    worker: request_payload.worker().clone(),
+                    class: request_payload.class,
+                    worker: request_payload.worker,
                     action: Notify,
                     start,
                     end,
@@ -191,15 +191,15 @@ impl WorkerNotifier for Callback {
                     execution: execution as i16,
                     limit: limit.map(|x| x as i16),
                     error,
-                    exception_kind: exception_payload.kind().clone(),
-                    exception_message: exception_payload.message().clone(),
-                    exception_error_code: exception_payload.error_code().clone(),
-                    exit_status: *exception_payload.exit_status(),
+                    exception_kind: exception_payload.kind,
+                    exception_message: exception_payload.message,
+                    exception_error_code: exception_payload.error_code,
+                    exit_status: exception_payload.exit_status,
                     ..response_payload
                 };
 
                 // Exit status 202 is using to signal work termination without further retry.
-                if *exception_payload.exit_status() == ExitStatus::TabsDataError.code() {
+                if exception_payload.exit_status == ExitStatus::TabsDataError.code() {
                     response_payload.status = WorkerCallbackStatus::Failed;
                     failed = true;
                 }
@@ -211,9 +211,9 @@ impl WorkerNotifier for Callback {
 
                 let client = reqwest::Client::new();
                 let mut request = client
-                    .request(callback.method().clone(), callback.url().clone())
-                    .headers(hashmap_to_headers(callback.headers().clone())?);
-                if *callback.body() {
+                    .request(callback.method.clone(), callback.url.clone())
+                    .headers(hashmap_to_headers(callback.headers.clone())?);
+                if callback.body {
                     request = request.json(&response_payload);
                 }
                 let callback_response = request.send().await;

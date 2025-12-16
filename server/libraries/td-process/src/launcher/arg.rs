@@ -154,7 +154,7 @@ impl MarkerKey {
     where
         T: Clone + TryInto<FunctionInput>,
     {
-        if let Some(context) = payload.context() {
+        if let Some(context) = &payload.context {
             let Ok(context) = context.clone().try_into() else {
                 return Ok("!".to_string());
             };
@@ -171,7 +171,7 @@ impl MarkerKey {
     where
         T: Clone + TryInto<FunctionInput>,
     {
-        if let Some(context) = payload.context() {
+        if let Some(context) = &payload.context {
             let Ok(context) = context.clone().try_into() else {
                 return Ok("!".to_string());
             };

@@ -128,7 +128,7 @@ pub async fn notify(
             return Err(InvalidMessageType);
         }
     };
-    if let Some(callback) = payload.callback() {
+    if let Some(callback) = &payload.callback {
         failed = callback
             .clone()
             .notify(

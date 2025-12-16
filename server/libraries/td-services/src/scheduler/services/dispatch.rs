@@ -145,7 +145,7 @@ mod tests {
         assert_eq!(locked_messages.len(), 0);
 
         let files = get_files_in_folder_sorted_by_name(
-            context.worker_queue.location(),
+            &context.worker_queue.location,
             Some(YAML_EXTENSION),
         )
         .unwrap();

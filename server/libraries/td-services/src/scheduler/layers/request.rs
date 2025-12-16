@@ -10,9 +10,8 @@ use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
 use td_common::server::WorkerName::FUNCTION;
 use td_common::server::{
-    Callback, HttpCallbackBuilder, MessageAction, RequestMessagePayload,
-    RequestMessagePayloadBuilder, SupervisorMessage, SupervisorMessagePayload, WorkerClass,
-    WorkerMessageQueue,
+    Callback, HttpCallback, MessageAction, RequestMessagePayload, SupervisorMessage,
+    SupervisorMessagePayload, WorkerClass, WorkerMessageQueue,
 };
 use td_error::{TdError, td_error};
 use td_objects::dxo::crudl::handle_sql_err;
@@ -75,13 +74,12 @@ pub async fn create_locked_workers<T: WorkerMessageQueue>(
                 let callback_url =
                     Url::parse(&callback_url).map_err(ScheduleError::CallbackUrlParseError)?;
 
-                let http_callback = HttpCallbackBuilder::default()
-                    .url(callback_url)
-                    .method(Method::POST)
-                    .headers(HashMap::default())
-                    .body(true)
-                    .build()
-                    .unwrap();
+                let http_callback = HttpCallback {
+                    url: callback_url,
+                    method: Method::POST,
+                    headers: HashMap::default(),
+                    body: true,
+                };
                 let callback = Callback::Http(http_callback);
 
                 // Build states map
@@ -308,16 +306,14 @@ pub async fn create_locked_workers<T: WorkerMessageQueue>(
 
                 // Build message payload
                 // TODO ADD get_states to states
-                let message_payload: RequestMessagePayload<FunctionInput> =
-                    RequestMessagePayloadBuilder::default()
-                        .class(WorkerClass::EPHEMERAL)
-                        .worker(FUNCTION.as_ref())
-                        .action(MessageAction::Start)
-                        .arguments(vec![])
-                        .callback(callback)
-                        .context(function_input)
-                        .build()
-                        .unwrap();
+                let message_payload = RequestMessagePayload {
+                    class: WorkerClass::EPHEMERAL,
+                    worker: FUNCTION.as_ref().to_string(),
+                    action: MessageAction::Start,
+                    arguments: Vec::new(),
+                    callback: Some(callback),
+                    context: Some(function_input),
+                };
 
                 // Create worker message
                 let message = WorkerDB::builder()
@@ -371,7 +367,7 @@ pub async fn unlock_workers<T: WorkerMessageQueue>(
                 None
             }?;
 
-            let function_input = message.context().as_ref().or_else(|| {
+            let function_input = message.context.as_ref().or_else(|| {
                 error!(
                     "Scheduled locked message [{}] has no context: {:?}",
                     m.id, m.payload

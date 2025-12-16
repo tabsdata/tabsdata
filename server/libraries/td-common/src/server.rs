@@ -24,7 +24,6 @@ use chrono::Utc;
 use const_format::concatcp;
 use derive_builder::Builder;
 use derive_new::new;
-use getset::{Getters, Setters};
 use http::Method;
 use pico_args::Arguments;
 use regex::Regex;
@@ -206,7 +205,7 @@ pub enum MessageAction {
     Notify,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, new, Setters, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, new, Serialize, Deserialize)]
 pub struct SupervisorMessage<T = Value>
 where
     T: Clone,
@@ -227,35 +226,23 @@ where
     SupervisorExceptionMessagePayload(ExceptionMessagePayload<T>),
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Getters, Setters, Builder, Serialize, Deserialize)]
-#[getset(get = "pub", set = "pub")]
-#[builder(setter(into))]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct RequestMessagePayload<T = Value>
 where
     T: Clone,
 {
     #[serde(default)]
-    class: WorkerClass,
-    worker: String,
-    action: MessageAction,
-    arguments: Vec<String>,
+    pub class: WorkerClass,
+    pub worker: String,
+    pub action: MessageAction,
+    pub arguments: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    callback: Option<Callback>,
+    pub callback: Option<Callback>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    context: Option<T>,
+    pub context: Option<T>,
 }
 
-impl<T> RequestMessagePayload<T>
-where
-    T: Clone,
-{
-    pub fn builder() -> RequestMessagePayloadBuilder<T> {
-        RequestMessagePayloadBuilder::default()
-    }
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Getters, Setters, Builder, Serialize, Deserialize)]
-#[getset(get = "pub", set = "pub")]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "")]
 pub struct ExceptionMessagePayload<T = Value>
 where
@@ -263,21 +250,15 @@ where
 {
     #[serde(skip)]
     _type: PhantomData<T>,
-    kind: Option<String>,
-    message: Option<String>,
-    error_code: Option<String>,
+    pub kind: Option<String>,
+    pub message: Option<String>,
+    pub error_code: Option<String>,
     #[serde(default = "default_exit_status")]
-    exit_status: i32,
+    pub exit_status: i32,
 }
 
 fn default_exit_status() -> i32 {
     ExitStatus::Success.code()
-}
-
-impl ExceptionMessagePayload {
-    pub fn builder() -> ExceptionMessagePayloadBuilder {
-        ExceptionMessagePayloadBuilder::default()
-    }
 }
 
 impl<T> Default for ExceptionMessagePayload<T>
@@ -389,16 +370,14 @@ pub enum Callback {
     Http(HttpCallback),
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Getters, Setters, Builder, Serialize, Deserialize)]
-#[getset(get = "pub")]
-#[builder(setter(into))]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct HttpCallback {
-    url: Url,
+    pub url: Url,
     #[serde(serialize_with = "method_serialize")]
     #[serde(deserialize_with = "method_deserialize")]
-    method: Method,
-    headers: HashMap<String, String>,
-    body: bool,
+    pub method: Method,
+    pub headers: HashMap<String, String>,
+    pub body: bool,
 }
 
 fn method_serialize<S>(method: &Method, serializer: S) -> Result<S::Ok, S::Error>
@@ -439,10 +418,9 @@ where
     }
 }
 
-#[derive(Debug, Getters)]
-#[getset(get = "pub")]
+#[derive(Debug)]
 pub struct FileWorkerMessageQueue {
-    location: PathBuf,
+    pub location: PathBuf,
 }
 
 pub enum PayloadType {
@@ -996,8 +974,7 @@ pub enum EtcError {
     ReadError { location: PathBuf, cause: Error },
 }
 
-#[derive(Debug, Getters)]
-#[getset(get = "pub")]
+#[derive(Debug)]
 pub struct FileEtcStore {
     location: PathBuf,
 }
@@ -1084,7 +1061,7 @@ pub trait EtcStore {
 #[async_trait]
 impl EtcStore for FileEtcStore {
     async fn read(&self, content: &EtcContent) -> Result<Option<Vec<u8>>, EtcError> {
-        let path = self.location().join(content.file());
+        let path = self.location.join(content.file());
         match fs::read(&path).await {
             Ok(bytes) => Ok(Some(bytes)),
             Err(e) if e.kind() == io::ErrorKind::NotFound => {

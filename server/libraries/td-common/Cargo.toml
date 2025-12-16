@@ -69,7 +69,6 @@ data-encoding = { workspace = true }
 derive_builder = { workspace = true }
 derive-new = { workspace = true }
 dirs = { workspace = true }
-getset = { workspace = true }
 homedir = { workspace = true }
 http = { workspace = true }
 itertools = { workspace = true }

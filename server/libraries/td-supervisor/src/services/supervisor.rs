@@ -711,7 +711,7 @@ impl Supervisor {
                     .controllers
                     .ephemeral
                     .workers
-                    .get(payload.worker());
+                    .get(&payload.worker);
                 if let Some(worker) = worker
                     && retry <= *worker.retries()
                 {
@@ -825,7 +825,7 @@ impl Supervisor {
                             return Err(RuntimeError::new("Unexpected response message received".to_string()));
                         }
                     };
-                    let send_result = match payload.class() {
+                    let send_result = match payload.class {
                         INIT => sender_init.send(message.clone()),
                         REGULAR => sender_regular.send(message.clone()),
                         EPHEMERAL => sender_ephemeral.send(message.clone()),
@@ -1189,7 +1189,7 @@ impl Supervisor {
                             return Err(RuntimeError::new("Unexpected response message received".to_string()));
                         }
                     };
-                    let worker = controller.workers.get(payload.worker());
+                    let worker = controller.workers.get(&payload.worker);
                     match worker {
                         Some(worker) => {
                             let worker_clone = worker.clone();
@@ -1766,7 +1766,7 @@ impl Supervisor {
                         return Err(InvalidMessageType);
                     }
                 };
-                for argument in payload.arguments() {
+                for argument in &payload.arguments {
                     command = command.argument(ArgumentPrefix::None, argument, None)
                 }
                 for argument in forward_parameters {
