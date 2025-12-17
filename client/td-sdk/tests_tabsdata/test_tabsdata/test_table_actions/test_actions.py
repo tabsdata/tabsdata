@@ -153,7 +153,7 @@ def test_example_publisher_with_filter_and_tags():
 
     classify_list = [
         dq.HasColumns(["id", "name", "age", "gender", "country"]),
-        dq.IsNull(cols=["id"], tags=["missing_data"]),
+        dq.IsNull(column_names=["id"], tags=["missing_data"]),
         dq.IsPositive("age", tags="invalid_data", ignore_nulls=True),
         dq.IsIn("gender", set={"M", "F", "O"}, tags="invalid_data", ignore_nulls=True),
     ]

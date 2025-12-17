@@ -5,8 +5,7 @@
 from __future__ import annotations
 
 from abc import ABC
-from typing import TYPE_CHECKING, Collection, Literal, Self, get_args
-
+from typing import TYPE_CHECKING, Collection, Literal, Self, get_args, Union
 from tabsdata.dataquality._utils import _is_collection
 from tabsdata.exceptions import (
     DataQualityConfigurationError,
@@ -15,7 +14,8 @@ from tabsdata.exceptions import (
 from tabsdata.tableframe.typing import TF_DATA_TYPES, DataType
 
 if TYPE_CHECKING:
-    from tabsdata.dataquality.typing._typing import ColsSpec, TagsSpec
+    from tabsdata.dataquality.typing._typing import ColumNamesWithAltSpec, \
+        TagsSpec
 
 
 class Classifier(ABC):
@@ -24,47 +24,60 @@ class Classifier(ABC):
     """
 
     def __init__(
-        self,
-        cols: ColsSpec = None,
-        *,
-        tags: TagsSpec = None,
+            self,
+            column_names: ColumNamesWithAltSpec = None,
+            *,
+            tags: TagsSpec = None,
     ):
         """
         Initialize the Classifier object.
 
         Args:
-            cols(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
-            optional):
-                Column name(s) to apply the classifier to and to store the
+            column_names: Column name(s) to apply the classifier to and to store the
                 classification result.
+
                 If a `str | list[str]` is given, those are the column names
                 to apply the classifier to. The classification results will be
                 stored in columns named 'dq.<column_name>_<classifier_class>`.
+
                 If a `tuple[str, str] | list[tuple[str, str]]` is given, the
                 first element of the tuple(s) is the column to apply the
                 classifier to and the second element of the tuple(s) is the
                 name of the column that will store the classification result.
+
                 If `None`, the classifier will be applied to all columns and
                 the results will be stored in columns named
                 'dq.<column_name>_<classifier_class>`.
+
                 Defaults to None.
-            tags (str | list[str] | None, optional): Tag(s) for the classifier.
-                Tags can be used by DataQuality operations to select which classifiers
-                to operate on. If a DataQuality operation does not define a tag, it
-                operates on all defined classifiers. If a DataQuality operation defines
-                one or more tags, it will only operate on classifiers that have at least
-                one of those tags.
+            tags: Tag(s) for the classifier.
+
+                Tags can be used by DataQuality operations to select which
+                classifiers to operate on. If a DataQuality operation does not
+                define a tag, it operates on all defined classifiers. If a
+                DataQuality operation defines one or more tags, it will only
+                operate on classifiers that have at least one of those tags.
+
                 Defaults to None.
         """
-        self.cols = cols
+        self.column_names = column_names
         self.tags = tags
 
     @property
-    def cols(self) -> list[str] | list[tuple[str, str]] | None:
-        return self._cols
+    def column_names(self) -> list[str] | list[tuple[str, str]] | None:
+        """
+        :return: The column names the data quality classifier applies to.
+            If a `list[str]` is returned, then the data quality column name
+            for the classifier will be automatically generated using the
+            column names and the classifier type.
+            If a `list[(str, str)]` is returned, the first element of the
+            tuples is the column name the classifier applies and the second
+            element is the data quality column name for the classifier.
+        """
+        return self._column_names
 
-    @cols.setter
-    def cols(self, value: ColsSpec):
+    @column_names.setter
+    def column_names(self, value: ColumNamesWithAltSpec):
         if isinstance(value, str):
             value = [value]
         elif value is None:
@@ -75,11 +88,15 @@ class Classifier(ABC):
         elif isinstance(value, list):
             _is_valid_classifier_list(value)
         else:
-            raise DataQualityConfigurationError(ErrorCode.DQCE9, value, type(value))
-        self._cols = value
+            raise DataQualityConfigurationError(ErrorCode.DQCE9, value,
+                                                type(value))
+        self._column_names = value
 
     @property
     def tags(self) -> list[str]:
+        """
+        :return: The classifier tags.
+        """
         return self._tags
 
     @tags.setter
@@ -91,17 +108,20 @@ class Classifier(ABC):
         elif isinstance(value, list):
             for v in value:
                 if not isinstance(v, str):
-                    raise DataQualityConfigurationError(ErrorCode.DQCE1, v, type(v))
+                    raise DataQualityConfigurationError(ErrorCode.DQCE1,
+                                                        v, type(v))
         else:
-            raise DataQualityConfigurationError(ErrorCode.DQCE2, value, type(value))
+            raise DataQualityConfigurationError(ErrorCode.DQCE2, value,
+                                                type(value))
         self._tags = value
 
 
 def _is_valid_classifier_tuple(
-    value: tuple[str, str],
+        value: tuple[str, str],
 ):
     if len(value) != 2:
-        raise DataQualityConfigurationError(ErrorCode.DQCE3, value, len(value))
+        raise DataQualityConfigurationError(ErrorCode.DQCE3, value,
+                                            len(value))
     if not (isinstance(value[0], str) and isinstance(value[1], str)):
         raise DataQualityConfigurationError(ErrorCode.DQCE4, value)
     return
@@ -114,7 +134,8 @@ def _is_valid_classifier_list(value: list):
             if not current_type:
                 current_type = str
             elif current_type is not str:
-                raise DataQualityConfigurationError(ErrorCode.DQCE8, current_type, str)
+                raise DataQualityConfigurationError(ErrorCode.DQCE8,
+                                                    current_type, str)
         elif isinstance(v, tuple):
             if not current_type:
                 current_type = tuple
@@ -123,11 +144,13 @@ def _is_valid_classifier_list(value: list):
                     ErrorCode.DQCE8, current_type, tuple
                 )
             if len(v) != 2:
-                raise DataQualityConfigurationError(ErrorCode.DQCE5, v, len(v))
+                raise DataQualityConfigurationError(ErrorCode.DQCE5, v,
+                                                    len(v))
             if not (isinstance(v[0], str) and isinstance(v[1], str)):
                 raise DataQualityConfigurationError(ErrorCode.DQCE6, v)
         else:
-            raise DataQualityConfigurationError(ErrorCode.DQCE7, v, type(v))
+            raise DataQualityConfigurationError(ErrorCode.DQCE7, v,
+                                                type(v))
     return
 
 
@@ -141,6 +164,8 @@ class BoolClassifier(Classifier):
 
 ScaleTypeSpec = Literal["exponential", "linear", "logarithmic", "quadratic"]
 
+ScaleRangeSpec = Union[tuple[int, int] | tuple[float | float]]
+ScaleTickSpec = Union[int, float]
 
 class Scale:
     """
@@ -176,32 +201,37 @@ class Scale:
     def scale_type(self, value: ScaleTypeSpec):
         if value not in self.VALID_SCALE_TYPES:
             raise DataQualityConfigurationError(
-                ErrorCode.DQCE47, ", ".join(self.VALID_SCALE_TYPES), value
+                ErrorCode.DQCE47,
+                ", ".join(self.VALID_SCALE_TYPES),
+                value
             )
         self._scale_type = value
 
     @property
-    def scale_range(self) -> tuple[int, int] | tuple[float, float]:
+    def scale_range(self) -> ScaleRangeSpec:
         return self._scale_range
 
     @scale_range.setter
-    def scale_range(self, value: tuple[int, int] | tuple[float | float]):
+    def scale_range(self, value: ScaleRangeSpec):
         if not isinstance(value, tuple):
-            raise DataQualityConfigurationError(ErrorCode.DQCE48, value, type(value))
+            raise DataQualityConfigurationError(ErrorCode.DQCE48, value,
+                                                type(value))
         elif len(value) != 2:
-            raise DataQualityConfigurationError(ErrorCode.DQCE49, value, len(value))
+            raise DataQualityConfigurationError(ErrorCode.DQCE49, value,
+                                                len(value))
         elif not all(isinstance(v, (int, float)) for v in value):
             raise DataQualityConfigurationError(ErrorCode.DQCE50, value)
         self._scale_range = value
 
     @property
-    def scale_tick(self) -> int | float | None:
+    def scale_tick(self) -> ScaleTickSpec:
         return self._scale_tick
 
     @scale_tick.setter
-    def scale_tick(self, value: int | float | None):
-        if value is not None and not isinstance(value, (int, float)):
-            raise DataQualityConfigurationError(ErrorCode.DQCE51, value, type(value))
+    def scale_tick(self, value: ScaleTickSpec):
+        if value is not None and not isinstance(value, get_args(ScaleTickSpec)):
+            raise DataQualityConfigurationError(ErrorCode.DQCE51, value,
+                                                type(value))
         self._scale_tick = value
 
     @property
@@ -211,7 +241,8 @@ class Scale:
     @buckets.setter
     def buckets(self, value: int):
         if not isinstance(value, int):
-            raise DataQualityConfigurationError(ErrorCode.DQCE52, value, type(value))
+            raise DataQualityConfigurationError(ErrorCode.DQCE52, value,
+                                                type(value))
         if value < 2 or value > 100:
             raise DataQualityConfigurationError(ErrorCode.DQCE80, value)
         self._buckets = value
@@ -246,15 +277,18 @@ class Scale:
             if self.bucket_names is not None:
                 if len(bucket_names) != buckets:
                     raise DataQualityConfigurationError(
-                        ErrorCode.DQCE53, buckets, bucket_names, len(bucket_names)
+                        ErrorCode.DQCE53,
+                        buckets,
+                        bucket_names,
+                        len(bucket_names)
                     )
 
     @classmethod
     def identity(
-        cls,
-        buckets: int,
-        scale_range: tuple[int, int] | tuple[float, float],
-        bucket_names: list[str] = None,
+            cls,
+            buckets: int,
+            scale_range: tuple[int, int] | tuple[float, float],
+            bucket_names: list[str] = None,
     ) -> Self:
         """
         identity scale.
@@ -262,21 +296,20 @@ class Scale:
         If bucket_names are provided, they  can be used with
             `CategoryCriteria.by_name()`.
         """
-        return cls(
-            scale_type="linear",
-            buckets=buckets,
-            scale_range=scale_range,
-            scale_tick=1,
-            bucket_names=bucket_names,
-            _internal=True,
-        )
+        scale = cls.__new__(cls)
+        scale.scale_type = "linear"
+        scale.buckets = buckets
+        scale.scale_range = scale_range
+        scale.scale_tick = 1
+        scale.bucket_names = bucket_names
+        return scale
 
     @classmethod
     def linear(
-        cls,
-        buckets: int,
-        scale_range: tuple[int, int] | tuple[float, float],
-        bucket_names: list[str] = None,
+            cls,
+            buckets: int,
+            scale_range: tuple[int, int] | tuple[float, float],
+            bucket_names: list[str] = None,
     ) -> Self:
         """
         linear scale.
@@ -284,22 +317,21 @@ class Scale:
         If bucket_names are provided, they  can be used with
             `CategoryCriteria.by_name()`.
         """
-        return cls(
-            scale_type="linear",
-            buckets=buckets,
-            scale_range=scale_range,
-            scale_tick=1,
-            bucket_names=bucket_names,
-            _internal=True,
-        )
+        scale = cls.__new__(cls)
+        scale.scale_type = "linear"
+        scale.buckets = buckets
+        scale.scale_range = scale_range
+        scale.scale_tick = 1
+        scale.bucket_names = bucket_names
+        return scale
 
     @classmethod
     def quadratic(
-        cls,
-        power: int | float,
-        buckets: int,
-        scale_range: tuple[int, int],
-        bucket_names: list[str] = None,
+            cls,
+            power: int | float,
+            buckets: int,
+            scale_range: tuple[int, int],
+            bucket_names: list[str] = None,
     ) -> Self:
         """
         quadratic scale.
@@ -307,22 +339,21 @@ class Scale:
         If bucket_names are provided, they  can be used with
             `CategoryCriteria.by_name()`.
         """
-        return cls(
-            scale_type="quadratic",
-            buckets=buckets,
-            scale_range=scale_range,
-            scale_tick=power,
-            bucket_names=bucket_names,
-            _internal=True,
-        )
+        scale = cls.__new__(cls)
+        scale.scale_type = "quadratic"
+        scale.buckets = buckets
+        scale.scale_range = scale_range
+        scale.scale_tick = power
+        scale.bucket_names = bucket_names
+        return scale
 
     @classmethod
     def exponential(
-        cls,
-        base: float | int,
-        buckets: int,
-        scale_range: tuple[float, float],
-        bucket_names: list[str] = None,
+            cls,
+            base: float | int,
+            buckets: int,
+            scale_range: tuple[float, float],
+            bucket_names: list[str] = None,
     ) -> Self:
         """
         exponential scale.
@@ -330,22 +361,21 @@ class Scale:
         If bucket_names are provided, they  can be used with
             `CategoryCriteria.by_name()`.
         """
-        return cls(
-            scale_type="exponential",
-            buckets=buckets,
-            scale_range=scale_range,
-            scale_tick=base,
-            bucket_names=bucket_names,
-            _internal=True,
-        )
+        scale = cls.__new__(cls)
+        scale.scale_type = "exponential"
+        scale.buckets = buckets
+        scale.scale_range = scale_range
+        scale.scale_tick = base
+        scale.bucket_names = bucket_names
+        return scale
 
     @classmethod
     def logarithmic(
-        cls,
-        base: float | int,
-        buckets: int,
-        scale_range: tuple[float, float],
-        bucket_names: list[str] = None,
+            cls,
+            base: float | int,
+            buckets: int,
+            scale_range: tuple[float, float],
+            bucket_names: list[str] = None,
     ) -> Self:
         """
         logarithmic scale.
@@ -353,14 +383,13 @@ class Scale:
         If bucket_names are provided, they  can be used with
             `CategoryCriteria.by_name()`.
         """
-        return cls(
-            scale_type="logarithmic",
-            buckets=buckets,
-            scale_range=scale_range,
-            scale_tick=base,
-            bucket_names=bucket_names,
-            _internal=True,
-        )
+        scale = cls.__new__(cls)
+        scale.scale_type = "logarithmic"
+        scale.buckets = buckets
+        scale.scale_range = scale_range
+        scale.scale_tick = base
+        scale.bucket_names = bucket_names
+        return scale
 
 
 class Categorizer(Classifier):
@@ -368,19 +397,20 @@ class Categorizer(Classifier):
     Categorizer that bucketizes data based on the give scale.
     """
 
-    def __init__(self, cols: ColsSpec = None, *, scale: Scale, tags: TagsSpec = None):
+    def __init__(self, column_names: ColumNamesWithAltSpec = None, *,
+                 scale: Scale, tags: TagsSpec = None):
         """
         Create a categorizer that categorizes data based on the given scale.
 
         Args:
-            cols(ColsSpec, optional): Column(s) to categorize.
+            column_names(ColsSpec, optional): Column(s) to categorize.
             scale(Scale): Scale to use for categorization.
             tags(str | list[str] | None, optional): Tag(s) for the classification
                 results. Tags allow performing multiple actions, with each taking into
                 account only classifiers that have certain tag(s).
 
         """
-        super().__init__(cols=cols, tags=tags)
+        super().__init__(column_names=column_names, tags=tags)
         self.scale = scale
 
     @property
@@ -390,7 +420,8 @@ class Categorizer(Classifier):
     @scale.setter
     def scale(self, value: Scale):
         if not isinstance(value, Scale):
-            raise DataQualityConfigurationError(ErrorCode.DQCE56, value, type(value))
+            raise DataQualityConfigurationError(ErrorCode.DQCE56, value,
+                                                type(value))
         self._scale = value
 
 
@@ -400,18 +431,18 @@ class DoesNotMatch(BoolClassifier):
     """
 
     def __init__(
-        self,
-        cols: ColsSpec = None,
-        ignore_nulls: bool = False,
-        *,
-        regex: str,
-        tags: TagsSpec = None,
+            self,
+            column_names: ColumNamesWithAltSpec = None,
+            ignore_nulls: bool = False,
+            *,
+            regex: str,
+            tags: TagsSpec = None,
     ):
         """
         Constructor.
 
         Args:
-            cols(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
+            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
             optional):
                 Column name(s) to apply the classifier to and to store the
                 classification result.
@@ -438,7 +469,7 @@ class DoesNotMatch(BoolClassifier):
                 one of those tags.
                 Defaults to None.
         """
-        super().__init__(cols=cols, tags=tags)
+        super().__init__(column_names=column_names, tags=tags)
         self.ignore_nulls = ignore_nulls
         self.regex = regex
 
@@ -449,7 +480,8 @@ class DoesNotMatch(BoolClassifier):
     @ignore_nulls.setter
     def ignore_nulls(self, value: bool):
         if not isinstance(value, bool):
-            raise DataQualityConfigurationError(ErrorCode.DQCE20, value, type(value))
+            raise DataQualityConfigurationError(ErrorCode.DQCE20, value,
+                                                type(value))
         self._ignore_nulls = value
 
     @property
@@ -459,7 +491,8 @@ class DoesNotMatch(BoolClassifier):
     @regex.setter
     def regex(self, value: str):
         if not isinstance(value, str):
-            raise DataQualityConfigurationError(ErrorCode.DQCE21, value, type(value))
+            raise DataQualityConfigurationError(ErrorCode.DQCE21, value,
+                                                type(value))
         self._regex = value
 
 
@@ -471,17 +504,17 @@ class HasColumns(BoolClassifier):
     VALID_MODES = ["at_least", "exact"]
 
     def __init__(
-        self,
-        cols: list[str] | str,
-        mode: Literal["at_least", "exact"] = "at_least",
-        *,
-        tags: TagsSpec = None,
+            self,
+            column_names: list[str] | str,
+            mode: Literal["at_least", "exact"] = "at_least",
+            *,
+            tags: TagsSpec = None,
     ):
         """
         Constructor.
 
         Args:
-            cols(list[str] | str):
+            column_names(list[str] | str):
                 Column name(s) to check for existence.
             mode(Literal["at_least", "exact"], optional): Mode of checking columns. If
                 "at_least", checks that at least the given columns exist. If "exact",
@@ -494,15 +527,15 @@ class HasColumns(BoolClassifier):
                 one of those tags.
                 Defaults to None.
         """
-        super().__init__(cols=cols, tags=tags)
+        super().__init__(column_names=column_names, tags=tags)
         self.mode = mode
 
     @property
-    def cols(self) -> list[str]:
+    def column_names(self) -> list[str]:
         return self._cols
 
-    @cols.setter
-    def cols(self, value: list[str]):
+    @column_names.setter
+    def column_names(self, value: list[str]):
         match value:
             case str():
                 value = [value]
@@ -539,16 +572,16 @@ class HasColumnTypes(BoolClassifier):
     """
 
     def __init__(
-        self,
-        cols: list[tuple[str, DataType]] | tuple[str, DataType],
-        *,
-        tags: TagsSpec = None,
+            self,
+            column_names: list[tuple[str, DataType]] | tuple[str, DataType],
+            *,
+            tags: TagsSpec = None,
     ):
         """
         Constructor.
 
         Args:
-            cols(list[tuple[str, DataType] | tuple[str, DataType]]):
+            column_names(list[tuple[str, DataType] | tuple[str, DataType]]):
                 Column name(s) and their expected data types to check for.
             tags (str | list[str] | None, optional): Tag(s) for the classifier.
                 Tags can be used by DataQuality operations to select which classifiers
@@ -558,14 +591,14 @@ class HasColumnTypes(BoolClassifier):
                 one of those tags.
                 Defaults to None.
         """
-        super().__init__(cols=cols, tags=tags)
+        super().__init__(column_names=column_names, tags=tags)
 
     @property
     def cols(self) -> list[tuple[str, DataType]]:
         return self._cols
 
     @cols.setter
-    def cols(self, value: list[tuple[str, DataType]]):
+    def column_names(self, value: list[tuple[str, DataType]]):
         match value:
             case tuple():
                 if len(value) != 2:
@@ -574,9 +607,11 @@ class HasColumnTypes(BoolClassifier):
                     )
                 a, b = value
                 if not isinstance(a, str):
-                    raise DataQualityConfigurationError(ErrorCode.DQCE36, a, type(a))
+                    raise DataQualityConfigurationError(ErrorCode.DQCE36, a,
+                                                        type(a))
                 elif b not in TF_DATA_TYPES:
-                    raise DataQualityConfigurationError(ErrorCode.DQCE37, b, type(b))
+                    raise DataQualityConfigurationError(ErrorCode.DQCE37, b,
+                                                        type(b))
                 value = [value]
             case list():
                 for v in value:
@@ -585,7 +620,8 @@ class HasColumnTypes(BoolClassifier):
                             ErrorCode.DQCE38, v, type(v)
                         )
                     elif len(v) != 2:
-                        raise DataQualityConfigurationError(ErrorCode.DQCE39, v, len(v))
+                        raise DataQualityConfigurationError(ErrorCode.DQCE39,
+                                                            v, len(v))
                     a, b = v
                     if not isinstance(a, str):
                         raise DataQualityConfigurationError(
@@ -608,19 +644,19 @@ class HasLen(BoolClassifier):
     """
 
     def __init__(
-        self,
-        cols: ColsSpec = None,
-        ignore_nulls: bool = False,
-        min: int | float = float("-inf"),
-        max: int | float = float("inf"),
-        *,
-        tags: TagsSpec = None,
+            self,
+            column_names: ColumNamesWithAltSpec = None,
+            ignore_nulls: bool = False,
+            min: int | float = float("-inf"),
+            max: int | float = float("inf"),
+            *,
+            tags: TagsSpec = None,
     ):
         """
         Constructor.
 
         Args:
-            cols(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
+            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
             optional):
                 Column name(s) to apply the classifier to and to store the
                 classification result.
@@ -648,7 +684,7 @@ class HasLen(BoolClassifier):
                 one of those tags.
                 Defaults to None.
         """
-        super().__init__(cols=cols, tags=tags)
+        super().__init__(column_names=column_names, tags=tags)
         self.ignore_nulls = ignore_nulls
         self.min = min
         self.max = max
@@ -660,7 +696,8 @@ class HasLen(BoolClassifier):
     @ignore_nulls.setter
     def ignore_nulls(self, value: bool):
         if not isinstance(value, bool):
-            raise DataQualityConfigurationError(ErrorCode.DQCE28, value, type(value))
+            raise DataQualityConfigurationError(ErrorCode.DQCE28, value,
+                                                type(value))
         self._ignore_nulls = value
 
     @property
@@ -670,7 +707,8 @@ class HasLen(BoolClassifier):
     @min.setter
     def min(self, value: int | float):
         if not isinstance(value, (int, float)):
-            raise DataQualityConfigurationError(ErrorCode.DQCE22, value, type(value))
+            raise DataQualityConfigurationError(ErrorCode.DQCE22, value,
+                                                type(value))
         self._min = value
 
     @property
@@ -680,7 +718,8 @@ class HasLen(BoolClassifier):
     @max.setter
     def max(self, value: int | float):
         if not isinstance(value, (int, float)):
-            raise DataQualityConfigurationError(ErrorCode.DQCE23, value, type(value))
+            raise DataQualityConfigurationError(ErrorCode.DQCE23, value,
+                                                type(value))
         self._max = value
 
 
@@ -690,18 +729,18 @@ class IsIn(BoolClassifier):
     """
 
     def __init__(
-        self,
-        cols: ColsSpec = None,
-        ignore_nulls: bool = False,
-        *,
-        set: Collection,
-        tags: TagsSpec = None,
+            self,
+            column_names: ColumNamesWithAltSpec = None,
+            ignore_nulls: bool = False,
+            *,
+            set: Collection,
+            tags: TagsSpec = None,
     ):
         """
         Constructor.
 
         Args:
-            cols(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
+            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
             optional):
                 Column name(s) to apply the classifier to and to store the
                 classification result.
@@ -728,7 +767,7 @@ class IsIn(BoolClassifier):
                 one of those tags.
                 Defaults to None.
         """
-        super().__init__(cols=cols, tags=tags)
+        super().__init__(column_names=column_names, tags=tags)
         self.ignore_nulls = ignore_nulls
         self.set = set
 
@@ -739,7 +778,8 @@ class IsIn(BoolClassifier):
     @ignore_nulls.setter
     def ignore_nulls(self, value: bool):
         if not isinstance(value, bool):
-            raise DataQualityConfigurationError(ErrorCode.DQCE29, value, type(value))
+            raise DataQualityConfigurationError(ErrorCode.DQCE29, value,
+                                                type(value))
         self._ignore_nulls = value
 
     @property
@@ -749,7 +789,8 @@ class IsIn(BoolClassifier):
     @set.setter
     def set(self, value: Collection):
         if not _is_collection(value):
-            raise DataQualityConfigurationError(ErrorCode.DQCE30, value, type(value))
+            raise DataQualityConfigurationError(ErrorCode.DQCE30, value,
+                                                type(value))
         self._set = value
 
 
@@ -761,20 +802,20 @@ class IsInRange(BoolClassifier):
     VALID_CLOSED_OPTIONS = ["both", "lower", "none", "upper"]
 
     def __init__(
-        self,
-        cols: ColsSpec = None,
-        ignore_nulls: bool = False,
-        min: int | float = float("-inf"),
-        max: int | float = float("inf"),
-        closed: Literal["both", "lower", "none", "upper"] = "both",
-        *,
-        tags: TagsSpec = None,
+            self,
+            column_names: ColumNamesWithAltSpec = None,
+            ignore_nulls: bool = False,
+            min: int | float = float("-inf"),
+            max: int | float = float("inf"),
+            closed: Literal["both", "lower", "none", "upper"] = "both",
+            *,
+            tags: TagsSpec = None,
     ):
         """
         Constructor.
 
         Args:
-            cols(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
+            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
             optional):
                 Column name(s) to apply the classifier to and to store the
                 classification result.
@@ -805,7 +846,7 @@ class IsInRange(BoolClassifier):
                 one of those tags.
                 Defaults to None.
         """
-        super().__init__(cols=cols, tags=tags)
+        super().__init__(column_names=column_names, tags=tags)
         self.ignore_nulls = ignore_nulls
         self.min = min
         self.max = max
@@ -818,7 +859,8 @@ class IsInRange(BoolClassifier):
     @ignore_nulls.setter
     def ignore_nulls(self, value: bool):
         if not isinstance(value, bool):
-            raise DataQualityConfigurationError(ErrorCode.DQCE24, value, type(value))
+            raise DataQualityConfigurationError(ErrorCode.DQCE24, value,
+                                                type(value))
         self._ignore_nulls = value
 
     @property
@@ -828,7 +870,8 @@ class IsInRange(BoolClassifier):
     @min.setter
     def min(self, value: int | float):
         if not isinstance(value, (int, float)):
-            raise DataQualityConfigurationError(ErrorCode.DQCE25, value, type(value))
+            raise DataQualityConfigurationError(ErrorCode.DQCE25, value,
+                                                type(value))
         self._min = value
 
     @property
@@ -838,7 +881,8 @@ class IsInRange(BoolClassifier):
     @max.setter
     def max(self, value: int | float):
         if not isinstance(value, (int, float)):
-            raise DataQualityConfigurationError(ErrorCode.DQCE26, value, type(value))
+            raise DataQualityConfigurationError(ErrorCode.DQCE26, value,
+                                                type(value))
         self._max = value
 
     @property
@@ -862,17 +906,17 @@ class IsNan(BoolClassifier):
     """
 
     def __init__(
-        self,
-        cols: ColsSpec = None,
-        ignore_nulls: bool = False,
-        *,
-        tags: TagsSpec = None,
+            self,
+            column_names: ColumNamesWithAltSpec = None,
+            ignore_nulls: bool = False,
+            *,
+            tags: TagsSpec = None,
     ):
         """
         Constructor.
 
         Args:
-            cols(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
+            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
             optional):
                 Column name(s) to apply the classifier to and to store the
                 classification result.
@@ -898,7 +942,7 @@ class IsNan(BoolClassifier):
                 one of those tags.
                 Defaults to None.
         """
-        super().__init__(cols=cols, tags=tags)
+        super().__init__(column_names=column_names, tags=tags)
         self.ignore_nulls = ignore_nulls
 
     @property
@@ -908,7 +952,8 @@ class IsNan(BoolClassifier):
     @ignore_nulls.setter
     def ignore_nulls(self, value: bool):
         if not isinstance(value, bool):
-            raise DataQualityConfigurationError(ErrorCode.DQCE10, value, type(value))
+            raise DataQualityConfigurationError(ErrorCode.DQCE10, value,
+                                                type(value))
         self._ignore_nulls = value
 
 
@@ -918,17 +963,17 @@ class IsNegative(BoolClassifier):
     """
 
     def __init__(
-        self,
-        cols: ColsSpec = None,
-        ignore_nulls: bool = False,
-        *,
-        tags: TagsSpec = None,
+            self,
+            column_names: ColumNamesWithAltSpec = None,
+            ignore_nulls: bool = False,
+            *,
+            tags: TagsSpec = None,
     ):
         """
         Constructor.
 
         Args:
-            cols(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
+            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
             optional):
                 Column name(s) to apply the classifier to and to store the
                 classification result.
@@ -954,7 +999,7 @@ class IsNegative(BoolClassifier):
                 one of those tags.
                 Defaults to None.
         """
-        super().__init__(cols=cols, tags=tags)
+        super().__init__(column_names=column_names, tags=tags)
         self.ignore_nulls = ignore_nulls
 
     @property
@@ -964,7 +1009,8 @@ class IsNegative(BoolClassifier):
     @ignore_nulls.setter
     def ignore_nulls(self, value: bool):
         if not isinstance(value, bool):
-            raise DataQualityConfigurationError(ErrorCode.DQCE16, value, type(value))
+            raise DataQualityConfigurationError(ErrorCode.DQCE16, value,
+                                                type(value))
         self._ignore_nulls = value
 
 
@@ -974,17 +1020,17 @@ class IsNegativeOrZero(BoolClassifier):
     """
 
     def __init__(
-        self,
-        cols: ColsSpec = None,
-        ignore_nulls: bool = False,
-        *,
-        tags: TagsSpec = None,
+            self,
+            column_names: ColumNamesWithAltSpec = None,
+            ignore_nulls: bool = False,
+            *,
+            tags: TagsSpec = None,
     ):
         """
         Constructor.
 
         Args:
-            cols(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
+            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
             optional):
                 Column name(s) to apply the classifier to and to store the
                 classification result.
@@ -1010,7 +1056,7 @@ class IsNegativeOrZero(BoolClassifier):
                 one of those tags.
                 Defaults to None.
         """
-        super().__init__(cols=cols, tags=tags)
+        super().__init__(column_names=column_names, tags=tags)
         self.ignore_nulls = ignore_nulls
 
     @property
@@ -1020,7 +1066,8 @@ class IsNegativeOrZero(BoolClassifier):
     @ignore_nulls.setter
     def ignore_nulls(self, value: bool):
         if not isinstance(value, bool):
-            raise DataQualityConfigurationError(ErrorCode.DQCE17, value, type(value))
+            raise DataQualityConfigurationError(ErrorCode.DQCE17, value,
+                                                type(value))
         self._ignore_nulls = value
 
 
@@ -1030,18 +1077,18 @@ class IsNotIn(BoolClassifier):
     """
 
     def __init__(
-        self,
-        cols: ColsSpec = None,
-        ignore_nulls: bool = False,
-        *,
-        set: Collection,
-        tags: TagsSpec = None,
+            self,
+            column_names: ColumNamesWithAltSpec = None,
+            ignore_nulls: bool = False,
+            *,
+            set: Collection,
+            tags: TagsSpec = None,
     ):
         """
         Constructor.
 
         Args:
-            cols(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
+            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
             optional):
                 Column name(s) to apply the classifier to and to store the
                 classification result.
@@ -1068,7 +1115,7 @@ class IsNotIn(BoolClassifier):
                 one of those tags.
                 Defaults to None.
         """
-        super().__init__(cols=cols, tags=tags)
+        super().__init__(column_names=column_names, tags=tags)
         self.ignore_nulls = ignore_nulls
         self.set = set
 
@@ -1079,7 +1126,8 @@ class IsNotIn(BoolClassifier):
     @ignore_nulls.setter
     def ignore_nulls(self, value: bool):
         if not isinstance(value, bool):
-            raise DataQualityConfigurationError(ErrorCode.DQCE31, value, type(value))
+            raise DataQualityConfigurationError(ErrorCode.DQCE31, value,
+                                                type(value))
         self._ignore_nulls = value
 
     @property
@@ -1089,7 +1137,8 @@ class IsNotIn(BoolClassifier):
     @set.setter
     def set(self, value: Collection):
         if not _is_collection(value):
-            raise DataQualityConfigurationError(ErrorCode.DQCE32, value, type(value))
+            raise DataQualityConfigurationError(ErrorCode.DQCE32, value,
+                                                type(value))
         self._set = value
 
 
@@ -1099,17 +1148,17 @@ class IsNotNan(BoolClassifier):
     """
 
     def __init__(
-        self,
-        cols: ColsSpec = None,
-        ignore_nulls: bool = False,
-        *,
-        tags: TagsSpec = None,
+            self,
+            column_names: ColumNamesWithAltSpec = None,
+            ignore_nulls: bool = False,
+            *,
+            tags: TagsSpec = None,
     ):
         """
         Constructor.
 
         Args:
-            cols(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
+            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
             optional):
                 Column name(s) to apply the classifier to and to store the
                 classification result.
@@ -1135,7 +1184,7 @@ class IsNotNan(BoolClassifier):
                 one of those tags.
                 Defaults to None.
         """
-        super().__init__(cols=cols, tags=tags)
+        super().__init__(column_names=column_names, tags=tags)
         self.ignore_nulls = ignore_nulls
 
     @property
@@ -1145,7 +1194,8 @@ class IsNotNan(BoolClassifier):
     @ignore_nulls.setter
     def ignore_nulls(self, value: bool):
         if not isinstance(value, bool):
-            raise DataQualityConfigurationError(ErrorCode.DQCE11, value, type(value))
+            raise DataQualityConfigurationError(ErrorCode.DQCE11, value,
+                                                type(value))
         self._ignore_nulls = value
 
 
@@ -1154,12 +1204,13 @@ class IsNotNull(BoolClassifier):
     IS NOT NULL classifier.
     """
 
-    def __init__(self, cols: ColsSpec = None, *, tags: TagsSpec = None):
+    def __init__(self, column_names: ColumNamesWithAltSpec = None, *,
+                 tags: TagsSpec = None):
         """
         Constructor.
 
         Args:
-            cols(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
+            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
             optional):
                 Column name(s) to apply the classifier to and to store the
                 classification result.
@@ -1182,7 +1233,7 @@ class IsNotNull(BoolClassifier):
                 one of those tags.
                 Defaults to None.
         """
-        super().__init__(cols=cols, tags=tags)
+        super().__init__(column_names=column_names, tags=tags)
 
 
 class IsNotNullNorNan(BoolClassifier):
@@ -1190,12 +1241,13 @@ class IsNotNullNorNan(BoolClassifier):
     IS NOT NULL AND NOT NAN classifier.
     """
 
-    def __init__(self, cols: ColsSpec = None, *, tags: TagsSpec = None):
+    def __init__(self, column_names: ColumNamesWithAltSpec = None, *,
+                 tags: TagsSpec = None):
         """
         Constructor.
 
         Args:
-            cols(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
+            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
             optional):
                 Column name(s) to apply the classifier to and to store the
                 classification result.
@@ -1218,7 +1270,7 @@ class IsNotNullNorNan(BoolClassifier):
                 one of those tags.
                 Defaults to None.
         """
-        super().__init__(cols=cols, tags=tags)
+        super().__init__(column_names=column_names, tags=tags)
 
 
 class IsNotZero(BoolClassifier):
@@ -1227,17 +1279,17 @@ class IsNotZero(BoolClassifier):
     """
 
     def __init__(
-        self,
-        cols: ColsSpec = None,
-        ignore_nulls: bool = False,
-        *,
-        tags: TagsSpec = None,
+            self,
+            column_names: ColumNamesWithAltSpec = None,
+            ignore_nulls: bool = False,
+            *,
+            tags: TagsSpec = None,
     ):
         """
         Constructor.
 
         Args:
-            cols(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
+            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
             optional):
                 Column name(s) to apply the classifier to and to store the
                 classification result.
@@ -1263,7 +1315,7 @@ class IsNotZero(BoolClassifier):
                 one of those tags.
                 Defaults to None.
         """
-        super().__init__(cols=cols, tags=tags)
+        super().__init__(column_names=column_names, tags=tags)
         self.ignore_nulls = ignore_nulls
 
     @property
@@ -1273,7 +1325,8 @@ class IsNotZero(BoolClassifier):
     @ignore_nulls.setter
     def ignore_nulls(self, value: bool):
         if not isinstance(value, bool):
-            raise DataQualityConfigurationError(ErrorCode.DQCE13, value, type(value))
+            raise DataQualityConfigurationError(ErrorCode.DQCE13, value,
+                                                type(value))
         self._ignore_nulls = value
 
 
@@ -1282,12 +1335,13 @@ class IsNull(BoolClassifier):
     IS NULL classifier.
     """
 
-    def __init__(self, cols: ColsSpec = None, *, tags: TagsSpec = None):
+    def __init__(self, column_names: ColumNamesWithAltSpec = None, *,
+                 tags: TagsSpec = None):
         """
         Constructor.
 
         Args:
-            cols(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
+            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
             optional):
                 Column name(s) to apply the classifier to and to store the
                 classification result.
@@ -1310,7 +1364,7 @@ class IsNull(BoolClassifier):
                 one of those tags.
                 Defaults to None.
         """
-        super().__init__(cols=cols, tags=tags)
+        super().__init__(column_names=column_names, tags=tags)
 
 
 class IsNullOrNan(BoolClassifier):
@@ -1318,12 +1372,13 @@ class IsNullOrNan(BoolClassifier):
     IS NULL OR NAN classifier.
     """
 
-    def __init__(self, cols: ColsSpec = None, *, tags: TagsSpec = None):
+    def __init__(self, column_names: ColumNamesWithAltSpec = None, *,
+                 tags: TagsSpec = None):
         """
         Constructor.
 
         Args:
-            cols(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
+            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
             optional):
                 Column name(s) to apply the classifier to and to store the
                 classification result.
@@ -1346,7 +1401,7 @@ class IsNullOrNan(BoolClassifier):
                 one of those tags.
                 Defaults to None.
         """
-        super().__init__(cols=cols, tags=tags)
+        super().__init__(column_names=column_names, tags=tags)
 
 
 class IsPositive(BoolClassifier):
@@ -1355,17 +1410,17 @@ class IsPositive(BoolClassifier):
     """
 
     def __init__(
-        self,
-        cols: ColsSpec = None,
-        ignore_nulls: bool = False,
-        *,
-        tags: TagsSpec = None,
+            self,
+            column_names: ColumNamesWithAltSpec = None,
+            ignore_nulls: bool = False,
+            *,
+            tags: TagsSpec = None,
     ):
         """
         Constructor.
 
         Args:
-            cols(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
+            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
             optional):
                 Column name(s) to apply the classifier to and to store the
                 classification result.
@@ -1391,7 +1446,7 @@ class IsPositive(BoolClassifier):
                 one of those tags.
                 Defaults to None.
         """
-        super().__init__(cols=cols, tags=tags)
+        super().__init__(column_names=column_names, tags=tags)
         self.ignore_nulls = ignore_nulls
 
     @property
@@ -1401,7 +1456,8 @@ class IsPositive(BoolClassifier):
     @ignore_nulls.setter
     def ignore_nulls(self, value: bool):
         if not isinstance(value, bool):
-            raise DataQualityConfigurationError(ErrorCode.DQCE14, value, type(value))
+            raise DataQualityConfigurationError(ErrorCode.DQCE14, value,
+                                                type(value))
         self._ignore_nulls = value
 
 
@@ -1411,17 +1467,17 @@ class IsPositiveOrZero(BoolClassifier):
     """
 
     def __init__(
-        self,
-        cols: ColsSpec = None,
-        ignore_nulls: bool = False,
-        *,
-        tags: TagsSpec = None,
+            self,
+            column_names: ColumNamesWithAltSpec = None,
+            ignore_nulls: bool = False,
+            *,
+            tags: TagsSpec = None,
     ):
         """
         Constructor.
 
         Args:
-            cols(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
+            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
             optional):
                 Column name(s) to apply the classifier to and to store the
                 classification result.
@@ -1447,7 +1503,7 @@ class IsPositiveOrZero(BoolClassifier):
                 one of those tags.
                 Defaults to None.
         """
-        super().__init__(cols=cols, tags=tags)
+        super().__init__(column_names=column_names, tags=tags)
         self.ignore_nulls = ignore_nulls
 
     @property
@@ -1457,7 +1513,8 @@ class IsPositiveOrZero(BoolClassifier):
     @ignore_nulls.setter
     def ignore_nulls(self, value: bool):
         if not isinstance(value, bool):
-            raise DataQualityConfigurationError(ErrorCode.DQCE15, value, type(value))
+            raise DataQualityConfigurationError(ErrorCode.DQCE15, value,
+                                                type(value))
         self._ignore_nulls = value
 
 
@@ -1467,17 +1524,17 @@ class IsZero(BoolClassifier):
     """
 
     def __init__(
-        self,
-        cols: ColsSpec = None,
-        ignore_nulls: bool = False,
-        *,
-        tags: TagsSpec = None,
+            self,
+            column_names: ColumNamesWithAltSpec = None,
+            ignore_nulls: bool = False,
+            *,
+            tags: TagsSpec = None,
     ):
         """
         Constructor.
 
         Args:
-            cols(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
+            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
             optional):
                 Column name(s) to apply the classifier to and to store the
                 classification result.
@@ -1503,7 +1560,7 @@ class IsZero(BoolClassifier):
                 one of those tags.
                 Defaults to None.
         """
-        super().__init__(cols=cols, tags=tags)
+        super().__init__(column_names=column_names, tags=tags)
         self.ignore_nulls = ignore_nulls
 
     @property
@@ -1513,7 +1570,8 @@ class IsZero(BoolClassifier):
     @ignore_nulls.setter
     def ignore_nulls(self, value: bool):
         if not isinstance(value, bool):
-            raise DataQualityConfigurationError(ErrorCode.DQCE12, value, type(value))
+            raise DataQualityConfigurationError(ErrorCode.DQCE12, value,
+                                                type(value))
         self._ignore_nulls = value
 
 
@@ -1523,18 +1581,18 @@ class Matches(BoolClassifier):
     """
 
     def __init__(
-        self,
-        cols: ColsSpec = None,
-        ignore_nulls: bool = False,
-        *,
-        regex: str,
-        tags: TagsSpec = None,
+            self,
+            column_names: ColumNamesWithAltSpec = None,
+            ignore_nulls: bool = False,
+            *,
+            regex: str,
+            tags: TagsSpec = None,
     ):
         """
         Constructor.
 
         Args:
-            cols(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
+            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
             optional):
                 Column name(s) to apply the classifier to and to store the
                 classification result.
@@ -1561,7 +1619,7 @@ class Matches(BoolClassifier):
                 one of those tags.
                 Defaults to None.
         """
-        super().__init__(cols=cols, tags=tags)
+        super().__init__(column_names=column_names, tags=tags)
         self.ignore_nulls = ignore_nulls
         self.regex = regex
 
@@ -1572,7 +1630,8 @@ class Matches(BoolClassifier):
     @ignore_nulls.setter
     def ignore_nulls(self, value: bool):
         if not isinstance(value, bool):
-            raise DataQualityConfigurationError(ErrorCode.DQCE18, value, type(value))
+            raise DataQualityConfigurationError(ErrorCode.DQCE18, value,
+                                                type(value))
         self._ignore_nulls = value
 
     @property
@@ -1582,5 +1641,6 @@ class Matches(BoolClassifier):
     @regex.setter
     def regex(self, value: str):
         if not isinstance(value, str):
-            raise DataQualityConfigurationError(ErrorCode.DQCE19, value, type(value))
+            raise DataQualityConfigurationError(ErrorCode.DQCE19, value,
+                                                type(value))
         self._regex = value

@@ -9,10 +9,10 @@ from typing import TYPE_CHECKING, Literal, Optional, Self, get_args
 
 from tabsdata.dataquality._utils import _is_collection
 from tabsdata.exceptions import DataQualityConfigurationError, ErrorCode
-from tabsdata.typing._specs import BucketsSpec, TableSpec
+from tabsdata.typing._specs import BucketsSpec
 
 if TYPE_CHECKING:
-    from tabsdata.dataquality.typing._typing import TagsSpec
+    from tabsdata.dataquality.typing._typing import TagsSpec, ColumnNamesSpec
 
 
 class Operation(ABC):
@@ -26,11 +26,13 @@ class Operation(ABC):
 
         Args:
             tags: Tag(s) for the operation.
-                Tags can be used by DataQuality operations to select which classifiers
-                to operate on. If a DataQuality operation does not define a tag, it
-                operates on all defined classifiers. If a DataQuality operation defines
-                one or more tags, it will only operate on classifiers that have at least
-                one of those tags.
+
+                Tags can be used by DataQuality operations to select which
+                classifiers to operate on. If a DataQuality operation does not
+                define a tag, it operates on all defined classifiers. If a
+                DataQuality operation defines one or more tags, it will only
+                operate on classifiers that have at least one of those tags.
+
                 Defaults to None.
         """
         self.tags = tags
@@ -38,7 +40,7 @@ class Operation(ABC):
     @property
     def tags(self) -> list[str]:
         """
-        :return: the data quality operation tags.
+        :return: the tags for the data operation.
         """
         return self._tags
 
@@ -52,13 +54,18 @@ class Operation(ABC):
         elif isinstance(value, list):
             for v in value:
                 if not isinstance(v, str):
-                    raise DataQualityConfigurationError(ErrorCode.DQCE44, v, type(v))
+                    raise DataQualityConfigurationError(
+                        ErrorCode.DQCE44, v, type(v)
+                    )
         else:
-            raise DataQualityConfigurationError(ErrorCode.DQCE45, value, type(value))
+            raise DataQualityConfigurationError(ErrorCode.DQCE45, value,
+                                                type(value))
         self._tags = value
 
 
-CriteriaTypeSpec = Literal["all_ok", "any_failed", "in_buckets", "not_in_buckets"]
+CriteriaTypeSpec = Literal[
+    "all_ok", "any_failed", "in_buckets", "not_in_buckets"
+]
 
 
 class Criteria:
@@ -69,29 +76,38 @@ class Criteria:
 
     Possible criteria are:
 
-        * `all_ok`: all boolean classifiers are `True`.
-        * `any_failed`: any boolean classifier is `False`.
-        * `in_buckets`: for the specified columns, rows that are
-    """
+    * `all_ok`: all boolean classifiers are `True`.
+    * `any_failed`: any boolean classifier is `False`.
+    * `in_buckets`: for the given columns, rows that are in the specified
+      buckets.
+    * `not_in_buckets`: for the given columns, rows that are not in the
+      specified buckets.
+      """
 
     VALID_CRITERIA_TYPES = get_args(CriteriaTypeSpec)
 
     def __init__(self):
-        raise DataQualityConfigurationError(ErrorCode.DQCE58, self.__class__.__name__)
+        """
+        Do not use directly, use one of `all_ok()`, `any_fail()`,
+        `in_buckets()` or `not_in_buckets()` class method to create a
+        `Criteria`.
+        """
+        raise DataQualityConfigurationError(ErrorCode.DQCE58,
+                                            self.__class__.__name__)
 
     def _init_boolean(
-        self,
-        criteria_type: CriteriaTypeSpec,
+            self,
+            criteria_type: CriteriaTypeSpec,
     ):
         self.criteria_type = criteria_type
         self.column_names = None
         self.buckets = None
 
     def _init_categories(
-        self,
-        criteria_type: CriteriaTypeSpec,
-        column_names: list[str],
-        buckets: BucketsSpec,
+            self,
+            criteria_type: CriteriaTypeSpec,
+            column_names: list[str],
+            buckets: BucketsSpec,
     ):
         self.criteria_type = criteria_type
         self.column_names = column_names
@@ -108,7 +124,9 @@ class Criteria:
     def criteria_type(self, value: CriteriaTypeSpec):
         if value not in self.VALID_CRITERIA_TYPES:
             raise DataQualityConfigurationError(
-                ErrorCode.DQCE59, ", ".join(self.VALID_CRITERIA_TYPES), value
+                ErrorCode.DQCE59,
+                ", ".join(self.VALID_CRITERIA_TYPES),
+                value
             )
         self._criteria_type = value
 
@@ -116,13 +134,13 @@ class Criteria:
     def column_names(self) -> list[str] | None:
         """
         :return: The column names the criteria is applied to. Only used with
-        `in_bucket` and `not_in_bucket` criteria. For other criteria is
+        `in_bucket` and `not_in_bucket` criteria. For other criteria types is
         `None`.
         """
         return self._column_names
 
     @column_names.setter
-    def column_names(self, column_names: Optional[TableSpec]):
+    def column_names(self, column_names: Optional[ColumnNamesSpec]):
         if isinstance(column_names, str):
             column_names = [column_names]
         if not _is_collection(column_names) and column_names is not None:
@@ -135,7 +153,7 @@ class Criteria:
     def buckets(self) -> BucketsSpec:
         """
         :return: The category buckets used by the criteria. Only used with
-        `in_bucket` and `not_in_bucket` criteria. For other criteria is
+        `in_bucket` and `not_in_bucket` criteria. For other criteria types is
         `None`.
         """
         return self._buckets
@@ -143,7 +161,9 @@ class Criteria:
     @buckets.setter
     def buckets(self, value: BucketsSpec):
         if not _is_collection(value) and value is not None:
-            raise DataQualityConfigurationError(ErrorCode.DQCE60, value, type(value))
+            raise DataQualityConfigurationError(
+                ErrorCode.DQCE60, value, type(value)
+            )
         self._buckets = value
 
     @classmethod
@@ -167,7 +187,7 @@ class Criteria:
         return c
 
     @classmethod
-    def in_buckets(cls, column_names: TableSpec, buckets: BucketsSpec) -> Self:
+    def in_buckets(cls, column_names: ColumnNamesSpec, buckets: BucketsSpec) -> Self:
         """
         :return: Creates a criteria for the category classifiers of the
         specified columns. For the record to be considered, it requires
@@ -185,7 +205,9 @@ class Criteria:
         return c
 
     @classmethod
-    def not_in_buckets(cls, column_names: TableSpec, buckets: BucketsSpec) -> Self:
+    def not_in_buckets(
+            cls, column_names: ColumnNamesSpec, buckets: BucketsSpec
+    ) -> Self:
         """
         :return: Creates a criteria for the category classifiers of the
         specified columns. For the record to be considered, it requires
@@ -209,17 +231,21 @@ class Threshold:
 
     Possible thresholds are:
 
-        * `count`: the number of records that will activate the threshold.
-        * `percent`: the percentage of records that will activate the
-        threshold.
-        * `one`: one record will activate the threshold. A convenience for
-        `count(1)`
+    * `count`: the number of records that will activate the threshold.
+    * `percent`: the percentage of records that will activate the threshold.
+    * `one`: one record will activate the threshold. A convenience for
+      `count(1)`
     """
 
     def __init__(self):
+        """
+        Do not use directly, use one of `count()`, `percent()` or `one()` class
+        method to create a `Threshold`.
+        """
         self._absolute = None
         self._relative = None
-        raise DataQualityConfigurationError(ErrorCode.DQCE67, self.__class__.__name__)
+        raise DataQualityConfigurationError(ErrorCode.DQCE67,
+                                            self.__class__.__name__)
 
     def __init__count(self, count: int):
         self.absolute = count
@@ -239,10 +265,12 @@ class Threshold:
             self._absolute = value
         elif isinstance(value, int):
             if value <= 0:
-                raise DataQualityConfigurationError(ErrorCode.DQCE69, value)
+                raise DataQualityConfigurationError(ErrorCode.DQCE69,
+                                                    value)
             self._absolute = value
         else:
-            raise DataQualityConfigurationError(ErrorCode.DQCE68, value, type(value))
+            raise DataQualityConfigurationError(ErrorCode.DQCE68, value,
+                                                type(value))
 
     @property
     def relative(self) -> float | None:
@@ -255,10 +283,12 @@ class Threshold:
         elif isinstance(value, (float, int)):
             value = float(value)
             if value <= 0 or value >= 100:
-                raise DataQualityConfigurationError(ErrorCode.DQCE72, value)
+                raise DataQualityConfigurationError(ErrorCode.DQCE72,
+                                                    value)
             self._relative = value
         else:
-            raise DataQualityConfigurationError(ErrorCode.DQCE73, value, type(value))
+            raise DataQualityConfigurationError(ErrorCode.DQCE73, value,
+                                                type(value))
 
     @classmethod
     def count(cls, rows: int) -> Self:
@@ -285,7 +315,8 @@ class Threshold:
     @classmethod
     def one(cls):
         """
-        Convenience method to fail the transaction if one rows matches the criteria.
+        Convenience method to fail the transaction if one rows matches the
+        criteria.
         """
         return cls.count(1)
 
@@ -297,25 +328,30 @@ class Fail(Operation):
     """
 
     def __init__(
-        self,
-        threshold: Threshold,
-        criteria: Criteria = None,
-        *,
-        tags: TagsSpec = None,
+            self,
+            threshold: Threshold,
+            criteria: Criteria = None,
+            *,
+            tags: TagsSpec = None,
     ):
         """
         Creates a data quality fail operation.
 
         Args:
-            threshold(Threshold): The row threshold to fail the transaction.
-            criteria(Criteria, optional): The criteria to fail the transaction.
+            threshold: The threshold to fail the transaction running the
+                function.
+            criteria: The criteria to fail the transaction running the function
+                if the threshold is exceeded.
+
                 Defaults to 'any_failed'.
-            tags (str | list[str] | None, optional): Tag(s) for the operation.
-                Tags can be used by DataQuality operations to select which classifiers
-                to operate on. If a DataQuality operation does not define a tag, it
-                operates on all defined classifiers. If a DataQuality operation defines
-                one or more tags, it will only operate on classifiers that have at least
-                one of those tags.
+            tags: Tag(s) for the operation.
+
+                Tags can be used by DataQuality operations to select which
+                classifiers to operate on. If a DataQuality operation does not
+                define a tag, it operates on all defined classifiers. If a
+                DataQuality operation defines one or more tags, it will only
+                operate on classifiers that have at least one of those tags.
+
                 Defaults to None.
         """
         super().__init__(tags=tags)
@@ -373,26 +409,31 @@ class Filter(Operation):
     """
 
     def __init__(
-        self,
-        to_table: str | None = None,
-        criteria: Criteria = None,
-        *,
-        tags: TagsSpec = None,
+            self,
+            to_table: str | None = None,
+            criteria: Criteria = None,
+            *,
+            tags: TagsSpec = None,
     ):
         """
         Creates a data quality filter.
 
         Args:
-            to_table: table to send the rows being filtered out to. If
-                `None`, the rows will be discarded. Defaults to None
+            to_table: table to send the rows being filtered out to. If `None`,
+                the rows will be discarded.
+
+                Defaults to None
             criteria: The criteria to filter out rows for.
+
                 Defaults to 'any_failed'.
             tags: Tag(s) for the operation.
-                Tags can be used by DataQuality operations to select which classifiers
-                to operate on. If a DataQuality operation does not define a tag, it
-                operates on all defined classifiers. If a DataQuality operation defines
-                one or more tags, it will only operate on classifiers that have at least
-                one of those tags.
+
+                Tags can be used by DataQuality operations to select which
+                classifiers to operate on. If a DataQuality operation does not
+                define a tag, it operates on all defined classifiers. If a
+                DataQuality operation defines one or more tags, it will only
+                operate on classifiers that have at least one of those tags.
+
                 Defaults to None.
         """
         super().__init__(tags=tags)
@@ -450,25 +491,27 @@ class Select(Operation):
     """
 
     def __init__(
-        self,
-        to_table: str,
-        criteria: Criteria = None,
-        *,
-        tags: TagsSpec = None,
+            self,
+            to_table: str,
+            criteria: Criteria = None,
+            *,
+            tags: TagsSpec = None,
     ):
         """
         Creates a data quality selector.
 
         Args:
-            to_table(str, optional): Table to send the rows being selected.
-            criteria(Criteria, optional): The criteria to select the rows with.
-                Defaults to 'all_ok'.
-            tags (str | list[str] | None, optional): Tag(s) for the operation.
-                Tags can be used by DataQuality operations to select which classifiers
-                to operate on. If a DataQuality operation does not define a tag, it
-                operates on all defined classifiers. If a DataQuality operation defines
-                one or more tags, it will only operate on classifiers that have at least
-                one of those tags.
+            to_table: Table to send the rows being selected.
+            criteria: The criteria to select the rows with. Defaults to
+                'all_ok'.
+            tags: Tag(s) for the operation.
+
+                Tags can be used by DataQuality operations to select which
+                classifiers to operate on. If a DataQuality operation does not
+                define a tag, it operates on all defined classifiers. If a
+                DataQuality operation defines one or more tags, it will only
+                operate on classifiers that have at least one of those tags.
+
                 Defaults to None.
         """
         super().__init__(tags=tags)
@@ -524,14 +567,17 @@ class Summary(Operation):
         Creates a data quality summary.
 
         Args:
-            table (str, optional): Name of the data quality summary table. Default name
-                   is `<table_name>_dq_summary`.
-            tags (str | list[str] | None, optional): Tag(s) for the operation.
-                Tags can be used by DataQuality operations to select which classifiers
-                to operate on. If a DataQuality operation does not define a tag, it
-                operates on all defined classifiers. If a DataQuality operation defines
-                one or more tags, it will only operate on classifiers that have at least
-                one of those tags.
+            table: Name of the data quality summary table.
+
+                Defaults to `<table_name>_dq_summary`.
+            tags: Tag(s) for the operation.
+
+                Tags can be used by DataQuality operations to select which
+                classifiers to operate on. If a DataQuality operation does not
+                define a tag, it operates on all defined classifiers. If a
+                DataQuality operation defines one or more tags, it will only
+                operate on classifiers that have at least one of those tags.
+
                 Defaults to None.
         """
         super().__init__(tags=tags)

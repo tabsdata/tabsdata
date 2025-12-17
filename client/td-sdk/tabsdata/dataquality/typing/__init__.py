@@ -10,7 +10,7 @@ from tabsdata.dataquality._classifiers import (
 )
 from tabsdata.dataquality._operations import CriteriaTypeSpec, Operation
 from tabsdata.dataquality.typing._typing import (
-    ColsSpec,
+    ColumNamesWithAltSpec,
     TagsSpec,
 )
 
@@ -21,7 +21,7 @@ __all__ = [
     "Classifier",
     "ScaleTypeSpec",
     # from tabsdata.dataquality.typing._typing
-    "ColsSpec",
+    "ColumNamesWithAltSpec",
     "TagsSpec",
     # from tabsdata.dataquality._operations
     "CriteriaTypeSpec",
