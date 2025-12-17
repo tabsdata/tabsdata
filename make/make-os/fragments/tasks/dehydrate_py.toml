@@ -1,0 +1,141 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[tasks.__os__dehydrate_py_tabsdata]
+plugin = "td-task-tracker"
+category = "11 - Development"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    set_env PYTHONWARNINGS ignore
+
+    debug "🔷 🔷 _____ Dehydrating the Python environment (tabsdata)..."
+
+    cd "${PROJECT_TABSDATA_ROOT_FOLDER}"
+
+    debug "🔸🔸🔸 Environment variable PROJECT_TABSDATA_ROOT_FOLDER: ${PROJECT_TABSDATA_ROOT_FOLDER}"
+
+    uv_version = exec uv --version
+    uv_version = trim ${uv_version.stdout}
+    debug "️🔸🔸🔸 Version of uv: ${uv_version}"
+
+    python_version = exec python --version
+    python_version = trim ${python_version.stdout}
+    debug "️🔸🔸🔸 Version of python: ${python_version}"
+
+    python_scripts_folder = exec python -c "import sysconfig; print(sysconfig.get_path('scripts'))"
+    python_scripts_folder = trim ${python_scripts_folder.stdout}
+    debug "🔸🔸🔸 Value of python_scripts_folder is ${python_scripts_folder}"
+
+    virtual_env = get_env VIRTUAL_ENV
+    debug "️🔸🔸🔸 Environment variable VIRTUAL_ENV: ${virtual_env}"
+
+    if is_empty ${profile}
+        build-folder = set "debug"
+    else
+        is_dev = eq ${profile} "dev"
+        if ${is_dev}
+            build-folder = set "debug"
+        else
+            build-folder = set ${profile}
+        end
+    end
+    if not is_empty ${td-target}
+        build-folder = set ${td-target}/${build-folder}
+    end
+    debug "🔸🔸🔸 Build folder: ${build-folder}"
+
+    os_family = os_family
+    debug "🔸🔸🔸 OS family: ${os_family}"
+
+    debug "🚀 pip unistall tabsdata --yes"
+    exec --fail-on-error pip uninstall tabsdata --yes
+
+    exec python setup.py --quiet clean --all
+
+    rm -r ${PROJECT_TABSDATA_ROOT_FOLDER}/target/python/
+
+    setup_py_file = set "${PROJECT_TABSDATA_ROOT_FOLDER}/setup.py"
+    if is_path_exists ${setup_py_file}
+        debug "🔸🔸🔸 Reading setup.py to extract base_binaries"
+        setup_py_content = readfile ${setup_py_file}
+        setup_py_lines = split ${setup_py_content} "\n"
+        in_base_binaries = set false
+        base_binaries = array
+        for setup_py_line in ${setup_py_lines}
+            setup_py_line = trim ${setup_py_line}
+            is_in_base_binaries = starts_with ${setup_py_line} "base_binaries = ["
+            is_out_base_binaries = starts_with ${setup_py_line} "]"
+            if ${is_in_base_binaries}
+                in_base_binaries = set true
+            elif ${is_out_base_binaries}
+                in_base_binaries = set false
+            else
+                if ${in_base_binaries}
+                    binary_name = replace ${setup_py_line} "\"" ""
+                    binary_name = replace ${binary_name} "," ""
+                    binary_name = trim ${binary_name}
+                    array_push ${base_binaries} ${binary_name}
+                    debug "🔸🔸🔸 Found binary: ${binary_name}"
+                end
+            end
+        end
+
+        base_binaries_size = array_length ${base_binaries}
+        debug "🔸🔸🔸 Found ${base_binaries_size} base binaries"
+
+        for base_binary in ${base_binaries}
+            if eq ${os_family} "windows"
+                binary_name = set "${base_binary}.exe"
+            else
+                binary_name = set "${base_binary}"
+            end
+            source_binary = set "${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${binary_name}"
+            target_binary = set "${python_scripts_folder}/${binary_name}"
+            exists = is_path_exists ${source_binary}
+            target_exists = is_path_exists ${target_binary}
+            if ${target_exists}
+                debug "🔅 Deleting symbolic link for '${binary_name}': ${source_binary} -> ${target_binary}"
+                rm ${target_binary}
+            end
+            exec --fail-on-error python -c "import os; os.symlink('${source_binary}', '${target_binary}')"
+        end
+    else
+        warn "⚠️ setup.py file not found at ${setup_py_file}"
+    end
+    ''']
+
+[tasks.__os__dehydrate_py_connectors]
+plugin = "td-task-tracker"
+category = "11 - Development"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    cd "${PROJECT_TABSDATA_ROOT_FOLDER}"
+
+    connectors = glob_array ${OS_CONNECTORS_PY_ROOT_FOLDER}/tabsdata_*
+
+    for connector in ${connectors}
+        is_connector = is_dir ${connector}
+        if ${is_connector}
+            cd ${connector}
+
+            connector_name = basename ${connector}
+            connector_package = replace ${connector_name} "_" "-"
+
+            debug "🚀 pip uninstall ${connector_package} --yes"
+            exec --fail-on-error pip uninstall ${connector_package} --yes
+
+            exec python setup.py --quiet clean --all
+
+            rm -r ${connector}/target/python/
+        end
+    end
+    ''']

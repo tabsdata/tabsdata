@@ -57,8 +57,11 @@ from tabsdata._utils.bundle_utils import (
 
 # noinspection PyProtectedMember
 from tabsdata._utils.constants import (
+    PYTHON_EDITABLE_PACKAGE_PREFIX,
+    PYTHON_EDITABLE_PACKAGE_SUFFIX,
     TABSDATA_AGENT_MODULE_NAME,
     TABSDATA_CONNECTORS,
+    TABSDATA_CONNECTORS_NAMES,
     TABSDATA_MODULE_NAME,
     TABSDATA_PACKAGES,
     TD_TABSDATA_AGENT_DEV_PKG,
@@ -631,13 +634,31 @@ def add_hex_numbers(hex1, hex2):
 def get_current_tabsdata_version():
     available_modules = [module.name for module in pkgutil.iter_modules()]
     mapping = importlib_metadata.packages_distributions()
-    real_modules = [
-        mapping[module][0] for module in available_modules if module in mapping
-    ]
+    real_modules = []
+    for module in available_modules:
+        if module in mapping:
+            real_modules.append(mapping[module][0])
+        elif module.startswith(PYTHON_EDITABLE_PACKAGE_PREFIX) and module.endswith(
+            PYTHON_EDITABLE_PACKAGE_SUFFIX
+        ):
+            real_modules.append(module)
     for module in real_modules:
-        if module == TABSDATA_MODULE_NAME:
+        if module == TABSDATA_MODULE_NAME or (
+            module.startswith(PYTHON_EDITABLE_PACKAGE_PREFIX + TABSDATA_MODULE_NAME)
+            and module.endswith(PYTHON_EDITABLE_PACKAGE_SUFFIX)
+            and not any(
+                module.startswith(PYTHON_EDITABLE_PACKAGE_PREFIX + connector)
+                for connector in TABSDATA_CONNECTORS_NAMES
+            )
+        ):
             try:
-                version = importlib_metadata.version(module)
+                distribution_name = (
+                    TABSDATA_MODULE_NAME
+                    if module.startswith(PYTHON_EDITABLE_PACKAGE_PREFIX)
+                    and module.endswith(PYTHON_EDITABLE_PACKAGE_SUFFIX)
+                    else module
+                )
+                version = importlib_metadata.version(distribution_name)
                 return version
             except Exception as e:
                 logger.error(f"Error getting version of {module}: {e}")
@@ -649,9 +670,8 @@ def get_current_tabsdata_version():
                 raise e
     logger.error("Could not find the tabsdata module in the available modules.")
     logger.error(
-        "This should never happen as the tabsdata code is "
-        "currently being run, please reach out to the "
-        "development team for assistance."
+        "This should never happen, as the tabsdata code is currently being run; "
+        "please reach out to the development team for assistance."
     )
     raise ValueError("Could not find the tabsdata module in the available modules.")
 

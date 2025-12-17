@@ -31,6 +31,12 @@ extend = [
     { path = "./make/make-os/fragments/tasks/build_rs.toml", relative = "git" },
     { path = "./make/make-os/fragments/tasks/build_py.toml", relative = "git" },
 
+    { path = "./make/make-os/fragments/tasks/hydrate_rs.toml", relative = "git" },
+    { path = "./make/make-os/fragments/tasks/hydrate_py.toml", relative = "git" },
+
+    { path = "./make/make-os/fragments/tasks/dehydrate_rs.toml", relative = "git" },
+    { path = "./make/make-os/fragments/tasks/dehydrate_py.toml", relative = "git" },
+
     { path = "./make/make-os/fragments/tasks/test_rs.toml", relative = "git" },
     { path = "./make/make-os/fragments/tasks/test_py.toml", relative = "git" },
 

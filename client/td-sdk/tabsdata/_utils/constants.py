@@ -7,6 +7,9 @@ POLARS_MODULE_NAME = "polars"
 
 TD_TABSDATA_DEV_PKG = "TD_TABSDATA_DEV_PKG"
 
+PYTHON_EDITABLE_PACKAGE_PREFIX = "__editable___"
+PYTHON_EDITABLE_PACKAGE_SUFFIX = "_finder"
+
 TABSDATA_CONNECTORS_NAMES = [
     "bigquery",
     "databricks",

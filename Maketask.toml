@@ -355,7 +355,7 @@ run_task = [
 [tasks.egg]
 plugin = "td-task-tracker"
 category = "03 - Build"
-description = "Generate editablue builds from source code"
+description = "Generate editable builds from source code"
 run_task = [
     { name = [
         "egg_rs",
@@ -388,6 +388,77 @@ run_task = [
         "__os__egg_py_ty_tableframe",
         "__os__egg_py_tabsdata",
         "__os__egg_py_connectors"
+    ] }
+]
+
+[tasks.hydrate]
+plugin = "td-task-tracker"
+category = "11 - Development"
+description = "Install editable builds from source code"
+run_task = [
+    { name = [
+        "hydrate_rs",
+        "hydrate_py"
+    ] }
+]
+
+[tasks.hydrate_rs]
+plugin = "td-task-tracker"
+category = "11 - Development"
+description = "Task 'hydrate' for Rust projects"
+run_task = [
+    { name = [
+        "__os__hydrate_rs"
+    ] }
+]
+
+[tasks.hydrate_py]
+plugin = "td-task-tracker"
+category = "11 - Development"
+description = "Task 'build' for Python projects"
+run_task = [
+    { name = [
+        "__os__hydrate_py_ta_features",
+        "__os__hydrate_py_ta_tableframe",
+        "__os__hydrate_py_te_examples",
+        "__os__hydrate_py_te_tableframe",
+        "__os__hydrate_py_te_variant",
+        "__os__hydrate_py_to_foundation",
+        "__os__hydrate_py_ty_tableframe",
+        "__os__hydrate_py_tabsdata",
+        "__os__hydrate_py_connectors"
+    ] }
+]
+
+[tasks.dehydrate]
+plugin = "td-task-tracker"
+category = "11 - Development"
+description = "Unistall editable builds from source code"
+run_task = [
+    { name = [
+        "dehydrate_rs",
+        "dehydrate_py"
+    ] }
+]
+
+[tasks.dehydrate_rs]
+plugin = "td-task-tracker"
+category = "11 - Development"
+description = "Task 'dehydrate' for Rust projects"
+run_task = [
+    { name = [
+        "__os__dehydrate_rs"
+    ] }
+]
+
+[tasks.dehydrate_py]
+plugin = "td-task-tracker"
+category = "11 - Development"
+description = "Task 'build' for Python projects"
+run_task = [
+    { name = [
+        "__os__dehydrate_py_tabsdata",
+        "__os__dehydrate_py_connectors"
     ] }
 ]
 
