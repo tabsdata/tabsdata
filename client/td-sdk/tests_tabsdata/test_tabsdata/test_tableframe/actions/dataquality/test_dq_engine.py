@@ -5,11 +5,8 @@
 import polars as pl
 import pytest
 from test_tabsdata.test_tableframe.actions.dataquality.dq_helper import (
+    CLASSIFIERS,
     dataset,
-    is_not_null_checks,
-    is_not_null_classifiers,
-    is_null_checks,
-    is_null_classifiers,
 )
 
 from tabsdata.tableframe._actions.dataquality.engine import DataQualityEngine
@@ -23,31 +20,30 @@ pretty_pandas()
 pl.Config.set_verbose(False)
 
 
+def dq_parameters():
+    parameters = []
+    for classifier, config in CLASSIFIERS.items():
+        for dtype in config.dtypes:
+            parameters.append(
+                pytest.param(
+                    classifier,
+                    dtype,
+                    config,
+                    id=f"{classifier.__name__}_{dtype.__name__}",
+                )
+            )
+    return parameters
+
+
 @pytest.mark.dq
-def test_is_null():
-    tf = dataset(rows=4096)
-    classifiers = is_null_classifiers()
-    dq = tf._dq
-    for classifier in classifiers:
-        dq = dq.is_null(classifier.cols, classifier.tags)
-    df = dq.tf()._lf.collect()
-    assert isinstance(dq, DataQualityEngine)
-    is_null_checks(df, dq._tags)
-
-    dq = dq.summary(["missing_single", "missing_list"])
-    df = dq.tf()._lf.collect()
-    print(df)
-
-
-@pytest.mark.dq
-def test_is_not_null():
-    tf = dataset(rows=1024)
-    classifier = is_not_null_classifiers()
-    dq = tf._dq.is_not_null(classifier.cols, classifier.tags)
-    df = dq.tf()._lf.collect()
-    assert isinstance(dq, DataQualityEngine)
-    is_not_null_checks(df, dq._tags)
-
-    dq = dq.summary(["not_missing"])
-    df = dq.tf()._lf.collect()
-    print(df)
+@pytest.mark.parametrize("classifier,dtype,configuration", dq_parameters())
+def test_dq_engine(classifier, dtype, configuration):
+    tf = dataset(dtype)
+    dq_engine = tf._dq
+    for classifier in configuration.classifiers:
+        dq_engine = configuration.method(dq_engine, classifier)
+    assert isinstance(dq_engine, DataQualityEngine)
+    df = dq_engine.tf()._lf.collect()
+    configuration.checker(df, dq_engine._tags)
+    assert "value" in df.columns
+    assert "id" in df.columns

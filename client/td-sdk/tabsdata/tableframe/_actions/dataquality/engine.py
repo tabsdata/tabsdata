@@ -6,10 +6,11 @@ from __future__ import annotations
 
 import logging
 from collections import namedtuple
-from enum import Enum, StrEnum
+from dataclasses import dataclass
+from enum import Enum
 
 # from typing import Any, Callable, Collection, Literal, Self
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, Callable, Self, cast
 
 import polars as pl
 
@@ -17,6 +18,13 @@ import polars as pl
 # import tabsdata._utils.tableframe._translator as td_translator
 import tabsdata.tableframe.expr.expr as td_expr
 import tabsdata.tableframe.lazyframe.frame as td_frame
+from tabsdata.dataquality._classifiers import (
+    Classifier,
+    IsNan,
+    IsNotNan,
+    IsNotNull,
+    IsNull,
+)
 from tabsdata.exceptions import DataQualityProcessingError, ErrorCode
 from tabsdata.tableframe.lazyframe.properties import TableFramePropertiesBuilder
 
@@ -52,14 +60,48 @@ class ClassifierFamily(Enum):
     CATEGORICAL = "categorical"
 
 
-class ClassifierSuffix(StrEnum):
-    IS_NULL = "_is_null"
-    IS_NOT_NULL = "_is_not_null"
+class PolarsProvider:
+    def __init__(self, function: Callable[[pl.Expr, Classifier], pl.Expr]):
+        self._function = function
+        import inspect
+
+        sig = inspect.signature(function)
+        self._needs_classifier = len(sig.parameters) > 1
+
+    def __call__(self, column: str, classifier: Classifier) -> pl.Expr:
+        col = pl.col(column)
+        return self._function(col, classifier)
+
+    @staticmethod
+    def is_null(col: pl.Expr, _: Classifier) -> pl.Expr:
+        return col.is_null()
+
+    @staticmethod
+    def is_not_null(col: pl.Expr, _: Classifier) -> pl.Expr:
+        return col.is_not_null()
+
+    @staticmethod
+    def is_nan(col: pl.Expr, classifier: Classifier) -> pl.Expr:
+        is_nan = cast(IsNan, classifier)
+        if is_nan.ignore_nulls:
+            return col.is_nan() & col.is_not_null()
+        else:
+            return col.is_nan() | col.is_null()
+
+    @staticmethod
+    def is_not_nan(col: pl.Expr, classifier: Classifier) -> pl.Expr:
+        is_not_nan = cast(IsNotNan, classifier)
+        if is_not_nan.ignore_nulls:
+            return col.is_not_nan() | col.is_null()
+        else:
+            return col.is_not_nan() & col.is_not_null()
 
 
-class ClassifierType(Enum):
-    IS_NULL = ClassifierFamily.BOOLEAN
-    IS_NOT_NULL = ClassifierFamily.BOOLEAN
+@dataclass(frozen=True)
+class ClassifierMetadata:
+    column_suffix: str
+    classifier_family: ClassifierFamily
+    polars_provider: PolarsProvider
 
 
 MappedColumn = namedtuple("MappedColumn", ["data_column", "dq_column"])
@@ -131,7 +173,7 @@ class DataQualityEngine:
     @classmethod
     def _name(
         cls,
-        classifier: ClassifierSuffix,
+        classifier: str,
         lf_column: str,
         dq_column: str | None = None,
     ) -> str:
@@ -157,51 +199,62 @@ class DataQualityEngine:
 
     """> Quality Classification Functions """
 
-    # noinspection DuplicatedCode
-    def is_null(
+    def _classify(
         self,
-        cols_spec: ColsSpec,
-        tags_spec: TagsSpec,
+        classifier: Classifier,
     ) -> Self:
-        columns = self._cols_spec_to_cols_list(cols_spec)
-        tags = self._tags_spec_to_list(tags_spec)
+        classifier_type = type(classifier)
+
+        metadata = CLASSIFIER_DICTIONARY.get(classifier_type)
+
+        if metadata is None:
+            raise DataQualityProcessingError(
+                ErrorCode.DQPE9,
+                classifier_type.__name__,
+                self._tf._data_table.name,
+            )
+
+        columns = self._cols_spec_to_cols_list(classifier.cols)
+        tags = self._tags_spec_to_list(classifier.tags)
         dq = self
+
         for column in columns:
             lf_column = column.data_column
-            dq_column = self._name(
-                ClassifierSuffix.IS_NULL, lf_column, column.dq_column
-            )
-            self._cols.update({dq_column: ClassifierType.IS_NULL.value})
+            dq_column = self._name(metadata.column_suffix, lf_column, column.dq_column)
+            self._cols.update({dq_column: metadata.classifier_family})
             vtags = tags if tags else [None]
             for tag in vtags:
                 if tag not in self._tags:
                     self._tags[tag] = set()
                 self._tags[tag].add(dq_column)
-            dq = dq._run(pl.col(lf_column).is_null(), dq_column)
+            expr = metadata.polars_provider(lf_column, classifier)
+            dq = dq._run(expr, dq_column)
+
         return dq
 
-    # noinspection DuplicatedCode
+    def is_null(
+        self,
+        is_null: IsNull,
+    ) -> Self:
+        return self._classify(is_null)
+
     def is_not_null(
         self,
-        cols_spec: ColsSpec,
-        tags_spec: TagsSpec,
+        is_not_null: IsNotNull,
     ) -> Self:
-        columns = self._cols_spec_to_cols_list(cols_spec)
-        tags = self._tags_spec_to_list(tags_spec)
-        dq = self
-        for column in columns:
-            lf_column = column.data_column
-            dq_column = self._name(
-                ClassifierSuffix.IS_NOT_NULL, lf_column, column.dq_column
-            )
-            self._cols.update({dq_column: ClassifierType.IS_NOT_NULL.value})
-            vtags = tags if tags else [None]
-            for tag in vtags:
-                if tag not in self._tags:
-                    self._tags[tag] = set()
-                self._tags[tag].add(dq_column)
-            dq = dq._run(pl.col(lf_column).is_not_null(), dq_column)
-        return dq
+        return self._classify(is_not_null)
+
+    def is_nan(
+        self,
+        is_nan: IsNan,
+    ) -> Self:
+        return self._classify(is_nan)
+
+    def is_not_nan(
+        self,
+        is_not_nan: IsNotNan,
+    ) -> Self:
+        return self._classify(is_not_nan)
 
     """> Quality Operation Functions """
 
@@ -504,3 +557,62 @@ class DataQualityEngine:
     #         raise ValueError(f"Invalid fn_mode: {fn_mode}. Must be 'row' or 'batch'.")
     #
     #     return self._run(expr, dq_column_name)
+
+
+CLASSIFIER_DICTIONARY: dict[type, ClassifierMetadata] = {
+    IsNull: ClassifierMetadata(
+        column_suffix="_is_null",
+        classifier_family=ClassifierFamily.BOOLEAN,
+        polars_provider=PolarsProvider(PolarsProvider.is_null),
+    ),
+    IsNotNull: ClassifierMetadata(
+        column_suffix="_is_not_null",
+        classifier_family=ClassifierFamily.BOOLEAN,
+        polars_provider=PolarsProvider(PolarsProvider.is_not_null),
+    ),
+    IsNan: ClassifierMetadata(
+        column_suffix="_is_nan",
+        classifier_family=ClassifierFamily.BOOLEAN,
+        polars_provider=PolarsProvider(PolarsProvider.is_nan),
+    ),
+    IsNotNan: ClassifierMetadata(
+        column_suffix="_is_not_nan",
+        classifier_family=ClassifierFamily.BOOLEAN,
+        polars_provider=PolarsProvider(PolarsProvider.is_not_nan),
+    ),
+    # IsNullOrNan: ClassifierMetadata(
+    #     suffix="_is_null_or_nan",
+    #     family=ClassifierFamily.BOOLEAN,
+    #     polars=lambda col: col.is_null() | col.is_nan(),
+    # ),
+    # IsZero: ClassifierMetadata(
+    #     suffix="_is_zero",
+    #     family=ClassifierFamily.BOOLEAN,
+    #     polars=lambda col: col.eq(0),
+    # ),
+    # IsNotZero: ClassifierMetadata(
+    #     suffix="_is_not_zero",
+    #     family=ClassifierFamily.BOOLEAN,
+    #     polars=lambda col: col.ne(0),
+    # ),
+    # IsPositive: ClassifierMetadata(
+    #     suffix="_is_positive",
+    #     family=ClassifierFamily.BOOLEAN,
+    #     polars=lambda col: col.gt(0),
+    # ),
+    # IsPositiveOrZero: ClassifierMetadata(
+    #     suffix="_is_positive_or_zero",
+    #     family=ClassifierFamily.BOOLEAN,
+    #     polars=lambda col: col.ge(0),
+    # ),
+    # IsNegative: ClassifierMetadata(
+    #     suffix="_is_negative",
+    #     family=ClassifierFamily.BOOLEAN,
+    #     polars=lambda col: col.lt(0),
+    # ),
+    # IsNegativeOrZero: ClassifierMetadata(
+    #     suffix="_is_negative_or_zero",
+    #     family=ClassifierFamily.BOOLEAN,
+    #     polars=lambda col: col.le(0),
+    # ),
+}

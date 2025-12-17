@@ -2,116 +2,525 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
-import random
+from dataclasses import dataclass
+from datetime import date, datetime, time, timedelta
+from decimal import Decimal
+from typing import Any, Callable
 
 import polars as pl
 
 import tabsdata as td
-from tabsdata.dataquality import DataQuality, IsNotNull, IsNull, Summary
+from tabsdata.dataquality import (
+    DataQuality,
+    IsNan,
+    IsNotNan,
+    IsNotNull,
+    IsNull,
+    Summary,
+)
+from tabsdata.dataquality._classifiers import Classifier
+from tabsdata.tableframe._actions.dataquality.engine import DataQualityEngine
 from tabsdata.tableframe.lazyframe.properties import TableFramePropertiesBuilder
 
+NaN = "NaN"
 
-def dataset(seed: int = 314159, rows: int = 314) -> td.TableFrame:
-    random.seed(seed)
+Q_ZERO = 128
+Q_POSITIVE = 64
+Q_NEGATIVE = 32
+Q_NULL = 16
+Q_NaN = 8
+
+
+@dataclass(frozen=True)
+class DataShape:
+    zero: int
+    positive: int
+    negative: int
+    null: int
+    nan: int
+    converter: Callable[[Any], Any]
+
+    @staticmethod
+    def to_boolean(value):
+        if value is None or value == NaN:
+            return None
+        return bool(value)
+
+    @staticmethod
+    def to_date(value):
+        if value is None or value == NaN:
+            return None
+        return date(1914, 5, 19) + timedelta(days=int(value))
+
+    @staticmethod
+    def to_datetime(value):
+        if value is None or value == NaN:
+            return None
+        return datetime(1914, 5, 19, 3, 14, 15) + timedelta(seconds=int(value))
+
+    @staticmethod
+    def to_decimal(value):
+        if value is None or value == NaN:
+            return None
+        return Decimal(str(value))
+
+    @staticmethod
+    def to_duration(value):
+        if value is None or value == NaN:
+            return None
+        return timedelta(seconds=int(value))
+
+    @staticmethod
+    def to_float(value):
+        if value is None:
+            return None
+        elif value == NaN:
+            return float(NaN)
+        else:
+            return float(value)
+
+    @staticmethod
+    def to_integer(value):
+        if value is None or value == NaN:
+            return None
+        return int(value)
+
+    @staticmethod
+    def to_null(value):
+        return None
+
+    @staticmethod
+    def to_string(value):
+        if value is None or value == NaN:
+            return None
+        return str(value)
+
+    @staticmethod
+    def to_time(value):
+        if value is None or value == NaN:
+            return None
+        return (datetime(1914, 5, 19, 3, 14, 15) + timedelta(seconds=int(value))).time()
+
+    @staticmethod
+    def to_unsigned_integer(value):
+        if value is None or value == NaN:
+            return None
+        return abs(int(value))
+
+    @staticmethod
+    def to_utf(value):
+        if value is None or value == NaN:
+            return None
+        return str(value)
+
+
+@dataclass(frozen=True)
+class ClassifierConfiguration:
+    classifiers: list[Classifier]
+    method: Callable[..., DataQualityEngine]
+    checker: Callable[[pl.DataFrame, dict], None]
+    actions: Callable[[str], DataQuality]
+    dtypes: list[type]
+
+
+def _is_null_checker(df: pl.DataFrame, tags: dict):
+    assert "value" in df.columns
+    assert "value_is_null" in df.columns
+    assert "null" in tags
+    assert "value_is_null" in tags["null"]
+
+    null_count = df.filter(pl.col("value").is_null()).height
+    dq_true_count = df.filter(pl.col("value_is_null") == True).height
+    assert (
+        null_count == dq_true_count
+    ), f"value: null_count={null_count}, dq_true_count={dq_true_count}"
+
+
+def _is_not_null_checker(df: pl.DataFrame, tags: dict):
+    assert "value" in df.columns
+    assert "value_is_not_null" in df.columns
+    assert "not_null" in tags
+    assert "value_is_not_null" in tags["not_null"]
+
+    not_null_count = df.filter(pl.col("value").is_not_null()).height
+    dq_true_count = df.filter(pl.col("value_is_not_null") == True).height
+    assert (
+        not_null_count == dq_true_count
+    ), f"value: not_null_count={not_null_count}, dq_true_count={dq_true_count}"
+
+
+def _is_nan_checker(df: pl.DataFrame, tags: dict):
+    assert "value" in df.columns
+
+    if "nan" in tags:
+        assert "value_is_nan" in df.columns
+        assert "value_is_nan" in tags["nan"]
+        nan_or_null_count = df.filter(
+            pl.col("value").is_nan() | pl.col("value").is_null()
+        ).height
+        dq_true_count = df.filter(pl.col("value_is_nan") == True).height
+        assert nan_or_null_count == dq_true_count, (
+            f"value (nan): nan_or_null_count={nan_or_null_count},"
+            f" dq_true_count={dq_true_count}"
+        )
+
+    if "nan_ignore_nulls" in tags:
+        assert "value_is_nan_ignore_nulls" in df.columns
+        assert "value_is_nan_ignore_nulls" in tags["nan_ignore_nulls"]
+        nan_count = df.filter(
+            pl.col("value").is_nan() & pl.col("value").is_not_null()
+        ).height
+        dq_true_count = df.filter(pl.col("value_is_nan_ignore_nulls") == True).height
+        assert nan_count == dq_true_count, (
+            f"value (nan_ignore_nulls): nan_count={nan_count},"
+            f" dq_true_count={dq_true_count}"
+        )
+
+
+def _is_not_nan_checker(df: pl.DataFrame, tags: dict):
+    assert "value" in df.columns
+
+    if "not_nan" in tags:
+        assert "value_is_not_nan" in df.columns
+        assert "value_is_not_nan" in tags["not_nan"]
+        not_nan_not_null_count = df.filter(
+            pl.col("value").is_not_nan() & pl.col("value").is_not_null()
+        ).height
+        dq_true_count = df.filter(pl.col("value_is_not_nan") == True).height
+        assert not_nan_not_null_count == dq_true_count, (
+            f"value (not_nan): not_nan_not_null_count={not_nan_not_null_count},"
+            f" dq_true_count={dq_true_count}"
+        )
+
+    if "not_nan_ignore_nulls" in tags:
+        assert "value_is_not_nan_ignore_nulls" in df.columns
+        assert "value_is_not_nan_ignore_nulls" in tags["not_nan_ignore_nulls"]
+        not_nan_or_null_count = df.filter(
+            pl.col("value").is_not_nan() | pl.col("value").is_null()
+        ).height
+        dq_true_count = df.filter(
+            pl.col("value_is_not_nan_ignore_nulls") == True
+        ).height
+        assert not_nan_or_null_count == dq_true_count, (
+            "value (not_nan_ignore_nulls):"
+            f" not_nan_or_null_count={not_nan_or_null_count},"
+            f" dq_true_count={dq_true_count}"
+        )
+
+
+def _is_null_action(table: str = "table00") -> DataQuality:
+    return DataQuality(
+        table=table,
+        classifiers=IsNull(
+            cols="value",
+            tags="null",
+        ),
+        operations=Summary(),
+    )
+
+
+def _is_not_null_action(table: str = "table00") -> DataQuality:
+    return DataQuality(
+        table=table,
+        classifiers=IsNotNull(
+            cols="value",
+            tags="not_null",
+        ),
+        operations=Summary(),
+    )
+
+
+def _is_nan_action(table: str = "table00") -> DataQuality:
+    return DataQuality(
+        table=table,
+        classifiers=[
+            IsNan(
+                cols=("value", "value_is_nan"),
+                tags="nan",
+                ignore_nulls=False,
+            ),
+            IsNan(
+                cols=("value", "value_is_nan_ignore_nulls"),
+                tags="nan_ignore_nulls",
+                ignore_nulls=True,
+            ),
+        ],
+        operations=Summary(),
+    )
+
+
+def _is_not_nan_action(table: str = "table00") -> DataQuality:
+    return DataQuality(
+        table=table,
+        classifiers=[
+            IsNotNan(
+                cols=("value", "value_is_not_nan"),
+                tags="not_nan",
+                ignore_nulls=False,
+            ),
+            IsNotNan(
+                cols=("value", "value_is_not_nan_ignore_nulls"),
+                tags="not_nan_ignore_nulls",
+                ignore_nulls=True,
+            ),
+        ],
+        operations=Summary(),
+    )
+
+
+DATASET_ROWS: dict[type, DataShape] = {
+    td.Boolean: DataShape(
+        Q_ZERO,
+        Q_POSITIVE,
+        0,
+        Q_NULL,
+        0,
+        DataShape.to_boolean,
+    ),
+    td.Date: DataShape(
+        0,
+        Q_POSITIVE,
+        Q_NEGATIVE,
+        Q_NULL,
+        0,
+        DataShape.to_date,
+    ),
+    td.Datetime: DataShape(
+        0,
+        Q_POSITIVE,
+        Q_NEGATIVE,
+        Q_NULL,
+        0,
+        DataShape.to_datetime,
+    ),
+    td.Decimal: DataShape(
+        Q_ZERO,
+        Q_POSITIVE,
+        Q_NEGATIVE,
+        Q_NULL,
+        0,
+        DataShape.to_decimal,
+    ),
+    td.Duration: DataShape(
+        Q_ZERO,
+        Q_POSITIVE,
+        Q_NEGATIVE,
+        Q_NULL,
+        0,
+        DataShape.to_duration,
+    ),
+    td.Float32: DataShape(
+        Q_ZERO,
+        Q_POSITIVE,
+        Q_NEGATIVE,
+        Q_NULL,
+        Q_NaN,
+        DataShape.to_float,
+    ),
+    td.Float64: DataShape(
+        Q_ZERO,
+        Q_POSITIVE,
+        Q_NEGATIVE,
+        Q_NULL,
+        Q_NaN,
+        DataShape.to_float,
+    ),
+    td.Int8: DataShape(
+        Q_ZERO,
+        Q_POSITIVE,
+        Q_NEGATIVE,
+        Q_NULL,
+        0,
+        DataShape.to_integer,
+    ),
+    td.Int16: DataShape(
+        Q_ZERO,
+        Q_POSITIVE,
+        Q_NEGATIVE,
+        Q_NULL,
+        0,
+        DataShape.to_integer,
+    ),
+    td.Int32: DataShape(
+        Q_ZERO,
+        Q_POSITIVE,
+        Q_NEGATIVE,
+        Q_NULL,
+        0,
+        DataShape.to_integer,
+    ),
+    td.Int64: DataShape(
+        Q_ZERO,
+        Q_POSITIVE,
+        Q_NEGATIVE,
+        Q_NULL,
+        0,
+        DataShape.to_integer,
+    ),
+    td.Int128: DataShape(
+        Q_ZERO,
+        Q_POSITIVE,
+        Q_NEGATIVE,
+        Q_NULL,
+        0,
+        DataShape.to_integer,
+    ),
+    td.Null: DataShape(
+        0,
+        0,
+        0,
+        Q_NULL,
+        0,
+        DataShape.to_null,
+    ),
+    td.String: DataShape(
+        Q_ZERO,
+        Q_POSITIVE,
+        Q_NEGATIVE,
+        Q_NULL,
+        0,
+        DataShape.to_string,
+    ),
+    td.Time: DataShape(
+        0,
+        Q_POSITIVE,
+        Q_NEGATIVE,
+        Q_NULL,
+        0,
+        DataShape.to_time,
+    ),
+    td.UInt8: DataShape(
+        Q_ZERO,
+        Q_POSITIVE,
+        0,
+        Q_NULL,
+        0,
+        DataShape.to_unsigned_integer,
+    ),
+    td.UInt16: DataShape(
+        Q_ZERO,
+        Q_POSITIVE,
+        0,
+        Q_NULL,
+        0,
+        DataShape.to_unsigned_integer,
+    ),
+    td.UInt32: DataShape(
+        Q_ZERO,
+        Q_POSITIVE,
+        0,
+        Q_NULL,
+        0,
+        DataShape.to_unsigned_integer,
+    ),
+    td.UInt64: DataShape(
+        Q_ZERO,
+        Q_POSITIVE,
+        0,
+        Q_NULL,
+        0,
+        DataShape.to_unsigned_integer,
+    ),
+    td.Utf8: DataShape(
+        Q_ZERO,
+        Q_POSITIVE,
+        Q_NEGATIVE,
+        Q_NULL,
+        0,
+        DataShape.to_utf,
+    ),
+}
+
+
+NULL_CAPABLE_DTYPES = list(DATASET_ROWS.keys())
+
+NAN_CAPABLE_DTYPES = [td.Float32, td.Float64]
+
+CLASSIFIERS: dict[type[Classifier], ClassifierConfiguration] = {
+    IsNull: ClassifierConfiguration(
+        classifiers=[
+            IsNull(
+                cols="value",
+                tags="null",
+            )
+        ],
+        method=DataQualityEngine.is_null,
+        checker=_is_null_checker,
+        actions=_is_null_action,
+        dtypes=NULL_CAPABLE_DTYPES,
+    ),
+    IsNotNull: ClassifierConfiguration(
+        classifiers=[
+            IsNotNull(
+                cols="value",
+                tags="not_null",
+            )
+        ],
+        method=DataQualityEngine.is_not_null,
+        checker=_is_not_null_checker,
+        actions=_is_not_null_action,
+        dtypes=NULL_CAPABLE_DTYPES,
+    ),
+    IsNan: ClassifierConfiguration(
+        classifiers=[
+            IsNan(
+                cols=("value", "value_is_nan"),
+                tags="nan",
+                ignore_nulls=False,
+            ),
+            IsNan(
+                cols=("value", "value_is_nan_ignore_nulls"),
+                tags="nan_ignore_nulls",
+                ignore_nulls=True,
+            ),
+        ],
+        method=DataQualityEngine.is_nan,
+        checker=_is_nan_checker,
+        actions=_is_nan_action,
+        dtypes=NAN_CAPABLE_DTYPES,
+    ),
+    IsNotNan: ClassifierConfiguration(
+        classifiers=[
+            IsNotNan(
+                cols=("value", "value_is_not_nan"),
+                tags="not_nan",
+                ignore_nulls=False,
+            ),
+            IsNotNan(
+                cols=("value", "value_is_not_nan_ignore_nulls"),
+                tags="not_nan_ignore_nulls",
+                ignore_nulls=True,
+            ),
+        ],
+        method=DataQualityEngine.is_not_nan,
+        checker=_is_not_nan_checker,
+        actions=_is_not_nan_action,
+        dtypes=NAN_CAPABLE_DTYPES,
+    ),
+}
+
+
+def dataset(dtype) -> td.TableFrame:
+    if dtype not in DATASET_ROWS:
+        raise ValueError(f"Unsupported dtype: {dtype}")
+
+    quantities = DATASET_ROWS[dtype]
+    converter = quantities.converter
+
+    data_values = (
+        [converter(0)] * quantities.zero
+        + [converter(1000)] * quantities.positive
+        + [converter(-1000)] * quantities.negative
+        + [converter(None)] * quantities.null
+        + [converter(NaN)] * quantities.nan
+    )
+
+    total_rows = len(data_values)
     data = {
-        "id": list(range(rows)),
-        "number01": [
-            (
-                float(0)
-                if i % 5 == 0
-                else (
-                    float(-1)
-                    if i % 5 == 1
-                    else (
-                        float(1)
-                        if i % 5 == 2
-                        else (None if i % 5 == 3 else float("nan"))
-                    )
-                )
-            )
-            for i in range(rows)
-        ],
-        "number02": [
-            (
-                float(0)
-                if i % 5 == 0
-                else (
-                    float(-2)
-                    if i % 5 == 1
-                    else (
-                        float(2)
-                        if i % 5 == 2
-                        else (None if i % 5 == 3 else float("nan"))
-                    )
-                )
-            )
-            for i in range(rows)
-        ],
-        "number03": [
-            (
-                float(0)
-                if i % 5 == 0
-                else (
-                    float(-3)
-                    if i % 5 == 1
-                    else (
-                        float(3)
-                        if i % 5 == 2
-                        else (None if i % 5 == 3 else float("nan"))
-                    )
-                )
-            )
-            for i in range(rows)
-        ],
-        "number04": [
-            (
-                float(0)
-                if i % 5 == 0
-                else (
-                    float(-4)
-                    if i % 5 == 1
-                    else (
-                        float(4)
-                        if i % 5 == 2
-                        else (None if i % 5 == 3 else float("nan"))
-                    )
-                )
-            )
-            for i in range(rows)
-        ],
-        "number05": [
-            (
-                float(0)
-                if i % 5 == 0
-                else (
-                    float(-5)
-                    if i % 5 == 1
-                    else (
-                        float(5)
-                        if i % 5 == 2
-                        else (None if i % 5 == 3 else float("nan"))
-                    )
-                )
-            )
-            for i in range(rows)
-        ],
-        "number06": [
-            (
-                float(0)
-                if i % 5 == 0
-                else (
-                    float(-6)
-                    if i % 5 == 1
-                    else (
-                        float(6)
-                        if i % 5 == 2
-                        else (None if i % 5 == 3 else float("nan"))
-                    )
-                )
-            )
-            for i in range(rows)
-        ],
+        "id": list(range(total_rows)),
+        "value": data_values,
     }
+
     lf = pl.LazyFrame(data)
     tf = td.TableFrame.__build__(
         df=lf,
@@ -120,135 +529,3 @@ def dataset(seed: int = 314159, rows: int = 314) -> td.TableFrame:
         properties=TableFramePropertiesBuilder.empty(),
     )
     return tf
-
-
-def is_null_classifiers():
-    return [
-        IsNull(cols="number01", tags=["missing_single"]),
-        IsNull(
-            cols=("number02", "number02_missing"),
-            tags=["missing_single"],
-        ),
-        IsNull(
-            cols=["number03", "number04"],
-            tags=["missing_list"],
-        ),
-        IsNull(
-            cols=[
-                ("number05", "number05_missing"),
-                ("number06", "number06_missing"),
-            ],
-            tags=["missing_list"],
-        ),
-    ]
-
-
-def is_null_actions(table: str = "table00"):
-    return DataQuality(
-        table=table, classifiers=is_null_classifiers(), operations=Summary()
-    )
-
-
-def is_null_checks(df: pl.DataFrame, tags: dict):
-    assert "id" in df.columns
-    assert "number01" in df.columns
-    assert "number02" in df.columns
-    assert "number03" in df.columns
-    assert "number04" in df.columns
-    assert "number05" in df.columns
-    assert "number06" in df.columns
-
-    assert "number01_is_null" in df.columns
-    assert "number02_missing" in df.columns
-    assert "number03_is_null" in df.columns
-    assert "number04_is_null" in df.columns
-    assert "number05_missing" in df.columns
-    assert "number06_missing" in df.columns
-
-    assert len(tags) == 2, f"Expected 2 tags, got {len(tags)}"
-    assert "missing_single" in tags
-    assert "missing_list" in tags
-
-    assert "number01_is_null" in tags["missing_single"]
-    assert "number02_missing" in tags["missing_single"]
-    assert (
-        len(tags["missing_single"]) == 2
-    ), f"Expected 2 columns in 'missing_single', got {len(tags['missing_single'])}"
-
-    assert "number03_is_null" in tags["missing_list"]
-    assert "number04_is_null" in tags["missing_list"]
-    assert "number05_missing" in tags["missing_list"]
-    assert "number06_missing" in tags["missing_list"]
-    assert (
-        len(tags["missing_list"]) == 4
-    ), f"Expected 4 columns in 'missing_list', got {len(tags['missing_list'])}"
-
-    number01_null_count = df.filter(pl.col("number01").is_null()).height
-    number01_dq_true_count = df.filter(pl.col("number01_is_null") == True).height
-    assert number01_null_count == number01_dq_true_count, (
-        f"number01: null_count={number01_null_count},"
-        f" dq_true_count={number01_dq_true_count}"
-    )
-
-    number02_null_count = df.filter(pl.col("number02").is_null()).height
-    number02_dq_true_count = df.filter(pl.col("number02_missing") == True).height
-    assert number02_null_count == number02_dq_true_count, (
-        f"number02: null_count={number02_null_count},"
-        f" dq_true_count={number02_dq_true_count}"
-    )
-
-    number03_null_count = df.filter(pl.col("number03").is_null()).height
-    number03_dq_true_count = df.filter(pl.col("number03_is_null") == True).height
-    assert number03_null_count == number03_dq_true_count, (
-        f"number03: null_count={number03_null_count},"
-        f" dq_true_count={number03_dq_true_count}"
-    )
-
-    number04_null_count = df.filter(pl.col("number04").is_null()).height
-    number04_dq_true_count = df.filter(pl.col("number04_is_null") == True).height
-    assert number04_null_count == number04_dq_true_count, (
-        f"number04: null_count={number04_null_count},"
-        f" dq_true_count={number04_dq_true_count}"
-    )
-
-    number05_null_count = df.filter(pl.col("number05").is_null()).height
-    number05_dq_true_count = df.filter(pl.col("number05_missing") == True).height
-    assert number05_null_count == number05_dq_true_count, (
-        f"number05: null_count={number05_null_count},"
-        f" dq_true_count={number05_dq_true_count}"
-    )
-
-    number06_null_count = df.filter(pl.col("number06").is_null()).height
-    number06_dq_true_count = df.filter(pl.col("number06_missing") == True).height
-    assert number06_null_count == number06_dq_true_count, (
-        f"number06: null_count={number06_null_count},"
-        f" dq_true_count={number06_dq_true_count}"
-    )
-
-
-def is_not_null_classifiers():
-    return IsNotNull(
-        cols="number01",
-        tags=["not_missing"],
-    )
-
-
-def is_not_null_actions(table: str = "table00"):
-    return DataQuality(
-        table=table, classifiers=is_not_null_classifiers(), operations=Summary()
-    )
-
-
-def is_not_null_checks(df: pl.DataFrame, tags: dict):
-    assert "number01" in df.columns
-    assert "number01_is_not_null" in df.columns
-
-    assert "not_missing" in tags
-    assert "number01_is_not_null" in tags["not_missing"]
-
-    number01_not_null_count = df.filter(pl.col("number01").is_not_null()).height
-    number01_dq_true_count = df.filter(pl.col("number01_is_not_null") == True).height
-    assert number01_not_null_count == number01_dq_true_count, (
-        f"number01: not_null_count={number01_not_null_count},"
-        f" dq_true_count={number01_dq_true_count}"
-    )

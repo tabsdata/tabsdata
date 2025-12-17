@@ -2,7 +2,7 @@
 # Copyright 2025 Tabs Data Inc.
 #
 import logging
-from typing import TYPE_CHECKING, Callable, Tuple, cast
+from typing import TYPE_CHECKING, Tuple, cast
 
 from tabsdata._table_actions.actions import OnTablesAction
 from tabsdata._tableinfo import TableInfo, TableKind
@@ -14,10 +14,6 @@ from tabsdata._tabsserver.function.typing import (
     OutputTableSpec,
 )
 from tabsdata.dataquality import DataQuality, Filter, Select, Summary
-from tabsdata.dataquality._classifiers import (
-    IsNotNull,
-    IsNull,
-)
 from tabsdata.dataquality._operations import Operation
 from tabsdata.exceptions import DataQualityProcessingError, ErrorCode
 from tabsdata.tableframe._actions.dataquality.engine import (
@@ -29,36 +25,6 @@ from tabsdata.tableframe.lazyframe.frame import TableFrame
 
 if TYPE_CHECKING:
     from tabsdata._tabsserver.function.execution_context import ExecutionContext
-
-
-CLASSIFIER_DQ_METHOD: dict[type, Callable] = {
-    IsNull: DataQualityEngine.is_null,
-    IsNotNull: DataQualityEngine.is_not_null,
-    # IsNan: DataQualityEngine.is_nan,
-    # IsNotNan: DataQualityEngine.is_not_nan,
-    # IsNullOrNan: DataQualityEngine.is_null_or_nan,
-    # IsZero: DataQualityEngine.is_zero,
-    # IsNotZero: DataQualityEngine.is_not_zero,
-    # IsPositive: DataQualityEngine.is_positive,
-    # IsPositiveOrZero: DataQualityEngine.is_positive_or_zero,
-    # IsNegative: DataQualityEngine.is_negative,
-    # IsNegativeOrZero: DataQualityEngine.is_negative_or_zero,
-    # IsIn: DataQualityEngine.is_in,
-    # IsNotIn: DataQualityEngine.is_not_in,
-    # IsInRange: DataQualityEngine.is_in_range,
-    # Matches: DataQualityEngine.matches,
-    # DoesNotMatch: DataQualityEngine.does_not_match,
-    # HasLen: DataQualityEngine.has_len,
-    # HasColumns: DataQualityEngine.has_columns,
-    # HasColumnTypes: DataQualityEngine.has_column_types,
-    # Categorizer: DataQualityEngine.categorize,
-}
-
-OPERATION_DQ_METHOD: dict[type, Callable] = {
-    Summary: DataQualityEngine.is_null,
-    Select: DataQualityEngine.is_not_null,
-    Filter: DataQualityEngine.is_not_null,
-}
 
 logger = logging.getLogger(__name__)
 
@@ -543,17 +509,7 @@ class DataQualityProcessor:
             action.classify if isinstance(action.classify, list) else [action.classify]
         )
         for classifier in classifiers:
-            classifier_type = type(classifier)
-            method = CLASSIFIER_DQ_METHOD.get(classifier_type)
-
-            if method is None:
-                raise DataQualityProcessingError(
-                    ErrorCode.DQPE9,
-                    classifier_type.__name__,
-                    action.table,
-                )
-
-            dq = method(dq, classifier.cols, classifier.tags)
+            dq = dq._classify(classifier=classifier)
 
         dtf.derived_tf = dq.tf()
         dtf.status = DerivedTableFrameStatus.COMPUTED
