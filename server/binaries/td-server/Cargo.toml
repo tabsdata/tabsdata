@@ -34,6 +34,10 @@ name = "td_bootloader"
 path = "src/bootloader.rs"
 
 [[bin]]
+name = "td_cron"
+path = "src/cron.rs"
+
+[[bin]]
 name = "td_supervisor"
 path = "src/supervisor.rs"
 
@@ -77,6 +81,7 @@ tm-workspace = { workspace = true }
 
 td-apiserver = { workspace = true }
 td-common = { workspace = true }
+td-cron = { workspace = true }
 td-database = { workspace = true }
 td-objects = { workspace = true }
 td-process = { workspace = true }

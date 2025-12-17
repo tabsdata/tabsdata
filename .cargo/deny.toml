@@ -46,6 +46,7 @@ deny = [{ crate = "log", reason = "We use 'tracing' crate instead, which has equ
     "tracing-log",
     "unicode_names2_generator",
     "wasm-bindgen-backend",
+    "wiremock",
     "zopfli"] }]
 
 [licenses]

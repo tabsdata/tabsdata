@@ -6611,7 +6611,6 @@ dependencies = [
  "derive-new",
  "derive_builder",
  "dirs",
- "getset",
  "homedir",
  "http",
  "itertools 0.14.0",

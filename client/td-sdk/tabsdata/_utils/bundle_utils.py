@@ -73,6 +73,7 @@ BASE_BINARIES = [
     "td_about",
     "td_apiserver",
     "td_bootloader",
+    "td_cron",
     "td_supervisor",
     "td_transporter",
 ]
