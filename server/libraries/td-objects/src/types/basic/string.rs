@@ -8,6 +8,8 @@ use crate::parse::{
     parse_function, parse_role, parse_table, parse_user,
 };
 use std::fmt::Debug;
+use std::str::FromStr;
+use td_error::{ApiError, api_error};
 use td_security::{ADMIN_USER, SEC_ADMIN_ROLE, SYS_ADMIN_ROLE, USER_ROLE};
 
 #[td_type::typed(string)]
@@ -25,6 +27,27 @@ pub struct CollectionName;
 #[td_type::typed(string)]
 pub struct Connector;
 
+#[td_type::typed(string(parser = CronMask::parse_cron))]
+pub struct CronMask;
+
+impl CronMask {
+    fn create_cron(s: String) -> Result<croner::Cron, td_error::TdError> {
+        let cron = croner::Cron::from_str(&s)
+            .map_err(|e| api_error!(ApiError::InternalError, "Invalid cron expression: {e}"))?;
+        Ok(cron)
+    }
+
+    fn parse_cron(s: String) -> Result<String, td_error::TdError> {
+        let cron = Self::create_cron(s)?;
+        Ok(cron.to_string())
+    }
+
+    pub fn into_cron(self) -> Result<croner::Cron, td_error::TdError> {
+        let cron = Self::create_cron(self.0)?;
+        Ok(cron)
+    }
+}
+
 #[td_type::typed(string(regex = DATA_LOCATION_REGEX, default = "/"))]
 pub struct DataLocation;
 
@@ -39,6 +62,9 @@ pub struct Email;
 
 #[td_type::typed(string(parser = parse_entity))]
 pub struct EntityName;
+
+#[td_type::typed(string)]
+pub struct EnvPrefix;
 
 #[td_type::typed(string)]
 pub struct ExecutionError;
@@ -175,3 +201,35 @@ impl UserName {
         Self(ADMIN_USER.to_string())
     }
 }
+
+// JSON blob with config for the workers.
+#[td_type::typed(string(default = "{}", parser = WorkerConfig::parse_json))]
+pub struct WorkerConfig;
+
+impl WorkerConfig {
+    fn parse_json(value: String) -> Result<String, td_error::TdError> {
+        // validate value is a valid json string
+        serde_json::from_str::<serde_json::Value>(&value).map_err(|e| {
+            api_error!(
+                ApiError::InternalError,
+                "Could not parse worker config as json: {e}"
+            )
+        })?;
+        Ok(value)
+    }
+
+    pub fn serialize<T>(value: T) -> Result<Self, td_error::TdError>
+    where
+        T: serde::Serialize,
+    {
+        Ok(Self(serde_json::to_string(&value).map_err(|e| {
+            api_error!(
+                ApiError::InternalError,
+                "Could not serialize worker config as json: {e}"
+            )
+        })?))
+    }
+}
+
+#[td_type::typed(string(min_len = 1, max_len = 10, default = "V1"))]
+pub struct WorkerVersion;

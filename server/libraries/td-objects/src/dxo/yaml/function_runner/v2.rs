@@ -2,12 +2,12 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::dxo::request::{Location, Locations};
+use crate::dxo::yaml::location::{Location, Locations};
 use crate::types::basic::{
-    CollectionId, CollectionName, ColumnCount, DependencyPos, ExecutionId, ExecutionName,
+    AtTime, CollectionId, CollectionName, ColumnCount, DependencyPos, ExecutionId, ExecutionName,
     FunctionName, FunctionRunId, FunctionVersionId, InputIdx, IsEmptyVersions, PartitionFileName,
     PartitionName, RowCount, SchemaHash, TableDataVersionId, TableFunctionParamPos, TableId,
-    TableName, TableVersionId, TransactionId, TriggeredOnMillis, VersionPos,
+    TableName, TableVersionId, TransactionId, TriggeredOn, VersionPos,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -15,15 +15,15 @@ use utoipa::ToSchema;
 
 #[td_type::Dto]
 #[derive(Eq, PartialEq)]
-pub struct FunctionInputV2 {
-    pub info: FunctionInfoV2,
+pub struct FunctionInput {
+    pub info: FunctionInfo,
     pub system_input: Vec<InputTable>,
     pub input: Vec<InputTable>,
     pub system_output: Vec<OutputTable>,
     pub output: Vec<OutputTable>,
 }
 
-impl Locations for FunctionInputV2 {
+impl Locations for FunctionInput {
     fn locations(&self) -> Vec<&Location> {
         let mut locations = vec![&self.info.function_data, &self.info.function_bundle];
         locations.extend(self.system_input.locations());
@@ -36,20 +36,20 @@ impl Locations for FunctionInputV2 {
 
 #[td_type::Dto]
 #[derive(Eq, PartialEq)]
-pub struct FunctionInfoV2 {
+pub struct FunctionInfo {
     pub collection_id: CollectionId,
     pub collection: CollectionName,
     pub function_version_id: FunctionVersionId,
     pub function: FunctionName,
     pub function_run_id: FunctionRunId,
     pub function_bundle: Location,
-    pub triggered_on: TriggeredOnMillis,
+    pub triggered_on: TriggeredOn,
     pub transaction_id: TransactionId,
     pub execution_id: ExecutionId,
     pub execution_name: Option<ExecutionName>,
     pub function_data: Location,
     #[builder(default)]
-    pub scheduled_on: TriggeredOnMillis, // when the request yaml was created
+    pub scheduled_on: AtTime, // when the request yaml was created
 }
 
 #[td_type::Dto]
@@ -67,7 +67,7 @@ pub struct InputTableVersion {
     #[builder(default)]
     pub function_run_id: Option<FunctionRunId>,
     #[builder(default)]
-    pub triggered_on: Option<TriggeredOnMillis>,
+    pub triggered_on: Option<AtTime>,
     #[builder(default)]
     pub table_data_version_id: Option<TableDataVersionId>,
     #[builder(default)]
@@ -98,7 +98,7 @@ pub struct InputPartitionTableVersion {
     execution_id: Option<ExecutionId>,
     transaction_id: Option<TransactionId>,
     function_run_id: Option<FunctionRunId>,
-    triggered_on: Option<TriggeredOnMillis>,
+    triggered_on: Option<AtTime>,
     table_data_version_id: Option<TableDataVersionId>,
     partitions: HashMap<PartitionName, Location>,
     input_idx: InputIdx,
@@ -202,8 +202,8 @@ pub struct OutputPartitionTableVersion {
 }
 
 #[td_type::Dto]
-pub struct FunctionOutputV2 {
-    pub output: Vec<WrittenTableV2>,
+pub struct FunctionOutput {
+    pub output: Vec<WrittenTable>,
 }
 
 #[td_type::Dto]
@@ -214,7 +214,7 @@ pub struct TableInfo {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, ToSchema)]
-pub enum WrittenTableV2 {
+pub enum WrittenTable {
     NoData {
         table: TableName,
     },
@@ -232,12 +232,195 @@ pub enum WrittenTableV2 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dxo::request::{EnvPrefix, FunctionInput, FunctionOutput};
-    use crate::types::basic::FunctionId;
+    use crate::dxo::yaml::{WorkerInput, WorkerOutput};
+    use crate::types::basic::{EnvPrefix, FunctionId};
     use itertools::Itertools;
     use std::collections::HashSet;
     use td_error::TdError;
     use url::Url;
+
+    #[test]
+    fn test_function_runner_input_ser_deser() {
+        let collection_id = CollectionId::default();
+        let function_version_id = FunctionVersionId::default();
+        let function_run_id = FunctionRunId::default();
+        let table_id = TableId::default();
+        let table_version_id = TableVersionId::default();
+        let table_data_version_id = TableDataVersionId::default();
+        let triggered_on = TriggeredOn::default();
+        let transaction_id = TransactionId::default();
+        let execution_id = ExecutionId::default();
+        let scheduled_on = AtTime::default();
+
+        let input = WorkerInput::FunctionV2(Box::new(FunctionInput {
+            info: FunctionInfo {
+                collection_id,
+                collection: CollectionName::try_from("collection").unwrap(),
+                function_version_id,
+                function: FunctionName::try_from("function").unwrap(),
+                function_run_id,
+                function_bundle: Location {
+                    uri: Url::try_from("file:///foo").unwrap(),
+                    env_prefix: None,
+                },
+                triggered_on,
+                transaction_id,
+                execution_id,
+                execution_name: None,
+                function_data: Location {
+                    uri: Url::try_from("file:///foo").unwrap(),
+                    env_prefix: None,
+                },
+                scheduled_on,
+            },
+            system_input: vec![InputTable::Table(InputTableVersion {
+                name: TableName::try_from("table").unwrap(),
+                collection_id,
+                collection: CollectionName::try_from("collection").unwrap(),
+                table_id,
+                table_version_id,
+                execution_id: None,
+                transaction_id: None,
+                function_run_id: None,
+                triggered_on: None,
+                table_data_version_id: None,
+                location: None,
+                input_idx: Default::default(),
+                table_pos: Default::default(),
+                version_pos: Default::default(),
+            })],
+            input: vec![InputTable::Table(InputTableVersion {
+                name: TableName::try_from("table").unwrap(),
+                collection_id,
+                collection: CollectionName::try_from("collection").unwrap(),
+                table_id,
+                table_version_id,
+                execution_id: None,
+                transaction_id: None,
+                function_run_id: None,
+                triggered_on: None,
+                table_data_version_id: None,
+                location: None,
+                input_idx: Default::default(),
+                table_pos: Default::default(),
+                version_pos: Default::default(),
+            })],
+            system_output: vec![OutputTable::Table(OutputTableVersion {
+                name: TableName::try_from("table").unwrap(),
+                collection_id,
+                collection: CollectionName::try_from("collection").unwrap(),
+                table_id,
+                table_version_id,
+                table_data_version_id,
+                location: Location {
+                    uri: Url::try_from("file:///foo").unwrap(),
+                    env_prefix: None,
+                },
+                table_pos: Default::default(),
+            })],
+            output: vec![OutputTable::Table(OutputTableVersion {
+                name: TableName::try_from("table").unwrap(),
+                collection_id,
+                collection: CollectionName::try_from("collection").unwrap(),
+                table_id,
+                table_version_id,
+                table_data_version_id,
+                location: Location {
+                    uri: Url::try_from("file:///foo").unwrap(),
+                    env_prefix: None,
+                },
+                table_pos: Default::default(),
+            })],
+        }));
+        let serialized = serde_yaml::to_string(&input).unwrap();
+        // println!("{}", serialized);
+
+        let triggered_on = triggered_on.as_str_millis();
+        let scheduled_on = scheduled_on.as_str_millis();
+        assert_eq!(
+            serialized.as_str(),
+            format!(
+                r#"!FunctionV2
+info:
+  collection_id: {collection_id}
+  collection: collection
+  function_version_id: {function_version_id}
+  function: function
+  function_run_id: {function_run_id}
+  function_bundle:
+    uri: file:///foo
+    env_prefix: null
+  triggered_on: {triggered_on}
+  transaction_id: {transaction_id}
+  execution_id: {execution_id}
+  execution_name: null
+  function_data:
+    uri: file:///foo
+    env_prefix: null
+  scheduled_on: {scheduled_on}
+system_input:
+- !Table
+  name: table
+  collection_id: {collection_id}
+  collection: collection
+  table_id: {table_id}
+  table_version_id: {table_version_id}
+  execution_id: null
+  transaction_id: null
+  function_run_id: null
+  triggered_on: null
+  table_data_version_id: null
+  location: null
+  input_idx: 0
+  table_pos: 0
+  version_pos: 0
+input:
+- !Table
+  name: table
+  collection_id: {collection_id}
+  collection: collection
+  table_id: {table_id}
+  table_version_id: {table_version_id}
+  execution_id: null
+  transaction_id: null
+  function_run_id: null
+  triggered_on: null
+  table_data_version_id: null
+  location: null
+  input_idx: 0
+  table_pos: 0
+  version_pos: 0
+system_output:
+- !Table
+  name: table
+  collection_id: {collection_id}
+  collection: collection
+  table_id: {table_id}
+  table_version_id: {table_version_id}
+  table_data_version_id: {table_data_version_id}
+  location:
+    uri: file:///foo
+    env_prefix: null
+  table_pos: 0
+output:
+- !Table
+  name: table
+  collection_id: {collection_id}
+  collection: collection
+  table_id: {table_id}
+  table_version_id: {table_version_id}
+  table_data_version_id: {table_data_version_id}
+  location:
+    uri: file:///foo
+    env_prefix: null
+  table_pos: 0
+"#
+            )
+        );
+
+        let deserialized: WorkerInput = serde_yaml::from_str(&serialized).unwrap();
+        assert_eq!(input, deserialized);
+    }
 
     #[test]
     fn test_input_table_version_locations() -> Result<(), TdError> {
@@ -285,7 +468,7 @@ mod tests {
             .execution_id(ExecutionId::default())
             .transaction_id(TransactionId::default())
             .function_run_id(FunctionRunId::default())
-            .triggered_on(TriggeredOnMillis::default())
+            .triggered_on(AtTime::default())
             .table_data_version_id(TableDataVersionId::default())
             .try_input_idx(1)?
             .try_table_pos(1)?
@@ -307,7 +490,7 @@ mod tests {
             .execution_id(ExecutionId::default())
             .transaction_id(TransactionId::default())
             .function_run_id(FunctionRunId::default())
-            .triggered_on(TriggeredOnMillis::default())
+            .triggered_on(AtTime::default())
             .table_data_version_id(TableDataVersionId::default())
             .try_input_idx(1)?
             .try_table_pos(1)?
@@ -332,7 +515,7 @@ mod tests {
             .execution_id(ExecutionId::default())
             .transaction_id(TransactionId::default())
             .function_run_id(FunctionRunId::default())
-            .triggered_on(TriggeredOnMillis::default())
+            .triggered_on(AtTime::default())
             .table_data_version_id(TableDataVersionId::default())
             .location(location.clone())
             .try_input_idx(1)?
@@ -358,7 +541,7 @@ mod tests {
             .execution_id(ExecutionId::default())
             .transaction_id(TransactionId::default())
             .function_run_id(FunctionRunId::default())
-            .triggered_on(TriggeredOnMillis::default())
+            .triggered_on(AtTime::default())
             .table_data_version_id(TableDataVersionId::default())
             .try_input_idx(1)?
             .try_table_pos(1)?
@@ -421,9 +604,9 @@ mod tests {
 
     #[test]
     fn test_output_table_serde_yaml() -> Result<(), TdError> {
-        let function_output = FunctionOutputV2::builder()
+        let function_output = FunctionOutput::builder()
             .output(vec![
-                WrittenTableV2::Data {
+                WrittenTable::Data {
                     table: TableName::try_from("table_1")?,
                     info: TableInfo {
                         column_count: ColumnCount::try_from(1i64)?,
@@ -431,12 +614,12 @@ mod tests {
                         schema_hash: SchemaHash::try_from("hash")?,
                     },
                 },
-                WrittenTableV2::NoData {
+                WrittenTable::NoData {
                     table: TableName::try_from("table_2")?,
                 },
             ])
             .build()?;
-        let function_output = FunctionOutput::V2(function_output);
+        let function_output = WorkerOutput::FunctionV2(function_output);
 
         println!("{}", serde_json::to_string(&function_output).unwrap());
         println!("{}", serde_yaml::to_string(&function_output).unwrap());
@@ -505,7 +688,7 @@ mod tests {
             .execution_id(ExecutionId::default())
             .transaction_id(TransactionId::default())
             .function_run_id(FunctionRunId::default())
-            .triggered_on(TriggeredOnMillis::default())
+            .triggered_on(AtTime::default())
             .table_data_version_id(TableDataVersionId::default())
             .location(locations[2].clone())
             .try_input_idx(0)?
@@ -521,7 +704,7 @@ mod tests {
             .execution_id(ExecutionId::default())
             .transaction_id(TransactionId::default())
             .function_run_id(FunctionRunId::default())
-            .triggered_on(TriggeredOnMillis::default())
+            .triggered_on(AtTime::default())
             .table_data_version_id(TableDataVersionId::default())
             .location(locations[3].clone())
             .try_input_idx(1)?
@@ -537,7 +720,7 @@ mod tests {
             .execution_id(ExecutionId::default())
             .transaction_id(TransactionId::default())
             .function_run_id(FunctionRunId::default())
-            .triggered_on(TriggeredOnMillis::default())
+            .triggered_on(AtTime::default())
             .table_data_version_id(TableDataVersionId::default())
             .location(locations[4].clone())
             .try_input_idx(2)?
@@ -581,20 +764,20 @@ mod tests {
                 .build()?,
         );
 
-        let info = FunctionInfoV2::builder()
+        let info = FunctionInfo::builder()
             .collection_id(CollectionId::default())
             .collection(CollectionName::try_from("cn")?)
             .function_version_id(FunctionVersionId::default())
             .function(FunctionName::try_from("fn")?)
             .function_run_id(FunctionRunId::default())
             .function_bundle(locations[8].clone())
-            .triggered_on(TriggeredOnMillis::default())
+            .triggered_on(TriggeredOn::default())
             .transaction_id(TransactionId::default())
             .execution_id(ExecutionId::default())
             .execution_name(Some(ExecutionName::try_from("en")?))
             .function_data(locations[0].clone())
             .build()?;
-        let function_input = FunctionInputV2::builder()
+        let function_input = FunctionInput::builder()
             .info(info)
             .system_input(vec![InputTable::Table(itv0)])
             .input(vec![
@@ -605,7 +788,7 @@ mod tests {
             .system_output(vec![ot3])
             .output(vec![ot4, ot5])
             .build()?;
-        let function_input = FunctionInput::V2(Box::new(function_input));
+        let function_input = WorkerInput::FunctionV2(Box::new(function_input));
         assert_eq!(
             function_input
                 .locations()
@@ -618,13 +801,18 @@ mod tests {
                 .sorted_by_key(|k| &k.uri)
                 .collect::<Vec<_>>()
         );
+        let env_prefixes = function_input
+            .locations()
+            .into_iter()
+            .filter_map(|location| location.env_prefix.clone())
+            .collect::<HashSet<_>>();
         assert_eq!(
-            function_input.env_prefixes(),
+            env_prefixes,
             HashSet::from([
-                &EnvPrefix::try_from("PA_")?,
-                &EnvPrefix::try_from("PB_")?,
-                &EnvPrefix::try_from("PC_")?,
-                &EnvPrefix::try_from("PD_")?
+                EnvPrefix::try_from("PA_")?,
+                EnvPrefix::try_from("PB_")?,
+                EnvPrefix::try_from("PC_")?,
+                EnvPrefix::try_from("PD_")?
             ])
         );
         // println!("{}", serde_yaml::to_string(&function_input).unwrap());

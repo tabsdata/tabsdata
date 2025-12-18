@@ -10,7 +10,7 @@ use td_common::server::{
     BIN_FOLDER, INPUT_FOLDER, LOCK_FOLDER, LOG_FOLDER, OUTPUT_FOLDER, REQUEST_FOLDER,
     RESPONSE_FOLDER, RequestMessagePayload, SupervisorMessage, base, counter,
 };
-use td_objects::dxo::request::FunctionInput;
+use td_objects::dxo::yaml::WorkerInput;
 use thiserror::Error;
 
 #[derive(Debug, Clone, EnumIter, EnumString, AsRefStr)]
@@ -139,8 +139,8 @@ impl MarkerKey {
         pyload: &RequestMessagePayload<T>,
     ) -> Result<String, ArgumentError>
     where
-        T: Clone + TryInto<FunctionInput>,
-        <T as TryInto<FunctionInput>>::Error: std::fmt::Display,
+        T: Clone + TryInto<WorkerInput>,
+        <T as TryInto<WorkerInput>>::Error: std::fmt::Display,
     {
         match self {
             MarkerKey::TdCollection => MarkerKey::collection(pyload),
@@ -152,16 +152,12 @@ impl MarkerKey {
 
     fn collection<T>(payload: &RequestMessagePayload<T>) -> Result<String, ArgumentError>
     where
-        T: Clone + TryInto<FunctionInput>,
+        T: Clone + TryInto<WorkerInput>,
     {
-        if let Some(context) = &payload.context {
-            let Ok(context) = context.clone().try_into() else {
-                return Ok("!".to_string());
-            };
-            match context {
-                FunctionInput::V0(_) => Ok("?".to_string()),
-                FunctionInput::V2(v2) => Ok(v2.info.collection.to_string()),
-            }
+        if let Some(context) = &payload.context
+            && let Ok(context) = context.clone().try_into()
+        {
+            Ok(context.collection().to_string())
         } else {
             Ok("!".to_string())
         }
@@ -169,16 +165,12 @@ impl MarkerKey {
 
     fn function<T>(payload: &RequestMessagePayload<T>) -> Result<String, ArgumentError>
     where
-        T: Clone + TryInto<FunctionInput>,
+        T: Clone + TryInto<WorkerInput>,
     {
-        if let Some(context) = &payload.context {
-            let Ok(context) = context.clone().try_into() else {
-                return Ok("!".to_string());
-            };
-            match context {
-                FunctionInput::V0(_) => Ok("?".to_string()),
-                FunctionInput::V2(v2) => Ok(v2.info.function.to_string()),
-            }
+        if let Some(context) = &payload.context
+            && let Ok(context) = context.clone().try_into()
+        {
+            Ok(context.function().to_string())
         } else {
             Ok("!".to_string())
         }

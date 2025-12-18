@@ -77,9 +77,9 @@ mod tests {
     use td_error::TdError;
     use td_objects::dxo::crudl::{RequestContext, handle_sql_err};
     use td_objects::dxo::function_run::FunctionRunDBWithNames;
-    use td_objects::dxo::request::FunctionOutput;
-    use td_objects::dxo::request::v2::{FunctionOutputV2, TableInfo, WrittenTableV2};
     use td_objects::dxo::table_data_version::TableDataVersionDBWithNames;
+    use td_objects::dxo::yaml::WorkerOutput;
+    use td_objects::dxo::yaml::function_runner::v2::{FunctionOutput, TableInfo, WrittenTable};
     use td_objects::sql::SelectBy;
     use td_objects::types::basic::{
         AccessTokenId, CollectionName, ColumnCount, ExecutionStatus, FunctionName,
@@ -138,7 +138,7 @@ mod tests {
         test_executions: Vec<TestExecution>,
         callback_function: &str,
         callback_status: WorkerCallbackStatus,
-        function_output: Option<FunctionOutput>,
+        function_output: Option<WorkerOutput>,
     ) -> Result<(), TdError> {
         test_status_update(db.clone(), &test_executions, |_, _, _, f| {
             let db = db.clone();
@@ -508,13 +508,13 @@ mod tests {
             }],
             "f_0",
             WorkerCallbackStatus::Done,
-            Some(FunctionOutput::V2(
-                FunctionOutputV2::builder()
+            Some(WorkerOutput::FunctionV2(
+                FunctionOutput::builder()
                     .output(vec![
-                        WrittenTableV2::NoData {
+                        WrittenTable::NoData {
                             table: TableName::try_from("t_0")?,
                         },
-                        WrittenTableV2::Data {
+                        WrittenTable::Data {
                             table: TableName::try_from("t_1")?,
                             info: TableInfo::builder()
                                 .column_count(ColumnCount::try_from(1i64)?)

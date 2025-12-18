@@ -2,8 +2,6 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::types::basic::AtTime;
-
 #[td_type::typed(i64)]
 pub struct AccessTokenExpiration;
 
@@ -23,9 +21,8 @@ impl SampleLen {
     pub const MAX: i64 = 1000;
 }
 
-#[td_type::typed(i64(default = default_triggered_on()))]
-pub struct TriggeredOnMillis;
+#[td_type::typed(i64(default = 60))]
+pub struct TimeoutThresholdMin;
 
-fn default_triggered_on() -> i64 {
-    AtTime::default().timestamp_millis()
-}
+#[td_type::typed(i64(default = 10000))]
+pub struct SizeThreshold;

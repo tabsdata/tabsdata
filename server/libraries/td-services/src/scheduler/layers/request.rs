@@ -17,17 +17,18 @@ use td_error::{TdError, td_error};
 use td_objects::dxo::crudl::handle_sql_err;
 use td_objects::dxo::function_requirement::FunctionRequirementDBWithNames;
 use td_objects::dxo::function_run::{FunctionRunDB, FunctionRunToExecuteDB, UpdateFunctionRunDB};
-use td_objects::dxo::request::v2::{
-    FunctionInfoV2, FunctionInputV2, InputTable, InputTableVersion, OutputTable, OutputTableVersion,
-};
-use td_objects::dxo::request::{EnvPrefix, FunctionInput, Location};
 use td_objects::dxo::table_data_version::TableDataVersionDBWithNames;
 use td_objects::dxo::worker::{UpdateWorkerMessageStatusDB, WorkerDB};
+use td_objects::dxo::yaml::WorkerInput;
+use td_objects::dxo::yaml::function_runner::v2::{
+    FunctionInfo, FunctionInput, InputTable, InputTableVersion, OutputTable, OutputTableVersion,
+};
+use td_objects::dxo::yaml::location::Location;
 use td_objects::rest_urls::{BASE_URL, UPDATE_FUNCTION_RUN};
 use td_objects::sql::{DaoQueries, FindBy, SelectBy, UpdateBy};
 use td_objects::types::addresses::InternalServerAddresses;
 use td_objects::types::basic::{
-    FunctionRunId, FunctionRunStatus, WorkerId, WorkerMessageStatus, WorkerStatus,
+    EnvPrefix, FunctionRunId, FunctionRunStatus, WorkerId, WorkerMessageStatus, WorkerStatus,
 };
 use td_storage::Storage;
 use td_storage::location::StorageLocation;
@@ -118,14 +119,14 @@ pub async fn create_locked_workers<T: WorkerMessageQueue>(
                     .build()?;
 
                 // Build message info
-                let info = FunctionInfoV2::builder()
+                let info = FunctionInfo::builder()
                     .collection_id(f.collection_id)
                     .collection(f.collection.clone())
                     .function_version_id(f.function_version_id)
                     .function(f.name.clone())
                     .function_run_id(f.id)
                     .function_bundle(bundle_location)
-                    .try_triggered_on(f.triggered_on.timestamp_millis())?
+                    .triggered_on(f.triggered_on)
                     .transaction_id(f.transaction_id)
                     .execution_id(f.execution_id)
                     .execution_name(f.execution.clone())
@@ -210,7 +211,7 @@ pub async fn create_locked_workers<T: WorkerMessageQueue>(
                             .triggered_on(
                                 found_data_version
                                     .as_ref()
-                                    .map(|v| v.triggered_on.timestamp_millis().try_into())
+                                    .map(|v| v.triggered_on.try_into())
                                     .transpose()?,
                             )
                             .table_data_version_id(found_data_version.as_ref().map(|v| v.id))
@@ -295,14 +296,14 @@ pub async fn create_locked_workers<T: WorkerMessageQueue>(
                     partition_and_sort(output_tables_map, OutputTable::Table);
 
                 // Build message context
-                let function_input_v2 = FunctionInputV2::builder()
+                let function_input_v2 = FunctionInput::builder()
                     .info(info)
                     .system_input(system_input)
                     .input(input)
                     .system_output(system_output)
                     .output(output)
                     .build()?;
-                let function_input = FunctionInput::V2(Box::new(function_input_v2));
+                let function_input = WorkerInput::FunctionV2(Box::new(function_input_v2));
 
                 // Build message payload
                 // TODO ADD get_states to states
@@ -376,8 +377,8 @@ pub async fn unlock_workers<T: WorkerMessageQueue>(
             })?;
 
             let function_run_id = match function_input {
-                FunctionInput::V0(_) => unreachable!(), // TODO
-                FunctionInput::V2(context) => Some(context.info.function_run_id),
+                WorkerInput::FunctionV2(context) => Some(context.info.function_run_id),
+                _ => unreachable!(), // TODO
             }?;
 
             Some((function_run_id, m))
@@ -511,7 +512,7 @@ pub async fn unlock_workers<T: WorkerMessageQueue>(
 async fn rollback_query(
     queries: &DaoQueries,
     conn: &mut SqliteConnection,
-    message: &SupervisorMessage<FunctionInput>,
+    message: &SupervisorMessage<WorkerInput>,
     function_run_id: &FunctionRunId,
 ) -> Result<(), TdError> {
     let update = UpdateFunctionRunDB::scheduled()?;
@@ -540,7 +541,7 @@ async fn rollback_query(
 
 async fn rollback_queue<T: WorkerMessageQueue>(
     message_queue: &T,
-    message: &SupervisorMessage<FunctionInput>,
+    message: &SupervisorMessage<WorkerInput>,
     function_run_id: &FunctionRunId,
 ) -> Result<(), TdError> {
     match message_queue.rollback(&message.id).await {

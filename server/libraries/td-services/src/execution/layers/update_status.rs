@@ -10,10 +10,10 @@ use td_objects::dxo::function_requirement::FunctionRequirementDBWithNames;
 use td_objects::dxo::function_run::{
     CommitFunctionRunDB, FunctionRunDB, FunctionRunToCommitDB, UpdateFunctionRunDB,
 };
-use td_objects::dxo::request::FunctionOutput;
-use td_objects::dxo::request::v2::WrittenTableV2;
 use td_objects::dxo::table_data_version::{TableDataVersionDB, UpdateTableDataVersionDB};
 use td_objects::dxo::worker::{CallbackRequest, UpdateWorkerDB, WorkerDB};
+use td_objects::dxo::yaml::WorkerOutput;
+use td_objects::dxo::yaml::function_runner::v2::WrittenTable;
 use td_objects::sql::recursive::RecursiveQueries;
 use td_objects::sql::{DaoQueries, SelectBy, UpdateBy};
 use td_objects::types::basic::{FunctionRunId, FunctionRunStatus, WorkerId};
@@ -249,7 +249,7 @@ pub async fn update_table_data_version_status(
 ) -> Result<(), TdError> {
     if let Some(context) = &callback.context {
         let futures: Vec<_> = match context {
-            FunctionOutput::V2(output) => {
+            WorkerOutput::FunctionV2(output) => {
                 output
                     .output
                     .iter()
@@ -259,13 +259,11 @@ pub async fn update_table_data_version_status(
                         let function_run_id = function_run_id.clone();
                         async move {
                             let (table_name, has_data) = match written {
-                                WrittenTableV2::NoData { table } => (table, None),
-                                WrittenTableV2::Data { table, info } => (table, Some(info)),
+                                WrittenTable::NoData { table } => (table, None),
+                                WrittenTable::Data { table, info } => (table, Some(info)),
                                 // TODO partitions should be handled differently, creating partitions and setting
                                 // the table to has_data = true and partition = true.
-                                WrittenTableV2::Partitions { table, info, .. } => {
-                                    (table, Some(info))
-                                }
+                                WrittenTable::Partitions { table, info, .. } => (table, Some(info)),
                             };
 
                             let update = UpdateTableDataVersionDB::builder()

@@ -71,16 +71,16 @@ mod tests {
     use td_objects::dxo::crudl::{RequestContext, handle_sql_err};
     use td_objects::dxo::execution::ExecutionRequest;
     use td_objects::dxo::function::FunctionRegister;
-    use td_objects::dxo::request::v2::{InputTable, OutputTable};
-    use td_objects::dxo::request::{EnvPrefix, FunctionInput};
     use td_objects::dxo::table_data_version::TableDataVersionDBWithNames;
+    use td_objects::dxo::yaml::WorkerInput;
+    use td_objects::dxo::yaml::function_runner::v2::{InputTable, OutputTable};
     use td_objects::rest_urls::FunctionParam;
     use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_function::seed_function;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, Decorator, ExecutionName, FunctionRuntimeValues,
-        RoleId, TableName, TableNameDto, UserId, WorkerMessageStatus,
+        AccessTokenId, BundleId, CollectionName, Decorator, EnvPrefix, ExecutionName,
+        FunctionRuntimeValues, RoleId, TableName, TableNameDto, UserId, WorkerMessageStatus,
     };
     use td_objects::types::composed::TableDependencyDto;
     use td_storage::SPath;
@@ -172,8 +172,8 @@ mod tests {
                 panic!("Unexpected SupervisorMessagePayload")
             }
         };
-        let Some(FunctionInput::V2(message)) = created_message else {
-            panic!("Unexpected FunctionInput version")
+        let Some(WorkerInput::FunctionV2(message)) = created_message else {
+            panic!("Unexpected WorkerInput version")
         };
 
         // V2 assertions
@@ -205,11 +205,8 @@ mod tests {
             info.function_bundle.env_prefix,
             Some(EnvPrefix::try_from(&mount_def.id)?)
         );
-        assert_eq!(
-            *info.triggered_on,
-            function_run.triggered_on.timestamp_millis()
-        );
-        assert!(info.triggered_on < info.scheduled_on);
+        assert_eq!(info.triggered_on, function_run.triggered_on);
+        assert!(*info.triggered_on < *info.scheduled_on);
         assert_eq!(info.execution_id, function_run.execution_id);
         assert_eq!(
             info.execution_name,

@@ -64,10 +64,12 @@ axum = { workspace = true }
 bytes = { workspace = true }
 constcat = { workspace = true }
 chrono = { workspace = true, features = ["serde"] }
+croner = { workspace = true }
 derive_builder = { workspace = true }
 derive-new = { workspace = true }
 futures = { workspace = true }
 getset = { workspace = true }
+http = { workspace = true }
 itertools = { workspace = true }
 nonempty = { workspace = true }
 paste = { workspace = true }

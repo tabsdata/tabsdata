@@ -181,6 +181,8 @@ pub enum WorkerClass {
 #[strum(serialize_all = "lowercase")]
 pub enum WorkerName {
     FUNCTION,
+    CRON,
+    WATCHDOG,
 }
 
 #[derive(

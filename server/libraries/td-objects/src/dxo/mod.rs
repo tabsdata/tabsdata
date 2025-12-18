@@ -38,7 +38,6 @@ pub mod global_status;
 pub mod inter_collection_access;
 pub mod inter_collection_permission;
 pub mod permission;
-pub mod request;
 pub mod role;
 pub mod runtime_info;
 pub mod synchrotron;
@@ -50,6 +49,7 @@ pub mod trigger;
 pub mod user;
 pub mod user_role;
 pub mod worker;
+pub mod yaml;
 
 /// # DataAccessObject
 /// Core trait for DAO types that operate directly on database tables.

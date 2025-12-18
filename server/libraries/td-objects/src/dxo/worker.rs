@@ -4,11 +4,11 @@
 
 #[td_type::dxo]
 mod definitions {
-    use crate::dxo::request::FunctionOutput;
+    use crate::dxo::yaml::WorkerOutput;
     use crate::types::basic::{
-        AtTime, CollectionId, CollectionName, ExecutionId, ExecutionName, FunctionName,
-        FunctionRunId, FunctionVersionId, TransactionId, WorkerId, WorkerMessageStatus,
-        WorkerStatus,
+        AtTime, CollectionId, CollectionName, CronMask, ExecutionId, ExecutionName, FunctionName,
+        FunctionRunId, FunctionVersionId, SizeThreshold, TimeoutThresholdMin, TransactionId,
+        WorkerId, WorkerMessageStatus, WorkerStatus,
     };
     use td_common::datetime::IntoDateTimeUtc;
     use td_common::execution_status::WorkerCallbackStatus;
@@ -87,8 +87,7 @@ mod definitions {
         pub function: FunctionName,
     }
 
-    // TODO: Value is a placeholder, we need to define the actual type
-    pub type CallbackRequest = ResponseMessagePayload<FunctionOutput>;
+    pub type CallbackRequest = ResponseMessagePayload<WorkerOutput>;
 
     #[td_type::Dlo]
     pub struct UpdateWorkerExecution {
@@ -132,9 +131,28 @@ mod definitions {
 
     impl UpdateWorkerMessageStatusDB {
         pub fn unlocked() -> Result<Self, TdError> {
-            Ok(Self::builder()
-                .message_status(WorkerMessageStatus::Unlocked)
-                .build()?)
+            Ok(Self {
+                message_status: WorkerMessageStatus::Unlocked,
+            })
         }
+    }
+
+    #[td_type::Dto]
+    #[derive(Eq, PartialEq)]
+    pub struct CronConfig {
+        pub version: WorkerVersion,
+        pub start: Option<AtTime>,
+        pub end: Option<AtTime>,
+        pub mask: CronMask,
+    }
+
+    #[td_type::Dto]
+    #[derive(Eq, PartialEq)]
+    pub struct WatchdogConfig {
+        pub version: WorkerVersion,
+        pub timeout_threshold_min: TimeoutThresholdMin,
+        pub size_threshold: SizeThreshold,
+        pub start: Option<AtTime>,
+        pub end: Option<AtTime>,
     }
 }

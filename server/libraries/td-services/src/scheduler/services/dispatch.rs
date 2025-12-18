@@ -49,8 +49,8 @@ mod tests {
     use td_objects::dxo::crudl::{RequestContext, handle_sql_err};
     use td_objects::dxo::execution::ExecutionRequest;
     use td_objects::dxo::function::FunctionRegister;
-    use td_objects::dxo::request::FunctionInput;
     use td_objects::dxo::worker::WorkerDB;
+    use td_objects::dxo::yaml::WorkerInput;
     use td_objects::rest_urls::FunctionParam;
     use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_collection::seed_collection;
@@ -124,10 +124,7 @@ mod tests {
             .oneshot(())
             .await?;
 
-        let created_messages = context
-            .worker_queue
-            .locked_messages::<FunctionInput>()
-            .await;
+        let created_messages = context.worker_queue.locked_messages::<WorkerInput>().await;
         assert_eq!(created_messages.len(), 1);
         let created_message = &created_messages[0];
 
@@ -138,10 +135,7 @@ mod tests {
             .oneshot(())
             .await?;
 
-        let locked_messages = context
-            .worker_queue
-            .locked_messages::<FunctionInput>()
-            .await;
+        let locked_messages = context.worker_queue.locked_messages::<WorkerInput>().await;
         assert_eq!(locked_messages.len(), 0);
 
         let files = get_files_in_folder_sorted_by_name(
@@ -152,7 +146,7 @@ mod tests {
         assert_eq!(files.len(), 1);
         let unlocked_file = &files[0];
 
-        let unlocked_message = SupervisorMessage::<FunctionInput>::try_from((
+        let unlocked_message = SupervisorMessage::<WorkerInput>::try_from((
             unlocked_file.clone(),
             PayloadType::Request,
         ))
