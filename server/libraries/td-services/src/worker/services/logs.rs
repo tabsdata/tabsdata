@@ -65,7 +65,7 @@ mod tests {
     use td_objects::test_utils::seed_function::seed_function;
     use td_objects::test_utils::seed_function_run::seed_function_run;
     use td_objects::test_utils::seed_transaction::seed_transaction;
-    use td_objects::test_utils::seed_worker::seed_worker;
+    use td_objects::test_utils::seed_worker::seed_function_runner_worker;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionRunStatus, RoleId,
         TransactionKey, UserId, WorkerMessageStatus,
@@ -147,20 +147,20 @@ mod tests {
         .await;
 
         let workers = [
-            seed_worker(
+            seed_function_runner_worker(
                 &db,
                 &execution,
                 &transaction,
                 &function_run,
-                WorkerMessageStatus::Locked,
+                &WorkerMessageStatus::Locked,
             )
             .await,
-            seed_worker(
+            seed_function_runner_worker(
                 &db,
                 &execution,
                 &transaction,
                 &function_run,
-                WorkerMessageStatus::Locked,
+                &WorkerMessageStatus::Locked,
             )
             .await,
         ];

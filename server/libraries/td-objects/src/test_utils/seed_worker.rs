@@ -2,7 +2,9 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use crate::dxo::collection::CollectionDB;
 use crate::dxo::execution::ExecutionDB;
+use crate::dxo::function::FunctionDB;
 use crate::dxo::function_run::FunctionRunDB;
 use crate::dxo::transaction::TransactionDB;
 use crate::dxo::worker::WorkerDB;
@@ -12,10 +14,45 @@ use td_database::sql::DbPool;
 
 pub async fn seed_worker(
     db: &DbPool,
+    collection: &CollectionDB,
+    function: &FunctionDB,
+    worker_type: &WorkerType,
+    worker_status: &WorkerStatus,
+    message_status: &WorkerMessageStatus,
+) -> WorkerDB {
+    let worker_db = WorkerDB::builder()
+        .collection_id(collection.id)
+        .execution_id(None)
+        .transaction_id(None)
+        .function_run_id(None)
+        .function_version_id(function.id)
+        .message_status(message_status)
+        .started_on(None)
+        .ended_on(None)
+        .status(worker_status)
+        .worker_type(worker_type)
+        .worker_config(None)
+        .build()
+        .unwrap();
+
+    let queries = DaoQueries::default();
+    queries
+        .insert::<WorkerDB>(&worker_db)
+        .unwrap()
+        .build()
+        .execute(db)
+        .await
+        .unwrap();
+
+    worker_db
+}
+
+pub async fn seed_function_runner_worker(
+    db: &DbPool,
     execution: &ExecutionDB,
     transaction: &TransactionDB,
     function_run: &FunctionRunDB,
-    status: WorkerMessageStatus,
+    status: &WorkerMessageStatus,
 ) -> WorkerDB {
     let worker_db = WorkerDB::builder()
         .collection_id(execution.collection_id)
@@ -107,12 +144,12 @@ mod tests {
         )
         .await;
 
-        let worker = seed_worker(
+        let worker = seed_function_runner_worker(
             &db,
             &execution,
             &transaction,
             &function_run,
-            WorkerMessageStatus::Locked,
+            &WorkerMessageStatus::Locked,
         )
         .await;
 
