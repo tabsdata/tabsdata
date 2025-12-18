@@ -4,7 +4,7 @@
 
 import pytest
 
-from tabsdata.dataquality._operations import (
+from tabsdata.dataquality._operator import (
     Criteria,
     Fail,
     Filter,

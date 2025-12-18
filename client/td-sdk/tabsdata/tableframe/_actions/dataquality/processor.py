@@ -14,7 +14,7 @@ from tabsdata._tabsserver.function.typing import (
     OutputTableSpec,
 )
 from tabsdata.dataquality import DataQuality, Filter, Select, Summary
-from tabsdata.dataquality._operations import Operation
+from tabsdata.dataquality._operator import Operator
 from tabsdata.exceptions import DataQualityProcessingError, ErrorCode
 from tabsdata.tableframe._actions.dataquality.engine import (
     ClassifierFamily,
@@ -199,14 +199,14 @@ class DataQualityProcessor:
         for action in self._input_actions:
             collection, table, position = self.resolve_input_table(action.table)
             input_actions_tables.extend(
-                self.build_table_names(collection, table, position, action.operations)
+                self.build_table_names(collection, table, position, action.operators)
             )
 
         output_actions_tables = []
         for action in self._output_actions:
             collection, table, position = self.resolve_output_table(action.table)
             output_actions_tables.extend(
-                self.build_table_names(collection, table, position, action.operations)
+                self.build_table_names(collection, table, position, action.operators)
             )
 
         self.validate_no_duplicate_table_names(
@@ -251,7 +251,7 @@ class DataQualityProcessor:
         collection: str,
         table: str,
         position: int | None,
-        operations: list[Operation],
+        operations: list[Operator],
     ) -> list[TableInfo]:
         table_names = []
         if operations:
@@ -415,7 +415,7 @@ class DataQualityProcessor:
         for action in self.input_actions:
             collection, table, position = self.resolve_input_table(action.table)
             table_infos = self.build_table_names(
-                collection, table, position, action.operations
+                collection, table, position, action.operators
             )
             if position >= len(input_table_frames):
                 raise DataQualityProcessingError(
@@ -423,14 +423,14 @@ class DataQualityProcessor:
                 )
             tableframe = input_table_frames[position]
             derived_table_frame, dq_cols, dq_tags = self.compute(tableframe, action)
-            if len(table_infos) != len(action.operations):
+            if len(table_infos) != len(action.operators):
                 raise DataQualityProcessingError(
                     ErrorCode.DQPE7,
                     action.table,
                     len(table_infos),
-                    len(action.operations),
+                    len(action.operators),
                 )
-            for table_info, operation in zip(table_infos, action.operations):
+            for table_info, operation in zip(table_infos, action.operators):
                 derived_table_frames.append(
                     self.harvest(
                         derived_table_frame, dq_cols, dq_tags, table_info, operation
@@ -440,7 +440,7 @@ class DataQualityProcessor:
         for action in self.output_actions:
             collection, table, position = self.resolve_output_table(action.table)
             table_infos = self.build_table_names(
-                collection, table, position, action.operations
+                collection, table, position, action.operators
             )
             if position >= len(output_table_frames):
                 raise DataQualityProcessingError(
@@ -448,14 +448,14 @@ class DataQualityProcessor:
                 )
             tableframe = output_table_frames[position]
             derived_table_frame, dq_cols, dq_tags = self.compute(tableframe, action)
-            if len(table_infos) != len(action.operations):
+            if len(table_infos) != len(action.operators):
                 raise DataQualityProcessingError(
                     ErrorCode.DQPE8,
                     action.table,
                     len(table_infos),
-                    len(action.operations),
+                    len(action.operators),
                 )
-            for table_info, operation in zip(table_infos, action.operations):
+            for table_info, operation in zip(table_infos, action.operators):
                 derived_table_frames.append(
                     self.harvest(
                         derived_table_frame, dq_cols, dq_tags, table_info, operation
@@ -524,7 +524,7 @@ class DataQualityProcessor:
         cols: dict[str, ClassifierFamily],
         tags: dict[str, set[str]] | None,
         _table_info: TableInfo,
-        operation: Operation,
+        operation: Operator,
     ) -> DerivedTableFrame | None:
         if tableframe is None:
             return None

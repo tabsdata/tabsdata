@@ -20,7 +20,7 @@ import tabsdata.tableframe.expr.expr as td_expr
 import tabsdata.tableframe.lazyframe.frame as td_frame
 
 # noinspection PyProtectedMember
-from tabsdata.dataquality._classifiers import (
+from tabsdata.dataquality._classifier import (
     Classifier,
     IsNan,
     IsNotNan,

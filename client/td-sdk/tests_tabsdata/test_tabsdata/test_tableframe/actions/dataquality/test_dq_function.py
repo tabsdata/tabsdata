@@ -22,7 +22,7 @@ def test_dq_transformer():
                 classifiers=[
                     dq.IsNull("number01"),
                 ],
-                operations=[
+                operators=[
                     dq.Summary(),
                 ],
             )

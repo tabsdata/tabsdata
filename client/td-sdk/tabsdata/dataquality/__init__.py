@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from tabsdata.dataquality._classifiers import (
+from tabsdata.dataquality._classifier import (
     Categorizer,
     DoesNotMatch,
     ExponentialScale,
@@ -33,12 +33,12 @@ from tabsdata.dataquality._classifiers import (
     MonomialScale,
     Scale,
 )
-from tabsdata.dataquality._data_quality import DataQuality
-from tabsdata.dataquality._operations import (
+from tabsdata.dataquality._dataquality import DataQuality
+from tabsdata.dataquality._operator import (
     Criteria,
     Fail,
     Filter,
-    Operation,
+    Operator,
     PercentThreshold,
     RowCountThreshold,
     Select,
@@ -78,7 +78,7 @@ __all__ = [
     # from tabsdata.dataquality._dataquality
     "DataQuality",
     # from tabsdata.dataquality._operations
-    "Operation",
+    "Operator",
     "Criteria",
     "Fail",
     "Filter",

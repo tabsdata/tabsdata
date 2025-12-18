@@ -4,9 +4,9 @@
 
 import pytest
 
-from tabsdata.dataquality._classifiers import Matches
-from tabsdata.dataquality._data_quality import DataQuality
-from tabsdata.dataquality._operations import Fail, RowCountThreshold, Summary
+from tabsdata.dataquality import DataQuality
+from tabsdata.dataquality._classifier import Matches
+from tabsdata.dataquality._operator import Fail, Summary, RowCountThreshold
 from tabsdata.exceptions import (
     DataQualityConfigurationError,
     ErrorCode,
@@ -25,7 +25,7 @@ def test_data_quality_class():
     dq = DataQuality(table, classifier, operation)
     assert dq.table == table
     assert dq.classifiers == [classifier]
-    assert dq.operations == [operation]
+    assert dq.operators == [operation]
 
 
 def test_data_quality_wrong_table_type():

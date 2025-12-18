@@ -18,7 +18,7 @@ from tabsdata.dataquality import (
     IsNull,
     Summary,
 )
-from tabsdata.dataquality._classifiers import Classifier
+from tabsdata.dataquality._classifier import Classifier
 from tabsdata.tableframe._actions.dataquality.engine import DataQualityEngine
 from tabsdata.tableframe.lazyframe.properties import TableFramePropertiesBuilder
 
@@ -215,7 +215,7 @@ def _is_null_action(table: str = "table00") -> DataQuality:
             column_names="value",
             tags="null",
         ),
-        operations=Summary(),
+        operators=Summary(),
     )
 
 
@@ -226,7 +226,7 @@ def _is_not_null_action(table: str = "table00") -> DataQuality:
             column_names="value",
             tags="not_null",
         ),
-        operations=Summary(),
+        operators=Summary(),
     )
 
 
@@ -245,7 +245,7 @@ def _is_nan_action(table: str = "table00") -> DataQuality:
                 ignore_nulls=True,
             ),
         ],
-        operations=Summary(),
+        operators=Summary(),
     )
 
 
@@ -264,7 +264,7 @@ def _is_not_nan_action(table: str = "table00") -> DataQuality:
                 ignore_nulls=True,
             ),
         ],
-        operations=Summary(),
+        operators=Summary(),
     )
 
 

@@ -45,7 +45,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "input1",
             classifiers=[],
-            operations=[Select(to_table="input1_select")],
+            operators=[Select(to_table="input1_select")],
         )
 
         processor = DataQualityProcessor(
@@ -81,7 +81,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "input1",
             classifiers=[],
-            operations=[Filter(to_table="input1_filter")],
+            operators=[Filter(to_table="input1_filter")],
         )
 
         processor = DataQualityProcessor(
@@ -117,7 +117,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "input1",
             classifiers=[],
-            operations=[Summary(table="input1_summary")],
+            operators=[Summary(table="input1_summary")],
         )
 
         processor = DataQualityProcessor(
@@ -153,7 +153,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "input1",
             classifiers=[],
-            operations=[
+            operators=[
                 Select(to_table="input1_select"),
                 Filter(to_table="input1_filter"),
                 Summary(table="input1_summary"),
@@ -205,13 +205,13 @@ class TestDataQualityProcessorTableNames:
         dq_action1 = DataQuality(
             "input1",
             classifiers=[],
-            operations=[Select(to_table="input1_select")],
+            operators=[Select(to_table="input1_select")],
         )
 
         dq_action2 = DataQuality(
             "input2",
             classifiers=[],
-            operations=[Filter(to_table="input2_filter")],
+            operators=[Filter(to_table="input2_filter")],
         )
 
         processor = DataQualityProcessor(
@@ -248,7 +248,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "table",
             classifiers=[],
-            operations=[Select(to_table="table_select")],
+            operators=[Select(to_table="table_select")],
         )
 
         processor = DataQualityProcessor(
@@ -282,7 +282,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "collection/table",
             classifiers=[],
-            operations=[Select(to_table="qualified_select")],
+            operators=[Select(to_table="qualified_select")],
         )
 
         processor = DataQualityProcessor(
@@ -316,7 +316,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "table@HEAD",
             classifiers=[],
-            operations=[Select(to_table="versioned_select")],
+            operators=[Select(to_table="versioned_select")],
         )
 
         processor = DataQualityProcessor(
@@ -350,7 +350,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "collection/table@HEAD~1",
             classifiers=[],
-            operations=[Select(to_table="full_uri_select")],
+            operators=[Select(to_table="full_uri_select")],
         )
 
         processor = DataQualityProcessor(
@@ -384,7 +384,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "table@HEAD^^",
             classifiers=[],
-            operations=[Select(to_table="caret_version_select")],
+            operators=[Select(to_table="caret_version_select")],
         )
 
         processor = DataQualityProcessor(
@@ -418,7 +418,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "table@ABCDEFGHIJKLMNOPQRSTUVWXY0",
             classifiers=[],
-            operations=[Select(to_table="hash_version_select")],
+            operators=[Select(to_table="hash_version_select")],
         )
 
         processor = DataQualityProcessor(
@@ -460,7 +460,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "table_a",
             classifiers=[],
-            operations=[Select(to_table="alias_resolved_select")],
+            operators=[Select(to_table="alias_resolved_select")],
         )
 
         processor = DataQualityProcessor(
@@ -494,7 +494,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "collection_a/customers",
             classifiers=[],
-            operations=[Select(to_table="qualified_resolved_select")],
+            operators=[Select(to_table="qualified_resolved_select")],
         )
 
         processor = DataQualityProcessor(
@@ -536,7 +536,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "collection_a/customers",
             classifiers=[],
-            operations=[Select(to_table="different_collection_select")],
+            operators=[Select(to_table="different_collection_select")],
         )
 
         processor = DataQualityProcessor(
@@ -570,7 +570,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "customers",
             classifiers=[],
-            operations=[Select(to_table="default_collection_select")],
+            operators=[Select(to_table="default_collection_select")],
         )
 
         processor = DataQualityProcessor(
@@ -620,7 +620,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "latest",
             classifiers=[],
-            operations=[Select(to_table="version_alias_select")],
+            operators=[Select(to_table="version_alias_select")],
         )
 
         processor = DataQualityProcessor(
@@ -662,7 +662,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "customers",
             classifiers=[],
-            operations=[Select(to_table="unresolved_select")],
+            operators=[Select(to_table="unresolved_select")],
         )
 
         processor = DataQualityProcessor(
@@ -694,7 +694,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "products",
             classifiers=[],
-            operations=[Select(to_table="not_found_select")],
+            operators=[Select(to_table="not_found_select")],
         )
 
         processor = DataQualityProcessor(
@@ -726,7 +726,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "collection_b/customers",
             classifiers=[],
-            operations=[Select(to_table="wrong_collection_select")],
+            operators=[Select(to_table="wrong_collection_select")],
         )
 
         processor = DataQualityProcessor(
@@ -766,7 +766,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "collection/customers",
             classifiers=[],
-            operations=[Select(to_table="ambiguous_select")],
+            operators=[Select(to_table="ambiguous_select")],
         )
 
         processor = DataQualityProcessor(
@@ -788,7 +788,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "customers",
             classifiers=[],
-            operations=[Select(to_table="empty_tables_select")],
+            operators=[Select(to_table="empty_tables_select")],
         )
 
         processor = DataQualityProcessor(
@@ -811,7 +811,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "output1",
             classifiers=[],
-            operations=[Select(to_table="output_select")],
+            operators=[Select(to_table="output_select")],
         )
 
         processor = DataQualityProcessor(
@@ -836,7 +836,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "output3",
             classifiers=[],
-            operations=[Select(to_table="unresolved_output_select")],
+            operators=[Select(to_table="unresolved_output_select")],
         )
 
         processor = DataQualityProcessor(
@@ -867,7 +867,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "input1",
             classifiers=[],
-            operations=[Filter()],
+            operators=[Filter()],
         )
 
         processor = DataQualityProcessor(
@@ -898,7 +898,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "input1",
             classifiers=[],
-            operations=[Summary(table=None)],
+            operators=[Summary(table=None)],
         )
 
         processor = DataQualityProcessor(
@@ -950,7 +950,7 @@ class TestDataQualityProcessorTableNames:
         input_action1 = DataQuality(
             "customers_latest",
             classifiers=[],
-            operations=[
+            operators=[
                 Select(to_table="customers_select"),
                 Filter(to_table="customers_filter"),
                 Summary(table="customers_summary"),
@@ -960,7 +960,7 @@ class TestDataQualityProcessorTableNames:
         input_action2 = DataQuality(
             "orders_latest",
             classifiers=[],
-            operations=[
+            operators=[
                 Filter(to_table="orders_filter"),
             ],
         )
@@ -968,7 +968,7 @@ class TestDataQualityProcessorTableNames:
         output_action1 = DataQuality(
             "cleaned_customers",
             classifiers=[],
-            operations=[
+            operators=[
                 Summary(table="output_summary"),
             ],
         )
@@ -1021,7 +1021,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "table1",
             classifiers=[],
-            operations=[Select(to_table="collection_test_select")],
+            operators=[Select(to_table="collection_test_select")],
         )
 
         processor = DataQualityProcessor(
@@ -1055,7 +1055,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "table_123",
             classifiers=[],
-            operations=[Select(to_table="special_chars_456")],
+            operators=[Select(to_table="special_chars_456")],
         )
 
         processor = DataQualityProcessor(
@@ -1089,7 +1089,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "input1",
             classifiers=[],
-            operations=[
+            operators=[
                 Select(to_table="mixed_select"),
                 Filter(to_table="mixed_filter"),
                 Summary(table="mixed_summary"),
@@ -1147,7 +1147,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "input1",
             classifiers=[],
-            operations=[Filter()],
+            operators=[Filter()],
         )
 
         processor = DataQualityProcessor(
@@ -1178,7 +1178,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "input1",
             classifiers=[],
-            operations=[Summary(table=None)],
+            operators=[Summary(table=None)],
         )
 
         processor = DataQualityProcessor(
@@ -1212,7 +1212,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "input1",
             classifiers=[],
-            operations=[
+            operators=[
                 Select(to_table="custom_select"),
                 Filter(),
                 Summary(table="custom_summary"),
@@ -1272,7 +1272,7 @@ class TestDataQualityProcessorTableNames:
         dq_action1 = DataQuality(
             "table1",
             classifiers=[],
-            operations=[
+            operators=[
                 Select(to_table="sales_valid"),
                 Filter(to_table="sales_invalid"),
                 Summary(table="sales_report"),
@@ -1282,7 +1282,7 @@ class TestDataQualityProcessorTableNames:
         dq_action2 = DataQuality(
             "table2",
             classifiers=[],
-            operations=[
+            operators=[
                 Select(to_table="inventory_valid"),
                 Filter(),
                 Summary(table="inventory_report"),
@@ -1292,7 +1292,7 @@ class TestDataQualityProcessorTableNames:
         dq_action3 = DataQuality(
             "table3",
             classifiers=[],
-            operations=[
+            operators=[
                 Select(to_table="customer_valid"),
                 Filter(to_table="customer_invalid"),
                 Summary(table=None),
@@ -1338,7 +1338,7 @@ class TestDataQualityProcessorTableNames:
         dq_action1 = DataQuality(
             "output1",
             classifiers=[],
-            operations=[
+            operators=[
                 Select(to_table="output1_select"),
                 Filter(to_table="output1_filter"),
                 Summary(table="output1_summary"),
@@ -1348,7 +1348,7 @@ class TestDataQualityProcessorTableNames:
         dq_action2 = DataQuality(
             "output2",
             classifiers=[],
-            operations=[
+            operators=[
                 Select(to_table="output2_select"),
                 Filter(to_table="output2_filter"),
                 Summary(table=None),
@@ -1358,7 +1358,7 @@ class TestDataQualityProcessorTableNames:
         dq_action3 = DataQuality(
             "output3",
             classifiers=[],
-            operations=[
+            operators=[
                 Select(to_table="output3_select"),
                 Filter(),
                 Summary(table="output3_summary"),
@@ -1422,7 +1422,7 @@ class TestDataQualityProcessorTableNames:
         input_action1 = DataQuality(
             "input1",
             classifiers=[],
-            operations=[
+            operators=[
                 Select(to_table="input1_select"),
                 Filter(),
                 Summary(table="input1_summary"),
@@ -1432,7 +1432,7 @@ class TestDataQualityProcessorTableNames:
         input_action2 = DataQuality(
             "input2",
             classifiers=[],
-            operations=[
+            operators=[
                 Select(to_table="input2_select"),
                 Filter(to_table="input2_filter"),
                 Summary(table=None),
@@ -1442,7 +1442,7 @@ class TestDataQualityProcessorTableNames:
         output_action1 = DataQuality(
             "output1",
             classifiers=[],
-            operations=[
+            operators=[
                 Select(to_table="output1_select"),
                 Filter(to_table="output1_filter"),
             ],
@@ -1451,7 +1451,7 @@ class TestDataQualityProcessorTableNames:
         output_action2 = DataQuality(
             "output2",
             classifiers=[],
-            operations=[
+            operators=[
                 Summary(table="output2_summary"),
             ],
         )
@@ -1493,7 +1493,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "input1",
             classifiers=[],
-            operations=[
+            operators=[
                 Select(to_table="custom_select_1"),
                 Select(to_table="custom_select_2"),
                 Filter(to_table="custom_filter_1"),
@@ -1542,7 +1542,7 @@ class TestDataQualityProcessorTableNames:
             action = DataQuality(
                 f"input{i}",
                 classifiers=[],
-                operations=[
+                operators=[
                     Select(to_table=f"select_{i}_1"),
                     Select(to_table=f"select_{i}_2"),
                     Filter(to_table=f"filter_{i}_1"),
@@ -1621,7 +1621,7 @@ class TestDataQualityProcessorTableNames:
         input_action1 = DataQuality(
             "raw_sales",
             classifiers=[],
-            operations=[
+            operators=[
                 Select(to_table="valid_sales"),
                 Filter(to_table="invalid_sales"),
                 Summary(table=None),
@@ -1631,7 +1631,7 @@ class TestDataQualityProcessorTableNames:
         input_action2 = DataQuality(
             "raw_inventory",
             classifiers=[],
-            operations=[
+            operators=[
                 Select(to_table="inventory_select"),
                 Filter(),
                 Summary(table="inventory_summary_report"),
@@ -1641,7 +1641,7 @@ class TestDataQualityProcessorTableNames:
         input_action3 = DataQuality(
             "raw_customers",
             classifiers=[],
-            operations=[
+            operators=[
                 Select(to_table="verified_customers"),
                 Summary(table=None),
             ],
@@ -1650,7 +1650,7 @@ class TestDataQualityProcessorTableNames:
         input_action4 = DataQuality(
             "raw_products",
             classifiers=[],
-            operations=[
+            operators=[
                 Filter(),
                 Summary(table="product_quality_report"),
             ],
@@ -1659,7 +1659,7 @@ class TestDataQualityProcessorTableNames:
         output_action1 = DataQuality(
             "cleaned_sales",
             classifiers=[],
-            operations=[
+            operators=[
                 Select(to_table="final_sales"),
                 Summary(table=None),
             ],
@@ -1668,7 +1668,7 @@ class TestDataQualityProcessorTableNames:
         output_action2 = DataQuality(
             "cleaned_inventory",
             classifiers=[],
-            operations=[
+            operators=[
                 Filter(),
             ],
         )
@@ -1676,7 +1676,7 @@ class TestDataQualityProcessorTableNames:
         output_action3 = DataQuality(
             "cleaned_customers",
             classifiers=[],
-            operations=[
+            operators=[
                 Summary(table="customer_quality_metrics"),
             ],
         )
@@ -1726,7 +1726,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "input1",
             classifiers=[],
-            operations=[
+            operators=[
                 Select(to_table="duplicate_name"),
                 Filter(to_table="duplicate_name"),
             ],
@@ -1767,7 +1767,7 @@ class TestDataQualityProcessorTableNames:
         dq_action_filter_with_table = DataQuality(
             "input1",
             classifiers=[],
-            operations=[Filter(to_table="filtered_output")],
+            operators=[Filter(to_table="filtered_output")],
         )
 
         processor = DataQualityProcessor(
@@ -1786,7 +1786,7 @@ class TestDataQualityProcessorTableNames:
         dq_action_filter_no_table = DataQuality(
             "input1",
             classifiers=[],
-            operations=[Filter()],
+            operators=[Filter()],
         )
 
         processor2 = DataQualityProcessor(
@@ -1803,7 +1803,7 @@ class TestDataQualityProcessorTableNames:
         dq_action_select = DataQuality(
             "input1",
             classifiers=[],
-            operations=[Select(to_table="selected_output")],
+            operators=[Select(to_table="selected_output")],
         )
 
         processor3 = DataQualityProcessor(
@@ -1842,7 +1842,7 @@ class TestDataQualityProcessorTableNames:
         dq_action1 = DataQuality(
             "input1",
             classifiers=[],
-            operations=[
+            operators=[
                 Select(to_table="shared_output"),
             ],
         )
@@ -1850,7 +1850,7 @@ class TestDataQualityProcessorTableNames:
         dq_action2 = DataQuality(
             "input2",
             classifiers=[],
-            operations=[
+            operators=[
                 Filter(to_table="shared_output"),
             ],
         )
@@ -1875,7 +1875,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "output1",
             classifiers=[],
-            operations=[
+            operators=[
                 Select(to_table="duplicate_output"),
                 Summary(table="duplicate_output"),
             ],
@@ -1901,7 +1901,7 @@ class TestDataQualityProcessorTableNames:
         dq_action1 = DataQuality(
             "output1",
             classifiers=[],
-            operations=[
+            operators=[
                 Select(to_table="shared_name"),
             ],
         )
@@ -1909,7 +1909,7 @@ class TestDataQualityProcessorTableNames:
         dq_action2 = DataQuality(
             "output2",
             classifiers=[],
-            operations=[
+            operators=[
                 Filter(to_table="shared_name"),
             ],
         )
@@ -1944,7 +1944,7 @@ class TestDataQualityProcessorTableNames:
         input_action = DataQuality(
             "input1",
             classifiers=[],
-            operations=[
+            operators=[
                 Select(to_table="conflict_name"),
             ],
         )
@@ -1952,7 +1952,7 @@ class TestDataQualityProcessorTableNames:
         output_action = DataQuality(
             "output1",
             classifiers=[],
-            operations=[
+            operators=[
                 Filter(to_table="conflict_name"),
             ],
         )
@@ -1986,7 +1986,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "input1",
             classifiers=[],
-            operations=[
+            operators=[
                 Select(to_table="dup1"),
                 Select(to_table="dup1"),
                 Filter(to_table="dup2"),
@@ -2025,7 +2025,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "input1",
             classifiers=[],
-            operations=[
+            operators=[
                 Select(to_table="triple"),
                 Filter(to_table="triple"),
                 Summary(table="triple"),
@@ -2063,7 +2063,7 @@ class TestDataQualityProcessorTableNames:
         input_action = DataQuality(
             "input1",
             classifiers=[],
-            operations=[
+            operators=[
                 Select(to_table="unique_select"),
                 Filter(to_table="unique_filter"),
                 Summary(table="unique_summary"),
@@ -2073,7 +2073,7 @@ class TestDataQualityProcessorTableNames:
         output_action = DataQuality(
             "output1",
             classifiers=[],
-            operations=[
+            operators=[
                 Select(to_table="unique_output_select"),
                 Summary(table="unique_output_summary"),
             ],
@@ -2115,7 +2115,7 @@ class TestDataQualityProcessorTableNames:
         dq_action1 = DataQuality(
             "input1",
             classifiers=[],
-            operations=[
+            operators=[
                 Select(to_table="source1_select"),
             ],
         )
@@ -2123,7 +2123,7 @@ class TestDataQualityProcessorTableNames:
         dq_action2 = DataQuality(
             "input2",
             classifiers=[],
-            operations=[
+            operators=[
                 Select(to_table="source2_select"),
             ],
         )
@@ -2166,7 +2166,7 @@ class TestDataQualityProcessorTableNames:
         input_action1 = DataQuality(
             "input1",
             classifiers=[],
-            operations=[
+            operators=[
                 Select(to_table="processed_data"),
                 Filter(to_table=None),
             ],
@@ -2175,7 +2175,7 @@ class TestDataQualityProcessorTableNames:
         input_action2 = DataQuality(
             "input2",
             classifiers=[],
-            operations=[
+            operators=[
                 Summary(table="processed_data"),
             ],
         )
@@ -2183,7 +2183,7 @@ class TestDataQualityProcessorTableNames:
         output_action1 = DataQuality(
             "output1",
             classifiers=[],
-            operations=[
+            operators=[
                 Select(to_table="final_output"),
             ],
         )
@@ -2233,7 +2233,7 @@ class TestDataQualityProcessorTableNames:
         dq_action1 = DataQuality(
             "table_a",
             classifiers=[],
-            operations=[
+            operators=[
                 Select(to_table="output_from_a"),
                 Filter(to_table="filtered_from_a"),
             ],
@@ -2242,7 +2242,7 @@ class TestDataQualityProcessorTableNames:
         dq_action2 = DataQuality(
             "table_b",
             classifiers=[],
-            operations=[
+            operators=[
                 Summary(table="summary_from_b"),
             ],
         )
@@ -2250,7 +2250,7 @@ class TestDataQualityProcessorTableNames:
         dq_action3 = DataQuality(
             "table_c",
             classifiers=[],
-            operations=[
+            operators=[
                 Select(to_table="output_from_c"),
             ],
         )
@@ -2293,7 +2293,7 @@ class TestDataQualityProcessorTableNames:
         dq_action1 = DataQuality(
             "output_table1",
             classifiers=[],
-            operations=[
+            operators=[
                 Select(to_table="validated_output1"),
                 Summary(table="summary_output1"),
             ],
@@ -2302,7 +2302,7 @@ class TestDataQualityProcessorTableNames:
         dq_action2 = DataQuality(
             "output_table2",
             classifiers=[],
-            operations=[
+            operators=[
                 Filter(to_table="filtered_output2"),
             ],
         )
@@ -2357,7 +2357,7 @@ class TestDataQualityProcessorTableNames:
         dq_action1 = DataQuality(
             "sales/transactions@HEAD",
             classifiers=[],
-            operations=[
+            operators=[
                 Select(to_table="clean_transactions"),
             ],
         )
@@ -2365,7 +2365,7 @@ class TestDataQualityProcessorTableNames:
         dq_action2 = DataQuality(
             "inventory/stock_levels",
             classifiers=[],
-            operations=[
+            operators=[
                 Filter(to_table="valid_stock"),
             ],
         )

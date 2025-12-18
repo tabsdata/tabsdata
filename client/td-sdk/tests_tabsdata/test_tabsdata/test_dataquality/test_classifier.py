@@ -8,7 +8,7 @@ from typing import get_args
 import pytest
 
 import tabsdata.tableframe.dtypes as td_dtypes
-from tabsdata.dataquality._classifiers import (
+from tabsdata.dataquality._classifier import (
     Categorizer,
     DoesNotMatch,
     ExponentialScale,

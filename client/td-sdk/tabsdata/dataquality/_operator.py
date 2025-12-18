@@ -21,7 +21,7 @@ from tabsdata.exceptions import ConstructorError, ErrorCode, ParameterValidation
 from tabsdata.typing._specs import TableName
 
 
-class Operation(ABC):
+class Operator(ABC):
     """
     Base abstract class for data quality operations.
     """
@@ -199,7 +199,7 @@ class PercentThreshold(Threshold):
         return self._percent
 
 
-class Fail(Operation):
+class Fail(Operator):
     """
     Fails the transaction running the function if a data quality threshold
     is reached for a given criteria.
@@ -255,7 +255,7 @@ class Fail(Operation):
 
 
 # noinspection DuplicatedCode
-class Filter(Operation):
+class Filter(Operator):
     """
     Filters a table based on data quality criteria.
 
@@ -316,7 +316,7 @@ class Filter(Operation):
 
 
 # noinspection DuplicatedCode
-class Select(Operation):
+class Select(Operator):
     """
     Selects rows from the table to which data quality is being applied and
     writes them to another table.
@@ -370,7 +370,7 @@ class Select(Operation):
         return self._criteria
 
 
-class Summary(Operation):
+class Summary(Operator):
     """
     Generates a data quality report for a table.
     """

@@ -67,7 +67,7 @@ def test_example_publisher():
             dq.DataQuality(
                 table="users",
                 classifiers=classify_list,
-                operations=op_list,
+                operators=op_list,
             ),
         ],
     )
@@ -84,7 +84,7 @@ def test_example_publisher():
     assert isinstance(action, dq.DataQuality)
     assert action.table == "users"
     assert action.classifiers == classify_list
-    assert action.operations == op_list
+    assert action.operators == op_list
 
 
 def test_example_publisher_with_filter():
@@ -121,7 +121,7 @@ def test_example_publisher_with_filter():
         on_tables=dq.DataQuality(
             table="users",
             classifiers=classify_list,
-            operations=op_list,
+            operators=op_list,
         ),
     )
     def pub2(users, offices):
@@ -137,7 +137,7 @@ def test_example_publisher_with_filter():
     assert isinstance(action, dq.DataQuality)
     assert action.table == "users"
     assert action.classifiers == classify_list
-    assert action.operations == op_list
+    assert action.operators == op_list
 
 
 def test_example_publisher_with_filter_and_tags():
@@ -181,7 +181,7 @@ def test_example_publisher_with_filter_and_tags():
             dq.DataQuality(
                 table="users",
                 classifiers=classify_list,
-                operations=op_list,
+                operators=op_list,
             )
         ],
     )
@@ -198,7 +198,7 @@ def test_example_publisher_with_filter_and_tags():
     assert isinstance(action, dq.DataQuality)
     assert action.table == "users"
     assert action.classifiers == classify_list
-    assert action.operations == op_list
+    assert action.operators == op_list
 
 
 @pytest.mark.skip("Un-skip this test when reverting TD-1089")
@@ -223,7 +223,7 @@ def test_example_transformer():
                 dq.IsNotNull(("zip", "zip_nn")),  # dq.zip_nn
                 dq.IsNotNull("country"),
             ],
-            operations=[
+            operators=[
                 dq.Summary(),
                 dq.Filter(to_table="employees_invalid"),
             ],
@@ -231,7 +231,7 @@ def test_example_transformer():
         dq.DataQuality(
             table="employees",
             classifiers=[dq.Categorizer("country", scale=continents)],
-            operations=[
+            operators=[
                 dq.Summary(),
                 dq.Filter(to_table="employees_invalid"),
             ],
@@ -246,7 +246,7 @@ def test_example_transformer():
                 dq.IsNull("id", tags="fail"),
                 dq.Categorizer("country", scale=continents),
             ],
-            operations=[
+            operators=[
                 dq.Summary(),
                 dq.Filter(to_table="users_recheck", criteria=dq.Criteria.any_failed()),
                 dq.Filter(
