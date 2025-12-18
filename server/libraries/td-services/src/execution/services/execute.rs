@@ -2,60 +2,23 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::do_authz::DO_AUTHZ;
-use crate::execution::layers::execution::{
-    assert_function_status, build_execution_plan, build_function_requirements, build_function_runs,
-    build_response, build_table_data_versions, build_transaction_map, build_transactions,
-    resolve_execution_plan_versions, update_initial_function_run_status, validate_execution_plan,
-    with_recursion_options,
-};
-use crate::graph::layers::{FunctionOrTable, GraphConfig, generate_td_graph};
+use crate::execution::layers::execute;
 use ta_services::factory::service_factory;
-use td_authz::{Authz, AuthzContext};
+use td_authz::AuthzContext;
 use td_execution::TransactionBy;
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
-use td_objects::dxo::dependency::DependencyDBWithNames;
-use td_objects::dxo::execution::{
-    ExecutionDB, ExecutionDBBuilder, ExecutionRequest, ExecutionResponse,
-};
-use td_objects::dxo::function::{FunctionDB, FunctionDBWithNames};
-use td_objects::dxo::function_requirement::FunctionRequirementDB;
-use td_objects::dxo::function_run::{FunctionRunDB, FunctionRunDBBuilder};
-use td_objects::dxo::table::TableDB;
-use td_objects::dxo::table_data_version::TableDataVersionDB;
-use td_objects::dxo::transaction::{TransactionDB, TransactionDBBuilder};
-use td_objects::dxo::trigger::TriggerDBWithNames;
+use td_objects::dxo::execution::{ExecutionRequest, ExecutionResponse};
+use td_objects::dxo::function::FunctionDBWithNames;
 use td_objects::rest_urls::FunctionParam;
 use td_objects::sql::DaoQueries;
-use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollExec};
 use td_objects::tower_service::from::{
-    BuildService, ExtractDataService, ExtractNameService, ExtractService, IntoService, SetService,
-    TryIntoService, UpdateService, With, combine,
+    ExtractDataService, ExtractNameService, ExtractService, With, combine,
 };
-use td_objects::tower_service::sql::{By, SqlSelectService, insert, insert_vec};
-use td_objects::types::basic::{
-    AtTime, CollectionId, CollectionIdName, FunctionId, FunctionIdName, FunctionOnly,
-};
-use td_objects::types::recursion::RecursionOptions;
+use td_objects::tower_service::sql::{By, SqlSelectService};
+use td_objects::types::basic::{AtTime, CollectionIdName, FunctionIdName};
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
-
-pub struct GraphOpts;
-impl
-    GraphConfig<
-        { TriggerDBWithNames::Active },
-        { DependencyDBWithNames::Active },
-        { FunctionDB::Executable },
-        { TableDB::Available },
-    > for GraphOpts
-{
-    type Authz = DO_AUTHZ;
-
-    fn include_dependency_functions(&self) -> bool {
-        false
-    }
-}
 
 #[service_factory(
     name = ExecuteFunctionService,
@@ -87,49 +50,7 @@ fn service() {
                 FunctionDBWithNames,
             >
         ),
-        from_fn(assert_function_status),
-        // check requester is coll_admin or coll_exec for the function's collection
-        from_fn(With::<FunctionDBWithNames>::extract::<CollectionId>),
-        from_fn(AuthzOn::<CollectionId>::set),
-        from_fn(Authz::<CollAdmin, CollExec>::check),
-        // Get recursion options
-        from_fn(With::<FunctionDBWithNames>::extract::<FunctionId>),
-        from_fn(With::<FunctionId>::convert_to::<FunctionOrTable>),
-        from_fn(With::<ExecutionRequest>::extract::<FunctionOnly>),
-        from_fn(with_recursion_options),
-        // Find td graph
-        generate_td_graph(GraphOpts),
-        // Build execution plan
-        from_fn(build_execution_plan),
-        from_fn(validate_execution_plan),
-        // Build execution
-        from_fn(With::<FunctionDBWithNames>::try_convert_to::<ExecutionDBBuilder, _>),
-        from_fn(With::<RequestContext>::update::<ExecutionDBBuilder, _>),
-        from_fn(With::<ExecutionRequest>::update::<ExecutionDBBuilder, _>),
-        from_fn(With::<RecursionOptions>::set::<ExecutionDBBuilder>),
-        from_fn(With::<ExecutionDBBuilder>::build::<ExecutionDB, _>),
-        from_fn(insert::<ExecutionDB>),
-        // Build transactions
-        from_fn(build_transaction_map),
-        from_fn(With::<ExecutionDB>::try_convert_to::<TransactionDBBuilder, _>),
-        from_fn(build_transactions),
-        from_fn(insert_vec::<TransactionDB>),
-        // Build new function runs
-        from_fn(With::<ExecutionDB>::try_convert_to::<FunctionRunDBBuilder, _>),
-        from_fn(build_function_runs),
-        from_fn(insert_vec::<FunctionRunDB>),
-        // Build new table data versions
-        from_fn(build_table_data_versions),
-        from_fn(insert_vec::<TableDataVersionDB>),
-        // Create execution plan
-        from_fn(resolve_execution_plan_versions),
-        // Create steps
-        from_fn(build_function_requirements),
-        from_fn(insert_vec::<FunctionRequirementDB>),
-        // Update function run initial status if needed
-        from_fn(update_initial_function_run_status),
-        // Execution plan response
-        from_fn(build_response),
+        execute(),
     )
 }
 
@@ -146,6 +67,7 @@ pub(crate) mod tests {
     use td_objects::dxo::execution::ExecutionDBWithStatus;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::function_requirement::FunctionRequirementDBWithNames;
+    use td_objects::dxo::function_run::FunctionRunDB;
     use td_objects::dxo::function_run::FunctionRunDBWithNames;
     use td_objects::dxo::table::TableDB;
     use td_objects::dxo::table_data_version::TableDataVersionDBWithNames;
@@ -171,14 +93,38 @@ pub(crate) mod tests {
     #[td_test::test(sqlx)]
     #[tokio::test]
     async fn test_tower_metadata_execute(db: DbPool) {
+        use crate::execution::layers::GraphOpts;
+        use crate::execution::layers::execution::{
+            assert_function_status, build_execution_plan, build_function_requirements,
+            build_function_runs, build_response, build_table_data_versions, build_transaction_map,
+            build_transactions, resolve_execution_plan_versions,
+            update_initial_function_run_status, validate_execution_plan, with_recursion_options,
+        };
+        use crate::graph::layers::FunctionOrTable;
         use crate::graph::layers::build::GraphBuilder;
+        use td_authz::Authz;
+        use td_objects::dxo::crudl::RequestContext;
         use td_objects::dxo::dependency::DependencyDBWithNames;
+        use td_objects::dxo::execution::{ExecutionDB, ExecutionDBBuilder, ExecutionRequest};
+        use td_objects::dxo::function::FunctionDBWithNames;
+        use td_objects::dxo::function_requirement::FunctionRequirementDB;
+        use td_objects::dxo::function_run::{FunctionRunDB, FunctionRunDBBuilder};
         use td_objects::dxo::inter_collection_access::{
             InterCollectionAccess, InterCollectionAccessBuilder,
         };
+        use td_objects::dxo::table_data_version::TableDataVersionDB;
+        use td_objects::dxo::transaction::{TransactionDB, TransactionDBBuilder};
         use td_objects::dxo::trigger::TriggerDBWithNames;
         use td_objects::tower_service::authz::InterColl;
+        use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollExec};
+        use td_objects::tower_service::from::{
+            BuildService, ExtractService, IntoService, SetService, TryIntoService, UpdateService,
+            With,
+        };
         use td_objects::tower_service::from::{ConvertIntoMapService, VecBuildService};
+        use td_objects::tower_service::sql::{insert, insert_vec};
+        use td_objects::types::basic::{CollectionId, FunctionId, FunctionOnly};
+        use td_objects::types::recursion::RecursionOptions;
         use td_tower::metadata::type_of_val;
 
         ExecuteFunctionService::with_defaults(db)
@@ -639,13 +585,13 @@ pub(crate) mod tests {
             assert_eq!(function_runs[0].status, FunctionRunStatus::Scheduled);
 
             let function: FunctionDBWithNames = queries
-                .select_by::<FunctionDBWithNames>(&(&FunctionName::try_from("function_2")?))?
+                .select_by::<FunctionDBWithNames>(&FunctionName::try_from("function_2")?)?
                 .build_query_as()
                 .fetch_one(&db)
                 .await
                 .map_err(handle_sql_err)?;
             let function_runs: Vec<FunctionRunDB> = queries
-                .select_by::<FunctionRunDB>(&(&function.id))?
+                .select_by::<FunctionRunDB>(&function.id)?
                 .build_query_as()
                 .fetch_all(&db)
                 .await
@@ -663,17 +609,17 @@ pub(crate) mod tests {
                 .fetch_all(&db)
                 .await
                 .map_err(handle_sql_err)?;
-            // assert_eq!(table_data_versions.len(), expected_created_tables.len());
+            assert_eq!(table_data_versions.len(), expected_created_tables.len());
             for table_data_version in table_data_versions {
                 assert_eq!(&table_data_version.execution_id, &response.id);
                 assert_eq!(table_data_version.has_data, None);
                 assert_eq!(table_data_version.status, FunctionRunStatus::Scheduled);
-                // assert!(
-                //     expected_created_tables.contains(&TableName::try_from(format!(
-                //         "{}/{}",
-                //         table_data_version.collection, table_data_version.name
-                //     ))?)
-                // );
+                assert!(
+                    expected_created_tables.contains(&TableName::try_from(format!(
+                        "{}/{}",
+                        table_data_version.collection, table_data_version.name
+                    ))?)
+                );
             }
 
             // FunctionCondition

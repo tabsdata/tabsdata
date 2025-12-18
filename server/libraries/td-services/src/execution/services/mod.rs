@@ -6,6 +6,7 @@ use crate::execution::services::callback::ExecutionCallbackService;
 use crate::execution::services::cancel::ExecutionCancelService;
 use crate::execution::services::details::ExecutionDetailsService;
 use crate::execution::services::execute::ExecuteFunctionService;
+use crate::execution::services::execute_version::ExecuteFunctionVersionService;
 use crate::execution::services::list::ExecutionListService;
 use crate::execution::services::read::ExecutionReadService;
 use crate::execution::services::recover::ExecutionRecoverService;
@@ -17,6 +18,7 @@ pub(crate) mod callback;
 mod cancel;
 mod details;
 pub(crate) mod execute;
+pub mod execute_version;
 mod list;
 mod read;
 mod recover;
@@ -28,6 +30,7 @@ pub struct ExecutionServices {
     pub cancel: ExecutionCancelService,
     pub details: ExecutionDetailsService,
     pub execute: ExecuteFunctionService,
+    pub execute_version: ExecuteFunctionVersionService,
     pub list: ExecutionListService,
     pub read: ExecutionReadService<{ FunctionDB::Executable }>,
     pub read_with_disabled: ExecutionReadService<{ FunctionDB::Active }>,

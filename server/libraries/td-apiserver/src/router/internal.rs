@@ -71,7 +71,12 @@ mod routes {
         Json(request): Json<ExecutionRequest>,
     ) -> Result<CreateStatus<ExecutionResponse>, ErrorStatus> {
         let request = context.create(function_param, request);
-        let response = state.execute.service().await.oneshot(request).await?;
+        let response = state
+            .execute_version
+            .service()
+            .await
+            .oneshot(request)
+            .await?;
         Ok(CreateStatus::CREATED(response))
     }
 
