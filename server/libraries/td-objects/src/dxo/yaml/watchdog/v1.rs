@@ -35,6 +35,8 @@ pub struct Info {
     pub config: WorkerConfig,    // WatchdogConfig serialized
 }
 
+pub type WatchdogOutput = ();
+
 #[cfg(test)]
 mod tests {
     use super::*;

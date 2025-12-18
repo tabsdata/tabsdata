@@ -32,6 +32,8 @@ pub struct Info {
     pub config: WorkerConfig, // CronConfig serialized
 }
 
+pub type CronOutput = ();
+
 #[cfg(test)]
 mod tests {
     use super::*;

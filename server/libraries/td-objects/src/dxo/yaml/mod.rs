@@ -58,4 +58,6 @@ impl Locations for WorkerInput {
 #[derive(Clone, Debug, Serialize, Deserialize, ToSchema)]
 pub enum WorkerOutput {
     FunctionV2(function_runner::v2::FunctionOutput),
+    CronV1(Box<cron::v1::CronOutput>),
+    WatchdogV1(Box<watchdog::v1::WatchdogOutput>),
 }
