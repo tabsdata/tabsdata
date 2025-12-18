@@ -13,7 +13,7 @@ use td_objects::dxo::function_run::{
 use td_objects::dxo::worker::{
     CallbackRequest, UpdateWorkerDB, UpdateWorkerDBBuilder, UpdateWorkerExecution,
 };
-use td_objects::rest_urls::FunctionRunIdParam;
+use td_objects::rest_urls::internal::FunctionRunIdParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::from::{
     BuildService, ExtractDataService, ExtractNameService, ExtractService, TryIntoService, With,

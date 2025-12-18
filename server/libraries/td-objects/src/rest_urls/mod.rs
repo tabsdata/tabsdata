@@ -10,14 +10,13 @@ use crate::types::basic::{
     RoleIdName, SampleLen, SampleOffset, Sql, TableIdName, TransactionIdName, UncommittedStatus,
     UserIdName, WorkerId, WorkerIdName,
 };
-use constcat::concat;
 use td_common::logging::LOG_EXTENSION;
 use td_common::server::{ERR_LOG_FILE_NAME, FN_LOG_FILE_NAME, OUT_LOG_FILE_NAME, TD_LOG_FILE_NAME};
 
 #[macro_export]
 macro_rules! url {
     ($( $path:expr $(,)? )*) => {
-        concat!($( $path, )*)
+        constcat::concat!($( $path, )*)
     };
 }
 
@@ -34,35 +33,61 @@ pub const DOCS_URL: &str = url!(BASE_API_URL, "/docs");
 pub const OPENAPI_JSON_URL: &str = url!(BASE_API_URL, "/api-docs/openapi.json");
 
 // Private URLs
-pub const INTERNAL_PREFIX: &str = url!("/internal");
+pub mod internal {
+    use super::*;
 
-pub const DOWNLOAD_FUNCTION_STATE: &str = url!(INTERNAL_PREFIX, FUNCTION, "/download-state");
+    pub const INTERNAL_PREFIX: &str = url!("/internal");
+    pub const OPENAPI_JSON_URL: &str = url!(INTERNAL_PREFIX, "/api-docs/openapi.json");
 
-pub const FUNCTION_EXECUTE_INTERNAL: &str = url!(INTERNAL_PREFIX, "/execute/{function_version_id}");
-#[td_type::UrlParam]
-pub struct FunctionVersionIdParam {
-    #[td_type(extractor)]
-    function_version_id: FunctionVersionId,
-}
+    pub const FUNCTION_VERSIONS: &str = url!(INTERNAL_PREFIX, "/function-versions");
+    pub const FUNCTION_VERSION: &str = url!(FUNCTION_VERSIONS, "/{function_version_id}");
 
-pub const UPDATE_FUNCTION_RUN: &str = url!(INTERNAL_PREFIX, "/function_run/{function_run_id}");
-#[td_type::UrlParam]
-pub struct FunctionRunIdParam {
-    #[td_type(extractor)]
-    function_run_id: FunctionRunId,
-}
+    #[td_type::UrlParam]
+    pub struct FunctionVersionIdParam {
+        #[td_type(extractor)]
+        pub function_version_id: FunctionVersionId,
+    }
 
-pub const UPDATE_WORKER: &str = url!(INTERNAL_PREFIX, "/worker/{worker_id}");
-#[td_type::UrlParam]
-pub struct WorkerIdParam {
-    #[td_type(extractor)]
-    worker_id: WorkerId,
+    #[td_type::UrlParam]
+    pub struct FunctionVersionAtIdParam {
+        #[td_type(extractor)]
+        pub function_version_id: FunctionVersionId,
+        #[td_type(extractor)]
+        pub at: AtTime,
+    }
+
+    pub const DOWNLOAD_FUNCTION_STATE: &str = url!(FUNCTION_VERSION, "/download-state");
+
+    pub const FUNCTION_VERSION_EXECUTION_STATUS: &str = url!(FUNCTION_VERSION, "/execution-status");
+    pub const FUNCTION_VERSION_EXECUTE: &str = url!(FUNCTION_VERSION, "/execute");
+
+    pub const FUNCTION_RUNS: &str = url!(INTERNAL_PREFIX, "/function-runs");
+    pub const FUNCTION_RUN: &str = url!(FUNCTION_RUNS, "/{function_run_id}");
+
+    #[td_type::UrlParam]
+    pub struct FunctionRunIdParam {
+        #[td_type(extractor)]
+        function_run_id: FunctionRunId,
+    }
+
+    pub const UPDATE_FUNCTION_RUN: &str = url!(FUNCTION_RUN);
+
+    pub const WORKERS: &str = url!(INTERNAL_PREFIX, "/workers");
+    pub const WORKER: &str = url!(WORKERS, "/{worker_id}");
+
+    #[td_type::UrlParam]
+    pub struct WorkerIdParam {
+        #[td_type(extractor)]
+        pub worker_id: WorkerId,
+    }
+
+    pub const UPDATE_WORKER: &str = url!(WORKER);
 }
 
 // Endpoints URLs
 
 // Auth
-pub const AUTH: &str = "/auth";
+pub const AUTH: &str = url!("/auth");
 pub const AUTH_LOGIN: &str = url!(AUTH, "/login");
 pub const AUTH_REFRESH: &str = url!(AUTH, "/refresh");
 pub const AUTH_ROLE_CHANGE: &str = url!(AUTH, "/role_change");
@@ -196,7 +221,7 @@ pub const FUNCTION_EXECUTE: &str = url!(FUNCTION, "/execute");
 pub struct AtTimeParam {
     #[td_type(extractor)]
     #[serde(default)]
-    at: AtTime,
+    pub at: AtTime,
 }
 
 #[td_type::QueryParam]

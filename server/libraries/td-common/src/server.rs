@@ -372,9 +372,12 @@ pub enum Callback {
     Http(HttpCallback),
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub struct HttpCallback {
+pub type HttpCallback = HttpRequest;
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, ToSchema)]
+pub struct HttpRequest {
     pub url: Url,
+    #[schema(value_type = String)]
     #[serde(serialize_with = "method_serialize")]
     #[serde(deserialize_with = "method_deserialize")]
     pub method: Method,

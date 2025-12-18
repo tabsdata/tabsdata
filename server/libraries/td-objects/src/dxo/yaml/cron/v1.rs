@@ -2,11 +2,11 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::dxo::yaml::http::HttpRequest;
 use crate::dxo::yaml::location::{Location, Locations};
 use crate::types::basic::{
     AtTime, CollectionId, CollectionName, FunctionName, FunctionVersionId, WorkerConfig,
 };
+use td_common::server::HttpRequest;
 
 #[td_type::Dto]
 #[derive(Eq, PartialEq)]
@@ -37,7 +37,6 @@ mod tests {
     use super::*;
     use crate::dxo::worker::CronConfig;
     use crate::dxo::yaml::WorkerInput;
-    use crate::dxo::yaml::http::HttpRequest;
     use crate::types::basic::{
         AtTime, CollectionName, CronMask, FunctionName, WorkerConfig, WorkerVersion,
     };
@@ -66,10 +65,10 @@ mod tests {
                 function: FunctionName::try_from("function").unwrap(),
                 scheduled_on,
                 task: HttpRequest {
-                    method: Method::POST.to_string(),
                     url: Url::try_from("http://localhost:2457/internal/fn_trigger").unwrap(),
-                    headers: vec![],
-                    body: None,
+                    method: Method::POST,
+                    headers: Default::default(),
+                    body: false,
                 },
                 config: WorkerConfig::serialize(cfg).unwrap(),
             },
@@ -91,10 +90,10 @@ info:
   function: function
   scheduled_on: {scheduled_on}
   task:
-    method: POST
     url: http://localhost:2457/internal/fn_trigger
-    headers: []
-    body: null
+    method: POST
+    headers: {{}}
+    body: false
   config: '{{"version":"V1","start":{start},"end":{end},"mask":"* * * * *"}}'
 "#
             )

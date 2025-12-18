@@ -2,11 +2,11 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::dxo::yaml::http::HttpRequest;
 use crate::dxo::yaml::location::{Location, Locations};
 use crate::types::basic::{
     AtTime, CollectionId, CollectionName, FunctionName, FunctionVersionId, WorkerConfig,
 };
+use td_common::server::HttpRequest;
 
 #[td_type::Dto]
 #[derive(Eq, PartialEq)]
@@ -40,9 +40,9 @@ mod tests {
     use super::*;
     use crate::dxo::worker::WatchdogConfig;
     use crate::dxo::yaml::WorkerInput;
-    use crate::dxo::yaml::http::HttpRequest;
     use crate::types::basic::{CollectionName, FunctionName, WorkerConfig, WorkerVersion};
     use http::Method;
+    use std::collections::HashMap;
     use url::Url;
 
     #[test]
@@ -72,25 +72,25 @@ mod tests {
                 },
                 scheduled_on,
                 fn_trigger: HttpRequest {
-                    method: Method::POST.to_string(),
                     url: Url::try_from("http://localhost:2457/internal/fn_trigger").unwrap(),
-                    headers: vec![],
-                    body: None,
+                    method: Method::POST,
+                    headers: Default::default(),
+                    body: false,
                 },
                 fn_state: HttpRequest {
-                    method: Method::GET.to_string(),
                     url: Url::try_from("http://localhost:2457/internal/fn_state").unwrap(),
-                    headers: vec![(
+                    method: Method::GET,
+                    headers: HashMap::from([(
                         "content-type".to_string(),
                         "application/parquet".to_string(),
-                    )],
-                    body: None,
+                    )]),
+                    body: false,
                 },
                 fn_status: HttpRequest {
-                    method: Method::GET.to_string(),
                     url: Url::try_from("http://localhost:2457/internal/fn_status").unwrap(),
-                    headers: vec![],
-                    body: None,
+                    method: Method::GET,
+                    headers: Default::default(),
+                    body: false,
                 },
                 config: WorkerConfig::serialize(cfg).unwrap(),
             },
@@ -115,22 +115,21 @@ info:
     env_prefix: null
   scheduled_on: {scheduled_on}
   fn_trigger:
-    method: POST
     url: http://localhost:2457/internal/fn_trigger
-    headers: []
-    body: null
+    method: POST
+    headers: {{}}
+    body: false
   fn_state:
-    method: GET
     url: http://localhost:2457/internal/fn_state
-    headers:
-    - - content-type
-      - application/parquet
-    body: null
-  fn_status:
     method: GET
+    headers:
+      content-type: application/parquet
+    body: false
+  fn_status:
     url: http://localhost:2457/internal/fn_status
-    headers: []
-    body: null
+    method: GET
+    headers: {{}}
+    body: false
   config: '{{"version":"V1","timeout_threshold_min":60,"size_threshold":10000,"start":{start},"end":{end}}}'
 "#
             )

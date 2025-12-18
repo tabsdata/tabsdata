@@ -9,10 +9,10 @@ use http::Method;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use td_common::server::{
-    Callback, HttpCallback, MessageAction, RequestMessagePayload, WorkerClass, WorkerMessageQueue,
-    WorkerName,
+    Callback, HttpCallback, HttpRequest, MessageAction, RequestMessagePayload, WorkerClass,
+    WorkerMessageQueue, WorkerName,
 };
-use td_error::{ApiError, TdError, api_error};
+use td_error::{ApiError, TdError, api_error, td_error};
 use td_objects::dxo::crudl::handle_sql_err;
 use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::function_requirement::FunctionRequirementDBWithNames;
@@ -23,12 +23,13 @@ use td_objects::dxo::yaml::cron::v1::CronInput;
 use td_objects::dxo::yaml::function_runner::v2::{
     FunctionInfo, FunctionInput, InputTable, InputTableVersion, OutputTable, OutputTableVersion,
 };
-use td_objects::dxo::yaml::http::HttpRequest;
 use td_objects::dxo::yaml::location::Location;
 use td_objects::dxo::yaml::watchdog::v1::WatchdogInput;
 use td_objects::dxo::yaml::{WorkerInput, cron, watchdog};
-use td_objects::rest_urls::{
-    BASE_URL, FUNCTION_EXECUTE_INTERNAL, UPDATE_FUNCTION_RUN, UPDATE_WORKER,
+use td_objects::rest_urls::BASE_URL;
+use td_objects::rest_urls::internal::{
+    DOWNLOAD_FUNCTION_STATE, FUNCTION_VERSION_EXECUTE, FUNCTION_VERSION_EXECUTION_STATUS,
+    UPDATE_FUNCTION_RUN, UPDATE_WORKER,
 };
 use td_objects::sql::{DaoQueries, SelectBy};
 use td_objects::types::addresses::InternalServerAddresses;
@@ -39,6 +40,12 @@ use td_storage::Storage;
 use td_storage::location::StorageLocation;
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
 use url::Url;
+
+#[td_error]
+pub enum WorkerRequestError {
+    #[error("Error parsing URL: {0}")]
+    UrlParse(#[from] url::ParseError) = 5000,
+}
 
 pub async fn create_locked_function_runner_workers_start_request<T: WorkerMessageQueue>(
     SrvCtx(message_queue): SrvCtx<T>,
@@ -63,17 +70,14 @@ pub async fn create_locked_function_runner_workers_start_request<T: WorkerMessag
                 // Build callback
                 // This is loopback address, because this endpoint is only available to the server.
                 let server_address = server_addresses.first();
-                let function_run_id = f.id.to_string();
-                let endpoint = UPDATE_FUNCTION_RUN.replace("{function_run_id}", &function_run_id);
-                let callback_url = format!("http://{server_address}{BASE_URL}{endpoint}");
-                let callback_url = Url::parse(&callback_url).map_err(|e| {
-                    api_error!(
-                        ApiError::InternalError,
-                        "Cannot create execution callback Url: {e}"
-                    )
-                })?;
                 let http_callback = HttpCallback {
-                    url: callback_url,
+                    url: {
+                        let function_run_id = f.id.to_string();
+                        let endpoint =
+                            UPDATE_FUNCTION_RUN.replace("{function_run_id}", &function_run_id);
+                        let callback_url = format!("http://{server_address}{BASE_URL}{endpoint}");
+                        Url::parse(&callback_url).map_err(WorkerRequestError::UrlParse)?
+                    },
                     method: Method::POST,
                     headers: HashMap::default(),
                     body: true,
@@ -359,38 +363,32 @@ pub async fn create_locked_cron_workers_start_request<T: WorkerMessageQueue>(
                 let server_address = server_addresses.first();
 
                 // Build callback
-                let endpoint = UPDATE_WORKER.replace("{worker_id}", &worker_id);
-                let callback_url = format!("http://{server_address}{BASE_URL}{endpoint}");
-                let callback_url = Url::parse(&callback_url).map_err(|e| {
-                    api_error!(
-                        ApiError::InternalError,
-                        "Cannot create worker callback Url: {e}"
-                    )
-                })?;
                 let http_callback = HttpCallback {
-                    url: callback_url,
+                    url: {
+                        let endpoint = UPDATE_WORKER.replace("{worker_id}", &worker_id);
+                        let callback_url = format!("http://{server_address}{BASE_URL}{endpoint}");
+                        Url::parse(&callback_url).map_err(WorkerRequestError::UrlParse)?
+                    },
                     method: Method::POST,
                     headers: HashMap::default(),
                     body: true,
                 };
                 let callback = Callback::Http(http_callback);
 
-                // Build trigger task
+                // Function version id
                 let function_version_id = cron_worker.function_version_id.to_string();
-                let endpoint = FUNCTION_EXECUTE_INTERNAL
-                    .replace("{function_version_id}", &function_version_id);
-                let trigger_url = format!("http://{server_address}{BASE_URL}{endpoint}");
-                let trigger_url = Url::parse(&trigger_url).map_err(|e| {
-                    api_error!(
-                        ApiError::InternalError,
-                        "Cannot create execution callback Url: {e}"
-                    )
-                })?;
+
+                // Build trigger task
                 let task = HttpRequest {
-                    method: Method::POST.to_string(),
-                    url: trigger_url,
-                    headers: Vec::new(),
-                    body: None,
+                    url: {
+                        let endpoint = FUNCTION_VERSION_EXECUTE
+                            .replace("{function_version_id}", &function_version_id);
+                        let trigger_url = format!("http://{server_address}{BASE_URL}{endpoint}");
+                        Url::parse(&trigger_url).map_err(WorkerRequestError::UrlParse)?
+                    },
+                    method: Method::POST,
+                    headers: Default::default(),
+                    body: true,
                 };
 
                 // Build info
@@ -446,16 +444,12 @@ pub async fn create_locked_cron_workers_stop_request<T: WorkerMessageQueue>(
                 let server_address = server_addresses.first();
 
                 // Build callback
-                let endpoint = UPDATE_WORKER.replace("{worker_id}", &worker_id);
-                let callback_url = format!("http://{server_address}{BASE_URL}{endpoint}");
-                let callback_url = Url::parse(&callback_url).map_err(|e| {
-                    api_error!(
-                        ApiError::InternalError,
-                        "Cannot create worker callback Url: {e}"
-                    )
-                })?;
                 let http_callback = HttpCallback {
-                    url: callback_url,
+                    url: {
+                        let endpoint = UPDATE_WORKER.replace("{worker_id}", &worker_id);
+                        let callback_url = format!("http://{server_address}{BASE_URL}{endpoint}");
+                        Url::parse(&callback_url).map_err(WorkerRequestError::UrlParse)?
+                    },
                     method: Method::POST,
                     headers: HashMap::default(),
                     body: true,
@@ -509,74 +503,58 @@ pub async fn create_locked_watchdog_workers_start_request<T: WorkerMessageQueue>
                 let server_address = server_addresses.first();
 
                 // Build callback
-                let endpoint = UPDATE_WORKER.replace("{worker_id}", &worker_id);
-                let callback_url = format!("http://{server_address}{BASE_URL}{endpoint}");
-                let callback_url = Url::parse(&callback_url).map_err(|e| {
-                    api_error!(
-                        ApiError::InternalError,
-                        "Cannot create worker callback Url: {e}"
-                    )
-                })?;
                 let http_callback = HttpCallback {
-                    url: callback_url,
+                    url: {
+                        let endpoint = UPDATE_WORKER.replace("{worker_id}", &worker_id);
+                        let callback_url = format!("http://{server_address}{BASE_URL}{endpoint}");
+                        Url::parse(&callback_url).map_err(WorkerRequestError::UrlParse)?
+                    },
                     method: Method::POST,
                     headers: HashMap::default(),
                     body: true,
                 };
                 let callback = Callback::Http(http_callback);
 
-                // Build fn_trigger request
+                // Function version id
                 let function_version_id = watchdog_worker.function_version_id.to_string();
-                let endpoint = FUNCTION_EXECUTE_INTERNAL
-                    .replace("{function_version_id}", &function_version_id);
-                let trigger_url = format!("http://{server_address}{BASE_URL}{endpoint}");
-                let trigger_url = Url::parse(&trigger_url).map_err(|e| {
-                    api_error!(
-                        ApiError::InternalError,
-                        "Cannot create execution callback Url: {e}"
-                    )
-                })?;
+
+                // Build fn_trigger request
                 let fn_trigger = HttpRequest {
-                    method: Method::POST.to_string(),
-                    url: trigger_url,
-                    headers: Vec::new(),
-                    body: None,
+                    url: {
+                        let endpoint = FUNCTION_VERSION_EXECUTE
+                            .replace("{function_version_id}", &function_version_id);
+                        let trigger_url = format!("http://{server_address}{BASE_URL}{endpoint}");
+                        Url::parse(&trigger_url).map_err(WorkerRequestError::UrlParse)?
+                    },
+                    method: Method::POST,
+                    headers: Default::default(),
+                    body: false,
                 };
 
                 // Build fn_state request
-                let function_version_id = watchdog_worker.function_version_id.to_string();
-                let endpoint = FUNCTION_EXECUTE_INTERNAL
-                    .replace("{function_version_id}", &function_version_id);
-                let trigger_url = format!("http://{server_address}{BASE_URL}{endpoint}");
-                let trigger_url = Url::parse(&trigger_url).map_err(|e| {
-                    api_error!(
-                        ApiError::InternalError,
-                        "Cannot create execution callback Url: {e}"
-                    )
-                })?;
                 let fn_state = HttpRequest {
-                    method: Method::POST.to_string(),
-                    url: trigger_url,
-                    headers: Vec::new(),
-                    body: None,
+                    url: {
+                        let endpoint = DOWNLOAD_FUNCTION_STATE
+                            .replace("{function_version_id}", &function_version_id);
+                        let fn_state = format!("http://{server_address}{BASE_URL}{endpoint}");
+                        Url::parse(&fn_state).map_err(WorkerRequestError::UrlParse)?
+                    },
+                    method: Method::GET,
+                    headers: Default::default(),
+                    body: false,
                 };
 
                 // Build fn_status request
-                let function_version_id = watchdog_worker.function_version_id.to_string();
-                let endpoint = FUNCTION_EXECUTE_INTERNAL
-                    .replace("{function_version_id}", &function_version_id);
-                let trigger_url = format!("http://{server_address}{BASE_URL}{endpoint}");
-                let trigger_url = Url::parse(&trigger_url).map_err(|e| {
-                    api_error!(
-                        ApiError::InternalError,
-                        "Cannot create execution callback Url: {e}"
-                    )
-                })?;
                 let fn_status = HttpRequest {
-                    method: Method::POST.to_string(),
-                    url: trigger_url,
-                    headers: Vec::new(),
-                    body: None,
+                    url: {
+                        let endpoint = FUNCTION_VERSION_EXECUTION_STATUS
+                            .replace("{function_version_id}", &function_version_id);
+                        let fn_status = format!("http://{server_address}{BASE_URL}{endpoint}");
+                        Url::parse(&fn_status).map_err(WorkerRequestError::UrlParse)?
+                    },
+                    method: Method::GET,
+                    headers: Default::default(),
+                    body: true,
                 };
 
                 // Build function location
