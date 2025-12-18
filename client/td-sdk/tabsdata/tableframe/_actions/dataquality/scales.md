@@ -1,5 +1,13 @@
 # Identity Range
 
+<p style="font-size:18px; color: red;">
+    <b>ToDo</b>: Mention the special handling of the first bin, either being left closed, 
+    or having an extra bin for the 'zero' value.
+    <br/>
+    <br/>
+    <b>ToDo</b>:Explain the strategy to efficiently evaluate scales.
+</p>
+
 ## Arguments
 
 - `min`

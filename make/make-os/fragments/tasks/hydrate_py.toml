@@ -158,24 +158,24 @@ script = [
     debug "🚀 uv pip install --quiet -e ."
     exec --fail-on-error uv pip install --quiet -e .
 
-    setup_py_file = set "${PROJECT_TABSDATA_ROOT_FOLDER}/setup.py"
-    if is_path_exists ${setup_py_file}
-        debug "🔸🔸🔸 Reading setup.py to extract base_binaries"
-        setup_py_content = readfile ${setup_py_file}
-        setup_py_lines = split ${setup_py_content} "\n"
+    setup_toml_file = set "${PROJECT_TABSDATA_ROOT_FOLDER}/setup.toml"
+    if is_path_exists ${setup_toml_file}
+        debug "🔸🔸🔸 Reading setup.toml to extract base_binaries"
+        setup_toml_content = readfile ${setup_toml_file}
+        setup_toml_lines = split ${setup_toml_content} "\n"
         in_base_binaries = set false
         base_binaries = array
-        for setup_py_line in ${setup_py_lines}
-            setup_py_line = trim ${setup_py_line}
-            is_in_base_binaries = starts_with ${setup_py_line} "base_binaries = ["
-            is_out_base_binaries = starts_with ${setup_py_line} "]"
+        for setup_toml_line in ${setup_toml_lines}
+            setup_toml_line = trim ${setup_toml_line}
+            is_in_base_binaries = starts_with ${setup_toml_line} "binaries = ["
+            is_out_base_binaries = starts_with ${setup_toml_line} "]"
             if ${is_in_base_binaries}
                 in_base_binaries = set true
             elif ${is_out_base_binaries}
                 in_base_binaries = set false
             else
                 if ${in_base_binaries}
-                    binary_name = replace ${setup_py_line} "\"" ""
+                    binary_name = replace ${setup_toml_line} "\"" ""
                     binary_name = replace ${binary_name} "," ""
                     binary_name = trim ${binary_name}
                     array_push ${base_binaries} ${binary_name}
@@ -207,7 +207,7 @@ script = [
             exec --fail-on-error python -c "import os; os.symlink('${source_binary}', '${target_binary}')"
         end
     else
-        warn "⚠️ setup.py file not found at ${setup_py_file}"
+        warn "⚠️ setup.toml file not found at ${setup_toml_file}"
     end
 
     pyenv = which pyenv

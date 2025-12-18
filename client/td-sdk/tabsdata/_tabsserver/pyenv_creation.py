@@ -17,11 +17,15 @@ import platform
 import re
 import shutil
 import subprocess
+import sysconfig
 import tempfile
+
+# noinspection PyCompatibility
+import tomllib
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Literal, Tuple, TypeAlias
+from typing import Literal, Tuple, TypeAlias
 
 import importlib_metadata
 import yaml
@@ -140,6 +144,15 @@ DEBUG_PACKAGES = [
 
 BUILD_MANIFEST_LOCATION = "assets/manifest/BUILD"
 BUILD_TIMESTAMP_KEY = "X-Build-Timestamp-UTC"
+
+PackageProvider: TypeAlias = Literal[
+    "Archive (Project)",
+    "Archive (Folder)",
+    "Archive (Wheel)",
+    "Folder (Editable)",
+    "Folder (Frozen)",
+    "Package",
+]
 
 
 def extract_package_name(requirement):
@@ -351,7 +364,7 @@ def verify_batch_of_packages_installable_for_environment(
 
 def found_requirements(
     requirements: list[str],
-    development_packages: list[str],
+    development_packages: list[tuple[str, PackageProvider]],
     real_environment_name: str,
 ) -> list[str]:
     logger.info(f"Checking if the packages {requirements} are available on PyPi")
@@ -448,7 +461,7 @@ def found_requirements_tabsdata(
     available_packages: list[str],
     real_environment_name: str,
     inherit_tabsdata_packages: bool,
-    development_packages: list[str],
+    development_packages: list[tuple[str, PackageProvider]],
 ):
     if tabsdata_packages:
         logger.info(f"Batch checking {len(tabsdata_packages)} tabsdata packages")
@@ -493,7 +506,9 @@ def found_requirements_tabsdata(
                                 # Environment hash has already been computed. Therefore,
                                 # any changes in the inherited packages will not be
                                 # reflected in a new environment hash.
-                                development_packages.append(str(td_location))
+                                development_packages.append(
+                                    (str(td_location), td_provider)
+                                )
                                 logger.info(
                                     f"Package {package} marked as: td-available"
                                 )
@@ -509,7 +524,9 @@ def found_requirements_tabsdata(
                             logger.info(f"Package {package} marked as: td-unavailable")
                     else:
                         logger.info(f"Package {package} marked as: unavailable")
-        development_packages[:] = list(dict.fromkeys(development_packages))
+        development_packages[:]: list[tuple[str, PackageProvider]] = list(
+            dict.fromkeys(development_packages)
+        )
 
 
 def get_build_timestamp() -> str:
@@ -895,18 +912,21 @@ def create_virtual_environment(  # noqa: C901
 
     development_packages = requirements_data.get(PYTHON_DEVELOPMENT_PACKAGES_KEY)
     if development_packages:
+        development_packages = [
+            tuple(pkg) if isinstance(pkg, list) else pkg for pkg in development_packages
+        ]
         logger.info(
             f"Development packages provided: {development_packages}, hashing its"
             " contents"
         )
-        for development_package in development_packages:
+        for development_package_location, _ in development_packages:
             environment_hash = add_hex_numbers(
-                environment_hash, get_dir_hash(development_package)
+                environment_hash, get_dir_hash(development_package_location)
             )
     else:
         # Defaulting to an empty array to avoid references issue when inheriting
         # tabsdata packages.
-        development_packages = []
+        development_packages: list[tuple[str, PackageProvider]] = []
     if salt:
         environment_hash = add_hex_numbers(environment_hash, hash_string(salt))
 
@@ -992,7 +1012,13 @@ def store_testimony(logical_environment_name, real_environment_name):
         times_used=1,
     )
     with open(testimony_file, "w") as f:
-        yaml.dump(asdict(testimony_data), f, default_flow_style=False, sort_keys=False)
+        yaml.dump(
+            asdict(testimony_data),
+            f,
+            default_flow_style=False,
+            sort_keys=False,
+            Dumper=yaml.SafeDumper,
+        )
     logger.info(f"Testimony file '{testimony_file}' stored successfully.")
 
 
@@ -1059,7 +1085,11 @@ def update_testimony(logical_environment_name, real_environment_name):
             )
             with open(testimony_file, "w") as f:
                 yaml.dump(
-                    asdict(testimony_data), f, default_flow_style=False, sort_keys=False
+                    asdict(testimony_data),
+                    f,
+                    default_flow_style=False,
+                    sort_keys=False,
+                    Dumper=yaml.SafeDumper,
                 )
             logger.info(
                 f"Testimony file '{testimony_file}' updated successfully. "
@@ -1131,7 +1161,7 @@ def check_if_testimony_exists(environment_name) -> bool:
 def atomic_environment_creation(
     logical_environment_name: str,
     real_environment_name: str,
-    development_packages: list[str],
+    development_packages: list[tuple[str, PackageProvider]],
     local_packages: str,
     python_version: str,
     required_modules: list[str],
@@ -1395,16 +1425,20 @@ def install_requirements(
 
 
 def install_development_packages(
-    development_packages: List[str],
+    development_packages: list[tuple[str, PackageProvider]],
     logical_environment_name: str,
     real_environment_name: str,
 ) -> bool | None:
     logger.info(f"Installing development packages for folder: {development_packages}")
     with time_block:
-        for development_package in development_packages:
+        for (
+            development_package_location,
+            development_package_provider,
+        ) in development_packages:
             install_result = install_host_package(
                 "Development",
-                development_package,
+                development_package_location,
+                development_package_provider,
                 logical_environment_name,
                 real_environment_name,
             )
@@ -1418,7 +1452,9 @@ def install_development_packages(
 
 
 def install_local_packages(
-    local_packages: str, logical_environment_name: str, real_environment_name: str
+    local_packages: str,
+    logical_environment_name: str,
+    real_environment_name: str,
 ) -> bool | None:
     logger.info(f"Installing local packages for folder: {local_packages}")
     with time_block:
@@ -1427,6 +1463,7 @@ def install_local_packages(
             install_result = install_host_package(
                 "Local",
                 package_folder,
+                None,
                 logical_environment_name,
                 real_environment_name,
             )
@@ -1439,31 +1476,121 @@ def install_local_packages(
     return True
 
 
+def link_base_binaries(
+    package_location: str,
+    real_environment_name: str,
+) -> None:
+    try:
+        setup_toml_path = os.path.join(package_location, "setup.toml")
+        if not os.path.exists(setup_toml_path):
+            return
+
+        with open(setup_toml_path, "rb") as setup_toml_file:
+            setup_config = tomllib.load(setup_toml_file)
+            base_binaries = setup_config.get("setup", {}).get("binaries", [])
+
+        if not base_binaries:
+            return
+
+        current_venv_scripts = sysconfig.get_path("scripts")
+
+        if CURRENT_PLATFORM.is_windows():
+            new_venv_scripts = os.path.join(
+                DEFAULT_ENVIRONMENT_FOLDER, real_environment_name, "Scripts"
+            )
+        else:
+            new_venv_scripts = os.path.join(
+                DEFAULT_ENVIRONMENT_FOLDER, real_environment_name, "bin"
+            )
+
+        for base_binary in base_binaries:
+            for binary_name in [base_binary, f"{base_binary}.exe"]:
+                source_binary = os.path.join(current_venv_scripts, binary_name)
+                if os.path.exists(source_binary):
+                    target_binary = os.path.join(new_venv_scripts, binary_name)
+                    try:
+                        os.symlink(source_binary, target_binary)
+                        logger.info(
+                            f"Created symlink for binary '{binary_name}' "
+                            f"from '{source_binary}' "
+                            f"to '{target_binary}'"
+                        )
+                    except FileExistsError:
+                        logger.debug(
+                            f"Symlink '{target_binary}' already exists for "
+                            f"binary '{binary_name}'"
+                            f"from '{source_binary}'"
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to create symlink '{target_binary}' for "
+                            f"binary '{binary_name}'"
+                            f"from '{source_binary}': {e}"
+                        )
+                    break
+    except Exception as e:
+        logger.warning(f"Failed to process binaries from setup.toml: {e}")
+
+
 def install_host_package(
     source: HostPackageSource,
-    package_archive: str,
+    package_location: str,
+    package_provider: PackageProvider | None,
     logical_environment_name: str,
     real_environment_name: str,
 ) -> bool | None:
-    logger.info(f"Installing host package archive: {package_archive}")
-    if os.path.isdir(package_archive) or (
-        os.path.isfile(package_archive)
-        and pathlib.Path(package_archive).suffix == WHEEL_EXTENSION
+    logger.info(f"Installing host package archive: {package_location}")
+    if os.path.isdir(package_location) or (
+        os.path.isfile(package_location)
+        and pathlib.Path(package_location).suffix == WHEEL_EXTENSION
     ):
+        install_command = [
+            UV_EXECUTABLE,
+            "pip",
+            "install",
+            "--link-mode",
+            "hardlink",
+        ]
+        if package_provider in [
+            "Archive (Project)",
+            "Archive (Folder)",
+            "Folder (Editable)",
+            "Folder (Frozen)",
+        ]:
+            install_command.append("-e")
+            link_base_binaries(package_location, real_environment_name)
+        elif source == "Local":
+            logger.info(f"Identified a local package: '{package_location}'")
+            pyproject_path = os.path.join(package_location, "pyproject.toml")
+            if os.path.exists(pyproject_path):
+                logger.info(
+                    "Identified a local package with pyproject.toml: "
+                    f"'{package_location}'"
+                )
+                with open(pyproject_path, "rb") as f:
+                    data = tomllib.load(f)
+                package_name = data.get("tool", {}).get("tabsdata", {}).get("name")
+                if package_name:
+                    logger.info(
+                        "Identified name in pyproject.toml: "
+                        f"'{package_location}' - '{package_name}'"
+                    )
+                if package_name and package_name in TABSDATA_PACKAGES:
+                    logger.info(
+                        "Identified a tabsdata local package: "
+                        f"'{package_location}' - '{package_name}'"
+                    )
+                    install_command.append("-e")
+        install_command.append(package_location)
         pip_install_requirements_command = add_python_target_and_join_commands(
-            [
-                UV_EXECUTABLE,
-                "pip",
-                "install",
-                "--link-mode",
-                "hardlink",
-                package_archive,
-            ],
+            install_command,
             real_environment_name,
         )
         logger.info(
-            f"Installing the host package in {package_archive} for the virtual "
-            f"environment {logical_environment_name}"
+            f"Installing the host package at {package_location} "
+            f"with provider {package_provider} "
+            f"and source {source} "
+            f"for the virtual environment {logical_environment_name}"
         )
         logger.info(f"Running command: '{pip_install_requirements_command}'")
         result = subprocess.run(
@@ -1473,7 +1600,7 @@ def install_host_package(
         )
         if result.returncode != 0:
             logger.error(
-                f"Failed to install the host package {package_archive} for the "
+                f"Failed to install the host package {package_location} for the "
                 f"virtual environment {logical_environment_name}"
             )
             logger.error(
@@ -1489,12 +1616,12 @@ def install_host_package(
             return None
         else:
             logger.info(
-                f"Host package {package_archive} installed successfully for the"
+                f"Host package {package_location} installed successfully for the"
                 f" virtual environment {logical_environment_name}"
             )
     else:
         message = (
-            f"Host package '${package_archive}' is not a directory or a wheel file."
+            f"Host package '${package_location}' is not a directory or a wheel file."
         )
         if source == "Development":
             logger.error(message)
@@ -1541,16 +1668,6 @@ def install_python_version(python_version: str) -> None:
             "already existed."
         )
         return None
-
-
-PackageProvider: TypeAlias = Literal[
-    "Archive (Project)",
-    "Archive (Folder)",
-    "Archive (Wheel)",
-    "Folder (Editable)",
-    "Folder (Frozen)",
-    "Package",
-]
 
 
 def get_tabsdata_package_metadata(
@@ -1662,8 +1779,8 @@ def inspect():
         logger.debug(f"   🗂️ · {module}")
 
 
-def retrieve_tabsdata_connectors_packages() -> list[str]:
-    tabsdata_connectors_development_packages = []
+def retrieve_tabsdata_connectors_packages() -> list[tuple[str, PackageProvider]]:
+    tabsdata_connectors_development_packages: list[tuple[str, PackageProvider]] = []
     for module_name, metadata in TABSDATA_CONNECTORS.items():
         provider, location = get_tabsdata_package_metadata(
             module_name,
@@ -1682,13 +1799,15 @@ def retrieve_tabsdata_connectors_packages() -> list[str]:
             "Folder (Editable)",
             "Folder (Frozen)",
         ):
-            tabsdata_connectors_development_packages.append(str(location))
+            tabsdata_connectors_development_packages.append((str(location), provider))
     return tabsdata_connectors_development_packages
 
 
 # noinspection DuplicatedCode
-def retrieve_tabsdata_package() -> Tuple[PackageProvider | None, str | None, list[str]]:
-    tabsdata_development_packages = []
+def retrieve_tabsdata_package() -> (
+    Tuple[PackageProvider | None, str | None, list[tuple[str, PackageProvider]]]
+):
+    tabsdata_development_packages: list[tuple[str, PackageProvider]] = []
     provider, location = get_tabsdata_package_metadata(
         TABSDATA_MODULE_NAME,
         TD_TABSDATA_DEV_PKG,
@@ -1704,15 +1823,15 @@ def retrieve_tabsdata_package() -> Tuple[PackageProvider | None, str | None, lis
         "Folder (Editable)",
         "Folder (Frozen)",
     ):
-        tabsdata_development_packages.append(str(location))
+        tabsdata_development_packages.append((str(location), provider))
     return provider, location, tabsdata_development_packages
 
 
 # noinspection DuplicatedCode
 def retrieve_tabsdata_agent_package() -> (
-    Tuple[PackageProvider | None, str | None, list[str]]
+    Tuple[PackageProvider | None, str | None, list[tuple[str, PackageProvider]]]
 ):
-    tabsdata_agent_development_packages = []
+    tabsdata_agent_development_packages: list[tuple[str, PackageProvider]] = []
     provider, location = get_tabsdata_package_metadata(
         TABSDATA_AGENT_MODULE_NAME,
         TD_TABSDATA_AGENT_DEV_PKG,
@@ -1729,14 +1848,14 @@ def retrieve_tabsdata_agent_package() -> (
         "Folder (Editable)",
         "Folder (Frozen)",
     ):
-        tabsdata_agent_development_packages.append(str(location))
+        tabsdata_agent_development_packages.append((str(location), provider))
     return provider, location, tabsdata_agent_development_packages
 
 
 def retrieve_tabsdata_requirements_packages(
     tabsdata_requirements: list[str],
-) -> Tuple[list[str], list[str]]:
-    tabsdata_requirements_development_packages = []
+) -> Tuple[list[tuple[str, PackageProvider]], list[str]]:
+    tabsdata_requirements_development_packages: list[tuple[str, PackageProvider]] = []
     tabsdata_requirements_non_development_packages = []
     for requirement in tabsdata_requirements:
         requirement_object = Requirement(requirement)
@@ -1759,7 +1878,7 @@ def retrieve_tabsdata_requirements_packages(
             "Folder (Editable)",
             "Folder (Frozen)",
         ):
-            tabsdata_requirements_development_packages.append(str(location))
+            tabsdata_requirements_development_packages.append((str(location), provider))
         else:
             tabsdata_requirements_non_development_packages.append(str(requirement))
     return (
@@ -1911,9 +2030,9 @@ def main():  # noqa: C901
     ) as requirements_file:
         logger.debug(f"Temporary base requirements file: {requirements_file.name}")
 
-        development_packages = []
+        development_packages: list[tuple[str, PackageProvider]] = []
 
-        tabsdata_connectors_development_packages = (
+        tabsdata_connectors_development_packages: list[tuple[str, PackageProvider]] = (
             retrieve_tabsdata_connectors_packages()
         )
         development_packages.extend(tabsdata_connectors_development_packages)
@@ -1938,7 +2057,9 @@ def main():  # noqa: C901
             tabsdata_requirements_non_development_packages,
         ) = retrieve_tabsdata_requirements_packages(additional_tabsdata_requirements)
         development_packages.extend(tabsdata_requirements_development_packages)
-        development_packages = list(dict.fromkeys(development_packages))
+        development_packages: list[tuple[str, PackageProvider]] = list(
+            dict.fromkeys(development_packages)
+        )
 
         public_packages = tabsdata_requirements_non_development_packages
         public_packages.extend(additional_non_tabsdata_requirements)
@@ -1964,7 +2085,12 @@ def main():  # noqa: C901
         }
 
         with open(requirements_path, "w") as file:
-            yaml.dump(requirements, file, default_flow_style=False)
+            yaml.dump(
+                requirements,
+                file,
+                default_flow_style=False,
+                Dumper=yaml.SafeDumper,
+            )
         logger.debug(f"Temporary base requirements contents: {requirements}")
 
         requirements_description_file = requirements_file.name

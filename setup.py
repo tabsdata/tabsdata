@@ -11,6 +11,7 @@ import shutil
 import sys
 import threading
 import time
+import tomllib
 import warnings
 from contextlib import contextmanager
 from pathlib import Path
@@ -493,20 +494,9 @@ target_release_folder = os.path.join(
 )
 logger.debug(f"Using tabsdata target release folder: '{target_release_folder}'")
 
-# Caution!: This list is replicated in project python file
-# 'client/td-sdk/tabsdata/_utils/bundle_utils.py' to ensure that when testing
-# with pytest, the binaries are distributed and available from tabsdata as a
-# local package.
-# Please, make sure you update this list in both places.
-base_binaries = [
-    "tdserver",
-    "td_about",
-    "td_apiserver",
-    "td_bootloader",
-    "td_cron",
-    "td_supervisor",
-    "td_transporter",
-]
+with open(os.path.join(ROOT, "setup.toml"), "rb") as setup_toml:
+    setup_config = tomllib.load(setup_toml)
+    base_binaries = setup_config["setup"]["binaries"]
 
 # noinspection DuplicatedCode
 binaries = [

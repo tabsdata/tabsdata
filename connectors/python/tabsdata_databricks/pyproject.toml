@@ -2,6 +2,9 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
+[tool.tabsdata]
+name = "tabsdata-databricks"
+
 [build-system]
 requires = [
     "archspec==0.2.5",
