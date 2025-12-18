@@ -52,9 +52,10 @@ ALTER TABLE workers_new
 
 CREATE VIEW workers__with_names AS
 SELECT w.*,
-       c.name  as collection,
-       e.name  as execution,
-       fv.name as function
+       c.name     as collection,
+       e.name     as execution,
+       fv.name    as function,
+       fv.enabled as enabled
 FROM workers w
          LEFT JOIN collections c ON w.collection_id = c.id
          LEFT JOIN executions e ON w.execution_id = e.id

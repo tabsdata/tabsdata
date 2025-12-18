@@ -46,17 +46,6 @@ mod definitions {
         pub worker_config: Option<WorkerConfig>, // added in v4
     }
 
-    impl WorkerDB {
-        // TODO this can be converted to states if creating a stateful select without versioned
-        pub async fn cron_to_schedule() -> Result<(WorkerType, WorkerStatus), TdError> {
-            Ok((WorkerType::Cron, WorkerStatus::Scheduled))
-        }
-
-        pub async fn watchdog_to_schedule() -> Result<(WorkerType, WorkerStatus), TdError> {
-            Ok((WorkerType::Watchdog, WorkerStatus::Scheduled))
-        }
-    }
-
     #[td_type::Dao]
     #[dao(sql_table = "workers__with_names")]
     #[inherits(WorkerDB)]
@@ -67,6 +56,27 @@ mod definitions {
         pub collection: CollectionName,
         pub execution: Option<ExecutionName>,
         pub function: FunctionName,
+        pub enabled: Enabled,
+    }
+
+    impl WorkerDBWithNames {
+        // TODO this can be converted to states if creating a stateful select without versioned
+        pub async fn cron_to_schedule() -> Result<(Enabled, WorkerType, WorkerStatus), TdError> {
+            Ok((Enabled::TRUE, WorkerType::Cron, WorkerStatus::Scheduled))
+        }
+
+        pub async fn cron_to_stop() -> Result<(Enabled, WorkerType, WorkerStatus), TdError> {
+            Ok((Enabled::TRUE, WorkerType::Cron, WorkerStatus::Stopped))
+        }
+
+        pub async fn watchdog_to_schedule() -> Result<(Enabled, WorkerType, WorkerStatus), TdError>
+        {
+            Ok((Enabled::TRUE, WorkerType::Watchdog, WorkerStatus::Scheduled))
+        }
+
+        pub async fn watchdog_to_stop() -> Result<(Enabled, WorkerType, WorkerStatus), TdError> {
+            Ok((Enabled::TRUE, WorkerType::Watchdog, WorkerStatus::Stopped))
+        }
     }
 
     #[td_type::Dto]
