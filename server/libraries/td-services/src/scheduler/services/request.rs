@@ -2,16 +2,19 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::scheduler::layers::request::create_locked_function_runner_workers;
+use crate::scheduler::layers::request::{
+    create_locked_cron_workers, create_locked_function_runner_workers,
+    create_locked_watchdog_workers,
+};
 use ta_services::factory::service_factory;
 use td_common::server::{FileWorkerMessageQueue, WorkerMessageQueue};
 use td_objects::dxo::function_run::{FunctionRunDB, FunctionRunToExecuteDB, UpdateFunctionRunDB};
-use td_objects::dxo::worker::WorkerDB;
+use td_objects::dxo::worker::{UpdateWorkerStatusDB, WorkerDB, WorkerDBWithNames};
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::from::{ExtractVecService, With};
 use td_objects::tower_service::sql::{By, SqlSelectAllService, SqlUpdateService, insert_vec};
 use td_objects::types::addresses::InternalServerAddresses;
-use td_objects::types::basic::FunctionRunId;
+use td_objects::types::basic::{FunctionRunId, WorkerId, WorkerStatus, WorkerType};
 use td_storage::Storage;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
@@ -67,13 +70,20 @@ where
 // - Storage
 // - T(MessageQueue)
 // - ServerUrl
-#[allow(clippy::extra_unused_type_parameters)] // TODO remove
 #[layer]
 pub fn request_cron_runners<T>()
 where
     T: WorkerMessageQueue,
 {
-    layers!()
+    layers!(
+        from_fn(WorkerDB::cron_to_schedule),
+        from_fn(By::<(WorkerType, WorkerStatus)>::select_all::<WorkerDBWithNames>),
+        from_fn(create_locked_cron_workers::<T>),
+        // Update statuses.
+        from_fn(With::<WorkerDBWithNames>::extract_vec::<WorkerId>),
+        from_fn(UpdateWorkerStatusDB::run_requested),
+        from_fn(By::<WorkerId>::update_all::<UpdateWorkerStatusDB, WorkerDB>),
+    )
 }
 
 // Requires:
@@ -82,13 +92,20 @@ where
 // - Storage
 // - T(MessageQueue)
 // - ServerUrl
-#[allow(clippy::extra_unused_type_parameters)] // TODO remove
 #[layer]
 pub fn request_watchdog_runners<T>()
 where
     T: WorkerMessageQueue,
 {
-    layers!()
+    layers!(
+        from_fn(WorkerDB::watchdog_to_schedule),
+        from_fn(By::<(WorkerType, WorkerStatus)>::select_all::<WorkerDBWithNames>),
+        from_fn(create_locked_watchdog_workers::<T>),
+        // Update statuses.
+        from_fn(With::<WorkerDBWithNames>::extract_vec::<WorkerId>),
+        from_fn(UpdateWorkerStatusDB::run_requested),
+        from_fn(By::<WorkerId>::update_all::<UpdateWorkerStatusDB, WorkerDB>),
+    )
 }
 
 #[cfg(test)]
@@ -141,6 +158,22 @@ mod tests {
                 type_of_val(&With::<FunctionRunToExecuteDB>::extract_vec::<FunctionRunId>),
                 type_of_val(&UpdateFunctionRunDB::run_requested),
                 type_of_val(&By::<FunctionRunId>::update_all::<UpdateFunctionRunDB, FunctionRunDB>),
+                // Cron
+                type_of_val(&WorkerDB::cron_to_schedule),
+                type_of_val(&By::<(WorkerType, WorkerStatus)>::select_all::<WorkerDBWithNames>),
+                type_of_val(&create_locked_cron_workers::<FileWorkerMessageQueue>),
+                // Update statuses.
+                type_of_val(&With::<WorkerDBWithNames>::extract_vec::<WorkerId>),
+                type_of_val(&UpdateWorkerStatusDB::run_requested),
+                type_of_val(&By::<WorkerId>::update_all::<UpdateWorkerStatusDB, WorkerDB>),
+                // Watchdog
+                type_of_val(&WorkerDB::watchdog_to_schedule),
+                type_of_val(&By::<(WorkerType, WorkerStatus)>::select_all::<WorkerDBWithNames>),
+                type_of_val(&create_locked_watchdog_workers::<FileWorkerMessageQueue>),
+                // Update statuses.
+                type_of_val(&With::<WorkerDBWithNames>::extract_vec::<WorkerId>),
+                type_of_val(&UpdateWorkerStatusDB::run_requested),
+                type_of_val(&By::<WorkerId>::update_all::<UpdateWorkerStatusDB, WorkerDB>),
             ]);
         Ok(())
     }

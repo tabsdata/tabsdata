@@ -6,8 +6,9 @@ pub mod params;
 
 use crate::types::basic::{
     AllowDisabled, AtTime, CollectionIdName, ExecutionIdName, FunctionIdName, FunctionRunId,
-    InterCollectionPermissionIdName, LogsCastNumber, PermissionIdName, RoleIdName, SampleLen,
-    SampleOffset, Sql, TableIdName, TransactionIdName, UncommittedStatus, UserIdName, WorkerIdName,
+    FunctionVersionId, InterCollectionPermissionIdName, LogsCastNumber, PermissionIdName,
+    RoleIdName, SampleLen, SampleOffset, Sql, TableIdName, TransactionIdName, UncommittedStatus,
+    UserIdName, WorkerId, WorkerIdName,
 };
 use constcat::concat;
 use td_common::logging::LOG_EXTENSION;
@@ -34,13 +35,28 @@ pub const OPENAPI_JSON_URL: &str = url!(BASE_API_URL, "/api-docs/openapi.json");
 
 // Private URLs
 pub const INTERNAL_PREFIX: &str = url!("/internal");
-pub const UPDATE_FUNCTION_RUN: &str = url!(INTERNAL_PREFIX, "/function_run/{function_run_id}");
-pub const DOWNLOAD_FUNCTION_STATE: &str = url!(FUNCTION, "/download-state");
 
+pub const DOWNLOAD_FUNCTION_STATE: &str = url!(INTERNAL_PREFIX, FUNCTION, "/download-state");
+
+pub const FUNCTION_EXECUTE_INTERNAL: &str = url!(INTERNAL_PREFIX, "/execute/{function_version_id}");
+#[td_type::UrlParam]
+pub struct FunctionVersionIdParam {
+    #[td_type(extractor)]
+    function_version_id: FunctionVersionId,
+}
+
+pub const UPDATE_FUNCTION_RUN: &str = url!(INTERNAL_PREFIX, "/function_run/{function_run_id}");
 #[td_type::UrlParam]
 pub struct FunctionRunIdParam {
     #[td_type(extractor)]
     function_run_id: FunctionRunId,
+}
+
+pub const UPDATE_WORKER: &str = url!(INTERNAL_PREFIX, "/worker/{worker_id}");
+#[td_type::UrlParam]
+pub struct WorkerIdParam {
+    #[td_type(extractor)]
+    worker_id: WorkerId,
 }
 
 // Endpoints URLs

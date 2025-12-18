@@ -46,10 +46,24 @@ mod definitions {
         pub worker_config: Option<WorkerConfig>, // added in v4
     }
 
+    impl WorkerDB {
+        // TODO this can be converted to states if creating a stateful select without versioned
+        pub async fn cron_to_schedule() -> Result<(WorkerType, WorkerStatus), TdError> {
+            Ok((WorkerType::Cron, WorkerStatus::Scheduled))
+        }
+
+        pub async fn watchdog_to_schedule() -> Result<(WorkerType, WorkerStatus), TdError> {
+            Ok((WorkerType::Watchdog, WorkerStatus::Scheduled))
+        }
+    }
+
     #[td_type::Dao]
     #[dao(sql_table = "workers__with_names")]
     #[inherits(WorkerDB)]
     pub struct WorkerDBWithNames {
+        #[td_type(extractor)]
+        pub id: WorkerId,
+
         pub collection: CollectionName,
         pub execution: Option<ExecutionName>,
         pub function: FunctionName,
@@ -148,6 +162,12 @@ mod definitions {
         pub fn stopped() -> Result<Self, TdError> {
             Ok(Self {
                 status: WorkerStatus::Stopped,
+            })
+        }
+
+        pub async fn run_requested() -> Result<Self, TdError> {
+            Ok(Self {
+                status: WorkerStatus::RunRequested,
             })
         }
     }

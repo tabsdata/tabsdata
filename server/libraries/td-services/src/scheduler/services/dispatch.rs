@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::scheduler::layers::request::unlock_workers;
+use crate::scheduler::layers::dispatch::unlock_workers;
 use ta_services::factory::service_factory;
 use td_common::server::{FileWorkerMessageQueue, WorkerMessageQueue};
 use td_objects::sql::DaoQueries;

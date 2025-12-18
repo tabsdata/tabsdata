@@ -9,7 +9,7 @@ use utoipa::ToSchema;
 
 pub mod cron;
 pub mod function_runner;
-mod http;
+pub mod http;
 pub mod location;
 pub mod watchdog;
 

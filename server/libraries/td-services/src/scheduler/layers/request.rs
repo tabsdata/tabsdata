@@ -6,40 +6,38 @@
 //! All errors parsing or processing messages should be logged and the message should be removed from the queue.
 
 use http::Method;
-use itertools::{Either, Itertools};
-use sqlx::SqliteConnection;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
-use std::ops::Deref;
-use std::str::FromStr;
 use td_common::server::{
-    Callback, HttpCallback, MessageAction, RequestMessagePayload, SupervisorMessagePayload,
-    WorkerClass, WorkerMessageQueue, WorkerName,
+    Callback, HttpCallback, MessageAction, RequestMessagePayload, WorkerClass, WorkerMessageQueue,
+    WorkerName,
 };
 use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::crudl::handle_sql_err;
+use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::function_requirement::FunctionRequirementDBWithNames;
-use td_objects::dxo::function_run::{FunctionRunDB, FunctionRunToExecuteDB, UpdateFunctionRunDB};
+use td_objects::dxo::function_run::FunctionRunToExecuteDB;
 use td_objects::dxo::table_data_version::TableDataVersionDBWithNames;
-use td_objects::dxo::worker::{UpdateWorkerMessageStatusDB, WorkerDB};
-use td_objects::dxo::yaml::WorkerInput;
+use td_objects::dxo::worker::{WorkerDB, WorkerDBWithNames};
 use td_objects::dxo::yaml::cron::v1::CronInput;
 use td_objects::dxo::yaml::function_runner::v2::{
     FunctionInfo, FunctionInput, InputTable, InputTableVersion, OutputTable, OutputTableVersion,
 };
+use td_objects::dxo::yaml::http::HttpRequest;
 use td_objects::dxo::yaml::location::Location;
 use td_objects::dxo::yaml::watchdog::v1::WatchdogInput;
-use td_objects::rest_urls::{BASE_URL, UPDATE_FUNCTION_RUN};
-use td_objects::sql::{DaoQueries, FindBy, SelectBy, UpdateBy};
+use td_objects::dxo::yaml::{WorkerInput, cron, watchdog};
+use td_objects::rest_urls::{
+    BASE_URL, FUNCTION_EXECUTE_INTERNAL, UPDATE_FUNCTION_RUN, UPDATE_WORKER,
+};
+use td_objects::sql::{DaoQueries, SelectBy};
 use td_objects::types::addresses::InternalServerAddresses;
 use td_objects::types::basic::{
-    EnvPrefix, FunctionRunId, FunctionRunStatus, WorkerId, WorkerMessageStatus, WorkerStatus,
-    WorkerType,
+    AtTime, EnvPrefix, WorkerConfig, WorkerMessageStatus, WorkerStatus, WorkerType,
 };
 use td_storage::Storage;
 use td_storage::location::StorageLocation;
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
-use tracing::{error, trace};
 use url::Url;
 
 pub async fn create_locked_function_runner_workers<T: WorkerMessageQueue>(
@@ -344,290 +342,248 @@ pub async fn create_locked_function_runner_workers<T: WorkerMessageQueue>(
     Ok(res)
 }
 
-pub async fn unlock_workers<T: WorkerMessageQueue>(
+pub async fn create_locked_cron_workers<T: WorkerMessageQueue>(
+    SrvCtx(message_queue): SrvCtx<T>,
+    SrvCtx(server_addresses): SrvCtx<InternalServerAddresses>,
+    Input(cron_workers): Input<Vec<WorkerDBWithNames>>,
+) -> Result<(), TdError> {
+    let futures: Vec<_> = cron_workers
+        .iter()
+        .map(|cron_worker| {
+            let message_queue = message_queue.clone();
+            let server_addresses = server_addresses.clone();
+            async move {
+                // This is loopback address, because this endpoint is only available to the server.
+                let server_address = server_addresses.first();
+
+                // Build callback
+                let worker_id = cron_worker.id.to_string();
+                let endpoint = UPDATE_WORKER.replace("{worker_id}", &worker_id);
+                let callback_url = format!("http://{server_address}{BASE_URL}{endpoint}");
+                let callback_url = Url::parse(&callback_url).map_err(|e| {
+                    api_error!(
+                        ApiError::InternalError,
+                        "Cannot create worker callback Url: {e}"
+                    )
+                })?;
+
+                let http_callback = HttpCallback {
+                    url: callback_url,
+                    method: Method::POST,
+                    headers: HashMap::default(),
+                    body: true,
+                };
+                let callback = Callback::Http(http_callback);
+
+                // Build trigger task
+                let function_version_id = cron_worker.function_version_id.to_string();
+                let endpoint = FUNCTION_EXECUTE_INTERNAL
+                    .replace("{function_version_id}", &function_version_id);
+                let trigger_url = format!("http://{server_address}{BASE_URL}{endpoint}");
+                let trigger_url = Url::parse(&trigger_url).map_err(|e| {
+                    api_error!(
+                        ApiError::InternalError,
+                        "Cannot create execution callback Url: {e}"
+                    )
+                })?;
+                let task = HttpRequest {
+                    method: Method::POST.to_string(),
+                    url: trigger_url,
+                    headers: Vec::new(),
+                    body: None,
+                };
+
+                // Build info
+                let info = cron::v1::Info {
+                    collection_id: cron_worker.collection_id,
+                    collection: cron_worker.collection.clone(),
+                    function_version_id: cron_worker.function_version_id,
+                    function: cron_worker.function.clone(),
+                    scheduled_on: AtTime::now(),
+                    task,
+                    config: WorkerConfig::serialize(&cron_worker.worker_config)?,
+                };
+                // Build message context
+                let cron_input = CronInput { info };
+                let context = WorkerInput::CronV1(Box::new(cron_input));
+
+                // Build message payload
+                // TODO ADD get_states to states
+                let message_payload = RequestMessagePayload {
+                    class: WorkerClass::EPHEMERAL,
+                    worker: WorkerName::CRON.as_ref().to_string(),
+                    action: MessageAction::Start,
+                    arguments: Vec::new(),
+                    callback: Some(callback),
+                    context: Some(context),
+                };
+
+                // Add it to the queue
+                message_queue
+                    .put(cron_worker.id.to_string(), message_payload)
+                    .await?;
+                Ok::<_, TdError>(())
+            }
+        })
+        .collect();
+    futures::future::try_join_all(futures).await?;
+    Ok(())
+}
+
+pub async fn create_locked_watchdog_workers<T: WorkerMessageQueue>(
     SrvCtx(message_queue): SrvCtx<T>,
     SrvCtx(queries): SrvCtx<DaoQueries>,
+    SrvCtx(storage): SrvCtx<Storage>,
+    SrvCtx(server_addresses): SrvCtx<InternalServerAddresses>,
     Connection(connection): Connection,
+    Input(watchdog_workers): Input<Vec<WorkerDBWithNames>>,
 ) -> Result<(), TdError> {
-    let messages = message_queue.locked_messages::<serde_yaml::Value>().await;
-    let (
-        function_runner_messages,
-        cron_messages,
-        watchdog_messages,
-        _invalid_requests,
-        _invalid_messages
-    ) = messages.into_iter().fold(
-        (HashMap::new(), HashMap::new(), HashMap::new(), HashSet::new(), HashSet::new()),
-        |(mut function_runner_messages, mut cron_messages, mut watchdog_messages, mut invalid_requests, mut invalid_messages), message| {
-            if let Ok(worker_id) = WorkerId::try_from(&message.id) &&
-                let SupervisorMessagePayload::SupervisorRequestMessagePayload(
-                    payload,
-                ) = &message.payload
-            {
-                match &payload.context {
-                    None => {
-                        error!("Scheduled locked message [{worker_id}] has no context: {payload:?}");
-                        invalid_requests.insert(worker_id);
-                    }
-                    Some(context) => {
-                        match WorkerName::from_str(&payload.worker) {
-                            Ok(WorkerName::FUNCTION) => {
-                                match serde_yaml::from_value(context.clone()) {
-                                    Ok(context) => {
-                                        function_runner_messages.insert(worker_id, context);
-                                    }
-                                    Err(e) => {
-                                        error!(
-                                            "Scheduled locked message [{worker_id}] has invalid context [{context:?}]: {e:?}",
-                                        );
-                                        invalid_requests.insert(worker_id);
-                                    }
-                                }
-                            }
-                            Ok(WorkerName::CRON) => {
-                                match serde_yaml::from_value(context.clone()) {
-                                    Ok(context) => {
-                                        cron_messages.insert(worker_id, context);
-                                    }
-                                    Err(e) => {
-                                        error!(
-                                            "Scheduled locked message [{worker_id}] has invalid context [{context:?}]: {e:?}",
-                                        );
-                                        invalid_requests.insert(worker_id);
-                                    }
-                                }
-                            }
-                            Ok(WorkerName::WATCHDOG) => {
-                                match serde_yaml::from_value(context.clone()) {
-                                    Ok(context) => {
-                                        watchdog_messages.insert(worker_id, context);
-                                    }
-                                    Err(e) => {
-                                        error!(
-                                            "Scheduled locked message [{worker_id}] has invalid context [{context:?}]: {e:?}",
-                                        );
-                                        invalid_requests.insert(worker_id);
-                                    }
-                                }
-                            }
-                            Err(e) => {
-                                error!("Scheduled locked message [{worker_id}] has invalid worker [{:?}]: {e:?}", payload.worker);
-                                invalid_requests.insert(worker_id);
-                            }
-                        };
-                    }
-                }
-            } else {
-                error!(
-                    "Scheduled locked message [{}] is not a SupervisorRequestMessagePayload: {:?}",
-                    message.id, message.payload
-                );
-                invalid_messages.insert(message.id);
-            };
-            (function_runner_messages, cron_messages, watchdog_messages, invalid_requests, invalid_messages)
-        },
-    );
-
-    let mut conn = connection.lock().await;
-    let conn = conn.get_mut_connection()?;
-    unlock_function_runner_workers(
-        queries.deref(),
-        &mut *conn,
-        message_queue.deref(),
-        function_runner_messages,
-    )
-    .await?;
-    unlock_cron_workers(
-        queries.deref(),
-        &mut *conn,
-        message_queue.deref(),
-        cron_messages,
-    )
-    .await?;
-    unlock_watchdog_workers(
-        queries.deref(),
-        &mut *conn,
-        message_queue.deref(),
-        watchdog_messages,
-    )
-    .await?;
-    Ok(())
-}
-
-pub async fn unlock_function_runner_workers<T: WorkerMessageQueue>(
-    queries: &DaoQueries,
-    conn: &mut SqliteConnection,
-    message_queue: &T,
-    messages: HashMap<WorkerId, FunctionInput>,
-) -> Result<(), TdError> {
-    // Filter all invalid messages
-    let function_run_ids = messages
+    let futures: Vec<_> = watchdog_workers
         .iter()
-        .map(|(id, m)| (m.info.function_run_id, (id, m)))
-        .collect::<HashMap<_, _>>();
+        .map(|watchdog_worker| {
+            let message_queue = message_queue.clone();
+            let queries = queries.clone();
+            let connection = connection.clone();
+            let storage = storage.clone();
+            let server_addresses = server_addresses.clone();
+            async move {
+                let mut conn = connection.lock().await;
+                let conn = conn.get_mut_connection()?;
 
-    let mut errors = Vec::new();
+                // This is loopback address, because this endpoint is only available to the server.
+                let server_address = server_addresses.first();
 
-    // Find all associated function runs
-    let found_function_runs: Vec<FunctionRunDB> = {
-        // TODO this should be chunked
-        let lookup: Vec<_> = function_run_ids.keys().copied().collect();
-        queries
-            .find_by::<FunctionRunDB>(&lookup)?
-            .build_query_as()
-            .fetch_all(&mut *conn)
-            .await
-            .map_err(handle_sql_err)?
-    };
-    let found_function_runs: HashMap<_, _> =
-        found_function_runs.iter().map(|f| (f.id, f)).collect();
+                // Build callback
+                let worker_id = watchdog_worker.id.to_string();
+                let endpoint = UPDATE_WORKER.replace("{worker_id}", &worker_id);
+                let callback_url = format!("http://{server_address}{BASE_URL}{endpoint}");
+                let callback_url = Url::parse(&callback_url).map_err(|e| {
+                    api_error!(
+                        ApiError::InternalError,
+                        "Cannot create worker callback Url: {e}"
+                    )
+                })?;
 
-    // Rollback all message for function runs that are not found
-    let not_found_runs = function_run_ids
-        .iter()
-        .filter(|(id, _)| !found_function_runs.contains_key(*id))
-        .collect::<Vec<_>>();
-    for (f_id, (w_id, _)) in not_found_runs {
-        trace!("Locked message [{w_id}] for function run [{f_id}] was not found in queue");
-        rollback_queue(message_queue, w_id, f_id)
-            .await
-            .unwrap_or_else(|e| errors.push(e));
-    }
+                let http_callback = HttpCallback {
+                    url: callback_url,
+                    method: Method::POST,
+                    headers: HashMap::default(),
+                    body: true,
+                };
+                let callback = Callback::Http(http_callback);
 
-    // Split in valid and invalid function runs
-    let (valid_runs, invalid_runs): (Vec<_>, Vec<_>) =
-        found_function_runs.into_iter().partition_map(|(id, f)| {
-            if matches!(f.status, FunctionRunStatus::RunRequested) {
-                Either::Left(id)
-            } else {
-                error!(
-                    "Scheduled locked message [{}] for function run [{}] is not in RR state: {}",
-                    id, f.id, f.status
-                );
-                Either::Right(id)
+                // Build fn_trigger request
+                let function_version_id = watchdog_worker.function_version_id.to_string();
+                let endpoint = FUNCTION_EXECUTE_INTERNAL
+                    .replace("{function_version_id}", &function_version_id);
+                let trigger_url = format!("http://{server_address}{BASE_URL}{endpoint}");
+                let trigger_url = Url::parse(&trigger_url).map_err(|e| {
+                    api_error!(
+                        ApiError::InternalError,
+                        "Cannot create execution callback Url: {e}"
+                    )
+                })?;
+                let fn_trigger = HttpRequest {
+                    method: Method::POST.to_string(),
+                    url: trigger_url,
+                    headers: Vec::new(),
+                    body: None,
+                };
+
+                // Build fn_state request
+                let function_version_id = watchdog_worker.function_version_id.to_string();
+                let endpoint = FUNCTION_EXECUTE_INTERNAL
+                    .replace("{function_version_id}", &function_version_id);
+                let trigger_url = format!("http://{server_address}{BASE_URL}{endpoint}");
+                let trigger_url = Url::parse(&trigger_url).map_err(|e| {
+                    api_error!(
+                        ApiError::InternalError,
+                        "Cannot create execution callback Url: {e}"
+                    )
+                })?;
+                let fn_state = HttpRequest {
+                    method: Method::POST.to_string(),
+                    url: trigger_url,
+                    headers: Vec::new(),
+                    body: None,
+                };
+
+                // Build fn_status request
+                let function_version_id = watchdog_worker.function_version_id.to_string();
+                let endpoint = FUNCTION_EXECUTE_INTERNAL
+                    .replace("{function_version_id}", &function_version_id);
+                let trigger_url = format!("http://{server_address}{BASE_URL}{endpoint}");
+                let trigger_url = Url::parse(&trigger_url).map_err(|e| {
+                    api_error!(
+                        ApiError::InternalError,
+                        "Cannot create execution callback Url: {e}"
+                    )
+                })?;
+                let fn_status = HttpRequest {
+                    method: Method::POST.to_string(),
+                    url: trigger_url,
+                    headers: Vec::new(),
+                    body: None,
+                };
+
+                // Build function location
+                let f: FunctionDB = queries
+                    .select_by::<FunctionDB>(&watchdog_worker.function_version_id)?
+                    .build_query_as()
+                    .fetch_one(&mut *conn)
+                    .await
+                    .map_err(handle_sql_err)?;
+
+                let storage_location = StorageLocation::try_from(&f.storage_version).unwrap();
+                let (path, _) = storage_location
+                    .builder(&f.data_location)
+                    .collection(&f.collection_id)
+                    .function(&f.bundle_id)
+                    .build();
+                let (external_path, mount_def) = storage.to_external_uri(&path)?;
+                let env_prefix = EnvPrefix::try_from(&mount_def.id)?;
+                let function_bundle = Location::builder()
+                    .uri(external_path)
+                    .env_prefix(env_prefix)
+                    .build()?;
+
+                // Build info
+                // TODO Urls are wrong as of now
+                let info = watchdog::v1::Info {
+                    collection_id: watchdog_worker.collection_id,
+                    collection: watchdog_worker.collection.clone(),
+                    function_version_id: watchdog_worker.function_version_id,
+                    function: watchdog_worker.function.clone(),
+                    function_bundle,
+                    scheduled_on: AtTime::now(),
+                    fn_trigger,
+                    fn_state,
+                    config: WorkerConfig::serialize(&watchdog_worker.worker_config)?,
+                    fn_status,
+                };
+                // Build message context
+                let cron_input = WatchdogInput { info };
+                let context = WorkerInput::WatchdogV1(Box::new(cron_input));
+
+                // Build message payload
+                // TODO ADD get_states to states
+                let message_payload = RequestMessagePayload {
+                    class: WorkerClass::EPHEMERAL,
+                    worker: WorkerName::WATCHDOG.as_ref().to_string(),
+                    action: MessageAction::Start,
+                    arguments: Vec::new(),
+                    callback: Some(callback),
+                    context: Some(context),
+                };
+
+                // Add it to the queue
+                message_queue
+                    .put(watchdog_worker.id.to_string(), message_payload)
+                    .await?;
+                Ok::<_, TdError>(())
             }
-        });
-
-    // Commit all valid function runs
-    for f_id in &valid_runs {
-        let (w_id, _message) = function_run_ids[f_id];
-        let update = UpdateWorkerMessageStatusDB::unlocked()?;
-        // TODO the queue should use this typed too
-        match queries
-            .update_by::<_, WorkerDB>(&update, &w_id)?
-            .build()
-            .execute(&mut *conn)
-            .await
-        {
-            Ok(_) => match message_queue.commit(&w_id.to_string()).await {
-                Ok(_) => {
-                    trace!(
-                        "Scheduled locked message [{w_id}] for function run [{f_id}] is committed"
-                    );
-                }
-                Err(e) => {
-                    error!(
-                        "Scheduled locked message [{w_id}] for function run [{f_id}] commit failed: {e}"
-                    );
-                    rollback_query(queries, conn, w_id, f_id)
-                        .await
-                        .unwrap_or_else(|e| errors.push(e));
-                    rollback_queue(message_queue, w_id, f_id)
-                        .await
-                        .unwrap_or_else(|e| errors.push(e));
-                }
-            },
-            Err(e) => {
-                error!(
-                    "Scheduled locked message [{w_id}] for function run [{f_id}] commit failed: {e}"
-                );
-            }
-        }
-    }
-
-    // Rollback all invalid function runs
-    for f_id in &invalid_runs {
-        let (w_id, _message) = function_run_ids[f_id];
-        rollback_query(queries, &mut *conn, w_id, f_id)
-            .await
-            .unwrap_or_else(|e| errors.push(e));
-        rollback_queue(message_queue, w_id, f_id)
-            .await
-            .unwrap_or_else(|e| errors.push(e));
-    }
-
-    // We try to run everything and avoid failures.
-    if !errors.is_empty() {
-        error!("Errors found: {errors:?}");
-    }
-    Ok(())
-}
-
-pub async fn unlock_cron_workers<T: WorkerMessageQueue>(
-    _queries: &DaoQueries,
-    _conn: &mut SqliteConnection,
-    _message_queue: &T,
-    _messages: HashMap<WorkerId, CronInput>,
-) -> Result<(), TdError> {
-    Ok(())
-}
-
-pub async fn unlock_watchdog_workers<T: WorkerMessageQueue>(
-    _queries: &DaoQueries,
-    _conn: &mut SqliteConnection,
-    _message_queue: &T,
-    _messages: HashMap<WorkerId, WatchdogInput>,
-) -> Result<(), TdError> {
-    Ok(())
-}
-
-async fn rollback_query(
-    queries: &DaoQueries,
-    conn: &mut SqliteConnection,
-    message_id: &WorkerId,
-    function_run_id: &FunctionRunId,
-) -> Result<(), TdError> {
-    let update = UpdateFunctionRunDB::scheduled()?;
-    match queries
-        .update_by::<_, FunctionRunDB>(&update, &function_run_id)?
-        .build()
-        .execute(&mut *conn)
-        .await
-    {
-        Ok(_) => {
-            error!(
-                "Rolled back status to scheduled for locked message [{message_id}] for function run [{function_run_id}] in DB"
-            );
-        }
-        Err(e) => {
-            error!(
-                "Failed to rollback status to scheduled for locked message [{message_id}] for function run [{function_run_id}]: {e}"
-            );
-        }
-    }
-
-    Ok(())
-}
-
-async fn rollback_queue<T: WorkerMessageQueue>(
-    message_queue: &T,
-    message_id: &WorkerId,
-    function_run_id: &FunctionRunId,
-) -> Result<(), TdError> {
-    match message_queue.rollback(&message_id.to_string()).await {
-        Ok(_) => {
-            error!(
-                "Rolled back locked message [{}] for function run [{}] in queue",
-                message_id, function_run_id
-            );
-        }
-        Err(e) => {
-            error!(
-                "Failed to rollback locked message [{}] for function run [{}]: {}",
-                message_id, function_run_id, e
-            );
-        }
-    }
-
+        })
+        .collect();
+    futures::future::try_join_all(futures).await?;
     Ok(())
 }

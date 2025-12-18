@@ -16,7 +16,7 @@ pub struct CronInput {
 
 impl Locations for CronInput {
     fn locations(&self) -> Vec<&Location> {
-        vec![&self.info.function_bundle]
+        vec![]
     }
 }
 
@@ -27,7 +27,6 @@ pub struct Info {
     pub collection: CollectionName,
     pub function_version_id: FunctionVersionId,
     pub function: FunctionName,
-    pub function_bundle: Location,
     pub scheduled_on: AtTime, // when the request yaml was created
     pub task: HttpRequest,    // http task of the cron
     pub config: WorkerConfig, // CronConfig serialized
@@ -65,10 +64,6 @@ mod tests {
                 collection: CollectionName::try_from("collection").unwrap(),
                 function_version_id,
                 function: FunctionName::try_from("function").unwrap(),
-                function_bundle: Location {
-                    uri: Url::try_from("file:///foo").unwrap(),
-                    env_prefix: None,
-                },
                 scheduled_on,
                 task: HttpRequest {
                     method: Method::POST.to_string(),
@@ -94,9 +89,6 @@ info:
   collection: collection
   function_version_id: {function_version_id}
   function: function
-  function_bundle:
-    uri: file:///foo
-    env_prefix: null
   scheduled_on: {scheduled_on}
   task:
     method: POST
