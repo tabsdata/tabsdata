@@ -40,7 +40,7 @@ use td_storage::location::StorageLocation;
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
 use url::Url;
 
-pub async fn create_locked_function_runner_workers<T: WorkerMessageQueue>(
+pub async fn create_locked_function_runner_workers_start_request<T: WorkerMessageQueue>(
     SrvCtx(message_queue): SrvCtx<T>,
     SrvCtx(queries): SrvCtx<DaoQueries>,
     SrvCtx(storage): SrvCtx<Storage>,
@@ -72,7 +72,6 @@ pub async fn create_locked_function_runner_workers<T: WorkerMessageQueue>(
                         "Cannot create execution callback Url: {e}"
                     )
                 })?;
-
                 let http_callback = HttpCallback {
                     url: callback_url,
                     method: Method::POST,
@@ -342,7 +341,7 @@ pub async fn create_locked_function_runner_workers<T: WorkerMessageQueue>(
     Ok(res)
 }
 
-pub async fn create_locked_cron_workers<T: WorkerMessageQueue>(
+pub async fn create_locked_cron_workers_start_request<T: WorkerMessageQueue>(
     SrvCtx(message_queue): SrvCtx<T>,
     SrvCtx(server_addresses): SrvCtx<InternalServerAddresses>,
     Input(cron_workers): Input<Vec<WorkerDBWithNames>>,
@@ -353,11 +352,13 @@ pub async fn create_locked_cron_workers<T: WorkerMessageQueue>(
             let message_queue = message_queue.clone();
             let server_addresses = server_addresses.clone();
             async move {
+                // Worker id
+                let worker_id = cron_worker.id.to_string();
+
                 // This is loopback address, because this endpoint is only available to the server.
                 let server_address = server_addresses.first();
 
                 // Build callback
-                let worker_id = cron_worker.id.to_string();
                 let endpoint = UPDATE_WORKER.replace("{worker_id}", &worker_id);
                 let callback_url = format!("http://{server_address}{BASE_URL}{endpoint}");
                 let callback_url = Url::parse(&callback_url).map_err(|e| {
@@ -366,7 +367,6 @@ pub async fn create_locked_cron_workers<T: WorkerMessageQueue>(
                         "Cannot create worker callback Url: {e}"
                     )
                 })?;
-
                 let http_callback = HttpCallback {
                     url: callback_url,
                     method: Method::POST,
@@ -419,9 +419,7 @@ pub async fn create_locked_cron_workers<T: WorkerMessageQueue>(
                 };
 
                 // Add it to the queue
-                message_queue
-                    .put(cron_worker.id.to_string(), message_payload)
-                    .await?;
+                message_queue.put(worker_id, message_payload).await?;
                 Ok::<_, TdError>(())
             }
         })
@@ -430,7 +428,61 @@ pub async fn create_locked_cron_workers<T: WorkerMessageQueue>(
     Ok(())
 }
 
-pub async fn create_locked_watchdog_workers<T: WorkerMessageQueue>(
+pub async fn create_locked_cron_workers_stop_request<T: WorkerMessageQueue>(
+    SrvCtx(message_queue): SrvCtx<T>,
+    SrvCtx(server_addresses): SrvCtx<InternalServerAddresses>,
+    Input(cron_workers): Input<Vec<WorkerDBWithNames>>,
+) -> Result<(), TdError> {
+    let futures: Vec<_> = cron_workers
+        .iter()
+        .map(|cron_worker| {
+            let message_queue = message_queue.clone();
+            let server_addresses = server_addresses.clone();
+            async move {
+                // Worker id
+                let worker_id = cron_worker.id.to_string();
+
+                // This is loopback address, because this endpoint is only available to the server.
+                let server_address = server_addresses.first();
+
+                // Build callback
+                let endpoint = UPDATE_WORKER.replace("{worker_id}", &worker_id);
+                let callback_url = format!("http://{server_address}{BASE_URL}{endpoint}");
+                let callback_url = Url::parse(&callback_url).map_err(|e| {
+                    api_error!(
+                        ApiError::InternalError,
+                        "Cannot create worker callback Url: {e}"
+                    )
+                })?;
+                let http_callback = HttpCallback {
+                    url: callback_url,
+                    method: Method::POST,
+                    headers: HashMap::default(),
+                    body: true,
+                };
+                let callback = Callback::Http(http_callback);
+
+                // Build message payload
+                let message_payload = RequestMessagePayload::<serde_yaml::Value> {
+                    class: WorkerClass::EPHEMERAL,
+                    worker: WorkerName::CRON.as_ref().to_string(),
+                    action: MessageAction::Stop,
+                    arguments: Vec::new(),
+                    callback: Some(callback),
+                    context: None,
+                };
+
+                // Add it to the queue
+                message_queue.put(worker_id, message_payload).await?;
+                Ok::<_, TdError>(())
+            }
+        })
+        .collect();
+    futures::future::try_join_all(futures).await?;
+    Ok(())
+}
+
+pub async fn create_locked_watchdog_workers_start_request<T: WorkerMessageQueue>(
     SrvCtx(message_queue): SrvCtx<T>,
     SrvCtx(queries): SrvCtx<DaoQueries>,
     SrvCtx(storage): SrvCtx<Storage>,
@@ -450,11 +502,13 @@ pub async fn create_locked_watchdog_workers<T: WorkerMessageQueue>(
                 let mut conn = connection.lock().await;
                 let conn = conn.get_mut_connection()?;
 
+                // Worker id
+                let worker_id = watchdog_worker.id.to_string();
+
                 // This is loopback address, because this endpoint is only available to the server.
                 let server_address = server_addresses.first();
 
                 // Build callback
-                let worker_id = watchdog_worker.id.to_string();
                 let endpoint = UPDATE_WORKER.replace("{worker_id}", &worker_id);
                 let callback_url = format!("http://{server_address}{BASE_URL}{endpoint}");
                 let callback_url = Url::parse(&callback_url).map_err(|e| {
@@ -463,7 +517,6 @@ pub async fn create_locked_watchdog_workers<T: WorkerMessageQueue>(
                         "Cannot create worker callback Url: {e}"
                     )
                 })?;
-
                 let http_callback = HttpCallback {
                     url: callback_url,
                     method: Method::POST,
@@ -577,9 +630,61 @@ pub async fn create_locked_watchdog_workers<T: WorkerMessageQueue>(
                 };
 
                 // Add it to the queue
-                message_queue
-                    .put(watchdog_worker.id.to_string(), message_payload)
-                    .await?;
+                message_queue.put(worker_id, message_payload).await?;
+                Ok::<_, TdError>(())
+            }
+        })
+        .collect();
+    futures::future::try_join_all(futures).await?;
+    Ok(())
+}
+
+pub async fn create_locked_watchdog_workers_stop_request<T: WorkerMessageQueue>(
+    SrvCtx(message_queue): SrvCtx<T>,
+    SrvCtx(server_addresses): SrvCtx<InternalServerAddresses>,
+    Input(watchdog_workers): Input<Vec<WorkerDBWithNames>>,
+) -> Result<(), TdError> {
+    let futures: Vec<_> = watchdog_workers
+        .iter()
+        .map(|watchdog_worker| {
+            let message_queue = message_queue.clone();
+            let server_addresses = server_addresses.clone();
+            async move {
+                // This is loopback address, because this endpoint is only available to the server.
+                let server_address = server_addresses.first();
+
+                // Worker id
+                let worker_id = watchdog_worker.id.to_string();
+
+                // Build callback
+                let endpoint = UPDATE_WORKER.replace("{worker_id}", &worker_id);
+                let callback_url = format!("http://{server_address}{BASE_URL}{endpoint}");
+                let callback_url = Url::parse(&callback_url).map_err(|e| {
+                    api_error!(
+                        ApiError::InternalError,
+                        "Cannot create worker callback Url: {e}"
+                    )
+                })?;
+                let http_callback = HttpCallback {
+                    url: callback_url,
+                    method: Method::POST,
+                    headers: HashMap::default(),
+                    body: true,
+                };
+                let callback = Callback::Http(http_callback);
+
+                // Build message payload
+                let message_payload = RequestMessagePayload::<serde_yaml::Value> {
+                    class: WorkerClass::EPHEMERAL,
+                    worker: WorkerName::WATCHDOG.as_ref().to_string(),
+                    action: MessageAction::Stop,
+                    arguments: Vec::new(),
+                    callback: Some(callback),
+                    context: None,
+                };
+
+                // Add it to the queue
+                message_queue.put(worker_id, message_payload).await?;
                 Ok::<_, TdError>(())
             }
         })

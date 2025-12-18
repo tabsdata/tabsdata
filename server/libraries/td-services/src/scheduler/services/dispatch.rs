@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::scheduler::layers::dispatch::unlock_workers;
+use crate::scheduler::layers::dispatch::unlock_workers_request;
 use ta_services::factory::service_factory;
 use td_common::server::{FileWorkerMessageQueue, WorkerMessageQueue};
 use td_objects::sql::DaoQueries;
@@ -31,7 +31,7 @@ pub fn commit<T>()
 where
     T: WorkerMessageQueue,
 {
-    layers!(from_fn(unlock_workers::<T>))
+    layers!(from_fn(unlock_workers_request::<T>))
 }
 
 #[cfg(test)]
@@ -71,7 +71,9 @@ mod tests {
         DispatchService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<(), ()>(&[type_of_val(&unlock_workers::<FileWorkerMessageQueue>)]);
+            .assert_service::<(), ()>(&[type_of_val(
+                &unlock_workers_request::<FileWorkerMessageQueue>,
+            )]);
         Ok(())
     }
 

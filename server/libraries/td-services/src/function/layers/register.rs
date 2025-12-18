@@ -12,7 +12,7 @@ use td_objects::dxo::crudl::handle_sql_err;
 use td_objects::dxo::dependency::{DependencyDB, DependencyDBBuilder};
 use td_objects::dxo::table::{TableDB, TableDBBuilder, TableDBWithNames};
 use td_objects::dxo::trigger::{TriggerDB, TriggerDBBuilder, TriggerDBWithNames};
-use td_objects::dxo::worker::{UpdateWorkerStatusDB, WorkerDB, WorkerDBBuilder};
+use td_objects::dxo::worker::{UpdateWorkerDB, WorkerDB, WorkerDBBuilder};
 use td_objects::sql::cte::CteQueries;
 use td_objects::sql::{DaoQueries, FindBy, UpdateBy};
 use td_objects::system::{
@@ -682,7 +682,7 @@ pub async fn stop_current_workers(
 
     if let Some(function_version_id) = function_version_id.deref() {
         // we cannot stop function workers
-        let update = UpdateWorkerStatusDB::stopped()?;
+        let update = UpdateWorkerDB::stopped().await?;
         let to_stop = [
             (function_version_id, WorkerType::Cron),
             (function_version_id, WorkerType::Watchdog),

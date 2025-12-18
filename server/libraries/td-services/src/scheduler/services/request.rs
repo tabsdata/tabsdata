@@ -3,18 +3,21 @@
 //
 
 use crate::scheduler::layers::request::{
-    create_locked_cron_workers, create_locked_function_runner_workers,
-    create_locked_watchdog_workers,
+    create_locked_cron_workers_start_request, create_locked_cron_workers_stop_request,
+    create_locked_function_runner_workers_start_request,
+    create_locked_watchdog_workers_start_request, create_locked_watchdog_workers_stop_request,
 };
 use ta_services::factory::service_factory;
 use td_common::server::{FileWorkerMessageQueue, WorkerMessageQueue};
 use td_objects::dxo::function_run::{FunctionRunDB, FunctionRunToExecuteDB, UpdateFunctionRunDB};
-use td_objects::dxo::worker::{UpdateWorkerStatusDB, WorkerDB, WorkerDBWithNames};
+use td_objects::dxo::worker::{
+    UpdateWorkerDB, UpdateWorkerMessageStatusDB, WorkerDB, WorkerDBWithNames,
+};
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::from::{ExtractVecService, With};
 use td_objects::tower_service::sql::{By, SqlSelectAllService, SqlUpdateService, insert_vec};
 use td_objects::types::addresses::InternalServerAddresses;
-use td_objects::types::basic::{FunctionRunId, WorkerId, WorkerStatus, WorkerType};
+use td_objects::types::basic::{Enabled, FunctionRunId, WorkerId, WorkerStatus, WorkerType};
 use td_storage::Storage;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
@@ -32,8 +35,15 @@ use td_tower::{layer, layers};
 )]
 fn service() {
     layers!(
+        // Request function runners that need to be started
         request_function_runners::<_, FileWorkerMessageQueue>(),
+        // Stop cron runners that need to be stopped
+        stop_cron_runners::<_, FileWorkerMessageQueue>(),
+        // Request cron runners that need to be started
         request_cron_runners::<_, FileWorkerMessageQueue>(),
+        // Stop watchdog runners that need to be stopped
+        stop_watchdog_runners::<_, FileWorkerMessageQueue>(),
+        // Request watchdog runners that need to be started
         request_watchdog_runners::<_, FileWorkerMessageQueue>(),
     )
 }
@@ -54,7 +64,7 @@ where
         // This is, with status scheduled and with all requirements done.
         from_fn(By::<()>::select_all::<FunctionRunToExecuteDB>),
         // Create a locked message for each function run.
-        from_fn(create_locked_function_runner_workers::<T>),
+        from_fn(create_locked_function_runner_workers_start_request::<T>),
         // And insert generated messages.
         from_fn(insert_vec::<WorkerDB>),
         // Update statuses.
@@ -67,7 +77,6 @@ where
 // Requires:
 // - Transaction connection
 // - DaoQueries
-// - Storage
 // - T(MessageQueue)
 // - ServerUrl
 #[layer]
@@ -76,13 +85,38 @@ where
     T: WorkerMessageQueue,
 {
     layers!(
-        from_fn(WorkerDB::cron_to_schedule),
-        from_fn(By::<(WorkerType, WorkerStatus)>::select_all::<WorkerDBWithNames>),
-        from_fn(create_locked_cron_workers::<T>),
+        from_fn(WorkerDBWithNames::cron_to_schedule),
+        from_fn(By::<(Enabled, WorkerType, WorkerStatus)>::select_all::<WorkerDBWithNames>),
+        from_fn(create_locked_cron_workers_start_request::<T>),
         // Update statuses.
         from_fn(With::<WorkerDBWithNames>::extract_vec::<WorkerId>),
-        from_fn(UpdateWorkerStatusDB::run_requested),
-        from_fn(By::<WorkerId>::update_all::<UpdateWorkerStatusDB, WorkerDB>),
+        from_fn(UpdateWorkerDB::run_requested),
+        from_fn(By::<WorkerId>::update_all::<UpdateWorkerDB, WorkerDB>),
+        from_fn(UpdateWorkerMessageStatusDB::locked),
+        from_fn(By::<WorkerId>::update_all::<UpdateWorkerMessageStatusDB, WorkerDB>),
+    )
+}
+
+// Requires:
+// - Transaction connection
+// - DaoQueries
+// - T(MessageQueue)
+// - ServerUrl
+#[layer]
+pub fn stop_cron_runners<T>()
+where
+    T: WorkerMessageQueue,
+{
+    layers!(
+        from_fn(WorkerDBWithNames::cron_to_stop),
+        from_fn(By::<(Enabled, WorkerType, WorkerStatus)>::select_all::<WorkerDBWithNames>),
+        from_fn(create_locked_cron_workers_stop_request::<T>),
+        // Update statuses.
+        from_fn(With::<WorkerDBWithNames>::extract_vec::<WorkerId>),
+        from_fn(UpdateWorkerDB::done),
+        from_fn(By::<WorkerId>::update_all::<UpdateWorkerDB, WorkerDB>),
+        from_fn(UpdateWorkerMessageStatusDB::locked),
+        from_fn(By::<WorkerId>::update_all::<UpdateWorkerMessageStatusDB, WorkerDB>),
     )
 }
 
@@ -98,13 +132,38 @@ where
     T: WorkerMessageQueue,
 {
     layers!(
-        from_fn(WorkerDB::watchdog_to_schedule),
-        from_fn(By::<(WorkerType, WorkerStatus)>::select_all::<WorkerDBWithNames>),
-        from_fn(create_locked_watchdog_workers::<T>),
+        from_fn(WorkerDBWithNames::watchdog_to_schedule),
+        from_fn(By::<(Enabled, WorkerType, WorkerStatus)>::select_all::<WorkerDBWithNames>),
+        from_fn(create_locked_watchdog_workers_start_request::<T>),
         // Update statuses.
         from_fn(With::<WorkerDBWithNames>::extract_vec::<WorkerId>),
-        from_fn(UpdateWorkerStatusDB::run_requested),
-        from_fn(By::<WorkerId>::update_all::<UpdateWorkerStatusDB, WorkerDB>),
+        from_fn(UpdateWorkerDB::run_requested),
+        from_fn(By::<WorkerId>::update_all::<UpdateWorkerDB, WorkerDB>),
+        from_fn(UpdateWorkerMessageStatusDB::locked),
+        from_fn(By::<WorkerId>::update_all::<UpdateWorkerMessageStatusDB, WorkerDB>),
+    )
+}
+
+// Requires:
+// - Transaction connection
+// - DaoQueries
+// - T(MessageQueue)
+// - ServerUrl
+#[layer]
+pub fn stop_watchdog_runners<T>()
+where
+    T: WorkerMessageQueue,
+{
+    layers!(
+        from_fn(WorkerDBWithNames::watchdog_to_stop),
+        from_fn(By::<(Enabled, WorkerType, WorkerStatus)>::select_all::<WorkerDBWithNames>),
+        from_fn(create_locked_watchdog_workers_stop_request::<T>),
+        // Update statuses.
+        from_fn(With::<WorkerDBWithNames>::extract_vec::<WorkerId>),
+        from_fn(UpdateWorkerDB::done),
+        from_fn(By::<WorkerId>::update_all::<UpdateWorkerDB, WorkerDB>),
+        from_fn(UpdateWorkerMessageStatusDB::locked),
+        from_fn(By::<WorkerId>::update_all::<UpdateWorkerMessageStatusDB, WorkerDB>),
     )
 }
 
@@ -147,11 +206,14 @@ mod tests {
             .metadata()
             .await
             .assert_service::<(), ()>(&[
+                // Function
                 // Get all function runs that are ready to execute.
                 // This is, with status scheduled and with all requirements done.
                 type_of_val(&By::<()>::select_all::<FunctionRunToExecuteDB>),
                 // Create a locked message for each function run.
-                type_of_val(&create_locked_function_runner_workers::<FileWorkerMessageQueue>),
+                type_of_val(
+                    &create_locked_function_runner_workers_start_request::<FileWorkerMessageQueue>,
+                ),
                 // And insert generated messages.
                 type_of_val(&insert_vec::<WorkerDB>),
                 // Update statuses.
@@ -159,21 +221,57 @@ mod tests {
                 type_of_val(&UpdateFunctionRunDB::run_requested),
                 type_of_val(&By::<FunctionRunId>::update_all::<UpdateFunctionRunDB, FunctionRunDB>),
                 // Cron
-                type_of_val(&WorkerDB::cron_to_schedule),
-                type_of_val(&By::<(WorkerType, WorkerStatus)>::select_all::<WorkerDBWithNames>),
-                type_of_val(&create_locked_cron_workers::<FileWorkerMessageQueue>),
+                // Stop
+                type_of_val(&WorkerDBWithNames::cron_to_stop),
+                type_of_val(
+                    &By::<(Enabled, WorkerType, WorkerStatus)>::select_all::<WorkerDBWithNames>,
+                ),
+                type_of_val(&create_locked_cron_workers_stop_request::<FileWorkerMessageQueue>),
                 // Update statuses.
                 type_of_val(&With::<WorkerDBWithNames>::extract_vec::<WorkerId>),
-                type_of_val(&UpdateWorkerStatusDB::run_requested),
-                type_of_val(&By::<WorkerId>::update_all::<UpdateWorkerStatusDB, WorkerDB>),
+                type_of_val(&UpdateWorkerDB::done),
+                type_of_val(&By::<WorkerId>::update_all::<UpdateWorkerDB, WorkerDB>),
+                type_of_val(&UpdateWorkerMessageStatusDB::locked),
+                type_of_val(&By::<WorkerId>::update_all::<UpdateWorkerMessageStatusDB, WorkerDB>),
+                // Start
+                type_of_val(&WorkerDBWithNames::cron_to_schedule),
+                type_of_val(
+                    &By::<(Enabled, WorkerType, WorkerStatus)>::select_all::<WorkerDBWithNames>,
+                ),
+                type_of_val(&create_locked_cron_workers_start_request::<FileWorkerMessageQueue>),
+                // Update statuses.
+                type_of_val(&With::<WorkerDBWithNames>::extract_vec::<WorkerId>),
+                type_of_val(&UpdateWorkerDB::run_requested),
+                type_of_val(&By::<WorkerId>::update_all::<UpdateWorkerDB, WorkerDB>),
+                type_of_val(&UpdateWorkerMessageStatusDB::locked),
+                type_of_val(&By::<WorkerId>::update_all::<UpdateWorkerMessageStatusDB, WorkerDB>),
                 // Watchdog
-                type_of_val(&WorkerDB::watchdog_to_schedule),
-                type_of_val(&By::<(WorkerType, WorkerStatus)>::select_all::<WorkerDBWithNames>),
-                type_of_val(&create_locked_watchdog_workers::<FileWorkerMessageQueue>),
+                // Stop
+                type_of_val(&WorkerDBWithNames::watchdog_to_stop),
+                type_of_val(
+                    &By::<(Enabled, WorkerType, WorkerStatus)>::select_all::<WorkerDBWithNames>,
+                ),
+                type_of_val(&create_locked_watchdog_workers_stop_request::<FileWorkerMessageQueue>),
                 // Update statuses.
                 type_of_val(&With::<WorkerDBWithNames>::extract_vec::<WorkerId>),
-                type_of_val(&UpdateWorkerStatusDB::run_requested),
-                type_of_val(&By::<WorkerId>::update_all::<UpdateWorkerStatusDB, WorkerDB>),
+                type_of_val(&UpdateWorkerDB::done),
+                type_of_val(&By::<WorkerId>::update_all::<UpdateWorkerDB, WorkerDB>),
+                type_of_val(&UpdateWorkerMessageStatusDB::locked),
+                type_of_val(&By::<WorkerId>::update_all::<UpdateWorkerMessageStatusDB, WorkerDB>),
+                // Start
+                type_of_val(&WorkerDBWithNames::watchdog_to_schedule),
+                type_of_val(
+                    &By::<(Enabled, WorkerType, WorkerStatus)>::select_all::<WorkerDBWithNames>,
+                ),
+                type_of_val(
+                    &create_locked_watchdog_workers_start_request::<FileWorkerMessageQueue>,
+                ),
+                // Update statuses.
+                type_of_val(&With::<WorkerDBWithNames>::extract_vec::<WorkerId>),
+                type_of_val(&UpdateWorkerDB::run_requested),
+                type_of_val(&By::<WorkerId>::update_all::<UpdateWorkerDB, WorkerDB>),
+                type_of_val(&UpdateWorkerMessageStatusDB::locked),
+                type_of_val(&By::<WorkerId>::update_all::<UpdateWorkerMessageStatusDB, WorkerDB>),
             ]);
         Ok(())
     }

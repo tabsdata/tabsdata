@@ -7,9 +7,10 @@ mod definitions {
     use crate::dxo::function::FunctionDB;
     use crate::dxo::yaml::WorkerOutput;
     use crate::types::basic::{
-        AtTime, CollectionId, CollectionName, CronMask, ExecutionId, ExecutionName, FunctionName,
-        FunctionRunId, FunctionVersionId, SizeThreshold, TimeoutThresholdMin, TransactionId,
-        WorkerConfig, WorkerId, WorkerMessageStatus, WorkerStatus, WorkerType, WorkerVersion,
+        AtTime, CollectionId, CollectionName, CronMask, Enabled, ExecutionId, ExecutionName,
+        FunctionName, FunctionRunId, FunctionVersionId, SizeThreshold, TimeoutThresholdMin,
+        TransactionId, WorkerConfig, WorkerId, WorkerMessageStatus, WorkerStatus, WorkerType,
+        WorkerVersion,
     };
     use td_common::datetime::IntoDateTimeUtc;
     use td_common::execution_status::WorkerCallbackStatus;
@@ -143,9 +144,35 @@ mod definitions {
     #[td_type(builder(try_from = UpdateWorkerExecution))]
     pub struct UpdateWorkerDB {
         #[dao(immutable)]
-        started_on: Option<AtTime>,
-        ended_on: Option<AtTime>,
-        status: WorkerStatus,
+        pub started_on: Option<AtTime>,
+        pub ended_on: Option<AtTime>,
+        pub status: WorkerStatus,
+    }
+
+    impl UpdateWorkerDB {
+        pub async fn run_requested() -> Result<Self, TdError> {
+            Ok(Self {
+                started_on: None,
+                ended_on: None,
+                status: WorkerStatus::RunRequested,
+            })
+        }
+
+        pub async fn stopped() -> Result<Self, TdError> {
+            Ok(Self {
+                started_on: None,
+                ended_on: None,
+                status: WorkerStatus::Stopped,
+            })
+        }
+
+        pub async fn done() -> Result<Self, TdError> {
+            Ok(Self {
+                started_on: None,
+                ended_on: None,
+                status: WorkerStatus::Done,
+            })
+        }
     }
 
     #[td_type::Dao]
@@ -155,29 +182,15 @@ mod definitions {
     }
 
     impl UpdateWorkerMessageStatusDB {
-        pub fn unlocked() -> Result<Self, TdError> {
+        pub async fn locked() -> Result<Self, TdError> {
+            Ok(Self {
+                message_status: WorkerMessageStatus::Locked,
+            })
+        }
+
+        pub async fn unlocked() -> Result<Self, TdError> {
             Ok(Self {
                 message_status: WorkerMessageStatus::Unlocked,
-            })
-        }
-    }
-
-    #[td_type::Dao]
-    #[dao(sql_table = "workers")]
-    pub struct UpdateWorkerStatusDB {
-        status: WorkerStatus,
-    }
-
-    impl UpdateWorkerStatusDB {
-        pub fn stopped() -> Result<Self, TdError> {
-            Ok(Self {
-                status: WorkerStatus::Stopped,
-            })
-        }
-
-        pub async fn run_requested() -> Result<Self, TdError> {
-            Ok(Self {
-                status: WorkerStatus::RunRequested,
             })
         }
     }
