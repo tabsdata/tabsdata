@@ -253,7 +253,7 @@ class DataQualityProcessor:
         position: int | None,
         operations: list[Operator],
     ) -> list[TableInfo]:
-        table_names = []
+        table_names: list[TableInfo] = []
         if operations:
             for operation in operations:
                 match operation:

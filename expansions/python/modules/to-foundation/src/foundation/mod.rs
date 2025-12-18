@@ -54,6 +54,8 @@ fn _foundation(module: &Bound<'_, PyModule>) -> PyResult<()> {
     symbols_module.add("REQUEST_FILE", symbols::REQUEST_FILE)?;
     symbols_module.add("RESPONSE_FILE", symbols::RESPONSE_FILE)?;
 
+    symbols_module.add_class::<symbols::TableType>()?;
+
     Ok(())
 }
 

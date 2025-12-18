@@ -445,6 +445,7 @@ class Collection:
         )
         (
             tables,
+            table_types,
             string_dependencies,
             trigger_by,
             function_snippet,
@@ -485,6 +486,7 @@ class Collection:
             function_name=function_name,
             description=description,
             tables=tables,
+            table_types=table_types,
             dependencies=string_dependencies,
             trigger_by=trigger_by,
             function_snippet=function_snippet,
@@ -559,6 +561,7 @@ class Collection:
         )
         (
             tables,
+            table_types,
             string_dependencies,
             trigger_by,
             function_snippet,
@@ -597,6 +600,7 @@ class Collection:
             new_function_name=new_function_name,
             description=description,
             tables=tables,
+            table_types=table_types,
             dependencies=string_dependencies,
             trigger_by=trigger_by,
             function_snippet=function_snippet,
@@ -4513,7 +4517,18 @@ def _create_archive(
     local_packages=None,
     valid_python_versions: list[str] = None,
     collection=None,
-):
+) -> tuple[
+    list[str],
+    dict[str, str],
+    list[str],
+    list[str],
+    str,
+    str,
+    str,
+    str,
+    str,
+    dict[str, str],
+]:
     function = _dynamic_import_function_from_path(function_path)
     function_name: str = function.name
     function_output = function.output
@@ -4522,6 +4537,7 @@ def _create_archive(
     tables: List[str] = (
         function_output._table_list if isinstance(function_output, TableOutput) else []
     )
+    table_types: dict[str, str] = {}
     if function.output_actions:
         from tabsdata.tableframe._actions.dataquality.processor import (
             DataQualityProcessor,
@@ -4544,9 +4560,14 @@ def _create_archive(
         )
         input_dq_tables, output_dq_tables = dq_processor.table_names()
         dq_tables = [*input_dq_tables, *output_dq_tables]
+        dq_typed_tables = {
+            table.table: table.kind._value_.value for table in output_dq_tables
+        }
         dq_table_names = [table.table for table in dq_tables]
+
         tables += dq_table_names
-    string_dependencies: List[str] = (
+        table_types = dq_typed_tables
+    string_dependencies: list[str] = (
         function.input._table_list if isinstance(function.input, TableInput) else []
     )
     if isinstance(function.trigger_by, Crontab):
@@ -4586,6 +4607,7 @@ def _create_archive(
 
     return (
         tables,
+        table_types,
         string_dependencies,
         trigger_string_list,
         function_snippet,

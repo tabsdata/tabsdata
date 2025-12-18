@@ -4,33 +4,51 @@
 
 from enum import Enum
 
+from tabsdata.expansions.foundation.symbols import TableType
+
 
 class TableKind(Enum):
-    PRIMITIVE = (
-        "primitive",
+    REGULAR = (
+        TableType.Regular,
         None,
         "Primitive data table",
     )
     DQ_FILTER = (
-        "dq_filter",
+        TableType.DQData,
         "_dq_filter",
         "From Data Quality Filter operation",
     )
     DQ_SELECT = (
-        "dq_select",
+        TableType.DQData,
         "_dq_select",
         "From Data Quality Select operation",
     )
     DQ_SUMMARY = (
-        "dq_summary",
+        TableType.DQSummary,
         "_dq_summary",
         "From Data Quality Summary operation",
     )
 
     def __init__(self, value: str, suffix: str, description: str):
         self._value_ = value
-        self.suffix = suffix
-        self.description = description
+        self._suffix = suffix
+        self._description = description
+
+    @property
+    def code(self) -> TableType:
+        return self._value_.value
+
+    @property
+    def type(self) -> TableType:
+        return self._value_
+
+    @property
+    def suffix(self) -> str:
+        return self._suffix
+
+    @property
+    def description(self) -> str:
+        return self._description
 
 
 class TableInfo:
@@ -40,7 +58,7 @@ class TableInfo:
 
     Attributes:
         table (str): The table name.
-        kind (TableType): The table kind.
+        kind (TableKind): The table kind.
         collection (str): The table collection.
     """
 
@@ -59,7 +77,7 @@ class TableInfo:
         Args:
             from_table (str): The table name from which the table is derived.
             from_collection (str): The collection name from which the table is derived.
-            kind (TableType): The table kind.
+            kind (TableKind): The table kind.
             table (str): The table name.
             collection (str): The table collection.
             position (int): The table position in the decorator.
@@ -120,7 +138,7 @@ class TableInfo:
     @property
     def kind(self) -> TableKind:
         """
-        TableType: The table kind.
+        TableKind: The table kind.
         """
         return self._kind
 
@@ -226,3 +244,51 @@ class TableInfo:
             f"position={self.position!r}, "
             ")"
         )
+
+
+class TypedTable:
+    """
+    Class to represent a table name with its corresponding type.
+
+    Attributes:
+        _table_name (str): The table name.
+        _table_type (TableKind): The table type.
+    """
+
+    def __init__(
+        self,
+        table_name: str,
+        table_type: TableType,
+    ):
+        """
+        Initialize a TypedTable object.
+
+        Args:
+            table_name (str): The table name.
+            table_type (str): The table type.
+        """
+        self._table_name = table_name
+        self._table_type = table_type
+
+    @property
+    def table_name(self) -> str:
+        """
+        str: The table name.
+        """
+        return self._table_name
+
+    @property
+    def table_type(self) -> TableType:
+        """
+        TableType: The table type.
+        """
+        return self._table_type
+
+    def __repr__(self) -> str:
+        """
+        Return a string representation of the TableType object.
+
+        Returns:
+            str: A string representation showing all key attributes.
+        """
+        return f"TableType(name={self.table_name!r}, type={self.table_type!r})"
