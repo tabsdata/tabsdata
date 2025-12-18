@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import importlib.util
 import inspect
+import json
 import os
 import sys
 import tempfile
@@ -4550,10 +4551,10 @@ def _create_archive(
     )
     if isinstance(function.trigger_by, Crontab):
         trigger_string_list = None
-        workers = {"C": function.trigger_by._to_dict()}
+        workers = {"C": json.dumps(function.trigger_by._to_dict())}
     elif isinstance(function.trigger_by, WatchDog):
         trigger_string_list = None
-        workers = {"W": function.trigger_by._to_dict()}
+        workers = {"W": json.dumps(function.trigger_by._to_dict())}
     else:
         trigger_string_list = function.trigger_by
         workers = None

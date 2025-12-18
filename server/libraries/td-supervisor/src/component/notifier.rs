@@ -227,7 +227,7 @@ impl WorkerNotifier for Callback {
                                 Ok(content) => {
                                     debug!(
                                         "Received a successful http response fine body content:\n'{}'",
-                                        serde_json::to_string_pretty(&content)?
+                                        serde_json::to_string_pretty(&content).unwrap_or(content)
                                     )
                                 }
                                 Err(cause) => {
@@ -239,10 +239,14 @@ impl WorkerNotifier for Callback {
                                 }
                             }
                         } else {
-                            debug!("Received a non-successful http response: {:?}", response);
-                            return Err(BadStatus {
-                                status: response.status(),
-                            });
+                            let dbg = format!("{response:?}");
+                            let status = response.status();
+                            let body = response.text().await.map_or_else(
+                                |_| String::default(),
+                                |content| serde_json::to_string_pretty(&content).unwrap_or(content),
+                            );
+                            debug!("Received a non-successful http response: {dbg} - {body}");
+                            return Err(BadStatus { status });
                         }
                     }
                     Err(e) => {

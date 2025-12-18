@@ -222,7 +222,7 @@ impl WorkerConfig {
         serde_json::from_str::<serde_json::Value>(&value).map_err(|e| {
             api_error!(
                 ApiError::InternalError,
-                "Could not parse worker config as json: {e}"
+                "Could not parse worker config as json. Value: {value}. Error: {e}"
             )
         })?;
         Ok(value)

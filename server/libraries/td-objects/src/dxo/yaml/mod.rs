@@ -57,6 +57,8 @@ impl Locations for WorkerInput {
 
 #[derive(Clone, Debug, Serialize, Deserialize, ToSchema)]
 pub enum WorkerOutput {
+    // V2 kept for backwards compatibility (in case one worker response was left before upgrading)
+    V2(function_runner::v2::FunctionOutput),
     FunctionV2(function_runner::v2::FunctionOutput),
     CronV1(Box<cron::v1::CronOutput>),
     WatchdogV1(Box<watchdog::v1::WatchdogOutput>),

@@ -586,7 +586,7 @@ def v2_response_format_representer(
     """Represent a V1_yaml instance as a YAML mapping node."""
     dumper.add_representer(Data, v2_data_representer)
     dumper.add_representer(NoData, v2_no_data_representer)
-    return dumper.represent_mapping("!V2", v2_response_format.content)
+    return dumper.represent_mapping("!FunctionV2", v2_response_format.content)
 
 
 def v2_data_representer(dumper: yaml.SafeDumper, data: Data) -> yaml.nodes.MappingNode:

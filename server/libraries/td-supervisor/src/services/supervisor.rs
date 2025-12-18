@@ -154,6 +154,7 @@ struct ControllersConfig {
 #[getset(get = "pub")]
 struct ControllerConfig {
     name: String,
+    // 0 means no limit
     concurrency: u16,
     #[serde(default, deserialize_with = "workers_to_map")]
     workers: IndexMap<String, WorkerConfig>,
@@ -265,6 +266,7 @@ pub struct WorkerConfig {
     #[serde(default, rename = "get-states")]
     get_states: Vec<GetState>,
     #[serde(default = "default_concurrency")]
+    // 0 means no limit
     concurrency: u16,
     #[serde(default = "default_retries")]
     retries: u16,
@@ -835,7 +837,7 @@ impl Supervisor {
                             debug!("Message '{:?}' sent successfully!", message);
                         }
                         Err(e) => {
-                            let error = format!("Failed to send message '{message:?}': {e:?}");
+                            let error = format!("Failed to send message '{message:?}': {e}");
                             error!(error);
                             return Err(RuntimeError::new(error));
                         }

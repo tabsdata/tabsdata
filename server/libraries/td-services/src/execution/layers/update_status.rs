@@ -248,50 +248,51 @@ pub async fn update_table_data_version_status(
     Input(callback): Input<CallbackRequest>,
 ) -> Result<(), TdError> {
     if let Some(context) = &callback.context {
-        let futures: Vec<_> = if let WorkerOutput::FunctionV2(output) = context {
-            output
-                .output
-                .iter()
-                .map(|written| {
-                    let queries = queries.clone();
-                    let connection = connection.clone();
-                    let function_run_id = function_run_id.clone();
-                    async move {
-                        let (table_name, has_data) = match written {
-                            WrittenTable::NoData { table } => (table, None),
-                            WrittenTable::Data { table, info } => (table, Some(info)),
-                            // TODO partitions should be handled differently, creating partitions and setting
-                            // the table to has_data = true and partition = true.
-                            WrittenTable::Partitions { table, info, .. } => (table, Some(info)),
-                        };
+        let futures: Vec<_> =
+            if let WorkerOutput::V2(output) | WorkerOutput::FunctionV2(output) = context {
+                output
+                    .output
+                    .iter()
+                    .map(|written| {
+                        let queries = queries.clone();
+                        let connection = connection.clone();
+                        let function_run_id = function_run_id.clone();
+                        async move {
+                            let (table_name, has_data) = match written {
+                                WrittenTable::NoData { table } => (table, None),
+                                WrittenTable::Data { table, info } => (table, Some(info)),
+                                // TODO partitions should be handled differently, creating partitions and setting
+                                // the table to has_data = true and partition = true.
+                                WrittenTable::Partitions { table, info, .. } => (table, Some(info)),
+                            };
 
-                        let update = UpdateTableDataVersionDB::builder()
-                            .has_data(Some(has_data.is_some().into()))
-                            .column_count(has_data.map(|info| info.column_count))
-                            .row_count(has_data.map(|info| info.row_count))
-                            .schema_hash(has_data.map(|info| info.schema_hash.clone()))
-                            .build()?;
+                            let update = UpdateTableDataVersionDB::builder()
+                                .has_data(Some(has_data.is_some().into()))
+                                .column_count(has_data.map(|info| info.column_count))
+                                .row_count(has_data.map(|info| info.row_count))
+                                .schema_hash(has_data.map(|info| info.schema_hash.clone()))
+                                .build()?;
 
-                        let mut conn = connection.lock().await;
-                        let conn = conn.get_mut_connection()?;
+                            let mut conn = connection.lock().await;
+                            let conn = conn.get_mut_connection()?;
 
-                        let res = queries
-                            .update_by::<_, TableDataVersionDB>(
-                                &update,
-                                &(&*function_run_id, table_name),
-                            )?
-                            .build()
-                            .execute(&mut *conn)
-                            .await
-                            .map_err(handle_sql_err)?;
-                        assert_one(res)?;
-                        Ok::<_, TdError>(())
-                    }
-                })
-                .collect()
-        } else {
-            Vec::new()
-        };
+                            let res = queries
+                                .update_by::<_, TableDataVersionDB>(
+                                    &update,
+                                    &(&*function_run_id, table_name),
+                                )?
+                                .build()
+                                .execute(&mut *conn)
+                                .await
+                                .map_err(handle_sql_err)?;
+                            assert_one(res)?;
+                            Ok::<_, TdError>(())
+                        }
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            };
 
         let _ = futures::future::try_join_all(futures).await?;
     }
