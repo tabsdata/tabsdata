@@ -83,7 +83,7 @@ def test_example_publisher():
     action: dq.DataQuality = output_actions[0]
     assert isinstance(action, dq.DataQuality)
     assert action.table == "users"
-    assert action.classify == classify_list
+    assert action.classifiers == classify_list
     assert action.operations == op_list
 
 
@@ -136,7 +136,7 @@ def test_example_publisher_with_filter():
     action: dq.DataQuality = output_actions[0]
     assert isinstance(action, dq.DataQuality)
     assert action.table == "users"
-    assert action.classify == classify_list
+    assert action.classifiers == classify_list
     assert action.operations == op_list
 
 
@@ -197,7 +197,7 @@ def test_example_publisher_with_filter_and_tags():
     action: dq.DataQuality = output_actions[0]
     assert isinstance(action, dq.DataQuality)
     assert action.table == "users"
-    assert action.classify == classify_list
+    assert action.classifiers == classify_list
     assert action.operations == op_list
 
 
@@ -205,10 +205,10 @@ def test_example_publisher_with_filter_and_tags():
 def test_example_transformer():
     import tabsdata.dataquality as dq
 
-    continents = dq.Scale.linear(
-        6,
-        (1, 6),
-        ["North America", "South America", "Antarctica", "Europe", "Asia", "Oceania"],
+    continents = LinearScale(
+        min=1,
+        max=6,
+        bins=6,
     )
 
     # Example 4 - Transformer
@@ -250,9 +250,9 @@ def test_example_transformer():
                 dq.Summary(),
                 dq.Filter(to_table="users_recheck", criteria=dq.Criteria.any_failed()),
                 dq.Filter(
-                    to_table="users_asia", criteria=dq.Criteria.in_buckets(["asia"])
+                    to_table="users_asia", criteria=dq.Criteria.in_bins(["asia"])
                 ),
-                dq.Fail(tags="fail", threshold=dq.Threshold.one()),
+                dq.Fail(tags="fail", threshold=dq.RowCountThreshold(1)),
             ],
         )
     ]

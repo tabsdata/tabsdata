@@ -212,7 +212,7 @@ def _is_null_action(table: str = "table00") -> DataQuality:
     return DataQuality(
         table=table,
         classifiers=IsNull(
-            cols="value",
+            column_names="value",
             tags="null",
         ),
         operations=Summary(),
@@ -223,7 +223,7 @@ def _is_not_null_action(table: str = "table00") -> DataQuality:
     return DataQuality(
         table=table,
         classifiers=IsNotNull(
-            cols="value",
+            column_names="value",
             tags="not_null",
         ),
         operations=Summary(),
@@ -235,12 +235,12 @@ def _is_nan_action(table: str = "table00") -> DataQuality:
         table=table,
         classifiers=[
             IsNan(
-                cols=("value", "value_is_nan"),
+                column_names=("value", "value_is_nan"),
                 tags="nan",
                 ignore_nulls=False,
             ),
             IsNan(
-                cols=("value", "value_is_nan_ignore_nulls"),
+                column_names=("value", "value_is_nan_ignore_nulls"),
                 tags="nan_ignore_nulls",
                 ignore_nulls=True,
             ),
@@ -254,12 +254,12 @@ def _is_not_nan_action(table: str = "table00") -> DataQuality:
         table=table,
         classifiers=[
             IsNotNan(
-                cols=("value", "value_is_not_nan"),
+                column_names=("value", "value_is_not_nan"),
                 tags="not_nan",
                 ignore_nulls=False,
             ),
             IsNotNan(
-                cols=("value", "value_is_not_nan_ignore_nulls"),
+                column_names=("value", "value_is_not_nan_ignore_nulls"),
                 tags="not_nan_ignore_nulls",
                 ignore_nulls=True,
             ),
@@ -440,7 +440,7 @@ CLASSIFIERS: dict[type[Classifier], ClassifierConfiguration] = {
     IsNull: ClassifierConfiguration(
         classifiers=[
             IsNull(
-                cols="value",
+                column_names="value",
                 tags="null",
             )
         ],
@@ -452,7 +452,7 @@ CLASSIFIERS: dict[type[Classifier], ClassifierConfiguration] = {
     IsNotNull: ClassifierConfiguration(
         classifiers=[
             IsNotNull(
-                cols="value",
+                column_names="value",
                 tags="not_null",
             )
         ],
@@ -464,12 +464,12 @@ CLASSIFIERS: dict[type[Classifier], ClassifierConfiguration] = {
     IsNan: ClassifierConfiguration(
         classifiers=[
             IsNan(
-                cols=("value", "value_is_nan"),
+                column_names=("value", "value_is_nan"),
                 tags="nan",
                 ignore_nulls=False,
             ),
             IsNan(
-                cols=("value", "value_is_nan_ignore_nulls"),
+                column_names=("value", "value_is_nan_ignore_nulls"),
                 tags="nan_ignore_nulls",
                 ignore_nulls=True,
             ),
@@ -482,12 +482,12 @@ CLASSIFIERS: dict[type[Classifier], ClassifierConfiguration] = {
     IsNotNan: ClassifierConfiguration(
         classifiers=[
             IsNotNan(
-                cols=("value", "value_is_not_nan"),
+                column_names=("value", "value_is_not_nan"),
                 tags="not_nan",
                 ignore_nulls=False,
             ),
             IsNotNan(
-                cols=("value", "value_is_not_nan_ignore_nulls"),
+                column_names=("value", "value_is_not_nan_ignore_nulls"),
                 tags="not_nan_ignore_nulls",
                 ignore_nulls=True,
             ),

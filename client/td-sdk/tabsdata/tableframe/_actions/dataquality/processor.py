@@ -506,7 +506,9 @@ class DataQualityProcessor:
         )
         dq = DataQualityEngine(tf)
         classifiers = (
-            action.classify if isinstance(action.classify, list) else [action.classify]
+            action.classifiers
+            if isinstance(action.classifiers, list)
+            else [action.classifiers]
         )
         for classifier in classifiers:
             dq = dq._classify(classifier=classifier)

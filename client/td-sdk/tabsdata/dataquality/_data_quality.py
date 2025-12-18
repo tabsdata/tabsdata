@@ -2,8 +2,6 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
-from __future__ import annotations
-
 from typing import Union
 
 from typing_extensions import TypeAlias
@@ -11,7 +9,9 @@ from typing_extensions import TypeAlias
 from tabsdata._table_actions.actions import OnTablesAction
 from tabsdata.dataquality._classifiers import Classifier
 from tabsdata.dataquality._operations import Operation
-from tabsdata.exceptions import DataQualityConfigurationError, ErrorCode
+from tabsdata.dataquality._utils import _normalize_to_list, _td_validate_call
+from tabsdata.exceptions import ErrorCode
+from tabsdata.typing._specs import TableName
 
 ClassifiersSpec: TypeAlias = Union[Classifier, list[Classifier]]
 OperationsSpec: TypeAlias = Union[Operation, list[Operation]]
@@ -22,9 +22,10 @@ class DataQuality(OnTablesAction):
     A data quality action on a table.
     """
 
+    @_td_validate_call(ErrorCode.PVDQ1)
     def __init__(
         self,
-        table: str,
+        table: TableName,
         classifiers: ClassifiersSpec,
         operations: OperationsSpec,
     ):
@@ -37,9 +38,9 @@ class DataQuality(OnTablesAction):
             operations: Data quality operations, based on the defined
                 classifiers, to perform on the table.
         """
-        self.table = table
-        self.classify = classifiers
-        self.operations = operations
+        self._table = table
+        self._classifiers = _normalize_to_list(classifiers)
+        self._operations = _normalize_to_list(operations)
 
     @property
     def table(self) -> str:
@@ -48,39 +49,12 @@ class DataQuality(OnTablesAction):
         """
         return self._table
 
-    @table.setter
-    def table(self, table: str):
-        match table:
-            case str():
-                self._table = table
-            case _:
-                raise DataQualityConfigurationError(
-                    ErrorCode.DQCE75, table, type(table)
-                )
-
     @property
-    def classify(self) -> list[Classifier]:
+    def classifiers(self) -> list[Classifier]:
         """
         :return: the data quality classifiers.
         """
-        return self._classify
-
-    @classify.setter
-    def classify(self, classify: Classifier | list[Classifier]):
-        match classify:
-            case Classifier():
-                self._classify = [classify]
-            case list():
-                for v in classify:
-                    if not isinstance(v, Classifier):
-                        raise DataQualityConfigurationError(
-                            ErrorCode.DQCE77, v, type(v)
-                        )
-                self._classify = classify
-            case _:
-                raise DataQualityConfigurationError(
-                    ErrorCode.DQCE76, classify, type(classify)
-                )
+        return self._classifiers
 
     @property
     def operations(self) -> list[Operation]:
@@ -88,20 +62,3 @@ class DataQuality(OnTablesAction):
         :return: the data quality operations.
         """
         return self._operations
-
-    @operations.setter
-    def operations(self, operations: Operation | list[Operation]):
-        match operations:
-            case Operation():
-                self._operations = [operations]
-            case list():
-                for v in operations:
-                    if not isinstance(v, Operation):
-                        raise DataQualityConfigurationError(
-                            ErrorCode.DQCE79, v, type(v)
-                        )
-                self._operations = operations
-            case _:
-                raise DataQualityConfigurationError(
-                    ErrorCode.DQCE78, operations, type(operations)
-                )

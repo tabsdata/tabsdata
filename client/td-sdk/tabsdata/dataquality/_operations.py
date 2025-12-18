@@ -2,17 +2,23 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
-from __future__ import annotations
-
 from abc import ABC
-from typing import TYPE_CHECKING, Literal, Optional, Self, get_args
+from typing import Optional, Self
 
-from tabsdata.dataquality._utils import _is_collection
-from tabsdata.exceptions import DataQualityConfigurationError, ErrorCode
-from tabsdata.typing._specs import BucketsSpec
-
-if TYPE_CHECKING:
-    from tabsdata.dataquality.typing._typing import TagsSpec, ColumnNamesSpec
+from tabsdata.dataquality._typing import (
+    MAX_BINS,
+    BinsCriteriaSpec,
+    ColumnNameSpec,
+    ColumnNamesSpec,
+    CriteriaTypeSpec,
+    PercentSpec,
+    RowCountSpec,
+    TagSpec,
+    TagsSpec,
+)
+from tabsdata.dataquality._utils import _normalize_to_list, _td_validate_call
+from tabsdata.exceptions import ConstructorError, ErrorCode, ParameterValidationError
+from tabsdata.typing._specs import TableName
 
 
 class Operation(ABC):
@@ -20,7 +26,8 @@ class Operation(ABC):
     Base abstract class for data quality operations.
     """
 
-    def __init__(self, *, tags: TagsSpec = None):
+    @_td_validate_call(ErrorCode.PVDQOP1)
+    def __init__(self, *, tags: Optional[TagsSpec] = None):
         """
         Constructor.
 
@@ -35,37 +42,14 @@ class Operation(ABC):
 
                 Defaults to None.
         """
-        self.tags = tags
+        self._tags = _normalize_to_list(tags)
 
     @property
-    def tags(self) -> list[str]:
+    def tags(self) -> list[TagSpec]:
         """
         :return: the tags for the data operation.
         """
         return self._tags
-
-    # noinspection DuplicatedCode
-    @tags.setter
-    def tags(self, value: TagsSpec):
-        if isinstance(value, str):
-            value = [value]
-        elif value is None:
-            value = []
-        elif isinstance(value, list):
-            for v in value:
-                if not isinstance(v, str):
-                    raise DataQualityConfigurationError(
-                        ErrorCode.DQCE44, v, type(v)
-                    )
-        else:
-            raise DataQualityConfigurationError(ErrorCode.DQCE45, value,
-                                                type(value))
-        self._tags = value
-
-
-CriteriaTypeSpec = Literal[
-    "all_ok", "any_failed", "in_buckets", "not_in_buckets"
-]
 
 
 class Criteria:
@@ -78,40 +62,47 @@ class Criteria:
 
     * `all_ok`: all boolean classifiers are `True`.
     * `any_failed`: any boolean classifier is `False`.
-    * `in_buckets`: for the given columns, rows that are in the specified
-      buckets.
-    * `not_in_buckets`: for the given columns, rows that are not in the
-      specified buckets.
-      """
-
-    VALID_CRITERIA_TYPES = get_args(CriteriaTypeSpec)
+    * `in_bins`: for the given columns, rows that are in the specified
+      bins.
+    * `not_in_bins`: for the given columns, rows that are not in the
+      specified bins.
+    """
 
     def __init__(self):
+        self._criteria_type = None
+        self._column_names = None
+        self._bins = None
         """
         Do not use directly, use one of `all_ok()`, `any_fail()`,
-        `in_buckets()` or `not_in_buckets()` class method to create a
+        `in_bins()` or `not_in_bins()` class method to create a
         `Criteria`.
         """
-        raise DataQualityConfigurationError(ErrorCode.DQCE58,
-                                            self.__class__.__name__)
+        raise ConstructorError(
+            ErrorCode.PVDQOP1,
+            f"{self.__class__.__name__} constructor cannot be invoked."
+            "use `all_ok()`, `any_fail()`, `in_bins()` or "
+            "`not_in_bins()`",
+        )
 
-    def _init_boolean(
-            self,
-            criteria_type: CriteriaTypeSpec,
+    @staticmethod
+    def _init(
+        cls,
+        criteria_type: CriteriaTypeSpec,
+        column_names: Optional[ColumnNamesSpec],
+        bins: Optional[BinsCriteriaSpec],
     ):
-        self.criteria_type = criteria_type
-        self.column_names = None
-        self.buckets = None
-
-    def _init_categories(
-            self,
-            criteria_type: CriteriaTypeSpec,
-            column_names: list[str],
-            buckets: BucketsSpec,
-    ):
-        self.criteria_type = criteria_type
-        self.column_names = column_names
-        self.buckets = buckets
+        if bins and len(bins) > MAX_BINS:
+            raise ParameterValidationError(
+                ErrorCode.PVDQOP2,
+                f"{cls.__name__} cannot create a Criteria with "
+                f"'{len(bins)}' bins, maximum is '{MAX_BINS}' "
+                "bins.",
+            )
+        criteria = cls.__new__(cls)
+        criteria._criteria_type = criteria_type
+        criteria._column_names = _normalize_to_list(column_names, True)
+        criteria._bins = bins
+        return criteria
 
     @property
     def criteria_type(self) -> CriteriaTypeSpec:
@@ -120,51 +111,23 @@ class Criteria:
         """
         return self._criteria_type
 
-    @criteria_type.setter
-    def criteria_type(self, value: CriteriaTypeSpec):
-        if value not in self.VALID_CRITERIA_TYPES:
-            raise DataQualityConfigurationError(
-                ErrorCode.DQCE59,
-                ", ".join(self.VALID_CRITERIA_TYPES),
-                value
-            )
-        self._criteria_type = value
-
     @property
-    def column_names(self) -> list[str] | None:
+    def column_names(self) -> Optional[list[ColumnNameSpec]]:
         """
         :return: The column names the criteria is applied to. Only used with
-        `in_bucket` and `not_in_bucket` criteria. For other criteria types is
+        `in_bin` and `not_in_bin` criteria. For other criteria types is
         `None`.
         """
         return self._column_names
 
-    @column_names.setter
-    def column_names(self, column_names: Optional[ColumnNamesSpec]):
-        if isinstance(column_names, str):
-            column_names = [column_names]
-        if not _is_collection(column_names) and column_names is not None:
-            raise DataQualityConfigurationError(
-                ErrorCode.DQCE60, column_names, type(column_names)
-            )
-        self._column_names = column_names
-
     @property
-    def buckets(self) -> BucketsSpec:
+    def bins(self) -> Optional[BinsCriteriaSpec]:
         """
-        :return: The category buckets used by the criteria. Only used with
-        `in_bucket` and `not_in_bucket` criteria. For other criteria types is
+        :return: The category bins used by the criteria. Only used with
+        `in_bin` and `not_in_bin` criteria. For other criteria types is
         `None`.
         """
-        return self._buckets
-
-    @buckets.setter
-    def buckets(self, value: BucketsSpec):
-        if not _is_collection(value) and value is not None:
-            raise DataQualityConfigurationError(
-                ErrorCode.DQCE60, value, type(value)
-            )
-        self._buckets = value
+        return self._bins
 
     @classmethod
     def all_ok(cls) -> Self:
@@ -172,9 +135,7 @@ class Criteria:
         :return: Creates a criteria that requires all boolean classifiers to
         be `True` for the record to be considered.
         """
-        c = cls.__new__(cls)
-        c._init_boolean(criteria_type="all_ok")
-        return c
+        return cls._init(cls, "all_ok", None, None)
 
     @classmethod
     def any_failed(cls) -> Self:
@@ -182,143 +143,60 @@ class Criteria:
         :return: Creates a criteria that requires at least one boolean
         classifier to be `False` for the record to be considered.
         """
-        c = cls.__new__(cls)
-        c._init_boolean(criteria_type="any_failed")
-        return c
+        return cls._init(cls, "any_failed", None, None)
 
     @classmethod
-    def in_buckets(cls, column_names: ColumnNamesSpec, buckets: BucketsSpec) -> Self:
+    @_td_validate_call(ErrorCode.PVDQOP3)
+    def in_bins(cls, column_names: ColumnNamesSpec, bins: BinsCriteriaSpec) -> Self:
         """
         :return: Creates a criteria for the category classifiers of the
         specified columns. For the record to be considered, it requires
-        the value in the columns to be in one of the specified buckets
+        the value in the columns to be in one of the specified bins
         (given either by index or name).
         """
-        if isinstance(column_names, str):
-            column_names = [column_names]
-        if not _is_collection(buckets):
-            raise DataQualityConfigurationError(
-                ErrorCode.DQCE61, buckets, type(buckets)
-            )
-        c = cls.__new__(cls)
-        c._init_categories("in_buckets", column_names, buckets)
-        return c
+        return cls._init(cls, "in_bins", column_names, bins)
 
     @classmethod
-    def not_in_buckets(
-            cls, column_names: ColumnNamesSpec, buckets: BucketsSpec
-    ) -> Self:
+    @_td_validate_call(ErrorCode.PVDQOP4)
+    def not_in_bins(cls, column_names: ColumnNamesSpec, bins: BinsCriteriaSpec) -> Self:
         """
         :return: Creates a criteria for the category classifiers of the
         specified columns. For the record to be considered, it requires
         the value in the columns not to be in any of the specified
-        buckets (given either by index or name).
+        bins (given either by index or name).
         """
-        if isinstance(column_names, str):
-            column_names = [column_names]
-        if not _is_collection(buckets):
-            raise DataQualityConfigurationError(
-                ErrorCode.DQCE61, buckets, type(buckets)
-            )
-        c = cls.__new__(cls)
-        c._init_categories("not_in_buckets", column_names, buckets)
-        return c
+        return cls._init(cls, "not_in_bins", column_names, bins)
 
 
-class Threshold:
+class Threshold(ABC):
     """ "
-    Defines a Threshold for the data quality `Fail` operation.
-
-    Possible thresholds are:
-
-    * `count`: the number of records that will activate the threshold.
-    * `percent`: the percentage of records that will activate the threshold.
-    * `one`: one record will activate the threshold. A convenience for
-      `count(1)`
+    Base threshold class for the data quality `Fail` operation.
     """
 
-    def __init__(self):
-        """
-        Do not use directly, use one of `count()`, `percent()` or `one()` class
-        method to create a `Threshold`.
-        """
-        self._absolute = None
-        self._relative = None
-        raise DataQualityConfigurationError(ErrorCode.DQCE67,
-                                            self.__class__.__name__)
 
-    def __init__count(self, count: int):
-        self.absolute = count
-        self._relative = None
+class RowCountThreshold(Threshold):
 
-    def __init__percent(self, percent: int):
-        self._absolute = None
-        self.relative = percent
-
-    @property
-    def absolute(self) -> int | None:
-        return self._absolute
-
-    @absolute.setter
-    def absolute(self, value: int | None):
-        if value is None:
-            self._absolute = value
-        elif isinstance(value, int):
-            if value <= 0:
-                raise DataQualityConfigurationError(ErrorCode.DQCE69,
-                                                    value)
-            self._absolute = value
-        else:
-            raise DataQualityConfigurationError(ErrorCode.DQCE68, value,
-                                                type(value))
-
-    @property
-    def relative(self) -> float | None:
-        return self._relative
-
-    @relative.setter
-    def relative(self, value: int | float | None):
-        if value is None:
-            self._relative = value
-        elif isinstance(value, (float, int)):
-            value = float(value)
-            if value <= 0 or value >= 100:
-                raise DataQualityConfigurationError(ErrorCode.DQCE72,
-                                                    value)
-            self._relative = value
-        else:
-            raise DataQualityConfigurationError(ErrorCode.DQCE73, value,
-                                                type(value))
-
-    @classmethod
-    def count(cls, rows: int) -> Self:
+    @_td_validate_call(ErrorCode.PVDQOP6)
+    def __init__(self, row_count: RowCountSpec):
         """
         Number of rows that will fail the transaction.
         """
-        if rows is None:
-            raise DataQualityConfigurationError(ErrorCode.DQCE70)
-        t = cls.__new__(cls)
-        t.__init__count(rows)
-        return t
+        self._row_count = row_count
 
-    @classmethod
-    def percent(cls, percent: float | int) -> Self:
-        """
-        Percentage of rows that will fail the transaction.
-        """
-        if percent is None:
-            raise DataQualityConfigurationError(ErrorCode.DQCE71)
-        t = cls.__new__(cls)
-        t.__init__percent(percent)
-        return t
+    @property
+    def row_count(self) -> int:
+        return self._row_count
 
-    @classmethod
-    def one(cls):
-        """
-        Convenience method to fail the transaction if one rows matches the
-        criteria.
-        """
-        return cls.count(1)
+
+class PercentThreshold(Threshold):
+
+    @_td_validate_call(ErrorCode.PVDQOP7)
+    def __init__(self, percent: PercentSpec):
+        self._percent = percent
+
+    @property
+    def percent(self) -> int:
+        return self._percent
 
 
 class Fail(Operation):
@@ -327,12 +205,13 @@ class Fail(Operation):
     is reached for a given criteria.
     """
 
+    @_td_validate_call(ErrorCode.PVDQOP8)
     def __init__(
-            self,
-            threshold: Threshold,
-            criteria: Criteria = None,
-            *,
-            tags: TagsSpec = None,
+        self,
+        threshold: Threshold,
+        criteria: Optional[Criteria] = None,
+        *,
+        tags: Optional[TagsSpec] = None,
     ):
         """
         Creates a data quality fail operation.
@@ -355,29 +234,17 @@ class Fail(Operation):
                 Defaults to None.
         """
         super().__init__(tags=tags)
-        self.threshold = threshold
-        self.criteria = criteria
+        self._threshold = threshold
+        if not criteria:
+            criteria = Criteria.any_failed()
+        self._criteria = criteria
 
     @property
     def criteria(self) -> Criteria:
         """
         :return: The fail criteria.
         """
-        if self._criteria is None:
-            return Criteria.any_failed()
         return self._criteria
-
-    @criteria.setter
-    def criteria(self, value: Criteria):
-        match value:
-            case Criteria():
-                self._criteria = value
-            case None:
-                self._criteria = None
-            case _:
-                raise DataQualityConfigurationError(
-                    ErrorCode.DQCE66, value, type(value)
-                )
 
     @property
     def threshold(self) -> Threshold:
@@ -385,16 +252,6 @@ class Fail(Operation):
         :return: The fail threshold.
         """
         return self._threshold
-
-    @threshold.setter
-    def threshold(self, value: Threshold):
-        match value:
-            case Threshold():
-                self._threshold = value
-            case _:
-                raise DataQualityConfigurationError(
-                    ErrorCode.DQCE74, value, type(value)
-                )
 
 
 # noinspection DuplicatedCode
@@ -408,12 +265,13 @@ class Filter(Operation):
     The filtered rows can be discarded or redirected to another table.
     """
 
+    @_td_validate_call(ErrorCode.PVDQOP9)
     def __init__(
-            self,
-            to_table: str | None = None,
-            criteria: Criteria = None,
-            *,
-            tags: TagsSpec = None,
+        self,
+        to_table: Optional[TableName] = None,
+        criteria: Optional[Criteria] = None,
+        *,
+        tags: Optional[TagsSpec] = None,
     ):
         """
         Creates a data quality filter.
@@ -437,48 +295,24 @@ class Filter(Operation):
                 Defaults to None.
         """
         super().__init__(tags=tags)
-        self.to_table = to_table
-        self.criteria = criteria
+        self._to_table = to_table
+        if not criteria:
+            criteria = Criteria.any_failed()
+        self._criteria = criteria
 
     @property
-    def to_table(self) -> str | None:
+    def to_table(self) -> Optional[TableName]:
         """
         :return: table to redirect the filtered out rows to.
         """
         return self._to_table
-
-    @to_table.setter
-    def to_table(self, value: str | None):
-        match value:
-            case None:
-                self._to_table = None
-            case str():
-                self._to_table = value
-            case _:
-                raise DataQualityConfigurationError(
-                    ErrorCode.DQCE62, value, type(value)
-                )
 
     @property
     def criteria(self) -> Criteria:
         """
         :return: Criteria to filter out rows for.
         """
-        if self._criteria is None:
-            return Criteria.any_failed()
         return self._criteria
-
-    @criteria.setter
-    def criteria(self, value: Criteria):
-        match value:
-            case Criteria():
-                self._criteria = value
-            case None:
-                self._criteria = None
-            case _:
-                raise DataQualityConfigurationError(
-                    ErrorCode.DQCE63, value, type(value)
-                )
 
 
 # noinspection DuplicatedCode
@@ -490,12 +324,13 @@ class Select(Operation):
     The table to which the select is being applied is not modified.
     """
 
+    @_td_validate_call(ErrorCode.PVDQOP10)
     def __init__(
-            self,
-            to_table: str,
-            criteria: Criteria = None,
-            *,
-            tags: TagsSpec = None,
+        self,
+        to_table: TableName,
+        criteria: Optional[Criteria] = None,
+        *,
+        tags: Optional[TagsSpec] = None,
     ):
         """
         Creates a data quality selector.
@@ -515,46 +350,24 @@ class Select(Operation):
                 Defaults to None.
         """
         super().__init__(tags=tags)
-        self.to_table = to_table
-        self.criteria = criteria
+        self._to_table = to_table
+        if not criteria:
+            criteria = Criteria.all_ok()
+        self._criteria = criteria
 
     @property
-    def to_table(self) -> str:
+    def to_table(self) -> TableName:
         """
         :return: table to write the selected rows to.
         """
         return self._to_table
-
-    @to_table.setter
-    def to_table(self, value: str):
-        match value:
-            case str():
-                self._to_table = value
-            case _:
-                raise DataQualityConfigurationError(
-                    ErrorCode.DQCE64, value, type(value)
-                )
 
     @property
     def criteria(self) -> Criteria:
         """
         :return: Criteria to select rows.
         """
-        if self._criteria is None:
-            return Criteria.all_ok()
         return self._criteria
-
-    @criteria.setter
-    def criteria(self, value: Criteria):
-        match value:
-            case Criteria():
-                self._criteria = value
-            case None:
-                self._criteria = None
-            case _:
-                raise DataQualityConfigurationError(
-                    ErrorCode.DQCE65, value, type(value)
-                )
 
 
 class Summary(Operation):
@@ -562,7 +375,10 @@ class Summary(Operation):
     Generates a data quality report for a table.
     """
 
-    def __init__(self, table: str | None = None, *, tags: TagsSpec = None):
+    @_td_validate_call(ErrorCode.PVDQOP11)
+    def __init__(
+        self, table: Optional[TableName] = None, *, tags: Optional[TagsSpec] = None
+    ):
         """
         Creates a data quality summary.
 
@@ -581,23 +397,11 @@ class Summary(Operation):
                 Defaults to None.
         """
         super().__init__(tags=tags)
-        self.table = table
+        self._table = table
 
     @property
-    def table(self) -> str:
+    def table(self) -> Optional[TableName]:
         """
         :return: Name of the data quality summary table.
         """
         return self._table
-
-    @table.setter
-    def table(self, value: str):
-        match value:
-            case None:
-                self._table = None
-            case str():
-                self._table = value
-            case _:
-                raise DataQualityConfigurationError(
-                    ErrorCode.DQCE46, value, type(value)
-                )

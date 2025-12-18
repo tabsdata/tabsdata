@@ -10,6 +10,7 @@ from tabsdata.dataquality import DataQuality, Filter, Select, Summary
 from tabsdata.exceptions import (
     DataQualityConfigurationError,
     DataQualityProcessingError,
+    ParameterValidationError,
 )
 from tabsdata.tableframe._actions.dataquality.processor import DataQualityProcessor
 
@@ -852,7 +853,6 @@ class TestDataQualityProcessorTableNames:
         assert "output3" in str(exception.value)
 
     def test_filter_with_none_to_table_does_not_produce_table(self):
-
         input_tables = {
             "input1": ExtendedTableURI(
                 TableURI(
@@ -1133,7 +1133,6 @@ class TestDataQualityProcessorTableNames:
         )
 
     def test_filter_with_none_to_table_produces_no_table(self):
-
         input_tables = {
             "input1": ExtendedTableURI(
                 TableURI(
@@ -1199,7 +1198,6 @@ class TestDataQualityProcessorTableNames:
         assert output_tables_names == []
 
     def test_table_names_mixed_custom_and_default_names(self):
-
         input_tables = {
             "input1": ExtendedTableURI(
                 TableURI(
@@ -1244,7 +1242,6 @@ class TestDataQualityProcessorTableNames:
         assert output_tables_names == []
 
     def test_table_names_many_input_actions_many_operations(self):
-
         input_tables = {
             "table1": ExtendedTableURI(
                 TableURI(
@@ -1336,7 +1333,6 @@ class TestDataQualityProcessorTableNames:
         assert output_tables_names == []
 
     def test_table_names_many_output_actions_many_operations(self):
-
         output_tables = ["output1", "output2", "output3"]
 
         dq_action1 = DataQuality(
@@ -1403,7 +1399,6 @@ class TestDataQualityProcessorTableNames:
         assert input_tables_names == []
 
     def test_table_names_many_input_and_output_actions(self):
-
         input_tables = {
             "input1": ExtendedTableURI(
                 TableURI(
@@ -1530,7 +1525,6 @@ class TestDataQualityProcessorTableNames:
         assert output_tables_names == []
 
     def test_table_names_five_actions_each_with_five_operations(self):
-
         input_tables = {
             f"input{i}": ExtendedTableURI(
                 TableURI(
@@ -1754,13 +1748,11 @@ class TestDataQualityProcessorTableNames:
         assert "appears 2 times" in str(exception.value)
 
     def test_select_rejects_none_to_table(self):
-
-        with pytest.raises(DataQualityConfigurationError):
+        with pytest.raises(ParameterValidationError):
             # noinspection PyTypeChecker
             Select(to_table=None)
 
     def test_filter_and_select_behavior_with_to_table(self):
-
         input_tables = {
             "input1": ExtendedTableURI(
                 TableURI(
@@ -2101,7 +2093,6 @@ class TestDataQualityProcessorTableNames:
         assert len(output_tables_names) == 2
 
     def test_no_duplicate_validation_unique_names_from_different_sources(self):
-
         input_tables = {
             "input1": ExtendedTableURI(
                 TableURI(

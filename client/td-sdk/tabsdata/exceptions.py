@@ -1,7 +1,7 @@
 #
 # Copyright 2024 Tabs Data Inc.
 #
-
+import re
 from enum import Enum
 
 
@@ -2064,6 +2064,71 @@ class ErrorCode(Enum):
         ),
     }
 
+    PVTEST0 = {}
+
+    PVDQCL1 = {}
+    PVDQCL2 = {}
+    PVDQCL3 = {}
+    PVDQCL4 = {}
+    PVDQCL5 = {}
+    PVDQCL6 = {}
+    PVDQCL7 = {}
+    PVDQCL8 = {}
+    PVDQCL9 = {}
+    PVDQCL10 = {}
+    PVDQCL11 = {}
+    PVDQCL12 = {}
+    PVDQCL13 = {}
+    PVDQCL14 = {}
+    PVDQCL15 = {}
+    PVDQCL16 = {}
+    PVDQCL17 = {}
+    PVDQCL18 = {}
+    PVDQCL19 = {}
+    PVDQCL20 = {}
+    PVDQCL21 = {}
+    PVDQCL22 = {}
+    PVDQCL23 = {}
+    PVDQCL24 = {}
+    PVDQCL25 = {}
+    PVDQCL26 = {}
+    PVDQCL27 = {}
+    PVDQCL28 = {}
+    PVDQCL29 = {}
+    PVDQCL30 = {}
+    PVDQCL31 = {}
+    PVDQCL32 = {}
+    PVDQCL33 = {}
+    PVDQCL34 = {}
+
+    PVDQOP1 = {}
+    PVDQOP2 = {}
+    PVDQOP3 = {}
+    PVDQOP4 = {}
+    PVDQOP5 = {}
+    PVDQOP6 = {}
+    PVDQOP7 = {}
+    PVDQOP8 = {}
+    PVDQOP9 = {}
+    PVDQOP10 = {}
+    PVDQOP11 = {}
+
+    PVDQ1 = {}
+
+    def code(self) -> str:
+        code = self.value.get("code")
+        if not code:
+            code = self.name
+            name, number = re.split(r"(?=\d)", code, maxsplit=1)
+            code = f"{name}-{number.zfill(3)}"
+        return code
+
+    def message(self) -> str:
+        message = self.value.get("message")
+        if not message:
+            message = "{}"
+        return message
+
 
 class TabsDataException(Exception):
     """
@@ -2072,8 +2137,8 @@ class TabsDataException(Exception):
 
     def __init__(self, error_code: ErrorCode, *args):
         self.error_code = error_code
-        self.code = self.error_code.value.get("code")
-        self.message = self.error_code.value.get("message").format(*args)
+        self.code = self.error_code.code()
+        self.message = self.error_code.message().format(*args)
         if not self.code.startswith(self.CODE_PREFIX):
             raise SDKError(
                 ErrorCode.SDKE1,
@@ -2214,3 +2279,20 @@ class WatchDogConfigurationError(TabsDataException):
     """
 
     CODE_PREFIX = "WCE"
+
+
+class ConstructorError(TabsDataException):
+    """
+    Exception raised when public API classes don't support using their
+    constructor.
+    """
+
+    CODE_PREFIX = "PV"
+
+
+class ParameterValidationError(TabsDataException):
+    """
+    Exception raised when public API parameter validation fails.
+    """
+
+    CODE_PREFIX = "PV"

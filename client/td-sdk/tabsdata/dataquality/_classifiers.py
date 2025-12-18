@@ -1,21 +1,42 @@
 #
 # Copyright 2025 Tabs Data Inc.
 #
-
-from __future__ import annotations
-
+import math
+import sys
 from abc import ABC
-from typing import TYPE_CHECKING, Collection, Literal, Self, get_args, Union
-from tabsdata.dataquality._utils import _is_collection
+from typing import Collection, Optional
+
+from tabsdata.dataquality._typing import (
+    MAX_BINS,
+    BinsSpec,
+    ColumNamesWithAltSpec,
+    ColumnNamesSpec,
+    ColumnNameWithAltSpec,
+    ColumnTypeSpec,
+    ColumnTypesSpec,
+    HasColumnsModeSpec,
+    LenSpec,
+    MaxSpec,
+    MinSpec,
+    RangeClosedOnSpec,
+    ScaleBaseSpec,
+    ScaleIdentityLimitSpec,
+    ScaleLimitSpec,
+    ScalePowerSpec,
+    TagSpec,
+    TagsSpec,
+)
+from tabsdata.dataquality._utils import (
+    _normalize_to_list,
+    _td_validate_call,
+    _validation_error,
+)
 from tabsdata.exceptions import (
     DataQualityConfigurationError,
     ErrorCode,
+    ParameterValidationError,
 )
-from tabsdata.tableframe.typing import TF_DATA_TYPES, DataType
-
-if TYPE_CHECKING:
-    from tabsdata.dataquality.typing._typing import ColumNamesWithAltSpec, \
-        TagsSpec
+from tabsdata.tableframe.typing import TF_DATA_TYPES
 
 
 class Classifier(ABC):
@@ -23,18 +44,19 @@ class Classifier(ABC):
     Abstract base class for classes that classify data
     """
 
+    @_td_validate_call(ErrorCode.PVDQCL1)
     def __init__(
             self,
-            column_names: ColumNamesWithAltSpec = None,
+            column_names: Optional[ColumNamesWithAltSpec] = None,
             *,
-            tags: TagsSpec = None,
+            tags: Optional[TagsSpec] = None,
     ):
         """
         Initialize the Classifier object.
 
         Args:
-            column_names: Column name(s) to apply the classifier to and to store the
-                classification result.
+            column_names: Column name(s) to apply the classifier to and to
+            store the classification result.
 
                 If a `str | list[str]` is given, those are the column names
                 to apply the classifier to. The classification results will be
@@ -60,11 +82,15 @@ class Classifier(ABC):
 
                 Defaults to None.
         """
-        self.column_names = column_names
-        self.tags = tags
+        column_names = _normalize_to_list(column_names, keep_none=True)
+        if column_names and len(column_names) > 0 and isinstance(
+                column_names[0], str):
+            column_names = [(s, None) for s in column_names]
+        self._column_names = column_names
+        self._tags = _normalize_to_list(tags)
 
     @property
-    def column_names(self) -> list[str] | list[tuple[str, str]] | None:
+    def column_names(self) -> Optional[list[ColumnNameWithAltSpec]]:
         """
         :return: The column names the data quality classifier applies to.
             If a `list[str]` is returned, then the data quality column name
@@ -76,82 +102,12 @@ class Classifier(ABC):
         """
         return self._column_names
 
-    @column_names.setter
-    def column_names(self, value: ColumNamesWithAltSpec):
-        if isinstance(value, str):
-            value = [value]
-        elif value is None:
-            pass
-        elif isinstance(value, tuple):
-            _is_valid_classifier_tuple(value)
-            value = [value]
-        elif isinstance(value, list):
-            _is_valid_classifier_list(value)
-        else:
-            raise DataQualityConfigurationError(ErrorCode.DQCE9, value,
-                                                type(value))
-        self._column_names = value
-
     @property
-    def tags(self) -> list[str]:
+    def tags(self) -> list[TagSpec]:
         """
         :return: The classifier tags.
         """
         return self._tags
-
-    @tags.setter
-    def tags(self, value: TagsSpec):
-        if isinstance(value, str):
-            value = [value]
-        elif value is None:
-            value = []
-        elif isinstance(value, list):
-            for v in value:
-                if not isinstance(v, str):
-                    raise DataQualityConfigurationError(ErrorCode.DQCE1,
-                                                        v, type(v))
-        else:
-            raise DataQualityConfigurationError(ErrorCode.DQCE2, value,
-                                                type(value))
-        self._tags = value
-
-
-def _is_valid_classifier_tuple(
-        value: tuple[str, str],
-):
-    if len(value) != 2:
-        raise DataQualityConfigurationError(ErrorCode.DQCE3, value,
-                                            len(value))
-    if not (isinstance(value[0], str) and isinstance(value[1], str)):
-        raise DataQualityConfigurationError(ErrorCode.DQCE4, value)
-    return
-
-
-def _is_valid_classifier_list(value: list):
-    current_type = None
-    for v in value:
-        if isinstance(v, str):
-            if not current_type:
-                current_type = str
-            elif current_type is not str:
-                raise DataQualityConfigurationError(ErrorCode.DQCE8,
-                                                    current_type, str)
-        elif isinstance(v, tuple):
-            if not current_type:
-                current_type = tuple
-            elif current_type is not tuple:
-                raise DataQualityConfigurationError(
-                    ErrorCode.DQCE8, current_type, tuple
-                )
-            if len(v) != 2:
-                raise DataQualityConfigurationError(ErrorCode.DQCE5, v,
-                                                    len(v))
-            if not (isinstance(v[0], str) and isinstance(v[1], str)):
-                raise DataQualityConfigurationError(ErrorCode.DQCE6, v)
-        else:
-            raise DataQualityConfigurationError(ErrorCode.DQCE7, v,
-                                                type(v))
-    return
 
 
 class BoolClassifier(Classifier):
@@ -162,243 +118,187 @@ class BoolClassifier(Classifier):
     pass
 
 
-ScaleTypeSpec = Literal["exponential", "linear", "logarithmic", "quadratic"]
+def _validate_min_max(min: ScaleLimitSpec, max: ScaleLimitSpec, fn_name: str):
+    if min >= max:
+        params_with_error = (
+            f"'min' = '{min}', 'max' = '{max}' "
+            "error: The maximum must be greater than the minimum."
+        )
+        raise _validation_error(ErrorCode.PVDQCL32, fn_name, params_with_error)
 
-ScaleRangeSpec = Union[tuple[int, int] | tuple[float | float]]
-ScaleTickSpec = Union[int, float]
 
-class Scale:
+def _validate_bins(bins: BinsSpec, min_in_first_bin: bool, fn_name: str):
+    if min_in_first_bin:
+        if bins > MAX_BINS:
+            params_with_error = (
+                f"'bins' = '{bins}', "
+                f"'min_in_first_bin' = '{min_in_first_bin}' "
+                f"error: the maximum number of bins is {MAX_BINS}."
+            )
+            raise _validation_error(ErrorCode.PVDQCL33, fn_name,
+                                    params_with_error)
+    else:
+        if bins > MAX_BINS + 1:
+            params_with_error = (
+                f"'bins' = '{bins}', "
+                f"'min_in_first_bin' = '{min_in_first_bin}' "
+                f"error: the maximum number of bins is {MAX_BINS + 1}."
+            )
+            raise _validation_error(ErrorCode.PVDQCL34, fn_name,
+                                    params_with_error)
+
+
+class Scale(ABC):
     """
-    Scale for `Categorizer` classifiers.
+    Base scale class.
     """
-
-    VALID_SCALE_TYPES = get_args(ScaleTypeSpec)
 
     def __init__(
-        self,
-        scale_type: ScaleTypeSpec,
-        buckets: int,
-        scale_range: tuple[int, int] | tuple[float, float],
-        scale_tick: int | float | None,
-        bucket_names: list[str] = None,
-        **kwargs,
+            self,
+            range: tuple[ScaleLimitSpec, ScaleLimitSpec],
+            bins: Optional[BinsSpec],
+            min_in_first_bin: bool,
     ):
-        if not kwargs.get("_internal"):
-            raise DataQualityConfigurationError(
-                ErrorCode.DQCE57, self.__class__.__name__
-            )
-        self.scale_type = scale_type
-        self.scale_range = scale_range
-        self.scale_tick = scale_tick
-        self.buckets = buckets
-        self.bucket_names = bucket_names
+        self._range = range
+        self._bins = bins
+        self._min_in_first_bin = min_in_first_bin
 
     @property
-    def scale_type(self) -> ScaleTypeSpec:
-        return self._scale_type
-
-    @scale_type.setter
-    def scale_type(self, value: ScaleTypeSpec):
-        if value not in self.VALID_SCALE_TYPES:
-            raise DataQualityConfigurationError(
-                ErrorCode.DQCE47,
-                ", ".join(self.VALID_SCALE_TYPES),
-                value
-            )
-        self._scale_type = value
+    def scale_range(self) -> tuple[ScaleLimitSpec, ScaleLimitSpec]:
+        return self._range
 
     @property
-    def scale_range(self) -> ScaleRangeSpec:
-        return self._scale_range
-
-    @scale_range.setter
-    def scale_range(self, value: ScaleRangeSpec):
-        if not isinstance(value, tuple):
-            raise DataQualityConfigurationError(ErrorCode.DQCE48, value,
-                                                type(value))
-        elif len(value) != 2:
-            raise DataQualityConfigurationError(ErrorCode.DQCE49, value,
-                                                len(value))
-        elif not all(isinstance(v, (int, float)) for v in value):
-            raise DataQualityConfigurationError(ErrorCode.DQCE50, value)
-        self._scale_range = value
+    def bins(self) -> Optional[BinsSpec]:
+        return self._bins
 
     @property
-    def scale_tick(self) -> ScaleTickSpec:
-        return self._scale_tick
+    def min_in_first_bin(self):
+        return self._min_in_first_bin
 
-    @scale_tick.setter
-    def scale_tick(self, value: ScaleTickSpec):
-        if value is not None and not isinstance(value, get_args(ScaleTickSpec)):
-            raise DataQualityConfigurationError(ErrorCode.DQCE51, value,
-                                                type(value))
-        self._scale_tick = value
+
+class IdentityScale(Scale):
+
+    @_td_validate_call(ErrorCode.PVDQCL23)
+    def __init__(
+            self,
+            min: ScaleIdentityLimitSpec,
+            max: ScaleIdentityLimitSpec,
+            min_in_first_bin: bool = True,
+    ):
+        """
+        Identity scale.
+        """
+        _validate_min_max(min, max, f"{self.__class__.__name__}.__init__")
+        super().__init__((min, max), max - min, min_in_first_bin)
+
+
+class LinearScale(Scale):
+
+    @_td_validate_call(ErrorCode.PVDQCL24)
+    def __init__(
+            self,
+            min: ScaleLimitSpec,
+            max: ScaleLimitSpec,
+            bins: Optional[BinsSpec] = MAX_BINS,
+            min_in_first_bin: bool = True,
+    ):
+        """
+        Linear scale.
+        """
+        _validate_min_max(min, max, f"{self.__class__.__name__}.__init__")
+        _validate_bins(bins, min_in_first_bin,
+                       f"{self.__class__.__name__}.__init__")
+        super().__init__((min, max), bins, min_in_first_bin)
+
+
+class MonomialScale(Scale):
+
+    @_td_validate_call(ErrorCode.PVDQCL25)
+    def __init__(
+            self,
+            min: ScaleLimitSpec,
+            max: ScaleLimitSpec,
+            power: ScalePowerSpec,
+            bins: Optional[BinsSpec] = MAX_BINS,
+            min_in_first_bin: bool = True,
+    ):
+        """
+        Monomial scale.
+        """
+        _validate_min_max(min, max, f"{self.__class__.__name__}.__init__")
+        _validate_bins(bins, min_in_first_bin,
+                       f"{self.__class__.__name__}.__init__")
+        super().__init__((min, max), bins, min_in_first_bin)
+        self._power = power
 
     @property
-    def buckets(self) -> int:
-        return self._buckets
+    def power(self) -> ScalePowerSpec:
+        return self._power
 
-    @buckets.setter
-    def buckets(self, value: int):
-        if not isinstance(value, int):
-            raise DataQualityConfigurationError(ErrorCode.DQCE52, value,
-                                                type(value))
-        if value < 2 or value > 100:
-            raise DataQualityConfigurationError(ErrorCode.DQCE80, value)
-        self._buckets = value
-        self._verify_buckets_and_bucket_names()
+
+class LogarithmicScale(Scale):
+
+    @_td_validate_call(ErrorCode.PVDQCL26)
+    def __init__(
+            self,
+            min: ScaleLimitSpec,
+            max: ScaleLimitSpec,
+            base: Optional[ScaleBaseSpec] = None,
+            bins: Optional[BinsSpec] = MAX_BINS,
+            min_in_first_bin: bool = True,
+    ):
+        """
+        Logarithmic scale.
+        """
+        _validate_min_max(min, max, f"{self.__class__.__name__}.__init__")
+        _validate_bins(bins, min_in_first_bin,
+                       f"{self.__class__.__name__}.__init__")
+        super().__init__((min, max), bins, min_in_first_bin)
+        self._base = base if base else math.e
 
     @property
-    def bucket_names(self) -> list[str] | None:
-        return self._bucket_names
+    def base(self) -> ScaleBaseSpec:
+        return self._base
 
-    @bucket_names.setter
-    def bucket_names(self, value: list[str] | None):
-        match value:
-            case None:
-                self._bucket_names = None
-            case list():
-                for v in value:
-                    if not isinstance(v, str):
-                        raise DataQualityConfigurationError(
-                            ErrorCode.DQCE54, value, v, type(v)
-                        )
-                self._bucket_names = value
-            case _:
-                raise DataQualityConfigurationError(
-                    ErrorCode.DQCE55, value, type(value)
-                )
-        self._verify_buckets_and_bucket_names()
 
-    def _verify_buckets_and_bucket_names(self):
-        if hasattr(self, "_buckets") and hasattr(self, "_bucket_names"):
-            buckets = self.buckets
-            bucket_names = self.bucket_names
-            if self.bucket_names is not None:
-                if len(bucket_names) != buckets:
-                    raise DataQualityConfigurationError(
-                        ErrorCode.DQCE53,
-                        buckets,
-                        bucket_names,
-                        len(bucket_names)
-                    )
+class ExponentialScale(Scale):
 
-    @classmethod
-    def identity(
-            cls,
-            buckets: int,
-            scale_range: tuple[int, int] | tuple[float, float],
-            bucket_names: list[str] = None,
-    ) -> Self:
+    @_td_validate_call(ErrorCode.PVDQCL27)
+    def __init__(
+            self,
+            min: ScaleLimitSpec,
+            max: ScaleLimitSpec,
+            base: Optional[ScaleBaseSpec] = None,
+            bins: Optional[BinsSpec] = MAX_BINS,
+            min_in_first_bin: bool = True,
+    ):
         """
-        identity scale.
-
-        If bucket_names are provided, they  can be used with
-            `CategoryCriteria.by_name()`.
+        Exponential scale.
         """
-        scale = cls.__new__(cls)
-        scale.scale_type = "linear"
-        scale.buckets = buckets
-        scale.scale_range = scale_range
-        scale.scale_tick = 1
-        scale.bucket_names = bucket_names
-        return scale
+        _validate_min_max(min, max, f"{self.__class__.__name__}.__init__")
+        _validate_bins(bins, min_in_first_bin,
+                       f"{self.__class__.__name__}.__init__")
+        super().__init__((min, max), bins, min_in_first_bin)
+        self._base = base if base else math.e
 
-    @classmethod
-    def linear(
-            cls,
-            buckets: int,
-            scale_range: tuple[int, int] | tuple[float, float],
-            bucket_names: list[str] = None,
-    ) -> Self:
-        """
-        linear scale.
-
-        If bucket_names are provided, they  can be used with
-            `CategoryCriteria.by_name()`.
-        """
-        scale = cls.__new__(cls)
-        scale.scale_type = "linear"
-        scale.buckets = buckets
-        scale.scale_range = scale_range
-        scale.scale_tick = 1
-        scale.bucket_names = bucket_names
-        return scale
-
-    @classmethod
-    def quadratic(
-            cls,
-            power: int | float,
-            buckets: int,
-            scale_range: tuple[int, int],
-            bucket_names: list[str] = None,
-    ) -> Self:
-        """
-        quadratic scale.
-
-        If bucket_names are provided, they  can be used with
-            `CategoryCriteria.by_name()`.
-        """
-        scale = cls.__new__(cls)
-        scale.scale_type = "quadratic"
-        scale.buckets = buckets
-        scale.scale_range = scale_range
-        scale.scale_tick = power
-        scale.bucket_names = bucket_names
-        return scale
-
-    @classmethod
-    def exponential(
-            cls,
-            base: float | int,
-            buckets: int,
-            scale_range: tuple[float, float],
-            bucket_names: list[str] = None,
-    ) -> Self:
-        """
-        exponential scale.
-
-        If bucket_names are provided, they  can be used with
-            `CategoryCriteria.by_name()`.
-        """
-        scale = cls.__new__(cls)
-        scale.scale_type = "exponential"
-        scale.buckets = buckets
-        scale.scale_range = scale_range
-        scale.scale_tick = base
-        scale.bucket_names = bucket_names
-        return scale
-
-    @classmethod
-    def logarithmic(
-            cls,
-            base: float | int,
-            buckets: int,
-            scale_range: tuple[float, float],
-            bucket_names: list[str] = None,
-    ) -> Self:
-        """
-        logarithmic scale.
-
-        If bucket_names are provided, they  can be used with
-            `CategoryCriteria.by_name()`.
-        """
-        scale = cls.__new__(cls)
-        scale.scale_type = "logarithmic"
-        scale.buckets = buckets
-        scale.scale_range = scale_range
-        scale.scale_tick = base
-        scale.bucket_names = bucket_names
-        return scale
+    @property
+    def base(self) -> ScaleBaseSpec:
+        return self._base
 
 
 class Categorizer(Classifier):
     """
-    Categorizer that bucketizes data based on the give scale.
+    Categorizer that bucketizes data in bins based on the give scale.
     """
 
-    def __init__(self, column_names: ColumNamesWithAltSpec = None, *,
-                 scale: Scale, tags: TagsSpec = None):
+    @_td_validate_call(ErrorCode.PVDQCL2)
+    def __init__(
+            self,
+            column_names: Optional[ColumNamesWithAltSpec] = None,
+            *,
+            scale: Scale,
+            tags: Optional[TagsSpec] = None,
+    ):
         """
         Create a categorizer that categorizes data based on the given scale.
 
@@ -406,23 +306,17 @@ class Categorizer(Classifier):
             column_names(ColsSpec, optional): Column(s) to categorize.
             scale(Scale): Scale to use for categorization.
             tags(str | list[str] | None, optional): Tag(s) for the classification
-                results. Tags allow performing multiple actions, with each taking into
+                results. Tags allow performing multiple actions, with each
+                taking into
                 account only classifiers that have certain tag(s).
 
         """
-        super().__init__(column_names=column_names, tags=tags)
-        self.scale = scale
+        super().__init__(column_names, tags=tags)
+        self._scale = scale
 
     @property
     def scale(self) -> Scale:
         return self._scale
-
-    @scale.setter
-    def scale(self, value: Scale):
-        if not isinstance(value, Scale):
-            raise DataQualityConfigurationError(ErrorCode.DQCE56, value,
-                                                type(value))
-        self._scale = value
 
 
 class DoesNotMatch(BoolClassifier):
@@ -430,20 +324,20 @@ class DoesNotMatch(BoolClassifier):
     REGEX NOT MATCH classifier.
     """
 
+    @_td_validate_call(ErrorCode.PVDQCL3)
     def __init__(
             self,
-            column_names: ColumNamesWithAltSpec = None,
+            column_names: Optional[ColumNamesWithAltSpec] = None,
             ignore_nulls: bool = False,
             *,
             regex: str,
-            tags: TagsSpec = None,
+            tags: Optional[TagsSpec] = None,
     ):
         """
         Constructor.
 
         Args:
-            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
-            optional):
+            column_names:
                 Column name(s) to apply the classifier to and to store the
                 classification result.
                 If a `str | list[str]` is given, those are the column names
@@ -462,38 +356,28 @@ class DoesNotMatch(BoolClassifier):
                 Defaults to False.
             regex (str): The regex pattern to not match against.
             tags (str | list[str] | None, optional): Tag(s) for the classifier.
-                Tags can be used by DataQuality operations to select which classifiers
-                to operate on. If a DataQuality operation does not define a tag, it
-                operates on all defined classifiers. If a DataQuality operation defines
-                one or more tags, it will only operate on classifiers that have at least
+                Tags can be used by DataQuality operations to select which
+                classifiers
+                to operate on. If a DataQuality operation does not define a
+                tag, it
+                operates on all defined classifiers. If a DataQuality
+                operation defines
+                one or more tags, it will only operate on classifiers
+                that have at least
                 one of those tags.
                 Defaults to None.
         """
-        super().__init__(column_names=column_names, tags=tags)
-        self.ignore_nulls = ignore_nulls
-        self.regex = regex
+        super().__init__(column_names, tags=tags)
+        self._ignore_nulls = ignore_nulls
+        self._regex = regex
 
     @property
     def ignore_nulls(self) -> bool:
         return self._ignore_nulls
 
-    @ignore_nulls.setter
-    def ignore_nulls(self, value: bool):
-        if not isinstance(value, bool):
-            raise DataQualityConfigurationError(ErrorCode.DQCE20, value,
-                                                type(value))
-        self._ignore_nulls = value
-
     @property
     def regex(self) -> str:
         return self._regex
-
-    @regex.setter
-    def regex(self, value: str):
-        if not isinstance(value, str):
-            raise DataQualityConfigurationError(ErrorCode.DQCE21, value,
-                                                type(value))
-        self._regex = value
 
 
 class HasColumns(BoolClassifier):
@@ -501,14 +385,13 @@ class HasColumns(BoolClassifier):
     HAS COLUMNS classifier. Checks the given columns exist in the table.
     """
 
-    VALID_MODES = ["at_least", "exact"]
-
+    @_td_validate_call(ErrorCode.PVDQCL4)
     def __init__(
             self,
-            column_names: list[str] | str,
-            mode: Literal["at_least", "exact"] = "at_least",
+            column_names: ColumnNamesSpec,
+            mode: HasColumnsModeSpec = "at_least",
             *,
-            tags: TagsSpec = None,
+            tags: Optional[TagsSpec] = None,
     ):
         """
         Constructor.
@@ -516,126 +399,86 @@ class HasColumns(BoolClassifier):
         Args:
             column_names(list[str] | str):
                 Column name(s) to check for existence.
-            mode(Literal["at_least", "exact"], optional): Mode of checking columns. If
-                "at_least", checks that at least the given columns exist. If "exact",
-                checks that exactly the given columns exist. Defaults to "at_least".
+            mode(Literal["at_least", "exact"], optional): Mode of checking
+            columns. If
+                "at_least", checks that at least the given columns exist.
+                If "exact",
+                checks that exactly the given columns exist. Defaults to
+                "at_least".
             tags (str | list[str] | None, optional): Tag(s) for the classifier.
-                Tags can be used by DataQuality operations to select which classifiers
-                to operate on. If a DataQuality operation does not define a tag, it
-                operates on all defined classifiers. If a DataQuality operation defines
-                one or more tags, it will only operate on classifiers that have at least
+                Tags can be used by DataQuality operations to select which
+                classifiers
+                to operate on. If a DataQuality operation does not define a
+                tag, it
+                operates on all defined classifiers. If a DataQuality
+                operation defines
+                one or more tags, it will only operate on classifiers that
+                have at least
                 one of those tags.
                 Defaults to None.
         """
-        super().__init__(column_names=column_names, tags=tags)
-        self.mode = mode
+        super().__init__(column_names, tags=tags)
+        self._mode = mode
 
     @property
-    def column_names(self) -> list[str]:
-        return self._cols
-
-    @column_names.setter
-    def column_names(self, value: list[str]):
-        match value:
-            case str():
-                value = [value]
-            case list():
-                for v in value:
-                    if not isinstance(v, str):
-                        raise DataQualityConfigurationError(
-                            ErrorCode.DQCE33, v, type(v)
-                        )
-            case _:
-                raise DataQualityConfigurationError(
-                    ErrorCode.DQCE34, value, type(value)
-                )
-        self._cols = value
-
-    @property
-    def mode(self) -> Literal["at_least", "exact"]:
+    def mode(self) -> HasColumnsModeSpec:
         return self._mode
 
-    @mode.setter
-    def mode(self, value: Literal["at_least", "exact"]):
-        if value not in self.VALID_MODES:
-            raise DataQualityConfigurationError(
-                ErrorCode.DQCE35,
-                ", ".join(self.VALID_MODES),
-                value,
+
+def _validate_column_types(value: list[ColumnTypeSpec]):
+    for c_name, c_type in value:
+        if c_type not in TF_DATA_TYPES:
+            msg = (
+                " Parameter validation error. "
+                "Function 'HasColumnTypes.__init__', "
+                f" 'column_type'=('{c_name}', '{c_type}'): "
+                "Invalid data type."
             )
-        self._mode = value
+            raise ParameterValidationError(ErrorCode.PVDQCL6, msg)
+    return
 
 
 class HasColumnTypes(BoolClassifier):
     """
-    COLUMN TYPES classifier. Checks that the given columns match the given types.
+    COLUMN TYPES classifier. Checks that the given columns match the given
+    types.
     """
 
+    @_td_validate_call(ErrorCode.PVDQCL5)
     def __init__(
             self,
-            column_names: list[tuple[str, DataType]] | tuple[str, DataType],
+            column_types: ColumnTypesSpec,
             *,
-            tags: TagsSpec = None,
+            tags: Optional[TagsSpec] = None,
     ):
         """
         Constructor.
 
         Args:
-            column_names(list[tuple[str, DataType] | tuple[str, DataType]]):
+            column_types(list[tuple[str, DataType] | tuple[str, DataType]]):
                 Column name(s) and their expected data types to check for.
             tags (str | list[str] | None, optional): Tag(s) for the classifier.
-                Tags can be used by DataQuality operations to select which classifiers
-                to operate on. If a DataQuality operation does not define a tag, it
-                operates on all defined classifiers. If a DataQuality operation defines
-                one or more tags, it will only operate on classifiers that have at least
+                Tags can be used by DataQuality operations to select which
+                classifiers
+                to operate on. If a DataQuality operation does not define a
+                tag, it
+                operates on all defined classifiers. If a DataQuality
+                operation defines
+                one or more tags, it will only operate on classifiers
+                that have at least
                 one of those tags.
                 Defaults to None.
         """
-        super().__init__(column_names=column_names, tags=tags)
+        column_types = _normalize_to_list(column_types)
+        column_names = [name for name, _ in _normalize_to_list(column_types)]
+        # noinspection PyTypeChecker
+        super().__init__(column_names, tags=tags)
+        _validate_column_types(column_types)
+        self._column_types = column_types
 
     @property
-    def cols(self) -> list[tuple[str, DataType]]:
-        return self._cols
-
-    @cols.setter
-    def column_names(self, value: list[tuple[str, DataType]]):
-        match value:
-            case tuple():
-                if len(value) != 2:
-                    raise DataQualityConfigurationError(
-                        ErrorCode.DQCE43, value, len(value)
-                    )
-                a, b = value
-                if not isinstance(a, str):
-                    raise DataQualityConfigurationError(ErrorCode.DQCE36, a,
-                                                        type(a))
-                elif b not in TF_DATA_TYPES:
-                    raise DataQualityConfigurationError(ErrorCode.DQCE37, b,
-                                                        type(b))
-                value = [value]
-            case list():
-                for v in value:
-                    if not isinstance(v, tuple):
-                        raise DataQualityConfigurationError(
-                            ErrorCode.DQCE38, v, type(v)
-                        )
-                    elif len(v) != 2:
-                        raise DataQualityConfigurationError(ErrorCode.DQCE39,
-                                                            v, len(v))
-                    a, b = v
-                    if not isinstance(a, str):
-                        raise DataQualityConfigurationError(
-                            ErrorCode.DQCE40, v, a, type(a)
-                        )
-                    elif b not in TF_DATA_TYPES:
-                        raise DataQualityConfigurationError(
-                            ErrorCode.DQCE41, v, b, type(b)
-                        )
-            case _:
-                raise DataQualityConfigurationError(
-                    ErrorCode.DQCE42, value, type(value)
-                )
-        self._cols = value
+    def column_types(self) -> list[ColumnTypeSpec]:
+        return self._column_types
 
 
 class HasLen(BoolClassifier):
@@ -643,21 +486,21 @@ class HasLen(BoolClassifier):
     HAS LEN classifier. Checks minimum or maximum value length.
     """
 
+    @_td_validate_call(ErrorCode.PVDQCL7)
     def __init__(
             self,
-            column_names: ColumNamesWithAltSpec = None,
+            column_names: Optional[ColumNamesWithAltSpec] = None,
             ignore_nulls: bool = False,
-            min: int | float = float("-inf"),
-            max: int | float = float("inf"),
+            min: LenSpec = 0,
+            max: LenSpec = sys.maxsize,
             *,
-            tags: TagsSpec = None,
+            tags: Optional[TagsSpec] = None,
     ):
         """
         Constructor.
 
         Args:
-            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
-            optional):
+            column_names:
                 Column name(s) to apply the classifier to and to store the
                 classification result.
                 If a `str | list[str]` is given, those are the column names
@@ -677,50 +520,40 @@ class HasLen(BoolClassifier):
             min (int | float, optional): Minimum length value. Defaults to -inf.
             max (int | float, optional): Maximum length value. Defaults to inf.
             tags (str | list[str] | None, optional): Tag(s) for the classifier.
-                Tags can be used by DataQuality operations to select which classifiers
-                to operate on. If a DataQuality operation does not define a tag, it
-                operates on all defined classifiers. If a DataQuality operation defines
-                one or more tags, it will only operate on classifiers that have at least
+                Tags can be used by DataQuality operations to select which
+                 classifiers
+                to operate on. If a DataQuality operation does not define a
+                tag, it
+                operates on all defined classifiers. If a DataQuality
+                operation defines
+                one or more tags, it will only operate on classifiers that
+                have at least
                 one of those tags.
                 Defaults to None.
         """
-        super().__init__(column_names=column_names, tags=tags)
-        self.ignore_nulls = ignore_nulls
-        self.min = min
-        self.max = max
+        super().__init__(column_names, tags=tags)
+        self._ignore_nulls = ignore_nulls
+        if min > max:
+            msg = (
+                " Parameter validation error. "
+                "Function 'HasLen.__init__', "
+                f" min='{min}' is greater than max='{max}'."
+            )
+            raise ParameterValidationError(ErrorCode.PVDQCL8, msg)
+        self._min = min
+        self._max = max
 
     @property
     def ignore_nulls(self) -> bool:
         return self._ignore_nulls
 
-    @ignore_nulls.setter
-    def ignore_nulls(self, value: bool):
-        if not isinstance(value, bool):
-            raise DataQualityConfigurationError(ErrorCode.DQCE28, value,
-                                                type(value))
-        self._ignore_nulls = value
-
     @property
-    def min(self) -> int | float:
+    def min(self) -> int:
         return self._min
 
-    @min.setter
-    def min(self, value: int | float):
-        if not isinstance(value, (int, float)):
-            raise DataQualityConfigurationError(ErrorCode.DQCE22, value,
-                                                type(value))
-        self._min = value
-
     @property
-    def max(self) -> int | float:
+    def max(self) -> int:
         return self._max
-
-    @max.setter
-    def max(self, value: int | float):
-        if not isinstance(value, (int, float)):
-            raise DataQualityConfigurationError(ErrorCode.DQCE23, value,
-                                                type(value))
-        self._max = value
 
 
 class IsIn(BoolClassifier):
@@ -728,13 +561,75 @@ class IsIn(BoolClassifier):
     IS IN classifier.
     """
 
+    @_td_validate_call(ErrorCode.PVDQCL9)
     def __init__(
             self,
-            column_names: ColumNamesWithAltSpec = None,
+            column_names: Optional[ColumNamesWithAltSpec] = None,
             ignore_nulls: bool = False,
             *,
             set: Collection,
-            tags: TagsSpec = None,
+            tags: Optional[TagsSpec] = None,
+    ):
+        """
+        Constructor.
+
+        Args:
+            column_names:
+                Column name(s) to apply the classifier to and to store the
+                classification result.
+                If a `str | list[str]` is given, those are the column names
+                to apply the classifier to. The classification results will be
+                stored in columns named 'dq.<column_name>_<classifier_class>`.
+                If a `tuple[str, str] | list[tuple[str, str]]` is given, the
+                first element of the tuple(s) is the column to apply the
+                classifier to and the second element of the tuple(s) is the
+                name of the column that will store the classification result.
+                If `None`, the classifier will be applied to all columns and
+                the results will be stored in columns named
+                'dq.<column_name>_<classifier_class>`.
+                Defaults to None.
+            ignore_nulls (bool, optional): Whether to ignore null values when
+                classifying. If True, null values will not be classified.
+                Defaults to False.
+            set (Collection): The set of values to check membership against.
+            tags (str | list[str] | None, optional): Tag(s) for the classifier.
+                Tags can be used by DataQuality operations to select which
+                classifiers
+                to operate on. If a DataQuality operation does not define a
+                tag, it
+                operates on all defined classifiers. If a DataQuality
+                operation defines
+                one or more tags, it will only operate on classifiers that
+                have at least
+                one of those tags.
+                Defaults to None.
+        """
+        super().__init__(column_names, tags=tags)
+        self._ignore_nulls = ignore_nulls
+        self._set = set
+
+    @property
+    def ignore_nulls(self) -> bool:
+        return self._ignore_nulls
+
+    @property
+    def set(self) -> Collection:
+        return self._set
+
+
+class IsNotIn(BoolClassifier):
+    """
+    NOT IN classifier.
+    """
+
+    @_td_validate_call(ErrorCode.PVDQCL10)
+    def __init__(
+            self,
+            column_names: Optional[ColumNamesWithAltSpec] = None,
+            ignore_nulls: bool = False,
+            *,
+            set: Collection,
+            tags: Optional[TagsSpec] = None,
     ):
         """
         Constructor.
@@ -767,31 +662,17 @@ class IsIn(BoolClassifier):
                 one of those tags.
                 Defaults to None.
         """
-        super().__init__(column_names=column_names, tags=tags)
-        self.ignore_nulls = ignore_nulls
-        self.set = set
+        super().__init__(column_names, tags=tags)
+        self._ignore_nulls = ignore_nulls
+        self._set = set
 
     @property
     def ignore_nulls(self) -> bool:
         return self._ignore_nulls
 
-    @ignore_nulls.setter
-    def ignore_nulls(self, value: bool):
-        if not isinstance(value, bool):
-            raise DataQualityConfigurationError(ErrorCode.DQCE29, value,
-                                                type(value))
-        self._ignore_nulls = value
-
     @property
     def set(self) -> Collection:
         return self._set
-
-    @set.setter
-    def set(self, value: Collection):
-        if not _is_collection(value):
-            raise DataQualityConfigurationError(ErrorCode.DQCE30, value,
-                                                type(value))
-        self._set = value
 
 
 class IsInRange(BoolClassifier):
@@ -799,15 +680,14 @@ class IsInRange(BoolClassifier):
     IS IN RANGE classifier. Checks that the value is in the given range.
     """
 
-    VALID_CLOSED_OPTIONS = ["both", "lower", "none", "upper"]
-
+    @_td_validate_call(ErrorCode.PVDQCL10)
     def __init__(
             self,
-            column_names: ColumNamesWithAltSpec = None,
+            column_names: Optional[ColumNamesWithAltSpec] = None,
             ignore_nulls: bool = False,
-            min: int | float = float("-inf"),
-            max: int | float = float("inf"),
-            closed: Literal["both", "lower", "none", "upper"] = "both",
+            min: MinSpec = float("-inf"),
+            max: MaxSpec = float("inf"),
+            closed: RangeClosedOnSpec = "both",
             *,
             tags: TagsSpec = None,
     ):
@@ -846,58 +726,115 @@ class IsInRange(BoolClassifier):
                 one of those tags.
                 Defaults to None.
         """
-        super().__init__(column_names=column_names, tags=tags)
-        self.ignore_nulls = ignore_nulls
-        self.min = min
-        self.max = max
-        self.closed = closed
+        super().__init__(column_names, tags=tags)
+        self._ignore_nulls = ignore_nulls
+        if min > max:
+            msg = (
+                " Parameter validation error. "
+                "Function 'IsInRange.__init__', "
+                f" min='{min}' is greater than max='{max}'."
+            )
+            raise ParameterValidationError(ErrorCode.PVDQCL11, msg)
+        self._min = min
+        self._max = max
+        self._closed = closed
 
     @property
     def ignore_nulls(self) -> bool:
         return self._ignore_nulls
 
-    @ignore_nulls.setter
-    def ignore_nulls(self, value: bool):
-        if not isinstance(value, bool):
-            raise DataQualityConfigurationError(ErrorCode.DQCE24, value,
-                                                type(value))
-        self._ignore_nulls = value
-
     @property
-    def min(self) -> int | float:
+    def min(self) -> MinSpec:
         return self._min
 
-    @min.setter
-    def min(self, value: int | float):
-        if not isinstance(value, (int, float)):
-            raise DataQualityConfigurationError(ErrorCode.DQCE25, value,
-                                                type(value))
-        self._min = value
-
     @property
-    def max(self) -> int | float:
+    def max(self) -> MaxSpec:
         return self._max
 
-    @max.setter
-    def max(self, value: int | float):
-        if not isinstance(value, (int, float)):
-            raise DataQualityConfigurationError(ErrorCode.DQCE26, value,
-                                                type(value))
-        self._max = value
-
     @property
-    def closed(self) -> Literal["both", "lower", "none", "upper"]:
+    def closed(self) -> RangeClosedOnSpec:
         return self._closed
 
-    @closed.setter
-    def closed(self, value: Literal["both", "lower", "none", "upper"]):
-        if value not in self.VALID_CLOSED_OPTIONS:
-            raise DataQualityConfigurationError(
-                ErrorCode.DQCE27,
-                ", ".join(self.VALID_CLOSED_OPTIONS),
-                value,
+
+class IsNotInRange(BoolClassifier):
+    """
+    NOT IN RANGE classifier. Checks that the value is not in the given range.
+    """
+
+    @_td_validate_call(ErrorCode.PVDQCL12)
+    def __init__(
+            self,
+            column_names: Optional[ColumNamesWithAltSpec] = None,
+            ignore_nulls: bool = False,
+            min: MinSpec = float("-inf"),
+            max: MaxSpec = float("inf"),
+            closed: RangeClosedOnSpec = "both",
+            *,
+            tags: TagsSpec = None,
+    ):
+        """
+        Constructor.
+
+        Args:
+            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
+            optional):
+                Column name(s) to apply the classifier to and to store the
+                classification result.
+                If a `str | list[str]` is given, those are the column names
+                to apply the classifier to. The classification results will be
+                stored in columns named 'dq.<column_name>_<classifier_class>`.
+                If a `tuple[str, str] | list[tuple[str, str]]` is given, the
+                first element of the tuple(s) is the column to apply the
+                classifier to and the second element of the tuple(s) is the
+                name of the column that will store the classification result.
+                If `None`, the classifier will be applied to all columns and
+                the results will be stored in columns named
+                'dq.<column_name>_<classifier_class>`.
+                Defaults to None.
+            ignore_nulls (bool, optional): Whether to ignore null values when
+                classifying. If True, null values will not be classified.
+                Defaults to False.
+            min (int | float, optional): Minimum length value. Defaults to -inf.
+            max (int | float, optional): Maximum length value. Defaults to inf.
+            closed (Literal["both", "lower", "none", "upper"], optional): Whether the
+                interval is closed on the 'both', 'left', 'right' or 'none' sides.
+                Defaults to 'both'.
+            tags (str | list[str] | None, optional): Tag(s) for the classifier.
+                Tags can be used by DataQuality operations to select which classifiers
+                to operate on. If a DataQuality operation does not define a tag, it
+                operates on all defined classifiers. If a DataQuality operation defines
+                one or more tags, it will only operate on classifiers that have at least
+                one of those tags.
+                Defaults to None.
+        """
+        super().__init__(column_names, tags=tags)
+        self._ignore_nulls = ignore_nulls
+        if min > max:
+            msg = (
+                " Parameter validation error. "
+                "Function 'NotInRange.__init__', "
+                f" min='{min}' is greater than max='{max}'."
             )
-        self._closed = value
+            raise ParameterValidationError(ErrorCode.PVDQCL13, msg)
+        self._min = min
+        self._max = max
+        self._closed = closed
+
+    @property
+    def ignore_nulls(self) -> bool:
+        return self._ignore_nulls
+
+    @property
+    def min(self) -> MinSpec:
+        return self._min
+
+    @property
+    def max(self) -> MaxSpec:
+        return self._max
+
+    @property
+    def closed(self) -> RangeClosedOnSpec:
+        return self._closed
 
 
 class IsNan(BoolClassifier):
@@ -905,12 +842,13 @@ class IsNan(BoolClassifier):
     IS NAN classifier.
     """
 
+    @_td_validate_call(ErrorCode.PVDQCL14)
     def __init__(
             self,
-            column_names: ColumNamesWithAltSpec = None,
+            column_names: Optional[ColumNamesWithAltSpec] = None,
             ignore_nulls: bool = False,
             *,
-            tags: TagsSpec = None,
+            tags: Optional[TagsSpec] = None,
     ):
         """
         Constructor.
@@ -942,19 +880,12 @@ class IsNan(BoolClassifier):
                 one of those tags.
                 Defaults to None.
         """
-        super().__init__(column_names=column_names, tags=tags)
-        self.ignore_nulls = ignore_nulls
+        super().__init__(column_names, tags=tags)
+        self._ignore_nulls = ignore_nulls
 
     @property
     def ignore_nulls(self) -> bool:
         return self._ignore_nulls
-
-    @ignore_nulls.setter
-    def ignore_nulls(self, value: bool):
-        if not isinstance(value, bool):
-            raise DataQualityConfigurationError(ErrorCode.DQCE10, value,
-                                                type(value))
-        self._ignore_nulls = value
 
 
 class IsNegative(BoolClassifier):
@@ -962,12 +893,13 @@ class IsNegative(BoolClassifier):
     IS NEGATIVE classifier.
     """
 
+    @_td_validate_call(ErrorCode.PVDQCL14)
     def __init__(
             self,
-            column_names: ColumNamesWithAltSpec = None,
+            column_names: Optional[ColumNamesWithAltSpec] = None,
             ignore_nulls: bool = False,
             *,
-            tags: TagsSpec = None,
+            tags: Optional[TagsSpec] = None,
     ):
         """
         Constructor.
@@ -999,19 +931,12 @@ class IsNegative(BoolClassifier):
                 one of those tags.
                 Defaults to None.
         """
-        super().__init__(column_names=column_names, tags=tags)
-        self.ignore_nulls = ignore_nulls
+        super().__init__(column_names, tags=tags)
+        self._ignore_nulls = ignore_nulls
 
     @property
     def ignore_nulls(self) -> bool:
         return self._ignore_nulls
-
-    @ignore_nulls.setter
-    def ignore_nulls(self, value: bool):
-        if not isinstance(value, bool):
-            raise DataQualityConfigurationError(ErrorCode.DQCE16, value,
-                                                type(value))
-        self._ignore_nulls = value
 
 
 class IsNegativeOrZero(BoolClassifier):
@@ -1019,12 +944,13 @@ class IsNegativeOrZero(BoolClassifier):
     IS NEGATIVE OR ZERO classifier.
     """
 
+    @_td_validate_call(ErrorCode.PVDQCL14)
     def __init__(
             self,
-            column_names: ColumNamesWithAltSpec = None,
+            column_names: Optional[ColumNamesWithAltSpec] = None,
             ignore_nulls: bool = False,
             *,
-            tags: TagsSpec = None,
+            tags: Optional[TagsSpec] = None,
     ):
         """
         Constructor.
@@ -1056,90 +982,12 @@ class IsNegativeOrZero(BoolClassifier):
                 one of those tags.
                 Defaults to None.
         """
-        super().__init__(column_names=column_names, tags=tags)
-        self.ignore_nulls = ignore_nulls
+        super().__init__(column_names, tags=tags)
+        self._ignore_nulls = ignore_nulls
 
     @property
     def ignore_nulls(self) -> bool:
         return self._ignore_nulls
-
-    @ignore_nulls.setter
-    def ignore_nulls(self, value: bool):
-        if not isinstance(value, bool):
-            raise DataQualityConfigurationError(ErrorCode.DQCE17, value,
-                                                type(value))
-        self._ignore_nulls = value
-
-
-class IsNotIn(BoolClassifier):
-    """
-    IS NOT IN classifier.
-    """
-
-    def __init__(
-            self,
-            column_names: ColumNamesWithAltSpec = None,
-            ignore_nulls: bool = False,
-            *,
-            set: Collection,
-            tags: TagsSpec = None,
-    ):
-        """
-        Constructor.
-
-        Args:
-            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
-            optional):
-                Column name(s) to apply the classifier to and to store the
-                classification result.
-                If a `str | list[str]` is given, those are the column names
-                to apply the classifier to. The classification results will be
-                stored in columns named 'dq.<column_name>_<classifier_class>`.
-                If a `tuple[str, str] | list[tuple[str, str]]` is given, the
-                first element of the tuple(s) is the column to apply the
-                classifier to and the second element of the tuple(s) is the
-                name of the column that will store the classification result.
-                If `None`, the classifier will be applied to all columns and
-                the results will be stored in columns named
-                'dq.<column_name>_<classifier_class>`.
-                Defaults to None.
-            ignore_nulls (bool, optional): Whether to ignore null values when
-                classifying. If True, null values will not be classified.
-                Defaults to False.
-            set (Collection): The set of values to check membership against.
-            tags (str | list[str] | None, optional): Tag(s) for the classifier.
-                Tags can be used by DataQuality operations to select which classifiers
-                to operate on. If a DataQuality operation does not define a tag, it
-                operates on all defined classifiers. If a DataQuality operation defines
-                one or more tags, it will only operate on classifiers that have at least
-                one of those tags.
-                Defaults to None.
-        """
-        super().__init__(column_names=column_names, tags=tags)
-        self.ignore_nulls = ignore_nulls
-        self.set = set
-
-    @property
-    def ignore_nulls(self) -> bool:
-        return self._ignore_nulls
-
-    @ignore_nulls.setter
-    def ignore_nulls(self, value: bool):
-        if not isinstance(value, bool):
-            raise DataQualityConfigurationError(ErrorCode.DQCE31, value,
-                                                type(value))
-        self._ignore_nulls = value
-
-    @property
-    def set(self) -> Collection:
-        return self._set
-
-    @set.setter
-    def set(self, value: Collection):
-        if not _is_collection(value):
-            raise DataQualityConfigurationError(ErrorCode.DQCE32, value,
-                                                type(value))
-        self._set = value
 
 
 class IsNotNan(BoolClassifier):
@@ -1147,12 +995,13 @@ class IsNotNan(BoolClassifier):
     IS NOT NAN classifier.
     """
 
+    @_td_validate_call(ErrorCode.PVDQCL14)
     def __init__(
             self,
-            column_names: ColumNamesWithAltSpec = None,
+            column_names: Optional[ColumNamesWithAltSpec] = None,
             ignore_nulls: bool = False,
             *,
-            tags: TagsSpec = None,
+            tags: Optional[TagsSpec] = None,
     ):
         """
         Constructor.
@@ -1184,19 +1033,12 @@ class IsNotNan(BoolClassifier):
                 one of those tags.
                 Defaults to None.
         """
-        super().__init__(column_names=column_names, tags=tags)
-        self.ignore_nulls = ignore_nulls
+        super().__init__(column_names, tags=tags)
+        self._ignore_nulls = ignore_nulls
 
     @property
     def ignore_nulls(self) -> bool:
         return self._ignore_nulls
-
-    @ignore_nulls.setter
-    def ignore_nulls(self, value: bool):
-        if not isinstance(value, bool):
-            raise DataQualityConfigurationError(ErrorCode.DQCE11, value,
-                                                type(value))
-        self._ignore_nulls = value
 
 
 class IsNotNull(BoolClassifier):
@@ -1204,8 +1046,13 @@ class IsNotNull(BoolClassifier):
     IS NOT NULL classifier.
     """
 
-    def __init__(self, column_names: ColumNamesWithAltSpec = None, *,
-                 tags: TagsSpec = None):
+    @_td_validate_call(ErrorCode.PVDQCL15)
+    def __init__(
+            self,
+            column_names: Optional[ColumNamesWithAltSpec] = None,
+            *,
+            tags: Optional[TagsSpec] = None,
+    ):
         """
         Constructor.
 
@@ -1233,7 +1080,7 @@ class IsNotNull(BoolClassifier):
                 one of those tags.
                 Defaults to None.
         """
-        super().__init__(column_names=column_names, tags=tags)
+        super().__init__(column_names, tags=tags)
 
 
 class IsNotNullNorNan(BoolClassifier):
@@ -1241,8 +1088,13 @@ class IsNotNullNorNan(BoolClassifier):
     IS NOT NULL AND NOT NAN classifier.
     """
 
-    def __init__(self, column_names: ColumNamesWithAltSpec = None, *,
-                 tags: TagsSpec = None):
+    @_td_validate_call(ErrorCode.PVDQCL15)
+    def __init__(
+            self,
+            column_names: Optional[ColumNamesWithAltSpec] = None,
+            *,
+            tags: Optional[TagsSpec] = None,
+    ):
         """
         Constructor.
 
@@ -1278,12 +1130,13 @@ class IsNotZero(BoolClassifier):
     IS NOT ZERO classifier.
     """
 
+    @_td_validate_call(ErrorCode.PVDQCL16)
     def __init__(
             self,
-            column_names: ColumNamesWithAltSpec = None,
+            column_names: Optional[ColumNamesWithAltSpec] = None,
             ignore_nulls: bool = False,
             *,
-            tags: TagsSpec = None,
+            tags: Optional[TagsSpec] = None,
     ):
         """
         Constructor.
@@ -1315,7 +1168,7 @@ class IsNotZero(BoolClassifier):
                 one of those tags.
                 Defaults to None.
         """
-        super().__init__(column_names=column_names, tags=tags)
+        super().__init__(column_names, tags=tags)
         self.ignore_nulls = ignore_nulls
 
     @property
@@ -1335,8 +1188,13 @@ class IsNull(BoolClassifier):
     IS NULL classifier.
     """
 
-    def __init__(self, column_names: ColumNamesWithAltSpec = None, *,
-                 tags: TagsSpec = None):
+    @_td_validate_call(ErrorCode.PVDQCL17)
+    def __init__(
+            self,
+            column_names: Optional[ColumNamesWithAltSpec] = None,
+            *,
+            tags: Optional[TagsSpec] = None,
+    ):
         """
         Constructor.
 
@@ -1364,7 +1222,7 @@ class IsNull(BoolClassifier):
                 one of those tags.
                 Defaults to None.
         """
-        super().__init__(column_names=column_names, tags=tags)
+        super().__init__(column_names, tags=tags)
 
 
 class IsNullOrNan(BoolClassifier):
@@ -1372,8 +1230,13 @@ class IsNullOrNan(BoolClassifier):
     IS NULL OR NAN classifier.
     """
 
-    def __init__(self, column_names: ColumNamesWithAltSpec = None, *,
-                 tags: TagsSpec = None):
+    @_td_validate_call(ErrorCode.PVDQCL18)
+    def __init__(
+            self,
+            column_names: Optional[ColumNamesWithAltSpec] = None,
+            *,
+            tags: Optional[TagsSpec] = None,
+    ):
         """
         Constructor.
 
@@ -1401,7 +1264,7 @@ class IsNullOrNan(BoolClassifier):
                 one of those tags.
                 Defaults to None.
         """
-        super().__init__(column_names=column_names, tags=tags)
+        super().__init__(column_names, tags=tags)
 
 
 class IsPositive(BoolClassifier):
@@ -1409,12 +1272,13 @@ class IsPositive(BoolClassifier):
     IS POSITIVE classifier.
     """
 
+    @_td_validate_call(ErrorCode.PVDQCL19)
     def __init__(
             self,
-            column_names: ColumNamesWithAltSpec = None,
+            column_names: Optional[ColumNamesWithAltSpec] = None,
             ignore_nulls: bool = False,
             *,
-            tags: TagsSpec = None,
+            tags: Optional[TagsSpec] = None,
     ):
         """
         Constructor.
@@ -1446,19 +1310,12 @@ class IsPositive(BoolClassifier):
                 one of those tags.
                 Defaults to None.
         """
-        super().__init__(column_names=column_names, tags=tags)
-        self.ignore_nulls = ignore_nulls
+        super().__init__(column_names, tags=tags)
+        self._ignore_nulls = ignore_nulls
 
     @property
     def ignore_nulls(self) -> bool:
         return self._ignore_nulls
-
-    @ignore_nulls.setter
-    def ignore_nulls(self, value: bool):
-        if not isinstance(value, bool):
-            raise DataQualityConfigurationError(ErrorCode.DQCE14, value,
-                                                type(value))
-        self._ignore_nulls = value
 
 
 class IsPositiveOrZero(BoolClassifier):
@@ -1466,12 +1323,13 @@ class IsPositiveOrZero(BoolClassifier):
     IS POSITIVE OR ZERO classifier.
     """
 
+    @_td_validate_call(ErrorCode.PVDQCL20)
     def __init__(
             self,
-            column_names: ColumNamesWithAltSpec = None,
+            column_names: Optional[ColumNamesWithAltSpec] = None,
             ignore_nulls: bool = False,
             *,
-            tags: TagsSpec = None,
+            tags: Optional[TagsSpec] = None,
     ):
         """
         Constructor.
@@ -1503,19 +1361,12 @@ class IsPositiveOrZero(BoolClassifier):
                 one of those tags.
                 Defaults to None.
         """
-        super().__init__(column_names=column_names, tags=tags)
-        self.ignore_nulls = ignore_nulls
+        super().__init__(column_names, tags=tags)
+        self._ignore_nulls = ignore_nulls
 
     @property
     def ignore_nulls(self) -> bool:
         return self._ignore_nulls
-
-    @ignore_nulls.setter
-    def ignore_nulls(self, value: bool):
-        if not isinstance(value, bool):
-            raise DataQualityConfigurationError(ErrorCode.DQCE15, value,
-                                                type(value))
-        self._ignore_nulls = value
 
 
 class IsZero(BoolClassifier):
@@ -1523,12 +1374,13 @@ class IsZero(BoolClassifier):
     IS ZERO classifier.
     """
 
+    @_td_validate_call(ErrorCode.PVDQCL21)
     def __init__(
             self,
-            column_names: ColumNamesWithAltSpec = None,
+            column_names: Optional[ColumNamesWithAltSpec] = None,
             ignore_nulls: bool = False,
             *,
-            tags: TagsSpec = None,
+            tags: Optional[TagsSpec] = None,
     ):
         """
         Constructor.
@@ -1560,19 +1412,12 @@ class IsZero(BoolClassifier):
                 one of those tags.
                 Defaults to None.
         """
-        super().__init__(column_names=column_names, tags=tags)
-        self.ignore_nulls = ignore_nulls
+        super().__init__(column_names, tags=tags)
+        self._ignore_nulls = ignore_nulls
 
     @property
     def ignore_nulls(self) -> bool:
         return self._ignore_nulls
-
-    @ignore_nulls.setter
-    def ignore_nulls(self, value: bool):
-        if not isinstance(value, bool):
-            raise DataQualityConfigurationError(ErrorCode.DQCE12, value,
-                                                type(value))
-        self._ignore_nulls = value
 
 
 class Matches(BoolClassifier):
@@ -1580,13 +1425,14 @@ class Matches(BoolClassifier):
     REGEX MATCH classifier.
     """
 
+    @_td_validate_call(ErrorCode.PVDQCL22)
     def __init__(
             self,
-            column_names: ColumNamesWithAltSpec = None,
+            column_names: Optional[ColumNamesWithAltSpec] = None,
             ignore_nulls: bool = False,
             *,
             regex: str,
-            tags: TagsSpec = None,
+            tags: Optional[TagsSpec] = None,
     ):
         """
         Constructor.
@@ -1619,28 +1465,14 @@ class Matches(BoolClassifier):
                 one of those tags.
                 Defaults to None.
         """
-        super().__init__(column_names=column_names, tags=tags)
-        self.ignore_nulls = ignore_nulls
-        self.regex = regex
+        super().__init__(column_names, tags=tags)
+        self._ignore_nulls = ignore_nulls
+        self._regex = regex
 
     @property
     def ignore_nulls(self) -> bool:
         return self._ignore_nulls
 
-    @ignore_nulls.setter
-    def ignore_nulls(self, value: bool):
-        if not isinstance(value, bool):
-            raise DataQualityConfigurationError(ErrorCode.DQCE18, value,
-                                                type(value))
-        self._ignore_nulls = value
-
     @property
     def regex(self) -> str:
         return self._regex
-
-    @regex.setter
-    def regex(self, value: str):
-        if not isinstance(value, str):
-            raise DataQualityConfigurationError(ErrorCode.DQCE19, value,
-                                                type(value))
-        self._regex = value

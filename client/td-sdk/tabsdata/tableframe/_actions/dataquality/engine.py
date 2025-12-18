@@ -18,6 +18,8 @@ import polars as pl
 # import tabsdata._utils.tableframe._translator as td_translator
 import tabsdata.tableframe.expr.expr as td_expr
 import tabsdata.tableframe.lazyframe.frame as td_frame
+
+# noinspection PyProtectedMember
 from tabsdata.dataquality._classifiers import (
     Classifier,
     IsNan,
@@ -32,8 +34,8 @@ from tabsdata.tableframe.lazyframe.properties import TableFramePropertiesBuilder
 
 
 if TYPE_CHECKING:
-    from tabsdata.dataquality.typing._typing import ColsSpec, TagsSpec
-
+    # noinspection PyProtectedMember
+    from tabsdata.dataquality._typing import ColumnNameWithAltSpec, TagsSpec
 
 DQ_VERSION = 1
 
@@ -129,7 +131,9 @@ class DataQualityEngine:
     """> Internal Helper Functions """
 
     @classmethod
-    def _cols_spec_to_cols_list(cls, cols_spec: ColsSpec) -> list[MappedColumn]:
+    def _cols_spec_to_cols_list(
+        cls, cols_spec: list[ColumnNameWithAltSpec]
+    ) -> list[MappedColumn]:
         match cols_spec:
             case None:
                 return []
@@ -208,13 +212,14 @@ class DataQualityEngine:
         metadata = CLASSIFIER_DICTIONARY.get(classifier_type)
 
         if metadata is None:
+            # noinspection PyProtectedMember
             raise DataQualityProcessingError(
                 ErrorCode.DQPE9,
                 classifier_type.__name__,
                 self._tf._data_table.name,
             )
 
-        columns = self._cols_spec_to_cols_list(classifier.cols)
+        columns = self._cols_spec_to_cols_list(classifier.column_names)
         tags = self._tags_spec_to_list(classifier.tags)
         dq = self
 
@@ -275,6 +280,7 @@ class DataQualityEngine:
             if self._cols[column] == ClassifierFamily.BOOLEAN:
                 dq_columns.append(column)
 
+        # noinspection PyProtectedMember
         lf = self._tf._lf.select(dq_columns)
         summary_data = []
         for column in sorted(dq_columns):
