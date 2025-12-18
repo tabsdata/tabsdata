@@ -9,7 +9,7 @@ mod definitions {
         AtTime, BundleId, CollectionId, CollectionName, Connector, DataLocation, Decorator,
         Description, Enabled, FunctionId, FunctionName, FunctionRuntimeValues, FunctionStatus,
         FunctionVersionId, ReuseFrozen, Snippet, StorageVersion, TableName, TableNameDto,
-        TableType, UserId, UserName,
+        TableType, UserId, UserName, WorkerConfig, WorkerTypeDto,
     };
     use crate::types::composed::{
         TableDependency, TableDependencyDto, TableTrigger, TableTriggerDto,
@@ -44,6 +44,10 @@ mod definitions {
         #[builder(default)]
         #[td_type(extractor)]
         pub enabled: Option<Enabled>, // added in v4
+        #[serde(default)]
+        #[builder(default)]
+        #[td_type(extractor)]
+        pub workers: Option<HashMap<WorkerTypeDto, WorkerConfig>>, // added in v4
     }
 
     #[td_type::Dto]
@@ -69,6 +73,8 @@ mod definitions {
         #[td_type(extractor)]
         pub reuse_frozen_tables: ReuseFrozen,
         pub enabled: Option<Enabled>, // added in v4
+        #[td_type(extractor)]
+        pub workers: Option<HashMap<WorkerTypeDto, WorkerConfig>>, // added in v4
     }
 
     #[td_type::Dao]

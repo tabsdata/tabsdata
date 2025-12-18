@@ -9,6 +9,7 @@ use crate::function::layers::update::{
 };
 use crate::function::layers::{
     check_private_tables, register_dependencies, register_tables, register_triggers,
+    register_workers,
 };
 use std::collections::HashMap;
 use ta_services::factory::service_factory;
@@ -27,7 +28,7 @@ use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev};
 use td_objects::tower_service::from::{
     BuildService, DefaultService, ExtractDataService, ExtractNameService, ExtractService,
-    SetService, TryIntoService, UpdateService, With, combine,
+    IntoSomeService, SetService, TryIntoService, UpdateService, With, combine,
 };
 use td_objects::tower_service::sql::{
     By, SqlDeleteService, SqlSelectAllService, SqlSelectService, insert,
@@ -35,6 +36,7 @@ use td_objects::tower_service::sql::{
 use td_objects::types::basic::{
     AtTime, BundleId, CollectionId, CollectionIdName, CollectionName, DataLocation, FunctionId,
     FunctionIdName, FunctionVersionId, ReuseFrozen, StorageVersion, TableNameDto, TableType,
+    WorkerConfig, WorkerTypeDto,
 };
 use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
 use td_tower::default_services::TransactionProvider;
@@ -100,6 +102,7 @@ fn service() {
         from_fn(By::<BundleId>::delete::<BundleDB>),
         // Register associations
         // Find previous versions
+        from_fn(With::<FunctionVersionId>::some),
         from_fn(By::<FunctionId>::select_all_versions::<{ TableDB::Available }, TableDB>),
         from_fn(By::<FunctionId>::select_all_versions::<{ DependencyDB::Active }, DependencyDB>),
         from_fn(
@@ -113,6 +116,7 @@ fn service() {
         from_fn(With::<FunctionUpdate>::extract::<Option<HashMap<TableNameDto, TableType>>>),
         from_fn(With::<FunctionUpdate>::extract::<Option<Vec<TableDependencyDto>>>),
         from_fn(With::<FunctionUpdate>::extract::<Option<Vec<TableTriggerDto>>>),
+        from_fn(With::<FunctionUpdate>::extract::<Option<HashMap<WorkerTypeDto, WorkerConfig>>>),
         // Validate tables do not exist
         from_fn(validate_tables_do_not_exist),
         // check private tables
@@ -124,6 +128,7 @@ fn service() {
         register_tables(),
         register_dependencies::<_, DO_AUTHZ>(),
         register_triggers::<_, DO_AUTHZ>(),
+        register_workers(),
         // Response
         // Extract new function version id
         from_fn(With::<FunctionDB>::extract::<FunctionVersionId>),
@@ -147,6 +152,7 @@ mod tests {
     use td_objects::dxo::crudl::handle_sql_err;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::trigger::TriggerDB;
+    use td_objects::dxo::worker::WorkerDB;
     use td_objects::rest_urls::CollectionParam;
     use td_objects::sql::SelectBy;
     use td_objects::sql::cte::CteQueries;
@@ -156,7 +162,7 @@ mod tests {
     use td_objects::test_utils::seed_inter_collection_permission::seed_inter_collection_permission;
     use td_objects::types::basic::{
         AccessTokenId, Decorator, Enabled, FunctionRuntimeValues, RoleId, TableName, TableStatus,
-        ToCollectionId, UserId,
+        ToCollectionId, UserId, WorkerMessageStatus, WorkerStatus, WorkerType,
     };
     use td_tower::ctx_service::RawOneshot;
 
@@ -166,7 +172,7 @@ mod tests {
     async fn test_tower_metadata_update_function(db: DbPool) {
         use crate::function::layers::register::{
             build_dependency_versions, build_table_versions, build_tables_trigger_versions,
-            build_trigger_versions,
+            build_trigger_versions, build_workers, stop_current_workers,
         };
         use td_objects::dxo::dependency::DependencyDBBuilder;
         use td_objects::dxo::inter_collection_access::{
@@ -174,6 +180,7 @@ mod tests {
         };
         use td_objects::dxo::table::TableDBBuilder;
         use td_objects::dxo::trigger::{TriggerDB, TriggerDBBuilder, TriggerDBWithNames};
+        use td_objects::dxo::worker::{WorkerDB, WorkerDBBuilder};
         use td_objects::tower_service::authz::InterColl;
         use td_objects::tower_service::from::{ConvertIntoMapService, VecBuildService};
         use td_objects::tower_service::sql::insert_vec;
@@ -230,6 +237,7 @@ mod tests {
                 type_of_val(&By::<BundleId>::delete::<BundleDB>),
                 // Register associations
                 // Find previous versions
+                type_of_val(&With::<FunctionVersionId>::some),
                 type_of_val(&By::<FunctionId>::select_all_versions::<{ TableDB::Available }, TableDB>),
                 type_of_val(&By::<FunctionId>::select_all_versions::<{ DependencyDB::Active }, DependencyDB>),
                 type_of_val(&By::<FunctionId>::select_all_versions::<
@@ -241,6 +249,7 @@ mod tests {
                 type_of_val(&With::<FunctionUpdate>::extract::<Option<HashMap<TableNameDto, TableType>>>),
                 type_of_val(&With::<FunctionUpdate>::extract::<Option<Vec<TableDependencyDto>>>),
                 type_of_val(&With::<FunctionUpdate>::extract::<Option<Vec<TableTriggerDto>>>),
+                type_of_val(&With::<FunctionUpdate>::extract::<Option<HashMap<WorkerTypeDto, WorkerConfig>>>),
                 // Validate tables do not exist
                 type_of_val(&validate_tables_do_not_exist),
                 // check private tables
@@ -261,24 +270,25 @@ mod tests {
                 type_of_val(&With::<FunctionDB>::try_convert_to::<DependencyDBBuilder, _>),
                 type_of_val(&With::<RequestContext>::update::<DependencyDBBuilder, _>),
                 type_of_val(&build_dependency_versions),
-
                 // inter collections check for dependencies
                 type_of_val(&With::<DependencyDB>::vec_convert_to::<InterCollectionAccessBuilder, _>),
                 type_of_val(&With::<InterCollectionAccessBuilder>::vec_build::<InterCollectionAccess, _>),
                 type_of_val(&Authz::<InterColl>::check_inter_collection),
-
                 type_of_val(&insert_vec::<DependencyDB>),
                 // Insert into trigger_versions(sql) current function trigger status=Active.
                 type_of_val(&With::<FunctionDB>::try_convert_to::<TriggerDBBuilder, _>),
                 type_of_val(&With::<RequestContext>::update::<TriggerDBBuilder, _>),
                 type_of_val(&build_trigger_versions),
-
                 // inter collections check for trigger
                 type_of_val(&With::<TriggerDB>::vec_convert_to::<InterCollectionAccessBuilder, _>),
                 type_of_val(&With::<InterCollectionAccessBuilder>::vec_build::<InterCollectionAccess, _>),
                 type_of_val(&Authz::<InterColl>::check_inter_collection),
-
                 type_of_val(&insert_vec::<TriggerDB>),
+                // Set stopped for current workers and insert into workers(sql) new workers.
+                type_of_val(&stop_current_workers),
+                type_of_val(&With::<FunctionDB>::try_convert_to::<WorkerDBBuilder, _>),
+                type_of_val(&build_workers),
+                type_of_val(&insert_vec::<WorkerDB>),
                 // Response
                 // Extract new function version id
                 type_of_val(&With::<FunctionDB>::extract::<FunctionVersionId>),
@@ -1703,6 +1713,296 @@ mod tests {
             .map_err(handle_sql_err)?;
         assert_eq!(function_db.enabled, Enabled::FALSE);
 
+        Ok(())
+    }
+
+    #[td_test::test(sqlx)]
+    #[tokio::test]
+    async fn test_workers_created(db: DbPool) -> Result<(), TdError> {
+        let collection_name = CollectionName::try_from("cofnig")?;
+        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
+
+        // Create it without workers
+        let create = FunctionRegister::builder()
+            .try_name("function_1")?
+            .try_description("function_foo description")?
+            .bundle_id(BundleId::default())
+            .try_snippet("function_foo snippet")?
+            .decorator(Decorator::Publisher)
+            .dependencies(None)
+            .triggers(None)
+            .tables(None)
+            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
+            .reuse_frozen_tables(false)
+            .workers(None)
+            .build()?;
+        let function_db = seed_function(&db, &collection, &create).await;
+        let workers: Vec<WorkerDB> = DaoQueries::default()
+            .select_by::<WorkerDB>(&function_db.id)?
+            .build_query_as()
+            .fetch_all(&db)
+            .await
+            .unwrap();
+        assert!(workers.is_empty());
+
+        // Then update to add a worker
+        let update = FunctionUpdate::builder()
+            .workers(Some(HashMap::from([(
+                WorkerTypeDto::Watchdog,
+                WorkerConfig::default(),
+            )])))
+            .build()?;
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
+                FunctionParam::builder()
+                    .try_collection(collection.name.to_string())?
+                    .try_function("function_1")?
+                    .build()?,
+                update.clone(),
+            );
+        let service = UpdateFunctionService::with_defaults(db.clone())
+            .service()
+            .await;
+        let updated_function_1 = service.raw_oneshot(request).await?;
+        let workers: Vec<WorkerDB> = DaoQueries::default()
+            .select_by::<WorkerDB>(&updated_function_1.id)?
+            .build_query_as()
+            .fetch_all(&db)
+            .await
+            .unwrap();
+        assert_eq!(workers.len(), 1);
+        let worker = &workers[0];
+        assert_eq!(worker.collection_id, collection.id);
+        assert_eq!(worker.execution_id, None);
+        assert_eq!(worker.transaction_id, None);
+        assert_eq!(worker.function_run_id, None);
+        assert_eq!(worker.function_version_id, updated_function_1.id);
+        assert_eq!(worker.message_status, WorkerMessageStatus::None);
+        assert_eq!(worker.started_on, None);
+        assert_eq!(worker.ended_on, None);
+        assert_eq!(worker.status, WorkerStatus::Scheduled);
+        assert_eq!(worker.worker_type, WorkerType::Watchdog);
+        assert_eq!(worker.worker_config, Some(WorkerConfig::default()));
+
+        // Then update with None
+        let update = FunctionUpdate::builder().workers(None).build()?;
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
+                FunctionParam::builder()
+                    .try_collection(collection.name.to_string())?
+                    .try_function("function_1")?
+                    .build()?,
+                update.clone(),
+            );
+        let service = UpdateFunctionService::with_defaults(db.clone())
+            .service()
+            .await;
+        let updated_function_2 = service.raw_oneshot(request).await?;
+
+        // updated_function_1 workers should be dropped
+        let workers: Vec<WorkerDB> = DaoQueries::default()
+            .select_by::<WorkerDB>(&updated_function_1.id)?
+            .build_query_as()
+            .fetch_all(&db)
+            .await
+            .unwrap();
+        assert_eq!(workers.len(), 1);
+        let worker = &workers[0];
+        assert_eq!(worker.collection_id, collection.id);
+        assert_eq!(worker.execution_id, None);
+        assert_eq!(worker.transaction_id, None);
+        assert_eq!(worker.function_run_id, None);
+        assert_eq!(worker.function_version_id, updated_function_1.id);
+        assert_eq!(worker.message_status, WorkerMessageStatus::None);
+        assert_eq!(worker.started_on, None);
+        assert_eq!(worker.ended_on, None);
+        assert_eq!(worker.status, WorkerStatus::Stopped);
+        assert_eq!(worker.worker_type, WorkerType::Watchdog);
+        assert_eq!(worker.worker_config, Some(WorkerConfig::default()));
+
+        // updated_function_2 should still have the same worker, recreated
+        let workers: Vec<WorkerDB> = DaoQueries::default()
+            .select_by::<WorkerDB>(&updated_function_2.id)?
+            .build_query_as()
+            .fetch_all(&db)
+            .await
+            .unwrap();
+        assert_eq!(workers.len(), 1);
+        let worker = &workers[0];
+        assert_eq!(worker.collection_id, collection.id);
+        assert_eq!(worker.execution_id, None);
+        assert_eq!(worker.transaction_id, None);
+        assert_eq!(worker.function_run_id, None);
+        assert_eq!(worker.function_version_id, updated_function_2.id);
+        assert_eq!(worker.message_status, WorkerMessageStatus::None);
+        assert_eq!(worker.started_on, None);
+        assert_eq!(worker.ended_on, None);
+        assert_eq!(worker.status, WorkerStatus::Scheduled);
+        assert_eq!(worker.worker_type, WorkerType::Watchdog);
+        assert_eq!(worker.worker_config, Some(WorkerConfig::default()));
+
+        // Then change the workers
+        let update = FunctionUpdate::builder()
+            .workers(Some(HashMap::from([(
+                WorkerTypeDto::Cron,
+                WorkerConfig::default(),
+            )])))
+            .build()?;
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
+                FunctionParam::builder()
+                    .try_collection(collection.name.to_string())?
+                    .try_function("function_1")?
+                    .build()?,
+                update.clone(),
+            );
+        let service = UpdateFunctionService::with_defaults(db.clone())
+            .service()
+            .await;
+        let updated_function_3 = service.raw_oneshot(request).await?;
+
+        // updated_function_2 should still have the same worker, stopped
+        let workers: Vec<WorkerDB> = DaoQueries::default()
+            .select_by::<WorkerDB>(&updated_function_2.id)?
+            .build_query_as()
+            .fetch_all(&db)
+            .await
+            .unwrap();
+        assert_eq!(workers.len(), 1);
+        let worker = &workers[0];
+        assert_eq!(worker.collection_id, collection.id);
+        assert_eq!(worker.execution_id, None);
+        assert_eq!(worker.transaction_id, None);
+        assert_eq!(worker.function_run_id, None);
+        assert_eq!(worker.function_version_id, updated_function_2.id);
+        assert_eq!(worker.message_status, WorkerMessageStatus::None);
+        assert_eq!(worker.started_on, None);
+        assert_eq!(worker.ended_on, None);
+        assert_eq!(worker.status, WorkerStatus::Stopped);
+        assert_eq!(worker.worker_type, WorkerType::Watchdog);
+        assert_eq!(worker.worker_config, Some(WorkerConfig::default()));
+
+        // updated_function_3 should have a same worker
+        let workers: Vec<WorkerDB> = DaoQueries::default()
+            .select_by::<WorkerDB>(&updated_function_3.id)?
+            .build_query_as()
+            .fetch_all(&db)
+            .await
+            .unwrap();
+        assert_eq!(workers.len(), 1);
+        let worker = &workers[0];
+        assert_eq!(worker.collection_id, collection.id);
+        assert_eq!(worker.execution_id, None);
+        assert_eq!(worker.transaction_id, None);
+        assert_eq!(worker.function_run_id, None);
+        assert_eq!(worker.function_version_id, updated_function_3.id);
+        assert_eq!(worker.message_status, WorkerMessageStatus::None);
+        assert_eq!(worker.started_on, None);
+        assert_eq!(worker.ended_on, None);
+        assert_eq!(worker.status, WorkerStatus::Scheduled);
+        assert_eq!(worker.worker_type, WorkerType::Cron);
+        assert_eq!(worker.worker_config, Some(WorkerConfig::default()));
+
+        // And last, drop them all, by passing empty map
+        let update = FunctionUpdate::builder()
+            .workers(Some(HashMap::new()))
+            .build()?;
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
+                FunctionParam::builder()
+                    .try_collection(collection.name.to_string())?
+                    .try_function("function_1")?
+                    .build()?,
+                update.clone(),
+            );
+        let service = UpdateFunctionService::with_defaults(db.clone())
+            .service()
+            .await;
+        let updated_function_4 = service.raw_oneshot(request).await?;
+
+        // updated_function_3 should still have the same worker, stopped
+        let workers: Vec<WorkerDB> = DaoQueries::default()
+            .select_by::<WorkerDB>(&updated_function_3.id)?
+            .build_query_as()
+            .fetch_all(&db)
+            .await
+            .unwrap();
+        assert_eq!(workers.len(), 1);
+        let worker = &workers[0];
+        assert_eq!(worker.collection_id, collection.id);
+        assert_eq!(worker.execution_id, None);
+        assert_eq!(worker.transaction_id, None);
+        assert_eq!(worker.function_run_id, None);
+        assert_eq!(worker.function_version_id, updated_function_3.id);
+        assert_eq!(worker.message_status, WorkerMessageStatus::None);
+        assert_eq!(worker.started_on, None);
+        assert_eq!(worker.ended_on, None);
+        assert_eq!(worker.status, WorkerStatus::Stopped);
+        assert_eq!(worker.worker_type, WorkerType::Cron);
+        assert_eq!(worker.worker_config, Some(WorkerConfig::default()));
+
+        // updated_function_4 should have a no worker
+        let workers: Vec<WorkerDB> = DaoQueries::default()
+            .select_by::<WorkerDB>(&updated_function_4.id)?
+            .build_query_as()
+            .fetch_all(&db)
+            .await
+            .unwrap();
+        assert_eq!(workers.len(), 0);
+        Ok(())
+    }
+
+    #[td_test::test(sqlx)]
+    #[tokio::test]
+    async fn test_multiple_workers_error(db: DbPool) -> Result<(), TdError> {
+        let collection_name = CollectionName::try_from("cofnig")?;
+        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
+
+        // Create it without workers
+        let create = FunctionRegister::builder()
+            .try_name("function_1")?
+            .try_description("function_foo description")?
+            .bundle_id(BundleId::default())
+            .try_snippet("function_foo snippet")?
+            .decorator(Decorator::Publisher)
+            .dependencies(None)
+            .triggers(None)
+            .tables(None)
+            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
+            .reuse_frozen_tables(false)
+            .workers(None)
+            .build()?;
+        let function_db = seed_function(&db, &collection, &create).await;
+        let workers: Vec<WorkerDB> = DaoQueries::default()
+            .select_by::<WorkerDB>(&function_db.id)?
+            .build_query_as()
+            .fetch_all(&db)
+            .await
+            .unwrap();
+        assert!(workers.is_empty());
+
+        // Then update to add more than 1 worker
+        let update = FunctionUpdate::builder()
+            .workers(Some(HashMap::from([
+                (WorkerTypeDto::Cron, WorkerConfig::default()),
+                (WorkerTypeDto::Watchdog, WorkerConfig::default()),
+            ])))
+            .build()?;
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
+                FunctionParam::builder()
+                    .try_collection(collection.name.to_string())?
+                    .try_function("function_1")?
+                    .build()?,
+                update.clone(),
+            );
+        let service = UpdateFunctionService::with_defaults(db.clone())
+            .service()
+            .await;
+        let res = service.raw_oneshot(request).await;
+        assert!(res.is_err());
+        let err = res.err().unwrap();
+        assert!(format!("{err}").contains("Multiple workers are not supported."));
         Ok(())
     }
 }

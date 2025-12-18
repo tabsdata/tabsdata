@@ -6,6 +6,7 @@ use crate::do_authz::DO_AUTHZ;
 use crate::function::layers::register::{data_location, validate_tables_do_not_exist};
 use crate::function::layers::{
     check_private_tables, register_dependencies, register_tables, register_triggers,
+    register_workers,
 };
 use std::collections::HashMap;
 use ta_services::factory::service_factory;
@@ -31,7 +32,8 @@ use td_objects::tower_service::sql::{
 };
 use td_objects::types::basic::{
     AtTime, BundleId, CollectionId, CollectionIdName, CollectionName, DataLocation, Enabled,
-    FunctionId, FunctionName, ReuseFrozen, StorageVersion, TableNameDto, TableType,
+    FunctionId, FunctionName, FunctionVersionId, ReuseFrozen, StorageVersion, TableNameDto,
+    TableType, WorkerConfig, WorkerTypeDto,
 };
 use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
 use td_tower::default_services::TransactionProvider;
@@ -99,17 +101,18 @@ fn service() {
         from_fn(With::<FunctionDB>::extract::<BundleId>),
         from_fn(By::<BundleId>::delete::<BundleDB>),
         // Register associations
-        // Extract new function id
-        from_fn(With::<FunctionDB>::extract::<FunctionId>),
         // Find previous versions (empty because it is a new function)
+        from_fn(With::<Option<FunctionVersionId>>::default),
         from_fn(With::<TableDB>::empty_vec),
         from_fn(With::<DependencyDB>::empty_vec),
         from_fn(With::<TriggerDBWithNames>::empty_vec),
         // Extract new associations
+        from_fn(With::<FunctionDB>::extract::<FunctionId>),
         from_fn(With::<FunctionRegister>::extract::<Option<Vec<TableNameDto>>>),
         from_fn(With::<FunctionRegister>::extract::<Option<HashMap<TableNameDto, TableType>>>),
         from_fn(With::<FunctionRegister>::extract::<Option<Vec<TableDependencyDto>>>),
         from_fn(With::<FunctionRegister>::extract::<Option<Vec<TableTriggerDto>>>),
+        from_fn(With::<FunctionRegister>::extract::<Option<HashMap<WorkerTypeDto, WorkerConfig>>>),
         // Validate tables do not exist
         from_fn(validate_tables_do_not_exist),
         // check private tables
@@ -121,8 +124,10 @@ fn service() {
         register_tables(),
         register_dependencies::<_, DO_AUTHZ>(),
         register_triggers::<_, DO_AUTHZ>(),
+        register_workers(),
         // Response
-        from_fn(By::<FunctionId>::select::<FunctionDBWithNames>),
+        from_fn(With::<FunctionDB>::extract::<FunctionVersionId>),
+        from_fn(By::<FunctionVersionId>::select::<FunctionDBWithNames>),
         from_fn(With::<FunctionDBWithNames>::try_convert_to::<FunctionBuilder, _>),
         from_fn(With::<FunctionBuilder>::build::<Function, _>),
     )
@@ -138,6 +143,7 @@ mod tests {
     use td_error::TdError;
     use td_execution::VersionResolverError;
     use td_objects::dxo::crudl::handle_sql_err;
+    use td_objects::dxo::worker::WorkerDB;
     use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_function::seed_function;
@@ -146,6 +152,7 @@ mod tests {
     use td_objects::tower_service::sql::SqlError;
     use td_objects::types::basic::{
         AccessTokenId, Decorator, FunctionRuntimeValues, RoleId, ToCollectionId, UserId,
+        WorkerMessageStatus, WorkerStatus, WorkerType,
     };
     use td_tower::ctx_service::RawOneshot;
 
@@ -155,7 +162,7 @@ mod tests {
     async fn test_tower_metadata_register_function(db: DbPool) {
         use crate::function::layers::register::{
             build_dependency_versions, build_table_versions, build_tables_trigger_versions,
-            build_trigger_versions,
+            build_trigger_versions, build_workers, stop_current_workers,
         };
         use td_objects::dxo::dependency::{DependencyDB, DependencyDBBuilder};
         use td_objects::dxo::inter_collection_access::{
@@ -163,6 +170,7 @@ mod tests {
         };
         use td_objects::dxo::table::{TableDB, TableDBBuilder};
         use td_objects::dxo::trigger::{TriggerDB, TriggerDBBuilder};
+        use td_objects::dxo::worker::{WorkerDB, WorkerDBBuilder};
         use td_objects::tower_service::authz::InterColl;
         use td_objects::tower_service::from::{
             ConvertIntoMapService, TryIntoService, UpdateService, VecBuildService, With,
@@ -229,19 +237,24 @@ mod tests {
                 type_of_val(&With::<FunctionDB>::extract::<BundleId>),
                 type_of_val(&By::<BundleId>::delete::<BundleDB>),
                 // Register associations
-                // Extract new function id
-                type_of_val(&With::<FunctionDB>::extract::<FunctionId>),
                 // Find previous versions (empty because it is a new function)
+                type_of_val(&With::<Option<FunctionVersionId>>::default),
                 type_of_val(&With::<TableDB>::empty_vec),
                 type_of_val(&With::<DependencyDB>::empty_vec),
                 type_of_val(&With::<TriggerDBWithNames>::empty_vec),
                 // Extract new associations
+                type_of_val(&With::<FunctionDB>::extract::<FunctionId>),
                 type_of_val(&With::<FunctionRegister>::extract::<Option<Vec<TableNameDto>>>),
                 type_of_val(
                     &With::<FunctionRegister>::extract::<Option<HashMap<TableNameDto, TableType>>>,
                 ),
                 type_of_val(&With::<FunctionRegister>::extract::<Option<Vec<TableDependencyDto>>>),
                 type_of_val(&With::<FunctionRegister>::extract::<Option<Vec<TableTriggerDto>>>),
+                type_of_val(
+                    &With::<FunctionRegister>::extract::<
+                        Option<HashMap<WorkerTypeDto, WorkerConfig>>,
+                    >,
+                ),
                 // Validate tables do not exist
                 type_of_val(&validate_tables_do_not_exist),
                 // check private tables
@@ -281,8 +294,14 @@ mod tests {
                 ),
                 type_of_val(&Authz::<InterColl>::check_inter_collection),
                 type_of_val(&insert_vec::<TriggerDB>),
+                // Set stopped for current workers and insert into workers(sql) new workers.
+                type_of_val(&stop_current_workers),
+                type_of_val(&With::<FunctionDB>::try_convert_to::<WorkerDBBuilder, _>),
+                type_of_val(&build_workers),
+                type_of_val(&insert_vec::<WorkerDB>),
                 // Response
-                type_of_val(&By::<FunctionId>::select::<FunctionDBWithNames>),
+                type_of_val(&With::<FunctionDB>::extract::<FunctionVersionId>),
+                type_of_val(&By::<FunctionVersionId>::select::<FunctionDBWithNames>),
                 type_of_val(&With::<FunctionDBWithNames>::try_convert_to::<FunctionBuilder, _>),
                 type_of_val(&With::<FunctionBuilder>::build::<Function, _>),
             ]);
@@ -1178,6 +1197,103 @@ mod tests {
         let err = err.domain_err::<VersionResolverError>();
         assert!(matches!(err, VersionResolverError::InvalidRange(_)));
 
+        Ok(())
+    }
+
+    #[td_test::test(sqlx)]
+    #[tokio::test]
+    async fn test_workers_created(db: DbPool) -> Result<(), TdError> {
+        let collection_name = CollectionName::try_from("collection")?;
+        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
+
+        let create = FunctionRegister::builder()
+            .try_name("function")?
+            .try_description("description")?
+            .bundle_id(BundleId::default())
+            .try_snippet("snippet")?
+            .decorator(Decorator::Publisher)
+            .dependencies(None)
+            .triggers(None)
+            .tables(None)
+            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
+            .reuse_frozen_tables(false)
+            .workers(Some(HashMap::from([(
+                WorkerTypeDto::Cron,
+                WorkerConfig::default(),
+            )])))
+            .build()?;
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
+                CollectionParam::builder()
+                    .try_collection(collection_name.as_str())?
+                    .build()?,
+                create,
+            );
+        let service = RegisterFunctionService::with_defaults(db.clone())
+            .service()
+            .await;
+        let res = service.raw_oneshot(request).await?;
+
+        let workers: Vec<WorkerDB> = DaoQueries::default()
+            .select_by::<WorkerDB>(&res.id)?
+            .build_query_as()
+            .fetch_all(&db)
+            .await
+            .unwrap();
+        assert_eq!(workers.len(), 1);
+        let worker = &workers[0];
+        assert_eq!(worker.collection_id, collection.id);
+        assert_eq!(worker.execution_id, None);
+        assert_eq!(worker.transaction_id, None);
+        assert_eq!(worker.function_run_id, None);
+        assert_eq!(worker.function_version_id, res.id);
+        assert_eq!(worker.message_status, WorkerMessageStatus::None);
+        assert_eq!(worker.started_on, None);
+        assert_eq!(worker.ended_on, None);
+        assert_eq!(worker.status, WorkerStatus::Scheduled);
+        assert_eq!(worker.worker_type, WorkerType::Cron);
+        assert_eq!(worker.worker_config, Some(WorkerConfig::default()));
+        Ok(())
+    }
+
+    #[td_test::test(sqlx)]
+    #[tokio::test]
+    async fn test_multiple_workers_error(db: DbPool) -> Result<(), TdError> {
+        let collection_name = CollectionName::try_from("collection")?;
+        seed_collection(&db, &collection_name, &UserId::admin()).await;
+
+        let create = FunctionRegister::builder()
+            .try_name("function")?
+            .try_description("description")?
+            .bundle_id(BundleId::default())
+            .try_snippet("snippet")?
+            .decorator(Decorator::Publisher)
+            .dependencies(None)
+            .triggers(None)
+            .tables(None)
+            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
+            .reuse_frozen_tables(false)
+            .workers(Some(HashMap::from([
+                (WorkerTypeDto::Cron, WorkerConfig::default()),
+                (WorkerTypeDto::Watchdog, WorkerConfig::default()),
+            ])))
+            .build()?;
+
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
+                CollectionParam::builder()
+                    .try_collection(collection_name.as_str())?
+                    .build()?,
+                create,
+            );
+
+        let service = RegisterFunctionService::with_defaults(db.clone())
+            .service()
+            .await;
+        let res = service.raw_oneshot(request).await;
+        assert!(res.is_err());
+        let err = res.err().unwrap();
+        assert!(format!("{err}").contains("Multiple workers are not supported."));
         Ok(())
     }
 }

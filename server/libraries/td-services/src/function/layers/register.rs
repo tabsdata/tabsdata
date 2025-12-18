@@ -5,27 +5,30 @@
 use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
 use td_error::display_vec::DisplayVec;
-use td_error::{TdError, td_error};
+use td_error::{ApiError, TdError, api_error, td_error};
 use td_execution::VersionResolver;
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::handle_sql_err;
 use td_objects::dxo::dependency::{DependencyDB, DependencyDBBuilder};
 use td_objects::dxo::table::{TableDB, TableDBBuilder, TableDBWithNames};
 use td_objects::dxo::trigger::{TriggerDB, TriggerDBBuilder, TriggerDBWithNames};
+use td_objects::dxo::worker::{UpdateWorkerStatusDB, WorkerDB, WorkerDBBuilder};
 use td_objects::sql::cte::CteQueries;
-use td_objects::sql::{DaoQueries, FindBy};
+use td_objects::sql::{DaoQueries, FindBy, UpdateBy};
 use td_objects::system::{
     SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES, SYSTEM_OUTPUT_TABLE_NAMES_PREFIXES,
 };
 use td_objects::types::basic::{
     AtTime, CollectionId, CollectionName, DataLocation, DependencyId, DependencyPos,
-    DependencyStatus, FunctionId, ReuseFrozen, TableFunctionParamPos, TableId, TableName,
-    TableNameDto, TableStatus, TableType, TriggerId, TriggerStatus, TriggerVersionId, TriggeredOn,
+    DependencyStatus, FunctionId, FunctionVersionId, ReuseFrozen, TableFunctionParamPos, TableId,
+    TableName, TableNameDto, TableStatus, TableType, TriggerId, TriggerStatus, TriggerVersionId,
+    TriggeredOn, WorkerConfig, WorkerType, WorkerTypeDto,
 };
 use td_objects::types::composed::{
     TableDependency, TableDependencyDto, TableTrigger, TableTriggerDto,
 };
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, ReqCtx, SrvCtx};
+use tracing::{debug, error};
 
 #[td_error]
 pub enum RegisterFunctionError {
@@ -667,4 +670,103 @@ pub async fn build_trigger_versions(
 
     let new_trigger_versions = new_trigger_versions.into_values().collect();
     Ok(new_trigger_versions)
+}
+
+pub async fn stop_current_workers(
+    Connection(connection): Connection,
+    SrvCtx(queries): SrvCtx<DaoQueries>,
+    Input(function_version_id): Input<Option<FunctionVersionId>>,
+) -> Result<(), TdError> {
+    let mut conn = connection.lock().await;
+    let conn = conn.get_mut_connection()?;
+
+    if let Some(function_version_id) = function_version_id.deref() {
+        // we cannot stop function workers
+        let update = UpdateWorkerStatusDB::stopped()?;
+        let to_stop = [
+            (function_version_id, WorkerType::Cron),
+            (function_version_id, WorkerType::Watchdog),
+        ];
+        let res = queries
+            .update_all_by::<_, WorkerDB>(&update, &to_stop)?
+            .build()
+            .execute(&mut *conn)
+            .await
+            .map_err(handle_sql_err)?;
+        debug!(
+            "Set stopped status in {} workers for function version {}.",
+            res.rows_affected(),
+            function_version_id
+        );
+    }
+
+    Ok(())
+}
+
+pub async fn build_workers(
+    Connection(connection): Connection,
+    SrvCtx(queries): SrvCtx<DaoQueries>,
+    Input(builder): Input<WorkerDBBuilder>,
+    Input(function_version_id): Input<Option<FunctionVersionId>>,
+    Input(new): Input<Option<HashMap<WorkerTypeDto, WorkerConfig>>>,
+) -> Result<Vec<WorkerDB>, TdError> {
+    let mut new_workers = vec![];
+    if let Some(new) = new.deref() {
+        match new.len() {
+            0 => {
+                debug!("No workers specified.");
+            }
+            1 => {
+                for (worker_type_dto, worker_config) in new {
+                    let worker_type = match worker_type_dto {
+                        WorkerTypeDto::Cron => WorkerType::Cron,
+                        WorkerTypeDto::Watchdog => WorkerType::Watchdog,
+                    };
+                    let worker_db = builder
+                        .deref()
+                        .clone()
+                        .worker_type(worker_type)
+                        .worker_config(Some(worker_config.clone()))
+                        .build()?;
+                    new_workers.push(worker_db);
+                    debug!("New worker of type {worker_type_dto} created.");
+                }
+            }
+            _ => {
+                // for now, we only support 1 worker per function
+                error!("Multiple workers specified. This is not supported.");
+                Err(api_error!(
+                    ApiError::InputError,
+                    "Multiple workers are not supported."
+                ))?
+            }
+        }
+    } else if let Some(function_version_id) = function_version_id.deref() {
+        // if there is no info about new workers, we recreate what was present for the new version
+        let mut conn = connection.lock().await;
+        let conn = conn.get_mut_connection()?;
+
+        let to_recreate = [
+            (function_version_id, WorkerType::Cron),
+            (function_version_id, WorkerType::Watchdog),
+        ];
+        let current_workers: Vec<WorkerDB> = queries
+            .find_by::<WorkerDB>(&to_recreate)?
+            .build_query_as()
+            .fetch_all(&mut *conn)
+            .await
+            .map_err(handle_sql_err)?;
+        for worker in current_workers {
+            let worker_db = builder
+                .deref()
+                .clone()
+                .worker_type(worker.worker_type)
+                .worker_config(worker.worker_config.clone())
+                .build()?;
+            new_workers.push(worker_db);
+        }
+    }
+
+    debug!("Created {} new workers.", new_workers.len());
+    Ok(new_workers)
 }

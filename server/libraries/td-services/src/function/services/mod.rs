@@ -430,6 +430,7 @@ pub(crate) mod tests {
             runtime_values: update.runtime_values.unwrap_or(create.runtime_values),
             reuse_frozen_tables: update.reuse_frozen_tables,
             enabled: update.enabled,
+            workers: None,
         };
         assert_register(db, user_id, collection, &update_as_register, response).await?;
         Ok(())

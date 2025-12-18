@@ -231,6 +231,23 @@ where
     }
 }
 
+#[async_trait]
+pub trait IntoSomeService<T> {
+    async fn some(value: Input<T>) -> Result<Option<T>, TdError>
+    where
+        for<'a> T: Send + Sync + Clone + 'a;
+}
+
+#[async_trait]
+impl<T> IntoSomeService<T> for With<T> {
+    async fn some(Input(value): Input<T>) -> Result<Option<T>, TdError>
+    where
+        for<'a> T: Send + Sync + Clone + 'a,
+    {
+        Ok(Some(value.deref().clone()))
+    }
+}
+
 #[td_error]
 pub enum WithError {
     #[error("Option has no value")]

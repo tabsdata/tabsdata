@@ -5,7 +5,7 @@
 use crate::do_authz::{DoAuthz, inter_collection_authz};
 use crate::function::layers::register::{
     build_dependency_versions, build_table_versions, build_tables_trigger_versions,
-    build_trigger_versions,
+    build_trigger_versions, build_workers, stop_current_workers,
 };
 use itertools::Itertools;
 use std::ops::Deref;
@@ -15,6 +15,7 @@ use td_objects::dxo::dependency::{DependencyDB, DependencyDBBuilder};
 use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::table::{TableDB, TableDBBuilder};
 use td_objects::dxo::trigger::{TriggerDB, TriggerDBBuilder};
+use td_objects::dxo::worker::{WorkerDB, WorkerDBBuilder};
 use td_objects::tower_service::from::{TryIntoService, UpdateService, With};
 use td_objects::tower_service::sql::insert_vec;
 use td_objects::types::basic::{CollectionName, TableNameDto};
@@ -65,6 +66,17 @@ pub fn register_triggers<A: DoAuthz>() {
         from_fn(build_trigger_versions),
         inter_collection_authz::<_, A, TriggerDB, _>(),
         from_fn(insert_vec::<TriggerDB>),
+    )
+}
+
+#[layer]
+pub fn register_workers() {
+    layers!(
+        // Set stopped for current workers and insert into workers(sql) new workers.
+        from_fn(stop_current_workers),
+        from_fn(With::<FunctionDB>::try_convert_to::<WorkerDBBuilder, _>),
+        from_fn(build_workers),
+        from_fn(insert_vec::<WorkerDB>),
     )
 }
 

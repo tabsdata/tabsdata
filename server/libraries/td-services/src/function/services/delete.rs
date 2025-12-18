@@ -4,7 +4,9 @@
 
 use crate::do_authz::SKIP_AUTHZ;
 use crate::function::layers::delete::build_deleted_function_version;
-use crate::function::layers::{register_dependencies, register_tables, register_triggers};
+use crate::function::layers::{
+    register_dependencies, register_tables, register_triggers, register_workers,
+};
 use std::collections::HashMap;
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
@@ -18,13 +20,13 @@ use td_objects::rest_urls::FunctionParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev};
 use td_objects::tower_service::from::{
-    DefaultService, ExtractNameService, ExtractService, TryIntoService, UpdateService, With,
-    combine,
+    DefaultService, ExtractNameService, ExtractService, IntoSomeService, TryIntoService,
+    UpdateService, With, combine,
 };
 use td_objects::tower_service::sql::{By, SqlSelectAllService, SqlSelectService, insert};
 use td_objects::types::basic::{
     AtTime, CollectionId, CollectionIdName, CollectionName, FunctionId, FunctionIdName,
-    FunctionVersionId, ReuseFrozen, TableNameDto, TableType,
+    FunctionVersionId, ReuseFrozen, TableNameDto, TableType, WorkerConfig, WorkerTypeDto,
 };
 use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
 use td_tower::default_services::TransactionProvider;
@@ -72,6 +74,7 @@ fn service() {
         from_fn(insert::<FunctionDB>),
         // Register associations
         // Find previous versions.
+        from_fn(With::<FunctionVersionId>::some),
         from_fn(By::<FunctionId>::select_all_versions::<{ TableDB::Active }, TableDB>),
         from_fn(By::<FunctionId>::select_all_versions::<{ DependencyDB::Active }, DependencyDB>),
         from_fn(
@@ -85,12 +88,16 @@ fn service() {
         from_fn(With::<Option<HashMap<TableNameDto, TableType>>>::default),
         from_fn(With::<Option<Vec<TableDependencyDto>>>::default),
         from_fn(With::<Option<Vec<TableTriggerDto>>>::default),
+        // Create an empty hashmap as workers so all the previous workers get deleted
+        from_fn(With::<HashMap<WorkerTypeDto, WorkerConfig>>::default),
+        from_fn(With::<HashMap<WorkerTypeDto, WorkerConfig>>::some),
         // Extract reuse frozen (default as deletes are not reusing anything)
         from_fn(With::<ReuseFrozen>::default),
         // And register new ones
         register_tables(),
         register_dependencies::<_, SKIP_AUTHZ>(),
         register_triggers::<_, SKIP_AUTHZ>(),
+        register_workers(),
     )
 }
 
@@ -104,12 +111,14 @@ mod tests {
     use td_error::TdError;
     use td_objects::dxo::crudl::handle_sql_err;
     use td_objects::dxo::function::{FunctionBuilder, FunctionRegister};
+    use td_objects::dxo::worker::WorkerDB;
     use td_objects::rest_urls::CollectionParam;
     use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_function::seed_function;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, Decorator, FunctionRuntimeValues, RoleId, UserId,
+        WorkerMessageStatus, WorkerStatus, WorkerType,
     };
     use td_tower::ctx_service::RawOneshot;
 
@@ -121,11 +130,12 @@ mod tests {
 
         use crate::function::layers::register::{
             build_dependency_versions, build_table_versions, build_tables_trigger_versions,
-            build_trigger_versions,
+            build_trigger_versions, build_workers, stop_current_workers,
         };
         use td_objects::dxo::dependency::DependencyDBBuilder;
         use td_objects::dxo::table::TableDBBuilder;
         use td_objects::dxo::trigger::{TriggerDB, TriggerDBBuilder, TriggerDBWithNames};
+        use td_objects::dxo::worker::{WorkerDB, WorkerDBBuilder};
         use td_objects::tower_service::from::{TryIntoService, UpdateService};
         use td_objects::tower_service::sql::insert_vec;
         use td_objects::types::basic::ReuseFrozen;
@@ -165,6 +175,7 @@ mod tests {
                 type_of_val(&insert::<FunctionDB>),
                 // Register associations
                 // Find previous versions.
+                type_of_val(&With::<FunctionVersionId>::some),
                 type_of_val(&By::<FunctionId>::select_all_versions::<{ TableDB::Active }, TableDB>),
                 type_of_val(&By::<FunctionId>::select_all_versions::<{ DependencyDB::Active }, DependencyDB>),
                 type_of_val(&
@@ -178,6 +189,9 @@ mod tests {
                 type_of_val(&With::<Option<HashMap<TableNameDto, TableType>>>::default),
                 type_of_val(&With::<Option<Vec<TableDependencyDto>>>::default),
                 type_of_val(&With::<Option<Vec<TableTriggerDto>>>::default),
+                // Create an empty hashmap as workers so all the previous workers get deleted
+                type_of_val(&With::<HashMap<WorkerTypeDto, WorkerConfig>>::default),
+                type_of_val(&With::<HashMap<WorkerTypeDto, WorkerConfig>>::some),
                 // Extract reuse frozen (default as deletes are not reusing anything)
                 type_of_val(&With::<ReuseFrozen>::default),
                 // Insert into table_versions(sql) current function tables status=Active.
@@ -199,6 +213,11 @@ mod tests {
                 type_of_val(&With::<RequestContext>::update::<TriggerDBBuilder, _>),
                 type_of_val(&build_trigger_versions),
                 type_of_val(&insert_vec::<TriggerDB>),
+                // Set stopped for current workers and insert into workers(sql) new workers.
+                type_of_val(&stop_current_workers),
+                type_of_val(&With::<FunctionDB>::try_convert_to::<WorkerDBBuilder, _>),
+                type_of_val(&build_workers),
+                type_of_val(&insert_vec::<WorkerDB>),
             ]);
     }
 
@@ -513,5 +532,76 @@ mod tests {
             &created_function_2,
         )
         .await
+    }
+
+    #[td_test::test(sqlx)]
+    #[tokio::test]
+    async fn test_delete_workers(db: DbPool) -> Result<(), TdError> {
+        let collection_name = CollectionName::try_from("cofnig")?;
+        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
+
+        // register a function
+        let create = FunctionRegister::builder()
+            .try_name("function_1")?
+            .try_description("wanted")?
+            .bundle_id(BundleId::default())
+            .try_snippet("the_trigger snippet")?
+            .decorator(Decorator::Publisher)
+            .dependencies(None)
+            .triggers(None)
+            .tables(Some(vec![TableNameDto::try_from("trigger_table")?]))
+            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
+            .reuse_frozen_tables(false)
+            .workers(Some(HashMap::from([(
+                WorkerTypeDto::Cron,
+                WorkerConfig::default(),
+            )])))
+            .build()?;
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
+                CollectionParam::builder()
+                    .try_collection(collection_name.as_str())?
+                    .build()?,
+                create,
+            );
+        let service = RegisterFunctionService::with_defaults(db.clone())
+            .service()
+            .await;
+        let function = service.raw_oneshot(request).await?;
+
+        // and then just deleted
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).delete(
+                FunctionParam::builder()
+                    .try_collection(format!("~{}", collection.id))?
+                    .try_function("function_1")?
+                    .build()?,
+            );
+        let service = DeleteFunctionService::with_defaults(db.clone())
+            .service()
+            .await;
+        service.raw_oneshot(request).await?;
+
+        // check its workers also got stopped
+        let workers: Vec<WorkerDB> = DaoQueries::default()
+            .select_by::<WorkerDB>(&())?
+            .build_query_as()
+            .fetch_all(&db)
+            .await
+            .unwrap();
+        assert_eq!(workers.len(), 1);
+        let worker = &workers[0];
+        assert_eq!(worker.collection_id, collection.id);
+        assert_eq!(worker.execution_id, None);
+        assert_eq!(worker.transaction_id, None);
+        assert_eq!(worker.function_run_id, None);
+        assert_eq!(worker.function_version_id, function.id);
+        assert_eq!(worker.message_status, WorkerMessageStatus::None);
+        assert_eq!(worker.started_on, None);
+        assert_eq!(worker.ended_on, None);
+        assert_eq!(worker.status, WorkerStatus::Stopped);
+        assert_eq!(worker.worker_type, WorkerType::Cron);
+        assert_eq!(worker.worker_config, Some(WorkerConfig::default()));
+        Ok(())
     }
 }
