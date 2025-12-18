@@ -83,7 +83,7 @@ fn service() {
         // Select trigger function.
         from_fn(
             By::<(CollectionIdName, FunctionIdName)>::select_version::<
-                { FunctionDBWithNames::Executable },
+                { FunctionDBWithNames::All },
                 FunctionDBWithNames,
             >
         ),

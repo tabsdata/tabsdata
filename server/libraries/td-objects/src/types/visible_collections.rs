@@ -54,25 +54,15 @@ fn collections_where<'a>(
 impl ListFilterGenerator for VisibleCollections {
     fn where_clause<'a, D: DataAccessObject>(
         &'a self,
-        with_where: bool,
         query_builder: &mut QueryBuilder<'a, Sqlite>,
-    ) -> Result<bool, TdError> {
-        let mut with_where = with_where;
-        if with_where {
-            query_builder.push(" AND ");
-        } else {
-            query_builder.push(" WHERE ");
-            with_where = true;
-        }
-
+    ) -> Result<(), TdError> {
         let field = D::sql_field_for_type(std::any::TypeId::of::<CollectionId>())?;
-        query_builder.push("(");
+        query_builder.push("AND (");
         collections_where(query_builder, field, self.direct())?;
         query_builder.push(" OR ");
         collections_where(query_builder, field, self.indirect())?;
         query_builder.push(")");
-
-        Ok(with_where)
+        Ok(())
     }
 }
 
@@ -100,19 +90,10 @@ impl TryFrom<&VisibleCollections> for VisibleTablesCollections {
 impl ListFilterGenerator for VisibleTablesCollections {
     fn where_clause<'a, D: DataAccessObject>(
         &'a self,
-        with_where: bool,
         query_builder: &mut QueryBuilder<'a, Sqlite>,
-    ) -> Result<bool, TdError> {
-        let mut with_where = with_where;
-        if with_where {
-            query_builder.push(" AND ");
-        } else {
-            query_builder.push(" WHERE ");
-            with_where = true;
-        }
-
+    ) -> Result<(), TdError> {
         let field = D::sql_field_for_type(std::any::TypeId::of::<CollectionId>())?;
-        query_builder.push("(");
+        query_builder.push("AND (");
         collections_where(query_builder, field, self.direct())?;
         query_builder.push(" OR ");
 
@@ -135,7 +116,7 @@ impl ListFilterGenerator for VisibleTablesCollections {
 
         query_builder.push(")");
 
-        Ok(with_where)
+        Ok(())
     }
 }
 
@@ -163,22 +144,12 @@ impl TryFrom<&VisibleCollections> for VisibleFunctionsCollections {
 impl ListFilterGenerator for VisibleFunctionsCollections {
     fn where_clause<'a, D: DataAccessObject>(
         &'a self,
-        with_where: bool,
         query_builder: &mut QueryBuilder<'a, Sqlite>,
-    ) -> Result<bool, TdError> {
-        let mut with_where = with_where;
-        if with_where {
-            query_builder.push(" AND ");
-        } else {
-            query_builder.push(" WHERE ");
-            with_where = true;
-        }
-
+    ) -> Result<(), TdError> {
         let field = D::sql_field_for_type(std::any::TypeId::of::<CollectionId>())?;
-        query_builder.push("(");
+        query_builder.push("AND (");
         collections_where(query_builder, field, self.direct())?;
         query_builder.push(")");
-
-        Ok(with_where)
+        Ok(())
     }
 }

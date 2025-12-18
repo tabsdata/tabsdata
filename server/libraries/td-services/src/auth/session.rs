@@ -102,7 +102,7 @@ impl<'a> Provider<'a, HashMap<AccessTokenId, Arc<Session>>, &'a mut SqliteConnec
         if self.time_to_purge() {
             let now = AtTime::now();
             let mut query = self.queries.delete_by::<SessionDB>(&())?;
-            query.push(" WHERE expires_on < ");
+            query.push(" AND expires_on < ");
             query.push_bind(&now);
             let purged = query
                 .build()

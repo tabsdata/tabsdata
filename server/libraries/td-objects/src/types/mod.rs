@@ -137,7 +137,6 @@ macro_rules! impl_dyn_tuples {
         }
     };
 }
-
 all_the_tuples!(impl_dyn_tuples);
 
 pub trait ComposedString {

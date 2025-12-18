@@ -59,6 +59,7 @@ where
         query_builder.push(select);
 
         // Where clause
+        query_builder.push(" WHERE ");
         gen_where_clause::<D, E>(&mut query_builder, std::slice::from_ref(e))?;
 
         // And last, order by
@@ -96,6 +97,7 @@ where
             // Safeguard so empty lookups don't find all rows
             query_builder.push(" WHERE 1 = 0");
         } else {
+            query_builder.push(" WHERE ");
             gen_where_clause::<D, E>(&mut query_builder, e)?;
         }
 
@@ -167,9 +169,14 @@ where
     ));
 
     // With the given statuses needed
-    state_where::<S, D>(query_builder)?;
+    query_builder.push(" AND ");
+    gen_where_clause::<D, _>(query_builder, D::state())?;
 
-    query_builder.push(")");
+    query_builder.push(
+        // just so formatting is better, inserting ')'
+        r#")
+        "#,
+    );
 
     Ok(())
 }
@@ -285,6 +292,8 @@ where
     query_builder.push(" WHERE ");
     query_builder.push(format!("rv.{table_id_field} = "));
     table_id.push_bind(query_builder);
+    query_builder.push(" AND ");
+    gen_where_clause::<D, _>(query_builder, D::state())?;
 
     // Build the where clause for the versions
     match versions {
@@ -383,29 +392,7 @@ where
         ))?,
     }
 
-    state_where::<S, D>(query_builder)?;
     query_builder.push(")");
-
-    Ok(())
-}
-
-fn state_where<const S: u8, D>(
-    query_builder: &mut sqlx::QueryBuilder<sqlx::Sqlite>,
-) -> Result<(), TdError>
-where
-    D: DataAccessObject + States<S>,
-{
-    let status = D::state();
-    if !status.is_empty() {
-        query_builder.push(" AND (");
-        let mut separated = query_builder.separated(" OR ");
-        for status in status {
-            let field = D::sql_field_for_type(status.type_id())?;
-            separated.push(format!("rv.{field} = "));
-            status.push_bind_unseparated(&mut separated);
-        }
-        query_builder.push(")");
-    }
 
     Ok(())
 }
@@ -447,7 +434,7 @@ mod tests {
         sql_table = "test_table",
         versioned(order_by = "defined_on", partition_by = "partition_id"),
         states(
-            Active = &[&TestStatus::Active],
+            Active = [TestStatus::Active],
         )
     )]
     struct TestDao {
@@ -526,7 +513,8 @@ mod tests {
         \n                test_ranked rv\
         \n            WHERE\
         \n                rv.rn = 1\
-        \n         AND (rv.status = ?))";
+        \n         AND ((status = ?)))\
+        \n        ";
         assert_eq!(query.sql(), expected);
     }
 
@@ -553,7 +541,8 @@ mod tests {
         \n                test_ranked rv\
         \n            WHERE\
         \n                rv.rn = 1\
-        \n         AND (rv.status = ?))";
+        \n         AND ((status = ?)))\
+        \n        ";
         assert_eq!(query.sql(), expected);
     }
 
@@ -659,7 +648,8 @@ mod tests {
         \n                latest_versions_ranked rv\
         \n            WHERE\
         \n                rv.rn = 1\
-        \n        )SELECT id, partition_id, status, defined_on FROM latest_versions ORDER BY 1 DESC";
+        \n         AND (1=1))\
+        \n        SELECT id, partition_id, status, defined_on FROM latest_versions WHERE (1=1) ORDER BY 1 DESC";
         assert_eq!(query.sql(), expected);
     }
 
@@ -685,7 +675,8 @@ mod tests {
         \n                latest_versions_ranked rv\
         \n            WHERE\
         \n                rv.rn = 1\
-        \n        )SELECT id, partition_id, status, defined_on FROM latest_versions ORDER BY 1 DESC";
+        \n         AND (1=1))\
+        \n        SELECT id, partition_id, status, defined_on FROM latest_versions WHERE (1=1) ORDER BY 1 DESC";
         assert_eq!(query.sql(), expected);
     }
 
@@ -712,7 +703,8 @@ mod tests {
         \n                latest_versions_ranked rv\
         \n            WHERE\
         \n                rv.rn = 1\
-        \n        )SELECT id, partition_id, status, defined_on FROM latest_versions WHERE (id = ?) ORDER BY 1 DESC";
+        \n         AND (1=1))\
+        \n        SELECT id, partition_id, status, defined_on FROM latest_versions WHERE ((id = ?)) ORDER BY 1 DESC";
         assert_eq!(query.sql(), expected);
     }
 

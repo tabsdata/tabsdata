@@ -72,47 +72,55 @@ where
     }
 }
 
+/// WHERE clause generic generator.
+/// AsDynSqlEntities provide a vector of SqlEntity. This vector is aggregated using OR conditions.
+/// Each SqlEntity might as well be a group of entities (such as tuples). SqlEntity is aggregated
+/// using AND conditions. So for example, [(A, B), (C, D)] generates ((A AND B) or (C AND D)).
+/// Empty AND/OR conditions result in 1=1 conditions.
 pub fn gen_where_clause<'a, D, E>(
     query_builder: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>,
     groups: &'a [E],
-) -> Result<bool, TdError>
+) -> Result<(), TdError>
 where
     D: DataAccessObject,
     E: AsDynSqlEntities,
 {
-    let mut with_where = false; // true if WHERE clause was added
+    query_builder.push("(");
+    if groups.is_empty() {
+        query_builder.push("1=1");
+    } else {
+        let mut first_group = true;
+        for group in groups {
+            let entities = group.as_dyn_entities();
 
-    for group in groups {
-        let entities = group.as_dyn_entities();
-
-        if entities.is_empty() {
-            continue;
-        }
-
-        if with_where {
-            query_builder.push(" OR ");
-        } else {
-            query_builder.push(" WHERE ");
-            with_where = true;
-        }
-
-        query_builder.push("(");
-
-        let mut first_entity = true;
-        for entity in entities {
-            if !first_entity {
-                query_builder.push(" AND ");
+            if entities.is_empty() {
+                query_builder.push("1=1");
+                continue;
             }
-            first_entity = false;
 
-            let column = <D>::sql_field_for_type(entity.type_id())?;
-            entity.push_bind(query_builder.push(format!("{} = ", column)));
+            if !first_group {
+                query_builder.push(" OR ");
+            }
+            first_group = false;
+
+            query_builder.push("(");
+            let mut first_entity = true;
+            for entity in entities {
+                if !first_entity {
+                    query_builder.push(" AND ");
+                }
+                first_entity = false;
+
+                let column = D::sql_field_for_type(entity.type_id())?;
+                entity.push_bind(query_builder.push(format!("{column} = ")));
+            }
+
+            query_builder.push(")");
         }
-
-        query_builder.push(")");
     }
+    query_builder.push(")");
 
-    Ok(with_where)
+    Ok(())
 }
 
 pub trait SelectBy<'a, E> {
@@ -135,6 +143,7 @@ where
         let fields = D::fields();
         let sql = format!("SELECT {} FROM {}", fields.join(", "), table);
         let mut query_builder = sqlx::QueryBuilder::new(sql);
+        query_builder.push(" WHERE ");
         gen_where_clause::<D, E>(&mut query_builder, std::slice::from_ref(where_))?;
         query_builder.push(" ");
         query_builder.push(D::order_by());
@@ -167,6 +176,7 @@ where
             // Safeguard so empty lookups don't find all rows
             query_builder.push(" WHERE 1 = 0");
         } else {
+            query_builder.push(" WHERE ");
             gen_where_clause::<D, E>(&mut query_builder, where_)?;
         }
         trace!("find_by_{}: sql: {}", table, query_builder.sql());
@@ -177,9 +187,8 @@ where
 pub trait ListFilterGenerator: Send + Sync {
     fn where_clause<'a, D: DataAccessObject>(
         &'a self,
-        with_where: bool,
         query_builder: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>,
-    ) -> Result<bool, TdError>;
+    ) -> Result<(), TdError>;
 }
 
 pub type NoListFilter = ();
@@ -187,10 +196,9 @@ pub type NoListFilter = ();
 impl ListFilterGenerator for NoListFilter {
     fn where_clause<'a, D: DataAccessObject>(
         &'a self,
-        with_where: bool,
         _query_builder: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>,
-    ) -> Result<bool, TdError> {
-        Ok(with_where)
+    ) -> Result<(), TdError> {
+        Ok(())
     }
 }
 
@@ -252,11 +260,10 @@ where
         let sql = format!("SELECT {} FROM {}", fields.join(", "), table);
         let mut query_builder = sqlx::QueryBuilder::new(sql);
 
-        let mut with_where =
-            gen_where_clause::<T::Dao, _>(&mut query_builder, std::slice::from_ref(where_))?;
-        with_where =
-            list_filter_generator.where_clause::<T::Dao>(with_where, &mut query_builder)?;
-        query_params_where(with_where, query_params, &mut query_builder);
+        query_builder.push(" WHERE ");
+        gen_where_clause::<T::Dao, _>(&mut query_builder, std::slice::from_ref(where_))?;
+        list_filter_generator.where_clause::<T::Dao>(&mut query_builder)?;
+        query_params_where(query_params, &mut query_builder);
 
         trace!("list_{}: sql: {}", table, query_builder.sql());
         Ok(query_builder)
@@ -279,43 +286,18 @@ where
         let sql = format!("SELECT {} FROM {}", fields.join(", "), table);
         let mut query_builder = sqlx::QueryBuilder::new(sql);
 
-        let mut with_where =
-            gen_where_clause::<T::Dao, _>(&mut query_builder, std::slice::from_ref(where_))?;
-
+        query_builder.push(" WHERE ");
+        gen_where_clause::<T::Dao, _>(&mut query_builder, std::slice::from_ref(where_))?;
         if let Some(natural_order_by) = natural_order_by {
-            if with_where {
-                query_builder.push(" AND ");
-            } else {
-                query_builder.push(" WHERE ");
-                with_where = true;
-            }
-
+            query_builder.push(" AND ");
             query_builder.push(format!("{} <= ", <T::Dao as Versioned>::order_by()));
             natural_order_by.push_bind(&mut query_builder);
         }
 
-        let state = <T::Dao as States<S>>::state();
-        if !state.is_empty() {
-            if with_where {
-                query_builder.push(" AND ");
-            } else {
-                query_builder.push(" WHERE ");
-                with_where = true;
-            }
-
-            query_builder.push("(");
-            let mut separated = query_builder.separated(" OR ");
-            for state in state {
-                let field = T::Dao::sql_field_for_type(state.type_id())?;
-                separated.push(format!("{field} = "));
-                state.push_bind_unseparated(&mut separated);
-            }
-            query_builder.push(")");
-        }
-
-        with_where =
-            list_filter_generator.where_clause::<T::Dao>(with_where, &mut query_builder)?;
-        query_params_where(with_where, query_params, &mut query_builder);
+        query_builder.push(" AND ");
+        gen_where_clause::<T::Dao, _>(&mut query_builder, <T::Dao as States<S>>::state())?;
+        list_filter_generator.where_clause::<T::Dao>(&mut query_builder)?;
+        query_params_where(query_params, &mut query_builder);
 
         trace!("list_at_{}: sql: {}", table, query_builder.sql());
         Ok(query_builder)
@@ -344,11 +326,10 @@ where
         let select = format!("SELECT {} FROM {}", fields.join(", "), LATEST_VERSIONS_CTE);
         query_builder.push(select);
 
-        let mut with_where =
-            gen_where_clause::<T::Dao, _>(&mut query_builder, std::slice::from_ref(where_))?;
-        with_where =
-            list_filter_generator.where_clause::<T::Dao>(with_where, &mut query_builder)?;
-        query_params_where(with_where, query_params, &mut query_builder);
+        query_builder.push(" WHERE ");
+        gen_where_clause::<T::Dao, _>(&mut query_builder, std::slice::from_ref(where_))?;
+        list_filter_generator.where_clause::<T::Dao>(&mut query_builder)?;
+        query_params_where(query_params, &mut query_builder);
 
         trace!(
             "list_versions_at_{}: sql: {}",
@@ -360,27 +341,17 @@ where
 }
 
 fn query_params_where<'a, T>(
-    with_where: bool,
     query_params: &'a ListQueryParams<T>,
     query_builder: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>,
-) -> bool
-where
+) where
     T: ListQuery,
 {
-    let mut with_where = with_where;
     query_params
         .conditions // And
         .conditions() // Or
         .iter()
         .for_each(|or| {
-            if with_where {
-                query_builder.push(" AND ");
-            } else {
-                query_builder.push(" WHERE ");
-                with_where = true;
-            }
-
-            query_builder.push("(");
+            query_builder.push(" AND (");
             let mut or_separated = query_builder.separated(" OR ");
             for cond in or.conditions() {
                 // no SQL injection here, as the values are bound to the fields of the struct
@@ -412,15 +383,7 @@ where
     let mut order = query_params.order.clone();
     let mut natural_order = query_params.natural_order.clone();
     if let Some(pagination) = &query_params.pagination {
-        if with_where {
-            query_builder.push(" AND ");
-        } else {
-            query_builder.push(" WHERE ");
-            with_where = true;
-        }
-
-        query_builder.push("(");
-
+        query_builder.push(" AND (");
         let pagination_field = query_params
             .order
             .as_ref()
@@ -445,8 +408,7 @@ where
         ));
         pagination.column_value().push_bind(query_builder);
 
-        query_builder.push(" OR ");
-        query_builder.push("(");
+        query_builder.push(" OR (");
 
         // field = value
         query_builder.push(format!("{} = ", T::map_dao_field(pagination_field.field())));
@@ -484,8 +446,6 @@ where
     query_builder
         .push(" LIMIT ")
         .push_bind(query_params.len as i64);
-
-    with_where
 }
 
 // D is needed to get the fields types for the WHERE clauses
@@ -517,6 +477,7 @@ where
         let fields = U::fields();
         let sql = format!("UPDATE {} SET ", table);
         let mut query_builder = dao.tuples_query_builder(sql, fields);
+        query_builder.push(" WHERE ");
         gen_where_clause::<D, E>(&mut query_builder, std::slice::from_ref(where_))?;
         trace!("update_{}: sql: {}", table, query_builder.sql());
         Ok(query_builder)
@@ -535,6 +496,7 @@ where
             // Safeguard so empty lookups don't update all rows
             query_builder.push(" WHERE 1 = 0");
         } else {
+            query_builder.push(" WHERE ");
             gen_where_clause::<D, E>(&mut query_builder, where_)?;
         }
         trace!("update_all_{}: sql: {}", table, query_builder.sql());
@@ -561,6 +523,7 @@ where
         let table = D::sql_table();
         let sql = format!("DELETE FROM {}", table);
         let mut query_builder = sqlx::QueryBuilder::new(sql);
+        query_builder.push(" WHERE ");
         gen_where_clause::<D, E>(&mut query_builder, std::slice::from_ref(where_))?;
         trace!("delete_{}: sql: {}", table, query_builder.sql());
         Ok(query_builder)
@@ -653,7 +616,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table ORDER BY 1 DESC"
+                "SELECT id, name, modified_on FROM test_table WHERE (1=1) ORDER BY 1 DESC"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -681,7 +644,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table ORDER BY modified_on"
+                "SELECT id, name, modified_on FROM test_table WHERE (1=1) ORDER BY modified_on"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -701,7 +664,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table WHERE (name = ?) ORDER BY 1 DESC"
+                "SELECT id, name, modified_on FROM test_table WHERE ((name = ?)) ORDER BY 1 DESC"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -723,7 +686,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table WHERE (id = ? AND name = ?) ORDER BY 1 DESC"
+                "SELECT id, name, modified_on FROM test_table WHERE ((id = ? AND name = ?)) ORDER BY 1 DESC"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -760,7 +723,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table WHERE (name = ?)"
+                "SELECT id, name, modified_on FROM test_table WHERE ((name = ?))"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -782,7 +745,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table WHERE (id = ? AND name = ?)"
+                "SELECT id, name, modified_on FROM test_table WHERE ((id = ? AND name = ?))"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -810,7 +773,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table WHERE (id = ? AND name = ?) OR (id = ? AND name = ?)"
+                "SELECT id, name, modified_on FROM test_table WHERE ((id = ? AND name = ?) OR (id = ? AND name = ?))"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -835,7 +798,10 @@ mod tests {
             let query = query_builder.build();
 
             let query_str = query.sql();
-            assert_eq!(query_str, "UPDATE test_table SET name = COALESCE(?, name)");
+            assert_eq!(
+                query_str,
+                "UPDATE test_table SET name = COALESCE(?, name) WHERE (1=1)"
+            );
 
             let result = query.execute(&db).await.unwrap();
             assert_eq!(result.rows_affected(), 2);
@@ -869,7 +835,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "UPDATE test_table SET name = COALESCE(?, name) WHERE (name = ?)"
+                "UPDATE test_table SET name = COALESCE(?, name) WHERE ((name = ?))"
             );
 
             let result = query.execute(&db).await.unwrap();
@@ -907,7 +873,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "UPDATE test_table SET name = COALESCE(?, name) WHERE (id = ? AND name = ?)"
+                "UPDATE test_table SET name = COALESCE(?, name) WHERE ((id = ? AND name = ?))"
             );
 
             let result = query.execute(&db).await.unwrap();
@@ -937,7 +903,7 @@ mod tests {
             let query = query_builder.build();
 
             let query_str = query.sql();
-            assert_eq!(query_str, "DELETE FROM test_table");
+            assert_eq!(query_str, "DELETE FROM test_table WHERE (1=1)");
 
             let result = query.execute(&db).await.unwrap();
             assert_eq!(result.rows_affected(), 2);
@@ -959,7 +925,7 @@ mod tests {
             let query = query_builder.build();
 
             let query_str = query.sql();
-            assert_eq!(query_str, "DELETE FROM test_table WHERE (name = ?)");
+            assert_eq!(query_str, "DELETE FROM test_table WHERE ((name = ?))");
 
             let result = query.execute(&db).await.unwrap();
             assert_eq!(result.rows_affected(), 1);
@@ -994,7 +960,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "DELETE FROM test_table WHERE (id = ? AND name = ?)"
+                "DELETE FROM test_table WHERE ((id = ? AND name = ?))"
             );
 
             let result = query.execute(&db).await.unwrap();
@@ -1083,9 +1049,9 @@ mod tests {
             let query_str = query.sql();
             assert!(
                 query_str
-                    == r#"SELECT id, name, modified_on FROM test_table WHERE (name = ?) AND (modified_on > ?) AND (name LIKE ? ESCAPE '\' ) AND (name < ? OR (name = ? AND modified_on < ?)) ORDER BY name DESC, modified_on DESC LIMIT ?"#
+                    == "SELECT id, name, modified_on FROM test_table WHERE ((name = ?)) AND (modified_on > ?) AND (name LIKE ? ESCAPE '\\' ) AND (name < ? OR (name = ? AND modified_on < ?)) ORDER BY name DESC, modified_on DESC LIMIT ?"
                     || query_str
-                        == r#"SELECT id, name, modified_on FROM test_table WHERE (name = ?) AND (name LIKE ? ESCAPE '\' ) AND (modified_on > ?) AND (name < ? OR (name = ? AND modified_on < ?)) ORDER BY name DESC, modified_on DESC LIMIT ?"#
+                        == "SELECT id, name, modified_on FROM test_table WHERE ((name = ?)) AND (name LIKE ? ESCAPE '\\' ) AND (modified_on > ?) AND (name < ? OR (name = ? AND modified_on < ?)) ORDER BY name DESC, modified_on DESC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -1118,7 +1084,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table ORDER BY id ASC LIMIT ?"
+                "SELECT id, name, modified_on FROM test_table WHERE (1=1) ORDER BY id ASC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -1149,7 +1115,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table ORDER BY modified_on DESC LIMIT ?"
+                "SELECT id, name, modified_on FROM test_table WHERE (1=1) ORDER BY modified_on DESC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -1186,7 +1152,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table ORDER BY name ASC, modified_on ASC LIMIT ?"
+                "SELECT id, name, modified_on FROM test_table WHERE (1=1) ORDER BY name ASC, modified_on ASC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -1224,7 +1190,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table ORDER BY name ASC, modified_on ASC LIMIT ?"
+                "SELECT id, name, modified_on FROM test_table WHERE (1=1) ORDER BY name ASC, modified_on ASC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -1260,7 +1226,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table WHERE (name = ?) ORDER BY id ASC LIMIT ?"
+                "SELECT id, name, modified_on FROM test_table WHERE (1=1) AND (name = ?) ORDER BY id ASC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -1297,7 +1263,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table WHERE (name LIKE ? ESCAPE '\\' ) ORDER BY id ASC LIMIT ?"
+                "SELECT id, name, modified_on FROM test_table WHERE (1=1) AND (name LIKE ? ESCAPE '\\' ) ORDER BY id ASC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -1334,7 +1300,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table WHERE (name LIKE ? ESCAPE '\\' ) ORDER BY id ASC LIMIT ?"
+                "SELECT id, name, modified_on FROM test_table WHERE (1=1) AND (name LIKE ? ESCAPE '\\' ) ORDER BY id ASC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -1368,7 +1334,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table WHERE (name BETWEEN ? AND ?) ORDER BY id ASC LIMIT ?"
+                "SELECT id, name, modified_on FROM test_table WHERE (1=1) AND (name BETWEEN ? AND ?) ORDER BY id ASC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -1401,7 +1367,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table ORDER BY id ASC LIMIT ?"
+                "SELECT id, name, modified_on FROM test_table WHERE (1=1) ORDER BY id ASC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -1439,7 +1405,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table WHERE (id < ? OR (id = ? AND id < ?)) ORDER BY id DESC LIMIT ?"
+                "SELECT id, name, modified_on FROM test_table WHERE (1=1) AND (id < ? OR (id = ? AND id < ?)) ORDER BY id DESC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -1475,7 +1441,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table WHERE (id > ? OR (id = ? AND id > ?)) ORDER BY id ASC LIMIT ?"
+                "SELECT id, name, modified_on FROM test_table WHERE (1=1) AND (id > ? OR (id = ? AND id > ?)) ORDER BY id ASC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -1511,7 +1477,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table WHERE (id < ? OR (id = ? AND id < ?)) ORDER BY id DESC LIMIT ?"
+                "SELECT id, name, modified_on FROM test_table WHERE (1=1) AND (id < ? OR (id = ? AND id < ?)) ORDER BY id DESC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -1546,7 +1512,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table WHERE (id > ? OR (id = ? AND id > ?)) ORDER BY id ASC LIMIT ?"
+                "SELECT id, name, modified_on FROM test_table WHERE (1=1) AND (id > ? OR (id = ? AND id > ?)) ORDER BY id ASC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -1584,7 +1550,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table WHERE (name > ? OR (name = ? AND id > ?)) ORDER BY name ASC, id ASC LIMIT ?"
+                "SELECT id, name, modified_on FROM test_table WHERE (1=1) AND (name > ? OR (name = ? AND id > ?)) ORDER BY name ASC, id ASC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -1626,7 +1592,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table WHERE (id < ? OR (id = ? AND id < ?)) ORDER BY id DESC, id DESC LIMIT ?"
+                "SELECT id, name, modified_on FROM test_table WHERE (1=1) AND (id < ? OR (id = ? AND id < ?)) ORDER BY id DESC, id DESC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -1665,7 +1631,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table WHERE (name < ? OR (name = ? AND id < ?)) ORDER BY name DESC, id DESC LIMIT ?"
+                "SELECT id, name, modified_on FROM test_table WHERE (1=1) AND (name < ? OR (name = ? AND id < ?)) ORDER BY name DESC, id DESC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -1702,7 +1668,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table WHERE (name < ? OR (name = ? AND id < ?)) ORDER BY name DESC, id DESC LIMIT ?"
+                "SELECT id, name, modified_on FROM test_table WHERE (1=1) AND (name < ? OR (name = ? AND id < ?)) ORDER BY name DESC, id DESC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -1743,7 +1709,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table WHERE (id > ? OR (id = ? AND id > ?)) ORDER BY id ASC, id ASC LIMIT ?"
+                "SELECT id, name, modified_on FROM test_table WHERE (1=1) AND (id > ? OR (id = ? AND id > ?)) ORDER BY id ASC, id ASC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -1783,7 +1749,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table WHERE (name > ? OR (name = ? AND id > ?)) ORDER BY name ASC, id ASC LIMIT ?"
+                "SELECT id, name, modified_on FROM test_table WHERE (1=1) AND (name > ? OR (name = ? AND id > ?)) ORDER BY name ASC, id ASC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -1823,9 +1789,9 @@ mod tests {
             let query_str = query.sql();
             assert!(
                 query_str
-                    == "SELECT id, name, modified_on FROM test_table WHERE (name = ? OR name >= ?) AND (id > ?) ORDER BY id ASC LIMIT ?"
+                    == "SELECT id, name, modified_on FROM test_table WHERE (1=1) AND (name = ? OR name >= ?) AND (id > ?) ORDER BY id ASC LIMIT ?"
                     || query_str
-                        == "SELECT id, name, modified_on FROM test_table WHERE (id > ?) AND (name = ? OR name >= ?) ORDER BY id ASC LIMIT ?"
+                        == "SELECT id, name, modified_on FROM test_table WHERE (1=1) AND (id > ?) AND (name = ? OR name >= ?) ORDER BY id ASC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -1863,7 +1829,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table WHERE (name = ?) ORDER BY name DESC, modified_on DESC LIMIT ?"
+                "SELECT id, name, modified_on FROM test_table WHERE (1=1) AND (name = ?) ORDER BY name DESC, modified_on DESC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();

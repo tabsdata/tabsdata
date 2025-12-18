@@ -27,7 +27,8 @@ use td_objects::graph::{MapGraph, TdGraph};
 use td_objects::sql::{DaoQueries, FindBy, UpdateBy};
 use td_objects::transaction::map::{TransactionMap, TransactionMapper};
 use td_objects::types::basic::{
-    Depth, Dot, FunctionOnly, FunctionRunStatus, FunctionStatus, InputIdx, Trigger, VersionPos,
+    Depth, Dot, Enabled, FunctionOnly, FunctionRunStatus, FunctionStatus, InputIdx, Trigger,
+    VersionPos,
 };
 use td_objects::types::graph::{FunctionNodeBuilder, GraphEdge, GraphNode, ResolvedVersion};
 use td_objects::types::recursion::RecursionOptions;
@@ -42,6 +43,13 @@ pub async fn assert_function_status(
             "Function '{}' must be in an active status to execute. Current status: '{}'",
             function.name,
             function.status
+        ))?
+    }
+    if !matches!(function.enabled, Enabled::TRUE) {
+        Err(api_error!(
+            ApiError::InputError,
+            "Function '{}' must be enabled to execute",
+            function.name,
         ))?
     }
     Ok(())

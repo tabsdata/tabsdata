@@ -166,8 +166,8 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
         }
 
         impl #impl_generics crate::dxo::States<0> for #ident #ty_generics #where_clause {
-            fn state() -> &'static [&'static dyn crate::types::SqlEntity] {
-                &[]
+            fn state() -> &'static [impl crate::types::AsDynSqlEntities] {
+                &[()]
             }
         }
     };
@@ -187,8 +187,8 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
                         }
 
                         impl #impl_generics crate::dxo::States<#i> for #ident #ty_generics #where_clause {
-                            fn state() -> &'static [&'static dyn crate::types::SqlEntity] {
-                                #value
+                            fn state() -> &'static [impl crate::types::AsDynSqlEntities] {
+                                &#value
                             }
                         }
                     }

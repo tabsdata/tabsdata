@@ -339,7 +339,7 @@ mod tests {
         versioned(order_by = "defined_on", partition_by = "id"),
         recursive(up = "current", down = "downstream"),
         states(
-            Active = &[&TestStatus::Active],
+            Active = [TestStatus::Active],
         )
     )]
     struct TestDao {
@@ -355,7 +355,7 @@ mod tests {
         sql_table = "test_table_reference",
         versioned(order_by = "defined_on", partition_by = "reference_id"),
         states(
-            Active = &[&TestStatus::Active],
+            Active = [TestStatus::Active],
         )
     )]
     struct RecursionReference {
@@ -608,7 +608,8 @@ mod tests {
         \n                latest_reference_versions_ranked rv\
         \n            WHERE\
         \n                rv.rn = 1\
-        \n        ),latest_recursion_versions_ranked AS (\
+        \n         AND (1=1))\
+        \n        ,latest_recursion_versions_ranked AS (\
         \n            SELECT\
         \n                v.*,\
         \n                ROW_NUMBER() OVER (PARTITION BY v.id ORDER BY v.defined_on DESC, v.id DESC) AS rn,\
@@ -622,7 +623,8 @@ mod tests {
         \n                latest_recursion_versions_ranked rv\
         \n            WHERE\
         \n                rv.rn = 1\
-        \n        ),upstream_versions AS (\
+        \n         AND (1=1))\
+        \n        ,upstream_versions AS (\
         \n            SELECT\
         \n                d.*,\
         \n                CAST(d.downstream AS TEXT) AS path_up,\
@@ -697,7 +699,8 @@ mod tests {
         \n                latest_reference_versions_ranked rv\
         \n            WHERE\
         \n                rv.rn = 1\
-        \n        ),latest_recursion_versions_ranked AS (\
+        \n         AND (1=1))\
+        \n        ,latest_recursion_versions_ranked AS (\
         \n            SELECT\
         \n                v.*,\
         \n                ROW_NUMBER() OVER (PARTITION BY v.id ORDER BY v.defined_on DESC, v.id DESC) AS rn,\
@@ -711,7 +714,8 @@ mod tests {
         \n                latest_recursion_versions_ranked rv\
         \n            WHERE\
         \n                rv.rn = 1\
-        \n        ),upstream_versions AS (\
+        \n         AND (1=1))\
+        \n        ,upstream_versions AS (\
         \n            SELECT\
         \n                d.*,\
         \n                CAST(d.downstream AS TEXT) AS path_up,\

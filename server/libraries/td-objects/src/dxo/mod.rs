@@ -162,7 +162,7 @@ pub trait TryUpdater<T>: Sized {
 ///     └───────────────────┘
 /// ```
 pub trait States<const S: u8> {
-    fn state() -> &'static [&'static dyn crate::types::SqlEntity];
+    fn state() -> &'static [impl crate::types::AsDynSqlEntities + 'static];
 }
 
 /// The `Versioned` trait marks DAO entities whose historical state must be queryable

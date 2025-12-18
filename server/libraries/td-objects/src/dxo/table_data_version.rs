@@ -43,7 +43,7 @@ mod definitions {
         versioned(order_by = "triggered_on", partition_by = "table_id"),
         states(
             // Table data versions that can be consumed.
-            Committed = &[&FunctionRunStatus::Committed],
+            Committed = [FunctionRunStatus::Committed],
         )
     )]
     #[inherits(TableDataVersionDB)]

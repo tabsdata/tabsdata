@@ -81,12 +81,12 @@ mod definitions {
         ),
         states(
             // Active functions are functions which are not deleted that have dependencies Active.
-            Active = &[&FunctionStatus::Active],
+            Active = [FunctionStatus::Active],
             // Available functions are functions that are not deleted and can be read.
-            Available = &[&FunctionStatus::Active, &FunctionStatus::Frozen],
+            Available = [FunctionStatus::Active, FunctionStatus::Frozen],
             // To execute a function, we need it to be Active (not Frozen or Deleted) and Enabled.
             // This state is required upfront for recursive queries to generate proper views.
-            Executable = &[&FunctionStatus::Active, &Enabled::TRUE],
+            Executable = [(FunctionStatus::Active, Enabled::TRUE)],
         )
     )]
     #[td_type(

@@ -20,7 +20,7 @@ mod definitions {
         recursive(up = "table_function_id", down = "function_id"),
         states(
             // Active dependencies are dependencies that can be used in executions.
-            Active = &[&DependencyStatus::Active],
+            Active = [DependencyStatus::Active],
         )
     )]
     #[td_type(

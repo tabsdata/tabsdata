@@ -188,6 +188,7 @@ pub async fn table(function: &FunctionName, table: &TableName) -> TableDBWithNam
         .collection(COLLECTION_NAME.clone())
         .function(function.clone())
         .defined_by(UserName::try_from("joaquin").unwrap())
+        .table_type(TableType::Regular)
         .build()
         .unwrap()
 }
