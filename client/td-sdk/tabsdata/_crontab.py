@@ -28,10 +28,15 @@ class Crontab:
 
     @mask.setter
     def mask(self, mask: str):
-        try:
-            croniter(mask)
-        except CroniterBadCronError as error:
-            raise DecoratorConfigurationError(ErrorCode.DCE14, mask) from error
+        if not mask or not isinstance(mask, str):
+            raise DecoratorConfigurationError(ErrorCode.DCE16, mask)
+        mask = mask.strip()
+        mask_elements = len(mask.split())
+        if mask_elements != 5:
+            raise DecoratorConfigurationError(ErrorCode.DCE14, mask,
+                                              mask_elements)
+        if not croniter.is_valid(mask):
+            raise DecoratorConfigurationError(ErrorCode.DCE15, mask)
         self._mask = mask
 
     @property

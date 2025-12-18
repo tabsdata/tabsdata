@@ -164,10 +164,25 @@ class ErrorCode(Enum):
     DCE14 = {
         "code": "DCE-014",
         "message": (
+            "The 'mask' parameter of a Crontab object must have 5 elements, "
+            "for minute precision; mask '{}' has '{}'."
+        ),
+    }
+    DCE15 = {
+        "code": "DCE-015",
+        "message": (
             "The 'mask' parameter of a Crontab object must be a valid cron"
             " specification; got '{}' instead."
         ),
     }
+    DCE16 = {
+        "code": "DCE-016",
+        "message": (
+            "The 'mask' parameter cannot be 'None' and must be a string; "
+            "got '{}' instead."
+        ),
+    }
+
     DECE2 = {
         "code": "DECE-002",
         "message": (
