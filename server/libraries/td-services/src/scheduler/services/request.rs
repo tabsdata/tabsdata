@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::scheduler::layers::request::create_locked_workers;
+use crate::scheduler::layers::request::create_locked_function_runner_workers;
 use ta_services::factory::service_factory;
 use td_common::server::{FileWorkerMessageQueue, WorkerMessageQueue};
 use td_objects::dxo::function_run::{FunctionRunDB, FunctionRunToExecuteDB, UpdateFunctionRunDB};
@@ -17,7 +17,6 @@ use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::{layer, layers};
 
-// TODO make factory accept generics so scheduler services can be used with different message queues.
 #[service_factory(
     name = RequestService,
     request = (),
@@ -29,7 +28,11 @@ use td_tower::{layer, layers};
     context = InternalServerAddresses,
 )]
 fn service() {
-    layers!(request::<_, FileWorkerMessageQueue>())
+    layers!(
+        request_function_runners::<_, FileWorkerMessageQueue>(),
+        request_cron_runners::<_, FileWorkerMessageQueue>(),
+        request_watchdog_runners::<_, FileWorkerMessageQueue>(),
+    )
 }
 
 // Requires:
@@ -39,7 +42,7 @@ fn service() {
 // - T(MessageQueue)
 // - ServerUrl
 #[layer]
-pub fn request<T>()
+pub fn request_function_runners<T>()
 where
     T: WorkerMessageQueue,
 {
@@ -48,14 +51,44 @@ where
         // This is, with status scheduled and with all requirements done.
         from_fn(By::<()>::select_all::<FunctionRunToExecuteDB>),
         // Create a locked message for each function run.
-        from_fn(create_locked_workers::<T>),
+        from_fn(create_locked_function_runner_workers::<T>),
         // And insert generated messages.
         from_fn(insert_vec::<WorkerDB>),
         // Update statuses.
         from_fn(With::<FunctionRunToExecuteDB>::extract_vec::<FunctionRunId>),
         from_fn(UpdateFunctionRunDB::run_requested),
-        from_fn(By::<FunctionRunId>::update_all::<UpdateFunctionRunDB, FunctionRunDB>)
+        from_fn(By::<FunctionRunId>::update_all::<UpdateFunctionRunDB, FunctionRunDB>),
     )
+}
+
+// Requires:
+// - Transaction connection
+// - DaoQueries
+// - Storage
+// - T(MessageQueue)
+// - ServerUrl
+#[allow(clippy::extra_unused_type_parameters)] // TODO remove
+#[layer]
+pub fn request_cron_runners<T>()
+where
+    T: WorkerMessageQueue,
+{
+    layers!()
+}
+
+// Requires:
+// - Transaction connection
+// - DaoQueries
+// - Storage
+// - T(MessageQueue)
+// - ServerUrl
+#[allow(clippy::extra_unused_type_parameters)] // TODO remove
+#[layer]
+pub fn request_watchdog_runners<T>()
+where
+    T: WorkerMessageQueue,
+{
+    layers!()
 }
 
 #[cfg(test)]
@@ -101,7 +134,7 @@ mod tests {
                 // This is, with status scheduled and with all requirements done.
                 type_of_val(&By::<()>::select_all::<FunctionRunToExecuteDB>),
                 // Create a locked message for each function run.
-                type_of_val(&create_locked_workers::<FileWorkerMessageQueue>),
+                type_of_val(&create_locked_function_runner_workers::<FileWorkerMessageQueue>),
                 // And insert generated messages.
                 type_of_val(&insert_vec::<WorkerDB>),
                 // Update statuses.
@@ -280,14 +313,14 @@ mod tests {
         }
 
         let message: WorkerDB = queries
-            .select_by::<WorkerDB>(&(function_run.id))?
+            .select_by::<WorkerDB>(&Some(function_run.id))?
             .build_query_as()
             .fetch_one(&db)
             .await
             .map_err(handle_sql_err)?;
         assert_eq!(message.collection_id, collection.id);
-        assert_eq!(message.execution_id, execution.id);
-        assert_eq!(message.function_run_id, function_run.id);
+        assert_eq!(message.execution_id, Some(execution.id));
+        assert_eq!(message.function_run_id, Some(function_run.id));
         assert_eq!(
             message.function_version_id,
             function_run.function_version_id

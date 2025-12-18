@@ -2,33 +2,39 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+//! These layers should not fail for single messages errors, only for wider errors (system, connection, etc.).
+//! All errors parsing or processing messages should be logged and the message should be removed from the queue.
+
 use http::Method;
 use itertools::{Either, Itertools};
 use sqlx::SqliteConnection;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
-use td_common::server::WorkerName::FUNCTION;
+use std::str::FromStr;
 use td_common::server::{
-    Callback, HttpCallback, MessageAction, RequestMessagePayload, SupervisorMessage,
-    SupervisorMessagePayload, WorkerClass, WorkerMessageQueue,
+    Callback, HttpCallback, MessageAction, RequestMessagePayload, SupervisorMessagePayload,
+    WorkerClass, WorkerMessageQueue, WorkerName,
 };
-use td_error::{TdError, td_error};
+use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::crudl::handle_sql_err;
 use td_objects::dxo::function_requirement::FunctionRequirementDBWithNames;
 use td_objects::dxo::function_run::{FunctionRunDB, FunctionRunToExecuteDB, UpdateFunctionRunDB};
 use td_objects::dxo::table_data_version::TableDataVersionDBWithNames;
 use td_objects::dxo::worker::{UpdateWorkerMessageStatusDB, WorkerDB};
 use td_objects::dxo::yaml::WorkerInput;
+use td_objects::dxo::yaml::cron::v1::CronInput;
 use td_objects::dxo::yaml::function_runner::v2::{
     FunctionInfo, FunctionInput, InputTable, InputTableVersion, OutputTable, OutputTableVersion,
 };
 use td_objects::dxo::yaml::location::Location;
+use td_objects::dxo::yaml::watchdog::v1::WatchdogInput;
 use td_objects::rest_urls::{BASE_URL, UPDATE_FUNCTION_RUN};
 use td_objects::sql::{DaoQueries, FindBy, SelectBy, UpdateBy};
 use td_objects::types::addresses::InternalServerAddresses;
 use td_objects::types::basic::{
     EnvPrefix, FunctionRunId, FunctionRunStatus, WorkerId, WorkerMessageStatus, WorkerStatus,
+    WorkerType,
 };
 use td_storage::Storage;
 use td_storage::location::StorageLocation;
@@ -36,17 +42,7 @@ use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
 use tracing::{error, trace};
 use url::Url;
 
-#[td_error]
-pub enum ScheduleError {
-    #[error("Cannot create execution callback Url: {0}")]
-    CallbackUrlParseError(#[from] url::ParseError) = 5000,
-    #[error("Invalid supervisor request message payload: {0}")]
-    InvalidRequestMessagePayload(String) = 5001,
-    #[error("Missing supervisor request message context")]
-    MissingRequestContext = 5002,
-}
-
-pub async fn create_locked_workers<T: WorkerMessageQueue>(
+pub async fn create_locked_function_runner_workers<T: WorkerMessageQueue>(
     SrvCtx(message_queue): SrvCtx<T>,
     SrvCtx(queries): SrvCtx<DaoQueries>,
     SrvCtx(storage): SrvCtx<Storage>,
@@ -72,8 +68,12 @@ pub async fn create_locked_workers<T: WorkerMessageQueue>(
                 let function_run_id = f.id.to_string();
                 let endpoint = UPDATE_FUNCTION_RUN.replace("{function_run_id}", &function_run_id);
                 let callback_url = format!("http://{server_address}{BASE_URL}{endpoint}");
-                let callback_url =
-                    Url::parse(&callback_url).map_err(ScheduleError::CallbackUrlParseError)?;
+                let callback_url = Url::parse(&callback_url).map_err(|e| {
+                    api_error!(
+                        ApiError::InternalError,
+                        "Cannot create execution callback Url: {e}"
+                    )
+                })?;
 
                 let http_callback = HttpCallback {
                     url: callback_url,
@@ -309,7 +309,7 @@ pub async fn create_locked_workers<T: WorkerMessageQueue>(
                 // TODO ADD get_states to states
                 let message_payload = RequestMessagePayload {
                     class: WorkerClass::EPHEMERAL,
-                    worker: FUNCTION.as_ref().to_string(),
+                    worker: WorkerName::FUNCTION.as_ref().to_string(),
                     action: MessageAction::Start,
                     arguments: Vec::new(),
                     callback: Some(callback),
@@ -325,6 +325,8 @@ pub async fn create_locked_workers<T: WorkerMessageQueue>(
                     .function_version_id(f.function_version_id)
                     .message_status(WorkerMessageStatus::Locked)
                     .status(WorkerStatus::RunRequested)
+                    .worker_type(WorkerType::FunctionRunner)
+                    .worker_config(None)
                     .build()?;
 
                 // Add it to the queue
@@ -342,54 +344,132 @@ pub async fn create_locked_workers<T: WorkerMessageQueue>(
     Ok(res)
 }
 
-// These layer should not fail for single messages errors, only for wider errors (system, connection, etc.).
-// All errors parsing or processing messages should be logged and the message should be removed from the queue.
 pub async fn unlock_workers<T: WorkerMessageQueue>(
     SrvCtx(message_queue): SrvCtx<T>,
     SrvCtx(queries): SrvCtx<DaoQueries>,
     Connection(connection): Connection,
 ) -> Result<(), TdError> {
-    let messages = message_queue.locked_messages().await;
-
-    // Filter all invalid messages
-    let function_run_ids = messages
-        .iter()
-        .filter_map(|m| {
-            let message = if let SupervisorMessagePayload::SupervisorRequestMessagePayload(
-                message,
-            ) = &m.payload
+    let messages = message_queue.locked_messages::<serde_yaml::Value>().await;
+    let (
+        function_runner_messages,
+        cron_messages,
+        watchdog_messages,
+        _invalid_requests,
+        _invalid_messages
+    ) = messages.into_iter().fold(
+        (HashMap::new(), HashMap::new(), HashMap::new(), HashSet::new(), HashSet::new()),
+        |(mut function_runner_messages, mut cron_messages, mut watchdog_messages, mut invalid_requests, mut invalid_messages), message| {
+            if let Ok(worker_id) = WorkerId::try_from(&message.id) &&
+                let SupervisorMessagePayload::SupervisorRequestMessagePayload(
+                    payload,
+                ) = &message.payload
             {
-                Some(message)
+                match &payload.context {
+                    None => {
+                        error!("Scheduled locked message [{worker_id}] has no context: {payload:?}");
+                        invalid_requests.insert(worker_id);
+                    }
+                    Some(context) => {
+                        match WorkerName::from_str(&payload.worker) {
+                            Ok(WorkerName::FUNCTION) => {
+                                match serde_yaml::from_value(context.clone()) {
+                                    Ok(context) => {
+                                        function_runner_messages.insert(worker_id, context);
+                                    }
+                                    Err(e) => {
+                                        error!(
+                                            "Scheduled locked message [{worker_id}] has invalid context [{context:?}]: {e:?}",
+                                        );
+                                        invalid_requests.insert(worker_id);
+                                    }
+                                }
+                            }
+                            Ok(WorkerName::CRON) => {
+                                match serde_yaml::from_value(context.clone()) {
+                                    Ok(context) => {
+                                        cron_messages.insert(worker_id, context);
+                                    }
+                                    Err(e) => {
+                                        error!(
+                                            "Scheduled locked message [{worker_id}] has invalid context [{context:?}]: {e:?}",
+                                        );
+                                        invalid_requests.insert(worker_id);
+                                    }
+                                }
+                            }
+                            Ok(WorkerName::WATCHDOG) => {
+                                match serde_yaml::from_value(context.clone()) {
+                                    Ok(context) => {
+                                        watchdog_messages.insert(worker_id, context);
+                                    }
+                                    Err(e) => {
+                                        error!(
+                                            "Scheduled locked message [{worker_id}] has invalid context [{context:?}]: {e:?}",
+                                        );
+                                        invalid_requests.insert(worker_id);
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                error!("Scheduled locked message [{worker_id}] has invalid worker [{:?}]: {e:?}", payload.worker);
+                                invalid_requests.insert(worker_id);
+                            }
+                        };
+                    }
+                }
             } else {
                 error!(
                     "Scheduled locked message [{}] is not a SupervisorRequestMessagePayload: {:?}",
-                    m.id, m.payload
+                    message.id, message.payload
                 );
-                None
-            }?;
+                invalid_messages.insert(message.id);
+            };
+            (function_runner_messages, cron_messages, watchdog_messages, invalid_requests, invalid_messages)
+        },
+    );
 
-            let function_input = message.context.as_ref().or_else(|| {
-                error!(
-                    "Scheduled locked message [{}] has no context: {:?}",
-                    m.id, m.payload
-                );
-                None
-            })?;
+    let mut conn = connection.lock().await;
+    let conn = conn.get_mut_connection()?;
+    unlock_function_runner_workers(
+        queries.deref(),
+        &mut *conn,
+        message_queue.deref(),
+        function_runner_messages,
+    )
+    .await?;
+    unlock_cron_workers(
+        queries.deref(),
+        &mut *conn,
+        message_queue.deref(),
+        cron_messages,
+    )
+    .await?;
+    unlock_watchdog_workers(
+        queries.deref(),
+        &mut *conn,
+        message_queue.deref(),
+        watchdog_messages,
+    )
+    .await?;
+    Ok(())
+}
 
-            let function_run_id = match function_input {
-                WorkerInput::FunctionV2(context) => Some(context.info.function_run_id),
-                _ => unreachable!(), // TODO
-            }?;
-
-            Some((function_run_id, m))
-        })
+pub async fn unlock_function_runner_workers<T: WorkerMessageQueue>(
+    queries: &DaoQueries,
+    conn: &mut SqliteConnection,
+    message_queue: &T,
+    messages: HashMap<WorkerId, FunctionInput>,
+) -> Result<(), TdError> {
+    // Filter all invalid messages
+    let function_run_ids = messages
+        .iter()
+        .map(|(id, m)| (m.info.function_run_id, (id, m)))
         .collect::<HashMap<_, _>>();
+
+    let mut errors = Vec::new();
 
     // Find all associated function runs
     let found_function_runs: Vec<FunctionRunDB> = {
-        let mut conn = connection.lock().await;
-        let conn = conn.get_mut_connection()?;
-
         // TODO this should be chunked
         let lookup: Vec<_> = function_run_ids.keys().copied().collect();
         queries
@@ -407,19 +487,12 @@ pub async fn unlock_workers<T: WorkerMessageQueue>(
         .iter()
         .filter(|(id, _)| !found_function_runs.contains_key(*id))
         .collect::<Vec<_>>();
-    let not_found_runs_futures = not_found_runs.into_iter().map(|(id, _)| {
-        let message_queue = message_queue.clone();
-        let message = function_run_ids[id];
-        async move {
-            trace!(
-                "Function run [{}] is not found for locked message [{}] in queue",
-                message.id, id
-            );
-            rollback_queue(message_queue.deref(), message, id).await?;
-
-            Ok::<_, TdError>(())
-        }
-    });
+    for (f_id, (w_id, _)) in not_found_runs {
+        trace!("Locked message [{w_id}] for function run [{f_id}] was not found in queue");
+        rollback_queue(message_queue, w_id, f_id)
+            .await
+            .unwrap_or_else(|e| errors.push(e));
+    }
 
     // Split in valid and invalid function runs
     let (valid_runs, invalid_runs): (Vec<_>, Vec<_>) =
@@ -427,92 +500,91 @@ pub async fn unlock_workers<T: WorkerMessageQueue>(
             if matches!(f.status, FunctionRunStatus::RunRequested) {
                 Either::Left(id)
             } else {
-                let message = function_run_ids[&f.id];
                 error!(
                     "Scheduled locked message [{}] for function run [{}] is not in RR state: {}",
-                    message.id, f.id, f.status
+                    id, f.id, f.status
                 );
                 Either::Right(id)
             }
         });
 
     // Commit all valid function runs
-    let valid_runs_futures = valid_runs.into_iter().map(|id| {
-        let message_queue = message_queue.clone();
-        let queries = queries.clone();
-        let connection = connection.clone();
-        let message = function_run_ids[&id];
-        async move {
-            let mut conn = connection.lock().await;
-            let conn = conn.get_mut_connection()?;
-
-            let update = UpdateWorkerMessageStatusDB::unlocked()?;
-            // TODO the queue should use this typed too
-            let message_id = WorkerId::try_from(message.id.as_str())?;
-            match queries
-                .update_by::<_, WorkerDB>(&update, &message_id)?
-                .build()
-                .execute(&mut *conn)
-                .await
-            {
-                Ok(_) => match message_queue.commit(&message.id).await {
-                    Ok(_) => {
-                        trace!(
-                            "Scheduled locked message [{}] for function run [{}] is committed",
-                            message.id, id
-                        );
-                    }
-                    Err(e) => {
-                        error!(
-                            "Scheduled locked message [{}] for function run [{}] commit failed: {}",
-                            message.id, id, e
-                        );
-                        rollback_query(queries.deref(), conn, message, &id).await?;
-                        rollback_queue(message_queue.deref(), message, &id).await?;
-                    }
-                },
-                Err(e) => {
-                    error!(
-                        "Scheduled locked message [{}] for function run [{}] commit failed: {}",
-                        message.id, id, e
+    for f_id in &valid_runs {
+        let (w_id, _message) = function_run_ids[f_id];
+        let update = UpdateWorkerMessageStatusDB::unlocked()?;
+        // TODO the queue should use this typed too
+        match queries
+            .update_by::<_, WorkerDB>(&update, &w_id)?
+            .build()
+            .execute(&mut *conn)
+            .await
+        {
+            Ok(_) => match message_queue.commit(&w_id.to_string()).await {
+                Ok(_) => {
+                    trace!(
+                        "Scheduled locked message [{w_id}] for function run [{f_id}] is committed"
                     );
                 }
+                Err(e) => {
+                    error!(
+                        "Scheduled locked message [{w_id}] for function run [{f_id}] commit failed: {e}"
+                    );
+                    rollback_query(queries, conn, w_id, f_id)
+                        .await
+                        .unwrap_or_else(|e| errors.push(e));
+                    rollback_queue(message_queue, w_id, f_id)
+                        .await
+                        .unwrap_or_else(|e| errors.push(e));
+                }
+            },
+            Err(e) => {
+                error!(
+                    "Scheduled locked message [{w_id}] for function run [{f_id}] commit failed: {e}"
+                );
             }
-
-            Ok::<_, TdError>(())
         }
-    });
+    }
 
     // Rollback all invalid function runs
-    let invalid_runs_futures = invalid_runs.into_iter().map(|id| {
-        let message_queue = message_queue.clone();
-        let queries = queries.clone();
-        let connection = connection.clone();
-        let message = function_run_ids[&id];
-        async move {
-            let mut conn = connection.lock().await;
-            let conn = conn.get_mut_connection()?;
+    for f_id in &invalid_runs {
+        let (w_id, _message) = function_run_ids[f_id];
+        rollback_query(queries, &mut *conn, w_id, f_id)
+            .await
+            .unwrap_or_else(|e| errors.push(e));
+        rollback_queue(message_queue, w_id, f_id)
+            .await
+            .unwrap_or_else(|e| errors.push(e));
+    }
 
-            rollback_query(queries.deref(), conn, message, &id).await?;
-            rollback_queue(message_queue.deref(), message, &id).await?;
+    // We try to run everything and avoid failures.
+    if !errors.is_empty() {
+        error!("Errors found: {errors:?}");
+    }
+    Ok(())
+}
 
-            Ok::<_, TdError>(())
-        }
-    });
+pub async fn unlock_cron_workers<T: WorkerMessageQueue>(
+    _queries: &DaoQueries,
+    _conn: &mut SqliteConnection,
+    _message_queue: &T,
+    _messages: HashMap<WorkerId, CronInput>,
+) -> Result<(), TdError> {
+    Ok(())
+}
 
-    let not_found_res = futures::future::try_join_all(not_found_runs_futures).await;
-    let valid_res = futures::future::try_join_all(valid_runs_futures).await;
-    let invalid_res = futures::future::try_join_all(invalid_runs_futures).await;
-    // We try to run all the futures and fail at the end.
-    let _ = valid_res.and(invalid_res).and(not_found_res)?;
-
+pub async fn unlock_watchdog_workers<T: WorkerMessageQueue>(
+    _queries: &DaoQueries,
+    _conn: &mut SqliteConnection,
+    _message_queue: &T,
+    _messages: HashMap<WorkerId, WatchdogInput>,
+) -> Result<(), TdError> {
     Ok(())
 }
 
 async fn rollback_query(
     queries: &DaoQueries,
     conn: &mut SqliteConnection,
-    message: &SupervisorMessage<WorkerInput>,
+    message_id: &WorkerId,
     function_run_id: &FunctionRunId,
 ) -> Result<(), TdError> {
     let update = UpdateFunctionRunDB::scheduled()?;
@@ -524,14 +596,12 @@ async fn rollback_query(
     {
         Ok(_) => {
             error!(
-                "Rolled back status to scheduled for locked message [{}] for function run [{}] in DB",
-                message.id, function_run_id
+                "Rolled back status to scheduled for locked message [{message_id}] for function run [{function_run_id}] in DB"
             );
         }
         Err(e) => {
             error!(
-                "Failed to rollback status to scheduled for locked message [{}] for function run [{}]: {}",
-                message.id, function_run_id, e
+                "Failed to rollback status to scheduled for locked message [{message_id}] for function run [{function_run_id}]: {e}"
             );
         }
     }
@@ -541,20 +611,20 @@ async fn rollback_query(
 
 async fn rollback_queue<T: WorkerMessageQueue>(
     message_queue: &T,
-    message: &SupervisorMessage<WorkerInput>,
+    message_id: &WorkerId,
     function_run_id: &FunctionRunId,
 ) -> Result<(), TdError> {
-    match message_queue.rollback(&message.id).await {
+    match message_queue.rollback(&message_id.to_string()).await {
         Ok(_) => {
             error!(
                 "Rolled back locked message [{}] for function run [{}] in queue",
-                message.id, function_run_id
+                message_id, function_run_id
             );
         }
         Err(e) => {
             error!(
                 "Failed to rollback locked message [{}] for function run [{}]: {}",
-                message.id, function_run_id, e
+                message_id, function_run_id, e
             );
         }
     }
