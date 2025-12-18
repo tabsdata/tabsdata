@@ -12,19 +12,25 @@ mod routes {
     use std::sync::Arc;
     use ta_apiserver::status::error_status::ErrorStatus;
     use ta_apiserver::status::extractors::Json;
-    use ta_apiserver::status::ok_status::{NoContent, UpdateStatus};
+    use ta_apiserver::status::ok_status::{CreateStatus, GetStatus, NoContent, UpdateStatus};
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
     use td_objects::dxo::crudl::RequestContext;
+    use td_objects::dxo::execution::{ExecutionRequest, ExecutionResponse};
     use td_objects::dxo::file::ParquetFile;
+    use td_objects::dxo::function_run::FunctionRun;
     use td_objects::dxo::worker::CallbackRequest;
-    use td_objects::rest_urls::params::FunctionAtIdName;
-    use td_objects::rest_urls::{
-        AtTimeParam, DOWNLOAD_FUNCTION_STATE, FunctionParam, FunctionRunIdParam,
-        UPDATE_FUNCTION_RUN,
+    use td_objects::rest_urls::AtTimeParam;
+    use td_objects::rest_urls::ExecutionParam;
+    use td_objects::rest_urls::internal::{
+        DOWNLOAD_FUNCTION_STATE, FUNCTION_VERSION_EXECUTE, FUNCTION_VERSION_EXECUTION_STATUS,
+        FunctionRunIdParam, FunctionVersionAtIdParam, FunctionVersionIdParam, UPDATE_FUNCTION_RUN,
+        UPDATE_WORKER, WorkerIdParam,
     };
     use td_services::execution::services::ExecutionServices;
+    use td_services::function_run::services::FunctionRunServices;
     use td_services::table::services::TableServices;
+    use td_services::worker::services::WorkerServices;
     use td_tower::ctx_service::RawOneshot;
     use tower::ServiceExt;
 
@@ -32,15 +38,54 @@ mod routes {
 
     #[apiserver_path(method = post, path = UPDATE_FUNCTION_RUN, tag = INTERNAL_TAG)]
     #[doc = "Callback endpoint for function executions"]
-    pub async fn callback(
-        State(execution): State<Arc<ExecutionServices>>,
+    pub async fn function_run_callback(
+        State(state): State<Arc<ExecutionServices>>,
         Extension(context): Extension<RequestContext>,
         Path(param): Path<FunctionRunIdParam>,
         Json(request): Json<CallbackRequest>,
     ) -> Result<UpdateStatus<NoContent>, ErrorStatus> {
         let request = context.update(param, request);
-        let response = execution.callback.service().await.oneshot(request).await?;
+        let response = state.callback.service().await.oneshot(request).await?;
         Ok(UpdateStatus::OK(response))
+    }
+
+    #[apiserver_path(method = post, path = UPDATE_WORKER, tag = INTERNAL_TAG)]
+    #[doc = "Callback endpoint for workers"]
+    pub async fn worker_callback(
+        State(state): State<Arc<WorkerServices>>,
+        Extension(context): Extension<RequestContext>,
+        Path(param): Path<WorkerIdParam>,
+        Json(request): Json<CallbackRequest>,
+    ) -> Result<UpdateStatus<NoContent>, ErrorStatus> {
+        let request = context.update(param, request);
+        let response = state.callback.service().await.oneshot(request).await?;
+        Ok(UpdateStatus::OK(response))
+    }
+
+    #[apiserver_path(method = post, path = FUNCTION_VERSION_EXECUTE, tag = INTERNAL_TAG)]
+    #[doc = "Executes a function version (must be the current active version)"]
+    pub async fn function_version_execute(
+        State(state): State<Arc<ExecutionServices>>,
+        Extension(context): Extension<RequestContext>,
+        Path(function_param): Path<FunctionVersionIdParam>,
+        Json(request): Json<ExecutionRequest>,
+    ) -> Result<CreateStatus<ExecutionResponse>, ErrorStatus> {
+        let request = context.create(function_param, request);
+        let response = state.execute.service().await.oneshot(request).await?;
+        Ok(CreateStatus::CREATED(response))
+    }
+
+    #[apiserver_path(method = get, path = FUNCTION_VERSION_EXECUTION_STATUS, tag = INTERNAL_TAG)]
+    #[doc = "Execution status for a given function version and execution plan"]
+    pub async fn function_version_execution_status(
+        State(state): State<Arc<FunctionRunServices>>,
+        Extension(context): Extension<RequestContext>,
+        Path(param): Path<FunctionVersionIdParam>,
+        Json(request): Json<ExecutionParam>,
+    ) -> Result<GetStatus<FunctionRun>, ErrorStatus> {
+        let request = context.read(param, request); // TODO
+        let response = state.read.service().await.oneshot(request).await?;
+        Ok(GetStatus::OK(response))
     }
 
     #[apiserver_path(method = get, path = DOWNLOAD_FUNCTION_STATE, tag = INTERNAL_TAG)]
