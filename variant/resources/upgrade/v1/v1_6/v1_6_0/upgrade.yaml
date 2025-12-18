@@ -1,0 +1,56 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+instance:
+  - path: [ "controllers", "ephemeral", "workers", "name:function" ]
+    action: insert_sibling
+    position: after
+    data:
+      name: cron
+      kind: processor
+      location: system
+      program: td_invoker
+      concurrency: 0
+      retries: 2
+      arguments:
+        - work
+        - locks-folder
+        - logs-folder
+        - bin-folder
+        - request-folder
+        - response-folder
+        - input-folder
+        - output-folder
+        - current-instance
+      markers:
+        - td-collection
+        - td-function
+        - td-worker
+  - path: [ "controllers", "ephemeral", "workers", "name:function" ]
+    action: insert_sibling
+    position: after
+    data:
+      name: watchdog
+      kind: processor
+      location: system
+      program: td_invoker
+      concurrency: 0
+      retries: 2
+      arguments:
+        - work
+        - locks-folder
+        - logs-folder
+        - bin-folder
+        - request-folder
+        - response-folder
+        - input-folder
+        - output-folder
+        - current-instance
+      markers:
+        - td-collection
+        - td-function
+        - td-worker
+      get-states:
+        - state-type: map
+          state-key: apiserver-mounts-options
