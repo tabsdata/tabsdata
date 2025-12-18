@@ -132,18 +132,6 @@ DataType: TypeAlias = Union[
     td_dtypes.UInt32,
     td_dtypes.UInt64,
     td_dtypes.Utf8,
-    td_dtypes.FLOAT_DTYPES,
-    td_dtypes.INTEGER_DTYPES,
-    td_dtypes.NUMERIC_DTYPES,
-    td_dtypes.SIGNED_INTEGER_DTYPES,
-    td_dtypes.TEMPORAL_DTYPES,
-    td_dtypes.UNSIGNED_INTEGER_DTYPES,
-    td_dtypes.NumericType,
-    td_dtypes.IntegerType,
-    td_dtypes.SignedIntegerType,
-    td_dtypes.UnsignedIntegerType,
-    td_dtypes.FloatType,
-    td_dtypes.TemporalType,
 ]
 
 TF_DATA_TYPES: frozenset[type] = frozenset(get_args(DataType))

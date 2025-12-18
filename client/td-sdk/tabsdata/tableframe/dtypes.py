@@ -21,8 +21,8 @@ Float64: TypeAlias = pl.Float64
 Int8: TypeAlias = pl.Int8
 Int16: TypeAlias = pl.Int16
 Int32: TypeAlias = pl.Int32
-# noinspection DuplicatedCode
 Int64: TypeAlias = pl.Int64
+# noinspection DuplicatedCode
 Int128: TypeAlias = pl.Int128
 Null: TypeAlias = pl.Null
 String: TypeAlias = pl.String
@@ -42,6 +42,7 @@ NUMERIC_DTYPES = polars_datatypes_group.NUMERIC_DTYPES
 SIGNED_INTEGER_DTYPES = polars_datatypes_group.SIGNED_INTEGER_DTYPES
 TEMPORAL_DTYPES = polars_datatypes_group.TEMPORAL_DTYPES
 UNSIGNED_INTEGER_DTYPES = polars_datatypes_group.UNSIGNED_INTEGER_DTYPES
+
 NumericType: TypeAlias = polars_datatypes_classes.NumericType
 IntegerType: TypeAlias = polars_datatypes_classes.IntegerType
 SignedIntegerType: TypeAlias = polars_datatypes_classes.SignedIntegerType
