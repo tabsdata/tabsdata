@@ -3,11 +3,14 @@
 //
 
 use crate::do_authz::SKIP_AUTHZ;
-use crate::graph::layers::{ALL_DEPS, FunctionOrTable, generate_td_graph};
+use crate::graph::layers::{FunctionOrTable, GraphConfig, generate_td_graph};
 use crate::table::layers::flow::{build_response, with_recursion_options};
 use ta_services::factory::service_factory;
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
-use td_objects::dxo::table::{TableDBWithNames, TableFlowGraphResponse};
+use td_objects::dxo::dependency::DependencyDBWithNames;
+use td_objects::dxo::function::FunctionDB;
+use td_objects::dxo::table::{TableDB, TableDBWithNames, TableFlowGraphResponse};
+use td_objects::dxo::trigger::TriggerDBWithNames;
 use td_objects::rest_urls::TableParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::from::{
@@ -18,6 +21,22 @@ use td_objects::types::basic::{AtTime, CollectionIdName, TableId, TableIdName};
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
+
+pub struct GraphOpts;
+impl
+    GraphConfig<
+        { TriggerDBWithNames::Active },
+        { DependencyDBWithNames::Active },
+        { FunctionDB::Readable },
+        { TableDB::Available },
+    > for GraphOpts
+{
+    type Authz = SKIP_AUTHZ;
+
+    fn include_dependency_functions(&self) -> bool {
+        true
+    }
+}
 
 #[service_factory(
     name = TableFlowGraphService,
@@ -46,7 +65,7 @@ fn service() {
         from_fn(With::<TableDBWithNames>::extract::<TableId>),
         from_fn(With::<TableId>::convert_to::<FunctionOrTable>),
         from_fn(with_recursion_options),
-        generate_td_graph::<_, SKIP_AUTHZ, ALL_DEPS>(),
+        generate_td_graph(GraphOpts),
         // Build response
         from_fn(build_response),
     )
@@ -78,11 +97,7 @@ mod tests {
     #[td_test::test(sqlx)]
     #[tokio::test]
     async fn test_tower_metadata_read_execution(db: DbPool) {
-        use crate::graph::layers::build::{
-            build_td_graph, find_all_functions_map, find_all_tables_map,
-            find_functions_output_tables, find_recursive_dependency_graph,
-            find_recursive_trigger_graph, main_function_id, unique_function_ids,
-        };
+        use crate::graph::layers::build::GraphBuilder;
         use td_tower::metadata::type_of_val;
 
         TableFlowGraphService::with_defaults(db)
@@ -109,20 +124,22 @@ mod tests {
                 type_of_val(&with_recursion_options),
                 // Find td graph
                 // Find triggers
-                type_of_val(&find_recursive_trigger_graph),
+                type_of_val(&GraphBuilder::<GraphOpts, _, _, _, _>::find_recursive_trigger_graph),
                 // Find dependencies. For clarity, we always show the function, even if
                 // generating a table centered graph, the same way we show the tables of
                 // a function centered graph.
-                type_of_val(&main_function_id),
-                type_of_val(&find_recursive_dependency_graph),
-                type_of_val(&unique_function_ids),
+                type_of_val(&GraphBuilder::<GraphOpts, _, _, _, _>::main_function_id),
+                type_of_val(
+                    &GraphBuilder::<GraphOpts, _, _, _, _>::find_recursive_dependency_graph,
+                ),
+                type_of_val(&GraphBuilder::<GraphOpts, _, _, _, _>::unique_function_ids),
                 // Find output tables
-                type_of_val(&find_functions_output_tables),
+                type_of_val(&GraphBuilder::<GraphOpts, _, _, _, _>::find_functions_output_tables),
                 // Find all tables and functions
-                type_of_val(&find_all_tables_map),
-                type_of_val(&find_all_functions_map),
+                type_of_val(&GraphBuilder::<GraphOpts, _, _, _, _>::find_all_tables_map),
+                type_of_val(&GraphBuilder::<GraphOpts, _, _, _, _>::find_all_functions_map),
                 // Create td graph and validate it
-                type_of_val(&build_td_graph),
+                type_of_val(&GraphBuilder::<GraphOpts, _, _, _, _>::build_td_graph),
                 // Build response
                 type_of_val(&build_response),
             ]);

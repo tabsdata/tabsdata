@@ -28,8 +28,6 @@ mod definitions {
             Frozen = &[&TableStatus::Frozen],
             Available = &[&TableStatus::Active, &TableStatus::Frozen],
             Output = &[&TableStatus::Active],
-            InputDependency = &[&TableStatus::Active, &TableStatus::Frozen],
-            Readable = &[&TableStatus::Active, &TableStatus::Frozen, &System::TRUE],
         )
     )]
     #[td_type(

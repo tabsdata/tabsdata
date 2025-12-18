@@ -25,12 +25,8 @@ pub mod storage;
 #[layer]
 pub fn find_data_version_location_at<E>()
 where
-    E: Extractor<CollectionIdName>
-        + Extractor<TableIdName>
-        + Extractor<AtTime>
-        + Send
-        + Sync
-        + 'static,
+    for<'a> E:
+        Extractor<CollectionIdName> + Extractor<TableIdName> + Extractor<AtTime> + Send + Sync + 'a,
 {
     layers!(
         // Extract parameters

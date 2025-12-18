@@ -9,19 +9,22 @@ use crate::execution::layers::execution::{
     resolve_execution_plan_versions, update_initial_function_run_status, validate_execution_plan,
     with_recursion_options,
 };
-use crate::graph::layers::{FunctionOrTable, TRIGGER_ONLY_DEPS, generate_td_graph};
+use crate::graph::layers::{FunctionOrTable, GraphConfig, generate_td_graph};
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
 use td_execution::TransactionBy;
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
+use td_objects::dxo::dependency::DependencyDBWithNames;
 use td_objects::dxo::execution::{
     ExecutionDB, ExecutionDBBuilder, ExecutionRequest, ExecutionResponse,
 };
-use td_objects::dxo::function::FunctionDBWithNames;
+use td_objects::dxo::function::{FunctionDB, FunctionDBWithNames};
 use td_objects::dxo::function_requirement::FunctionRequirementDB;
 use td_objects::dxo::function_run::{FunctionRunDB, FunctionRunDBBuilder};
+use td_objects::dxo::table::TableDB;
 use td_objects::dxo::table_data_version::TableDataVersionDB;
 use td_objects::dxo::transaction::{TransactionDB, TransactionDBBuilder};
+use td_objects::dxo::trigger::TriggerDBWithNames;
 use td_objects::rest_urls::FunctionParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollExec};
@@ -37,6 +40,22 @@ use td_objects::types::recursion::RecursionOptions;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
+
+pub struct GraphOpts;
+impl
+    GraphConfig<
+        { TriggerDBWithNames::Active },
+        { DependencyDBWithNames::Active },
+        { FunctionDB::Executable },
+        { TableDB::Available },
+    > for GraphOpts
+{
+    type Authz = DO_AUTHZ;
+
+    fn include_dependency_functions(&self) -> bool {
+        false
+    }
+}
 
 #[service_factory(
     name = ExecuteFunctionService,
@@ -79,7 +98,7 @@ fn service() {
         from_fn(With::<ExecutionRequest>::extract::<FunctionOnly>),
         from_fn(with_recursion_options),
         // Find td graph
-        generate_td_graph::<_, DO_AUTHZ, TRIGGER_ONLY_DEPS>(),
+        generate_td_graph(GraphOpts),
         // Build execution plan
         from_fn(build_execution_plan),
         from_fn(validate_execution_plan),
@@ -152,12 +171,7 @@ pub(crate) mod tests {
     #[td_test::test(sqlx)]
     #[tokio::test]
     async fn test_tower_metadata_execute(db: DbPool) {
-        use crate::graph::layers::build::{
-            build_td_graph, find_all_functions_map, find_all_tables_map,
-            find_functions_output_tables, find_recursive_trigger_graph,
-            find_triggered_functions_dependency_graph, main_function_id,
-            unique_triggered_function_ids,
-        };
+        use crate::graph::layers::build::GraphBuilder;
         use td_objects::dxo::dependency::DependencyDBWithNames;
         use td_objects::dxo::inter_collection_access::{
             InterCollectionAccess, InterCollectionAccessBuilder,
@@ -170,104 +184,111 @@ pub(crate) mod tests {
         ExecuteFunctionService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<CreateRequest<FunctionParam, ExecutionRequest>, ExecutionResponse>(
-                &[
-                    // Extract from request.
-                    type_of_val(
-                        &With::<CreateRequest<FunctionParam, ExecutionRequest>>::extract::<
-                            RequestContext,
-                        >,
-                    ),
-                    type_of_val(
-                        &With::<CreateRequest<FunctionParam, ExecutionRequest>>::extract_name::<
-                            FunctionParam,
-                        >,
-                    ),
-                    type_of_val(
-                        &With::<CreateRequest<FunctionParam, ExecutionRequest>>::extract_data::<
-                            ExecutionRequest,
-                        >,
-                    ),
-                    type_of_val(&With::<RequestContext>::extract::<AtTime>),
-                    type_of_val(&With::<FunctionParam>::extract::<CollectionIdName>),
-                    type_of_val(&With::<FunctionParam>::extract::<FunctionIdName>),
-                    type_of_val(&combine::<CollectionIdName, FunctionIdName>),
-                    // Select trigger function.
-                    type_of_val(
-                        &By::<(CollectionIdName, FunctionIdName)>::select_version::<
-                            { FunctionDBWithNames::Active },
-                            FunctionDBWithNames,
-                        >,
-                    ),
-                    type_of_val(&assert_function_status),
-                    // check requester is coll_admin or coll_exec for the function's collection
-                    type_of_val(&With::<FunctionDBWithNames>::extract::<CollectionId>),
-                    type_of_val(&AuthzOn::<CollectionId>::set),
-                    type_of_val(&Authz::<CollAdmin, CollExec>::check),
-                    // Get recursion options
-                    type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
-                    type_of_val(&With::<FunctionId>::convert_to::<FunctionOrTable>),
-                    type_of_val(&With::<ExecutionRequest>::extract::<FunctionOnly>),
-                    type_of_val(&with_recursion_options),
-                    // Find td graph
-                    // Find triggers
-                    type_of_val(&find_recursive_trigger_graph),
-                    // inter collection authz check
-                    type_of_val(&With::<TriggerDBWithNames>::vec_convert_to::<InterCollectionAccessBuilder, _>),
-                    type_of_val(&With::<InterCollectionAccessBuilder>::vec_build::<InterCollectionAccess, _>),
-                    type_of_val(&Authz::<InterColl>::check_inter_collection),
-                    // Find dependencies. For clarity, we always show the function, even if
-                    // generating a table centered graph, the same way we show the tables of
-                    // a function centered graph.
-                    type_of_val(&main_function_id),
-                    type_of_val(&unique_triggered_function_ids),
-                    type_of_val(&find_triggered_functions_dependency_graph),
-                    // inter collection authz check
-                    type_of_val(&With::<DependencyDBWithNames>::vec_convert_to::<InterCollectionAccessBuilder, _>),
-                    type_of_val(&With::<InterCollectionAccessBuilder>::vec_build::<InterCollectionAccess, _>),
-                    type_of_val(&Authz::<InterColl>::check_inter_collection),
-                    // Find output tables
-                    type_of_val(&find_functions_output_tables),
-                    // Find all tables and functions
-                    type_of_val(&find_all_tables_map),
-                    type_of_val(&find_all_functions_map),
-                    // Create td graph and validate it
-                    type_of_val(&build_td_graph),
-                    // Build execution plan
-                    type_of_val(&build_execution_plan),
-                    type_of_val(&validate_execution_plan),
-                    // Build execution
-                    type_of_val(
-                        &With::<FunctionDBWithNames>::try_convert_to::<ExecutionDBBuilder, _>,
-                    ),
-                    type_of_val(&With::<RequestContext>::update::<ExecutionDBBuilder, _>),
-                    type_of_val(&With::<ExecutionRequest>::update::<ExecutionDBBuilder, _>),
-                    type_of_val(&With::<RecursionOptions>::set::<ExecutionDBBuilder>),
-                    type_of_val(&With::<ExecutionDBBuilder>::build::<ExecutionDB, _>),
-                    type_of_val(&insert::<ExecutionDB>),
-                    // Build transactions
-                    type_of_val(&build_transaction_map),
-                    type_of_val(&With::<ExecutionDB>::try_convert_to::<TransactionDBBuilder, _>),
-                    type_of_val(&build_transactions),
-                    type_of_val(&insert_vec::<TransactionDB>),
-                    // Build new function runs
-                    type_of_val(&With::<ExecutionDB>::try_convert_to::<FunctionRunDBBuilder, _>),
-                    type_of_val(&build_function_runs),
-                    type_of_val(&insert_vec::<FunctionRunDB>),
-                    // Build new table data versions
-                    type_of_val(&build_table_data_versions),
-                    type_of_val(&insert_vec::<TableDataVersionDB>),
-                    // Create execution plan
-                    type_of_val(&resolve_execution_plan_versions),
-                    // Create steps
-                    type_of_val(&build_function_requirements),
-                    type_of_val(&insert_vec::<FunctionRequirementDB>),
-                    // Update function run initial status if needed
-                    type_of_val(&update_initial_function_run_status),
-                    // Execution plan response
-                    type_of_val(&build_response),
-                ],
-            );
+            .assert_service::<CreateRequest<
+            FunctionParam,
+            ExecutionRequest,
+        >, ExecutionResponse>(&[
+            // Extract from request.
+            type_of_val(
+                &With::<CreateRequest<FunctionParam, ExecutionRequest>>::extract::<RequestContext>,
+            ),
+            type_of_val(
+                &With::<CreateRequest<FunctionParam, ExecutionRequest>>::extract_name::<
+                    FunctionParam,
+                >,
+            ),
+            type_of_val(
+                &With::<CreateRequest<FunctionParam, ExecutionRequest>>::extract_data::<
+                    ExecutionRequest,
+                >,
+            ),
+            type_of_val(&With::<RequestContext>::extract::<AtTime>),
+            type_of_val(&With::<FunctionParam>::extract::<CollectionIdName>),
+            type_of_val(&With::<FunctionParam>::extract::<FunctionIdName>),
+            type_of_val(&combine::<CollectionIdName, FunctionIdName>),
+            // Select trigger function.
+            type_of_val(
+                &By::<(CollectionIdName, FunctionIdName)>::select_version::<
+                    { FunctionDBWithNames::Active },
+                    FunctionDBWithNames,
+                >,
+            ),
+            type_of_val(&assert_function_status),
+            // check requester is coll_admin or coll_exec for the function's collection
+            type_of_val(&With::<FunctionDBWithNames>::extract::<CollectionId>),
+            type_of_val(&AuthzOn::<CollectionId>::set),
+            type_of_val(&Authz::<CollAdmin, CollExec>::check),
+            // Get recursion options
+            type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
+            type_of_val(&With::<FunctionId>::convert_to::<FunctionOrTable>),
+            type_of_val(&With::<ExecutionRequest>::extract::<FunctionOnly>),
+            type_of_val(&with_recursion_options),
+            // Find td graph
+            // Find triggers
+            type_of_val(&GraphBuilder::<GraphOpts, _, _, _, _>::find_recursive_trigger_graph),
+            // inter collection authz check
+            type_of_val(
+                &With::<TriggerDBWithNames>::vec_convert_to::<InterCollectionAccessBuilder, _>,
+            ),
+            type_of_val(
+                &With::<InterCollectionAccessBuilder>::vec_build::<InterCollectionAccess, _>,
+            ),
+            type_of_val(&Authz::<InterColl>::check_inter_collection),
+            // Find dependencies. For clarity, we always show the function, even if
+            // generating a table centered graph, the same way we show the tables of
+            // a function centered graph.
+            type_of_val(&GraphBuilder::<GraphOpts, _, _, _, _>::main_function_id),
+            type_of_val(&GraphBuilder::<GraphOpts, _, _, _, _>::unique_triggered_function_ids),
+            type_of_val(
+                &GraphBuilder::<GraphOpts, _, _, _, _>::find_triggered_functions_dependency_graph,
+            ),
+            // inter collection authz check
+            type_of_val(
+                &With::<DependencyDBWithNames>::vec_convert_to::<InterCollectionAccessBuilder, _>,
+            ),
+            type_of_val(
+                &With::<InterCollectionAccessBuilder>::vec_build::<InterCollectionAccess, _>,
+            ),
+            type_of_val(&Authz::<InterColl>::check_inter_collection),
+            // Find output tables
+            type_of_val(&GraphBuilder::<GraphOpts, _, _, _, _>::find_functions_output_tables),
+            // Find all tables and functions
+            type_of_val(&GraphBuilder::<GraphOpts, _, _, _, _>::find_all_tables_map),
+            type_of_val(&GraphBuilder::<GraphOpts, _, _, _, _>::find_all_functions_map),
+            // Create td graph and validate it
+            type_of_val(&GraphBuilder::<GraphOpts, _, _, _, _>::build_td_graph),
+            // Build execution plan
+            type_of_val(&build_execution_plan),
+            type_of_val(&validate_execution_plan),
+            // Build execution
+            type_of_val(&With::<FunctionDBWithNames>::try_convert_to::<ExecutionDBBuilder, _>),
+            type_of_val(&With::<RequestContext>::update::<ExecutionDBBuilder, _>),
+            type_of_val(&With::<ExecutionRequest>::update::<ExecutionDBBuilder, _>),
+            type_of_val(&With::<RecursionOptions>::set::<ExecutionDBBuilder>),
+            type_of_val(&With::<ExecutionDBBuilder>::build::<ExecutionDB, _>),
+            type_of_val(&insert::<ExecutionDB>),
+            // Build transactions
+            type_of_val(&build_transaction_map),
+            type_of_val(&With::<ExecutionDB>::try_convert_to::<TransactionDBBuilder, _>),
+            type_of_val(&build_transactions),
+            type_of_val(&insert_vec::<TransactionDB>),
+            // Build new function runs
+            type_of_val(&With::<ExecutionDB>::try_convert_to::<FunctionRunDBBuilder, _>),
+            type_of_val(&build_function_runs),
+            type_of_val(&insert_vec::<FunctionRunDB>),
+            // Build new table data versions
+            type_of_val(&build_table_data_versions),
+            type_of_val(&insert_vec::<TableDataVersionDB>),
+            // Create execution plan
+            type_of_val(&resolve_execution_plan_versions),
+            // Create steps
+            type_of_val(&build_function_requirements),
+            type_of_val(&insert_vec::<FunctionRequirementDB>),
+            // Update function run initial status if needed
+            type_of_val(&update_initial_function_run_status),
+            // Execution plan response
+            type_of_val(&build_response),
+        ]);
     }
 
     #[td_test::test(sqlx)]

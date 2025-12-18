@@ -23,7 +23,6 @@ mod definitions {
             Active = &[&TriggerStatus::Active],
             Available = &[&TriggerStatus::Active, &TriggerStatus::Frozen],
             Frozen = &[&TriggerStatus::Frozen],
-            UserDefined = &[&System::FALSE],
         )
     )]
     #[td_type(
