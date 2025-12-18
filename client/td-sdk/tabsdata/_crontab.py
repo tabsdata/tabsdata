@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from croniter import CroniterBadCronError, croniter
+from croniter import croniter
 
 from tabsdata.exceptions import DecoratorConfigurationError, ErrorCode
 
@@ -33,8 +33,7 @@ class Crontab:
         mask = mask.strip()
         mask_elements = len(mask.split())
         if mask_elements != 5:
-            raise DecoratorConfigurationError(ErrorCode.DCE14, mask,
-                                              mask_elements)
+            raise DecoratorConfigurationError(ErrorCode.DCE14, mask, mask_elements)
         if not croniter.is_valid(mask):
             raise DecoratorConfigurationError(ErrorCode.DCE15, mask)
         self._mask = mask

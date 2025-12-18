@@ -39,18 +39,24 @@ def test_crontab_class_all_params():
         "end": EXAMPLE_END_DATETIME.isoformat(),
     }
 
+
 @pytest.mark.unit
 @pytest.mark.crontab
 def test_crontab_wrong_mask_element_counts():
     with pytest.raises(DecoratorConfigurationError) as e:
         # noinspection PyTypeChecker
-        Crontab(mask="1 * * *",)
+        Crontab(
+            mask="1 * * *",
+        )
     assert e.value.error_code == ErrorCode.DCE14
 
     with pytest.raises(DecoratorConfigurationError) as e:
         # noinspection PyTypeChecker
-        Crontab(mask="* 1 * * * *",)
+        Crontab(
+            mask="* 1 * * * *",
+        )
     assert e.value.error_code == ErrorCode.DCE14
+
 
 @pytest.mark.unit
 @pytest.mark.crontab
@@ -91,4 +97,3 @@ def test_crontab_mask_validation_failure():
     with pytest.raises(DecoratorConfigurationError) as e:
         Crontab(mask=1)
     assert e.value.error_code == ErrorCode.DCE16
-

@@ -73,9 +73,9 @@ class Upgrade_1_5_1_to_1_6_0(Upgrade):
             with open(instance_config_path, "r", encoding="utf-8") as f:
                 instance_config_content = f.read()
             if (
-                    instance_config_content_upgraded
-                    and instance_config_content_upgraded.strip()
-                    != instance_config_content.strip()
+                instance_config_content_upgraded
+                and instance_config_content_upgraded.strip()
+                != instance_config_content.strip()
             ):
                 messages.append(
                     f"[dry-run] Would upgrade '{instance_config_path}' "
@@ -97,14 +97,15 @@ class Upgrade_1_5_1_to_1_6_0(Upgrade):
             for worker in workers:
                 logger.debug(f"Provisioning config folder for worker '{worker}'.")
                 target_worker_config_folder = (
-                        instance / "workspace" / "config" / "proc" / "ephemeral" / worker
+                    instance / "workspace" / "config" / "proc" / "ephemeral" / worker
                 )
                 if not target_worker_config_folder.exists():
                     source_worker_config_folder = None
                     # noinspection PyBroadException
                     try:
                         source_worker_config_folder = td_resource(
-                            f"resources/profile/workspace/config/proc/ephemeral/{worker}/"
+                            "resources/profile/workspace/config/proc/ephemeral/"
+                            f"{worker}/"
                         )
                     except Exception:
                         logger.debug(
@@ -128,7 +129,7 @@ class Upgrade_1_5_1_to_1_6_0(Upgrade):
 
                 logger.debug(f"Provisioning work folder for worker '{worker}'.")
                 target_worker_work_folder = (
-                        instance / "workspace" / "work" / "proc" / "ephemeral" / worker
+                    instance / "workspace" / "work" / "proc" / "ephemeral" / worker
                 )
                 if not target_worker_work_folder.exists():
                     source_worker_work_folder = None

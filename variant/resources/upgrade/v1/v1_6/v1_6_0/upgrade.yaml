@@ -10,7 +10,7 @@ instance:
       name: cron
       kind: processor
       location: system
-      program: td_invoker
+      program: td_cron
       concurrency: 0
       retries: 2
       arguments:
