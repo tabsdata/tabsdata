@@ -16,9 +16,9 @@ pub async fn seed_collection(
     let collection = CollectionCreateDB::builder()
         .name(collection_name.clone())
         .description(Description::default())
-        .created_on(created_on.clone())
+        .created_on(created_on)
         .created_by_id(created_by)
-        .modified_on(created_on.clone())
+        .modified_on(created_on)
         .modified_by_id(created_by)
         .build()
         .unwrap();

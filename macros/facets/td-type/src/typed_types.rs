@@ -900,7 +900,7 @@ pub fn typed_timestamp(
 
     let expanded = quote! {
         #(#attrs)*
-        #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, sqlx::Type)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, sqlx::Type)]
         #[sqlx(transparent)]
         pub struct #name(chrono::DateTime<chrono::Utc>);
 

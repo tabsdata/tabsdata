@@ -474,19 +474,19 @@ mod tests {
                 id: TestId::try_from("00000000000000000000000004").unwrap(),
                 partition_id: TestPartition::try_from("0").unwrap(),
                 status: TestStatus::try_from("A").unwrap(),
-                defined_on: AT_04_08.clone(),
+                defined_on: *AT_04_08,
             },
             TestDao {
                 id: TestId::try_from("00000000000000000000000008").unwrap(),
                 partition_id: TestPartition::try_from("1").unwrap(),
                 status: TestStatus::try_from("A").unwrap(),
-                defined_on: AT_04_08.clone(),
+                defined_on: *AT_04_08,
             },
             TestDao {
                 id: TestId::try_from("0000000000000000000000000C").unwrap(),
                 partition_id: TestPartition::try_from("1").unwrap(),
                 status: TestStatus::try_from("D").unwrap(),
-                defined_on: AT_0C.clone(),
+                defined_on: *AT_0C,
             },
         ]
     });

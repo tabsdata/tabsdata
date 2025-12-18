@@ -150,7 +150,7 @@ mod tests {
                 .unwrap(),
             user_update,
         );
-        let request_time = request.context.time.clone();
+        let request_time = request.context.time;
         let response = service.raw_oneshot(request).await;
         let updated = response.unwrap();
 
@@ -212,7 +212,7 @@ mod tests {
                     .unwrap(),
                 user_update,
             );
-        let request_time = request.context.time.clone();
+        let request_time = request.context.time;
         let response = service.raw_oneshot(request).await;
         let updated = response.unwrap();
 

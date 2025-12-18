@@ -24,7 +24,7 @@ pub async fn seed_function_run(
         .function_version_id(function_version.id)
         .execution_id(execution.id)
         .transaction_id(transaction.id)
-        .triggered_on(transaction.triggered_on.clone())
+        .triggered_on(transaction.triggered_on)
         .triggered_by_id(transaction.triggered_by_id)
         .trigger(Trigger::Manual)
         .status(status.clone())

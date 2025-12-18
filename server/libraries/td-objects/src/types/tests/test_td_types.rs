@@ -93,7 +93,7 @@ mod tests {
             .bind(my_f64)
             .bind(my_bool)
             .bind(my_id)
-            .bind(&my_timestamp)
+            .bind(my_timestamp)
             .execute(&mut *conn)
             .await
             .unwrap();

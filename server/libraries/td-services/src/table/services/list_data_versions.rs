@@ -329,7 +329,7 @@ mod tests {
                 TableDataVersionAtIdName::builder()
                     .try_collection(format!("~{}", collection.id))?
                     .try_table(format!("{}", table_version.name))?
-                    .at(t3.clone())
+                    .at(t3)
                     .uncommitted(false)
                     .build()?,
                 ListParams::default(),

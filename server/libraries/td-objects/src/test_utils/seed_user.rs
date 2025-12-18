@@ -42,7 +42,7 @@ pub async fn seed_user(db: &DbPool, name: &UserName, enabled: &UserEnabled) -> U
             create.password.trim(),
         ))
         .unwrap()
-        .try_password_set_on(request_context.time.clone())
+        .try_password_set_on(request_context.time)
         .unwrap()
         .password_must_change(false)
         .enabled(create.enabled)

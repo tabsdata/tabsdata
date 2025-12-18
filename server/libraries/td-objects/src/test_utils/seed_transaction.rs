@@ -20,7 +20,7 @@ pub async fn seed_transaction(
         .try_transaction_by("ANY")
         .unwrap()
         .transaction_key(transaction_key.clone())
-        .triggered_on(execution.triggered_on.clone())
+        .triggered_on(execution.triggered_on)
         .triggered_by_id(execution.triggered_by_id)
         .build()
         .unwrap();

@@ -291,7 +291,7 @@ pub async fn build_tables_trigger_versions(
                             .to_builder()
                             .id(TriggerVersionId::default())
                             .status(TriggerStatus::Frozen)
-                            .defined_on(&*at_time)
+                            .defined_on(*at_time)
                             .build(),
                     )
                 }
@@ -305,7 +305,7 @@ pub async fn build_tables_trigger_versions(
                             .id(TriggerVersionId::default())
                             .trigger_by_function_id(table.function_id)
                             .status(TriggerStatus::Active)
-                            .defined_on(&*at_time)
+                            .defined_on(*at_time)
                             .build(),
                     )
                 }

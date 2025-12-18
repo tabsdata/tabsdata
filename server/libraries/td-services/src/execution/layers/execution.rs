@@ -199,7 +199,7 @@ pub async fn resolve_execution_plan_versions(
             |versions, source, target| {
                 let queries = queries.clone();
                 let connection = connection.clone();
-                let triggered_on = execution.triggered_on.clone();
+                let triggered_on = execution.triggered_on;
                 async move {
                     let mut conn = connection.lock().await;
                     let conn = conn.get_mut_connection()?;
@@ -497,7 +497,7 @@ pub async fn build_response(
     let response = ExecutionResponse {
         id: execution.id,
         name: execution.name.clone(),
-        triggered_on: execution.triggered_on.clone(),
+        triggered_on: execution.triggered_on,
         transactions,
         dot,
         all_functions,

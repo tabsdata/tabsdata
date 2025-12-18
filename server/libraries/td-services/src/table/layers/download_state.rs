@@ -29,7 +29,7 @@ pub async fn get_table_at_id_name(
     let table_at_id = TableAtIdName {
         collection: CollectionIdName::from_id(function.collection_id),
         table: TableIdName::from_id(state_table.table_id),
-        at: at_time.deref().clone(),
+        at: *at_time,
     };
     Ok(table_at_id)
 }
