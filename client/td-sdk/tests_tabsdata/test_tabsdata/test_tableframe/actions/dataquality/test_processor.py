@@ -8,7 +8,6 @@ from tabsdata._tableinfo import TableKind
 from tabsdata._tableuri import ExtendedTableURI, TableURI
 from tabsdata.dataquality import DataQuality, Filter, Select, Summary
 from tabsdata.exceptions import (
-    DataQualityConfigurationError,
     DataQualityProcessingError,
     ParameterValidationError,
 )
@@ -1124,13 +1123,11 @@ class TestDataQualityProcessorTableNames:
 
     def test_select_requires_to_table_parameter(self):
 
-        with pytest.raises(TypeError) as exc_info:
+        with pytest.raises(ParameterValidationError) as exc_info:
             # noinspection PyArgumentList
             Select()
 
-        assert "missing 1 required positional argument: 'to_table'" in str(
-            exc_info.value
-        )
+        assert "PVTEST-000" in str(exc_info.value)
 
     def test_filter_with_none_to_table_produces_no_table(self):
         input_tables = {

@@ -46,10 +46,10 @@ class Classifier(ABC):
 
     @_td_validate_call(ErrorCode.PVDQCL1)
     def __init__(
-            self,
-            column_names: Optional[ColumNamesWithAltSpec] = None,
-            *,
-            tags: Optional[TagsSpec] = None,
+        self,
+        column_names: Optional[ColumNamesWithAltSpec] = None,
+        *,
+        tags: Optional[TagsSpec] = None,
     ):
         """
         Initialize the Classifier object.
@@ -83,8 +83,7 @@ class Classifier(ABC):
                 Defaults to None.
         """
         column_names = _normalize_to_list(column_names, keep_none=True)
-        if column_names and len(column_names) > 0 and isinstance(
-                column_names[0], str):
+        if column_names and len(column_names) > 0 and isinstance(column_names[0], str):
             column_names = [(s, None) for s in column_names]
         self._column_names = column_names
         self._tags = _normalize_to_list(tags)
@@ -135,8 +134,7 @@ def _validate_bins(bins: BinsSpec, min_in_first_bin: bool, fn_name: str):
                 f"'min_in_first_bin' = '{min_in_first_bin}' "
                 f"error: the maximum number of bins is {MAX_BINS}."
             )
-            raise _validation_error(ErrorCode.PVDQCL33, fn_name,
-                                    params_with_error)
+            raise _validation_error(ErrorCode.PVDQCL33, fn_name, params_with_error)
     else:
         if bins > MAX_BINS + 1:
             params_with_error = (
@@ -144,8 +142,7 @@ def _validate_bins(bins: BinsSpec, min_in_first_bin: bool, fn_name: str):
                 f"'min_in_first_bin' = '{min_in_first_bin}' "
                 f"error: the maximum number of bins is {MAX_BINS + 1}."
             )
-            raise _validation_error(ErrorCode.PVDQCL34, fn_name,
-                                    params_with_error)
+            raise _validation_error(ErrorCode.PVDQCL34, fn_name, params_with_error)
 
 
 class Scale(ABC):
@@ -154,10 +151,10 @@ class Scale(ABC):
     """
 
     def __init__(
-            self,
-            range: tuple[ScaleLimitSpec, ScaleLimitSpec],
-            bins: Optional[BinsSpec],
-            min_in_first_bin: bool,
+        self,
+        range: tuple[ScaleLimitSpec, ScaleLimitSpec],
+        bins: Optional[BinsSpec],
+        min_in_first_bin: bool,
     ):
         self._range = range
         self._bins = bins
@@ -180,10 +177,10 @@ class IdentityScale(Scale):
 
     @_td_validate_call(ErrorCode.PVDQCL23)
     def __init__(
-            self,
-            min: ScaleIdentityLimitSpec,
-            max: ScaleIdentityLimitSpec,
-            min_in_first_bin: bool = True,
+        self,
+        min: ScaleIdentityLimitSpec,
+        max: ScaleIdentityLimitSpec,
+        min_in_first_bin: bool = True,
     ):
         """
         Identity scale.
@@ -196,18 +193,17 @@ class LinearScale(Scale):
 
     @_td_validate_call(ErrorCode.PVDQCL24)
     def __init__(
-            self,
-            min: ScaleLimitSpec,
-            max: ScaleLimitSpec,
-            bins: Optional[BinsSpec] = MAX_BINS,
-            min_in_first_bin: bool = True,
+        self,
+        min: ScaleLimitSpec,
+        max: ScaleLimitSpec,
+        bins: Optional[BinsSpec] = MAX_BINS,
+        min_in_first_bin: bool = True,
     ):
         """
         Linear scale.
         """
         _validate_min_max(min, max, f"{self.__class__.__name__}.__init__")
-        _validate_bins(bins, min_in_first_bin,
-                       f"{self.__class__.__name__}.__init__")
+        _validate_bins(bins, min_in_first_bin, f"{self.__class__.__name__}.__init__")
         super().__init__((min, max), bins, min_in_first_bin)
 
 
@@ -215,19 +211,18 @@ class MonomialScale(Scale):
 
     @_td_validate_call(ErrorCode.PVDQCL25)
     def __init__(
-            self,
-            min: ScaleLimitSpec,
-            max: ScaleLimitSpec,
-            power: ScalePowerSpec,
-            bins: Optional[BinsSpec] = MAX_BINS,
-            min_in_first_bin: bool = True,
+        self,
+        min: ScaleLimitSpec,
+        max: ScaleLimitSpec,
+        power: ScalePowerSpec,
+        bins: Optional[BinsSpec] = MAX_BINS,
+        min_in_first_bin: bool = True,
     ):
         """
         Monomial scale.
         """
         _validate_min_max(min, max, f"{self.__class__.__name__}.__init__")
-        _validate_bins(bins, min_in_first_bin,
-                       f"{self.__class__.__name__}.__init__")
+        _validate_bins(bins, min_in_first_bin, f"{self.__class__.__name__}.__init__")
         super().__init__((min, max), bins, min_in_first_bin)
         self._power = power
 
@@ -240,19 +235,18 @@ class LogarithmicScale(Scale):
 
     @_td_validate_call(ErrorCode.PVDQCL26)
     def __init__(
-            self,
-            min: ScaleLimitSpec,
-            max: ScaleLimitSpec,
-            base: Optional[ScaleBaseSpec] = None,
-            bins: Optional[BinsSpec] = MAX_BINS,
-            min_in_first_bin: bool = True,
+        self,
+        min: ScaleLimitSpec,
+        max: ScaleLimitSpec,
+        base: Optional[ScaleBaseSpec] = None,
+        bins: Optional[BinsSpec] = MAX_BINS,
+        min_in_first_bin: bool = True,
     ):
         """
         Logarithmic scale.
         """
         _validate_min_max(min, max, f"{self.__class__.__name__}.__init__")
-        _validate_bins(bins, min_in_first_bin,
-                       f"{self.__class__.__name__}.__init__")
+        _validate_bins(bins, min_in_first_bin, f"{self.__class__.__name__}.__init__")
         super().__init__((min, max), bins, min_in_first_bin)
         self._base = base if base else math.e
 
@@ -265,19 +259,18 @@ class ExponentialScale(Scale):
 
     @_td_validate_call(ErrorCode.PVDQCL27)
     def __init__(
-            self,
-            min: ScaleLimitSpec,
-            max: ScaleLimitSpec,
-            base: Optional[ScaleBaseSpec] = None,
-            bins: Optional[BinsSpec] = MAX_BINS,
-            min_in_first_bin: bool = True,
+        self,
+        min: ScaleLimitSpec,
+        max: ScaleLimitSpec,
+        base: Optional[ScaleBaseSpec] = None,
+        bins: Optional[BinsSpec] = MAX_BINS,
+        min_in_first_bin: bool = True,
     ):
         """
         Exponential scale.
         """
         _validate_min_max(min, max, f"{self.__class__.__name__}.__init__")
-        _validate_bins(bins, min_in_first_bin,
-                       f"{self.__class__.__name__}.__init__")
+        _validate_bins(bins, min_in_first_bin, f"{self.__class__.__name__}.__init__")
         super().__init__((min, max), bins, min_in_first_bin)
         self._base = base if base else math.e
 
@@ -293,11 +286,11 @@ class Categorizer(Classifier):
 
     @_td_validate_call(ErrorCode.PVDQCL2)
     def __init__(
-            self,
-            column_names: Optional[ColumNamesWithAltSpec] = None,
-            *,
-            scale: Scale,
-            tags: Optional[TagsSpec] = None,
+        self,
+        column_names: Optional[ColumNamesWithAltSpec] = None,
+        *,
+        scale: Scale,
+        tags: Optional[TagsSpec] = None,
     ):
         """
         Create a categorizer that categorizes data based on the given scale.
@@ -326,12 +319,12 @@ class DoesNotMatch(BoolClassifier):
 
     @_td_validate_call(ErrorCode.PVDQCL3)
     def __init__(
-            self,
-            column_names: Optional[ColumNamesWithAltSpec] = None,
-            ignore_nulls: bool = False,
-            *,
-            regex: str,
-            tags: Optional[TagsSpec] = None,
+        self,
+        column_names: Optional[ColumNamesWithAltSpec] = None,
+        ignore_nulls: bool = False,
+        *,
+        regex: str,
+        tags: Optional[TagsSpec] = None,
     ):
         """
         Constructor.
@@ -387,11 +380,11 @@ class HasColumns(BoolClassifier):
 
     @_td_validate_call(ErrorCode.PVDQCL4)
     def __init__(
-            self,
-            column_names: ColumnNamesSpec,
-            mode: HasColumnsModeSpec = "at_least",
-            *,
-            tags: Optional[TagsSpec] = None,
+        self,
+        column_names: ColumnNamesSpec,
+        mode: HasColumnsModeSpec = "at_least",
+        *,
+        tags: Optional[TagsSpec] = None,
     ):
         """
         Constructor.
@@ -446,10 +439,10 @@ class HasColumnTypes(BoolClassifier):
 
     @_td_validate_call(ErrorCode.PVDQCL5)
     def __init__(
-            self,
-            column_types: ColumnTypesSpec,
-            *,
-            tags: Optional[TagsSpec] = None,
+        self,
+        column_types: ColumnTypesSpec,
+        *,
+        tags: Optional[TagsSpec] = None,
     ):
         """
         Constructor.
@@ -488,13 +481,13 @@ class HasLen(BoolClassifier):
 
     @_td_validate_call(ErrorCode.PVDQCL7)
     def __init__(
-            self,
-            column_names: Optional[ColumNamesWithAltSpec] = None,
-            ignore_nulls: bool = False,
-            min: LenSpec = 0,
-            max: LenSpec = sys.maxsize,
-            *,
-            tags: Optional[TagsSpec] = None,
+        self,
+        column_names: Optional[ColumNamesWithAltSpec] = None,
+        ignore_nulls: bool = False,
+        min: LenSpec = 0,
+        max: LenSpec = sys.maxsize,
+        *,
+        tags: Optional[TagsSpec] = None,
     ):
         """
         Constructor.
@@ -563,12 +556,12 @@ class IsIn(BoolClassifier):
 
     @_td_validate_call(ErrorCode.PVDQCL9)
     def __init__(
-            self,
-            column_names: Optional[ColumNamesWithAltSpec] = None,
-            ignore_nulls: bool = False,
-            *,
-            set: Collection,
-            tags: Optional[TagsSpec] = None,
+        self,
+        column_names: Optional[ColumNamesWithAltSpec] = None,
+        ignore_nulls: bool = False,
+        *,
+        set: Collection,
+        tags: Optional[TagsSpec] = None,
     ):
         """
         Constructor.
@@ -624,19 +617,19 @@ class IsNotIn(BoolClassifier):
 
     @_td_validate_call(ErrorCode.PVDQCL10)
     def __init__(
-            self,
-            column_names: Optional[ColumNamesWithAltSpec] = None,
-            ignore_nulls: bool = False,
-            *,
-            set: Collection,
-            tags: Optional[TagsSpec] = None,
+        self,
+        column_names: Optional[ColumNamesWithAltSpec] = None,
+        ignore_nulls: bool = False,
+        *,
+        set: Collection,
+        tags: Optional[TagsSpec] = None,
     ):
         """
         Constructor.
 
         Args:
-            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
-            optional):
+            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] |
+            None, optional):
                 Column name(s) to apply the classifier to and to store the
                 classification result.
                 If a `str | list[str]` is given, those are the column names
@@ -682,21 +675,21 @@ class IsInRange(BoolClassifier):
 
     @_td_validate_call(ErrorCode.PVDQCL10)
     def __init__(
-            self,
-            column_names: Optional[ColumNamesWithAltSpec] = None,
-            ignore_nulls: bool = False,
-            min: MinSpec = float("-inf"),
-            max: MaxSpec = float("inf"),
-            closed: RangeClosedOnSpec = "both",
-            *,
-            tags: TagsSpec = None,
+        self,
+        column_names: Optional[ColumNamesWithAltSpec] = None,
+        ignore_nulls: bool = False,
+        min: MinSpec = float("-inf"),
+        max: MaxSpec = float("inf"),
+        closed: RangeClosedOnSpec = "both",
+        *,
+        tags: TagsSpec = None,
     ):
         """
         Constructor.
 
         Args:
-            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
-            optional):
+            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] |
+            None, optional):
                 Column name(s) to apply the classifier to and to store the
                 classification result.
                 If a `str | list[str]` is given, those are the column names
@@ -763,21 +756,21 @@ class IsNotInRange(BoolClassifier):
 
     @_td_validate_call(ErrorCode.PVDQCL12)
     def __init__(
-            self,
-            column_names: Optional[ColumNamesWithAltSpec] = None,
-            ignore_nulls: bool = False,
-            min: MinSpec = float("-inf"),
-            max: MaxSpec = float("inf"),
-            closed: RangeClosedOnSpec = "both",
-            *,
-            tags: TagsSpec = None,
+        self,
+        column_names: Optional[ColumNamesWithAltSpec] = None,
+        ignore_nulls: bool = False,
+        min: MinSpec = float("-inf"),
+        max: MaxSpec = float("inf"),
+        closed: RangeClosedOnSpec = "both",
+        *,
+        tags: TagsSpec = None,
     ):
         """
         Constructor.
 
         Args:
-            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
-            optional):
+            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] |
+            None, optional):
                 Column name(s) to apply the classifier to and to store the
                 classification result.
                 If a `str | list[str]` is given, those are the column names
@@ -844,18 +837,18 @@ class IsNan(BoolClassifier):
 
     @_td_validate_call(ErrorCode.PVDQCL14)
     def __init__(
-            self,
-            column_names: Optional[ColumNamesWithAltSpec] = None,
-            ignore_nulls: bool = False,
-            *,
-            tags: Optional[TagsSpec] = None,
+        self,
+        column_names: Optional[ColumNamesWithAltSpec] = None,
+        ignore_nulls: bool = False,
+        *,
+        tags: Optional[TagsSpec] = None,
     ):
         """
         Constructor.
 
         Args:
-            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
-            optional):
+            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] |
+            None, optional):
                 Column name(s) to apply the classifier to and to store the
                 classification result.
                 If a `str | list[str]` is given, those are the column names
@@ -895,18 +888,18 @@ class IsNegative(BoolClassifier):
 
     @_td_validate_call(ErrorCode.PVDQCL14)
     def __init__(
-            self,
-            column_names: Optional[ColumNamesWithAltSpec] = None,
-            ignore_nulls: bool = False,
-            *,
-            tags: Optional[TagsSpec] = None,
+        self,
+        column_names: Optional[ColumNamesWithAltSpec] = None,
+        ignore_nulls: bool = False,
+        *,
+        tags: Optional[TagsSpec] = None,
     ):
         """
         Constructor.
 
         Args:
-            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
-            optional):
+            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] |
+            None, optional):
                 Column name(s) to apply the classifier to and to store the
                 classification result.
                 If a `str | list[str]` is given, those are the column names
@@ -946,18 +939,18 @@ class IsNegativeOrZero(BoolClassifier):
 
     @_td_validate_call(ErrorCode.PVDQCL14)
     def __init__(
-            self,
-            column_names: Optional[ColumNamesWithAltSpec] = None,
-            ignore_nulls: bool = False,
-            *,
-            tags: Optional[TagsSpec] = None,
+        self,
+        column_names: Optional[ColumNamesWithAltSpec] = None,
+        ignore_nulls: bool = False,
+        *,
+        tags: Optional[TagsSpec] = None,
     ):
         """
         Constructor.
 
         Args:
-            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
-            optional):
+            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] |
+            None, optional):
                 Column name(s) to apply the classifier to and to store the
                 classification result.
                 If a `str | list[str]` is given, those are the column names
@@ -997,18 +990,18 @@ class IsNotNan(BoolClassifier):
 
     @_td_validate_call(ErrorCode.PVDQCL14)
     def __init__(
-            self,
-            column_names: Optional[ColumNamesWithAltSpec] = None,
-            ignore_nulls: bool = False,
-            *,
-            tags: Optional[TagsSpec] = None,
+        self,
+        column_names: Optional[ColumNamesWithAltSpec] = None,
+        ignore_nulls: bool = False,
+        *,
+        tags: Optional[TagsSpec] = None,
     ):
         """
         Constructor.
 
         Args:
-            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
-            optional):
+            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] |
+            None, optional):
                 Column name(s) to apply the classifier to and to store the
                 classification result.
                 If a `str | list[str]` is given, those are the column names
@@ -1048,17 +1041,17 @@ class IsNotNull(BoolClassifier):
 
     @_td_validate_call(ErrorCode.PVDQCL15)
     def __init__(
-            self,
-            column_names: Optional[ColumNamesWithAltSpec] = None,
-            *,
-            tags: Optional[TagsSpec] = None,
+        self,
+        column_names: Optional[ColumNamesWithAltSpec] = None,
+        *,
+        tags: Optional[TagsSpec] = None,
     ):
         """
         Constructor.
 
         Args:
-            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
-            optional):
+            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] |
+            None, optional):
                 Column name(s) to apply the classifier to and to store the
                 classification result.
                 If a `str | list[str]` is given, those are the column names
@@ -1090,17 +1083,17 @@ class IsNotNullNorNan(BoolClassifier):
 
     @_td_validate_call(ErrorCode.PVDQCL15)
     def __init__(
-            self,
-            column_names: Optional[ColumNamesWithAltSpec] = None,
-            *,
-            tags: Optional[TagsSpec] = None,
+        self,
+        column_names: Optional[ColumNamesWithAltSpec] = None,
+        *,
+        tags: Optional[TagsSpec] = None,
     ):
         """
         Constructor.
 
         Args:
-            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
-            optional):
+            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] |
+            None, optional):
                 Column name(s) to apply the classifier to and to store the
                 classification result.
                 If a `str | list[str]` is given, those are the column names
@@ -1132,18 +1125,18 @@ class IsNotZero(BoolClassifier):
 
     @_td_validate_call(ErrorCode.PVDQCL16)
     def __init__(
-            self,
-            column_names: Optional[ColumNamesWithAltSpec] = None,
-            ignore_nulls: bool = False,
-            *,
-            tags: Optional[TagsSpec] = None,
+        self,
+        column_names: Optional[ColumNamesWithAltSpec] = None,
+        ignore_nulls: bool = False,
+        *,
+        tags: Optional[TagsSpec] = None,
     ):
         """
         Constructor.
 
         Args:
-            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
-            optional):
+            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] |
+            None, optional):
                 Column name(s) to apply the classifier to and to store the
                 classification result.
                 If a `str | list[str]` is given, those are the column names
@@ -1178,8 +1171,7 @@ class IsNotZero(BoolClassifier):
     @ignore_nulls.setter
     def ignore_nulls(self, value: bool):
         if not isinstance(value, bool):
-            raise DataQualityConfigurationError(ErrorCode.DQCE13, value,
-                                                type(value))
+            raise DataQualityConfigurationError(ErrorCode.DQCE13, value, type(value))
         self._ignore_nulls = value
 
 
@@ -1190,17 +1182,17 @@ class IsNull(BoolClassifier):
 
     @_td_validate_call(ErrorCode.PVDQCL17)
     def __init__(
-            self,
-            column_names: Optional[ColumNamesWithAltSpec] = None,
-            *,
-            tags: Optional[TagsSpec] = None,
+        self,
+        column_names: Optional[ColumNamesWithAltSpec] = None,
+        *,
+        tags: Optional[TagsSpec] = None,
     ):
         """
         Constructor.
 
         Args:
-            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
-            optional):
+            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] |
+            None, optional):
                 Column name(s) to apply the classifier to and to store the
                 classification result.
                 If a `str | list[str]` is given, those are the column names
@@ -1232,17 +1224,17 @@ class IsNullOrNan(BoolClassifier):
 
     @_td_validate_call(ErrorCode.PVDQCL18)
     def __init__(
-            self,
-            column_names: Optional[ColumNamesWithAltSpec] = None,
-            *,
-            tags: Optional[TagsSpec] = None,
+        self,
+        column_names: Optional[ColumNamesWithAltSpec] = None,
+        *,
+        tags: Optional[TagsSpec] = None,
     ):
         """
         Constructor.
 
         Args:
-            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
-            optional):
+            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] |
+            None, optional):
                 Column name(s) to apply the classifier to and to store the
                 classification result.
                 If a `str | list[str]` is given, those are the column names
@@ -1274,18 +1266,18 @@ class IsPositive(BoolClassifier):
 
     @_td_validate_call(ErrorCode.PVDQCL19)
     def __init__(
-            self,
-            column_names: Optional[ColumNamesWithAltSpec] = None,
-            ignore_nulls: bool = False,
-            *,
-            tags: Optional[TagsSpec] = None,
+        self,
+        column_names: Optional[ColumNamesWithAltSpec] = None,
+        ignore_nulls: bool = False,
+        *,
+        tags: Optional[TagsSpec] = None,
     ):
         """
         Constructor.
 
         Args:
-            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
-            optional):
+            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] |
+            None, optional):
                 Column name(s) to apply the classifier to and to store the
                 classification result.
                 If a `str | list[str]` is given, those are the column names
@@ -1325,18 +1317,18 @@ class IsPositiveOrZero(BoolClassifier):
 
     @_td_validate_call(ErrorCode.PVDQCL20)
     def __init__(
-            self,
-            column_names: Optional[ColumNamesWithAltSpec] = None,
-            ignore_nulls: bool = False,
-            *,
-            tags: Optional[TagsSpec] = None,
+        self,
+        column_names: Optional[ColumNamesWithAltSpec] = None,
+        ignore_nulls: bool = False,
+        *,
+        tags: Optional[TagsSpec] = None,
     ):
         """
         Constructor.
 
         Args:
-            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
-            optional):
+            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] |
+            None, optional):
                 Column name(s) to apply the classifier to and to store the
                 classification result.
                 If a `str | list[str]` is given, those are the column names
@@ -1376,18 +1368,18 @@ class IsZero(BoolClassifier):
 
     @_td_validate_call(ErrorCode.PVDQCL21)
     def __init__(
-            self,
-            column_names: Optional[ColumNamesWithAltSpec] = None,
-            ignore_nulls: bool = False,
-            *,
-            tags: Optional[TagsSpec] = None,
+        self,
+        column_names: Optional[ColumNamesWithAltSpec] = None,
+        ignore_nulls: bool = False,
+        *,
+        tags: Optional[TagsSpec] = None,
     ):
         """
         Constructor.
 
         Args:
-            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
-            optional):
+            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] |
+            None, optional):
                 Column name(s) to apply the classifier to and to store the
                 classification result.
                 If a `str | list[str]` is given, those are the column names
@@ -1427,19 +1419,19 @@ class Matches(BoolClassifier):
 
     @_td_validate_call(ErrorCode.PVDQCL22)
     def __init__(
-            self,
-            column_names: Optional[ColumNamesWithAltSpec] = None,
-            ignore_nulls: bool = False,
-            *,
-            regex: str,
-            tags: Optional[TagsSpec] = None,
+        self,
+        column_names: Optional[ColumNamesWithAltSpec] = None,
+        ignore_nulls: bool = False,
+        *,
+        regex: str,
+        tags: Optional[TagsSpec] = None,
     ):
         """
         Constructor.
 
         Args:
-            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] | None,
-            optional):
+            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] |
+            None, optional):
                 Column name(s) to apply the classifier to and to store the
                 classification result.
                 If a `str | list[str]` is given, those are the column names

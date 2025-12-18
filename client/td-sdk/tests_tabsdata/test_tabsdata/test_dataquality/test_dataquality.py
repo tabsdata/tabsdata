@@ -6,7 +6,7 @@ import pytest
 
 from tabsdata.dataquality import DataQuality
 from tabsdata.dataquality._classifier import Matches
-from tabsdata.dataquality._operator import Fail, Summary, RowCountThreshold
+from tabsdata.dataquality._operator import Fail, RowCountThreshold, Summary
 from tabsdata.exceptions import (
     DataQualityConfigurationError,
     ErrorCode,

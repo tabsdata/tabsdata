@@ -12,6 +12,7 @@ from tabsdata import (
     transformer,
 )
 from tabsdata._table_actions.actions import OnTablesAction
+from tabsdata.dataquality import LinearScale
 
 # noinspection PyUnresolvedReferences
 from . import pytestmark  # noqa: F401

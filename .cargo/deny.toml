@@ -35,6 +35,7 @@ deny = [{ crate = "log", reason = "We use 'tracing' crate instead, which has equ
     "netlink-sys",
     "opentelemetry-appender-log",
     "prodash",
+    "pyo3-log",
     "pyo3-stub-gen",
     "reqwest",
     "rustpython-parser",

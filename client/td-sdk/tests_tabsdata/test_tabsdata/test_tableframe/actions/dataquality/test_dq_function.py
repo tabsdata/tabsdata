@@ -20,7 +20,7 @@ def test_dq_transformer():
             dq.DataQuality(
                 table="table_o",
                 classifiers=[
-                    dq.IsNull("number01"),
+                    dq.IsNull("value"),
                 ],
                 operators=[
                     dq.Summary(),
@@ -31,7 +31,7 @@ def test_dq_transformer():
     def dq_transformer(tf: td.TableFrame) -> td.TableFrame:
         return tf
 
-    fnout = tdfnrun(
+    _ = tdfnrun(
         function=dq_transformer,
-        input_tables=dataset(),
+        input_tables=dataset(td.Float32),
     )

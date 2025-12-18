@@ -3,7 +3,7 @@
 #
 
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any, Callable
 
@@ -86,7 +86,7 @@ class DataShape:
         return int(value)
 
     @staticmethod
-    def to_null(value):
+    def to_null(_):
         return None
 
     @staticmethod

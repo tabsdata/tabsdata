@@ -19,6 +19,7 @@ import shutil
 import subprocess
 import sysconfig
 import tempfile
+import time
 
 # noinspection PyCompatibility
 import tomllib
@@ -1476,7 +1477,7 @@ def install_local_packages(
     return True
 
 
-def link_base_binaries(
+def link_base_binaries(  # noqa: C901
     package_location: str,
     real_environment_name: str,
 ) -> None:
@@ -1506,10 +1507,13 @@ def link_base_binaries(
         for base_binary in base_binaries:
             for binary_name in [base_binary, f"{base_binary}.exe"]:
                 source_binary = os.path.join(current_venv_scripts, binary_name)
+                target_binary = os.path.join(new_venv_scripts, binary_name)
                 if os.path.exists(source_binary):
-                    target_binary = os.path.join(new_venv_scripts, binary_name)
                     try:
                         os.symlink(source_binary, target_binary)
+                        now = time.time()
+                        os.utime(new_venv_scripts, (now, now))
+                        os.utime(target_binary, (now, now))
                         logger.info(
                             f"Created symlink for binary '{binary_name}' "
                             f"from '{source_binary}' "
@@ -1528,6 +1532,12 @@ def link_base_binaries(
                             f"from '{source_binary}': {e}"
                         )
                     break
+                else:
+                    logger.info(
+                        f"Bypassing symlink for binary '{binary_name}' "
+                        f"from '{source_binary}' "
+                        f"to '{target_binary}'"
+                    )
     except Exception as e:
         logger.warning(f"Failed to process binaries from setup.toml: {e}")
 
@@ -1581,6 +1591,8 @@ def install_host_package(
                         f"'{package_location}' - '{package_name}'"
                     )
                     install_command.append("-e")
+                    if package_name == TABSDATA_MODULE_NAME:
+                        link_base_binaries(package_location, real_environment_name)
         install_command.append(package_location)
         pip_install_requirements_command = add_python_target_and_join_commands(
             install_command,
