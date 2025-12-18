@@ -235,5 +235,6 @@ mod tests {
         assert_eq!(function.defined_on, found.defined_on);
         assert_eq!(function.defined_by_id, found.defined_by_id);
         assert_eq!(function.status, found.status);
+        assert_eq!(function.enabled, found.enabled);
     }
 }

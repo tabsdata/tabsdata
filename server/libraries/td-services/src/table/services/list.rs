@@ -134,16 +134,11 @@ mod tests {
         // Update function with table_1 table (remove table_2)
         let tables = vec![TableNameDto::try_from("table_1")?];
         let update = FunctionUpdate::builder()
-            .try_name("joaquin")?
-            .try_description("function_foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet")?
+            .name(Some("joaquin".try_into()?))
+            .description(Some("function_foo description".try_into()?))
+            .snippet(Some("function_foo snippet".try_into()?))
             .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(tables)
-            .try_runtime_values("mock runtime values")?
-            .reuse_frozen_tables(false)
+            .tables(Some(tables))
             .build()?;
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(

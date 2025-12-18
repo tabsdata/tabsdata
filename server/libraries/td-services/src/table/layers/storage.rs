@@ -75,7 +75,7 @@ mod tests {
     use td_objects::dxo::collection::CollectionDB;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::execution::ExecutionDB;
-    use td_objects::dxo::function::{FunctionDB, FunctionRegister};
+    use td_objects::dxo::function::{FunctionDB, FunctionRegister, FunctionUpdate};
     use td_objects::dxo::function_run::FunctionRunDB;
     use td_objects::dxo::table::TableDB;
     use td_objects::dxo::table_data_version::TableDataVersionDB;
@@ -329,17 +329,12 @@ mod tests {
         collection: &CollectionDB,
     ) -> Result<(ExecutionDB, TransactionDB, FunctionRunDB, TableDB), TdError> {
         // Update the function to change the table version (TODO make this a seed function)
-        let update = FunctionRegister::builder()
-            .try_name("joaquin_2")?
-            .try_description("function_foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet")?
+        let update = FunctionUpdate::builder()
+            .name(Some("joaquin_2".try_into()?))
+            .description(Some("function_foo description".try_into()?))
+            .snippet(Some("function_foo snippet".try_into()?))
             .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
             .tables(vec![TableNameDto::try_from("table_1")?])
-            .try_runtime_values("mock runtime values")?
-            .reuse_frozen_tables(false)
             .build()?;
 
         let request =

@@ -46,7 +46,30 @@ mod definitions {
         pub enabled: Option<Enabled>, // added in v4
     }
 
-    pub type FunctionUpdate = FunctionRegister;
+    #[td_type::Dto]
+    #[derive(Default)]
+    #[serde(default)]
+    #[builder(default)]
+    pub struct FunctionUpdate {
+        pub name: Option<FunctionName>,
+        pub description: Option<Description>,
+        pub bundle_id: Option<BundleId>,
+        pub snippet: Option<Snippet>,
+        pub decorator: Option<Decorator>,
+        pub connector: Option<Option<Connector>>,
+        #[td_type(extractor)]
+        pub dependencies: Option<Vec<TableDependencyDto>>,
+        #[td_type(extractor)]
+        pub triggers: Option<Vec<TableTriggerDto>>,
+        #[td_type(extractor)]
+        pub tables: Option<Vec<TableNameDto>>,
+        #[td_type(extractor)]
+        pub table_types: Option<HashMap<TableNameDto, TableType>>, // added in v4
+        pub runtime_values: Option<FunctionRuntimeValues>,
+        #[td_type(extractor)]
+        pub reuse_frozen_tables: ReuseFrozen,
+        pub enabled: Option<Enabled>, // added in v4
+    }
 
     #[td_type::Dao]
     #[derive(Eq, PartialEq)]
@@ -94,13 +117,14 @@ mod definitions {
         pub data_location: DataLocation,
         #[td_type(setter)]
         pub storage_version: StorageVersion,
-        #[td_type(builder(include), extractor)]
+        #[td_type(extractor)]
+        #[td_type(builder(include))]
         pub bundle_id: BundleId,
         #[td_type(builder(include))]
         pub snippet: Snippet,
-        #[td_type(updater(include, field = "time"))]
+        #[td_type(updater(try_from = RequestContext, field = "time"))]
         pub defined_on: AtTime,
-        #[td_type(updater(include, field = "user_id"))]
+        #[td_type(updater(try_from = RequestContext, field = "user_id"))]
         pub defined_by_id: UserId,
         #[builder(default = FunctionStatus::Active)]
         pub status: FunctionStatus,

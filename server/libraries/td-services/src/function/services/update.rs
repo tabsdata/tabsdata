@@ -4,7 +4,9 @@
 
 use crate::do_authz::DO_AUTHZ;
 use crate::function::layers::register::{data_location, validate_tables_do_not_exist};
-use crate::function::layers::update::assert_function_name_not_exists;
+use crate::function::layers::update::{
+    assert_function_name_not_exists, update_function_db_builder,
+};
 use crate::function::layers::{
     check_private_tables, register_dependencies, register_tables, register_triggers,
 };
@@ -31,9 +33,8 @@ use td_objects::tower_service::sql::{
     By, SqlDeleteService, SqlSelectAllService, SqlSelectService, insert,
 };
 use td_objects::types::basic::{
-    AtTime, BundleId, CollectionId, CollectionIdName, CollectionName, DataLocation, Enabled,
-    FunctionId, FunctionIdName, FunctionVersionId, ReuseFrozen, StorageVersion, TableNameDto,
-    TableType,
+    AtTime, BundleId, CollectionId, CollectionIdName, CollectionName, DataLocation, FunctionId,
+    FunctionIdName, FunctionVersionId, ReuseFrozen, StorageVersion, TableNameDto, TableType,
 };
 use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
 use td_tower::default_services::TransactionProvider;
@@ -86,16 +87,10 @@ fn service() {
         from_fn(With::<StorageVersion>::default),
         from_fn(data_location),
         // Insert into function_versions(sql) status=Active.
-        from_fn(With::<FunctionUpdate>::try_convert_to::<FunctionDBBuilder, _>),
+        from_fn(By::<FunctionVersionId>::select::<FunctionDB>),
+        from_fn(With::<FunctionDB>::try_convert_to::<FunctionDBBuilder, _>),
+        from_fn(update_function_db_builder),
         from_fn(With::<RequestContext>::update::<FunctionDBBuilder, _>),
-        from_fn(With::<CollectionId>::set::<FunctionDBBuilder>),
-        // Change enabled flag if provided, else maintain what we had
-        from_fn(With::<FunctionDBWithNames>::extract::<Enabled>),
-        from_fn(With::<FunctionUpdate>::extract::<Option<Enabled>>),
-        from_fn(With::<Option<Enabled>>::unwrap_or_else::<Enabled>),
-        from_fn(With::<Enabled>::set::<FunctionDBBuilder>),
-        // We maintain the same function id
-        from_fn(With::<FunctionId>::set::<FunctionDBBuilder>),
         from_fn(With::<StorageVersion>::set::<FunctionDBBuilder>),
         from_fn(With::<DataLocation>::set::<FunctionDBBuilder>),
         from_fn(With::<FunctionDBBuilder>::build::<FunctionDB, _>),
@@ -160,7 +155,7 @@ mod tests {
     use td_objects::test_utils::seed_function::seed_function;
     use td_objects::test_utils::seed_inter_collection_permission::seed_inter_collection_permission;
     use td_objects::types::basic::{
-        AccessTokenId, Decorator, FunctionRuntimeValues, RoleId, TableName, TableStatus,
+        AccessTokenId, Decorator, Enabled, FunctionRuntimeValues, RoleId, TableName, TableStatus,
         ToCollectionId, UserId,
     };
     use td_tower::ctx_service::RawOneshot;
@@ -222,16 +217,10 @@ mod tests {
                 type_of_val(&With::<StorageVersion>::default),
                 type_of_val(&data_location),
                 // Insert into function_versions(sql) status=Active.
-                type_of_val(&With::<FunctionUpdate>::try_convert_to::<FunctionDBBuilder, _>),
+                type_of_val(&By::<FunctionVersionId>::select::<FunctionDB>),
+                type_of_val(&With::<FunctionDB>::try_convert_to::<FunctionDBBuilder, _>),
+                type_of_val(&update_function_db_builder),
                 type_of_val(&With::<RequestContext>::update::<FunctionDBBuilder, _>),
-                type_of_val(&With::<CollectionId>::set::<FunctionDBBuilder>),
-                // Change enabled flag if provided, else maintain what we had
-                type_of_val(&With::<FunctionDBWithNames>::extract::<Enabled>),
-                type_of_val(&With::<FunctionUpdate>::extract::<Option<Enabled>>),
-                type_of_val(&With::<Option<Enabled>>::unwrap_or_else::<Enabled>),
-                type_of_val(&With::<Enabled>::set::<FunctionDBBuilder>),
-                // We maintain the same function id
-                type_of_val(&With::<FunctionId>::set::<FunctionDBBuilder>),
                 type_of_val(&With::<StorageVersion>::set::<FunctionDBBuilder>),
                 type_of_val(&With::<DataLocation>::set::<FunctionDBBuilder>),
                 type_of_val(&With::<FunctionDBBuilder>::build::<FunctionDB, _>),
@@ -306,7 +295,7 @@ mod tests {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
-        let create = FunctionUpdate::builder()
+        let create = FunctionRegister::builder()
             .try_name("foo")?
             .try_description("foo description")?
             .bundle_id(BundleId::default())
@@ -322,18 +311,11 @@ mod tests {
         let created_function = seed_function(&db, &collection, &create).await;
 
         let update = FunctionUpdate::builder()
-            .try_name("foo_updated")?
-            .try_description("foo_updated description updated")?
+            .name(Some("foo_updated".try_into()?))
+            .description(Some("foo_updated description updated".try_into()?))
             .bundle_id(BundleId::default())
-            .try_snippet("foo_updated snippet")?
+            .snippet(Some("foo_updated snippet".try_into()?))
             .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(None)
-            .runtime_values(FunctionRuntimeValues::try_from(
-                "foo_updated runtime values",
-            )?)
-            .reuse_frozen_tables(false)
             .build()?;
 
         let request =
@@ -369,7 +351,7 @@ mod tests {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
-        let create = FunctionUpdate::builder()
+        let create = FunctionRegister::builder()
             .try_name("joaquin_workout")?
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
@@ -385,16 +367,13 @@ mod tests {
         let created_function = seed_function(&db, &collection, &create).await;
 
         let update = FunctionUpdate::builder()
-            .try_name("joaquin_workout_updated")?
-            .try_description("function_foo description updated")?
+            .name(Some("joaquin_workout_updated".try_into()?))
+            .description(Some("foo_updated description updated".try_into()?))
             .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet updated")?
+            .snippet(Some("function_foo snippet updated".try_into()?))
             .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
             .tables(Some(vec![TableNameDto::try_from("new_table")?]))
             .runtime_values(FunctionRuntimeValues::try_from("new mock runtime values")?)
-            .reuse_frozen_tables(false)
             .build()?;
 
         let request =
@@ -430,7 +409,7 @@ mod tests {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
-        let create = FunctionUpdate::builder()
+        let create = FunctionRegister::builder()
             .try_name("joaquin_workout")?
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
@@ -446,16 +425,12 @@ mod tests {
         let created_function = seed_function(&db, &collection, &create).await;
 
         let update = FunctionUpdate::builder()
-            .try_name("joaquin_workout_updated")?
-            .try_description("function_foo description updated")?
+            .name(Some("joaquin_workout_updated".try_into()?))
+            .description(Some("foo_updated description updated".try_into()?))
             .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet updated")?
+            .snippet(Some("function_foo snippet updated".try_into()?))
             .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(None)
             .runtime_values(FunctionRuntimeValues::try_from("new mock runtime values")?)
-            .reuse_frozen_tables(false)
             .build()?;
 
         let request = RequestContext::with(
@@ -495,7 +470,7 @@ mod tests {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
-        let create = FunctionUpdate::builder()
+        let create = FunctionRegister::builder()
             .try_name("joaquin_workout")?
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
@@ -511,16 +486,13 @@ mod tests {
         let created_function = seed_function(&db, &collection, &create).await;
 
         let update = FunctionUpdate::builder()
-            .try_name("joaquin_workout_updated")?
-            .try_description("function_foo description updated")?
+            .name(Some("joaquin_workout_updated".try_into()?))
+            .description(Some("foo_updated description updated".try_into()?))
             .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet updated")?
+            .snippet(Some("function_foo snippet updated".try_into()?))
             .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
             .tables(Some(vec![TableNameDto::try_from("new_table")?]))
             .runtime_values(FunctionRuntimeValues::try_from("new mock runtime values")?)
-            .reuse_frozen_tables(false)
             .build()?;
 
         let request =
@@ -556,7 +528,7 @@ mod tests {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
-        let create = FunctionUpdate::builder()
+        let create = FunctionRegister::builder()
             .try_name("joaquin_workout")?
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
@@ -572,16 +544,14 @@ mod tests {
         let created_function = seed_function(&db, &collection, &create).await;
 
         let update = FunctionUpdate::builder()
-            .try_name("joaquin_workout_updated")?
-            .try_description("function_foo description updated")?
+            .name(Some("joaquin_workout_updated".try_into()?))
+            .description(Some("foo_updated description updated".try_into()?))
             .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet updated")?
+            .snippet(Some("function_foo snippet updated".try_into()?))
             .decorator(Decorator::Publisher)
             .dependencies(Some(vec![TableDependencyDto::try_from("new_table")?]))
-            .triggers(None)
             .tables(Some(vec![TableNameDto::try_from("new_table")?]))
             .runtime_values(FunctionRuntimeValues::try_from("new mock runtime values")?)
-            .reuse_frozen_tables(false)
             .build()?;
 
         let request =
@@ -617,7 +587,7 @@ mod tests {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
-        let create = FunctionUpdate::builder()
+        let create = FunctionRegister::builder()
             .try_name("joaquin_workout")?
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
@@ -633,16 +603,13 @@ mod tests {
         let created_function = seed_function(&db, &collection, &create).await;
 
         let update = FunctionUpdate::builder()
-            .try_name("joaquin_workout_updated")?
-            .try_description("function_foo description updated")?
+            .name(Some("joaquin_workout_updated".try_into()?))
+            .description(Some("foo_updated description updated".try_into()?))
             .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet updated")?
+            .snippet(Some("function_foo snippet updated".try_into()?))
             .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
             .tables(Some(vec![TableNameDto::try_from("new_table")?]))
             .runtime_values(FunctionRuntimeValues::try_from("new mock runtime values")?)
-            .reuse_frozen_tables(false)
             .build()?;
 
         let request =
@@ -678,7 +645,7 @@ mod tests {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
-        let create = FunctionUpdate::builder()
+        let create = FunctionRegister::builder()
             .try_name("joaquin_workout")?
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
@@ -694,16 +661,14 @@ mod tests {
         let created_function = seed_function(&db, &collection, &create).await;
 
         let update = FunctionUpdate::builder()
-            .try_name("joaquin_workout_updated")?
-            .try_description("function_foo description updated")?
+            .name(Some("joaquin_workout_updated".try_into()?))
+            .description(Some("foo_updated description updated".try_into()?))
             .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet updated")?
+            .snippet(Some("function_foo snippet updated".try_into()?))
             .decorator(Decorator::Publisher)
             .dependencies(Some(vec![TableDependencyDto::try_from("new_table")?]))
-            .triggers(None)
             .tables(Some(vec![TableNameDto::try_from("new_table")?]))
             .runtime_values(FunctionRuntimeValues::try_from("new mock runtime values")?)
-            .reuse_frozen_tables(false)
             .build()?;
 
         let request =
@@ -739,7 +704,7 @@ mod tests {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
-        let trigger_create = FunctionUpdate::builder()
+        let trigger_create = FunctionRegister::builder()
             .try_name("the_trigger")?
             .try_description("wanted")?
             .bundle_id(BundleId::default())
@@ -755,7 +720,7 @@ mod tests {
         let _ = seed_function(&db, &collection, &trigger_create).await;
 
         // Actual test
-        let create = FunctionUpdate::builder()
+        let create = FunctionRegister::builder()
             .try_name("joaquin_workout")?
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
@@ -771,16 +736,13 @@ mod tests {
         let created_function = seed_function(&db, &collection, &create).await;
 
         let update = FunctionUpdate::builder()
-            .try_name("joaquin_workout_updated")?
-            .try_description("function_foo description updated")?
+            .name(Some("joaquin_workout_updated".try_into()?))
+            .description(Some("function_foo description updated".try_into()?))
             .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet updated")?
+            .snippet(Some("function_foo snippet updated".try_into()?))
             .decorator(Decorator::Publisher)
-            .dependencies(None)
             .triggers(Some(vec![TableTriggerDto::try_from("trigger_table")?]))
-            .tables(None)
             .runtime_values(FunctionRuntimeValues::try_from("new mock runtime values")?)
-            .reuse_frozen_tables(false)
             .build()?;
 
         let request =
@@ -816,7 +778,7 @@ mod tests {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
-        let trigger_create = FunctionUpdate::builder()
+        let trigger_create = FunctionRegister::builder()
             .try_name("the_trigger")?
             .try_description("wanted")?
             .bundle_id(BundleId::default())
@@ -832,7 +794,7 @@ mod tests {
         let _ = seed_function(&db, &collection, &trigger_create).await;
 
         // Actual test
-        let create = FunctionUpdate::builder()
+        let create = FunctionRegister::builder()
             .try_name("joaquin_workout")?
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
@@ -848,16 +810,12 @@ mod tests {
         let created_function = seed_function(&db, &collection, &create).await;
 
         let update = FunctionUpdate::builder()
-            .try_name("joaquin_workout_updated")?
-            .try_description("function_foo description updated")?
+            .name(Some("joaquin_workout_updated".try_into()?))
+            .description(Some("function_foo description updated".try_into()?))
             .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet updated")?
+            .snippet(Some("function_foo snippet updated".try_into()?))
             .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(None)
             .runtime_values(FunctionRuntimeValues::try_from("new mock runtime values")?)
-            .reuse_frozen_tables(false)
             .build()?;
 
         let request = RequestContext::with(
@@ -897,7 +855,7 @@ mod tests {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
-        let trigger_create = FunctionUpdate::builder()
+        let trigger_create = FunctionRegister::builder()
             .try_name("the_trigger")?
             .try_description("wanted")?
             .bundle_id(BundleId::default())
@@ -913,7 +871,7 @@ mod tests {
         let _ = seed_function(&db, &collection, &trigger_create).await;
 
         // Actual test
-        let create = FunctionUpdate::builder()
+        let create = FunctionRegister::builder()
             .try_name("joaquin_workout")?
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
@@ -929,16 +887,13 @@ mod tests {
         let created_function = seed_function(&db, &collection, &create).await;
 
         let update = FunctionUpdate::builder()
-            .try_name("joaquin_workout_updated")?
-            .try_description("function_foo description updated")?
+            .name(Some("joaquin_workout_updated".try_into()?))
+            .description(Some("function_foo description updated".try_into()?))
             .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet updated")?
+            .snippet(Some("function_foo snippet updated".try_into()?))
             .decorator(Decorator::Publisher)
-            .dependencies(None)
             .triggers(Some(vec![TableTriggerDto::try_from("trigger_table")?]))
-            .tables(None)
             .runtime_values(FunctionRuntimeValues::try_from("new mock runtime values")?)
-            .reuse_frozen_tables(false)
             .build()?;
 
         let request =
@@ -974,7 +929,7 @@ mod tests {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
-        let trigger_create = FunctionUpdate::builder()
+        let trigger_create = FunctionRegister::builder()
             .try_name("the_trigger")?
             .try_description("wanted")?
             .bundle_id(BundleId::default())
@@ -993,7 +948,7 @@ mod tests {
         let _ = seed_function(&db, &collection, &trigger_create).await;
 
         // Actual test
-        let create = FunctionUpdate::builder()
+        let create = FunctionRegister::builder()
             .try_name("joaquin_workout")?
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
@@ -1012,10 +967,10 @@ mod tests {
         let created_function = seed_function(&db, &collection, &create).await;
 
         let update = FunctionUpdate::builder()
-            .try_name("joaquin_workout_updated")?
-            .try_description("function_foo description updated")?
+            .name(Some("joaquin_workout_updated".try_into()?))
+            .description(Some("function_foo description updated".try_into()?))
             .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet updated")?
+            .snippet(Some("function_foo snippet updated".try_into()?))
             .decorator(Decorator::Publisher)
             .dependencies(Some(vec![
                 TableDependencyDto::try_from("trigger_table")?,
@@ -1027,7 +982,6 @@ mod tests {
                 TableNameDto::try_from("joaquin_table_3")?,
             ]))
             .runtime_values(FunctionRuntimeValues::try_from("new mock runtime values")?)
-            .reuse_frozen_tables(false)
             .build()?;
 
         let request =
@@ -1063,7 +1017,7 @@ mod tests {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
-        let create = FunctionUpdate::builder()
+        let create = FunctionRegister::builder()
             .try_name("joaquin_workout")?
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
@@ -1079,16 +1033,12 @@ mod tests {
         let _created_function = seed_function(&db, &collection, &create).await;
 
         let update = FunctionUpdate::builder()
-            .try_name("joaquin_workout")?
-            .try_description("function_foo description")?
+            .name(Some("joaquin_workout".try_into()?))
+            .description(Some("function_foo description".try_into()?))
             .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet")?
+            .snippet(Some("function_foo snippet".try_into()?))
             .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(None)
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
-            .reuse_frozen_tables(false)
             .build()?;
 
         let request =
@@ -1115,16 +1065,8 @@ mod tests {
         assert_eq!(tables.len(), 1);
 
         let update = FunctionUpdate::builder()
-            .try_name("joaquin_workout")?
-            .try_description("function_foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
+            .name(Some("joaquin_workout".try_into()?))
             .tables(Some(vec![TableNameDto::try_from("joaquin_table")?]))
-            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
-            .reuse_frozen_tables(false)
             .build()?;
 
         let request =
@@ -1151,15 +1093,8 @@ mod tests {
         ));
 
         let update = FunctionUpdate::builder()
-            .try_name("joaquin_workout")?
-            .try_description("function_foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
+            .name(Some("joaquin_workout".try_into()?))
             .tables(Some(vec![TableNameDto::try_from("joaquin_table")?]))
-            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .reuse_frozen_tables(true)
             .build()?;
 
@@ -1220,16 +1155,8 @@ mod tests {
         let created_function = seed_function(&db, &collection, &create).await;
 
         let update = FunctionUpdate::builder()
-            .try_name("function_foo_2")?
-            .try_description("function_foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
+            .name(Some("function_foo_2".try_into()?))
             .tables(Some(vec![TableNameDto::try_from("joaquin_table")?]))
-            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
-            .reuse_frozen_tables(true)
             .build()?;
 
         let update_request =
@@ -1390,11 +1317,11 @@ mod tests {
         let tables = Some(vec![TableNameDto::try_from("output_1")?]);
 
         let bundle_id = BundleId::default();
-        let update = FunctionRegister::builder()
-            .try_name("function_2")?
-            .try_description("function_2 description")?
+        let update = FunctionUpdate::builder()
+            .name(Some("function_2".try_into()?))
+            .description(Some("function_2 description".try_into()?))
             .bundle_id(bundle_id)
-            .try_snippet("function_2 snippet")?
+            .snippet(Some("function_2 snippet".try_into()?))
             .decorator(Decorator::Publisher)
             .dependencies(dependencies)
             .triggers(triggers)
@@ -1454,17 +1381,9 @@ mod tests {
         ]);
 
         let bundle_id = BundleId::default();
-        let update = FunctionRegister::builder()
-            .try_name("function")?
-            .try_description("description")?
+        let update = FunctionUpdate::builder()
             .bundle_id(bundle_id)
-            .try_snippet("snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(Some(vec![]))
-            .triggers(Some(vec![]))
             .tables(tables)
-            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
-            .reuse_frozen_tables(false)
             .build()?;
 
         let request =
@@ -1503,7 +1422,7 @@ mod tests {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
-        let create = FunctionUpdate::builder()
+        let create = FunctionRegister::builder()
             .try_name("function_1")?
             .try_description("description")?
             .bundle_id(BundleId::default())
@@ -1518,7 +1437,7 @@ mod tests {
 
         let created_function = seed_function(&db, &collection, &create).await;
 
-        let dependant = FunctionUpdate::builder()
+        let dependant = FunctionRegister::builder()
             .try_name("function_2")?
             .try_description("description")?
             .bundle_id(BundleId::default())
@@ -1534,16 +1453,12 @@ mod tests {
         let _ = seed_function(&db, &collection, &dependant).await;
 
         let update = FunctionUpdate::builder()
-            .try_name("function_1")?
-            .try_description("description")?
+            .name(Some("function_1".try_into()?))
+            .description(Some("description".try_into()?))
             .bundle_id(BundleId::default())
-            .try_snippet("snippet")?
+            .snippet(Some("snippet".try_into()?))
             .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
             .tables(Some(vec![TableNameDto::try_from("table_1")?]))
-            .runtime_values(FunctionRuntimeValues::default())
-            .reuse_frozen_tables(false)
             .build()?;
 
         // With an update, a new function version and table version is created
@@ -1629,7 +1544,7 @@ mod tests {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
-        let create = FunctionUpdate::builder()
+        let create = FunctionRegister::builder()
             .try_name("function_1")?
             .try_description("description")?
             .bundle_id(BundleId::default())
@@ -1644,7 +1559,7 @@ mod tests {
 
         let _ = seed_function(&db, &collection, &create).await;
 
-        let dependant = FunctionUpdate::builder()
+        let dependant = FunctionRegister::builder()
             .try_name("function_2")?
             .try_description("description")?
             .bundle_id(BundleId::default())
@@ -1660,16 +1575,7 @@ mod tests {
         let dependant_function = seed_function(&db, &collection, &dependant).await;
 
         let update = FunctionUpdate::builder()
-            .try_name("function_2")?
-            .try_description("description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(None)
-            .runtime_values(FunctionRuntimeValues::default())
-            .reuse_frozen_tables(false)
+            .name(Some("function_2".try_into()?))
             .build()?;
 
         // With an update, a new function version and table version is created
@@ -1725,6 +1631,78 @@ mod tests {
             .unwrap();
         assert_eq!(dependency_function.len(), 1); // only implicit self dependency
         assert_eq!(dependency_function[0].name, dependant.name);
+        Ok(())
+    }
+
+    #[td_test::test(sqlx)]
+    #[tokio::test]
+    async fn test_update_enable_disable(db: DbPool) -> Result<(), TdError> {
+        let collection_name = CollectionName::try_from("cofnig")?;
+        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
+
+        // Create it as enabled = false
+        let create = FunctionRegister::builder()
+            .try_name("function_1")?
+            .try_description("function_foo description")?
+            .bundle_id(BundleId::default())
+            .try_snippet("function_foo snippet")?
+            .decorator(Decorator::Publisher)
+            .dependencies(None)
+            .triggers(None)
+            .tables(None)
+            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
+            .enabled(Enabled::FALSE)
+            .reuse_frozen_tables(false)
+            .build()?;
+        let function_db = seed_function(&db, &collection, &create).await;
+        assert_eq!(function_db.enabled, Enabled::FALSE);
+
+        // Then update to enable it
+        let update = FunctionUpdate::builder().enabled(Enabled::TRUE).build()?;
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
+                FunctionParam::builder()
+                    .try_collection(collection.name.to_string())?
+                    .try_function("function_1")?
+                    .build()?,
+                update.clone(),
+            );
+
+        let service = UpdateFunctionService::with_defaults(db.clone())
+            .service()
+            .await;
+        let response = service.raw_oneshot(request).await?;
+        let function_db: FunctionDB = DaoQueries::default()
+            .select_by::<FunctionDB>(&response.id)?
+            .build_query_as()
+            .fetch_one(&db)
+            .await
+            .map_err(handle_sql_err)?;
+        assert_eq!(function_db.enabled, Enabled::TRUE);
+
+        // Then update to disable it again
+        let update = FunctionUpdate::builder().enabled(Enabled::FALSE).build()?;
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
+                FunctionParam::builder()
+                    .try_collection(collection.name.to_string())?
+                    .try_function("function_1")?
+                    .build()?,
+                update.clone(),
+            );
+
+        let service = UpdateFunctionService::with_defaults(db.clone())
+            .service()
+            .await;
+        let response = service.raw_oneshot(request).await?;
+        let function_db: FunctionDB = DaoQueries::default()
+            .select_by::<FunctionDB>(&response.id)?
+            .build_query_as()
+            .fetch_one(&db)
+            .await
+            .map_err(handle_sql_err)?;
+        assert_eq!(function_db.enabled, Enabled::FALSE);
+
         Ok(())
     }
 }

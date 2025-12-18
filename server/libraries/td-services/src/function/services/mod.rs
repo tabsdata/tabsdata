@@ -53,7 +53,8 @@ pub(crate) mod tests {
     };
     use td_objects::table_ref::TableRef;
     use td_objects::types::basic::{
-        AtTime, DependencyStatus, FunctionStatus, TableName, TableStatus, TriggerStatus, UserId,
+        AtTime, DependencyStatus, Enabled, FunctionStatus, TableName, TableStatus, TriggerStatus,
+        UserId,
     };
     use td_objects::types::composed::{TableDependency, TableTrigger, TableTriggerDto};
 
@@ -95,6 +96,7 @@ pub(crate) mod tests {
         assert_eq!(response.snippet, create.snippet);
         assert_eq!(response.defined_by_id, *user_id);
         assert_eq!(response.collection, collection.name);
+        assert_eq!(response.enabled, Enabled::TRUE);
 
         let queries = DaoQueries::default();
         let function_version_id = response.id;
@@ -412,7 +414,24 @@ pub(crate) mod tests {
         }
 
         // And finally, new version should be the exact same as if it just got registered.
-        assert_register(db, user_id, collection, update, response).await?;
+        let create = create.clone();
+        let update = update.clone();
+        let update_as_register = FunctionRegister {
+            name: update.name.unwrap_or(create.name),
+            description: update.description.unwrap_or(create.description),
+            bundle_id: update.bundle_id.unwrap_or(create.bundle_id),
+            snippet: update.snippet.unwrap_or(create.snippet),
+            decorator: update.decorator.unwrap_or(create.decorator),
+            connector: update.connector.unwrap_or(create.connector),
+            dependencies: update.dependencies,
+            triggers: update.triggers,
+            tables: update.tables,
+            table_types: update.table_types,
+            runtime_values: update.runtime_values.unwrap_or(create.runtime_values),
+            reuse_frozen_tables: update.reuse_frozen_tables,
+            enabled: update.enabled,
+        };
+        assert_register(db, user_id, collection, &update_as_register, response).await?;
         Ok(())
     }
 

@@ -6,13 +6,6 @@ use crate::config::PasswordHashingConfig;
 use argon2::password_hash::SaltString;
 use argon2::password_hash::rand_core::OsRng;
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
-use td_error::{TdError, td_error};
-
-#[td_error]
-pub enum Error {
-    #[error("Password must be at least {0} characters")]
-    PasswordLengthViolation(usize),
-}
 
 // Verifies the password hash.
 pub fn verify_password(phc_str: &str, password: &str) -> bool {
@@ -25,13 +18,6 @@ pub fn verify_password(phc_str: &str, password: &str) -> bool {
     }
 }
 
-pub fn assert_password_policy(password: &str) -> Result<(), TdError> {
-    const MIN_PASSWORD_LENGTH: usize = 8;
-    if password.len() < MIN_PASSWORD_LENGTH {
-        Err(Error::PasswordLengthViolation(MIN_PASSWORD_LENGTH))?
-    }
-    Ok(())
-}
 pub fn create_password_hash(
     password_hashing_config: &PasswordHashingConfig,
     password: &str,

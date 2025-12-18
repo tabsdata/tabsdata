@@ -45,7 +45,7 @@ pub struct PasswordMustChange;
 #[td_type::typed(bool)]
 pub struct Private;
 
-#[td_type::typed(bool)]
+#[td_type::typed(bool(default = false))]
 pub struct ReuseFrozen;
 
 #[td_type::typed(bool)]

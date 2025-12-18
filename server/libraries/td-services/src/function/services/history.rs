@@ -159,16 +159,11 @@ mod tests {
 
         // Update function_1 to function_2
         let update = FunctionUpdate::builder()
-            .try_name("function_2")?
-            .try_description("function_foo description")?
+            .name(Some("function_2".try_into()?))
+            .description(Some("function_foo description".try_into()?))
             .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet")?
+            .snippet(Some("function_foo snippet".try_into()?))
             .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(None)
-            .try_runtime_values("mock runtime values")?
-            .reuse_frozen_tables(false)
             .build()?;
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(

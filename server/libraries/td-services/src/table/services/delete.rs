@@ -194,16 +194,12 @@ mod tests {
 
         // Update the function to remove the tables (set it to frozen).
         let update = FunctionUpdate::builder()
-            .try_name("joaquin_workout")?
-            .try_description("function_foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet")?
+            .name(Some("joaquin_workout".try_into()?))
+            .description(Some("function_foo description".try_into()?))
+            .snippet(Some("function_foo snippet".try_into()?))
             .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
             .tables(Some(vec![TableNameDto::try_from("keep_this_one")?]))
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
-            .reuse_frozen_tables(false)
             .build()?;
 
         let request = RequestContext::with(
@@ -295,16 +291,12 @@ mod tests {
 
         // Update the function to remove the tables (set it to frozen).
         let update = FunctionUpdate::builder()
-            .try_name("joaquin_workout")?
-            .try_description("function_foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet")?
+            .name(Some("joaquin_workout".try_into()?))
+            .description(Some("function_foo description".try_into()?))
+            .snippet(Some("function_foo snippet".try_into()?))
             .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
             .tables(Some(vec![TableNameDto::try_from("keep_this_one")?]))
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
-            .reuse_frozen_tables(false)
             .build()?;
 
         let request = RequestContext::with(
