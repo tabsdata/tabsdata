@@ -12,6 +12,7 @@ use crate::execution::layers::read::{
 use crate::graph::layers::{FunctionOrTable, GraphConfig, generate_td_graph};
 use ta_services::factory::service_factory;
 use td_execution::TransactionBy;
+use td_objects::dxo::States;
 use td_objects::dxo::crudl::ReadRequest;
 use td_objects::dxo::dependency::DependencyDBWithNames;
 use td_objects::dxo::execution::{ExecutionDB, ExecutionResponse};
@@ -32,14 +33,14 @@ use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
 
-pub struct GraphOpts;
-impl
+pub struct GraphOpts<const FUNCTION_STATE: u8>;
+impl<const FUNCTION_STATE: u8>
     GraphConfig<
         { TriggerDBWithNames::Active },
         { DependencyDBWithNames::Active },
-        { FunctionDB::Active },
+        { FUNCTION_STATE },
         { TableDB::Available },
-    > for GraphOpts
+    > for GraphOpts<FUNCTION_STATE>
 {
     type Authz = SKIP_AUTHZ;
 
@@ -57,7 +58,10 @@ impl
     context = DaoQueries,
     context = TransactionBy,
 )]
-fn service() {
+fn service<const FUNCTION_STATE: u8>()
+where
+    FunctionDB: States<FUNCTION_STATE>,
+{
     layers!(
         // Extract from request.
         from_fn(With::<ReadRequest<ExecutionParam>>::extract_name::<ExecutionParam>),
@@ -74,7 +78,7 @@ fn service() {
         from_fn(With::<FunctionId>::convert_to::<FunctionOrTable>),
         from_fn(with_existing_recursion_options),
         // Find td graph
-        generate_td_graph(GraphOpts),
+        generate_td_graph(GraphOpts::<FUNCTION_STATE>),
         // Build execution plan
         from_fn(build_execution_plan),
         // Get transactions
@@ -160,7 +164,7 @@ mod tests {
     async fn test_read_execution(db: DbPool) -> Result<(), TdError> {
         let execution = test_execute(db.clone(), false, false, true, false).await?;
 
-        let service = ExecutionReadService::with_defaults(db.clone())
+        let service = ExecutionReadService::<{ FunctionDB::Executable }>::with_defaults(db.clone())
             .service()
             .await;
         let request =

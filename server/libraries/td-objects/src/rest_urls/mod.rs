@@ -5,7 +5,7 @@
 pub mod params;
 
 use crate::types::basic::{
-    AtTime, CollectionIdName, ExecutionIdName, FunctionIdName, FunctionRunId,
+    AllowDisabled, AtTime, CollectionIdName, ExecutionIdName, FunctionIdName, FunctionRunId,
     InterCollectionPermissionIdName, LogsCastNumber, PermissionIdName, RoleIdName, SampleLen,
     SampleOffset, Sql, TableIdName, TransactionIdName, UncommittedStatus, UserIdName, WorkerIdName,
 };
@@ -259,9 +259,16 @@ pub struct ExecutionParam {
 
 pub const EXECUTION_CANCEL: &str = url!(EXECUTION, "/cancel");
 pub const EXECUTION_RECOVER: &str = url!(EXECUTION, "/recover");
-pub const EXECUTION_READ: &str = url!(EXECUTION);
 pub const EXECUTION_DETAILS: &str = url!(EXECUTION, "/details");
 pub const EXECUTION_LIST: &str = url!(EXECUTIONS);
+
+#[td_type::QueryParam]
+pub struct AllowDisabledParam {
+    #[serde(default)]
+    pub with_disabled: AllowDisabled,
+}
+
+pub const EXECUTION_READ: &str = url!(EXECUTION);
 
 // Transactions
 pub const TRANSACTIONS: &str = url!("/transactions");

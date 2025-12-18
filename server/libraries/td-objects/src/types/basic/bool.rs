@@ -2,6 +2,9 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+#[td_type::typed(bool(default = false))]
+pub struct AllowDisabled;
+
 #[td_type::typed(bool)]
 pub struct DataChanged;
 

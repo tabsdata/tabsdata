@@ -24,8 +24,8 @@ pub struct CollectionAtName {
 impl CollectionAtName {
     pub fn new(collection: CollectionParam, at: AtTimeParam) -> Self {
         Self {
-            collection: collection.collection.clone(),
-            at: at.at.clone(),
+            collection: collection.collection,
+            at: at.at,
         }
     }
 }
@@ -43,9 +43,9 @@ pub struct FunctionAtIdName {
 impl FunctionAtIdName {
     pub fn new(function: FunctionParam, at: AtTimeParam) -> Self {
         Self {
-            collection: function.collection.clone(),
-            function: function.function.clone(),
-            at: at.at.clone(),
+            collection: function.collection,
+            function: function.function,
+            at: at.at,
         }
     }
 }
@@ -63,9 +63,9 @@ pub struct TableAtIdName {
 impl TableAtIdName {
     pub fn new(table: TableParam, at: AtTimeParam) -> Self {
         Self {
-            collection: table.collection.clone(),
-            table: table.table.clone(),
-            at: at.at.clone(),
+            collection: table.collection,
+            table: table.table,
+            at: at.at,
         }
     }
 }
@@ -86,9 +86,9 @@ pub struct TableDataVersionAtIdName {
 impl TableDataVersionAtIdName {
     pub fn new(table: TableAtIdName, uncommitted_param: UncommittedParam) -> Self {
         Self {
-            collection: table.collection.clone(),
-            table: table.table.clone(),
-            at: table.at.clone(),
+            collection: table.collection,
+            table: table.table,
+            at: table.at,
             uncommitted: uncommitted_param.uncommitted,
         }
     }
@@ -121,13 +121,13 @@ impl TableSampleAtName {
         sql: SqlParam,
     ) -> Self {
         Self {
-            collection: table.collection.clone(),
-            table: table.table.clone(),
-            at: at.at.clone(),
+            collection: table.collection,
+            table: table.table,
+            at: at.at,
             offset: offset_len.offset,
             len: offset_len.len,
-            format: format.format.clone(),
-            sql: sql.sql.clone(),
+            format: format.format,
+            sql: sql.sql,
         }
     }
 }

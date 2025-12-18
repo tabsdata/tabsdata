@@ -22,8 +22,8 @@ mod routes {
         Execution, ExecutionDetails, ExecutionRequest, ExecutionResponse,
     };
     use td_objects::rest_urls::{
-        EXECUTION_CANCEL, EXECUTION_DETAILS, EXECUTION_LIST, EXECUTION_READ, EXECUTION_RECOVER,
-        ExecutionParam, FUNCTION_EXECUTE, FunctionParam,
+        AllowDisabledParam, EXECUTION_CANCEL, EXECUTION_DETAILS, EXECUTION_LIST, EXECUTION_READ,
+        EXECUTION_RECOVER, ExecutionParam, FUNCTION_EXECUTE, FunctionParam,
     };
     use td_services::execution::services::ExecutionServices;
     use tower::ServiceExt;
@@ -85,9 +85,15 @@ mod routes {
         State(executions): State<Arc<ExecutionServices>>,
         Extension(context): Extension<RequestContext>,
         Path(param): Path<ExecutionParam>,
+        Query(allow_disabled): Query<AllowDisabledParam>,
     ) -> Result<GetStatus<ExecutionResponse>, ErrorStatus> {
         let request = context.read(param);
-        let response = executions.read.service().await.oneshot(request).await?;
+        let service = if *allow_disabled.with_disabled {
+            executions.read_with_disabled.service().await
+        } else {
+            executions.read.service().await
+        };
+        let response = service.oneshot(request).await?;
         Ok(GetStatus::OK(response))
     }
 

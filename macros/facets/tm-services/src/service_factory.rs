@@ -9,7 +9,9 @@ use quote::{format_ident, quote};
 use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
 use syn::token::Comma;
-use syn::{FnArg, Ident, ItemFn, ReturnType, Token, Type, parse_macro_input, parse_quote};
+use syn::{
+    FnArg, GenericParam, Ident, ItemFn, ReturnType, Token, Type, parse_macro_input, parse_quote,
+};
 
 struct ProviderArgs {
     name: Ident,
@@ -80,16 +82,51 @@ pub fn service_factory(attr: TokenStream, item: TokenStream) -> TokenStream {
             .into();
     }
 
-    // Inject `Req, Res` into generics
+    // Calculate generics
+    let original_generics = func.sig.generics.clone();
+    let (impl_generics, ty_generics, where_clause) = original_generics.split_for_impl();
+    let generic_params = &original_generics.params;
+    let generic_tys = original_generics
+        .params
+        .iter()
+        .filter_map(|p| match p {
+            GenericParam::Type(ty) => Some(ty.ident.clone()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    let phantom_data = if !generic_tys.is_empty() {
+        quote! {
+            _phantom: std::marker::PhantomData<(#(#generic_tys),*)>,
+        }
+    } else {
+        quote! {}
+    };
+
+    let phantom_data_init = if !generic_tys.is_empty() {
+        quote! {
+            _phantom: std::marker::PhantomData,
+        }
+    } else {
+        quote! {}
+    };
+
+    // Inject `Req, Res` into generics, moving current generics to struct
+    func.sig.generics.params = Punctuated::new();
     func.sig.generics.params.insert(0, parse_quote! { Req });
     func.sig.generics.params.insert(1, parse_quote! { Res });
 
     // Inject In's bounds into the where clause
-    let where_clause = func.sig.generics.make_where_clause();
-    where_clause.predicates.push(parse_quote! {
+    let where_clause_new = func.sig.generics.make_where_clause();
+    if let Some(og_where) = &where_clause {
+        for predicate in og_where.predicates.iter() {
+            where_clause_new.predicates.push(predicate.clone());
+        }
+    }
+
+    where_clause_new.predicates.push(parse_quote! {
         Req: Send + Sync + 'static
     });
-    where_clause.predicates.push(parse_quote! {
+    where_clause_new.predicates.push(parse_quote! {
         Res: Send + Sync + 'static
     });
 
@@ -154,8 +191,26 @@ pub fn service_factory(attr: TokenStream, item: TokenStream) -> TokenStream {
         inputs
     };
 
+    // Factory generics
+    let mut factory_where_clause: syn::WhereClause = parse_quote!(where);
+    for ty in &factory_types {
+        factory_where_clause
+            .predicates
+            .push(parse_quote!(#ty: ::ta_services::factory::FieldAccessor<C>));
+    }
+    if let Some(wc) = &where_clause {
+        for predicate in &wc.predicates {
+            factory_where_clause.predicates.push(predicate.clone());
+        }
+    }
+    let factory_where_clause = if factory_where_clause.predicates.is_empty() {
+        quote! {}
+    } else {
+        quote! {#factory_where_clause}
+    };
+
     // Wrap body in `ServiceProvider`
-    let original_block = func.block;
+    let original_block = func.block.clone();
     func.block = parse_quote!({
         use ::td_tower::service_provider::IntoServiceProvider;
         tower::builder::ServiceBuilder::new()
@@ -174,37 +229,39 @@ pub fn service_factory(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     // Generate provider struct
     TokenStream::from(quote! {
-        pub struct #name {
+        pub struct #name #impl_generics {
             provider: ::td_tower::service_provider::ServiceProvider<#req_ty, #res_ty, td_error::TdError>,
             #[cfg(feature = "test_tower_metadata")]
             metadata: ::td_tower::service_provider::ServiceProvider<(), td_tower::metadata::MetadataMutex, td_error::TdError>,
+            #phantom_data
         }
 
         #[allow(non_snake_case)]
-        impl #name {
+        impl #impl_generics #name #ty_generics #where_clause {
             pub fn new(#db_input #(#ctx_input),*) -> Self {
                 Self {
                     provider: Self::#func_name(#db_arg #(#ctx_arg.clone()),*),
                     #[cfg(feature = "test_tower_metadata")]
                     metadata: Self::#func_name(#db_arg #(#ctx_arg.clone()),*),
+                    #phantom_data_init
                 }
             }
 
             #[cfg(feature = "test-utils")]
-            pub fn with_defaults(#db_input) -> Self{
+            pub fn with_defaults(#db_input) -> Self {
                 Self {
                     provider: Self::#func_name(#db_arg #(std::sync::Arc::new(#ctx_ty::default())),*),
                     #[cfg(feature = "test_tower_metadata")]
                     metadata: Self::#func_name(#db_arg #(std::sync::Arc::new(#ctx_ty::default())),*),
+                    #phantom_data_init
                 }
             }
 
             #func
         }
 
-        impl<C> ::ta_services::factory::ServiceFactory<C> for #name
-        where
-            #(#factory_types: ::ta_services::factory::FieldAccessor<C>,)*
+        impl<C, #generic_params> ::ta_services::factory::ServiceFactory<C> for #name #ty_generics
+        #factory_where_clause
         {
             type Service = Self;
             fn build(ctx: &C) -> Self {
@@ -213,8 +270,9 @@ pub fn service_factory(attr: TokenStream, item: TokenStream) -> TokenStream {
             }
         }
 
+
         #[async_trait::async_trait]
-        impl ::ta_services::service::TdService for #name {
+        impl #impl_generics ::ta_services::service::TdService for #name #ty_generics #where_clause {
             type Request = #req_ty;
             type Response = #res_ty;
             type Error = td_error::TdError;

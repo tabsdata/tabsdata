@@ -11,6 +11,7 @@ use crate::execution::services::read::ExecutionReadService;
 use crate::execution::services::recover::ExecutionRecoverService;
 use crate::execution::services::runtime_info::RuntimeInfoService;
 use ta_services::factory::ServiceFactory;
+use td_objects::dxo::function::FunctionDB;
 
 pub(crate) mod callback;
 mod cancel;
@@ -28,7 +29,8 @@ pub struct ExecutionServices {
     pub details: ExecutionDetailsService,
     pub execute: ExecuteFunctionService,
     pub list: ExecutionListService,
-    pub read: ExecutionReadService,
+    pub read: ExecutionReadService<{ FunctionDB::Executable }>,
+    pub read_with_disabled: ExecutionReadService<{ FunctionDB::Active }>,
     pub recover: ExecutionRecoverService,
     pub info: RuntimeInfoService,
 }
