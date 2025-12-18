@@ -13,9 +13,7 @@ use td_objects::dxo::permission::{PermissionDB, PermissionDBWithNames};
 use td_objects::rest_urls::RolePermissionParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, SecAdmin, System};
-use td_objects::tower_service::from::{
-    ExtractNameService, ExtractService, TryIntoService, UnwrapService, With,
-};
+use td_objects::tower_service::from::{ExtractNameService, ExtractService, TryIntoService, With};
 use td_objects::tower_service::sql::{By, SqlDeleteService, SqlSelectService};
 use td_objects::types::basic::{
     CollectionId, EntityId, PermissionId, PermissionIdName, RoleIdName,
@@ -50,7 +48,7 @@ fn service() {
             Do(service!(layers!(
                 // a permission on a single collection can also be deleted by a collection admin
                 from_fn(With::<PermissionDBWithNames>::extract::<Option<EntityId>>),
-                from_fn(With::<EntityId>::unwrap_option),
+                from_fn(With::<Option<EntityId>>::unwrap),
                 from_fn(With::<EntityId>::try_convert_to::<CollectionId, _>),
                 from_fn(AuthzOn::<CollectionId>::set),
                 from_fn(Authz::<SecAdmin, CollAdmin>::check),
@@ -114,7 +112,7 @@ mod tests {
             type_of_val(&assert_role_in_permission),
             type_of_val(&is_permission_with_names_on_a_single_collection),
             type_of_val(&With::<PermissionDBWithNames>::extract::<Option<EntityId>>),
-            type_of_val(&With::<EntityId>::unwrap_option),
+            type_of_val(&With::<Option<EntityId>>::unwrap),
             type_of_val(&With::<EntityId>::try_convert_to::<CollectionId, _>),
             type_of_val(&AuthzOn::<CollectionId>::set),
             type_of_val(&Authz::<SecAdmin, CollAdmin>::check),

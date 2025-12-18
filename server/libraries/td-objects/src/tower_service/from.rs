@@ -231,27 +231,42 @@ where
     }
 }
 
-#[async_trait]
-pub trait UnwrapService<T> {
-    async fn unwrap_option(value: Input<Option<T>>) -> Result<T, TdError>;
-}
-
 #[td_error]
 pub enum WithError {
     #[error("Option has no value")]
     OptionHasNoValue,
 }
 
-#[async_trait]
-impl<T> UnwrapService<T> for With<T>
-where
-    for<'a> T: Send + Sync + Clone + 'a,
-{
-    async fn unwrap_option(Input(value): Input<Option<T>>) -> Result<T, TdError> {
+impl<T> With<Option<T>> {
+    pub async fn unwrap(Input(value): Input<Option<T>>) -> Result<T, TdError>
+    where
+        T: Send + Sync + Clone,
+    {
         value
             .deref()
             .clone()
             .ok_or(WithError::OptionHasNoValue.into())
+    }
+
+    pub async fn unwrap_or_default(Input(value): Input<Option<T>>) -> Result<T, TdError>
+    where
+        T: Default + Send + Sync + Clone,
+    {
+        Ok(value.deref().clone().unwrap_or_default())
+    }
+
+    pub async fn unwrap_or_else<U>(
+        Input(value): Input<Option<T>>,
+        Input(or): Input<U>,
+    ) -> Result<T, TdError>
+    where
+        T: Send + Sync + Clone,
+        U: Into<T> + Clone + Send + Sync,
+    {
+        match value.deref() {
+            Some(v) => Ok(v.clone()),
+            None => Ok(or.deref().clone().into()),
+        }
     }
 }
 
@@ -474,17 +489,26 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_unwrap() -> Result<(), TdError> {
+    async fn test_option() -> Result<(), TdError> {
         #[td_type::typed(string)]
         struct MyString;
 
         let option = Some(MyString::try_from("test")?);
-        let result = With::<MyString>::unwrap_option(Input::new(option)).await?;
+        let result = With::<Option<MyString>>::unwrap(Input::new(option)).await?;
         assert_eq!(result, MyString::try_from("test")?);
 
         let option = None;
-        let result = With::<MyString>::unwrap_option(Input::new(option)).await;
+        let result = With::<Option<MyString>>::unwrap(Input::new(option)).await;
         assert!(result.is_err());
+
+        let option = None;
+        let or_else = MyString::try_from("or_else")?;
+        let result = With::<Option<MyString>>::unwrap_or_else(
+            Input::new(option),
+            Input::new(or_else.clone()),
+        )
+        .await?;
+        assert_eq!(result, or_else);
 
         Ok(())
     }
