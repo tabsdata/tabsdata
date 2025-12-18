@@ -198,6 +198,16 @@ pub enum TableStatus {
     Deleted,
 }
 
+#[td_type::typed_enum]
+#[derive(Default)]
+pub enum TableType {
+    #[default]
+    #[typed_enum(rename = "R")]
+    Regular,
+    #[typed_enum(rename = "DQS")]
+    DQSummary,
+}
+
 /// Represents the status of a transaction. Note transactions are atomic status wise.
 /// So final status (e.g., Committed, Canceled, Yanked) means all function runs within the transaction
 /// do have the same status.

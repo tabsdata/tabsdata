@@ -8,12 +8,13 @@ mod definitions {
     use crate::types::basic::{
         AtTime, BundleId, CollectionId, CollectionName, Connector, DataLocation, Decorator,
         Description, Enabled, FunctionId, FunctionName, FunctionRuntimeValues, FunctionStatus,
-        FunctionVersionId, ReuseFrozen, Snippet, StorageVersion, TableName, TableNameDto, UserId,
-        UserName,
+        FunctionVersionId, ReuseFrozen, Snippet, StorageVersion, TableName, TableNameDto,
+        TableType, UserId, UserName,
     };
     use crate::types::composed::{
         TableDependency, TableDependencyDto, TableTrigger, TableTriggerDto,
     };
+    use std::collections::HashMap;
 
     #[td_type::Dto]
     pub struct FunctionRegister {
@@ -32,13 +33,17 @@ mod definitions {
         #[td_type(extractor)]
         pub tables: Option<Vec<TableNameDto>>,
         #[serde(default)]
+        #[builder(default)]
+        #[td_type(extractor)]
+        pub table_types: Option<HashMap<TableNameDto, TableType>>, // added in v4
+        #[serde(default)]
         pub runtime_values: FunctionRuntimeValues,
         #[td_type(extractor)]
         pub reuse_frozen_tables: ReuseFrozen,
         #[serde(default)]
         #[builder(default)]
         #[td_type(extractor)]
-        pub enabled: Option<Enabled>,
+        pub enabled: Option<Enabled>, // added in v4
     }
 
     pub type FunctionUpdate = FunctionRegister;

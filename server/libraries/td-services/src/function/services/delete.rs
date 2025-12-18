@@ -5,6 +5,7 @@
 use crate::do_authz::SKIP_AUTHZ;
 use crate::function::layers::delete::build_deleted_function_version;
 use crate::function::layers::{register_dependencies, register_tables, register_triggers};
+use std::collections::HashMap;
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
 use td_objects::dxo::collection::CollectionDB;
@@ -23,7 +24,7 @@ use td_objects::tower_service::from::{
 use td_objects::tower_service::sql::{By, SqlSelectAllService, SqlSelectService, insert};
 use td_objects::types::basic::{
     AtTime, CollectionId, CollectionIdName, CollectionName, FunctionId, FunctionIdName,
-    FunctionVersionId, ReuseFrozen, TableNameDto,
+    FunctionVersionId, ReuseFrozen, TableNameDto, TableType,
 };
 use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
 use td_tower::default_services::TransactionProvider;
@@ -81,6 +82,7 @@ fn service() {
         ),
         // Extract new associations (empty because it is a delete operation).
         from_fn(With::<Option<Vec<TableNameDto>>>::default),
+        from_fn(With::<Option<HashMap<TableNameDto, TableType>>>::default),
         from_fn(With::<Option<Vec<TableDependencyDto>>>::default),
         from_fn(With::<Option<Vec<TableTriggerDto>>>::default),
         // Extract reuse frozen (default as deletes are not reusing anything)
@@ -173,6 +175,7 @@ mod tests {
                 ),
                 // Extract new associations (empty because it is a delete operation).
                 type_of_val(&With::<Option<Vec<TableNameDto>>>::default),
+                type_of_val(&With::<Option<HashMap<TableNameDto, TableType>>>::default),
                 type_of_val(&With::<Option<Vec<TableDependencyDto>>>::default),
                 type_of_val(&With::<Option<Vec<TableTriggerDto>>>::default),
                 // Extract reuse frozen (default as deletes are not reusing anything)

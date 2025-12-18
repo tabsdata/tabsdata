@@ -36,6 +36,9 @@ pub struct HasData;
 #[td_type::typed(bool)]
 pub struct IsEmptyVersions;
 
+#[td_type::typed(bool)]
+pub struct Partitioned;
+
 #[td_type::typed(bool(default = false))]
 pub struct PasswordMustChange;
 
@@ -59,6 +62,3 @@ pub struct UncommittedStatus;
 
 #[td_type::typed(bool(default = true))]
 pub struct UserEnabled;
-
-#[td_type::typed(bool)]
-pub struct Versioned;

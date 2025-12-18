@@ -7,6 +7,7 @@ use crate::function::layers::register::{data_location, validate_tables_do_not_ex
 use crate::function::layers::{
     check_private_tables, register_dependencies, register_tables, register_triggers,
 };
+use std::collections::HashMap;
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
 use td_objects::dxo::bundle::BundleDB;
@@ -30,7 +31,7 @@ use td_objects::tower_service::sql::{
 };
 use td_objects::types::basic::{
     AtTime, BundleId, CollectionId, CollectionIdName, CollectionName, DataLocation, Enabled,
-    FunctionId, FunctionName, ReuseFrozen, StorageVersion, TableNameDto,
+    FunctionId, FunctionName, ReuseFrozen, StorageVersion, TableNameDto, TableType,
 };
 use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
 use td_tower::default_services::TransactionProvider;
@@ -106,6 +107,7 @@ fn service() {
         from_fn(With::<TriggerDBWithNames>::empty_vec),
         // Extract new associations
         from_fn(With::<FunctionRegister>::extract::<Option<Vec<TableNameDto>>>),
+        from_fn(With::<FunctionRegister>::extract::<Option<HashMap<TableNameDto, TableType>>>),
         from_fn(With::<FunctionRegister>::extract::<Option<Vec<TableDependencyDto>>>),
         from_fn(With::<FunctionRegister>::extract::<Option<Vec<TableTriggerDto>>>),
         // Validate tables do not exist
@@ -235,6 +237,9 @@ mod tests {
                 type_of_val(&With::<TriggerDBWithNames>::empty_vec),
                 // Extract new associations
                 type_of_val(&With::<FunctionRegister>::extract::<Option<Vec<TableNameDto>>>),
+                type_of_val(
+                    &With::<FunctionRegister>::extract::<Option<HashMap<TableNameDto, TableType>>>,
+                ),
                 type_of_val(&With::<FunctionRegister>::extract::<Option<Vec<TableDependencyDto>>>),
                 type_of_val(&With::<FunctionRegister>::extract::<Option<Vec<TableTriggerDto>>>),
                 // Validate tables do not exist

@@ -8,9 +8,9 @@ mod definitions {
     use crate::dxo::execution::{FunctionNodeResponse, TableNodeResponse};
     use crate::dxo::function::FunctionDB;
     use crate::types::basic::{
-        AtTime, CollectionId, CollectionName, FunctionId, FunctionName, FunctionVersionId, Private,
-        System, TableDataVersionId, TableFunctionParamPos, TableId, TableName, TableStatus,
-        TableVersionId, UserId, UserName, Versioned,
+        AtTime, CollectionId, CollectionName, FunctionId, FunctionName, FunctionVersionId,
+        Partitioned, Private, System, TableDataVersionId, TableFunctionParamPos, TableId,
+        TableName, TableStatus, TableType, TableVersionId, UserId, UserName,
     };
     use crate::types::composed::TableVersions;
     use crate::types::graph::GraphEdge;
@@ -54,13 +54,15 @@ mod definitions {
         pub function_param_pos: Option<TableFunctionParamPos>,
         #[builder(default = "Private::FALSE")]
         pub private: Private,
-        #[builder(default = "Versioned::FALSE")]
-        pub partitioned: Versioned,
+        #[builder(default = "Partitioned::FALSE")]
+        pub partitioned: Partitioned,
         #[td_type(updater(include, field = "time"))]
         pub defined_on: AtTime,
         #[td_type(updater(include, field = "user_id"))]
         pub defined_by_id: UserId,
         pub status: TableStatus,
+        #[builder(default)]
+        pub table_type: TableType, // added in v4
     }
 
     #[td_type::Dao]

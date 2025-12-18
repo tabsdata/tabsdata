@@ -20,7 +20,7 @@ use td_objects::system::{
 use td_objects::types::basic::{
     AtTime, CollectionId, CollectionName, DataLocation, DependencyId, DependencyPos,
     DependencyStatus, FunctionId, ReuseFrozen, TableFunctionParamPos, TableId, TableName,
-    TableNameDto, TableStatus, TriggerId, TriggerStatus, TriggerVersionId, TriggeredOn,
+    TableNameDto, TableStatus, TableType, TriggerId, TriggerStatus, TriggerVersionId, TriggeredOn,
 };
 use td_objects::types::composed::{
     TableDependency, TableDependencyDto, TableTrigger, TableTriggerDto,
@@ -130,6 +130,7 @@ pub async fn build_table_versions(
     Input(function_id): Input<FunctionId>,
     Input(existing_versions): Input<Vec<TableDB>>,
     Input(new_tables): Input<Option<Vec<TableNameDto>>>,
+    Input(new_tables_types): Input<Option<HashMap<TableNameDto, TableType>>>,
     Input(table_version_builder): Input<TableDBBuilder>,
     Input(reuse_frozen): Input<ReuseFrozen>,
 ) -> Result<Vec<TableDB>, TdError> {
@@ -141,13 +142,19 @@ pub async fn build_table_versions(
         .map(|t| ((&t.collection_id, &t.name), t))
         .collect();
 
+    // Table types
+    let new_tables_types = match new_tables_types.deref() {
+        Some(new_tables_types) => new_tables_types,
+        None => &HashMap::new(),
+    };
+
     // Add iterators of new tables (system tables with negative pos)
     let user_tables = new_tables
         .as_deref()
         .unwrap_or_default()
         .iter()
-        .map(TableName::try_from)
-        .collect::<Result<Vec<_>, _>>()?;
+        .map(|n| Ok((TableName::try_from(n)?, new_tables_types.get(n))))
+        .collect::<Result<Vec<_>, TdError>>()?;
     let user_tables = user_tables
         .iter()
         .enumerate()
@@ -159,9 +166,9 @@ pub async fn build_table_versions(
             // system tables are the same for the same function
             // TODO we need to make sure these names are not going to conflict with user tables
             let table_name = format!("{prefix}__{function_id}");
-            TableName::try_from(table_name)
+            Ok((TableName::try_from(table_name)?, None))
         })
-        .collect::<Result<Vec<_>, _>>()?;
+        .collect::<Result<Vec<_>, TdError>>()?;
     let system_tables = new_system_tables
         .iter()
         .enumerate()
@@ -170,7 +177,7 @@ pub async fn build_table_versions(
     let new_tables = user_tables.chain(system_tables).collect::<Vec<_>>();
 
     // Create new table versions
-    for (pos, table_name) in new_tables {
+    for (pos, (table_name, table_type)) in new_tables {
         // Reuse table id if the table is the same
         let existing_version = existing_versions.get(&(&*collection_id, table_name));
         let table_id = if let Some(existing_version) = existing_version {
@@ -213,6 +220,7 @@ pub async fn build_table_versions(
             .name(table_name)
             .function_param_pos(Some(TableFunctionParamPos::try_from(pos)?))
             .status(TableStatus::Active)
+            .table_type(table_type.cloned().unwrap_or_default())
             .build()?;
 
         new_table_versions.insert((&*collection_id, table_name), table_version);

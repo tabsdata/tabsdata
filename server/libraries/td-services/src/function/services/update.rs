@@ -8,6 +8,7 @@ use crate::function::layers::update::assert_function_name_not_exists;
 use crate::function::layers::{
     check_private_tables, register_dependencies, register_tables, register_triggers,
 };
+use std::collections::HashMap;
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
 use td_objects::dxo::bundle::BundleDB;
@@ -32,6 +33,7 @@ use td_objects::tower_service::sql::{
 use td_objects::types::basic::{
     AtTime, BundleId, CollectionId, CollectionIdName, CollectionName, DataLocation, Enabled,
     FunctionId, FunctionIdName, FunctionVersionId, ReuseFrozen, StorageVersion, TableNameDto,
+    TableType,
 };
 use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
 use td_tower::default_services::TransactionProvider;
@@ -113,6 +115,7 @@ fn service() {
         ),
         // Extract new associations
         from_fn(With::<FunctionUpdate>::extract::<Option<Vec<TableNameDto>>>),
+        from_fn(With::<FunctionUpdate>::extract::<Option<HashMap<TableNameDto, TableType>>>),
         from_fn(With::<FunctionUpdate>::extract::<Option<Vec<TableDependencyDto>>>),
         from_fn(With::<FunctionUpdate>::extract::<Option<Vec<TableTriggerDto>>>),
         // Validate tables do not exist
@@ -246,6 +249,7 @@ mod tests {
                 >),
                 // Extract new associations
                 type_of_val(&With::<FunctionUpdate>::extract::<Option<Vec<TableNameDto>>>),
+                type_of_val(&With::<FunctionUpdate>::extract::<Option<HashMap<TableNameDto, TableType>>>),
                 type_of_val(&With::<FunctionUpdate>::extract::<Option<Vec<TableDependencyDto>>>),
                 type_of_val(&With::<FunctionUpdate>::extract::<Option<Vec<TableTriggerDto>>>),
                 // Validate tables do not exist
