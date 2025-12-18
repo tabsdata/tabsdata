@@ -53,7 +53,7 @@ dummy = []
 mock-env = []
 sqlx_log = []
 test_logging = []
-test_tower_metadata = ["td-tower/test_tower_metadata"]
+test_tower_metadata = []
 test-utils = []
 
 [package.metadata.cargo-machete]
@@ -82,14 +82,9 @@ tm-workspace = { workspace = true }
 td-apiserver = { workspace = true }
 td-common = { workspace = true }
 td-cron = { workspace = true }
-td-database = { workspace = true }
-td-objects = { workspace = true }
 td-process = { workspace = true }
-td-services = { workspace = true }
 td-shuttle = { workspace = true }
-td-storage = { workspace = true }
 td-supervisor = { workspace = true }
-td-tower = { workspace = true }
 
 ## Extensions
 

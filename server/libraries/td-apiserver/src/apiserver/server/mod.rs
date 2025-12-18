@@ -36,8 +36,6 @@ pub enum ServerError {
     StdTcpListener(String, std::io::Error),
     #[error("Failed to join Server handles: {0}")]
     JoinHandle(JoinError),
-    #[error("Failed to get the loopback port: {0}")]
-    LoopbackPort(std::io::Error),
 }
 
 #[async_trait]
@@ -48,6 +46,8 @@ pub trait Server: Debug + Send + Sync {
     ) -> Vec<JoinHandle<Result<(), ServerError>>>;
 
     fn listeners(&self) -> &Vec<TcpListener>;
+
+    #[allow(unused)]
     fn scheme(&self) -> Scheme;
 }
 
