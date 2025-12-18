@@ -1571,7 +1571,7 @@ mod tests {
         .await?;
 
         let recursive_downstream_trigger: Vec<TriggerDB> = DaoQueries::default()
-            .select_recursive_versions_at::<{ TriggerDB::Active }, TriggerDB, { FunctionDB::Active }, FunctionDB>(
+            .select_recursive_versions_at::<{ TriggerDB::Active }, TriggerDB, { FunctionDB::Executable }, FunctionDB>(
                 None,
                 None,
                 &response.function_id,
@@ -1697,7 +1697,7 @@ mod tests {
         .await?;
 
         let recursive_downstream_trigger: Vec<TriggerDB> = DaoQueries::default()
-            .select_recursive_versions_at::<{ TriggerDB::Active }, TriggerDB, { FunctionDB::Active }, FunctionDB>(
+            .select_recursive_versions_at::<{ TriggerDB::Active }, TriggerDB, { FunctionDB::Executable }, FunctionDB>(
                 None,
                 None,
                 &response.function_id,

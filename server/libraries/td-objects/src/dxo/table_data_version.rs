@@ -42,6 +42,7 @@ mod definitions {
         sql_table = "table_data_versions__with_function",
         versioned(order_by = "triggered_on", partition_by = "table_id"),
         states(
+            // Table data versions that can be consumed.
             Committed = &[&FunctionRunStatus::Committed],
         )
     )]

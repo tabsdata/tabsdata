@@ -83,7 +83,7 @@ fn service() {
         // Select trigger function.
         from_fn(
             By::<(CollectionIdName, FunctionIdName)>::select_version::<
-                { FunctionDBWithNames::Active },
+                { FunctionDBWithNames::Executable },
                 FunctionDBWithNames,
             >
         ),
@@ -209,7 +209,7 @@ pub(crate) mod tests {
             // Select trigger function.
             type_of_val(
                 &By::<(CollectionIdName, FunctionIdName)>::select_version::<
-                    { FunctionDBWithNames::Active },
+                    { FunctionDBWithNames::All },
                     FunctionDBWithNames,
                 >,
             ),

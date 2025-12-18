@@ -24,10 +24,12 @@ mod definitions {
             partition_by = "table_id",
         ),
         states(
+            // Active tables are tables that can be generated and consumed.
             Active = &[&TableStatus::Active],
+            // Frozen tables are tables that cannot be generated, but can be consumed.
             Frozen = &[&TableStatus::Frozen],
+            // Available tables are all the tables that are not deleted.
             Available = &[&TableStatus::Active, &TableStatus::Frozen],
-            Output = &[&TableStatus::Active],
         )
     )]
     #[td_type(
@@ -66,6 +68,7 @@ mod definitions {
         sql_table = "tables__with_names",
         order_by = "function_param_pos",
         states(
+            // Available user tables are all the tables that are not deleted.
             System = &[&TableStatus::Active, &TableStatus::Frozen, &System::TRUE],
         )
     )]

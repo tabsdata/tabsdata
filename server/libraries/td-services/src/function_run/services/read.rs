@@ -49,7 +49,7 @@ fn service() {
         from_fn(With::<RequestContext>::extract::<AtTime>),
         from_fn(
             By::<(CollectionIdName, FunctionIdName)>::select_version::<
-                { FunctionDBWithNames::Active },
+                { FunctionDBWithNames::Executable },
                 FunctionDBWithNames,
             >
         ),
@@ -113,7 +113,7 @@ mod tests {
                 type_of_val(&With::<RequestContext>::extract::<AtTime>),
                 type_of_val(
                     &By::<(CollectionIdName, FunctionIdName)>::select_version::<
-                        { FunctionDBWithNames::Active },
+                        { FunctionDBWithNames::Executable },
                         FunctionDBWithNames,
                     >,
                 ),

@@ -224,7 +224,7 @@ where
         // Find output tables for each triggered_function
         // TODO this should be chunked
         let output_tables: Vec<TableDBWithNames> = queries
-            .find_versions_at::<{ TableDBWithNames::Output }, TableDBWithNames>(
+            .find_versions_at::<{ TableDBWithNames::Active }, TableDBWithNames>(
                 Some(&at_time),
                 functions.deref(),
             )?

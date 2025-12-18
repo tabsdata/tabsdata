@@ -19,6 +19,7 @@ mod definitions {
         versioned(order_by = "defined_on", partition_by = "dependency_id"),
         recursive(up = "table_function_id", down = "function_id"),
         states(
+            // Active dependencies are dependencies that can be used in executions.
             Active = &[&DependencyStatus::Active],
         )
     )]

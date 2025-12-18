@@ -20,9 +20,12 @@ mod definitions {
         ),
         recursive(up = "trigger_by_function_id", down = "function_id"),
         states(
+            // Active triggers are available to be used in executions.
             Active = &[&TriggerStatus::Active],
-            Available = &[&TriggerStatus::Active, &TriggerStatus::Frozen],
+            // Frozen triggers mean the trigger exists, but cannot be used in executions.
             Frozen = &[&TriggerStatus::Frozen],
+            // Available triggers are all the triggers that are not deleted.
+            Available = &[&TriggerStatus::Active, &TriggerStatus::Frozen],
         )
     )]
     #[td_type(

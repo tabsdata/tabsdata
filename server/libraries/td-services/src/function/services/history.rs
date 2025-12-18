@@ -48,7 +48,7 @@ fn service() {
         from_fn(combine::<CollectionId, FunctionIdName>),
         from_fn(
             By::<(CollectionId, FunctionIdName)>::select_version::<
-                { FunctionDBWithNames::Readable },
+                { FunctionDBWithNames::Available },
                 FunctionDBWithNames,
             >
         ),
@@ -109,7 +109,7 @@ mod tests {
                 type_of_val(&combine::<CollectionId, FunctionIdName>),
                 type_of_val(
                     &By::<(CollectionId, FunctionIdName)>::select_version::<
-                        { FunctionDBWithNames::Readable },
+                        { FunctionDBWithNames::Available },
                         FunctionDBWithNames,
                     >,
                 ),
