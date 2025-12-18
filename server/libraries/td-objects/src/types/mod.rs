@@ -2,6 +2,9 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+#[cfg(test)]
+mod tests;
+
 // Basic types reexported for convenience under basic module
 pub mod basic;
 
@@ -12,9 +15,6 @@ pub mod option;
 pub mod recursion;
 pub mod status_count;
 pub mod visible_collections;
-
-#[cfg(test)]
-mod tests;
 
 /// A trait for types that can be used as SQL entities.
 pub trait SqlEntity: std::fmt::Debug + Send + Sync {

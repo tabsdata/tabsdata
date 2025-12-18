@@ -4,11 +4,12 @@
 
 #[td_type::dxo]
 mod definitions {
+    use crate::dxo::function::FunctionDB;
     use crate::dxo::yaml::WorkerOutput;
     use crate::types::basic::{
         AtTime, CollectionId, CollectionName, CronMask, ExecutionId, ExecutionName, FunctionName,
         FunctionRunId, FunctionVersionId, SizeThreshold, TimeoutThresholdMin, TransactionId,
-        WorkerId, WorkerMessageStatus, WorkerStatus,
+        WorkerConfig, WorkerId, WorkerMessageStatus, WorkerStatus, WorkerType, WorkerVersion,
     };
     use td_common::datetime::IntoDateTimeUtc;
     use td_common::execution_status::WorkerCallbackStatus;
@@ -17,38 +18,38 @@ mod definitions {
 
     #[td_type::Dao]
     #[dao(sql_table = "workers")]
+    #[td_type(builder(try_from = FunctionDB, skip_all))]
     pub struct WorkerDB {
         #[builder(default)]
         #[td_type(extractor)]
         pub id: WorkerId,
-        #[td_type(extractor)]
+        #[td_type(builder(include), extractor)]
         pub collection_id: CollectionId,
-        pub execution_id: ExecutionId,
-        pub transaction_id: TransactionId,
-        pub function_run_id: FunctionRunId,
+        #[builder(default)]
+        pub execution_id: Option<ExecutionId>,
+        #[builder(default)]
+        pub transaction_id: Option<TransactionId>,
+        #[builder(default)]
+        pub function_run_id: Option<FunctionRunId>,
+        #[td_type(builder(include, field = "id"))]
         pub function_version_id: FunctionVersionId,
+        #[builder(default = "WorkerMessageStatus::None")]
         pub message_status: WorkerMessageStatus,
         #[builder(default)]
         pub started_on: Option<AtTime>,
         #[builder(default)]
         pub ended_on: Option<AtTime>,
+        #[builder(default = "WorkerStatus::Scheduled")]
         pub status: WorkerStatus,
+
+        pub worker_type: WorkerType,             // added in v4
+        pub worker_config: Option<WorkerConfig>, // added in v4
     }
 
     #[td_type::Dao]
     #[dao(sql_table = "workers__with_names")]
+    #[inherits(WorkerDB)]
     pub struct WorkerDBWithNames {
-        pub id: WorkerId,
-        pub collection_id: CollectionId,
-        pub execution_id: ExecutionId,
-        pub transaction_id: TransactionId,
-        pub function_run_id: FunctionRunId,
-        pub function_version_id: FunctionVersionId,
-        pub message_status: WorkerMessageStatus,
-        pub started_on: Option<AtTime>,
-        pub ended_on: Option<AtTime>,
-        pub status: WorkerStatus,
-
         pub collection: CollectionName,
         pub execution: Option<ExecutionName>,
         pub function: FunctionName,
@@ -63,11 +64,11 @@ mod definitions {
         #[dto(list(filter, filter_like, order_by))]
         pub collection_id: CollectionId,
         #[dto(list(filter, filter_like, order_by))]
-        pub execution_id: ExecutionId,
+        pub execution_id: Option<ExecutionId>,
         #[dto(list(filter, filter_like, order_by))]
-        pub transaction_id: TransactionId,
+        pub transaction_id: Option<TransactionId>,
         #[dto(list(filter, filter_like, order_by))]
-        pub function_run_id: FunctionRunId,
+        pub function_run_id: Option<FunctionRunId>,
         #[dto(list(filter, filter_like, order_by))]
         pub function_version_id: FunctionVersionId,
         #[dto(list(filter, filter_like, order_by))]
@@ -133,6 +134,20 @@ mod definitions {
         pub fn unlocked() -> Result<Self, TdError> {
             Ok(Self {
                 message_status: WorkerMessageStatus::Unlocked,
+            })
+        }
+    }
+
+    #[td_type::Dao]
+    #[dao(sql_table = "workers")]
+    pub struct UpdateWorkerStatusDB {
+        status: WorkerStatus,
+    }
+
+    impl UpdateWorkerStatusDB {
+        pub fn stopped() -> Result<Self, TdError> {
+            Ok(Self {
+                status: WorkerStatus::Stopped,
             })
         }
     }

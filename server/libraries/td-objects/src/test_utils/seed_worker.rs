@@ -7,7 +7,7 @@ use crate::dxo::function_run::FunctionRunDB;
 use crate::dxo::transaction::TransactionDB;
 use crate::dxo::worker::WorkerDB;
 use crate::sql::{DaoQueries, Insert};
-use crate::types::basic::{WorkerMessageStatus, WorkerStatus};
+use crate::types::basic::{WorkerMessageStatus, WorkerStatus, WorkerType};
 use td_database::sql::DbPool;
 
 pub async fn seed_worker(
@@ -27,6 +27,8 @@ pub async fn seed_worker(
         .started_on(None)
         .ended_on(None)
         .status(WorkerStatus::RunRequested)
+        .worker_type(WorkerType::FunctionRunner)
+        .worker_config(None)
         .build()
         .unwrap();
 
@@ -115,9 +117,9 @@ mod tests {
         .await;
 
         assert_eq!(worker.collection_id, collection.id);
-        assert_eq!(worker.execution_id, execution.id);
-        assert_eq!(worker.transaction_id, transaction.id);
-        assert_eq!(worker.function_run_id, function_run.id);
+        assert_eq!(worker.execution_id, Some(execution.id));
+        assert_eq!(worker.transaction_id, Some(transaction.id));
+        assert_eq!(worker.function_run_id, Some(function_run.id));
         assert_eq!(worker.function_version_id, function_run.function_version_id);
         assert_eq!(worker.message_status, WorkerMessageStatus::Locked);
     }

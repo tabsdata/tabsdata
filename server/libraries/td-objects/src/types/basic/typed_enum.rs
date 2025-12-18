@@ -259,6 +259,8 @@ pub enum TriggerStatus {
 
 #[td_type::typed_enum]
 pub enum WorkerMessageStatus {
+    #[typed_enum(rename = "N")]
+    None,
     #[typed_enum(rename = "L")]
     Locked,
     #[typed_enum(rename = "U")]
@@ -267,6 +269,10 @@ pub enum WorkerMessageStatus {
 
 #[td_type::typed_enum]
 pub enum WorkerStatus {
+    #[typed_enum(rename = "S")]
+    Scheduled,
+    #[typed_enum(rename = "SP")]
+    Stopped,
     #[typed_enum(rename = "RR")]
     RunRequested,
     #[typed_enum(rename = "R")]
@@ -290,4 +296,22 @@ impl From<WorkerCallbackStatus> for WorkerStatus {
             WorkerCallbackStatus::Failed => WorkerStatus::Failed,
         }
     }
+}
+
+#[td_type::typed_enum]
+pub enum WorkerTypeDto {
+    #[typed_enum(rename = "C")]
+    Cron,
+    #[typed_enum(rename = "W")]
+    Watchdog,
+}
+
+#[td_type::typed_enum]
+pub enum WorkerType {
+    #[typed_enum(rename = "F")]
+    FunctionRunner,
+    #[typed_enum(rename = "C")]
+    Cron,
+    #[typed_enum(rename = "W")]
+    Watchdog,
 }
