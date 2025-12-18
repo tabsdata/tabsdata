@@ -108,13 +108,57 @@ controllers:
         arguments:
           - logs-folder
   ephemeral:
-    concurrency: 8
+    concurrency: 0
     workers:
       - name: function
         kind: processor
         location: system
         program: td_invoker
         concurrency: 8
+        retries: 2
+        arguments:
+          - work
+          - locks-folder
+          - logs-folder
+          - bin-folder
+          - request-folder
+          - response-folder
+          - input-folder
+          - output-folder
+          - current-instance
+        markers:
+          - td-collection
+          - td-function
+          - td-worker
+          - td-attempt
+        get-states:
+          - state-type: map
+            state-key: apiserver-mounts-options
+      - name: cron
+        kind: processor
+        location: system
+        program: td_cron
+        concurrency: 0
+        retries: 2
+        arguments:
+          - locks-folder
+          - logs-folder
+          - bin-folder
+          - request-folder
+          - response-folder
+          - input-folder
+          - output-folder
+          - current-instance
+        markers:
+          - td-collection
+          - td-function
+          - td-worker
+          - td-attempt
+      - name: watchdog
+        kind: processor
+        location: system
+        program: td_invoker
+        concurrency: 0
         retries: 2
         arguments:
           - work
