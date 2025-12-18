@@ -43,6 +43,14 @@ pub mod internal {
         pub function_version_id: FunctionVersionId,
     }
 
+    #[td_type::Dlo]
+    pub struct FunctionVersionExecution {
+        #[td_type(extractor)]
+        pub function_version_id: FunctionVersionId,
+        #[td_type(extractor)]
+        pub execution: ExecutionIdName,
+    }
+
     #[td_type::UrlParam]
     pub struct FunctionVersionAtIdParam {
         #[td_type(extractor)]
@@ -295,7 +303,7 @@ pub const EXECUTION: &str = url!(EXECUTIONS, "/{execution}");
 #[td_type::UrlParam]
 pub struct ExecutionParam {
     #[td_type(extractor)]
-    execution: ExecutionIdName,
+    pub execution: ExecutionIdName,
 }
 
 pub const EXECUTION_CANCEL: &str = url!(EXECUTION, "/cancel");

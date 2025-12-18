@@ -5026,9 +5026,6 @@ dependencies = [
  "getset",
  "openssl",
  "serde",
- "strum",
- "td-error",
- "thiserror",
 ]
 
 [[package]]
@@ -5602,6 +5599,7 @@ dependencies = [
  "quote",
  "regex",
  "syn",
+ "url",
 ]
 
 [[package]]

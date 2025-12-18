@@ -24,8 +24,8 @@ mod routes {
     use td_objects::rest_urls::ExecutionParam;
     use td_objects::rest_urls::internal::{
         DOWNLOAD_FUNCTION_STATE, FUNCTION_VERSION_EXECUTE, FUNCTION_VERSION_EXECUTION_STATUS,
-        FunctionRunIdParam, FunctionVersionAtIdParam, FunctionVersionIdParam, UPDATE_FUNCTION_RUN,
-        UPDATE_WORKER, WorkerIdParam,
+        FunctionRunIdParam, FunctionVersionAtIdParam, FunctionVersionExecution,
+        FunctionVersionIdParam, UPDATE_FUNCTION_RUN, UPDATE_WORKER, WorkerIdParam,
     };
     use td_services::execution::services::ExecutionServices;
     use td_services::function_run::services::FunctionRunServices;
@@ -88,8 +88,17 @@ mod routes {
         Path(param): Path<FunctionVersionIdParam>,
         Json(request): Json<ExecutionParam>,
     ) -> Result<GetStatus<FunctionRun>, ErrorStatus> {
-        let request = context.read(param, request); // TODO
-        let response = state.read.service().await.oneshot(request).await?;
+        let request = FunctionVersionExecution {
+            function_version_id: param.function_version_id,
+            execution: request.execution,
+        };
+        let request = context.read(request);
+        let response = state
+            .read_version_execution
+            .service()
+            .await
+            .oneshot(request)
+            .await?;
         Ok(GetStatus::OK(response))
     }
 
