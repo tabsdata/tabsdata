@@ -32,7 +32,8 @@ mod tests {
     use crate::transaction::TransactionBy;
     use td_objects::transaction::map::TransactionMapperError;
     use td_objects::types::basic::{
-        CollectionId, CollectionName, FunctionId, FunctionName, FunctionVersionId, TransactionKey,
+        CollectionId, CollectionName, Enabled, FunctionId, FunctionName, FunctionVersionId,
+        TransactionKey,
     };
     use td_objects::types::graph::FunctionNode;
 
@@ -52,6 +53,7 @@ mod tests {
             .function_id(FunctionId::default())
             .function_version_id(key)
             .name(FunctionName::try_from("name")?)
+            .enabled(Enabled::TRUE)
             .build()?;
 
         assert_eq!(

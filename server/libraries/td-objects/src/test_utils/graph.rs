@@ -9,10 +9,10 @@ use crate::dxo::trigger::TriggerDBWithNames;
 use crate::graph::{TdGraph, TdGraphBuilder};
 use crate::types::basic::{
     AtTime, BundleId, CollectionId, CollectionName, DataLocation, Decorator, DependencyId,
-    DependencyPos, DependencyStatus, DependencyVersionId, Description, FunctionId, FunctionName,
-    FunctionRuntimeValues, FunctionStatus, FunctionVersionId, Snippet, StorageVersion, TableId,
-    TableName, TableStatus, TableVersionId, TriggerId, TriggerStatus, TriggerVersionId, UserId,
-    UserName,
+    DependencyPos, DependencyStatus, DependencyVersionId, Description, Enabled, FunctionId,
+    FunctionName, FunctionRuntimeValues, FunctionStatus, FunctionVersionId, Snippet,
+    StorageVersion, TableId, TableName, TableStatus, TableType, TableVersionId, TriggerId,
+    TriggerStatus, TriggerVersionId, UserId, UserName,
 };
 use crate::types::composed::TableVersions;
 use crate::types::graph::{FunctionNode, TableNode};
@@ -147,6 +147,7 @@ pub fn function_node(function: &FunctionName) -> FunctionNode {
         .function_id(FUNCTION_IDS.get(function).unwrap())
         .function_version_id(FUNCTION_VERSION_IDS.get(function).unwrap())
         .name(function.clone())
+        .enabled(Enabled::TRUE)
         .build()
         .unwrap()
 }
@@ -210,6 +211,7 @@ pub async fn function(function: &FunctionName) -> FunctionDBWithNames {
         .status(FunctionStatus::Active)
         .collection(COLLECTION_NAME.clone())
         .defined_by(UserName::try_from("joaquin").unwrap())
+        .enabled(Enabled::TRUE)
         .build()
         .unwrap()
 }

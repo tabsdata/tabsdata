@@ -6,8 +6,9 @@ use crate::dxo::function::FunctionDBWithNames;
 use crate::dxo::table::TableDBWithNames;
 use crate::dxo::table_data_version::ExecutionTableDataVersionRead;
 use crate::types::basic::{
-    CollectionId, CollectionName, DependencyPos, FunctionId, FunctionName, FunctionVersionId,
-    SelfDependency, System, TableFunctionParamPos, TableId, TableName, TableVersionId,
+    CollectionId, CollectionName, DependencyPos, Enabled, FunctionId, FunctionName,
+    FunctionVersionId, SelfDependency, System, TableFunctionParamPos, TableId, TableName,
+    TableVersionId,
 };
 use crate::types::composed::TableVersions;
 use serde::{Deserialize, Serialize};
@@ -27,6 +28,7 @@ pub struct FunctionNode {
     #[td_type(builder(field = "id"))]
     pub function_version_id: FunctionVersionId,
     pub name: FunctionName,
+    pub enabled: Enabled,
 }
 
 impl Display for FunctionNode {
@@ -73,47 +75,11 @@ impl<F: Display, T: Display> Display for GraphNode<F, T> {
 }
 
 impl GraphNode<FunctionNode, TableNode> {
-    pub fn output(table: &TableDBWithNames) -> Result<(Self, Self), TdError> {
-        Ok((
-            GraphNode::Function(
-                FunctionNode::builder()
-                    .collection_id(table.collection_id)
-                    .collection(table.collection.clone())
-                    .function_id(table.function_id)
-                    .function_version_id(table.function_version_id)
-                    .name(table.function.clone())
-                    .build()?,
-            ),
-            GraphNode::Table(
-                TableNode::builder()
-                    .collection_id(table.collection_id)
-                    .collection(table.collection.clone())
-                    .function_version_id(table.function_version_id)
-                    .table_id(table.table_id)
-                    .table_version_id(table.id)
-                    .name(table.name.clone())
-                    .system(table.system)
-                    .build()?,
-            ),
-        ))
-    }
-
-    pub fn input(
-        table: &TableDBWithNames,
+    pub fn pair(
         function: &FunctionDBWithNames,
+        table: &TableDBWithNames,
     ) -> Result<(Self, Self), TdError> {
         Ok((
-            GraphNode::Table(
-                TableNode::builder()
-                    .collection_id(table.collection_id)
-                    .collection(table.collection.clone())
-                    .function_version_id(table.function_version_id)
-                    .table_id(table.table_id)
-                    .table_version_id(table.id)
-                    .name(table.name.clone())
-                    .system(table.system)
-                    .build()?,
-            ),
             GraphNode::Function(
                 FunctionNode::builder()
                     .collection_id(function.collection_id)
@@ -121,6 +87,18 @@ impl GraphNode<FunctionNode, TableNode> {
                     .function_id(function.function_id)
                     .function_version_id(function.id)
                     .name(function.name.clone())
+                    .enabled(function.enabled)
+                    .build()?,
+            ),
+            GraphNode::Table(
+                TableNode::builder()
+                    .collection_id(table.collection_id)
+                    .collection(table.collection.clone())
+                    .function_version_id(table.function_version_id)
+                    .table_id(table.table_id)
+                    .table_version_id(table.id)
+                    .name(table.name.clone())
+                    .system(table.system)
                     .build()?,
             ),
         ))
@@ -254,8 +232,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_graph_node_from_table() -> Result<(), TdError> {
+        let function = function(&FUNCTION_NAMES[0]).await;
         let table = table(&FUNCTION_NAMES[0], &TABLE_NAMES[0]).await;
-        let (function_node, table_node) = GraphNode::output(&table)?;
+        let (function_node, table_node) = GraphNode::pair(&function, &table)?;
 
         if let GraphNode::Function(function) = function_node {
             assert_eq!(function.collection_id, table.collection_id);
@@ -283,7 +262,7 @@ mod tests {
         let dependency = dependency(&TABLE_NAMES[0], &FUNCTION_NAMES[0]).await;
         let table = table(&FUNCTION_NAMES[0], &TABLE_NAMES[0]).await;
         let function = function(&FUNCTION_NAMES[0]).await;
-        let (table_node, function_node) = GraphNode::input(&table, &function)?;
+        let (function_node, table_node) = GraphNode::pair(&function, &table)?;
 
         if let GraphNode::Table(node) = table_node {
             assert_eq!(node.collection_id, dependency.table_collection_id);
@@ -311,7 +290,7 @@ mod tests {
         let trigger = trigger(&TABLE_NAMES[0], &FUNCTION_NAMES[0]).await;
         let table = table(&FUNCTION_NAMES[0], &TABLE_NAMES[0]).await;
         let function = function(&FUNCTION_NAMES[0]).await;
-        let (table_node, function_node) = GraphNode::input(&table, &function)?;
+        let (function_node, table_node) = GraphNode::pair(&function, &table)?;
 
         if let GraphNode::Table(node) = table_node {
             assert_eq!(node.collection_id, trigger.trigger_by_collection_id);

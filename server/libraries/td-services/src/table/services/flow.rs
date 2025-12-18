@@ -27,7 +27,7 @@ impl
     GraphConfig<
         { TriggerDBWithNames::Active },
         { DependencyDBWithNames::Active },
-        { FunctionDB::Readable },
+        { FunctionDB::Available },
         { TableDB::Available },
     > for GraphOpts
 {

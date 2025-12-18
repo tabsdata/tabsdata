@@ -7,7 +7,7 @@ mod definitions {
     use crate::dxo::crudl::RequestContext;
     use crate::types::basic::{
         AtTime, BundleId, CollectionId, CollectionName, Connector, DataLocation, Decorator,
-        Description, FunctionId, FunctionName, FunctionRuntimeValues, FunctionStatus,
+        Description, Enabled, FunctionId, FunctionName, FunctionRuntimeValues, FunctionStatus,
         FunctionVersionId, ReuseFrozen, Snippet, StorageVersion, TableName, TableNameDto, UserId,
         UserName,
     };
@@ -35,6 +35,10 @@ mod definitions {
         pub runtime_values: FunctionRuntimeValues,
         #[td_type(extractor)]
         pub reuse_frozen_tables: ReuseFrozen,
+        #[serde(default)]
+        #[builder(default)]
+        #[td_type(extractor)]
+        pub enabled: Option<Enabled>,
     }
 
     pub type FunctionUpdate = FunctionRegister;
@@ -50,7 +54,7 @@ mod definitions {
         states(
             Active = &[&FunctionStatus::Active],
             Available = &[&FunctionStatus::Active, &FunctionStatus::Frozen],
-            DownstreamTrigger = &[&FunctionStatus::Active],
+            Executable = &[&FunctionStatus::Active, &Enabled::TRUE],
             Readable = &[&FunctionStatus::Active, &FunctionStatus::Frozen],
         )
     )]
@@ -92,6 +96,8 @@ mod definitions {
         pub defined_by_id: UserId,
         #[builder(default = FunctionStatus::Active)]
         pub status: FunctionStatus,
+        #[td_type(setter)]
+        pub enabled: Enabled, // added in v4
     }
 
     #[td_type::Dao]
@@ -104,6 +110,8 @@ mod definitions {
         pub collection_id: CollectionId,
         #[td_type(extractor)]
         pub function_id: FunctionId,
+        #[td_type(extractor)]
+        pub enabled: Enabled, //  added in v4
 
         pub collection: CollectionName,
         pub defined_by: UserName,

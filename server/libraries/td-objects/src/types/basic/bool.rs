@@ -15,6 +15,9 @@ impl From<Option<HasData>> for DataChanged {
     }
 }
 
+#[td_type::typed(bool(default = true))]
+pub struct Enabled;
+
 #[td_type::typed(bool(default = false))]
 pub struct Fixed;
 

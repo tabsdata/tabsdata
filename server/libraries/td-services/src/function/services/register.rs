@@ -29,8 +29,8 @@ use td_objects::tower_service::sql::{
     By, SqlAssertNotExistsService, SqlDeleteService, SqlSelectService, insert,
 };
 use td_objects::types::basic::{
-    AtTime, BundleId, CollectionId, CollectionIdName, CollectionName, DataLocation, FunctionId,
-    FunctionName, ReuseFrozen, StorageVersion, TableNameDto,
+    AtTime, BundleId, CollectionId, CollectionIdName, CollectionName, DataLocation, Enabled,
+    FunctionId, FunctionName, ReuseFrozen, StorageVersion, TableNameDto,
 };
 use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
 use td_tower::default_services::TransactionProvider;
@@ -82,12 +82,16 @@ fn service() {
         // Get location and storage version.
         from_fn(With::<StorageVersion>::default),
         from_fn(data_location),
+        // Get enabled flag
+        from_fn(With::<FunctionRegister>::extract::<Option<Enabled>>),
+        from_fn(With::<Option<Enabled>>::unwrap_or_default),
         // Insert into function_versions(sql) status=Active.
         from_fn(With::<FunctionRegister>::try_convert_to::<FunctionDBBuilder, _>),
         from_fn(With::<RequestContext>::update::<FunctionDBBuilder, _>),
         from_fn(With::<CollectionId>::set::<FunctionDBBuilder>),
         from_fn(With::<StorageVersion>::set::<FunctionDBBuilder>),
         from_fn(With::<DataLocation>::set::<FunctionDBBuilder>),
+        from_fn(With::<Enabled>::set::<FunctionDBBuilder>),
         from_fn(With::<FunctionDBBuilder>::build::<FunctionDB, _>),
         from_fn(insert::<FunctionDB>),
         // Remove from bundles
@@ -207,12 +211,16 @@ mod tests {
                 // Get location and storage version.
                 type_of_val(&With::<StorageVersion>::default),
                 type_of_val(&data_location),
+                // Get enabled flag
+                type_of_val(&With::<FunctionRegister>::extract::<Option<Enabled>>),
+                type_of_val(&With::<Option<Enabled>>::unwrap_or_default),
                 // Insert into function_versions(sql) status=Active.
                 type_of_val(&With::<FunctionRegister>::try_convert_to::<FunctionDBBuilder, _>),
                 type_of_val(&With::<RequestContext>::update::<FunctionDBBuilder, _>),
                 type_of_val(&With::<CollectionId>::set::<FunctionDBBuilder>),
                 type_of_val(&With::<StorageVersion>::set::<FunctionDBBuilder>),
                 type_of_val(&With::<DataLocation>::set::<FunctionDBBuilder>),
+                type_of_val(&With::<Enabled>::set::<FunctionDBBuilder>),
                 type_of_val(&With::<FunctionDBBuilder>::build::<FunctionDB, _>),
                 type_of_val(&insert::<FunctionDB>),
                 // Remove from bundles

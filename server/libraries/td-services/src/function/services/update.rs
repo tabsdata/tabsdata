@@ -30,8 +30,8 @@ use td_objects::tower_service::sql::{
     By, SqlDeleteService, SqlSelectAllService, SqlSelectService, insert,
 };
 use td_objects::types::basic::{
-    AtTime, BundleId, CollectionId, CollectionIdName, CollectionName, DataLocation, FunctionId,
-    FunctionIdName, FunctionVersionId, ReuseFrozen, StorageVersion, TableNameDto,
+    AtTime, BundleId, CollectionId, CollectionIdName, CollectionName, DataLocation, Enabled,
+    FunctionId, FunctionIdName, FunctionVersionId, ReuseFrozen, StorageVersion, TableNameDto,
 };
 use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
 use td_tower::default_services::TransactionProvider;
@@ -87,6 +87,11 @@ fn service() {
         from_fn(With::<FunctionUpdate>::try_convert_to::<FunctionDBBuilder, _>),
         from_fn(With::<RequestContext>::update::<FunctionDBBuilder, _>),
         from_fn(With::<CollectionId>::set::<FunctionDBBuilder>),
+        // Change enabled flag if provided, else maintain what we had
+        from_fn(With::<FunctionDBWithNames>::extract::<Enabled>),
+        from_fn(With::<FunctionUpdate>::extract::<Option<Enabled>>),
+        from_fn(With::<Option<Enabled>>::unwrap_or_else::<Enabled>),
+        from_fn(With::<Enabled>::set::<FunctionDBBuilder>),
         // We maintain the same function id
         from_fn(With::<FunctionId>::set::<FunctionDBBuilder>),
         from_fn(With::<StorageVersion>::set::<FunctionDBBuilder>),
@@ -217,6 +222,11 @@ mod tests {
                 type_of_val(&With::<FunctionUpdate>::try_convert_to::<FunctionDBBuilder, _>),
                 type_of_val(&With::<RequestContext>::update::<FunctionDBBuilder, _>),
                 type_of_val(&With::<CollectionId>::set::<FunctionDBBuilder>),
+                // Change enabled flag if provided, else maintain what we had
+                type_of_val(&With::<FunctionDBWithNames>::extract::<Enabled>),
+                type_of_val(&With::<FunctionUpdate>::extract::<Option<Enabled>>),
+                type_of_val(&With::<Option<Enabled>>::unwrap_or_else::<Enabled>),
+                type_of_val(&With::<Enabled>::set::<FunctionDBBuilder>),
                 // We maintain the same function id
                 type_of_val(&With::<FunctionId>::set::<FunctionDBBuilder>),
                 type_of_val(&With::<StorageVersion>::set::<FunctionDBBuilder>),

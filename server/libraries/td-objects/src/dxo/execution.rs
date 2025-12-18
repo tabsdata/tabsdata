@@ -9,10 +9,10 @@ mod definitions {
     use crate::dxo::function::{Function, FunctionDBWithNames};
     use crate::dxo::table_data_version::ExecutionTableDataVersionRead;
     use crate::types::basic::{
-        AtTime, CollectionId, CollectionName, Dot, ExecutionId, ExecutionName, ExecutionStatus,
-        FunctionId, FunctionName, FunctionOnly, FunctionRunStatus, FunctionVersionId, StatusCount,
-        System, TableDataVersionId, TableName, TableVersionId, TransactionId, TriggeredOn, UserId,
-        UserName,
+        AtTime, CollectionId, CollectionName, Dot, Enabled, ExecutionId, ExecutionName,
+        ExecutionStatus, FunctionId, FunctionName, FunctionOnly, FunctionRunStatus,
+        FunctionVersionId, StatusCount, System, TableDataVersionId, TableName, TableVersionId,
+        TransactionId, TriggeredOn, UserId, UserName,
     };
     use crate::types::composed::TableVersions;
     use crate::types::graph::GraphEdge;
@@ -144,6 +144,7 @@ mod definitions {
         #[td_type(builder(try_from = FunctionDBWithNames, field = "id"))]
         pub function_version_id: FunctionVersionId,
         pub name: FunctionName,
+        pub enabled: Enabled,
     }
 
     #[td_type::Dto]

@@ -39,6 +39,7 @@ pub async fn seed_function(
         .collection_id(collection.id)
         .data_location(DataLocation::default())
         .storage_version(StorageVersion::default())
+        .enabled(function_create.enabled.unwrap_or_default())
         .build()
         .unwrap();
 

@@ -72,11 +72,13 @@ impl<'a> TdGraphBuilder<'a> {
                 .get(&trigger.function_id)
                 .ok_or(GraphError::MissingFunction(trigger.function_id))?;
 
-            let (src, tgt) = GraphNode::input(table, function)?;
-            let s = self.add_if_absent(src);
-            let t = self.add_if_absent(tgt);
+            let (function_node, table_node) = GraphNode::pair(function, table)?;
+            let function_idx = self.add_if_absent(function_node);
+            let table_idx = self.add_if_absent(table_node);
+
+            // note it is inverted in output edges
             self.graph
-                .add_edge(s, t, GraphEdge::trigger(Versions::None));
+                .add_edge(table_idx, function_idx, GraphEdge::trigger(Versions::None));
         }
         Ok(self)
     }
@@ -84,15 +86,25 @@ impl<'a> TdGraphBuilder<'a> {
     /// Adds output edges from functions to output tables.
     pub fn with_outputs(mut self, outputs: &[TableDBWithNames]) -> Result<Self, TdError> {
         for table in outputs {
-            let (src, tgt) = GraphNode::output(table)?;
-            let s = self.add_if_absent(src);
-            let t = self.add_if_absent(tgt);
+            let function = self
+                .all_functions_map
+                .get(&table.function_id)
+                .ok_or(GraphError::MissingFunction(table.function_id))?;
+
+            let (function_node, table_node) = GraphNode::pair(function, table)?;
+            let function_idx = self.add_if_absent(function_node);
+            let table_idx = self.add_if_absent(table_node);
 
             let graph_output = GraphOutput::builder()
                 .output_pos(table.function_param_pos)
                 .build()?;
-            self.graph
-                .add_edge(s, t, GraphEdge::output(Versions::None, graph_output));
+
+            // note it is inverted in dep and trigger edges
+            self.graph.add_edge(
+                function_idx,
+                table_idx,
+                GraphEdge::output(Versions::None, graph_output),
+            );
         }
         Ok(self)
     }
@@ -109,18 +121,19 @@ impl<'a> TdGraphBuilder<'a> {
                 .get(&dep.function_id)
                 .ok_or(GraphError::MissingFunction(dep.function_id))?;
 
-            let (src, tgt) = GraphNode::input(table, function)?;
-            let s = self.add_if_absent(src);
-            let t = self.add_if_absent(tgt);
+            let (function_node, table_node) = GraphNode::pair(function, table)?;
+            let function_idx = self.add_if_absent(function_node);
+            let table_idx = self.add_if_absent(table_node);
 
             let graph_dep = GraphDependency::builder()
                 .dep_pos(dep.dep_pos)
                 .self_dependency(function.id == table.function_version_id)
                 .build()?;
 
+            // note it is inverted in output edges
             self.graph.add_edge(
-                s,
-                t,
+                table_idx,
+                function_idx,
                 GraphEdge::dependency(dep.table_versions.deref().clone(), graph_dep),
             );
         }
