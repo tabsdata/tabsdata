@@ -59,6 +59,26 @@ impl InternalServer {
             let router = utoipa_axum::router::OpenApiRouter::default()
                 .nest(td_objects::rest_urls::BASE_API_URL, router);
 
+            // Add docs endpoints if the feature is enabled.
+            #[allow(unused_mut, unused_variables)]
+            let (mut router, openapi) = router.split_for_parts();
+
+            #[cfg(feature = "api-docs")]
+            {
+                use td_build::version::TABSDATA_VERSION;
+                use td_objects::rest_urls::{DOCS_URL, OPENAPI_JSON_URL};
+
+                use utoipa_swagger_ui::{SwaggerUi, Url};
+
+                let mut openapi = openapi;
+                openapi.info.title = "Tabsdata Internal API".to_string();
+                openapi.info.version = TABSDATA_VERSION.to_string();
+                router = router.merge(axum::Router::from(
+                    SwaggerUi::new(DOCS_URL)
+                        .url(Url::new("Internal API V1 Docs", OPENAPI_JSON_URL), openapi),
+                ));
+            }
+
             // Default layers
             let router = router
                 .layer(TimeoutLayer::with_status_code(
@@ -68,7 +88,7 @@ impl InternalServer {
                 .layer(CorsService::layer())
                 .layer(TraceService::layer());
 
-            ServerBuilder::new(context.config.internal_addresses.clone(), router.into())
+            ServerBuilder::new(context.config.internal_addresses.clone(), router)
                 .build()
                 .await
         }?;

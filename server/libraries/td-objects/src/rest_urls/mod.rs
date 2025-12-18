@@ -28,16 +28,11 @@ pub const BASE_URL_V1: &str = url!(BASE_API_URL, V1);
 
 pub const BASE_URL: &str = BASE_URL_V1;
 
-// OpenApi URLs
-pub const DOCS_URL: &str = url!(BASE_API_URL, "/docs");
-pub const OPENAPI_JSON_URL: &str = url!(BASE_API_URL, "/api-docs/openapi.json");
-
 // Private URLs
 pub mod internal {
     use super::*;
 
     pub const INTERNAL_PREFIX: &str = url!("/internal");
-    pub const OPENAPI_JSON_URL: &str = url!(INTERNAL_PREFIX, "/api-docs/openapi.json");
 
     pub const FUNCTION_VERSIONS: &str = url!(INTERNAL_PREFIX, "/function-versions");
     pub const FUNCTION_VERSION: &str = url!(FUNCTION_VERSIONS, "/{function_version_id}");
@@ -83,6 +78,10 @@ pub mod internal {
 
     pub const UPDATE_WORKER: &str = url!(WORKER);
 }
+
+// OpenApi URLs
+pub const DOCS_URL: &str = url!(BASE_API_URL, "/docs");
+pub const OPENAPI_JSON_URL: &str = url!(BASE_API_URL, "/api-docs/openapi.json");
 
 // Endpoints URLs
 
