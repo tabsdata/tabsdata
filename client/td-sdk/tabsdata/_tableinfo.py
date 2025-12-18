@@ -11,7 +11,7 @@ class TableKind(Enum):
     REGULAR = (
         TableType.Regular,
         None,
-        "Primitive data table",
+        "Regular data table",
     )
     DQ_FILTER = (
         TableType.DQData,

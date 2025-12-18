@@ -604,6 +604,437 @@ level1:
         assert items[1]["value"] == 15
 
 
+# noinspection PyTypeChecker
+class TestEditNode:
+
+    def test_edit_node_simple_value_in_list(self):
+        # fmt: off
+        yaml_str = """\
+workers:
+  - name: worker1
+    enabled: true
+  - name: worker2
+    enabled: false
+"""
+        # fmt: off
+        yaml = YAML()
+        yaml.preserve_quotes = True
+        source = yaml.load(StringIO(yaml_str))
+
+        spec = {
+            "path": ["workers", "name:worker1", "enabled"],
+            "action": "edit_node",
+            "position": "same",
+            "data": False,
+        }
+
+        editor = YamlEditor(spec=spec, source=source)
+        result_yaml = editor.apply(dry_run=True)
+
+        # fmt: off
+        expected = """\
+workers:
+  - name: worker1
+    enabled: false
+  - name: worker2
+    enabled: false
+"""
+        # fmt: on
+        assert result_yaml == expected
+
+        workers = editor.data["workers"]
+        assert workers[0]["enabled"] is False
+        assert workers[1]["enabled"] is False
+
+    def test_edit_node_string_value(self):
+        # fmt: off
+        yaml_str = """\
+workers:
+  - name: worker1
+    kind: processor
+  - name: worker2
+    kind: listener
+"""
+        # fmt: off
+        yaml = YAML()
+        yaml.preserve_quotes = True
+        source = yaml.load(StringIO(yaml_str))
+
+        spec = {
+            "path": ["workers", "name:worker1", "kind"],
+            "action": "edit_node",
+            "position": "same",
+            "data": "scheduler",
+        }
+
+        editor = YamlEditor(spec=spec, source=source)
+        result_yaml = editor.apply(dry_run=True)
+
+        # fmt: off
+        expected = """\
+workers:
+  - name: worker1
+    kind: scheduler
+  - name: worker2
+    kind: listener
+"""
+        # fmt: on
+        assert result_yaml == expected
+
+        assert editor.data["workers"][0]["kind"] == "scheduler"
+
+    def test_edit_node_numeric_value(self):
+        # fmt: off
+        yaml_str = """\
+servers:
+  - name: server1
+    port: 8080
+  - name: server2
+    port: 8081
+"""
+        # fmt: off
+        yaml = YAML()
+        yaml.preserve_quotes = True
+        source = yaml.load(StringIO(yaml_str))
+
+        spec = {
+            "path": ["servers", "name:server1", "port"],
+            "action": "edit_node",
+            "position": "same",
+            "data": 9000,
+        }
+
+        editor = YamlEditor(spec=spec, source=source)
+        result_yaml = editor.apply(dry_run=True)
+
+        # fmt: off
+        expected = """\
+servers:
+  - name: server1
+    port: 9000
+  - name: server2
+    port: 8081
+"""
+        # fmt: on
+        assert result_yaml == expected
+
+        assert editor.data["servers"][0]["port"] == 9000
+
+    def test_edit_node_deeply_nested(self):
+        # fmt: off
+        yaml_str = """\
+controllers:
+  init:
+    workers:
+      - name: bootloader
+        kind: processor
+        config:
+          timeout: 30
+      - name: server-information
+        kind: processor
+        config:
+          timeout: 60
+"""
+        # fmt: off
+        yaml = YAML()
+        yaml.preserve_quotes = True
+        source = yaml.load(StringIO(yaml_str))
+
+        spec = {
+            "path": ["controllers", "init", "workers", "name:bootloader", "config", "timeout"],
+            "action": "edit_node",
+            "position": "same",
+            "data": 120,
+        }
+
+        editor = YamlEditor(spec=spec, source=source)
+        result_yaml = editor.apply(dry_run=True)
+
+        # fmt: off
+        expected = """\
+controllers:
+  init:
+    workers:
+      - name: bootloader
+        kind: processor
+        config:
+          timeout: 120
+      - name: server-information
+        kind: processor
+        config:
+          timeout: 60
+"""
+        # fmt: on
+        assert result_yaml == expected
+
+        bootloader_config = editor.data["controllers"]["init"]["workers"][0]["config"]
+        assert bootloader_config["timeout"] == 120
+
+    def test_edit_node_with_comments_preserved(self):
+        # fmt: off
+        yaml_str = """\
+# Worker configuration
+workers:
+  # First worker
+  - name: worker1
+    enabled: true  # inline comment
+  # Second worker
+  - name: worker2
+    enabled: false
+"""
+        # fmt: off
+        yaml = YAML()
+        yaml.preserve_quotes = True
+        source = yaml.load(StringIO(yaml_str))
+
+        spec = {
+            "path": ["workers", "name:worker1", "enabled"],
+            "action": "edit_node",
+            "position": "same",
+            "data": False,
+        }
+
+        editor = YamlEditor(spec=spec, source=source)
+        result = editor.apply(dry_run=True)
+
+        # Verify the value was changed
+        assert editor.data["workers"][0]["enabled"] is False
+
+        # Verify all comments are preserved
+        assert "# Worker configuration" in result
+        assert "# First worker" in result
+        assert "# Second worker" in result
+        assert "# inline comment" in result
+
+        # Verify the structure is correct
+        assert "enabled: false" in result or "enabled: False" in result
+        assert "workers[0]" in str(editor.data) or editor.data["workers"][0]["name"] == "worker1"
+
+    def test_edit_node_multiple_edits(self):
+        # fmt: off
+        yaml_str = """\
+workers:
+  - name: worker1
+    enabled: true
+    kind: processor
+  - name: worker2
+    enabled: true
+    kind: listener
+"""
+        # fmt: off
+        yaml = YAML()
+        yaml.preserve_quotes = True
+        source = yaml.load(StringIO(yaml_str))
+
+        spec = [
+            {
+                "path": ["workers", "name:worker1", "enabled"],
+                "action": "edit_node",
+                "position": "same",
+                "data": False,
+            },
+            {
+                "path": ["workers", "name:worker2", "kind"],
+                "action": "edit_node",
+                "position": "same",
+                "data": "scheduler",
+            },
+        ]
+
+        editor = YamlEditor(spec=spec, source=source)
+        result_yaml = editor.apply(dry_run=True)
+
+        # fmt: off
+        expected = """\
+workers:
+  - name: worker1
+    enabled: false
+    kind: processor
+  - name: worker2
+    enabled: true
+    kind: scheduler
+"""
+        # fmt: on
+        assert result_yaml == expected
+
+        assert editor.data["workers"][0]["enabled"] is False
+        assert editor.data["workers"][1]["kind"] == "scheduler"
+
+    def test_edit_node_real_world_config(self):
+        # fmt: off
+        yaml_str = """\
+name: tabsdata
+controllers:
+  init:
+    concurrency: 1
+    workers:
+      - name: bootloader
+        kind: processor
+        location: relative
+        program: td_bootloader
+        enabled: true
+      - name: server-information
+        kind: processor
+        location: system
+        program: td_srvinf
+        enabled: true
+"""
+        # fmt: off
+        yaml = YAML()
+        yaml.preserve_quotes = True
+        source = yaml.load(StringIO(yaml_str))
+
+        spec = {
+            "path": ["controllers", "init", "workers", "name:bootloader", "enabled"],
+            "action": "edit_node",
+            "position": "same",
+            "data": False,
+        }
+
+        editor = YamlEditor(spec=spec, source=source)
+        result = editor.apply(dry_run=True)
+
+        # fmt: off
+        expected = """\
+name: tabsdata
+controllers:
+  init:
+    concurrency: 1
+    workers:
+      - name: bootloader
+        kind: processor
+        location: relative
+        program: td_bootloader
+        enabled: false
+      - name: server-information
+        kind: processor
+        location: system
+        program: td_srvinf
+        enabled: true
+"""
+        # fmt: on
+        assert result == expected
+
+        workers = editor.data["controllers"]["init"]["workers"]
+        assert workers[0]["enabled"] is False
+        assert workers[1]["enabled"] is True
+
+    def test_edit_node_invalid_position_raises(self):
+        # fmt: off
+        yaml_str = """\
+workers:
+  - name: worker1
+    enabled: true
+"""
+        # fmt: off
+        yaml = YAML()
+        yaml.preserve_quotes = True
+        source = yaml.load(StringIO(yaml_str))
+
+        spec = {
+            "path": ["workers", "name:worker1", "enabled"],
+            "action": "edit_node",
+            "position": "after",
+            "data": False,
+        }
+
+        editor = YamlEditor(spec=spec, source=source)
+        with pytest.raises(ValueError, match="Invalid position"):
+            editor.apply(dry_run=True)
+
+    def test_edit_node_empty_route_raises(self):
+        # fmt: off
+        yaml_str = """\
+key: value
+"""
+        # fmt: off
+        yaml = YAML()
+        yaml.preserve_quotes = True
+        source = yaml.load(StringIO(yaml_str))
+
+        spec = {
+            "path": [],
+            "action": "edit_node",
+            "position": "same",
+            "data": "new_value",
+        }
+
+        editor = YamlEditor(spec=spec, source=source)
+        with pytest.raises(ValueError, match="Route cannot be empty"):
+            editor.apply(dry_run=True)
+
+    def test_edit_node_last_segment_with_colon_raises(self):
+        # fmt: off
+        yaml_str = """\
+workers:
+  - name: worker1
+    enabled: true
+"""
+        # fmt: off
+        yaml = YAML()
+        yaml.preserve_quotes = True
+        source = yaml.load(StringIO(yaml_str))
+
+        spec = {
+            "path": ["workers", "name:worker1"],
+            "action": "edit_node",
+            "position": "same",
+            "data": {"name": "worker2"},
+        }
+
+        editor = YamlEditor(spec=spec, source=source)
+        with pytest.raises(ValueError, match="Last segment of route cannot be in 'key:value' format"):
+            editor.apply(dry_run=True)
+
+    def test_edit_node_nonexistent_key_raises(self):
+        # fmt: off
+        yaml_str = """\
+workers:
+  - name: worker1
+    enabled: true
+"""
+        # fmt: off
+        yaml = YAML()
+        yaml.preserve_quotes = True
+        source = yaml.load(StringIO(yaml_str))
+
+        spec = {
+            "path": ["workers", "name:worker1", "nonexistent"],
+            "action": "edit_node",
+            "position": "same",
+            "data": "value",
+        }
+
+        editor = YamlEditor(spec=spec, source=source)
+        with pytest.raises(ValueError, match="Key 'nonexistent' not found"):
+            editor.apply(dry_run=True)
+
+    def test_edit_node_with_non_dict_navigation_raises(self):
+        # fmt: off
+        yaml_str = """\
+workers:
+  - name: worker1
+    settings:
+      - option1
+      - option2
+"""
+        # fmt: off
+        yaml = YAML()
+        yaml.preserve_quotes = True
+        source = yaml.load(StringIO(yaml_str))
+
+        spec = {
+            "path": ["workers", "name:worker1", "settings", "value"],
+            "action": "edit_node",
+            "position": "same",
+            "data": "new_value",
+        }
+
+        editor = YamlEditor(spec=spec, source=source)
+        with pytest.raises(ValueError):
+            editor.apply(dry_run=True)
+
+
 class TestErrorHandling:
 
     def test_invalid_action_raises(self):

@@ -12,7 +12,8 @@ from ruamel.yaml.comments import CommentedMap, CommentedSeq
 
 SiblingPosition = Literal["after", "before"]
 ChildPosition = Literal["end", "start"]
-Action = Literal["insert_sibling", "insert_child"]
+EditPosition = Literal["same"]
+Action = Literal["insert_sibling", "insert_child", "edit_node"]
 
 
 class YamlEditor:
@@ -232,6 +233,33 @@ class YamlEditor:
         else:
             raise ValueError(f"Cannot insert child into {type(target)}")
 
+    def edit_node(
+        self, route: list[str], data: Any, position: EditPosition = "same"
+    ) -> None:
+        if position not in get_args(EditPosition):
+            raise ValueError(
+                f"Invalid position '{position}'. Must be one of"
+                f" {get_args(EditPosition)}"
+            )
+        if not route:
+            raise ValueError("Route cannot be empty for edit_node")
+        last_segment = route[-1]
+        if ":" in last_segment:
+            raise ValueError(
+                "Last segment of route cannot be in 'key:value' format for edit_node; "
+                f"got '{last_segment}' instead"
+            )
+        parent, target, anchor = self.navigate_route(route)
+        if not isinstance(anchor, str):
+            raise ValueError(
+                f"Cannot edit node: anchor must be a string key, got {type(anchor)}"
+            )
+        if not isinstance(parent, dict):
+            raise ValueError(
+                f"Cannot edit node: parent must be a dict, got {type(parent)}"
+            )
+        parent[anchor] = data
+
     def apply(self, dry_run: bool = False) -> Optional[str]:
         for spec in self.spec_data:
             path = spec.get("path", [])
@@ -241,13 +269,18 @@ class YamlEditor:
                 raise ValueError(
                     f"Unknown action '{action}'. Must be one of {get_args(Action)}"
                 )
-            position = spec.get(
-                "position", "after" if action == "insert_sibling" else "end"
-            )
+            if action == "edit_node":
+                position = spec.get("position", "same")
+            else:
+                position = spec.get(
+                    "position", "after" if action == "insert_sibling" else "end"
+                )
             if action == "insert_sibling":
                 self.insert_sibling(path, data, position)
             elif action == "insert_child":
                 self.insert_child(path, data, position)
+            elif action == "edit_node":
+                self.edit_node(path, data, position)
         if dry_run:
             stream = StringIO()
             self.yaml.dump(self.data, stream)

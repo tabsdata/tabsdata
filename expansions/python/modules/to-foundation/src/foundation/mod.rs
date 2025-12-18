@@ -9,7 +9,6 @@ use pyo3::prelude::PyModuleMethods;
 use pyo3::types::PyAnyMethods;
 use pyo3::types::PyModule;
 use pyo3::{Bound, PyResult, Python, pymodule, wrap_pyfunction};
-use tracing::{debug, warn};
 
 const PY_ATTRIBUTE_NAME: &str = "__name__";
 const PY_ATTRIBUTE_VERSION: &str = "__version__";
@@ -74,12 +73,12 @@ fn register_py_module<'a>(
     if let Ok(module) = sys_modules.get_item(&module_path)
         && let Ok(module) = module.downcast::<PyModule>()
     {
-        warn!("Module {module_path:?} already exists!");
+        // warn!("Module {module_path:?} already exists!");
 
         return Ok(module.clone());
     }
 
-    debug!("Module {module_path:?} does not exist. Creating it...");
+    // debug!("Module {module_path:?} does not exist. Creating it...");
 
     let module = PyModule::new(py, module_name)?;
     module.setattr(PY_ATTRIBUTE_NAME, &module_path)?;
@@ -87,7 +86,7 @@ fn register_py_module<'a>(
     sys_modules.set_item(&module_path, &module)?;
     parent.add_submodule(&module)?;
 
-    debug!("Module {module_path:?} created!");
+    // debug!("Module {module_path:?} created!");
 
     Ok(module)
 }
