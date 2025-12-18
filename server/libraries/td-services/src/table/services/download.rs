@@ -50,7 +50,7 @@ fn service() {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::Context;
     use bytes::Bytes;
@@ -66,9 +66,10 @@ mod tests {
     use ta_services::factory::ServiceFactory;
     use ta_services::service::TdService;
     use td_common::absolute_path::AbsolutePath;
+    use td_database::sql::DbPool;
     use td_error::TdError;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::dxo::function::FunctionRegister;
+    use td_objects::dxo::function::{FunctionDB, FunctionRegister};
     use td_objects::dxo::table::TableDB;
     use td_objects::rest_urls::{AtTimeParam, TableParam};
     use td_objects::sql::SelectBy;
@@ -90,7 +91,7 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_tower_metadata_download_service(db: td_database::sql::DbPool) {
+    async fn test_tower_metadata_download_service(db: DbPool) {
         use crate::table::layers::storage::resolve_table_location;
         use td_objects::dxo::table::TableDBWithNames;
         use td_objects::dxo::table_data_version::TableDataVersionDBWithNames;
@@ -144,10 +145,9 @@ mod tests {
             ]);
     }
 
-    //noinspection DuplicatedCode
+    #[td_test::test(sqlx)]
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn test_download() -> Result<(), TdError> {
-        let db = td_database::test_utils::db().await?;
+    async fn test_download(db: DbPool) -> Result<(), TdError> {
         let context = Context::with_defaults(db);
 
         let collection = seed_collection(
@@ -173,32 +173,88 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let function_version = seed_function(&context.db, &collection, &create).await;
+        let function = seed_function(&context.db, &collection, &create).await;
 
+        let (collection_name, collection_id) = (collection.name.clone(), collection.id);
+        let get_download = async move |context: &Context,
+                                       table: &str,
+                                       at_time: &AtTime|
+                    -> Result<Bytes, TdError> {
+            // with ids
+            let request =
+                RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                    .read(TableAtIdName::new(
+                        TableParam::builder()
+                            .try_collection(format!("~{}", collection_id))?
+                            .try_table(table)?
+                            .build()?,
+                        AtTimeParam::builder().at(at_time).build()?,
+                    ));
+            let service = TableDownloadService::build(context);
+            let response = service.service().await.raw_oneshot(request).await?;
+            let mut stream = response.into_inner();
+            let bytes_with_ids = match stream.next().await {
+                Some(res) => res?,
+                None => Bytes::new(),
+            };
+            // with names
+            let request =
+                RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                    .read(TableAtIdName::new(
+                        TableParam::builder()
+                            .try_collection(format!("{}", collection_name))?
+                            .try_table(table)?
+                            .build()?,
+                        AtTimeParam::builder().at(at_time).build()?,
+                    ));
+            let service = TableDownloadService::build(context);
+            let response = service.service().await.raw_oneshot(request).await?;
+            let mut stream = response.into_inner();
+            let bytes_with_names = match stream.next().await {
+                Some(res) => res?,
+                None => Bytes::new(),
+            };
+            assert_eq!(bytes_with_ids, bytes_with_names);
+            Ok(bytes_with_ids)
+        };
+
+        let tables = created_tables
+            .into_iter()
+            .map(TableName::try_from)
+            .collect::<Result<Vec<_>, _>>()?;
+        test_download_tables(&context, &collection, &function, &tables, get_download).await
+    }
+
+    pub async fn test_download_tables(
+        context: &Context,
+        collection: &CollectionDB,
+        function: &FunctionDB,
+        tables: &[TableName],
+        get_download: impl AsyncFn(&Context, &str, &AtTime) -> Result<Bytes, TdError>,
+    ) -> Result<(), TdError> {
         let storage_location = StorageVersion::default();
 
         // 3 function runs, 2 with data and 1 without, per table
         let mut at_times = vec![AtTime::now()];
         for i in 0..3 {
-            let execution = seed_execution(&context.db, &function_version).await;
+            let execution = seed_execution(&context.db, function).await;
             let transaction_key = TransactionKey::try_from("ANY")?;
             let transaction = seed_transaction(&context.db, &execution, &transaction_key).await;
 
             at_times.push(AtTime::now());
             let function_run = seed_function_run(
                 &context.db,
-                &collection,
-                &function_version,
+                collection,
+                function,
                 &execution,
                 &transaction,
                 &FunctionRunStatus::Committed,
             )
             .await;
 
-            for table in &created_tables {
-                let table = TableName::try_from(table)?;
+            for table in tables {
                 let table_version = DaoQueries::default()
-                    .select_by::<TableDB>(&(collection.id, &table))?
+                    .select_by::<TableDB>(&(collection.id, table))?
                     .build_query_as()
                     .fetch_one(&context.db)
                     .await
@@ -207,7 +263,7 @@ mod tests {
                 if i % 2 == 0 {
                     let table_data_version = seed_table_data_version_with_data(
                         &context.db,
-                        &collection,
+                        collection,
                         &execution,
                         &transaction,
                         &function_run,
@@ -217,7 +273,7 @@ mod tests {
 
                     let (path, _) = StorageLocation::try_from(&storage_location)
                         .unwrap()
-                        .builder(&function_version.data_location)
+                        .builder(&function.data_location)
                         .collection(&table_data_version.collection_id)
                         .data(&table_data_version.id)
                         .table(
@@ -264,7 +320,7 @@ mod tests {
                 } else {
                     seed_table_data_version(
                         &context.db,
-                        &collection,
+                        collection,
                         &execution,
                         &transaction,
                         &function_run,
@@ -275,76 +331,13 @@ mod tests {
             }
         }
 
-        async fn get_download(
-            service: &TableDownloadService,
-            collection: &str,
-            table: &str,
-            at_time: &AtTime,
-        ) -> Result<Bytes, TdError> {
-            let request =
-                RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
-                    .read(TableAtIdName::new(
-                        TableParam::builder()
-                            .try_collection(collection)?
-                            .try_table(table)?
-                            .build()?,
-                        AtTimeParam::builder().at(at_time).build()?,
-                    ));
-            let response = service.service().await.raw_oneshot(request).await?;
-            let mut stream = response.into_inner();
-            let bytes = match stream.next().await {
-                Some(res) => res?,
-                None => Bytes::new(),
-            };
-            Ok(bytes)
-        }
-
-        let service = TableDownloadService::build(&context);
-
         // No data before the first function run
-        // With IDs
-        let bytes_with_ids = get_download(
-            &service,
-            format!("~{}", collection.id).as_str(),
-            created_tables[0].as_str(),
-            &at_times[0],
-        )
-        .await?;
-        assert!(bytes_with_ids.is_empty());
-
-        // With names
-        let bytes_with_names = get_download(
-            &service,
-            &collection.name,
-            created_tables[0].as_str(),
-            &at_times[0],
-        )
-        .await?;
-        assert!(bytes_with_names.is_empty());
+        let bytes = get_download(context, tables[0].as_str(), &at_times[0]).await?;
+        assert!(bytes.is_empty());
 
         // Download named 0 at first function run
-        // With IDs
-        let bytes_with_ids = get_download(
-            &service,
-            format!("~{}", collection.id).as_str(),
-            created_tables[0].as_str(),
-            &at_times[1],
-        )
-        .await?;
-
-        // With names
-        let bytes_with_names = get_download(
-            &service,
-            &collection.name,
-            created_tables[0].as_str(),
-            &at_times[1],
-        )
-        .await?;
-
-        assert_eq!(bytes_with_ids, bytes_with_names);
-        let df = ParquetReader::new(Cursor::new(&bytes_with_names))
-            .finish()
-            .unwrap();
+        let bytes = get_download(context, tables[0].as_str(), &at_times[1]).await?;
+        let df = ParquetReader::new(Cursor::new(&bytes)).finish().unwrap();
         let expected = DataFrame::new(vec![
             Int64Chunked::new("i".into(), &[0, 1]).into_column(),
             StringChunked::new("s".into(), &["a", "b"]).into_column(),
@@ -353,28 +346,8 @@ mod tests {
         assert_eq!(df, expected);
 
         // Download named 0 at second function run (as it has no data, it doesn't change)
-        // With IDs
-        let bytes_with_ids = get_download(
-            &service,
-            format!("~{}", collection.id).as_str(),
-            created_tables[0].as_str(),
-            &at_times[2],
-        )
-        .await?;
-
-        // With names
-        let bytes_with_names = get_download(
-            &service,
-            &collection.name,
-            created_tables[0].as_str(),
-            &at_times[2],
-        )
-        .await?;
-
-        assert_eq!(bytes_with_ids, bytes_with_names);
-        let df = ParquetReader::new(Cursor::new(&bytes_with_names))
-            .finish()
-            .unwrap();
+        let bytes = get_download(context, tables[0].as_str(), &at_times[2]).await?;
+        let df = ParquetReader::new(Cursor::new(&bytes)).finish().unwrap();
         let expected = DataFrame::new(vec![
             Int64Chunked::new("i".into(), &[0, 1]).into_column(),
             StringChunked::new("s".into(), &["a", "b"]).into_column(),
@@ -383,28 +356,8 @@ mod tests {
         assert_eq!(df, expected);
 
         // Download named 2 at third function run (skip 1 as second run had no data)
-        // With IDs
-        let bytes_with_ids = get_download(
-            &service,
-            format!("~{}", collection.id).as_str(),
-            created_tables[0].as_str(),
-            &at_times[3],
-        )
-        .await?;
-
-        // With names
-        let bytes_with_names = get_download(
-            &service,
-            &collection.name,
-            created_tables[0].as_str(),
-            &at_times[3],
-        )
-        .await?;
-
-        assert_eq!(bytes_with_ids, bytes_with_names);
-        let df = ParquetReader::new(Cursor::new(&bytes_with_names))
-            .finish()
-            .unwrap();
+        let bytes = get_download(context, tables[0].as_str(), &at_times[3]).await?;
+        let df = ParquetReader::new(Cursor::new(&bytes)).finish().unwrap();
         let expected = DataFrame::new(vec![
             Int64Chunked::new("i".into(), &[2, 1]).into_column(),
             StringChunked::new("s".into(), &["a", "b"]).into_column(),

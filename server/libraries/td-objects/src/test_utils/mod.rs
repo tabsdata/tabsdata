@@ -11,6 +11,7 @@ pub mod seed_function_run;
 pub mod seed_inter_collection_permission;
 pub mod seed_permission;
 pub mod seed_role;
+pub mod seed_system_tables;
 pub mod seed_table_data_version;
 pub mod seed_transaction;
 pub mod seed_user;

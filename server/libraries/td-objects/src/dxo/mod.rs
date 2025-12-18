@@ -8,6 +8,7 @@ pub mod collection;
 pub mod crudl;
 pub mod dependency;
 pub mod execution;
+pub mod file;
 pub mod function;
 pub mod function_requirement;
 pub mod function_run;

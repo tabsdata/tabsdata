@@ -14,6 +14,9 @@ use td_objects::dxo::table::{TableDB, TableDBBuilder, TableDBWithNames};
 use td_objects::dxo::trigger::{TriggerDB, TriggerDBBuilder, TriggerDBWithNames};
 use td_objects::sql::cte::CteQueries;
 use td_objects::sql::{DaoQueries, FindBy};
+use td_objects::system::{
+    SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES, SYSTEM_OUTPUT_TABLE_NAMES_PREFIXES,
+};
 use td_objects::types::basic::{
     AtTime, CollectionId, CollectionName, DataLocation, DependencyId, DependencyPos,
     DependencyStatus, FunctionId, ReuseFrozen, TableFunctionParamPos, TableId, TableName,
@@ -46,9 +49,6 @@ pub async fn data_location(
 ) -> Result<DataLocation, TdError> {
     Ok(DataLocation::default())
 }
-
-pub const SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES: [&str; 1] = ["td.fn_state"];
-pub const SYSTEM_OUTPUT_TABLE_NAMES_PREFIXES: [&str; 1] = ["td.fn_state"];
 
 pub async fn validate_tables_do_not_exist(
     Connection(connection): Connection,

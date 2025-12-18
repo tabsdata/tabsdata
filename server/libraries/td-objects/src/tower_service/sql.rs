@@ -385,6 +385,15 @@ pub trait SqlAssertExistsService<E> {
     ) -> Result<(), TdError>
     where
         D: DataAccessObject;
+
+    async fn assert_version_exists<const S: u8, D>(
+        connection: Connection,
+        queries: SrvCtx<DaoQueries>,
+        natural_order_by: Input<D::Order>,
+        by: Input<E>,
+    ) -> Result<(), TdError>
+    where
+        D: DataAccessObject + Versioned + States<S>;
 }
 
 #[async_trait]
@@ -406,6 +415,37 @@ where
         let by = by.deref();
         let result: Vec<D> = queries
             .select_by::<D>(by)?
+            .build_query_as()
+            .fetch_all(&mut *conn)
+            .await
+            .map_err(handle_sql_err)?;
+
+        if result.is_empty() {
+            Err(
+                formatted_entity::<D, _>(by).and_then(|(columns, values, table)| {
+                    Err(SqlError::CouldNotFindEntity(columns, values, table))?
+                })?,
+            )
+        } else {
+            Ok(())
+        }
+    }
+
+    async fn assert_version_exists<const S: u8, D>(
+        Connection(connection): Connection,
+        SrvCtx(queries): SrvCtx<DaoQueries>,
+        Input(natural_order_by): Input<D::Order>,
+        Input(by): Input<E>,
+    ) -> Result<(), TdError>
+    where
+        D: DataAccessObject + Versioned + States<S>,
+    {
+        let mut conn = connection.lock().await;
+        let conn = conn.get_mut_connection()?;
+
+        let by = by.deref();
+        let result: Vec<D> = queries
+            .select_versions_at::<S, D>(Some(&*natural_order_by), by)?
             .build_query_as()
             .fetch_all(&mut *conn)
             .await

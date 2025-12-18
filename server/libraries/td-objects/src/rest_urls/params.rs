@@ -53,11 +53,11 @@ impl FunctionAtIdName {
 #[td_type::Dlo]
 pub struct TableAtIdName {
     #[td_type(extractor)]
-    collection: CollectionIdName,
+    pub collection: CollectionIdName,
     #[td_type(extractor)]
-    table: TableIdName,
+    pub table: TableIdName,
     #[td_type(extractor)]
-    at: AtTime,
+    pub at: AtTime,
 }
 
 impl TableAtIdName {

@@ -35,6 +35,7 @@ pub const OPENAPI_JSON_URL: &str = url!(BASE_API_URL, "/api-docs/openapi.json");
 // Private URLs
 pub const INTERNAL_PREFIX: &str = url!("/internal");
 pub const UPDATE_FUNCTION_RUN: &str = url!(INTERNAL_PREFIX, "/function_run/{function_run_id}");
+pub const DOWNLOAD_FUNCTION_STATE: &str = url!(FUNCTION, "/download-state");
 
 #[td_type::UrlParam]
 pub struct FunctionRunIdParam {

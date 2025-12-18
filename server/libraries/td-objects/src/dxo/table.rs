@@ -62,7 +62,13 @@ mod definitions {
     }
 
     #[td_type::Dao]
-    #[dao(sql_table = "tables__with_names", order_by = "function_param_pos")]
+    #[dao(
+        sql_table = "tables__with_names",
+        order_by = "function_param_pos",
+        states(
+            System = &[&TableStatus::Active, &TableStatus::Frozen, &System::TRUE],
+        )
+    )]
     #[inherits(TableDB)]
     pub struct TableDBWithNames {
         #[td_type(extractor)]

@@ -4,6 +4,7 @@
 
 pub mod delete;
 mod download;
+mod download_state;
 mod flow;
 mod list;
 pub mod list_by_collection;
@@ -13,6 +14,7 @@ mod schema;
 
 use crate::table::services::delete::TableDeleteService;
 use crate::table::services::download::TableDownloadService;
+use crate::table::services::download_state::TableStateDownloadService;
 use crate::table::services::flow::TableFlowGraphService;
 use crate::table::services::list::TableListService;
 use crate::table::services::list_by_collection::TableListByCollectionService;
@@ -28,6 +30,7 @@ pub struct TableServices {
     pub list_data_versions: TableListDataVersionsService,
     pub schema: TableSchemaService,
     pub download: TableDownloadService,
+    pub download_state: TableStateDownloadService,
     pub sample: TableSampleService,
     pub delete: TableDeleteService,
     pub flow_graph: TableFlowGraphService,

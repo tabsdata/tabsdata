@@ -37,9 +37,6 @@ pub struct FunctionServices {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use crate::function::layers::register::{
-        SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES, SYSTEM_OUTPUT_TABLE_NAMES_PREFIXES,
-    };
     use chrono::DateTime;
     use td_database::sql::DbPool;
     use td_error::TdError;
@@ -51,6 +48,9 @@ pub(crate) mod tests {
     use td_objects::dxo::trigger::TriggerDBWithNames;
     use td_objects::sql::cte::CteQueries;
     use td_objects::sql::{DaoQueries, SelectBy};
+    use td_objects::system::{
+        SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES, SYSTEM_OUTPUT_TABLE_NAMES_PREFIXES,
+    };
     use td_objects::table_ref::TableRef;
     use td_objects::types::basic::{
         AtTime, DependencyStatus, FunctionStatus, TableName, TableStatus, TriggerStatus, UserId,

@@ -8,16 +8,14 @@ use td_apiforge::router_ext;
 mod routes {
     use axum::Extension;
     use axum::extract::{Path, State};
-    use axum::response::IntoResponse;
     use axum_extra::extract::Query;
-    #[allow(unused_imports)]
-    use serde_json::json;
     use std::sync::Arc;
     use ta_apiserver::status::error_status::ErrorStatus;
     use ta_apiserver::status::ok_status::{DeleteStatus, GetStatus, ListStatus, NoContent};
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
+    use td_objects::dxo::file::{CsvFile, ParquetFile};
     use td_objects::dxo::table::{Table, TableFlowGraphResponse};
     use td_objects::dxo::table_data_version::TableDataVersion;
     use td_objects::rest_urls::params::{
@@ -28,11 +26,9 @@ mod routes {
         LIST_TABLES, LIST_TABLES_BY_COLL, SAMPLE_TABLE, SCHEMA_TABLE, SampleOffsetLenParam,
         SqlParam, TABLE_DELETE, TABLE_FLOW_GRAPH, TableParam, UncommittedParam,
     };
-    use td_objects::stream::BoxedSyncStream;
     use td_services::table::services::TableServices;
     use td_tower::ctx_service::RawOneshot;
     use tower::ServiceExt;
-    use utoipa::IntoResponses;
 
     const TABLES_TAG: &str = "Tables";
 
@@ -46,24 +42,6 @@ mod routes {
         let request = context.delete(table_path);
         let response = state.delete.service().await.oneshot(request).await?;
         Ok(DeleteStatus::OK(response))
-    }
-
-    /// This struct is just used to document ParquetFile in the OpenAPI schema.
-    /// The server is just returning a stream of bytes, so we need to specify the content type.
-    #[allow(dead_code)]
-    #[derive(utoipa::ToSchema, IntoResponses)]
-    #[response(
-        status = 200,
-        description = "OK",
-        example = json!([]),
-        content_type = "application/vnd.apache.parquet"
-    )]
-    pub struct ParquetFile(BoxedSyncStream);
-
-    impl IntoResponse for ParquetFile {
-        fn into_response(self) -> axum::response::Response {
-            self.0.into_response()
-        }
     }
 
     #[apiserver_path(method = get, path = DOWNLOAD_TABLE, tag = TABLES_TAG)]
@@ -133,19 +111,6 @@ mod routes {
             .oneshot(request)
             .await?;
         Ok(ListStatus::OK(response))
-    }
-
-    /// This struct is just used to document ParquetFile in the OpenAPI schema.
-    /// The server is just returning a stream of bytes, so we need to specify the content type.
-    #[allow(dead_code)]
-    #[derive(utoipa::ToSchema, IntoResponses)]
-    #[response(status = 200, description = "OK", content_type = "text/csv")]
-    pub struct CsvFile(BoxedSyncStream);
-
-    impl IntoResponse for CsvFile {
-        fn into_response(self) -> axum::response::Response {
-            self.0.into_response()
-        }
     }
 
     #[apiserver_path(method = get, path = SAMPLE_TABLE, tag = TABLES_TAG)]
