@@ -71,7 +71,7 @@ class Crontab:
         except NoTimezoneError:
             raise DecoratorConfigurationError(ErrorCode.DCE18, end)
         except Exception:
-            raise DecoratorConfigurationError(ErrorCode.DCE11, end, type(end))
+            raise DecoratorConfigurationError(ErrorCode.DCE12, end, type(end))
 
         start = getattr(self, "_start", None)
         if start is not None and end is not None and start >= self._end:

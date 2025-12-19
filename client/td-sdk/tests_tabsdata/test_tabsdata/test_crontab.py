@@ -5,6 +5,7 @@
 from datetime import datetime
 
 import pytest
+from dateutil import tz
 
 from tabsdata._crontab import Crontab
 from tabsdata.exceptions import (
@@ -12,8 +13,8 @@ from tabsdata.exceptions import (
     ErrorCode,
 )
 
-EXAMPLE_START_DATETIME = datetime(2025, 4, 2)
-EXAMPLE_END_DATETIME = datetime(2025, 4, 3)
+EXAMPLE_START_DATETIME = datetime(2025, 4, 2, tzinfo=tz.UTC)
+EXAMPLE_END_DATETIME = datetime(2025, 4, 3, tzinfo=tz.UTC)
 
 
 @pytest.mark.unit
@@ -31,12 +32,12 @@ def test_crontab_class_defaults():
 def test_crontab_class_all_params():
     crontab = Crontab("25 19 * * 1,3,5", EXAMPLE_START_DATETIME, EXAMPLE_END_DATETIME)
     assert crontab.mask == "25 19 * * 1,3,5"
-    assert crontab.start == EXAMPLE_START_DATETIME
-    assert crontab.end == EXAMPLE_END_DATETIME
+    assert crontab.start == EXAMPLE_START_DATETIME.isoformat(timespec="microseconds")
+    assert crontab.end == EXAMPLE_END_DATETIME.isoformat(timespec="microseconds")
     assert crontab._to_dict() == {
         "mask": "25 19 * * 1,3,5",
-        "start": EXAMPLE_START_DATETIME.isoformat(),
-        "end": EXAMPLE_END_DATETIME.isoformat(),
+        "start": EXAMPLE_START_DATETIME.isoformat(timespec="microseconds"),
+        "end": EXAMPLE_END_DATETIME.isoformat(timespec="microseconds"),
     }
 
 
