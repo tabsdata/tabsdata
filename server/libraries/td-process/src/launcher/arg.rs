@@ -25,6 +25,8 @@ pub enum InheritedArgumentKey {
     Work,
 }
 
+/// Generic argument keys received by workers. Should be in sync with
+/// [crate::launcher::params::Params].
 #[derive(Debug, Clone, EnumIter, EnumString, AsRefStr)]
 #[strum(serialize_all = "kebab-case")]
 pub enum ArgumentKey {
