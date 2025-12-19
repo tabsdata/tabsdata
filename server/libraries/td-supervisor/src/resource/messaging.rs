@@ -133,14 +133,10 @@ impl SupervisorMessageQueue {
     pub fn error(message: SupervisorMessage) -> std::io::Result<SupervisorMessage> {
         for folder in FOLDERS {
             let source = Self::locate_at(message.clone(), folder.to_string())?;
-            if source.is_some() {
-                let target = Self::at_error(source.clone().unwrap().clone())?;
-                debug!(
-                    "Moving error message from '{:?}' to '{:?}'",
-                    source.clone().unwrap(),
-                    target
-                );
-                fs::rename(&source.unwrap().file, &target.file)?;
+            if let Some(source) = source {
+                let target = Self::at_error(source.clone())?;
+                debug!("Moving error message from '{:?}' to '{:?}'", source, target);
+                fs::rename(&source.file, &target.file)?;
                 return Ok(target);
             }
         }

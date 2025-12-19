@@ -35,7 +35,7 @@ use td_python::venv::{
 use thiserror::Error;
 use tokio::io::AsyncWriteExt;
 use tokio::process::{Child, Command};
-use tracing::{debug, error, info};
+use tracing::{debug, info};
 
 /// Runs a worker under the Tabsdata system.
 pub trait WorkerRunner: Debug {

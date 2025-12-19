@@ -17,7 +17,7 @@ use crate::services::bootloader::{
 };
 use crate::services::supervisor::TD_ARGUMENT_KEY;
 use crate::services::supervisor::WorkerLocation::Relative;
-use clap::{Parser, command};
+use clap::Parser;
 use clap_derive::{Args, Subcommand};
 use colored::Colorize;
 use getset::Getters;
