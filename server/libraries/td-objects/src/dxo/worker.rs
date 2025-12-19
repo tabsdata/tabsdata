@@ -67,7 +67,7 @@ mod definitions {
         }
 
         pub async fn cron_to_stop() -> Result<(Enabled, WorkerType, WorkerStatus), TdError> {
-            Ok((Enabled::TRUE, WorkerType::Cron, WorkerStatus::Stopped))
+            Ok((Enabled::TRUE, WorkerType::Cron, WorkerStatus::StopScheduled))
         }
 
         pub async fn watchdog_to_schedule() -> Result<(Enabled, WorkerType, WorkerStatus), TdError>
@@ -76,7 +76,11 @@ mod definitions {
         }
 
         pub async fn watchdog_to_stop() -> Result<(Enabled, WorkerType, WorkerStatus), TdError> {
-            Ok((Enabled::TRUE, WorkerType::Watchdog, WorkerStatus::Stopped))
+            Ok((
+                Enabled::TRUE,
+                WorkerType::Watchdog,
+                WorkerStatus::StopScheduled,
+            ))
         }
     }
 
@@ -158,19 +162,19 @@ mod definitions {
             })
         }
 
-        pub async fn stopped() -> Result<Self, TdError> {
+        pub async fn stop_scheduled() -> Result<Self, TdError> {
             Ok(Self {
                 started_on: None,
                 ended_on: None,
-                status: WorkerStatus::Stopped,
+                status: WorkerStatus::StopScheduled,
             })
         }
 
-        pub async fn done() -> Result<Self, TdError> {
+        pub async fn stop_requested() -> Result<Self, TdError> {
             Ok(Self {
                 started_on: None,
                 ended_on: None,
-                status: WorkerStatus::Done,
+                status: WorkerStatus::StopRequested,
             })
         }
     }

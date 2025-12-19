@@ -10,6 +10,7 @@ pub enum WorkerCallbackStatus {
     Done,
     Error,
     Failed,
+    Stopped,
 }
 
 #[derive(utoipa::ToSchema, Debug, Clone, Serialize, Deserialize)]

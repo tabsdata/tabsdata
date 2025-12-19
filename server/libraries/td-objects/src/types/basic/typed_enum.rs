@@ -3,6 +3,7 @@
 //
 
 use td_common::execution_status::WorkerCallbackStatus;
+use td_error::{ApiError, TdError, api_error};
 
 #[td_type::typed_enum]
 pub enum Decorator {
@@ -97,14 +98,21 @@ pub enum FunctionRunStatus {
     Yanked,
 }
 
-impl From<WorkerCallbackStatus> for FunctionRunStatus {
-    fn from(value: WorkerCallbackStatus) -> Self {
-        match value {
+impl TryFrom<WorkerCallbackStatus> for FunctionRunStatus {
+    type Error = TdError;
+
+    fn try_from(value: WorkerCallbackStatus) -> Result<Self, TdError> {
+        let status = match value {
             WorkerCallbackStatus::Running => FunctionRunStatus::Running,
             WorkerCallbackStatus::Done => FunctionRunStatus::Done,
             WorkerCallbackStatus::Error => FunctionRunStatus::Error,
             WorkerCallbackStatus::Failed => FunctionRunStatus::Failed,
-        }
+            WorkerCallbackStatus::Stopped => Err(api_error!(
+                ApiError::InputError,
+                "Cannot stop a function run worker via worker callback."
+            ))?,
+        };
+        Ok(status)
     }
 }
 
@@ -271,14 +279,18 @@ pub enum WorkerMessageStatus {
 pub enum WorkerStatus {
     #[typed_enum(rename = "S")]
     Scheduled,
-    #[typed_enum(rename = "SP")]
-    Stopped,
     #[typed_enum(rename = "RR")]
     RunRequested,
     #[typed_enum(rename = "R")]
     Running,
     #[typed_enum(rename = "D")]
     Done,
+    #[typed_enum(rename = "SPS")]
+    StopScheduled,
+    #[typed_enum(rename = "SPR")]
+    StopRequested,
+    #[typed_enum(rename = "SP")]
+    Stopped,
     #[typed_enum(rename = "E")]
     Error,
     #[typed_enum(rename = "F")]
@@ -294,6 +306,7 @@ impl From<WorkerCallbackStatus> for WorkerStatus {
             WorkerCallbackStatus::Done => WorkerStatus::Done,
             WorkerCallbackStatus::Error => WorkerStatus::Error,
             WorkerCallbackStatus::Failed => WorkerStatus::Failed,
+            WorkerCallbackStatus::Stopped => WorkerStatus::Stopped,
         }
     }
 }

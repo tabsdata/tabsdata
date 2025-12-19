@@ -682,7 +682,7 @@ pub async fn stop_current_workers(
 
     if let Some(function_version_id) = function_version_id.deref() {
         // we cannot stop function workers
-        let update = UpdateWorkerDB::stopped().await?;
+        let update = UpdateWorkerDB::stop_scheduled().await?;
         let to_stop = [
             (function_version_id, WorkerType::Cron),
             (function_version_id, WorkerType::Watchdog),

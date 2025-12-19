@@ -113,7 +113,7 @@ where
         from_fn(create_locked_cron_workers_stop_request::<T>),
         // Update statuses.
         from_fn(With::<WorkerDBWithNames>::extract_vec::<WorkerId>),
-        from_fn(UpdateWorkerDB::done),
+        from_fn(UpdateWorkerDB::stop_requested),
         from_fn(By::<WorkerId>::update_all::<UpdateWorkerDB, WorkerDB>),
         from_fn(UpdateWorkerMessageStatusDB::locked),
         from_fn(By::<WorkerId>::update_all::<UpdateWorkerMessageStatusDB, WorkerDB>),
@@ -160,7 +160,7 @@ where
         from_fn(create_locked_watchdog_workers_stop_request::<T>),
         // Update statuses.
         from_fn(With::<WorkerDBWithNames>::extract_vec::<WorkerId>),
-        from_fn(UpdateWorkerDB::done),
+        from_fn(UpdateWorkerDB::stop_requested),
         from_fn(By::<WorkerId>::update_all::<UpdateWorkerDB, WorkerDB>),
         from_fn(UpdateWorkerMessageStatusDB::locked),
         from_fn(By::<WorkerId>::update_all::<UpdateWorkerMessageStatusDB, WorkerDB>),
@@ -229,7 +229,7 @@ mod tests {
                 type_of_val(&create_locked_cron_workers_stop_request::<FileWorkerMessageQueue>),
                 // Update statuses.
                 type_of_val(&With::<WorkerDBWithNames>::extract_vec::<WorkerId>),
-                type_of_val(&UpdateWorkerDB::done),
+                type_of_val(&UpdateWorkerDB::stop_requested),
                 type_of_val(&By::<WorkerId>::update_all::<UpdateWorkerDB, WorkerDB>),
                 type_of_val(&UpdateWorkerMessageStatusDB::locked),
                 type_of_val(&By::<WorkerId>::update_all::<UpdateWorkerMessageStatusDB, WorkerDB>),
@@ -254,7 +254,7 @@ mod tests {
                 type_of_val(&create_locked_watchdog_workers_stop_request::<FileWorkerMessageQueue>),
                 // Update statuses.
                 type_of_val(&With::<WorkerDBWithNames>::extract_vec::<WorkerId>),
-                type_of_val(&UpdateWorkerDB::done),
+                type_of_val(&UpdateWorkerDB::stop_requested),
                 type_of_val(&By::<WorkerId>::update_all::<UpdateWorkerDB, WorkerDB>),
                 type_of_val(&UpdateWorkerMessageStatusDB::locked),
                 type_of_val(&By::<WorkerId>::update_all::<UpdateWorkerMessageStatusDB, WorkerDB>),
