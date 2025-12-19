@@ -378,8 +378,10 @@ pub type HttpCallback = HttpRequest;
 pub struct HttpRequest {
     pub url: Url,
     #[schema(value_type = String)]
-    #[serde(serialize_with = "method_serialize")]
-    #[serde(deserialize_with = "method_deserialize")]
+    #[serde(
+        serialize_with = "method_serialize",
+        deserialize_with = "method_deserialize"
+    )]
     pub method: Method,
     pub headers: HashMap<String, String>,
     pub body: bool,

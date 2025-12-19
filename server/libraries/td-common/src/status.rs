@@ -26,3 +26,10 @@ impl ExitStatus {
         }
     }
 }
+
+// little trick to use "?" regardless
+impl From<Result<ExitStatus, ExitStatus>> for ExitStatus {
+    fn from(result: Result<ExitStatus, ExitStatus>) -> Self {
+        result.unwrap_or_else(|status| status)
+    }
+}

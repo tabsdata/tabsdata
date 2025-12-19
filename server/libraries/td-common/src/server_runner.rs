@@ -44,7 +44,7 @@ impl ServerRunner {
         self
     }
 
-    pub async fn run(self) -> ExitStatus {
+    pub async fn run(self) -> Result<ExitStatus, ExitStatus> {
         let (shutdown_tx, shutdown_rx) = shutdown_signal();
         let mut tasks_set = Tasks::new();
 
@@ -100,10 +100,10 @@ impl ServerRunner {
 
         if any_error {
             error!("Server runner finished with errors");
-            ExitStatus::GeneralError
+            Err(ExitStatus::GeneralError)
         } else {
             info!("Server runner finished successfully");
-            ExitStatus::Success
+            Ok(ExitStatus::Success)
         }
     }
 }
@@ -255,7 +255,7 @@ mod tests {
             servers,
             graceful_timeout_secs: Some(Duration::from_secs(1)),
         };
-        let status = runner.run().await;
+        let status = runner.run().await.into();
         assert!(matches!(status, ExitStatus::Success));
     }
 
@@ -296,7 +296,7 @@ mod tests {
             servers,
             graceful_timeout_secs: Some(Duration::from_secs(1)),
         };
-        let status = runner.run().await;
+        let status = runner.run().await.into();
 
         // Error from first server triggers cancellation of second
         assert!(error_flag.load(Ordering::SeqCst));
@@ -320,7 +320,7 @@ mod tests {
             servers,
             graceful_timeout_secs: Some(Duration::from_secs(1)),
         };
-        let status = runner.run().await;
+        let status = runner.run().await.into();
 
         // The server will be force-aborted because it exceeds the 1 seconds timeout
         assert!(matches!(status, ExitStatus::Success));

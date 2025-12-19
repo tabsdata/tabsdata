@@ -36,13 +36,10 @@ pub fn run() {
             logging::start(Level::INFO, None, false);
 
             // Resolve config and params
-            let config = match params.resolve(config) {
-                Ok(config) => config,
-                Err(e) => {
-                    error!("Error resolving API Server configuration: {}", e);
-                    return ExitStatus::GeneralError;
-                }
-            };
+            let config = params.resolve(config).map_err(|e| {
+                error!("Error resolving API Server configuration: {e}");
+                ExitStatus::GeneralError
+            })?;
 
             // Connect to db
             let db = match td_database::db(&config.database).await {
@@ -58,35 +55,35 @@ pub fn run() {
                                 match db.check().await {
                                     Ok(_) => {
                                         info!("Database already exists");
-                                        return ExitStatus::GeneralError;
+                                        Err(ExitStatus::GeneralError)?
                                     }
                                     Err(DbError::DatabaseSchemaDoesNotExist) => {
                                         if let Err(err) = db.upgrade().await {
                                             error!("Error creating database: {}", err);
-                                            return ExitStatus::GeneralError;
+                                            Err(ExitStatus::GeneralError)?
                                         }
                                         info!("Database created");
                                     }
                                     Err(err) => {
                                         error!("Error checking database for creating it: {}", err);
-                                        return ExitStatus::GeneralError;
+                                        Err(ExitStatus::GeneralError)?
                                     }
                                 }
                                 // After creating the database and/or schema, system exits.
                                 // Values 'auto' & 'None' keep the process running.
-                                return ExitStatus::Success;
+                                Err(ExitStatus::Success)?
                             }
                             DbSchema::Upgrade => {
                                 info!("Upgrading database");
                                 match db.check().await {
                                     Ok(_) => {
                                         info!("Database does not need to be upgraded");
-                                        return ExitStatus::NoAction;
+                                        Err(ExitStatus::NoAction)?
                                     }
                                     Err(DbError::DatabaseNeedsUpgrade(_)) => {
                                         if let Err(err) = db.upgrade().await {
                                             error!("Error upgrading database: {}", err);
-                                            return ExitStatus::GeneralError;
+                                            Err(ExitStatus::GeneralError)?
                                         }
                                         info!("Database upgraded");
                                     }
@@ -95,12 +92,12 @@ pub fn run() {
                                             "Unexpected error occurred during the database upgrade check: {}",
                                             error
                                         );
-                                        return ExitStatus::GeneralError;
+                                        Err(ExitStatus::GeneralError)?
                                     }
                                 }
                                 // After upgrading the database and/or schema, system exits.
                                 // Values 'auto' & 'None' keep the process running.
-                                return ExitStatus::Success;
+                                Err(ExitStatus::Success)?
                             }
                             DbSchema::Auto => {
                                 info!("Creating or upgrading database");
@@ -111,14 +108,14 @@ pub fn run() {
                                     Err(DbError::DatabaseSchemaDoesNotExist) => {
                                         if let Err(err) = db.upgrade().await {
                                             error!("Error creating database: {}", err);
-                                            return ExitStatus::GeneralError;
+                                            Err(ExitStatus::GeneralError)?
                                         }
                                         info!("Database created");
                                     }
                                     Err(DbError::DatabaseNeedsUpgrade(_)) => {
                                         if let Err(err) = db.upgrade().await {
                                             error!("Error upgrading database: {}", err);
-                                            return ExitStatus::GeneralError;
+                                            Err(ExitStatus::GeneralError)?
                                         }
                                         info!("Database upgraded");
                                     }
@@ -127,7 +124,7 @@ pub fn run() {
                                             "Error checking database for creating or upgrading it: {}",
                                             err
                                         );
-                                        return ExitStatus::GeneralError;
+                                        Err(ExitStatus::GeneralError)?
                                     }
                                 }
                             }
@@ -138,53 +135,42 @@ pub fn run() {
                             info!("Database is up to date, starting apiserver");
                         }
                         Err(e) => {
-                            error!("Error checking if database is up to date: {}", e);
-                            return ExitStatus::GeneralError;
+                            error!("Error checking if database is up to date: {e}");
+                            Err(ExitStatus::GeneralError)?
                         }
                     }
                     db
                 }
                 Err(e) => {
-                    error!("Error connecting to Sqlite database: {}", e);
-                    return ExitStatus::GeneralError;
+                    error!("Error connecting to Sqlite database: {e}");
+                    Err(ExitStatus::GeneralError)?
                 }
             };
 
             // Create storage
-            let mount_defs = match config.storage_mounts() {
-                Ok(mount_def) => mount_def,
-                Err(e) => {
-                    error!("Error creating storage: {}", e);
-                    return ExitStatus::GeneralError;
-                }
-            };
-            let storage = match Storage::from(mount_defs) {
-                Ok(storage) => storage,
-                Err(e) => {
-                    error!("Error creating storage: {}", e);
-                    return ExitStatus::GeneralError;
-                }
-            };
+            let mount_defs = config.storage_mounts().map_err(|e| {
+                error!("Error creating storage: {e}");
+                ExitStatus::GeneralError
+            })?;
+            let storage = Storage::from(mount_defs).map_err(|e| {
+                error!("Error creating storage: {e}");
+                ExitStatus::GeneralError
+            })?;
             let storage = Arc::new(storage);
 
             // Create worker message queue
-            let worker_message_queue = match FileWorkerMessageQueue::new().await {
-                Ok(worker_message_queue) => worker_message_queue,
-                Err(e) => {
-                    error!("Error creating worker message queue: {}", e);
-                    return ExitStatus::GeneralError;
-                }
-            };
+            let worker_message_queue = FileWorkerMessageQueue::new().await.map_err(|e| {
+                error!("Error creating worker message queue: {e}");
+                ExitStatus::GeneralError
+            })?;
             let worker_message_queue = Arc::new(worker_message_queue);
 
             // Create runtime context
-            let runtime_context = match RuntimeContext::new().await {
-                Ok(context) => Arc::new(context),
-                Err(e) => {
-                    error!("Error creating runtime context: {}", e);
-                    return ExitStatus::GeneralError;
-                }
-            };
+            let runtime_context = RuntimeContext::new().await.map_err(|e| {
+                error!("Error creating runtime context: {e}");
+                ExitStatus::GeneralError
+            })?;
+            let runtime_context = Arc::new(runtime_context);
 
             // Create queries
             let queries = Arc::new(DaoQueries::default());
@@ -199,29 +185,22 @@ pub fn run() {
             );
 
             // Create required servers
-            let api_server = match ApiServer::new(&server_context).await {
-                Ok(api_server) => api_server,
-                Err(e) => {
-                    error!("Error creating API Server: {}", e);
-                    return ExitStatus::GeneralError;
-                }
-            };
-            let internal_server = match InternalServer::new(&server_context).await {
-                Ok(internal_server) => internal_server,
-                Err(e) => {
-                    error!("Error creating Internal Server: {}", e);
-                    return ExitStatus::GeneralError;
-                }
-            };
+            let api_server = ApiServer::new(&server_context).await.map_err(|e| {
+                error!("Error creating API Server: {e}");
+                ExitStatus::GeneralError
+            })?;
+            let internal_server = InternalServer::new(&server_context).await.map_err(|e| {
+                error!("Error creating Internal Server: {e}");
+                ExitStatus::GeneralError
+            })?;
 
             // Create scheduler servers
-            let internal_addresses = match internal_server.addresses().await {
-                Ok(addresses) => Arc::new(addresses),
-                Err(e) => {
-                    error!("Error retrieving internal addresses: {}", e);
-                    return ExitStatus::GeneralError;
-                }
-            };
+            let internal_addresses = internal_server.addresses().await.map_err(|e| {
+                error!("Error retrieving internal addresses: {e}");
+                ExitStatus::GeneralError
+            })?;
+            let internal_addresses = Arc::new(internal_addresses);
+
             let scheduler_context = SchedulerCtx::new(
                 db.clone(),
                 queries.clone(),

@@ -14,7 +14,6 @@ use std::collections::HashMap;
 use std::env;
 use std::env::{args, current_dir, set_current_dir};
 use std::fmt::Debug;
-use std::future::Future;
 use std::io::{Error, ErrorKind};
 use std::marker::PhantomData;
 use std::path::PathBuf;
@@ -98,12 +97,15 @@ impl<C: Config, P: Params> Cli<C, P> {
         println!();
     }
 
-    fn exec_impl(
+    fn exec_impl<R>(
         config_name: &str,
         parser: CliParser<P>,
-        app: impl FnOnce(C, P) -> ExitStatus,
+        app: impl FnOnce(C, P) -> R,
         config_dir: Option<PathBuf>,
-    ) -> ExitStatus {
+    ) -> ExitStatus
+    where
+        R: Into<ExitStatus>,
+    {
         let stdin_config = parser.stdin_config.unwrap_or(false);
         match parser.config {
             Some(ConfigArg::Default) => {
@@ -117,28 +119,32 @@ impl<C: Config, P: Params> Cli<C, P> {
             }
             _ => {
                 let config: C = config::load_config(config_name, config_dir, stdin_config);
-                app(config, parser.params)
+                app(config, parser.params).into()
             }
         }
     }
 
-    fn _exec(
-        config_name: &str,
-        parser: CliParser<P>,
-        app: impl FnOnce(C, P) -> ExitStatus,
-        config_dir: Option<PathBuf>,
-    ) -> ExitStatus {
-        Self::exec_impl(config_name, parser, app, config_dir)
-    }
-
-    fn _exec_async<R>(
+    fn _exec<R>(
         config_name: &str,
         parser: CliParser<P>,
         app: impl FnOnce(C, P) -> R,
         config_dir: Option<PathBuf>,
     ) -> ExitStatus
     where
-        R: Future<Output = ExitStatus>,
+        R: Into<ExitStatus>,
+    {
+        Self::exec_impl(config_name, parser, app, config_dir)
+    }
+
+    fn _exec_async<F, R>(
+        config_name: &str,
+        parser: CliParser<P>,
+        app: impl FnOnce(C, P) -> F,
+        config_dir: Option<PathBuf>,
+    ) -> ExitStatus
+    where
+        F: Future<Output = R>,
+        R: Into<ExitStatus>,
     {
         let app = move |config: C, params: P| {
             tokio::runtime::Builder::new_multi_thread()
@@ -146,6 +152,7 @@ impl<C: Config, P: Params> Cli<C, P> {
                 .build()
                 .unwrap()
                 .block_on(app(config, params))
+                .into()
         };
         Self::exec_impl(config_name, parser, app, config_dir)
     }
@@ -180,11 +187,10 @@ impl<C: Config, P: Params> Cli<C, P> {
     }
 
     /// Execute the app function providing the configuration and CLI parameters.
-    pub fn exec(
-        config_name: &str,
-        app: impl FnOnce(C, P) -> ExitStatus,
-        config_dir: Option<PathBuf>,
-    ) {
+    pub fn exec<R>(config_name: &str, app: impl FnOnce(C, P) -> R, config_dir: Option<PathBuf>)
+    where
+        R: Into<ExitStatus>,
+    {
         Self::log_parameters();
         let result = Self::_exec(
             config_name,
@@ -196,13 +202,14 @@ impl<C: Config, P: Params> Cli<C, P> {
     }
 
     /// Execute the app function within Tokio's async environment, providing the configuration and CLI parameters.
-    pub fn exec_async<R>(
+    pub fn exec_async<F, R>(
         config_name: &str,
-        app: impl FnOnce(C, P) -> R,
+        app: impl FnOnce(C, P) -> F,
         config_dir: Option<PathBuf>,
         monitor_folders: Option<PathBuf>,
     ) where
-        R: Future<Output = ExitStatus>,
+        F: Future<Output = R>,
+        R: Into<ExitStatus>,
     {
         Self::log_parameters();
         let runtime = Runtime::new().unwrap();
