@@ -11,22 +11,22 @@ use td_objects::dxo::function_run::{
     FunctionRunDB, UpdateFunctionRunDB, UpdateFunctionRunDBBuilder,
 };
 use td_objects::dxo::worker::{
-    CallbackRequest, UpdateWorkerDB, UpdateWorkerDBBuilder, UpdateWorkerExecution,
+    CallbackRequest, UpdateWorkerDB, UpdateWorkerDBBuilder, UpdateWorkerExecution, WorkerDB,
 };
-use td_objects::rest_urls::internal::FunctionRunIdParam;
+use td_objects::rest_urls::internal::FunctionRunWorkerIdParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::from::{
     BuildService, ExtractDataService, ExtractNameService, ExtractService, TryIntoService, With,
 };
-use td_objects::tower_service::sql::{By, SqlSelectAllService};
-use td_objects::types::basic::FunctionRunId;
+use td_objects::tower_service::sql::{By, SqlAssertExistsService, SqlSelectAllService};
+use td_objects::types::basic::{FunctionRunId, WorkerId};
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
 
 #[service_factory(
     name = ExecutionCallbackService,
-    request = UpdateRequest<FunctionRunIdParam, CallbackRequest>,
+    request = UpdateRequest<FunctionRunWorkerIdParam, CallbackRequest>,
     response = (),
     connection = TransactionProvider,
     context = DaoQueries,
@@ -35,25 +35,29 @@ fn service() {
     layers!(
         // Extract from request.
         from_fn(
-            With::<UpdateRequest<FunctionRunIdParam, CallbackRequest>>::extract_name::<
-                FunctionRunIdParam,
+            With::<UpdateRequest<FunctionRunWorkerIdParam, CallbackRequest>>::extract_name::<
+                FunctionRunWorkerIdParam,
             >
         ),
         from_fn(
-            With::<UpdateRequest<FunctionRunIdParam, CallbackRequest>>::extract_data::<
+            With::<UpdateRequest<FunctionRunWorkerIdParam, CallbackRequest>>::extract_data::<
                 CallbackRequest,
             >
         ),
         // Convert callback request to status update request.
         from_fn(With::<CallbackRequest>::try_convert_to::<UpdateWorkerExecution, _>),
-        // Extract function_run_id. We assume it's correct as the callback is constructed by the server.
-        from_fn(With::<FunctionRunIdParam>::extract::<FunctionRunId>),
-        // Find function run (we will always have 1).
-        from_fn(By::<FunctionRunId>::select_all::<FunctionRunDB>),
+        // Extract worker_id.
+        from_fn(With::<FunctionRunWorkerIdParam>::extract::<WorkerId>),
+        // Find worker (we will always have 1).
+        from_fn(By::<WorkerId>::assert_exists::<WorkerDB>),
         // Update worker status.
         from_fn(With::<UpdateWorkerExecution>::try_convert_to::<UpdateWorkerDBBuilder, _>),
         from_fn(With::<UpdateWorkerDBBuilder>::build::<UpdateWorkerDB, _>),
         from_fn(update_worker_status),
+        // Extract function_run_id.
+        from_fn(With::<FunctionRunWorkerIdParam>::extract::<FunctionRunId>),
+        // Find function run (we will always have 1).
+        from_fn(By::<FunctionRunId>::select_all::<FunctionRunDB>),
         // Update function run status.
         from_fn(With::<UpdateWorkerExecution>::try_convert_to::<UpdateFunctionRunDBBuilder, _>),
         from_fn(With::<UpdateFunctionRunDBBuilder>::build::<UpdateFunctionRunDB, _>),
@@ -84,7 +88,7 @@ mod tests {
     use td_objects::types::basic::{
         AccessTokenId, CollectionName, ColumnCount, ExecutionStatus, FunctionName,
         FunctionRunStatus, RoleId, RowCount, SchemaHash, TableName, TableNameDto,
-        TransactionStatus, UserId, WorkerId,
+        TransactionStatus, UserId,
     };
     use td_objects::types::composed::TableDependencyDto;
     use td_tower::ctx_service::RawOneshot;
@@ -98,34 +102,34 @@ mod tests {
         ExecutionCallbackService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<UpdateRequest<FunctionRunIdParam, CallbackRequest>, ()>(&[
+            .assert_service::<UpdateRequest<FunctionRunWorkerIdParam, CallbackRequest>, ()>(&[
                 // Extract from request.
-                type_of_val(
-                    &With::<UpdateRequest<FunctionRunIdParam, CallbackRequest>>::extract_name::<
-                        FunctionRunIdParam,
-                    >,
+                type_of_val(&
+                    With::<UpdateRequest<FunctionRunWorkerIdParam, CallbackRequest>>::extract_name::<
+                        FunctionRunWorkerIdParam,
+                    >
                 ),
-                type_of_val(
-                    &With::<UpdateRequest<FunctionRunIdParam, CallbackRequest>>::extract_data::<
+                type_of_val(&
+                    With::<UpdateRequest<FunctionRunWorkerIdParam, CallbackRequest>>::extract_data::<
                         CallbackRequest,
-                    >,
+                    >
                 ),
                 // Convert callback request to status update request.
                 type_of_val(&With::<CallbackRequest>::try_convert_to::<UpdateWorkerExecution, _>),
-                // Extract function_run_id. We assume it's correct as the callback is constructed by the server.
-                type_of_val(&With::<FunctionRunIdParam>::extract::<FunctionRunId>),
-                // Find function run (we will always have 1).
-                type_of_val(&By::<FunctionRunId>::select_all::<FunctionRunDB>),
+                // Extract worker_id. We assume it's correct as the callback is constructed by the server.
+                type_of_val(&With::<FunctionRunWorkerIdParam>::extract::<WorkerId>),
+                // Find worker (we will always have 1).
+                type_of_val(&By::<WorkerId>::assert_exists::<WorkerDB>),
                 // Update worker status.
-                type_of_val(
-                    &With::<UpdateWorkerExecution>::try_convert_to::<UpdateWorkerDBBuilder, _>,
-                ),
+                type_of_val(&With::<UpdateWorkerExecution>::try_convert_to::<UpdateWorkerDBBuilder, _>),
                 type_of_val(&With::<UpdateWorkerDBBuilder>::build::<UpdateWorkerDB, _>),
                 type_of_val(&update_worker_status),
+                // Extract function_run_id. We assume it's correct as the callback is constructed by the server.
+                type_of_val(&With::<FunctionRunWorkerIdParam>::extract::<FunctionRunId>),
+                // Find function run (we will always have 1).
+                type_of_val(&By::<FunctionRunId>::select_all::<FunctionRunDB>),
                 // Update function run status.
-                type_of_val(
-                    &With::<UpdateWorkerExecution>::try_convert_to::<UpdateFunctionRunDBBuilder, _>,
-                ),
+                type_of_val(&With::<UpdateWorkerExecution>::try_convert_to::<UpdateFunctionRunDBBuilder, _>),
                 type_of_val(&With::<UpdateFunctionRunDBBuilder>::build::<UpdateFunctionRunDB, _>),
                 type_of_val(&update_function_run_status),
                 // Update table data versions status.
@@ -140,7 +144,7 @@ mod tests {
         callback_status: WorkerCallbackStatus,
         function_output: Option<WorkerOutput>,
     ) -> Result<(), TdError> {
-        test_status_update(db.clone(), &test_executions, |_, _, _, f| {
+        test_status_update(db.clone(), &test_executions, |_, _, _, f, w| {
             let db = db.clone();
             let callback_status = callback_status.clone();
             let function_output = function_output.clone();
@@ -151,10 +155,11 @@ mod tests {
                 .find(|f| f.name.as_str() == callback_function)
                 .unwrap();
             let function_run = *f[&test_function].id;
+            let worker = *w[&test_function].id;
 
             async move {
                 let response: CallbackRequest = ResponseMessagePayloadBuilder::default()
-                    .id(WorkerId::default().to_string())
+                    .id(worker.to_string())
                     .class(WorkerClass::EPHEMERAL)
                     .worker("".to_string())
                     .action(MessageAction::Notify)
@@ -175,9 +180,10 @@ mod tests {
                 let request =
                     RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
                         .update(
-                            FunctionRunIdParam::builder()
-                                .function_run_id(function_run)
-                                .build()?,
+                            FunctionRunWorkerIdParam {
+                                function_run_id: function_run.into(),
+                                worker_id: worker.into(),
+                            },
                             response,
                         );
 

@@ -34,7 +34,7 @@ pub mod internal {
 
     pub const INTERNAL_PREFIX: &str = url!("/internal");
 
-    pub const FUNCTION_VERSIONS: &str = url!(INTERNAL_PREFIX, "/function-versions");
+    pub const FUNCTION_VERSIONS: &str = url!("/function-versions");
     pub const FUNCTION_VERSION: &str = url!(FUNCTION_VERSIONS, "/{function_version_id}");
 
     #[td_type::UrlParam]
@@ -51,31 +51,21 @@ pub mod internal {
         pub execution: ExecutionIdName,
     }
 
-    #[td_type::UrlParam]
-    pub struct FunctionVersionAtIdParam {
+    #[td_type::Dlo]
+    pub struct FunctionVersionAtId {
         #[td_type(extractor)]
         pub function_version_id: FunctionVersionId,
         #[td_type(extractor)]
         pub at: AtTime,
     }
 
-    pub const DOWNLOAD_FUNCTION_STATE: &str = url!(FUNCTION_VERSION, "/download-state");
+    pub const DOWNLOAD_FUNCTION_STATE: &str =
+        url!(INTERNAL_PREFIX, FUNCTION_VERSION, "/download-state");
+    pub const FUNCTION_VERSION_EXECUTION_STATUS: &str =
+        url!(INTERNAL_PREFIX, FUNCTION_VERSION, "/execution-status");
+    pub const FUNCTION_VERSION_EXECUTE: &str = url!(INTERNAL_PREFIX, FUNCTION_VERSION, "/execute");
 
-    pub const FUNCTION_VERSION_EXECUTION_STATUS: &str = url!(FUNCTION_VERSION, "/execution-status");
-    pub const FUNCTION_VERSION_EXECUTE: &str = url!(FUNCTION_VERSION, "/execute");
-
-    pub const FUNCTION_RUNS: &str = url!(INTERNAL_PREFIX, "/function-runs");
-    pub const FUNCTION_RUN: &str = url!(FUNCTION_RUNS, "/{function_run_id}");
-
-    #[td_type::UrlParam]
-    pub struct FunctionRunIdParam {
-        #[td_type(extractor)]
-        function_run_id: FunctionRunId,
-    }
-
-    pub const UPDATE_FUNCTION_RUN: &str = url!(FUNCTION_RUN);
-
-    pub const WORKERS: &str = url!(INTERNAL_PREFIX, "/workers");
+    pub const WORKERS: &str = url!("/workers");
     pub const WORKER: &str = url!(WORKERS, "/{worker_id}");
 
     #[td_type::UrlParam]
@@ -84,7 +74,21 @@ pub mod internal {
         pub worker_id: WorkerId,
     }
 
-    pub const UPDATE_WORKER: &str = url!(WORKER);
+    pub const UPDATE_WORKER: &str = url!(INTERNAL_PREFIX, WORKER);
+
+    pub const FUNCTION_RUNS: &str = url!("/function-runs");
+    pub const FUNCTION_RUN: &str = url!(FUNCTION_RUNS, "/{function_run_id}");
+    pub const FUNCTION_RUN_WORKER: &str = url!(FUNCTION_RUN, WORKER);
+
+    #[td_type::UrlParam]
+    pub struct FunctionRunWorkerIdParam {
+        #[td_type(extractor)]
+        pub function_run_id: FunctionRunId,
+        #[td_type(extractor)]
+        pub worker_id: WorkerId,
+    }
+
+    pub const UPDATE_FUNCTION_RUN_WORKER: &str = url!(INTERNAL_PREFIX, FUNCTION_RUN_WORKER);
 }
 
 // OpenApi URLs

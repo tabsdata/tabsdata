@@ -9,7 +9,7 @@ use ta_services::factory::service_factory;
 use td_objects::dxo::crudl::ReadRequest;
 use td_objects::dxo::function::FunctionDBWithNames;
 use td_objects::dxo::table::TableDBWithNames;
-use td_objects::rest_urls::internal::FunctionVersionAtIdParam;
+use td_objects::rest_urls::internal::FunctionVersionAtId;
 use td_objects::rest_urls::params::TableAtIdName;
 use td_objects::sql::DaoQueries;
 use td_objects::stream::BoxedSyncStream;
@@ -23,7 +23,7 @@ use td_tower::layers;
 
 #[service_factory(
     name = TableStateDownloadService,
-    request = ReadRequest<FunctionVersionAtIdParam>,
+    request = ReadRequest<FunctionVersionAtId>,
     response = BoxedSyncStream,
     connection = ConnectionProvider,
     context = DaoQueries,
@@ -32,12 +32,10 @@ use td_tower::layers;
 fn service() {
     layers!(
         // Extract parameters
-        from_fn(
-            With::<ReadRequest<FunctionVersionAtIdParam>>::extract_name::<FunctionVersionAtIdParam>
-        ),
-        from_fn(With::<FunctionVersionAtIdParam>::extract::<AtTime>),
+        from_fn(With::<ReadRequest<FunctionVersionAtId>>::extract_name::<FunctionVersionAtId>),
+        from_fn(With::<FunctionVersionAtId>::extract::<AtTime>),
         // get function
-        from_fn(With::<FunctionVersionAtIdParam>::extract::<FunctionVersionId>),
+        from_fn(With::<FunctionVersionAtId>::extract::<FunctionVersionId>),
         from_fn(
             By::<FunctionVersionId>::select_version::<
                 { FunctionDBWithNames::Available },
@@ -99,16 +97,14 @@ mod tests {
         TableStateDownloadService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<ReadRequest<FunctionVersionAtIdParam>, BoxedSyncStream>(&[
+            .assert_service::<ReadRequest<FunctionVersionAtId>, BoxedSyncStream>(&[
                 // Extract parameters
                 type_of_val(
-                    &With::<ReadRequest<FunctionVersionAtIdParam>>::extract_name::<
-                        FunctionVersionAtIdParam,
-                    >,
+                    &With::<ReadRequest<FunctionVersionAtId>>::extract_name::<FunctionVersionAtId>,
                 ),
-                type_of_val(&With::<FunctionVersionAtIdParam>::extract::<AtTime>),
+                type_of_val(&With::<FunctionVersionAtId>::extract::<AtTime>),
                 // get function
-                type_of_val(&With::<FunctionVersionAtIdParam>::extract::<FunctionVersionId>),
+                type_of_val(&With::<FunctionVersionAtId>::extract::<FunctionVersionId>),
                 type_of_val(
                     &By::<FunctionVersionId>::select_version::<
                         { FunctionDBWithNames::Available },
@@ -195,7 +191,7 @@ mod tests {
             // with ids
             let request =
                 RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
-                    .read(FunctionVersionAtIdParam {
+                    .read(FunctionVersionAtId {
                         function_version_id: function.id,
                         at: *at_time,
                     });
@@ -209,7 +205,7 @@ mod tests {
             // with names
             let request =
                 RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
-                    .read(FunctionVersionAtIdParam {
+                    .read(FunctionVersionAtId {
                         function_version_id: function.id,
                         at: *at_time,
                     });

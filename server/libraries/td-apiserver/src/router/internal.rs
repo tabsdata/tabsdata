@@ -24,8 +24,8 @@ mod routes {
     use td_objects::rest_urls::ExecutionParam;
     use td_objects::rest_urls::internal::{
         DOWNLOAD_FUNCTION_STATE, FUNCTION_VERSION_EXECUTE, FUNCTION_VERSION_EXECUTION_STATUS,
-        FunctionRunIdParam, FunctionVersionAtIdParam, FunctionVersionExecution,
-        FunctionVersionIdParam, UPDATE_FUNCTION_RUN, UPDATE_WORKER, WorkerIdParam,
+        FunctionRunWorkerIdParam, FunctionVersionAtId, FunctionVersionExecution,
+        FunctionVersionIdParam, UPDATE_FUNCTION_RUN_WORKER, UPDATE_WORKER, WorkerIdParam,
     };
     use td_services::execution::services::ExecutionServices;
     use td_services::function_run::services::FunctionRunServices;
@@ -36,12 +36,12 @@ mod routes {
 
     const INTERNAL_TAG: &str = "Internal";
 
-    #[apiserver_path(method = post, path = UPDATE_FUNCTION_RUN, tag = INTERNAL_TAG)]
+    #[apiserver_path(method = post, path = UPDATE_FUNCTION_RUN_WORKER, tag = INTERNAL_TAG)]
     #[doc = "Callback endpoint for function executions"]
     pub async fn function_run_callback(
         State(state): State<Arc<ExecutionServices>>,
         Extension(context): Extension<RequestContext>,
-        Path(param): Path<FunctionRunIdParam>,
+        Path(param): Path<FunctionRunWorkerIdParam>,
         Json(request): Json<CallbackRequest>,
     ) -> Result<UpdateStatus<NoContent>, ErrorStatus> {
         let request = context.update(param, request);
@@ -110,7 +110,7 @@ mod routes {
         Path(function_param): Path<FunctionVersionIdParam>,
         Query(at_param): Query<AtTimeParam>,
     ) -> Result<ParquetFile, ErrorStatus> {
-        let param = FunctionVersionAtIdParam {
+        let param = FunctionVersionAtId {
             function_version_id: function_param.function_version_id,
             at: at_param.at,
         };

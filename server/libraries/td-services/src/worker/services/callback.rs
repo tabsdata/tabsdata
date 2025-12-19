@@ -13,7 +13,7 @@ use td_objects::sql::DaoQueries;
 use td_objects::tower_service::from::{
     BuildService, ExtractDataService, ExtractNameService, ExtractService, TryIntoService, With,
 };
-use td_objects::tower_service::sql::{By, SqlSelectAllService};
+use td_objects::tower_service::sql::{By, SqlAssertExistsService};
 use td_objects::types::basic::WorkerId;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
@@ -37,10 +37,10 @@ fn service() {
         ),
         // Convert callback request to status update request.
         from_fn(With::<CallbackRequest>::try_convert_to::<UpdateWorkerExecution, _>),
-        // Extract worker_id. We assume it's correct as the callback is constructed by the server.
+        // Extract worker_id.
         from_fn(With::<WorkerIdParam>::extract::<WorkerId>),
         // Find worker (we will always have 1).
-        from_fn(By::<WorkerId>::select_all::<WorkerDB>),
+        from_fn(By::<WorkerId>::assert_exists::<WorkerDB>),
         // Update worker status.
         from_fn(With::<UpdateWorkerExecution>::try_convert_to::<UpdateWorkerDBBuilder, _>),
         from_fn(With::<UpdateWorkerDBBuilder>::build::<UpdateWorkerDB, _>),
@@ -95,10 +95,10 @@ mod tests {
                 ),
                 // Convert callback request to status update request.
                 type_of_val(&With::<CallbackRequest>::try_convert_to::<UpdateWorkerExecution, _>),
-                // Extract worker_id. We assume it's correct as the callback is constructed by the server.
+                // Extract worker_id.
                 type_of_val(&With::<WorkerIdParam>::extract::<WorkerId>),
                 // Find worker (we will always have 1).
-                type_of_val(&By::<WorkerId>::select_all::<WorkerDB>),
+                type_of_val(&By::<WorkerId>::assert_exists::<WorkerDB>),
                 // Update worker status.
                 type_of_val(
                     &With::<UpdateWorkerExecution>::try_convert_to::<UpdateWorkerDBBuilder, _>,

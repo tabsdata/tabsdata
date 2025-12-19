@@ -29,12 +29,12 @@ use td_objects::dxo::yaml::{WorkerInput, cron, watchdog};
 use td_objects::rest_urls::BASE_URL;
 use td_objects::rest_urls::internal::{
     DOWNLOAD_FUNCTION_STATE, FUNCTION_VERSION_EXECUTE, FUNCTION_VERSION_EXECUTION_STATUS,
-    UPDATE_FUNCTION_RUN, UPDATE_WORKER,
+    UPDATE_FUNCTION_RUN_WORKER, UPDATE_WORKER,
 };
 use td_objects::sql::{DaoQueries, SelectBy};
 use td_objects::types::addresses::InternalServerAddresses;
 use td_objects::types::basic::{
-    AtTime, EnvPrefix, WorkerConfig, WorkerMessageStatus, WorkerStatus, WorkerType,
+    AtTime, EnvPrefix, WorkerConfig, WorkerId, WorkerMessageStatus, WorkerStatus, WorkerType,
 };
 use td_storage::Storage;
 use td_storage::location::StorageLocation;
@@ -67,14 +67,17 @@ pub async fn create_locked_function_runner_workers_start_request<T: WorkerMessag
                 let mut conn = connection.lock().await;
                 let conn = conn.get_mut_connection()?;
 
+                // Worker id
+                let worker_id = WorkerId::default();
+
                 // Build callback
                 // This is loopback address, because this endpoint is only available to the server.
                 let server_address = server_addresses.first();
                 let http_callback = HttpCallback {
                     url: {
-                        let function_run_id = f.id.to_string();
-                        let endpoint =
-                            UPDATE_FUNCTION_RUN.replace("{function_run_id}", &function_run_id);
+                        let endpoint = UPDATE_FUNCTION_RUN_WORKER
+                            .replace("{function_run_id}", &f.id.to_string())
+                            .replace("{worker_id}", &worker_id.to_string());
                         let callback_url = format!("http://{server_address}{BASE_URL}{endpoint}");
                         Url::parse(&callback_url).map_err(WorkerRequestError::UrlParse)?
                     },
@@ -318,17 +321,20 @@ pub async fn create_locked_function_runner_workers_start_request<T: WorkerMessag
                 };
 
                 // Create worker message
-                let message = WorkerDB::builder()
-                    .collection_id(f.collection_id)
-                    .execution_id(f.execution_id)
-                    .transaction_id(f.transaction_id)
-                    .function_run_id(f.id)
-                    .function_version_id(f.function_version_id)
-                    .message_status(WorkerMessageStatus::Locked)
-                    .status(WorkerStatus::RunRequested)
-                    .worker_type(WorkerType::FunctionRunner)
-                    .worker_config(None)
-                    .build()?;
+                let message = WorkerDB {
+                    id: worker_id,
+                    collection_id: f.collection_id,
+                    execution_id: Some(f.execution_id),
+                    transaction_id: Some(f.transaction_id),
+                    function_run_id: Some(f.id),
+                    function_version_id: f.function_version_id,
+                    message_status: WorkerMessageStatus::Locked,
+                    started_on: None,
+                    ended_on: None,
+                    status: WorkerStatus::RunRequested,
+                    worker_type: WorkerType::FunctionRunner,
+                    worker_config: None,
+                };
 
                 // Add it to the queue
                 message_queue

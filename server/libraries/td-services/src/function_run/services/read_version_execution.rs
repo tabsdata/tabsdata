@@ -3,8 +3,7 @@
 //
 
 use ta_services::factory::service_factory;
-use td_authz::AuthzContext;
-use td_objects::dxo::crudl::{ReadRequest, RequestContext};
+use td_objects::dxo::crudl::ReadRequest;
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::function_run::{FunctionRun, FunctionRunBuilder, FunctionRunDBWithNames};
 use td_objects::rest_urls::internal::FunctionVersionExecution;
@@ -25,11 +24,9 @@ use td_tower::layers;
     response = FunctionRun,
     connection = ConnectionProvider,
     context = DaoQueries,
-    context = AuthzContext,
 )]
 fn service() {
     layers!(
-        from_fn(With::<ReadRequest<FunctionVersionExecution>>::extract::<RequestContext>),
         from_fn(
             With::<ReadRequest<FunctionVersionExecution>>::extract_name::<FunctionVersionExecution>
         ),
@@ -69,16 +66,13 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_tower_metadata_read_function_run(db: DbPool) {
+    async fn test_tower_metadata_read_version_execution(db: DbPool) {
         use td_tower::metadata::type_of_val;
 
         FunctionVersionExecutionReadService::with_defaults(db)
             .metadata()
             .await
             .assert_service::<ReadRequest<FunctionVersionExecution>, FunctionRun>(&[
-                type_of_val(
-                    &With::<ReadRequest<FunctionVersionExecution>>::extract::<RequestContext>,
-                ),
                 type_of_val(
                     &With::<ReadRequest<FunctionVersionExecution>>::extract_name::<
                         FunctionVersionExecution,

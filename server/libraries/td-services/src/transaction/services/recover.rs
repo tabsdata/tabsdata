@@ -104,7 +104,7 @@ mod tests {
         test_executions: Vec<TestExecution>,
         recover_on: usize,
     ) -> Result<(), TdError> {
-        test_status_update(db.clone(), &test_executions, |_, _, t, _| {
+        test_status_update(db.clone(), &test_executions, |_, _, t, _, _| {
             let db = db.clone();
             let test_transaction = test_executions
                 .iter()

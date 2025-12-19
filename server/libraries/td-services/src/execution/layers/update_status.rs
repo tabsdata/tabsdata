@@ -37,16 +37,15 @@ pub async fn update_worker_status(
     SrvCtx(queries): SrvCtx<DaoQueries>,
     Connection(connection): Connection,
     Input(update): Input<UpdateWorkerDB>,
-    Input(callback): Input<CallbackRequest>,
+    Input(worker_id): Input<WorkerId>,
 ) -> Result<(), TdError> {
     let mut conn = connection.lock().await;
     let conn = conn.get_mut_connection()?;
 
     // Worker status update is never conditional, we want to know exactly what got reported,
     // as it doesn't affect execution flow, it's just informational.
-    let worker_id = WorkerId::try_from(&callback.id)?;
     let _ = queries
-        .update_by::<_, WorkerDB>(update.deref(), &(&worker_id))?
+        .update_by::<_, WorkerDB>(update.deref(), &*worker_id)?
         .build()
         .execute(&mut *conn)
         .await
@@ -186,7 +185,7 @@ pub async fn update_function_run_status(
         let update = CommitFunctionRunDB::default();
         // TODO this is not getting chunked
         let _ = queries
-            .update_all_by::<_, FunctionRunDB>(&update, &(to_commit))?
+            .update_all_by::<_, FunctionRunDB>(&update, &to_commit)?
             .build()
             .execute(&mut *conn)
             .await
@@ -231,7 +230,7 @@ pub async fn update_function_run_status(
         let function_run_ids: Vec<_> = function_run_ids.iter().collect();
         // TODO this is not getting chunked
         let _ = queries
-            .update_all_by::<_, FunctionRunDB>(&update, &(function_run_ids))?
+            .update_all_by::<_, FunctionRunDB>(&update, &function_run_ids)?
             .build()
             .execute(&mut *conn)
             .await
@@ -316,6 +315,7 @@ pub(crate) mod tests {
     use td_objects::dxo::table::TableDB;
     use td_objects::dxo::table_data_version::{TableDataVersionDB, TableDataVersionDBWithFunction};
     use td_objects::dxo::transaction::{TransactionDB, TransactionDBWithStatus};
+    use td_objects::dxo::worker::WorkerDB;
     use td_objects::sql::{DaoQueries, SelectBy};
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_execution::seed_execution;
@@ -324,10 +324,11 @@ pub(crate) mod tests {
     use td_objects::test_utils::seed_function_run::seed_function_run;
     use td_objects::test_utils::seed_table_data_version::seed_table_data_version;
     use td_objects::test_utils::seed_transaction::seed_transaction;
+    use td_objects::test_utils::seed_worker::seed_function_runner_worker;
     use td_objects::types::basic::{
         BundleId, CollectionName, Decorator, DependencyPos, ExecutionStatus, FunctionName,
         FunctionRunStatus, FunctionRuntimeValues, TableName, TableNameDto, TransactionStatus,
-        UserId, VersionPos,
+        UserId, VersionPos, WorkerMessageStatus,
     };
     use td_objects::types::composed::TableDependencyDto;
 
@@ -364,6 +365,7 @@ pub(crate) mod tests {
             &HashMap<&TestExecution, ExecutionDB>,
             &HashMap<&TestTransaction, TransactionDB>,
             &HashMap<&TestFunction, FunctionRunDB>,
+            &HashMap<&TestFunction, WorkerDB>,
         ) -> Fut,
         Fut: Future<Output = Result<(), TdError>>,
     {
@@ -643,8 +645,47 @@ pub(crate) mod tests {
             .into_iter()
             .collect::<HashMap<_, _>>();
 
+        // Create workers (1 per function run)
+        let workers: HashSet<_> = test_executions
+            .iter()
+            .flat_map(|e| e.transactions.iter().map(move |t| (e, t, &t.functions)))
+            .flat_map(|(e, t, f)| f.iter().map(move |f| (e, t, f)))
+            .collect();
+        let workers_futures = workers
+            .iter()
+            .map(|(e, t, f)| {
+                let db = db.clone();
+                let executions = executions.clone();
+                let transactions = transactions.clone();
+                let function_runs = function_runs.clone();
+                async move {
+                    let req = seed_function_runner_worker(
+                        &db,
+                        executions.get(e).unwrap(),
+                        transactions.get(t).unwrap(),
+                        function_runs.get(f).unwrap(),
+                        &WorkerMessageStatus::Unlocked,
+                    )
+                    .await;
+
+                    (*f, req)
+                }
+            })
+            .collect::<Vec<_>>();
+        let workers = futures::future::join_all(workers_futures)
+            .await
+            .into_iter()
+            .collect::<HashMap<_, _>>();
+
         // Execute test
-        test_run(&collections, &executions, &transactions, &function_runs).await?;
+        test_run(
+            &collections,
+            &executions,
+            &transactions,
+            &function_runs,
+            &workers,
+        )
+        .await?;
 
         // Assert expected state
         // Assert execution

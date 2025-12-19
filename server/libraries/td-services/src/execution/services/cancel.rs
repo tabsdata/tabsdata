@@ -102,7 +102,7 @@ mod tests {
         test_executions: Vec<TestExecution>,
         cancel_on: usize,
     ) -> Result<(), TdError> {
-        test_status_update(db.clone(), &test_executions, |_, e, _, _| {
+        test_status_update(db.clone(), &test_executions, |_, e, _, _, _| {
             let db = db.clone();
             let execution = e[&test_executions[cancel_on]].id.to_string();
 
