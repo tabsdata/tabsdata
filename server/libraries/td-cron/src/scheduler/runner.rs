@@ -80,7 +80,7 @@ async fn sleep_until(time: DateTime<Utc>) {
     let now = Utc::now();
     if time > now {
         let delay = (time - now).to_std().unwrap_or(Duration::ZERO);
-        info!("Waiting until {time}. Current is {now}. Time to wait: {delay:?}.");
+        debug!("Waiting until {time}. Current is {now}. Time to wait: {delay:?}.");
         sleep(delay).await;
     }
 }

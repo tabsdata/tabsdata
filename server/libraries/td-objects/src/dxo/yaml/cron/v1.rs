@@ -41,6 +41,7 @@ mod tests {
     use crate::dxo::worker::CronConfig;
     use crate::dxo::yaml::WorkerInput;
     use crate::types::basic::{AtTime, CollectionName, CronMask, FunctionName, WorkerConfig};
+    use chrono::DateTime;
     use http::Method;
     use url::Url;
 
@@ -50,8 +51,8 @@ mod tests {
         let collection_id = CollectionId::default();
         let function_version_id = FunctionVersionId::default();
         let scheduled_on = AtTime::default();
-        let start = AtTime::default();
-        let end = AtTime::default();
+        let start = DateTime::default();
+        let end = DateTime::default();
 
         let cfg = CronConfig {
             start: Some(start),
@@ -79,8 +80,8 @@ mod tests {
         // println!("{}", serialized);
 
         let scheduled_on = scheduled_on.as_str_millis();
-        let start = start.as_str_millis();
-        let end = end.as_str_millis();
+        let start = serde_json::to_string(&start).unwrap();
+        let end = serde_json::to_string(&end).unwrap();
         assert_eq!(
             serialized.as_str(),
             format!(

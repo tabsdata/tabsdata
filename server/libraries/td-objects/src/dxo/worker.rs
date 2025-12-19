@@ -11,6 +11,7 @@ mod definitions {
         FunctionName, FunctionRunId, FunctionVersionId, SizeThreshold, TimeoutThresholdMin,
         TransactionId, WorkerConfig, WorkerId, WorkerMessageStatus, WorkerStatus, WorkerType,
     };
+    use chrono::{DateTime, Utc};
     use td_common::datetime::IntoDateTimeUtc;
     use td_common::execution_status::WorkerCallbackStatus;
     use td_common::server::ResponseMessagePayload;
@@ -197,8 +198,8 @@ mod definitions {
     #[td_type::Dto]
     #[derive(Eq, PartialEq)]
     pub struct CronConfig {
-        pub start: Option<AtTime>,
-        pub end: Option<AtTime>,
+        pub start: Option<DateTime<Utc>>,
+        pub end: Option<DateTime<Utc>>,
         pub mask: CronMask,
     }
 
@@ -207,7 +208,7 @@ mod definitions {
     pub struct WatchdogConfig {
         pub timeout_threshold_min: TimeoutThresholdMin,
         pub size_threshold: SizeThreshold,
-        pub start: Option<AtTime>,
-        pub end: Option<AtTime>,
+        pub start: Option<DateTime<Utc>>,
+        pub end: Option<DateTime<Utc>>,
     }
 }

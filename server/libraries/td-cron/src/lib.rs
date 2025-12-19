@@ -8,7 +8,6 @@ use serde::de::DeserializeOwned;
 use serde_json::Value;
 use std::fs::File;
 use td_common::logging;
-use td_common::logging::LogOutput;
 use td_common::server::REQUEST_FILE;
 use td_common::server_runner::ServerRunner;
 use td_common::status::ExitStatus;
@@ -33,7 +32,7 @@ pub fn run() {
             let ArgumentParameters { request_folder, .. } = params;
 
             // Initialize logging
-            logging::start(Level::INFO, Some(LogOutput::StdOut), false);
+            logging::start(Level::INFO, None, false);
 
             // parse request.yaml
             let request_file = request_folder.join(REQUEST_FILE);

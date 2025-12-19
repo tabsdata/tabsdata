@@ -143,15 +143,17 @@ class ErrorCode(Enum):
     DCE11 = {
         "code": "DCE-011",
         "message": (
-            "The 'start' parameter of a Crontab object must be a datetime object "
-            "or None; got '{}' of type {} instead."
+            "The 'start' parameter of a Crontab object must be a "
+            "string in ISO 8601 format, a datetime object or None; "
+            "got an object of type '{}' instead."
         ),
     }
     DCE12 = {
         "code": "DCE-012",
         "message": (
-            "The 'end' parameter of a Crontab object must be a datetime object "
-            "or None; got '{}' of type {} instead."
+            "The 'end' parameter of a Crontab object must be a "
+            "string in ISO 8601 format, a datetime object or None; "
+            "got an object of type '{}' instead."
         ),
     }
     DCE13 = {
@@ -180,6 +182,24 @@ class ErrorCode(Enum):
         "message": (
             "The 'mask' parameter cannot be 'None' and must be a string; "
             "got '{}' instead."
+        ),
+    }
+    DCE17 = {
+        "code": "DCE-17",
+        "message": (
+            "The 'start' parameter of a Crontab object must be a "
+            "string in ISO 8601 format or a datetime object with timezone "
+            "information. Got '{}', which does not have timezone information. "
+            "Ensure that it does by checking that 'start.tzinfo' is not None."
+        ),
+    }
+    DCE18 = {
+        "code": "DCE-18",
+        "message": (
+            "The 'end' parameter of a Crontab object must be a "
+            "string in ISO 8601 format or a datetime object with timezone "
+            "information. Got '{}', which does not have timezone information. "
+            "Ensure that it does by checking that 'end.tzinfo' is not None."
         ),
     }
 

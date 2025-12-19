@@ -70,6 +70,11 @@ from tabsdata._tabsserver.function.yaml_parsing import (
     store_import_as_yaml,
 )
 from tabsdata._tabsserver.utils import convert_uri_to_path
+from tabsdata._utils.datetime import (
+    NoTimezoneError,
+    datetime_to_microseconds_iso_str,
+    normalize_iso_datetime,
+)
 from tabsdata.exceptions import (
     ErrorCode,
     SourceConfigurationError,
@@ -228,11 +233,7 @@ class AzureSource(SourcePlugin):
         """
         str: The date and time after which the files were modified.
         """
-        return (
-            self._initial_last_modified.isoformat(timespec="microseconds")
-            if self._initial_last_modified
-            else None
-        )
+        return datetime_to_microseconds_iso_str(self._initial_last_modified)
 
     @initial_last_modified.setter
     def initial_last_modified(self, initial_last_modified: str | datetime):
@@ -243,29 +244,16 @@ class AzureSource(SourcePlugin):
             initial_last_modified (str | datetime): The date and time after
                 which the files were modified. The date and time can be provided as a
                 string in [ISO 8601 format](https://en.wikipedia.org/wiki/ISO_8601)
-                or as a datetime object. If no timezone is
-                provided, UTC will be assumed.
+                or as a datetime object.
         """
-        if initial_last_modified:
-            if isinstance(initial_last_modified, datetime):
-                processed_initial_last_modified = initial_last_modified
-            else:
-                try:
-                    processed_initial_last_modified = datetime.fromisoformat(
-                        initial_last_modified
-                    )
-                except ValueError:
-                    raise SourceConfigurationError(
-                        ErrorCode.SOCE5, initial_last_modified
-                    )
-                except TypeError:
-                    raise SourceConfigurationError(
-                        ErrorCode.SOCE6, type(initial_last_modified)
-                    )
-            _raise_exception_if_no_tzinfo(processed_initial_last_modified)
-            self._initial_last_modified = processed_initial_last_modified
-        else:
-            self._initial_last_modified = None
+        try:
+            self._initial_last_modified = normalize_iso_datetime(initial_last_modified)
+        except ValueError:
+            raise SourceConfigurationError(ErrorCode.SOCE5, initial_last_modified)
+        except TypeError:
+            raise SourceConfigurationError(ErrorCode.SOCE6, type(initial_last_modified))
+        except NoTimezoneError:
+            raise SourceConfigurationError(ErrorCode.SOCE41, initial_last_modified)
 
     @property
     def initial_values(self) -> dict:
@@ -478,11 +466,7 @@ class GCSSource(SourcePlugin):
         """
         str: The date and time after which the files were modified.
         """
-        return (
-            self._initial_last_modified.isoformat(timespec="microseconds")
-            if self._initial_last_modified
-            else None
-        )
+        return datetime_to_microseconds_iso_str(self._initial_last_modified)
 
     @initial_last_modified.setter
     def initial_last_modified(self, initial_last_modified: str | datetime):
@@ -493,29 +477,16 @@ class GCSSource(SourcePlugin):
             initial_last_modified (str | datetime): The date and time after
                 which the files were modified. The date and time can be provided as a
                 string in [ISO 8601 format](https://en.wikipedia.org/wiki/ISO_8601)
-                or as a datetime object. If no timezone is
-                provided, UTC will be assumed.
+                or as a datetime object.
         """
-        if initial_last_modified:
-            if isinstance(initial_last_modified, datetime):
-                processed_initial_last_modified = initial_last_modified
-            else:
-                try:
-                    processed_initial_last_modified = datetime.fromisoformat(
-                        initial_last_modified
-                    )
-                except ValueError:
-                    raise SourceConfigurationError(
-                        ErrorCode.SOCE5, initial_last_modified
-                    )
-                except TypeError:
-                    raise SourceConfigurationError(
-                        ErrorCode.SOCE6, type(initial_last_modified)
-                    )
-            _raise_exception_if_no_tzinfo(processed_initial_last_modified)
-            self._initial_last_modified = processed_initial_last_modified
-        else:
-            self._initial_last_modified = None
+        try:
+            self._initial_last_modified = normalize_iso_datetime(initial_last_modified)
+        except ValueError:
+            raise SourceConfigurationError(ErrorCode.SOCE5, initial_last_modified)
+        except TypeError:
+            raise SourceConfigurationError(ErrorCode.SOCE6, type(initial_last_modified))
+        except NoTimezoneError:
+            raise SourceConfigurationError(ErrorCode.SOCE41, initial_last_modified)
 
     @property
     def initial_values(self) -> dict:
@@ -731,11 +702,7 @@ class LocalFileSource(SourcePlugin):
         """
         str: The date and time after which the files were modified.
         """
-        return (
-            self._initial_last_modified.isoformat(timespec="microseconds")
-            if self._initial_last_modified
-            else None
-        )
+        return datetime_to_microseconds_iso_str(self._initial_last_modified)
 
     @initial_last_modified.setter
     def initial_last_modified(self, initial_last_modified: str | datetime):
@@ -746,29 +713,16 @@ class LocalFileSource(SourcePlugin):
             initial_last_modified (str | datetime): The date and time after
                 which the files were modified. The date and time can be provided as a
                 string in [ISO 8601 format](https://en.wikipedia.org/wiki/ISO_8601)
-                or as a datetime object. If no timezone is
-                provided, UTC will be assumed.
+                or as a datetime object.
         """
-        if initial_last_modified:
-            if isinstance(initial_last_modified, datetime):
-                processed_initial_last_modified = initial_last_modified
-            else:
-                try:
-                    processed_initial_last_modified = datetime.fromisoformat(
-                        initial_last_modified
-                    )
-                except ValueError:
-                    raise SourceConfigurationError(
-                        ErrorCode.SOCE5, initial_last_modified
-                    )
-                except TypeError:
-                    raise SourceConfigurationError(
-                        ErrorCode.SOCE6, type(initial_last_modified)
-                    )
-            _raise_exception_if_no_tzinfo(processed_initial_last_modified)
-            self._initial_last_modified = processed_initial_last_modified
-        else:
-            self._initial_last_modified = None
+        try:
+            self._initial_last_modified = normalize_iso_datetime(initial_last_modified)
+        except ValueError:
+            raise SourceConfigurationError(ErrorCode.SOCE5, initial_last_modified)
+        except TypeError:
+            raise SourceConfigurationError(ErrorCode.SOCE6, type(initial_last_modified))
+        except NoTimezoneError:
+            raise SourceConfigurationError(ErrorCode.SOCE41, initial_last_modified)
 
     @property
     def initial_values(self) -> dict:
@@ -997,11 +951,7 @@ class S3Source(SourcePlugin):
         """
         str: The date and time after which the files were modified.
         """
-        return (
-            self._initial_last_modified.isoformat(timespec="microseconds")
-            if self._initial_last_modified
-            else None
-        )
+        return datetime_to_microseconds_iso_str(self._initial_last_modified)
 
     @initial_last_modified.setter
     def initial_last_modified(self, initial_last_modified: str | datetime):
@@ -1012,29 +962,16 @@ class S3Source(SourcePlugin):
             initial_last_modified (str | datetime): The date and time after
                 which the files were modified. The date and time can be provided as a
                 string in [ISO 8601 format](https://en.wikipedia.org/wiki/ISO_8601)
-                or as a datetime object. If no timezone is
-                provided, UTC will be assumed.
+                or as a datetime object.
         """
-        if initial_last_modified:
-            if isinstance(initial_last_modified, datetime):
-                processed_initial_last_modified = initial_last_modified
-            else:
-                try:
-                    processed_initial_last_modified = datetime.fromisoformat(
-                        initial_last_modified
-                    )
-                except ValueError:
-                    raise SourceConfigurationError(
-                        ErrorCode.SOCE5, initial_last_modified
-                    )
-                except TypeError:
-                    raise SourceConfigurationError(
-                        ErrorCode.SOCE6, type(initial_last_modified)
-                    )
-            _raise_exception_if_no_tzinfo(processed_initial_last_modified)
-            self._initial_last_modified = processed_initial_last_modified
-        else:
-            self._initial_last_modified = None
+        try:
+            self._initial_last_modified = normalize_iso_datetime(initial_last_modified)
+        except ValueError:
+            raise SourceConfigurationError(ErrorCode.SOCE5, initial_last_modified)
+        except TypeError:
+            raise SourceConfigurationError(ErrorCode.SOCE6, type(initial_last_modified))
+        except NoTimezoneError:
+            raise SourceConfigurationError(ErrorCode.SOCE41, initial_last_modified)
 
     @property
     def initial_values(self) -> dict:
@@ -1405,8 +1342,3 @@ def _obtain_transporter_import(
 
 def _is_wildcard_pattern(pattern: str) -> bool:
     return any(char in pattern for char in "*?")
-
-
-def _raise_exception_if_no_tzinfo(user_input_datetime: datetime):
-    if user_input_datetime.tzinfo is None:
-        raise SourceConfigurationError(ErrorCode.SOCE41, user_input_datetime)
