@@ -4,7 +4,7 @@
 
 use crate::dxo::yaml::location::{Location, Locations};
 use crate::types::basic::{
-    AtTime, CollectionId, CollectionName, FunctionName, FunctionVersionId, WorkerConfig,
+    AtTime, CollectionId, CollectionName, FunctionName, FunctionVersionId, WorkerConfig, WorkerId,
 };
 use td_common::server::HttpRequest;
 
@@ -23,6 +23,7 @@ impl Locations for CronInput {
 #[td_type::Dto]
 #[derive(Eq, PartialEq)]
 pub struct Info {
+    pub worker_id: WorkerId,
     pub collection_id: CollectionId,
     pub collection: CollectionName,
     pub function_version_id: FunctionVersionId,
@@ -39,14 +40,13 @@ mod tests {
     use super::*;
     use crate::dxo::worker::CronConfig;
     use crate::dxo::yaml::WorkerInput;
-    use crate::types::basic::{
-        AtTime, CollectionName, CronMask, FunctionName, WorkerConfig, WorkerVersion,
-    };
+    use crate::types::basic::{AtTime, CollectionName, CronMask, FunctionName, WorkerConfig};
     use http::Method;
     use url::Url;
 
     #[test]
     fn test_cron_input_ser_deser() {
+        let worker_id = WorkerId::default();
         let collection_id = CollectionId::default();
         let function_version_id = FunctionVersionId::default();
         let scheduled_on = AtTime::default();
@@ -54,13 +54,13 @@ mod tests {
         let end = AtTime::default();
 
         let cfg = CronConfig {
-            version: WorkerVersion::default(),
             start: Some(start),
             end: Some(end),
             mask: CronMask::try_from("* * * * *").unwrap(),
         };
         let input = WorkerInput::CronV1(Box::new(CronInput {
             info: Info {
+                worker_id,
                 collection_id,
                 collection: CollectionName::try_from("collection").unwrap(),
                 function_version_id,
@@ -86,6 +86,7 @@ mod tests {
             format!(
                 r#"!CronV1
 info:
+  worker_id: {worker_id}
   collection_id: {collection_id}
   collection: collection
   function_version_id: {function_version_id}
@@ -96,7 +97,7 @@ info:
     method: POST
     headers: {{}}
     body: false
-  config: '{{"version":"V1","start":{start},"end":{end},"mask":"* * * * *"}}'
+  config: '{{"start":{start},"end":{end},"mask":"* * * * *"}}'
 "#
             )
         );

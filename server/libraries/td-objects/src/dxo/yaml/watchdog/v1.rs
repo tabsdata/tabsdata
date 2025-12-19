@@ -4,7 +4,7 @@
 
 use crate::dxo::yaml::location::{Location, Locations};
 use crate::types::basic::{
-    AtTime, CollectionId, CollectionName, FunctionName, FunctionVersionId, WorkerConfig,
+    AtTime, CollectionId, CollectionName, FunctionName, FunctionVersionId, WorkerConfig, WorkerId,
 };
 use td_common::server::HttpRequest;
 
@@ -23,6 +23,7 @@ impl Locations for WatchdogInput {
 #[td_type::Dto]
 #[derive(Eq, PartialEq)]
 pub struct Info {
+    pub worker_id: WorkerId,
     pub collection_id: CollectionId,
     pub collection: CollectionName,
     pub function_version_id: FunctionVersionId,
@@ -42,13 +43,14 @@ mod tests {
     use super::*;
     use crate::dxo::worker::WatchdogConfig;
     use crate::dxo::yaml::WorkerInput;
-    use crate::types::basic::{CollectionName, FunctionName, WorkerConfig, WorkerVersion};
+    use crate::types::basic::{CollectionName, FunctionName, WorkerConfig};
     use http::Method;
     use std::collections::HashMap;
     use url::Url;
 
     #[test]
     fn test_watchdog_input_ser_deser() {
+        let worker_id = WorkerId::default();
         let collection_id = CollectionId::default();
         let function_version_id = FunctionVersionId::default();
         let scheduled_on = AtTime::default();
@@ -56,7 +58,6 @@ mod tests {
         let end = AtTime::default();
 
         let cfg = WatchdogConfig {
-            version: WorkerVersion::default(),
             timeout_threshold_min: Default::default(),
             size_threshold: Default::default(),
             start: Some(start),
@@ -64,6 +65,7 @@ mod tests {
         };
         let input = WorkerInput::WatchdogV1(Box::new(WatchdogInput {
             info: Info {
+                worker_id,
                 collection_id,
                 collection: CollectionName::try_from("collection").unwrap(),
                 function_version_id,
@@ -108,6 +110,7 @@ mod tests {
             format!(
                 r#"!WatchdogV1
 info:
+  worker_id: {worker_id}
   collection_id: {collection_id}
   collection: collection
   function_version_id: {function_version_id}
@@ -132,7 +135,7 @@ info:
     method: GET
     headers: {{}}
     body: false
-  config: '{{"version":"V1","timeout_threshold_min":60,"size_threshold":10000,"start":{start},"end":{end}}}'
+  config: '{{"timeout_threshold_min":60,"size_threshold":10000,"start":{start},"end":{end}}}'
 "#
             )
         );

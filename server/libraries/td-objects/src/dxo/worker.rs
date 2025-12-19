@@ -10,7 +10,6 @@ mod definitions {
         AtTime, CollectionId, CollectionName, CronMask, Enabled, ExecutionId, ExecutionName,
         FunctionName, FunctionRunId, FunctionVersionId, SizeThreshold, TimeoutThresholdMin,
         TransactionId, WorkerConfig, WorkerId, WorkerMessageStatus, WorkerStatus, WorkerType,
-        WorkerVersion,
     };
     use td_common::datetime::IntoDateTimeUtc;
     use td_common::execution_status::WorkerCallbackStatus;
@@ -198,7 +197,6 @@ mod definitions {
     #[td_type::Dto]
     #[derive(Eq, PartialEq)]
     pub struct CronConfig {
-        pub version: WorkerVersion,
         pub start: Option<AtTime>,
         pub end: Option<AtTime>,
         pub mask: CronMask,
@@ -207,7 +205,6 @@ mod definitions {
     #[td_type::Dto]
     #[derive(Eq, PartialEq)]
     pub struct WatchdogConfig {
-        pub version: WorkerVersion,
         pub timeout_threshold_min: TimeoutThresholdMin,
         pub size_threshold: SizeThreshold,
         pub start: Option<AtTime>,

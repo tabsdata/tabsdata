@@ -4,51 +4,59 @@
 
 use crate::scheduler::runner::{CronJobSchedulerError, CronJobTask};
 use async_trait::async_trait;
+use std::fmt::{Debug, Formatter};
+use td_common::server::HttpRequest;
 use tokio::sync::watch;
 use tracing::{debug, error, warn};
 
-#[derive(Debug)]
-pub struct HttpRequest {
-    method: http::Method,
-    url: url::Url,
-    headers: Vec<(String, String)>,
-    body: Option<String>,
+pub struct HttpRequestTask {
+    request: HttpRequest,
+    body: Option<Box<dyn Fn() -> String + Send + Sync>>,
     client: reqwest::Client,
 }
 
-impl HttpRequest {
-    pub fn new(method: http::Method, url: url::Url) -> Self {
+impl Debug for HttpRequestTask {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("HttpRequestTask")
+            .field("request", &self.request)
+            .field("body", &self.body.is_some())
+            .finish()
+    }
+}
+
+impl HttpRequestTask {
+    pub fn new(request: HttpRequest) -> Self {
         Self {
-            method,
-            url,
-            headers: vec![],
+            request,
             body: None,
             client: reqwest::Client::new(),
         }
     }
 
-    pub fn with_headers(&mut self, headers: Vec<(String, String)>) -> &mut Self {
-        self.headers = headers;
-        self
-    }
-
-    pub fn with_body(&mut self, body: String) -> &mut Self {
-        self.body = Some(body);
+    pub fn with_body(&mut self, body: impl Fn() -> String + Send + Sync + 'static) -> &mut Self {
+        self.body = Some(Box::new(body));
         self
     }
 }
 
 #[async_trait]
-impl CronJobTask for HttpRequest {
+impl CronJobTask for HttpRequestTask {
     async fn run(&self, mut shutdown: watch::Receiver<()>) -> Result<(), CronJobSchedulerError> {
-        let mut request = self.client.request(self.method.clone(), self.url.clone());
+        let HttpRequest {
+            url,
+            method,
+            headers,
+            body,
+        } = self.request.clone();
 
-        for (key, value) in &self.headers {
+        let mut request = self.client.request(method, url);
+
+        for (key, value) in headers {
             request = request.header(key, value);
         }
 
-        if let Some(body) = &self.body {
-            request = request.body(body.clone());
+        if body && let Some(body_gen) = self.body.as_ref() {
+            request = request.body(body_gen());
         }
 
         let response_fut = request.send();
@@ -94,10 +102,12 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let task = Box::new(HttpRequest::new(
-            Method::GET,
-            format!("{}/test", mock_server.uri()).parse().unwrap(),
-        ));
+        let task = Box::new(HttpRequestTask::new(HttpRequest {
+            url: format!("{}/test", mock_server.uri()).parse().unwrap(),
+            method: Method::GET,
+            headers: Default::default(),
+            body: false,
+        }));
 
         let (_shutdown_tx, shutdown_rx) = watch::channel(());
         let result = task.run(shutdown_rx).await;
@@ -114,10 +124,12 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let task = Box::new(HttpRequest::new(
-            Method::GET,
-            format!("{}/test", mock_server.uri()).parse().unwrap(),
-        ));
+        let task = Box::new(HttpRequestTask::new(HttpRequest {
+            url: format!("{}/test", mock_server.uri()).parse().unwrap(),
+            method: Method::GET,
+            headers: Default::default(),
+            body: false,
+        }));
 
         let (_shutdown_tx, shutdown_rx) = watch::channel(());
         let result = task.run(shutdown_rx).await;

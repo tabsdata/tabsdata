@@ -54,6 +54,7 @@ td-build = { workspace = true }
 ## Libraries
 
 td-common = { workspace = true }
+td-objects = { workspace = true }
 td-process = { workspace = true }
 
 ## Extensions
@@ -61,7 +62,6 @@ td-process = { workspace = true }
 # External dependencies
 
 async-trait = { workspace = true }
-clap = { workspace = true, features = ["derive"] }
 chrono = { workspace = true }
 croner = { workspace = true }
 futures = { workspace = true }
@@ -71,7 +71,9 @@ thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 tokio-cron-scheduler = { workspace = true }
 tracing = { workspace = true }
-url = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
 
 [dev-dependencies]
 td-common = { workspace = true, features = ["td-test"] }

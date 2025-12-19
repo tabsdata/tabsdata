@@ -387,12 +387,16 @@ pub async fn create_locked_cron_workers_start_request<T: WorkerMessageQueue>(
                         Url::parse(&trigger_url).map_err(WorkerRequestError::UrlParse)?
                     },
                     method: Method::POST,
-                    headers: Default::default(),
+                    headers: HashMap::from([(
+                        "content-type".to_string(),
+                        "application/json".to_string(),
+                    )]),
                     body: true,
                 };
 
                 // Build info
                 let info = cron::v1::Info {
+                    worker_id: cron_worker.id,
                     collection_id: cron_worker.collection_id,
                     collection: cron_worker.collection.clone(),
                     function_version_id: cron_worker.function_version_id,
@@ -581,6 +585,7 @@ pub async fn create_locked_watchdog_workers_start_request<T: WorkerMessageQueue>
                 // Build info
                 // TODO Urls are wrong as of now
                 let info = watchdog::v1::Info {
+                    worker_id: watchdog_worker.id,
                     collection_id: watchdog_worker.collection_id,
                     collection: watchdog_worker.collection.clone(),
                     function_version_id: watchdog_worker.function_version_id,

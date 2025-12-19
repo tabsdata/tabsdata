@@ -23,11 +23,11 @@ mod definitions {
 
     #[td_type::Dto]
     pub struct ExecutionRequest {
-        name: Option<ExecutionName>,
+        pub name: Option<ExecutionName>,
         #[builder(default)]
         #[serde(default)]
         #[td_type(extractor)]
-        function_only: FunctionOnly,
+        pub function_only: FunctionOnly,
     }
 
     #[td_type::Dao]
