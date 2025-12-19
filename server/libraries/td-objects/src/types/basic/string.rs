@@ -8,7 +8,6 @@ use crate::parse::{
     parse_function, parse_role, parse_table, parse_user,
 };
 use std::fmt::Debug;
-use std::str::FromStr;
 use td_error::{ApiError, api_error};
 use td_security::{ADMIN_USER, SEC_ADMIN_ROLE, SYS_ADMIN_ROLE, USER_ROLE};
 
@@ -32,17 +31,12 @@ pub struct CronMask;
 
 impl CronMask {
     fn create_cron(s: String) -> Result<croner::Cron, td_error::TdError> {
-        let parts = s.split(' ').collect::<Vec<_>>();
-        if parts.len() > 5 {
-            // 6 parts gives a precision of seconds, which we do not support
-            // * * * * * * <- seconds
-            //   * * * * * <- minutes
-            Err(api_error!(
-                ApiError::InputError,
-                "Invalid cron expression, seconds are not supported"
-            ))?
-        }
-        let cron = croner::Cron::from_str(&s)
+        // We do not allow seconds precision in the parsed cron masks.
+        let parser = croner::parser::CronParser::builder()
+            .seconds(croner::parser::Seconds::Disallowed)
+            .build();
+        let cron = parser
+            .parse(&s)
             .map_err(|e| api_error!(ApiError::InputError, "Invalid cron expression: {e}"))?;
         Ok(cron)
     }
