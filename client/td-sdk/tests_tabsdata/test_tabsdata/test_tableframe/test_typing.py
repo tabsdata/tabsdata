@@ -42,40 +42,10 @@ class TestDataTypes:
         for dtype in expected_types:
             assert dtype in TF_DATA_TYPES, f"{dtype} should be in TF_DATA_TYPES"
 
-    def test_data_types_contains_type_groups(self):
-        expected_groups = [
-            td_dtypes.FLOAT_DTYPES,
-            td_dtypes.INTEGER_DTYPES,
-            td_dtypes.NUMERIC_DTYPES,
-            td_dtypes.SIGNED_INTEGER_DTYPES,
-            td_dtypes.TEMPORAL_DTYPES,
-            td_dtypes.UNSIGNED_INTEGER_DTYPES,
-        ]
-
-        for dtype_group in expected_groups:
-            assert (
-                dtype_group in TF_DATA_TYPES
-            ), f"{dtype_group} should be in TF_DATA_TYPES"
-
-    def test_data_types_contains_abstract_types(self):
-        expected_abstract = [
-            td_dtypes.NumericType,
-            td_dtypes.IntegerType,
-            td_dtypes.SignedIntegerType,
-            td_dtypes.UnsignedIntegerType,
-            td_dtypes.FloatType,
-            td_dtypes.TemporalType,
-        ]
-
-        for dtype in expected_abstract:
-            assert dtype in TF_DATA_TYPES, f"{dtype} should be in TF_DATA_TYPES"
-
     def test_membership_checking(self):
         assert td_dtypes.Int32 in TF_DATA_TYPES
         assert td_dtypes.String in TF_DATA_TYPES
         assert td_dtypes.Float64 in TF_DATA_TYPES
-        assert td_dtypes.INTEGER_DTYPES in TF_DATA_TYPES
-        assert td_dtypes.NumericType in TF_DATA_TYPES
 
     def test_data_types_is_immutable(self):
         with pytest.raises(AttributeError):

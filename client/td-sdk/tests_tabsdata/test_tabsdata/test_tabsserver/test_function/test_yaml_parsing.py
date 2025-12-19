@@ -49,6 +49,7 @@ def test_store_response_as_yaml_generates_correct_yaml():
             return {"!NoData": loader.construct_mapping(node)}
 
         TestResponseLoader.add_constructor("!V2", v2_constructor)
+        TestResponseLoader.add_constructor("!FunctionV2", v2_constructor)
         TestResponseLoader.add_constructor("!Data", v2_data_constructor)
         TestResponseLoader.add_constructor("!NoData", v2_no_data_constructor)
 

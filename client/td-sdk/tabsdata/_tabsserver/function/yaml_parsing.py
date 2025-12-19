@@ -515,14 +515,27 @@ def v1_data_listener_constructor(loader, node):
 
 def get_input_yaml_loader():
     """Add constructors to PyYAML loader."""
-    loader = yaml.SafeLoader
+
+    # To avoid modifying the global SafeLoader.
+    class InputYamlLoader(yaml.SafeLoader):
+        pass
+
     # When more versions are added, they will be listed here, and each will have its
     # own constructor.
-    loader.add_constructor("!FunctionV2", v2_function_constructor)
-    loader.add_constructor("!V2", v2_function_constructor)  # TODO: Only here for
-    #   backwards compatibility, remove ASAP
-    loader.add_constructor("!DataListenerInputV1", v1_data_listener_constructor)
-    return loader
+    InputYamlLoader.add_constructor(
+        "!FunctionV2",
+        v2_function_constructor,
+    )
+    # ToDo: Only here for backwards compatibility, remove ASAP.
+    InputYamlLoader.add_constructor(
+        "!V2",
+        v2_function_constructor,
+    )
+    InputYamlLoader.add_constructor(
+        "!DataListenerInputV1",
+        v1_data_listener_constructor,
+    )
+    return InputYamlLoader
 
 
 def parse_request_yaml(yaml_file: str) -> FunctionYaml | DataListenerYaml:
@@ -889,9 +902,13 @@ def v1_s3_representer(
 
 def get_copy_dumper():
     """Add representers to a YAML serializer."""
-    safe_dumper = yaml.SafeDumper
-    safe_dumper.add_representer(V1CopyFormat, v1_copy_format_representer)
-    return safe_dumper
+
+    # To avoid modifying the global SafeDumper.
+    class CopyDumper(yaml.SafeDumper):
+        pass
+
+    CopyDumper.add_representer(V1CopyFormat, v1_copy_format_representer)
+    return CopyDumper
 
 
 def get_import_dumper():
@@ -1016,11 +1033,15 @@ def v1_import_report_constructor(loader, node):
 
 def get_import_report_yaml_loader():
     """Add constructors to PyYAML loader."""
-    loader = yaml.SafeLoader
+
+    # To avoid modifying the global SafeDumper.
+    class ImportReportYamlLoader(yaml.SafeLoader):
+        pass
+
     # When more versions are added, they will be listed here, and each will have its
     # own constructor.
-    loader.add_constructor("!ImportV1", v1_import_report_constructor)
-    return loader
+    ImportReportYamlLoader.add_constructor("!ImportV1", v1_import_report_constructor)
+    return ImportReportYamlLoader
 
 
 def parse_import_report_yaml(yaml_file: str) -> ImportReportYaml:

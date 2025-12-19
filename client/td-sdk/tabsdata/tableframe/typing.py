@@ -109,6 +109,7 @@ Roll: TypeAlias = pl_typing.Roll
 # noinspection PyProtectedMember
 TimeUnit: TypeAlias = pl_typing.TimeUnit
 
+# Caution: Update type TypeOfDataType below everytime you modify this type.
 DataType: TypeAlias = Union[
     td_dtypes.Boolean,
     td_dtypes.Categorical,
@@ -132,6 +133,31 @@ DataType: TypeAlias = Union[
     td_dtypes.UInt32,
     td_dtypes.UInt64,
     td_dtypes.Utf8,
+]
+
+# Caution: Update type DataType above everytime you modify this type.
+TypeOfDataType: TypeAlias = Union[
+    type[td_dtypes.Boolean],
+    type[td_dtypes.Categorical],
+    type[td_dtypes.Date],
+    type[td_dtypes.Datetime],
+    type[td_dtypes.Decimal],
+    type[td_dtypes.Duration],
+    type[td_dtypes.Enum],
+    type[td_dtypes.Float32],
+    type[td_dtypes.Float64],
+    type[td_dtypes.Int8],
+    type[td_dtypes.Int16],
+    type[td_dtypes.Int64],
+    type[td_dtypes.Int32],
+    type[td_dtypes.Int128],
+    type[td_dtypes.Null],
+    type[td_dtypes.String],
+    type[td_dtypes.Time],
+    type[td_dtypes.UInt8],
+    type[td_dtypes.UInt16],
+    type[td_dtypes.UInt32],
+    type[td_dtypes.UInt64],
 ]
 
 TF_DATA_TYPES: frozenset[type] = frozenset(get_args(DataType))

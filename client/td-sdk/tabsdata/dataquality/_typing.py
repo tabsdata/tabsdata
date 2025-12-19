@@ -6,7 +6,7 @@ from typing import Annotated, Literal, TypeAlias, Union
 
 from pydantic import Field, Strict, StrictFloat, StrictInt
 
-from tabsdata.tableframe.typing import DataType
+from tabsdata.tableframe.typing import DataType, TypeOfDataType
 
 ColumnNameSpec: TypeAlias = str
 
@@ -34,7 +34,7 @@ HasColumnsModeSpec: TypeAlias = Literal["at_least", "exact"]
 
 DataTypeSpec: TypeAlias = DataType
 
-ColumnTypeSpec: TypeAlias = tuple[ColumnNameSpec, DataTypeSpec]
+ColumnTypeSpec: TypeAlias = tuple[ColumnNameSpec, TypeOfDataType]
 
 ColumnTypesSpec: TypeAlias = Union[
     ColumnTypeSpec,
