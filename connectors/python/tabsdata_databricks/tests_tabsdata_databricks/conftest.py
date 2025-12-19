@@ -21,14 +21,9 @@ TESTING_RESOURCES_FOLDER = TESTING_RESOURCES_PATH
 enrich_sys_path()
 _enrich_sys_path()
 
-import os
 from typing import Any, Generator
 
-import databricks.sdk as dbsdk
-import databricks.sql as dbsql
 import pytest
-from databricks.sdk import WorkspaceClient
-from databricks.sdk.core import Config, pat_auth
 from xdist.workermanage import WorkerController
 
 from tabsdata._utils.tdlogging import setup_tests_logging
@@ -64,7 +59,9 @@ def pytest_sessionfinish(session, exitstatus):
 
 
 @pytest.fixture(scope="session")
-def databricks_client(databricks_config: dict) -> Generator[WorkspaceClient, Any, None]:
+def databricks_client(databricks_config: dict) -> Generator[Any, Any, None]:
+    import databricks.sdk as dbsdk  # Lazy import
+
     host = databricks_config["HOST"]
     token = databricks_config["TOKEN"]
     ws_client = dbsdk.WorkspaceClient(
@@ -76,6 +73,8 @@ def databricks_client(databricks_config: dict) -> Generator[WorkspaceClient, Any
 
 @pytest.fixture(scope="session")
 def databricks_config() -> Generator[dict[str, str], Any, None]:
+    import os  # Lazy import
+
     config = {
         "CATALOG_ENV": "DBX0__CATALOG",
         "HOST_ENV": "DBX0__HOST",
@@ -123,6 +122,9 @@ def databricks_config() -> Generator[dict[str, str], Any, None]:
 
 @pytest.fixture(scope="session")
 def sql_conn(databricks_client, databricks_config):
+    import databricks.sql as dbsql  # Lazy import
+    from databricks.sdk.core import Config, pat_auth  # Lazy import
+
     warehouse_id = None
     warehouse_name = databricks_config["WAREHOUSE_NAME"]
     for warehouse in databricks_client.warehouses.list():

@@ -31,29 +31,9 @@ from time import sleep
 from typing import Any
 
 # noinspection PyPackageRequirements
-import boto3
-
-# noinspection PyPackageRequirements
-import docker
-import hvac
-
-# noinspection PyPackageRequirements
-import mysql.connector
-import numpy as np
-
-# noinspection PyPackageRequirements
-import oracledb
-import polars as pl
-import psycopg2
-
-# noinspection PyPackageRequirements
 import pytest
 import yaml
-
-# noinspection PyPackageRequirements
-from azure.storage.blob import BlobServiceClient
 from filelock import FileLock
-from google.cloud import storage
 from xdist.workermanage import WorkerController
 
 import tabsdata as td
@@ -88,7 +68,7 @@ def pytest_configure(config: pytest.Config):
     setup_tests_logging()
     if not hasattr(config, "workerinput"):
         setup_temp_folder(config)
-    clean_everything()
+        clean_everything()
 
 
 def pytest_configure_node(node: WorkerController):
@@ -138,14 +118,27 @@ CORRECT_DESTINATION = TableOutput("output")
 CORRECT_INPUT_ACTIONS = {}
 CORRECT_OUTPUT_ACTIONS = {}
 
-PYTEST_DEFAULT_ENVIRONMENT_PREFIX = "pytest_exclusive_prefix_"
-DEFAULT_PYTEST_MARIADB_DOCKER_CONTAINER_NAME = "pytest_exclusive_mariadb_container"
-DEFAULT_PYTEST_MYSQL_DOCKER_CONTAINER_NAME = "pytest_exclusive_mysql_container"
-DEFAULT_PYTEST_ORACLE_DOCKER_CONTAINER_NAME = "pytest_exclusive_oracle_container"
-DEFAULT_PYTEST_POSTGRES_DOCKER_CONTAINER_NAME = "pytest_exclusive_postgres_container"
 DEFAULT_LOGS_FILE = "fn.log"
 
-DEFAULT_PYTEST_HASHICORP_DOCKER_CONTAINER_NAME = "pytest_exclusive_hashicorp_container"
+PYTEST_DEFAULT_ENVIRONMENT_PREFIX = "tdpytest_"
+DOCKER_REGULAR_CONTAINER_INFIX = "c_"
+DOCKER_COMPOSE_CONTAINER_INFIX = "k_"
+DEFAULT_PYTEST_MARIADB_DOCKER_CONTAINER_NAME = (
+    f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}{DOCKER_REGULAR_CONTAINER_INFIX}mariadb"
+)
+DEFAULT_PYTEST_MYSQL_DOCKER_CONTAINER_NAME = (
+    f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}{DOCKER_REGULAR_CONTAINER_INFIX}mysql"
+)
+DEFAULT_PYTEST_ORACLE_DOCKER_CONTAINER_NAME = (
+    f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}{DOCKER_REGULAR_CONTAINER_INFIX}oracle"
+)
+DEFAULT_PYTEST_POSTGRES_DOCKER_CONTAINER_NAME = (
+    f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}{DOCKER_REGULAR_CONTAINER_INFIX}postgres"
+)
+DEFAULT_PYTEST_HASHICORP_DOCKER_CONTAINER_NAME = (
+    f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}{DOCKER_REGULAR_CONTAINER_INFIX}hashicorp"
+)
+
 HASHICORP_PORT = 8200
 HASHICORP_TESTING_SECRET_PATH = "tabsdata/testing/path"
 HASHICORP_TESTING_SECRET_NAME = "testing_secret_name"
@@ -372,13 +365,17 @@ def pytest_generate_tests(metafunc):
 def read_json_and_clean(path, sort=True):
     """Reads a json file and removes the td.id column. Also sorts it to make
     comparison more stable"""
+    import polars as pl  # Lazy import
+
     df = pl.read_json(path)
     df = clean_polars_df(df, sort=sort)
     return df
 
 
-def clean_polars_df(df, sort=True) -> pl.DataFrame:
+def clean_polars_df(df, sort=True):
     """Removes the td column. Also sorts it to make comparison more stable"""
+    import polars as pl  # Lazy import
+
     # TODO: change to quote
 
     df = df.select(pl.exclude(f"^{re.escape(td_constants.TD_COLUMN_PREFIX)}.*$"))
@@ -839,6 +836,12 @@ def create_docker_postgres_database(
     name: str = DEFAULT_PYTEST_POSTGRES_DOCKER_CONTAINER_NAME,
     port: int = None,
 ):
+    # noinspection PyPackageRequirements
+    import docker  # Lazy import
+
+    # noinspection PyPackageRequirements
+    import psycopg2  # Lazy import
+
     logger.info("Starting Postgres container")
     client = docker.from_env()
     if containers := client.containers.list(filters={"name": name}):
@@ -1062,6 +1065,9 @@ def s3_config():
 
 @pytest.fixture(scope="session")
 def s3_client(s3_config):
+    # noinspection PyPackageRequirements
+    import boto3  # Lazy import
+
     session = boto3.Session(
         aws_access_key_id=os.environ.get(s3_config["ACCESS_KEY_ENV"]),
         aws_secret_access_key=os.environ.get(s3_config["SECRET_KEY_ENV"]),
@@ -1123,6 +1129,9 @@ def azure_config():
 
 @pytest.fixture(scope="session")
 def azure_client(azure_config):
+    # noinspection PyPackageRequirements
+    from azure.storage.blob import BlobServiceClient  # Lazy import
+
     account_name = os.environ.get(azure_config["ACCOUNT_NAME_ENV"])
     account_key = os.environ.get(azure_config["ACCOUNT_KEY_ENV"])
     service = BlobServiceClient(
@@ -1154,6 +1163,8 @@ def gcs_config():
 
 @pytest.fixture
 def gcs_client(tmp_path, gcs_config):
+    from google.cloud import storage  # Lazy import
+
     gcs_credentials_path = os.path.join(
         tmp_path, f"gcs_credentials_{uuid.uuid4().hex[:16]}.json"
     )
@@ -1185,6 +1196,12 @@ def create_docker_mysql_database(
     name: str = DEFAULT_PYTEST_MYSQL_DOCKER_CONTAINER_NAME,
     port: int = None,
 ):
+    # noinspection PyPackageRequirements
+    import docker  # Lazy import
+
+    # noinspection PyPackageRequirements
+    import mysql.connector  # Lazy import
+
     logger.info("Starting MySQL container")
     client = docker.from_env()
     if containers := client.containers.list(filters={"name": name}):
@@ -1381,6 +1398,10 @@ def create_docker_mysql_database(
 
 
 def create_docker_hashicorp_vault(s3_config: dict):
+    # noinspection PyPackageRequirements
+    import docker  # Lazy import
+    import hvac  # Lazy import
+
     logger.info("Starting HashiCorp vault container")
     client = docker.from_env()
     if client.containers.list(
@@ -1460,6 +1481,12 @@ def create_docker_mariadb_database(
     name: str = DEFAULT_PYTEST_MARIADB_DOCKER_CONTAINER_NAME,
     port: int = None,
 ):
+    # noinspection PyPackageRequirements
+    import docker  # Lazy import
+
+    # noinspection PyPackageRequirements
+    import mysql.connector  # Lazy import
+
     logger.info("Starting MariaDB container")
     client = docker.from_env()
     if containers := client.containers.list(filters={"name": name}):
@@ -1662,6 +1689,12 @@ def create_docker_oracle_database(
     name: str = DEFAULT_PYTEST_ORACLE_DOCKER_CONTAINER_NAME,
     port: int = None,
 ):
+    # noinspection PyPackageRequirements
+    import docker  # Lazy import
+
+    # noinspection PyPackageRequirements
+    import oracledb  # Lazy import
+
     logger.info("Starting Oracle container")
     client = docker.from_env()
     if containers := client.containers.list(filters={"name": name}):
@@ -1868,6 +1901,9 @@ def clean_python_virtual_environments():
 
 
 def remove_docker_containers(name_pattern):
+    # noinspection PyPackageRequirements
+    import docker  # Lazy import
+
     client = docker.from_env()
     for container in client.containers.list(all=True, filters={"name": name_pattern}):
         try:
@@ -2240,6 +2276,9 @@ def testing_collection_with_table(worker_id, tabsserver_connection):
 
 
 def get_lf(size: int, chunk_size=1000):
+    import numpy as np  # Lazy import
+    import polars as pl  # Lazy import
+
     final_lf = None
     for start in range(0, size, chunk_size):
         end = min(start + chunk_size, size)

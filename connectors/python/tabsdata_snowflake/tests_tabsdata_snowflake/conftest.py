@@ -22,14 +22,9 @@ TESTING_RESOURCES_FOLDER = TESTING_RESOURCES_PATH
 enrich_sys_path()
 _enrich_sys_path()
 
-import os
-
 import pytest
-from snowflake.connector import connect
 from xdist.workermanage import WorkerController
 
-import tabsdata as td
-from tabsdata._secret import _recursively_evaluate_secret
 from tabsdata._utils.tdlogging import setup_tests_logging
 from tests_tabsdata.conftest import (
     clean_python_virtual_environments,
@@ -62,6 +57,10 @@ def pytest_sessionfinish(session, exitstatus):
 
 @pytest.fixture(scope="session")
 def snowflake_config():
+    import os  # Lazy import
+
+    import tabsdata as td  # Lazy import
+
     config: dict[str, Any] = {
         "ACCOUNT_ENV": "SNW__ACCOUNT",
         "USER_ENV": "SNW__USER",
@@ -96,6 +95,10 @@ def snowflake_config():
 
 @pytest.fixture(scope="session")
 def snowflake_connection(snowflake_config):
+    from snowflake.connector import connect  # Lazy import
+
+    from tabsdata._secret import _recursively_evaluate_secret  # Lazy import
+
     conn = connect(
         **_recursively_evaluate_secret(snowflake_config["CONNECTION_PARAMETERS"])
     )

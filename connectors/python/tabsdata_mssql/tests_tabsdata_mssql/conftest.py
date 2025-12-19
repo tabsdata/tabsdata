@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import logging
 
+from conftest import DOCKER_REGULAR_CONTAINER_INFIX, PYTEST_DEFAULT_ENVIRONMENT_PREFIX
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
@@ -23,8 +25,6 @@ _enrich_sys_path()
 
 from time import sleep
 
-import docker
-import polars as pl
 import pytest
 from filelock import FileLock
 from xdist.workermanage import WorkerController
@@ -35,7 +35,6 @@ from tests_tabsdata.conftest import (
     DB_NAME,
     DB_PASSWORD,
     MAXIMUM_RETRY_COUNT,
-    clean_polars_df,
     clean_python_virtual_environments,
     pytest_addoption,
     pytest_generate_tests,
@@ -49,7 +48,7 @@ def pytest_configure(config: pytest.Config):
     setup_tests_logging()
     if not hasattr(config, "workerinput"):
         setup_temp_folder(config)
-    clean_everything()
+        clean_everything()
 
 
 def pytest_configure_node(node: WorkerController):
@@ -57,32 +56,50 @@ def pytest_configure_node(node: WorkerController):
 
 
 DEFAULT_PYTEST_MSSQL_2019_DOCKER_CONTAINER_NAME = (
-    "pytest_exclusive_mssql_2019_container"
+    f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}{DOCKER_REGULAR_CONTAINER_INFIX}mssql-2019"
 )
 DEFAULT_PYTEST_MSSQL_2022_DOCKER_CONTAINER_NAME = (
-    "pytest_exclusive_mssql_2022_container"
+    f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}{DOCKER_REGULAR_CONTAINER_INFIX}mssql-2022"
 )
 
 MSSQL_2019_PORT = 2544
 MSSQL_2022_PORT = 1433
 MSSQL_USER = "sa"
 
-INVOICE_HEADER_DF = clean_polars_df(
-    pl.DataFrame(
-        {
-            "id": range(1, 7),
-            "name": ["Arvind", "Tucu", "Dimas", "Joaquin", "Jennifer", "Aleix"],
-        }
+
+# Lazy-loaded dataframes with lazy imports
+def _create_invoice_dataframes():
+    """Create dataframes with lazy polars import"""
+    import polars as pl  # Lazy import
+
+    from tests_tabsdata.conftest import clean_polars_df
+
+    invoice_header = clean_polars_df(
+        pl.DataFrame(
+            {
+                "id": range(1, 7),
+                "name": ["Arvind", "Tucu", "Dimas", "Joaquin", "Jennifer", "Aleix"],
+            }
+        )
     )
-)
-INVOICE_ITEM_DF = clean_polars_df(
-    pl.DataFrame(
-        {
-            "id": range(1, 6),
-            "name": ["Leonardo", "Donatello", "Michelangelo", "Raphael", "Splinter"],
-        }
+    invoice_item = clean_polars_df(
+        pl.DataFrame(
+            {
+                "id": range(1, 6),
+                "name": [
+                    "Leonardo",
+                    "Donatello",
+                    "Michelangelo",
+                    "Raphael",
+                    "Splinter",
+                ],
+            }
+        )
     )
-)
+    return invoice_header, invoice_item
+
+
+INVOICE_HEADER_DF, INVOICE_ITEM_DF = _create_invoice_dataframes()
 
 
 def testing_mssql_2019(tmp_path_factory, worker_id):
@@ -126,6 +143,8 @@ def testing_mssql_2022(tmp_path_factory, worker_id):
 
 
 def create_docker_mssql_database(name: str, port: int, version: int):
+    import docker  # Lazy import
+
     logger.info("Starting Microsoft SQL Server container")
     logger.info(f"Using container name: {name}")
     logger.info(f"Using port: {port}")

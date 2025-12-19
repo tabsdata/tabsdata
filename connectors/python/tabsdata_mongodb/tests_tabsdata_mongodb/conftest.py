@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import logging
 
+from conftest import DOCKER_COMPOSE_CONTAINER_INFIX, PYTEST_DEFAULT_ENVIRONMENT_PREFIX
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
@@ -21,13 +23,9 @@ TESTING_RESOURCES_FOLDER = TESTING_RESOURCES_PATH
 enrich_sys_path()
 _enrich_sys_path()
 
-import os
-import subprocess
 from time import sleep
 from urllib.parse import quote_plus
 
-import docker
-import pymongo
 import pytest
 from filelock import FileLock
 from xdist.workermanage import WorkerController
@@ -37,6 +35,7 @@ from tests_tabsdata.conftest import (
     DB_HOST,
     DB_PASSWORD,
     DB_USER,
+    DOCKER_REGULAR_CONTAINER_INFIX,
     MAXIMUM_RETRY_COUNT,
     clean_python_virtual_environments,
     pytest_addoption,
@@ -57,7 +56,9 @@ def pytest_configure_node(node: WorkerController):
     setup_temp_folder_node(node)
 
 
-DEFAULT_PYTEST_MONGODB_DOCKER_CONTAINER_NAME = "pytest_exclusive_mongodb_container"
+DEFAULT_PYTEST_MONGODB_DOCKER_CONTAINER_NAME = (
+    f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}{DOCKER_REGULAR_CONTAINER_INFIX}mongodb"
+)
 MONGODB_PORT = 27018
 MONGODB_URI_WITHOUT_CREDENTIALS = f"mongodb://{DB_HOST}:{MONGODB_PORT}"
 MONGODB_URI_WITH_CREDENTIALS = (
@@ -66,14 +67,19 @@ MONGODB_URI_WITH_CREDENTIALS = (
     f"{quote_plus(DB_PASSWORD)}@{DB_HOST}:{MONGODB_PORT}"
 )
 
-DEFAULT_PYTEST_MONGODB_DOCKER_COMPOSE_CONTAINER_NAME = "tests_tabsdata_mongodb"
+DEFAULT_PYTEST_MONGODB_DOCKER_COMPOSE_CONTAINER_NAME = (
+    f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}{DOCKER_COMPOSE_CONTAINER_INFIX}mongodb"
+)
 DEFAULT_PYTEST_MONGODB_WITH_REPLICA_SET_DOCKER_CONTAINER_NAME = (
-    "pytest_exclusive_mongodb_container_with_replica_set"
+    f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}{DOCKER_REGULAR_CONTAINER_INFIX}mongodb-rest"
 )
 MONGODB_WITH_REPLICA_SET_URI = "mongodb://127.0.0.1:27017/?replicaSet=rs0"
 
 
 def create_docker_mongodb_database():
+    import docker  # Lazy import
+    import pymongo  # Lazy import
+
     remove_docker_containers(DEFAULT_PYTEST_MONGODB_DOCKER_CONTAINER_NAME)
     logger.info("Starting MongoDB container")
     client = docker.from_env()
@@ -134,6 +140,12 @@ def testing_mongodb(tmp_path_factory, worker_id):
 
 
 def create_docker_mongodb_database_with_replica_set():
+    import os  # Lazy import
+    import subprocess  # Lazy import
+
+    import docker  # Lazy import
+    import pymongo  # Lazy import
+
     remove_docker_containers(
         f"({DEFAULT_PYTEST_MONGODB_DOCKER_COMPOSE_CONTAINER_NAME}"
         f"|{DEFAULT_PYTEST_MONGODB_WITH_REPLICA_SET_DOCKER_CONTAINER_NAME})"

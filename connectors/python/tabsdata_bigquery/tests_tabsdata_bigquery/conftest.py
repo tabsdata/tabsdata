@@ -6,8 +6,6 @@ from __future__ import annotations
 
 import logging
 
-import tabsdata
-
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
@@ -23,11 +21,7 @@ TESTING_RESOURCES_FOLDER = TESTING_RESOURCES_PATH
 enrich_sys_path()
 _enrich_sys_path()
 
-import json
-import os
-
 import pytest
-from google.cloud import bigquery
 from xdist.workermanage import WorkerController
 
 from tabsdata._utils.tdlogging import setup_tests_logging
@@ -64,6 +58,11 @@ def pytest_sessionfinish(session, exitstatus):
 
 @pytest.fixture(scope="session")
 def bigquery_client(bigquery_config: dict):
+    import json  # Lazy import
+    import os  # Lazy import
+
+    from google.cloud import bigquery  # Lazy import
+
     service_account_key = os.environ.get(bigquery_config["ENV"])
     if not service_account_key:
         raise Exception(
@@ -78,6 +77,10 @@ def bigquery_client(bigquery_config: dict):
 
 @pytest.fixture(scope="session")
 def bigquery_config():
+    import os  # Lazy import
+
+    import tabsdata  # Lazy import
+
     # Note: this is currently very simple, but if needed it can be extended. This
     # dictionary will provide all the pieces necessary for testing against BigQuery
 

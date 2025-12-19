@@ -22,12 +22,9 @@ TESTING_RESOURCES_FOLDER = TESTING_RESOURCES_PATH
 enrich_sys_path()
 _enrich_sys_path()
 
-import os
-
 import pytest
 from xdist.workermanage import WorkerController
 
-import tabsdata as td
 from tabsdata._utils.tdlogging import setup_tests_logging
 from tests_tabsdata.conftest import (
     clean_python_virtual_environments,
@@ -37,15 +34,27 @@ from tests_tabsdata.conftest import (
     setup_temp_folder_node,
 )
 
-FAKE_CREDENTIALS = td.SalesforceTokenCredentials(
-    username="username",
-    password="password",
-    security_token="security_token",
-)
+
+def _create_fake_credentials():
+    """Create fake credentials with lazy import"""
+    import tabsdata as td  # Lazy import
+
+    return td.SalesforceTokenCredentials(
+        username="username",
+        password="password",
+        security_token="security_token",
+    )
+
+
+FAKE_CREDENTIALS = _create_fake_credentials()
 
 
 @pytest.fixture(scope="session")
 def sf_config():
+    import os  # Lazy import
+
+    import tabsdata as td  # Lazy import
+
     config: dict[str, Any] = {
         "USERNAME_ENV": "SF0__USERNAME",
         "PASSWORD_ENV": "SF0__PASSWORD",

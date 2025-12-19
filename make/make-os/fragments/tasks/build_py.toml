@@ -286,6 +286,9 @@ script = [
     end
     debug "🔸🔸🔸 Build folder: ${build-folder}"
 
+    os_family = os_family
+    debug "🔸🔸🔸 OS family: ${os_family}"
+
     if is_empty ${virtual_env}
         if ${on_ga_true}
             debug "🚀 uv pip install --system -e ."

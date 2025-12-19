@@ -132,6 +132,19 @@ script = [
 
     cd ${PROJECT_RS_TO_FOUNDATION_FOLDER}
 
+    info "🛟 Helping PyO3 to find the Python standard library..."
+    pythonhome = get_env PYTHONHOME
+    info "🔸 🛟 PYTHONHOME is: ${pythonhome}"
+    python_prefix = exec --fail-on-error python -c "import sys; print(sys.prefix)"
+    python_prefix = trim ${python_prefix.stdout}
+    info "🚑 Python prefix is ${python_prefix}"
+    python_base_prefix = exec python -c "import sys; print(sys.base_prefix)"
+    python_base_prefix = trim ${python_base_prefix.stdout}
+    info "🚑 Python base prefix is ${python_base_prefix}"
+    python_home = set ${python_base_prefix}
+    set_env PYTHONHOME ${python_home}
+    info "🔸 🛟 PYTHONHOME set to: ${python_home}"
+
     debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TO_FOUNDATION_CARGO_TOML} --features without-polars-alloc --bin pystubs"
     exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TO_FOUNDATION_CARGO_TOML} --features without-polars-alloc --bin pystubs
     ''']
@@ -150,6 +163,19 @@ script = [
     exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_POLARS_CARGO_TOML} --lib --bins --examples
 
     cd ${PROJECT_RS_TY_TABLEFRAME_FOLDER}
+
+    info "🛟 Helping PyO3 to find the Python standard library..."
+    pythonhome = get_env PYTHONHOME
+    info "🔸 🛟 PYTHONHOME is: ${pythonhome}"
+    python_prefix = exec --fail-on-error python -c "import sys; print(sys.prefix)"
+    python_prefix = trim ${python_prefix.stdout}
+    info "🚑 Python prefix is ${python_prefix}"
+    python_base_prefix = exec python -c "import sys; print(sys.base_prefix)"
+    python_base_prefix = trim ${python_base_prefix.stdout}
+    info "🚑 Python base prefix is ${python_base_prefix}"
+    python_home = set ${python_base_prefix}
+    set_env PYTHONHOME ${python_home}
+    info "🔸 🛟 PYTHONHOME set to: ${python_home}"
 
     debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TY_TABLEFRAME_CARGO_TOML} --features without-polars-alloc --bin pystubs"
     exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TY_TABLEFRAME_CARGO_TOML} --features without-polars-alloc --bin pystubs
@@ -181,6 +207,19 @@ script = [
 
     cd ${PROJECT_RS_TO_FOUNDATION_FOLDER}
 
+    info "🛟 Helping PyO3 to find the Python standard library..."
+    pythonhome = get_env PYTHONHOME
+    info "🔸 🛟 PYTHONHOME is: ${pythonhome}"
+    python_prefix = exec --fail-on-error python -c "import sys; print(sys.prefix)"
+    python_prefix = trim ${python_prefix.stdout}
+    info "🚑 Python prefix is ${python_prefix}"
+    python_base_prefix = exec python -c "import sys; print(sys.base_prefix)"
+    python_base_prefix = trim ${python_base_prefix.stdout}
+    info "🚑 Python base prefix is ${python_base_prefix}"
+    python_home = set ${python_base_prefix}
+    set_env PYTHONHOME ${python_home}
+    info "🔸 🛟 PYTHONHOME set to: ${python_home}"
+
     debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TO_FOUNDATION_CARGO_TOML} --features without-polars-alloc --bin pystubs"
     exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TO_FOUNDATION_CARGO_TOML} --features without-polars-alloc --bin pystubs
     ''']
@@ -199,6 +238,19 @@ script = [
     exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_POLARS_CARGO_TOML} --lib --bins
 
     cd ${PROJECT_RS_TY_TABLEFRAME_FOLDER}
+
+    info "🛟 Helping PyO3 to find the Python standard library..."
+    pythonhome = get_env PYTHONHOME
+    info "🔸 🛟 PYTHONHOME is: ${pythonhome}"
+    python_prefix = exec --fail-on-error python -c "import sys; print(sys.prefix)"
+    python_prefix = trim ${python_prefix.stdout}
+    info "🚑 Python prefix is ${python_prefix}"
+    python_base_prefix = exec python -c "import sys; print(sys.base_prefix)"
+    python_base_prefix = trim ${python_base_prefix.stdout}
+    info "🚑 Python base prefix is ${python_base_prefix}"
+    python_home = set ${python_base_prefix}
+    set_env PYTHONHOME ${python_home}
+    info "🔸 🛟 PYTHONHOME set to: ${python_home}"
 
     debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TY_TABLEFRAME_CARGO_TOML} --features without-polars-alloc --bin pystubs"
     exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TY_TABLEFRAME_CARGO_TOML} --features without-polars-alloc --bin pystubs
