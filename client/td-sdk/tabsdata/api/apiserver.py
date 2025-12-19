@@ -609,6 +609,7 @@ class APIServer:
         decorator: str,
         runtime_values: str,
         reuse_frozen_tables: bool,
+        enabled: bool = None,
         plugin_name: str = None,
         workers: dict = None,
         raise_for_status: bool = True,
@@ -627,6 +628,7 @@ class APIServer:
             "table_types",
             "reuse_frozen_tables",
             "runtime_values",
+            "enabled",
             "connector",
             "workers",
         ]
@@ -642,6 +644,7 @@ class APIServer:
             table_types,
             reuse_frozen_tables,
             runtime_values,
+            enabled,
             plugin_name,
             workers,
         ]
@@ -747,6 +750,7 @@ class APIServer:
         decorator: str = None,
         runtime_values: str = None,
         reuse_frozen_tables: bool = None,
+        enabled: bool = None,
         plugin_name: str = None,
         workers: dict = None,
         raise_for_status: bool = True,
@@ -766,6 +770,7 @@ class APIServer:
                 "decorator",
                 "runtime_values",
                 "reuse_frozen_tables",
+                "enabled",
                 "connector",
                 "workers",
             ],
@@ -781,6 +786,7 @@ class APIServer:
                 decorator,  # Either P, S or T
                 runtime_values,
                 reuse_frozen_tables,
+                enabled,
                 plugin_name,
                 workers,
             ],

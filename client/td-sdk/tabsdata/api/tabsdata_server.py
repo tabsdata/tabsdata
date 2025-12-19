@@ -408,6 +408,7 @@ class Collection:
         local_packages: List[str] | str | None = None,
         function_name: str = None,
         reuse_tables: bool = False,
+        enabled: bool = True,
         raise_for_status: bool = True,
     ) -> Function:
         """
@@ -496,6 +497,7 @@ class Collection:
             decorator=decorator_type,
             plugin_name=source_or_destination_name,
             workers=workers,
+            enabled=enabled,
             raise_for_status=raise_for_status,
         )
         return Function(self.connection, self, function_name)
@@ -524,6 +526,7 @@ class Collection:
         local_packages: List[str] | str | None = None,
         new_function_name=None,
         reuse_tables: bool = False,
+        enabled: bool = True,
         raise_for_status: bool = True,
     ) -> Function:
         """
@@ -610,6 +613,7 @@ class Collection:
             reuse_frozen_tables=reuse_tables,
             plugin_name=source_or_destination_name,
             workers=workers,
+            enabled=enabled,
             raise_for_status=raise_for_status,
         )
 
@@ -1097,6 +1101,7 @@ class Function:
         self.defined_on_str = None
         self.defined_by = kwargs.get("defined_by")
         self.type = kwargs.get("decorator")
+        self.enabled = kwargs.get("enabled")
         self.kwargs = kwargs
         self._data = None
 
@@ -1317,6 +1322,7 @@ class Function:
         requirements: str = None,
         local_packages: List[str] | str | None = None,
         reuse_tables: bool = False,
+        enabled: bool = True,
         raise_for_status: bool = True,
     ) -> Function:
         result = self.collection.register_function(
@@ -1327,6 +1333,7 @@ class Function:
             local_packages=local_packages,
             function_name=self.name,
             reuse_tables=reuse_tables,
+            enabled=enabled,
             raise_for_status=raise_for_status,
         )
         self.refresh()
@@ -1375,6 +1382,7 @@ class Function:
         local_packages: List[str] | str | None = None,
         new_function_name: str = None,
         reuse_tables: bool = False,
+        enabled: bool = True,
         raise_for_status: bool = True,
     ) -> Function:
         collection = self.collection
@@ -1387,11 +1395,23 @@ class Function:
             local_packages=local_packages,
             new_function_name=new_function_name,
             reuse_tables=reuse_tables,
+            enabled=enabled,
             raise_for_status=raise_for_status,
         )
         self.refresh()
         self.name = result.name
         self.collection = result.collection
+        return result
+
+    def enable(self, enabled: bool = True, raise_for_status: bool = True) -> Function:
+        collection = self.collection
+        result = self.connection.function_update(
+            collection_name=collection.name,
+            function_name=self.name,
+            enabled=enabled,
+            raise_for_status=raise_for_status,
+        )
+        self.refresh()
         return result
 
     def __eq__(self, other):
@@ -3506,6 +3526,7 @@ class TabsdataServer:
         local_packages: List[str] | str | None = None,
         function_name: str = None,
         reuse_tables: bool = False,
+        enabled: bool = True,
         raise_for_status: bool = True,
     ) -> Function:
         """
@@ -3544,6 +3565,7 @@ class TabsdataServer:
             local_packages=local_packages,
             function_name=function_name,
             reuse_tables=reuse_tables,
+            enabled=enabled,
             raise_for_status=raise_for_status,
         )
 
@@ -3711,6 +3733,7 @@ class TabsdataServer:
         local_packages: List[str] | str | None = None,
         new_function_name: str = None,
         reuse_tables: bool = False,
+        enabled: bool = True,
         raise_for_status: bool = True,
     ) -> Function:
         """
@@ -3750,8 +3773,32 @@ class TabsdataServer:
             local_packages=local_packages,
             new_function_name=new_function_name,
             reuse_tables=reuse_tables,
+            enabled=enabled,
             raise_for_status=raise_for_status,
         )
+
+    def enable_function(
+        self,
+        collection_name: str,
+        function_name: str,
+        enabled: bool,
+        raise_for_status: bool = True,
+    ) -> Function:
+        """
+        Enable/Disable a function in the server.
+
+        Args:
+            collection_name (str): The name of the collection.
+            function_name (str): The name of the function.
+            enabled (bool): Whether to enable or disable the function.
+            raise_for_status (bool, optional): Whether to raise an exception if the
+                request was not successful. Defaults to True.
+
+        Raises:
+            APIServerError: If the function could not be updated.
+        """
+        function = Function(self.connection, collection_name, function_name)
+        return function.enable(enabled=enabled, raise_for_status=raise_for_status)
 
     def create_inter_coll_perm(
         self,

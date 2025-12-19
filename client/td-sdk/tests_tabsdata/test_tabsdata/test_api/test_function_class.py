@@ -127,6 +127,48 @@ def test_function_class_register(tabsserver_connection):
 
 
 @pytest.mark.integration
+@pytest.mark.requires_internet
+def test_function_class_register_disabled(tabsserver_connection):
+    collection = Collection(
+        tabsserver_connection.connection,
+        "test_function_class_register_disabled_collection",
+    )
+    collection.create()
+    function = Function(
+        tabsserver_connection.connection,
+        collection=collection,
+        name="test_function_class_register_disabled_function",
+    )
+    try:
+        function.register(
+            description="test_function_register_description",
+            function_path=(
+                f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
+                                "test_input_plugin", "example.py")}::input_plugin"
+            ),
+            local_packages=LOCAL_PACKAGES_LIST,
+            enabled=False,
+        )
+        functions = tabsserver_connection.list_functions(
+            "test_function_class_register_disabled_collection"
+        )
+        assert any(
+            function.name == "test_function_class_register_disabled_function"
+            and not function.enabled
+            for function in functions
+        )
+        functions = collection.functions
+        assert any(
+            function.name == "test_function_class_register_disabled_function"
+            and not function.enabled
+            for function in functions
+        )
+    finally:
+        function.delete(raise_for_status=False)
+        collection.delete(raise_for_status=False)
+
+
+@pytest.mark.integration
 def test_function_class_delete(tabsserver_connection):
     collection = Collection(
         tabsserver_connection.connection, "test_function_class_delete_collection"

@@ -278,6 +278,11 @@ def list(ctx: click.Context, coll: str):
     ),
 )
 @click.option(
+    "--enabled/--disabled",
+    default=True,
+    help="Enable or disable the feature",
+)
+@click.option(
     "--update",
     is_flag=True,
     help="If provided, update the function if it already exists.",
@@ -292,6 +297,7 @@ def register(
     requirements: str,
     local_pkg: Tuple[str, ...],
     reuse_tables: bool,
+    enabled: bool,
     update: bool = False,
 ):
     """Register a function"""
@@ -340,6 +346,7 @@ def register(
                     requirements=requirements,
                     local_packages=local_pkg,
                     reuse_tables=reuse_tables,
+                    enabled=enabled,
                 )
                 click.echo("Function updated successfully")
                 return
@@ -356,6 +363,7 @@ def register(
             requirements,
             local_pkg,
             reuse_tables=reuse_tables,
+            enabled=enabled,
         )
         click.echo("Function registered successfully")
     except Exception as e:
@@ -658,6 +666,11 @@ def _monitor_execution_or_transaction(
         "and their data history re-initialized."
     ),
 )
+@click.option(
+    "--enabled/--disabled",
+    default=True,
+    help="Enable or disable the feature",
+)
 @click.pass_context
 def update(
     ctx: click.Context,
@@ -669,6 +682,7 @@ def update(
     requirements: str,
     local_pkg: Tuple[str, ...],
     reuse_tables: bool,
+    enabled: bool,
 ):
     """Update a function"""
     verify_login_or_prompt(ctx)
@@ -702,8 +716,89 @@ def update(
             requirements=requirements,
             local_packages=local_pkg,
             reuse_tables=reuse_tables,
+            enabled=enabled,
         )
         click.echo("Function updated successfully")
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to update function: {e}")
+
+
+@fn.command()
+@click.option(
+    "--name",
+    "-n",
+    help="Name of the function to enable.",
+)
+@click.option(
+    "--coll",
+    "-c",
+    help="Name of the collection to which the function belongs.",
+)
+@click.pass_context
+def enable(
+    ctx: click.Context,
+    name: str,
+    coll: str,
+):
+    """Enables a function"""
+    name = name or logical_prompt(ctx, "Name of the function to be updated")
+    coll = (
+        coll
+        or get_currently_pinned_object(ctx, "collection")
+        or logical_prompt(ctx, "Name of the collection to which the function belongs")
+    )
+
+    click.echo(f"Enabling function '{name}' in collection '{coll}'")
+    click.echo("-" * 10)
+    try:
+        server: TabsdataServer = ctx.obj["tabsdataserver"]
+        server.enable_function(
+            collection_name=coll,
+            function_name=name,
+            enabled=True,
+        )
+        click.echo("Function updated successfully")
+    except Exception as e:
+        hint_common_solutions(ctx, e)
+        raise click.ClickException(f"Failed to enable function: {e}")
+
+
+@fn.command()
+@click.option(
+    "--name",
+    "-n",
+    help="Name of the function to disable.",
+)
+@click.option(
+    "--coll",
+    "-c",
+    help="Name of the collection to which the function belongs.",
+)
+@click.pass_context
+def disable(
+    ctx: click.Context,
+    name: str,
+    coll: str,
+):
+    name = name or logical_prompt(ctx, "Name of the function to be updated")
+    coll = (
+        coll
+        or get_currently_pinned_object(ctx, "collection")
+        or logical_prompt(ctx, "Name of the collection to which the function belongs")
+    )
+
+    """Disables a function"""
+    click.echo(f"Disabling function '{name}' in collection '{coll}'")
+    click.echo("-" * 10)
+    try:
+        server: TabsdataServer = ctx.obj["tabsdataserver"]
+        server.enable_function(
+            collection_name=coll,
+            function_name=name,
+            enabled=False,
+        )
+        click.echo("Function updated successfully")
+    except Exception as e:
+        hint_common_solutions(ctx, e)
+        raise click.ClickException(f"Failed to disable function: {e}")
