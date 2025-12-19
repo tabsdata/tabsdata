@@ -11,9 +11,10 @@ use td_common::id::Id;
 use td_error::{TdError, td_error};
 
 const IDENTIFIER_LEN: &str = "99";
-pub const IDENTIFIER_PATTERN: &str = concat!("[a-zA-Z][a-zA-Z0-9_]{0,", IDENTIFIER_LEN, "}");
+pub const IDENTIFIER_LEN_PATTERN: &str = concat!("{0,", IDENTIFIER_LEN, "}");
+pub const IDENTIFIER_PATTERN: &str = concat!("[a-zA-Z][a-zA-Z0-9_]", IDENTIFIER_LEN_PATTERN);
 pub const UNDERSCORE_IDENTIFIER_PATTERN: &str =
-    concat!("[a-zA-Z_][a-zA-Z0-9_]{0,", IDENTIFIER_LEN, "}");
+    concat!("[a-zA-Z_][a-zA-Z0-9_]", IDENTIFIER_LEN_PATTERN);
 
 pub const DATA_LOCATION_REGEX: &str = concat!("^(/|(/", IDENTIFIER_PATTERN, ")*)$");
 
@@ -256,8 +257,16 @@ pub fn parse_function(s: impl Into<String>) -> Result<String, TdError> {
     parse_name(s, "Function name")
 }
 
+const EXECUTION_NAME_PATTERN: &str = concat!("^", IDENTIFIER_LEN_PATTERN, "$");
+
 pub fn parse_execution(s: impl Into<String>) -> Result<String, TdError> {
-    parse_name(s, "Execution name")
+    static REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(EXECUTION_NAME_PATTERN).unwrap());
+
+    parser(
+        REGEX.clone(),
+        s,
+        "Execution name, a word of up to 100 characters",
+    )
 }
 
 pub fn parse_table(s: impl Into<String>) -> Result<String, TdError> {
