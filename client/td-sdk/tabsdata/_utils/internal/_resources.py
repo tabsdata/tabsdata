@@ -9,7 +9,6 @@ from importlib.metadata import distribution
 from importlib.resources import as_file, files
 from pathlib import Path
 
-import tabsdata
 from tabsdata._utils.constants import TABSDATA_MODULE_NAME
 
 logger = logging.getLogger(__name__)
@@ -20,31 +19,49 @@ DIRECT_URL_JSON = "direct_url.json"
 DIR_INFO = "dir_info"
 EDITABLE = "editable"
 
+FILE_PROTOCOL = "file://"
+WINDOWS_OS_NAME = "nt"
+WINDOWS_URL_PREFIX = "/"
+BACK_SLASH = "\\"
+WHEEL_EXTENSION = ".whl"
+
 VARIANT = "variant"
 RESOURCES = "resources"
 
 
 # noinspection PyBroadException
-def is_editable_package(package: str) -> bool:
+def is_editable_package(package: str) -> tuple[bool, Path | None]:
+    editable: bool = False
+    root: Path | None = None
     try:
         package_distribution = distribution(package)
         if package_distribution.read_text(DIRECT_URL_JSON):
-            direct_url = json.loads(package_distribution.read_text(DIRECT_URL_JSON))
-            if direct_url.get(DIR_INFO, {}).get(EDITABLE, False):
-                return True
+            direct_url_data = json.loads(
+                package_distribution.read_text(DIRECT_URL_JSON)
+            )
+            if direct_url_data.get(DIR_INFO, {}).get(EDITABLE, False):
+                editable = True
+                url = direct_url_data.get("url", "")
+                if url.startswith(FILE_PROTOCOL):
+                    url = url[len(FILE_PROTOCOL) :]
+                    if os.name == WINDOWS_OS_NAME and url.startswith(
+                        WINDOWS_URL_PREFIX
+                    ):
+                        url = url[len(WINDOWS_URL_PREFIX) :]
+                    if not url.suffix == WHEEL_EXTENSION:
+                        root = Path(url)
     except Exception:
         pass
-    return False
+    return editable, root
 
 
 # noinspection PyBroadException
 def td_resource(resource: str) -> Path:
     if resource.startswith(f"{RESOURCES}{os.sep}"):
-        if is_editable_package(TABSDATA_MODULE_NAME):
+        editable, root = is_editable_package(TABSDATA_MODULE_NAME)
+        if editable and root:
             try:
-                module_path = Path(tabsdata.__file__).parent
-                project_root = module_path.parent.parent.parent
-                variant_path = project_root / VARIANT / resource
+                variant_path = root / VARIANT / resource
                 if variant_path.exists():
                     return variant_path
             except Exception:

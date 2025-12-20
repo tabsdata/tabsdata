@@ -28,7 +28,7 @@ pub type ProcessDistilled = (
 
 const PYTHON_MODULE_ALIASES: &[(&str, &str)] = &[(
     "tabsdata._tabsserver.function.execute_function_from_bundle_path",
-    "tdfunction",
+    "td_function",
 )];
 
 fn python_module_aliases() -> HashMap<&'static str, &'static str> {

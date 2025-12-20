@@ -113,7 +113,7 @@ controllers:
       - name: function
         kind: processor
         location: system
-        program: td_invoker
+        program: td_function
         concurrency: 8
         retries: 2
         arguments:
@@ -157,7 +157,7 @@ controllers:
       - name: watchdog
         kind: processor
         location: system
-        program: td_invoker
+        program: td_watchdog
         concurrency: 0
         retries: 2
         arguments:
