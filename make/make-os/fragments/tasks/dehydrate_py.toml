@@ -109,7 +109,7 @@ script = [
                 debug "🔅 Deleting symbolic link for '${binary_name}': ${source_binary} -> ${target_binary}"
                 rm ${target_binary}
             end
-            exec --fail-on-error python -c "import os; os.symlink('${source_binary}', '${target_binary}')"
+            exec --fail-on-error python -c "import os; os.symlink(r'${source_binary}', r'${target_binary}')"
         end
     else
         warn "⚠️ setup.py file not found at ${setup_py_file}"

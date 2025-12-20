@@ -427,7 +427,7 @@ script = [
             if ${target_exists}
                 rm ${target_binary}
             end
-            exec --fail-on-error python -c "import os; os.symlink('${source_binary}', '${target_binary}')"
+            exec --fail-on-error python -c "import os; os.symlink(r'${source_binary}', r'${target_binary}')"
         end
     else
         warn "⚠️ setup.toml file not found at ${setup_toml_file}"
