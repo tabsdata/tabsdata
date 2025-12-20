@@ -411,6 +411,13 @@ script = [
             end
             source_binary = set "${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${binary_name}"
             target_binary = set "${python_scripts_folder}/${binary_name}"
+            if eq ${os_family} "windows"
+                source_binary = replace ${source_binary} "/" "\\"
+                target_binary = replace ${target_binary} "/" "\\"
+            else
+                source_binary = replace ${source_binary} "\\" "/"
+                target_binary = replace ${target_binary} "\\" "/"
+            end
             exists = is_path_exists ${source_binary}
             if not ${exists}
                 warn "🔥 Binary not found: ${source_binary}"
