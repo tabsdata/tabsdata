@@ -299,6 +299,7 @@ def verify_single_package_installable_for_environment(
             pip_install_dry_run,
             shell=True,
             capture_output=True,
+            text=True,
         )
     if result.returncode == 0:
         logger.debug(f"Package {package} is installable with pip")
@@ -1267,6 +1268,7 @@ def atomic_environment_creation(
             pip_upgrade_command,
             shell=True,
             capture_output=True,
+            text=True,
         )
         logger.info(f"Result: {result}")
         # noinspection PyUnreachableCode
@@ -1399,6 +1401,7 @@ def install_requirements(
             pip_install_requirements_command,
             shell=True,
             capture_output=True,
+            text=True,
         )
     if result.returncode != 0:
         logger.error(
@@ -1609,6 +1612,7 @@ def install_host_package(
             pip_install_requirements_command,
             shell=True,
             capture_output=True,
+            text=True,
         )
         if result.returncode != 0:
             logger.error(
@@ -1660,6 +1664,7 @@ def install_python_version(python_version: str) -> None:
         command,
         shell=True,
         capture_output=True,
+        text=True,
     )
     # On Windows, exit status 2 means that the Python version is already installed,
     ok_codes = (0, 2) if platform.system() == "Windows" else (0,)
