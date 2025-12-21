@@ -48,8 +48,9 @@ def is_editable_package(package: str) -> tuple[bool, Path | None]:
                         WINDOWS_URL_PREFIX
                     ):
                         url = url[len(WINDOWS_URL_PREFIX) :]
+                    url = Path(url)
                     if not url.suffix == WHEEL_EXTENSION:
-                        root = Path(url)
+                        root = url
     except Exception:
         pass
     return editable, root

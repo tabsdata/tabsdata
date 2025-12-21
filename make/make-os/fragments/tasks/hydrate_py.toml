@@ -217,6 +217,12 @@ script = [
         warn "⚠️ setup.toml file not found at ${setup_toml_file}"
     end
 
+    pytthon_target_folder = set "${PROJECT_TABSDATA_ROOT_FOLDER}/target/python"
+    if ${pytthon_target_folder}
+        debug "🔅 Deleting python target folder: ${pytthon_target_folder}"
+        rm -r ${pytthon_target_folder}
+    end
+
     pyenv = which pyenv
     if not eq ${pyenv} ""
         warn "✅ Component pyenv is available. Considering rehash."
@@ -260,6 +266,12 @@ script = [
 
             debug "🚀 uv pip install --quiet develop -e ."
             exec --fail-on-error uv pip install --quiet -e .
+
+            pytthon_target_folder = set "${connector}/target/python"
+            if ${pytthon_target_folder}
+                debug "🔅 Deleting python target folder: ${pytthon_target_folder}"
+                rm -r ${pytthon_target_folder}
+            end
 
             cd ${PROJECT_TABSDATA_ROOT_FOLDER}
         end

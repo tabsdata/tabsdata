@@ -155,6 +155,8 @@ script = [
                 debug "🔅 Deleting python target folder: ${pytthon_target_folder}"
                 rm -r ${pytthon_target_folder}
             end
+
+            cd ${PROJECT_TABSDATA_ROOT_FOLDER}
         end
     end
     ''']
