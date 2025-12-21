@@ -726,7 +726,7 @@ def inject_tabsdata_version(required_modules: list[str]) -> list[str]:  # noqa: 
     legacy_tabsdata_modules = [
         module
         for module in tabsdata_modules
-        if extract_package_name(module) not in TABSDATA_PACKAGES
+        if canonicalize_name(extract_package_name(module)) not in TABSDATA_PACKAGES
     ]
 
     for legacy_module in legacy_tabsdata_modules:
