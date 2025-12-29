@@ -39,6 +39,7 @@ from tests_tabsdata_mssql.conftest import (
     DB_PASSWORD,
     MSSQL_USER,
     TESTING_RESOURCES_FOLDER,
+    MSSQLConfig,
 )
 
 logger = logging.getLogger(__name__)
@@ -52,13 +53,11 @@ LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
 FAKE_CONNECTION_PARAMETERS = "fake_connection_parameters"
 
 
-def get_df_from_connection(partial_connection_string: str, table: str):
+def get_df_from_connection(mssql_connection: MSSQLConfig, table: str):
     """
     Helper function to get a DataFrame from a connection string and table name.
     """
-    connection_string = (
-        f"{partial_connection_string}UID={MSSQL_USER};PWD={DB_PASSWORD};"
-    )
+    connection_string = f"{mssql_connection.connection_string}UID={mssql_connection.credentials.user.secret_value};PWD={mssql_connection.credentials.password.secret_value};"
     connection_url = URL.create(
         "mssql+pyodbc", query={"odbc_connect": connection_string}
     )
@@ -147,9 +146,9 @@ def test_mssql_chunk(tmp_path):
 def test_write_mssql(tmp_path, mssql_connection):
     table_name = f"write_mssql_table_{uuid.uuid4().hex[:8]}".replace("-", "_")
     destination = td.MSSQLDestination(
-        mssql_connection,
+        mssql_connection.connection_string,
         table_name,
-        credentials=td.UserPasswordCredentials(MSSQL_USER, DB_PASSWORD),
+        credentials=mssql_connection.credentials,
         chunk_size=1,
     )
     destination._tabsdata_internal_logger = logger
@@ -175,9 +174,9 @@ def test_write_mssql_multiple_files(tmp_path, mssql_connection):
         "-", "_"
     )
     destination = td.MSSQLDestination(
-        mssql_connection,
+        mssql_connection.connection_string,
         [table_name_0, table_name_1],
-        credentials=td.UserPasswordCredentials(MSSQL_USER, DB_PASSWORD),
+        credentials=mssql_connection.credentials,
         chunk_size=1,
     )
     destination._tabsdata_internal_logger = logger
@@ -212,9 +211,9 @@ def test_stream(tmp_path, size, mssql_connection):
     table_name = f"test_stream_table_{uuid.uuid4().hex[:8]}".replace("-", "_")
     chunk_size = int(size / 3) + 1
     mssql_destination = td.MSSQLDestination(
-        mssql_connection,
+        mssql_connection.connection_string,
         table_name,
-        credentials=td.UserPasswordCredentials(MSSQL_USER, DB_PASSWORD),
+        credentials=mssql_connection.credentials,
         chunk_size=chunk_size,
     )
     mssql_destination._tabsdata_internal_logger = logger
@@ -231,9 +230,9 @@ def test_stream_append(tmp_path, size, mssql_connection):
     table_name = f"test_stream_table_append_{uuid.uuid4().hex[:8]}".replace("-", "_")
     chunk_size = int(size / 3) + 1
     mssql_destination = td.MSSQLDestination(
-        mssql_connection,
+        mssql_connection.connection_string,
         table_name,
-        credentials=td.UserPasswordCredentials(MSSQL_USER, DB_PASSWORD),
+        credentials=mssql_connection.credentials,
         if_table_exists="append",
         chunk_size=chunk_size,
     )
@@ -252,9 +251,9 @@ def test_stream_replace(tmp_path, size, mssql_connection):
     table_name = f"test_stream_table_replace_{uuid.uuid4().hex[:8]}".replace("-", "_")
     chunk_size = int(size / 3) + 1
     mssql_destination = td.MSSQLDestination(
-        mssql_connection,
+        mssql_connection.connection_string,
         table_name,
-        credentials=td.UserPasswordCredentials(MSSQL_USER, DB_PASSWORD),
+        credentials=mssql_connection.credentials,
         if_table_exists="replace",
         chunk_size=chunk_size,
     )
@@ -278,9 +277,9 @@ def test_stream_multiple_lf(tmp_path, size, mssql_connection):
     )
     chunk_size = int(size / 3) + 1
     mssql_destination = td.MSSQLDestination(
-        mssql_connection,
+        mssql_connection.connection_string,
         [table_name_1, table_name_2],
-        credentials=td.UserPasswordCredentials(MSSQL_USER, DB_PASSWORD),
+        credentials=mssql_connection.credentials,
         chunk_size=chunk_size,
     )
     mssql_destination._tabsdata_internal_logger = logger
@@ -300,9 +299,9 @@ def test_stream_different_len_raises_error(size, tmp_path, mssql_connection):
     lf = get_lf(size)
     chunk_size = int(size / 3) + 1
     mssql_destination = td.MSSQLDestination(
-        mssql_connection,
+        mssql_connection.connection_string,
         ["table1", "table2"],
-        credentials=td.UserPasswordCredentials(MSSQL_USER, DB_PASSWORD),
+        credentials=mssql_connection.credentials,
         chunk_size=chunk_size,
     )
     mssql_destination._tabsdata_internal_logger = logger
@@ -322,9 +321,9 @@ def test_single_element_table_list(tmp_path, size, mssql_connection):
         "-", "_"
     )
     mssql_destination = td.MSSQLDestination(
-        mssql_connection,
+        mssql_connection.connection_string,
         [table_name],
-        credentials=td.UserPasswordCredentials(MSSQL_USER, DB_PASSWORD),
+        credentials=mssql_connection.credentials,
         chunk_size=size + 10,
     )
     mssql_destination._tabsdata_internal_logger = logger
@@ -353,9 +352,9 @@ def test_output_mssql(tmp_path, mssql_connection, mssql_version):
     )
     table_name = f"output_mssql_table_{uuid.uuid4().hex[:8]}".replace("-", "_")
     destination = td.MSSQLDestination(
-        mssql_connection,
+        mssql_connection.connection_string,
         table_name,
-        credentials=td.UserPasswordCredentials(MSSQL_USER, DB_PASSWORD),
+        credentials=mssql_connection.credentials,
     )
     output_mssql_copy = copy.deepcopy(output_mssql)
     output_mssql_copy.output = destination
@@ -421,9 +420,9 @@ def test_multiple_outputs_mssql(tmp_path, mssql_connection, mssql_version):
         "-", "_"
     )
     destination = td.MSSQLDestination(
-        mssql_connection,
+        mssql_connection.connection_string,
         [table_name_0, table_name_1],
-        credentials=td.UserPasswordCredentials(MSSQL_USER, DB_PASSWORD),
+        credentials=mssql_connection.credentials,
     )
     multiple_outputs_mssql_copy = copy.deepcopy(multiple_outputs_mssql)
     multiple_outputs_mssql_copy.output = destination
@@ -499,9 +498,9 @@ def test_output_mssql_with_none(tmp_path, mssql_connection, mssql_version):
     )
     table_name = f"output_mssql_table_{uuid.uuid4().hex[:8]}".replace("-", "_")
     destination = td.MSSQLDestination(
-        mssql_connection,
+        mssql_connection.connection_string,
         table_name,
-        credentials=td.UserPasswordCredentials(MSSQL_USER, DB_PASSWORD),
+        credentials=mssql_connection.credentials,
     )
     output_mssql_none_copy = copy.deepcopy(output_mssql_none)
     output_mssql_none_copy.output = destination

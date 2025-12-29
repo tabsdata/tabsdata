@@ -97,9 +97,9 @@ def test_mssql_wrong_query_list_type():
 @pytest.mark.slow
 def test_chunk(tmp_path, mssql_connection):
     source = td.MSSQLSource(
-        mssql_connection,
+        mssql_connection.connection_string,
         "SELECT * FROM INVOICE_HEADER",
-        credentials=td.UserPasswordCredentials(MSSQL_USER, DB_PASSWORD),
+        credentials=mssql_connection.credentials,
         chunk_size=1,
     )
     source._tabsdata_internal_logger = logger
@@ -115,9 +115,9 @@ def test_chunk(tmp_path, mssql_connection):
 @pytest.mark.slow
 def test_chunk_multiple_queries(tmp_path, mssql_connection):
     source = td.MSSQLSource(
-        mssql_connection,
+        mssql_connection.connection_string,
         ["SELECT * FROM INVOICE_HEADER", "SELECT * FROM INVOICE_ITEM"],
-        credentials=td.UserPasswordCredentials(MSSQL_USER, DB_PASSWORD),
+        credentials=mssql_connection.credentials,
         chunk_size=1,
     )
     source._tabsdata_internal_logger = logger
@@ -138,12 +138,12 @@ def test_chunk_multiple_queries(tmp_path, mssql_connection):
 @pytest.mark.slow
 def test_chunk_multiple_queries_with_initial_values(tmp_path, mssql_connection):
     source = td.MSSQLSource(
-        mssql_connection,
+        mssql_connection.connection_string,
         [
             "SELECT * FROM INVOICE_HEADER where id > :number",
             "SELECT * FROM INVOICE_ITEM where id > :number",
         ],
-        credentials=td.UserPasswordCredentials(MSSQL_USER, DB_PASSWORD),
+        credentials=mssql_connection.credentials,
         chunk_size=1,
         initial_values={"number": 2},
     )
@@ -165,11 +165,11 @@ def test_chunk_multiple_queries_with_initial_values(tmp_path, mssql_connection):
 @pytest.mark.slow
 def test_chunk_initial_values_no_result(tmp_path, mssql_connection):
     source = td.MSSQLSource(
-        mssql_connection,
+        mssql_connection.connection_string,
         [
             "SELECT * FROM INVOICE_HEADER where id > :number",
         ],
-        credentials=td.UserPasswordCredentials(MSSQL_USER, DB_PASSWORD),
+        credentials=mssql_connection.credentials,
         chunk_size=1,
         initial_values={"number": 100},
     )
@@ -197,12 +197,12 @@ def test_input_mssql(mssql_connection, tmp_path, mssql_version):
     )
     input_mssql_modified = copy.deepcopy(input_mssql)
     source = td.MSSQLSource(
-        mssql_connection,
+        mssql_connection.connection_string,
         query=[
             "select * from INVOICE_HEADER",
             "select * from INVOICE_ITEM",
         ],
-        credentials=td.UserPasswordCredentials(MSSQL_USER, DB_PASSWORD),
+        credentials=mssql_connection.credentials,
     )
     input_mssql_modified.input = source
     context_archive = create_bundle_archive(
@@ -277,12 +277,12 @@ def test_input_mssql_initial_values(mssql_connection, tmp_path, mssql_version):
         input_mssql_initial_values
     )
     source = td.MSSQLSource(
-        mssql_connection,
+        mssql_connection.connection_string,
         [
             "SELECT * FROM INVOICE_HEADER where id > :number",
             "SELECT * from INVOICE_ITEM where id > :number",
         ],
-        credentials=td.UserPasswordCredentials(MSSQL_USER, DB_PASSWORD),
+        credentials=mssql_connection.credentials,
         initial_values={"number": 2},
     )
     input_mssql_initial_values_nothing_stored.input = source
@@ -362,12 +362,12 @@ def test_input_mssql_initial_values_stored_number_0(
     )
     input_mssql_initial_values_stored_0 = copy.deepcopy(input_mssql_initial_values)
     source = td.MSSQLSource(
-        mssql_connection,
+        mssql_connection.connection_string,
         [
             "SELECT * FROM INVOICE_HEADER where id > :number",
             "SELECT * from INVOICE_ITEM where id > :number",
         ],
-        credentials=td.UserPasswordCredentials(MSSQL_USER, DB_PASSWORD),
+        credentials=mssql_connection.credentials,
         initial_values={"number": 2},
     )
     input_mssql_initial_values_stored_0.input = source
@@ -453,12 +453,12 @@ def test_input_mssql_initial_values_stored_number_2(
     )
     input_mssql_initial_values_stored_2 = copy.deepcopy(input_mssql_initial_values)
     source = td.MSSQLSource(
-        mssql_connection,
+        mssql_connection.connection_string,
         [
             "SELECT * FROM INVOICE_HEADER where id > :number",
             "SELECT * from INVOICE_ITEM where id > :number",
         ],
-        credentials=td.UserPasswordCredentials(MSSQL_USER, DB_PASSWORD),
+        credentials=mssql_connection.credentials,
         initial_values={"number": 2},
     )
     input_mssql_initial_values_stored_2.input = source
