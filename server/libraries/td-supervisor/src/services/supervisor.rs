@@ -1076,6 +1076,13 @@ impl Supervisor {
         self: Arc<Self>,
         receiver: Receiver<SupervisorMessage>,
     ) -> Result<(), RuntimeError> {
+        // ToDo: this is a temporary workaround until we implement a a proper way to check regular workers initialization state.
+        // Wait 30 seconds before starting ephemeral workers
+        // This gives time for the system to fully initialize (e.g., apiserver)
+        info!("Ephemeral controller waiting 30 seconds before starting...");
+        sleep(Duration::from_secs(30)).await;
+        info!("Ephemeral controller starting now");
+
         let controller = &self.config.controllers.ephemeral.clone();
         let mark = self.ephemeral_mark.clone();
         self.start_workers(
