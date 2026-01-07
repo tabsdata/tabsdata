@@ -4,9 +4,19 @@
 
 from __future__ import annotations
 
+import collections.abc as collections
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
-from typing import TYPE_CHECKING, Literal, Mapping, Sequence, TypeAlias, Union, get_args
+from typing import (
+    TYPE_CHECKING,
+    Iterable,
+    Literal,
+    Mapping,
+    Sequence,
+    TypeAlias,
+    Union,
+    get_args,
+)
 
 import polars as pl
 
@@ -17,6 +27,7 @@ import tabsdata.tableframe.dtypes as td_dtypes
 import tabsdata.tableframe.schema as td_schema
 
 if TYPE_CHECKING:
+    import tabsdata.tableframe.functions.col as td_col
     from tabsdata.tableframe.expr.expr import Expr
     from tabsdata.tableframe.selectors import SelectorProxy
 
@@ -167,3 +178,87 @@ SchemaInitDataType: TypeAlias = Union[DataType, PythonDataType]
 IntoExprColumn: TypeAlias = Union["Expr", Series, str]
 
 IntoExpr: TypeAlias = Union[pl_typing.PythonLiteral, IntoExprColumn, None]
+
+SchemaItem: TypeAlias = Union[
+    tuple[str, TypeOfDataType],
+    list,  # Two-element list: [name, dtype]
+    "td_col.Column",
+]
+
+
+class SimpleSchema:
+    """
+    A flexible simple schema class that normalizes various input formats.
+
+    Accepts column name + dtype pairs in multiple formats:
+    - Mapping: {"col1": td.Int64, "col2": td.String}
+    - List of tuples: [("col1", td.Int64), ("col2", td.String)]
+    - List of lists: [["col1", td.Int64], ["col2", td.String]]
+    - List of Columns: [td.col("col1", td.Int64), td.col("col2", td.String)]
+    - Any other iterable containing the above formats
+    """
+
+    def __init__(
+        self,
+        schema: Union[
+            Mapping[str, TypeOfDataType],
+            Iterable[SchemaItem],
+            None,
+        ] = None,
+    ) -> None:
+        self._schema = schema
+
+    @property
+    def schema(self) -> tuple[tuple[str, TypeOfDataType], ...]:
+        """
+        Normalize the input schema to a standard sequence of (name, dtype) tuples.
+
+        Returns:
+            Tuple of (column_name, column_dtype) pairs
+        """
+        if self._schema is None:
+            return ()
+
+        # Handle Mapping (dict-like)
+        if isinstance(self._schema, collections.Mapping):
+            return tuple((name, dtype) for name, dtype in self._schema.items())
+
+        # Handle Iterable (list, tuple, etc.) but not strings or bytes
+        if isinstance(self._schema, collections.Iterable) and not isinstance(
+            self._schema, (str, bytes)
+        ):
+            # Lazy import to avoid circular dependency
+            import tabsdata.tableframe.functions.col as td_col
+
+            result = []
+            for item in self._schema:
+                # Column object
+                if isinstance(item, td_col.Column):
+                    result.append((item.name, item.dtype))
+                # Tuple or list with (name, dtype)
+                elif isinstance(item, (tuple, list)):
+                    if len(item) == 2:
+                        name, dtype = item
+                        if isinstance(name, str):
+                            result.append((name, dtype))
+                        else:
+                            raise ValueError(
+                                "Invalid schema item: first element must be a string"
+                                f" (column name), got {type(name).__name__}"
+                            )
+                    else:
+                        raise ValueError(
+                            "Invalid schema item: expected 2 elements (name, dtype),"
+                            f" got {len(item)}"
+                        )
+                else:
+                    raise ValueError(
+                        "Invalid schema item: expected Column, tuple, or list, got"
+                        f" {type(item).__name__}"
+                    )
+            return tuple(result)
+
+        raise ValueError(
+            "Invalid schema type: expected Mapping, Iterable, or None, got"
+            f" {type(self._schema).__name__}"
+        )

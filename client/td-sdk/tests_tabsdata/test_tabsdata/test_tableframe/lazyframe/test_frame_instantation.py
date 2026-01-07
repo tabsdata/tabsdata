@@ -13,6 +13,8 @@ import pytest
 from tabulate import tabulate
 
 import tabsdata as td
+import tabsdata.tableframe.dtypes as td_dtypes
+import tabsdata.tableframe.functions.col as td_col
 
 # noinspection PyProtectedMember
 from tabsdata._utils.tableframe._helpers import REQUIRED_COLUMNS
@@ -37,6 +39,7 @@ from tabsdata.tableframe.lazyframe.frame import (
     _split_columns,
 )
 from tabsdata.tableframe.lazyframe.properties import TableFramePropertiesBuilder
+from tabsdata.tableframe.typing import SimpleSchema
 
 # noinspection PyUnresolvedReferences
 from .. import pytestmark  # noqa: F401
@@ -525,3 +528,128 @@ def test_sorted_columns_from_join_and_chained_group_by(columns):
     tf = tf_left.join(other=tf_right, on="a")
     tf = tf.group_by("c").max().group_by("d").min()
     assert_columns_sorted(tf._lf)
+
+
+# Tests for TableFrame.empty() with SimpleSchema
+
+
+def test_empty_with_simple_schema_none():
+    schema = None
+    tf = TableFrame.empty(schema=schema)
+
+    assert tf.is_empty()
+    assert not tf
+    assert_origin(tf, TableFrameOrigin.IMPORT)
+    columns = tf.columns()
+    assert len(columns) == 0
+
+
+def test_empty_with_simple_schema_dict():
+    schema = SimpleSchema({"age": td_dtypes.Int64, "name": td_dtypes.String})
+    tf = TableFrame.empty(schema=schema)
+
+    assert tf.is_empty()
+    assert not tf
+    assert_origin(tf, TableFrameOrigin.IMPORT)
+    columns = tf.columns()
+    assert len(columns) == 2
+
+    assert "age" in columns
+    assert "name" in columns
+
+
+def test_empty_with_simple_schema_list_of_tuples():
+    schema = SimpleSchema([("age", td_dtypes.Int64), ("name", td_dtypes.String)])
+    tf = TableFrame.empty(schema=schema)
+
+    assert tf.is_empty()
+    assert not tf
+    assert_origin(tf, TableFrameOrigin.IMPORT)
+    columns = tf.columns()
+    assert len(columns) == 2
+
+    assert "age" in columns
+    assert "name" in columns
+
+
+def test_empty_with_simple_schema_list_of_lists():
+    schema = SimpleSchema([["age", td_dtypes.Int64], ["name", td_dtypes.String]])
+    tf = TableFrame.empty(schema=schema)
+
+    assert tf.is_empty()
+    assert not tf
+    assert_origin(tf, TableFrameOrigin.IMPORT)
+    columns = tf.columns()
+    assert len(columns) == 2
+
+    assert "age" in columns
+    assert "name" in columns
+
+
+def test_empty_with_simple_schema_list_of_columns():
+    schema = SimpleSchema(
+        [td_col.Column("age", td_dtypes.Int64), td_col.Column("name", td_dtypes.String)]
+    )
+    tf = TableFrame.empty(schema=schema)
+    assert tf.is_empty()
+    assert not tf
+    assert_origin(tf, TableFrameOrigin.IMPORT)
+    columns = tf.columns()
+    assert len(columns) == 2
+
+    assert "age" in columns
+    assert "name" in columns
+
+
+def test_empty_with_simple_schema_mixed_types():
+    schema = SimpleSchema(
+        {
+            "int_col": td_dtypes.Int64,
+            "float_col": td_dtypes.Float64,
+            "string_col": td_dtypes.String,
+            "bool_col": td_dtypes.Boolean,
+            "date_col": td_dtypes.Date,
+        }
+    )
+    tf = TableFrame.empty(schema=schema)
+    assert tf.is_empty()
+    assert not tf
+    assert_origin(tf, TableFrameOrigin.IMPORT)
+    columns = tf.columns()
+    assert len(columns) == 5
+
+    assert "int_col" in columns
+    assert "float_col" in columns
+    assert "string_col" in columns
+    assert "bool_col" in columns
+    assert "date_col" in columns
+
+
+def test_empty_with_simple_schema_empty_dict():
+    schema = SimpleSchema({})
+    tf = TableFrame.empty(schema=schema)
+    assert tf.is_empty()
+    assert not tf
+    assert_origin(tf, TableFrameOrigin.IMPORT)
+    assert len(tf.columns()) == 0
+
+
+def test_empty_with_simple_schema_empty_list():
+    schema = SimpleSchema([])
+    tf = TableFrame.empty(schema=schema)
+    assert tf.is_empty()
+    assert not tf
+    assert_origin(tf, TableFrameOrigin.IMPORT)
+    assert len(tf.columns()) == 0
+
+
+def test_empty_with_simple_schema_single_column():
+    schema = SimpleSchema({"value": td_dtypes.Int64})
+    tf = TableFrame.empty(schema=schema)
+    assert tf.is_empty()
+    assert not tf
+    assert_origin(tf, TableFrameOrigin.IMPORT)
+    columns = tf.columns()
+    assert len(columns) == 1
+
+    assert "value" in columns

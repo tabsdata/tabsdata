@@ -155,13 +155,13 @@ class TableFrame:
 
     @classmethod
     @pydoc(categories="tableframe")
-    def empty(cls) -> TableFrame:
+    def empty(cls, schema: td_typing.SimpleSchema = None) -> TableFrame:
         """
         Creates an empty (no column - no row) TableFrame.
         """
         return TableFrame.__build__(
             origin=TableFrameOrigin.IMPORT,
-            df=None,
+            df=pl.LazyFrame(schema=schema.schema if schema is not None else None),
             mode="tab",
             idx=None,
             properties=None,
