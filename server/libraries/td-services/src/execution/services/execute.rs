@@ -86,7 +86,7 @@ pub(crate) mod tests {
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, Depth, ExecutionName, ExecutionStatus,
         FunctionName, FunctionRunStatus, FunctionRuntimeValues, RoleId, TableName, TableNameDto,
-        ToCollectionId, TransactionKey, TransactionStatus, TriggerType, TriggeredOn, UserId,
+        ToCollectionId, TransactionKey, TransactionStatus, TriggeredOn, UserId,
     };
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
     use td_tower::ctx_service::RawOneshot;
@@ -125,7 +125,7 @@ pub(crate) mod tests {
         };
         use td_objects::tower_service::from::{ConvertIntoMapService, VecBuildService};
         use td_objects::tower_service::sql::{insert, insert_vec};
-        use td_objects::types::basic::{CollectionId, FunctionId, FunctionOnly};
+        use td_objects::types::basic::{CollectionId, FunctionId, FunctionOnly, TriggerType};
         use td_objects::types::recursion::RecursionOptions;
         use td_tower::metadata::type_of_val;
 

@@ -98,3 +98,7 @@ def test_crontab_mask_validation_failure():
     with pytest.raises(DecoratorConfigurationError) as e:
         Crontab(mask=1)
     assert e.value.error_code == ErrorCode.DCE16
+
+    with pytest.raises(DecoratorConfigurationError) as e:
+        Crontab(mask="@hourly")
+    assert e.value.error_code == ErrorCode.DCE19

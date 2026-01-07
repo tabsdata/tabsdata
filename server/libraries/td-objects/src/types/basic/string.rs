@@ -31,8 +31,15 @@ pub struct CronMask;
 
 impl CronMask {
     fn create_cron(s: String) -> Result<croner::Cron, td_error::TdError> {
+        if s.contains("@") {
+            return Err(api_error!(
+                ApiError::InputError,
+                "Invalid cron expression: '@' aliases not supported"
+            ));
+        }
         // We do not allow seconds precision in the parsed cron masks.
         let parser = croner::parser::CronParser::builder()
+            .alternative_weekdays(false)
             .seconds(croner::parser::Seconds::Disallowed)
             .build();
         let cron = parser

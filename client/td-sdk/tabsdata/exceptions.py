@@ -202,6 +202,13 @@ class ErrorCode(Enum):
             "Ensure that it does by checking that 'end.tzinfo' is not None."
         ),
     }
+    DCE19 = {
+        "code": "DCE-019",
+        "message": (
+            "The 'mask' parameter '{}' for Crontab object does not support "
+            "'@' mask aliasing."
+        ),
+    }
 
     DECE2 = {
         "code": "DECE-002",

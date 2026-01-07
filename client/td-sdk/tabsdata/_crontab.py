@@ -36,6 +36,8 @@ class Crontab:
         if not mask or not isinstance(mask, str):
             raise DecoratorConfigurationError(ErrorCode.DCE16, mask)
         mask = mask.strip()
+        if mask.startswith("@"):
+            raise DecoratorConfigurationError(ErrorCode.DCE19, mask)
         mask_elements = len(mask.split())
         if mask_elements != 5:
             raise DecoratorConfigurationError(ErrorCode.DCE14, mask, mask_elements)
