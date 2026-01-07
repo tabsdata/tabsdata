@@ -9,7 +9,7 @@ use td_common::files::{
 };
 use td_common::server::{
     COMPLETE_FOLDER, ERROR_FOLDER, FAIL_FOLDER, ONGOING_FOLDER, PLANNED_FOLDER, PayloadType,
-    QUEUED_FOLDER, SupervisorMessage,
+    QUEUED_FOLDER, STOP_FOLDER, SupervisorMessage,
 };
 use tracing::{debug, error};
 
@@ -193,6 +193,27 @@ impl SupervisorMessageQueue {
         )
     }
 
+    //noinspection DuplicatedCode
+    pub fn stop(message: SupervisorMessage) -> std::io::Result<SupervisorMessage> {
+        for folder in FOLDERS {
+            let source = Self::locate_at(message.clone(), folder.to_string())?;
+            if let Some(source) = source {
+                let target = Self::at_stop(source.clone())?;
+                debug!("Moving stop message from '{:?}' to '{:?}'", source, target);
+                if let Some(parent) = target.file.parent() {
+                    fs::create_dir_all(parent)?;
+                }
+                fs::rename(&source.file, &target.file)?;
+                return Ok(target);
+            }
+        }
+        Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("Message couldn't be moved to the stop folder '{message:?}'"),
+        ))
+    }
+
+    //noinspection DuplicatedCode
     pub fn error(message: SupervisorMessage) -> std::io::Result<SupervisorMessage> {
         for folder in FOLDERS {
             let source = Self::locate_at(message.clone(), folder.to_string())?;
@@ -205,7 +226,7 @@ impl SupervisorMessageQueue {
         }
         Err(std::io::Error::new(
             std::io::ErrorKind::NotFound,
-            format!("Message couldn't be moved to the to error folder '{message:?}'"),
+            format!("Message couldn't be moved to the error folder '{message:?}'"),
         ))
     }
 
@@ -281,6 +302,25 @@ impl SupervisorMessageQueue {
         })
     }
 
+    //noinspection DuplicatedCode
+    fn at_stop(message: SupervisorMessage) -> std::io::Result<SupervisorMessage> {
+        if let Some(folder) = &message.file.parent()
+            && let Some(file) = &message.file.file_name()
+        {
+            let mut path = PathBuf::from(folder);
+            path.push(STOP_FOLDER);
+            path.push(file);
+            let mut message = message.clone();
+            message.file = path;
+            return Ok(message);
+        }
+        Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("Error relocating message to stop folder '{message:?}'"),
+        ))
+    }
+
+    //noinspection DuplicatedCode
     fn at_error(message: SupervisorMessage) -> std::io::Result<SupervisorMessage> {
         if let Some(folder) = &message.file.parent()
             && let Some(file) = &message.file.file_name()
