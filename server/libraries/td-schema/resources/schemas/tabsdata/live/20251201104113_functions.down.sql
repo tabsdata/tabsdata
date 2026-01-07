@@ -67,3 +67,7 @@ ALTER TABLE tables
 -- Drop enabled column to functions
 ALTER TABLE functions
     DROP COLUMN enabled;
+
+-- Drop trigger_type column to executions
+ALTER TABLE executions
+    DROP COLUMN trigger_type;

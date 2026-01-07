@@ -28,11 +28,24 @@ use td_objects::sql::{DaoQueries, FindBy, UpdateBy};
 use td_objects::transaction::map::{TransactionMap, TransactionMapper};
 use td_objects::types::basic::{
     Depth, Dot, Enabled, FunctionOnly, FunctionRunStatus, FunctionStatus, InputIdx, Trigger,
-    VersionPos,
+    TriggerType, VersionPos,
 };
 use td_objects::types::graph::{FunctionNodeBuilder, GraphEdge, GraphNode, ResolvedVersion};
 use td_objects::types::recursion::RecursionOptions;
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
+
+pub async fn trigger_type_manual() -> Result<TriggerType, TdError> {
+    Ok(TriggerType::Manual)
+}
+
+pub async fn trigger_type_cron() -> Result<TriggerType, TdError> {
+    Ok(TriggerType::Cron)
+}
+
+// pub async fn trigger_type_data_listener(
+// ) -> Result<TriggerType, TdError> {
+//     Ok(TriggerType::DataListener)
+// }
 
 pub async fn assert_function_status(
     Input(function): Input<FunctionDBWithNames>,

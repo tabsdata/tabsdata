@@ -32,6 +32,7 @@ def test_execution_class(tabsserver_connection):
         triggered_by="triggered_by",
         triggered_on=time_triggered,
         status="F",
+        trigger_type="M",
         random_kwarg="kwarg",
         started_on=time_triggered,
         ended_on=time_triggered,
@@ -45,6 +46,7 @@ def test_execution_class(tabsserver_connection):
     assert isinstance(execution.started_on_str, str)
     assert execution.ended_on == time_triggered
     assert isinstance(execution.ended_on_str, str)
+    assert execution.trigger_type == "Manual"
     assert execution.status == "Finished"
     assert execution.kwargs
     assert execution.__repr__()

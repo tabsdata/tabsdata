@@ -27,7 +27,10 @@ from tabsdata._utils.bundle_utils import create_bundle_archive
 from tabsdata._utils.temps import tabsdata_temp_folder
 from tabsdata.api.apiserver import APIServer, obtain_connection
 from tabsdata.api.status_utils.data_version import data_version_status_to_mapping
-from tabsdata.api.status_utils.execution import execution_status_to_mapping
+from tabsdata.api.status_utils.execution import (
+    execution_status_to_mapping,
+    execution_trigger_type_to_mapping,
+)
 from tabsdata.api.status_utils.function_run import function_run_status_to_mapping
 from tabsdata.api.status_utils.transaction import transaction_status_to_mapping
 from tabsdata.api.status_utils.worker import worker_status_to_mapping
@@ -844,6 +847,7 @@ class Execution:
             triggered_on (int): The timestamp when the execution was triggered.
             ended_on (int): The timestamp when the execution ended.
             started_on (int): The timestamp when the execution started.
+            trigger_type: Type type of trigger for the execution.
             status (str): The status of the execution.
             **kwargs: Additional keyword arguments.
         """
@@ -855,6 +859,7 @@ class Execution:
         self.triggered_on = kwargs.get("triggered_on")
         # This way it gets computed dynamically, and we don't need to replicate logic
         self.triggered_on_str = None
+        self.trigger_type = kwargs.get("trigger_type")
         self.status = kwargs.get("status")
 
         self.triggered_by = kwargs.get("triggered_by")
@@ -938,6 +943,19 @@ class Execution:
         ]
 
     @property
+    def trigger_type(self) -> str:
+        if self._trigger_type is None:
+            self.trigger_type = self._data.get("trigger_type")
+        return self._trigger_type
+
+    @trigger_type.setter
+    def trigger_type(self, trigger_type: str | None):
+        if trigger_type is None:
+            self._trigger_type = trigger_type
+        else:
+            self._trigger_type = execution_trigger_type_to_mapping(trigger_type)
+
+    @property
     def status(self) -> str:
         if self._status is None:
             self.status = self._data.get("status")
@@ -1014,6 +1032,7 @@ class Execution:
         self.function = None
         self.triggered_on = None
         self.triggered_on_str = None
+        self.trigger_type = None
         self.status = None
         self.triggered_by = None
         self.ended_on = None

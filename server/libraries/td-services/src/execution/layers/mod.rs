@@ -26,7 +26,7 @@ use td_objects::tower_service::from::{
     BuildService, ExtractService, IntoService, SetService, TryIntoService, UpdateService, With,
 };
 use td_objects::tower_service::sql::{insert, insert_vec};
-use td_objects::types::basic::{CollectionId, FunctionId, FunctionOnly};
+use td_objects::types::basic::{CollectionId, FunctionId, FunctionOnly, TriggerType};
 use td_objects::types::recursion::RecursionOptions;
 use td_tower::from_fn::from_fn;
 use td_tower::{layer, layers};
@@ -81,6 +81,7 @@ pub fn execute() {
         from_fn(With::<FunctionDBWithNames>::try_convert_to::<ExecutionDBBuilder, _>),
         from_fn(With::<RequestContext>::update::<ExecutionDBBuilder, _>),
         from_fn(With::<ExecutionRequest>::update::<ExecutionDBBuilder, _>),
+        from_fn(With::<TriggerType>::set::<ExecutionDBBuilder>),
         from_fn(With::<RecursionOptions>::set::<ExecutionDBBuilder>),
         from_fn(With::<ExecutionDBBuilder>::build::<ExecutionDB, _>),
         from_fn(insert::<ExecutionDB>),

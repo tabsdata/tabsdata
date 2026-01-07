@@ -69,10 +69,7 @@ pub fn run() {
             let end = cron_config.end.map(|t| t.timestamp_millis());
 
             // prepare trigger task
-            let trigger_name = format!(
-                "collection:{}, function:{}, cron='{}'",
-                cron.info.collection, cron.info.function, mask
-            );
+            let trigger_name = format!("by cron mask '{}'", mask);
             let execution_request = ExecutionName::try_from(trigger_name)
                 .map(|name| ExecutionRequest {
                     name: Some(name),

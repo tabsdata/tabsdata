@@ -266,6 +266,16 @@ pub enum TriggerStatus {
 }
 
 #[td_type::typed_enum]
+pub enum TriggerType {
+    #[typed_enum(rename = "M")]
+    Manual,
+    #[typed_enum(rename = "C")]
+    Cron,
+    #[typed_enum(rename = "DL")]
+    DataListener,
+}
+
+#[td_type::typed_enum]
 pub enum WorkerMessageStatus {
     #[typed_enum(rename = "N")]
     None,

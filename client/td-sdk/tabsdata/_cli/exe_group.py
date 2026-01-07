@@ -338,6 +338,7 @@ def list_plan(
             table.add_column("Collection")
             table.add_column("Function")
             table.add_column("Triggered on")
+            table.add_column("Trigger", no_wrap=True)
             table.add_column("Status", no_wrap=True)
 
             for execution in list_of_executions:
@@ -347,6 +348,7 @@ def list_plan(
                     execution.collection.name,
                     execution.function.name,
                     beautify_time(execution.triggered_on_str),
+                    execution.trigger_type,
                     execution.status,
                 )
 

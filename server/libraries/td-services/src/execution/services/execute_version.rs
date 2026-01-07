@@ -3,6 +3,7 @@
 //
 
 use crate::execution::layers::execute;
+use crate::execution::layers::execution::trigger_type_cron;
 use crate::execution::layers::execution_version::assert_function_version;
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
@@ -58,6 +59,7 @@ fn service() {
             By::<FunctionId>::select_version::<{ FunctionDBWithNames::All }, FunctionDBWithNames>
         ),
         from_fn(assert_function_version),
+        from_fn(trigger_type_cron), //TODO: This should be either cron or data listener
         execute(),
     )
 }
@@ -114,7 +116,7 @@ mod tests {
         };
         use td_objects::tower_service::from::{ConvertIntoMapService, VecBuildService};
         use td_objects::tower_service::sql::{insert, insert_vec};
-        use td_objects::types::basic::{CollectionId, FunctionId, FunctionOnly};
+        use td_objects::types::basic::{CollectionId, FunctionId, FunctionOnly, TriggerType};
         use td_objects::types::recursion::RecursionOptions;
         use td_tower::metadata::type_of_val;
 
@@ -148,6 +150,9 @@ mod tests {
                     By::<FunctionId>::select_version::<{ FunctionDBWithNames::All }, FunctionDBWithNames>
                 ),
                 type_of_val(&assert_function_version),
+                type_of_val(&trigger_type_cron),
+
+                // execute()
                 type_of_val(&assert_function_status),
                 // check requester is coll_admin or coll_exec for the function's collection
                 type_of_val(&With::<FunctionDBWithNames>::extract::<CollectionId>),
@@ -199,6 +204,7 @@ mod tests {
                 type_of_val(&With::<FunctionDBWithNames>::try_convert_to::<ExecutionDBBuilder, _>),
                 type_of_val(&With::<RequestContext>::update::<ExecutionDBBuilder, _>),
                 type_of_val(&With::<ExecutionRequest>::update::<ExecutionDBBuilder, _>),
+                type_of_val(&With::<TriggerType>::set::<ExecutionDBBuilder>),
                 type_of_val(&With::<RecursionOptions>::set::<ExecutionDBBuilder>),
                 type_of_val(&With::<ExecutionDBBuilder>::build::<ExecutionDB, _>),
                 type_of_val(&insert::<ExecutionDB>),

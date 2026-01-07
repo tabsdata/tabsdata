@@ -3,6 +3,7 @@
 //
 
 use crate::execution::layers::execute;
+use crate::execution::layers::execution::trigger_type_manual;
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
 use td_execution::TransactionBy;
@@ -50,6 +51,7 @@ fn service() {
                 FunctionDBWithNames,
             >
         ),
+        from_fn(trigger_type_manual),
         execute(),
     )
 }
@@ -84,7 +86,7 @@ pub(crate) mod tests {
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, Depth, ExecutionName, ExecutionStatus,
         FunctionName, FunctionRunStatus, FunctionRuntimeValues, RoleId, TableName, TableNameDto,
-        ToCollectionId, TransactionKey, TransactionStatus, TriggeredOn, UserId,
+        ToCollectionId, TransactionKey, TransactionStatus, TriggerType, TriggeredOn, UserId,
     };
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
     use td_tower::ctx_service::RawOneshot;
@@ -159,6 +161,8 @@ pub(crate) mod tests {
                     FunctionDBWithNames,
                 >,
             ),
+            type_of_val(&trigger_type_manual),
+            // execute()
             type_of_val(&assert_function_status),
             // check requester is coll_admin or coll_exec for the function's collection
             type_of_val(&With::<FunctionDBWithNames>::extract::<CollectionId>),
@@ -210,6 +214,7 @@ pub(crate) mod tests {
             type_of_val(&With::<FunctionDBWithNames>::try_convert_to::<ExecutionDBBuilder, _>),
             type_of_val(&With::<RequestContext>::update::<ExecutionDBBuilder, _>),
             type_of_val(&With::<ExecutionRequest>::update::<ExecutionDBBuilder, _>),
+            type_of_val(&With::<TriggerType>::set::<ExecutionDBBuilder>),
             type_of_val(&With::<RecursionOptions>::set::<ExecutionDBBuilder>),
             type_of_val(&With::<ExecutionDBBuilder>::build::<ExecutionDB, _>),
             type_of_val(&insert::<ExecutionDB>),

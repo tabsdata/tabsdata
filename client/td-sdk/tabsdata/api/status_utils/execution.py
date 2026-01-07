@@ -5,6 +5,28 @@
 from enum import Enum
 
 
+class TriggerTypeStatus(Enum):
+    MANUAL = "M"
+    CRON = "C"
+    DATA_LISTENER = "DL"
+
+
+EXECUTION_TRIGGER_TYPE_MAPPING = {
+    TriggerTypeStatus.MANUAL.value: "Manual",
+    TriggerTypeStatus.CRON.value: "Cron",
+    TriggerTypeStatus.DATA_LISTENER.value: "Listener",
+}
+
+
+def execution_trigger_type_to_mapping(trigger_type: str) -> str:
+    """
+    Function to convert a status to a mapping. While currently it
+    only accesses the dictionary and returns the corresponding value, it could get
+    more difficult in the future.
+    """
+    return EXECUTION_TRIGGER_TYPE_MAPPING.get(trigger_type, trigger_type)
+
+
 class ExecutionStatus(Enum):
     FINISHED = "F"
     STALLED = "L"

@@ -12,7 +12,7 @@ mod definitions {
         AtTime, CollectionId, CollectionName, Dot, Enabled, ExecutionId, ExecutionName,
         ExecutionStatus, FunctionId, FunctionName, FunctionOnly, FunctionRunStatus,
         FunctionVersionId, StatusCount, System, TableDataVersionId, TableName, TableVersionId,
-        TransactionId, TriggeredOn, UserId, UserName,
+        TransactionId, TriggerType, TriggeredOn, UserId, UserName,
     };
     use crate::types::composed::TableVersions;
     use crate::types::graph::GraphEdge;
@@ -59,6 +59,8 @@ mod definitions {
         pub triggered_on: TriggeredOn,
         #[td_type(updater(try_from = RequestContext, field = "user_id"))]
         pub triggered_by_id: UserId,
+        #[td_type(setter)]
+        pub trigger_type: TriggerType, // Added in v4
 
         pub recursion_options: sqlx::types::Json<Option<RecursionOptions>>, // Added in v3
     }
@@ -117,6 +119,8 @@ mod definitions {
         pub function: FunctionName,
         #[dto(list(filter, filter_like, order_by))]
         pub triggered_by: UserName,
+        #[dto(list(filter, filter_like, order_by))]
+        pub trigger_type: TriggerType, // Added in v4
 
         #[dto(list(filter, filter_like))]
         pub started_on: Option<AtTime>,

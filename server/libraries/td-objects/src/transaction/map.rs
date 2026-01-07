@@ -87,6 +87,7 @@ mod tests {
     use crate::dxo::execution::ExecutionDB;
     use crate::test_utils::graph::{FUNCTION_NAMES, function_node};
     use crate::test_utils::transaction::TestTransactionBy;
+    use crate::types::basic::TriggerType;
 
     fn dummy_execution() -> ExecutionDB {
         ExecutionDB {
@@ -98,6 +99,7 @@ mod tests {
             triggered_on: Default::default(),
             triggered_by_id: Default::default(),
             recursion_options: Default::default(),
+            trigger_type: TriggerType::Manual,
         }
     }
 
