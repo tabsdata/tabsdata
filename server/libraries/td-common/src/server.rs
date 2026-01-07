@@ -131,6 +131,7 @@ pub const QUEUED_FOLDER: &str = "queued";
 pub const ONGOING_FOLDER: &str = "ongoing";
 pub const COMPLETE_FOLDER: &str = "complete";
 
+pub const STOP_FOLDER: &str = "stop";
 pub const ERROR_FOLDER: &str = "error";
 pub const FAIL_FOLDER: &str = "fail";
 
