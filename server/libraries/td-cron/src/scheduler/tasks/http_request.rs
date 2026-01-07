@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use std::fmt::{Debug, Formatter};
 use td_common::server::HttpRequest;
 use tokio::sync::watch;
-use tracing::{debug, error, warn};
+use tracing::{debug, error, info, warn};
 
 pub struct HttpRequestTask {
     request: HttpRequest,
@@ -42,6 +42,7 @@ impl HttpRequestTask {
 #[async_trait]
 impl CronJobTask for HttpRequestTask {
     async fn run(&self, mut shutdown: watch::Receiver<()>) -> Result<(), CronJobSchedulerError> {
+        info!("Cron trigger starting");
         let HttpRequest {
             url,
             method,

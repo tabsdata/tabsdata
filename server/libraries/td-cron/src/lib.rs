@@ -69,17 +69,18 @@ pub fn run() {
             let end = cron_config.end.map(|t| t.timestamp_millis());
 
             // prepare trigger task
-            let execution_request = ExecutionName::try_from(format!(
-                "td-cron::mask={}::worker={}",
-                mask, cron.info.worker_id
-            ))
-            .map(|n| ExecutionRequest {
-                name: Some(n),
-                function_only: Default::default(),
-            })
-            .map(|r| serde_json::to_string(&r).unwrap_or_default())
-            .unwrap_or_default();
-            info!("Execution request to be sent: {execution_request}");
+            let trigger_name = format!(
+                "collection:{}, function:{}, cron='{}'",
+                cron.info.collection, cron.info.function, mask
+            );
+            let execution_request = ExecutionName::try_from(trigger_name)
+                .map(|name| ExecutionRequest {
+                    name: Some(name),
+                    function_only: Default::default(),
+                })
+                .map(|r| serde_json::to_string_pretty(&r).unwrap_or_default())
+                .unwrap_or_default();
+            info!("Execution request to be sent: \n{execution_request}");
             // Note that this request can be created inside the closure instead of moving it,
             // so things like time of the request could be included there if needed.
             let body = move || execution_request.clone();

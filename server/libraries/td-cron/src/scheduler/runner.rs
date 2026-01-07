@@ -41,27 +41,26 @@ pub(crate) struct CronScheduler {
 }
 
 impl CronScheduler {
-    pub fn new(
+    fn _new(
         mask: croner::Cron,
         start: Option<i64>,
         end: Option<i64>,
         task: Box<dyn CronJobTask>,
+        handle_seconds: bool,
     ) -> Result<Self, CronJobSchedulerError> {
         // correct masks missing seconds to have it, as tokio_cron_scheduler::Job requires it
         let parser = croner::parser::CronParser::builder()
             .seconds(croner::parser::Seconds::Required)
             .build();
-        let mask = match parser.parse(mask.as_str()) {
+        let mut mask = mask.to_string();
+        if !handle_seconds {
+            mask = format!("0 {}", mask);
+        }
+        let mask = match parser.parse(&mask) {
             Ok(cron) => cron,
             Err(e) => {
-                warn!(
-                    "Error parsing cron mask with required seconds: {e}. Correcting with seconds set to 0."
-                );
-
-                let mask = format!("0 {mask}");
-                parser.parse(mask.as_str()).map_err(|inner| {
-                    error!("Error parsing modified cron mask with seconds set to 0: {inner}.");
-                    // returning main error, most likely the mask was wrong in the first place
+                parser.parse(mask.as_str()).map_err(|_| {
+                    // returning main error, mask was wrong in the first place
                     CronJobSchedulerError::ParseError(e)
                 })?
             }
@@ -73,6 +72,15 @@ impl CronScheduler {
             end,
             task,
         })
+    }
+
+    pub fn new(
+        mask: croner::Cron,
+        start: Option<i64>,
+        end: Option<i64>,
+        task: Box<dyn CronJobTask>,
+    ) -> Result<Self, CronJobSchedulerError> {
+        Self::_new(mask, start, end, task, false)
     }
 }
 
@@ -293,7 +301,7 @@ mod tests {
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         let task = Box::new(MockTask { tx });
 
-        let scheduler = CronScheduler::new(mask, None, None, task).unwrap();
+        let scheduler = CronScheduler::_new(mask, None, None, task, true).unwrap();
         let (shutdown_tx, shutdown_rx) = watch::channel(());
 
         let handle = tokio::spawn(async move {
