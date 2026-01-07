@@ -165,8 +165,23 @@ impl SupervisorMessageQueue {
                 )
             })?;
         let target = root.join(PLANNED_FOLDER).join(name);
-        fs::rename(source, target)?;
-        Ok(())
+        debug!(
+            "Renaming message to planned: '{:?}' -> '{:?}'",
+            source, target
+        );
+        match fs::rename(source, &target) {
+            Ok(_) => {
+                debug!("Successfully renamed message to planned: '{:?}'", target);
+                Ok(())
+            }
+            Err(e) => {
+                error!(
+                    "Failed to rename message to planned: '{:?}' -> '{:?}': {:?}",
+                    source, target, e
+                );
+                Err(e)
+            }
+        }
     }
 
     pub fn queued(message: SupervisorMessage) -> std::io::Result<SupervisorMessage> {
@@ -207,12 +222,41 @@ impl SupervisorMessageQueue {
             let source = Self::locate_at(message.clone(), folder.to_string())?;
             if let Some(source) = source {
                 let target = Self::at_stop(source.clone())?;
-                debug!("Moving stop message from '{:?}' to '{:?}'", source, target);
                 if let Some(parent) = target.file.parent() {
-                    fs::create_dir_all(parent)?;
+                    debug!("Creating stop message parent directory: '{:?}'", parent);
+                    match fs::create_dir_all(parent) {
+                        Ok(_) => {
+                            debug!(
+                                "Successfully created stop message parent directory: '{:?}'",
+                                parent
+                            );
+                        }
+                        Err(e) => {
+                            error!(
+                                "Failed to create stop message parent directory '{:?}': {:?}",
+                                parent, e
+                            );
+                            return Err(e);
+                        }
+                    }
                 }
-                fs::rename(&source.file, &target.file)?;
-                return Ok(target);
+                debug!(
+                    "Moving stop message: '{:?}' -> '{:?}'",
+                    source.file, target.file
+                );
+                match fs::rename(&source.file, &target.file) {
+                    Ok(_) => {
+                        debug!("Successfully moved stop message to: '{:?}'", target.file);
+                        return Ok(target);
+                    }
+                    Err(e) => {
+                        error!(
+                            "Failed to move stop message '{:?}' -> '{:?}': {:?}",
+                            source.file, target.file, e
+                        );
+                        return Err(e);
+                    }
+                }
             }
         }
         Err(std::io::Error::new(
@@ -227,9 +271,23 @@ impl SupervisorMessageQueue {
             let source = Self::locate_at(message.clone(), folder.to_string())?;
             if let Some(source) = source {
                 let target = Self::at_error(source.clone())?;
-                debug!("Moving error message from '{:?}' to '{:?}'", source, target);
-                fs::rename(&source.file, &target.file)?;
-                return Ok(target);
+                debug!(
+                    "Moving error message: '{:?}' -> '{:?}'",
+                    source.file, target.file
+                );
+                match fs::rename(&source.file, &target.file) {
+                    Ok(_) => {
+                        debug!("Successfully moved error message to: '{:?}'", target.file);
+                        return Ok(target);
+                    }
+                    Err(e) => {
+                        error!(
+                            "Failed to move error message '{:?}' -> '{:?}': {:?}",
+                            source.file, target.file, e
+                        );
+                        return Err(e);
+                    }
+                }
             }
         }
         Err(std::io::Error::new(
@@ -264,8 +322,20 @@ impl SupervisorMessageQueue {
                     format!("Message file name not found for '{message:?}'"),
                 )
             })?);
-        fs::rename(source, target)?;
-        Ok(())
+        debug!("Moving message to fail: '{:?}' -> '{:?}'", source, target);
+        match fs::rename(source, &target) {
+            Ok(_) => {
+                debug!("Successfully moved message to fail: '{:?}'", target);
+                Ok(())
+            }
+            Err(e) => {
+                error!(
+                    "Failed to move message to fail: '{:?}' -> '{:?}': {:?}",
+                    source, target, e
+                );
+                Err(e)
+            }
+        }
     }
 
     fn change_to(message: SupervisorMessage, vault: String) -> std::io::Result<SupervisorMessage> {
@@ -351,9 +421,27 @@ impl SupervisorMessageQueue {
         source_vault: String,
         target_vault: String,
     ) -> std::io::Result<SupervisorMessage> {
-        let source = Self::change_to(message.clone(), source_vault)?;
-        let target = Self::change_to(message.clone(), target_vault)?;
-        fs::rename(&source.file, &target.file)?;
-        Ok(target)
+        let source = Self::change_to(message.clone(), source_vault.clone())?;
+        let target = Self::change_to(message.clone(), target_vault.clone())?;
+        debug!(
+            "Moving message from '{}' to '{}': '{:?}' -> '{:?}'",
+            source_vault, target_vault, source.file, target.file
+        );
+        match fs::rename(&source.file, &target.file) {
+            Ok(_) => {
+                debug!(
+                    "Successfully moved message from '{}' to '{}': '{:?}'",
+                    source_vault, target_vault, target.file
+                );
+                Ok(target)
+            }
+            Err(e) => {
+                error!(
+                    "Failed to move message from '{}' to '{}': '{:?}' -> '{:?}': {:?}",
+                    source_vault, target_vault, source.file, target.file, e
+                );
+                Err(e)
+            }
+        }
     }
 }
