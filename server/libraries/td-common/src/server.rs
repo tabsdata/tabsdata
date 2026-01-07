@@ -236,6 +236,7 @@ where
     #[serde(default)]
     pub class: WorkerClass,
     pub worker: String,
+    pub run_id: String,
     pub action: MessageAction,
     pub arguments: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -409,6 +410,7 @@ where
     pub fn new(
         class: WorkerClass,
         worker: String,
+        worker_id: String,
         action: MessageAction,
         arguments: Vec<String>,
         callback: Option<Callback>,
@@ -417,6 +419,7 @@ where
         RequestMessagePayload {
             class,
             worker,
+            run_id: worker_id,
             action,
             arguments,
             callback,
@@ -731,6 +734,7 @@ pub fn counter(path: &Path) -> String {
 #[cfg(test)]
 mod tests_queue {
     use super::*;
+    use crate::id;
 
     #[tokio::test]
     async fn test_put_and_commit_message() {
@@ -740,6 +744,7 @@ mod tests_queue {
         let payload = RequestMessagePayload::<Value> {
             class: WorkerClass::REGULAR,
             worker: String::from("worker1"),
+            run_id: id::id().to_string(),
             action: MessageAction::Start,
             arguments: vec![String::from("arg1")],
             callback: None,
@@ -793,6 +798,7 @@ mod tests_queue {
         let payload = RequestMessagePayload::<Value> {
             class: WorkerClass::REGULAR,
             worker: String::from("worker2"),
+            run_id: id::id().to_string(),
             action: MessageAction::Start,
             arguments: vec![String::from("arg2")],
             callback: None,
@@ -846,6 +852,7 @@ mod tests_queue {
         let payload = RequestMessagePayload::<Value> {
             class: WorkerClass::REGULAR,
             worker: String::from("worker3"),
+            run_id: id::id().to_string(),
             action: MessageAction::Start,
             arguments: vec![String::from("arg3")],
             callback: None,

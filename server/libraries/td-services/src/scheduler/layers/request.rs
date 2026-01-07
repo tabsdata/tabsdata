@@ -8,6 +8,7 @@
 use http::Method;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
+use td_common::id;
 use td_common::server::{
     Callback, HttpCallback, HttpRequest, MessageAction, RequestMessagePayload, WorkerClass,
     WorkerMessageQueue, WorkerName,
@@ -314,6 +315,7 @@ pub async fn create_locked_function_runner_workers_start_request<T: WorkerMessag
                 let message_payload = RequestMessagePayload {
                     class: WorkerClass::EPHEMERAL,
                     worker: WorkerName::FUNCTION.as_ref().to_string(),
+                    run_id: worker_id.to_string(),
                     action: MessageAction::Start,
                     arguments: Vec::new(),
                     callback: Some(callback),
@@ -420,6 +422,7 @@ pub async fn create_locked_cron_workers_start_request<T: WorkerMessageQueue>(
                 let message_payload = RequestMessagePayload {
                     class: WorkerClass::EPHEMERAL,
                     worker: WorkerName::CRON.as_ref().to_string(),
+                    run_id: worker_id.clone(),
                     action: MessageAction::Start,
                     arguments: Vec::new(),
                     callback: Some(callback),
@@ -466,10 +469,15 @@ pub async fn create_locked_cron_workers_stop_request<T: WorkerMessageQueue>(
                 };
                 let callback = Callback::Http(http_callback);
 
+                // we create a diff message ID than the worker ID for STOP
+                // as it has to be a different file name for the current messaging impl
+                let message_id = id::id().to_string();
+
                 // Build message payload
                 let message_payload = RequestMessagePayload::<serde_yaml::Value> {
                     class: WorkerClass::EPHEMERAL,
                     worker: WorkerName::CRON.as_ref().to_string(),
+                    run_id: worker_id,
                     action: MessageAction::Stop,
                     arguments: Vec::new(),
                     callback: Some(callback),
@@ -477,7 +485,7 @@ pub async fn create_locked_cron_workers_stop_request<T: WorkerMessageQueue>(
                 };
 
                 // Add it to the queue
-                message_queue.put(worker_id, message_payload).await?;
+                message_queue.put(message_id, message_payload).await?;
                 Ok::<_, TdError>(())
             }
         })
@@ -612,6 +620,7 @@ pub async fn create_locked_watchdog_workers_start_request<T: WorkerMessageQueue>
                 let message_payload = RequestMessagePayload {
                     class: WorkerClass::EPHEMERAL,
                     worker: WorkerName::WATCHDOG.as_ref().to_string(),
+                    run_id: worker_id.clone(),
                     action: MessageAction::Start,
                     arguments: Vec::new(),
                     callback: Some(callback),
@@ -662,10 +671,15 @@ pub async fn create_locked_watchdog_workers_stop_request<T: WorkerMessageQueue>(
                 };
                 let callback = Callback::Http(http_callback);
 
+                // we create a diff message ID than the worker ID for STOP
+                // as it has to be a different file name for the current messaging impl
+                let message_id = id::id().to_string();
+
                 // Build message payload
                 let message_payload = RequestMessagePayload::<serde_yaml::Value> {
                     class: WorkerClass::EPHEMERAL,
                     worker: WorkerName::WATCHDOG.as_ref().to_string(),
+                    run_id: worker_id.clone(),
                     action: MessageAction::Stop,
                     arguments: Vec::new(),
                     callback: Some(callback),
@@ -673,7 +687,7 @@ pub async fn create_locked_watchdog_workers_stop_request<T: WorkerMessageQueue>(
                 };
 
                 // Add it to the queue
-                message_queue.put(worker_id, message_payload).await?;
+                message_queue.put(message_id, message_payload).await?;
                 Ok::<_, TdError>(())
             }
         })
