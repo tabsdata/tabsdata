@@ -56,6 +56,7 @@ use sysinfo::{Pid, Signal};
 use td_common::attach::check_nowait_env;
 use td_common::env::to_absolute;
 use td_common::execution_status::WorkerCallbackStatus;
+use td_common::id::id;
 use td_common::os::terminate_process;
 use td_common::server::MessageAction;
 use td_common::server::SupervisorMessagePayload::{
@@ -514,6 +515,7 @@ struct RunInfo {
     _abort_handle: AbortHandle,
     _worker_config: WorkerConfig,
     intentionally_stopped: Arc<AtomicBool>,
+    shutdown_in_progress: Arc<AtomicBool>,
     pid: Option<u32>,
     interceptor: Option<SupervisorMessage>,
 }
@@ -546,6 +548,22 @@ impl Drop for Supervisor {
 impl Supervisor {
     fn drop_workers(&mut self) {
         info!("Dropping the Supervisor workers...");
+
+        debug!("Attempting to mark remaining tasks as shutdown in progress...");
+        if let Ok(mut map) = self.running_tasks_map.try_lock() {
+            for (_worker_name, tasks) in map.iter_mut() {
+                for (_run_id, run_info) in tasks.iter_mut() {
+                    run_info.shutdown_in_progress.store(true, SeqCst);
+                }
+            }
+            drop(map);
+            debug!("Marked remaining tasks as shutdown in progress");
+        } else {
+            debug!(
+                "Could not acquire lock to mark tasks; likely already marked during stop_workers"
+            );
+        }
+
         let mut system = sysinfo::System::new_all();
         system.refresh_all();
         let pid = process::id();
@@ -733,7 +751,9 @@ impl Supervisor {
                 {
                     let retry = retry + 1;
                     let name = format!("{id}{RETRIES_DELIMITER}{retry}{ext}");
-                    return if let Err(e) = SupervisorMessageQueue::planned(message.clone(), name) {
+                    return if let Err(e) =
+                        SupervisorMessageQueue::planned_from_error(message.clone(), name)
+                    {
                         let error = format!("Error retrying message '{message:?}': {e}");
                         error!("{}", error);
                         Err(RuntimeError::new(error))
@@ -1394,6 +1414,7 @@ impl Supervisor {
                         _abort_handle: abort_handle,
                         _worker_config: worker.clone(),
                         intentionally_stopped: Arc::new(AtomicBool::new(false)),
+                        shutdown_in_progress: Arc::new(AtomicBool::new(false)),
                         pid: None,
                         interceptor: None,
                     };
@@ -1463,6 +1484,7 @@ impl Supervisor {
                                         _abort_handle: abort_handle,
                                         _worker_config: worker.clone(),
                                         intentionally_stopped: Arc::new(AtomicBool::new(false)),
+                                        shutdown_in_progress: Arc::new(AtomicBool::new(false)),
                                         pid: None,
                                         interceptor: None,
                                     };
@@ -1654,7 +1676,7 @@ impl Supervisor {
         let execution = execution(&message);
         let limit = worker.retries;
 
-        let (intentionally_stopped, interceptor) =
+        let (intentionally_stopped, shutdown_in_progress, interceptor) =
             if let SupervisorRequestMessagePayload(payload) = &message.payload {
                 let map = self.running_tasks_map.lock().await;
                 let info = map
@@ -1663,15 +1685,29 @@ impl Supervisor {
                     .map(|info| {
                         (
                             info.intentionally_stopped.load(SeqCst),
+                            info.shutdown_in_progress.load(SeqCst),
                             info.interceptor.clone(),
                         )
                     })
-                    .unwrap_or((false, None));
+                    .unwrap_or((false, false, None));
                 drop(map);
                 info
             } else {
-                (false, None)
+                (false, false, None)
             };
+
+        if shutdown_in_progress {
+            info!(
+                "Worker '{}' run '{}' completed during shutdown; skipping notification and message handling",
+                worker.name(),
+                if let SupervisorRequestMessagePayload(payload) = &message.payload {
+                    payload.run_id.as_str()
+                } else {
+                    "<no payload>"
+                }
+            );
+            return Ok(());
+        }
 
         let (status, error) = if intentionally_stopped {
             info!(
@@ -2100,6 +2136,34 @@ impl Supervisor {
         };
 
         if let EPHEMERAL = class {
+            let worker_folder = self
+                .params
+                .clone()
+                .work()
+                .join(PROC_FOLDER)
+                .join(class.as_ref())
+                .join(worker.name())
+                .join(WORK_FOLDER)
+                .join(CAST_FOLDER)
+                .join(message.clone().unwrap().work.clone());
+
+            if worker_folder.exists() {
+                let parent = worker_folder.parent().ok_or_else(|| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::NotFound,
+                        format!("Parent directory not found for '{:?}'", worker_folder),
+                    )
+                })?;
+                let old_name = message.clone().unwrap().work;
+                let new_name = format!("{}_{}", old_name, id());
+                let new_path = parent.join(new_name);
+                std::fs::rename(&worker_folder, &new_path)?;
+                debug!(
+                    "Renamed existing ephemeral folder from '{:?}' to '{:?}'",
+                    worker_folder, new_path
+                );
+            }
+
             create_dir_all(&config_folder)?;
             create_dir_all(&work_folder)?;
             let mold_folder = self
@@ -2208,6 +2272,16 @@ impl Supervisor {
     }
 
     async fn stop_workers(&self, signal: Signal) -> Result<(), RuntimeError> {
+        debug!("Marking all running tasks as shutdown in progress before stopping...");
+        let mut map = self.running_tasks_map.lock().await;
+        for (_worker_name, tasks) in map.iter_mut() {
+            for (_run_id, run_info) in tasks.iter_mut() {
+                run_info.shutdown_in_progress.store(true, SeqCst);
+            }
+        }
+        drop(map);
+        debug!("Marked all running tasks as shutdown in progress");
+
         self.stop_ephemeral_workers(signal).await?;
         self.stop_regular_workers(signal).await?;
         self.stop_init_workers(signal).await?;

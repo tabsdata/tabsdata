@@ -105,13 +105,14 @@ script = [
             end
             exists = is_path_exists ${source_binary}
             if not ${exists}
-                warn "🔥 Binary not found: ${source_binary}"
+                warn "🔥 Binary source not found: ${source_binary}"
             end
-            debug "🔅 Creating symbolic link for '${binary_name}': ${source_binary} -> ${target_binary}"
             target_exists = is_path_exists ${target_binary}
             if ${target_exists}
                 debug "🔅 Deleting symbolic link for '${binary_name}': ${source_binary} -> ${target_binary}"
                 rm ${target_binary}
+            else
+                warn "🔥 Binary target not found: ${source_binary}"
             end
         end
     else

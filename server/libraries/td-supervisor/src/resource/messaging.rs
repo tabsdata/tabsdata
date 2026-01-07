@@ -32,8 +32,8 @@ impl SupervisorMessageQueue {
     fn recover_leftover_messages(&self) -> std::io::Result<()> {
         debug!("Starting recovery of leftover messages from QUEUED and ONGOING folders");
 
-        let queued_count = self.recover_leftover_messages_from_folder(QUEUED_FOLDER);
         let ongoing_count = self.recover_leftover_messages_from_folder(ONGOING_FOLDER);
+        let queued_count = self.recover_leftover_messages_from_folder(QUEUED_FOLDER);
         let total_count = queued_count + ongoing_count;
 
         if total_count > 0 {
@@ -64,18 +64,33 @@ impl SupervisorMessageQueue {
         let mut recovered_count = 0;
         for file in messages {
             match SupervisorMessage::try_from((file.clone(), PayloadType::Request)) {
-                Ok(message) => match Self::error(message.clone()) {
-                    Ok(_) => {
-                        debug!("Recovered leftover message from {}: {:?}", folder, file);
-                        recovered_count += 1;
+                Ok(message) => {
+                    let name = match message.file.file_name().and_then(|name| name.to_str()) {
+                        Some(file_name) => file_name.to_string(),
+                        None => {
+                            error!(
+                                "Failed to extract file name from leftover message in {} folder: {:?}",
+                                folder, message.file
+                            );
+                            continue;
+                        }
+                    };
+                    match Self::planned_from_leftover(message.clone(), name) {
+                        Ok(_) => {
+                            debug!(
+                                "Recovered leftover message from {} to planned: {:?}",
+                                folder, file
+                            );
+                            recovered_count += 1;
+                        }
+                        Err(error) => {
+                            error!(
+                                "Failed to recover leftover message from {} to planned: {:?} - {:?}",
+                                folder, file, error
+                            );
+                        }
                     }
-                    Err(error) => {
-                        error!(
-                            "Failed to move leftover message from {} to error: {:?} - {:?}",
-                            folder, file, error
-                        );
-                    }
-                },
+                }
                 Err(e) => {
                     error!(
                         "Failed to extract leftover message from {} folder: {:?} - {:?}",
@@ -139,7 +154,7 @@ impl SupervisorMessageQueue {
         Self::change_to(message, COMPLETE_FOLDER.to_string())
     }
 
-    pub fn planned(message: SupervisorMessage, name: String) -> std::io::Result<()> {
+    pub fn planned_from_error(message: SupervisorMessage, name: String) -> std::io::Result<()> {
         let source = &message.file;
         let root = message
             .file
@@ -171,12 +186,52 @@ impl SupervisorMessageQueue {
         );
         match fs::rename(source, &target) {
             Ok(_) => {
-                debug!("Successfully renamed message to planned: '{:?}'", target);
+                debug!(
+                    "Successfully renamed message to planned from error: '{:?}'",
+                    target
+                );
                 Ok(())
             }
             Err(e) => {
                 error!(
-                    "Failed to rename message to planned: '{:?}' -> '{:?}': {:?}",
+                    "Failed to rename message to planned from error: '{:?}' -> '{:?}': {:?}",
+                    source, target, e
+                );
+                Err(e)
+            }
+        }
+    }
+
+    pub fn planned_from_leftover(message: SupervisorMessage, name: String) -> std::io::Result<()> {
+        let source = &message.file;
+        let root = message
+            .file
+            .parent()
+            .ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("Message parent directory for not found for '{message:?}'"),
+                )
+            })?
+            .parent()
+            .ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("Message grandparent directory not found for '{message:?}'"),
+                )
+            })?;
+        let target = root.join(PLANNED_FOLDER).join(name);
+        match fs::rename(source, &target) {
+            Ok(_) => {
+                debug!(
+                    "Successfully renamed message to planned from leftovers: '{:?}'",
+                    target
+                );
+                Ok(())
+            }
+            Err(e) => {
+                error!(
+                    "Failed to rename message to planned from leftovers: '{:?}' -> '{:?}': {:?}",
                     source, target, e
                 );
                 Err(e)
