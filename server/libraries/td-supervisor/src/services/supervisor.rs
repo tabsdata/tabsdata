@@ -57,6 +57,7 @@ use td_common::attach::check_nowait_env;
 use td_common::env::to_absolute;
 use td_common::execution_status::WorkerCallbackStatus;
 use td_common::os::terminate_process;
+use td_common::server::MessageAction;
 use td_common::server::SupervisorMessagePayload::{
     SupervisorExceptionMessagePayload, SupervisorRequestMessagePayload,
     SupervisorResponseMessagePayload,
@@ -82,7 +83,7 @@ use tokio::runtime::Handle;
 use tokio::select;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::{Mutex, mpsc};
-use tokio::task::{JoinHandle, block_in_place};
+use tokio::task::{AbortHandle, block_in_place};
 use tokio::time::sleep;
 use tracing::{debug, error, info, trace, warn};
 
@@ -503,9 +504,21 @@ pub struct Supervisor {
     mutex: Arc<std::sync::Mutex<()>>,
     dropping: Arc<AtomicBool>,
     state: SupervisorState,
+    running_tasks_map: Arc<Mutex<RunningTasksMap>>,
 }
 
 type WorkerCommandLine = (String, Vec<String>, Vec<String>);
+
+#[derive(Clone)]
+struct RunInfo {
+    _abort_handle: AbortHandle,
+    _worker_config: WorkerConfig,
+    intentionally_stopped: Arc<AtomicBool>,
+    pid: Option<u32>,
+    interceptor: Option<SupervisorMessage>,
+}
+
+type RunningTasksMap = HashMap<String, HashMap<String, RunInfo>>;
 
 impl Drop for Supervisor {
     fn drop(&mut self) {
@@ -585,6 +598,7 @@ impl Supervisor {
             mutex: Arc::new(std::sync::Mutex::new(())),
             dropping: Arc::new(AtomicBool::new(false)),
             state: State::new(),
+            running_tasks_map: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -628,7 +642,7 @@ impl Supervisor {
                     return result
                 },
                 result = monitor_handle.as_mut() => {
-                    info!("Received STOP request. Initiating graceful stop...: '{:?}'", result);
+                    info!("Received STOP request. Initiating graceful stopsche...: '{:?}'", result);
                     return self.stop_workers(Signal::Term).await;
                 },
                 signal = terminate() => {
@@ -745,31 +759,161 @@ impl Supervisor {
         queue: &SupervisorMessageQueue,
         sender: &Sender<SupervisorMessage>,
     ) -> Result<(), RuntimeError> {
-        let messages = queue.planned_messages();
+        let mut messages = queue.planned_messages();
         trace!(
             "Polling for planned messages. Got {} new messages.",
             messages.len()
         );
-        if !messages.is_empty() {
-            trace!("Received new planned message: {}.", messages.len());
+        if messages.is_empty() {
+            return Ok(());
         }
-        for message in messages {
+
+        info!("Processing {} planned messages", messages.len());
+
+        let mut start_messages = Vec::new();
+        let mut stop_messages = Vec::new();
+
+        for message in messages.drain(..) {
+            if let SupervisorRequestMessagePayload(payload) = &message.payload
+                && matches!(payload.action, MessageAction::Stop)
+            {
+                stop_messages.push(message);
+                continue;
+            }
+            start_messages.push(message);
+        }
+
+        info!(
+            "Message categorization: {} stop's - {} start's",
+            stop_messages.len(),
+            start_messages.len(),
+        );
+
+        for message in start_messages {
             if let Err(e) = SupervisorMessageQueue::queued(message.clone()) {
                 let error = format!("Error queuing message '{message:?}': {e}");
                 error!("{}", error);
                 return Err(RuntimeError::new(error));
-            } else {
-                info!("Sent message to controllers queue: {:?}", message);
             }
+
             if let Err(e) = sender.send(message.clone()).await {
                 let error = format!("Error dispatching message '{message:?}': {e}");
                 error!("{}", error);
                 return Err(RuntimeError::new(error));
-            } else {
-                info!("Sent message to controllers queue: {:?}", message);
+            }
+
+            debug!("Sent message to controllers: {:?}", message);
+        }
+
+        for message in stop_messages {
+            if let SupervisorRequestMessagePayload(payload) = &message.payload {
+                let run_id = payload.run_id.clone();
+                let worker_name = payload.worker.clone();
+
+                let mut map = self.running_tasks_map.lock().await;
+                let total_tasks: usize = map.values().map(|tasks| tasks.len()).sum();
+                debug!(
+                    "Checking running_tasks_map for stop: worker='{}', run_id='{}'. Total running tasks: {}",
+                    worker_name, run_id, total_tasks
+                );
+
+                let mut run_pid = None;
+                let mut task_found = false;
+                let mut stop_already_requested = false;
+                if let Some(run_info) = map
+                    .get_mut(&worker_name)
+                    .and_then(|tasks| tasks.get_mut(&run_id))
+                {
+                    stop_already_requested = run_info.intentionally_stopped.load(SeqCst)
+                        || run_info.interceptor.is_some();
+                    if stop_already_requested {
+                        debug!(
+                            "Stop state already set for worker '{}' (run_id: {}); skipping overwrite",
+                            worker_name, run_id
+                        );
+                        task_found = true;
+                    } else {
+                        run_info.intentionally_stopped.store(true, SeqCst);
+                        run_info.interceptor = Some(message.clone());
+                        debug!("Stored stop interceptor message: {:?}", message.file);
+                        // run_info.abort_handle.abort();
+                        info!(
+                            "Marked worker '{}' (run_id: {}) as intentionally stopped.",
+                            worker_name, run_id
+                        );
+                        run_pid = run_info.pid;
+                        task_found = true;
+                    }
+                }
+
+                if !stop_already_requested {
+                    debug!(
+                        "Stop not yet requested for: worker='{}', run_id='{}' & message file: {:?}",
+                        worker_name, run_id, message.file
+                    );
+                    if task_found {
+                        debug!(
+                            "Task for stop request found: worker='{}', run_id='{}' & message file: {:?}",
+                            worker_name, run_id, message.file
+                        );
+                        if let Some(pid) = run_pid {
+                            debug!(
+                                "Found pid {} for worker '{}' (run_id: {}) in running_tasks_map",
+                                pid, worker_name, run_id
+                            );
+                            info!(
+                                "Terminating os process with pid {} for worker '{}' (run_id: {})",
+                                pid, worker_name, run_id
+                            );
+                            if let Err(error) = terminate_process(pid as i32, Kill) {
+                                error!(
+                                    "Failed to terminate process {}: {}. This will be retried...",
+                                    pid, error
+                                );
+                                if !stop_already_requested {
+                                    Supervisor::reset_stop_state(&mut map, &worker_name, &run_id);
+                                }
+                            }
+                        } else {
+                            warn!(
+                                "No pid found in running_tasks_map for worker '{}' (run_id: {}); it may not have started yet or already stopped.",
+                                worker_name, run_id
+                            );
+                            if !stop_already_requested {
+                                Supervisor::reset_stop_state(&mut map, &worker_name, &run_id);
+                            }
+                        }
+                    } else {
+                        debug!(
+                            "Task for stop request not found: worker='{}', run_id='{}' & message file: {:?}",
+                            worker_name, run_id, message.file
+                        );
+                    }
+                } else {
+                    debug!(
+                        "Stop already requested for: worker='{}', run_id='{}' & message file: {:?}",
+                        worker_name, run_id, message.file
+                    );
+                }
+                drop(map);
             }
         }
+
         Ok(())
+    }
+
+    fn reset_stop_state(map: &mut RunningTasksMap, worker_name: &str, run_id: &str) {
+        if let Some(run_info) = map
+            .get_mut(worker_name)
+            .and_then(|tasks| tasks.get_mut(run_id))
+        {
+            run_info.intentionally_stopped.store(false, SeqCst);
+            run_info.interceptor = None;
+            debug!(
+                "Reset intentionally stopped state for worker '{}' (run_id: {})",
+                worker_name, run_id
+            );
+        }
     }
 
     async fn dispatch(
@@ -1076,7 +1220,7 @@ impl Supervisor {
         self: Arc<Self>,
         receiver: Receiver<SupervisorMessage>,
     ) -> Result<(), RuntimeError> {
-        // ToDo: this is a temporary workaround until we implement a a proper way to check regular workers initialization state.
+        // ToDo: this is a temporary workaround until we implement a proper way to check regular workers initialization state.
         // Wait 30 seconds before starting ephemeral workers
         // This gives time for the system to fully initialize (e.g., apiserver)
         info!("Ephemeral controller waiting 30 seconds before starting...");
@@ -1116,9 +1260,21 @@ impl Supervisor {
             + 'static,
         Fut: Future<Output = Result<(), RuntimeError>> + Send + 'static,
     {
-        type RunningTasksSet = FuturesUnordered<
-            JoinHandle<Result<(WorkerConfig, Result<(), RuntimeError>), tokio::task::JoinError>>,
+        type WrappedTaskFuture = std::pin::Pin<
+            Box<
+                dyn Future<
+                        Output = (
+                            String,
+                            String,
+                            Result<
+                                (WorkerConfig, String, Result<(), RuntimeError>),
+                                tokio::task::JoinError,
+                            >,
+                        ),
+                    > + Send,
+            >,
         >;
+        type RunningTasksSet = FuturesUnordered<WrappedTaskFuture>;
 
         let concurrency_limit = controller.concurrency as usize;
         let workers_map: IndexMap<String, WorkerConfig> = if controller.name == EPHEMERAL.as_ref() {
@@ -1126,52 +1282,137 @@ impl Supervisor {
         } else {
             controller.workers().clone()
         };
+
+        info!(
+            "{} start_workers starting: workers_map.len()={}, concurrency_limit={}",
+            controller_class,
+            workers_map.len(),
+            concurrency_limit
+        );
+
+        if workers_map.is_empty() && controller.name != EPHEMERAL.as_ref() {
+            warn!(
+                "{} workers_map is empty; no workers configured",
+                controller_class
+            );
+        }
+
         let mut workers_iter = workers_map.iter();
         let mut running_tasks: RunningTasksSet = FuturesUnordered::new();
+        let running_tasks_map = self.running_tasks_map.clone();
 
         loop {
             let can_spawn_worker = workers_iter.len() > 0;
             let can_spawn_task = running_tasks.len() < concurrency_limit || concurrency_limit == 0;
             let can_poll_task = !running_tasks.is_empty();
+
             select! {
                 biased;
-                Some(result) = running_tasks.next(), if can_poll_task => {
+                Some((worker_name, run_id, result)) = running_tasks.next(), if can_poll_task => {
+                    debug!("{} branch: task completed for worker '{}' (run_id: {})", controller_class, worker_name, run_id);
                     match result {
-                        Ok(Ok((worker, outcome))) => {
+                        Ok((_worker, _run_id, outcome)) => {
+                            let mut map = running_tasks_map.lock().await;
+                            if let Some(worker_tasks) = map.get_mut(&worker_name) {
+                                worker_tasks.remove(&run_id);
+                            }
+                            drop(map);
+
                             match outcome {
                                 Ok(()) => {
-                                    info!("{} task for worker '{:?}' finished successfully", controller_class, worker);
+                                    info!("{} task for worker '{}' (run_id: {}) finished successfully",
+                                        controller_class, worker_name, run_id);
                                 }
                                 Err(e) => {
-                                    error!("{} task for worker '{:?}' finished unsuccessfully: {:?}", controller_class, worker, e);
+                                    error!("{} task for worker '{}' (run_id: {}) finished unsuccessfully: {:?}",
+                                        controller_class, worker_name, run_id, e);
                                     return Err(e);
                                 }
                             }
                         }
-                        Ok(Err(e)) => {
-                            let message = format!("{controller_class} task finished unexpectedly with error: {e:?}");
-                            error!(message);
-                            return Err(RuntimeError::new(message));
-                        }
                         Err(e) => {
-                            let message = format!("{controller_class} task finished abruptly with error: {e:?}");
-                            error!(message);
-                            return Err(RuntimeError::new(message));
+                            if e.is_cancelled() {
+                                let mut map = running_tasks_map.lock().await;
+                                let (intentionally_stopped, interceptor) = map
+                                    .get(&worker_name)
+                                    .and_then(|tasks| tasks.get(&run_id))
+                                    .map(|info| {
+                                        (
+                                            info.intentionally_stopped.load(SeqCst),
+                                            info.interceptor.clone(),
+                                        )
+                                    })
+                                    .unwrap_or((false, None));
+
+                                if let Some(worker_tasks) = map.get_mut(&worker_name) {
+                                    worker_tasks.remove(&run_id);
+                                }
+                                drop(map);
+
+                                let is_ephemeral = controller.name == EPHEMERAL.as_ref();
+
+                                if !is_ephemeral {
+                                    let message = format!("{controller_class} task cancelled abruptly with error: {e:?}");
+                                    error!(message);
+                                    return Err(RuntimeError::new(message));
+                                } else if !intentionally_stopped {
+                                    let message = format!("{controller_class} task cancelled abruptly with error: {e:?}");
+                                    error!(message);
+                                    return Err(RuntimeError::new(message));
+                                } else {
+                                    info!("{} ephemeral task '{}' (run_id: {}) was intentionally stopped via stop request (interceptor: {:?})",
+                                        controller_class, worker_name, run_id, interceptor.as_ref().map(|m| &m.file));
+                                }
+                            } else if e.is_panic() {
+                                let message = format!("{controller_class} task panicked: {e:?}");
+                                error!(message);
+                                return Err(RuntimeError::new(message));
+                            } else {
+                                let message = format!("{controller_class} task finished abruptly with error: {e:?}");
+                                error!(message);
+                                return Err(RuntimeError::new(message));
+                            }
                         }
                     }
                 }
                 Some((_name, worker)) = async { workers_iter.next() }, if can_spawn_worker && can_spawn_task => {
+                    debug!("{} branch: spawning worker from iterator", controller_class);
                     let worker_clone = worker.clone();
+                    let worker_name = worker.name().clone();
+                    let run_id = worker_name.clone();
                     let self_arc = Arc::clone(&self);
                     let log_prefix_clone = controller_class.clone();
+                    let run_id_clone = run_id.clone();
                     let handle = tokio::spawn(async move {
                         let outcome = start_worker_function(self_arc, worker_clone.clone(), None).await
                             .map_err(|e| RuntimeError::new(format!("{log_prefix_clone} RunnerError: {e:?} - {worker_clone:?}")));
-                        Ok((worker_clone, outcome))
+                        (worker_clone, run_id_clone, outcome)
                     });
-                    running_tasks.push(handle);
+
+                    let abort_handle = handle.abort_handle();
+                    let run_info = RunInfo {
+                        _abort_handle: abort_handle,
+                        _worker_config: worker.clone(),
+                        intentionally_stopped: Arc::new(AtomicBool::new(false)),
+                        pid: None,
+                        interceptor: None,
+                    };
+
+                    let mut map = running_tasks_map.lock().await;
+                    map.entry(worker_name.clone())
+                        .or_insert_with(HashMap::new)
+                        .insert(run_id.clone(), run_info);
+                    drop(map);
+
+                    let run_id_for_future = run_id.clone();
+                    let wrapped_future = Box::pin(async move {
+                        let result = handle.await;
+                        (worker_name.clone(), run_id_for_future, result)
+                    });
+                    running_tasks.push(wrapped_future);
                 }
                 _ = async { }, if !can_spawn_worker && matches!(mark.load(SeqCst), NA) => {
+                    debug!("{} branch: marking workers as launched", controller_class);
                     let done = if controller.name == INIT.as_ref() {
                         if running_tasks.is_empty() {
                             info!("All scheduled Init tasks completed!");
@@ -1198,23 +1439,96 @@ impl Supervisor {
                             return Err(RuntimeError::new("Unexpected response message received".to_string()));
                         }
                     };
-                    let worker = controller.workers.get(&payload.worker);
-                    match worker {
-                        Some(worker) => {
-                            let worker_clone = worker.clone();
-                            let self_arc = Arc::clone(&self);
-                            let log_prefix_clone = controller_class.clone();
-                            let handle = tokio::spawn(async move {
-                                let outcome = start_worker_function(self_arc, worker_clone.clone(), Some(message)).await
-                                    .map_err(|e| RuntimeError::new(format!("{log_prefix_clone} RunnerError: {e:?} - {worker_clone:?}")));
-                                Ok((worker_clone, outcome))
-                            });
-                            running_tasks.push(handle);
+
+                    match payload.action {
+                        MessageAction::Start => {
+                            warn!("Received start action...");
+                            let worker = controller.workers.get(&payload.worker);
+                            match worker {
+                                Some(worker) => {
+                                    let worker_clone = worker.clone();
+                                    let worker_name = worker.name().clone();
+                                    let run_id = payload.run_id.clone();
+                                    let self_arc = Arc::clone(&self);
+                                    let log_prefix_clone = controller_class.clone();
+                                    let run_id_clone = run_id.clone();
+                                    let handle = tokio::spawn(async move {
+                                        let outcome = start_worker_function(self_arc, worker_clone.clone(), Some(message)).await
+                                            .map_err(|e| RuntimeError::new(format!("{log_prefix_clone} RunnerError: {e:?} - {worker_clone:?}")));
+                                        (worker_clone, run_id_clone, outcome)
+                                    });
+
+                                    let abort_handle = handle.abort_handle();
+                                    let run_info = RunInfo {
+                                        _abort_handle: abort_handle,
+                                        _worker_config: worker.clone(),
+                                        intentionally_stopped: Arc::new(AtomicBool::new(false)),
+                                        pid: None,
+                                        interceptor: None,
+                                    };
+
+                                    let mut map = running_tasks_map.lock().await;
+                                    map.entry(worker_name.clone())
+                                        .or_insert_with(HashMap::new)
+                                        .insert(run_id.clone(), run_info);
+                                    let total_tasks: usize = map.values().map(|tasks| tasks.len()).sum();
+                                    info!("{} Added worker '{}' (run_id: {}) to running_tasks_map. Total running tasks: {}",
+                                        controller_class, worker_name, run_id, total_tasks);
+                                    drop(map);
+
+                                    let worker_name_for_future = worker_name.clone();
+                                    let run_id_for_future = run_id.clone();
+                                    let wrapped_future = Box::pin(async move {
+                                        let result = handle.await;
+                                        (worker_name_for_future, run_id_for_future, result)
+                                    });
+                                    running_tasks.push(wrapped_future);
+                                }
+                                None => {
+                                    let message = format!("Unrecognized worker name in message. Discarding it. - '{message:?}'");
+                                    error!(message);
+                                    return Err(RuntimeError::new(message));
+                                }
+                            }
                         }
-                        None => {
-                            let message = format!("Unrecognized worker name in message. Discarding it. - '{message:?}'");
-                            error!(message);
-                            return Err(RuntimeError::new(message));
+                        MessageAction::Stop => {
+                            warn!("Received stop action; ignoring for now. Stop messages shouldn't be arriving to this queue.");
+                            let run_id = payload.run_id.clone();
+                            let worker_name = payload.worker.clone();
+
+                            let map = running_tasks_map.lock().await;
+
+                            let mut task_found = false;
+                            let mut run_pid = None;
+                            let mut stop_already_requested = false;
+                            let mut interceptor: Option<SupervisorMessage> = None;
+
+                            if let Some(run_info) = map
+                                .get(&worker_name)
+                                .and_then(|tasks| tasks.get(&run_id))
+                            {
+                                task_found = true;
+                                run_pid = run_info.pid;
+                                stop_already_requested = run_info.intentionally_stopped.load(SeqCst)
+                                    || run_info.interceptor.is_some();
+                                interceptor = run_info.interceptor.clone();
+                            }
+
+                            drop(map);
+
+                            warn!(
+                                "Received stop message for worker='{}', run_id='{}', task_found={}, run_pid={:?}, stop_already_requested={}, interceptor={:?}, message file: {:?}",
+                                worker_name,
+                                run_id,
+                                task_found,
+                                run_pid,
+                                stop_already_requested,
+                                interceptor.as_ref().map(|m| &m.file),
+                                message.file
+                            );
+                        }
+                        MessageAction::Notify => {
+                            warn!("Received notify action; ignoring for now. Stop messages are not yet supported, implemented or expected.");
                         }
                     }
                 }
@@ -1235,7 +1549,9 @@ impl Supervisor {
         worker: WorkerConfig,
         message: Option<SupervisorMessage>,
     ) -> Result<(), RunnerError> {
-        let (_, result) = self.start_worker(worker, message, None, INIT).await;
+        let (_, result) = self
+            .start_worker(worker, message, None, INIT, None, None)
+            .await;
         result.map(|_| ())?;
         Ok(())
     }
@@ -1245,7 +1561,9 @@ impl Supervisor {
         worker: WorkerConfig,
         message: Option<SupervisorMessage>,
     ) -> Result<(), RunnerError> {
-        let (_, result) = self.start_worker(worker, message, None, REGULAR).await;
+        let (_, result) = self
+            .start_worker(worker, message, None, REGULAR, None, None)
+            .await;
         result.map(|_| ())?;
         Ok(())
     }
@@ -1263,12 +1581,21 @@ impl Supervisor {
 
         let start = Utc::now().timestamp_millis();
 
+        let (worker_name, run_id) = match &message.payload {
+            SupervisorRequestMessagePayload(payload) => {
+                (Some(payload.worker.clone()), Some(payload.run_id.clone()))
+            }
+            _ => (None, None),
+        };
+
         let (worker_run, result) = self
             .start_worker(
                 worker.clone(),
                 Some(message.clone()),
                 Some(start),
                 EPHEMERAL,
+                worker_name,
+                run_id,
             )
             .await;
 
@@ -1326,13 +1653,47 @@ impl Supervisor {
         let end = Utc::now().timestamp_millis();
         let execution = execution(&message);
         let limit = worker.retries;
-        let (status, error) = match &result {
-            Ok(_) => (WorkerCallbackStatus::Done, None),
-            Err(e) => {
-                if execution <= limit {
-                    (WorkerCallbackStatus::Error, Some(format!("{e:?}")))
+
+        let (intentionally_stopped, interceptor) =
+            if let SupervisorRequestMessagePayload(payload) = &message.payload {
+                let map = self.running_tasks_map.lock().await;
+                let info = map
+                    .get(&payload.worker)
+                    .and_then(|tasks| tasks.get(&payload.run_id))
+                    .map(|info| {
+                        (
+                            info.intentionally_stopped.load(SeqCst),
+                            info.interceptor.clone(),
+                        )
+                    })
+                    .unwrap_or((false, None));
+                drop(map);
+                info
+            } else {
+                (false, None)
+            };
+
+        let (status, error) = if intentionally_stopped {
+            info!(
+                "Worker '{}' run '{}' intentionally stopped via stop request (interceptor: {:?})",
+                worker.name(),
+                if let SupervisorRequestMessagePayload(payload) = &message.payload {
+                    payload.run_id.as_str()
                 } else {
-                    (WorkerCallbackStatus::Failed, Some(format!("{e:?}")))
+                    ""
+                },
+                interceptor.as_ref().map(|m| &m.file)
+            );
+            (WorkerCallbackStatus::Stopped, None)
+        } else {
+            match &result {
+                Ok(_) => (WorkerCallbackStatus::Done, None),
+                Err(e) => {
+                    if execution <= limit {
+                        (WorkerCallbackStatus::Error, Some(format!("{e:?}")))
+                    } else {
+                        (WorkerCallbackStatus::Failed, Some(format!("{e:?}")))
+                    }
                 }
             }
         };
@@ -1380,6 +1741,14 @@ impl Supervisor {
                 error
             );
             SupervisorMessageQueue::fail(message)?;
+            if let Some(interceptor_message) = interceptor {
+                SupervisorMessageQueue::fail(interceptor_message)?;
+            }
+        } else if intentionally_stopped {
+            SupervisorMessageQueue::stop(message)?;
+            if let Some(interceptor_message) = interceptor {
+                SupervisorMessageQueue::finalize(interceptor_message)?;
+            }
         } else {
             match result {
                 Ok(_) => {
@@ -1399,6 +1768,8 @@ impl Supervisor {
         message: Option<SupervisorMessage>,
         start: Option<i64>,
         class: WorkerClass,
+        worker_name: Option<String>,
+        run_id: Option<String>,
     ) -> (Option<TabsDataWorker>, Result<(), RunnerError>) {
         info!(
             "Entering {} worker... '{}'",
@@ -1521,6 +1892,22 @@ impl Supervisor {
         let td_worker = TabsDataWorker::new(describer.clone());
         match td_worker.work(work_get_state, false) {
             Ok((mut child, _out, _err)) => {
+                if let (Some(pid), Some(worker_name), Some(run_id)) =
+                    (child.id(), &worker_name, &run_id)
+                {
+                    let mut map = self.running_tasks_map.lock().await;
+                    if let Some(worker_tasks) = map.get_mut(worker_name)
+                        && let Some(run_info) = worker_tasks.get_mut(run_id)
+                    {
+                        run_info.pid = Some(pid);
+                        debug!(
+                            "Updated pid '{}' for worker '{}' (run_id: {})",
+                            pid, worker_name, run_id
+                        );
+                    }
+                    drop(map);
+                }
+
                 if let Some(message) = message {
                     let start = match start {
                         None => return (Some(td_worker), Err(MissingStartDate)),
@@ -1535,6 +1922,16 @@ impl Supervisor {
                             error,
                             serde_json::to_string_pretty(&message)
                         );
+
+                        if let Some(pid) = child.id() {
+                            warn!(
+                                "Killing worker process {} due to failed start notification",
+                                pid
+                            );
+                            if let Err(e) = terminate_process(pid as i32, Signal::Kill) {
+                                error!("Failed to kill worker process {}: {}", pid, e);
+                            }
+                        }
                         return (Some(td_worker), Err(error));
                     }
                     match SupervisorMessageQueue::ongoing(message) {

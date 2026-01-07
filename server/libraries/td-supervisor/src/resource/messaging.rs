@@ -193,6 +193,14 @@ impl SupervisorMessageQueue {
         )
     }
 
+    pub fn finalize(message: SupervisorMessage) -> std::io::Result<SupervisorMessage> {
+        Self::move_to(
+            message,
+            PLANNED_FOLDER.to_string(),
+            COMPLETE_FOLDER.to_string(),
+        )
+    }
+
     //noinspection DuplicatedCode
     pub fn stop(message: SupervisorMessage) -> std::io::Result<SupervisorMessage> {
         for folder in FOLDERS {
