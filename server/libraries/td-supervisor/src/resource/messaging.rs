@@ -22,7 +22,70 @@ pub struct SupervisorMessageQueue {
 
 impl SupervisorMessageQueue {
     pub fn new(root: PathBuf) -> Self {
-        Self { root }
+        let queue = Self { root };
+        if let Err(e) = queue.recover_leftover_messages() {
+            error!("Failed to recover leftover messages: {:?}", e);
+        }
+        queue
+    }
+
+    fn recover_leftover_messages(&self) -> std::io::Result<()> {
+        debug!("Starting recovery of leftover messages from QUEUED and ONGOING folders");
+
+        let queued_count = self.recover_leftover_messages_from_folder(QUEUED_FOLDER);
+        let ongoing_count = self.recover_leftover_messages_from_folder(ONGOING_FOLDER);
+        let total_count = queued_count + ongoing_count;
+
+        if total_count > 0 {
+            debug!(
+                "Message recovery complete: {} messages moved to error folders for retry",
+                total_count
+            );
+        }
+
+        Ok(())
+    }
+
+    fn recover_leftover_messages_from_folder(&self, folder: &str) -> usize {
+        let messages =
+            get_files_in_folder_sorted_by_name(self.root.join(folder), Some(YAML_EXTENSION))
+                .unwrap_or_else(|_| Vec::new());
+
+        if messages.is_empty() {
+            return 0;
+        }
+
+        debug!(
+            "Found {} leftover messages in {} folder",
+            messages.len(),
+            folder
+        );
+
+        let mut recovered_count = 0;
+        for file in messages {
+            match SupervisorMessage::try_from((file.clone(), PayloadType::Request)) {
+                Ok(message) => match Self::error(message.clone()) {
+                    Ok(_) => {
+                        debug!("Recovered leftover message from {}: {:?}", folder, file);
+                        recovered_count += 1;
+                    }
+                    Err(error) => {
+                        error!(
+                            "Failed to move leftover message from {} to error: {:?} - {:?}",
+                            folder, file, error
+                        );
+                    }
+                },
+                Err(e) => {
+                    error!(
+                        "Failed to extract leftover message from {} folder: {:?} - {:?}",
+                        folder, file, e
+                    );
+                }
+            }
+        }
+
+        recovered_count
     }
 
     pub fn planned_messages(&self) -> Vec<SupervisorMessage> {
