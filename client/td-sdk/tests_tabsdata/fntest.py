@@ -33,6 +33,7 @@ from tabsdata._tabsserver.function.global_utils import (
 from tabsdata._tabsserver.function.response_utils import RESPONSE_FILE_NAME
 from tabsdata._tabsserver.invoker import REQUEST_FILE_NAME
 from tabsdata._utils.bundle_utils import create_bundle_archive
+from tabsdata._utils.tableframe import _helpers as td_helpers
 from tabsdata.tableframe._actions.dataquality.processor import DataQualityProcessor
 from tabsdata.tableframe.lazyframe.properties import TableFramePropertiesBuilder
 from tests_tabsdata.bootest import TDLOCAL_FOLDER
@@ -84,12 +85,13 @@ class FunctionConstants(Enum):
     TEMP_SUFFIX = ".run"
 
 
-# ToDo: accept parquet files files too
 MockTableFrame: TypeAlias = Union[
     td.TableFrame,
     pl.LazyFrame,
     pl.DataFrame,
     pd.DataFrame,
+    Path,
+    str,
     dict[str, list[Any]],
 ]
 
@@ -101,8 +103,123 @@ MockTableFrameSpec: TypeAlias = Union[
 ]
 
 
-# ToDo: New helper functions like output(n) -> frame
+def drop_system_columns_td_tf(tf: td.TableFrame) -> td.TableFrame:
+    system_columns = list(td_helpers.SYSTEM_COLUMNS)
+    existing_columns = set(tf._lf.collect_schema().names())
+    columns_to_drop = [
+        column for column in system_columns if column in existing_columns
+    ]
+    lf = tf._lf.drop(columns_to_drop)
+    return td.TableFrame.__build__(
+        df=lf,
+        mode="raw",
+        idx=tf._idx,
+        properties=tf._properties,
+    )
+
+
+def drop_system_columns_pl_lf(lf: pl.LazyFrame) -> pl.LazyFrame:
+    system_columns = list(td_helpers.SYSTEM_COLUMNS)
+    existing_columns = set(lf.collect_schema().names())
+    columns_to_drop = [
+        column for column in system_columns if column in existing_columns
+    ]
+    return lf.drop(columns_to_drop)
+
+
+def drop_system_columns_pl_df(df: pl.DataFrame) -> pl.DataFrame:
+    system_columns = list(td_helpers.SYSTEM_COLUMNS)
+    existing_columns = set(df.collect_schema().names())
+    columns_to_drop = [
+        column for column in system_columns if column in existing_columns
+    ]
+    return df.drop(columns_to_drop)
+
+
+def drop_system_columns_pd_df(df: pd.DataFrame) -> pd.DataFrame:
+    system_columns = list(td_helpers.SYSTEM_COLUMNS)
+    columns_to_drop = [column for column in system_columns if column in df.columns]
+    return df.drop(columns=columns_to_drop)
+
+
+class FnPath:
+
+    def __init__(self, path: Path):
+        self._path = path
+
+    @property
+    def path(self) -> Path:
+        return self._path
+
+    def as_os_fd(self) -> Path:
+        return self._path
+
+    def as_td_tf(self, with_sys_columns: bool = True) -> td.TableFrame:
+        lf = pl.scan_parquet(self._path)
+        tf = td.TableFrame.__build__(
+            df=lf,
+            mode="raw",
+            idx=None,
+            properties=TableFramePropertiesBuilder.empty(),
+        )
+        if not with_sys_columns:
+            tf = drop_system_columns_td_tf(tf)
+        return tf
+
+    def as_pl_lf(self, with_sys_columns: bool = True) -> pl.LazyFrame:
+        lf = pl.scan_parquet(self._path)
+        if not with_sys_columns:
+            lf = drop_system_columns_pl_lf(lf)
+        return lf
+
+    def as_pl_df(self, with_sys_columns: bool = True) -> pl.DataFrame:
+        df = pl.read_parquet(self._path)
+        if not with_sys_columns:
+            df = drop_system_columns_pl_df(df)
+        return df
+
+    def as_pd_df(self, with_sys_columns: bool = True) -> pd.DataFrame:
+        df = pd.read_parquet(self._path)
+        if not with_sys_columns:
+            df = drop_system_columns_pd_df(df)
+        return df
+
+
 class FnOut:
+
+    def __init__(self, paths: list[Path]):
+        self._paths = [FnPath(path) for path in paths]
+
+    @property
+    def files(self) -> list[FnPath]:
+        return self._paths
+
+    def __len__(self) -> int:
+        return len(self._paths)
+
+    def __getitem__(self, index: int) -> FnPath:
+        return self._paths[index]
+
+    def __iter__(self):
+        return iter(self._paths)
+
+    def as_os_fd(self) -> list[Path]:
+        return [path.as_os_fd() for path in self._paths]
+
+    def as_td_tf(self, with_sys_columns: bool = True) -> list[td.TableFrame]:
+        return [path.as_td_tf(with_sys_columns) for path in self._paths]
+
+    def as_pl_lf(self, with_sys_columns: bool = True) -> list[pl.LazyFrame]:
+        return [path.as_pl_lf(with_sys_columns) for path in self._paths]
+
+    def as_pl_df(self, with_sys_columns: bool = True) -> list[pl.DataFrame]:
+        return [path.as_pl_df(with_sys_columns) for path in self._paths]
+
+    def as_pd_df(self, with_sys_columns: bool = True) -> list[pd.DataFrame]:
+        return [path.as_pd_df(with_sys_columns) for path in self._paths]
+
+
+class FnRun:
     def __init__(
         self,
         folder: Path,
@@ -117,7 +234,7 @@ class FnOut:
         self._folder = folder
         self._request = request
         self._response = response
-        self._output = output
+        self._output = FnOut(output)
         self._offset = offset
         self._environment = environment
         self._status = status
@@ -138,8 +255,10 @@ class FnOut:
             raise FileNotFoundError(f"Response file does not exist: '{self._response}'")
 
         for output_file in self._output:
-            if not output_file.exists():
-                raise FileNotFoundError(f"Output file does not exist: '{output_file}'")
+            if not output_file.path.exists():
+                raise FileNotFoundError(
+                    f"Output file does not exist: '{output_file.path}'"
+                )
 
         if self._output_initial_values and not self._offset.exists():
             raise FileNotFoundError(f"Offset file does not exist: '{self._offset}'")
@@ -160,7 +279,7 @@ class FnOut:
         return self._response
 
     @property
-    def output(self) -> list[Path]:
+    def output(self) -> FnOut:
         return self._output
 
     @property
@@ -199,6 +318,13 @@ def convert_table(data: MockTableFrame) -> td.TableFrame:
         case pd.DataFrame() | dict():
             return td.TableFrame.__build__(
                 df=pl.DataFrame(data),
+                mode="raw",
+                idx=None,
+                properties=TableFramePropertiesBuilder.empty(),
+            )
+        case Path() | str():
+            return td.TableFrame.__build__(
+                df=pl.scan_parquet(data),
                 mode="raw",
                 idx=None,
                 properties=TableFramePropertiesBuilder.empty(),
@@ -297,7 +423,7 @@ def tdfnrun(
     input_tables: MockTableFrameSpec = None,
     input_initial_values: MockTableFrame = None,
     output_initial_values: bool = False,
-) -> FnOut:
+) -> FnRun:
     tdtest = Path(tempfile.gettempdir()) / FunctionConstants.TEMP_ROOT.value
     os.makedirs(tdtest, exist_ok=True)
     with tempfile.TemporaryDirectory(
@@ -416,7 +542,7 @@ def tdfnrun(
             temp_cwd=True,
         )
 
-        fnout = FnOut(
+        fnrun = FnRun(
             folder=fn_root,
             request=request_file,
             response=response_file,
@@ -427,4 +553,4 @@ def tdfnrun(
             output_initial_values=output_initial_values,
         )
 
-        return fnout
+        return fnrun
