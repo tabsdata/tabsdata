@@ -141,6 +141,7 @@ controllers:
         concurrency: 0
         retries: 2
         arguments:
+          - work
           - locks-folder
           - logs-folder
           - bin-folder
