@@ -2158,6 +2158,54 @@ class ErrorCode(Enum):
     PVDQOP11 = {}
 
     PVDQ1 = {}
+    PVCX1 = {
+        "code": "PVCX-001",
+        "message": None,
+    }
+    PVCX2 = {
+        "code": "PVCX-002",
+        "message": None,
+    }
+    PVCX3 = {
+        "code": "PVCX-003",
+        "message": None,
+    }
+    PVCX4 = {
+        "code": "PVCX-004",
+        "message": None,
+    }
+    PVSOC1 = {
+        "code": "PVSOC-001",
+        "message": None,
+    }
+    PVSOC2 = {
+        "code": "PVSOC-002",
+        "message": None,
+    }
+    PVSOC3 = {
+        "code": "PVSOC-003",
+        "message": None,
+    }
+    PVSOC4 = {
+        "code": "PVSOC-004",
+        "message": None,
+    }
+    PVSOC5 = {
+        "code": "PVSOC-005",
+        "message": None,
+    }
+    PVSOC6 = {
+        "code": "PVSOC-006",
+        "message": None,
+    }
+    PVSOC7 = {
+        "code": "PVSOC-007",
+        "message": None,
+    }
+    PVSOC8 = {
+        "code": "PVSOC-008",
+        "message": None,
+    }
 
     def code(self) -> str:
         code = self.value.get("code")

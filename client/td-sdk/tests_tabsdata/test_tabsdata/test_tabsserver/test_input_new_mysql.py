@@ -197,7 +197,7 @@ def test_input_new_mysql_types_check(mysql_config, tmp_path):
         uri=mysql_config.uri,
         user=mysql_config.user,
         password=mysql_config.password,
-        schema_overrides={"c_tinyint": td_dtypes.Float64},
+        schema_overrides={"c_tinyint": td_dtypes.Float64()},
     )
     context_archive = create_bundle_archive(
         input_new_mysql_types_check,
@@ -262,7 +262,9 @@ def test_input_new_mysql_types_check_pandas(mysql_config, tmp_path):
         user=mysql_config.user,
         password=mysql_config.password,
         loader="pandas",
-        schema_overrides=[{"c_set": td_dtypes.String, "c_tinyint": td_dtypes.Float64}],
+        schema_overrides=[
+            {"c_set": td_dtypes.String(), "c_tinyint": td_dtypes.Float64()}
+        ],
     )
     context_archive = create_bundle_archive(
         input_new_mysql_types_check,

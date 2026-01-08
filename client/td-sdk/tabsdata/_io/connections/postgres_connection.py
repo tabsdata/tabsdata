@@ -2,11 +2,13 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
+from typing import Optional
 from urllib.parse import urlparse
 
 from tabsdata._credentials import UserPasswordCredentials, build_credentials
 from tabsdata._io.connections.connections import Conn
 from tabsdata._io.constants import POSTGRES_SCHEMES
+from tabsdata.dataquality._utils import _td_validate_call
 from tabsdata.exceptions import (
     ConnectionConfigurationError,
     ErrorCode,
@@ -18,13 +20,14 @@ class PostgresConn(Conn):
     Represents a connection configuration to Postgres.
     """
 
+    @_td_validate_call(ErrorCode.PVCX4)
     def __init__(
         self,
         uri: str,
-        credentials: UserPasswordCredentials | None = None,
+        credentials: Optional[UserPasswordCredentials] = None,
         enforce_connection_params: bool = True,
-        cx_src_configs_postgres: dict = None,
-        cx_dst_configs_postgres: dict = None,
+        cx_src_configs_postgres: Optional[dict] = None,
+        cx_dst_configs_postgres: Optional[dict] = None,
     ):
         """
         Initialize a PostgresConn instance.
@@ -43,11 +46,11 @@ class PostgresConn(Conn):
         Raises:
             ConnectionConfigurationError: If any connection configurations are invalid.
         """
-        self.uri = uri
-        self.credentials = credentials
-        self.enforce_connection_params = enforce_connection_params
-        self.cx_src_configs_postgres = cx_src_configs_postgres or {}
-        self.cx_dst_configs_postgres = cx_dst_configs_postgres or {}
+        self._uri = self._validate_uri(uri)
+        self._credentials = self._build_credentials(credentials)
+        self._enforce_connection_params = enforce_connection_params
+        self._cx_src_configs_postgres = cx_src_configs_postgres or {}
+        self._cx_dst_configs_postgres = cx_dst_configs_postgres or {}
 
     @property
     def uri(self) -> str:
@@ -56,50 +59,38 @@ class PostgresConn(Conn):
         """
         return self._uri
 
-    @uri.setter
-    def uri(self, uri: str):
+    def _validate_uri(self, uri: str):
         """
-        Set the URI of the database.
+        Validate that the provided URI is a valid Postgres URI.
         Args:
             uri: The URI of the database.
         """
-        if not isinstance(uri, str):
-            raise ConnectionConfigurationError(
-                ErrorCode.CXCE1, self.__class__.__name__, type(uri)
-            )
-
         parsed_uri = urlparse(uri)
-        if parsed_uri.scheme.lower() not in POSTGRES_SCHEMES:
+        parsed_uri_scheme = parsed_uri.scheme.lower().split("+")[0]
+        if parsed_uri_scheme not in POSTGRES_SCHEMES:
             raise ConnectionConfigurationError(
-                ErrorCode.CXCE2, parsed_uri.scheme, POSTGRES_SCHEMES, uri
+                ErrorCode.CXCE2, parsed_uri_scheme, POSTGRES_SCHEMES, uri
             )
         self._parsed_uri = parsed_uri
-        self._uri = uri
+        return uri
 
     @property
-    def credentials(self) -> UserPasswordCredentials | None:
+    def credentials(self) -> Optional[UserPasswordCredentials]:
         """
-        The credentials required to access the
-        Postgres database. If no credentials were provided, it will return None.
+        The credentials required to access the Postgres database. If no credentials were
+        provided, it will return None.
         """
         return self._credentials
 
-    @credentials.setter
-    def credentials(self, credentials: UserPasswordCredentials | None):
+    def _build_credentials(self, credentials: Optional[UserPasswordCredentials]):
         """
-        Set the credentials required to access the PostgresDatabase.
+        Build the credentials required to access the Postgres database.
         Args:
-            credentials: The credentials required to access the PostgresDatabase.
+            credentials: The credentials required to access the Postgres database.
         """
-        if not credentials:
-            self._credentials = None
-        else:
+        if credentials:
             credentials = build_credentials(credentials)
-            if not (isinstance(credentials, UserPasswordCredentials)):
-                raise ConnectionConfigurationError(
-                    ErrorCode.CXCE3, self.__class__.__name__, type(credentials)
-                )
-            self._credentials = credentials
+        return credentials
 
     @property
     def enforce_connection_params(self) -> bool:
@@ -108,72 +99,19 @@ class PostgresConn(Conn):
         """
         return self._enforce_connection_params
 
-    @enforce_connection_params.setter
-    def enforce_connection_params(self, enforce_connection_params: bool):
-        """
-        Set whether to enforce connection parameters for the Postgres connection.
-        Args:
-            enforce_connection_params: Whether to enforce connection parameters for the
-                Postgres connection.
-        """
-        if not isinstance(enforce_connection_params, bool):
-            raise ConnectionConfigurationError(
-                ErrorCode.CXCE4,
-                self.__class__.__name__,
-                type(enforce_connection_params),
-            )
-        self._enforce_connection_params = enforce_connection_params
-
     @property
     def cx_src_configs_postgres(self) -> dict:
         """
-        The source configuration parameters for the Postgres connection.
+        Source-specific configuration parameters for the Postgres connection.
         """
         return self._cx_src_configs_postgres
-
-    @cx_src_configs_postgres.setter
-    def cx_src_configs_postgres(self, cx_src_configs_postgres: dict | None):
-        """
-        Set the source configuration parameters for the Postgres connection.
-        Args:
-            cx_src_configs_postgres: The source configuration parameters for the
-                Postgres connection.
-        """
-        if cx_src_configs_postgres is None:
-            cx_src_configs_postgres = {}
-        elif not isinstance(cx_src_configs_postgres, dict):
-            raise ConnectionConfigurationError(
-                ErrorCode.CXCE5,
-                self.__class__.__name__,
-                type(cx_src_configs_postgres),
-            )
-        self._cx_src_configs_postgres = cx_src_configs_postgres
 
     @property
     def cx_dst_configs_postgres(self) -> dict:
         """
-        The destination configuration parameters for the Postgres
-        connection.
+        Destination-specific configuration parameters for the Postgres connection.
         """
         return self._cx_dst_configs_postgres
-
-    @cx_dst_configs_postgres.setter
-    def cx_dst_configs_postgres(self, cx_dst_configs_postgres: dict | None):
-        """
-        Set the destination configuration parameters for the Postgres connection.
-        Args:
-            cx_dst_configs_postgres: The destination configuration parameters for the
-                Postgres connection.
-        """
-        if cx_dst_configs_postgres is None:
-            cx_dst_configs_postgres = {}
-        elif not isinstance(cx_dst_configs_postgres, dict):
-            raise ConnectionConfigurationError(
-                ErrorCode.CXCE6,
-                self.__class__.__name__,
-                type(cx_dst_configs_postgres),
-            )
-        self._cx_dst_configs_postgres = cx_dst_configs_postgres
 
     def __eq__(self, other):
         if not isinstance(other, PostgresConn):

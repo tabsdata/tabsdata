@@ -11,20 +11,16 @@ data = [
     "select * from INVOICE_ITEM where id > :number",
 ]
 
-mysql_input = td.MySQLSrc(
-    conn=td.MySQLConn(
-        uri="mysql://wrongip:3306/testing",
-        credentials=td.UserPasswordCredentials("wronguser", "wrongpassword"),
-    ),
-    queries=["select * from NO_TABLE where id > :number"],
-    initial_values={"number": 7},
-)
-
 
 def testing_tabsdata_function(uri: str, user: str, password: str):
-    mysql_input.conn.uri = uri
-    mysql_input.queries = data
-    mysql_input.conn.credentials = td.UserPasswordCredentials(user, password)
+    mysql_input = td.MySQLSrc(
+        conn=td.MySQLConn(
+            uri=uri,
+            credentials=td.UserPasswordCredentials(user, password),
+        ),
+        queries=data,
+        initial_values={"number": 7},
+    )
     mysql_input.initial_values = {"number": 2}
 
     @td.publisher(

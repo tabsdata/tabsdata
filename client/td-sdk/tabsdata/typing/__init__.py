@@ -2,11 +2,11 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
-from tabsdata._io.inputs.sql.mariadb_input import MariaDBLoaderSpec
-from tabsdata._io.inputs.sql.mysql_input import MySQLLoaderSpec
-from tabsdata._io.inputs.sql.oracle_input import OracleLoaderSpec
-from tabsdata._io.inputs.sql.postgres_input import PostgresLoaderSpec
 from tabsdata._io.inputs.sql.shared_types import (
+    MariaDBLoaderSpec,
+    MySQLLoaderSpec,
+    OracleLoaderSpec,
+    PostgresLoaderSpec,
     QueriesSpec,
     SchemaOverrideSpec,
 )
@@ -27,13 +27,9 @@ __all__ = [
     # from tabsdata._io.inputs.sql.shared_types
     "QueriesSpec",
     "SchemaOverrideSpec",
-    # from tabsdata._io.inputs.sql.mysql_input
     "MySQLLoaderSpec",
-    # from tabsdata._io.inputs.sql.postgres_input
     "PostgresLoaderSpec",
-    # from tabsdata._io.inputs.sql.mariadb_input
     "MariaDBLoaderSpec",
-    # from tabsdata._io.inputs.sql.oracle_input
     "OracleLoaderSpec",
     # from tabsdata._io.outputs.shared_enums
     "IfTableExistStrategySpec",

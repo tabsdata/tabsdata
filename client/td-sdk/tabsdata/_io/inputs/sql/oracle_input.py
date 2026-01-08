@@ -4,15 +4,20 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Literal, get_args
+from typing import Any, Optional, get_args
+
+from pydantic import PositiveInt
 
 from tabsdata._io.connections.oracle_connection import OracleConn
 from tabsdata._io.inputs.helpers.helper_constants import _LoaderSpec
 from tabsdata._io.inputs.helpers.source_helper_factory import (
     get_sql_source_helper,
 )
-from tabsdata._io.inputs.sql.shared_types import QueriesSpec, SchemaOverrideSpec
-from tabsdata._io.inputs.sql_inputs import _validate_initial_values_type
+from tabsdata._io.inputs.sql.shared_types import (
+    OracleLoaderSpec,
+    QueriesSpec,
+    SchemaOverrideSpec,
+)
 from tabsdata._io.plugin import SourcePlugin
 from tabsdata._tabsserver.function.offset_utils import OffsetReturn
 from tabsdata._utils.sql_utils import (
@@ -20,6 +25,7 @@ from tabsdata._utils.sql_utils import (
     validate_schema_overrides_dict,
     validate_schema_overrides_list,
 )
+from tabsdata.dataquality._utils import _td_validate_call
 from tabsdata.exceptions import (
     ErrorCode,
     SourceConfigurationError,
@@ -30,21 +36,20 @@ from tabsdata.tableframe.typing import DataType
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-OracleLoaderSpec = Literal["polars_sqlalchemy", "pandas"]
-
 
 class OracleSrc(SourcePlugin):
     """
     Source plugin for reading data from Oracle.
     """
 
+    @_td_validate_call(ErrorCode.PVSOC5)
     def __init__(
         self,
         conn: OracleConn,
         queries: QueriesSpec,
-        initial_values: dict[str, Any] | None = None,
+        initial_values: Optional[dict[str, Any]] = None,
         transactional: bool = True,
-        chunk_size: int = 100000,
+        chunk_size: PositiveInt = 100000,
         loader: OracleLoaderSpec = "polars_sqlalchemy",
         schema_overrides: SchemaOverrideSpec = None,
     ):
@@ -71,17 +76,14 @@ class OracleSrc(SourcePlugin):
                 from the corresponding query as keys and the TableFrame DataType to cast
                 the column to. The type casting from the original column type to the
                 desired type must be supported.
-
-        Raises:
-            SourceConfigurationError: If any source configurations are invalid.
         """
-        self.conn = conn
-        self.queries = queries
-        self.initial_values = initial_values or {}
-        self.transactional = transactional
-        self.chunk_size = chunk_size
-        self.loader = loader
-        self.schema_overrides = schema_overrides
+        self._conn = conn
+        self._queries = self._normalize_queries(queries)
+        self._initial_values = initial_values or {}
+        self._transactional = transactional
+        self._chunk_size = chunk_size
+        self._loader = self._validate_loader(loader)
+        self._schema_overrides = self._validate_schema_overrides(schema_overrides)
 
     @property
     def conn(self) -> OracleConn:
@@ -90,23 +92,6 @@ class OracleSrc(SourcePlugin):
         """
         return self._conn
 
-    @conn.setter
-    def conn(self, conn: OracleConn):
-        """
-        Sets the Oracle connection configuration.
-
-        Args:
-            conn: The Oracle connection configuration.
-        """
-        if not isinstance(conn, OracleConn):
-            raise SourceConfigurationError(
-                ErrorCode.SOCE46,
-                self.__class__.__name__,
-                OracleConn.__name__,
-                type(conn),
-            )
-        self._conn = conn
-
     @property
     def queries(self) -> list[str]:
         """
@@ -114,28 +99,16 @@ class OracleSrc(SourcePlugin):
         """
         return self._queries
 
-    @queries.setter
-    def queries(self, queries: QueriesSpec):
+    def _normalize_queries(self, queries: QueriesSpec):
         """
-        Sets the SQL queries to execute to read data.
+        Normalize the "queries" parameter to a list of strings.
 
         Args:
             queries: The SQL queries to execute to read data.
         """
-
-        if not isinstance(queries, (str, list)):
-            raise SourceConfigurationError(
-                ErrorCode.SOCE47, self.__class__.__name__, type(queries)
-            )
-        if isinstance(queries, list) and not all(
-            isinstance(single_query, str) for single_query in queries
-        ):
-            raise SourceConfigurationError(
-                ErrorCode.SOCE47, self.__class__.__name__, type(queries)
-            )
         if isinstance(queries, str):
             queries = [queries]
-        self._queries = queries
+        return queries
 
     @property
     def initial_values(self) -> dict:
@@ -145,22 +118,15 @@ class OracleSrc(SourcePlugin):
         return self._initial_values
 
     @initial_values.setter
-    def initial_values(self, initial_values: dict | None):
+    @_td_validate_call(ErrorCode.PVSOC6)
+    def initial_values(self, initial_values: Optional[dict[str, Any]]):
         """
-        Sets the initial values for the parameters in the SQL queries.
+        Set the initial values for the parameters in the SQL queries.
 
         Args:
             initial_values: The initial values for the parameters in the SQL queries.
         """
-        if not initial_values:
-            self._initial_values = {}
-        elif not isinstance(initial_values, dict):
-            raise SourceConfigurationError(
-                ErrorCode.SOCE48, self.__class__.__name__, type(initial_values)
-            )
-        else:
-            _validate_initial_values_type(initial_values)
-            self._initial_values = initial_values
+        self._initial_values = initial_values or {}
 
     @property
     def _offset_return(self) -> str:
@@ -177,45 +143,12 @@ class OracleSrc(SourcePlugin):
         """
         return self._transactional
 
-    @transactional.setter
-    def transactional(self, transactional: bool):
-        """
-        Sets the transactional property.
-
-        Args:
-            transactional: Whether to use transactions for reading to ensure
-                consistency.
-        """
-        if not isinstance(transactional, bool):
-            raise SourceConfigurationError(
-                ErrorCode.SOCE49, self.__class__.__name__, type(transactional)
-            )
-        self._transactional = transactional
-
     @property
     def chunk_size(self) -> int:
         """
         The chunk size in records for reading large queries in batches.
         """
         return self._chunk_size
-
-    @chunk_size.setter
-    def chunk_size(self, chunk_size: int):
-        """
-        Sets the chunk size reading large queries in batches.
-
-        Args:
-            chunk_size: The chunk size in records for reading large queries in batches.
-        """
-        if not isinstance(chunk_size, int):
-            raise SourceConfigurationError(
-                ErrorCode.SOCE50, self.__class__.__name__, type(chunk_size)
-            )
-        if chunk_size <= 0:
-            raise SourceConfigurationError(
-                ErrorCode.SOCE51, self.__class__.__name__, chunk_size
-            )
-        self._chunk_size = chunk_size
 
     @property
     def loader(self) -> OracleLoaderSpec:
@@ -224,10 +157,9 @@ class OracleSrc(SourcePlugin):
         """
         return self._loader.value
 
-    @loader.setter
-    def loader(self, loader: OracleLoaderSpec):
+    def _validate_loader(self, loader: OracleLoaderSpec):
         """
-        Sets the loader used to execute SQL imports.
+        Validate the loader parameter used to execute SQL imports.
         Args:
             loader: The data processing loader to use for executing SQL imports.
         """
@@ -238,36 +170,34 @@ class OracleSrc(SourcePlugin):
                 get_args(OracleLoaderSpec),
                 loader,
             )
-        self._loader = _LoaderSpec(loader)
+        return _LoaderSpec(loader)
 
     @property
-    def schema_overrides(self) -> list[dict[str, DataType]] | None:
+    def schema_overrides(self) -> Optional[list[dict[str, DataType]]]:
         """
         The schema overrides for the tables being read.
         """
         return self._schema_overrides
 
-    @schema_overrides.setter
-    def schema_overrides(self, schema_overrides: SchemaOverrideSpec):
+    def _validate_schema_overrides(self, schema_overrides: SchemaOverrideSpec):
         """
-        Sets the schema overrides for the tables being read.
+        Validate the schema overrides for the tables being read.
         Args:
             schema_overrides: The schema overrides for the tables being read.
         """
-        if schema_overrides is not None:
-            valid_types = (dict, list)
-            if not isinstance(schema_overrides, valid_types):
-                raise SourceConfigurationError(
-                    ErrorCode.SOCE53, self.__class__.__name__, type(schema_overrides)
-                )
-            if isinstance(schema_overrides, list):
-                validate_schema_overrides_list(schema_overrides, self.queries)
-            else:
-                validate_schema_overrides_dict(schema_overrides, self.queries)
-
-        if isinstance(schema_overrides, dict):
+        if schema_overrides is None:
+            return None
+        elif isinstance(schema_overrides, list):
+            validate_schema_overrides_list(schema_overrides, self.queries)
+        elif isinstance(schema_overrides, dict):
+            validate_schema_overrides_dict(schema_overrides, self.queries)
             schema_overrides = [schema_overrides]
-        self._schema_overrides = schema_overrides
+        else:
+            raise SourceConfigurationError(
+                ErrorCode.SOCE53, self.__class__.__name__, type(schema_overrides)
+            )
+
+        return schema_overrides
 
     def stream(self, working_dir: str) -> list[TableFrame]:
         """
