@@ -1,56 +1,69 @@
 //
-// Copyright 2025 Tabs Data Inc.
+// Copyright 2026. Tabs Data Inc.
 //
 
-use crate::scheduler::runner::{CronJobSchedulerError, CronJobTask};
+//! A task for executing HTTP requests.
+//
+// Copyright 2026. Tabs Data Inc.
+//
+
+use crate::task_runner::{Task, TaskRunnerError};
 use async_trait::async_trait;
-use std::fmt::{Debug, Formatter};
+use std::fmt;
+use std::fmt::{Debug, Display, Formatter};
 use td_common::server::HttpRequest;
 use tokio::sync::watch;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
-pub struct HttpRequestTask {
+/// A task that executes an HTTP request.
+pub struct HttpTask {
     request: HttpRequest,
     body: Option<Box<dyn Fn() -> String + Send + Sync>>,
     client: reqwest::Client,
 }
 
-impl Debug for HttpRequestTask {
+impl Debug for HttpTask {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("HttpRequestTask")
+        f.debug_struct("HttpTask")
             .field("request", &self.request)
             .field("body", &self.body.is_some())
             .finish()
     }
 }
 
-impl HttpRequestTask {
+impl HttpTask {
+    /// Creates a new `HttpTask`.
     pub fn new(request: HttpRequest) -> Self {
-        Self {
+        let task = Self {
             request,
             body: None,
             client: reqwest::Client::new(),
-        }
+        };
+        debug!("Creating, {task}.");
+        task
     }
 
-    pub fn with_body(&mut self, body: impl Fn() -> String + Send + Sync + 'static) -> &mut Self {
+    /// Sets the body of the HTTP request.
+    pub fn with_body(mut self, body: impl Fn() -> String + Send + Sync + 'static) -> Self {
         self.body = Some(Box::new(body));
         self
     }
 }
 
 #[async_trait]
-impl CronJobTask for HttpRequestTask {
-    async fn run(&self, mut shutdown: watch::Receiver<()>) -> Result<(), CronJobSchedulerError> {
-        info!("Cron trigger starting");
+impl Task for HttpTask {
+    type Error = TaskRunnerError;
+    /// Runs the HTTP request task.
+    async fn run(&self, mut shutdown: watch::Receiver<()>) -> Result<(), Self::Error> {
         let HttpRequest {
             url,
             method,
             headers,
             body,
         } = self.request.clone();
+        debug!("Running, {self}");
 
-        let mut request = self.client.request(method, url);
+        let mut request = self.client.request(method.clone(), url.clone());
 
         for (key, value) in headers {
             request = request.header(key, value);
@@ -63,26 +76,42 @@ impl CronJobTask for HttpRequestTask {
         let response_fut = request.send();
         let response = tokio::select! {
             _ = shutdown.changed() => {
-                warn!("HttpRequest received shutdown signal. Cancelling request...");
+                info!("Received shutdown signal, {self}.");
                 return Ok(());
             },
             res = response_fut => {
-                debug!("Http request received response: {res:?}");
+                debug!("HTTP response, method: {self}.");
                 res
             }
         }
-        .map_err(|e| CronJobSchedulerError::JobFailure(e.into()))?;
+        .map_err(|e| TaskRunnerError::TaskFailure(e.into()))?;
 
         match response.error_for_status() {
             Ok(res) => {
-                debug!("Successful http response: {res:?}");
+                debug!(
+                    "Successful HTTP response, {self}, status: {}.",
+                    res.status()
+                );
                 Ok(())
             }
             Err(err) => {
-                error!("Unsuccessful http response: {err:?}");
-                Err(CronJobSchedulerError::JobFailure(err.into()))
+                error!(
+                    "Unsuccessful HTTP response, {self}, status: {:?}.",
+                    err.status()
+                );
+                Err(TaskRunnerError::TaskFailure(err.into()))
             }
         }
+    }
+}
+
+impl Display for HttpTask {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "method: {}, url: {}",
+            self.request.method, self.request.url
+        )
     }
 }
 
@@ -90,7 +119,7 @@ impl CronJobTask for HttpRequestTask {
 mod tests {
     use super::*;
     use http::Method;
-    use wiremock::matchers::{method, path};
+    use wiremock::matchers::{body_string, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     #[tokio::test]
@@ -103,12 +132,12 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let task = Box::new(HttpRequestTask::new(HttpRequest {
+        let task = HttpTask::new(HttpRequest {
             url: format!("{}/test", mock_server.uri()).parse().unwrap(),
             method: Method::GET,
             headers: Default::default(),
             body: false,
-        }));
+        });
 
         let (_shutdown_tx, shutdown_rx) = watch::channel(());
         let result = task.run(shutdown_rx).await;
@@ -125,15 +154,41 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let task = Box::new(HttpRequestTask::new(HttpRequest {
+        let task = HttpTask::new(HttpRequest {
             url: format!("{}/test", mock_server.uri()).parse().unwrap(),
             method: Method::GET,
             headers: Default::default(),
             body: false,
-        }));
+        });
 
         let (_shutdown_tx, shutdown_rx) = watch::channel(());
         let result = task.run(shutdown_rx).await;
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_execute_task_http_with_body() {
+        let mock_server = MockServer::start().await;
+        let body_content = "Hello, world!";
+
+        Mock::given(method("POST"))
+            .and(path("/test"))
+            .and(body_string(body_content))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&mock_server)
+            .await;
+
+        let mut task = HttpTask::new(HttpRequest {
+            url: format!("{}/test", mock_server.uri()).parse().unwrap(),
+            method: Method::POST,
+            headers: Default::default(),
+            body: true,
+        });
+
+        task = task.with_body(move || body_content.to_string());
+
+        let (_shutdown_tx, shutdown_rx) = watch::channel(());
+        let result = task.run(shutdown_rx).await;
+        assert!(result.is_ok());
     }
 }

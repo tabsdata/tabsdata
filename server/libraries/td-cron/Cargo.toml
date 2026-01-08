@@ -50,6 +50,7 @@ td-build = { workspace = true }
 ## Macros
 
 td-build = { workspace = true }
+td-error = { workspace = true }
 
 ## Libraries
 
@@ -64,7 +65,6 @@ td-process = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }
 croner = { workspace = true }
-futures = { workspace = true }
 http = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
 thiserror = { workspace = true }
@@ -74,10 +74,12 @@ tracing = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
+strum = { workspace = true }
 
 [dev-dependencies]
 td-common = { workspace = true, features = ["td-test"] }
 wiremock = { workspace = true }
+testdir = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }
