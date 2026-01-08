@@ -10,7 +10,7 @@ import math
 from collections import namedtuple
 from dataclasses import dataclass
 from enum import Enum, IntEnum
-from typing import TYPE_CHECKING, AbstractSet, Any, Callable, Self, TypeVar
+from typing import TYPE_CHECKING, AbstractSet, Any, Callable, Self, TypeVar, cast
 
 import polars as pl
 from polars._typing import ClosedInterval
@@ -57,6 +57,7 @@ if TYPE_CHECKING:
     from tabsdata.dataquality._typing import ColumnNameWithAltSpec, TagsSpec
 
 DQ_VERSION = 1
+MAX_BINS = 100
 
 PolarsClosedInterval = ClosedInterval
 RangeClassifier = IsBetween | IsNotBetween
@@ -77,10 +78,14 @@ class DQColumns(Enum):
     DQ_VERSION = "dq.version"
     DQ_CLASSIFIER = "dq.classifier"
     DQ_TYPE = "dq.type"
-    DQ_BUCKETS = "dq.buckets"
-    DQ_TRUE = "dq.true"
+    DQ_BINS = "dq.bins"
     DQ_FALSE = "dq.false"
-    DQ_CATEGORY = "dq.p{:02d}"
+    DQ_TRUE = "dq.true"
+    DQ_CATEGORY = "dq.p{:03d}"
+    DQ_UNDERFLOW = "dq.under"
+    DQ_OVERFLOW = "dq.over"
+    DQ_NAN = "dq.nan"
+    DQ_NONE = "dq.none"
     DQ_PARAMETERS = "dq.parameters"
 
     @classmethod
@@ -664,6 +669,12 @@ class ClassifierMetadata:
     polars_provider: PolarsProvider
 
 
+@dataclass
+class ColumnInfo:
+    family: ClassifierFamily
+    classifier: Classifier
+
+
 MappedColumn = namedtuple("MappedColumn", ["data_column", "dq_column"])
 
 
@@ -671,11 +682,11 @@ class DataQualityEngine:
     def __init__(
         self,
         tf: td_frame.TableFrame,
-        cols: dict[str, ClassifierFamily] = None,
+        cols: dict[str, ColumnInfo] = None,
         tags: dict[str, set[str]] = None,
     ):
         self._tf: td_frame.TableFrame = tf
-        self._cols: dict[str, ClassifierFamily] = cols or {}
+        self._cols: dict[str, ColumnInfo] = cols or {}
         self._tags: dict[str, set[str]] = tags or {}
 
     """> Special Functions """
@@ -784,7 +795,14 @@ class DataQualityEngine:
         for column in columns:
             lf_column = column.data_column
             dq_column = self._name(metadata.column_suffix, lf_column, column.dq_column)
-            self._cols.update({dq_column: metadata.classifier_family})
+            self._cols.update(
+                {
+                    dq_column: ColumnInfo(
+                        family=metadata.classifier_family,
+                        classifier=classifier,
+                    )
+                }
+            )
             vtags = tags if tags else [None]
             for tag in vtags:
                 if tag not in self._tags:
@@ -918,6 +936,7 @@ class DataQualityEngine:
 
     """> Quality Operation Functions """
 
+    # noinspection DuplicatedCode
     def summary(
         self,
         tags_spec: TagsSpec,
@@ -932,25 +951,102 @@ class DataQualityEngine:
                     ErrorCode.DQPE10,
                     column,
                 )
-            if self._cols[column] == ClassifierFamily.BOOLEAN:
-                dq_columns.append(column)
+            dq_columns.append(column)
 
         # noinspection PyProtectedMember
         lf = self._tf._lf.select(dq_columns)
         summary_data = []
+
         for column in sorted(dq_columns):
-            true_count = lf.select(pl.col(column).sum()).collect().item()
-            false_count = lf.select((~pl.col(column)).sum()).collect().item()
-            summary_row = {
-                DQColumns.DQ_VERSION.value: DQ_VERSION,
-                DQColumns.DQ_CLASSIFIER.value: column,
-                DQColumns.DQ_TYPE.value: ClassifierFamily.BOOLEAN.value,
-                DQColumns.DQ_BUCKETS.value: None,
-                DQColumns.DQ_TRUE.value: true_count,
-                DQColumns.DQ_FALSE.value: false_count,
-            }
-            for i in range(100):
-                summary_row[DQColumns.column(i)] = None
+            column_info = self._cols[column]
+            classifier_family = column_info.family
+            summary_row = None
+
+            match classifier_family:
+                case ClassifierFamily.BOOLEAN:
+                    false_count = (
+                        lf.select((pl.col(column) == ByteSentinel.FALSE).sum())
+                        .collect()
+                        .item()
+                    )
+                    true_count = (
+                        lf.select((pl.col(column) == ByteSentinel.TRUE).sum())
+                        .collect()
+                        .item()
+                    )
+                    nan_count = (
+                        lf.select((pl.col(column) == ByteSentinel.NAN).sum())
+                        .collect()
+                        .item()
+                    )
+                    null_count = (
+                        lf.select((pl.col(column) == ByteSentinel.NULL).sum())
+                        .collect()
+                        .item()
+                    )
+                    summary_row = {
+                        DQColumns.DQ_VERSION.value: DQ_VERSION,
+                        DQColumns.DQ_CLASSIFIER.value: column,
+                        DQColumns.DQ_TYPE.value: ClassifierFamily.BOOLEAN.value,
+                        DQColumns.DQ_BINS.value: None,
+                        DQColumns.DQ_FALSE.value: false_count,
+                        DQColumns.DQ_TRUE.value: true_count,
+                        DQColumns.DQ_UNDERFLOW.value: None,
+                        DQColumns.DQ_OVERFLOW.value: None,
+                        DQColumns.DQ_NAN.value: nan_count,
+                        DQColumns.DQ_NONE.value: null_count,
+                    }
+                    for i in range(MAX_BINS + 1):
+                        summary_row[DQColumns.column(i)] = None
+                case ClassifierFamily.CATEGORICAL:
+                    categorizer = cast(Categorizer, column_info.classifier)
+                    underflow_count = (
+                        lf.select((pl.col(column) == ByteSentinel.UNDERFLOW).sum())
+                        .collect()
+                        .item()
+                    )
+                    overflow_count = (
+                        lf.select((pl.col(column) == ByteSentinel.OVERFLOW).sum())
+                        .collect()
+                        .item()
+                    )
+                    nan_count = (
+                        lf.select((pl.col(column) == ByteSentinel.NAN).sum())
+                        .collect()
+                        .item()
+                    )
+                    null_count = (
+                        lf.select((pl.col(column) == ByteSentinel.NULL).sum())
+                        .collect()
+                        .item()
+                    )
+                    summary_row = {
+                        DQColumns.DQ_VERSION.value: DQ_VERSION,
+                        DQColumns.DQ_CLASSIFIER.value: column,
+                        DQColumns.DQ_TYPE.value: ClassifierFamily.CATEGORICAL.value,
+                        DQColumns.DQ_BINS.value: categorizer.scale.bins,
+                        DQColumns.DQ_FALSE.value: None,
+                        DQColumns.DQ_TRUE.value: None,
+                        DQColumns.DQ_UNDERFLOW.value: underflow_count,
+                        DQColumns.DQ_OVERFLOW.value: overflow_count,
+                        DQColumns.DQ_NAN.value: nan_count,
+                        DQColumns.DQ_NONE.value: null_count,
+                    }
+                    if categorizer.scale.min_in_first_bin:
+                        summary_row[DQColumns.column(0)] = None
+                    else:
+                        count = lf.select((pl.col(column) == 0).sum()).collect().item()
+                        summary_row[DQColumns.column(0)] = count
+                    for i in range(1, categorizer.scale.bins + 1):
+                        count = lf.select((pl.col(column) == i).sum()).collect().item()
+                        summary_row[DQColumns.column(i)] = count
+                    for i in range(categorizer.scale.bins + 1, MAX_BINS + 1):
+                        summary_row[DQColumns.column(i)] = None
+                case _:
+                    raise ValueError(
+                        f"Unsupported classifier family: {classifier_family}"
+                    )
+
             summary_row[DQColumns.DQ_PARAMETERS.value] = None
             summary_data.append(summary_row)
 
@@ -960,11 +1056,15 @@ class DataQualityEngine:
             DQColumns.DQ_VERSION.value: pl.UInt8,
             DQColumns.DQ_CLASSIFIER.value: pl.String,
             DQColumns.DQ_TYPE.value: pl.String,
-            DQColumns.DQ_BUCKETS.value: pl.UInt8,
-            DQColumns.DQ_TRUE.value: pl.UInt64,
+            DQColumns.DQ_BINS.value: pl.UInt8,
             DQColumns.DQ_FALSE.value: pl.UInt64,
+            DQColumns.DQ_TRUE.value: pl.UInt64,
+            DQColumns.DQ_UNDERFLOW.value: pl.UInt64,
+            DQColumns.DQ_OVERFLOW.value: pl.UInt64,
+            DQColumns.DQ_NAN.value: pl.UInt64,
+            DQColumns.DQ_NONE.value: pl.UInt64,
         }
-        for i in range(100):
+        for i in range(MAX_BINS + 1):
             schema[DQColumns.column(i)] = pl.UInt64
         schema[DQColumns.DQ_PARAMETERS.value] = pl.String
 
@@ -1022,32 +1122,6 @@ class DataQualityEngine:
 
     # ToDo: Work in progress...
 
-    # def is_between(
-    #     self,
-    #     data_column_name: str,
-    #     lower_bound: int | float,
-    #     upper_bound: int | float,
-    #     closed: td_typing.ClosedInterval = "both",
-    #     dq_column_name: str | None = None,
-    # ) -> Self:
-    #     return self._run(
-    #         pl.col(data_column_name).is_between(lower_bound, upper_bound, closed),
-    #         self._name(data_column_name, dq_column_name),
-    #     )
-    #
-    # def is_not_between(
-    #     self,
-    #     data_column_name: str,
-    #     lower_bound: int | float,
-    #     upper_bound: int | float,
-    #     closed: td_typing.ClosedInterval = "both",
-    #     dq_column_name: str | None = None,
-    # ) -> Self:
-    #     return self._run(
-    #         ~pl.col(data_column_name).is_between(lower_bound, upper_bound, closed),
-    #         self._name(data_column_name, dq_column_name),
-    #     )
-    #
     # """> Quality Generic Functions """
     #
     # def expr(

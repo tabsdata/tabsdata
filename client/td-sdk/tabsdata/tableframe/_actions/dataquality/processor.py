@@ -17,7 +17,7 @@ from tabsdata.dataquality import DataQuality, Filter, Select, Summary
 from tabsdata.dataquality._operator import Operator
 from tabsdata.exceptions import DataQualityProcessingError, ErrorCode
 from tabsdata.tableframe._actions.dataquality.engine import (
-    ClassifierFamily,
+    ColumnInfo,
     DataQualityEngine,
 )
 from tabsdata.tableframe.functions.eager import concat
@@ -494,7 +494,7 @@ class DataQualityProcessor:
         action: DataQuality,
     ) -> Tuple[
         DerivedTableFrame | None,
-        dict[str, ClassifierFamily] | None,
+        dict[str, ColumnInfo] | None,
         dict[str, set[str]] | None,
     ]:
         tf = cls.to_tableframe(tableframe)
@@ -521,7 +521,7 @@ class DataQualityProcessor:
     def harvest(
         cls,
         tableframe: DerivedTableFrame | None,
-        cols: dict[str, ClassifierFamily],
+        cols: dict[str, ColumnInfo],
         tags: dict[str, set[str]] | None,
         _table_info: TableInfo,
         operation: Operator,
