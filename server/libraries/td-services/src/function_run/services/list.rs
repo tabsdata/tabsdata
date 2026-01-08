@@ -94,15 +94,16 @@ mod tests {
         let function_version = seed_function(&db, &collection, &create).await;
         let transaction_key = TransactionKey::try_from("ANY")?;
 
-        let execution = seed_execution(&db, &function_version).await;
+        let execution1 = seed_execution(&db, &function_version).await;
+        let execution2 = seed_execution(&db, &function_version).await;
 
         let function_runs = [
             seed_function_run(
                 &db,
                 &collection,
                 &function_version,
-                &execution,
-                &seed_transaction(&db, &execution, &transaction_key).await,
+                &execution1,
+                &seed_transaction(&db, &execution1, &transaction_key).await,
                 &FunctionRunStatus::Done,
             )
             .await,
@@ -110,8 +111,8 @@ mod tests {
                 &db,
                 &collection,
                 &function_version,
-                &execution,
-                &seed_transaction(&db, &execution, &transaction_key).await,
+                &execution1,
+                &seed_transaction(&db, &execution1, &transaction_key).await,
                 &FunctionRunStatus::Done,
             )
             .await,
@@ -119,8 +120,8 @@ mod tests {
                 &db,
                 &collection,
                 &function_version,
-                &execution,
-                &seed_transaction(&db, &execution, &transaction_key).await,
+                &execution1,
+                &seed_transaction(&db, &execution1, &transaction_key).await,
                 &FunctionRunStatus::Done,
             )
             .await,
@@ -128,8 +129,8 @@ mod tests {
                 &db,
                 &collection,
                 &function_version,
-                &execution,
-                &seed_transaction(&db, &execution, &transaction_key).await,
+                &execution1,
+                &seed_transaction(&db, &execution2, &transaction_key).await,
                 &FunctionRunStatus::Done,
             )
             .await,
@@ -137,8 +138,8 @@ mod tests {
                 &db,
                 &collection,
                 &function_version,
-                &execution,
-                &seed_transaction(&db, &execution, &transaction_key).await,
+                &execution1,
+                &seed_transaction(&db, &execution2, &transaction_key).await,
                 &FunctionRunStatus::Done,
             )
             .await,
@@ -156,14 +157,54 @@ mod tests {
         assert_eq!(response.len, function_runs.len());
         assert_eq!(response.data[0].id, function_runs[0].id);
         assert_eq!(response.data[0].triggered_on, function_runs[0].triggered_on);
+        assert_eq!(
+            response.data[0].function_version_id,
+            function_runs[0].function_version_id
+        );
+        assert_eq!(
+            response.data[0].execution_function_version_id,
+            execution1.function_version_id
+        );
         assert_eq!(response.data[1].id, function_runs[1].id);
         assert_eq!(response.data[1].triggered_on, function_runs[1].triggered_on);
+        assert_eq!(
+            response.data[1].function_version_id,
+            function_runs[1].function_version_id
+        );
+        assert_eq!(
+            response.data[1].execution_function_version_id,
+            execution1.function_version_id
+        );
         assert_eq!(response.data[2].id, function_runs[2].id);
         assert_eq!(response.data[2].triggered_on, function_runs[2].triggered_on);
+        assert_eq!(
+            response.data[2].function_version_id,
+            function_runs[2].function_version_id
+        );
+        assert_eq!(
+            response.data[1].execution_function_version_id,
+            execution1.function_version_id
+        );
         assert_eq!(response.data[3].id, function_runs[3].id);
         assert_eq!(response.data[3].triggered_on, function_runs[3].triggered_on);
+        assert_eq!(
+            response.data[3].function_version_id,
+            function_runs[3].function_version_id
+        );
+        assert_eq!(
+            response.data[3].execution_function_version_id,
+            execution2.function_version_id
+        );
         assert_eq!(response.data[4].id, function_runs[4].id);
         assert_eq!(response.data[4].triggered_on, function_runs[4].triggered_on);
+        assert_eq!(
+            response.data[4].function_version_id,
+            function_runs[4].function_version_id
+        );
+        assert_eq!(
+            response.data[4].execution_function_version_id,
+            execution2.function_version_id
+        );
         Ok(())
     }
 }

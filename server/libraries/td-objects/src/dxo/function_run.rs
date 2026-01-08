@@ -50,6 +50,7 @@ mod definitions {
         pub name: FunctionName,
         pub collection: CollectionName,
         pub execution: Option<ExecutionName>,
+        pub execution_function_version_id: FunctionVersionId,
         pub triggered_by: UserName,
     }
 
@@ -78,6 +79,7 @@ mod definitions {
         pub id: FunctionRunId,
         #[dto(list(filter, filter_like, order_by))]
         pub collection_id: CollectionId,
+        #[dto(list(filter, order_by))]
         pub function_version_id: FunctionVersionId,
         #[dto(list(filter, filter_like, order_by))]
         pub execution_id: ExecutionId,
@@ -99,6 +101,8 @@ mod definitions {
         pub collection: CollectionName,
         #[dto(list(filter, filter_like))]
         pub execution: Option<ExecutionName>,
+        #[dto(list(filter, order_by))]
+        pub execution_function_version_id: FunctionVersionId,
         pub triggered_by: UserName,
         // TODO exception info
         // pub kind: Option<String>,

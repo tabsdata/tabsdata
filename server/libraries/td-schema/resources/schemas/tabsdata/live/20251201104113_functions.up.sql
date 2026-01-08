@@ -67,3 +67,17 @@ WHERE w.worker_enabled = true; -- Hiding marker workers for disabled function ve
 -- Trigger Type can be M (manual), C (cron), DL (data listener)
 ALTER TABLE executions
     ADD COLUMN trigger_type TEXT NOT NULL DEFAULT 'M';
+
+DROP VIEW function_runs__with_names;
+CREATE VIEW function_runs__with_names AS
+SELECT f.*,
+       fv.name                                         AS name,
+       c.name                                          AS collection,
+       e.name                                          AS execution,
+       e.function_version_id                           AS execution_function_version_id,
+       IFNULL(u.name, '[' || f.triggered_by_id || ']') as triggered_by
+FROM function_runs f
+         LEFT JOIN collections c ON f.collection_id = c.id
+         LEFT JOIN functions fv ON f.function_version_id = fv.id
+         LEFT JOIN executions e ON f.execution_id = e.id
+         LEFT JOIN users u ON f.triggered_by_id = u.id;
