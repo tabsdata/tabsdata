@@ -15,12 +15,22 @@ import polars as pl
 
 import tabsdata.tableframe.expr.expr as td_expr
 import tabsdata.tableframe.lazyframe.frame as td_frame
-from tabsdata.dataquality import IsNotZero, IsZero
+from tabsdata.dataquality import (
+    DoesNotMatch,
+    HasLen,
+    IsNotZero,
+    IsPositive,
+    IsPositiveOrZero,
+    IsZero,
+    Matches,
+)
 
 # noinspection PyProtectedMember
 from tabsdata.dataquality._classifier import (
     Classifier,
     IsNan,
+    IsNegative,
+    IsNegativeOrZero,
     IsNotNan,
     IsNotNull,
     IsNotNullNorNan,
@@ -173,6 +183,90 @@ class PolarsProvider:
             .when(QExpressions.IS_NAN(column, dtype))
             .then(ByteSentinel.NAN)
             .otherwise(column.ne(0))
+        )
+
+    @staticmethod
+    def is_positive(column: pl.Expr, dtype: pl.DataType, _: IsPositive) -> pl.Expr:
+        return (
+            pl.when(column.is_null())
+            .then(ByteSentinel.NULL)
+            .when(QExpressions.IS_NAN(column, dtype))
+            .then(ByteSentinel.NAN)
+            .otherwise(column.gt(0))
+        )
+
+    @staticmethod
+    def is_positive_or_zero(
+        column: pl.Expr, dtype: pl.DataType, _: IsPositiveOrZero
+    ) -> pl.Expr:
+        return (
+            pl.when(column.is_null())
+            .then(ByteSentinel.NULL)
+            .when(QExpressions.IS_NAN(column, dtype))
+            .then(ByteSentinel.NAN)
+            .otherwise(column.ge(0))
+        )
+
+    @staticmethod
+    def is_negative(column: pl.Expr, dtype: pl.DataType, _: IsNegative) -> pl.Expr:
+        return (
+            pl.when(column.is_null())
+            .then(ByteSentinel.NULL)
+            .when(QExpressions.IS_NAN(column, dtype))
+            .then(ByteSentinel.NAN)
+            .otherwise(column.lt(0))
+        )
+
+    @staticmethod
+    def is_negative_or_zero(
+        column: pl.Expr, dtype: pl.DataType, _: IsNegativeOrZero
+    ) -> pl.Expr:
+        return (
+            pl.when(column.is_null())
+            .then(ByteSentinel.NULL)
+            .when(QExpressions.IS_NAN(column, dtype))
+            .then(ByteSentinel.NAN)
+            .otherwise(column.le(0))
+        )
+
+    @staticmethod
+    def matches(column: pl.Expr, dtype: pl.DataType, classifier: Matches) -> pl.Expr:
+        return (
+            pl.when(column.is_null())
+            .then(ByteSentinel.NULL)
+            .when(QExpressions.IS_NAN(column, dtype))
+            .then(ByteSentinel.NAN)
+            .otherwise(column.cast(pl.Utf8).str.contains(classifier.regex))
+        )
+
+    @staticmethod
+    def does_not_match(
+        column: pl.Expr, dtype: pl.DataType, classifier: DoesNotMatch
+    ) -> pl.Expr:
+        return (
+            pl.when(column.is_null())
+            .then(ByteSentinel.NULL)
+            .when(QExpressions.IS_NAN(column, dtype))
+            .then(ByteSentinel.NAN)
+            .otherwise(~column.cast(pl.Utf8).str.contains(classifier.regex))
+        )
+
+    @staticmethod
+    def has_length(column: pl.Expr, dtype: pl.DataType, classifier: HasLen) -> pl.Expr:
+        return (
+            pl.when(column.is_null())
+            .then(ByteSentinel.NULL)
+            .when(QExpressions.IS_NAN(column, dtype))
+            .then(ByteSentinel.NAN)
+            .otherwise(
+                column.cast(pl.Utf8)
+                .str.len_chars()
+                .is_between(
+                    classifier.min,
+                    classifier.max,
+                    closed="both",
+                )
+            )
         )
 
 
@@ -339,6 +433,18 @@ class DataQualityEngine:
     ) -> Self:
         return self._classify(is_not_nan)
 
+    def is_null_or_nan(
+        self,
+        is_null_or_nan: IsNullOrNan,
+    ) -> Self:
+        return self._classify(is_null_or_nan)
+
+    def is_not_null_nor_nan(
+        self,
+        is_not_null_nor_nan: IsNotNullNorNan,
+    ) -> Self:
+        return self._classify(is_not_null_nor_nan)
+
     def is_zero(
         self,
         is_zero: IsZero,
@@ -350,6 +456,48 @@ class DataQualityEngine:
         is_not_zero: IsNotZero,
     ) -> Self:
         return self._classify(is_not_zero)
+
+    def is_positive(
+        self,
+        is_positive: IsPositive,
+    ) -> Self:
+        return self._classify(is_positive)
+
+    def is_positive_or_zero(
+        self,
+        is_positive_or_zero: IsPositiveOrZero,
+    ) -> Self:
+        return self._classify(is_positive_or_zero)
+
+    def is_negative(
+        self,
+        is_negative: IsNegative,
+    ) -> Self:
+        return self._classify(is_negative)
+
+    def is_negative_or_zero(
+        self,
+        is_negative_or_zero: IsNegativeOrZero,
+    ) -> Self:
+        return self._classify(is_negative_or_zero)
+
+    def matches(
+        self,
+        matches: Matches,
+    ) -> Self:
+        return self._classify(matches)
+
+    def does_not_match(
+        self,
+        does_not_match: DoesNotMatch,
+    ) -> Self:
+        return self._classify(does_not_match)
+
+    def has_length(
+        self,
+        has_length: HasLen,
+    ) -> Self:
+        return self._classify(has_length)
 
     """> Quality Operation Functions """
 
@@ -457,47 +605,6 @@ class DataQualityEngine:
 
     # ToDo: Work in progress...
 
-    # def is_nan(
-    #     self,
-    #     data_column_name: str,
-    #     dq_column_name: str | None = None,
-    # ) -> Self:
-    #     return self._run(
-    #         pl.col(data_column_name).is_nan(),
-    #         self._name(data_column_name, dq_column_name),
-    #     )
-    #
-    # def is_not_nan(
-    #     self,
-    #     data_column_name: str,
-    #     dq_column_name: str | None = None,
-    # ) -> Self:
-    #     return self._run(
-    #         pl.col(data_column_name).is_not_nan(),
-    #         self._name(data_column_name, dq_column_name),
-    #     )
-    #
-    # def is_null_or_nan(
-    #     self,
-    #     data_column_name: str,
-    #     dq_column_name: str | None = None,
-    # ) -> Self:
-    #     return self._run(
-    #         pl.col(data_column_name).is_null() | pl.col(data_column_name).is_nan(),
-    #         self._name(data_column_name, dq_column_name),
-    #     )
-    #
-    # def is_not_null_or_nan(
-    #     self,
-    #     data_column_name: str,
-    #     dq_column_name: str | None = None,
-    # ) -> Self:
-    #     return self._run(
-    #         pl.col(data_column_name).is_not_null()
-    #         & pl.col(data_column_name).is_not_nan(),
-    #         self._name(data_column_name, dq_column_name),
-    #     )
-    #
     # def is_in(
     #     self,
     #     data_column_name: str,
@@ -517,56 +624,6 @@ class DataQualityEngine:
     # ) -> Self:
     #     return self._run(
     #         ~pl.col(data_column_name).is_in(data_column_values),
-    #         self._name(data_column_name, dq_column_name),
-    #     )
-    #
-    # def is_positive(
-    #     self,
-    #     data_column_name: str,
-    #     dq_column_name: str | None = None,
-    # ) -> Self:
-    #     return self._run(
-    #         pl.col(data_column_name).gt(0),
-    #         self._name(data_column_name, dq_column_name),
-    #     )
-    #
-    # def is_positive_or_zero(
-    #     self,
-    #     data_column_name: str,
-    #     dq_column_name: str | None = None,
-    # ) -> Self:
-    #     return self._run(
-    #         pl.col(data_column_name).ge(0),
-    #         self._name(data_column_name, dq_column_name),
-    #     )
-    #
-    # def is_negative(
-    #     self,
-    #     data_column_name: str,
-    #     dq_column_name: str | None = None,
-    # ) -> Self:
-    #     return self._run(
-    #         pl.col(data_column_name).lt(0),
-    #         self._name(data_column_name, dq_column_name),
-    #     )
-    #
-    # def is_negative_or_zero(
-    #     self,
-    #     data_column_name: str,
-    #     dq_column_name: str | None = None,
-    # ) -> Self:
-    #     return self._run(
-    #         pl.col(data_column_name).le(0),
-    #         self._name(data_column_name, dq_column_name),
-    #     )
-    #
-    # def is_zero(
-    #     self,
-    #     data_column_name: str,
-    #     dq_column_name: str | None = None,
-    # ) -> Self:
-    #     return self._run(
-    #         pl.col(data_column_name).eq(0),
     #         self._name(data_column_name, dq_column_name),
     #     )
     #
@@ -696,24 +753,39 @@ CLASSIFIER_DICTIONARY: dict[type, ClassifierMetadata] = {
         classifier_family=ClassifierFamily.BOOLEAN,
         polars_provider=PolarsProvider(PolarsProvider.is_not_zero),
     ),
-    # IsPositive: ClassifierMetadata(
-    #     suffix="_is_positive",
-    #     family=ClassifierFamily.BOOLEAN,
-    #     polars=lambda col: col.gt(0),
-    # ),
-    # IsPositiveOrZero: ClassifierMetadata(
-    #     suffix="_is_positive_or_zero",
-    #     family=ClassifierFamily.BOOLEAN,
-    #     polars=lambda col: col.ge(0),
-    # ),
-    # IsNegative: ClassifierMetadata(
-    #     suffix="_is_negative",
-    #     family=ClassifierFamily.BOOLEAN,
-    #     polars=lambda col: col.lt(0),
-    # ),
-    # IsNegativeOrZero: ClassifierMetadata(
-    #     suffix="_is_negative_or_zero",
-    #     family=ClassifierFamily.BOOLEAN,
-    #     polars=lambda col: col.le(0),
-    # ),
+    IsPositive: ClassifierMetadata(
+        column_suffix="_is_positive",
+        classifier_family=ClassifierFamily.BOOLEAN,
+        polars_provider=PolarsProvider(PolarsProvider.is_positive),
+    ),
+    IsPositiveOrZero: ClassifierMetadata(
+        column_suffix="_is_positive_or_zero",
+        classifier_family=ClassifierFamily.BOOLEAN,
+        polars_provider=PolarsProvider(PolarsProvider.is_positive_or_zero),
+    ),
+    IsNegative: ClassifierMetadata(
+        column_suffix="_is_negative",
+        classifier_family=ClassifierFamily.BOOLEAN,
+        polars_provider=PolarsProvider(PolarsProvider.is_negative),
+    ),
+    IsNegativeOrZero: ClassifierMetadata(
+        column_suffix="_is_negative_or_zero",
+        classifier_family=ClassifierFamily.BOOLEAN,
+        polars_provider=PolarsProvider(PolarsProvider.is_negative_or_zero),
+    ),
+    Matches: ClassifierMetadata(
+        column_suffix="_matches",
+        classifier_family=ClassifierFamily.BOOLEAN,
+        polars_provider=PolarsProvider(PolarsProvider.matches),
+    ),
+    DoesNotMatch: ClassifierMetadata(
+        column_suffix="_does_not_match",
+        classifier_family=ClassifierFamily.BOOLEAN,
+        polars_provider=PolarsProvider(PolarsProvider.does_not_match),
+    ),
+    HasLen: ClassifierMetadata(
+        column_suffix="_has_length",
+        classifier_family=ClassifierFamily.BOOLEAN,
+        polars_provider=PolarsProvider(PolarsProvider.has_length),
+    ),
 }

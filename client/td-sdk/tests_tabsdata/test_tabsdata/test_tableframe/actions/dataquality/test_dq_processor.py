@@ -23,16 +23,21 @@ pl.Config.set_verbose(False)
 
 def dq_parameters():
     parameters = []
-    for classifier, config in CLASSIFIERS.items():
-        for dtype in config.dtypes:
-            parameters.append(
-                pytest.param(
-                    classifier,
-                    dtype,
-                    config,
-                    id=f"{classifier.__name__}_{dtype.__name__}",
+    for classifier, configs in CLASSIFIERS.items():
+        for config in configs:
+            for dtype in config.dtypes:
+                if config.name is not None:
+                    config_id = f"{classifier.__name__}_{dtype.__name__}_{config.name}"
+                else:
+                    config_id = f"{classifier.__name__}_{dtype.__name__}"
+                parameters.append(
+                    pytest.param(
+                        classifier,
+                        dtype,
+                        config,
+                        id=config_id,
+                    )
                 )
-            )
     return parameters
 
 
