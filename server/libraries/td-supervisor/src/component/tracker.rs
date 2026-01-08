@@ -295,7 +295,6 @@ pub fn check_status(pid_path: PathBuf) -> WorkerStatus {
     }
 }
 
-
 pub fn get_ok_path(work_path: PathBuf) -> PathBuf {
     work_path.join(WORKER_OK_FILE)
 }

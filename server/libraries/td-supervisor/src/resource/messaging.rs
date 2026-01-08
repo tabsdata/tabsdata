@@ -8,8 +8,8 @@ use td_common::files::{
     YAML_EXTENSION, get_files_in_folder_sorted_by_name, get_files_in_subfolders_sorted_by_name,
 };
 use td_common::server::{
-    COMPLETE_FOLDER, ERROR_FOLDER, FAIL_FOLDER, ONGOING_FOLDER, PLANNED_FOLDER, PayloadType,
-    QUEUED_FOLDER, STOP_FOLDER, SupervisorMessage,
+    COMPLETE_FOLDER, ERROR_FOLDER, EXTENSION_DELIMITER, FAIL_FOLDER, INITIAL_RUN, ONGOING_FOLDER,
+    PLANNED_FOLDER, PayloadType, QUEUED_FOLDER, RETRIES_DELIMITER, STOP_FOLDER, SupervisorMessage,
 };
 use tracing::{debug, error};
 
@@ -65,7 +65,11 @@ impl SupervisorMessageQueue {
         for file in messages {
             match SupervisorMessage::try_from((file.clone(), PayloadType::Request)) {
                 Ok(message) => {
-                    let name = match message.file.file_name().and_then(|name| name.to_str()) {
+                    let original_name = match message
+                        .file
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                    {
                         Some(file_name) => file_name.to_string(),
                         None => {
                             error!(
@@ -75,7 +79,36 @@ impl SupervisorMessageQueue {
                             continue;
                         }
                     };
-                    match Self::planned_from_leftover(message.clone(), name) {
+
+                    let extension = format!("{}{}", EXTENSION_DELIMITER, YAML_EXTENSION);
+                    let initial_run_name = if let Some(stem) =
+                        original_name.strip_suffix(&extension)
+                    {
+                        if let Some(message) = stem.split(RETRIES_DELIMITER).next() {
+                            format!(
+                                "{}{}{}{}{}",
+                                message,
+                                RETRIES_DELIMITER,
+                                INITIAL_RUN,
+                                EXTENSION_DELIMITER,
+                                YAML_EXTENSION
+                            )
+                        } else {
+                            error!(
+                                "Failed to extract message from leftover file name '{}' in {} folder",
+                                original_name, folder
+                            );
+                            continue;
+                        }
+                    } else {
+                        error!(
+                            "Leftover file name '{}' in {} folder does not end with {}",
+                            original_name, folder, extension
+                        );
+                        continue;
+                    };
+
+                    match Self::planned_from_leftover(message.clone(), initial_run_name) {
                         Ok(_) => {
                             debug!(
                                 "Recovered leftover message from {} to planned: {:?}",
@@ -91,10 +124,10 @@ impl SupervisorMessageQueue {
                         }
                     }
                 }
-                Err(e) => {
+                Err(error) => {
                     error!(
                         "Failed to extract leftover message from {} folder: {:?} - {:?}",
-                        folder, file, e
+                        folder, file, error
                     );
                 }
             }
@@ -220,7 +253,7 @@ impl SupervisorMessageQueue {
                     format!("Message grandparent directory not found for '{message:?}'"),
                 )
             })?;
-        let target = root.join(PLANNED_FOLDER).join(name);
+        let target = root.join(PLANNED_FOLDER).join(&name);
         match fs::rename(source, &target) {
             Ok(_) => {
                 debug!(
@@ -229,12 +262,19 @@ impl SupervisorMessageQueue {
                 );
                 Ok(())
             }
-            Err(e) => {
-                error!(
-                    "Failed to rename message to planned from leftovers: '{:?}' -> '{:?}': {:?}",
-                    source, target, e
-                );
-                Err(e)
+            Err(error) => {
+                if target.exists() {
+                    error!(
+                        "Failed to rename message to planned from leftovers: source='{:?}', target='{:?}' (already exists), error={:?}",
+                        source, target, error
+                    );
+                } else {
+                    error!(
+                        "Failed to rename message to planned from leftovers: source='{:?}', target='{:?}', error={:?}",
+                        source, target, error
+                    );
+                }
+                Err(error)
             }
         }
     }

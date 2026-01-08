@@ -1798,7 +1798,7 @@ impl Supervisor {
                                     error!("Failed to write worker ok file: {:?}", e);
                                 }
                             });
-                        },
+                        }
                         None => {
                             info!("No worker to generate an ok file...");
                         }
