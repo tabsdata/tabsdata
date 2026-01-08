@@ -54,6 +54,7 @@ pub async fn seed_function_runner_worker(
     transaction: &TransactionDB,
     function_run: &FunctionRunDB,
     status: &WorkerMessageStatus,
+    worker_type: WorkerType,
 ) -> WorkerDB {
     let worker_db = WorkerDB::builder()
         .collection_id(execution.collection_id)
@@ -68,6 +69,7 @@ pub async fn seed_function_runner_worker(
         .worker_enabled(true)
         .worker_type(WorkerType::FunctionRunner)
         .worker_config(None)
+        .worker_type(worker_type)
         .build()
         .unwrap();
 
@@ -152,6 +154,7 @@ mod tests {
             &transaction,
             &function_run,
             &WorkerMessageStatus::Locked,
+            WorkerType::FunctionRunner,
         )
         .await;
 

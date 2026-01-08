@@ -47,7 +47,7 @@ mod tests {
     use td_objects::test_utils::seed_worker::seed_function_runner_worker;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionRunStatus, RoleId,
-        TransactionKey, UserId, WorkerMessageStatus,
+        TransactionKey, UserId, WorkerMessageStatus, WorkerType,
     };
     use td_tower::ctx_service::RawOneshot;
 
@@ -116,6 +116,7 @@ mod tests {
                 &transaction,
                 &function_run,
                 &WorkerMessageStatus::Locked,
+                WorkerType::FunctionRunner,
             )
             .await,
             seed_function_runner_worker(
@@ -124,6 +125,7 @@ mod tests {
                 &transaction,
                 &function_run,
                 &WorkerMessageStatus::Locked,
+                WorkerType::FunctionRunner,
             )
             .await,
             seed_function_runner_worker(
@@ -132,6 +134,7 @@ mod tests {
                 &transaction,
                 &function_run,
                 &WorkerMessageStatus::Locked,
+                WorkerType::FunctionRunner,
             )
             .await,
             seed_function_runner_worker(
@@ -140,6 +143,7 @@ mod tests {
                 &transaction,
                 &function_run,
                 &WorkerMessageStatus::Locked,
+                WorkerType::FunctionRunner,
             )
             .await,
             seed_function_runner_worker(
@@ -148,6 +152,7 @@ mod tests {
                 &transaction,
                 &function_run,
                 &WorkerMessageStatus::Unlocked,
+                WorkerType::Cron,
             )
             .await,
         ];
@@ -161,14 +166,22 @@ mod tests {
         assert_eq!(response.len, workers.len());
         assert_eq!(response.data[0].id, workers[0].id);
         assert_eq!(response.data[0].message_status, workers[0].message_status);
+        assert_eq!(response.data[0].worker_type, workers[0].worker_type);
+        assert_eq!(response.data[0].worker_type, WorkerType::FunctionRunner);
         assert_eq!(response.data[1].id, workers[1].id);
         assert_eq!(response.data[1].message_status, workers[1].message_status);
+        assert_eq!(response.data[1].worker_type, workers[1].worker_type);
         assert_eq!(response.data[2].id, workers[2].id);
         assert_eq!(response.data[2].message_status, workers[2].message_status);
+        assert_eq!(response.data[2].worker_type, workers[2].worker_type);
         assert_eq!(response.data[3].id, workers[3].id);
         assert_eq!(response.data[3].message_status, workers[3].message_status);
+        assert_eq!(response.data[3].worker_type, workers[3].worker_type);
+        assert_eq!(response.data[4].worker_type, workers[4].worker_type);
         assert_eq!(response.data[4].id, workers[4].id);
         assert_eq!(response.data[4].message_status, workers[4].message_status);
+        assert_eq!(response.data[4].worker_type, workers[4].worker_type);
+        assert_eq!(response.data[4].worker_type, WorkerType::Cron);
         Ok(())
     }
 }

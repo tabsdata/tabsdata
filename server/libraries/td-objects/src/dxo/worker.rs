@@ -60,6 +60,7 @@ mod definitions {
         pub execution: Option<ExecutionName>,
         pub function: FunctionName,
         pub enabled: Enabled,
+        pub worker_type: WorkerType,
     }
 
     impl WorkerDBWithNames {
@@ -117,6 +118,8 @@ mod definitions {
         pub execution: Option<ExecutionName>,
         #[dto(list(filter, filter_like, order_by))]
         pub function: FunctionName,
+        #[dto(list(filter, order_by))]
+        pub worker_type: WorkerType,
     }
 
     pub type CallbackRequest = ResponseMessagePayload<WorkerOutput>;

@@ -68,7 +68,7 @@ mod tests {
     use td_objects::test_utils::seed_worker::seed_function_runner_worker;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionRunStatus, RoleId,
-        TransactionKey, UserId, WorkerMessageStatus,
+        TransactionKey, UserId, WorkerMessageStatus, WorkerType,
     };
     use td_tower::ctx_service::RawOneshot;
     use testdir::testdir;
@@ -153,6 +153,7 @@ mod tests {
                 &transaction,
                 &function_run,
                 &WorkerMessageStatus::Locked,
+                WorkerType::FunctionRunner,
             )
             .await,
             seed_function_runner_worker(
@@ -161,6 +162,7 @@ mod tests {
                 &transaction,
                 &function_run,
                 &WorkerMessageStatus::Locked,
+                WorkerType::FunctionRunner,
             )
             .await,
         ];
