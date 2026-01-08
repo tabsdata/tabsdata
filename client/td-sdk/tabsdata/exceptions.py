@@ -66,6 +66,20 @@ class ErrorCode(Enum):
             "'dict' or None, got '{}' instead."
         ),
     }
+    CXCE7 = {
+        "code": "CXCE-007",
+        "message": (
+            "The 'connection_string_or_uri' parameter in a {} must be a 'str', got '{}'"
+            " instead"
+        ),
+    }
+    CXCE8 = {
+        "code": "CXCE-008",
+        "message": (
+            "The 'connection_string_or_uri' parameter in a {} must be either an"
+            " ODBC connection string or a URI, got '{}' instead."
+        ),
+    }
     DCE1 = {
         "code": "DCE-001",
         "message": (
@@ -2174,6 +2188,10 @@ class ErrorCode(Enum):
         "code": "PVCX-004",
         "message": None,
     }
+    PVCX5 = {
+        "code": "PVCX-005",
+        "message": None,
+    }
     PVSOC1 = {
         "code": "PVSOC-001",
         "message": None,
@@ -2204,6 +2222,14 @@ class ErrorCode(Enum):
     }
     PVSOC8 = {
         "code": "PVSOC-008",
+        "message": None,
+    }
+    PVSOC9 = {
+        "code": "PVSOC-009",
+        "message": None,
+    }
+    PVSOC10 = {
+        "code": "PVSOC-010",
         "message": None,
     }
 

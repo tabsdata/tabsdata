@@ -64,7 +64,7 @@ class MySQLSrc(SourcePlugin):
             transactional: Whether to use transactions for reading to ensure
                 consistency. Defaults to True.
             chunk_size: The chunk size in records for reading large queries in batches.
-                Defaults to 10000.
+                Defaults to 100000.
             loader: The data processing loader to use for executing SQL imports.
             schema_overrides: Type mapping overrides for the columns of the queries. It
                 can be a single mapping, a dictionary of mappings or a list of mappings.

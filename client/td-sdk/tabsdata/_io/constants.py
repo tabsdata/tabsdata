@@ -9,11 +9,14 @@ FILE_SCHEME = "file"
 GCS_SCHEME = "gs"
 MARIADB_SCHEME = "mariadb"
 MYSQL_SCHEME = "mysql"
+MSSQL_SCHEME = "mssql"
 ORACLE_SCHEME = "oracle"
 POSTGRES_SCHEMES = ("postgres", "postgresql")
 S3_SCHEME = "s3"
 
 URI_INDICATOR = "://"
+
+ODBC_CONNECT_PARAM = "odbc_connect"
 
 
 # TODO: Consider making this a list calculated at runtime from existing regions.

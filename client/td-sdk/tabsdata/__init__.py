@@ -134,6 +134,8 @@ from tabsdata_mongodb._connector import MongoDBDestination
 
 # noinspection PyProtectedMember
 from tabsdata_mssql._connector import MSSQLDestination, MSSQLSource
+from tabsdata_mssql.connection.mssql_connection import MSSQLConn
+from tabsdata_mssql.input.mssql_input import MSSQLSrc
 from tabsdata_salesforce._connector import (
     SalesforceReportSource,
     SalesforceSource,
@@ -270,6 +272,10 @@ __all__ = [
     # From tabsdata_mssql.connector
     "MSSQLDestination",
     "MSSQLSource",
+    # From tabsdata_mssql.input.mssql_input
+    "MSSQLSrc",
+    # From tabsdata_mssql.connection.mssql_connection
+    "MSSQLConn",
     # From tabsdata_salesforce.connector
     "SalesforceReportSource",
     "SalesforceSource",

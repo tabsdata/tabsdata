@@ -22,6 +22,7 @@ from tabsdata.typing._specs import (
     TableSpec,
     TransformerTriggerBySpec,
 )
+from tabsdata_mssql.constants import MSSQLLoaderSpec
 
 __all__ = [
     # from tabsdata._io.inputs.sql.shared_types
@@ -31,6 +32,8 @@ __all__ = [
     "PostgresLoaderSpec",
     "MariaDBLoaderSpec",
     "OracleLoaderSpec",
+    # from tabsdata_mssql.constants
+    "MSSQLLoaderSpec",
     # from tabsdata._io.outputs.shared_enums
     "IfTableExistStrategySpec",
     "SchemaStrategySpec",

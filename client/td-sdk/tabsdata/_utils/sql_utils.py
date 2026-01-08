@@ -138,6 +138,7 @@ def escape_special_characters(string: str) -> str:
 
 def add_driver_to_uri(uri: str, log=False) -> str:
 
+    import sqlalchemy.dialects.mssql.pyodbc as mssqlconnector
     import sqlalchemy.dialects.mysql.mysqlconnector as mysqlconnector
     import sqlalchemy.dialects.oracle.oracledb as oracleconnector
 
@@ -147,6 +148,9 @@ def add_driver_to_uri(uri: str, log=False) -> str:
         )
         ORACLE = SQLDescriptor(
             name=oracleconnector.dialect.name, driver=oracleconnector.dialect.driver
+        )
+        MSSQL = SQLDescriptor(
+            name=mssqlconnector.dialect.name, driver=mssqlconnector.dialect.driver
         )
 
     logger.debug("Adding driver to uri") if log else None

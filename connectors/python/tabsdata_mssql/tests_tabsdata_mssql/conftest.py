@@ -114,6 +114,7 @@ VALID_MSSQL_PREFIXES = ["MSSQL0"]
 class MSSQLConfig:
     connection_string: str
     credentials: UserPasswordCredentials | None
+    uri: str = ""
     version: int = 2019
 
 
@@ -129,10 +130,12 @@ def testing_mssql_2019(tmp_path_factory, worker_id, request) -> MSSQLConfig:
         )
     if os.environ.get(f"{prefix}_MSSQL_2019_ENVS") in TRUE_VALUES:
         connection_string = os.environ.get(f"{prefix}_MSSQL_2019_CONNECTION_STRING")
-        if not connection_string:
+        uri = os.environ.get(f"{prefix}_MSSQL_2019_URI")
+        if not (connection_string or uri):
             raise Exception(
-                f"The environment variable '{prefix}_MSSQL_2019_CONNECTION_STRING' is"
-                " not set. Unable to run tests using the 'mssql_connection' fixture."
+                f"Neither environment variables '{prefix}_MSSQL_2019_CONNECTION_STRING'"
+                f"nor '{prefix}_MSSQL_2019_URI' are set. Unable to run tests using the"
+                "'mssql_connection' fixture."
             )
         user = os.environ.get(f"{prefix}_MSSQL_2019_USER")
         if not user:
@@ -150,6 +153,7 @@ def testing_mssql_2019(tmp_path_factory, worker_id, request) -> MSSQLConfig:
         escaped_password = urllib.parse.quote(password)
         config = MSSQLConfig(
             connection_string=connection_string,
+            uri=uri,
             credentials=UserPasswordCredentials(
                 user=escaped_user, password=escaped_password
             ),
@@ -174,7 +178,8 @@ def testing_mssql_2019(tmp_path_factory, worker_id, request) -> MSSQLConfig:
                 # only one worker will be able to create the database
                 result = create_docker_mssql_database(name, port, 2019)
         return MSSQLConfig(
-            connection_string=result,
+            connection_string=result[0],
+            uri=result[1],
             credentials=UserPasswordCredentials(MSSQL_USER, DB_PASSWORD),
         )
 
@@ -191,10 +196,12 @@ def testing_mssql_2022(tmp_path_factory, worker_id, request) -> MSSQLConfig:
         )
     if os.environ.get(f"{prefix}_MSSQL_2022_ENVS") in TRUE_VALUES:
         connection_string = os.environ.get(f"{prefix}_MSSQL_2022_CONNECTION_STRING")
-        if not connection_string:
+        uri = os.environ.get(f"{prefix}_MSSQL_2022_URI")
+        if not (connection_string or uri):
             raise Exception(
-                f"The environment variable '{prefix}_MSSQL_2022_CONNECTION_STRING' is"
-                " not set. Unable to run tests using the 'mssql_connection' fixture."
+                f"Neither environment variables '{prefix}_MSSQL_2022_CONNECTION_STRING'"
+                f"nor '{prefix}_MSSQL_2022_URI' are set. Unable to run tests using the"
+                "'mssql_connection' fixture."
             )
         user = os.environ.get(f"{prefix}_MSSQL_2022_USER")
         if not user:
@@ -212,6 +219,7 @@ def testing_mssql_2022(tmp_path_factory, worker_id, request) -> MSSQLConfig:
         escaped_password = urllib.parse.quote(password)
         config = MSSQLConfig(
             connection_string=connection_string,
+            uri=uri,
             credentials=UserPasswordCredentials(
                 user=escaped_user, password=escaped_password
             ),
@@ -237,7 +245,8 @@ def testing_mssql_2022(tmp_path_factory, worker_id, request) -> MSSQLConfig:
                 # only one worker will be able to create the database
                 result = create_docker_mssql_database(name, port, 2022)
         return MSSQLConfig(
-            connection_string=result,
+            connection_string=result[0],
+            uri=result[1],
             credentials=UserPasswordCredentials(MSSQL_USER, DB_PASSWORD),
             version=2022,
         )
@@ -251,7 +260,7 @@ def get_container_port_binding(container, port: str) -> int:
         raise Exception(f"Port {port} is not bound in the container.")
 
 
-def create_docker_mssql_database(name: str, port: int, version: int):
+def create_docker_mssql_database(name: str, port: int, version: int) -> tuple[str, str]:
     import docker  # Lazy import
 
     logger.info("Starting Microsoft SQL Server container")
@@ -264,8 +273,13 @@ def create_docker_mssql_database(name: str, port: int, version: int):
         container = containers[0]
         port = get_container_port_binding(container, MSSQL_FORWARDED_PORT)
         return (
-            f"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER={DB_HOST},{port};"
-            f"Database={DB_NAME};TrustServerCertificate=yes;"
+            (
+                f"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER={DB_HOST},{port};"
+                f"Database={DB_NAME};TrustServerCertificate=yes;"
+            ),
+            (
+                f"mssql://{urllib.parse.quote(DB_HOST)}:{port}/{DB_NAME}?driver={urllib.parse.quote_plus('ODBC Driver 18 for SQL Server')}&TrustServerCertificate=yes"
+            ),
         )
     else:
         import pyodbc
@@ -458,8 +472,13 @@ def create_docker_mssql_database(name: str, port: int, version: int):
         mycursor.close()
         conn.close()
         return (
-            f"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER={DB_HOST},{port};"
-            f"Database={DB_NAME};TrustServerCertificate=yes;"
+            (
+                f"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER={DB_HOST},{port};"
+                f"Database={DB_NAME};TrustServerCertificate=yes;"
+            ),
+            (
+                f"mssql://{urllib.parse.quote(DB_HOST)}:{port}/{DB_NAME}?driver={urllib.parse.quote_plus('ODBC Driver 18 for SQL Server')}&TrustServerCertificate=yes"
+            ),
         )
 
 

@@ -5,8 +5,17 @@
 import importlib.metadata
 
 from tabsdata_mssql._connector import MSSQLDestination, MSSQLSource
+from tabsdata_mssql.connection.mssql_connection import MSSQLConn
+from tabsdata_mssql.constants import MSSQLLoaderSpec
+from tabsdata_mssql.input.mssql_input import MSSQLSrc
 
-__all__ = ["MSSQLDestination", "MSSQLSource"]
+__all__ = [
+    "MSSQLDestination",
+    "MSSQLSource",
+    "MSSQLSrc",
+    "MSSQLLoaderSpec",
+    "MSSQLConn",
+]
 
 # noinspection PyBroadException
 try:
