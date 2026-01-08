@@ -216,10 +216,11 @@ def clean_rs(project_folder):
 def clean_ts(project_folder):
     inclusion_patterns = [
         "node_modules",
-        "target",
         "src/tests/coverage",
         "src/e2e/test-results",
         "src/e2e/playwright-report",
+        "target",
+        "test-results",
     ]
 
     exclusion_patterns = [
