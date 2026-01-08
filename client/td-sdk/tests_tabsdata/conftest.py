@@ -834,7 +834,6 @@ def mysql_config(tmp_path_factory, worker_id, request) -> MySQLConfig:
 
 def create_docker_postgres_database(
     name: str = DEFAULT_PYTEST_POSTGRES_DOCKER_CONTAINER_NAME,
-    port: int = None,
 ):
     # noinspection PyPackageRequirements
     import docker  # Lazy import
@@ -849,21 +848,19 @@ def create_docker_postgres_database(
         container = containers[0]
         return get_container_port_binding(container, POSTGRES_FORWARDED_PORT)
     else:
-        port_lock = FileLock(os.path.join(tabsdata_temp_folder(), "free_port.lock"))
-        with port_lock:
-            if port is None:
-                port = get_free_port()
-            client.containers.run(
-                "postgres:17.2",
-                name=name,
-                environment=[
-                    f"POSTGRES_DB={DB_NAME}",
-                    f"POSTGRES_USER={DB_USER}",
-                    f"POSTGRES_PASSWORD={DB_PASSWORD}",
-                ],
-                ports={POSTGRES_FORWARDED_PORT: port},
-                detach=True,
-            )
+        container = client.containers.run(
+            "postgres:17.2",
+            name=name,
+            environment=[
+                f"POSTGRES_DB={DB_NAME}",
+                f"POSTGRES_USER={DB_USER}",
+                f"POSTGRES_PASSWORD={DB_PASSWORD}",
+            ],
+            ports={POSTGRES_FORWARDED_PORT: None},
+            detach=True,
+        )
+        container.reload()
+        port = get_container_port_binding(container, POSTGRES_FORWARDED_PORT)
         # Wait for the database to be ready
         retry = 0
         while True:
@@ -1194,7 +1191,6 @@ def get_container_port_binding(container, port: str) -> int:
 
 def create_docker_mysql_database(
     name: str = DEFAULT_PYTEST_MYSQL_DOCKER_CONTAINER_NAME,
-    port: int = None,
 ):
     # noinspection PyPackageRequirements
     import docker  # Lazy import
@@ -1209,22 +1205,20 @@ def create_docker_mysql_database(
         container = containers[0]
         return get_container_port_binding(container, MYSQL_FORWARDED_PORT)
     else:
-        port_lock = FileLock(os.path.join(tabsdata_temp_folder(), "free_port.lock"))
-        with port_lock:
-            if port is None:
-                port = get_free_port()
-            client.containers.run(
-                "mysql:9.1.0",
-                name=name,
-                environment=[
-                    "MYSQL_ROOT_PASSWORD=password",
-                    f"MYSQL_DATABASE={DB_NAME}",
-                    f"MYSQL_USER={DB_USER}",
-                    f"MYSQL_PASSWORD={DB_PASSWORD}",
-                ],
-                ports={MYSQL_FORWARDED_PORT: port},
-                detach=True,
-            )
+        container = client.containers.run(
+            "mysql:9.1.0",
+            name=name,
+            environment=[
+                "MYSQL_ROOT_PASSWORD=password",
+                f"MYSQL_DATABASE={DB_NAME}",
+                f"MYSQL_USER={DB_USER}",
+                f"MYSQL_PASSWORD={DB_PASSWORD}",
+            ],
+            ports={MYSQL_FORWARDED_PORT: None},
+            detach=True,
+        )
+        container.reload()
+        port = get_container_port_binding(container, MYSQL_FORWARDED_PORT)
         # Wait for the database to be ready
         retry = 0
         while True:
@@ -1479,7 +1473,6 @@ def create_docker_hashicorp_vault(s3_config: dict):
 
 def create_docker_mariadb_database(
     name: str = DEFAULT_PYTEST_MARIADB_DOCKER_CONTAINER_NAME,
-    port: int = None,
 ):
     # noinspection PyPackageRequirements
     import docker  # Lazy import
@@ -1494,22 +1487,20 @@ def create_docker_mariadb_database(
         container = containers[0]
         return get_container_port_binding(container, MARIADB_FORWARDED_PORT)
     else:
-        port_lock = FileLock(os.path.join(tabsdata_temp_folder(), "free_port.lock"))
-        with port_lock:
-            if port is None:
-                port = get_free_port()
-            client.containers.run(
-                "mariadb:11.4.4",
-                name=name,
-                environment=[
-                    "MARIADB_ROOT_PASSWORD=password",
-                    f"MARIADB_DATABASE={DB_NAME}",
-                    f"MARIADB_USER={DB_USER}",
-                    f"MARIADB_PASSWORD={DB_PASSWORD}",
-                ],
-                ports={MARIADB_FORWARDED_PORT: port},
-                detach=True,
-            )
+        container = client.containers.run(
+            "mariadb:11.4.4",
+            name=name,
+            environment=[
+                "MARIADB_ROOT_PASSWORD=password",
+                f"MARIADB_DATABASE={DB_NAME}",
+                f"MARIADB_USER={DB_USER}",
+                f"MARIADB_PASSWORD={DB_PASSWORD}",
+            ],
+            ports={MARIADB_FORWARDED_PORT: None},
+            detach=True,
+        )
+        container.reload()
+        port = get_container_port_binding(container, MARIADB_FORWARDED_PORT)
         # Wait for the database to be ready
         retry = 0
         while True:
@@ -1687,7 +1678,6 @@ def create_docker_mariadb_database(
 
 def create_docker_oracle_database(
     name: str = DEFAULT_PYTEST_ORACLE_DOCKER_CONTAINER_NAME,
-    port: int = None,
 ):
     # noinspection PyPackageRequirements
     import docker  # Lazy import
@@ -1702,19 +1692,17 @@ def create_docker_oracle_database(
         container = containers[0]
         return get_container_port_binding(container, ORACLE_FORWARDED_PORT)
     else:
-        port_lock = FileLock(os.path.join(tabsdata_temp_folder(), "free_port.lock"))
-        with port_lock:
-            if port is None:
-                port = get_free_port()
-            client.containers.run(
-                "container-registry.oracle.com/database/free:23.6.0.0-lite",
-                name=name,
-                environment=[
-                    f"ORACLE_PWD={DB_PASSWORD}",
-                ],
-                ports={ORACLE_FORWARDED_PORT: port},
-                detach=True,
-            )
+        container = client.containers.run(
+            "container-registry.oracle.com/database/free:23.6.0.0-lite",
+            name=name,
+            environment=[
+                f"ORACLE_PWD={DB_PASSWORD}",
+            ],
+            ports={ORACLE_FORWARDED_PORT: None},
+            detach=True,
+        )
+        container.reload()
+        port = get_container_port_binding(container, ORACLE_FORWARDED_PORT)
         # Wait for the database to be ready
         retry = 0
         while True:
