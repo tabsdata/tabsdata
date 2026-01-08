@@ -18,7 +18,7 @@ TABSDATA_EXTENSION = "t"
 
 
 class FileFormat(ABC):
-    """The class of the different possible formats for files."""
+    """Class for different possible formats for files."""
 
     IDENTIFIER = None
 
@@ -68,7 +68,7 @@ class FileFormatIdentifier(Enum):
 
 
 class AvroFormat(FileFormat):
-    """The class of the Parquet file format."""
+    """Avro file format."""
 
     IDENTIFIER = FileFormatIdentifier.AVRO.value
 
@@ -117,7 +117,7 @@ class AvroFormat(FileFormat):
 
 
 class CSVFormat(FileFormat):
-    """The class of the CSV file format.
+    """CSV file format.
 
     Attributes:
         separator (str | int): The separator of the CSV file.
@@ -465,7 +465,7 @@ class CSVFormat(FileFormat):
 
 
 class NDJSONFormat(FileFormat):
-    """The class of the log file format."""
+    """JSON file format."""
 
     IDENTIFIER = FileFormatIdentifier.NDJSON.value
 
@@ -480,7 +480,7 @@ class NDJSONFormat(FileFormat):
 
 
 class LogFormat(FileFormat):
-    """The class of the log file format."""
+    """Log file format."""
 
     IDENTIFIER = FileFormatIdentifier.LOG.value
 
@@ -495,7 +495,7 @@ class LogFormat(FileFormat):
 
 
 class ParquetFormat(FileFormat):
-    """The class of the Parquet file format."""
+    """Parquet file format."""
 
     IDENTIFIER = FileFormatIdentifier.PARQUET.value
 

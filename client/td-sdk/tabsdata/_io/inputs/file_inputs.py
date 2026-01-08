@@ -85,17 +85,7 @@ logger = logging.getLogger(__name__)
 
 class AzureSource(SourcePlugin):
     """
-    Class for managing the configuration of Azure-file-based data inputs.
-
-    Attributes:
-        format (FileFormat): The format of the file. If not provided, it will be
-            inferred from the file extension of the data.
-        uri (str | list[str]): The URI of the files with format: 'az://path/to/files'.
-            It can be a single URI or a list of URIs.
-        credentials (AzureCredentials): The credentials required to access Azure.
-        initial_last_modified (str | datetime): If provided, only the files
-            modified after this date and time will be considered.
-
+    Azure-file-based data inputs.
     """
 
     class SupportedFormats(Enum):
@@ -118,24 +108,24 @@ class AzureSource(SourcePlugin):
     ):
         """
         Initializes the AzureSource with the given URI and the credentials required to
-            access Azure, and optionally a format and date and
-            time after which the files were modified.
+        access Azure, and optionally a format and date and time after which the files
+        were modified.
 
         Args:
-            uri (str | list[str]): The URI of the files with format:
+            uri: The URI of the files with format:
                 'az://path/to/files'. It can be a single URI or a list of URIs.
-            credentials (AzureCredentials): The credentials required to access
-                Azure. Must be an AzureCredentials object.
-            format (str | FileFormat, optional): The format of the file. If not
+            credentials: The credentials required to access
+                Azure. Must be an AzureAccountKeyCredentials object.
+            format: The format of the file. If not
                 provided, it will be inferred from the file extension of the data.
                 Can be either a string with the format or a FileFormat object .
-                Currently supported formats are 'csv',
-                'parquet', 'avro', 'ndjson', 'jsonl' and 'log'.
-            initial_last_modified (str | datetime, optional): If provided,
-                only the files modified after this date and time will be considered.
-                The date and time can be provided as a string in
-                [ISO 8601 format](https://en.wikipedia.org/wiki/ISO_8601) or as
-                a datetime object. If no timezone is provided, UTC will be assumed.
+                Currently supported formats are 'csv', 'parquet', 'avro', 'ndjson',
+                'jsonl'
+                and 'log'.
+            initial_last_modified: If provided, only the files modified after this date
+                and time will be considered. The date and time can be provided as a
+                string in [ISO 8601 format](https://en.wikipedia.org/wiki/ISO_8601) or
+                as a datetime object. If no timezone is provided, UTC will be assumed.
 
         Raises:
             InputConfigurationError
@@ -159,7 +149,7 @@ class AzureSource(SourcePlugin):
         Sets the URI of the files with format: 'az://path/to/files'.
 
         Args:
-            uri (str | list[str]): The URI of the files with format:
+            uri: The URI of the files with format:
                 'az://path/to/files'. It can be a single URI or a list of URIs.
         """
         self._uri = uri
@@ -200,7 +190,7 @@ class AzureSource(SourcePlugin):
         Sets the format of the file.
 
         Args:
-            format (str | FileFormat): The format of the file. If not
+            format: The format of the file. If not
                 provided, it will be inferred from the file extension of the data.
                 Can be either a string with the format or a FileFormat object.
                 Currently supported formats are 'csv',
@@ -241,7 +231,7 @@ class AzureSource(SourcePlugin):
         Sets the date and time after which the files were modified.
 
         Args:
-            initial_last_modified (str | datetime): The date and time after
+            initial_last_modified: The date and time after
                 which the files were modified. The date and time can be provided as a
                 string in [ISO 8601 format](https://en.wikipedia.org/wiki/ISO_8601)
                 or as a datetime object.
@@ -290,7 +280,7 @@ class AzureSource(SourcePlugin):
         Sets the credentials required to access Azure.
 
         Args:
-            credentials (AzureCredentials): The credentials required to access
+            credentials: The credentials required to access
                 Azure. Must be an AzureCredentials object.
         """
         credentials = build_credentials(credentials)
@@ -318,17 +308,7 @@ class AzureSource(SourcePlugin):
 
 class GCSSource(SourcePlugin):
     """
-    Class for managing the configuration of GCS-file-based data inputs.
-
-    Attributes:
-        format (FileFormat): The format of the file. If not provided, it will be
-            inferred from the file extension of the data.
-        uri (str | list[str]): The URI of the files with format: 'gs://path/to/files'.
-            It can be a single URI or a list of URIs.
-        credentials (GCPCredentials): The credentials required to access GCS.
-        initial_last_modified (str | datetime): If provided, only the files
-            modified after this date and time will be considered.
-
+    GCS-file-based data inputs.
     """
 
     class SupportedFormats(Enum):
@@ -351,20 +331,20 @@ class GCSSource(SourcePlugin):
     ):
         """
         Initializes the GCSSource with the given URI and the credentials required to
-            access GCS, and optionally a format and date and
-            time after which the files were modified.
+        access GCS, and optionally a format and date and time after which the files were
+        modified.
 
         Args:
-            uri (str | list[str]): The URI of the files with format:
+            uri: The URI of the files with format:
                 'az://path/to/files'. It can be a single URI or a list of URIs.
-            credentials (GCPCredentials): The credentials required to access
+            credentials: The credentials required to access
                 GCS. Must be a GCPCredentials object.
-            format (str | FileFormat, optional): The format of the file. If not
+            format: The format of the file. If not
                 provided, it will be inferred from the file extension of the data.
                 Can be either a string with the format or a FileFormat object.
                 Currently supported formats are 'csv',
                 'parquet', 'avro', 'ndjson', 'jsonl' and 'log'.
-            initial_last_modified (str | datetime, optional): If provided,
+            initial_last_modified: If provided,
                 only the files modified after this date and time will be considered.
                 The date and time can be provided as a string in
                 [ISO 8601 format](https://en.wikipedia.org/wiki/ISO_8601) or as
@@ -392,7 +372,7 @@ class GCSSource(SourcePlugin):
         Sets the URI of the files with format: 'gs://path/to/files'.
 
         Args:
-            uri (str | list[str]): The URI of the files with format:
+            uri: The URI of the files with format:
                 'gs://path/to/files'. It can be a single URI or a list of URIs.
         """
         self._uri = uri
@@ -433,7 +413,7 @@ class GCSSource(SourcePlugin):
         Sets the format of the file.
 
         Args:
-            format (str | FileFormat): The format of the file. If not
+            format: The format of the file. If not
                 provided, it will be inferred from the file extension of the data.
                 Can be either a string with the format or a FileFormat object.
                 Currently supported formats are 'csv',
@@ -453,7 +433,7 @@ class GCSSource(SourcePlugin):
         Verifies that the provided format is valid for the GCSSource
 
         Args:
-            format (FileFormat): The format to verify.
+            format: The format to verify.
         """
         valid_input_formats = tuple(element.value for element in self.SupportedFormats)
         if not (isinstance(format, valid_input_formats)):
@@ -474,7 +454,7 @@ class GCSSource(SourcePlugin):
         Sets the date and time after which the files were modified.
 
         Args:
-            initial_last_modified (str | datetime): The date and time after
+            initial_last_modified: The date and time after
                 which the files were modified. The date and time can be provided as a
                 string in [ISO 8601 format](https://en.wikipedia.org/wiki/ISO_8601)
                 or as a datetime object.
@@ -523,7 +503,7 @@ class GCSSource(SourcePlugin):
         Sets the credentials required to access GCS.
 
         Args:
-            credentials (GCPCredentials): The credentials required to access
+            credentials: The credentials required to access
                 GCS. Must be a GCPCredentials object.
         """
         if not (isinstance(credentials, GCPCredentials)):
@@ -550,16 +530,7 @@ class GCSSource(SourcePlugin):
 
 class LocalFileSource(SourcePlugin):
     """
-    Class for managing the configuration of local-file-based data inputs.
-
-    Attributes:
-        format (FileFormat): The format of the file. If not provided, it will be
-            inferred from the file extension of the data.
-        path (str | list[str]): The path where the files can be found. It can be a
-            single path or a list of paths.
-        initial_last_modified (str | None): If not None, only the files modified after
-            this date and time will be considered.
-
+    Local-file-based data inputs.
     """
 
     class SupportedFormats(Enum):
@@ -581,17 +552,17 @@ class LocalFileSource(SourcePlugin):
     ):
         """
         Initializes the LocalFileSource with the given path, and optionally a format and
-            a date and time after which the files were modified.
+        a date and time after which the files were modified.
 
         Args:
-            path (str | list[str]): The path where the files can be found. It can be a
+            path: The path where the files can be found. It can be a
                 single path or a list of paths.
-            format (str | FileFormat, optional): The format of the file. If not
+            format: The format of the file. If not
                 provided, it will be inferred from the file extension of the data.
                 Can be either a string with the format or a FileFormat object.
                 Currently supported formats are 'csv',
                 'parquet', 'avro', 'ndjson', 'jsonl' and 'log'.
-            initial_last_modified (str | datetime, optional): If provided,
+            initial_last_modified: If provided,
                 only the files modified after this date and time will be considered.
                 The date and time can be provided as a string in
                 [ISO 8601 format](https://en.wikipedia.org/wiki/ISO_8601) or as
@@ -625,7 +596,7 @@ class LocalFileSource(SourcePlugin):
         Sets the path or paths to the files to load.
 
         Args:
-            path (str | list[str]): The path or paths to the files to load.
+            path: The path or paths to the files to load.
         """
         self._path = path
         if isinstance(path, str):
@@ -668,7 +639,7 @@ class LocalFileSource(SourcePlugin):
         Sets the format of the file.
 
         Args:
-            format (str): The format of the file. If not
+            format: The format of the file. If not
                 provided, it will be inferred from the file extension.
                 Can be either a string with the format or a FileFormat object.
                 Currently supported formats are 'csv',
@@ -689,7 +660,7 @@ class LocalFileSource(SourcePlugin):
         Verifies that the provided format is valid for the LocalFileSource
 
         Args:
-            format (FileFormat): The format to verify
+            format: The format to verify
         """
         valid_input_formats = tuple(element.value for element in self.SupportedFormats)
         if not (isinstance(format, valid_input_formats)):
@@ -710,7 +681,7 @@ class LocalFileSource(SourcePlugin):
         Sets the date and time after which the files were modified.
 
         Args:
-            initial_last_modified (str | datetime): The date and time after
+            initial_last_modified: The date and time after
                 which the files were modified. The date and time can be provided as a
                 string in [ISO 8601 format](https://en.wikipedia.org/wiki/ISO_8601)
                 or as a datetime object.
@@ -765,17 +736,7 @@ class LocalFileSource(SourcePlugin):
 
 class S3Source(SourcePlugin):
     """
-    Class for managing the configuration of S3-file-based data inputs.
-
-    Attributes:
-        format (FileFormat): The format of the file. If not provided, it will be
-            inferred from the file extension of the data.
-        uri (str | list[str]): The URI of the files with format: 's3://path/to/files'.
-            It can be a single URI or a list of URIs.
-        credentials (S3Credentials): The credentials required to access the S3 bucket.
-        initial_last_modified (str | datetime): If provided, only the files
-            modified after this date and time will be considered.
-
+    S3-file-based data inputs.
     """
 
     class SupportedFormats(Enum):
@@ -799,25 +760,25 @@ class S3Source(SourcePlugin):
     ):
         """
         Initializes the S3Source with the given URI and the credentials required to
-            access the S3 bucket, and optionally a format and date and
-            time after which the files were modified.
+        access the S3 bucket, and optionally a format and date and
+        time after which the files were modified.
 
         Args:
-            uri (str | list[str]): The URI of the files with format:
+            uri: The URI of the files with format:
                 's3://path/to/files'. It can be a single URI or a list of URIs.
-            credentials (S3Credentials): The credentials required to access the
+            credentials: The credentials required to access the
                 S3 bucket. Must be a S3Credentials object.
-            format (str | FileFormat, optional): The format of the file. If not
+            format: The format of the file. If not
                 provided, it will be inferred from the file extension of the data.
                 Can be either a string with the format or a FileFormat object.
                 Currently supported formats are 'csv',
                 'parquet', 'avro', 'ndjson', 'jsonl' and 'log'.
-            initial_last_modified (str | datetime, optional): If provided,
+            initial_last_modified: If provided,
                 only the files modified after this date and time will be considered.
                 The date and time can be provided as a string in
                 [ISO 8601 format](https://en.wikipedia.org/wiki/ISO_8601) or as
                 a datetime object. If no timezone is provided, UTC will be assumed.
-            region (str, optional): The region where the S3 bucket is located. If not
+            region: The region where the S3 bucket is located. If not
                 provided, the default AWS region will be used.
 
         Raises:
@@ -843,7 +804,7 @@ class S3Source(SourcePlugin):
         Sets the URI of the files with format: 's3://path/to/files'.
 
         Args:
-            uri (str | list[str]): The URI of the files with format:
+            uri: The URI of the files with format:
                 's3://path/to/files'. It can be a single URI or a list of URIs.
         """
         self._uri = uri
@@ -883,7 +844,7 @@ class S3Source(SourcePlugin):
         Sets the region where the S3 bucket is located.
 
         Args:
-            region (str): The region where the S3 bucket is located.
+            region: The region where the S3 bucket is located.
         """
         if region:
             if not isinstance(region, str):
@@ -918,7 +879,7 @@ class S3Source(SourcePlugin):
         Sets the format of the file.
 
         Args:
-            format (str | FileFormat): The format of the file. If not
+            format: The format of the file. If not
                 provided, it will be inferred from the file extension of the data.
                 Can be either a string with the format or a FileFormat object.
                 Currently supported formats are 'csv',
@@ -938,7 +899,7 @@ class S3Source(SourcePlugin):
         Verifies that the provided format is valid for the S3Source
 
         Args:
-            format (FileFormat): The format to verify.
+            format: The format to verify.
         """
         valid_input_formats = tuple(element.value for element in self.SupportedFormats)
         if not (isinstance(format, valid_input_formats)):
@@ -959,7 +920,7 @@ class S3Source(SourcePlugin):
         Sets the date and time after which the files were modified.
 
         Args:
-            initial_last_modified (str | datetime): The date and time after
+            initial_last_modified: The date and time after
                 which the files were modified. The date and time can be provided as a
                 string in [ISO 8601 format](https://en.wikipedia.org/wiki/ISO_8601)
                 or as a datetime object.
@@ -1008,7 +969,7 @@ class S3Source(SourcePlugin):
         Sets the credentials required to access the S3 bucket.
 
         Args:
-            credentials (S3Credentials): The credentials required to access the
+            credentials: The credentials required to access the
                 S3 bucket. Must be a S3Credentials object.
         """
         credentials = build_credentials(credentials)

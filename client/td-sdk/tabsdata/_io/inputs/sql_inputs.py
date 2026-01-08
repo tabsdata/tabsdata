@@ -36,7 +36,7 @@ def _validate_initial_values_type(initial_values: dict):
     Validates the initial values provided for the SQL queries.
 
     Args:
-        initial_values (dict): The initial values for the parameters in the SQL queries.
+        initial_values: The initial values for the parameters in the SQL queries.
 
     Raises:
         InputConfigurationError: If the initial values are not valid.
@@ -48,17 +48,7 @@ def _validate_initial_values_type(initial_values: dict):
 
 class MariaDBSource(SourcePlugin):
     """
-    Class for managing the configuration of MariaDB-based data inputs.
-
-    Attributes:
-        credentials (UserPasswordCredentials): The credentials required to access the
-            MariaDB database.
-        initial_values (dict): The initial values for the parameters in the SQL queries.
-        query (str | List[str]): The SQL query(s) to execute. If multiple queries are
-            provided, they must be provided as a dictionary, with the parameter name in
-            the registered function as the key and the SQL query as the value.
-        uri (str): The URI of the database where the data is located.
-
+    MariaDB-based data inputs.
     """
 
     def __init__(
@@ -70,18 +60,18 @@ class MariaDBSource(SourcePlugin):
     ):
         """
         Initializes the MariaDBSource with the given URI and query, and optionally
-            connection credentials and initial values for the parameters in the SQL
-            queries.
+        connection credentials and initial values for the parameters in the SQL
+        queries.
 
         Args:
-            uri (str): The URI of the database where the data is located
-            query (str | List[str]): The SQL query(s) to execute. If multiple queries
+            uri: The URI of the database where the data is located
+            query: The SQL query(s) to execute. If multiple queries
                 are provided, they must be provided as a list, and they will be
                 mapped to the function inputs in the same order as they are defined.
-            credentials (UserPasswordCredentials, optional): The credentials
+            credentials: The credentials
                 required to access the MariaDB database. Must be a
                 UserPasswordCredentials object.
-            initial_values (dict, optional): The initial values for the parameters in
+            initial_values: The initial values for the parameters in
                 the SQL queries.
 
         Raises:
@@ -105,7 +95,7 @@ class MariaDBSource(SourcePlugin):
         Sets the URI of the database where the data is located.
 
         Args:
-            uri (str): The URI of the database where the data is located.
+            uri: The URI of the database where the data is located.
         """
         self._uri = uri
         self._parsed_uri = urlparse(uri)
@@ -127,7 +117,7 @@ class MariaDBSource(SourcePlugin):
         Sets the initial values for the parameters in the SQL queries.
 
         Args:
-            initial_values (dict): The initial values for the parameters in the SQL
+            initial_values: The initial values for the parameters in the SQL
                 queries.
         """
         if not initial_values:
@@ -151,7 +141,7 @@ class MariaDBSource(SourcePlugin):
         Sets the SQL query(s) to execute
 
         Args:
-            query (str | List[str]): The SQL query(s) to execute. If multiple queries
+            query: The SQL query(s) to execute. If multiple queries
                 are provided, they must be provided as a list, and they will be
                 mapped to the function inputs in the same order as they are defined.
         """
@@ -178,9 +168,8 @@ class MariaDBSource(SourcePlugin):
         Sets the credentials to access MariaDB.
 
         Args:
-            credentials (UserPasswordCredentials | None): The credentials
-                required to access MariaDB. Can be a UserPasswordCredentials
-                object or None
+            credentials: The credentials required to access MariaDB.
+                Can be a UserPasswordCredentials object or None.
         """
         if not credentials:
             self._credentials = None
@@ -216,17 +205,7 @@ class MariaDBSource(SourcePlugin):
 
 class MySQLSource(SourcePlugin):
     """
-    Class for managing the configuration of MySQL-based data inputs.
-
-    Attributes:
-        credentials (UserPasswordCredentials): The credentials required to access the
-            MySQL database.
-        initial_values (dict): The initial values for the parameters in the SQL queries.
-        query (str | List[str]): The SQL query(s) to execute. If multiple queries are
-            provided, they must be provided as a dictionary, with the parameter name in
-            the registered function as the key and the SQL query as the value.
-        uri (str): The URI of the database where the data is located.
-
+    MySQL-based data inputs.
     """
 
     def __init__(
@@ -238,18 +217,17 @@ class MySQLSource(SourcePlugin):
     ):
         """
         Initializes the MySQLSource with the given URI and query, and optionally
-            connection credentials and initial values for the parameters in the SQL
-            queries.
+        connection credentials and initial values for the parameters in the SQL
+        queries.
 
         Args:
-            uri (str): The URI of the database where the data is located
-            query (str | List[str]): The SQL query(s) to execute. If multiple queries
+            uri: The URI of the database where the data is located
+            query: The SQL query(s) to execute. If multiple queries
                 are provided, they must be provided as a list, and they will be
                 mapped to the function inputs in the same order as they are defined.
-            credentials (UserPasswordCredentials, optional): The credentials
-                required to access the MySQL database. Must be a
-                UserPasswordCredentials object.
-            initial_values (dict, optional): The initial values for the parameters in
+            credentials: The credentials required to access the MySQL database.
+                Must be a UserPasswordCredentials object.
+            initial_values: The initial values for the parameters in
                 the SQL queries.
 
         Raises:
@@ -273,7 +251,7 @@ class MySQLSource(SourcePlugin):
         Sets the URI of the database where the data is located.
 
         Args:
-            uri (str): The URI of the database where the data is located.
+            uri: The URI of the database where the data is located.
         """
         self._uri = uri
         self._parsed_uri = urlparse(uri)
@@ -295,7 +273,7 @@ class MySQLSource(SourcePlugin):
         Sets the initial values for the parameters in the SQL queries.
 
         Args:
-            initial_values (dict): The initial values for the parameters in the SQL
+            initial_values: The initial values for the parameters in the SQL
                 queries.
         """
         if not initial_values:
@@ -319,7 +297,7 @@ class MySQLSource(SourcePlugin):
         Sets the SQL query(s) to execute
 
         Args:
-            query (str | List[str]): The SQL query(s) to execute. If multiple queries
+            query: The SQL query(s) to execute. If multiple queries
                 are provided, they must be provided as a list, and they will be
                 mapped to the function inputs in the same order as they are defined.
         """
@@ -346,9 +324,8 @@ class MySQLSource(SourcePlugin):
         Sets the credentials to access the MySQLDatabase.
 
         Args:
-            credentials (UserPasswordCredentials | None): The credentials
-                required to access the MySQLDatabase. Can be a UserPasswordCredentials
-                object or None
+            credentials: The credentials required to access the MySQLDatabase.
+                Can be a UserPasswordCredentials object or None
         """
         if not credentials:
             self._credentials = None
@@ -384,17 +361,7 @@ class MySQLSource(SourcePlugin):
 
 class OracleSource(SourcePlugin):
     """
-    Class for managing the configuration of Oracle-based data inputs.
-
-    Attributes:
-        credentials (UserPasswordCredentials): The credentials required to access the
-            Oracle database.
-        initial_values (dict): The initial values for the parameters in the SQL queries.
-        query (str | List[str]): The SQL query(s) to execute. If multiple queries are
-            provided, they must be provided as a dictionary, with the parameter name in
-            the registered function as the key and the SQL query as the value.
-        uri (str): The URI of the database where the data is located.
-
+    Oracle-based data inputs.
     """
 
     def __init__(
@@ -406,19 +373,17 @@ class OracleSource(SourcePlugin):
     ):
         """
         Initializes the OracleSource with the given URI and query, and optionally
-            connection credentials and initial values for the parameters in the SQL
-            queries.
+        connection credentials and initial values for the parameters in the SQL
+        queries.
 
         Args:
-            uri (str): The URI of the database where the data is located
-            query (str | List[str]): The SQL query(s) to execute. If multiple queries
+            uri: The URI of the database where the data is located
+            query: The SQL query(s) to execute. If multiple queries
                 are provided, they must be provided as a list, and they will be
                 mapped to the function inputs in the same order as they are defined.
-            credentials (UserPasswordCredentials, optional): The credentials
-                required to access the Oracle database. Must be a
-                UserPasswordCredentials object.
-            initial_values (dict, optional): The initial values for the parameters in
-                the SQL queries.
+            credentials: The credentials required to access the Oracle database.
+                Must be a UserPasswordCredentials object.
+            initial_values: The initial values for the parameters in the SQL queries.
 
         Raises:
             InputConfigurationError
@@ -441,7 +406,7 @@ class OracleSource(SourcePlugin):
         Sets the URI of the database where the data is located.
 
         Args:
-            uri (str): The URI of the database where the data is located.
+            uri: The URI of the database where the data is located.
         """
         self._uri = uri
         self._parsed_uri = urlparse(uri)
@@ -463,8 +428,7 @@ class OracleSource(SourcePlugin):
         Sets the initial values for the parameters in the SQL queries.
 
         Args:
-            initial_values (dict): The initial values for the parameters in the SQL
-                queries.
+            initial_values: The initial values for the parameters in the SQL queries.
         """
         if not initial_values:
             self._initial_values = {}
@@ -487,7 +451,7 @@ class OracleSource(SourcePlugin):
         Sets the SQL query(s) to execute
 
         Args:
-            query (str | List[str]): The SQL query(s) to execute. If multiple queries
+            query: The SQL query(s) to execute. If multiple queries
                 are provided, they must be provided as a list, and they will be
                 mapped to the function inputs in the same order as they are defined.
         """
@@ -514,9 +478,8 @@ class OracleSource(SourcePlugin):
         Sets the credentials to access Oracle.
 
         Args:
-            credentials (UserPasswordCredentials | None): The credentials
-                required to access Oracle. Can be a UserPasswordCredentials
-                object or None
+            credentials: The credentials required to access Oracle.
+                Can be a UserPasswordCredentials object or None.
         """
         if not credentials:
             self._credentials = None
@@ -552,16 +515,7 @@ class OracleSource(SourcePlugin):
 
 class PostgresSource(SourcePlugin):
     """
-    Class for managing the configuration of Postgres-based data inputs.
-
-    Attributes:
-        credentials (UserPasswordCredentials): The credentials required to access the
-            Postgres database.
-        initial_values (dict): The initial values for the parameters in the SQL queries.
-        query (str | List[str]): The SQL query(s) to execute. If multiple queries are
-            provided, they must be provided as a dictionary, with the parameter name in
-            the registered function as the key and the SQL query as the value.
-        uri (str): The URI of the database where the data is located.
+    Postgres-based data inputs.
     """
 
     def __init__(
@@ -573,18 +527,17 @@ class PostgresSource(SourcePlugin):
     ):
         """
         Initializes the PostgresSource with the given URI and query, and optionally
-            connection credentials and initial values for the parameters in the SQL
-            queries.
+        connection credentials and initial values for the parameters in the SQL
+        queries.
 
         Args:
-            uri (str): The URI of the database where the data is located
-            query (str | List[str]): The SQL query(s) to execute. If multiple queries
+            uri: The URI of the database where the data is located
+            query: The SQL query(s) to execute. If multiple queries
                 are provided, they must be provided as a list, and they will be
                 mapped to the function inputs in the same order as they are defined.
-            credentials (UserPasswordCredentials, optional): The credentials
-                required to access the Postgres database. Must be a
-                UserPasswordCredentials object.
-            initial_values (dict, optional): The initial values for the parameters in
+            credentials: The credentials required to access the Postgres database. Must
+                be a UserPasswordCredentials object.
+            initial_values: The initial values for the parameters in
                 the SQL queries.
 
         Raises:
@@ -630,7 +583,7 @@ class PostgresSource(SourcePlugin):
         Sets the initial values for the parameters in the SQL queries.
 
         Args:
-            initial_values (dict): The initial values for the parameters in the SQL
+            initial_values: The initial values for the parameters in the SQL
                 queries.
         """
         if not initial_values:
@@ -655,7 +608,7 @@ class PostgresSource(SourcePlugin):
         Sets the SQL query(s) to execute
 
         Args:
-            query (str | List[str]): The SQL query(s) to execute. If multiple queries
+            query: The SQL query(s) to execute. If multiple queries
                 are provided, they must be provided as a list, and they will be
                 mapped to the function inputs in the same order as they are defined.
         """
@@ -682,9 +635,8 @@ class PostgresSource(SourcePlugin):
         Sets the credentials to access the PostgresDatabase.
 
         Args:
-            credentials (UserPasswordCredentials | None): The credentials
-                required to access the Postgres database. Can be a
-                UserPasswordCredentials object or None
+            credentials: The credentials required to access the Postgres database.
+                Can be a UserPasswordCredentials object or None.
         """
         if not credentials:
             self._credentials = None

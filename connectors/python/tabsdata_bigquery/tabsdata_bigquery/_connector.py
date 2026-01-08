@@ -33,7 +33,7 @@ logger.setLevel(logging.DEBUG)
 
 class BigQueryConn(Conn):
     """
-    Represents a connection configuration to BigQuery.
+    For connection configuration to BigQueryDest.
     """
 
     def __init__(
@@ -197,8 +197,9 @@ class BigQueryConn(Conn):
 
 class BigQueryDest(DestinationPlugin):
     """
-    Destination plugin to store data in BigQuery tables. The data is first stored in
-        parquet files in a GCS bucket, and then loaded into the BigQuery tables.
+    BigQuery based data outputs.
+    The data is first stored in parquet files in a GCS bucket, and then loaded into the
+    BigQuery tables.
     """
 
     def __init__(
@@ -209,23 +210,26 @@ class BigQueryDest(DestinationPlugin):
         schema_strategy: SchemaStrategySpec = "update",
     ):
         """
-        Initializes the BigQueryDest with the configuration desired to store
-            the data.
+        Initializes the BigQueryDest with the configuration desired to store the data.
 
         Args:
-            conn (BigQueryConn): The BigQuery connection configuration.
-            tables (str | list[str] | None, optional): The table(s) to store the data
+            conn: The BigQuery connection configuration.
+
+            tables: The table(s) to store the data
                 in. If multiple tables are provided, they must be provided as a list. If
                 None, the table names will be those of the input tables for the
-                function.
-                Defaults to None.
-            if_table_exists ({'append', 'replace'}, optional): The strategy to
+                function. Defaults to None.
+
+            if_table_exists: The strategy to
                 follow when the table already exists.
+
                 - ‘append’ will append to an existing table.
-                - ‘replace’ will create a new table, overwriting an existing
-                one. Defaults to 'append'.
-            schema_strategy ({'update', 'strict'}, optional): The strategy to
+                - ‘replace’ will create a new table, overwriting an existing one.
+                    Defaults to 'append'.
+
+            schema_strategy: The strategy to
                 follow for the schema when the table already exists.
+
                 - ‘update’ will update the schema with the possible new columns that
                     might exist in the TableFrame.
                 - ‘strict’ will not modify the schema, and will fail if there is any

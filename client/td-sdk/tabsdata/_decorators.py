@@ -58,8 +58,7 @@ def transformer(
     on_output_tables: OnTablesSpec = None,
 ) -> callable:
     """
-    Decorator to set the data and destination parameters of a function and
-        convert it to a TabsdataFunction.
+    Decorator to define a function to transform data present in Tabsdata.
 
     Args:
         input_tables (TableInput | str | List[str]): Where to obtain the data that
@@ -77,7 +76,7 @@ def transformer(
             Can be a single action or a list of them.
             Defaults to None.
     Returns:
-        callable: The function converted to a TabsdataFunction.
+        callable: The function converted to a Tabsdata Function.
     """
 
     input_tables = _build_transformer_input(input_tables)
@@ -158,18 +157,15 @@ def publisher(
     on_tables: OnTablesSpec = None,
 ) -> callable:
     """
-    Decorator to set the data and destination parameters of a function and
-        convert it to a TabsdataFunction.
+    Decorator to define a function to publish data to Tabsdata.
 
     Args:
-        source (AzureSource | LocalFileSource | MariaDBSource | MySQLSource |
-            OracleSource | PostgresSource | S3Source | SourcePlugin): Where to obtain
-            the data that will be provided as an input to the function.
-        tables (TableOutput | str | List[str]): Where to store the
-            output of the function.
-        name (str, optional): The name with which the function will be registered.
+        source: Where to obtain the data that will be provided as an input to the
+            function.
+        tables: Where to store the output of the function.
+        name: The name with which the function will be registered.
             If not provided, the current function name will be used.
-        trigger_by (PublisherTriggerBySpec, optional): The trigger that will cause
+        trigger_by: The trigger that will cause
             the function to execute. It can be a table in the system, a list of
             tables, None (in which case it must be triggered manually), or a Crontab.
         on_tables (OnTablesSpec, optional): Actions
@@ -177,7 +173,7 @@ def publisher(
             single action or a list of them.
             Defaults to None.
     Returns:
-        callable: The function converted to a TabsdataFunction.
+        callable: The function converted to a Tabsdata Function.
     """
     if not isinstance(source, SourcePlugin) or isinstance(source, TableInput):
         raise DecoratorConfigurationError(ErrorCode.DCE3, type(source))
@@ -227,23 +223,20 @@ def subscriber(
     # on_tables: OnTablesSpec = None, TODO: Uncomment this when reverting TD-1089
 ) -> callable:
     """
-    Decorator to set the data and destination parameters of a function and
-        convert it to a TabsdataFunction.
+    Decorator to define a function to subscribe to data present in Tabsdata.
 
     Args:
-        tables (TableInput | str | List[str]): Where to obtain the data that will be
-            provided as an input to the function.
-        destination (AzureDestination | LocalFileDestination | MariaDBDestination |
-            MySQLDestination | OracleDestination | PostgresDestination | S3Destination
-            | DestinationPlugin): Where to store the output of the function.
-        name (str, optional): The name with which the function will be registered.
+        tables: Where to obtain the data that will be provided as an input to the
+            function.
+        destination: Where to store the output of the function.
+        name: The name with which the function will be registered.
             If not provided, the current function name will be used.
-        trigger_by (SubscriberTriggerBySpec, optional): The trigger that will cause
+        trigger_by: The trigger that will cause
             the function to execute. It can be a table in the system, a list of
             tables, None (in which case it must be triggered manually),
             or a Crontab. Defaults to all dependencies.
     Returns:
-        callable: The function converted to a TabsdataFunction.
+        callable: The function converted to a Tabsdata Function.
     """
 
     if not isinstance(tables, TableInput):

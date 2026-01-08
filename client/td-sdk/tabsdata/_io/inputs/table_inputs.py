@@ -31,10 +31,7 @@ logger = logging.getLogger(__name__)
 
 class TableInput(SourcePlugin):
     """
-    Class for managing the configuration of table-based data inputs.
-
-    Attributes:
-        table (str | List[str]): The table(s) to load.
+    Table-based data inputs.
     """
 
     def __init__(self, table: str | List[str]):
@@ -43,7 +40,7 @@ class TableInput(SourcePlugin):
             provided, they must be provided as a list.
 
         Args:
-            table (str | List[str]): The table(s) to load.
+            table: The table(s) to load.
                 If multiple tables are provided, they must be provided as a list.
         """
         self.table = table
@@ -61,7 +58,7 @@ class TableInput(SourcePlugin):
         Sets the table(s) to load.
 
         Args:
-            table (str | List[str]): The table(s) to load.
+            table: The table(s) to load.
                 If multiple tables are provided, they must be provided as a list
         """
         self._table = table

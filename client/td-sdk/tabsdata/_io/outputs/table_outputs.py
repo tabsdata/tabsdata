@@ -29,11 +29,7 @@ logger = logging.getLogger(__name__)
 
 class TableOutput(DestinationPlugin):
     """
-    Class for managing the configuration of table-based data outputs.
-
-    Attributes:
-        table (str | list[str]): The table(s) to create. If multiple tables are
-            provided, they must be provided as a list.
+    Table-based data outputs.
     """
 
     def __init__(self, table: str | list[str]):
@@ -41,7 +37,7 @@ class TableOutput(DestinationPlugin):
         Initializes the TableOutput with the given table(s) to create.
 
         Args:
-            table (str | list[str]): The table(s) to create. If multiple tables are
+            table: The table(s) to create. If multiple tables are
                 provided, they must be provided as a list.
         """
         self.table = table
@@ -60,7 +56,7 @@ class TableOutput(DestinationPlugin):
         Sets the table(s) to create.
 
         Args:
-            table (str | list[str]): The table(s) to create. If multiple tables are
+            table: The table(s) to create. If multiple tables are
                 provided, they must be provided as a list.
         """
         self._table = table

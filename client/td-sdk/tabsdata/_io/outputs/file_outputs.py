@@ -394,7 +394,7 @@ def build_catalog(catalog) -> AWSGlue:
     Builds a Catalog object from a dictionary or a Catalog object.
 
     Args:
-        catalog (dict | AWSGlue): The dictionary or Catalog object to build the
+        catalog: The dictionary or Catalog object to build the
           Catalog object from.
 
     Returns:
@@ -420,14 +420,7 @@ def build_catalog(catalog) -> AWSGlue:
 
 class AzureDestination(DestinationPlugin):
     """
-    Class for managing the configuration of Azure-file-based data outputs.
-
-    Attributes:
-        format (FileFormat): The format of the file to be created. If not provided,
-            it will be inferred from the file extension.
-        uri (str | list[str]): The URI of the files with format: 'az://path/to/files'.
-            It can be a single URI or a list of URIs.
-        credentials (AzureCredentials): The credentials required to access Azure.
+    Azure-file-based data outputs.
     """
 
     class SupportedFormats(Enum):
@@ -448,14 +441,14 @@ class AzureDestination(DestinationPlugin):
     ):
         """
         Initializes the AzureDestination with the given URI and the credentials
-            required to access Azure; and optionally a format.
+        required to access Azure; and optionally a format.
 
         Args:
-            uri (str | list[str]): The URI of the files to export with format:
+            uri: The URI of the files to export with format:
                 'az://path/to/files'. It can be a single URI or a list of URIs.
-            credentials (AzureCredentials): The credentials required to access
+            credentials: The credentials required to access
                 Azure. Must be an AzureCredentials object.
-            format (str | FileFormat, optional): The format of the file. If not
+            format: The format of the file. If not
                 provided, it will be inferred from the file extension.
                 Can be either a string with the format or a FileFormat object.
                 Currently supported formats are 'csv',
@@ -482,7 +475,7 @@ class AzureDestination(DestinationPlugin):
         Sets the URI of the files with format: 'az://path/to/files'.
 
         Args:
-            uri (str | list[str]): The URI of the files with format:
+            uri: The URI of the files with format:
                 'az://path/to/files'. It can be a single URI or a list of URIs.
         """
         self._uri = uri
@@ -532,7 +525,7 @@ class AzureDestination(DestinationPlugin):
         Sets the format of the file.
 
         Args:
-            format (str | FileFormat): The format of the file. If not
+            format: The format of the file. If not
                 provided, it will be inferred from the file extension of the data.
                 Can be either a string with the format or a FileFormat.
                 Currently supported formats are 'csv',
@@ -552,7 +545,7 @@ class AzureDestination(DestinationPlugin):
         Verifies that the provided format is valid for the AzureDestination
 
         Args:
-            format (FileFormat): The format to verify.
+            format: The format to verify.
         """
         valid_output_formats = tuple(element.value for element in self.SupportedFormats)
         if not (isinstance(format, valid_output_formats)):
@@ -573,7 +566,7 @@ class AzureDestination(DestinationPlugin):
         Sets the credentials required to access Azure.
 
         Args:
-            credentials (AzureCredentials): The credentials required to access
+            credentials: The credentials required to access
                 Azure. Must be an AzureCredentials object.
         """
         credentials = build_credentials(credentials)
@@ -632,14 +625,7 @@ class AzureDestination(DestinationPlugin):
 
 class GCSDestination(DestinationPlugin):
     """
-    Class for managing the configuration of GCS-file-based data outputs.
-
-    Attributes:
-        format (FileFormat): The format of the file to be created. If not provided,
-            it will be inferred from the file extension.
-        uri (str | list[str]): The URI of the files with format: 'gs://path/to/files'.
-            It can be a single URI or a list of URIs.
-        credentials (GCPCredentials): The credentials required to access GCS.
+    GCS-file-based data outputs.
     """
 
     class SupportedFormats(Enum):
@@ -660,14 +646,14 @@ class GCSDestination(DestinationPlugin):
     ):
         """
         Initializes the GCSDestination with the given URI and the credentials
-            required to access GCS; and optionally a format.
+        required to access GCS; and optionally a format.
 
         Args:
-            uri (str | list[str]): The URI of the files to export with format:
+            uri: The URI of the files to export with format:
                 'gs://path/to/files'. It can be a single URI or a list of URIs.
-            credentials (GCPCredentials): The credentials required to access
+            credentials: The credentials required to access
                 GCS. Must be a GCPCredentials object.
-            format (str | FileFormat, optional): The format of the file. If not
+            format: The format of the file. If not
                 provided, it will be inferred from the file extension.
                 Can be either a string with the format or a FileFormat object.
                 Currently supported formats are 'csv',
@@ -694,7 +680,7 @@ class GCSDestination(DestinationPlugin):
         Sets the URI of the files with format: 'gs://path/to/files'.
 
         Args:
-            uri (str | list[str]): The URI of the files with format:
+            uri: The URI of the files with format:
                 'gs://path/to/files'. It can be a single URI or a list of URIs.
         """
         self._uri = uri
@@ -744,7 +730,7 @@ class GCSDestination(DestinationPlugin):
         Sets the format of the file.
 
         Args:
-            format (str | FileFormat): The format of the file. If not
+            format: The format of the file. If not
                 provided, it will be inferred from the file extension of the data.
                 Can be either a string with the format or a FileFormat object.
                 Currently supported formats are 'csv',
@@ -764,7 +750,7 @@ class GCSDestination(DestinationPlugin):
         Verifies that the provided format is valid for the GCSDestination
 
         Args:
-            format (FileFormat): The format to verify.
+            format: The format to verify.
         """
         valid_output_formats = tuple(element.value for element in self.SupportedFormats)
         if not (isinstance(format, valid_output_formats)):
@@ -785,7 +771,7 @@ class GCSDestination(DestinationPlugin):
         Sets the credentials required to access GCS.
 
         Args:
-            credentials (GCPCredentials): The credentials required to access
+            credentials: The credentials required to access
                 GCS. Must be a GCPCredentials object.
         """
         if not (isinstance(credentials, GCPCredentials)):
@@ -839,6 +825,9 @@ class GCSDestination(DestinationPlugin):
 
 
 class LocalFileDestination(DestinationPlugin):
+    """
+    LocalFile-based data outputs.
+    """
 
     class SupportedFormats(Enum):
         """
@@ -860,9 +849,9 @@ class LocalFileDestination(DestinationPlugin):
         format.
 
         Args:
-            path (str | list[str]): The path where the files must be stored. It can be a
+            path: The path where the files must be stored. It can be a
                 single path or a list of paths.
-            format (str | FileFormat, optional): The format of the file. If not
+            format: The format of the file. If not
                 provided, it will be inferred from the file extension of the data.
                 Can be either a string with the format or a FileFormat object.
                 Currently supported formats are 'csv',
@@ -888,7 +877,7 @@ class LocalFileDestination(DestinationPlugin):
         Sets the path or paths to store the files.
 
         Args:
-            path (str | list[str]): The path or paths to store the files.
+            path: The path or paths to store the files.
         """
         self._path = path
         if isinstance(path, str):
@@ -931,7 +920,7 @@ class LocalFileDestination(DestinationPlugin):
         Sets the format of the file.
 
         Args:
-            format (str): The format of the file. If not
+            format: The format of the file. If not
                 provided, it will be inferred from the file extension.
                 Can be either a string with the format or a FileFormat object.
                 Currently supported formats are 'csv',
@@ -959,7 +948,7 @@ class LocalFileDestination(DestinationPlugin):
         Verifies that the provided format is valid for the LocalFileDestination
 
         Args:
-            format (FileFormat): The format to verify
+            format: The format to verify
         """
         valid_output_formats = tuple(element.value for element in self.SupportedFormats)
         if not (isinstance(format, valid_output_formats)):
@@ -1010,14 +999,7 @@ class LocalFileDestination(DestinationPlugin):
 
 class S3Destination(DestinationPlugin):
     """
-    Class for managing the configuration of S3-file-based data outputs.
-
-    Attributes:
-        format (FileFormat): The format of the file. If not provided, it will be
-            inferred from the file extension.
-        uri (str | list[str]): The URI of the files with format: 's3://path/to/files'.
-            It can be a single URI or a list of URIs.
-        credentials (S3Credentials): The credentials required to access the S3 bucket.
+    S3-file-based data outputs.
     """
 
     class SupportedFormats(Enum):
@@ -1040,20 +1022,20 @@ class S3Destination(DestinationPlugin):
     ):
         """
         Initializes the S3Destination with the given URI and the credentials required to
-            access the S3 bucket, and optionally a format and date and
-            time after which the files were modified.
+        access the S3 bucket, and optionally a format and date and
+        time after which the files were modified.
 
         Args:
-            uri (str | list[str]): The URI of the files with format:
+            uri: The URI of the files with format:
                 's3://path/to/files'. It can be a single URI or a list of URIs.
-            credentials (S3Credentials): The credentials required to access the
+            credentials: The credentials required to access the
                 S3 bucket. Must be a S3Credentials object.
-            format (str | FileFormat, optional): The format of the file. If not
+            format: The format of the file. If not
                 provided, it will be inferred from the file extension of the data.
                 Can be either a string with the format or a FileFormat object.
                 Currently supported formats are 'csv',
                 'parquet', 'ndjson' and 'jsonl'.
-            region (str, optional): The region where the S3 bucket is located. If not
+            region: The region where the S3 bucket is located. If not
                 provided, the default AWS region will be used.
 
         Raises:
@@ -1079,7 +1061,7 @@ class S3Destination(DestinationPlugin):
         Sets the URI of the files with format: 's3://path/to/files'.
 
         Args:
-            uri (str | list[str]): The URI of the files with format:
+            uri: The URI of the files with format:
                 's3://path/to/files'. It can be a single URI or a list of URIs.
         """
         self._uri = uri
@@ -1119,7 +1101,7 @@ class S3Destination(DestinationPlugin):
         Sets the region where the S3 bucket is located.
 
         Args:
-            region (str): The region where the S3 bucket is located.
+            region: The region where the S3 bucket is located.
         """
         if region:
             if not isinstance(region, str):
@@ -1154,7 +1136,7 @@ class S3Destination(DestinationPlugin):
         Sets the format of the file.
 
         Args:
-            format (str | FileFormat): The format of the file. If not
+            format: The format of the file. If not
                 provided, it will be inferred from the file extension of the data.
                 Can be either a string with the format or a FileFormat object.
                 Currently supported formats are 'csv',
@@ -1190,7 +1172,7 @@ class S3Destination(DestinationPlugin):
         Sets the catalog to store the data in.
 
         Args:
-            catalog (AWSGlue): The catalog to store the data in.
+            catalog: The catalog to store the data in.
         """
         if catalog is None:
             self._catalog = None
@@ -1214,7 +1196,7 @@ class S3Destination(DestinationPlugin):
         Verifies that the provided format is valid for the S3Destination
 
         Args:
-            format (FileFormat): The format to verify.
+            format: The format to verify.
         """
         valid_output_formats = tuple(element.value for element in self.SupportedFormats)
         if not (isinstance(format, valid_output_formats)):
@@ -1235,7 +1217,7 @@ class S3Destination(DestinationPlugin):
         Sets the credentials required to access the S3 bucket.
 
         Args:
-            credentials (S3Credentials): The credentials required to access the
+            credentials: The credentials required to access the
                 S3 bucket. Must be a S3Credentials object.
         """
         credentials = build_credentials(credentials)

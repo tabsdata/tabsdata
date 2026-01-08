@@ -27,6 +27,9 @@ MONGODB_ID_COLUMN = "_id"
 
 
 class MongoDBDestination(DestinationPlugin):
+    """
+    MongoDB-based data outputs.
+    """
 
     def __init__(
         self,
@@ -44,12 +47,12 @@ class MongoDBDestination(DestinationPlugin):
         **kwargs,
     ):
         """
-        Initializes the MongoDBDestination with the configuration desired to store
-            the data.
+        Initializes the MongoDBDestination with the configuration desired to store the
+        data.
 
         Args:
-            uri (str): The URI of the MongoDB database.
-            collections_with_ids (tuple[str, str] | List[tuple[str, str]]): A tuple
+            uri: The URI of the MongoDB database.
+            collections_with_ids: A tuple
                 or list of tuples with the collection and the name of the
                 field that will be used as the unique identifier. For example, if you
                 want to store the data in a collection called 'my_collection' in
@@ -58,40 +61,40 @@ class MongoDBDestination(DestinationPlugin):
                 'my_database.my_collection', 'username'). If you wanted MongoDB to
                 autogenerate the id, you would provide the following tuple:
                 ('my_database.my_collection', None).
-            credentials (UserPasswordCredentials, optional): The credentials to connect
+            credentials: The credentials to connect
                 with the database. If None, no credentials will be used.
-            connection_options(dict, optional): A dictionary with the options to pass
+            connection_options: A dictionary with the options to pass
                 to the pymongo.MongoClient constructor. For example, if you want to
                 set the timeout to 1000 milliseconds, you would provide the following
                 dictionary: {'serverSelectionTimeoutMS': 1000}.
-            if_collection_exists (Literal["append", "replace"], optional): The action
+            if_collection_exists: The action
                 to take if the collection already exists. If 'append', the data will be
                 appended to the existing collection. If 'replace', the existing
                 collection will be replaced with the new data. Defaults to 'append'.
-            use_trxs (bool, optional): Whether to use a transaction when storing
+            use_trxs: Whether to use a transaction when storing
                 the data in the database. If True, the data will be stored in a
                 transaction, which will ensure that all the data is stored or none of
                 it is (requires that the database is configured with a replica set). If
                 False, the data will be stored without a transaction, which may lead
                 to inconsistent data in the database. Defaults to False.
-            docs_per_trx (int, optional): The maximum number of documents
+            docs_per_trx: The maximum number of documents
                 to store in a single transaction. If the number of documents to store
                 exceeds this number, the data will be stored in multiple transactions.
-            maintain_order (bool, optional): Whether to maintain the order of the
+            maintain_order: Whether to maintain the order of the
                 documents when storing them in the database. If True, the documents
                 will be stored in the same order as they are in the TableFrame. If
                 False, the documents will be stored in the order that they are
                 processed. Defaults to False.
-            update_existing (bool, optional): Whether to update the existing documents
+            update_existing: Whether to update the existing documents
                 in the database. If True, the documents will be updated if they already
                 exist in the database. If False, the documents will be inserted without
                 updating the existing documents, and if a document with the same id
                 already exists execution will fail. Defaults to True.
-            fail_on_duplicate_key (bool, optional): Whether to raise an exception if a
+            fail_on_duplicate_key: Whether to raise an exception if a
                 document with the same id already exists in the collection. If True, an
                 exception will be raised. If False, the operation will continue without
                 raising an exception. Defaults to True.
-            log_intermediate_files (bool, optional): Whether to log when each batch
+            log_intermediate_files: Whether to log when each batch
                 of data is stored in the database. If True, a message will be logged for
                 each batch of data stored. If False, no message will be logged until all
                 the data for a single collection has been stored. Defaults to False.

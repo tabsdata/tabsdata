@@ -34,7 +34,7 @@ logger.setLevel(logging.DEBUG)
 
 class MSSQLSource(SourcePlugin):
     """
-    Source plugin for Microsoft SQL Server.
+    Microsoft SQL Server based data inputs.
     """
 
     def __init__(
@@ -53,9 +53,9 @@ class MSSQLSource(SourcePlugin):
         Initialize the MSSQLSource with a connection string and a query.
 
         Args:
-            connection_string (str): The connection string to connect to the database.
-            query (str | list[str]): The SQL query or queries to execute.
-            chunk_size (int): The number of rows to fetch in each chunk.
+            connection_string: The connection string to connect to the database.
+            query: The SQL query or queries to execute.
+            chunk_size: The number of rows to fetch in each chunk.
                 Defaults to 50000.
         """
 
@@ -280,7 +280,7 @@ class MSSQLSource(SourcePlugin):
 
 class MSSQLDestination(DestinationPlugin):
     """
-    Destination plugin for Microsoft SQL Server.
+    MSSQL-based data outputs.
     """
 
     def __init__(
@@ -299,13 +299,13 @@ class MSSQLDestination(DestinationPlugin):
         Initialize the MSSQLDestination with a connection string and a table name.
 
         Args:
-            connection_string (str): The connection string to connect to the database.
-            destination_table (str | List[str]): The table(s) to create.
+            connection_string: The connection string to connect to the database.
+            destination_table: The table(s) to create.
                 If multiple tables are provided, they must be provided as a list.
-            if_table_exists ({'append', 'replace'}): The strategy to
+            if_table_exists: The strategy to
                 follow when the table already exists.
-                - ‘replace’ will create a new database table, overwriting an
-                    existing one.
+                - ‘replace’ will create a new database table, overwriting an existing
+                    one.
                 - ‘append’ will append to an existing table.
         """
 

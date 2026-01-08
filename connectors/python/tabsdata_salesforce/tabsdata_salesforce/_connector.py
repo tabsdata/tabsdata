@@ -152,6 +152,9 @@ class SalesforceTokenCredentials(SalesforceCredentials):
 
 
 class SalesforceSource(SourcePlugin):
+    """
+    Salesforce (SOQL query) based data inputs (not Salesforce Reports).
+    """
 
     LAST_MODIFIED_COLUMN = "SystemModstamp"
     LAST_MODIFIED_TOKEN = "$lastModified"
@@ -167,19 +170,18 @@ class SalesforceSource(SourcePlugin):
     ):
         """
         Initializes the SalesforceSource with the given query(s) and the credentials
-            required to access Salesforce.
+        required to access Salesforce.
 
         Args:
-            credentials (SalesforceCredentials): The credentials to access Salesforce.
-            query (str | list[str]): The query or queries to execute in Salesforce.
+            credentials: The credentials to access Salesforce.
+            query: The query or queries to execute in Salesforce.
                 It can be a single string or a list of strings.
-            instance_url (str, optional): The URL of the instance to which we want to
+            instance_url: The URL of the instance to which we want to
                 connect. Only necessary when the username and password are associated
-                to more than one instance.
-                Defaults to None.
-            include_deleted (bool, optional): Whether to include deleted records in the
+                to more than one instance. Defaults to None.
+            include_deleted: Whether to include deleted records in the
                 query results. Defaults to False.
-            initial_last_modified (str, optional): The initial last modified date to use
+            initial_last_modified: The initial last modified date to use
                 in the queries. This is useful when we want to query only the records
                 that have been modified since a certain date.
                 Defaults to None.
@@ -342,6 +344,10 @@ def _maximum_date(date1: str, date2: str):
 
 
 class SalesforceReportSource(SourcePlugin):
+    """
+    Salesforce Reports based data inputs.
+    """
+
     def __init__(
         self,
         credentials: SalesforceCredentials,
@@ -357,22 +363,22 @@ class SalesforceReportSource(SourcePlugin):
     ):
         """
         Initializes the SalesforceReportSource with the report information and the
-            credentials required to access Salesforce.
+        credentials to access Salesforce.
 
         Args:
-            credentials (SalesforceCredentials): The credentials to access Salesforce.
-            report (str | list[str]): The report or reports to execute in Salesforce.
+            credentials: The credentials to access Salesforce.
+            report: The report or reports to execute in Salesforce.
                 It can be a single string or a list of strings. The string must be
                 either the report ID or the name of the report.
-            column_name_strategy (Literal["columnName", "label"]): Indicates which
+            column_name_strategy: Indicates which
                 column attribute to use as the
                 column name in the output data. It can be one of the following:
                 - "columnName": The API name of the column (e.g., "ACCOUNT.NAME").
                 - "label": The label of the column (e.g., "Account Name").
-            find_report_by (Literal["id", "name"], optional): Indicates whether the
+            find_report_by: Indicates whether the
                 'report' parameter contains report IDs or report names. If not
                 provided, it will be inferred from the value of the 'report' parameter.
-            filter (tuple[str, str, str] | list[tuple[str, str, str]], optional):
+            filter:
                 A filter or list of filters to apply to the report. Each filter is a
                 tuple of three strings: (field, operator, value). For example:
                 [("CreatedDate", "greaterThan", "2023-01-01T00:00:00.000Z")].
@@ -391,19 +397,17 @@ class SalesforceReportSource(SourcePlugin):
                     - within
                     - between
                 Defaults to None.
-            filter_logic (str, optional): A string representing the logic to apply to
+            filter_logic: A string representing the logic to apply to
                 the filters. For example: "(1 AND 2) OR 3". The numbers correspond to
                 the position of the filters in the 'filter' list (starting at 1).
                 Defaults to None.
-            instance_url (str, optional): The URL of the instance to which we want to
+            instance_url: The URL of the instance to which we want to
                 connect. Only necessary when the username and password are associated
-                to more than one instance.
-                Defaults to None.
-            last_modified_column (str, optional): The name of the column to use for
+                to more than one instance. Defaults to None.
+            last_modified_column: The name of the column to use for
                 incremental loading based on the last modified date. If provided,
-                the report must contain this column.
-                Defaults to None.
-            initial_last_modified (str, optional): The initial last modified date to
+                the report must contain this column. Defaults to None.
+            initial_last_modified: The initial last modified date to
                 use for incremental loading. This is useful when we want to load only
                 the records that have been modified since a certain date. Defaults to
                 None. If provided, it must be a string in Salesforce datetime format

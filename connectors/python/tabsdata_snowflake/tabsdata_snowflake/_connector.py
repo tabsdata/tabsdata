@@ -48,6 +48,9 @@ def restore_snowflake_logger_levels():
 
 
 class SnowflakeDestination(DestinationPlugin):
+    """
+    Snowflake based data outputs.
+    """
 
     def __init__(
         self,
@@ -58,10 +61,38 @@ class SnowflakeDestination(DestinationPlugin):
         **kwargs,
     ):
         """
-        Initializes the SnowflakeDestination with the configuration desired to store
-            the data.
+        Initializes the SnowflakeDestination with the configuration desired to store the
+        data.
 
         Args:
+            connection_parameters: Following values are to be defined in connection
+                parameters.
+
+                    `account`: Snowflake account
+
+                    `user`: Snowflake user
+
+                    `password`: Snowflake user’s Personal Access Token (PAT). Password
+                    for programmatic access is not supported anymore.
+
+                    `role`: Snowflake role
+
+                    `database`: Snowflake database
+
+                    `schema`: Snowflake schema
+
+                    `warehouse`: Snowflake warehouse
+
+            destination_table: Names of the destination tables to be created, replaced,
+                or appended in Snowflake.
+
+            if_table_exists: This is an optional property to define the strategy to
+                follow when the table already exists. ‘replace’ will create overwrite
+                the existing table, and ‘append’ will append to the existing data in the
+                table. Defaults to ‘append’.
+
+            stage: Snowflake stage name. If not provided, a temporary one will be
+                created.
 
         """
         try:

@@ -219,8 +219,8 @@ class DirectSecret(Secret):
 
 
 class EnvironmentSecret(Secret):
-    """Secrets class representing a secret obtained from an environment variable in
-        the server.
+    """Secrets class representing a secret obtained from an environment variable in the
+    server.
 
     Attributes:
         environment_variable_name (str): Name of the environment variable from which

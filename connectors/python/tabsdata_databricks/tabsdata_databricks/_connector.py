@@ -59,6 +59,10 @@ def _table_fqn_4sql(table: str) -> str:
 
 
 class DatabricksDestination(DestinationPlugin):
+    """
+    Databricks based data outputs.
+    """
+
     def __init__(
         self,
         host_url: str,
@@ -75,9 +79,48 @@ class DatabricksDestination(DestinationPlugin):
     ):
         """
         Initializes the DatabricksDestination with the configuration desired to store
-            the data.
+        the data.
 
         Args:
+            host_url: Databricks URL
+
+            token: Databricks Personal Account Token (PAT). The user owning the PAT
+                requires ‘USE CATALOG’, ‘USE SCHEMA’, ‘READ VOLUME’ & ‘WRITE VOLUME’
+                privileges.
+
+            tables: Tables to be created in Databricks. Each table name provided must
+                either be fully qualified in the form of ‘catalog.schema.table_name’ or
+                have the information provided through the ‘catalog’ or the ‘schema’
+                parameters. For example, if a table of the form ‘schema.table_name’ is
+                provided, the ‘catalog’ parameter must also be provided. If a table of
+                the form ‘table_name’ is provided, both ‘catalog’ and ‘schema’ must be
+                provided.
+
+            volume: Name of the Databricks volume. The connector uses an existing
+                Databricks managed volume. The files written to the volume are deleted
+                after connector finishes writing the data to the Databricks table.
+
+            catalog: Catalog name (optional, can be null if the table name has the
+                catalog name.)
+
+            schema: Schema name (optional, can be null if the table name has the schema
+                name.)
+
+            warehouse: Warehouse name (use either this or warehouse_id) that will be
+                used for uploading data to Databricks tables. The user has to have
+                privileges to use the warehouse.
+
+            warehouse_id: Warehouse Id. Use `null` if warehouse name is provided.
+
+            if_table_exists: This is an optional property to define the strategy to
+                follow when the table already exists. ‘replace’ will create overwrite
+                the existing table, and ‘append’ will append to the existing data in the
+                table. Defaults to ‘append’.
+
+            schema_strategy: The is to mention the strategy to follow when appending to
+                a table with an existing schema. ‘update’ will update the schema with
+                the possible new columns that might exist in the TableFrame. ‘strict’
+                will not modify the schema, and will fail if there is any difference.
 
         """
         try:

@@ -44,18 +44,7 @@ logging.getLogger("urllib3").setLevel(logging.ERROR)
 
 class MariaDBDestination(DestinationPlugin):
     """
-    Class for managing the configuration of MariaDB-based data outputs.
-
-    Attributes:
-        credentials (UserPasswordCredentials): The credentials required to access the
-            MariaDB database.
-        destination_table (str | List[str]): The table(s) to create. If multiple tables
-            are provided, they must be provided as a list.
-        if_table_exists ({'append', 'replace'}): The strategy to
-            follow when the table already exists.
-            - ‘replace’ will create a new database table, overwriting an existing one.
-            - ‘append’ will append to an existing table.
-        uri (str): The URI of the database where the data is going to be stored.
+    MariaDB-based data outputs.
     """
 
     def __init__(
@@ -70,10 +59,10 @@ class MariaDBDestination(DestinationPlugin):
         and optionally connection credentials.
 
         Args:
-            uri (str): The URI of the database where the data is going to be stored.
-            destination_table (List[str] | str): The tables to create. If multiple
+            uri: The URI of the database where the data is going to be stored.
+            destination_table: The tables to create. If multiple
                 tables are provided, they must be provided as a list.
-            credentials (UserPasswordCredentials, optional): The credentials
+            credentials: The credentials
                 required to access the MariaDB database. Must be a
                 UserPasswordCredentials object.
             if_table_exists ({'append', 'replace'}, optional): The strategy to
@@ -132,7 +121,7 @@ class MariaDBDestination(DestinationPlugin):
         Sets the URI of the database where the data is going to be stored.
 
         Args:
-            uri (str): The URI of the database where the data is going to be stored.
+            uri: The URI of the database where the data is going to be stored.
         """
         self._uri = uri
         self._parsed_uri = urlparse(uri)
@@ -155,7 +144,7 @@ class MariaDBDestination(DestinationPlugin):
         Sets the table(s) to create.
 
         Args:
-            destination_table (List[str] | str): The table(s) to create. If multiple
+            destination_table: The table(s) to create. If multiple
                 tables are provided, they must be provided as a list.
         """
         if isinstance(destination_table, (list, str)):
@@ -201,7 +190,7 @@ class MariaDBDestination(DestinationPlugin):
         Store the results in the SQL destination.
 
         Args:
-            working_dir (str): The working directory where the results will be stored.
+            working_dir: The working directory where the results will be stored.
             results (list[pl.LazyFrame | None]): The results to store in the SQL
                 destination.
         """
@@ -222,18 +211,7 @@ class MariaDBDestination(DestinationPlugin):
 
 class MySQLDestination(DestinationPlugin):
     """
-    Class for managing the configuration of MySQL-based data outputs.
-
-    Attributes:
-        credentials (UserPasswordCredentials): The credentials required to access the
-            MySQL database.
-        destination_table (str | List[str]): The table(s) to create. If multiple tables
-            are provided, they must be provided as a list.
-        if_table_exists ({'append', 'replace'}): The strategy to
-            follow when the table already exists.
-            - ‘replace’ will create a new database table, overwriting an existing one.
-            - ‘append’ will append to an existing table.
-        uri (str): The URI of the database where the data is going to be stored.
+    MySQL-based data outputs.
     """
 
     def __init__(
@@ -248,10 +226,10 @@ class MySQLDestination(DestinationPlugin):
         and optionally connection credentials.
 
         Args:
-            uri (str): The URI of the database where the data is going to be stored.
-            destination_table (List[str] | str): The tables to create. If multiple
+            uri: The URI of the database where the data is going to be stored.
+            destination_table: The tables to create. If multiple
                 tables are provided, they must be provided as a list.
-            credentials (UserPasswordCredentials, optional): The credentials
+            credentials: The credentials
                 required to access the MySQL database. Must be a
                 UserPasswordCredentials object.
 
@@ -305,7 +283,7 @@ class MySQLDestination(DestinationPlugin):
         Sets the URI of the database where the data is going to be stored.
 
         Args:
-            uri (str): The URI of the database where the data is going to be stored.
+            uri: The URI of the database where the data is going to be stored.
         """
         self._uri = uri
         self._parsed_uri = urlparse(uri)
@@ -328,7 +306,7 @@ class MySQLDestination(DestinationPlugin):
         Sets the table(s) to create.
 
         Args:
-            destination_table (List[str] | str): The table(s) to create. If multiple
+            destination_table: The table(s) to create. If multiple
                 tables are provided, they must be provided as a list.
         """
         if isinstance(destination_table, (list, str)):
@@ -394,18 +372,7 @@ class MySQLDestination(DestinationPlugin):
 
 class OracleDestination(DestinationPlugin):
     """
-    Class for managing the configuration of Oracle-based data outputs.
-
-    Attributes:
-        credentials (UserPasswordCredentials): The credentials required to access the
-            Oracle database.
-        destination_table (str | List[str]): The table(s) to create. If multiple tables
-            are provided, they must be provided as a list.
-        if_table_exists ({'append', 'replace'}): The strategy to
-            follow when the table already exists.
-            - ‘replace’ will create a new database table, overwriting an existing one.
-            - ‘append’ will append to an existing table.
-        uri (str): The URI of the database where the data is going to be stored.
+    Oracle-based data outputs.
     """
 
     def __init__(
@@ -420,10 +387,10 @@ class OracleDestination(DestinationPlugin):
         and optionally connection credentials.
 
         Args:
-            uri (str): The URI of the database where the data is going to be stored.
-            destination_table (List[str] | str): The tables to create. If multiple
+            uri: The URI of the database where the data is going to be stored.
+            destination_table: The tables to create. If multiple
                 tables are provided, they must be provided as a list.
-            credentials (UserPasswordCredentials, optional): The credentials
+            credentials: The credentials
                 required to access the Oracle database. Must be a
                 UserPasswordCredentials object.
 
@@ -567,18 +534,7 @@ class OracleDestination(DestinationPlugin):
 
 class PostgresDestination(DestinationPlugin):
     """
-    Class for managing the configuration of Postgres-based data outputs.
-
-    Attributes:
-        credentials (UserPasswordCredentials): The credentials required to access the
-            Postgres database.
-        destination_table (str | List[str]): The table(s) to create. If multiple tables
-            are provided, they must be provided as a list.
-        if_table_exists ({'append', 'replace'}): The strategy to
-            follow when the table already exists.
-            - ‘replace’ will create a new database table, overwriting an existing one.
-            - ‘append’ will append to an existing table.
-        uri (str): The URI of the database where the data is going to be stored.
+    Postgres-based data outputs.
     """
 
     def __init__(
@@ -593,10 +549,10 @@ class PostgresDestination(DestinationPlugin):
         and optionally connection credentials.
 
         Args:
-            uri (str): The URI of the database where the data is going to be stored.
-            destination_table (List[str] | str): The tables to create. If multiple
+            uri: The URI of the database where the data is going to be stored.
+            destination_table: The tables to create. If multiple
                 tables are provided, they must be provided as a list.
-            credentials (UserPasswordCredentials, optional): The credentials
+            credentials: The credentials
                 required to access the Postgres database. Must be a
                 UserPasswordCredentials object.
 

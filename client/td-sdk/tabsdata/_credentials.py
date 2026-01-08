@@ -35,8 +35,8 @@ class AzureCredentials(Credentials, ABC):
 
 
 class AzureAccountKeyCredentials(AzureCredentials):
-    """Credentials class to store the credentials needed to access an Azure
-    using account key credentials (account name and account key).
+    """Credentials class to access Azure using account key credentials (account name and
+    account key).
 
     Attributes:
         account_name (Secret): The Azure account name.
@@ -203,8 +203,8 @@ class S3Credentials(Credentials, ABC):
 
 
 class S3AccessKeyCredentials(S3Credentials):
-    """Credentials class to store the credentials needed to access an S3 bucket
-    using access key credentials (access key id and secret access key).
+    """Credentials class to access an S3 bucket using access key credentials (access key
+    id and secret access key).
 
     Attributes:
         aws_access_key_id (Secret): The AWS access key id.
