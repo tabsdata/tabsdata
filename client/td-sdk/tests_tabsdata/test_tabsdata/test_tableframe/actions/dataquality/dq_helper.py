@@ -6,8 +6,9 @@ import math
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from decimal import Decimal
-from typing import Any, Callable, Literal
+from typing import Any, Callable
 
+import numpy as np
 import polars as pl
 
 import tabsdata as td
@@ -31,11 +32,17 @@ from tabsdata.dataquality import (
     Summary,
 )
 from tabsdata.dataquality._classifier import (
+    Categorizer,
     Classifier,
+    ExponentialScale,
+    IdentityScale,
     IsNegativeOrZero,
     IsNotNullNorNan,
     IsNotZero,
     IsNullOrNan,
+    LinearScale,
+    LogarithmicScale,
+    MonomialScale,
 )
 from tabsdata.dataquality._typing import RangeClosedOnSpec
 from tabsdata.tableframe._actions.dataquality.engine import (
@@ -52,6 +59,8 @@ Q_POSITIVE = 64
 Q_NEGATIVE = 32
 Q_NULL = 16
 Q_NaN = 8
+
+Q_CATEGORIZER = 512
 
 
 @dataclass(frozen=True)
@@ -145,9 +154,10 @@ class ClassifierConfiguration:
     actions: Callable[[str], DataQuality]
     dtypes: list[type]
     name: str | None = None
+    dataset: Callable[[type], td.TableFrame] | None = None
 
 
-def _is_null_checker(df: pl.DataFrame, tags: dict):
+def _is_null_checker(df: pl.DataFrame, tags: dict, _qrows: int = None):
     assert "value" in df.columns
     assert "value_is_null" in df.columns
     assert "null" in tags
@@ -189,7 +199,7 @@ def _is_null_checker(df: pl.DataFrame, tags: dict):
     ), f"is_null NULL: dq={dq_null_count}, expected={null_count}"
 
 
-def _is_not_null_checker(df: pl.DataFrame, tags: dict):
+def _is_not_null_checker(df: pl.DataFrame, tags: dict, _qrows: int = None):
     assert "value" in df.columns
     assert "value_is_not_null" in df.columns
     assert "not_null" in tags
@@ -232,7 +242,7 @@ def _is_not_null_checker(df: pl.DataFrame, tags: dict):
     ), f"is_not_null NULL: dq={dq_null_count}, expected={null_count}"
 
 
-def _is_nan_checker(df: pl.DataFrame, tags: dict):
+def _is_nan_checker(df: pl.DataFrame, tags: dict, _qrows: int = None):
     assert "value" in df.columns
     assert "value_is_nan" in df.columns
     assert "nan" in tags
@@ -273,7 +283,7 @@ def _is_nan_checker(df: pl.DataFrame, tags: dict):
     ), f"is_nan NULL: dq={dq_null_count}, expected={null_count}"
 
 
-def _is_not_nan_checker(df: pl.DataFrame, tags: dict):
+def _is_not_nan_checker(df: pl.DataFrame, tags: dict, _qrows: int = None):
     assert "value" in df.columns
     assert "value_is_not_nan" in df.columns
     assert "not_nan" in tags
@@ -314,7 +324,7 @@ def _is_not_nan_checker(df: pl.DataFrame, tags: dict):
     ), f"is_not_nan NULL: dq={dq_null_count}, expected={null_count}"
 
 
-def _is_null_or_nan_checker(df: pl.DataFrame, tags: dict):
+def _is_null_or_nan_checker(df: pl.DataFrame, tags: dict, _qrows: int = None):
     assert "value" in df.columns
     assert "value_is_null_or_nan" in df.columns
     assert "null_or_nan" in tags
@@ -362,7 +372,7 @@ def _is_null_or_nan_checker(df: pl.DataFrame, tags: dict):
     ), f"is_null_or_nan NULL: dq={dq_null_count}, expected={null_count}"
 
 
-def _is_not_null_nor_nan_checker(df: pl.DataFrame, tags: dict):
+def _is_not_null_nor_nan_checker(df: pl.DataFrame, tags: dict, _qrows: int = None):
     assert "value" in df.columns
     assert "value_is_not_null_nor_nan" in df.columns
     assert "not_null_nor_nan" in tags
@@ -412,7 +422,7 @@ def _is_not_null_nor_nan_checker(df: pl.DataFrame, tags: dict):
     ), f"is_not_null_nor_nan NULL: dq={dq_null_count}, expected={null_count}"
 
 
-def _is_zero_checker(df: pl.DataFrame, tags: dict):
+def _is_zero_checker(df: pl.DataFrame, tags: dict, _qrows: int = None):
     assert "value" in df.columns
     assert "value_is_zero" in df.columns
     assert "zero" in tags
@@ -457,7 +467,7 @@ def _is_zero_checker(df: pl.DataFrame, tags: dict):
     ), f"is_zero NULL: dq={dq_null_count}, expected={null_count}"
 
 
-def _is_not_zero_checker(df: pl.DataFrame, tags: dict):
+def _is_not_zero_checker(df: pl.DataFrame, tags: dict, _qrows: int = None):
     assert "value" in df.columns
     assert "value_is_not_zero" in df.columns
     assert "not_zero" in tags
@@ -503,7 +513,7 @@ def _is_not_zero_checker(df: pl.DataFrame, tags: dict):
     ), f"is_not_zero NULL: dq={dq_null_count}, expected={null_count}"
 
 
-def _is_positive_checker(df: pl.DataFrame, tags: dict):
+def _is_positive_checker(df: pl.DataFrame, tags: dict, _qrows: int = None):
     assert "value" in df.columns
     assert "value_is_positive" in df.columns
     assert "positive" in tags
@@ -549,7 +559,7 @@ def _is_positive_checker(df: pl.DataFrame, tags: dict):
     ), f"is_positive NULL: dq={dq_null_count}, expected={null_count}"
 
 
-def _is_positive_or_zero_checker(df: pl.DataFrame, tags: dict):
+def _is_positive_or_zero_checker(df: pl.DataFrame, tags: dict, _qrows: int = None):
     assert "value" in df.columns
     assert "value_is_positive_or_zero" in df.columns
     assert "positive_or_zero" in tags
@@ -603,7 +613,7 @@ def _is_positive_or_zero_checker(df: pl.DataFrame, tags: dict):
     ), f"is_positive_or_zero NULL: dq={dq_null_count}, expected={null_count}"
 
 
-def _is_negative_checker(df: pl.DataFrame, tags: dict):
+def _is_negative_checker(df: pl.DataFrame, tags: dict, _qrows: int = None):
     assert "value" in df.columns
     assert "value_is_negative" in df.columns
     assert "negative" in tags
@@ -649,7 +659,7 @@ def _is_negative_checker(df: pl.DataFrame, tags: dict):
     ), f"is_negative NULL: dq={dq_null_count}, expected={null_count}"
 
 
-def _is_negative_or_zero_checker(df: pl.DataFrame, tags: dict):
+def _is_negative_or_zero_checker(df: pl.DataFrame, tags: dict, _qrows: int = None):
     assert "value" in df.columns
     assert "value_is_negative_or_zero" in df.columns
     assert "negative_or_zero" in tags
@@ -706,7 +716,7 @@ def _is_negative_or_zero_checker(df: pl.DataFrame, tags: dict):
 def _make_is_between_checker(
     min_val: Any, max_val: Any, closed: RangeClosedOnSpec = "both"
 ):
-    def _is_between_checker(df: pl.DataFrame, tags: dict):
+    def _is_between_checker(df: pl.DataFrame, tags: dict, _qrows: int = None):
         assert "value" in df.columns
         assert "value_is_between" in df.columns
         assert "is_between" in tags
@@ -848,7 +858,7 @@ def _make_is_between_checker(
 def _make_is_not_between_checker(
     min_val: Any, max_val: Any, closed: RangeClosedOnSpec = "both"
 ):
-    def _is_not_between_checker(df: pl.DataFrame, tags: dict):
+    def _is_not_between_checker(df: pl.DataFrame, tags: dict, _qrows: int = None):
         assert "value" in df.columns
         assert "value_is_not_between" in df.columns
         assert "is_not_between" in tags
@@ -996,7 +1006,7 @@ def _make_is_not_between_checker(
 
 
 def _make_is_in_checker(values_set: set):
-    def _is_in_checker(df: pl.DataFrame, tags: dict):
+    def _is_in_checker(df: pl.DataFrame, tags: dict, _qrows: int = None):
         assert "value" in df.columns
         assert "value_is_in" in df.columns
         assert "is_in" in tags
@@ -1121,7 +1131,7 @@ def _make_is_in_checker(values_set: set):
 
 
 def _make_is_not_in_checker(values_set: set):
-    def _is_not_in_checker(df: pl.DataFrame, tags: dict):
+    def _is_not_in_checker(df: pl.DataFrame, tags: dict, _qrows: int = None):
         assert "value" in df.columns
         assert "value_is_not_in" in df.columns
         assert "is_not_in" in tags
@@ -1249,7 +1259,7 @@ def _make_is_not_in_checker(values_set: set):
 
 
 def _make_matches_checker(pattern: str):
-    def _matches_checker(df: pl.DataFrame, tags: dict):
+    def _matches_checker(df: pl.DataFrame, tags: dict, _qrows: int = None):
         assert "value" in df.columns
         assert "value_matches" in df.columns
         assert "matches" in tags
@@ -1308,7 +1318,7 @@ def _make_matches_checker(pattern: str):
 
 
 def _make_does_not_match_checker(pattern: str):
-    def _does_not_match_checker(df: pl.DataFrame, tags: dict):
+    def _does_not_match_checker(df: pl.DataFrame, tags: dict, _qrows: int = None):
         assert "value" in df.columns
         assert "value_does_not_match" in df.columns
         assert "does_not_match" in tags
@@ -1375,7 +1385,7 @@ def _make_does_not_match_checker(pattern: str):
 
 
 def _make_has_length_checker(min_length: int, max_length: int):
-    def _has_length_checker(df: pl.DataFrame, tags: dict):
+    def _has_length_checker(df: pl.DataFrame, tags: dict, _qrows: int = None):
         assert "value" in df.columns
         assert "value_has_length" in df.columns
         assert "has_length" in tags
@@ -1449,6 +1459,177 @@ def _make_has_length_checker(min_length: int, max_length: int):
         ), f"has_length NULL: dq={dq_null_count}, expected={null_count}"
 
     return _has_length_checker
+
+
+def _make_categorizer_checker(scale):
+    scale_tag_map = {
+        IdentityScale: "identity",
+        LinearScale: "linear",
+        MonomialScale: "monomial",
+        LogarithmicScale: "logarithmic",
+        ExponentialScale: "exponential",
+    }
+    expected_tag = scale_tag_map.get(type(scale))
+
+    def _categorizer_checker(df: pl.DataFrame, tags: dict, qrows: int = None):
+        assert qrows, "Number of original rows is mandatory for categorizer tests."
+
+        assert len(df) >= Q_CATEGORIZER, (
+            f"Expected {qrows} rows to be at least {Q_CATEGORIZER}, "
+            f"but got {len(df)} instead. Rows were lost during processing."
+        )
+
+        assert len(df) == qrows, (
+            f"Expected {qrows} rows (same as input dataset), "
+            f"but got {len(df)} instead. Rows were lost during processing."
+        )
+
+        assert "value" in df.columns
+        assert "value_category" in df.columns
+        assert expected_tag in tags, (
+            f"Expected tag '{expected_tag}' not found in tags. "
+            f"Available tags: {list(tags.keys())}"
+        )
+        assert "value_category" in tags[expected_tag], (
+            f"Column 'value_category' not found in tags['{expected_tag}']. "
+            f"Available columns: {list(tags[expected_tag])}"
+        )
+        assert df.schema["value_category"] == pl.UInt8, (
+            "Expected UInt8 dtype for DQ result column; got"
+            f" {df.schema['value_category']}"
+        )
+
+        minimum, maximum = scale.scale_range
+        dtype = df.schema["value"]
+
+        cuts = []
+        match scale:
+            case IdentityScale():
+                cuts = [minimum + i + 1 for i in range(scale.bins)]
+            case LinearScale():
+                size = (maximum - minimum) / scale.bins
+                cuts = [minimum + (i + 1) * size for i in range(scale.bins)]
+                cuts[-1] = maximum
+            case MonomialScale():
+                lower = minimum ** (1.0 / scale.power)
+                upper = maximum ** (1.0 / scale.power)
+                size = (upper - lower) / scale.bins
+                cuts = [
+                    (lower + (i + 1) * size) ** scale.power for i in range(scale.bins)
+                ]
+                cuts[-1] = maximum
+            case LogarithmicScale():
+                lower = scale.base**minimum
+                upper = scale.base**maximum
+                size = (upper - lower) / scale.bins
+                if scale.base == 10.0:
+                    cuts = [
+                        math.log10(lower + (i + 1) * size) for i in range(scale.bins)
+                    ]
+                elif scale.base == math.e:
+                    cuts = [math.log(lower + (i + 1) * size) for i in range(scale.bins)]
+                else:
+                    cuts = [
+                        math.log(lower + (i + 1) * size) / math.log(scale.base)
+                        for i in range(scale.bins)
+                    ]
+                cuts[-1] = maximum
+            case ExponentialScale():
+                if scale.base == 10.0:
+                    lower = math.log10(minimum)
+                    upper = math.log10(maximum)
+                elif scale.base == math.e:
+                    lower = math.log(minimum)
+                    upper = math.log(maximum)
+                else:
+                    lower = math.log(minimum) / math.log(scale.base)
+                    upper = math.log(maximum) / math.log(scale.base)
+                size = (upper - lower) / scale.bins
+                cuts = [
+                    scale.base ** (lower + (i + 1) * size) for i in range(scale.bins)
+                ]
+                cuts[-1] = maximum
+            case _:
+                raise ValueError(f"Unsupported scale type: {type(scale)}")
+
+        def get_expected_bin(row_value):
+            if row_value is None or (
+                dtype in [pl.Float32, pl.Float64] and math.isnan(row_value)
+            ):
+                return None
+            if row_value < minimum:
+                return ByteSentinel.UNDERFLOW
+            if row_value > maximum:
+                return ByteSentinel.OVERFLOW
+
+            if not scale.min_in_first_bin and row_value == minimum:
+                return 0
+
+            for i, cut in enumerate(cuts, start=1):
+                if row_value <= cut:
+                    return i
+
+            return scale.bins
+
+        null_mask = pl.col("value").is_null()
+        null_count = df.filter(null_mask).height
+        dq_null_count = df.filter(pl.col("value_category") == ByteSentinel.NULL).height
+        assert (
+            dq_null_count == null_count
+        ), f"NULL: dq={dq_null_count}, expected={null_count}"
+
+        if dtype in [pl.Float32, pl.Float64]:
+            nan_mask = pl.col("value").is_nan()
+            nan_count = df.filter(nan_mask).height
+            dq_nan_count = df.filter(
+                pl.col("value_category") == ByteSentinel.NAN
+            ).height
+            assert (
+                dq_nan_count == nan_count
+            ), f"NAN: dq={dq_nan_count}, expected={nan_count}"
+
+        underflow_mask = pl.col("value").is_not_null() & (pl.col("value") < minimum)
+        if dtype in [pl.Float32, pl.Float64]:
+            underflow_mask = underflow_mask & pl.col("value").is_not_nan()
+        underflow_count = df.filter(underflow_mask).height
+        dq_underflow_count = df.filter(
+            pl.col("value_category") == ByteSentinel.UNDERFLOW
+        ).height
+        assert (
+            dq_underflow_count == underflow_count
+        ), f"UNDERFLOW: dq={dq_underflow_count}, expected={underflow_count}"
+
+        overflow_mask = pl.col("value").is_not_null() & (pl.col("value") > maximum)
+        if dtype in [pl.Float32, pl.Float64]:
+            overflow_mask = overflow_mask & pl.col("value").is_not_nan()
+        overflow_count = df.filter(overflow_mask).height
+        dq_overflow_count = df.filter(
+            pl.col("value_category") == ByteSentinel.OVERFLOW
+        ).height
+        assert (
+            dq_overflow_count == overflow_count
+        ), f"OVERFLOW: dq={dq_overflow_count}, expected={overflow_count}"
+
+        valid_mask = (
+            pl.col("value").is_not_null()
+            & (pl.col("value") >= minimum)
+            & (pl.col("value") <= maximum)
+        )
+        if dtype in [pl.Float32, pl.Float64]:
+            valid_mask = valid_mask & pl.col("value").is_not_nan()
+
+        valid_df = df.filter(valid_mask)
+
+        for row in valid_df.iter_rows(named=True):
+            value = row["value"]
+            actual_bin = row["value_category"]
+            expected_bin = get_expected_bin(value)
+            assert actual_bin == expected_bin, (
+                f"Value {value} assigned to bin {actual_bin}, "
+                f"but expected bin {expected_bin} based on scale {type(scale).__name__}"
+            )
+
+    return _categorizer_checker
 
 
 def _is_null_action(
@@ -1820,6 +2001,42 @@ def _make_has_length_action(min_length: int, max_length: int):
     return _has_length_action
 
 
+def _make_categorizer_action(scale):
+    scale_tag_map = {
+        IdentityScale: "identity",
+        LinearScale: "linear",
+        MonomialScale: "monomial",
+        LogarithmicScale: "logarithmic",
+        ExponentialScale: "exponential",
+    }
+    tag = scale_tag_map.get(type(scale))
+
+    def _categorizer_action(
+        table: str = "table00",
+        _dtype: type = None,
+    ) -> DataQuality:
+        return DataQuality(
+            table=table,
+            classifiers=[
+                Categorizer(
+                    column_names=("value", "value_category"),
+                    scale=scale,
+                    tags=tag,
+                )
+            ],
+            operators=Summary(),
+        )
+
+    return _categorizer_action
+
+
+def _make_categorizer_dataset(scale):
+    def _categorizer_dataset(dtype: type) -> td.TableFrame:
+        return categorical_dataset(scale, dtype)
+
+    return _categorizer_dataset
+
+
 DATASET_ROWS: dict[type, DataShape] = {
     td.Boolean: DataShape(
         Q_ZERO,
@@ -2006,6 +2223,8 @@ NUMERIC_DTYPES = [
     td.Float32,
     td.Float64,
 ]
+
+INTEGER_NUMERIC_DTYPES = [td.Int8, td.Int16, td.Int32, td.Int64]
 
 SIGNED_NUMERIC_DTYPES = [
     td.Decimal,
@@ -2706,10 +2925,1462 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             name="length_0_5",
         ),
     ],
+    Categorizer: [
+        ClassifierConfiguration(
+            classifiers=[
+                Categorizer(
+                    column_names=("value", "value_category"),
+                    scale=LinearScale(
+                        min_val=0,
+                        max_val=100,
+                        bins=10,
+                        min_in_first_bin=True,
+                    ),
+                    tags="linear",
+                ),
+            ],
+            method=DataQualityEngine.categorizer,
+            checker=_make_categorizer_checker(
+                LinearScale(
+                    min_val=0,
+                    max_val=100,
+                    bins=10,
+                    min_in_first_bin=True,
+                )
+            ),
+            actions=_make_categorizer_action(
+                LinearScale(
+                    min_val=0,
+                    max_val=100,
+                    bins=10,
+                    min_in_first_bin=True,
+                )
+            ),
+            dtypes=NUMERIC_DTYPES,
+            name="linear_0_100_10_with_min",
+            dataset=_make_categorizer_dataset(
+                LinearScale(
+                    min_val=0,
+                    max_val=100,
+                    bins=10,
+                    min_in_first_bin=True,
+                )
+            ),
+        ),
+        ClassifierConfiguration(
+            classifiers=[
+                Categorizer(
+                    column_names=("value", "value_category"),
+                    scale=LinearScale(
+                        min_val=0,
+                        max_val=100,
+                        bins=10,
+                        min_in_first_bin=False,
+                    ),
+                    tags="linear",
+                ),
+            ],
+            method=DataQualityEngine.categorizer,
+            checker=_make_categorizer_checker(
+                LinearScale(
+                    min_val=0,
+                    max_val=100,
+                    bins=10,
+                    min_in_first_bin=False,
+                )
+            ),
+            actions=_make_categorizer_action(
+                LinearScale(
+                    min_val=0,
+                    max_val=100,
+                    bins=10,
+                    min_in_first_bin=False,
+                )
+            ),
+            dtypes=NUMERIC_DTYPES,
+            name="linear_0_100_10_no_min",
+            dataset=_make_categorizer_dataset(
+                LinearScale(
+                    min_val=0,
+                    max_val=100,
+                    bins=10,
+                    min_in_first_bin=False,
+                )
+            ),
+        ),
+        ClassifierConfiguration(
+            classifiers=[
+                Categorizer(
+                    column_names=("value", "value_category"),
+                    scale=LinearScale(
+                        min_val=0,
+                        max_val=10,
+                        bins=5,
+                        min_in_first_bin=True,
+                    ),
+                    tags="linear",
+                ),
+            ],
+            method=DataQualityEngine.categorizer,
+            checker=_make_categorizer_checker(
+                LinearScale(
+                    min_val=0,
+                    max_val=10,
+                    bins=5,
+                    min_in_first_bin=True,
+                )
+            ),
+            actions=_make_categorizer_action(
+                LinearScale(
+                    min_val=0,
+                    max_val=10,
+                    bins=5,
+                    min_in_first_bin=True,
+                )
+            ),
+            dtypes=NUMERIC_DTYPES,
+            name="linear_0_10_5_with_min",
+            dataset=_make_categorizer_dataset(
+                LinearScale(
+                    min_val=0,
+                    max_val=10,
+                    bins=5,
+                    min_in_first_bin=True,
+                )
+            ),
+        ),
+        ClassifierConfiguration(
+            classifiers=[
+                Categorizer(
+                    column_names=("value", "value_category"),
+                    scale=LinearScale(
+                        min_val=0,
+                        max_val=10,
+                        bins=5,
+                        min_in_first_bin=False,
+                    ),
+                    tags="linear",
+                ),
+            ],
+            method=DataQualityEngine.categorizer,
+            checker=_make_categorizer_checker(
+                LinearScale(
+                    min_val=0,
+                    max_val=10,
+                    bins=5,
+                    min_in_first_bin=False,
+                )
+            ),
+            actions=_make_categorizer_action(
+                LinearScale(
+                    min_val=0,
+                    max_val=10,
+                    bins=5,
+                    min_in_first_bin=False,
+                )
+            ),
+            dtypes=NUMERIC_DTYPES,
+            name="linear_0_10_5_no_min",
+            dataset=_make_categorizer_dataset(
+                LinearScale(
+                    min_val=0,
+                    max_val=10,
+                    bins=5,
+                    min_in_first_bin=False,
+                )
+            ),
+        ),
+        ClassifierConfiguration(
+            classifiers=[
+                Categorizer(
+                    column_names=("value", "value_category"),
+                    scale=LinearScale(
+                        min_val=-50,
+                        max_val=50,
+                        bins=20,
+                        min_in_first_bin=True,
+                    ),
+                    tags="linear",
+                ),
+            ],
+            method=DataQualityEngine.categorizer,
+            checker=_make_categorizer_checker(
+                LinearScale(
+                    min_val=-50,
+                    max_val=50,
+                    bins=20,
+                    min_in_first_bin=True,
+                )
+            ),
+            actions=_make_categorizer_action(
+                LinearScale(
+                    min_val=-50,
+                    max_val=50,
+                    bins=20,
+                    min_in_first_bin=True,
+                )
+            ),
+            dtypes=NUMERIC_DTYPES,
+            name="linear_neg50_50_20_with_min",
+            dataset=_make_categorizer_dataset(
+                LinearScale(
+                    min_val=-50,
+                    max_val=50,
+                    bins=20,
+                    min_in_first_bin=True,
+                )
+            ),
+        ),
+        ClassifierConfiguration(
+            classifiers=[
+                Categorizer(
+                    column_names=("value", "value_category"),
+                    scale=LinearScale(
+                        min_val=-50,
+                        max_val=50,
+                        bins=20,
+                        min_in_first_bin=False,
+                    ),
+                    tags="linear",
+                ),
+            ],
+            method=DataQualityEngine.categorizer,
+            checker=_make_categorizer_checker(
+                LinearScale(
+                    min_val=-50,
+                    max_val=50,
+                    bins=20,
+                    min_in_first_bin=False,
+                )
+            ),
+            actions=_make_categorizer_action(
+                LinearScale(
+                    min_val=-50,
+                    max_val=50,
+                    bins=20,
+                    min_in_first_bin=False,
+                )
+            ),
+            dtypes=NUMERIC_DTYPES,
+            name="linear_neg50_50_20_no_min",
+            dataset=_make_categorizer_dataset(
+                LinearScale(
+                    min_val=-50,
+                    max_val=50,
+                    bins=20,
+                    min_in_first_bin=False,
+                )
+            ),
+        ),
+        ClassifierConfiguration(
+            classifiers=[
+                Categorizer(
+                    column_names=("value", "value_category"),
+                    scale=LinearScale(
+                        min_val=0,
+                        max_val=1,
+                        bins=100,
+                        min_in_first_bin=True,
+                    ),
+                    tags="linear",
+                ),
+            ],
+            method=DataQualityEngine.categorizer,
+            checker=_make_categorizer_checker(
+                LinearScale(
+                    min_val=0,
+                    max_val=1,
+                    bins=100,
+                    min_in_first_bin=True,
+                )
+            ),
+            actions=_make_categorizer_action(
+                LinearScale(
+                    min_val=0,
+                    max_val=1,
+                    bins=100,
+                    min_in_first_bin=True,
+                )
+            ),
+            dtypes=NUMERIC_DTYPES,
+            name="linear_0_1_100_with_min",
+            dataset=_make_categorizer_dataset(
+                LinearScale(
+                    min_val=0,
+                    max_val=1,
+                    bins=100,
+                    min_in_first_bin=True,
+                )
+            ),
+        ),
+        ClassifierConfiguration(
+            classifiers=[
+                Categorizer(
+                    column_names=("value", "value_category"),
+                    scale=LinearScale(
+                        min_val=0,
+                        max_val=1,
+                        bins=100,
+                        min_in_first_bin=False,
+                    ),
+                    tags="linear",
+                ),
+            ],
+            method=DataQualityEngine.categorizer,
+            checker=_make_categorizer_checker(
+                LinearScale(
+                    min_val=0,
+                    max_val=1,
+                    bins=100,
+                    min_in_first_bin=False,
+                )
+            ),
+            actions=_make_categorizer_action(
+                LinearScale(
+                    min_val=0,
+                    max_val=1,
+                    bins=100,
+                    min_in_first_bin=False,
+                )
+            ),
+            dtypes=NUMERIC_DTYPES,
+            name="linear_0_1_100_no_min",
+            dataset=_make_categorizer_dataset(
+                LinearScale(
+                    min_val=0,
+                    max_val=1,
+                    bins=100,
+                    min_in_first_bin=False,
+                )
+            ),
+        ),
+        ClassifierConfiguration(
+            classifiers=[
+                Categorizer(
+                    column_names=("value", "value_category"),
+                    scale=IdentityScale(
+                        min_val=0,
+                        max_val=10,
+                        min_in_first_bin=True,
+                    ),
+                    tags="identity",
+                ),
+            ],
+            method=DataQualityEngine.categorizer,
+            checker=_make_categorizer_checker(
+                IdentityScale(
+                    min_val=0,
+                    max_val=10,
+                    min_in_first_bin=True,
+                )
+            ),
+            actions=_make_categorizer_action(
+                IdentityScale(
+                    min_val=0,
+                    max_val=10,
+                    min_in_first_bin=True,
+                )
+            ),
+            dtypes=INTEGER_NUMERIC_DTYPES,
+            name="identity_0_10_with_min",
+            dataset=_make_categorizer_dataset(
+                IdentityScale(
+                    min_val=0,
+                    max_val=10,
+                    min_in_first_bin=True,
+                )
+            ),
+        ),
+        ClassifierConfiguration(
+            classifiers=[
+                Categorizer(
+                    column_names=("value", "value_category"),
+                    scale=IdentityScale(
+                        min_val=0,
+                        max_val=10,
+                        min_in_first_bin=False,
+                    ),
+                    tags="identity",
+                ),
+            ],
+            method=DataQualityEngine.categorizer,
+            checker=_make_categorizer_checker(
+                IdentityScale(
+                    min_val=0,
+                    max_val=10,
+                    min_in_first_bin=False,
+                )
+            ),
+            actions=_make_categorizer_action(
+                IdentityScale(
+                    min_val=0,
+                    max_val=10,
+                    min_in_first_bin=False,
+                )
+            ),
+            dtypes=INTEGER_NUMERIC_DTYPES,
+            name="identity_0_10_no_min",
+            dataset=_make_categorizer_dataset(
+                IdentityScale(
+                    min_val=0,
+                    max_val=10,
+                    min_in_first_bin=False,
+                )
+            ),
+        ),
+        ClassifierConfiguration(
+            classifiers=[
+                Categorizer(
+                    column_names=("value", "value_category"),
+                    scale=IdentityScale(
+                        min_val=1,
+                        max_val=20,
+                        min_in_first_bin=True,
+                    ),
+                    tags="identity",
+                ),
+            ],
+            method=DataQualityEngine.categorizer,
+            checker=_make_categorizer_checker(
+                IdentityScale(
+                    min_val=1,
+                    max_val=20,
+                    min_in_first_bin=True,
+                )
+            ),
+            actions=_make_categorizer_action(
+                IdentityScale(
+                    min_val=1,
+                    max_val=20,
+                    min_in_first_bin=True,
+                )
+            ),
+            dtypes=INTEGER_NUMERIC_DTYPES,
+            name="identity_1_20_with_min",
+            dataset=_make_categorizer_dataset(
+                IdentityScale(
+                    min_val=1,
+                    max_val=20,
+                    min_in_first_bin=True,
+                )
+            ),
+        ),
+        ClassifierConfiguration(
+            classifiers=[
+                Categorizer(
+                    column_names=("value", "value_category"),
+                    scale=IdentityScale(
+                        min_val=1,
+                        max_val=20,
+                        min_in_first_bin=False,
+                    ),
+                    tags="identity",
+                ),
+            ],
+            method=DataQualityEngine.categorizer,
+            checker=_make_categorizer_checker(
+                IdentityScale(
+                    min_val=1,
+                    max_val=20,
+                    min_in_first_bin=False,
+                )
+            ),
+            actions=_make_categorizer_action(
+                IdentityScale(
+                    min_val=1,
+                    max_val=20,
+                    min_in_first_bin=False,
+                )
+            ),
+            dtypes=INTEGER_NUMERIC_DTYPES,
+            name="identity_1_20_no_min",
+            dataset=_make_categorizer_dataset(
+                IdentityScale(
+                    min_val=1,
+                    max_val=20,
+                    min_in_first_bin=False,
+                )
+            ),
+        ),
+        ClassifierConfiguration(
+            classifiers=[
+                Categorizer(
+                    column_names=("value", "value_category"),
+                    scale=IdentityScale(
+                        min_val=0,
+                        max_val=100,
+                        min_in_first_bin=True,
+                    ),
+                    tags="identity",
+                ),
+            ],
+            method=DataQualityEngine.categorizer,
+            checker=_make_categorizer_checker(
+                IdentityScale(
+                    min_val=0,
+                    max_val=100,
+                    min_in_first_bin=True,
+                )
+            ),
+            actions=_make_categorizer_action(
+                IdentityScale(
+                    min_val=0,
+                    max_val=100,
+                    min_in_first_bin=True,
+                )
+            ),
+            dtypes=INTEGER_NUMERIC_DTYPES,
+            name="identity_0_100_with_min",
+            dataset=_make_categorizer_dataset(
+                IdentityScale(
+                    min_val=0,
+                    max_val=100,
+                    min_in_first_bin=True,
+                )
+            ),
+        ),
+        ClassifierConfiguration(
+            classifiers=[
+                Categorizer(
+                    column_names=("value", "value_category"),
+                    scale=IdentityScale(
+                        min_val=0,
+                        max_val=100,
+                        min_in_first_bin=False,
+                    ),
+                    tags="identity",
+                ),
+            ],
+            method=DataQualityEngine.categorizer,
+            checker=_make_categorizer_checker(
+                IdentityScale(
+                    min_val=0,
+                    max_val=100,
+                    min_in_first_bin=False,
+                )
+            ),
+            actions=_make_categorizer_action(
+                IdentityScale(
+                    min_val=0,
+                    max_val=100,
+                    min_in_first_bin=False,
+                )
+            ),
+            dtypes=INTEGER_NUMERIC_DTYPES,
+            name="identity_0_100_no_min",
+            dataset=_make_categorizer_dataset(
+                IdentityScale(
+                    min_val=0,
+                    max_val=100,
+                    min_in_first_bin=False,
+                )
+            ),
+        ),
+        ClassifierConfiguration(
+            classifiers=[
+                Categorizer(
+                    column_names=("value", "value_category"),
+                    scale=MonomialScale(
+                        min_val=1,
+                        max_val=100,
+                        power=2.0,
+                        bins=10,
+                        min_in_first_bin=True,
+                    ),
+                    tags="monomial",
+                ),
+            ],
+            method=DataQualityEngine.categorizer,
+            checker=_make_categorizer_checker(
+                MonomialScale(
+                    min_val=1,
+                    max_val=100,
+                    power=2.0,
+                    bins=10,
+                    min_in_first_bin=True,
+                )
+            ),
+            actions=_make_categorizer_action(
+                MonomialScale(
+                    min_val=1,
+                    max_val=100,
+                    power=2.0,
+                    bins=10,
+                    min_in_first_bin=True,
+                )
+            ),
+            dtypes=NUMERIC_DTYPES,
+            name="monomial_quadratic_1_100_10_with_min",
+            dataset=_make_categorizer_dataset(
+                MonomialScale(
+                    min_val=1,
+                    max_val=100,
+                    power=2.0,
+                    bins=10,
+                    min_in_first_bin=True,
+                )
+            ),
+        ),
+        ClassifierConfiguration(
+            classifiers=[
+                Categorizer(
+                    column_names=("value", "value_category"),
+                    scale=MonomialScale(
+                        min_val=1,
+                        max_val=100,
+                        power=2.0,
+                        bins=10,
+                        min_in_first_bin=False,
+                    ),
+                    tags="monomial",
+                ),
+            ],
+            method=DataQualityEngine.categorizer,
+            checker=_make_categorizer_checker(
+                MonomialScale(
+                    min_val=1,
+                    max_val=100,
+                    power=2.0,
+                    bins=10,
+                    min_in_first_bin=False,
+                )
+            ),
+            actions=_make_categorizer_action(
+                MonomialScale(
+                    min_val=1,
+                    max_val=100,
+                    power=2.0,
+                    bins=10,
+                    min_in_first_bin=False,
+                )
+            ),
+            dtypes=NUMERIC_DTYPES,
+            name="monomial_quadratic_1_100_10_no_min",
+            dataset=_make_categorizer_dataset(
+                MonomialScale(
+                    min_val=1,
+                    max_val=100,
+                    power=2.0,
+                    bins=10,
+                    min_in_first_bin=False,
+                )
+            ),
+        ),
+        ClassifierConfiguration(
+            classifiers=[
+                Categorizer(
+                    column_names=("value", "value_category"),
+                    scale=MonomialScale(
+                        min_val=0,
+                        max_val=27,
+                        power=3.0,
+                        bins=9,
+                        min_in_first_bin=True,
+                    ),
+                    tags="monomial",
+                ),
+            ],
+            method=DataQualityEngine.categorizer,
+            checker=_make_categorizer_checker(
+                MonomialScale(
+                    min_val=0,
+                    max_val=27,
+                    power=3.0,
+                    bins=9,
+                    min_in_first_bin=True,
+                )
+            ),
+            actions=_make_categorizer_action(
+                MonomialScale(
+                    min_val=0,
+                    max_val=27,
+                    power=3.0,
+                    bins=9,
+                    min_in_first_bin=True,
+                )
+            ),
+            dtypes=NUMERIC_DTYPES,
+            name="monomial_cubic_0_27_9_with_min",
+            dataset=_make_categorizer_dataset(
+                MonomialScale(
+                    min_val=0,
+                    max_val=27,
+                    power=3.0,
+                    bins=9,
+                    min_in_first_bin=True,
+                )
+            ),
+        ),
+        ClassifierConfiguration(
+            classifiers=[
+                Categorizer(
+                    column_names=("value", "value_category"),
+                    scale=MonomialScale(
+                        min_val=0,
+                        max_val=27,
+                        power=3.0,
+                        bins=9,
+                        min_in_first_bin=False,
+                    ),
+                    tags="monomial",
+                ),
+            ],
+            method=DataQualityEngine.categorizer,
+            checker=_make_categorizer_checker(
+                MonomialScale(
+                    min_val=0,
+                    max_val=27,
+                    power=3.0,
+                    bins=9,
+                    min_in_first_bin=False,
+                )
+            ),
+            actions=_make_categorizer_action(
+                MonomialScale(
+                    min_val=0,
+                    max_val=27,
+                    power=3.0,
+                    bins=9,
+                    min_in_first_bin=False,
+                )
+            ),
+            dtypes=NUMERIC_DTYPES,
+            name="monomial_cubic_0_27_9_no_min",
+            dataset=_make_categorizer_dataset(
+                MonomialScale(
+                    min_val=0,
+                    max_val=27,
+                    power=3.0,
+                    bins=9,
+                    min_in_first_bin=False,
+                )
+            ),
+        ),
+        ClassifierConfiguration(
+            classifiers=[
+                Categorizer(
+                    column_names=("value", "value_category"),
+                    scale=MonomialScale(
+                        min_val=1,
+                        max_val=1000,
+                        power=2.0,
+                        bins=30,
+                        min_in_first_bin=True,
+                    ),
+                    tags="monomial",
+                ),
+            ],
+            method=DataQualityEngine.categorizer,
+            checker=_make_categorizer_checker(
+                MonomialScale(
+                    min_val=1,
+                    max_val=1000,
+                    power=2.0,
+                    bins=30,
+                    min_in_first_bin=True,
+                )
+            ),
+            actions=_make_categorizer_action(
+                MonomialScale(
+                    min_val=1,
+                    max_val=1000,
+                    power=2.0,
+                    bins=30,
+                    min_in_first_bin=True,
+                )
+            ),
+            dtypes=NUMERIC_DTYPES,
+            name="monomial_quadratic_1_1000_30_with_min",
+            dataset=_make_categorizer_dataset(
+                MonomialScale(
+                    min_val=1,
+                    max_val=1000,
+                    power=2.0,
+                    bins=30,
+                    min_in_first_bin=True,
+                )
+            ),
+        ),
+        ClassifierConfiguration(
+            classifiers=[
+                Categorizer(
+                    column_names=("value", "value_category"),
+                    scale=MonomialScale(
+                        min_val=1,
+                        max_val=1000,
+                        power=2.0,
+                        bins=30,
+                        min_in_first_bin=False,
+                    ),
+                    tags="monomial",
+                ),
+            ],
+            method=DataQualityEngine.categorizer,
+            checker=_make_categorizer_checker(
+                MonomialScale(
+                    min_val=1,
+                    max_val=1000,
+                    power=2.0,
+                    bins=30,
+                    min_in_first_bin=False,
+                )
+            ),
+            actions=_make_categorizer_action(
+                MonomialScale(
+                    min_val=1,
+                    max_val=1000,
+                    power=2.0,
+                    bins=30,
+                    min_in_first_bin=False,
+                )
+            ),
+            dtypes=NUMERIC_DTYPES,
+            name="monomial_quadratic_1_1000_30_no_min",
+            dataset=_make_categorizer_dataset(
+                MonomialScale(
+                    min_val=1,
+                    max_val=1000,
+                    power=2.0,
+                    bins=30,
+                    min_in_first_bin=False,
+                )
+            ),
+        ),
+        ClassifierConfiguration(
+            classifiers=[
+                Categorizer(
+                    column_names=("value", "value_category"),
+                    scale=LogarithmicScale(
+                        min_val=0,
+                        max_val=6,
+                        base=10.0,
+                        bins=6,
+                        min_in_first_bin=True,
+                    ),
+                    tags="logarithmic",
+                ),
+            ],
+            method=DataQualityEngine.categorizer,
+            checker=_make_categorizer_checker(
+                LogarithmicScale(
+                    min_val=0,
+                    max_val=6,
+                    base=10.0,
+                    bins=6,
+                    min_in_first_bin=True,
+                )
+            ),
+            actions=_make_categorizer_action(
+                LogarithmicScale(
+                    min_val=0,
+                    max_val=6,
+                    base=10.0,
+                    bins=6,
+                    min_in_first_bin=True,
+                )
+            ),
+            dtypes=NUMERIC_DTYPES,
+            name="logarithmic_base10_0_6_6_with_min",
+            dataset=_make_categorizer_dataset(
+                LogarithmicScale(
+                    min_val=0,
+                    max_val=6,
+                    base=10.0,
+                    bins=6,
+                    min_in_first_bin=True,
+                )
+            ),
+        ),
+        ClassifierConfiguration(
+            classifiers=[
+                Categorizer(
+                    column_names=("value", "value_category"),
+                    scale=LogarithmicScale(
+                        min_val=0,
+                        max_val=6,
+                        base=10.0,
+                        bins=6,
+                        min_in_first_bin=False,
+                    ),
+                    tags="logarithmic",
+                ),
+            ],
+            method=DataQualityEngine.categorizer,
+            checker=_make_categorizer_checker(
+                LogarithmicScale(
+                    min_val=0,
+                    max_val=6,
+                    base=10.0,
+                    bins=6,
+                    min_in_first_bin=False,
+                )
+            ),
+            actions=_make_categorizer_action(
+                LogarithmicScale(
+                    min_val=0,
+                    max_val=6,
+                    base=10.0,
+                    bins=6,
+                    min_in_first_bin=False,
+                )
+            ),
+            dtypes=NUMERIC_DTYPES,
+            name="logarithmic_base10_0_6_6_no_min",
+            dataset=_make_categorizer_dataset(
+                LogarithmicScale(
+                    min_val=0,
+                    max_val=6,
+                    base=10.0,
+                    bins=6,
+                    min_in_first_bin=False,
+                )
+            ),
+        ),
+        ClassifierConfiguration(
+            classifiers=[
+                Categorizer(
+                    column_names=("value", "value_category"),
+                    scale=LogarithmicScale(
+                        min_val=1,
+                        max_val=4,
+                        base=2.0,
+                        bins=4,
+                        min_in_first_bin=True,
+                    ),
+                    tags="logarithmic",
+                ),
+            ],
+            method=DataQualityEngine.categorizer,
+            checker=_make_categorizer_checker(
+                LogarithmicScale(
+                    min_val=1,
+                    max_val=4,
+                    base=2.0,
+                    bins=4,
+                    min_in_first_bin=True,
+                )
+            ),
+            actions=_make_categorizer_action(
+                LogarithmicScale(
+                    min_val=1,
+                    max_val=4,
+                    base=2.0,
+                    bins=4,
+                    min_in_first_bin=True,
+                )
+            ),
+            dtypes=NUMERIC_DTYPES,
+            name="logarithmic_base2_1_4_4_with_min",
+            dataset=_make_categorizer_dataset(
+                LogarithmicScale(
+                    min_val=1,
+                    max_val=4,
+                    base=2.0,
+                    bins=4,
+                    min_in_first_bin=True,
+                )
+            ),
+        ),
+        ClassifierConfiguration(
+            classifiers=[
+                Categorizer(
+                    column_names=("value", "value_category"),
+                    scale=LogarithmicScale(
+                        min_val=1,
+                        max_val=4,
+                        base=2.0,
+                        bins=4,
+                        min_in_first_bin=False,
+                    ),
+                    tags="logarithmic",
+                ),
+            ],
+            method=DataQualityEngine.categorizer,
+            checker=_make_categorizer_checker(
+                LogarithmicScale(
+                    min_val=1,
+                    max_val=4,
+                    base=2.0,
+                    bins=4,
+                    min_in_first_bin=False,
+                )
+            ),
+            actions=_make_categorizer_action(
+                LogarithmicScale(
+                    min_val=1,
+                    max_val=4,
+                    base=2.0,
+                    bins=4,
+                    min_in_first_bin=False,
+                )
+            ),
+            dtypes=NUMERIC_DTYPES,
+            name="logarithmic_base2_1_4_4_no_min",
+            dataset=_make_categorizer_dataset(
+                LogarithmicScale(
+                    min_val=1,
+                    max_val=4,
+                    base=2.0,
+                    bins=4,
+                    min_in_first_bin=False,
+                )
+            ),
+        ),
+        ClassifierConfiguration(
+            classifiers=[
+                Categorizer(
+                    column_names=("value", "value_category"),
+                    scale=LogarithmicScale(
+                        min_val=0,
+                        max_val=3,
+                        base=math.e,
+                        bins=10,
+                        min_in_first_bin=True,
+                    ),
+                    tags="logarithmic",
+                ),
+            ],
+            method=DataQualityEngine.categorizer,
+            checker=_make_categorizer_checker(
+                LogarithmicScale(
+                    min_val=0,
+                    max_val=3,
+                    base=math.e,
+                    bins=10,
+                    min_in_first_bin=True,
+                )
+            ),
+            actions=_make_categorizer_action(
+                LogarithmicScale(
+                    min_val=0,
+                    max_val=3,
+                    base=math.e,
+                    bins=10,
+                    min_in_first_bin=True,
+                )
+            ),
+            dtypes=NUMERIC_DTYPES,
+            name="logarithmic_base_e_0_3_10_with_min",
+            dataset=_make_categorizer_dataset(
+                LogarithmicScale(
+                    min_val=0,
+                    max_val=3,
+                    base=math.e,
+                    bins=10,
+                    min_in_first_bin=True,
+                )
+            ),
+        ),
+        ClassifierConfiguration(
+            classifiers=[
+                Categorizer(
+                    column_names=("value", "value_category"),
+                    scale=LogarithmicScale(
+                        min_val=0,
+                        max_val=3,
+                        base=math.e,
+                        bins=10,
+                        min_in_first_bin=False,
+                    ),
+                    tags="logarithmic",
+                ),
+            ],
+            method=DataQualityEngine.categorizer,
+            checker=_make_categorizer_checker(
+                LogarithmicScale(
+                    min_val=0,
+                    max_val=3,
+                    base=math.e,
+                    bins=10,
+                    min_in_first_bin=False,
+                )
+            ),
+            actions=_make_categorizer_action(
+                LogarithmicScale(
+                    min_val=0,
+                    max_val=3,
+                    base=math.e,
+                    bins=10,
+                    min_in_first_bin=False,
+                )
+            ),
+            dtypes=NUMERIC_DTYPES,
+            name="logarithmic_base_e_0_3_10_no_min",
+            dataset=_make_categorizer_dataset(
+                LogarithmicScale(
+                    min_val=0,
+                    max_val=3,
+                    base=math.e,
+                    bins=10,
+                    min_in_first_bin=False,
+                )
+            ),
+        ),
+        ClassifierConfiguration(
+            classifiers=[
+                Categorizer(
+                    column_names=("value", "value_category"),
+                    scale=ExponentialScale(
+                        min_val=1,
+                        max_val=1000000,
+                        base=10.0,
+                        bins=6,
+                        min_in_first_bin=True,
+                    ),
+                    tags="exponential",
+                ),
+            ],
+            method=DataQualityEngine.categorizer,
+            checker=_make_categorizer_checker(
+                ExponentialScale(
+                    min_val=1,
+                    max_val=1000000,
+                    base=10.0,
+                    bins=6,
+                    min_in_first_bin=True,
+                )
+            ),
+            actions=_make_categorizer_action(
+                ExponentialScale(
+                    min_val=1,
+                    max_val=1000000,
+                    base=10.0,
+                    bins=6,
+                    min_in_first_bin=True,
+                )
+            ),
+            dtypes=NUMERIC_DTYPES,
+            name="exponential_base10_1_1M_6_with_min",
+            dataset=_make_categorizer_dataset(
+                ExponentialScale(
+                    min_val=1,
+                    max_val=1000000,
+                    base=10.0,
+                    bins=6,
+                    min_in_first_bin=True,
+                )
+            ),
+        ),
+        ClassifierConfiguration(
+            classifiers=[
+                Categorizer(
+                    column_names=("value", "value_category"),
+                    scale=ExponentialScale(
+                        min_val=1,
+                        max_val=1000000,
+                        base=10.0,
+                        bins=6,
+                        min_in_first_bin=False,
+                    ),
+                    tags="exponential",
+                ),
+            ],
+            method=DataQualityEngine.categorizer,
+            checker=_make_categorizer_checker(
+                ExponentialScale(
+                    min_val=1,
+                    max_val=1000000,
+                    base=10.0,
+                    bins=6,
+                    min_in_first_bin=False,
+                )
+            ),
+            actions=_make_categorizer_action(
+                ExponentialScale(
+                    min_val=1,
+                    max_val=1000000,
+                    base=10.0,
+                    bins=6,
+                    min_in_first_bin=False,
+                )
+            ),
+            dtypes=NUMERIC_DTYPES,
+            name="exponential_base10_1_1M_6_no_min",
+            dataset=_make_categorizer_dataset(
+                ExponentialScale(
+                    min_val=1,
+                    max_val=1000000,
+                    base=10.0,
+                    bins=6,
+                    min_in_first_bin=False,
+                )
+            ),
+        ),
+        ClassifierConfiguration(
+            classifiers=[
+                Categorizer(
+                    column_names=("value", "value_category"),
+                    scale=ExponentialScale(
+                        min_val=1,
+                        max_val=1000,
+                        base=10.0,
+                        bins=3,
+                        min_in_first_bin=True,
+                    ),
+                    tags="exponential",
+                ),
+            ],
+            method=DataQualityEngine.categorizer,
+            checker=_make_categorizer_checker(
+                ExponentialScale(
+                    min_val=1,
+                    max_val=1000,
+                    base=10.0,
+                    bins=3,
+                    min_in_first_bin=True,
+                )
+            ),
+            actions=_make_categorizer_action(
+                ExponentialScale(
+                    min_val=1,
+                    max_val=1000,
+                    base=10.0,
+                    bins=3,
+                    min_in_first_bin=True,
+                )
+            ),
+            dtypes=NUMERIC_DTYPES,
+            name="exponential_base10_1_1000_3_with_min",
+            dataset=_make_categorizer_dataset(
+                ExponentialScale(
+                    min_val=1,
+                    max_val=1000,
+                    base=10.0,
+                    bins=3,
+                    min_in_first_bin=True,
+                )
+            ),
+        ),
+        ClassifierConfiguration(
+            classifiers=[
+                Categorizer(
+                    column_names=("value", "value_category"),
+                    scale=ExponentialScale(
+                        min_val=1,
+                        max_val=1000,
+                        base=10.0,
+                        bins=3,
+                        min_in_first_bin=False,
+                    ),
+                    tags="exponential",
+                ),
+            ],
+            method=DataQualityEngine.categorizer,
+            checker=_make_categorizer_checker(
+                ExponentialScale(
+                    min_val=1,
+                    max_val=1000,
+                    base=10.0,
+                    bins=3,
+                    min_in_first_bin=False,
+                )
+            ),
+            actions=_make_categorizer_action(
+                ExponentialScale(
+                    min_val=1,
+                    max_val=1000,
+                    base=10.0,
+                    bins=3,
+                    min_in_first_bin=False,
+                )
+            ),
+            dtypes=NUMERIC_DTYPES,
+            name="exponential_base10_1_1000_3_no_min",
+            dataset=_make_categorizer_dataset(
+                ExponentialScale(
+                    min_val=1,
+                    max_val=1000,
+                    base=10.0,
+                    bins=3,
+                    min_in_first_bin=False,
+                )
+            ),
+        ),
+        ClassifierConfiguration(
+            classifiers=[
+                Categorizer(
+                    column_names=("value", "value_category"),
+                    scale=ExponentialScale(
+                        min_val=2,
+                        max_val=256,
+                        base=2.0,
+                        bins=8,
+                        min_in_first_bin=True,
+                    ),
+                    tags="exponential",
+                ),
+            ],
+            method=DataQualityEngine.categorizer,
+            checker=_make_categorizer_checker(
+                ExponentialScale(
+                    min_val=2,
+                    max_val=256,
+                    base=2.0,
+                    bins=8,
+                    min_in_first_bin=True,
+                )
+            ),
+            actions=_make_categorizer_action(
+                ExponentialScale(
+                    min_val=2,
+                    max_val=256,
+                    base=2.0,
+                    bins=8,
+                    min_in_first_bin=True,
+                )
+            ),
+            dtypes=NUMERIC_DTYPES,
+            name="exponential_base2_2_256_8_with_min",
+            dataset=_make_categorizer_dataset(
+                ExponentialScale(
+                    min_val=2,
+                    max_val=256,
+                    base=2.0,
+                    bins=8,
+                    min_in_first_bin=True,
+                )
+            ),
+        ),
+        ClassifierConfiguration(
+            classifiers=[
+                Categorizer(
+                    column_names=("value", "value_category"),
+                    scale=ExponentialScale(
+                        min_val=2,
+                        max_val=256,
+                        base=2.0,
+                        bins=8,
+                        min_in_first_bin=False,
+                    ),
+                    tags="exponential",
+                ),
+            ],
+            method=DataQualityEngine.categorizer,
+            checker=_make_categorizer_checker(
+                ExponentialScale(
+                    min_val=2,
+                    max_val=256,
+                    base=2.0,
+                    bins=8,
+                    min_in_first_bin=False,
+                )
+            ),
+            actions=_make_categorizer_action(
+                ExponentialScale(
+                    min_val=2,
+                    max_val=256,
+                    base=2.0,
+                    bins=8,
+                    min_in_first_bin=False,
+                )
+            ),
+            dtypes=NUMERIC_DTYPES,
+            name="exponential_base2_2_256_8_no_min",
+            dataset=_make_categorizer_dataset(
+                ExponentialScale(
+                    min_val=2,
+                    max_val=256,
+                    base=2.0,
+                    bins=8,
+                    min_in_first_bin=False,
+                )
+            ),
+        ),
+        ClassifierConfiguration(
+            classifiers=[
+                Categorizer(
+                    column_names=("value", "value_category"),
+                    scale=ExponentialScale(
+                        min_val=1,
+                        max_val=1000,
+                        base=math.e,
+                        bins=10,
+                        min_in_first_bin=True,
+                    ),
+                    tags="exponential",
+                ),
+            ],
+            method=DataQualityEngine.categorizer,
+            checker=_make_categorizer_checker(
+                ExponentialScale(
+                    min_val=1,
+                    max_val=1000,
+                    base=math.e,
+                    bins=10,
+                    min_in_first_bin=True,
+                )
+            ),
+            actions=_make_categorizer_action(
+                ExponentialScale(
+                    min_val=1,
+                    max_val=1000,
+                    base=math.e,
+                    bins=10,
+                    min_in_first_bin=True,
+                )
+            ),
+            dtypes=NUMERIC_DTYPES,
+            name="exponential_base_e_1_1000_10_with_min",
+            dataset=_make_categorizer_dataset(
+                ExponentialScale(
+                    min_val=1,
+                    max_val=1000,
+                    base=math.e,
+                    bins=10,
+                    min_in_first_bin=True,
+                )
+            ),
+        ),
+        ClassifierConfiguration(
+            classifiers=[
+                Categorizer(
+                    column_names=("value", "value_category"),
+                    scale=ExponentialScale(
+                        min_val=1,
+                        max_val=1000,
+                        base=math.e,
+                        bins=10,
+                        min_in_first_bin=False,
+                    ),
+                    tags="exponential",
+                ),
+            ],
+            method=DataQualityEngine.categorizer,
+            checker=_make_categorizer_checker(
+                ExponentialScale(
+                    min_val=1,
+                    max_val=1000,
+                    base=math.e,
+                    bins=10,
+                    min_in_first_bin=False,
+                )
+            ),
+            actions=_make_categorizer_action(
+                ExponentialScale(
+                    min_val=1,
+                    max_val=1000,
+                    base=math.e,
+                    bins=10,
+                    min_in_first_bin=False,
+                )
+            ),
+            dtypes=NUMERIC_DTYPES,
+            name="exponential_base_e_1_1000_10_no_min",
+            dataset=_make_categorizer_dataset(
+                ExponentialScale(
+                    min_val=1,
+                    max_val=1000,
+                    base=math.e,
+                    bins=10,
+                    min_in_first_bin=False,
+                )
+            ),
+        ),
+    ],
 }
 
 
-def dataset(dtype) -> td.TableFrame:
+def boolean_dataset(dtype) -> td.TableFrame:
     if dtype not in DATASET_ROWS:
         raise ValueError(f"Unsupported dtype: {dtype}")
 
@@ -2728,6 +4399,147 @@ def dataset(dtype) -> td.TableFrame:
     data = {
         "id": list(range(total_rows)),
         "value": data_values,
+    }
+
+    lf = pl.LazyFrame(data)
+    tf = td.TableFrame.__build__(
+        df=lf,
+        mode="raw",
+        idx=0,
+        properties=TableFramePropertiesBuilder.empty(),
+    )
+
+    return tf
+
+
+def categorical_dataset(
+    scale, dtype, sample_size: int = Q_CATEGORIZER
+) -> td.TableFrame:
+    minimum, maximum = scale.scale_range
+    values = []
+    values.extend(np.linspace(minimum, maximum, sample_size).tolist())
+
+    values.extend([minimum, maximum])
+
+    underflow = abs(maximum - minimum) * 0.1 + 1
+    overflow = abs(maximum - minimum) * 0.1 + 1
+    values.extend(
+        [
+            minimum - underflow,
+            maximum + overflow,
+        ]
+    )
+
+    if isinstance(scale, LinearScale):
+        size = (maximum - minimum) / scale.bins
+        for i in range(1, scale.bins):
+            cut = minimum + i * size
+            values.extend(
+                [
+                    cut - 0.001,
+                    cut,
+                    cut + 0.001,
+                ]
+            )
+    elif isinstance(scale, IdentityScale):
+        if maximum - minimum <= 100:
+            values.extend(range(int(minimum), int(maximum) + 1))
+        else:
+            samples = np.linspace(minimum, maximum, 100, dtype=int)
+            values.extend(samples.tolist())
+    elif isinstance(scale, MonomialScale):
+        lower = minimum ** (1.0 / scale.power)
+        upper = maximum ** (1.0 / scale.power)
+        samples = np.linspace(lower, upper, 50)
+        samples = (samples**scale.power).tolist()
+        values.extend(samples)
+        if scale.power == 2.0:
+            perfect_squares = [i**2 for i in range(1, 50) if minimum <= i**2 <= maximum]
+            values.extend(perfect_squares)
+        elif scale.power == 3.0:
+            perfect_cubes = [i**3 for i in range(1, 20) if minimum <= i**3 <= maximum]
+            values.extend(perfect_cubes)
+    elif isinstance(scale, LogarithmicScale):
+        for exponent in np.linspace(minimum, maximum, 50):
+            values.append(scale.base**exponent)
+        for i in range(int(minimum), int(maximum) + 1):
+            values.append(scale.base**i)
+    elif isinstance(scale, ExponentialScale):
+        if minimum > 0:
+            samples = np.logspace(
+                math.log10(minimum) if scale.base == 10.0 else math.log(minimum),
+                math.log10(maximum) if scale.base == 10.0 else math.log(maximum),
+                100,
+            )
+            values.extend(samples.tolist())
+        if scale.base == 10.0:
+            powers = [10**i for i in range(10) if minimum <= 10**i <= maximum]
+            values.extend(powers)
+        elif scale.base == 2.0:
+            powers = [2**i for i in range(20) if minimum <= 2**i <= maximum]
+            values.extend(powers)
+
+    epsilon = (maximum - minimum) / 1000
+    values.extend(
+        [
+            minimum + epsilon,
+            minimum + 2 * epsilon,
+            minimum + 3 * epsilon,
+            maximum - 3 * epsilon,
+            maximum - 2 * epsilon,
+            maximum - epsilon,
+        ]
+    )
+
+    mid = (minimum + maximum) / 2
+    quarter1 = minimum + (maximum - minimum) / 4
+    quarter3 = minimum + 3 * (maximum - minimum) / 4
+    values.extend(
+        [
+            quarter1 - epsilon,
+            quarter1,
+            quarter1 + epsilon,
+            mid - epsilon,
+            mid,
+            mid + epsilon,
+            quarter3 - epsilon,
+            quarter3,
+            quarter3 + epsilon,
+        ]
+    )
+
+    values.append(None)
+
+    pl_dtype = getattr(pl, dtype.__name__)
+    if pl_dtype in [pl.Float32, pl.Float64]:
+        values.append(float("nan"))
+
+    regular_values = [
+        value
+        for value in values
+        if value is not None and not (isinstance(value, float) and math.isnan(value))
+    ]
+    special_values = [
+        value
+        for value in values
+        if value is None or (isinstance(value, float) and math.isnan(value))
+    ]
+
+    if dtype in [td.Int8, td.Int16, td.Int32, td.Int64, td.Int128]:
+        values = []
+        for value in regular_values:
+            try:
+                ivalue = int(round(value))
+                values.append(ivalue)
+            except (ValueError, OverflowError):
+                pass
+        values.extend(special_values)
+    else:
+        values = regular_values + special_values
+
+    data = {
+        "id": list(range(len(values))),
+        "value": values,
     }
 
     lf = pl.LazyFrame(data)

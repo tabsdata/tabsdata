@@ -9,7 +9,7 @@ import pytest
 from test_tabsdata.test_tableframe.actions.dataquality.dq_helper import (
     CLASSIFIERS,
     DATASET_ROWS,
-    dataset,
+    boolean_dataset,
 )
 
 from tabsdata.dataquality import IsIn, IsNotIn
@@ -77,13 +77,17 @@ def dq_parameters():
 @pytest.mark.dq
 @pytest.mark.parametrize("classifier,dtype,configuration", dq_parameters())
 def test_dq_engine(classifier, dtype, configuration):
+    dataset = (
+        configuration.dataset if configuration.dataset is not None else boolean_dataset
+    )
     tf = dataset(dtype)
+    qrows = len(tf._lf.collect())
     dq_engine = tf._dq
     for classifier in configuration.classifiers:
         converted_classifier = _convert_classifier_values(classifier, dtype)
         dq_engine = configuration.method(dq_engine, converted_classifier)
     assert isinstance(dq_engine, DataQualityEngine)
     df = dq_engine.tf()._lf.collect()
-    configuration.checker(df, dq_engine._tags)
+    configuration.checker(df, dq_engine._tags, qrows)
     assert "value" in df.columns
     assert "id" in df.columns

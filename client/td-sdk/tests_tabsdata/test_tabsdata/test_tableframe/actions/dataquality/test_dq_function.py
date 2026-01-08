@@ -4,7 +4,7 @@
 
 import pytest
 from fntest import tdfnrun
-from test_tabsdata.test_tableframe.actions.dataquality.dq_helper import dataset
+from test_tabsdata.test_tableframe.actions.dataquality.dq_helper import boolean_dataset
 
 import tabsdata as td
 import tabsdata.dataquality as dq
@@ -35,5 +35,5 @@ def test_dq_transformer():
 
     _ = tdfnrun(
         function=dq_transformer,
-        input_tables=dataset(td.Float32),
+        input_tables=boolean_dataset(td.Float32),
     )

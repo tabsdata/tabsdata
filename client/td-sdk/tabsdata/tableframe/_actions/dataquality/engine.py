@@ -33,7 +33,10 @@ from tabsdata.dataquality import (
 
 # noinspection PyProtectedMember
 from tabsdata.dataquality._classifier import (
+    Categorizer,
     Classifier,
+    ExponentialScale,
+    IdentityScale,
     IsNan,
     IsNegative,
     IsNegativeOrZero,
@@ -42,6 +45,9 @@ from tabsdata.dataquality._classifier import (
     IsNotNullNorNan,
     IsNull,
     IsNullOrNan,
+    LinearScale,
+    LogarithmicScale,
+    MonomialScale,
 )
 from tabsdata.exceptions import DataQualityProcessingError, ErrorCode
 from tabsdata.tableframe.lazyframe.properties import TableFramePropertiesBuilder
@@ -90,6 +96,8 @@ class ClassifierFamily(Enum):
 class ByteSentinel(IntEnum):
     FALSE = 0
     TRUE = 1
+    UNDERFLOW = 252
+    OVERFLOW = 253
     NAN = 254
     NULL = 255
 
@@ -107,24 +115,41 @@ class QExpressions(QCallableEnum):
 
 class PolarsProvider:
     def __init__(
-        self, function: Callable[[pl.Expr, pl.DataType, ClassifierType], pl.Expr]
+        self,
+        function: Callable[
+            [
+                pl.Expr,
+                pl.DataType,
+                ClassifierType,
+            ],
+            pl.Expr,
+        ],
     ):
         self._function = function
         signature = inspect.signature(function)
         self._needs_classifier = len(signature.parameters) > 2
 
     def __call__(
-        self, column: str, dtype: pl.DataType, classifier: ClassifierType
+        self,
+        column: str,
+        dtype: pl.DataType,
+        classifier: ClassifierType,
     ) -> pl.Expr:
         column_expr = pl.col(column)
         return self._function(column_expr, dtype, classifier)
 
     @staticmethod
-    def _null(column: pl.Expr) -> pl.Expr:
+    def _null(
+        column: pl.Expr,
+    ) -> pl.Expr:
         return column.is_null()
 
     @staticmethod
-    def is_null(column: pl.Expr, dtype: pl.DataType, _: IsNull) -> pl.Expr:
+    def is_null(
+        column: pl.Expr,
+        dtype: pl.DataType,
+        _: IsNull,
+    ) -> pl.Expr:
         return (
             pl.when(PolarsProvider._null(column))
             .then(ByteSentinel.TRUE)
@@ -135,7 +160,11 @@ class PolarsProvider:
         )
 
     @staticmethod
-    def is_not_null(column: pl.Expr, dtype: pl.DataType, _: IsNotNull) -> pl.Expr:
+    def is_not_null(
+        column: pl.Expr,
+        dtype: pl.DataType,
+        _: IsNotNull,
+    ) -> pl.Expr:
         return (
             pl.when(PolarsProvider._null(column))
             .then(ByteSentinel.FALSE)
@@ -146,11 +175,18 @@ class PolarsProvider:
         )
 
     @staticmethod
-    def _nan(column: pl.Expr, dtype: pl.DataType) -> pl.Expr:
+    def _nan(
+        column: pl.Expr,
+        dtype: pl.DataType,
+    ) -> pl.Expr:
         return QExpressions.IS_NAN(column, dtype)
 
     @staticmethod
-    def is_nan(column: pl.Expr, dtype: pl.DataType, _: IsNan) -> pl.Expr:
+    def is_nan(
+        column: pl.Expr,
+        dtype: pl.DataType,
+        _: IsNan,
+    ) -> pl.Expr:
         return (
             pl.when(column.is_null())
             .then(ByteSentinel.NULL)
@@ -161,7 +197,11 @@ class PolarsProvider:
         )
 
     @staticmethod
-    def is_not_nan(column: pl.Expr, dtype: pl.DataType, _: IsNotNan) -> pl.Expr:
+    def is_not_nan(
+        column: pl.Expr,
+        dtype: pl.DataType,
+        _: IsNotNan,
+    ) -> pl.Expr:
         return (
             pl.when(column.is_null())
             .then(ByteSentinel.NULL)
@@ -172,11 +212,18 @@ class PolarsProvider:
         )
 
     @staticmethod
-    def _null_or_nan(column: pl.Expr, dtype: pl.DataType) -> pl.Expr:
+    def _null_or_nan(
+        column: pl.Expr,
+        dtype: pl.DataType,
+    ) -> pl.Expr:
         return column.is_null() | QExpressions.IS_NAN(column, dtype)
 
     @staticmethod
-    def is_null_or_nan(column: pl.Expr, dtype: pl.DataType, _: IsNullOrNan) -> pl.Expr:
+    def is_null_or_nan(
+        column: pl.Expr,
+        dtype: pl.DataType,
+        _: IsNullOrNan,
+    ) -> pl.Expr:
         return (
             pl.when(PolarsProvider._null_or_nan(column, dtype))
             .then(ByteSentinel.TRUE)
@@ -186,7 +233,9 @@ class PolarsProvider:
 
     @staticmethod
     def is_not_null_nor_nan(
-        column: pl.Expr, dtype: pl.DataType, _: IsNotNullNorNan
+        column: pl.Expr,
+        dtype: pl.DataType,
+        _: IsNotNullNorNan,
     ) -> pl.Expr:
         return (
             pl.when(PolarsProvider._null_or_nan(column, dtype))
@@ -196,11 +245,17 @@ class PolarsProvider:
         )
 
     @staticmethod
-    def _zero(column: pl.Expr) -> pl.Expr:
+    def _zero(
+        column: pl.Expr,
+    ) -> pl.Expr:
         return column.eq(0)
 
     @staticmethod
-    def is_zero(column: pl.Expr, dtype: pl.DataType, _: IsZero) -> pl.Expr:
+    def is_zero(
+        column: pl.Expr,
+        dtype: pl.DataType,
+        _: IsZero,
+    ) -> pl.Expr:
         base_expression = (
             pl.when(column.is_null())
             .then(ByteSentinel.NULL)
@@ -211,7 +266,11 @@ class PolarsProvider:
         return base_expression.otherwise(core_expression).cast(pl.UInt8)
 
     @staticmethod
-    def is_not_zero(column: pl.Expr, dtype: pl.DataType, _: IsNotZero) -> pl.Expr:
+    def is_not_zero(
+        column: pl.Expr,
+        dtype: pl.DataType,
+        _: IsNotZero,
+    ) -> pl.Expr:
         base_expression = (
             pl.when(column.is_null())
             .then(ByteSentinel.NULL)
@@ -222,11 +281,17 @@ class PolarsProvider:
         return base_expression.otherwise(core_expression).cast(pl.UInt8)
 
     @staticmethod
-    def _positive(column: pl.Expr) -> pl.Expr:
+    def _positive(
+        column: pl.Expr,
+    ) -> pl.Expr:
         return column.gt(0)
 
     @staticmethod
-    def is_positive(column: pl.Expr, dtype: pl.DataType, _: IsPositive) -> pl.Expr:
+    def is_positive(
+        column: pl.Expr,
+        dtype: pl.DataType,
+        _: IsPositive,
+    ) -> pl.Expr:
         base_expression = (
             pl.when(column.is_null())
             .then(ByteSentinel.NULL)
@@ -237,12 +302,16 @@ class PolarsProvider:
         return base_expression.otherwise(core_expression).cast(pl.UInt8)
 
     @staticmethod
-    def _positive_or_zero(column: pl.Expr) -> pl.Expr:
+    def _positive_or_zero(
+        column: pl.Expr,
+    ) -> pl.Expr:
         return column.ge(0)
 
     @staticmethod
     def is_positive_or_zero(
-        column: pl.Expr, dtype: pl.DataType, _: IsPositiveOrZero
+        column: pl.Expr,
+        dtype: pl.DataType,
+        _: IsPositiveOrZero,
     ) -> pl.Expr:
         base_expression = (
             pl.when(column.is_null())
@@ -254,11 +323,17 @@ class PolarsProvider:
         return base_expression.otherwise(core_expression).cast(pl.UInt8)
 
     @staticmethod
-    def _negative(column: pl.Expr) -> pl.Expr:
+    def _negative(
+        column: pl.Expr,
+    ) -> pl.Expr:
         return column.lt(0)
 
     @staticmethod
-    def is_negative(column: pl.Expr, dtype: pl.DataType, _: IsNegative) -> pl.Expr:
+    def is_negative(
+        column: pl.Expr,
+        dtype: pl.DataType,
+        _: IsNegative,
+    ) -> pl.Expr:
         base_expression = (
             pl.when(column.is_null())
             .then(ByteSentinel.NULL)
@@ -269,12 +344,16 @@ class PolarsProvider:
         return base_expression.otherwise(core_expression).cast(pl.UInt8)
 
     @staticmethod
-    def _negative_or_zero(column: pl.Expr) -> pl.Expr:
+    def _negative_or_zero(
+        column: pl.Expr,
+    ) -> pl.Expr:
         return column.le(0)
 
     @staticmethod
     def is_negative_or_zero(
-        column: pl.Expr, dtype: pl.DataType, _: IsNegativeOrZero
+        column: pl.Expr,
+        dtype: pl.DataType,
+        _: IsNegativeOrZero,
     ) -> pl.Expr:
         base_expression = (
             pl.when(column.is_null())
@@ -286,7 +365,10 @@ class PolarsProvider:
         return base_expression.otherwise(core_expression).cast(pl.UInt8)
 
     @staticmethod
-    def _between(column: pl.Expr, classifier: RangeClassifier) -> pl.Expr:
+    def _between(
+        column: pl.Expr,
+        classifier: RangeClassifier,
+    ) -> pl.Expr:
         if classifier.min is None and classifier.max is None:
             return pl.lit(True)
         if classifier.min is None:
@@ -305,7 +387,9 @@ class PolarsProvider:
 
     @staticmethod
     def is_between(
-        column: pl.Expr, dtype: pl.DataType, classifier: IsBetween
+        column: pl.Expr,
+        dtype: pl.DataType,
+        classifier: IsBetween,
     ) -> pl.Expr:
         base_expression = (
             pl.when(column.is_null())
@@ -318,7 +402,9 @@ class PolarsProvider:
 
     @staticmethod
     def is_not_between(
-        column: pl.Expr, dtype: pl.DataType, classifier: IsNotBetween
+        column: pl.Expr,
+        dtype: pl.DataType,
+        classifier: IsNotBetween,
     ) -> pl.Expr:
         base_expression = (
             pl.when(column.is_null())
@@ -330,12 +416,19 @@ class PolarsProvider:
         return base_expression.otherwise(core_expression).cast(pl.UInt8)
 
     @staticmethod
-    def _in(column: pl.Expr, values: AbstractSet[Any]) -> pl.Expr:
+    def _in(
+        column: pl.Expr,
+        values: AbstractSet[Any],
+    ) -> pl.Expr:
         return column.is_in(values)
 
     # noinspection DuplicatedCode
     @staticmethod
-    def is_in(column: pl.Expr, dtype: pl.DataType, classifier: IsIn) -> pl.Expr:
+    def is_in(
+        column: pl.Expr,
+        dtype: pl.DataType,
+        classifier: IsIn,
+    ) -> pl.Expr:
         has_none = None in classifier.values
         has_nan = any(
             isinstance(value, float) and math.isnan(value)
@@ -374,7 +467,11 @@ class PolarsProvider:
 
     # noinspection DuplicatedCode
     @staticmethod
-    def is_not_in(column: pl.Expr, dtype: pl.DataType, classifier: IsNotIn) -> pl.Expr:
+    def is_not_in(
+        column: pl.Expr,
+        dtype: pl.DataType,
+        classifier: IsNotIn,
+    ) -> pl.Expr:
         has_none = None in classifier.values
         has_nan = any(
             isinstance(value, float) and math.isnan(value)
@@ -413,11 +510,18 @@ class PolarsProvider:
         return base_expression.otherwise(core_expression).cast(pl.UInt8)
 
     @staticmethod
-    def _matches(column: pl.Expr, pattern: str) -> pl.Expr:
+    def _matches(
+        column: pl.Expr,
+        pattern: str,
+    ) -> pl.Expr:
         return column.cast(pl.Utf8).str.contains(pattern)
 
     @staticmethod
-    def matches(column: pl.Expr, dtype: pl.DataType, classifier: Matches) -> pl.Expr:
+    def matches(
+        column: pl.Expr,
+        dtype: pl.DataType,
+        classifier: Matches,
+    ) -> pl.Expr:
         base_expression = (
             pl.when(column.is_null())
             .then(ByteSentinel.NULL)
@@ -429,7 +533,9 @@ class PolarsProvider:
 
     @staticmethod
     def does_not_match(
-        column: pl.Expr, dtype: pl.DataType, classifier: DoesNotMatch
+        column: pl.Expr,
+        dtype: pl.DataType,
+        classifier: DoesNotMatch,
     ) -> pl.Expr:
         base_expression = (
             pl.when(column.is_null())
@@ -441,7 +547,11 @@ class PolarsProvider:
         return base_expression.otherwise(core_expression).cast(pl.UInt8)
 
     @staticmethod
-    def _has_length(column: pl.Expr, min_len: int, max_len: int) -> pl.Expr:
+    def _has_length(
+        column: pl.Expr,
+        min_len: int,
+        max_len: int,
+    ) -> pl.Expr:
         return (
             column.cast(pl.Utf8)
             .str.len_chars()
@@ -450,7 +560,9 @@ class PolarsProvider:
 
     @staticmethod
     def has_length(
-        column: pl.Expr, dtype: pl.DataType, classifier: HasLength
+        column: pl.Expr,
+        dtype: pl.DataType,
+        classifier: HasLength,
     ) -> pl.Expr:
         base_expression = (
             pl.when(column.is_null())
@@ -462,6 +574,87 @@ class PolarsProvider:
             column, classifier.min, classifier.max
         )
         return base_expression.otherwise(core_expression).cast(pl.UInt8)
+
+    @staticmethod
+    def categorizer(
+        column: pl.Expr,
+        dtype: pl.DataType,
+        classifier: Categorizer,
+    ) -> pl.Expr:
+        scale = classifier.scale
+        minimum, maximum = scale.scale_range
+
+        cuts = []
+
+        match scale:
+            case IdentityScale():
+                cuts = [minimum + i + 1 for i in range(scale.bins)]
+            case LinearScale():
+                size = (maximum - minimum) / scale.bins
+                cuts = [minimum + (i + 1) * size for i in range(scale.bins)]
+                cuts[-1] = maximum
+            case MonomialScale():
+                lower = minimum ** (1.0 / scale.power)
+                upper = maximum ** (1.0 / scale.power)
+                size = (upper - lower) / scale.bins
+                cuts = [
+                    (lower + (i + 1) * size) ** scale.power for i in range(scale.bins)
+                ]
+                cuts[-1] = maximum
+            case LogarithmicScale():
+                lower = scale.base**minimum
+                upper = scale.base**maximum
+                size = (upper - lower) / scale.bins
+                if scale.base == 10.0:
+                    cuts = [
+                        math.log10(lower + (i + 1) * size) for i in range(scale.bins)
+                    ]
+                elif scale.base == math.e:
+                    cuts = [math.log(lower + (i + 1) * size) for i in range(scale.bins)]
+                else:
+                    cuts = [
+                        math.log(lower + (i + 1) * size) / math.log(scale.base)
+                        for i in range(scale.bins)
+                    ]
+                cuts[-1] = maximum
+            case ExponentialScale():
+                if scale.base == 10.0:
+                    lower = math.log10(minimum)
+                    upper = math.log10(maximum)
+                elif scale.base == math.e:
+                    lower = math.log(minimum)
+                    upper = math.log(maximum)
+                else:
+                    lower = math.log(minimum) / math.log(scale.base)
+                    upper = math.log(maximum) / math.log(scale.base)
+                size = (upper - lower) / scale.bins
+                cuts = [
+                    scale.base ** (lower + (i + 1) * size) for i in range(scale.bins)
+                ]
+                cuts[-1] = maximum
+            case _:
+                raise ValueError(f"Unsupported scale type: {type(scale)}")
+
+        expression = None
+        if not scale.min_in_first_bin:
+            expression = pl.when(column == minimum).then(pl.lit(0))
+        for i, cut in enumerate(cuts, start=1):
+            if expression is None:
+                expression = pl.when(column <= cut).then(pl.lit(i))
+            else:
+                expression = expression.when(column <= cut).then(pl.lit(i))
+        return (
+            pl.when(column.is_null())
+            .then(ByteSentinel.NULL)
+            .when(QExpressions.IS_NAN(column, dtype))
+            .then(ByteSentinel.NAN)
+            .when(column < minimum)
+            .then(ByteSentinel.UNDERFLOW)
+            .when(column > maximum)
+            .then(ByteSentinel.OVERFLOW)
+            .otherwise(expression)
+            .cast(pl.UInt8)
+        )
 
 
 @dataclass(frozen=True)
@@ -716,6 +909,12 @@ class DataQualityEngine:
         has_length: HasLength,
     ) -> Self:
         return self._classify(has_length)
+
+    def categorizer(
+        self,
+        categorizer: Categorizer,
+    ) -> Self:
+        return self._classify(categorizer)
 
     """> Quality Operation Functions """
 
@@ -1003,5 +1202,10 @@ CLASSIFIER_DICTIONARY: dict[type, ClassifierMetadata] = {
         column_suffix="_has_length",
         classifier_family=ClassifierFamily.BOOLEAN,
         polars_provider=PolarsProvider(PolarsProvider.has_length),
+    ),
+    Categorizer: ClassifierMetadata(
+        column_suffix="_category",
+        classifier_family=ClassifierFamily.CATEGORICAL,
+        polars_provider=PolarsProvider(PolarsProvider.categorizer),
     ),
 }

@@ -6,7 +6,7 @@ import polars as pl
 import pytest
 from test_tabsdata.test_tableframe.actions.dataquality.dq_helper import (
     CLASSIFIERS,
-    dataset,
+    boolean_dataset,
 )
 
 from tabsdata._tabsserver.function.typing import DerivedTableFrame
@@ -44,7 +44,11 @@ def dq_parameters():
 @pytest.mark.dq
 @pytest.mark.parametrize("classifier,dtype,configuration", dq_parameters())
 def test_dq_processor(classifier, dtype, configuration):
+    dataset = (
+        configuration.dataset if configuration.dataset is not None else boolean_dataset
+    )
     tf = dataset(dtype)
+    qrows = len(tf._lf.collect())
     action = configuration.actions("table00", dtype)
     dtf, cols, tags = DataQualityProcessor.compute([tf], action)
     assert dtf is not None, f"Failed for {classifier.__name__} with {dtype.__name__}"
@@ -53,6 +57,6 @@ def test_dq_processor(classifier, dtype, configuration):
     assert isinstance(dtf, DerivedTableFrame)
     assert dtf.derived_tf is not None
     df = dtf.derived_tf._lf.collect()
-    configuration.checker(df, tags)
+    configuration.checker(df, tags, qrows)
     assert "value" in df.columns
     assert "id" in df.columns
