@@ -19,7 +19,10 @@ from tabsdata.dataquality import (
     Summary,
 )
 from tabsdata.dataquality._classifier import Classifier
-from tabsdata.tableframe._actions.dataquality.engine import DataQualityEngine
+from tabsdata.tableframe._actions.dataquality.engine import (
+    ByteSentinel,
+    DataQualityEngine,
+)
 from tabsdata.tableframe.lazyframe.properties import TableFramePropertiesBuilder
 
 NaN = "NaN"
@@ -129,11 +132,37 @@ def _is_null_checker(df: pl.DataFrame, tags: dict):
     assert "null" in tags
     assert "value_is_null" in tags["null"]
 
-    null_count = df.filter(pl.col("value").is_null()).height
-    dq_true_count = df.filter(pl.col("value_is_null") == True).height
+    dtype = df.schema["value"]
+    is_float = dtype in [pl.Float32, pl.Float64]
+
+    true_count = df.filter(pl.col("value").is_null()).height
+    if is_float:
+        false_count = df.filter(
+            pl.col("value").is_not_null() & pl.col("value").is_not_nan()
+        ).height
+        nan_count = df.filter(pl.col("value").is_nan()).height
+    else:
+        false_count = df.filter(pl.col("value").is_not_null()).height
+        nan_count = 0
+    null_count = 0
+
+    dq_false_count = df.filter(pl.col("value_is_null") == ByteSentinel.FALSE).height
+    dq_true_count = df.filter(pl.col("value_is_null") == ByteSentinel.TRUE).height
+    dq_nan_count = df.filter(pl.col("value_is_null") == ByteSentinel.NAN).height
+    dq_null_count = df.filter(pl.col("value_is_null") == ByteSentinel.NULL).height
+
     assert (
-        null_count == dq_true_count
-    ), f"value: null_count={null_count}, dq_true_count={dq_true_count}"
+        dq_false_count == false_count
+    ), f"is_null FALSE: dq={dq_false_count}, expected={false_count}"
+    assert (
+        dq_true_count == true_count
+    ), f"is_null TRUE: dq={dq_true_count}, expected={true_count}"
+    assert (
+        dq_nan_count == nan_count
+    ), f"is_null NAN: dq={dq_nan_count}, expected={nan_count}"
+    assert (
+        dq_null_count == null_count
+    ), f"is_null NULL: dq={dq_null_count}, expected={null_count}"
 
 
 def _is_not_null_checker(df: pl.DataFrame, tags: dict):
@@ -142,70 +171,116 @@ def _is_not_null_checker(df: pl.DataFrame, tags: dict):
     assert "not_null" in tags
     assert "value_is_not_null" in tags["not_null"]
 
-    not_null_count = df.filter(pl.col("value").is_not_null()).height
-    dq_true_count = df.filter(pl.col("value_is_not_null") == True).height
+    dtype = df.schema["value"]
+    is_float = dtype in [pl.Float32, pl.Float64]
+
+    false_count = df.filter(pl.col("value").is_null()).height
+    if is_float:
+        true_count = df.filter(
+            pl.col("value").is_not_null() & pl.col("value").is_not_nan()
+        ).height
+        nan_count = df.filter(pl.col("value").is_nan()).height
+    else:
+        true_count = df.filter(pl.col("value").is_not_null()).height
+        nan_count = 0
+    null_count = 0
+
+    dq_false_count = df.filter(pl.col("value_is_not_null") == ByteSentinel.FALSE).height
+    dq_true_count = df.filter(pl.col("value_is_not_null") == ByteSentinel.TRUE).height
+    dq_nan_count = df.filter(pl.col("value_is_not_null") == ByteSentinel.NAN).height
+    dq_null_count = df.filter(pl.col("value_is_not_null") == ByteSentinel.NULL).height
+
     assert (
-        not_null_count == dq_true_count
-    ), f"value: not_null_count={not_null_count}, dq_true_count={dq_true_count}"
+        dq_false_count == false_count
+    ), f"is_not_null FALSE: dq={dq_false_count}, expected={false_count}"
+    assert (
+        dq_true_count == true_count
+    ), f"is_not_null TRUE: dq={dq_true_count}, expected={true_count}"
+    assert (
+        dq_nan_count == nan_count
+    ), f"is_not_null NAN: dq={dq_nan_count}, expected={nan_count}"
+    assert (
+        dq_null_count == null_count
+    ), f"is_not_null NULL: dq={dq_null_count}, expected={null_count}"
 
 
 def _is_nan_checker(df: pl.DataFrame, tags: dict):
     assert "value" in df.columns
+    assert "value_is_nan" in df.columns
+    assert "nan" in tags
+    assert "value_is_nan" in tags["nan"]
 
-    if "nan" in tags:
-        assert "value_is_nan" in df.columns
-        assert "value_is_nan" in tags["nan"]
-        nan_or_null_count = df.filter(
-            pl.col("value").is_nan() | pl.col("value").is_null()
-        ).height
-        dq_true_count = df.filter(pl.col("value_is_nan") == True).height
-        assert nan_or_null_count == dq_true_count, (
-            f"value (nan): nan_or_null_count={nan_or_null_count},"
-            f" dq_true_count={dq_true_count}"
-        )
+    dtype = df.schema["value"]
+    is_float = dtype in [pl.Float32, pl.Float64]
+    assert (
+        is_float
+    ), f"is_nan checker should only be called for Float types, got {dtype}"
 
-    if "nan_ignore_nulls" in tags:
-        assert "value_is_nan_ignore_nulls" in df.columns
-        assert "value_is_nan_ignore_nulls" in tags["nan_ignore_nulls"]
-        nan_count = df.filter(
-            pl.col("value").is_nan() & pl.col("value").is_not_null()
-        ).height
-        dq_true_count = df.filter(pl.col("value_is_nan_ignore_nulls") == True).height
-        assert nan_count == dq_true_count, (
-            f"value (nan_ignore_nulls): nan_count={nan_count},"
-            f" dq_true_count={dq_true_count}"
-        )
+    true_count = df.filter(pl.col("value").is_nan()).height
+    false_count = df.filter(
+        pl.col("value").is_not_null() & pl.col("value").is_not_nan()
+    ).height
+    nan_count = 0
+    null_count = df.filter(pl.col("value").is_null()).height
+
+    dq_false_count = df.filter(pl.col("value_is_nan") == ByteSentinel.FALSE).height
+    dq_true_count = df.filter(pl.col("value_is_nan") == ByteSentinel.TRUE).height
+    dq_nan_count = df.filter(pl.col("value_is_nan") == ByteSentinel.NAN).height
+    dq_null_count = df.filter(pl.col("value_is_nan") == ByteSentinel.NULL).height
+
+    assert (
+        dq_false_count == false_count
+    ), f"is_nan FALSE: dq={dq_false_count}, expected={false_count}"
+    assert (
+        dq_true_count == true_count
+    ), f"is_nan TRUE: dq={dq_true_count}, expected={true_count}"
+    assert (
+        dq_nan_count == nan_count
+    ), f"is_nan NAN: dq={dq_nan_count}, expected={nan_count}"
+    assert (
+        dq_null_count == null_count
+    ), f"is_nan NULL: dq={dq_null_count}, expected={null_count}"
 
 
 def _is_not_nan_checker(df: pl.DataFrame, tags: dict):
     assert "value" in df.columns
+    assert "value_is_not_nan" in df.columns
+    assert "not_nan" in tags
+    assert "value_is_not_nan" in tags["not_nan"]
 
-    if "not_nan" in tags:
-        assert "value_is_not_nan" in df.columns
-        assert "value_is_not_nan" in tags["not_nan"]
-        not_nan_not_null_count = df.filter(
-            pl.col("value").is_not_nan() & pl.col("value").is_not_null()
-        ).height
-        dq_true_count = df.filter(pl.col("value_is_not_nan") == True).height
-        assert not_nan_not_null_count == dq_true_count, (
-            f"value (not_nan): not_nan_not_null_count={not_nan_not_null_count},"
-            f" dq_true_count={dq_true_count}"
-        )
+    dtype = df.schema["value"]
+    is_float = dtype in [pl.Float32, pl.Float64]
+    assert (
+        is_float
+    ), f"is_not_nan checker should only be called for Float types, got {dtype}"
 
-    if "not_nan_ignore_nulls" in tags:
-        assert "value_is_not_nan_ignore_nulls" in df.columns
-        assert "value_is_not_nan_ignore_nulls" in tags["not_nan_ignore_nulls"]
-        not_nan_or_null_count = df.filter(
-            pl.col("value").is_not_nan() | pl.col("value").is_null()
-        ).height
-        dq_true_count = df.filter(
-            pl.col("value_is_not_nan_ignore_nulls") == True
-        ).height
-        assert not_nan_or_null_count == dq_true_count, (
-            "value (not_nan_ignore_nulls):"
-            f" not_nan_or_null_count={not_nan_or_null_count},"
-            f" dq_true_count={dq_true_count}"
-        )
+    assert "value_is_not_nan" in df.columns
+    assert "value_is_not_nan" in tags["not_nan"]
+
+    false_count = df.filter(pl.col("value").is_nan()).height
+    true_count = df.filter(
+        pl.col("value").is_not_null() & pl.col("value").is_not_nan()
+    ).height
+    null_count = df.filter(pl.col("value").is_null()).height
+    nan_count = 0
+
+    dq_false_count = df.filter(pl.col("value_is_not_nan") == ByteSentinel.FALSE).height
+    dq_true_count = df.filter(pl.col("value_is_not_nan") == ByteSentinel.TRUE).height
+    dq_nan_count = df.filter(pl.col("value_is_not_nan") == ByteSentinel.NAN).height
+    dq_null_count = df.filter(pl.col("value_is_not_nan") == ByteSentinel.NULL).height
+
+    assert (
+        dq_false_count == false_count
+    ), f"is_not_nan FALSE: dq={dq_false_count}, expected={false_count}"
+    assert (
+        dq_true_count == true_count
+    ), f"is_not_nan TRUE: dq={dq_true_count}, expected={true_count}"
+    assert (
+        dq_nan_count == nan_count
+    ), f"is_not_nan NAN: dq={dq_nan_count}, expected={nan_count}"
+    assert (
+        dq_null_count == null_count
+    ), f"is_not_nan NULL: dq={dq_null_count}, expected={null_count}"
 
 
 def _is_null_action(table: str = "table00") -> DataQuality:

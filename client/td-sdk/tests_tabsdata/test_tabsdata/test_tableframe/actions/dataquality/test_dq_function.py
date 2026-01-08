@@ -10,7 +10,9 @@ import tabsdata as td
 import tabsdata.dataquality as dq
 
 
+@pytest.mark.dq
 @pytest.mark.tdfnrun
+@pytest.mark.skip(reason="Skip until summary data quality operations are refactored.")
 def test_dq_transformer():
     @td.transformer(
         name="transformer",

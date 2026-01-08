@@ -15,6 +15,7 @@ from tabsdata.tableframe._actions.dataquality.processor import DataQualityProces
 
 
 class TestDataQualityProcessorTableNames:
+    @pytest.mark.dq
     def test_table_names_empty_actions(self):
         processor = DataQualityProcessor(
             collection="collection",
@@ -29,6 +30,7 @@ class TestDataQualityProcessorTableNames:
         assert input_tables_names == []
         assert output_tables_names == []
 
+    @pytest.mark.dq
     def test_table_names_single_input_action_with_select(self):
         input_tables = {
             "input1": ExtendedTableURI(
@@ -65,6 +67,7 @@ class TestDataQualityProcessorTableNames:
         assert input_tables_names[0].from_collection == "collection"
         assert output_tables_names == []
 
+    @pytest.mark.dq
     def test_table_names_single_input_action_with_filter(self):
         input_tables = {
             "input1": ExtendedTableURI(
@@ -101,6 +104,7 @@ class TestDataQualityProcessorTableNames:
         assert input_tables_names[0].from_collection == "collection"
         assert output_tables_names == []
 
+    @pytest.mark.dq
     def test_table_names_single_input_action_with_summary(self):
         input_tables = {
             "input1": ExtendedTableURI(
@@ -137,6 +141,7 @@ class TestDataQualityProcessorTableNames:
         assert input_tables_names[0].from_collection == "collection"
         assert output_tables_names == []
 
+    @pytest.mark.dq
     def test_table_names_multiple_operations_in_single_action(self):
         input_tables = {
             "input1": ExtendedTableURI(
@@ -181,6 +186,7 @@ class TestDataQualityProcessorTableNames:
         assert input_tables_names[2].kind == TableKind.DQ_SUMMARY
         assert output_tables_names == []
 
+    @pytest.mark.dq
     def test_table_names_multiple_input_actions(self):
         input_tables = {
             "input1": ExtendedTableURI(
@@ -232,6 +238,7 @@ class TestDataQualityProcessorTableNames:
         assert input_tables_names[1].kind == TableKind.DQ_FILTER
         assert output_tables_names == []
 
+    @pytest.mark.dq
     def test_table_names_simple_table_name_format(self):
         input_tables = {
             "table": ExtendedTableURI(
@@ -266,6 +273,7 @@ class TestDataQualityProcessorTableNames:
         assert input_tables_names[0].kind == TableKind.DQ_SELECT
         assert output_tables_names == []
 
+    @pytest.mark.dq
     def test_table_names_collection_slash_table_format(self):
         input_tables = {
             "alias": ExtendedTableURI(
@@ -300,6 +308,7 @@ class TestDataQualityProcessorTableNames:
         assert input_tables_names[0].kind == TableKind.DQ_SELECT
         assert output_tables_names == []
 
+    @pytest.mark.dq
     def test_table_names_table_at_version_format(self):
         input_tables = {
             "alias": ExtendedTableURI(
@@ -334,6 +343,7 @@ class TestDataQualityProcessorTableNames:
         assert input_tables_names[0].kind == TableKind.DQ_SELECT
         assert output_tables_names == []
 
+    @pytest.mark.dq
     def test_table_names_full_uri_format(self):
         input_tables = {
             "alias": ExtendedTableURI(
@@ -368,6 +378,7 @@ class TestDataQualityProcessorTableNames:
         assert input_tables_names[0].kind == TableKind.DQ_SELECT
         assert output_tables_names == []
 
+    @pytest.mark.dq
     def test_table_names_version_with_carets_format(self):
         input_tables = {
             "alias": ExtendedTableURI(
@@ -402,6 +413,7 @@ class TestDataQualityProcessorTableNames:
         assert input_tables_names[0].kind == TableKind.DQ_SELECT
         assert output_tables_names == []
 
+    @pytest.mark.dq
     def test_table_names_version_with_hash_format(self):
         input_tables = {
             "alias1": ExtendedTableURI(
@@ -436,6 +448,7 @@ class TestDataQualityProcessorTableNames:
         assert input_tables_names[0].kind == TableKind.DQ_SELECT
         assert output_tables_names == []
 
+    @pytest.mark.dq
     def test_name_collision_resolved_via_alias(self):
         input_tables = {
             "table_a": ExtendedTableURI(
@@ -478,6 +491,7 @@ class TestDataQualityProcessorTableNames:
         assert input_tables_names[0].kind == TableKind.DQ_SELECT
         assert output_tables_names == []
 
+    @pytest.mark.dq
     def test_name_collision_resolved_via_qualified_name_single_match(self):
         input_tables = {
             "alias": ExtendedTableURI(
@@ -512,6 +526,7 @@ class TestDataQualityProcessorTableNames:
         assert input_tables_names[0].kind == TableKind.DQ_SELECT
         assert output_tables_names == []
 
+    @pytest.mark.dq
     def test_name_collision_resolved_different_collections(self):
         input_tables = {
             "table_a": ExtendedTableURI(
@@ -554,6 +569,7 @@ class TestDataQualityProcessorTableNames:
         assert input_tables_names[0].kind == TableKind.DQ_SELECT
         assert output_tables_names == []
 
+    @pytest.mark.dq
     def test_name_collision_resolved_using_default_collection(self):
         input_tables = {
             "alias": ExtendedTableURI(
@@ -588,6 +604,7 @@ class TestDataQualityProcessorTableNames:
         assert input_tables_names[0].kind == TableKind.DQ_SELECT
         assert output_tables_names == []
 
+    @pytest.mark.dq
     def test_name_collision_resolved_with_version_via_alias(self):
         input_tables = {
             "latest": ExtendedTableURI(
@@ -638,6 +655,7 @@ class TestDataQualityProcessorTableNames:
         assert input_tables_names[0].kind == TableKind.DQ_SELECT
         assert output_tables_names == []
 
+    @pytest.mark.dq
     def test_name_collision_unresolved_multiple_versions_same_collection(self):
         input_tables = {
             "alias1": ExtendedTableURI(
@@ -678,6 +696,7 @@ class TestDataQualityProcessorTableNames:
         assert exception.value.code == "DQPE-001"
         assert "customers" in str(exception.value)
 
+    @pytest.mark.dq
     def test_name_collision_unresolved_table_not_found(self):
         input_tables = {
             "alias": ExtendedTableURI(
@@ -710,6 +729,7 @@ class TestDataQualityProcessorTableNames:
         assert exception.value.code == "DQPE-001"
         assert "products" in str(exception.value)
 
+    @pytest.mark.dq
     def test_name_collision_unresolved_wrong_collection(self):
         input_tables = {
             "alias": ExtendedTableURI(
@@ -742,6 +762,7 @@ class TestDataQualityProcessorTableNames:
         assert exception.value.code == "DQPE-001"
         assert "collection_b/customers" in str(exception.value)
 
+    @pytest.mark.dq
     def test_name_collision_unresolved_ambiguous_qualified_name(self):
         input_tables = {
             "alias1": ExtendedTableURI(
@@ -781,6 +802,7 @@ class TestDataQualityProcessorTableNames:
 
         assert exception.value.code == "DQPE-001"
 
+    @pytest.mark.dq
     def test_name_collision_unresolved_empty_input_tables(self):
         input_tables = {}
 
@@ -804,6 +826,7 @@ class TestDataQualityProcessorTableNames:
         assert exception.value.code == "DQPE-001"
         assert "customers" in str(exception.value)
 
+    @pytest.mark.dq
     def test_output_table_resolved_successfully(self):
         output_tables = ["output1", "output2"]
 
@@ -829,6 +852,7 @@ class TestDataQualityProcessorTableNames:
         assert output_tables_names[0].kind == TableKind.DQ_SELECT
         assert input_tables_names == []
 
+    @pytest.mark.dq
     def test_output_table_unresolved_not_in_output_tables(self):
         output_tables = ["output1", "output2"]
 
@@ -851,6 +875,7 @@ class TestDataQualityProcessorTableNames:
 
         assert "output3" in str(exception.value)
 
+    @pytest.mark.dq
     def test_filter_with_none_to_table_does_not_produce_table(self):
         input_tables = {
             "input1": ExtendedTableURI(
@@ -882,6 +907,7 @@ class TestDataQualityProcessorTableNames:
         assert len(input_tables_names) == 0
         assert output_tables_names == []
 
+    @pytest.mark.dq
     def test_table_names_with_none_table_in_summary(self):
         input_tables = {
             "input1": ExtendedTableURI(
@@ -916,6 +942,7 @@ class TestDataQualityProcessorTableNames:
         assert input_tables_names[0].kind == TableKind.DQ_SUMMARY
         assert output_tables_names == []
 
+    @pytest.mark.dq
     def test_table_names_complex_scenario_mixed_operations(self):
         input_tables = {
             "customers_latest": ExtendedTableURI(
@@ -1005,6 +1032,7 @@ class TestDataQualityProcessorTableNames:
         assert output_tables_names[0].table == "output_summary"
         assert output_tables_names[0].kind == TableKind.DQ_SUMMARY
 
+    @pytest.mark.dq
     def test_table_names_preserves_collection_in_result(self):
         input_tables = {
             "table1": ExtendedTableURI(
@@ -1039,6 +1067,7 @@ class TestDataQualityProcessorTableNames:
         assert input_tables_names[0].kind == TableKind.DQ_SELECT
         assert output_tables_names == []
 
+    @pytest.mark.dq
     def test_table_names_with_special_characters_in_names(self):
         input_tables = {
             "alias": ExtendedTableURI(
@@ -1073,6 +1102,7 @@ class TestDataQualityProcessorTableNames:
         assert input_tables_names[0].kind == TableKind.DQ_SELECT
         assert output_tables_names == []
 
+    @pytest.mark.dq
     def test_table_names_all_three_operation_types_together(self):
         input_tables = {
             "input1": ExtendedTableURI(
@@ -1121,6 +1151,7 @@ class TestDataQualityProcessorTableNames:
 
         assert output_tables_names == []
 
+    @pytest.mark.dq
     def test_select_requires_to_table_parameter(self):
 
         with pytest.raises(ParameterValidationError) as exc_info:
@@ -1129,6 +1160,7 @@ class TestDataQualityProcessorTableNames:
 
         assert "PVTEST-000" in str(exc_info.value)
 
+    @pytest.mark.dq
     def test_filter_with_none_to_table_produces_no_table(self):
         input_tables = {
             "input1": ExtendedTableURI(
@@ -1160,6 +1192,7 @@ class TestDataQualityProcessorTableNames:
         assert len(input_tables_names) == 0
         assert output_tables_names == []
 
+    @pytest.mark.dq
     def test_table_names_summary_with_default_name(self):
         input_tables = {
             "input1": ExtendedTableURI(
@@ -1194,6 +1227,7 @@ class TestDataQualityProcessorTableNames:
         assert input_tables_names[0].kind == TableKind.DQ_SUMMARY
         assert output_tables_names == []
 
+    @pytest.mark.dq
     def test_table_names_mixed_custom_and_default_names(self):
         input_tables = {
             "input1": ExtendedTableURI(
@@ -1238,6 +1272,7 @@ class TestDataQualityProcessorTableNames:
 
         assert output_tables_names == []
 
+    @pytest.mark.dq
     def test_table_names_many_input_actions_many_operations(self):
         input_tables = {
             "table1": ExtendedTableURI(
@@ -1329,6 +1364,7 @@ class TestDataQualityProcessorTableNames:
 
         assert output_tables_names == []
 
+    @pytest.mark.dq
     def test_table_names_many_output_actions_many_operations(self):
         output_tables = ["output1", "output2", "output3"]
 
@@ -1395,6 +1431,7 @@ class TestDataQualityProcessorTableNames:
 
         assert input_tables_names == []
 
+    @pytest.mark.dq
     def test_table_names_many_input_and_output_actions(self):
         input_tables = {
             "input1": ExtendedTableURI(
@@ -1475,6 +1512,7 @@ class TestDataQualityProcessorTableNames:
         assert output_tables_names[1].table == "output1_filter"
         assert output_tables_names[2].table == "output2_summary"
 
+    @pytest.mark.dq
     def test_table_names_many_operations_single_action_all_custom(self):
         input_tables = {
             "input1": ExtendedTableURI(
@@ -1521,6 +1559,7 @@ class TestDataQualityProcessorTableNames:
 
         assert output_tables_names == []
 
+    @pytest.mark.dq
     def test_table_names_five_actions_each_with_five_operations(self):
         input_tables = {
             f"input{i}": ExtendedTableURI(
@@ -1573,6 +1612,7 @@ class TestDataQualityProcessorTableNames:
 
         assert output_tables_names == []
 
+    @pytest.mark.dq
     def test_table_names_complex_real_world_scenario(self):
         input_tables = {
             "raw_sales": ExtendedTableURI(
@@ -1708,6 +1748,7 @@ class TestDataQualityProcessorTableNames:
         assert output_tables_names[1].table == "cleaned_sales_dq_summary"
         assert output_tables_names[2].table == "customer_quality_metrics"
 
+    @pytest.mark.dq
     def test_duplicate_validation_same_custom_name_in_input_actions(self):
         input_tables = {
             "input1": ExtendedTableURI(
@@ -1744,11 +1785,13 @@ class TestDataQualityProcessorTableNames:
         assert "duplicate_name" in str(exception.value)
         assert "appears 2 times" in str(exception.value)
 
+    @pytest.mark.dq
     def test_select_rejects_none_to_table(self):
         with pytest.raises(ParameterValidationError):
             # noinspection PyTypeChecker
             Select(to_table=None)
 
+    @pytest.mark.dq
     def test_filter_and_select_behavior_with_to_table(self):
         input_tables = {
             "input1": ExtendedTableURI(
@@ -1816,6 +1859,7 @@ class TestDataQualityProcessorTableNames:
         assert input_tables_names3[0].table == "selected_output"
         assert input_tables_names3[0].kind == TableKind.DQ_SELECT
 
+    @pytest.mark.dq
     def test_duplicate_validation_same_custom_name_across_input_actions(self):
         input_tables = {
             "input1": ExtendedTableURI(
@@ -1866,6 +1910,7 @@ class TestDataQualityProcessorTableNames:
         assert exception.value.code == "DQPE-004"
         assert "shared_output" in str(exception.value)
 
+    @pytest.mark.dq
     def test_duplicate_validation_same_custom_name_in_output_actions(self):
         output_tables = ["output1"]
 
@@ -1892,6 +1937,7 @@ class TestDataQualityProcessorTableNames:
         assert exception.value.code == "DQPE-004"
         assert "duplicate_output" in str(exception.value)
 
+    @pytest.mark.dq
     def test_duplicate_validation_same_custom_name_across_output_actions(self):
         output_tables = ["output1", "output2"]
 
@@ -1925,6 +1971,7 @@ class TestDataQualityProcessorTableNames:
         assert exception.value.code == "DQPE-004"
         assert "shared_name" in str(exception.value)
 
+    @pytest.mark.dq
     def test_duplicate_validation_same_name_across_input_and_output(self):
         input_tables = {
             "input1": ExtendedTableURI(
@@ -1968,6 +2015,7 @@ class TestDataQualityProcessorTableNames:
         assert exception.value.code == "DQPE-004"
         assert "conflict_name" in str(exception.value)
 
+    @pytest.mark.dq
     def test_duplicate_validation_multiple_duplicates(self):
         input_tables = {
             "input1": ExtendedTableURI(
@@ -2007,6 +2055,7 @@ class TestDataQualityProcessorTableNames:
         assert "dup2" in str(exception.value)
         assert "appears 2 times" in str(exception.value)
 
+    @pytest.mark.dq
     def test_duplicate_validation_triple_duplicate(self):
         input_tables = {
             "input1": ExtendedTableURI(
@@ -2044,6 +2093,7 @@ class TestDataQualityProcessorTableNames:
         assert "triple" in str(exception.value)
         assert "appears 3 times" in str(exception.value)
 
+    @pytest.mark.dq
     def test_no_duplicate_validation_unique_names(self):
         input_tables = {
             "input1": ExtendedTableURI(
@@ -2089,6 +2139,7 @@ class TestDataQualityProcessorTableNames:
         assert len(input_tables_names) == 3
         assert len(output_tables_names) == 2
 
+    @pytest.mark.dq
     def test_no_duplicate_validation_unique_names_from_different_sources(self):
         input_tables = {
             "input1": ExtendedTableURI(
@@ -2139,6 +2190,7 @@ class TestDataQualityProcessorTableNames:
         assert input_tables_names[0].table == "source1_select"
         assert input_tables_names[1].table == "source2_select"
 
+    @pytest.mark.dq
     def test_duplicate_validation_complex_scenario(self):
         input_tables = {
             "input1": ExtendedTableURI(
@@ -2199,6 +2251,7 @@ class TestDataQualityProcessorTableNames:
         assert exception.value.code == "DQPE-004"
         assert "processed_data" in str(exception.value)
 
+    @pytest.mark.dq
     def test_from_table_and_from_collection_with_different_collections(self):
         input_tables = {
             "table_a": ExtendedTableURI(
@@ -2284,6 +2337,7 @@ class TestDataQualityProcessorTableNames:
         assert input_tables_names[3].from_collection == "default_collection"
         assert input_tables_names[3].collection == "default_collection"
 
+    @pytest.mark.dq
     def test_from_table_and_from_collection_output_actions(self):
         output_tables = ["output_table1", "output_table2"]
 
@@ -2331,6 +2385,7 @@ class TestDataQualityProcessorTableNames:
         assert output_tables_names[2].from_collection == "my_collection"
         assert output_tables_names[2].kind == TableKind.DQ_FILTER
 
+    @pytest.mark.dq
     def test_from_table_and_from_collection_with_qualified_table_reference(self):
         input_tables = {
             "alias1": ExtendedTableURI(

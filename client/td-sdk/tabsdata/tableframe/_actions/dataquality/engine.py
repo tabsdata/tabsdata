@@ -4,20 +4,18 @@
 
 from __future__ import annotations
 
+import inspect
 import logging
 from collections import namedtuple
 from dataclasses import dataclass
-from enum import Enum
-
-# from typing import Any, Callable, Collection, Literal, Self
-from typing import TYPE_CHECKING, Callable, Self, cast
+from enum import Enum, IntEnum
+from typing import TYPE_CHECKING, Callable, Self, TypeVar
 
 import polars as pl
 
-# noinspection PyProtectedMember
-# import tabsdata._utils.tableframe._translator as td_translator
 import tabsdata.tableframe.expr.expr as td_expr
 import tabsdata.tableframe.lazyframe.frame as td_frame
+from tabsdata.dataquality import IsNotZero, IsZero
 
 # noinspection PyProtectedMember
 from tabsdata.dataquality._classifier import (
@@ -25,13 +23,12 @@ from tabsdata.dataquality._classifier import (
     IsNan,
     IsNotNan,
     IsNotNull,
+    IsNotNullNorNan,
     IsNull,
+    IsNullOrNan,
 )
 from tabsdata.exceptions import DataQualityProcessingError, ErrorCode
 from tabsdata.tableframe.lazyframe.properties import TableFramePropertiesBuilder
-
-# import tabsdata.tableframe.typing as td_typing
-
 
 if TYPE_CHECKING:
     # noinspection PyProtectedMember
@@ -40,6 +37,8 @@ if TYPE_CHECKING:
 DQ_VERSION = 1
 
 logger = logging.getLogger(__name__)
+
+ClassifierType = TypeVar("ClassifierType", bound=Classifier)
 
 
 class DQColumns(Enum):
@@ -62,41 +61,119 @@ class ClassifierFamily(Enum):
     CATEGORICAL = "categorical"
 
 
+class ByteSentinel(IntEnum):
+    FALSE = 0
+    TRUE = 1
+    NAN = 254
+    NULL = 255
+
+
+class QCallableEnum(Enum):
+    def __call__(self, *args, **kwargs):
+        return self.value(*args, **kwargs)
+
+
+class QExpressions(QCallableEnum):
+    IS_NAN = lambda column, dtype: (  # noqa: E731
+        column.is_nan() if dtype in [pl.Float32, pl.Float64] else pl.lit(False)
+    )
+
+
 class PolarsProvider:
-    def __init__(self, function: Callable[[pl.Expr, Classifier], pl.Expr]):
+    def __init__(
+        self, function: Callable[[pl.Expr, pl.DataType, ClassifierType], pl.Expr]
+    ):
         self._function = function
-        import inspect
+        signature = inspect.signature(function)
+        self._needs_classifier = len(signature.parameters) > 2
 
-        sig = inspect.signature(function)
-        self._needs_classifier = len(sig.parameters) > 1
-
-    def __call__(self, column: str, classifier: Classifier) -> pl.Expr:
-        col = pl.col(column)
-        return self._function(col, classifier)
-
-    @staticmethod
-    def is_null(col: pl.Expr, _: Classifier) -> pl.Expr:
-        return col.is_null()
+    def __call__(
+        self, column: str, dtype: pl.DataType, classifier: ClassifierType
+    ) -> pl.Expr:
+        column_expr = pl.col(column)
+        return self._function(column_expr, dtype, classifier)
 
     @staticmethod
-    def is_not_null(col: pl.Expr, _: Classifier) -> pl.Expr:
-        return col.is_not_null()
+    def is_null(column: pl.Expr, dtype: pl.DataType, _: IsNull) -> pl.Expr:
+        return (
+            pl.when(column.is_null())
+            .then(ByteSentinel.TRUE)
+            .when(QExpressions.IS_NAN(column, dtype))
+            .then(ByteSentinel.NAN)
+            .otherwise(ByteSentinel.FALSE)
+        )
 
     @staticmethod
-    def is_nan(col: pl.Expr, classifier: Classifier) -> pl.Expr:
-        is_nan = cast(IsNan, classifier)
-        if is_nan.ignore_nulls:
-            return col.is_nan() & col.is_not_null()
-        else:
-            return col.is_nan() | col.is_null()
+    def is_not_null(column: pl.Expr, dtype: pl.DataType, _: IsNotNull) -> pl.Expr:
+        return (
+            pl.when(column.is_null())
+            .then(ByteSentinel.FALSE)
+            .when(QExpressions.IS_NAN(column, dtype))
+            .then(ByteSentinel.NAN)
+            .otherwise(ByteSentinel.TRUE)
+        )
 
     @staticmethod
-    def is_not_nan(col: pl.Expr, classifier: Classifier) -> pl.Expr:
-        is_not_nan = cast(IsNotNan, classifier)
-        if is_not_nan.ignore_nulls:
-            return col.is_not_nan() | col.is_null()
-        else:
-            return col.is_not_nan() & col.is_not_null()
+    def is_nan(column: pl.Expr, dtype: pl.DataType, _: IsNan) -> pl.Expr:
+        return (
+            pl.when(column.is_null())
+            .then(ByteSentinel.NULL)
+            .when(QExpressions.IS_NAN(column, dtype))
+            .then(ByteSentinel.TRUE)
+            .otherwise(ByteSentinel.FALSE)
+        )
+
+    @staticmethod
+    def is_not_nan(column: pl.Expr, dtype: pl.DataType, _: IsNotNan) -> pl.Expr:
+        return (
+            pl.when(column.is_null())
+            .then(ByteSentinel.NULL)
+            .when(QExpressions.IS_NAN(column, dtype))
+            .then(ByteSentinel.FALSE)
+            .otherwise(ByteSentinel.TRUE)
+        )
+
+    @staticmethod
+    def is_null_or_nan(column: pl.Expr, dtype: pl.DataType, _: IsNullOrNan) -> pl.Expr:
+        return (
+            pl.when(column.is_null())
+            .then(ByteSentinel.TRUE)
+            .when(QExpressions.IS_NAN(column, dtype))
+            .then(ByteSentinel.TRUE)
+            .otherwise(ByteSentinel.FALSE)
+        )
+
+    @staticmethod
+    def is_not_null_nor_nan(
+        column: pl.Expr, dtype: pl.DataType, _: IsNotNullNorNan
+    ) -> pl.Expr:
+        return (
+            pl.when(column.is_null())
+            .then(ByteSentinel.FALSE)
+            .when(QExpressions.IS_NAN(column, dtype))
+            .then(ByteSentinel.FALSE)
+            .otherwise(ByteSentinel.TRUE)
+        )
+
+    @staticmethod
+    def is_zero(column: pl.Expr, dtype: pl.DataType, _: IsZero) -> pl.Expr:
+        return (
+            pl.when(column.is_null())
+            .then(ByteSentinel.NULL)
+            .when(QExpressions.IS_NAN(column, dtype))
+            .then(ByteSentinel.NAN)
+            .otherwise(column.eq(0))
+        )
+
+    @staticmethod
+    def is_not_zero(column: pl.Expr, dtype: pl.DataType, _: IsNotZero) -> pl.Expr:
+        return (
+            pl.when(column.is_null())
+            .then(ByteSentinel.NULL)
+            .when(QExpressions.IS_NAN(column, dtype))
+            .then(ByteSentinel.NAN)
+            .otherwise(column.ne(0))
+        )
 
 
 @dataclass(frozen=True)
@@ -232,7 +309,8 @@ class DataQualityEngine:
                 if tag not in self._tags:
                     self._tags[tag] = set()
                 self._tags[tag].add(dq_column)
-            expr = metadata.polars_provider(lf_column, classifier)
+            lf_dtype = self._tf._lf.schema[lf_column]
+            expr = metadata.polars_provider(lf_column, lf_dtype, classifier)
             dq = dq._run(expr, dq_column)
 
         return dq
@@ -260,6 +338,18 @@ class DataQualityEngine:
         is_not_nan: IsNotNan,
     ) -> Self:
         return self._classify(is_not_nan)
+
+    def is_zero(
+        self,
+        is_zero: IsZero,
+    ) -> Self:
+        return self._classify(is_zero)
+
+    def is_not_zero(
+        self,
+        is_not_zero: IsNotZero,
+    ) -> Self:
+        return self._classify(is_not_zero)
 
     """> Quality Operation Functions """
 
@@ -586,21 +676,26 @@ CLASSIFIER_DICTIONARY: dict[type, ClassifierMetadata] = {
         classifier_family=ClassifierFamily.BOOLEAN,
         polars_provider=PolarsProvider(PolarsProvider.is_not_nan),
     ),
-    # IsNullOrNan: ClassifierMetadata(
-    #     suffix="_is_null_or_nan",
-    #     family=ClassifierFamily.BOOLEAN,
-    #     polars=lambda col: col.is_null() | col.is_nan(),
-    # ),
-    # IsZero: ClassifierMetadata(
-    #     suffix="_is_zero",
-    #     family=ClassifierFamily.BOOLEAN,
-    #     polars=lambda col: col.eq(0),
-    # ),
-    # IsNotZero: ClassifierMetadata(
-    #     suffix="_is_not_zero",
-    #     family=ClassifierFamily.BOOLEAN,
-    #     polars=lambda col: col.ne(0),
-    # ),
+    IsNullOrNan: ClassifierMetadata(
+        column_suffix="_is_null_or_nan",
+        classifier_family=ClassifierFamily.BOOLEAN,
+        polars_provider=PolarsProvider(PolarsProvider.is_null_or_nan),
+    ),
+    IsNotNullNorNan: ClassifierMetadata(
+        column_suffix="_is_not_null_nor_nan",
+        classifier_family=ClassifierFamily.BOOLEAN,
+        polars_provider=PolarsProvider(PolarsProvider.is_not_null_nor_nan),
+    ),
+    IsZero: ClassifierMetadata(
+        column_suffix="_is_zero",
+        classifier_family=ClassifierFamily.BOOLEAN,
+        polars_provider=PolarsProvider(PolarsProvider.is_zero),
+    ),
+    IsNotZero: ClassifierMetadata(
+        column_suffix="_is_not_zero",
+        classifier_family=ClassifierFamily.BOOLEAN,
+        polars_provider=PolarsProvider(PolarsProvider.is_not_zero),
+    ),
     # IsPositive: ClassifierMetadata(
     #     suffix="_is_positive",
     #     family=ClassifierFamily.BOOLEAN,
