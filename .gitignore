@@ -146,3 +146,4 @@ venv/
 wheels/
 client/td-sdk/tabsdata/assets
 tabsdata_agent/assets
+test-results
