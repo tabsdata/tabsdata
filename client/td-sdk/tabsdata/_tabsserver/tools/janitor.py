@@ -9,7 +9,7 @@ import shutil
 from datetime import datetime, timezone
 from functools import partial
 from pathlib import Path
-from typing import Iterable, List
+from typing import List
 
 from tabsdata._tabsserver.function.global_utils import setup_logging
 
@@ -51,31 +51,34 @@ def is_file_expired(path: Path, now_ms: int, retention_ms: int) -> bool:
 
 
 def is_folder_expired(folder: Path, now_ms: int, retention_ms: int) -> bool:
-    stack = [folder]
-    while stack:
-        current = stack.pop()
-        if not current.exists():
-            continue
-        if not is_file_expired(current, now_ms, retention_ms):
-            return False
-        if current.is_dir():
-            stack.extend(current.iterdir())
+    if not folder.exists():
+        return False
+    if not is_file_expired(folder, now_ms, retention_ms):
+        return False
+    if folder.is_dir():
+        for child in folder.iterdir():
+            if not is_folder_expired(child, now_ms, retention_ms):
+                return False
     return True
 
 
-def subfolders(folder: Path) -> Iterable[Path]:
-    entries = []
-    for entry in folder.iterdir():
-        try:
-            mtime = entry.stat().st_mtime
-        except FileNotFoundError:
-            continue
-        entries.append((mtime, entry))
-    for _, entry in sorted(entries, key=lambda item: item[0]):
-        yield entry
+def has_ok_file(folder: Path) -> bool:
+    ok_file = folder / "work" / "ok"
+    exists = ok_file.exists()
+    if exists:
+        logger.debug(f"Folder '{folder}' has 'ok' file at '{ok_file}'")
+    else:
+        logger.debug(f"Folder '{folder}' does not have 'ok' file at '{ok_file}'")
+    return exists
 
 
-def perform(instance: Path, folders: List[Path], retention: int, limit: int):
+def perform(
+    instance: Path,
+    folders: List[Path],
+    folders_requiring_ok: List[Path],
+    retention: int,
+    limit: int,
+):
     logger.info("Performing instance cleanup")
     now_ms = int(datetime.now(tz=timezone.utc).timestamp() * 1000)
     logger.info(
@@ -87,7 +90,16 @@ def perform(instance: Path, folders: List[Path], retention: int, limit: int):
     for folder in folders:
         if deleted >= limit:
             break
-        deleted = clean_folder(folder, now_ms, retention, limit, deleted)
+        deleted = clean_folder(
+            folder, now_ms, retention, limit, deleted, require_ok=False
+        )
+
+    for folder in folders_requiring_ok:
+        if deleted >= limit:
+            break
+        deleted = clean_folder(
+            folder, now_ms, retention, limit, deleted, require_ok=True
+        )
 
     logger.info(f"Deleted {deleted} items (limit is {limit}).")
     logger.info("Instance cleanup iteration completed")
@@ -99,18 +111,26 @@ def clean_folder(
     retention: int,
     limit: int,
     deleted: int,
+    require_ok: bool = False,
 ) -> int:
     if not folder.exists():  # Folder is now living in Meinong's Jungle.
         logger.debug(f"Skipping folder '{folder}' because it does not exist.")
         return deleted
 
-    logger.info("Evaluating folder '{folder}' for cleanup.")
+    logger.info(f"Evaluating folder '{folder}' for cleanup (require_ok={require_ok}).")
 
-    for entry in subfolders(folder):
+    for entry in folder.iterdir():
         if deleted >= limit:
             break
 
         if entry.is_dir():
+            if require_ok and not has_ok_file(entry):
+                logger.debug(
+                    f"Folder '{entry}' not removed because it does not have work/ok"
+                    " file."
+                )
+                continue
+
             if is_folder_expired(entry, now_ms, retention):
                 delete_folder(entry)
                 deleted += 1
@@ -125,7 +145,7 @@ def clean_folder(
                 deleted += 1
             else:
                 logger.debug(
-                    "File '{entry}' not removed because it is not yet expired."
+                    f"File '{entry}' not removed because it is not yet expired."
                 )
 
     return deleted
@@ -134,6 +154,7 @@ def clean_folder(
 def process(
     instance: Path,
     folders: List[Path],
+    folders_requiring_ok: List[Path],
     frequency: int,
     retention: int,
     limit: int,
@@ -143,6 +164,7 @@ def process(
         perform,
         instance=instance,
         folders=folders,
+        folders_requiring_ok=folders_requiring_ok,
         retention=retention,
         limit=limit,
     )
@@ -248,6 +270,9 @@ def main():
     folders = [
         complete_messages_folder,
         stop_messages_folder,
+    ]
+
+    folders_requiring_ok = [
         function_cast_folder,
         cron_cast_folder,
     ]
@@ -255,6 +280,7 @@ def main():
     process(
         arguments.instance,
         folders,
+        folders_requiring_ok,
         arguments.frequency,
         arguments.retention,
         arguments.limit,
