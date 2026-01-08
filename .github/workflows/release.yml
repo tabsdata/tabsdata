@@ -82,10 +82,6 @@ on:
         options: ['true', 'false']
         default: 'false'
 
-  # schedule:
-  #   # Run at 02:00 UTC (03:00 AM Spain time) Monday to Friday
-  #  - cron: "0 2 * * 1-5"
-
 jobs:
   cap-job:
     name: Cap Job
