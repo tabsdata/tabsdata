@@ -25,11 +25,12 @@ CREATE TABLE workers_new
     status              TEXT      NOT NULL,
 
     worker_type         TEXT      NOT NULL,
+    worker_enabled      BOOLEAN   NOT NULL,
     worker_config       BLOB      NULL
 );
 
 INSERT INTO workers_new (id, collection_id, execution_id, transaction_id, function_version_id, function_run_id,
-                         message_status, started_on, ended_on, status, worker_type, worker_config)
+                         message_status, started_on, ended_on, status, worker_type, worker_enabled, worker_config)
 SELECT id,
        collection_id,
        execution_id,
@@ -41,6 +42,7 @@ SELECT id,
        ended_on,
        status,
        'F',
+       false,
        NULL
 FROM workers;
 
@@ -59,7 +61,8 @@ SELECT w.*,
 FROM workers w
          LEFT JOIN collections c ON w.collection_id = c.id
          LEFT JOIN executions e ON w.execution_id = e.id
-         LEFT JOIN functions fv ON w.function_version_id = fv.id;
+         LEFT JOIN functions fv ON w.function_version_id = fv.id
+WHERE w.worker_enabled = true; -- Hiding marker workers for disabled function versions
 
 -- Trigger Type can be M (manual), C (cron), DL (data listener)
 ALTER TABLE executions

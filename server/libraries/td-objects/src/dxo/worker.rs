@@ -43,7 +43,9 @@ mod definitions {
         #[builder(default = "WorkerStatus::Scheduled")]
         pub status: WorkerStatus,
 
-        pub worker_type: WorkerType,             // added in v4
+        pub worker_type: WorkerType, // added in v4
+        #[td_type(builder(include, field = "enabled"), extractor)]
+        pub worker_enabled: Enabled, // added in v4
         pub worker_config: Option<WorkerConfig>, // added in v4
     }
 

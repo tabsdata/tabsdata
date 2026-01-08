@@ -35,7 +35,8 @@ use td_objects::rest_urls::internal::{
 use td_objects::sql::{DaoQueries, SelectBy};
 use td_objects::types::addresses::InternalServerAddresses;
 use td_objects::types::basic::{
-    AtTime, EnvPrefix, WorkerConfig, WorkerId, WorkerMessageStatus, WorkerStatus, WorkerType,
+    AtTime, Enabled, EnvPrefix, WorkerConfig, WorkerId, WorkerMessageStatus, WorkerStatus,
+    WorkerType,
 };
 use td_storage::Storage;
 use td_storage::location::StorageLocation;
@@ -335,6 +336,7 @@ pub async fn create_locked_function_runner_workers_start_request<T: WorkerMessag
                     ended_on: None,
                     status: WorkerStatus::RunRequested,
                     worker_type: WorkerType::FunctionRunner,
+                    worker_enabled: Enabled::TRUE,
                     worker_config: None,
                 };
 
