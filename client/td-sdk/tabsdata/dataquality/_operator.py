@@ -225,6 +225,42 @@ class PercentThreshold(Threshold):
         return self._percent
 
 
+class Enrich(Operator):
+    """
+    An operator that adds the data quality classifier columns to the original
+    table frame.
+    It does not remove any row from the original table.
+    """
+
+    @_td_validate_call(ErrorCode.PVDQOP9)
+    def __init__(
+        self,
+        to_table: Optional[TableName] = None,
+        *,
+        tags: Optional[TagsSpec] = None,
+    ):
+        """
+        Initializes the `Enrich` operator.
+
+        Args:
+            to_table: The name of the table with the added data quality
+                      classifer columns.
+                      If `None`, the original table is used.
+            tags: Optional tags to link this operator to specific classifiers.
+        """
+        super().__init__(tags=tags)
+        self._to_table = to_table
+
+    @property
+    def to_table(self) -> Optional[TableName]:
+        """
+        Returns the destination table with the enriched data quality classifer
+        columns.
+        If `None`, the original table is used.
+        """
+        return self._to_table
+
+
 class Fail(Operator):
     """
     An operator that fails the current transaction if a data quality threshold is met.
@@ -272,8 +308,8 @@ class Filter(Operator):
     """
     An operator that filters rows from a table based on data quality criteria.
 
-    The filtered rows are removed from the table being processed. They can either be
-    discarded or redirected to another table.
+    The filtered rows are removed from the table being processed. They can
+    either be discarded or redirected to another table.
     """
 
     @_td_validate_call(ErrorCode.PVDQOP9)
@@ -281,6 +317,7 @@ class Filter(Operator):
         self,
         to_table: Optional[TableName] = None,
         criteria: Optional[Criteria] = None,
+        enrich: bool = False,
         *,
         tags: Optional[TagsSpec] = None,
     ):
@@ -289,9 +326,11 @@ class Filter(Operator):
 
         Args:
             to_table: The name of the table to which filtered rows will be sent.
-                      If `None`, the rows are discarded.
+                      If `None`, the filtered rows are discarded.
             criteria: The criteria for selecting rows to filter.
                       Defaults to `Criteria.any_failed()`.
+            enrich: If the table with filtered data should include the data
+                    quality classifier columns used by the criteria.
             tags: Optional tags to link this operator to specific classifiers.
         """
         super().__init__(tags=tags)
@@ -299,6 +338,7 @@ class Filter(Operator):
         if not criteria:
             criteria = Criteria.any_failed()
         self._criteria = criteria
+        self._enrich = enrich
 
     @property
     def to_table(self) -> Optional[TableName]:
@@ -315,6 +355,14 @@ class Filter(Operator):
         """
         return self._criteria
 
+    @property
+    def enrich(self) -> bool:
+        """
+        Returns if the table with filtered data should include the data quality
+        classifier columns used by the criteria.
+        """
+        return self._enrich
+
 
 class Select(Operator):
     """
@@ -329,6 +377,7 @@ class Select(Operator):
         self,
         to_table: TableName,
         criteria: Optional[Criteria] = None,
+        enrich: bool = False,
         *,
         tags: Optional[TagsSpec] = None,
     ):
@@ -338,6 +387,8 @@ class Select(Operator):
         Args:
             to_table: The name of the table where selected rows will be written.
             criteria: The criteria for selecting rows. Defaults to `Criteria.all_ok()`.
+            enrich: If the table with filtered data should include the data
+                    quality classifier columns used by the criteria.
             tags: Optional tags to link this operator to specific classifiers.
         """
         super().__init__(tags=tags)
@@ -345,6 +396,7 @@ class Select(Operator):
         if not criteria:
             criteria = Criteria.all_ok()
         self._criteria = criteria
+        self._enrich = enrich
 
     @property
     def to_table(self) -> TableName:
@@ -359,6 +411,14 @@ class Select(Operator):
         Returns the criteria for this `Select` operation.
         """
         return self._criteria
+
+    @property
+    def enrich(self) -> bool:
+        """
+        Returns if the table with filtered data should include the data quality
+        classifier columns used by the criteria.
+        """
+        return self._enrich
 
 
 class Summary(Operator):
