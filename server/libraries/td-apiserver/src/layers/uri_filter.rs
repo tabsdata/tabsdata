@@ -2,11 +2,10 @@
 //  Copyright 2024 Tabs Data Inc.
 //
 
-use axum::extract::Request;
+use axum::extract::{Request, connect_info::ConnectInfo};
 use axum::middleware::Next;
 use axum::response::Response;
-use axum_extra::extract::Host;
-use std::net::ToSocketAddrs;
+use std::net::SocketAddr;
 use ta_apiserver::status::error_status::ErrorStatus;
 use td_error::{TdError, td_error};
 use td_objects::dxo::crudl::RequestContext;
@@ -18,19 +17,11 @@ pub struct LoopbackIpFilterService;
 
 impl LoopbackIpFilterService {
     pub async fn layer(
-        Host(addr): Host,
-        request: Request,
+        ConnectInfo(addr): ConnectInfo<SocketAddr>,
+        mut request: Request,
         next: Next,
     ) -> Result<Response, ErrorStatus> {
-        let is_loopback = match addr.to_socket_addrs() {
-            Ok(mut addrs) => {
-                // Check if all resolved IP addresses are loopback addresses
-                addrs.all(|socket_addr| socket_addr.ip().is_loopback())
-            }
-            Err(_) => false,
-        };
-
-        if is_loopback {
+        if addr.ip().is_loopback() {
             // TODO create internal user and role
             // Insert the context into the request extensions.
             let request_context = RequestContext::with(
@@ -38,7 +29,6 @@ impl LoopbackIpFilterService {
                 UserId::admin(),
                 RoleId::sys_admin(),
             );
-            let mut request = request;
             request.extensions_mut().insert(request_context);
 
             let log_span = span!(Level::INFO, "loopback_request");

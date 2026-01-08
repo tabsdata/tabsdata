@@ -8,6 +8,7 @@ use axum::Router;
 use axum_server::Handle;
 use axum_server::tls_rustls::RustlsConfig;
 use http::uri::Scheme;
+use std::net::SocketAddr;
 use std::time::Duration;
 use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
@@ -45,7 +46,7 @@ impl Server for TlsServer {
 
                 let server = axum_server::from_tcp_rustls(listener, tls_config)
                     .handle(handle.clone())
-                    .serve(router.into_make_service());
+                    .serve(router.into_make_service_with_connect_info::<SocketAddr>());
 
                 // Graceful shutdown via the shutdown signal
                 tokio::select! {

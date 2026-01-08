@@ -6,6 +6,7 @@ use crate::apiserver::server::{Server, ServerError};
 use async_trait::async_trait;
 use axum::Router;
 use http::uri::Scheme;
+use std::net::SocketAddr;
 use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info};
@@ -27,11 +28,12 @@ impl Server for PlainServer {
             let dbg_listener = format!("{listener:?}");
 
             let router = self.router.clone();
+            let make_service = router.into_make_service_with_connect_info::<SocketAddr>();
             let mut shutdown = shutdown.clone();
             let handle = tokio::spawn(async move {
                 info!("Server listening on {dbg_listener}");
 
-                axum::serve(listener, router)
+                axum::serve(listener, make_service)
                     .with_graceful_shutdown({
                         let dbg_listener = dbg_listener.clone();
                         async move {
