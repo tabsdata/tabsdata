@@ -56,6 +56,7 @@ use sysinfo::{Pid, Signal};
 use td_common::attach::check_nowait_env;
 use td_common::env::to_absolute;
 use td_common::execution_status::WorkerCallbackStatus;
+use td_common::files::YAML_EXTENSION;
 use td_common::id::id;
 use td_common::os::terminate_process;
 use td_common::server::MessageAction;
@@ -66,10 +67,11 @@ use td_common::server::SupervisorMessagePayload::{
 use td_common::server::WorkerClass::{EPHEMERAL, INIT, REGULAR};
 use td_common::server::{
     CAST_FOLDER, CONFIG_FILE, CONFIG_FOLDER, CONFIG_NAMESPACE, CONFIG_PATH_ENV, CONFIG_URI_ENV,
-    ETC_FOLDER, INSTANCE_PATH_ENV, INSTANCE_URI_ENV, MOLD_FOLDER, MSG_FOLDER, PARENT_FOLDER,
-    PROC_FOLDER, REPOSITORY_PATH_ENV, REPOSITORY_URI_ENV, REQUEST_MESSAGE_FILE_PATTERN,
-    RETRIES_DELIMITER, SupervisorMessage, WORK_FOLDER, WORK_PATH_ENV, WORK_URI_ENV,
-    WORKSPACE_FOLDER, WORKSPACE_PATH_ENV, WORKSPACE_URI_ENV, WorkerClass,
+    ETC_FOLDER, EXTENSION_DELIMITER, INSTANCE_PATH_ENV, INSTANCE_URI_ENV, MOLD_FOLDER, MSG_FOLDER,
+    ONGOING_FOLDER, PARENT_FOLDER, PLANNED_FOLDER, PROC_FOLDER, QUEUED_FOLDER, REPOSITORY_PATH_ENV,
+    REPOSITORY_URI_ENV, REQUEST_MESSAGE_FILE_PATTERN, RETRIES_DELIMITER, SupervisorMessage,
+    WORK_FOLDER, WORK_PATH_ENV, WORK_URI_ENV, WORKSPACE_FOLDER, WORKSPACE_PATH_ENV,
+    WORKSPACE_URI_ENV, WorkerClass,
 };
 use td_common::signal::terminate;
 use td_common::status::ExitStatus::{GeneralError, Success, TabsDataError};
@@ -2175,6 +2177,111 @@ impl Supervisor {
                 .join(worker.name())
                 .join(MOLD_FOLDER);
             copy_mold_tree(&mold_folder, &work_folder)?;
+
+            if let Some(worker_message) = message.as_ref() {
+                let message_file_path = worker_message.file.file_name().ok_or_else(|| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        format!(
+                            "Failed to get file name from message file: {:?}",
+                            worker_message.file
+                        ),
+                    )
+                })?;
+                let message_file = message_file_path.to_str().ok_or_else(|| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        format!(
+                            "Failed to convert file name to string: {:?}",
+                            message_file_path
+                        ),
+                    )
+                })?;
+                let yaml_extension = format!("{}{}", EXTENSION_DELIMITER, YAML_EXTENSION);
+                let target_message_file =
+                    if let Some(message_stem) = message_file.strip_suffix(&yaml_extension) {
+                        if let Some(message_id) = message_stem.split(RETRIES_DELIMITER).next() {
+                            format!("{}{}{}", message_id, EXTENSION_DELIMITER, YAML_EXTENSION)
+                        } else {
+                            return Err(RunnerError::IOError(std::io::Error::new(
+                                std::io::ErrorKind::InvalidInput,
+                                format!(
+                                    "Failed to extract message id from file name: {:?}",
+                                    message_file
+                                ),
+                            )));
+                        }
+                    } else {
+                        return Err(RunnerError::IOError(std::io::Error::new(
+                            std::io::ErrorKind::InvalidInput,
+                            format!(
+                                "File name does not end with {}: {:?}",
+                                yaml_extension, message_file
+                            ),
+                        )));
+                    };
+
+                let message_parent_folder = worker_message.file.parent().ok_or_else(|| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::NotFound,
+                        format!(
+                            "Failed to get parent folder from message file: {:?}",
+                            worker_message.file
+                        ),
+                    )
+                })?;
+                let message_grandparent_folder =
+                    message_parent_folder.parent().ok_or_else(|| {
+                        std::io::Error::new(
+                            std::io::ErrorKind::NotFound,
+                            format!(
+                                "Failed to get grandparent folder from message file: {:?}",
+                                worker_message.file
+                            ),
+                        )
+                    })?;
+
+                const MESSAGE_FOLDERS: [&str; 3] = [PLANNED_FOLDER, QUEUED_FOLDER, ONGOING_FOLDER];
+                let mut source_message_path = None;
+                for folder in MESSAGE_FOLDERS {
+                    let candidate_path = message_grandparent_folder.join(folder).join(message_file);
+                    if candidate_path.exists() {
+                        source_message_path = Some(candidate_path);
+                        break;
+                    }
+                }
+
+                let source_path = source_message_path.ok_or_else(|| {
+                    let searched_paths: Vec<_> = MESSAGE_FOLDERS
+                        .iter()
+                        .map(|f| message_grandparent_folder.join(f).join(message_file))
+                        .collect();
+                    std::io::Error::new(
+                        std::io::ErrorKind::NotFound,
+                        format!(
+                            "Message file not found in any of the expected folders. Searched: {:?}",
+                            searched_paths
+                        ),
+                    )
+                })?;
+
+                let target_message_path = worker_folder.join(target_message_file);
+                debug!(
+                    "Copying message file from '{:?}' to '{:?}'...",
+                    source_path, target_message_path
+                );
+                if let Err(e) = std::fs::copy(&source_path, &target_message_path) {
+                    error!(
+                        "Failed to copy message file from '{:?}' to '{:?}': {:?}",
+                        source_path, target_message_path, e
+                    );
+                    return Err(RunnerError::IOError(e));
+                }
+                debug!(
+                    "Copied message file from '{:?}' to '{:?}'",
+                    source_path, target_message_path
+                );
+            }
         }
 
         Ok((config_folder, work_folder))

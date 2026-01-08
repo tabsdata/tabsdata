@@ -138,6 +138,7 @@ pub const FAIL_FOLDER: &str = "fail";
 pub const UNKNOWN_RUN: u16 = 0;
 pub const INITIAL_RUN: u16 = 1;
 
+pub const EXTENSION_DELIMITER: &str = ".";
 pub const RETRIES_DELIMITER: &str = "_";
 pub const INITIAL_CALL: &str = concatcp!(RETRIES_DELIMITER, INITIAL_RUN);
 
