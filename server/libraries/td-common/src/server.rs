@@ -96,6 +96,7 @@ pub const RESPONSE_FILE: &str = "response.yaml";
 pub const EXCEPTION_FILE: &str = "exception.yaml";
 
 pub const WORKER_PID_FILE: &str = "pid";
+pub const WORKER_OK_FILE: &str = "ok";
 pub const WORKER_OUT_FILE: &str = "out.log";
 pub const WORKER_ERR_FILE: &str = "err.log";
 

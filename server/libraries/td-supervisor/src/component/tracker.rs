@@ -16,7 +16,7 @@ use std::{fs, io};
 use thiserror::Error;
 
 use td_common::os::check_process;
-use td_common::server::WORKER_PID_FILE;
+use td_common::server::{WORKER_OK_FILE, WORKER_PID_FILE};
 
 pub const DEFAULT_WORKER_FOLDER: &str = ".";
 pub const DEFAULT_WORKER_PID: i32 = -1;
@@ -78,6 +78,18 @@ pub enum TrackerError {
     },
     #[error("Worker '{pid}' is not running")]
     WorkerNotRunning { pid: i32 },
+    #[error("Unable to open(w) the worker ok file '{ok_path}': {cause}")]
+    WorkerOkFileWriteOpenError {
+        ok_path: PathBuf,
+        #[source]
+        cause: io::Error,
+    },
+    #[error("Unable to write the worker ok file '{ok_path}': {cause}")]
+    WorkerOkFileWriteError {
+        ok_path: PathBuf,
+        #[source]
+        cause: io::Error,
+    },
 }
 
 // Default tracker.
@@ -159,6 +171,18 @@ impl WorkerTracker {
     pub fn check_worker_status(&self) -> WorkerStatus {
         let pid_path = self.get_worker_pid_path();
         check_status(pid_path)
+    }
+
+    // Gets the path to the worker ok file.
+    pub fn get_worker_ok_path(&self) -> PathBuf {
+        get_ok_path(self.folder.clone())
+    }
+
+    // Writes the worker ok file.
+    pub fn write_worker_ok_file(&mut self) -> Result<&WorkerTracker, TrackerError> {
+        let ok_path = self.get_worker_ok_path();
+        write_ok_file(ok_path)?;
+        Ok(self)
     }
 }
 
@@ -269,6 +293,28 @@ pub fn check_status(pid_path: PathBuf) -> WorkerStatus {
     } else {
         WorkerStatus::NoPidFile
     }
+}
+
+
+pub fn get_ok_path(work_path: PathBuf) -> PathBuf {
+    work_path.join(WORKER_OK_FILE)
+}
+
+pub fn write_ok_file(ok_path: PathBuf) -> Result<(), TrackerError> {
+    let mut ok_file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(&ok_path)
+        .map_err(|e| TrackerError::WorkerOkFileWriteOpenError {
+            ok_path: ok_path.clone(),
+            cause: e,
+        })?;
+    write!(ok_file, "").map_err(|e| TrackerError::WorkerOkFileWriteError {
+        ok_path: ok_path.clone(),
+        cause: e,
+    })?;
+    Ok(())
 }
 
 #[cfg(test)]

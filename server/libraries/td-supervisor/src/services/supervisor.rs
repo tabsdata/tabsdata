@@ -1791,6 +1791,18 @@ impl Supervisor {
             match result {
                 Ok(_) => {
                     SupervisorMessageQueue::complete(message)?;
+                    match &worker_run {
+                        Some(worker) => {
+                            let _ = worker.tracker().write().ok().map(|mut tracker| {
+                                if let Err(e) = tracker.write_worker_ok_file() {
+                                    error!("Failed to write worker ok file: {:?}", e);
+                                }
+                            });
+                        },
+                        None => {
+                            info!("No worker to generate an ok file...");
+                        }
+                    }
                 }
                 Err(_) => {
                     SupervisorMessageQueue::error(message)?;
