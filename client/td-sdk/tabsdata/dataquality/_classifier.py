@@ -12,7 +12,7 @@ import math
 import re
 import sys
 from abc import ABC
-from typing import AbstractSet, Collection, Optional
+from typing import AbstractSet, Collection, FrozenSet, Optional, Type
 
 from tabsdata.dataquality._typing import (
     MAX_BINS,
@@ -40,106 +40,14 @@ from tabsdata.exceptions import (
     ErrorCode,
     ParameterValidationError,
 )
-
-
-class Classifier(ABC):
-    """
-    Abstract base class for all data quality classifiers.
-
-    A classifier is applied to one or more columns to produce a classification
-    result, which is stored in a new column. It supports tags to allow data quality
-    operations to selectively act on specific classifiers.
-    """
-
-    @_td_validate_call(ErrorCode.PVDQCL1)
-    def __init__(
-        self,
-        column_names: Optional[ColumNamesWithAltSpec] = None,
-        on_missing_column: OnInvalidColumnSpec = "ignore",
-        on_wrong_type: OnInvalidColumnSpec = "ignore",
-        *,
-        tags: Optional[TagsSpec] = None,
-    ):
-        """
-        Initializes the classifier.
-
-        Args:
-            column_names: The column(s) to apply the classifier to.
-                - A string or list of strings specifies the source columns. The results
-                  are stored in columns with auto-generated names.
-                - A tuple `(source, destination)` or a list of such tuples allows
-                  specifying custom names for the result columns.
-                - If `None`, the classifier is applied to all columns.
-            on_missing_column: What to do if a column name is missing.
-            on_wrong_type: What to do if the type of a column is incompatible
-                           with the classifier.
-            tags: A tag or list of tags to associate with the classifier. Tags help
-                  filter which classifiers an operation should consider.
-        """
-        column_names = _normalize_to_list(column_names, keep_none=True)
-        if column_names and isinstance(column_names[0], str):
-            column_names = [(s, None) for s in column_names]
-        self._column_names = column_names
-        self._tags = _normalize_to_list(tags)
-        self._on_missing_column = on_missing_column
-        self._on_wrong_type = on_wrong_type
-
-    @property
-    def column_names(self) -> Optional[list[ColumnNameWithAltSpec]]:
-        """
-        Returns the list of columns the classifier applies to, including optional
-        destination column names.
-        """
-        return self._column_names
-
-    @property
-    def tags(self) -> list[TagSpec]:
-        """
-        Returns the list of tags associated with the classifier.
-        """
-        return self._tags
-
-    @property
-    def on_missing_column(self) -> OnInvalidColumnSpec:
-        """
-        Returns what do if the column is missing.
-        """
-        return self._on_missing_column
-
-    @property
-    def on_wrong_type(self) -> OnInvalidColumnSpec:
-        """
-        Returns what do if the column type is incompatible with tthe classifer.
-        """
-        return self._on_wrong_type
-
-
-class BoolClassifier(Classifier):
-    """
-    Abstract base class for classifiers that produce a boolean result
-    (`True` or `False`).
-    """
-
-
-def _validate_min_max(min_val: ScaleLimitSpec, max_val: ScaleLimitSpec, fn_name: str):
-    """Validates that `min_val` is less than `max_val`."""
-    if min_val >= max_val:
-        params_with_error = (
-            f"'min': {min_val}, 'max': {max_val} - The maximum value must be strictly "
-            "greater than the minimum value."
-        )
-        raise _validation_error(ErrorCode.PVDQCL32, fn_name, params_with_error)
-
-
-def _validate_bins(bins: BinsSpec, min_in_first_bin: bool, fn_name: str):
-    """Validates the number of bins against the allowed maximum."""
-    max_allowed = MAX_BINS if min_in_first_bin else MAX_BINS + 1
-    if bins > max_allowed:
-        params_with_error = (
-            f"'bins': {bins}, 'min_in_first_bin': {min_in_first_bin} - "
-            f"Exceeds the maximum allowed bins of {max_allowed}."
-        )
-        raise _validation_error(ErrorCode.PVDQCL33, fn_name, params_with_error)
+from tabsdata.tableframe.dtypes import (
+    _ALL_DTYPES,
+    _ALL_NON_BOOLEAN_DTYPES,
+    _FLOAT_DTYPES,
+    _NUMERIC_DTYPES,
+    _SIGNED_NUMERIC_DTYPES,
+    _STRING_DTYPES,
+)
 
 
 class Scale(ABC):
@@ -331,10 +239,125 @@ class ExponentialScale(Scale):
         return self._base
 
 
+class Classifier(ABC):
+    """
+    Abstract base class for all data quality classifiers.
+
+    A classifier is applied to one or more columns to produce a classification
+    result, which is stored in a new column. It supports tags to allow data quality
+    operations to selectively act on specific classifiers.
+    """
+
+    @classmethod
+    def supported_dtypes(cls) -> FrozenSet[Type]:
+        """Returns the set of data types supported by this classifier."""
+        return _ALL_DTYPES
+
+    @_td_validate_call(ErrorCode.PVDQCL1)
+    def __init__(
+        self,
+        column_names: Optional[ColumNamesWithAltSpec] = None,
+        on_missing_column: OnInvalidColumnSpec = "ignore",
+        on_wrong_type: OnInvalidColumnSpec = "ignore",
+        *,
+        tags: Optional[TagsSpec] = None,
+    ):
+        """
+        Initializes the classifier.
+
+        Args:
+            column_names: The column(s) to apply the classifier to.
+                - A string or list of strings specifies the source columns. The results
+                  are stored in columns with auto-generated names.
+                - A tuple `(source, destination)` or a list of such tuples allows
+                  specifying custom names for the result columns.
+                - If `None`, the classifier is applied to all columns.
+            on_missing_column: What to do if a column name is missing.
+            on_wrong_type: Behavior when a column’s type is incompatible with the
+                           classifier.
+            tags: A tag or list of tags to associate with the classifier. Tags help
+                  filter which classifiers an operation should consider.
+        """
+        column_names = _normalize_to_list(column_names, keep_none=True)
+        if column_names and isinstance(column_names[0], str):
+            column_names = [(s, None) for s in column_names]
+        self._column_names = column_names
+        self._tags = _normalize_to_list(tags)
+        self._on_missing_column = on_missing_column
+        self._on_wrong_type = on_wrong_type
+
+    @property
+    def column_names(self) -> Optional[list[ColumnNameWithAltSpec]]:
+        """
+        Returns the list of columns the classifier applies to, including optional
+        destination column names.
+        """
+        return self._column_names
+
+    @property
+    def tags(self) -> list[TagSpec]:
+        """
+        Returns the list of tags associated with the classifier.
+        """
+        return self._tags
+
+    @property
+    def on_missing_column(self) -> OnInvalidColumnSpec:
+        """
+        Returns what do if the column is missing.
+        """
+        return self._on_missing_column
+
+    @property
+    def on_wrong_type(self) -> OnInvalidColumnSpec:
+        """
+        Returns what do if the column type is incompatible with the classifier.
+        """
+        return self._on_wrong_type
+
+
+class BoolClassifier(Classifier):
+    """
+    Abstract base class for classifiers that produce a boolean result
+    (`True` or `False`).
+    """
+
+    @classmethod
+    def supported_dtypes(cls) -> FrozenSet[Type]:
+        """Returns the set of data types supported by boolean classifiers."""
+        return _ALL_DTYPES
+
+
+def _validate_min_max(min_val: ScaleLimitSpec, max_val: ScaleLimitSpec, fn_name: str):
+    """Validates that `min_val` is less than `max_val`."""
+    if min_val >= max_val:
+        params_with_error = (
+            f"'min': {min_val}, 'max': {max_val} - The maximum value must be strictly "
+            "greater than the minimum value."
+        )
+        raise _validation_error(ErrorCode.PVDQCL32, fn_name, params_with_error)
+
+
+def _validate_bins(bins: BinsSpec, min_in_first_bin: bool, fn_name: str):
+    """Validates the number of bins against the allowed maximum."""
+    max_allowed = MAX_BINS if min_in_first_bin else MAX_BINS + 1
+    if bins > max_allowed:
+        params_with_error = (
+            f"'bins': {bins}, 'min_in_first_bin': {min_in_first_bin} - "
+            f"Exceeds the maximum allowed bins of {max_allowed}."
+        )
+        raise _validation_error(ErrorCode.PVDQCL33, fn_name, params_with_error)
+
+
 class Categorizer(Classifier):
     """
     A classifier that bucketizes data into bins based on a given scale.
     """
+
+    @classmethod
+    def supported_dtypes(cls) -> FrozenSet[Type]:
+        """Returns the set of data types supported by categorizers."""
+        return _NUMERIC_DTYPES
 
     @_td_validate_call(ErrorCode.PVDQCL2)
     def __init__(
@@ -352,8 +375,8 @@ class Categorizer(Classifier):
         Args:
             column_names: The column(s) to categorize.
             on_missing_column: What to do if a column name is missing.
-            on_wrong_type: What to do if the type of a column is incompatible
-                           with the classifier.
+            on_wrong_type: Behavior when a column’s type is incompatible with the
+                           classifier.
             scale: The scale to use for categorization.
             tags: Optional tags for the classifier.
         """
@@ -378,134 +401,511 @@ def _validate_pattern(pattern: str, fn_name: str, error_code: ErrorCode) -> str:
         raise _validation_error(error_code, fn_name, msg)
 
 
-class Matches(BoolClassifier):
+# noinspection DuplicatedCode
+class IsNull(BoolClassifier):
     """
-    A boolean classifier that checks if a value matches a regex pattern.
+    A boolean classifier that checks if a value is `NULL`.
     """
 
-    @_td_validate_call(ErrorCode.PVDQCL22)
+    @classmethod
+    def supported_dtypes(cls) -> FrozenSet[Type]:
+        """Returns the set of data types supported by IsNull classifier."""
+        return _ALL_DTYPES
+
+    @_td_validate_call(ErrorCode.PVDQCL17)
     def __init__(
         self,
         column_names: Optional[ColumNamesWithAltSpec] = None,
         on_missing_column: OnInvalidColumnSpec = "ignore",
-        on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
-        pattern: str,
         tags: Optional[TagsSpec] = None,
     ):
         """
-        Initializes the `Matches` classifier.
+        Initializes the `IsNull` classifier.
 
         Args:
             column_names: The column(s) to check.
             on_missing_column: What to do if a column name is missing.
-            on_wrong_type: What to do if the type of a column is incompatible
-                           with the classifier.
-            pattern: The regular expression to match against.
             tags: Optional tags for the classifier.
         """
-        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
-        self._pattern = _validate_pattern(
-            pattern, f"{self.__class__.__name__}.__init__", ErrorCode.PVDQCL35
-        )
-
-    @property
-    def pattern(self) -> str:
-        """Returns the regex pattern."""
-        return self._pattern
+        super().__init__(column_names, on_missing_column, "ignore", tags=tags)
 
 
-class DoesNotMatch(BoolClassifier):
+class IsNotNull(BoolClassifier):
     """
-    A boolean classifier that checks if a value does *not* match a regex pattern.
+    A boolean classifier that checks if a value is *not* `NULL`.
     """
 
-    @_td_validate_call(ErrorCode.PVDQCL3)
+    @classmethod
+    def supported_dtypes(cls) -> FrozenSet[Type]:
+        """Returns the set of data types supported by IsNotNull classifier."""
+        return _ALL_DTYPES
+
+    @_td_validate_call(ErrorCode.PVDQCL15)
     def __init__(
         self,
         column_names: Optional[ColumNamesWithAltSpec] = None,
         on_missing_column: OnInvalidColumnSpec = "ignore",
-        on_wrong_type: OnInvalidColumnSpec = "ignore",
-        *,
-        pattern: str,
-        tags: Optional[TagsSpec] = None,
-    ):
-        """
-        Initializes the `DoesNotMatch` classifier.
-
-        Args:
-            column_names: The column(s) to apply the check to.
-            pattern: The regular expression to not match against.
-            on_missing_column: What to do if a column name is missing.
-            on_wrong_type: What to do if the type of a column is incompatible
-                           with the classifier.
-            tags: Optional tags for the classifier.
-        """
-        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
-        self._pattern = _validate_pattern(
-            pattern, f"{self.__class__.__name__}.__init__", ErrorCode.PVDQCL36
-        )
-
-    @property
-    def pattern(self) -> str:
-        """Returns the regex pattern."""
-        return self._pattern
-
-
-class HasLength(BoolClassifier):
-    """
-    A boolean classifier that checks if the length of a value is within a given range.
-    """
-
-    @_td_validate_call(ErrorCode.PVDQCL7)
-    def __init__(
-        self,
-        column_names: Optional[ColumNamesWithAltSpec] = None,
-        min_len: LenSpec = 0,
-        max_len: LenSpec = sys.maxsize,
-        on_missing_column: OnInvalidColumnSpec = "ignore",
-        on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
         tags: Optional[TagsSpec] = None,
     ):
         """
-        Initializes the `HasLength` classifier.
+        Initializes the `IsNotNull` classifier.
 
         Args:
             column_names: The column(s) to check.
-            min_len: The minimum allowed length (inclusive).
-            max_len: The maximum allowed length (inclusive).
             on_missing_column: What to do if a column name is missing.
-            on_wrong_type: What to do if the type of a column is incompatible
-                           with the classifier.
+            tags: Optional tags for the classifier.
+        """
+        super().__init__(column_names, on_missing_column, "ignore", tags=tags)
+
+
+class IsNan(BoolClassifier):
+    """
+    A boolean classifier that checks if a value is `NaN` (Not a Number).
+    """
+
+    @classmethod
+    def supported_dtypes(cls) -> FrozenSet[Type]:
+        """Returns the set of data types supported by IsNan classifier."""
+        return _FLOAT_DTYPES
+
+    @_td_validate_call(ErrorCode.PVDQCL14)
+    def __init__(
+        self,
+        column_names: Optional[ColumNamesWithAltSpec] = None,
+        on_missing_column: OnInvalidColumnSpec = "ignore",
+        on_wrong_type: OnInvalidColumnSpec = "ignore",
+        *,
+        tags: Optional[TagsSpec] = None,
+    ):
+        """
+        Initializes the `IsNan` classifier.
+
+        Args:
+            column_names: The column(s) to check.
+            on_missing_column: What to do if a column name is missing.
+            on_wrong_type: Behavior when a column’s type is incompatible with the
+                           classifier.
             tags: Optional tags for the classifier.
         """
         super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
-        if min_len > max_len:
-            msg = (
-                " Parameter validation error. "
-                "Function 'HasLen.__init__', "
-                f" min='{min_len}' is greater than max='{max_len}'."
-            )
-            raise ParameterValidationError(ErrorCode.PVDQCL8, msg)
+
+
+class IsNotNan(BoolClassifier):
+    """
+    A boolean classifier that checks if a value is *not* `NaN`.
+    """
+
+    @classmethod
+    def supported_dtypes(cls) -> FrozenSet[Type]:
+        """Returns the set of data types supported by IsNotNan classifier."""
+        return _FLOAT_DTYPES
+
+    @_td_validate_call(ErrorCode.PVDQCL14)
+    def __init__(
+        self,
+        column_names: Optional[ColumNamesWithAltSpec] = None,
+        on_missing_column: OnInvalidColumnSpec = "ignore",
+        on_wrong_type: OnInvalidColumnSpec = "ignore",
+        *,
+        tags: Optional[TagsSpec] = None,
+    ):
+        """
+        Initializes the `IsNotNan` classifier.
+
+        Args:
+            column_names: The column(s) to check.
+            on_missing_column: What to do if a column name is missing.
+            on_wrong_type: Behavior when a column’s type is incompatible with the
+                           classifier.
+            tags: Optional tags for the classifier.
+        """
+        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
+
+
+class IsNullOrNan(BoolClassifier):
+    """
+    A boolean classifier that checks if a value is either `NULL` or `NaN`.
+    """
+
+    @classmethod
+    def supported_dtypes(cls) -> FrozenSet[Type]:
+        """Returns the set of data types supported by IsNullOrNan classifier."""
+        return _FLOAT_DTYPES
+
+    @_td_validate_call(ErrorCode.PVDQCL18)
+    def __init__(
+        self,
+        column_names: Optional[ColumNamesWithAltSpec] = None,
+        on_missing_column: OnInvalidColumnSpec = "ignore",
+        on_wrong_type: OnInvalidColumnSpec = "ignore",
+        *,
+        tags: Optional[TagsSpec] = None,
+    ):
+        """
+        Initializes the `IsNullOrNan` classifier.
+
+        Args:
+            column_names: The column(s) to check.
+            on_missing_column: What to do if a column name is missing.
+            on_wrong_type: Behavior when a column’s type is incompatible with the
+                           classifier.
+            tags: Optional tags for the classifier.
+        """
+        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
+
+
+class IsNotNullNorNan(BoolClassifier):
+    """
+    A boolean classifier that checks if a value is neither `NULL` nor `NaN`.
+    """
+
+    @classmethod
+    def supported_dtypes(cls) -> FrozenSet[Type]:
+        """Returns the set of data types supported by IsNotNullNorNan classifier."""
+        return _FLOAT_DTYPES
+
+    @_td_validate_call(ErrorCode.PVDQCL15)
+    def __init__(
+        self,
+        column_names: Optional[ColumNamesWithAltSpec] = None,
+        on_missing_column: OnInvalidColumnSpec = "ignore",
+        on_wrong_type: OnInvalidColumnSpec = "ignore",
+        *,
+        tags: Optional[TagsSpec] = None,
+    ):
+        """
+        Initializes the `IsNotNullNorNan` classifier.
+
+        Args:
+            column_names: The column(s) to check.
+            on_missing_column: What to do if a column name is missing.
+            on_wrong_type: Behavior when a column’s type is incompatible with the
+                           classifier.
+            tags: Optional tags for the classifier.
+        """
+        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
+
+
+# noinspection DuplicatedCode
+class IsZero(BoolClassifier):
+    """
+    A boolean classifier that checks if a numeric value is zero.
+    """
+
+    @classmethod
+    def supported_dtypes(cls) -> FrozenSet[Type]:
+        """Returns the set of data types supported by IsZero classifier."""
+        return _NUMERIC_DTYPES
+
+    @_td_validate_call(ErrorCode.PVDQCL21)
+    def __init__(
+        self,
+        column_names: Optional[ColumNamesWithAltSpec] = None,
+        on_missing_column: OnInvalidColumnSpec = "ignore",
+        on_wrong_type: OnInvalidColumnSpec = "ignore",
+        *,
+        tags: Optional[TagsSpec] = None,
+    ):
+        """
+        Initializes the `IsZero` classifier.
+
+        Args:
+            column_names: The column(s) to check.
+            on_missing_column: What to do if a column name is missing.
+            on_wrong_type: Behavior when a column’s type is incompatible with the
+                           classifier.
+            tags: Optional tags for the classifier.
+        """
+        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
+
+
+class IsNotZero(BoolClassifier):
+    """
+    A boolean classifier that checks if a numeric value is not zero.
+    """
+
+    @classmethod
+    def supported_dtypes(cls) -> FrozenSet[Type]:
+        """Returns the set of data types supported by IsNotZero classifier."""
+        return _NUMERIC_DTYPES
+
+    @_td_validate_call(ErrorCode.PVDQCL16)
+    def __init__(
+        self,
+        column_names: Optional[ColumNamesWithAltSpec] = None,
+        on_missing_column: OnInvalidColumnSpec = "ignore",
+        on_wrong_type: OnInvalidColumnSpec = "ignore",
+        *,
+        tags: Optional[TagsSpec] = None,
+    ):
+        """
+        Initializes the `IsNotZero` classifier.
+
+        Args:
+            column_names: The column(s) to check.
+            on_missing_column: What to do if a column name is missing.
+            on_wrong_type: Behavior when a column’s type is incompatible with the
+                           classifier.
+            tags: Optional tags for the classifier.
+        """
+        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
+
+
+class IsPositive(BoolClassifier):
+    """
+    A boolean classifier that checks if a numeric value is positive.
+    """
+
+    @classmethod
+    def supported_dtypes(cls) -> FrozenSet[Type]:
+        """Returns the set of data types supported by IsPositive classifier."""
+        return _SIGNED_NUMERIC_DTYPES
+
+    @_td_validate_call(ErrorCode.PVDQCL19)
+    def __init__(
+        self,
+        column_names: Optional[ColumNamesWithAltSpec] = None,
+        on_missing_column: OnInvalidColumnSpec = "ignore",
+        on_wrong_type: OnInvalidColumnSpec = "ignore",
+        *,
+        tags: Optional[TagsSpec] = None,
+    ):
+        """
+        Initializes the `IsPositive` classifier.
+
+        Args:
+            column_names: The column(s) to check.
+            on_missing_column: What to do if a column name is missing.
+            on_wrong_type: Behavior when a column’s type is incompatible with the
+                           classifier.
+            tags: Optional tags for the classifier.
+        """
+        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
+
+
+class IsPositiveOrZero(BoolClassifier):
+    """
+    A boolean classifier that checks if a numeric value is positive or zero.
+    """
+
+    @classmethod
+    def supported_dtypes(cls) -> FrozenSet[Type]:
+        """Returns the set of data types supported by IsPositiveOrZero classifier."""
+        return _SIGNED_NUMERIC_DTYPES
+
+    @_td_validate_call(ErrorCode.PVDQCL20)
+    def __init__(
+        self,
+        column_names: Optional[ColumNamesWithAltSpec] = None,
+        on_missing_column: OnInvalidColumnSpec = "ignore",
+        on_wrong_type: OnInvalidColumnSpec = "ignore",
+        *,
+        tags: Optional[TagsSpec] = None,
+    ):
+        """
+        Initializes the `IsPositiveOrZero` classifier.
+
+        Args:
+            column_names: The column(s) to check.
+            on_missing_column: What to do if a column name is missing.
+            on_wrong_type: Behavior when a column’s type is incompatible with the
+                           classifier.
+            tags: Optional tags for the classifier.
+        """
+        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
+
+
+class IsNegative(BoolClassifier):
+    """
+    A boolean classifier that checks if a numeric value is negative.
+    """
+
+    @classmethod
+    def supported_dtypes(cls) -> FrozenSet[Type]:
+        """Returns the set of data types supported by IsNegative classifier."""
+        return _SIGNED_NUMERIC_DTYPES
+
+    @_td_validate_call(ErrorCode.PVDQCL14)
+    def __init__(
+        self,
+        column_names: Optional[ColumNamesWithAltSpec] = None,
+        on_missing_column: OnInvalidColumnSpec = "ignore",
+        on_wrong_type: OnInvalidColumnSpec = "ignore",
+        *,
+        tags: Optional[TagsSpec] = None,
+    ):
+        """
+        Initializes the `IsNegative` classifier.
+
+        Args:
+            column_names: The column(s) to check.
+            on_missing_column: What to do if a column name is missing.
+            on_wrong_type: Behavior when a column’s type is incompatible with the
+                           classifier.
+            tags: Optional tags for the classifier.
+        """
+        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
+
+
+class IsNegativeOrZero(BoolClassifier):
+    """
+    A boolean classifier that checks if a numeric value is negative or zero.
+    """
+
+    @classmethod
+    def supported_dtypes(cls) -> FrozenSet[Type]:
+        """Returns the set of data types supported by IsNegativeOrZero classifier."""
+        return _SIGNED_NUMERIC_DTYPES
+
+    @_td_validate_call(ErrorCode.PVDQCL14)
+    def __init__(
+        self,
+        column_names: Optional[ColumNamesWithAltSpec] = None,
+        on_missing_column: OnInvalidColumnSpec = "ignore",
+        on_wrong_type: OnInvalidColumnSpec = "ignore",
+        *,
+        tags: Optional[TagsSpec] = None,
+    ):
+        """
+        Initializes the `IsNegativeOrZero` classifier.
+
+        Args:
+            column_names: The column(s) to check.
+            on_missing_column: What to do if a column name is missing.
+            on_wrong_type: Behavior when a column’s type is incompatible with the
+                           classifier.
+            tags: Optional tags for the classifier.
+        """
+        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
+
+
+class IsBetween(BoolClassifier):
+    """
+    A boolean classifier that checks if a value is within a specified range.
+    """
+
+    @classmethod
+    def supported_dtypes(cls) -> FrozenSet[Type]:
+        """Returns the set of data types supported by IsBetween classifier."""
+        return _ALL_NON_BOOLEAN_DTYPES
+
+    @_td_validate_call(ErrorCode.PVDQCL10)
+    def __init__(
+        self,
+        column_names: Optional[ColumNamesWithAltSpec] = None,
+        min_len: Optional[RangeValueSpec] = None,
+        max_len: Optional[RangeValueSpec] = None,
+        closed: RangeClosedOnSpec = "both",
+        on_missing_column: OnInvalidColumnSpec = "ignore",
+        on_wrong_type: OnInvalidColumnSpec = "ignore",
+        *,
+        tags: Optional[TagsSpec] = None,
+    ):
+        """
+        Initializes the `IsBetween` classifier.
+
+        Args:
+            column_names: The column(s) to check.
+            min_len: The minimum value of the range.
+            max_len: The maximum value of the range.
+            closed: Specifies if the range is inclusive ("both", "lower", "upper") or
+                exclusive ("none").
+            on_missing_column: What to do if a column name is missing.
+            on_wrong_type: Behavior when a column’s type is incompatible with the
+                           classifier.
+            tags: Optional tags for the classifier.
+        """
+        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
+        _validate_range(min_len, max_len, ErrorCode.PVDQCL11)
         self._min = min_len
         self._max = max_len
+        self._closed = closed
 
     @property
-    def min(self) -> int:
-        """Returns the minimum allowed length."""
+    def min(self) -> Optional[RangeValueSpec]:
+        """Returns the minimum value of the range."""
         return self._min
 
     @property
-    def max(self) -> int:
-        """Returns the maximum allowed length."""
+    def max(self) -> Optional[RangeValueSpec]:
+        """Returns the maximum value of the range."""
         return self._max
+
+    @property
+    def closed(self) -> RangeClosedOnSpec:
+        """Returns how the range is closed."""
+        return self._closed
+
+
+class IsNotBetween(BoolClassifier):
+    """
+    A boolean classifier that checks if a value is *outside* a specified range.
+    """
+
+    @classmethod
+    def supported_dtypes(cls) -> FrozenSet[Type]:
+        """Returns the set of data types supported by IsNotBetween classifier."""
+        return _ALL_NON_BOOLEAN_DTYPES
+
+    @_td_validate_call(ErrorCode.PVDQCL12)
+    def __init__(
+        self,
+        column_names: Optional[ColumNamesWithAltSpec] = None,
+        min_len: Optional[RangeValueSpec] = None,
+        max_len: Optional[RangeValueSpec] = None,
+        closed: RangeClosedOnSpec = "both",
+        on_missing_column: OnInvalidColumnSpec = "ignore",
+        on_wrong_type: OnInvalidColumnSpec = "ignore",
+        *,
+        tags: Optional[TagsSpec] = None,
+    ):
+        """
+        Initializes the `IsNotBetween` classifier.
+
+        Args:
+            column_names: The column(s) to check.
+            min_len: The minimum value of the range.
+            max_len: The maximum value of the range.
+            closed: Specifies if the range is inclusive ("both", "lower", "upper") or
+                exclusive ("none").
+            on_missing_column: What to do if a column name is missing.
+            on_wrong_type: Behavior when a column’s type is incompatible with the
+                           classifier.
+            tags: Optional tags for the classifier.
+        """
+        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
+        _validate_range(min_len, max_len, ErrorCode.PVDQCL11)
+        self._min = min_len
+        self._max = max_len
+        self._closed = closed
+
+    @property
+    def min(self) -> Optional[RangeValueSpec]:
+        """Returns the minimum value of the range."""
+        return self._min
+
+    @property
+    def max(self) -> Optional[RangeValueSpec]:
+        """Returns the maximum value of the range."""
+        return self._max
+
+    @property
+    def closed(self) -> RangeClosedOnSpec:
+        """Returns how the range is closed."""
+        return self._closed
 
 
 class IsIn(BoolClassifier):
     """
     A boolean classifier that checks if a value is in a specified set of values.
     """
+
+    @classmethod
+    def supported_dtypes(cls) -> FrozenSet[Type]:
+        """Returns the set of data types supported by IsIn classifier."""
+        return _ALL_DTYPES
 
     @_td_validate_call(ErrorCode.PVDQCL9)
     def __init__(
@@ -539,6 +939,11 @@ class IsNotIn(BoolClassifier):
     A boolean classifier that checks if a value is *not* in a specified set of values.
     """
 
+    @classmethod
+    def supported_dtypes(cls) -> FrozenSet[Type]:
+        """Returns the set of data types supported by IsNotIn classifier."""
+        return _ALL_DTYPES
+
     @_td_validate_call(ErrorCode.PVDQCL10)
     def __init__(
         self,
@@ -566,6 +971,145 @@ class IsNotIn(BoolClassifier):
         return self._values
 
 
+class Matches(BoolClassifier):
+    """
+    A boolean classifier that checks if a value matches a regex pattern.
+    """
+
+    @classmethod
+    def supported_dtypes(cls) -> FrozenSet[Type]:
+        """Returns the set of data types supported by Matches classifier."""
+        return _STRING_DTYPES
+
+    @_td_validate_call(ErrorCode.PVDQCL22)
+    def __init__(
+        self,
+        column_names: Optional[ColumNamesWithAltSpec] = None,
+        on_missing_column: OnInvalidColumnSpec = "ignore",
+        on_wrong_type: OnInvalidColumnSpec = "ignore",
+        *,
+        pattern: str,
+        tags: Optional[TagsSpec] = None,
+    ):
+        """
+        Initializes the `Matches` classifier.
+
+        Args:
+            column_names: The column(s) to check.
+            on_missing_column: What to do if a column name is missing.
+            on_wrong_type: Behavior when a column’s type is incompatible with the
+                           classifier.
+            pattern: The regular expression to match against.
+            tags: Optional tags for the classifier.
+        """
+        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
+        self._pattern = _validate_pattern(
+            pattern, f"{self.__class__.__name__}.__init__", ErrorCode.PVDQCL35
+        )
+
+    @property
+    def pattern(self) -> str:
+        """Returns the regex pattern."""
+        return self._pattern
+
+
+class DoesNotMatch(BoolClassifier):
+    """
+    A boolean classifier that checks if a value does *not* match a regex pattern.
+    """
+
+    @classmethod
+    def supported_dtypes(cls) -> FrozenSet[Type]:
+        """Returns the set of data types supported by DoesNotMatch classifier."""
+        return _STRING_DTYPES
+
+    @_td_validate_call(ErrorCode.PVDQCL3)
+    def __init__(
+        self,
+        column_names: Optional[ColumNamesWithAltSpec] = None,
+        on_missing_column: OnInvalidColumnSpec = "ignore",
+        on_wrong_type: OnInvalidColumnSpec = "ignore",
+        *,
+        pattern: str,
+        tags: Optional[TagsSpec] = None,
+    ):
+        """
+        Initializes the `DoesNotMatch` classifier.
+
+        Args:
+            column_names: The column(s) to apply the check to.
+            pattern: The regular expression to not match against.
+            on_missing_column: What to do if a column name is missing.
+            on_wrong_type: Behavior when a column’s type is incompatible with the
+                           classifier.
+            tags: Optional tags for the classifier.
+        """
+        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
+        self._pattern = _validate_pattern(
+            pattern, f"{self.__class__.__name__}.__init__", ErrorCode.PVDQCL36
+        )
+
+    @property
+    def pattern(self) -> str:
+        """Returns the regex pattern."""
+        return self._pattern
+
+
+class HasLength(BoolClassifier):
+    """
+    A boolean classifier that checks if the length of a value is within a given range.
+    """
+
+    @classmethod
+    def supported_dtypes(cls) -> FrozenSet[Type]:
+        """Returns the set of data types supported by HasLength classifier."""
+        return _STRING_DTYPES
+
+    @_td_validate_call(ErrorCode.PVDQCL7)
+    def __init__(
+        self,
+        column_names: Optional[ColumNamesWithAltSpec] = None,
+        min_len: LenSpec = 0,
+        max_len: LenSpec = sys.maxsize,
+        on_missing_column: OnInvalidColumnSpec = "ignore",
+        on_wrong_type: OnInvalidColumnSpec = "ignore",
+        *,
+        tags: Optional[TagsSpec] = None,
+    ):
+        """
+        Initializes the `HasLength` classifier.
+
+        Args:
+            column_names: The column(s) to check.
+            min_len: The minimum allowed length (inclusive).
+            max_len: The maximum allowed length (inclusive).
+            on_missing_column: What to do if a column name is missing.
+            on_wrong_type: Behavior when a column’s type is incompatible with the
+                           classifier.
+            tags: Optional tags for the classifier.
+        """
+        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
+        if min_len > max_len:
+            msg = (
+                " Parameter validation error. "
+                "Function 'HasLen.__init__', "
+                f" min='{min_len}' is greater than max='{max_len}'."
+            )
+            raise ParameterValidationError(ErrorCode.PVDQCL8, msg)
+        self._min = min_len
+        self._max = max_len
+
+    @property
+    def min(self) -> int:
+        """Returns the minimum allowed length."""
+        return self._min
+
+    @property
+    def max(self) -> int:
+        """Returns the maximum allowed length."""
+        return self._max
+
+
 def _validate_range(
     min_len: Optional[RangeValueSpec],
     max_len: Optional[RangeValueSpec],
@@ -586,427 +1130,3 @@ def _validate_range(
                 f" min_len='{min_len}' is greater than max_len='{max_len}'."
             )
             raise ParameterValidationError(error_code, msg)
-
-
-class IsBetween(BoolClassifier):
-    """
-    A boolean classifier that checks if a value is within a specified range.
-    """
-
-    @_td_validate_call(ErrorCode.PVDQCL10)
-    def __init__(
-        self,
-        column_names: Optional[ColumNamesWithAltSpec] = None,
-        min_len: Optional[RangeValueSpec] = None,
-        max_len: Optional[RangeValueSpec] = None,
-        closed: RangeClosedOnSpec = "both",
-        on_missing_column: OnInvalidColumnSpec = "ignore",
-        on_wrong_type: OnInvalidColumnSpec = "ignore",
-        *,
-        tags: Optional[TagsSpec] = None,
-    ):
-        """
-        Initializes the `IsBetween` classifier.
-
-        Args:
-            column_names: The column(s) to check.
-            min_len: The minimum value of the range.
-            max_len: The maximum value of the range.
-            closed: Specifies if the range is inclusive ("both", "lower", "upper") or
-                exclusive ("none").
-            on_missing_column: What to do if a column name is missing.
-            on_wrong_type: What to do if the type of a column is incompatible
-                           with the classifier.
-            tags: Optional tags for the classifier.
-        """
-        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
-        _validate_range(min_len, max_len, ErrorCode.PVDQCL11)
-        self._min = min_len
-        self._max = max_len
-        self._closed = closed
-
-    @property
-    def min(self) -> Optional[RangeValueSpec]:
-        """Returns the minimum value of the range."""
-        return self._min
-
-    @property
-    def max(self) -> Optional[RangeValueSpec]:
-        """Returns the maximum value of the range."""
-        return self._max
-
-    @property
-    def closed(self) -> RangeClosedOnSpec:
-        """Returns how the range is closed."""
-        return self._closed
-
-
-class IsNotBetween(BoolClassifier):
-    """
-    A boolean classifier that checks if a value is *outside* a specified range.
-    """
-
-    @_td_validate_call(ErrorCode.PVDQCL12)
-    def __init__(
-        self,
-        column_names: Optional[ColumNamesWithAltSpec] = None,
-        min_len: Optional[RangeValueSpec] = None,
-        max_len: Optional[RangeValueSpec] = None,
-        closed: RangeClosedOnSpec = "both",
-        on_missing_column: OnInvalidColumnSpec = "ignore",
-        on_wrong_type: OnInvalidColumnSpec = "ignore",
-        *,
-        tags: Optional[TagsSpec] = None,
-    ):
-        """
-        Initializes the `IsNotBetween` classifier.
-
-        Args:
-            column_names: The column(s) to check.
-            min_len: The minimum value of the range.
-            max_len: The maximum value of the range.
-            closed: Specifies if the range is inclusive ("both", "lower", "upper") or
-                exclusive ("none").
-            on_missing_column: What to do if a column name is missing.
-            on_wrong_type: What to do if the type of a column is incompatible
-                           with the classifier.
-            tags: Optional tags for the classifier.
-        """
-        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
-        _validate_range(min_len, max_len, ErrorCode.PVDQCL11)
-        self._min = min_len
-        self._max = max_len
-        self._closed = closed
-
-    @property
-    def min(self) -> Optional[RangeValueSpec]:
-        """Returns the minimum value of the range."""
-        return self._min
-
-    @property
-    def max(self) -> Optional[RangeValueSpec]:
-        """Returns the maximum value of the range."""
-        return self._max
-
-    @property
-    def closed(self) -> RangeClosedOnSpec:
-        """Returns how the range is closed."""
-        return self._closed
-
-
-class IsNan(BoolClassifier):
-    """
-    A boolean classifier that checks if a value is `NaN` (Not a Number).
-    """
-
-    @_td_validate_call(ErrorCode.PVDQCL14)
-    def __init__(
-        self,
-        column_names: Optional[ColumNamesWithAltSpec] = None,
-        on_missing_column: OnInvalidColumnSpec = "ignore",
-        on_wrong_type: OnInvalidColumnSpec = "ignore",
-        *,
-        tags: Optional[TagsSpec] = None,
-    ):
-        """
-        Initializes the `IsNan` classifier.
-
-        Args:
-            column_names: The column(s) to check.
-            on_missing_column: What to do if a column name is missing.
-            on_wrong_type: What to do if the type of a column is incompatible
-                           with the classifier.
-            tags: Optional tags for the classifier.
-        """
-        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
-
-
-class IsNegative(BoolClassifier):
-    """
-    A boolean classifier that checks if a numeric value is negative.
-    """
-
-    @_td_validate_call(ErrorCode.PVDQCL14)
-    def __init__(
-        self,
-        column_names: Optional[ColumNamesWithAltSpec] = None,
-        on_missing_column: OnInvalidColumnSpec = "ignore",
-        on_wrong_type: OnInvalidColumnSpec = "ignore",
-        *,
-        tags: Optional[TagsSpec] = None,
-    ):
-        """
-        Initializes the `IsNegative` classifier.
-
-        Args:
-            column_names: The column(s) to check.
-            on_missing_column: What to do if a column name is missing.
-            on_wrong_type: What to do if the type of a column is incompatible
-                           with the classifier.
-            tags: Optional tags for the classifier.
-        """
-        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
-
-
-class IsNegativeOrZero(BoolClassifier):
-    """
-    A boolean classifier that checks if a numeric value is negative or zero.
-    """
-
-    @_td_validate_call(ErrorCode.PVDQCL14)
-    def __init__(
-        self,
-        column_names: Optional[ColumNamesWithAltSpec] = None,
-        on_missing_column: OnInvalidColumnSpec = "ignore",
-        on_wrong_type: OnInvalidColumnSpec = "ignore",
-        *,
-        tags: Optional[TagsSpec] = None,
-    ):
-        """
-        Initializes the `IsNegativeOrZero` classifier.
-
-        Args:
-            column_names: The column(s) to check.
-            on_missing_column: What to do if a column name is missing.
-            on_wrong_type: What to do if the type of a column is incompatible
-                           with the classifier.
-            tags: Optional tags for the classifier.
-        """
-        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
-
-
-class IsNotNan(BoolClassifier):
-    """
-    A boolean classifier that checks if a value is *not* `NaN`.
-    """
-
-    @_td_validate_call(ErrorCode.PVDQCL14)
-    def __init__(
-        self,
-        column_names: Optional[ColumNamesWithAltSpec] = None,
-        on_missing_column: OnInvalidColumnSpec = "ignore",
-        on_wrong_type: OnInvalidColumnSpec = "ignore",
-        *,
-        tags: Optional[TagsSpec] = None,
-    ):
-        """
-        Initializes the `IsNotNan` classifier.
-
-        Args:
-            column_names: The column(s) to check.
-            on_missing_column: What to do if a column name is missing.
-            on_wrong_type: What to do if the type of a column is incompatible
-                           with the classifier.
-            tags: Optional tags for the classifier.
-        """
-        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
-
-
-class IsNotNull(BoolClassifier):
-    """
-    A boolean classifier that checks if a value is *not* `NULL`.
-    """
-
-    @_td_validate_call(ErrorCode.PVDQCL15)
-    def __init__(
-        self,
-        column_names: Optional[ColumNamesWithAltSpec] = None,
-        on_missing_column: OnInvalidColumnSpec = "ignore",
-        *,
-        tags: Optional[TagsSpec] = None,
-    ):
-        """
-        Initializes the `IsNotNull` classifier.
-
-        Args:
-            column_names: The column(s) to check.
-            on_missing_column: What to do if a column name is missing.
-            tags: Optional tags for the classifier.
-        """
-        super().__init__(column_names, on_missing_column, "ignore", tags=tags)
-
-
-class IsNotNullNorNan(BoolClassifier):
-    """
-    A boolean classifier that checks if a value is neither `NULL` nor `NaN`.
-    """
-
-    @_td_validate_call(ErrorCode.PVDQCL15)
-    def __init__(
-        self,
-        column_names: Optional[ColumNamesWithAltSpec] = None,
-        on_missing_column: OnInvalidColumnSpec = "ignore",
-        on_wrong_type: OnInvalidColumnSpec = "ignore",
-        *,
-        tags: Optional[TagsSpec] = None,
-    ):
-        """
-        Initializes the `IsNotNullNorNan` classifier.
-
-        Args:
-            column_names: The column(s) to check.
-            on_missing_column: What to do if a column name is missing.
-            on_wrong_type: What to do if the type of a column is incompatible
-                           with the classifier.
-            tags: Optional tags for the classifier.
-        """
-        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
-
-
-class IsNotZero(BoolClassifier):
-    """
-    A boolean classifier that checks if a numeric value is not zero.
-    """
-
-    @_td_validate_call(ErrorCode.PVDQCL16)
-    def __init__(
-        self,
-        column_names: Optional[ColumNamesWithAltSpec] = None,
-        on_missing_column: OnInvalidColumnSpec = "ignore",
-        on_wrong_type: OnInvalidColumnSpec = "ignore",
-        *,
-        tags: Optional[TagsSpec] = None,
-    ):
-        """
-        Initializes the `IsNotZero` classifier.
-
-        Args:
-            column_names: The column(s) to check.
-            on_missing_column: What to do if a column name is missing.
-            on_wrong_type: What to do if the type of a column is incompatible
-                           with the classifier.
-            tags: Optional tags for the classifier.
-        """
-        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
-
-
-class IsNull(BoolClassifier):
-    """
-    A boolean classifier that checks if a value is `NULL`.
-    """
-
-    @_td_validate_call(ErrorCode.PVDQCL17)
-    def __init__(
-        self,
-        column_names: Optional[ColumNamesWithAltSpec] = None,
-        on_missing_column: OnInvalidColumnSpec = "ignore",
-        *,
-        tags: Optional[TagsSpec] = None,
-    ):
-        """
-        Initializes the `IsNull` classifier.
-
-        Args:
-            column_names: The column(s) to check.
-            on_missing_column: What to do if a column name is missing.
-            tags: Optional tags for the classifier.
-        """
-        super().__init__(column_names, on_missing_column, "ignore", tags=tags)
-
-
-class IsNullOrNan(BoolClassifier):
-    """
-    A boolean classifier that checks if a value is either `NULL` or `NaN`.
-    """
-
-    @_td_validate_call(ErrorCode.PVDQCL18)
-    def __init__(
-        self,
-        column_names: Optional[ColumNamesWithAltSpec] = None,
-        on_missing_column: OnInvalidColumnSpec = "ignore",
-        on_wrong_type: OnInvalidColumnSpec = "ignore",
-        *,
-        tags: Optional[TagsSpec] = None,
-    ):
-        """
-        Initializes the `IsNullOrNan` classifier.
-
-        Args:
-            column_names: The column(s) to check.
-            on_missing_column: What to do if a column name is missing.
-            on_wrong_type: What to do if the type of a column is incompatible
-                           with the classifier.
-            tags: Optional tags for the classifier.
-        """
-        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
-
-
-class IsPositive(BoolClassifier):
-    """
-    A boolean classifier that checks if a numeric value is positive.
-    """
-
-    @_td_validate_call(ErrorCode.PVDQCL19)
-    def __init__(
-        self,
-        column_names: Optional[ColumNamesWithAltSpec] = None,
-        on_missing_column: OnInvalidColumnSpec = "ignore",
-        on_wrong_type: OnInvalidColumnSpec = "ignore",
-        *,
-        tags: Optional[TagsSpec] = None,
-    ):
-        """
-        Initializes the `IsPositive` classifier.
-
-        Args:
-            column_names: The column(s) to check.
-            on_missing_column: What to do if a column name is missing.
-            on_wrong_type: What to do if the type of a column is incompatible
-                           with the classifier.
-            tags: Optional tags for the classifier.
-        """
-        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
-
-
-class IsPositiveOrZero(BoolClassifier):
-    """
-    A boolean classifier that checks if a numeric value is positive or zero.
-    """
-
-    @_td_validate_call(ErrorCode.PVDQCL20)
-    def __init__(
-        self,
-        column_names: Optional[ColumNamesWithAltSpec] = None,
-        on_missing_column: OnInvalidColumnSpec = "ignore",
-        on_wrong_type: OnInvalidColumnSpec = "ignore",
-        *,
-        tags: Optional[TagsSpec] = None,
-    ):
-        """
-        Initializes the `IsPositiveOrZero` classifier.
-
-        Args:
-            column_names: The column(s) to check.
-            on_missing_column: What to do if a column name is missing.
-            on_wrong_type: What to do if the type of a column is incompatible
-                           with the classifier.
-            tags: Optional tags for the classifier.
-        """
-        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
-
-
-class IsZero(BoolClassifier):
-    """
-    A boolean classifier that checks if a numeric value is zero.
-    """
-
-    @_td_validate_call(ErrorCode.PVDQCL21)
-    def __init__(
-        self,
-        column_names: Optional[ColumNamesWithAltSpec] = None,
-        on_missing_column: OnInvalidColumnSpec = "ignore",
-        on_wrong_type: OnInvalidColumnSpec = "ignore",
-        *,
-        tags: Optional[TagsSpec] = None,
-    ):
-        """
-        Initializes the `IsZero` classifier.
-
-        Args:
-            column_names: The column(s) to check.
-            on_missing_column: What to do if a column name is missing.
-            on_wrong_type: What to do if the type of a column is incompatible
-                           with the classifier.
-            tags: Optional tags for the classifier.
-        """
-        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)

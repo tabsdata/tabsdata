@@ -1261,6 +1261,20 @@ class ErrorCode(Enum):
             "All quality columns must be registered in the DataQualityEngine."
         ),
     }
+    DQPE11 = {
+        "code": "DQPE-011",
+        "message": (
+            "Column '{}' not found in table '{}'. "
+            "The specified column does not exist as a non-system column."
+        ),
+    }
+    DQPE12 = {
+        "code": "DQPE-012",
+        "message": (
+            "Column '{}' has incompatible dtype '{}' for classifier '{}'. "
+            "The column's data type is not supported by this classifier."
+        ),
+    }
     DQCE80 = {
         "code": "DQCE-080",
         "message": (

@@ -378,15 +378,15 @@ class PolarsProvider:
             return pl.lit(True)
         if classifier.min is None:
             if classifier.closed in ("both", "upper"):
-                return column.le(classifier.max)
-            return column.lt(classifier.max)
+                return column.le(pl.lit(classifier.max))
+            return column.lt(pl.lit(classifier.max))
         if classifier.max is None:
             if classifier.closed in ("both", "lower"):
-                return column.ge(classifier.min)
-            return column.gt(classifier.min)
+                return column.ge(pl.lit(classifier.min))
+            return column.gt(pl.lit(classifier.min))
         return column.is_between(
-            classifier.min,
-            classifier.max,
+            pl.lit(classifier.min),
+            pl.lit(classifier.max),
             closed=CLOSED_MAPPING[classifier.closed],
         )
 
@@ -560,7 +560,7 @@ class PolarsProvider:
         return (
             column.cast(pl.Utf8)
             .str.len_chars()
-            .is_between(min_len, max_len, closed="both")
+            .is_between(pl.lit(min_len), pl.lit(max_len), closed="both")
         )
 
     @staticmethod
@@ -699,33 +699,76 @@ class DataQualityEngine:
 
     """> Internal Helper Functions """
 
-    @classmethod
     def _cols_spec_to_cols_list(
-        cls, cols_spec: list[ColumnNameWithAltSpec]
+        self,
+        classifier: Classifier,
+        cols_spec: list[ColumnNameWithAltSpec],
     ) -> list[MappedColumn]:
+        schema = self._tf._lf.collect_schema()
+        user_columns, _ = td_frame._split_columns(schema.names())
+        user_columns = set(user_columns)
+        supported_dtypes = classifier.supported_dtypes()
+
+        columns = []
         match cols_spec:
             case None:
-                return []
+                columns = [(column, None) for column in sorted(user_columns)]
             case str():
-                return [MappedColumn(data_column=cols_spec, dq_column=None)]
+                columns = [(cols_spec, None)]
             case tuple():
-                return [MappedColumn(data_column=cols_spec[0], dq_column=cols_spec[1])]
+                columns = [(cols_spec[0], cols_spec[1])]
             case list():
-                cols_list = []
+                columns = []
                 for col_spec in cols_spec:
                     if isinstance(col_spec, str):
-                        cols_list.append(
-                            MappedColumn(data_column=col_spec, dq_column=None)
-                        )
+                        columns.append((col_spec, None))
                     elif isinstance(col_spec, tuple):
-                        cols_list.append(
-                            MappedColumn(data_column=col_spec[0], dq_column=col_spec[1])
-                        )
+                        columns.append((col_spec[0], col_spec[1]))
                     else:
                         raise TypeError(f"Invalid columns specification: {cols_spec}")
-                return cols_list
             case _:
                 raise TypeError(f"Invalid columns specification: {cols_spec}")
+
+        mapped_columns = []
+        for data_column, dq_column in columns:
+            if data_column not in user_columns:
+                match classifier.on_missing_column:
+                    case "fail":
+                        raise DataQualityProcessingError(
+                            ErrorCode.DQPE11,
+                            data_column,
+                            self._tf._data_table.name,
+                        )
+                    case "ignore":
+                        continue
+                    case _:
+                        raise ValueError(
+                            "Unknown on_missing_column value: "
+                            f"{classifier.on_missing_column}"
+                        )
+
+            dtype = schema[data_column]
+            if type(dtype) not in supported_dtypes:
+                match classifier.on_wrong_type:
+                    case "fail":
+                        raise DataQualityProcessingError(
+                            ErrorCode.DQPE12,
+                            data_column,
+                            type(dtype).__name__,
+                            classifier.__class__.__name__,
+                        )
+                    case "ignore":
+                        continue
+                    case _:
+                        raise ValueError(
+                            f"Unknown on_wrong_type value: {classifier.on_wrong_type}"
+                        )
+
+            mapped_columns.append(
+                MappedColumn(data_column=data_column, dq_column=dq_column)
+            )
+
+        return mapped_columns
 
     @classmethod
     def _tags_spec_to_list(cls, tags_spec: TagsSpec) -> list[str]:
@@ -788,7 +831,7 @@ class DataQualityEngine:
                 self._tf._data_table.name,
             )
 
-        columns = self._cols_spec_to_cols_list(classifier.column_names)
+        columns = self._cols_spec_to_cols_list(classifier, classifier.column_names)
         tags = self._tags_spec_to_list(classifier.tags)
         dq = self
 

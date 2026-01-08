@@ -12,6 +12,7 @@ import numpy as np
 import polars as pl
 
 import tabsdata as td
+import tabsdata.tableframe.dtypes as td_dtypes
 from tabsdata.dataquality import (
     DataQuality,
     DoesNotMatch,
@@ -137,7 +138,7 @@ class DataShape:
     def to_unsigned_integer(value):
         if value is None or value == NaN:
             return None
-        return abs(int(value))
+        return max(0, int(value))
 
     @staticmethod
     def to_utf(value):
@@ -755,9 +756,9 @@ def _make_is_between_checker(
                 null_count = df.filter(pl.col("value").is_null()).height
         elif min_val is None:
             if closed in ("both", "upper"):
-                condition = pl.col("value").le(converted_max)
+                condition = pl.col("value").le(pl.lit(converted_max))
             else:
-                condition = pl.col("value").lt(converted_max)
+                condition = pl.col("value").lt(pl.lit(converted_max))
             if is_float:
                 false_count = df.filter(
                     pl.col("value").is_not_nan()
@@ -780,9 +781,9 @@ def _make_is_between_checker(
                 null_count = df.filter(pl.col("value").is_null()).height
         elif max_val is None:
             if closed in ("both", "lower"):
-                condition = pl.col("value").ge(converted_min)
+                condition = pl.col("value").ge(pl.lit(converted_min))
             else:
-                condition = pl.col("value").gt(converted_min)
+                condition = pl.col("value").gt(pl.lit(converted_min))
             if is_float:
                 false_count = df.filter(
                     pl.col("value").is_not_nan()
@@ -805,7 +806,7 @@ def _make_is_between_checker(
                 null_count = df.filter(pl.col("value").is_null()).height
         else:
             condition = pl.col("value").is_between(
-                converted_min, converted_max, closed=polars_closed
+                pl.lit(converted_min), pl.lit(converted_max), closed=polars_closed
             )
             if is_float:
                 false_count = df.filter(
@@ -897,9 +898,9 @@ def _make_is_not_between_checker(
                 null_count = df.filter(pl.col("value").is_null()).height
         elif min_val is None:
             if closed in ("both", "upper"):
-                condition = pl.col("value").le(converted_max)
+                condition = pl.col("value").le(pl.lit(converted_max))
             else:
-                condition = pl.col("value").lt(converted_max)
+                condition = pl.col("value").lt(pl.lit(converted_max))
             if is_float:
                 false_count = df.filter(
                     pl.col("value").is_not_nan()
@@ -924,9 +925,9 @@ def _make_is_not_between_checker(
                 null_count = df.filter(pl.col("value").is_null()).height
         elif max_val is None:
             if closed in ("both", "lower"):
-                condition = pl.col("value").ge(converted_min)
+                condition = pl.col("value").ge(pl.lit(converted_min))
             else:
-                condition = pl.col("value").gt(converted_min)
+                condition = pl.col("value").gt(pl.lit(converted_min))
             if is_float:
                 false_count = df.filter(
                     pl.col("value").is_not_nan()
@@ -951,7 +952,7 @@ def _make_is_not_between_checker(
                 null_count = df.filter(pl.col("value").is_null()).height
         else:
             condition = pl.col("value").is_between(
-                converted_min, converted_max, closed=polars_closed
+                pl.lit(converted_min), pl.lit(converted_max), closed=polars_closed
             )
             if is_float:
                 false_count = df.filter(
@@ -1817,8 +1818,37 @@ def _make_is_between_action(
     ) -> DataQuality:
         if dtype is not None and dtype in DATASET_ROWS:
             converter = DATASET_ROWS[dtype].converter
-            converted_min = converter(min_val) if min_val is not None else None
-            converted_max = converter(max_val) if max_val is not None else None
+
+            is_uint = dtype in (
+                td_dtypes.UInt8,
+                td_dtypes.UInt16,
+                td_dtypes.UInt32,
+                td_dtypes.UInt64,
+            )
+
+            if is_uint:
+                if min_val is not None:
+                    if min_val == NaN:
+                        converted_min = None
+                    elif isinstance(min_val, (int, float)):
+                        converted_min = int(min_val)
+                    else:
+                        converted_min = converter(min_val)
+                else:
+                    converted_min = None
+
+                if max_val is not None:
+                    if max_val == NaN:
+                        converted_max = None
+                    elif isinstance(max_val, (int, float)):
+                        converted_max = int(max_val)
+                    else:
+                        converted_max = converter(max_val)
+                else:
+                    converted_max = None
+            else:
+                converted_min = converter(min_val) if min_val is not None else None
+                converted_max = converter(max_val) if max_val is not None else None
         else:
             converted_min = min_val
             converted_max = max_val
@@ -1848,9 +1878,39 @@ def _make_is_not_between_action(
         dtype: type = None,
     ) -> DataQuality:
         if dtype is not None and dtype in DATASET_ROWS:
+
             converter = DATASET_ROWS[dtype].converter
-            converted_min = converter(min_val) if min_val is not None else None
-            converted_max = converter(max_val) if max_val is not None else None
+
+            is_uint = dtype in (
+                td_dtypes.UInt8,
+                td_dtypes.UInt16,
+                td_dtypes.UInt32,
+                td_dtypes.UInt64,
+            )
+
+            if is_uint:
+                if min_val is not None:
+                    if min_val == NaN:
+                        converted_min = None
+                    elif isinstance(min_val, (int, float)):
+                        converted_min = int(min_val)
+                    else:
+                        converted_min = converter(min_val)
+                else:
+                    converted_min = None
+
+                if max_val is not None:
+                    if max_val == NaN:
+                        converted_max = None
+                    elif isinstance(max_val, (int, float)):
+                        converted_max = int(max_val)
+                    else:
+                        converted_max = converter(max_val)
+                else:
+                    converted_max = None
+            else:
+                converted_min = converter(min_val) if min_val is not None else None
+                converted_max = converter(max_val) if max_val is not None else None
         else:
             converted_min = min_val
             converted_max = max_val
@@ -1879,12 +1939,24 @@ def _make_is_in_action(values_set: set):
     ) -> DataQuality:
         if dtype is not None and dtype in DATASET_ROWS:
             converter = DATASET_ROWS[dtype].converter
+
+            is_uint = dtype in (
+                td_dtypes.UInt8,
+                td_dtypes.UInt16,
+                td_dtypes.UInt32,
+                td_dtypes.UInt64,
+            )
+
             converted_values = set()
             for value in values_set:
                 if value is None:
                     converted_values.add(None)
                 elif isinstance(value, float) and math.isnan(value):
                     converted_values.add(value)
+                elif is_uint and value == NaN:
+                    converted_values.add(None)
+                elif is_uint and isinstance(value, (int, float)):
+                    converted_values.add(int(value))
                 else:
                     converted_values.add(converter(value))
             converted_values = frozenset(converted_values)
@@ -1913,12 +1985,24 @@ def _make_is_not_in_action(values_set: set):
     ) -> DataQuality:
         if dtype is not None and dtype in DATASET_ROWS:
             converter = DATASET_ROWS[dtype].converter
+
+            is_uint = dtype in (
+                td_dtypes.UInt8,
+                td_dtypes.UInt16,
+                td_dtypes.UInt32,
+                td_dtypes.UInt64,
+            )
+
             converted_values = set()
             for value in values_set:
                 if value is None:
                     converted_values.add(None)
                 elif isinstance(value, float) and math.isnan(value):
                     converted_values.add(value)
+                elif is_uint and value == NaN:
+                    converted_values.add(None)
+                elif is_uint and isinstance(value, (int, float)):
+                    converted_values.add(int(value))
                 else:
                     converted_values.add(converter(value))
             converted_values = frozenset(converted_values)
@@ -2200,48 +2284,6 @@ DATASET_ROWS: dict[type, DataShape] = {
     ),
 }
 
-NULL_CAPABLE_DTYPES = list(DATASET_ROWS.keys())
-
-NAN_CAPABLE_DTYPES = [
-    td.Float32,
-    td.Float64,
-]
-
-NULL_AND_NAN_CAPABLE_DTYPES = list(set(NAN_CAPABLE_DTYPES) & set(NULL_CAPABLE_DTYPES))
-
-NUMERIC_DTYPES = [
-    td.Decimal,
-    td.Int8,
-    td.Int16,
-    td.Int32,
-    td.Int64,
-    td.Int128,
-    td.UInt8,
-    td.UInt16,
-    td.UInt32,
-    td.UInt64,
-    td.Float32,
-    td.Float64,
-]
-
-INTEGER_NUMERIC_DTYPES = [td.Int8, td.Int16, td.Int32, td.Int64]
-
-SIGNED_NUMERIC_DTYPES = [
-    td.Decimal,
-    td.Int8,
-    td.Int16,
-    td.Int32,
-    td.Int64,
-    td.Int128,
-    td.Float32,
-    td.Float64,
-]
-
-STRING_DTYPES = [
-    td.String,
-    td.Utf8,
-]
-
 CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
     IsNull: [
         ClassifierConfiguration(
@@ -2254,7 +2296,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.is_null,
             checker=_is_null_checker,
             actions=_is_null_action,
-            dtypes=NULL_CAPABLE_DTYPES,
+            dtypes=list(IsNull.supported_dtypes()),
         ),
     ],
     IsNotNull: [
@@ -2268,7 +2310,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.is_not_null,
             checker=_is_not_null_checker,
             actions=_is_not_null_action,
-            dtypes=NULL_CAPABLE_DTYPES,
+            dtypes=list(IsNotNull.supported_dtypes()),
         ),
     ],
     IsNan: [
@@ -2282,7 +2324,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.is_nan,
             checker=_is_nan_checker,
             actions=_is_nan_action,
-            dtypes=NAN_CAPABLE_DTYPES,
+            dtypes=list(IsNan.supported_dtypes()),
         ),
     ],
     IsNotNan: [
@@ -2296,7 +2338,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.is_not_nan,
             checker=_is_not_nan_checker,
             actions=_is_not_nan_action,
-            dtypes=NAN_CAPABLE_DTYPES,
+            dtypes=list(IsNotNan.supported_dtypes()),
         ),
     ],
     IsNullOrNan: [
@@ -2310,7 +2352,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.is_null_or_nan,
             checker=_is_null_or_nan_checker,
             actions=_is_null_or_nan_action,
-            dtypes=NULL_AND_NAN_CAPABLE_DTYPES,
+            dtypes=list(IsNullOrNan.supported_dtypes()),
         ),
     ],
     IsNotNullNorNan: [
@@ -2324,7 +2366,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.is_not_null_nor_nan,
             checker=_is_not_null_nor_nan_checker,
             actions=_is_not_null_nor_nan_action,
-            dtypes=NULL_AND_NAN_CAPABLE_DTYPES,
+            dtypes=list(IsNotNullNorNan.supported_dtypes()),
         ),
     ],
     IsZero: [
@@ -2338,7 +2380,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.is_zero,
             checker=_is_zero_checker,
             actions=_is_zero_action,
-            dtypes=NUMERIC_DTYPES,
+            dtypes=list(IsZero.supported_dtypes()),
         ),
     ],
     IsNotZero: [
@@ -2352,7 +2394,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.is_not_zero,
             checker=_is_not_zero_checker,
             actions=_is_not_zero_action,
-            dtypes=NUMERIC_DTYPES,
+            dtypes=list(IsNotZero.supported_dtypes()),
         ),
     ],
     IsPositive: [
@@ -2366,7 +2408,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.is_positive,
             checker=_is_positive_checker,
             actions=_is_positive_action,
-            dtypes=NUMERIC_DTYPES,
+            dtypes=list(IsPositive.supported_dtypes()),
         ),
     ],
     IsPositiveOrZero: [
@@ -2380,7 +2422,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.is_positive_or_zero,
             checker=_is_positive_or_zero_checker,
             actions=_is_positive_or_zero_action,
-            dtypes=NUMERIC_DTYPES,
+            dtypes=list(IsPositiveOrZero.supported_dtypes()),
         ),
     ],
     IsNegative: [
@@ -2394,7 +2436,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.is_negative,
             checker=_is_negative_checker,
             actions=_is_negative_action,
-            dtypes=NUMERIC_DTYPES,
+            dtypes=list(IsNegative.supported_dtypes()),
         ),
     ],
     IsNegativeOrZero: [
@@ -2408,7 +2450,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.is_negative_or_zero,
             checker=_is_negative_or_zero_checker,
             actions=_is_negative_or_zero_action,
-            dtypes=NUMERIC_DTYPES,
+            dtypes=list(IsNegativeOrZero.supported_dtypes()),
         ),
     ],
     IsBetween: [
@@ -2425,7 +2467,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.is_between,
             checker=_make_is_between_checker(-100, 100, "both"),
             actions=_make_is_between_action(-100, 100, "both"),
-            dtypes=SIGNED_NUMERIC_DTYPES,
+            dtypes=list(IsBetween.supported_dtypes()),
             name="range_-100_100_both",
         ),
         ClassifierConfiguration(
@@ -2441,7 +2483,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.is_between,
             checker=_make_is_between_checker(0, 1000, "lower"),
             actions=_make_is_between_action(0, 1000, "lower"),
-            dtypes=NUMERIC_DTYPES,
+            dtypes=list(IsBetween.supported_dtypes()),
             name="range_0_1000_lower",
         ),
         ClassifierConfiguration(
@@ -2457,7 +2499,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.is_between,
             checker=_make_is_between_checker(None, 0, "both"),
             actions=_make_is_between_action(None, 0, "both"),
-            dtypes=NUMERIC_DTYPES,
+            dtypes=list(IsBetween.supported_dtypes()),
             name="range_none_0_both",
         ),
         ClassifierConfiguration(
@@ -2473,7 +2515,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.is_between,
             checker=_make_is_between_checker(0, None, "both"),
             actions=_make_is_between_action(0, None, "both"),
-            dtypes=NUMERIC_DTYPES,
+            dtypes=list(IsBetween.supported_dtypes()),
             name="range_0_none_both",
         ),
         ClassifierConfiguration(
@@ -2489,7 +2531,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.is_between,
             checker=_make_is_between_checker(-1000, 0, "upper"),
             actions=_make_is_between_action(-1000, 0, "upper"),
-            dtypes=SIGNED_NUMERIC_DTYPES,
+            dtypes=list(IsBetween.supported_dtypes()),
             name="range_-1000_0_upper",
         ),
     ],
@@ -2507,7 +2549,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.is_not_between,
             checker=_make_is_not_between_checker(-100, 100, "both"),
             actions=_make_is_not_between_action(-100, 100, "both"),
-            dtypes=SIGNED_NUMERIC_DTYPES,
+            dtypes=list(IsNotBetween.supported_dtypes()),
             name="range_-100_100_both",
         ),
         ClassifierConfiguration(
@@ -2523,7 +2565,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.is_not_between,
             checker=_make_is_not_between_checker(0, 1000, "lower"),
             actions=_make_is_not_between_action(0, 1000, "lower"),
-            dtypes=NUMERIC_DTYPES,
+            dtypes=list(IsNotBetween.supported_dtypes()),
             name="range_0_1000_lower",
         ),
         ClassifierConfiguration(
@@ -2539,7 +2581,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.is_not_between,
             checker=_make_is_not_between_checker(None, 0, "both"),
             actions=_make_is_not_between_action(None, 0, "both"),
-            dtypes=NUMERIC_DTYPES,
+            dtypes=list(IsNotBetween.supported_dtypes()),
             name="range_none_0_both",
         ),
         ClassifierConfiguration(
@@ -2555,7 +2597,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.is_not_between,
             checker=_make_is_not_between_checker(0, None, "both"),
             actions=_make_is_not_between_action(0, None, "both"),
-            dtypes=NUMERIC_DTYPES,
+            dtypes=list(IsNotBetween.supported_dtypes()),
             name="range_0_none_both",
         ),
         ClassifierConfiguration(
@@ -2571,7 +2613,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.is_not_between,
             checker=_make_is_not_between_checker(-1000, 0, "upper"),
             actions=_make_is_not_between_action(-1000, 0, "upper"),
-            dtypes=SIGNED_NUMERIC_DTYPES,
+            dtypes=list(IsNotBetween.supported_dtypes()),
             name="range_-1000_0_upper",
         ),
     ],
@@ -2587,7 +2629,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.is_in,
             checker=_make_is_in_checker({0, 1000}),
             actions=_make_is_in_action({0, 1000}),
-            dtypes=NULL_CAPABLE_DTYPES,
+            dtypes=list(IsIn.supported_dtypes()),
             name="values_0_1000",
         ),
         ClassifierConfiguration(
@@ -2601,7 +2643,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.is_in,
             checker=_make_is_in_checker({None, 0}),
             actions=_make_is_in_action({None, 0}),
-            dtypes=NULL_CAPABLE_DTYPES,
+            dtypes=list(IsIn.supported_dtypes()),
             name="none_and_0",
         ),
         ClassifierConfiguration(
@@ -2615,7 +2657,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.is_in,
             checker=_make_is_in_checker({-1000}),
             actions=_make_is_in_action({-1000}),
-            dtypes=SIGNED_NUMERIC_DTYPES,
+            dtypes=list(IsIn.supported_dtypes()),
             name="negative_1000",
         ),
         ClassifierConfiguration(
@@ -2629,7 +2671,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.is_in,
             checker=_make_is_in_checker({None, 1000}),
             actions=_make_is_in_action({None, 1000}),
-            dtypes=NULL_CAPABLE_DTYPES,
+            dtypes=list(IsIn.supported_dtypes()),
             name="none_and_1000",
         ),
         ClassifierConfiguration(
@@ -2643,7 +2685,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.is_in,
             checker=_make_is_in_checker({NaN, 1000}),
             actions=_make_is_in_action({NaN, 1000}),
-            dtypes=NAN_CAPABLE_DTYPES,
+            dtypes=list(IsIn.supported_dtypes()),
             name="nan_and_1000",
         ),
         ClassifierConfiguration(
@@ -2657,7 +2699,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.is_in,
             checker=_make_is_in_checker({None, NaN, 0}),
             actions=_make_is_in_action({None, NaN, 0}),
-            dtypes=NAN_CAPABLE_DTYPES,
+            dtypes=list(IsIn.supported_dtypes()),
             name="none_nan_0",
         ),
     ],
@@ -2673,7 +2715,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.is_not_in,
             checker=_make_is_not_in_checker({0, 1000}),
             actions=_make_is_not_in_action({0, 1000}),
-            dtypes=NULL_CAPABLE_DTYPES,
+            dtypes=list(IsNotIn.supported_dtypes()),
             name="values_0_1000",
         ),
         ClassifierConfiguration(
@@ -2687,7 +2729,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.is_not_in,
             checker=_make_is_not_in_checker({None, 0}),
             actions=_make_is_not_in_action({None, 0}),
-            dtypes=NULL_CAPABLE_DTYPES,
+            dtypes=list(IsNotIn.supported_dtypes()),
             name="none_and_0",
         ),
         ClassifierConfiguration(
@@ -2701,7 +2743,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.is_not_in,
             checker=_make_is_not_in_checker({-1000}),
             actions=_make_is_not_in_action({-1000}),
-            dtypes=SIGNED_NUMERIC_DTYPES,
+            dtypes=list(IsNotIn.supported_dtypes()),
             name="negative_1000",
         ),
         ClassifierConfiguration(
@@ -2715,7 +2757,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.is_not_in,
             checker=_make_is_not_in_checker({None, 1000}),
             actions=_make_is_not_in_action({None, 1000}),
-            dtypes=NULL_CAPABLE_DTYPES,
+            dtypes=list(IsNotIn.supported_dtypes()),
             name="none_and_1000",
         ),
         ClassifierConfiguration(
@@ -2729,7 +2771,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.is_not_in,
             checker=_make_is_not_in_checker({NaN, 1000}),
             actions=_make_is_not_in_action({NaN, 1000}),
-            dtypes=NAN_CAPABLE_DTYPES,
+            dtypes=list(IsNotIn.supported_dtypes()),
             name="nan_and_1000",
         ),
         ClassifierConfiguration(
@@ -2743,7 +2785,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.is_not_in,
             checker=_make_is_not_in_checker({None, NaN, 0}),
             actions=_make_is_not_in_action({None, NaN, 0}),
-            dtypes=NAN_CAPABLE_DTYPES,
+            dtypes=list(IsNotIn.supported_dtypes()),
             name="none_nan_0",
         ),
     ],
@@ -2759,7 +2801,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.matches,
             checker=_make_matches_checker(".*"),
             actions=_make_matches_action(".*"),
-            dtypes=STRING_DTYPES,
+            dtypes=list(Matches.supported_dtypes()),
             name="all",
         ),
         ClassifierConfiguration(
@@ -2773,7 +2815,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.matches,
             checker=_make_matches_checker("^10"),
             actions=_make_matches_action("^10"),
-            dtypes=STRING_DTYPES,
+            dtypes=list(Matches.supported_dtypes()),
             name="start10",
         ),
         ClassifierConfiguration(
@@ -2787,7 +2829,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.matches,
             checker=_make_matches_checker("^-10"),
             actions=_make_matches_action("^-10"),
-            dtypes=STRING_DTYPES,
+            dtypes=list(Matches.supported_dtypes()),
             name="start_minus10",
         ),
         ClassifierConfiguration(
@@ -2801,7 +2843,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.matches,
             checker=_make_matches_checker("^0$"),
             actions=_make_matches_action("^0$"),
-            dtypes=STRING_DTYPES,
+            dtypes=list(Matches.supported_dtypes()),
             name="exact0",
         ),
     ],
@@ -2817,7 +2859,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.does_not_match,
             checker=_make_does_not_match_checker(".*"),
             actions=_make_does_not_match_action(".*"),
-            dtypes=STRING_DTYPES,
+            dtypes=list(DoesNotMatch.supported_dtypes()),
             name="all",
         ),
         ClassifierConfiguration(
@@ -2831,7 +2873,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.does_not_match,
             checker=_make_does_not_match_checker("^10"),
             actions=_make_does_not_match_action("^10"),
-            dtypes=STRING_DTYPES,
+            dtypes=list(DoesNotMatch.supported_dtypes()),
             name="start10",
         ),
         ClassifierConfiguration(
@@ -2845,7 +2887,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.does_not_match,
             checker=_make_does_not_match_checker("^-10"),
             actions=_make_does_not_match_action("^-10"),
-            dtypes=STRING_DTYPES,
+            dtypes=list(DoesNotMatch.supported_dtypes()),
             name="start_minus10",
         ),
         ClassifierConfiguration(
@@ -2859,7 +2901,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.does_not_match,
             checker=_make_does_not_match_checker("^0$"),
             actions=_make_does_not_match_action("^0$"),
-            dtypes=STRING_DTYPES,
+            dtypes=list(DoesNotMatch.supported_dtypes()),
             name="exact0",
         ),
     ],
@@ -2876,7 +2918,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.has_length,
             checker=_make_has_length_checker(0, 1),
             actions=_make_has_length_action(0, 1),
-            dtypes=STRING_DTYPES,
+            dtypes=list(HasLength.supported_dtypes()),
             name="length_0_1",
         ),
         ClassifierConfiguration(
@@ -2891,7 +2933,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.has_length,
             checker=_make_has_length_checker(5, 5),
             actions=_make_has_length_action(5, 5),
-            dtypes=STRING_DTYPES,
+            dtypes=list(HasLength.supported_dtypes()),
             name="length_5",
         ),
         ClassifierConfiguration(
@@ -2906,7 +2948,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.has_length,
             checker=_make_has_length_checker(5, 6),
             actions=_make_has_length_action(5, 6),
-            dtypes=STRING_DTYPES,
+            dtypes=list(HasLength.supported_dtypes()),
             name="length_5_6",
         ),
         ClassifierConfiguration(
@@ -2921,7 +2963,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             method=DataQualityEngine.has_length,
             checker=_make_has_length_checker(0, 5),
             actions=_make_has_length_action(0, 5),
-            dtypes=STRING_DTYPES,
+            dtypes=list(HasLength.supported_dtypes()),
             name="length_0_5",
         ),
     ],
@@ -2956,7 +2998,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_in_first_bin=True,
                 )
             ),
-            dtypes=NUMERIC_DTYPES,
+            dtypes=list(Categorizer.supported_dtypes()),
             name="linear_0_100_10_with_min",
             dataset=_make_categorizer_dataset(
                 LinearScale(
@@ -2997,7 +3039,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_in_first_bin=False,
                 )
             ),
-            dtypes=NUMERIC_DTYPES,
+            dtypes=list(Categorizer.supported_dtypes()),
             name="linear_0_100_10_no_min",
             dataset=_make_categorizer_dataset(
                 LinearScale(
@@ -3038,7 +3080,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_in_first_bin=True,
                 )
             ),
-            dtypes=NUMERIC_DTYPES,
+            dtypes=list(Categorizer.supported_dtypes()),
             name="linear_0_10_5_with_min",
             dataset=_make_categorizer_dataset(
                 LinearScale(
@@ -3079,7 +3121,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_in_first_bin=False,
                 )
             ),
-            dtypes=NUMERIC_DTYPES,
+            dtypes=list(Categorizer.supported_dtypes()),
             name="linear_0_10_5_no_min",
             dataset=_make_categorizer_dataset(
                 LinearScale(
@@ -3120,7 +3162,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_in_first_bin=True,
                 )
             ),
-            dtypes=NUMERIC_DTYPES,
+            dtypes=list(Categorizer.supported_dtypes()),
             name="linear_neg50_50_20_with_min",
             dataset=_make_categorizer_dataset(
                 LinearScale(
@@ -3161,7 +3203,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_in_first_bin=False,
                 )
             ),
-            dtypes=NUMERIC_DTYPES,
+            dtypes=list(Categorizer.supported_dtypes()),
             name="linear_neg50_50_20_no_min",
             dataset=_make_categorizer_dataset(
                 LinearScale(
@@ -3202,7 +3244,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_in_first_bin=True,
                 )
             ),
-            dtypes=NUMERIC_DTYPES,
+            dtypes=list(Categorizer.supported_dtypes()),
             name="linear_0_1_100_with_min",
             dataset=_make_categorizer_dataset(
                 LinearScale(
@@ -3243,7 +3285,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_in_first_bin=False,
                 )
             ),
-            dtypes=NUMERIC_DTYPES,
+            dtypes=list(Categorizer.supported_dtypes()),
             name="linear_0_1_100_no_min",
             dataset=_make_categorizer_dataset(
                 LinearScale(
@@ -3281,7 +3323,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_in_first_bin=True,
                 )
             ),
-            dtypes=INTEGER_NUMERIC_DTYPES,
+            dtypes=list(Categorizer.supported_dtypes()),
             name="identity_0_10_with_min",
             dataset=_make_categorizer_dataset(
                 IdentityScale(
@@ -3318,7 +3360,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_in_first_bin=False,
                 )
             ),
-            dtypes=INTEGER_NUMERIC_DTYPES,
+            dtypes=list(Categorizer.supported_dtypes()),
             name="identity_0_10_no_min",
             dataset=_make_categorizer_dataset(
                 IdentityScale(
@@ -3355,7 +3397,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_in_first_bin=True,
                 )
             ),
-            dtypes=INTEGER_NUMERIC_DTYPES,
+            dtypes=list(Categorizer.supported_dtypes()),
             name="identity_1_20_with_min",
             dataset=_make_categorizer_dataset(
                 IdentityScale(
@@ -3392,7 +3434,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_in_first_bin=False,
                 )
             ),
-            dtypes=INTEGER_NUMERIC_DTYPES,
+            dtypes=list(Categorizer.supported_dtypes()),
             name="identity_1_20_no_min",
             dataset=_make_categorizer_dataset(
                 IdentityScale(
@@ -3429,7 +3471,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_in_first_bin=True,
                 )
             ),
-            dtypes=INTEGER_NUMERIC_DTYPES,
+            dtypes=list(Categorizer.supported_dtypes()),
             name="identity_0_100_with_min",
             dataset=_make_categorizer_dataset(
                 IdentityScale(
@@ -3466,7 +3508,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_in_first_bin=False,
                 )
             ),
-            dtypes=INTEGER_NUMERIC_DTYPES,
+            dtypes=list(Categorizer.supported_dtypes()),
             name="identity_0_100_no_min",
             dataset=_make_categorizer_dataset(
                 IdentityScale(
@@ -3509,7 +3551,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_in_first_bin=True,
                 )
             ),
-            dtypes=NUMERIC_DTYPES,
+            dtypes=list(Categorizer.supported_dtypes()),
             name="monomial_quadratic_1_100_10_with_min",
             dataset=_make_categorizer_dataset(
                 MonomialScale(
@@ -3554,7 +3596,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_in_first_bin=False,
                 )
             ),
-            dtypes=NUMERIC_DTYPES,
+            dtypes=list(Categorizer.supported_dtypes()),
             name="monomial_quadratic_1_100_10_no_min",
             dataset=_make_categorizer_dataset(
                 MonomialScale(
@@ -3599,7 +3641,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_in_first_bin=True,
                 )
             ),
-            dtypes=NUMERIC_DTYPES,
+            dtypes=list(Categorizer.supported_dtypes()),
             name="monomial_cubic_0_27_9_with_min",
             dataset=_make_categorizer_dataset(
                 MonomialScale(
@@ -3644,7 +3686,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_in_first_bin=False,
                 )
             ),
-            dtypes=NUMERIC_DTYPES,
+            dtypes=list(Categorizer.supported_dtypes()),
             name="monomial_cubic_0_27_9_no_min",
             dataset=_make_categorizer_dataset(
                 MonomialScale(
@@ -3689,7 +3731,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_in_first_bin=True,
                 )
             ),
-            dtypes=NUMERIC_DTYPES,
+            dtypes=list(Categorizer.supported_dtypes()),
             name="monomial_quadratic_1_1000_30_with_min",
             dataset=_make_categorizer_dataset(
                 MonomialScale(
@@ -3734,7 +3776,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_in_first_bin=False,
                 )
             ),
-            dtypes=NUMERIC_DTYPES,
+            dtypes=list(Categorizer.supported_dtypes()),
             name="monomial_quadratic_1_1000_30_no_min",
             dataset=_make_categorizer_dataset(
                 MonomialScale(
@@ -3779,7 +3821,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_in_first_bin=True,
                 )
             ),
-            dtypes=NUMERIC_DTYPES,
+            dtypes=list(Categorizer.supported_dtypes()),
             name="logarithmic_base10_0_6_6_with_min",
             dataset=_make_categorizer_dataset(
                 LogarithmicScale(
@@ -3824,7 +3866,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_in_first_bin=False,
                 )
             ),
-            dtypes=NUMERIC_DTYPES,
+            dtypes=list(Categorizer.supported_dtypes()),
             name="logarithmic_base10_0_6_6_no_min",
             dataset=_make_categorizer_dataset(
                 LogarithmicScale(
@@ -3869,7 +3911,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_in_first_bin=True,
                 )
             ),
-            dtypes=NUMERIC_DTYPES,
+            dtypes=list(Categorizer.supported_dtypes()),
             name="logarithmic_base2_1_4_4_with_min",
             dataset=_make_categorizer_dataset(
                 LogarithmicScale(
@@ -3914,7 +3956,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_in_first_bin=False,
                 )
             ),
-            dtypes=NUMERIC_DTYPES,
+            dtypes=list(Categorizer.supported_dtypes()),
             name="logarithmic_base2_1_4_4_no_min",
             dataset=_make_categorizer_dataset(
                 LogarithmicScale(
@@ -3959,7 +4001,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_in_first_bin=True,
                 )
             ),
-            dtypes=NUMERIC_DTYPES,
+            dtypes=list(Categorizer.supported_dtypes()),
             name="logarithmic_base_e_0_3_10_with_min",
             dataset=_make_categorizer_dataset(
                 LogarithmicScale(
@@ -4004,7 +4046,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_in_first_bin=False,
                 )
             ),
-            dtypes=NUMERIC_DTYPES,
+            dtypes=list(Categorizer.supported_dtypes()),
             name="logarithmic_base_e_0_3_10_no_min",
             dataset=_make_categorizer_dataset(
                 LogarithmicScale(
@@ -4049,7 +4091,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_in_first_bin=True,
                 )
             ),
-            dtypes=NUMERIC_DTYPES,
+            dtypes=list(Categorizer.supported_dtypes()),
             name="exponential_base10_1_1M_6_with_min",
             dataset=_make_categorizer_dataset(
                 ExponentialScale(
@@ -4094,7 +4136,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_in_first_bin=False,
                 )
             ),
-            dtypes=NUMERIC_DTYPES,
+            dtypes=list(Categorizer.supported_dtypes()),
             name="exponential_base10_1_1M_6_no_min",
             dataset=_make_categorizer_dataset(
                 ExponentialScale(
@@ -4139,7 +4181,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_in_first_bin=True,
                 )
             ),
-            dtypes=NUMERIC_DTYPES,
+            dtypes=list(Categorizer.supported_dtypes()),
             name="exponential_base10_1_1000_3_with_min",
             dataset=_make_categorizer_dataset(
                 ExponentialScale(
@@ -4184,7 +4226,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_in_first_bin=False,
                 )
             ),
-            dtypes=NUMERIC_DTYPES,
+            dtypes=list(Categorizer.supported_dtypes()),
             name="exponential_base10_1_1000_3_no_min",
             dataset=_make_categorizer_dataset(
                 ExponentialScale(
@@ -4229,7 +4271,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_in_first_bin=True,
                 )
             ),
-            dtypes=NUMERIC_DTYPES,
+            dtypes=list(Categorizer.supported_dtypes()),
             name="exponential_base2_2_256_8_with_min",
             dataset=_make_categorizer_dataset(
                 ExponentialScale(
@@ -4274,7 +4316,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_in_first_bin=False,
                 )
             ),
-            dtypes=NUMERIC_DTYPES,
+            dtypes=list(Categorizer.supported_dtypes()),
             name="exponential_base2_2_256_8_no_min",
             dataset=_make_categorizer_dataset(
                 ExponentialScale(
@@ -4319,7 +4361,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_in_first_bin=True,
                 )
             ),
-            dtypes=NUMERIC_DTYPES,
+            dtypes=list(Categorizer.supported_dtypes()),
             name="exponential_base_e_1_1000_10_with_min",
             dataset=_make_categorizer_dataset(
                 ExponentialScale(
@@ -4364,7 +4406,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_in_first_bin=False,
                 )
             ),
-            dtypes=NUMERIC_DTYPES,
+            dtypes=list(Categorizer.supported_dtypes()),
             name="exponential_base_e_1_1000_10_no_min",
             dataset=_make_categorizer_dataset(
                 ExponentialScale(

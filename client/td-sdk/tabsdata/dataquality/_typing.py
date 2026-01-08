@@ -62,8 +62,7 @@ strings.
 
 OnInvalidColumnSpec: TypeAlias = Literal["ignore", "fail"]
 """
-A type alias that specificies what to if a column is invalid for the 
-classifier.
+A type alias that specifies what to if a column is invalid for the classifier.
 """
 
 # --- General Purpose Types ---
