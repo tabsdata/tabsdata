@@ -58,6 +58,14 @@ A type alias for one or more tags, which can be a single string or a list of
 strings.
 """
 
+# --- Invalid Column Specifications ---
+
+OnInvalidColumnSpec: TypeAlias = Literal["ignore", "fail"]
+"""
+A type alias that specificies what to if a column is invalid for the 
+classifier.
+"""
+
 # --- General Purpose Types ---
 
 LenSpec: TypeAlias = Annotated[StrictInt, Field(ge=0)]

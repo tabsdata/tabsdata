@@ -20,6 +20,7 @@ from tabsdata.dataquality._typing import (
     ColumNamesWithAltSpec,
     ColumnNameWithAltSpec,
     LenSpec,
+    OnInvalidColumnSpec,
     RangeClosedOnSpec,
     RangeValueSpec,
     ScaleBaseSpec,
@@ -54,6 +55,8 @@ class Classifier(ABC):
     def __init__(
         self,
         column_names: Optional[ColumNamesWithAltSpec] = None,
+        on_missing_column: OnInvalidColumnSpec = "ignore",
+        on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
         tags: Optional[TagsSpec] = None,
     ):
@@ -67,6 +70,9 @@ class Classifier(ABC):
                 - A tuple `(source, destination)` or a list of such tuples allows
                   specifying custom names for the result columns.
                 - If `None`, the classifier is applied to all columns.
+            on_missing_column: What to do if a column name is missing.
+            on_wrong_type: What to do if the type of a column is incompatible
+                           with the classifier.
             tags: A tag or list of tags to associate with the classifier. Tags help
                   filter which classifiers an operation should consider.
         """
@@ -75,6 +81,8 @@ class Classifier(ABC):
             column_names = [(s, None) for s in column_names]
         self._column_names = column_names
         self._tags = _normalize_to_list(tags)
+        self._on_missing_column = on_missing_column
+        self._on_wrong_type = on_wrong_type
 
     @property
     def column_names(self) -> Optional[list[ColumnNameWithAltSpec]]:
@@ -90,6 +98,20 @@ class Classifier(ABC):
         Returns the list of tags associated with the classifier.
         """
         return self._tags
+
+    @property
+    def on_missing_column(self) -> OnInvalidColumnSpec:
+        """
+        Returns what do if the column is missing.
+        """
+        return self._on_missing_column
+
+    @property
+    def on_wrong_type(self) -> OnInvalidColumnSpec:
+        """
+        Returns what do if the column type is incompatible with tthe classifer.
+        """
+        return self._on_wrong_type
 
 
 class BoolClassifier(Classifier):
@@ -318,6 +340,8 @@ class Categorizer(Classifier):
     def __init__(
         self,
         column_names: Optional[ColumNamesWithAltSpec] = None,
+        on_missing_column: OnInvalidColumnSpec = "ignore",
+        on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
         scale: Scale,
         tags: Optional[TagsSpec] = None,
@@ -327,10 +351,13 @@ class Categorizer(Classifier):
 
         Args:
             column_names: The column(s) to categorize.
+            on_missing_column: What to do if a column name is missing.
+            on_wrong_type: What to do if the type of a column is incompatible
+                           with the classifier.
             scale: The scale to use for categorization.
             tags: Optional tags for the classifier.
         """
-        super().__init__(column_names, tags=tags)
+        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
         self._scale = scale
 
     @property
@@ -360,6 +387,8 @@ class Matches(BoolClassifier):
     def __init__(
         self,
         column_names: Optional[ColumNamesWithAltSpec] = None,
+        on_missing_column: OnInvalidColumnSpec = "ignore",
+        on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
         pattern: str,
         tags: Optional[TagsSpec] = None,
@@ -369,10 +398,13 @@ class Matches(BoolClassifier):
 
         Args:
             column_names: The column(s) to check.
+            on_missing_column: What to do if a column name is missing.
+            on_wrong_type: What to do if the type of a column is incompatible
+                           with the classifier.
             pattern: The regular expression to match against.
             tags: Optional tags for the classifier.
         """
-        super().__init__(column_names, tags=tags)
+        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
         self._pattern = _validate_pattern(
             pattern, f"{self.__class__.__name__}.__init__", ErrorCode.PVDQCL35
         )
@@ -392,6 +424,8 @@ class DoesNotMatch(BoolClassifier):
     def __init__(
         self,
         column_names: Optional[ColumNamesWithAltSpec] = None,
+        on_missing_column: OnInvalidColumnSpec = "ignore",
+        on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
         pattern: str,
         tags: Optional[TagsSpec] = None,
@@ -402,9 +436,12 @@ class DoesNotMatch(BoolClassifier):
         Args:
             column_names: The column(s) to apply the check to.
             pattern: The regular expression to not match against.
+            on_missing_column: What to do if a column name is missing.
+            on_wrong_type: What to do if the type of a column is incompatible
+                           with the classifier.
             tags: Optional tags for the classifier.
         """
-        super().__init__(column_names, tags=tags)
+        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
         self._pattern = _validate_pattern(
             pattern, f"{self.__class__.__name__}.__init__", ErrorCode.PVDQCL36
         )
@@ -424,8 +461,10 @@ class HasLength(BoolClassifier):
     def __init__(
         self,
         column_names: Optional[ColumNamesWithAltSpec] = None,
-        min: LenSpec = 0,
-        max: LenSpec = sys.maxsize,
+        min_len: LenSpec = 0,
+        max_len: LenSpec = sys.maxsize,
+        on_missing_column: OnInvalidColumnSpec = "ignore",
+        on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
         tags: Optional[TagsSpec] = None,
     ):
@@ -436,18 +475,21 @@ class HasLength(BoolClassifier):
             column_names: The column(s) to check.
             min_len: The minimum allowed length (inclusive).
             max_len: The maximum allowed length (inclusive).
+            on_missing_column: What to do if a column name is missing.
+            on_wrong_type: What to do if the type of a column is incompatible
+                           with the classifier.
             tags: Optional tags for the classifier.
         """
-        super().__init__(column_names, tags=tags)
-        if min > max:
+        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
+        if min_len > max_len:
             msg = (
                 " Parameter validation error. "
                 "Function 'HasLen.__init__', "
-                f" min='{min}' is greater than max='{max}'."
+                f" min='{min_len}' is greater than max='{max_len}'."
             )
             raise ParameterValidationError(ErrorCode.PVDQCL8, msg)
-        self._min = min
-        self._max = max
+        self._min = min_len
+        self._max = max_len
 
     @property
     def min(self) -> int:
@@ -469,6 +511,7 @@ class IsIn(BoolClassifier):
     def __init__(
         self,
         column_names: Optional[ColumNamesWithAltSpec] = None,
+        on_missing_column: OnInvalidColumnSpec = "ignore",
         *,
         values: Collection,
         tags: Optional[TagsSpec] = None,
@@ -478,10 +521,11 @@ class IsIn(BoolClassifier):
 
         Args:
             column_names: The column(s) to check.
+            on_missing_column: What to do if a column name is missing.
             values: The collection of values to check against.
             tags: Optional tags for the classifier.
         """
-        super().__init__(column_names, tags=tags)
+        super().__init__(column_names, on_missing_column, "ignore", tags=tags)
         self._values = _normalize_to_set(values)
 
     @property
@@ -499,6 +543,7 @@ class IsNotIn(BoolClassifier):
     def __init__(
         self,
         column_names: Optional[ColumNamesWithAltSpec] = None,
+        on_missing_column: OnInvalidColumnSpec = "ignore",
         *,
         values: Collection,
         tags: Optional[TagsSpec] = None,
@@ -508,10 +553,11 @@ class IsNotIn(BoolClassifier):
 
         Args:
             column_names: The column(s) to check.
+            on_missing_column: What to do if a column name is missing.
             values: The collection of values to check against.
             tags: Optional tags for the classifier.
         """
-        super().__init__(column_names, tags=tags)
+        super().__init__(column_names, on_missing_column, "ignore", tags=tags)
         self._values = _normalize_to_set(values)
 
     @property
@@ -521,21 +567,23 @@ class IsNotIn(BoolClassifier):
 
 
 def _validate_range(
-    min: Optional[RangeValueSpec], max: Optional[RangeValueSpec], error_code: ErrorCode
+    min_len: Optional[RangeValueSpec],
+    max_len: Optional[RangeValueSpec],
+    error_code: ErrorCode,
 ):
-    if min is not None and max is not None:
-        if type(min) is not type(max):
+    if min_len is not None and max_len is not None:
+        if type(min_len) is not type(max_len):
             msg = (
-                " Parameter validation error. "
-                "Function 'IsInRange.__init__', "
-                f" min='{min}' and max='{max}' must be of the same type."
+                " Parameter validation error. Function 'IsInRange.__init__', "
+                f" min_len='{min_len}' and max_len='{max_len}' must be of the same"
+                " type."
             )
             raise ParameterValidationError(error_code, msg)
-        if min > max:
+        if min_len > max_len:
             msg = (
                 " Parameter validation error. "
                 "Function 'IsInRange.__init__', "
-                f" min='{min}' is greater than max='{max}'."
+                f" min_len='{min_len}' is greater than max_len='{max_len}'."
             )
             raise ParameterValidationError(error_code, msg)
 
@@ -549,9 +597,11 @@ class IsBetween(BoolClassifier):
     def __init__(
         self,
         column_names: Optional[ColumNamesWithAltSpec] = None,
-        min: Optional[RangeValueSpec] = None,
-        max: Optional[RangeValueSpec] = None,
+        min_len: Optional[RangeValueSpec] = None,
+        max_len: Optional[RangeValueSpec] = None,
         closed: RangeClosedOnSpec = "both",
+        on_missing_column: OnInvalidColumnSpec = "ignore",
+        on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
         tags: Optional[TagsSpec] = None,
     ):
@@ -560,16 +610,19 @@ class IsBetween(BoolClassifier):
 
         Args:
             column_names: The column(s) to check.
-            min_val: The minimum value of the range.
-            max_val: The maximum value of the range.
+            min_len: The minimum value of the range.
+            max_len: The maximum value of the range.
             closed: Specifies if the range is inclusive ("both", "lower", "upper") or
                 exclusive ("none").
+            on_missing_column: What to do if a column name is missing.
+            on_wrong_type: What to do if the type of a column is incompatible
+                           with the classifier.
             tags: Optional tags for the classifier.
         """
-        super().__init__(column_names, tags=tags)
-        _validate_range(min, max, ErrorCode.PVDQCL11)
-        self._min = min
-        self._max = max
+        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
+        _validate_range(min_len, max_len, ErrorCode.PVDQCL11)
+        self._min = min_len
+        self._max = max_len
         self._closed = closed
 
     @property
@@ -597,9 +650,11 @@ class IsNotBetween(BoolClassifier):
     def __init__(
         self,
         column_names: Optional[ColumNamesWithAltSpec] = None,
-        min: Optional[RangeValueSpec] = None,
-        max: Optional[RangeValueSpec] = None,
+        min_len: Optional[RangeValueSpec] = None,
+        max_len: Optional[RangeValueSpec] = None,
         closed: RangeClosedOnSpec = "both",
+        on_missing_column: OnInvalidColumnSpec = "ignore",
+        on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
         tags: Optional[TagsSpec] = None,
     ):
@@ -608,16 +663,19 @@ class IsNotBetween(BoolClassifier):
 
         Args:
             column_names: The column(s) to check.
-            min_val: The minimum value of the range.
-            max_val: The maximum value of the range.
+            min_len: The minimum value of the range.
+            max_len: The maximum value of the range.
             closed: Specifies if the range is inclusive ("both", "lower", "upper") or
                 exclusive ("none").
+            on_missing_column: What to do if a column name is missing.
+            on_wrong_type: What to do if the type of a column is incompatible
+                           with the classifier.
             tags: Optional tags for the classifier.
         """
-        super().__init__(column_names, tags=tags)
-        _validate_range(min, max, ErrorCode.PVDQCL11)
-        self._min = min
-        self._max = max
+        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
+        _validate_range(min_len, max_len, ErrorCode.PVDQCL11)
+        self._min = min_len
+        self._max = max_len
         self._closed = closed
 
     @property
@@ -645,6 +703,8 @@ class IsNan(BoolClassifier):
     def __init__(
         self,
         column_names: Optional[ColumNamesWithAltSpec] = None,
+        on_missing_column: OnInvalidColumnSpec = "ignore",
+        on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
         tags: Optional[TagsSpec] = None,
     ):
@@ -653,9 +713,12 @@ class IsNan(BoolClassifier):
 
         Args:
             column_names: The column(s) to check.
+            on_missing_column: What to do if a column name is missing.
+            on_wrong_type: What to do if the type of a column is incompatible
+                           with the classifier.
             tags: Optional tags for the classifier.
         """
-        super().__init__(column_names, tags=tags)
+        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
 
 
 class IsNegative(BoolClassifier):
@@ -667,6 +730,8 @@ class IsNegative(BoolClassifier):
     def __init__(
         self,
         column_names: Optional[ColumNamesWithAltSpec] = None,
+        on_missing_column: OnInvalidColumnSpec = "ignore",
+        on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
         tags: Optional[TagsSpec] = None,
     ):
@@ -675,9 +740,12 @@ class IsNegative(BoolClassifier):
 
         Args:
             column_names: The column(s) to check.
+            on_missing_column: What to do if a column name is missing.
+            on_wrong_type: What to do if the type of a column is incompatible
+                           with the classifier.
             tags: Optional tags for the classifier.
         """
-        super().__init__(column_names, tags=tags)
+        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
 
 
 class IsNegativeOrZero(BoolClassifier):
@@ -689,6 +757,8 @@ class IsNegativeOrZero(BoolClassifier):
     def __init__(
         self,
         column_names: Optional[ColumNamesWithAltSpec] = None,
+        on_missing_column: OnInvalidColumnSpec = "ignore",
+        on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
         tags: Optional[TagsSpec] = None,
     ):
@@ -697,9 +767,12 @@ class IsNegativeOrZero(BoolClassifier):
 
         Args:
             column_names: The column(s) to check.
+            on_missing_column: What to do if a column name is missing.
+            on_wrong_type: What to do if the type of a column is incompatible
+                           with the classifier.
             tags: Optional tags for the classifier.
         """
-        super().__init__(column_names, tags=tags)
+        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
 
 
 class IsNotNan(BoolClassifier):
@@ -711,6 +784,8 @@ class IsNotNan(BoolClassifier):
     def __init__(
         self,
         column_names: Optional[ColumNamesWithAltSpec] = None,
+        on_missing_column: OnInvalidColumnSpec = "ignore",
+        on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
         tags: Optional[TagsSpec] = None,
     ):
@@ -719,9 +794,12 @@ class IsNotNan(BoolClassifier):
 
         Args:
             column_names: The column(s) to check.
+            on_missing_column: What to do if a column name is missing.
+            on_wrong_type: What to do if the type of a column is incompatible
+                           with the classifier.
             tags: Optional tags for the classifier.
         """
-        super().__init__(column_names, tags=tags)
+        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
 
 
 class IsNotNull(BoolClassifier):
@@ -733,6 +811,7 @@ class IsNotNull(BoolClassifier):
     def __init__(
         self,
         column_names: Optional[ColumNamesWithAltSpec] = None,
+        on_missing_column: OnInvalidColumnSpec = "ignore",
         *,
         tags: Optional[TagsSpec] = None,
     ):
@@ -741,9 +820,10 @@ class IsNotNull(BoolClassifier):
 
         Args:
             column_names: The column(s) to check.
+            on_missing_column: What to do if a column name is missing.
             tags: Optional tags for the classifier.
         """
-        super().__init__(column_names, tags=tags)
+        super().__init__(column_names, on_missing_column, "ignore", tags=tags)
 
 
 class IsNotNullNorNan(BoolClassifier):
@@ -755,6 +835,8 @@ class IsNotNullNorNan(BoolClassifier):
     def __init__(
         self,
         column_names: Optional[ColumNamesWithAltSpec] = None,
+        on_missing_column: OnInvalidColumnSpec = "ignore",
+        on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
         tags: Optional[TagsSpec] = None,
     ):
@@ -763,9 +845,12 @@ class IsNotNullNorNan(BoolClassifier):
 
         Args:
             column_names: The column(s) to check.
+            on_missing_column: What to do if a column name is missing.
+            on_wrong_type: What to do if the type of a column is incompatible
+                           with the classifier.
             tags: Optional tags for the classifier.
         """
-        super().__init__(column_names=column_names, tags=tags)
+        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
 
 
 class IsNotZero(BoolClassifier):
@@ -777,6 +862,8 @@ class IsNotZero(BoolClassifier):
     def __init__(
         self,
         column_names: Optional[ColumNamesWithAltSpec] = None,
+        on_missing_column: OnInvalidColumnSpec = "ignore",
+        on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
         tags: Optional[TagsSpec] = None,
     ):
@@ -785,9 +872,12 @@ class IsNotZero(BoolClassifier):
 
         Args:
             column_names: The column(s) to check.
+            on_missing_column: What to do if a column name is missing.
+            on_wrong_type: What to do if the type of a column is incompatible
+                           with the classifier.
             tags: Optional tags for the classifier.
         """
-        super().__init__(column_names, tags=tags)
+        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
 
 
 class IsNull(BoolClassifier):
@@ -799,6 +889,7 @@ class IsNull(BoolClassifier):
     def __init__(
         self,
         column_names: Optional[ColumNamesWithAltSpec] = None,
+        on_missing_column: OnInvalidColumnSpec = "ignore",
         *,
         tags: Optional[TagsSpec] = None,
     ):
@@ -807,9 +898,10 @@ class IsNull(BoolClassifier):
 
         Args:
             column_names: The column(s) to check.
+            on_missing_column: What to do if a column name is missing.
             tags: Optional tags for the classifier.
         """
-        super().__init__(column_names, tags=tags)
+        super().__init__(column_names, on_missing_column, "ignore", tags=tags)
 
 
 class IsNullOrNan(BoolClassifier):
@@ -821,6 +913,8 @@ class IsNullOrNan(BoolClassifier):
     def __init__(
         self,
         column_names: Optional[ColumNamesWithAltSpec] = None,
+        on_missing_column: OnInvalidColumnSpec = "ignore",
+        on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
         tags: Optional[TagsSpec] = None,
     ):
@@ -829,9 +923,12 @@ class IsNullOrNan(BoolClassifier):
 
         Args:
             column_names: The column(s) to check.
+            on_missing_column: What to do if a column name is missing.
+            on_wrong_type: What to do if the type of a column is incompatible
+                           with the classifier.
             tags: Optional tags for the classifier.
         """
-        super().__init__(column_names, tags=tags)
+        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
 
 
 class IsPositive(BoolClassifier):
@@ -843,6 +940,8 @@ class IsPositive(BoolClassifier):
     def __init__(
         self,
         column_names: Optional[ColumNamesWithAltSpec] = None,
+        on_missing_column: OnInvalidColumnSpec = "ignore",
+        on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
         tags: Optional[TagsSpec] = None,
     ):
@@ -851,9 +950,12 @@ class IsPositive(BoolClassifier):
 
         Args:
             column_names: The column(s) to check.
+            on_missing_column: What to do if a column name is missing.
+            on_wrong_type: What to do if the type of a column is incompatible
+                           with the classifier.
             tags: Optional tags for the classifier.
         """
-        super().__init__(column_names, tags=tags)
+        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
 
 
 class IsPositiveOrZero(BoolClassifier):
@@ -865,6 +967,8 @@ class IsPositiveOrZero(BoolClassifier):
     def __init__(
         self,
         column_names: Optional[ColumNamesWithAltSpec] = None,
+        on_missing_column: OnInvalidColumnSpec = "ignore",
+        on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
         tags: Optional[TagsSpec] = None,
     ):
@@ -873,9 +977,12 @@ class IsPositiveOrZero(BoolClassifier):
 
         Args:
             column_names: The column(s) to check.
+            on_missing_column: What to do if a column name is missing.
+            on_wrong_type: What to do if the type of a column is incompatible
+                           with the classifier.
             tags: Optional tags for the classifier.
         """
-        super().__init__(column_names, tags=tags)
+        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
 
 
 class IsZero(BoolClassifier):
@@ -887,6 +994,8 @@ class IsZero(BoolClassifier):
     def __init__(
         self,
         column_names: Optional[ColumNamesWithAltSpec] = None,
+        on_missing_column: OnInvalidColumnSpec = "ignore",
+        on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
         tags: Optional[TagsSpec] = None,
     ):
@@ -895,6 +1004,9 @@ class IsZero(BoolClassifier):
 
         Args:
             column_names: The column(s) to check.
+            on_missing_column: What to do if a column name is missing.
+            on_wrong_type: What to do if the type of a column is incompatible
+                           with the classifier.
             tags: Optional tags for the classifier.
         """
-        super().__init__(column_names, tags=tags)
+        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)

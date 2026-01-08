@@ -180,19 +180,19 @@ def test_wrong_tags_type_raises_error():
 
 
 def test_has_len_classifier():
-    classifier = HasLength(min=5, max=10)
+    classifier = HasLength(min_len=5, max_len=10)
     assert classifier.min == 5
     assert classifier.max == 10
 
 
 def test_has_len_classifier_only_min():
-    classifier = HasLength(min=5)
+    classifier = HasLength(min_len=5)
     assert classifier.min == 5
     assert classifier.max == sys.maxsize
 
 
 def test_has_len_classifier_only_max():
-    classifier = HasLength(max=10)
+    classifier = HasLength(max_len=10)
     assert classifier.min == 0
     assert classifier.max == 10
 
@@ -214,12 +214,12 @@ def test_is_in_classifier_wrong_set_type():
 
 
 def test_is_between_classifier():
-    classifier = IsBetween(min=5, max=10)
+    classifier = IsBetween(min_len=5, max_len=10)
     assert classifier.min == 5
     assert classifier.max == 10
     assert classifier.closed == "both"
 
-    classifier = IsBetween(min=5, max=5)
+    classifier = IsBetween(min_len=5, max_len=5)
     assert classifier.min == 5
     assert classifier.max == 5
     assert classifier.closed == "both"
@@ -228,13 +228,13 @@ def test_is_between_classifier():
 def test_is_between_classifier_valid_closed_options():
     valid_closed_options = get_args(RangeClosedOnSpec)
     for closed_option in valid_closed_options:
-        classifier = IsBetween(min=5, max=10, closed=closed_option)
+        classifier = IsBetween(min_len=5, max_len=10, closed=closed_option)
         assert classifier.closed == closed_option
 
 
 def test_is_between_classifier_wrong_closed_option():
     with pytest.raises(ParameterValidationError) as e:
-        IsBetween(min=5, max=10, closed="invalid_option")
+        IsBetween(min_len=5, max_len=10, closed="invalid_option")
     assert e.value.error_code == ErrorCode.PVDQCL10
 
 
@@ -246,27 +246,27 @@ def test_is_between_classifier_no_values():
 
 def test_is_between_classifier_wrong_min_max_types():
     with pytest.raises(ParameterValidationError) as e:
-        IsBetween(min="5", max=10)
+        IsBetween(min_len="5", max_len=10)
     assert e.value.error_code == ErrorCode.PVDQCL10
 
     with pytest.raises(ParameterValidationError) as e:
-        IsBetween(min=5, max="10")
+        IsBetween(min_len=5, max_len="10")
     assert e.value.error_code == ErrorCode.PVDQCL10
 
 
 def test_is_between_classifier_wrong_min_max():
     with pytest.raises(ParameterValidationError) as e:
-        IsBetween(min=10, max=9)
+        IsBetween(min_len=10, max_len=9)
     assert e.value.error_code == ErrorCode.PVDQCL10
 
 
 def test_is_not_between_classifier():
-    classifier = IsNotBetween(min=5, max=10)
+    classifier = IsNotBetween(min_len=5, max_len=10)
     assert classifier.min == 5
     assert classifier.max == 10
     assert classifier.closed == "both"
 
-    classifier = IsNotBetween(min=5, max=5)
+    classifier = IsNotBetween(min_len=5, max_len=5)
     assert classifier.min == 5
     assert classifier.max == 5
     assert classifier.closed == "both"
@@ -275,13 +275,13 @@ def test_is_not_between_classifier():
 def test_is_not_between_classifier_valid_closed_options():
     valid_closed_options = get_args(RangeClosedOnSpec)
     for closed_option in valid_closed_options:
-        classifier = IsNotBetween(min=5, max=10, closed=closed_option)
+        classifier = IsNotBetween(min_len=5, max_len=10, closed=closed_option)
         assert classifier.closed == closed_option
 
 
 def test_is_not_between_classifier_wrong_closed_option():
     with pytest.raises(ParameterValidationError) as e:
-        IsNotBetween(min=5, max=10, closed="invalid_option")
+        IsNotBetween(min_len=5, max_len=10, closed="invalid_option")
     assert e.value.error_code == ErrorCode.PVDQCL10
 
 
@@ -293,17 +293,17 @@ def test_is_not_between_classifier_no_values():
 
 def test_is_not_between_classifier_wrong_min_max_types():
     with pytest.raises(ParameterValidationError) as e:
-        IsNotBetween(min="5", max=10)
+        IsNotBetween(min_len="5", max_len=10)
     assert e.value.error_code == ErrorCode.PVDQCL10
 
     with pytest.raises(ParameterValidationError) as e:
-        IsNotBetween(min=5, max="10")
+        IsNotBetween(min_len=5, max_len="10")
     assert e.value.error_code == ErrorCode.PVDQCL10
 
 
 def test_is_not_between_classifier_wrong_min_max():
     with pytest.raises(ParameterValidationError) as e:
-        IsNotBetween(min=10, max=9)
+        IsNotBetween(min_len=10, max_len=9)
     assert e.value.error_code == ErrorCode.PVDQCL10
 
 
@@ -576,3 +576,404 @@ def test_categorizer_wrong_scale_type_raises_error():
     with pytest.raises(ParameterValidationError) as e:
         Categorizer(scale="hi")
     assert e.value.error_code == ErrorCode.PVDQCL2
+
+
+def test_matches_on_missing_column_and_on_wrong_type():
+    with pytest.raises(ParameterValidationError) as e:
+        Matches(pattern="^test_.*", on_missing_column="error")
+    assert e.value.error_code == ErrorCode.PVDQCL22
+
+    classifier = Matches(pattern="^test_.*", on_missing_column="ignore")
+    assert classifier.on_missing_column == "ignore"
+
+    classifier = Matches(pattern="^test_.*", on_missing_column="fail")
+    assert classifier.on_missing_column == "fail"
+
+    with pytest.raises(ParameterValidationError) as e:
+        Matches(pattern="^test_.*", on_wrong_type="error")
+    assert e.value.error_code == ErrorCode.PVDQCL22
+
+    classifier = Matches(pattern="^test_.*", on_wrong_type="ignore")
+    assert classifier.on_wrong_type == "ignore"
+
+    classifier = Matches(pattern="^test_.*", on_wrong_type="fail")
+    assert classifier.on_wrong_type == "fail"
+
+
+def test_does_not_match_on_missing_column_and_on_wrong_type():
+    with pytest.raises(ParameterValidationError) as e:
+        DoesNotMatch(pattern="^test_.*", on_missing_column="error")
+    assert e.value.error_code == ErrorCode.PVDQCL3
+
+    classifier = DoesNotMatch(pattern="^test_.*", on_missing_column="ignore")
+    assert classifier.on_missing_column == "ignore"
+
+    classifier = DoesNotMatch(pattern="^test_.*", on_missing_column="fail")
+    assert classifier.on_missing_column == "fail"
+
+    with pytest.raises(ParameterValidationError) as e:
+        DoesNotMatch(pattern="^test_.*", on_wrong_type="error")
+    assert e.value.error_code == ErrorCode.PVDQCL3
+
+    classifier = DoesNotMatch(pattern="^test_.*", on_wrong_type="ignore")
+    assert classifier.on_wrong_type == "ignore"
+
+    classifier = DoesNotMatch(pattern="^test_.*", on_wrong_type="fail")
+    assert classifier.on_wrong_type == "fail"
+
+
+def test_has_length_on_missing_column_and_on_wrong_type():
+    with pytest.raises(ParameterValidationError) as e:
+        HasLength(on_missing_column="error")
+    assert e.value.error_code == ErrorCode.PVDQCL7
+
+    classifier = HasLength(on_missing_column="ignore")
+    assert classifier.on_missing_column == "ignore"
+
+    classifier = HasLength(on_missing_column="fail")
+    assert classifier.on_missing_column == "fail"
+
+    with pytest.raises(ParameterValidationError) as e:
+        HasLength(on_wrong_type="error")
+    assert e.value.error_code == ErrorCode.PVDQCL7
+
+    classifier = HasLength(on_wrong_type="ignore")
+    assert classifier.on_wrong_type == "ignore"
+
+    classifier = HasLength(on_wrong_type="fail")
+    assert classifier.on_wrong_type == "fail"
+
+
+def test_is_in_on_missing_column():
+    with pytest.raises(ParameterValidationError) as e:
+        IsIn(values=[1], on_missing_column="error")
+    assert e.value.error_code == ErrorCode.PVDQCL9
+
+    classifier = IsIn(values=[1], on_missing_column="ignore")
+    assert classifier.on_missing_column == "ignore"
+
+    classifier = IsIn(values=[1], on_missing_column="fail")
+    assert classifier.on_missing_column == "fail"
+
+
+def test_is_not_in_on_missing_column():
+    with pytest.raises(ParameterValidationError) as e:
+        IsNotIn(values=[1], on_missing_column="error")
+    assert e.value.error_code == ErrorCode.PVDQCL10
+
+    classifier = IsNotIn(values=[1], on_missing_column="ignore")
+    assert classifier.on_missing_column == "ignore"
+
+    classifier = IsNotIn(values=[1], on_missing_column="fail")
+    assert classifier.on_missing_column == "fail"
+
+
+def test_is_between_on_missing_column_and_on_wrong_type():
+    with pytest.raises(ParameterValidationError) as e:
+        IsBetween(on_missing_column="error")
+    assert e.value.error_code == ErrorCode.PVDQCL10
+
+    classifier = IsBetween(on_missing_column="ignore")
+    assert classifier.on_missing_column == "ignore"
+
+    classifier = IsBetween(on_missing_column="fail")
+    assert classifier.on_missing_column == "fail"
+
+    with pytest.raises(ParameterValidationError) as e:
+        IsBetween(on_wrong_type="error")
+    assert e.value.error_code == ErrorCode.PVDQCL10
+
+    classifier = IsBetween(on_wrong_type="ignore")
+    assert classifier.on_wrong_type == "ignore"
+
+    classifier = IsBetween(on_wrong_type="fail")
+    assert classifier.on_wrong_type == "fail"
+
+
+def test_is_not_between_on_missing_column_and_on_wrong_type():
+    with pytest.raises(ParameterValidationError) as e:
+        IsNotBetween(on_missing_column="error")
+    assert e.value.error_code == ErrorCode.PVDQCL12
+
+    classifier = IsNotBetween(on_missing_column="ignore")
+    assert classifier.on_missing_column == "ignore"
+
+    classifier = IsNotBetween(on_missing_column="fail")
+    assert classifier.on_missing_column == "fail"
+
+    with pytest.raises(ParameterValidationError) as e:
+        IsNotBetween(on_wrong_type="error")
+    assert e.value.error_code == ErrorCode.PVDQCL12
+
+    classifier = IsNotBetween(on_wrong_type="ignore")
+    assert classifier.on_wrong_type == "ignore"
+
+    classifier = IsNotBetween(on_wrong_type="fail")
+    assert classifier.on_wrong_type == "fail"
+
+
+def test_is_nan_on_missing_column_and_on_wrong_type():
+    with pytest.raises(ParameterValidationError) as e:
+        IsNan(on_missing_column="error")
+    assert e.value.error_code == ErrorCode.PVDQCL14
+
+    classifier = IsNan(on_missing_column="ignore")
+    assert classifier.on_missing_column == "ignore"
+
+    classifier = IsNan(on_missing_column="fail")
+    assert classifier.on_missing_column == "fail"
+
+    with pytest.raises(ParameterValidationError) as e:
+        IsNan(on_wrong_type="error")
+    assert e.value.error_code == ErrorCode.PVDQCL14
+
+    classifier = IsNan(on_wrong_type="ignore")
+    assert classifier.on_wrong_type == "ignore"
+
+    classifier = IsNan(on_wrong_type="fail")
+    assert classifier.on_wrong_type == "fail"
+
+
+def test_is_negative_on_missing_column_and_on_wrong_type():
+    with pytest.raises(ParameterValidationError) as e:
+        IsNegative(on_missing_column="error")
+    assert e.value.error_code == ErrorCode.PVDQCL14
+
+    classifier = IsNegative(on_missing_column="ignore")
+    assert classifier.on_missing_column == "ignore"
+
+    classifier = IsNegative(on_missing_column="fail")
+    assert classifier.on_missing_column == "fail"
+
+    with pytest.raises(ParameterValidationError) as e:
+        IsNegative(on_wrong_type="error")
+    assert e.value.error_code == ErrorCode.PVDQCL14
+
+    classifier = IsNegative(on_wrong_type="ignore")
+    assert classifier.on_wrong_type == "ignore"
+
+    classifier = IsNegative(on_wrong_type="fail")
+    assert classifier.on_wrong_type == "fail"
+
+
+def test_is_negative_or_zero_on_missing_column_and_on_wrong_type():
+    with pytest.raises(ParameterValidationError) as e:
+        IsNegativeOrZero(on_missing_column="error")
+    assert e.value.error_code == ErrorCode.PVDQCL14
+
+    classifier = IsNegativeOrZero(on_missing_column="ignore")
+    assert classifier.on_missing_column == "ignore"
+
+    classifier = IsNegativeOrZero(on_missing_column="fail")
+    assert classifier.on_missing_column == "fail"
+
+    with pytest.raises(ParameterValidationError) as e:
+        IsNegativeOrZero(on_wrong_type="error")
+    assert e.value.error_code == ErrorCode.PVDQCL14
+
+    classifier = IsNegativeOrZero(on_wrong_type="ignore")
+    assert classifier.on_wrong_type == "ignore"
+
+    classifier = IsNegativeOrZero(on_wrong_type="fail")
+    assert classifier.on_wrong_type == "fail"
+
+
+def test_is_not_nan_on_missing_column_and_on_wrong_type():
+    with pytest.raises(ParameterValidationError) as e:
+        IsNotNan(on_missing_column="error")
+    assert e.value.error_code == ErrorCode.PVDQCL14
+
+    classifier = IsNotNan(on_missing_column="ignore")
+    assert classifier.on_missing_column == "ignore"
+
+    classifier = IsNotNan(on_missing_column="fail")
+    assert classifier.on_missing_column == "fail"
+
+    with pytest.raises(ParameterValidationError) as e:
+        IsNotNan(on_wrong_type="error")
+    assert e.value.error_code == ErrorCode.PVDQCL14
+
+    classifier = IsNotNan(on_wrong_type="ignore")
+    assert classifier.on_wrong_type == "ignore"
+
+    classifier = IsNotNan(on_wrong_type="fail")
+    assert classifier.on_wrong_type == "fail"
+
+
+def test_is_not_null_on_missing_column():
+    with pytest.raises(ParameterValidationError) as e:
+        IsNotNull(on_missing_column="error")
+    assert e.value.error_code == ErrorCode.PVDQCL15
+
+    classifier = IsNotNull(on_missing_column="ignore")
+    assert classifier.on_missing_column == "ignore"
+
+    classifier = IsNotNull(on_missing_column="fail")
+    assert classifier.on_missing_column == "fail"
+
+
+def test_is_not_null_nor_nan_on_missing_column_and_on_wrong_type():
+    with pytest.raises(ParameterValidationError) as e:
+        IsNotNullNorNan(on_missing_column="error")
+    assert e.value.error_code == ErrorCode.PVDQCL15
+
+    classifier = IsNotNullNorNan(on_missing_column="ignore")
+    assert classifier.on_missing_column == "ignore"
+
+    classifier = IsNotNullNorNan(on_missing_column="fail")
+    assert classifier.on_missing_column == "fail"
+
+    with pytest.raises(ParameterValidationError) as e:
+        IsNotNullNorNan(on_wrong_type="error")
+    assert e.value.error_code == ErrorCode.PVDQCL15
+
+    classifier = IsNotNullNorNan(on_wrong_type="ignore")
+    assert classifier.on_wrong_type == "ignore"
+
+    classifier = IsNotNullNorNan(on_wrong_type="fail")
+    assert classifier.on_wrong_type == "fail"
+
+
+def test_is_not_zero_on_missing_column_and_on_wrong_type():
+    with pytest.raises(ParameterValidationError) as e:
+        IsNotZero(on_missing_column="error")
+    assert e.value.error_code == ErrorCode.PVDQCL16
+
+    classifier = IsNotZero(on_missing_column="ignore")
+    assert classifier.on_missing_column == "ignore"
+
+    classifier = IsNotZero(on_missing_column="fail")
+    assert classifier.on_missing_column == "fail"
+
+    with pytest.raises(ParameterValidationError) as e:
+        IsNotZero(on_wrong_type="error")
+    assert e.value.error_code == ErrorCode.PVDQCL16
+
+    classifier = IsNotZero(on_wrong_type="ignore")
+    assert classifier.on_wrong_type == "ignore"
+
+    classifier = IsNotZero(on_wrong_type="fail")
+    assert classifier.on_wrong_type == "fail"
+
+
+def test_is_null_on_missing_column():
+    with pytest.raises(ParameterValidationError) as e:
+        IsNull(on_missing_column="error")
+    assert e.value.error_code == ErrorCode.PVDQCL17
+
+    classifier = IsNull(on_missing_column="ignore")
+    assert classifier.on_missing_column == "ignore"
+
+    classifier = IsNull(on_missing_column="fail")
+    assert classifier.on_missing_column == "fail"
+
+
+def test_is_null_or_nan_on_missing_column_and_on_wrong_type():
+    with pytest.raises(ParameterValidationError) as e:
+        IsNullOrNan(on_missing_column="error")
+    assert e.value.error_code == ErrorCode.PVDQCL18
+
+    classifier = IsNullOrNan(on_missing_column="ignore")
+    assert classifier.on_missing_column == "ignore"
+
+    classifier = IsNullOrNan(on_missing_column="fail")
+    assert classifier.on_missing_column == "fail"
+
+    with pytest.raises(ParameterValidationError) as e:
+        IsNullOrNan(on_wrong_type="error")
+    assert e.value.error_code == ErrorCode.PVDQCL18
+
+    classifier = IsNullOrNan(on_wrong_type="ignore")
+    assert classifier.on_wrong_type == "ignore"
+
+    classifier = IsNullOrNan(on_wrong_type="fail")
+    assert classifier.on_wrong_type == "fail"
+
+
+def test_is_positive_on_missing_column_and_on_wrong_type():
+    with pytest.raises(ParameterValidationError) as e:
+        IsPositive(on_missing_column="error")
+    assert e.value.error_code == ErrorCode.PVDQCL19
+
+    classifier = IsPositive(on_missing_column="ignore")
+    assert classifier.on_missing_column == "ignore"
+
+    classifier = IsPositive(on_missing_column="fail")
+    assert classifier.on_missing_column == "fail"
+
+    with pytest.raises(ParameterValidationError) as e:
+        IsPositive(on_wrong_type="error")
+    assert e.value.error_code == ErrorCode.PVDQCL19
+
+    classifier = IsPositive(on_wrong_type="ignore")
+    assert classifier.on_wrong_type == "ignore"
+
+    classifier = IsPositive(on_wrong_type="fail")
+    assert classifier.on_wrong_type == "fail"
+
+
+def test_is_positive_or_zero_on_missing_column_and_on_wrong_type():
+    with pytest.raises(ParameterValidationError) as e:
+        IsPositiveOrZero(on_missing_column="error")
+    assert e.value.error_code == ErrorCode.PVDQCL20
+
+    classifier = IsPositiveOrZero(on_missing_column="ignore")
+    assert classifier.on_missing_column == "ignore"
+
+    classifier = IsPositiveOrZero(on_missing_column="fail")
+    assert classifier.on_missing_column == "fail"
+
+    with pytest.raises(ParameterValidationError) as e:
+        IsPositiveOrZero(on_wrong_type="error")
+    assert e.value.error_code == ErrorCode.PVDQCL20
+
+    classifier = IsPositiveOrZero(on_wrong_type="ignore")
+    assert classifier.on_wrong_type == "ignore"
+
+    classifier = IsPositiveOrZero(on_wrong_type="fail")
+    assert classifier.on_wrong_type == "fail"
+
+
+def test_is_zero_on_missing_column_and_on_wrong_type():
+    with pytest.raises(ParameterValidationError) as e:
+        IsZero(on_missing_column="error")
+    assert e.value.error_code == ErrorCode.PVDQCL21
+
+    classifier = IsZero(on_missing_column="ignore")
+    assert classifier.on_missing_column == "ignore"
+
+    classifier = IsZero(on_missing_column="fail")
+    assert classifier.on_missing_column == "fail"
+
+    with pytest.raises(ParameterValidationError) as e:
+        IsZero(on_wrong_type="error")
+    assert e.value.error_code == ErrorCode.PVDQCL21
+
+    classifier = IsZero(on_wrong_type="ignore")
+    assert classifier.on_wrong_type == "ignore"
+
+    classifier = IsZero(on_wrong_type="fail")
+    assert classifier.on_wrong_type == "fail"
+
+
+def test_categorizer_on_missing_column_and_on_wrong_type():
+    scale = LinearScale(1, 7)
+    with pytest.raises(ParameterValidationError) as e:
+        Categorizer(scale=scale, on_missing_column="error")
+    assert e.value.error_code == ErrorCode.PVDQCL2
+
+    classifier = Categorizer(scale=scale, on_missing_column="ignore")
+    assert classifier.on_missing_column == "ignore"
+
+    classifier = Categorizer(scale=scale, on_missing_column="fail")
+    assert classifier.on_missing_column == "fail"
+
+    with pytest.raises(ParameterValidationError) as e:
+        Categorizer(scale=scale, on_wrong_type="error")
+    assert e.value.error_code == ErrorCode.PVDQCL2
+
+    classifier = Categorizer(scale=scale, on_wrong_type="ignore")
+    assert classifier.on_wrong_type == "ignore"
+
+    classifier = Categorizer(scale=scale, on_wrong_type="fail")
+    assert classifier.on_wrong_type == "fail"
