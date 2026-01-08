@@ -9,6 +9,7 @@ import pytest
 from tabsdata.dataquality._utils import (
     _get_parameter_type_hints,
     _normalize_to_list,
+    _normalize_to_set,
     _td_validate_call,
 )
 from tabsdata.exceptions import ErrorCode, ParameterValidationError
@@ -30,6 +31,45 @@ def test_normalize_to_list_with_single_value():
 
 def test_normalize_to_list_with_list():
     assert _normalize_to_list(["a", "b"]) == ["a", "b"]
+
+
+# Tests for _normalize_to_set
+def test_normalize_to_set_with_none():
+    assert _normalize_to_set(None) == set()
+
+
+def test_normalize_to_set_with_none_and_keep_none():
+    assert _normalize_to_set(None, keep_none=True) is None
+
+
+def test_normalize_to_set_with_single_value():
+    assert _normalize_to_set("a") == {"a"}
+    assert _normalize_to_set(1) == {1}
+
+
+def test_normalize_to_set_with_list():
+    assert _normalize_to_set(["a", "b"]) == {"a", "b"}
+
+
+def test_normalize_to_set_with_set():
+    assert _normalize_to_set({"a", "b"}) == {"a", "b"}
+
+
+def test_normalize_to_set_with_tuple():
+    assert _normalize_to_set(("a", "b")) == {"a", "b"}
+
+
+def test_normalize_to_set_with_duplicates():
+    assert _normalize_to_set(["a", "b", "a"]) == {"a", "b"}
+
+
+def test_normalize_to_set_with_nan():
+    # Note: float('nan') is not equal to float('nan'), so we need to handle this in the test
+    result = _normalize_to_set([1, float("nan"), 2, float("nan")])
+    assert len(result) == 3
+    assert 1 in result
+    assert 2 in result
+    assert any(isinstance(x, float) and str(x) == "nan" for x in result)
 
 
 # Tests for _get_parameter_type_hints

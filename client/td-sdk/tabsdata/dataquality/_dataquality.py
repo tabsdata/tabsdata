@@ -1,6 +1,11 @@
 #
 # Copyright 2025 Tabs Data Inc.
 #
+"""
+This module defines the `DataQuality` action, which orchestrates the application
+of data quality rules on a table. It combines classifiers and operators to perform
+comprehensive data quality checks and actions.
+"""
 
 from typing import Union
 
@@ -14,12 +19,19 @@ from tabsdata.exceptions import ErrorCode
 from tabsdata.typing._specs import TableName
 
 ClassifiersSpec: TypeAlias = Union[Classifier, list[Classifier]]
+"""A type alias for one or more `Classifier` instances."""
+
 OperatorsSpec: TypeAlias = Union[Operator, list[Operator]]
+"""A type alias for one or more `Operator` instances."""
 
 
 class DataQuality(OnTablesAction):
     """
-    A data quality action on a table.
+    Represents a data quality action to be performed on a table.
+
+    This class encapsulates a set of data quality rules, defined by classifiers
+    and operators, that are applied to a specified table. It serves as a container
+    for a complete data quality workflow.
     """
 
     @_td_validate_call(ErrorCode.PVDQ1)
@@ -30,13 +42,15 @@ class DataQuality(OnTablesAction):
         operators: OperatorsSpec,
     ):
         """
-        Constructor.
+        Initializes a `DataQuality` action.
 
         Args:
-            table: Name of the table to apply the data quality action.
-            classifiers: Data quality classifiers to apply to the table.
-            operators: Data quality operations, based on the defined
-                classifiers, to perform on the table.
+            table: The name of the table to which the data quality rules will be
+                   applied.
+            classifiers: A single classifier or a list of classifiers to evaluate
+                         the data in the table.
+            operators: A single operator or a list of operators that define the
+                       actions to take based on the classifier results.
         """
         self._table = table
         self._classifiers = _normalize_to_list(classifiers)
@@ -45,20 +59,21 @@ class DataQuality(OnTablesAction):
     @property
     def table(self) -> str:
         """
-        :return: the table the data quality action operates on.
+        Returns the name of the table targeted by this data quality action.
         """
         return self._table
 
     @property
     def classifiers(self) -> list[Classifier]:
         """
-        :return: the data quality classifiers.
+        Returns the list of classifiers used in this data quality action.
         """
         return self._classifiers
 
     @property
     def operators(self) -> list[Operator]:
         """
-        :return: the data quality operators.
+        Returns the list of operators that will be executed based on the
+        classifier results.
         """
         return self._operators

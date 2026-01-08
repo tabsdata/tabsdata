@@ -1,24 +1,27 @@
 #
 # Copyright 2025 Tabs Data Inc.
 #
+"""
+This module defines a set of classifiers used for data quality analysis. Classifiers
+are used to evaluate data in columns and categorize or flag them based on specific
+rules. These include boolean classifiers for simple checks (e.g., `IsNull`, `IsBetween`)
+and categorizers for binning data.
+"""
+
 import math
+import re
 import sys
 from abc import ABC
-from typing import Collection, Optional
+from typing import AbstractSet, Collection, Optional
 
 from tabsdata.dataquality._typing import (
     MAX_BINS,
     BinsSpec,
     ColumNamesWithAltSpec,
-    ColumnNamesSpec,
     ColumnNameWithAltSpec,
-    ColumnTypeSpec,
-    ColumnTypesSpec,
-    HasColumnsModeSpec,
     LenSpec,
-    MaxSpec,
-    MinSpec,
     RangeClosedOnSpec,
+    RangeValueSpec,
     ScaleBaseSpec,
     ScaleIdentityLimitSpec,
     ScaleLimitSpec,
@@ -28,20 +31,23 @@ from tabsdata.dataquality._typing import (
 )
 from tabsdata.dataquality._utils import (
     _normalize_to_list,
+    _normalize_to_set,
     _td_validate_call,
     _validation_error,
 )
 from tabsdata.exceptions import (
-    DataQualityConfigurationError,
     ErrorCode,
     ParameterValidationError,
 )
-from tabsdata.tableframe.typing import TF_DATA_TYPES
 
 
 class Classifier(ABC):
     """
-    Abstract base class for classes that classify data
+    Abstract base class for all data quality classifiers.
+
+    A classifier is applied to one or more columns to produce a classification
+    result, which is stored in a new column. It supports tags to allow data quality
+    operations to selectively act on specific classifiers.
     """
 
     @_td_validate_call(ErrorCode.PVDQCL1)
@@ -52,38 +58,20 @@ class Classifier(ABC):
         tags: Optional[TagsSpec] = None,
     ):
         """
-        Initialize the Classifier object.
+        Initializes the classifier.
 
         Args:
-            column_names: Column name(s) to apply the classifier to and to
-            store the classification result.
-
-                If a `str | list[str]` is given, those are the column names
-                to apply the classifier to. The classification results will be
-                stored in columns named 'dq.<column_name>_<classifier_class>`.
-
-                If a `tuple[str, str] | list[tuple[str, str]]` is given, the
-                first element of the tuple(s) is the column to apply the
-                classifier to and the second element of the tuple(s) is the
-                name of the column that will store the classification result.
-
-                If `None`, the classifier will be applied to all columns and
-                the results will be stored in columns named
-                'dq.<column_name>_<classifier_class>`.
-
-                Defaults to None.
-            tags: Tag(s) for the classifier.
-
-                Tags can be used by DataQuality operations to select which
-                classifiers to operate on. If a DataQuality operation does not
-                define a tag, it operates on all defined classifiers. If a
-                DataQuality operation defines one or more tags, it will only
-                operate on classifiers that have at least one of those tags.
-
-                Defaults to None.
+            column_names: The column(s) to apply the classifier to.
+                - A string or list of strings specifies the source columns. The results
+                  are stored in columns with auto-generated names.
+                - A tuple `(source, destination)` or a list of such tuples allows
+                  specifying custom names for the result columns.
+                - If `None`, the classifier is applied to all columns.
+            tags: A tag or list of tags to associate with the classifier. Tags help
+                  filter which classifiers an operation should consider.
         """
         column_names = _normalize_to_list(column_names, keep_none=True)
-        if column_names and len(column_names) > 0 and isinstance(column_names[0], str):
+        if column_names and isinstance(column_names[0], str):
             column_names = [(s, None) for s in column_names]
         self._column_names = column_names
         self._tags = _normalize_to_list(tags)
@@ -91,197 +79,239 @@ class Classifier(ABC):
     @property
     def column_names(self) -> Optional[list[ColumnNameWithAltSpec]]:
         """
-        :return: The column names the data quality classifier applies to.
-            If a `list[str]` is returned, then the data quality column name
-            for the classifier will be automatically generated using the
-            column names and the classifier type.
-            If a `list[(str, str)]` is returned, the first element of the
-            tuples is the column name the classifier applies and the second
-            element is the data quality column name for the classifier.
+        Returns the list of columns the classifier applies to, including optional
+        destination column names.
         """
         return self._column_names
 
     @property
     def tags(self) -> list[TagSpec]:
         """
-        :return: The classifier tags.
+        Returns the list of tags associated with the classifier.
         """
         return self._tags
 
 
 class BoolClassifier(Classifier):
-    """ "
-    Abstract base class for classes that classify data into True or False.
+    """
+    Abstract base class for classifiers that produce a boolean result
+    (`True` or `False`).
     """
 
-    pass
 
-
-def _validate_min_max(min: ScaleLimitSpec, max: ScaleLimitSpec, fn_name: str):
-    if min >= max:
+def _validate_min_max(min_val: ScaleLimitSpec, max_val: ScaleLimitSpec, fn_name: str):
+    """Validates that `min_val` is less than `max_val`."""
+    if min_val >= max_val:
         params_with_error = (
-            f"'min' = '{min}', 'max' = '{max}' "
-            "error: The maximum must be greater than the minimum."
+            f"'min': {min_val}, 'max': {max_val} - The maximum value must be strictly "
+            "greater than the minimum value."
         )
         raise _validation_error(ErrorCode.PVDQCL32, fn_name, params_with_error)
 
 
 def _validate_bins(bins: BinsSpec, min_in_first_bin: bool, fn_name: str):
-    if min_in_first_bin:
-        if bins > MAX_BINS:
-            params_with_error = (
-                f"'bins' = '{bins}', "
-                f"'min_in_first_bin' = '{min_in_first_bin}' "
-                f"error: the maximum number of bins is {MAX_BINS}."
-            )
-            raise _validation_error(ErrorCode.PVDQCL33, fn_name, params_with_error)
-    else:
-        if bins > MAX_BINS + 1:
-            params_with_error = (
-                f"'bins' = '{bins}', "
-                f"'min_in_first_bin' = '{min_in_first_bin}' "
-                f"error: the maximum number of bins is {MAX_BINS + 1}."
-            )
-            raise _validation_error(ErrorCode.PVDQCL34, fn_name, params_with_error)
+    """Validates the number of bins against the allowed maximum."""
+    max_allowed = MAX_BINS if min_in_first_bin else MAX_BINS + 1
+    if bins > max_allowed:
+        params_with_error = (
+            f"'bins': {bins}, 'min_in_first_bin': {min_in_first_bin} - "
+            f"Exceeds the maximum allowed bins of {max_allowed}."
+        )
+        raise _validation_error(ErrorCode.PVDQCL33, fn_name, params_with_error)
 
 
 class Scale(ABC):
     """
-    Base scale class.
+    Abstract base class for scales used in categorization.
+
+    A scale defines how numerical data is divided into bins.
     """
 
     def __init__(
         self,
-        range: tuple[ScaleLimitSpec, ScaleLimitSpec],
+        scale_range: tuple[ScaleLimitSpec, ScaleLimitSpec],
         bins: Optional[BinsSpec],
         min_in_first_bin: bool,
     ):
-        self._range = range
+        self._range = scale_range
         self._bins = bins
         self._min_in_first_bin = min_in_first_bin
 
     @property
     def scale_range(self) -> tuple[ScaleLimitSpec, ScaleLimitSpec]:
+        """Returns the (min, max) range of the scale."""
         return self._range
 
     @property
     def bins(self) -> Optional[BinsSpec]:
+        """Returns the number of bins in the scale."""
         return self._bins
 
     @property
-    def min_in_first_bin(self):
+    def min_in_first_bin(self) -> bool:
+        """Returns whether the minimum value is included in the first bin."""
         return self._min_in_first_bin
 
 
 class IdentityScale(Scale):
+    """
+    An identity scale where each integer value corresponds to a bin.
+    """
 
     @_td_validate_call(ErrorCode.PVDQCL23)
     def __init__(
         self,
-        min: ScaleIdentityLimitSpec,
-        max: ScaleIdentityLimitSpec,
+        min_val: ScaleIdentityLimitSpec,
+        max_val: ScaleIdentityLimitSpec,
         min_in_first_bin: bool = True,
     ):
         """
-        Identity scale.
+        Initializes an identity scale.
+
+        Args:
+            min_val: The minimum integer value of the scale.
+            max_val: The maximum integer value of the scale.
+            min_in_first_bin: If `True`, the minimum value is part of the first bin.
         """
-        _validate_min_max(min, max, f"{self.__class__.__name__}.__init__")
-        super().__init__((min, max), max - min, min_in_first_bin)
+        _validate_min_max(min_val, max_val, f"{self.__class__.__name__}.__init__")
+        super().__init__((min_val, max_val), max_val - min_val, min_in_first_bin)
 
 
 class LinearScale(Scale):
+    """
+    A linear scale that divides a range into equally sized bins.
+    """
 
     @_td_validate_call(ErrorCode.PVDQCL24)
     def __init__(
         self,
-        min: ScaleLimitSpec,
-        max: ScaleLimitSpec,
-        bins: Optional[BinsSpec] = MAX_BINS,
+        min_val: ScaleLimitSpec,
+        max_val: ScaleLimitSpec,
+        bins: BinsSpec = MAX_BINS,
         min_in_first_bin: bool = True,
     ):
         """
-        Linear scale.
+        Initializes a linear scale.
+
+        Args:
+            min_val: The minimum value of the scale.
+            max_val: The maximum value of the scale.
+            bins: The number of bins to create.
+            min_in_first_bin: If `True`, the minimum value is part of the first bin.
         """
-        _validate_min_max(min, max, f"{self.__class__.__name__}.__init__")
+        _validate_min_max(min_val, max_val, f"{self.__class__.__name__}.__init__")
         _validate_bins(bins, min_in_first_bin, f"{self.__class__.__name__}.__init__")
-        super().__init__((min, max), bins, min_in_first_bin)
+        super().__init__((min_val, max_val), bins, min_in_first_bin)
 
 
 class MonomialScale(Scale):
+    """
+    A monomial (power-law) scale.
+    """
 
     @_td_validate_call(ErrorCode.PVDQCL25)
     def __init__(
         self,
-        min: ScaleLimitSpec,
-        max: ScaleLimitSpec,
+        min_val: ScaleLimitSpec,
+        max_val: ScaleLimitSpec,
         power: ScalePowerSpec,
-        bins: Optional[BinsSpec] = MAX_BINS,
+        bins: BinsSpec = MAX_BINS,
         min_in_first_bin: bool = True,
     ):
         """
-        Monomial scale.
+        Initializes a monomial scale.
+
+        Args:
+            min_val: The minimum value of the scale.
+            max_val: The maximum value of the scale.
+            power: The exponent for the power-law function.
+            bins: The number of bins.
+            min_in_first_bin: If `True`, the minimum value is part of the first bin.
         """
-        _validate_min_max(min, max, f"{self.__class__.__name__}.__init__")
+        _validate_min_max(min_val, max_val, f"{self.__class__.__name__}.__init__")
         _validate_bins(bins, min_in_first_bin, f"{self.__class__.__name__}.__init__")
-        super().__init__((min, max), bins, min_in_first_bin)
+        super().__init__((min_val, max_val), bins, min_in_first_bin)
         self._power = power
 
     @property
     def power(self) -> ScalePowerSpec:
+        """Returns the power of the monomial scale."""
         return self._power
 
 
 class LogarithmicScale(Scale):
+    """
+    A logarithmic scale.
+    """
 
     @_td_validate_call(ErrorCode.PVDQCL26)
     def __init__(
         self,
-        min: ScaleLimitSpec,
-        max: ScaleLimitSpec,
+        min_val: ScaleLimitSpec,
+        max_val: ScaleLimitSpec,
         base: Optional[ScaleBaseSpec] = None,
-        bins: Optional[BinsSpec] = MAX_BINS,
+        bins: BinsSpec = MAX_BINS,
         min_in_first_bin: bool = True,
     ):
         """
-        Logarithmic scale.
+        Initializes a logarithmic scale.
+
+        Args:
+            min_val: The minimum value of the scale.
+            max_val: The maximum value of the scale.
+            base: The base of the logarithm. Defaults to `math.e`.
+            bins: The number of bins.
+            min_in_first_bin: If `True`, the minimum value is part of the first bin.
         """
-        _validate_min_max(min, max, f"{self.__class__.__name__}.__init__")
+        _validate_min_max(min_val, max_val, f"{self.__class__.__name__}.__init__")
         _validate_bins(bins, min_in_first_bin, f"{self.__class__.__name__}.__init__")
-        super().__init__((min, max), bins, min_in_first_bin)
-        self._base = base if base else math.e
+        super().__init__((min_val, max_val), bins, min_in_first_bin)
+        self._base = base or math.e
 
     @property
     def base(self) -> ScaleBaseSpec:
+        """Returns the base of the logarithmic scale."""
         return self._base
 
 
 class ExponentialScale(Scale):
+    """
+    An exponential scale.
+    """
 
     @_td_validate_call(ErrorCode.PVDQCL27)
     def __init__(
         self,
-        min: ScaleLimitSpec,
-        max: ScaleLimitSpec,
+        min_val: ScaleLimitSpec,
+        max_val: ScaleLimitSpec,
         base: Optional[ScaleBaseSpec] = None,
-        bins: Optional[BinsSpec] = MAX_BINS,
+        bins: BinsSpec = MAX_BINS,
         min_in_first_bin: bool = True,
     ):
         """
-        Exponential scale.
+        Initializes an exponential scale.
+
+        Args:
+            min_val: The minimum value of the scale.
+            max_val: The maximum value of the scale.
+            base: The base of the exponent. Defaults to `math.e`.
+            bins: The number of bins.
+            min_in_first_bin: If `True`, the minimum value is part of the first bin.
         """
-        _validate_min_max(min, max, f"{self.__class__.__name__}.__init__")
+        _validate_min_max(min_val, max_val, f"{self.__class__.__name__}.__init__")
         _validate_bins(bins, min_in_first_bin, f"{self.__class__.__name__}.__init__")
-        super().__init__((min, max), bins, min_in_first_bin)
-        self._base = base if base else math.e
+        super().__init__((min_val, max_val), bins, min_in_first_bin)
+        self._base = base or math.e
 
     @property
     def base(self) -> ScaleBaseSpec:
+        """Returns the base of the exponential scale."""
         return self._base
 
 
 class Categorizer(Classifier):
     """
-    Categorizer that bucketizes data in bins based on the give scale.
+    A classifier that bucketizes data into bins based on a given scale.
     """
 
     @_td_validate_call(ErrorCode.PVDQCL2)
@@ -293,239 +323,122 @@ class Categorizer(Classifier):
         tags: Optional[TagsSpec] = None,
     ):
         """
-        Create a categorizer that categorizes data based on the given scale.
+        Initializes a categorizer.
 
         Args:
-            column_names(ColsSpec, optional): Column(s) to categorize.
-            scale(Scale): Scale to use for categorization.
-            tags(str | list[str] | None, optional): Tag(s) for the classification
-                results. Tags allow performing multiple actions, with each
-                taking into
-                account only classifiers that have certain tag(s).
-
+            column_names: The column(s) to categorize.
+            scale: The scale to use for categorization.
+            tags: Optional tags for the classifier.
         """
         super().__init__(column_names, tags=tags)
         self._scale = scale
 
     @property
     def scale(self) -> Scale:
+        """Returns the scale used for categorization."""
         return self._scale
 
 
+def _validate_pattern(pattern: str, fn_name: str, error_code: ErrorCode) -> str:
+    """
+    Validates a regular expression pattern.
+    """
+    try:
+        re.compile(pattern)
+        return pattern
+    except re.error:
+        msg = (
+            f"Invalid regex pattern '{pattern}', error: {re.error}."
+        )
+        raise _validation_error(error_code, fn_name, msg)
+
+class Matches(BoolClassifier):
+    """
+    A boolean classifier that checks if a value matches a regex pattern.
+    """
+
+    @_td_validate_call(ErrorCode.PVDQCL22)
+    def __init__(
+            self,
+            column_names: Optional[ColumNamesWithAltSpec] = None,
+            *,
+            pattern: str,
+            tags: Optional[TagsSpec] = None,
+    ):
+        """
+        Initializes the `Matches` classifier.
+
+        Args:
+            column_names: The column(s) to check.
+            pattern: The regular expression to match against.
+            tags: Optional tags for the classifier.
+        """
+        super().__init__(column_names, tags=tags)
+        self._pattern = _validate_pattern(pattern,
+                                          f"{self.__class__.__name__}.__init__",
+                                          ErrorCode.PVDQCL35)
+
+    @property
+    def pattern(self) -> str:
+        """Returns the regex pattern."""
+        return self._pattern
+
 class DoesNotMatch(BoolClassifier):
     """
-    REGEX NOT MATCH classifier.
+    A boolean classifier that checks if a value does *not* match a regex pattern.
     """
 
     @_td_validate_call(ErrorCode.PVDQCL3)
     def __init__(
         self,
         column_names: Optional[ColumNamesWithAltSpec] = None,
-        ignore_nulls: bool = False,
         *,
-        regex: str,
+        pattern: str,
         tags: Optional[TagsSpec] = None,
     ):
         """
-        Constructor.
+        Initializes the `DoesNotMatch` classifier.
 
         Args:
-            column_names:
-                Column name(s) to apply the classifier to and to store the
-                classification result.
-                If a `str | list[str]` is given, those are the column names
-                to apply the classifier to. The classification results will be
-                stored in columns named 'dq.<column_name>_<classifier_class>`.
-                If a `tuple[str, str] | list[tuple[str, str]]` is given, the
-                first element of the tuple(s) is the column to apply the
-                classifier to and the second element of the tuple(s) is the
-                name of the column that will store the classification result.
-                If `None`, the classifier will be applied to all columns and
-                the results will be stored in columns named
-                'dq.<column_name>_<classifier_class>`.
-                Defaults to None.
-            ignore_nulls (bool, optional): Whether to ignore null values when
-                classifying. If True, null values will not be classified.
-                Defaults to False.
-            regex (str): The regex pattern to not match against.
-            tags (str | list[str] | None, optional): Tag(s) for the classifier.
-                Tags can be used by DataQuality operations to select which
-                classifiers
-                to operate on. If a DataQuality operation does not define a
-                tag, it
-                operates on all defined classifiers. If a DataQuality
-                operation defines
-                one or more tags, it will only operate on classifiers
-                that have at least
-                one of those tags.
-                Defaults to None.
+            column_names: The column(s) to apply the check to.
+            pattern: The regular expression to not match against.
+            tags: Optional tags for the classifier.
         """
         super().__init__(column_names, tags=tags)
-        self._ignore_nulls = ignore_nulls
-        self._regex = regex
+        self._pattern = _validate_pattern(pattern,
+                                          f"{self.__class__.__name__}.__init__",
+                                          ErrorCode.PVDQCL36)
 
     @property
-    def ignore_nulls(self) -> bool:
-        return self._ignore_nulls
-
-    @property
-    def regex(self) -> str:
-        return self._regex
+    def pattern(self) -> str:
+        """Returns the regex pattern."""
+        return self._pattern
 
 
-class HasColumns(BoolClassifier):
+class HasLength(BoolClassifier):
     """
-    HAS COLUMNS classifier. Checks the given columns exist in the table.
-    """
-
-    @_td_validate_call(ErrorCode.PVDQCL4)
-    def __init__(
-        self,
-        column_names: ColumnNamesSpec,
-        mode: HasColumnsModeSpec = "at_least",
-        *,
-        tags: Optional[TagsSpec] = None,
-    ):
-        """
-        Constructor.
-
-        Args:
-            column_names(list[str] | str):
-                Column name(s) to check for existence.
-            mode(Literal["at_least", "exact"], optional): Mode of checking
-            columns. If
-                "at_least", checks that at least the given columns exist.
-                If "exact",
-                checks that exactly the given columns exist. Defaults to
-                "at_least".
-            tags (str | list[str] | None, optional): Tag(s) for the classifier.
-                Tags can be used by DataQuality operations to select which
-                classifiers
-                to operate on. If a DataQuality operation does not define a
-                tag, it
-                operates on all defined classifiers. If a DataQuality
-                operation defines
-                one or more tags, it will only operate on classifiers that
-                have at least
-                one of those tags.
-                Defaults to None.
-        """
-        super().__init__(column_names, tags=tags)
-        self._mode = mode
-
-    @property
-    def mode(self) -> HasColumnsModeSpec:
-        return self._mode
-
-
-def _validate_column_types(value: list[ColumnTypeSpec]):
-    for c_name, c_type in value:
-        if c_type not in TF_DATA_TYPES:
-            msg = (
-                " Parameter validation error. "
-                "Function 'HasColumnTypes.__init__', "
-                f" 'column_type'=('{c_name}', '{c_type}'): "
-                "Invalid data type."
-            )
-            raise ParameterValidationError(ErrorCode.PVDQCL6, msg)
-    return
-
-
-class HasColumnTypes(BoolClassifier):
-    """
-    COLUMN TYPES classifier. Checks that the given columns match the given
-    types.
-    """
-
-    @_td_validate_call(ErrorCode.PVDQCL5)
-    def __init__(
-        self,
-        column_types: ColumnTypesSpec,
-        *,
-        tags: Optional[TagsSpec] = None,
-    ):
-        """
-        Constructor.
-
-        Args:
-            column_types(list[tuple[str, DataType] | tuple[str, DataType]]):
-                Column name(s) and their expected data types to check for.
-            tags (str | list[str] | None, optional): Tag(s) for the classifier.
-                Tags can be used by DataQuality operations to select which
-                classifiers
-                to operate on. If a DataQuality operation does not define a
-                tag, it
-                operates on all defined classifiers. If a DataQuality
-                operation defines
-                one or more tags, it will only operate on classifiers
-                that have at least
-                one of those tags.
-                Defaults to None.
-        """
-        column_types = _normalize_to_list(column_types)
-        column_names = [name for name, _ in _normalize_to_list(column_types)]
-        # noinspection PyTypeChecker
-        super().__init__(column_names, tags=tags)
-        _validate_column_types(column_types)
-        self._column_types = column_types
-
-    @property
-    def column_types(self) -> list[ColumnTypeSpec]:
-        return self._column_types
-
-
-class HasLen(BoolClassifier):
-    """
-    HAS LEN classifier. Checks minimum or maximum value length.
+    A boolean classifier that checks if the length of a value is within a given range.
     """
 
     @_td_validate_call(ErrorCode.PVDQCL7)
     def __init__(
         self,
         column_names: Optional[ColumNamesWithAltSpec] = None,
-        ignore_nulls: bool = False,
         min: LenSpec = 0,
         max: LenSpec = sys.maxsize,
         *,
         tags: Optional[TagsSpec] = None,
     ):
         """
-        Constructor.
+        Initializes the `HasLength` classifier.
 
         Args:
-            column_names:
-                Column name(s) to apply the classifier to and to store the
-                classification result.
-                If a `str | list[str]` is given, those are the column names
-                to apply the classifier to. The classification results will be
-                stored in columns named 'dq.<column_name>_<classifier_class>`.
-                If a `tuple[str, str] | list[tuple[str, str]]` is given, the
-                first element of the tuple(s) is the column to apply the
-                classifier to and the second element of the tuple(s) is the
-                name of the column that will store the classification result.
-                If `None`, the classifier will be applied to all columns and
-                the results will be stored in columns named
-                'dq.<column_name>_<classifier_class>`.
-                Defaults to None.
-            ignore_nulls (bool, optional): Whether to ignore null values when
-                classifying. If True, null values will not be classified.
-                Defaults to False.
-            min (int | float, optional): Minimum length value. Defaults to -inf.
-            max (int | float, optional): Maximum length value. Defaults to inf.
-            tags (str | list[str] | None, optional): Tag(s) for the classifier.
-                Tags can be used by DataQuality operations to select which
-                 classifiers
-                to operate on. If a DataQuality operation does not define a
-                tag, it
-                operates on all defined classifiers. If a DataQuality
-                operation defines
-                one or more tags, it will only operate on classifiers that
-                have at least
-                one of those tags.
-                Defaults to None.
+            column_names: The column(s) to check.
+            min_len: The minimum allowed length (inclusive).
+            max_len: The maximum allowed length (inclusive).
+            tags: Optional tags for the classifier.
         """
         super().__init__(column_names, tags=tags)
-        self._ignore_nulls = ignore_nulls
         if min > max:
             msg = (
                 " Parameter validation error. "
@@ -537,506 +450,283 @@ class HasLen(BoolClassifier):
         self._max = max
 
     @property
-    def ignore_nulls(self) -> bool:
-        return self._ignore_nulls
-
-    @property
     def min(self) -> int:
+        """Returns the minimum allowed length."""
         return self._min
 
     @property
     def max(self) -> int:
+        """Returns the maximum allowed length."""
         return self._max
 
 
 class IsIn(BoolClassifier):
     """
-    IS IN classifier.
+    A boolean classifier that checks if a value is in a specified set of values.
     """
 
     @_td_validate_call(ErrorCode.PVDQCL9)
     def __init__(
         self,
         column_names: Optional[ColumNamesWithAltSpec] = None,
-        ignore_nulls: bool = False,
         *,
-        set: Collection,
+        values: Collection,
         tags: Optional[TagsSpec] = None,
     ):
         """
-        Constructor.
+        Initializes the `IsIn` classifier.
 
         Args:
-            column_names:
-                Column name(s) to apply the classifier to and to store the
-                classification result.
-                If a `str | list[str]` is given, those are the column names
-                to apply the classifier to. The classification results will be
-                stored in columns named 'dq.<column_name>_<classifier_class>`.
-                If a `tuple[str, str] | list[tuple[str, str]]` is given, the
-                first element of the tuple(s) is the column to apply the
-                classifier to and the second element of the tuple(s) is the
-                name of the column that will store the classification result.
-                If `None`, the classifier will be applied to all columns and
-                the results will be stored in columns named
-                'dq.<column_name>_<classifier_class>`.
-                Defaults to None.
-            ignore_nulls (bool, optional): Whether to ignore null values when
-                classifying. If True, null values will not be classified.
-                Defaults to False.
-            set (Collection): The set of values to check membership against.
-            tags (str | list[str] | None, optional): Tag(s) for the classifier.
-                Tags can be used by DataQuality operations to select which
-                classifiers
-                to operate on. If a DataQuality operation does not define a
-                tag, it
-                operates on all defined classifiers. If a DataQuality
-                operation defines
-                one or more tags, it will only operate on classifiers that
-                have at least
-                one of those tags.
-                Defaults to None.
+            column_names: The column(s) to check.
+            values: The collection of values to check against.
+            tags: Optional tags for the classifier.
         """
         super().__init__(column_names, tags=tags)
-        self._ignore_nulls = ignore_nulls
-        self._set = set
+        self._values = _normalize_to_set(values)
 
     @property
-    def ignore_nulls(self) -> bool:
-        return self._ignore_nulls
-
-    @property
-    def set(self) -> Collection:
-        return self._set
+    def values(self) -> AbstractSet:
+        """Returns the set of values for the check."""
+        return self._values
 
 
 class IsNotIn(BoolClassifier):
     """
-    NOT IN classifier.
+    A boolean classifier that checks if a value is *not* in a specified set of values.
     """
 
     @_td_validate_call(ErrorCode.PVDQCL10)
     def __init__(
         self,
         column_names: Optional[ColumNamesWithAltSpec] = None,
-        ignore_nulls: bool = False,
         *,
-        set: Collection,
+        values: Collection,
         tags: Optional[TagsSpec] = None,
     ):
         """
-        Constructor.
+        Initializes the `IsNotIn` classifier.
 
         Args:
-            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] |
-            None, optional):
-                Column name(s) to apply the classifier to and to store the
-                classification result.
-                If a `str | list[str]` is given, those are the column names
-                to apply the classifier to. The classification results will be
-                stored in columns named 'dq.<column_name>_<classifier_class>`.
-                If a `tuple[str, str] | list[tuple[str, str]]` is given, the
-                first element of the tuple(s) is the column to apply the
-                classifier to and the second element of the tuple(s) is the
-                name of the column that will store the classification result.
-                If `None`, the classifier will be applied to all columns and
-                the results will be stored in columns named
-                'dq.<column_name>_<classifier_class>`.
-                Defaults to None.
-            ignore_nulls (bool, optional): Whether to ignore null values when
-                classifying. If True, null values will not be classified.
-                Defaults to False.
-            set (Collection): The set of values to check membership against.
-            tags (str | list[str] | None, optional): Tag(s) for the classifier.
-                Tags can be used by DataQuality operations to select which classifiers
-                to operate on. If a DataQuality operation does not define a tag, it
-                operates on all defined classifiers. If a DataQuality operation defines
-                one or more tags, it will only operate on classifiers that have at least
-                one of those tags.
-                Defaults to None.
+            column_names: The column(s) to check.
+            values: The collection of values to check against.
+            tags: Optional tags for the classifier.
         """
         super().__init__(column_names, tags=tags)
-        self._ignore_nulls = ignore_nulls
-        self._set = set
+        self._values = _normalize_to_set(values)
 
     @property
-    def ignore_nulls(self) -> bool:
-        return self._ignore_nulls
-
-    @property
-    def set(self) -> Collection:
-        return self._set
+    def values(self) -> AbstractSet:
+        """Returns the set of values for the check."""
+        return self._values
 
 
-class IsInRange(BoolClassifier):
-    """
-    IS IN RANGE classifier. Checks that the value is in the given range.
-    """
-
-    @_td_validate_call(ErrorCode.PVDQCL10)
-    def __init__(
-        self,
-        column_names: Optional[ColumNamesWithAltSpec] = None,
-        ignore_nulls: bool = False,
-        min: MinSpec = float("-inf"),
-        max: MaxSpec = float("inf"),
-        closed: RangeClosedOnSpec = "both",
-        *,
-        tags: TagsSpec = None,
-    ):
-        """
-        Constructor.
-
-        Args:
-            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] |
-            None, optional):
-                Column name(s) to apply the classifier to and to store the
-                classification result.
-                If a `str | list[str]` is given, those are the column names
-                to apply the classifier to. The classification results will be
-                stored in columns named 'dq.<column_name>_<classifier_class>`.
-                If a `tuple[str, str] | list[tuple[str, str]]` is given, the
-                first element of the tuple(s) is the column to apply the
-                classifier to and the second element of the tuple(s) is the
-                name of the column that will store the classification result.
-                If `None`, the classifier will be applied to all columns and
-                the results will be stored in columns named
-                'dq.<column_name>_<classifier_class>`.
-                Defaults to None.
-            ignore_nulls (bool, optional): Whether to ignore null values when
-                classifying. If True, null values will not be classified.
-                Defaults to False.
-            min (int | float, optional): Minimum length value. Defaults to -inf.
-            max (int | float, optional): Maximum length value. Defaults to inf.
-            closed (Literal["both", "lower", "none", "upper"], optional): Whether the
-                interval is closed on the 'both', 'left', 'right' or 'none' sides.
-                Defaults to 'both'.
-            tags (str | list[str] | None, optional): Tag(s) for the classifier.
-                Tags can be used by DataQuality operations to select which classifiers
-                to operate on. If a DataQuality operation does not define a tag, it
-                operates on all defined classifiers. If a DataQuality operation defines
-                one or more tags, it will only operate on classifiers that have at least
-                one of those tags.
-                Defaults to None.
-        """
-        super().__init__(column_names, tags=tags)
-        self._ignore_nulls = ignore_nulls
+def _validate_range(
+    min: Optional[RangeValueSpec], max: Optional[RangeValueSpec], error_code: ErrorCode
+):
+    if min is not None and max is not None:
+        if type(min) is not type(max):
+            msg = (
+                " Parameter validation error. "
+                "Function 'IsInRange.__init__', "
+                f" min='{min}' and max='{max}' must be of the same type."
+            )
+            raise ParameterValidationError(error_code, msg)
         if min > max:
             msg = (
                 " Parameter validation error. "
                 "Function 'IsInRange.__init__', "
                 f" min='{min}' is greater than max='{max}'."
             )
-            raise ParameterValidationError(ErrorCode.PVDQCL11, msg)
+            raise ParameterValidationError(error_code, msg)
+
+
+class IsBetween(BoolClassifier):
+    """
+    A boolean classifier that checks if a value is within a specified range.
+    """
+
+    @_td_validate_call(ErrorCode.PVDQCL10)
+    def __init__(
+        self,
+        column_names: Optional[ColumNamesWithAltSpec] = None,
+        min: Optional[RangeValueSpec] = None,
+        max: Optional[RangeValueSpec] = None,
+        closed: RangeClosedOnSpec = "both",
+        *,
+        tags: Optional[TagsSpec] = None,
+    ):
+        """
+        Initializes the `IsBetween` classifier.
+
+        Args:
+            column_names: The column(s) to check.
+            min_val: The minimum value of the range.
+            max_val: The maximum value of the range.
+            closed: Specifies if the range is inclusive ("both", "lower", "upper") or
+                exclusive ("none").
+            tags: Optional tags for the classifier.
+        """
+        super().__init__(column_names, tags=tags)
+        _validate_range(min, max, ErrorCode.PVDQCL11)
         self._min = min
         self._max = max
         self._closed = closed
 
     @property
-    def ignore_nulls(self) -> bool:
-        return self._ignore_nulls
-
-    @property
-    def min(self) -> MinSpec:
+    def min(self) -> Optional[RangeValueSpec]:
+        """Returns the minimum value of the range."""
         return self._min
 
     @property
-    def max(self) -> MaxSpec:
+    def max(self) -> Optional[RangeValueSpec]:
+        """Returns the maximum value of the range."""
         return self._max
 
     @property
     def closed(self) -> RangeClosedOnSpec:
+        """Returns how the range is closed."""
         return self._closed
 
 
-class IsNotInRange(BoolClassifier):
+class IsNotBetween(BoolClassifier):
     """
-    NOT IN RANGE classifier. Checks that the value is not in the given range.
+    A boolean classifier that checks if a value is *outside* a specified range.
     """
 
     @_td_validate_call(ErrorCode.PVDQCL12)
     def __init__(
         self,
         column_names: Optional[ColumNamesWithAltSpec] = None,
-        ignore_nulls: bool = False,
-        min: MinSpec = float("-inf"),
-        max: MaxSpec = float("inf"),
+        min: Optional[RangeValueSpec] = None,
+        max: Optional[RangeValueSpec] = None,
         closed: RangeClosedOnSpec = "both",
         *,
-        tags: TagsSpec = None,
+        tags: Optional[TagsSpec] = None,
     ):
         """
-        Constructor.
+        Initializes the `IsNotBetween` classifier.
 
         Args:
-            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] |
-            None, optional):
-                Column name(s) to apply the classifier to and to store the
-                classification result.
-                If a `str | list[str]` is given, those are the column names
-                to apply the classifier to. The classification results will be
-                stored in columns named 'dq.<column_name>_<classifier_class>`.
-                If a `tuple[str, str] | list[tuple[str, str]]` is given, the
-                first element of the tuple(s) is the column to apply the
-                classifier to and the second element of the tuple(s) is the
-                name of the column that will store the classification result.
-                If `None`, the classifier will be applied to all columns and
-                the results will be stored in columns named
-                'dq.<column_name>_<classifier_class>`.
-                Defaults to None.
-            ignore_nulls (bool, optional): Whether to ignore null values when
-                classifying. If True, null values will not be classified.
-                Defaults to False.
-            min (int | float, optional): Minimum length value. Defaults to -inf.
-            max (int | float, optional): Maximum length value. Defaults to inf.
-            closed (Literal["both", "lower", "none", "upper"], optional): Whether the
-                interval is closed on the 'both', 'left', 'right' or 'none' sides.
-                Defaults to 'both'.
-            tags (str | list[str] | None, optional): Tag(s) for the classifier.
-                Tags can be used by DataQuality operations to select which classifiers
-                to operate on. If a DataQuality operation does not define a tag, it
-                operates on all defined classifiers. If a DataQuality operation defines
-                one or more tags, it will only operate on classifiers that have at least
-                one of those tags.
-                Defaults to None.
+            column_names: The column(s) to check.
+            min_val: The minimum value of the range.
+            max_val: The maximum value of the range.
+            closed: Specifies if the range is inclusive ("both", "lower", "upper") or
+                exclusive ("none").
+            tags: Optional tags for the classifier.
         """
         super().__init__(column_names, tags=tags)
-        self._ignore_nulls = ignore_nulls
-        if min > max:
-            msg = (
-                " Parameter validation error. "
-                "Function 'NotInRange.__init__', "
-                f" min='{min}' is greater than max='{max}'."
-            )
-            raise ParameterValidationError(ErrorCode.PVDQCL13, msg)
+        _validate_range(min, max, ErrorCode.PVDQCL11)
         self._min = min
         self._max = max
         self._closed = closed
 
     @property
-    def ignore_nulls(self) -> bool:
-        return self._ignore_nulls
-
-    @property
-    def min(self) -> MinSpec:
+    def min(self) -> Optional[RangeValueSpec]:
+        """Returns the minimum value of the range."""
         return self._min
 
     @property
-    def max(self) -> MaxSpec:
+    def max(self) -> Optional[RangeValueSpec]:
+        """Returns the maximum value of the range."""
         return self._max
 
     @property
     def closed(self) -> RangeClosedOnSpec:
+        """Returns how the range is closed."""
         return self._closed
 
 
 class IsNan(BoolClassifier):
     """
-    IS NAN classifier.
+    A boolean classifier that checks if a value is `NaN` (Not a Number).
     """
 
     @_td_validate_call(ErrorCode.PVDQCL14)
     def __init__(
         self,
         column_names: Optional[ColumNamesWithAltSpec] = None,
-        ignore_nulls: bool = False,
         *,
         tags: Optional[TagsSpec] = None,
     ):
         """
-        Constructor.
+        Initializes the `IsNan` classifier.
 
         Args:
-            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] |
-            None, optional):
-                Column name(s) to apply the classifier to and to store the
-                classification result.
-                If a `str | list[str]` is given, those are the column names
-                to apply the classifier to. The classification results will be
-                stored in columns named 'dq.<column_name>_<classifier_class>`.
-                If a `tuple[str, str] | list[tuple[str, str]]` is given, the
-                first element of the tuple(s) is the column to apply the
-                classifier to and the second element of the tuple(s) is the
-                name of the column that will store the classification result.
-                If `None`, the classifier will be applied to all columns and
-                the results will be stored in columns named
-                'dq.<column_name>_<classifier_class>`.
-                Defaults to None.
-            ignore_nulls (bool, optional): Whether to ignore null values when
-                classifying. If True, null values will not be classified.
-                Defaults to False.
-            tags (str | list[str] | None, optional): Tag(s) for the classifier.
-                Tags can be used by DataQuality operations to select which classifiers
-                to operate on. If a DataQuality operation does not define a tag, it
-                operates on all defined classifiers. If a DataQuality operation defines
-                one or more tags, it will only operate on classifiers that have at least
-                one of those tags.
-                Defaults to None.
+            column_names: The column(s) to check.
+            tags: Optional tags for the classifier.
         """
         super().__init__(column_names, tags=tags)
-        self._ignore_nulls = ignore_nulls
-
-    @property
-    def ignore_nulls(self) -> bool:
-        return self._ignore_nulls
 
 
 class IsNegative(BoolClassifier):
     """
-    IS NEGATIVE classifier.
+    A boolean classifier that checks if a numeric value is negative.
     """
 
     @_td_validate_call(ErrorCode.PVDQCL14)
     def __init__(
         self,
         column_names: Optional[ColumNamesWithAltSpec] = None,
-        ignore_nulls: bool = False,
         *,
         tags: Optional[TagsSpec] = None,
     ):
         """
-        Constructor.
+        Initializes the `IsNegative` classifier.
 
         Args:
-            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] |
-            None, optional):
-                Column name(s) to apply the classifier to and to store the
-                classification result.
-                If a `str | list[str]` is given, those are the column names
-                to apply the classifier to. The classification results will be
-                stored in columns named 'dq.<column_name>_<classifier_class>`.
-                If a `tuple[str, str] | list[tuple[str, str]]` is given, the
-                first element of the tuple(s) is the column to apply the
-                classifier to and the second element of the tuple(s) is the
-                name of the column that will store the classification result.
-                If `None`, the classifier will be applied to all columns and
-                the results will be stored in columns named
-                'dq.<column_name>_<classifier_class>`.
-                Defaults to None.
-            ignore_nulls (bool, optional): Whether to ignore null values when
-                classifying. If True, null values will not be classified.
-                Defaults to False.
-            tags (str | list[str] | None, optional): Tag(s) for the classifier.
-                Tags can be used by DataQuality operations to select which classifiers
-                to operate on. If a DataQuality operation does not define a tag, it
-                operates on all defined classifiers. If a DataQuality operation defines
-                one or more tags, it will only operate on classifiers that have at least
-                one of those tags.
-                Defaults to None.
+            column_names: The column(s) to check.
+            tags: Optional tags for the classifier.
         """
         super().__init__(column_names, tags=tags)
-        self._ignore_nulls = ignore_nulls
-
-    @property
-    def ignore_nulls(self) -> bool:
-        return self._ignore_nulls
 
 
 class IsNegativeOrZero(BoolClassifier):
     """
-    IS NEGATIVE OR ZERO classifier.
+    A boolean classifier that checks if a numeric value is negative or zero.
     """
 
     @_td_validate_call(ErrorCode.PVDQCL14)
     def __init__(
         self,
         column_names: Optional[ColumNamesWithAltSpec] = None,
-        ignore_nulls: bool = False,
         *,
         tags: Optional[TagsSpec] = None,
     ):
         """
-        Constructor.
+        Initializes the `IsNegativeOrZero` classifier.
 
         Args:
-            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] |
-            None, optional):
-                Column name(s) to apply the classifier to and to store the
-                classification result.
-                If a `str | list[str]` is given, those are the column names
-                to apply the classifier to. The classification results will be
-                stored in columns named 'dq.<column_name>_<classifier_class>`.
-                If a `tuple[str, str] | list[tuple[str, str]]` is given, the
-                first element of the tuple(s) is the column to apply the
-                classifier to and the second element of the tuple(s) is the
-                name of the column that will store the classification result.
-                If `None`, the classifier will be applied to all columns and
-                the results will be stored in columns named
-                'dq.<column_name>_<classifier_class>`.
-                Defaults to None.
-            ignore_nulls (bool, optional): Whether to ignore null values when
-                classifying. If True, null values will not be classified.
-                Defaults to False.
-            tags (str | list[str] | None, optional): Tag(s) for the classifier.
-                Tags can be used by DataQuality operations to select which classifiers
-                to operate on. If a DataQuality operation does not define a tag, it
-                operates on all defined classifiers. If a DataQuality operation defines
-                one or more tags, it will only operate on classifiers that have at least
-                one of those tags.
-                Defaults to None.
+            column_names: The column(s) to check.
+            tags: Optional tags for the classifier.
         """
         super().__init__(column_names, tags=tags)
-        self._ignore_nulls = ignore_nulls
-
-    @property
-    def ignore_nulls(self) -> bool:
-        return self._ignore_nulls
 
 
 class IsNotNan(BoolClassifier):
     """
-    IS NOT NAN classifier.
+    A boolean classifier that checks if a value is *not* `NaN`.
     """
 
     @_td_validate_call(ErrorCode.PVDQCL14)
     def __init__(
         self,
         column_names: Optional[ColumNamesWithAltSpec] = None,
-        ignore_nulls: bool = False,
         *,
         tags: Optional[TagsSpec] = None,
     ):
         """
-        Constructor.
+        Initializes the `IsNotNan` classifier.
 
         Args:
-            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] |
-            None, optional):
-                Column name(s) to apply the classifier to and to store the
-                classification result.
-                If a `str | list[str]` is given, those are the column names
-                to apply the classifier to. The classification results will be
-                stored in columns named 'dq.<column_name>_<classifier_class>`.
-                If a `tuple[str, str] | list[tuple[str, str]]` is given, the
-                first element of the tuple(s) is the column to apply the
-                classifier to and the second element of the tuple(s) is the
-                name of the column that will store the classification result.
-                If `None`, the classifier will be applied to all columns and
-                the results will be stored in columns named
-                'dq.<column_name>_<classifier_class>`.
-                Defaults to None.
-            ignore_nulls (bool, optional): Whether to ignore null values when
-                classifying. If True, null values will not be classified.
-                Defaults to False.
-            tags (str | list[str] | None, optional): Tag(s) for the classifier.
-                Tags can be used by DataQuality operations to select which classifiers
-                to operate on. If a DataQuality operation does not define a tag, it
-                operates on all defined classifiers. If a DataQuality operation defines
-                one or more tags, it will only operate on classifiers that have at least
-                one of those tags.
-                Defaults to None.
+            column_names: The column(s) to check.
+            tags: Optional tags for the classifier.
         """
         super().__init__(column_names, tags=tags)
-        self._ignore_nulls = ignore_nulls
-
-    @property
-    def ignore_nulls(self) -> bool:
-        return self._ignore_nulls
 
 
 class IsNotNull(BoolClassifier):
     """
-    IS NOT NULL classifier.
+    A boolean classifier that checks if a value is *not* `NULL`.
     """
 
     @_td_validate_call(ErrorCode.PVDQCL15)
@@ -1047,38 +737,18 @@ class IsNotNull(BoolClassifier):
         tags: Optional[TagsSpec] = None,
     ):
         """
-        Constructor.
+        Initializes the `IsNotNull` classifier.
 
         Args:
-            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] |
-            None, optional):
-                Column name(s) to apply the classifier to and to store the
-                classification result.
-                If a `str | list[str]` is given, those are the column names
-                to apply the classifier to. The classification results will be
-                stored in columns named 'dq.<column_name>_<classifier_class>`.
-                If a `tuple[str, str] | list[tuple[str, str]]` is given, the
-                first element of the tuple(s) is the column to apply the
-                classifier to and the second element of the tuple(s) is the
-                name of the column that will store the classification result.
-                If `None`, the classifier will be applied to all columns and
-                the results will be stored in columns named
-                'dq.<column_name>_<classifier_class>`.
-                Defaults to None.
-            tags (str | list[str] | None, optional): Tag(s) for the classifier.
-                Tags can be used by DataQuality operations to select which classifiers
-                to operate on. If a DataQuality operation does not define a tag, it
-                operates on all defined classifiers. If a DataQuality operation defines
-                one or more tags, it will only operate on classifiers that have at least
-                one of those tags.
-                Defaults to None.
+            column_names: The column(s) to check.
+            tags: Optional tags for the classifier.
         """
         super().__init__(column_names, tags=tags)
 
 
 class IsNotNullNorNan(BoolClassifier):
     """
-    IS NOT NULL AND NOT NAN classifier.
+    A boolean classifier that checks if a value is neither `NULL` nor `NaN`.
     """
 
     @_td_validate_call(ErrorCode.PVDQCL15)
@@ -1089,95 +759,40 @@ class IsNotNullNorNan(BoolClassifier):
         tags: Optional[TagsSpec] = None,
     ):
         """
-        Constructor.
+        Initializes the `IsNotNullNorNan` classifier.
 
         Args:
-            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] |
-            None, optional):
-                Column name(s) to apply the classifier to and to store the
-                classification result.
-                If a `str | list[str]` is given, those are the column names
-                to apply the classifier to. The classification results will be
-                stored in columns named 'dq.<column_name>_<classifier_class>`.
-                If a `tuple[str, str] | list[tuple[str, str]]` is given, the
-                first element of the tuple(s) is the column to apply the
-                classifier to and the second element of the tuple(s) is the
-                name of the column that will store the classification result.
-                If `None`, the classifier will be applied to all columns and
-                the results will be stored in columns named
-                'dq.<column_name>_<classifier_class>`.
-                Defaults to None.
-            tags (str | list[str] | None, optional): Tag(s) for the classifier.
-                Tags can be used by DataQuality operations to select which classifiers
-                to operate on. If a DataQuality operation does not define a tag, it
-                operates on all defined classifiers. If a DataQuality operation defines
-                one or more tags, it will only operate on classifiers that have at least
-                one of those tags.
-                Defaults to None.
+            column_names: The column(s) to check.
+            tags: Optional tags for the classifier.
         """
         super().__init__(column_names=column_names, tags=tags)
 
 
 class IsNotZero(BoolClassifier):
     """
-    IS NOT ZERO classifier.
+    A boolean classifier that checks if a numeric value is not zero.
     """
 
     @_td_validate_call(ErrorCode.PVDQCL16)
     def __init__(
         self,
         column_names: Optional[ColumNamesWithAltSpec] = None,
-        ignore_nulls: bool = False,
         *,
         tags: Optional[TagsSpec] = None,
     ):
         """
-        Constructor.
+        Initializes the `IsNotZero` classifier.
 
         Args:
-            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] |
-            None, optional):
-                Column name(s) to apply the classifier to and to store the
-                classification result.
-                If a `str | list[str]` is given, those are the column names
-                to apply the classifier to. The classification results will be
-                stored in columns named 'dq.<column_name>_<classifier_class>`.
-                If a `tuple[str, str] | list[tuple[str, str]]` is given, the
-                first element of the tuple(s) is the column to apply the
-                classifier to and the second element of the tuple(s) is the
-                name of the column that will store the classification result.
-                If `None`, the classifier will be applied to all columns and
-                the results will be stored in columns named
-                'dq.<column_name>_<classifier_class>`.
-                Defaults to None.
-            ignore_nulls (bool, optional): Whether to ignore null values when
-                classifying. If True, null values will not be classified.
-                Defaults to False.
-            tags (str | list[str] | None, optional): Tag(s) for the classifier.
-                Tags can be used by DataQuality operations to select which classifiers
-                to operate on. If a DataQuality operation does not define a tag, it
-                operates on all defined classifiers. If a DataQuality operation defines
-                one or more tags, it will only operate on classifiers that have at least
-                one of those tags.
-                Defaults to None.
+            column_names: The column(s) to check.
+            tags: Optional tags for the classifier.
         """
         super().__init__(column_names, tags=tags)
-        self.ignore_nulls = ignore_nulls
-
-    @property
-    def ignore_nulls(self) -> bool:
-        return self._ignore_nulls
-
-    @ignore_nulls.setter
-    def ignore_nulls(self, value: bool):
-        if not isinstance(value, bool):
-            raise DataQualityConfigurationError(ErrorCode.DQCE13, value, type(value))
-        self._ignore_nulls = value
 
 
 class IsNull(BoolClassifier):
     """
-    IS NULL classifier.
+    A boolean classifier that checks if a value is `NULL`.
     """
 
     @_td_validate_call(ErrorCode.PVDQCL17)
@@ -1188,38 +803,18 @@ class IsNull(BoolClassifier):
         tags: Optional[TagsSpec] = None,
     ):
         """
-        Constructor.
+        Initializes the `IsNull` classifier.
 
         Args:
-            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] |
-            None, optional):
-                Column name(s) to apply the classifier to and to store the
-                classification result.
-                If a `str | list[str]` is given, those are the column names
-                to apply the classifier to. The classification results will be
-                stored in columns named 'dq.<column_name>_<classifier_class>`.
-                If a `tuple[str, str] | list[tuple[str, str]]` is given, the
-                first element of the tuple(s) is the column to apply the
-                classifier to and the second element of the tuple(s) is the
-                name of the column that will store the classification result.
-                If `None`, the classifier will be applied to all columns and
-                the results will be stored in columns named
-                'dq.<column_name>_<classifier_class>`.
-                Defaults to None.
-            tags (str | list[str] | None, optional): Tag(s) for the classifier.
-                Tags can be used by DataQuality operations to select which classifiers
-                to operate on. If a DataQuality operation does not define a tag, it
-                operates on all defined classifiers. If a DataQuality operation defines
-                one or more tags, it will only operate on classifiers that have at least
-                one of those tags.
-                Defaults to None.
+            column_names: The column(s) to check.
+            tags: Optional tags for the classifier.
         """
         super().__init__(column_names, tags=tags)
 
 
 class IsNullOrNan(BoolClassifier):
     """
-    IS NULL OR NAN classifier.
+    A boolean classifier that checks if a value is either `NULL` or `NaN`.
     """
 
     @_td_validate_call(ErrorCode.PVDQCL18)
@@ -1230,241 +825,77 @@ class IsNullOrNan(BoolClassifier):
         tags: Optional[TagsSpec] = None,
     ):
         """
-        Constructor.
+        Initializes the `IsNullOrNan` classifier.
 
         Args:
-            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] |
-            None, optional):
-                Column name(s) to apply the classifier to and to store the
-                classification result.
-                If a `str | list[str]` is given, those are the column names
-                to apply the classifier to. The classification results will be
-                stored in columns named 'dq.<column_name>_<classifier_class>`.
-                If a `tuple[str, str] | list[tuple[str, str]]` is given, the
-                first element of the tuple(s) is the column to apply the
-                classifier to and the second element of the tuple(s) is the
-                name of the column that will store the classification result.
-                If `None`, the classifier will be applied to all columns and
-                the results will be stored in columns named
-                'dq.<column_name>_<classifier_class>`.
-                Defaults to None.
-            tags (str | list[str] | None, optional): Tag(s) for the classifier.
-                Tags can be used by DataQuality operations to select which classifiers
-                to operate on. If a DataQuality operation does not define a tag, it
-                operates on all defined classifiers. If a DataQuality operation defines
-                one or more tags, it will only operate on classifiers that have at least
-                one of those tags.
-                Defaults to None.
+            column_names: The column(s) to check.
+            tags: Optional tags for the classifier.
         """
         super().__init__(column_names, tags=tags)
 
 
 class IsPositive(BoolClassifier):
     """
-    IS POSITIVE classifier.
+    A boolean classifier that checks if a numeric value is positive.
     """
 
     @_td_validate_call(ErrorCode.PVDQCL19)
     def __init__(
         self,
         column_names: Optional[ColumNamesWithAltSpec] = None,
-        ignore_nulls: bool = False,
         *,
         tags: Optional[TagsSpec] = None,
     ):
         """
-        Constructor.
+        Initializes the `IsPositive` classifier.
 
         Args:
-            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] |
-            None, optional):
-                Column name(s) to apply the classifier to and to store the
-                classification result.
-                If a `str | list[str]` is given, those are the column names
-                to apply the classifier to. The classification results will be
-                stored in columns named 'dq.<column_name>_<classifier_class>`.
-                If a `tuple[str, str] | list[tuple[str, str]]` is given, the
-                first element of the tuple(s) is the column to apply the
-                classifier to and the second element of the tuple(s) is the
-                name of the column that will store the classification result.
-                If `None`, the classifier will be applied to all columns and
-                the results will be stored in columns named
-                'dq.<column_name>_<classifier_class>`.
-                Defaults to None.
-            ignore_nulls (bool, optional): Whether to ignore null values when
-                classifying. If True, null values will not be classified.
-                Defaults to False.
-            tags (str | list[str] | None, optional): Tag(s) for the classifier.
-                Tags can be used by DataQuality operations to select which classifiers
-                to operate on. If a DataQuality operation does not define a tag, it
-                operates on all defined classifiers. If a DataQuality operation defines
-                one or more tags, it will only operate on classifiers that have at least
-                one of those tags.
-                Defaults to None.
+            column_names: The column(s) to check.
+            tags: Optional tags for the classifier.
         """
         super().__init__(column_names, tags=tags)
-        self._ignore_nulls = ignore_nulls
-
-    @property
-    def ignore_nulls(self) -> bool:
-        return self._ignore_nulls
 
 
 class IsPositiveOrZero(BoolClassifier):
     """
-    IS POSITIVE OR ZERO classifier.
+    A boolean classifier that checks if a numeric value is positive or zero.
     """
 
     @_td_validate_call(ErrorCode.PVDQCL20)
     def __init__(
         self,
         column_names: Optional[ColumNamesWithAltSpec] = None,
-        ignore_nulls: bool = False,
         *,
         tags: Optional[TagsSpec] = None,
     ):
         """
-        Constructor.
+        Initializes the `IsPositiveOrZero` classifier.
 
         Args:
-            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] |
-            None, optional):
-                Column name(s) to apply the classifier to and to store the
-                classification result.
-                If a `str | list[str]` is given, those are the column names
-                to apply the classifier to. The classification results will be
-                stored in columns named 'dq.<column_name>_<classifier_class>`.
-                If a `tuple[str, str] | list[tuple[str, str]]` is given, the
-                first element of the tuple(s) is the column to apply the
-                classifier to and the second element of the tuple(s) is the
-                name of the column that will store the classification result.
-                If `None`, the classifier will be applied to all columns and
-                the results will be stored in columns named
-                'dq.<column_name>_<classifier_class>`.
-                Defaults to None.
-            ignore_nulls (bool, optional): Whether to ignore null values when
-                classifying. If True, null values will not be classified.
-                Defaults to False.
-            tags (str | list[str] | None, optional): Tag(s) for the classifier.
-                Tags can be used by DataQuality operations to select which classifiers
-                to operate on. If a DataQuality operation does not define a tag, it
-                operates on all defined classifiers. If a DataQuality operation defines
-                one or more tags, it will only operate on classifiers that have at least
-                one of those tags.
-                Defaults to None.
+            column_names: The column(s) to check.
+            tags: Optional tags for the classifier.
         """
         super().__init__(column_names, tags=tags)
-        self._ignore_nulls = ignore_nulls
-
-    @property
-    def ignore_nulls(self) -> bool:
-        return self._ignore_nulls
 
 
 class IsZero(BoolClassifier):
     """
-    IS ZERO classifier.
+    A boolean classifier that checks if a numeric value is zero.
     """
 
     @_td_validate_call(ErrorCode.PVDQCL21)
     def __init__(
         self,
         column_names: Optional[ColumNamesWithAltSpec] = None,
-        ignore_nulls: bool = False,
         *,
         tags: Optional[TagsSpec] = None,
     ):
         """
-        Constructor.
+        Initializes the `IsZero` classifier.
 
         Args:
-            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] |
-            None, optional):
-                Column name(s) to apply the classifier to and to store the
-                classification result.
-                If a `str | list[str]` is given, those are the column names
-                to apply the classifier to. The classification results will be
-                stored in columns named 'dq.<column_name>_<classifier_class>`.
-                If a `tuple[str, str] | list[tuple[str, str]]` is given, the
-                first element of the tuple(s) is the column to apply the
-                classifier to and the second element of the tuple(s) is the
-                name of the column that will store the classification result.
-                If `None`, the classifier will be applied to all columns and
-                the results will be stored in columns named
-                'dq.<column_name>_<classifier_class>`.
-                Defaults to None.
-            ignore_nulls (bool, optional): Whether to ignore null values when
-                classifying. If True, null values will not be classified.
-                Defaults to False.
-            tags (str | list[str] | None, optional): Tag(s) for the classifier.
-                Tags can be used by DataQuality operations to select which classifiers
-                to operate on. If a DataQuality operation does not define a tag, it
-                operates on all defined classifiers. If a DataQuality operation defines
-                one or more tags, it will only operate on classifiers that have at least
-                one of those tags.
-                Defaults to None.
+            column_names: The column(s) to check.
+            tags: Optional tags for the classifier.
         """
         super().__init__(column_names, tags=tags)
-        self._ignore_nulls = ignore_nulls
 
-    @property
-    def ignore_nulls(self) -> bool:
-        return self._ignore_nulls
-
-
-class Matches(BoolClassifier):
-    """
-    REGEX MATCH classifier.
-    """
-
-    @_td_validate_call(ErrorCode.PVDQCL22)
-    def __init__(
-        self,
-        column_names: Optional[ColumNamesWithAltSpec] = None,
-        ignore_nulls: bool = False,
-        *,
-        regex: str,
-        tags: Optional[TagsSpec] = None,
-    ):
-        """
-        Constructor.
-
-        Args:
-            column_names(str | list[str] | tuple[str, str] | list[tuple[str, str]] |
-            None, optional):
-                Column name(s) to apply the classifier to and to store the
-                classification result.
-                If a `str | list[str]` is given, those are the column names
-                to apply the classifier to. The classification results will be
-                stored in columns named 'dq.<column_name>_<classifier_class>`.
-                If a `tuple[str, str] | list[tuple[str, str]]` is given, the
-                first element of the tuple(s) is the column to apply the
-                classifier to and the second element of the tuple(s) is the
-                name of the column that will store the classification result.
-                If `None`, the classifier will be applied to all columns and
-                the results will be stored in columns named
-                'dq.<column_name>_<classifier_class>`.
-                Defaults to None.
-            ignore_nulls (bool, optional): Whether to ignore null values when
-                classifying. If True, null values will not be classified.
-                Defaults to False.
-            regex (str): The regex pattern to match against.
-            tags (str | list[str] | None, optional): Tag(s) for the classifier.
-                Tags can be used by DataQuality operations to select which classifiers
-                to operate on. If a DataQuality operation does not define a tag, it
-                operates on all defined classifiers. If a DataQuality operation defines
-                one or more tags, it will only operate on classifiers that have at least
-                one of those tags.
-                Defaults to None.
-        """
-        super().__init__(column_names, tags=tags)
-        self._ignore_nulls = ignore_nulls
-        self._regex = regex
-
-    @property
-    def ignore_nulls(self) -> bool:
-        return self._ignore_nulls
-
-    @property
-    def regex(self) -> str:
-        return self._regex

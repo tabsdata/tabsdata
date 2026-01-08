@@ -30,7 +30,6 @@ def test_example_publisher():
     #     | metric                  | True | False |
     #     ------------------------------------------
     #     | rows                    | 2500 |     0 |
-    #     | has_schema_columns      |    1 |     0 |
     #     | all_columns_is_not_null | 1200 |  1300 |
     #     | age_is_positive         | 2400 |   100 |
     #     | gender_in               | 2490 |    10 |
@@ -43,10 +42,9 @@ def test_example_publisher():
     import tabsdata.dataquality as dq
 
     classify_list = [
-        dq.HasColumns(["id", "name", "age", "gender", "country"]),
         dq.IsNotNull(),
         dq.IsPositiveOrZero("age"),
-        dq.IsIn("gender", set={"M", "F", "O"}),
+        dq.IsIn("gender", values={"M", "F", "O"}),
     ]
     op_list = [dq.Summary()]
 
@@ -98,10 +96,9 @@ def test_example_publisher_with_filter():
     import tabsdata.dataquality as dq
 
     classify_list = [
-        dq.HasColumns(["id", "name", "age", "gender", "country"]),
         dq.IsNotNull(),
         dq.IsPositive("age"),
-        dq.IsIn("gender", set={"M", "F", "O"}),
+        dq.IsIn("gender", values={"M", "F", "O"}),
     ]
     op_list = [dq.Summary(), dq.Filter()]
 
@@ -153,10 +150,9 @@ def test_example_publisher_with_filter_and_tags():
     import tabsdata.dataquality as dq
 
     classify_list = [
-        dq.HasColumns(["id", "name", "age", "gender", "country"]),
         dq.IsNull(column_names=["id"], tags=["missing_data"]),
-        dq.IsPositive("age", tags="invalid_data", ignore_nulls=True),
-        dq.IsIn("gender", set={"M", "F", "O"}, tags="invalid_data", ignore_nulls=True),
+        dq.IsPositive("age", tags="invalid_data"),
+        dq.IsIn("gender", values={"M", "F", "O"}, tags="invalid_data"),
     ]
     op_list = [
         dq.Summary(),
@@ -242,7 +238,6 @@ def test_example_transformer():
         dq.DataQuality(
             table="users_x",
             classifiers=[
-                dq.HasColumns(["id", "campus", "city", "state", "country"]),
                 dq.IsNull("country"),
                 dq.IsNull("id", tags="fail"),
                 dq.Categorizer("country", scale=continents),

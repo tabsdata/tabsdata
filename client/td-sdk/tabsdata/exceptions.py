@@ -2142,6 +2142,8 @@ class ErrorCode(Enum):
     PVDQCL32 = {}
     PVDQCL33 = {}
     PVDQCL34 = {}
+    PVDQCL35 = {}
+    PVDQCL36 = {}
 
     PVDQOP1 = {}
     PVDQOP2 = {}

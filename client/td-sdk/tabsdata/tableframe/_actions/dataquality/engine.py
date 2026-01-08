@@ -17,7 +17,7 @@ import tabsdata.tableframe.expr.expr as td_expr
 import tabsdata.tableframe.lazyframe.frame as td_frame
 from tabsdata.dataquality import (
     DoesNotMatch,
-    HasLen,
+    HasLength,
     IsNotZero,
     IsPositive,
     IsPositiveOrZero,
@@ -236,7 +236,7 @@ class PolarsProvider:
             .then(ByteSentinel.NULL)
             .when(QExpressions.IS_NAN(column, dtype))
             .then(ByteSentinel.NAN)
-            .otherwise(column.cast(pl.Utf8).str.contains(classifier.regex))
+            .otherwise(column.cast(pl.Utf8).str.contains(classifier.pattern))
         )
 
     @staticmethod
@@ -248,11 +248,13 @@ class PolarsProvider:
             .then(ByteSentinel.NULL)
             .when(QExpressions.IS_NAN(column, dtype))
             .then(ByteSentinel.NAN)
-            .otherwise(~column.cast(pl.Utf8).str.contains(classifier.regex))
+            .otherwise(~column.cast(pl.Utf8).str.contains(classifier.pattern))
         )
 
     @staticmethod
-    def has_length(column: pl.Expr, dtype: pl.DataType, classifier: HasLen) -> pl.Expr:
+    def has_length(
+        column: pl.Expr, dtype: pl.DataType, classifier: HasLength
+    ) -> pl.Expr:
         return (
             pl.when(column.is_null())
             .then(ByteSentinel.NULL)
@@ -495,7 +497,7 @@ class DataQualityEngine:
 
     def has_length(
         self,
-        has_length: HasLen,
+        has_length: HasLength,
     ) -> Self:
         return self._classify(has_length)
 
@@ -783,7 +785,7 @@ CLASSIFIER_DICTIONARY: dict[type, ClassifierMetadata] = {
         classifier_family=ClassifierFamily.BOOLEAN,
         polars_provider=PolarsProvider(PolarsProvider.does_not_match),
     ),
-    HasLen: ClassifierMetadata(
+    HasLength: ClassifierMetadata(
         column_suffix="_has_length",
         classifier_family=ClassifierFamily.BOOLEAN,
         polars_provider=PolarsProvider(PolarsProvider.has_length),

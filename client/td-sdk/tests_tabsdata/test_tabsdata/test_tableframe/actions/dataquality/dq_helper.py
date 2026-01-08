@@ -13,7 +13,7 @@ import tabsdata as td
 from tabsdata.dataquality import (
     DataQuality,
     DoesNotMatch,
-    HasLen,
+    HasLength,
     IsNan,
     IsNegative,
     IsNotNan,
@@ -991,7 +991,7 @@ def _make_matches_action(regex: str):
                 Matches(
                     column_names=("value", "value_matches"),
                     tags="matches",
-                    regex=regex,
+                    pattern=regex,
                 ),
             ],
             operators=Summary(),
@@ -1008,7 +1008,7 @@ def _make_does_not_match_action(regex: str):
                 DoesNotMatch(
                     column_names=("value", "value_does_not_match"),
                     tags="does_not_match",
-                    regex=regex,
+                    pattern=regex,
                 ),
             ],
             operators=Summary(),
@@ -1022,7 +1022,7 @@ def _make_has_length_action(min_length: int, max_length: int):
         return DataQuality(
             table=table,
             classifiers=[
-                HasLen(
+                HasLength(
                     column_names=("value", "value_has_length"),
                     tags="has_length",
                     min=min_length,
@@ -1402,7 +1402,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                 Matches(
                     column_names=("value", "value_matches"),
                     tags="matches",
-                    regex=".*",
+                    pattern=".*",
                 ),
             ],
             method=DataQualityEngine.matches,
@@ -1416,7 +1416,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                 Matches(
                     column_names=("value", "value_matches"),
                     tags="matches",
-                    regex="^10",
+                    pattern="^10",
                 ),
             ],
             method=DataQualityEngine.matches,
@@ -1430,7 +1430,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                 Matches(
                     column_names=("value", "value_matches"),
                     tags="matches",
-                    regex="^-10",
+                    pattern="^-10",
                 ),
             ],
             method=DataQualityEngine.matches,
@@ -1444,7 +1444,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                 Matches(
                     column_names=("value", "value_matches"),
                     tags="matches",
-                    regex="^0$",
+                    pattern="^0$",
                 ),
             ],
             method=DataQualityEngine.matches,
@@ -1460,7 +1460,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                 DoesNotMatch(
                     column_names=("value", "value_does_not_match"),
                     tags="does_not_match",
-                    regex=".*",
+                    pattern=".*",
                 ),
             ],
             method=DataQualityEngine.does_not_match,
@@ -1474,7 +1474,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                 DoesNotMatch(
                     column_names=("value", "value_does_not_match"),
                     tags="does_not_match",
-                    regex="^10",
+                    pattern="^10",
                 ),
             ],
             method=DataQualityEngine.does_not_match,
@@ -1488,7 +1488,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                 DoesNotMatch(
                     column_names=("value", "value_does_not_match"),
                     tags="does_not_match",
-                    regex="^-10",
+                    pattern="^-10",
                 ),
             ],
             method=DataQualityEngine.does_not_match,
@@ -1502,7 +1502,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                 DoesNotMatch(
                     column_names=("value", "value_does_not_match"),
                     tags="does_not_match",
-                    regex="^0$",
+                    pattern="^0$",
                 ),
             ],
             method=DataQualityEngine.does_not_match,
@@ -1512,10 +1512,10 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             name="exact0",
         ),
     ],
-    HasLen: [
+    HasLength: [
         ClassifierConfiguration(
             classifiers=[
-                HasLen(
+                HasLength(
                     column_names=("value", "value_has_length"),
                     tags="has_length",
                     min=0,
@@ -1530,7 +1530,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ),
         ClassifierConfiguration(
             classifiers=[
-                HasLen(
+                HasLength(
                     column_names=("value", "value_has_length"),
                     tags="has_length",
                     min=5,
@@ -1545,7 +1545,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ),
         ClassifierConfiguration(
             classifiers=[
-                HasLen(
+                HasLength(
                     column_names=("value", "value_has_length"),
                     tags="has_length",
                     min=5,
@@ -1560,7 +1560,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ),
         ClassifierConfiguration(
             classifiers=[
-                HasLen(
+                HasLength(
                     column_names=("value", "value_has_length"),
                     tags="has_length",
                     min=0,
