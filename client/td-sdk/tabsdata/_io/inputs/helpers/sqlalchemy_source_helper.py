@@ -40,14 +40,14 @@ class SQLAlchemySourceHelper:
         """
         Initialize the SQLAlchemySourceHelper with a given SQL source configuration.
         Args:
-            source (SQLSourceProtocol): The SQL source configuration.
+            source: The SQL source configuration.
         """
         self.source = source
 
     @property
     def source(self) -> SQLSourceConfig:
         """
-        SQLSourceProtocol: The SQL source configuration.
+        The SQL source configuration.
         """
         return self._source
 
@@ -56,7 +56,7 @@ class SQLAlchemySourceHelper:
         """
         Set the SQL source configuration
         Args:
-            source (SQLSourceProtocol): The SQL source configuration.
+            source: The SQL source configuration.
         """
         if not isinstance(source, SQLSourceConfig):
             raise TypeError(
@@ -69,9 +69,9 @@ class SQLAlchemySourceHelper:
         """
         Execute the SQL queries and return the list of resulting Parquet file names.
         Args:
-            working_dir (str): The working directory where the files will be stored.
+            working_dir: The working directory where the files will be stored.
         Returns:
-            list[list[str]]: A nested list of Parquet file names where each element of
+            A nested list of Parquet file names where each element of
                 the outer list corresponds to each given query
         """
         conn_uri = obtain_uri(self.source.conn, log=True, add_credentials=True)
@@ -119,13 +119,12 @@ class SQLAlchemySourceHelper:
         """
         Run the list of SQL queries and return the list of resulting Parquet file names.
         Args:
-            queries (list[str]): The list of SQL queries to execute.
-            session (Connection): The SQLAlchemy connection.
-            destination (str): The destination directory for the Parquet files.
-            schema_overrides_list (list[dict[str, DataType]]): List of Schema Overrides
-                for each query.
+            queries: The list of SQL queries to execute.
+            session: The SQLAlchemy connection.
+            destination: The destination directory for the Parquet files.
+            schema_overrides_list: List of Schema Overrides for each query.
         Returns:
-            list[list[str]]: A nested list of Parquet file names for each query result.
+            A nested list of Parquet file names for each query result.
         """
         results = []
         for idx, query in enumerate(queries):
@@ -153,12 +152,12 @@ class SQLAlchemySourceHelper:
         """
         Execute a single SQL query and return the resulting Parquet file name.
         Args:
-            query (str): The SQL query to execute.
-            session (Connection): The SQLAlchemy connection.
-            destination (str): The destination directory for the Parquet file.
-            schema_overrides (dict[str, DataType]): Schema Overrides for query
+            query: The SQL query to execute.
+            session: The SQLAlchemy connection.
+            destination: The destination directory for the Parquet file.
+            schema_overrides: Schema Overrides for query
         Returns:
-            list[str]: List of parquet files representing each chunk.
+            List of parquet files representing each chunk.
         """
         logger.info(
             f"Importing SQL query: {query} with\ninitial values:"

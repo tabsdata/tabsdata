@@ -29,15 +29,14 @@ class OracleConn(Conn):
         Initialize an OracleConn instance.
 
         Args:
-            uri (str): The URI of the Oracle database.
-            credentials (UserPasswordCredentials | None): Credentials for authenticating
-                with the database.
-            enforce_connection_params (bool, optional): Whether to enforce connection
-                parameters for the Oracle connection. Defaults to True.
-            cx_src_configs_oracle (dict, optional): Source-specific configuration
-                parameters for the Oracle connection. Defaults to None.
-            cx_dst_configs_oracle (dict, optional): Destination-specific configuration
-                parameters for the Oracle connection. Defaults to None.
+            uri: The URI of the Oracle database.
+            credentials: Credentials for authenticating with the database.
+            enforce_connection_params: Whether to enforce connection parameters for the
+                Oracle connection. Defaults to True.
+            cx_src_configs_oracle: Source-specific configuration parameters for the
+            Oracle connection. Defaults to None.
+            cx_dst_configs_oracle: Destination-specific configuration parameters for the
+                Oracle connection. Defaults to None.
 
         Raises:
             ConnectionConfigurationError: If any connection configurations are invalid.
@@ -51,7 +50,7 @@ class OracleConn(Conn):
     @property
     def uri(self) -> str:
         """
-        str: The URI of the database where the data is located.
+        The URI of the database where the data is located.
         """
         return self._uri
 
@@ -60,7 +59,7 @@ class OracleConn(Conn):
         """
         Set the URI of the database.
         Args:
-            uri (str): The URI of the database.
+            uri: The URI of the database.
         """
         if not isinstance(uri, str):
             raise ConnectionConfigurationError(
@@ -78,8 +77,8 @@ class OracleConn(Conn):
     @property
     def credentials(self) -> UserPasswordCredentials | None:
         """
-        UserPasswordCredentials | None: The credentials required to access the
-            Oracle database. If no credentials were provided, it will return None.
+        The credentials required to access the
+        Oracle database. If no credentials were provided, it will return None.
         """
         return self._credentials
 
@@ -88,8 +87,7 @@ class OracleConn(Conn):
         """
         Set the credentials required to access the Oracle database.
         Args:
-            credentials (UserPasswordCredentials | None): The credentials required to
-                access the Oracle database.
+            credentials: The credentials required to access the Oracle database.
         """
         if not credentials:
             self._credentials = None
@@ -104,7 +102,7 @@ class OracleConn(Conn):
     @property
     def enforce_connection_params(self) -> bool:
         """
-        bool: Whether to enforce connection parameters for the Oracle connection.
+        Whether to enforce connection parameters for the Oracle connection.
         """
         return self._enforce_connection_params
 
@@ -113,8 +111,8 @@ class OracleConn(Conn):
         """
         Set whether to enforce connection parameters for the Oracle connection.
         Args:
-            enforce_connection_params (bool): Whether to enforce connection parameters
-                for the Oracle connection.
+            enforce_connection_params: Whether to enforce connection parameters for the
+                Oracle connection.
         """
         if not isinstance(enforce_connection_params, bool):
             raise ConnectionConfigurationError(
@@ -127,7 +125,7 @@ class OracleConn(Conn):
     @property
     def cx_src_configs_oracle(self) -> dict:
         """
-        dict: The source configuration parameters for the Oracle connection.
+        The source configuration parameters for the Oracle connection.
         """
         return self._cx_src_configs_oracle
 
@@ -136,8 +134,8 @@ class OracleConn(Conn):
         """
         Set the source configuration parameters for the Oracle connection.
         Args:
-            cx_src_configs_oracle (dict | None): The source configuration parameters
-            for the Oracle connection.
+            cx_src_configs_oracle: The source configuration parameters for the Oracle
+                connection.
         """
         if cx_src_configs_oracle is None:
             cx_src_configs_oracle = {}
@@ -152,7 +150,7 @@ class OracleConn(Conn):
     @property
     def cx_dst_configs_oracle(self) -> dict:
         """
-        dict: The destination configuration parameters for the Oracle connection.
+        The destination configuration parameters for the Oracle connection.
         """
         return self._cx_dst_configs_oracle
 
@@ -161,8 +159,8 @@ class OracleConn(Conn):
         """
         Set the destination configuration parameters for the Oracle connection.
         Args:
-            cx_dst_configs_oracle (dict | None): The destination configuration
-            parameters for the Oracle connection.
+            cx_dst_configs_oracle: The destination configuration parameters for the
+                Oracle connection.
         """
         if cx_dst_configs_oracle is None:
             cx_dst_configs_oracle = {}

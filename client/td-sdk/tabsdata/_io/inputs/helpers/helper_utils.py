@@ -26,12 +26,12 @@ def replace_initial_values_placeholder(
     """
     Replace initial values placeholders in the query based on the database type.
     Args:
-        conn_uri (str): The connection URI of the database.
-        query (str): The SQL query with placeholders.
-        initial_values (dict[str, Any]): A dictionary of initial values to replace
+        conn_uri: The connection URI of the database.
+        query: The SQL query with placeholders.
+        initial_values: A dictionary of initial values to replace
             in the query.
     Returns:
-        str: The SQL query with initial values placeholders replaced.
+        The SQL query with initial values placeholders replaced.
     """
     parsed_conn_uri = urlparse(conn_uri)
     conn_uri_scheme = parsed_conn_uri.scheme.lower()
@@ -63,9 +63,9 @@ def get_numpy_dtype_from_polars(
     """
     Get the corresponding NumPy dtype for a given Polars dtype.
     Args:
-        td_dtype (DataType): The Polars data type.
+        td_dtype: The Polars data type.
     Returns:
-        np.dtype: The corresponding NumPy data type.
+        The corresponding NumPy data type.
     Raises:
         ValueError: If the Polars dtype is not in the defined mapping.
     """

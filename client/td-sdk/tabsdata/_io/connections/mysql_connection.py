@@ -30,16 +30,15 @@ class MySQLConn(Conn):
         Initialize a MySQLConn instance.
 
         Args:
-            uri (str): The URI of the MySQL database.
-            credentials (UserPasswordCredentials | None): Credentials for authenticating
-                with the database.
-            enforce_connection_params (bool, optional): Whether to enforce connection
-                parameters for the MySQL connection. Applicable only for a connection to
-                a MySQL Destination. Defaults to True.
-            cx_src_configs_mysql (dict, optional): Source-specific configuration
-                parameters for the MySQL connection. Defaults to None.
-            cx_dst_configs_mysql (dict, optional): Destination-specific configuration
-                parameters for the MySQL connection. Defaults to None.
+            uri: The URI of the MySQL database.
+            credentials: Credentials for authenticating with the database.
+            enforce_connection_params: Whether to enforce connection parameters for the
+                MySQL connection. Applicable only for a connection to a MySQL
+                Destination. Defaults to True.
+            cx_src_configs_mysql: Source-specific configuration parameters for the MySQL
+                connection. Defaults to None.
+            cx_dst_configs_mysql: Destination-specific configuration parameters for the
+                MySQL connection. Defaults to None.
 
         Raises:
             ConnectionConfigurationError: If any connection configurations are invalid.
@@ -53,7 +52,7 @@ class MySQLConn(Conn):
     @property
     def uri(self) -> str:
         """
-        str: The URI of the database where the data is located.
+        The URI of the database where the data is located.
         """
         return self._uri
 
@@ -62,7 +61,7 @@ class MySQLConn(Conn):
         """
         Set the URI of the database where the data is located.
         Args:
-            uri (str): The URI of the database.
+            uri: The URI of the database.
         """
         if not isinstance(uri, str):
             raise ConnectionConfigurationError(
@@ -79,8 +78,8 @@ class MySQLConn(Conn):
     @property
     def credentials(self) -> UserPasswordCredentials | None:
         """
-        UserPasswordCredentials | None: The credentials required to access the
-            MySQLDatabase. If no credentials were provided, it will return None.
+        The credentials required to access the MySQL database. If no credentials were
+        provided, it will return None.
         """
         return self._credentials
 
@@ -89,8 +88,7 @@ class MySQLConn(Conn):
         """
         Set the credentials required to access the MySQLDatabase.
         Args:
-            credentials (UserPasswordCredentials | None): The credentials required to
-                access the MySQLDatabase.
+            credentials: The credentials required to access the MySQLDatabase.
         """
         if not credentials:
             self._credentials = None
@@ -105,7 +103,7 @@ class MySQLConn(Conn):
     @property
     def enforce_connection_params(self) -> bool:
         """
-        bool: Whether to enforce connection parameters for the MySQL connection.
+        Whether to enforce connection parameters for the MySQL connection.
         """
         return self._enforce_connection_params
 
@@ -114,8 +112,8 @@ class MySQLConn(Conn):
         """
         Set whether to enforce connection parameters for the MySQL connection.
         Args:
-            enforce_connection_params (bool): Whether to enforce connection parameters
-                for the MySQL connection.
+            enforce_connection_params: Whether to enforce connection parameters for the
+                MySQL connection.
         """
         if not isinstance(enforce_connection_params, bool):
             raise ConnectionConfigurationError(
@@ -128,7 +126,7 @@ class MySQLConn(Conn):
     @property
     def cx_src_configs_sql(self) -> dict:
         """
-        dict: The source configuration parameters for the MySQL connection.
+        The source configuration parameters for the MySQL connection.
         """
         return self._cx_src_configs_sql
 
@@ -137,8 +135,8 @@ class MySQLConn(Conn):
         """
         Set the source configuration parameters for the MySQL connection.
         Args:
-            cx_src_configs_sql (dict | None): The source configuration parameters for
-                the MySQL connection.
+            cx_src_configs_sql: The source configuration parameters for the MySQL
+            connection.
         """
         if cx_src_configs_sql is None:
             cx_src_configs_sql = {}
@@ -151,7 +149,7 @@ class MySQLConn(Conn):
     @property
     def cx_dst_configs_sql(self) -> dict:
         """
-        dict: The destination configuration parameters for the MySQL connection.
+        The destination configuration parameters for the MySQL connection.
         """
         return self._cx_dst_configs_sql
 
@@ -160,8 +158,8 @@ class MySQLConn(Conn):
         """
         Set the destination configuration parameters for the MySQL connection.
         Args:
-            cx_dst_configs_sql (dict | None): The destination configuration parameters
-            for the MySQL connection.
+            cx_dst_configs_sql: The destination configuration parameters for the MySQL
+                connection.
         """
         if cx_dst_configs_sql is None:
             cx_dst_configs_sql = {}

@@ -30,16 +30,15 @@ class PostgresConn(Conn):
         Initialize a PostgresConn instance.
 
         Args:
-            uri (str): The URI of the Postgres database.
-            credentials (UserPasswordCredentials | None): Credentials for authenticating
-                with the database.
-            enforce_connection_params (bool, optional): Whether to enforce connection
-                parameters for the Postgres connection. Applicable only for a connection
-                to a Postgres Destination. Defaults to True.
-            cx_src_configs_postgres (dict, optional): Source-specific configuration
-                parameters for the Postgres connection. Defaults to None.
-            cx_dst_configs_postgres (dict, optional): Destination-specific configuration
-                parameters for the Postgres connection. Defaults to None.
+            uri: The URI of the Postgres database.
+            credentials: Credentials for authenticating with the database.
+            enforce_connection_params: Whether to enforce connection parameters for the
+                Postgres connection. Applicable only for a connection to a Postgres
+                Destination. Defaults to True.
+            cx_src_configs_postgres: Source-specific configuration parameters for the
+                Postgres connection. Defaults to None.
+            cx_dst_configs_postgres: Destination-specific configuration parameters for
+                the Postgres connection. Defaults to None.
 
         Raises:
             ConnectionConfigurationError: If any connection configurations are invalid.
@@ -53,7 +52,7 @@ class PostgresConn(Conn):
     @property
     def uri(self) -> str:
         """
-        str: The URI of the database where the data is located.
+        The URI of the database where the data is located.
         """
         return self._uri
 
@@ -62,7 +61,7 @@ class PostgresConn(Conn):
         """
         Set the URI of the database.
         Args:
-            uri (str): The URI of the database.
+            uri: The URI of the database.
         """
         if not isinstance(uri, str):
             raise ConnectionConfigurationError(
@@ -80,8 +79,8 @@ class PostgresConn(Conn):
     @property
     def credentials(self) -> UserPasswordCredentials | None:
         """
-        UserPasswordCredentials | None: The credentials required to access the
-            PostgresDatabase. If no credentials were provided, it will return None.
+        The credentials required to access the
+        Postgres database. If no credentials were provided, it will return None.
         """
         return self._credentials
 
@@ -90,8 +89,7 @@ class PostgresConn(Conn):
         """
         Set the credentials required to access the PostgresDatabase.
         Args:
-            credentials (UserPasswordCredentials | None): The credentials required to
-                access the PostgresDatabase.
+            credentials: The credentials required to access the PostgresDatabase.
         """
         if not credentials:
             self._credentials = None
@@ -106,7 +104,7 @@ class PostgresConn(Conn):
     @property
     def enforce_connection_params(self) -> bool:
         """
-        bool: Whether to enforce connection parameters for the Postgres connection.
+        Whether to enforce connection parameters for the Postgres connection.
         """
         return self._enforce_connection_params
 
@@ -115,8 +113,8 @@ class PostgresConn(Conn):
         """
         Set whether to enforce connection parameters for the Postgres connection.
         Args:
-            enforce_connection_params (bool): Whether to enforce connection parameters
-                for the Postgres connection.
+            enforce_connection_params: Whether to enforce connection parameters for the
+                Postgres connection.
         """
         if not isinstance(enforce_connection_params, bool):
             raise ConnectionConfigurationError(
@@ -129,7 +127,7 @@ class PostgresConn(Conn):
     @property
     def cx_src_configs_postgres(self) -> dict:
         """
-        dict: The source configuration parameters for the Postgres connection.
+        The source configuration parameters for the Postgres connection.
         """
         return self._cx_src_configs_postgres
 
@@ -138,8 +136,8 @@ class PostgresConn(Conn):
         """
         Set the source configuration parameters for the Postgres connection.
         Args:
-            cx_src_configs_postgres (dict | None): The source configuration parameters
-            for the Postgres connection.
+            cx_src_configs_postgres: The source configuration parameters for the
+                Postgres connection.
         """
         if cx_src_configs_postgres is None:
             cx_src_configs_postgres = {}
@@ -154,7 +152,7 @@ class PostgresConn(Conn):
     @property
     def cx_dst_configs_postgres(self) -> dict:
         """
-        dict: The destination configuration parameters for the Postgres
+        The destination configuration parameters for the Postgres
         connection.
         """
         return self._cx_dst_configs_postgres
@@ -164,8 +162,8 @@ class PostgresConn(Conn):
         """
         Set the destination configuration parameters for the Postgres connection.
         Args:
-            cx_dst_configs_postgres (dict | None): The destination configuration
-            parameters for the Postgres connection.
+            cx_dst_configs_postgres: The destination configuration parameters for the
+                Postgres connection.
         """
         if cx_dst_configs_postgres is None:
             cx_dst_configs_postgres = {}

@@ -53,30 +53,25 @@ class MariaDBSrc(SourcePlugin):
         Initialize a MariaDBSrc instance.
 
         Args:
-            conn (MariaDBConn): The MariaDB connection configuration.
-            queries (str | list[str]): The SQL query or list of queries to execute.
-            initial_values (dict | None, optional): Initial values for query parameters.
-                Defaults to None.
-            transactional (bool, optional): Whether to use transactions for reading to
-                ensure consistency. Defaults to True.
-            chunk_size (int, optional): The chunk size in records for reading large
-                queries in batches. Defaults to 100000.
-            loader (MariaDBLoaderSpec, optional): The data processing loader to
-                use for executing SQL imports.
-            schema_overrides (dict[str, DataType] | list[dict[str, DataType]] | None,
-                optional):
-                Type mapping overrides for the columns of the queries.
-                It can be a single mapping, a dictionary of mappings or a list
-                of mappings. It can be a single dictionary mapping only when the
-                queries is a single query. If using a dictionary of mappings,
-                the keys must be match any of names of  the Tabsdata tables
-                produced by the publisher. If using a a list of mappings, the
-                list of mappings must have the same size as the queries list;
-                for queries there is no need for mapping the corresponding
-                element in the list can be None.The mapping dictionary must have
-                column names from the corresponding query as keys and the
-                TableFrame DataType to cast the column to. The type casting from
-                the original column type to the desired type must be supported.
+            conn: The MariaDB connection configuration.
+            queries: The SQL query or list of queries to execute.
+            initial_values: Initial values for query parameters. Defaults to None.
+            transactional: Whether to use transactions for reading to ensure
+                consistency. Defaults to True.
+            chunk_size: The chunk size in records for reading large queries in batches.
+                Defaults to 100000.
+            loader: The data processing loader to use for executing SQL imports.
+            schema_overrides: Type mapping overrides for the columns of the queries. It
+                can be a single mapping, a dictionary of mappings or a list of mappings.
+                It can be a single dictionary mapping only when the queries is a single
+                query. If using a dictionary of mappings, the keys must match any of
+                names of the Tabsdata tables produced by the publisher. If using a list
+                of mappings, the list of mappings must have the same size as the queries
+                list; for queries there is no need for mapping the corresponding element
+                in the list can be None. The mapping dictionary must have column names
+                from the corresponding query as keys and the TableFrame DataType to cast
+                the column to. The type casting from the original column type to the
+                desired type must be supported.
 
         Raises:
             SourceConfigurationError: If any source configurations are invalid.
@@ -92,7 +87,7 @@ class MariaDBSrc(SourcePlugin):
     @property
     def conn(self) -> MariaDBConn:
         """
-        MariaDBConn: The MariaDB connection configuration.
+        The MariaDB connection configuration.
         """
         return self._conn
 
@@ -101,7 +96,7 @@ class MariaDBSrc(SourcePlugin):
         """
         Set the MariaDB connection configuration.
         Args:
-            conn (MariaDBConn): The MariaDB connection configuration.
+            conn: The MariaDB connection configuration.
         """
         if not isinstance(conn, MariaDBConn):
             raise SourceConfigurationError(
@@ -115,7 +110,7 @@ class MariaDBSrc(SourcePlugin):
     @property
     def queries(self) -> list[str]:
         """
-        list[str]: The SQL queries to execute to read data.
+        The SQL queries to execute to read data.
         """
         return self._queries
 
@@ -125,7 +120,7 @@ class MariaDBSrc(SourcePlugin):
         Sets the SQL queries to execute to read data.
 
         Args:
-            queries (str | list[str]): The SQL queries to execute to read data.
+            queries: The SQL queries to execute to read data.
         """
 
         if not isinstance(queries, (str, list)):
@@ -145,7 +140,7 @@ class MariaDBSrc(SourcePlugin):
     @property
     def initial_values(self) -> dict:
         """
-        dict: The initial values for the parameters in the SQL queries.
+        The initial values for the parameters in the SQL queries.
         """
         return self._initial_values
 
@@ -155,8 +150,7 @@ class MariaDBSrc(SourcePlugin):
         Sets the initial values for the parameters in the SQL queries.
 
         Args:
-            initial_values (dict): The initial values for the parameters in the SQL
-                queries.
+            initial_values: The initial values for the parameters in the SQL queries.
         """
         if not initial_values:
             self._initial_values = {}
@@ -179,7 +173,7 @@ class MariaDBSrc(SourcePlugin):
     @property
     def transactional(self) -> bool:
         """
-        bool: Whether to use transactions for reading to ensure consistency.
+        Whether to use transactions for reading to ensure consistency.
         """
         return self._transactional
 
@@ -189,8 +183,8 @@ class MariaDBSrc(SourcePlugin):
         Sets the transactional property.
 
         Args:
-            transactional (bool): Whether to use transactions for reading to ensure
-            consistency.
+            transactional: Whether to use transactions for reading to ensure
+                consistency.
         """
         if not isinstance(transactional, bool):
             raise SourceConfigurationError(
@@ -201,7 +195,7 @@ class MariaDBSrc(SourcePlugin):
     @property
     def chunk_size(self) -> int:
         """
-        int: The chunk size in records for reading large queries in batches.
+        The chunk size in records for reading large queries in batches.
         """
         return self._chunk_size
 
@@ -211,8 +205,7 @@ class MariaDBSrc(SourcePlugin):
         Sets the chunk size reading large queries in batches.
 
         Args:
-            chunk_size (int): The chunk size in records for reading large queries in
-            batches.
+            chunk_size: The chunk size in records for reading large queries in batches.
         """
         if not isinstance(chunk_size, int):
             raise SourceConfigurationError(
@@ -227,7 +220,7 @@ class MariaDBSrc(SourcePlugin):
     @property
     def loader(self) -> MariaDBLoaderSpec:
         """
-        str: The data processing loader to use for executing SQL imports.
+        The data processing loader to use for executing SQL imports.
         """
         return self._loader.value
 
@@ -236,8 +229,7 @@ class MariaDBSrc(SourcePlugin):
         """
         Sets the loader used to execute SQL imports.
         Args:
-            loader (LoaderSpecLiteral): The data processing loader to use for executing
-                SQL imports.
+            loader: The data processing loader to use for executing SQL imports.
         """
         if loader not in get_args(MariaDBLoaderSpec):
             raise SourceConfigurationError(
@@ -251,8 +243,7 @@ class MariaDBSrc(SourcePlugin):
     @property
     def schema_overrides(self) -> list[dict[str, DataType]] | None:
         """
-        list[dict[str, DataType]] | None:
-            The schema overrides for the tables being read.
+        The schema overrides for the tables being read.
         """
         return self._schema_overrides
 
@@ -261,8 +252,7 @@ class MariaDBSrc(SourcePlugin):
         """
         Sets the schema overrides for the tables being read.
         Args:
-            schema_overrides (dict[str, DataType] | list[dict[str, DataType]] | None):
-                The schema overrides for the tables being read.
+            schema_overrides: The schema overrides for the tables being read.
         """
         if schema_overrides is not None:
             valid_types = (dict, list)
@@ -284,9 +274,9 @@ class MariaDBSrc(SourcePlugin):
         Execute the query and load the results as a list of TableFrames.
 
         Args:
-            working_dir (str): The directory where the Parquet files will be saved.
+            working_dir: The directory where the Parquet files will be saved.
         Returns:
-            list[TableFrame]: A list of TableFrames containing the query results.
+            A list of TableFrames containing the query results.
         """
         logger.debug(f"Triggering {self}")
         helper = get_sql_source_helper(self)

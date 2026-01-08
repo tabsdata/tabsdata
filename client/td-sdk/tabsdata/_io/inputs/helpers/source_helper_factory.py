@@ -35,11 +35,9 @@ def get_sql_source_helper(
     Factory function to get the appropriate SQL source helper based on the source and
     loader type.
     Args:
-        source (Union[MySQLSrc, PostgresSrc, MariaDBSrc, OracleSrc]): The SQL source
-        configuration.
-
+        source: The SQL source configuration.
     Returns:
-        Union[SQLAlchemySourceHelper]: The appropriate SQL source helper instance.
+        The appropriate SQL source helper instance.
     """
     sql_source_config = _get_sql_source_config(source)
     logger.debug(f"Created SQL source config for {source}")

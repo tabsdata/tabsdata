@@ -53,30 +53,25 @@ class MySQLSrc(SourcePlugin):
         Initialize a MySQLSource for reading data from MySQL.
 
         Args:
-            conn (MySQLConn): The MySQL connection configuration.
-            queries (str | list[str]): The SQL query or list of queries to execute.
-            initial_values (dict | None, optional): Initial values for query parameters.
-                Defaults to None.
-            transactional (bool, optional): Whether to use transactions for reading to
-                ensure consistency. Defaults to True.
-            chunk_size (int, optional): The chunk size in records for reading large
-                queries in batches. Defaults to 10000.
-            loader (MySQLLoaderSpec, optional): The data processing loader to
-                use for executing SQL imports.
-            schema_overrides (dict[str, DataType] | list[dict[str, DataType]] | None,
-                optional):
-                Type mapping overrides for the columns of the queries.
-                It can be a single mapping, a dictionary of mappings or a list
-                of mappings. It can be a single dictionary mapping only when the
-                queries is a single query. If using a dictionary of mappings,
-                the keys must be match any of names of  the Tabsdata tables
-                produced by the publisher. If using a a list of mappings, the
-                list of mappings must have the same size as the queries list;
-                for queries there is no need for mapping the corresponding
-                element in the list can be None.The mapping dictionary must have
-                column names from the corresponding query as keys and the
-                TableFrame DataType to cast the column to. The type casting from
-                the original column type to the desired type must be supported.
+            conn: The MySQL connection configuration.
+            queries: The SQL query or list of queries to execute.
+            initial_values: Initial values for query parameters. Defaults to None.
+            transactional: Whether to use transactions for reading to ensure
+                consistency. Defaults to True.
+            chunk_size: The chunk size in records for reading large queries in batches.
+                Defaults to 10000.
+            loader: The data processing loader to use for executing SQL imports.
+            schema_overrides: Type mapping overrides for the columns of the queries. It
+                can be a single mapping, a dictionary of mappings or a list of mappings.
+                It can be a single dictionary mapping only when the queries is a single
+                query. If using a dictionary of mappings, the keys must match any of
+                names of the Tabsdata tables produced by the publisher. If using a list
+                of mappings, the list of mappings must have the same size as the queries
+                list; for queries there is no need for mapping the corresponding element
+                in the list can be None. The mapping dictionary must have column names
+                from the corresponding query as keys and the TableFrame DataType to cast
+                the column to. The type casting from the original column type to the
+                desired type must be supported.
 
         Raises:
             SourceConfigurationError: If any source configurations are invalid.
@@ -92,7 +87,7 @@ class MySQLSrc(SourcePlugin):
     @property
     def conn(self) -> MySQLConn:
         """
-        MySQLConn: The MySQL connection configuration.
+        The MySQL connection configuration.
         """
         return self._conn
 
@@ -102,7 +97,7 @@ class MySQLSrc(SourcePlugin):
         Sets the MySQL connection configuration.
 
         Args:
-            conn (MySQLConn): The MySQL connection configuration.
+            conn: The MySQL connection configuration.
         """
         if not isinstance(conn, MySQLConn):
             raise SourceConfigurationError(
@@ -116,7 +111,7 @@ class MySQLSrc(SourcePlugin):
     @property
     def queries(self) -> list[str]:
         """
-        list[str]: The SQL queries to execute to read data.
+        The SQL queries to execute to read data.
         """
         return self._queries
 
@@ -126,7 +121,7 @@ class MySQLSrc(SourcePlugin):
         Sets the SQL queries to execute to read data.
 
         Args:
-            queries (str | list[str]): The SQL queries to execute to read data.
+            queries: The SQL queries to execute to read data.
         """
 
         if not isinstance(queries, (str, list)):
@@ -146,7 +141,7 @@ class MySQLSrc(SourcePlugin):
     @property
     def initial_values(self) -> dict:
         """
-        dict: The initial values for the parameters in the SQL queries.
+        The initial values for the parameters in the SQL queries.
         """
         return self._initial_values
 
@@ -156,8 +151,7 @@ class MySQLSrc(SourcePlugin):
         Sets the initial values for the parameters in the SQL queries.
 
         Args:
-            initial_values (dict): The initial values for the parameters in the SQL
-                queries.
+            initial_values: The initial values for the parameters in the SQL queries.
         """
         if not initial_values:
             self._initial_values = {}
@@ -180,7 +174,7 @@ class MySQLSrc(SourcePlugin):
     @property
     def transactional(self) -> bool:
         """
-        bool: Whether to use transactions for reading to ensure consistency.
+        Whether to use transactions for reading to ensure consistency.
         """
         return self._transactional
 
@@ -190,8 +184,8 @@ class MySQLSrc(SourcePlugin):
         Sets the transactional property.
 
         Args:
-            transactional (bool): Whether to use transactions for reading to ensure
-            consistency.
+            transactional: Whether to use transactions for reading to ensure
+                consistency.
         """
         if not isinstance(transactional, bool):
             raise SourceConfigurationError(
@@ -202,7 +196,7 @@ class MySQLSrc(SourcePlugin):
     @property
     def chunk_size(self) -> int:
         """
-        int: The chunk size in records for reading large queries in batches.
+        The chunk size in records for reading large queries in batches.
         """
         return self._chunk_size
 
@@ -212,8 +206,7 @@ class MySQLSrc(SourcePlugin):
         Sets the chunk size reading large queries in batches.
 
         Args:
-            chunk_size (int): The chunk size in records for reading large queries in
-            batches.
+            chunk_size: The chunk size in records for reading large queries in batches.
         """
         if not isinstance(chunk_size, int):
             raise SourceConfigurationError(
@@ -228,7 +221,7 @@ class MySQLSrc(SourcePlugin):
     @property
     def loader(self) -> MySQLLoaderSpec:
         """
-        str: The data processing loader to use for executing SQL imports.
+        The data processing loader to use for executing SQL imports.
         """
         return self._loader.value
 
@@ -237,8 +230,7 @@ class MySQLSrc(SourcePlugin):
         """
         Sets the loader used to execute SQL imports.
         Args:
-            loader (LoaderSpecLiteral): The data processing loader to use for executing
-                SQL imports.
+            loader: The data processing loader to use for executing SQL imports.
         """
         if loader not in get_args(MySQLLoaderSpec):
             raise SourceConfigurationError(
@@ -252,8 +244,7 @@ class MySQLSrc(SourcePlugin):
     @property
     def schema_overrides(self) -> list[dict[str, DataType]] | None:
         """
-        list[dict[str, DataType]] | None:
-            The schema overrides for the tables being read.
+        The schema overrides for the tables being read.
         """
         return self._schema_overrides
 
@@ -262,8 +253,7 @@ class MySQLSrc(SourcePlugin):
         """
         Sets the schema overrides for the tables being read.
         Args:
-            schema_overrides (dict[str, DataType] | list[dict[str, DataType]] | None):
-                The schema overrides for the tables being read.
+            schema_overrides: The schema overrides for the tables being read.
         """
         if schema_overrides is not None:
             valid_types = (dict, list)
@@ -285,9 +275,9 @@ class MySQLSrc(SourcePlugin):
         Execute the query and load the results as a list of TableFrames.
 
         Args:
-            working_dir (str): The directory where the Parquet files will be saved.
+            working_dir: The directory where the Parquet files will be saved.
         Returns:
-            list[TableFrame]: A list of TableFrames containing the query results.
+            A list of TableFrames containing the query results.
         """
         logger.debug(f"Triggering {self}")
         helper = get_sql_source_helper(self)

@@ -31,16 +31,15 @@ class MariaDBConn(Conn):
         Initialize a MariaDBConn instance.
 
         Args:
-            uri (str): The URI of the MariaDB database.
-            credentials (UserPasswordCredentials | None): Credentials for authenticating
-                with the database.
-            enforce_connection_params (bool, optional): Whether to enforce connection
-                parameters for the MariaDB connection. Applicable only for a connection
-                to a MariaDB Destination. Defaults to True.
-            cx_src_configs_mariadb (dict, optional): Source-specific configuration
-                parameters for the MariaDB connection. Defaults to None.
-            cx_dst_configs_mariadb (dict, optional): Destination-specific configuration
-                parameters for the MariaDB connection. Defaults to None.
+            uri: The URI of the MariaDB database.
+            credentials: Credentials for authenticating with the database.
+            enforce_connection_params: Whether to enforce connection parameters for the
+                MariaDB connection. Applicable only for a connection to a MariaDB
+                Destination. Defaults to True.
+            cx_src_configs_mariadb: Source-specific configuration parameters for the
+                MariaDB connection. Defaults to None.
+            cx_dst_configs_mariadb: Destination-specific configuration parameters for
+                the MariaDB connection. Defaults to None.
 
         Raises:
             ConnectionConfigurationError: If any connection configurations are invalid.
@@ -54,7 +53,7 @@ class MariaDBConn(Conn):
     @property
     def uri(self) -> str:
         """
-        str: The URI of the database where the data is located.
+        The URI of the database where the data is located.
         """
         return self._uri
 
@@ -63,7 +62,7 @@ class MariaDBConn(Conn):
         """
         Set the URI of the database.
         Args:
-            uri (str): The URI of the database.
+            uri: The URI of the database.
         """
         if not isinstance(uri, str):
             raise ConnectionConfigurationError(
@@ -81,8 +80,8 @@ class MariaDBConn(Conn):
     @property
     def credentials(self) -> UserPasswordCredentials | None:
         """
-        UserPasswordCredentials | None: The credentials required to access the
-            MariaDB database. If no credentials were provided, it will return None.
+        The credentials required to access the MariaDB database. If no credentials were
+        provided, it will return None.
         """
         return self._credentials
 
@@ -91,8 +90,7 @@ class MariaDBConn(Conn):
         """
         Set the credentials required to access the MariaDB database.
         Args:
-            credentials (UserPasswordCredentials | None): The credentials required to
-                access the MariaDB database.
+            credentials: The credentials required to access the MariaDB database.
         """
         if not credentials:
             self._credentials = None
@@ -107,7 +105,7 @@ class MariaDBConn(Conn):
     @property
     def enforce_connection_params(self) -> bool:
         """
-        bool: Whether to enforce connection parameters for the MariaDB connection.
+        Whether to enforce connection parameters for the MariaDB connection.
         """
         return self._enforce_connection_params
 
@@ -116,8 +114,8 @@ class MariaDBConn(Conn):
         """
         Set whether to enforce connection parameters for the MariaDB connection.
         Args:
-            enforce_connection_params (bool): Whether to enforce connection parameters
-                for the MariaDB connection.
+            enforce_connection_params: Whether to enforce connection parameters for the
+                MariaDB connection.
         """
         if not isinstance(enforce_connection_params, bool):
             raise ConnectionConfigurationError(
@@ -130,7 +128,7 @@ class MariaDBConn(Conn):
     @property
     def cx_src_configs_mariadb(self) -> dict:
         """
-        dict: Source-specific configuration parameters for the MariaDB connection.
+        Source-specific configuration parameters for the MariaDB connection.
         """
         return self._cx_src_configs_mariadb
 
@@ -139,8 +137,8 @@ class MariaDBConn(Conn):
         """
         Set the source-specific configuration parameters for the MariaDB connection.
         Args:
-            cx_src_configs_mariadb (dict | None): Source-specific configuration
-            parameters for the MariaDB connection.
+            cx_src_configs_mariadb: Source-specific configuration parameters for the
+                MariaDB connection.
         """
         if cx_src_configs_mariadb is None:
             cx_src_configs_mariadb = {}
@@ -155,7 +153,7 @@ class MariaDBConn(Conn):
     @property
     def cx_dst_configs_mariadb(self) -> dict:
         """
-        dict: Destination-specific configuration parameters for the MariaDB connection.
+        Destination-specific configuration parameters for the MariaDB connection.
         """
         return self._cx_dst_configs_mariadb
 
@@ -165,8 +163,8 @@ class MariaDBConn(Conn):
         Set the destination-specific configuration parameters for the MariaDB
         connection.
         Args:
-            cx_dst_configs_mariadb (dict | None): Destination-specific configuration
-            parameters for the MariaDB connection.
+            cx_dst_configs_mariadb: Destination-specific configuration parameters for
+                the MariaDB connection.
         """
         if cx_dst_configs_mariadb is None:
             cx_dst_configs_mariadb = {}
