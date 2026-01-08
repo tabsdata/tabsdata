@@ -58,7 +58,7 @@ def dq_parameters():
     parameters = []
     for classifier, configs in CLASSIFIERS.items():
         for config in configs:
-            for dtype in config.dtypes:
+            for dtype in sorted(config.dtypes, key=lambda t: t.__name__):
                 if config.name is not None:
                     config_id = f"{classifier.__name__}_{dtype.__name__}_{config.name}"
                 else:
