@@ -347,10 +347,9 @@ def _validate_pattern(pattern: str, fn_name: str, error_code: ErrorCode) -> str:
         re.compile(pattern)
         return pattern
     except re.error:
-        msg = (
-            f"Invalid regex pattern '{pattern}', error: {re.error}."
-        )
+        msg = f"Invalid regex pattern '{pattern}', error: {re.error}."
         raise _validation_error(error_code, fn_name, msg)
+
 
 class Matches(BoolClassifier):
     """
@@ -359,11 +358,11 @@ class Matches(BoolClassifier):
 
     @_td_validate_call(ErrorCode.PVDQCL22)
     def __init__(
-            self,
-            column_names: Optional[ColumNamesWithAltSpec] = None,
-            *,
-            pattern: str,
-            tags: Optional[TagsSpec] = None,
+        self,
+        column_names: Optional[ColumNamesWithAltSpec] = None,
+        *,
+        pattern: str,
+        tags: Optional[TagsSpec] = None,
     ):
         """
         Initializes the `Matches` classifier.
@@ -374,14 +373,15 @@ class Matches(BoolClassifier):
             tags: Optional tags for the classifier.
         """
         super().__init__(column_names, tags=tags)
-        self._pattern = _validate_pattern(pattern,
-                                          f"{self.__class__.__name__}.__init__",
-                                          ErrorCode.PVDQCL35)
+        self._pattern = _validate_pattern(
+            pattern, f"{self.__class__.__name__}.__init__", ErrorCode.PVDQCL35
+        )
 
     @property
     def pattern(self) -> str:
         """Returns the regex pattern."""
         return self._pattern
+
 
 class DoesNotMatch(BoolClassifier):
     """
@@ -405,9 +405,9 @@ class DoesNotMatch(BoolClassifier):
             tags: Optional tags for the classifier.
         """
         super().__init__(column_names, tags=tags)
-        self._pattern = _validate_pattern(pattern,
-                                          f"{self.__class__.__name__}.__init__",
-                                          ErrorCode.PVDQCL36)
+        self._pattern = _validate_pattern(
+            pattern, f"{self.__class__.__name__}.__init__", ErrorCode.PVDQCL36
+        )
 
     @property
     def pattern(self) -> str:
@@ -898,4 +898,3 @@ class IsZero(BoolClassifier):
             tags: Optional tags for the classifier.
         """
         super().__init__(column_names, tags=tags)
-

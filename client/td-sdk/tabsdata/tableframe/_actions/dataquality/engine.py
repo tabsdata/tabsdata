@@ -6,18 +6,24 @@ from __future__ import annotations
 
 import inspect
 import logging
+import math
 from collections import namedtuple
 from dataclasses import dataclass
 from enum import Enum, IntEnum
-from typing import TYPE_CHECKING, Callable, Self, TypeVar
+from typing import TYPE_CHECKING, AbstractSet, Any, Callable, Self, TypeVar
 
 import polars as pl
+from polars._typing import ClosedInterval
 
 import tabsdata.tableframe.expr.expr as td_expr
 import tabsdata.tableframe.lazyframe.frame as td_frame
 from tabsdata.dataquality import (
     DoesNotMatch,
     HasLength,
+    IsBetween,
+    IsIn,
+    IsNotBetween,
+    IsNotIn,
     IsNotZero,
     IsPositive,
     IsPositiveOrZero,
@@ -45,6 +51,16 @@ if TYPE_CHECKING:
     from tabsdata.dataquality._typing import ColumnNameWithAltSpec, TagsSpec
 
 DQ_VERSION = 1
+
+PolarsClosedInterval = ClosedInterval
+RangeClassifier = IsBetween | IsNotBetween
+
+CLOSED_MAPPING: dict[str, PolarsClosedInterval] = {
+    "lower": "left",
+    "upper": "right",
+    "both": "both",
+    "none": "none",
+}
 
 logger = logging.getLogger(__name__)
 
@@ -104,33 +120,44 @@ class PolarsProvider:
         return self._function(column_expr, dtype, classifier)
 
     @staticmethod
+    def _null(column: pl.Expr) -> pl.Expr:
+        return column.is_null()
+
+    @staticmethod
     def is_null(column: pl.Expr, dtype: pl.DataType, _: IsNull) -> pl.Expr:
         return (
-            pl.when(column.is_null())
+            pl.when(PolarsProvider._null(column))
             .then(ByteSentinel.TRUE)
             .when(QExpressions.IS_NAN(column, dtype))
             .then(ByteSentinel.NAN)
             .otherwise(ByteSentinel.FALSE)
+            .cast(pl.UInt8)
         )
 
     @staticmethod
     def is_not_null(column: pl.Expr, dtype: pl.DataType, _: IsNotNull) -> pl.Expr:
         return (
-            pl.when(column.is_null())
+            pl.when(PolarsProvider._null(column))
             .then(ByteSentinel.FALSE)
             .when(QExpressions.IS_NAN(column, dtype))
             .then(ByteSentinel.NAN)
             .otherwise(ByteSentinel.TRUE)
+            .cast(pl.UInt8)
         )
+
+    @staticmethod
+    def _nan(column: pl.Expr, dtype: pl.DataType) -> pl.Expr:
+        return QExpressions.IS_NAN(column, dtype)
 
     @staticmethod
     def is_nan(column: pl.Expr, dtype: pl.DataType, _: IsNan) -> pl.Expr:
         return (
             pl.when(column.is_null())
             .then(ByteSentinel.NULL)
-            .when(QExpressions.IS_NAN(column, dtype))
+            .when(PolarsProvider._nan(column, dtype))
             .then(ByteSentinel.TRUE)
             .otherwise(ByteSentinel.FALSE)
+            .cast(pl.UInt8)
         )
 
     @staticmethod
@@ -138,19 +165,23 @@ class PolarsProvider:
         return (
             pl.when(column.is_null())
             .then(ByteSentinel.NULL)
-            .when(QExpressions.IS_NAN(column, dtype))
+            .when(PolarsProvider._nan(column, dtype))
             .then(ByteSentinel.FALSE)
             .otherwise(ByteSentinel.TRUE)
+            .cast(pl.UInt8)
         )
+
+    @staticmethod
+    def _null_or_nan(column: pl.Expr, dtype: pl.DataType) -> pl.Expr:
+        return column.is_null() | QExpressions.IS_NAN(column, dtype)
 
     @staticmethod
     def is_null_or_nan(column: pl.Expr, dtype: pl.DataType, _: IsNullOrNan) -> pl.Expr:
         return (
-            pl.when(column.is_null())
-            .then(ByteSentinel.TRUE)
-            .when(QExpressions.IS_NAN(column, dtype))
+            pl.when(PolarsProvider._null_or_nan(column, dtype))
             .then(ByteSentinel.TRUE)
             .otherwise(ByteSentinel.FALSE)
+            .cast(pl.UInt8)
         )
 
     @staticmethod
@@ -158,118 +189,279 @@ class PolarsProvider:
         column: pl.Expr, dtype: pl.DataType, _: IsNotNullNorNan
     ) -> pl.Expr:
         return (
-            pl.when(column.is_null())
-            .then(ByteSentinel.FALSE)
-            .when(QExpressions.IS_NAN(column, dtype))
+            pl.when(PolarsProvider._null_or_nan(column, dtype))
             .then(ByteSentinel.FALSE)
             .otherwise(ByteSentinel.TRUE)
+            .cast(pl.UInt8)
         )
+
+    @staticmethod
+    def _zero(column: pl.Expr) -> pl.Expr:
+        return column.eq(0)
 
     @staticmethod
     def is_zero(column: pl.Expr, dtype: pl.DataType, _: IsZero) -> pl.Expr:
-        return (
+        base_expression = (
             pl.when(column.is_null())
             .then(ByteSentinel.NULL)
             .when(QExpressions.IS_NAN(column, dtype))
             .then(ByteSentinel.NAN)
-            .otherwise(column.eq(0))
         )
+        core_expression = PolarsProvider._zero(column)
+        return base_expression.otherwise(core_expression).cast(pl.UInt8)
 
     @staticmethod
     def is_not_zero(column: pl.Expr, dtype: pl.DataType, _: IsNotZero) -> pl.Expr:
-        return (
+        base_expression = (
             pl.when(column.is_null())
             .then(ByteSentinel.NULL)
             .when(QExpressions.IS_NAN(column, dtype))
             .then(ByteSentinel.NAN)
-            .otherwise(column.ne(0))
         )
+        core_expression = ~PolarsProvider._zero(column)
+        return base_expression.otherwise(core_expression).cast(pl.UInt8)
+
+    @staticmethod
+    def _positive(column: pl.Expr) -> pl.Expr:
+        return column.gt(0)
 
     @staticmethod
     def is_positive(column: pl.Expr, dtype: pl.DataType, _: IsPositive) -> pl.Expr:
-        return (
+        base_expression = (
             pl.when(column.is_null())
             .then(ByteSentinel.NULL)
             .when(QExpressions.IS_NAN(column, dtype))
             .then(ByteSentinel.NAN)
-            .otherwise(column.gt(0))
         )
+        core_expression = PolarsProvider._positive(column)
+        return base_expression.otherwise(core_expression).cast(pl.UInt8)
+
+    @staticmethod
+    def _positive_or_zero(column: pl.Expr) -> pl.Expr:
+        return column.ge(0)
 
     @staticmethod
     def is_positive_or_zero(
         column: pl.Expr, dtype: pl.DataType, _: IsPositiveOrZero
     ) -> pl.Expr:
-        return (
+        base_expression = (
             pl.when(column.is_null())
             .then(ByteSentinel.NULL)
             .when(QExpressions.IS_NAN(column, dtype))
             .then(ByteSentinel.NAN)
-            .otherwise(column.ge(0))
         )
+        core_expression = PolarsProvider._positive_or_zero(column)
+        return base_expression.otherwise(core_expression).cast(pl.UInt8)
+
+    @staticmethod
+    def _negative(column: pl.Expr) -> pl.Expr:
+        return column.lt(0)
 
     @staticmethod
     def is_negative(column: pl.Expr, dtype: pl.DataType, _: IsNegative) -> pl.Expr:
-        return (
+        base_expression = (
             pl.when(column.is_null())
             .then(ByteSentinel.NULL)
             .when(QExpressions.IS_NAN(column, dtype))
             .then(ByteSentinel.NAN)
-            .otherwise(column.lt(0))
         )
+        core_expression = PolarsProvider._negative(column)
+        return base_expression.otherwise(core_expression).cast(pl.UInt8)
+
+    @staticmethod
+    def _negative_or_zero(column: pl.Expr) -> pl.Expr:
+        return column.le(0)
 
     @staticmethod
     def is_negative_or_zero(
         column: pl.Expr, dtype: pl.DataType, _: IsNegativeOrZero
     ) -> pl.Expr:
-        return (
+        base_expression = (
             pl.when(column.is_null())
             .then(ByteSentinel.NULL)
             .when(QExpressions.IS_NAN(column, dtype))
             .then(ByteSentinel.NAN)
-            .otherwise(column.le(0))
+        )
+        core_expression = PolarsProvider._negative_or_zero(column)
+        return base_expression.otherwise(core_expression).cast(pl.UInt8)
+
+    @staticmethod
+    def _between(column: pl.Expr, classifier: RangeClassifier) -> pl.Expr:
+        if classifier.min is None and classifier.max is None:
+            return pl.lit(True)
+        if classifier.min is None:
+            if classifier.closed in ("both", "upper"):
+                return column.le(classifier.max)
+            return column.lt(classifier.max)
+        if classifier.max is None:
+            if classifier.closed in ("both", "lower"):
+                return column.ge(classifier.min)
+            return column.gt(classifier.min)
+        return column.is_between(
+            classifier.min,
+            classifier.max,
+            closed=CLOSED_MAPPING[classifier.closed],
         )
 
     @staticmethod
-    def matches(column: pl.Expr, dtype: pl.DataType, classifier: Matches) -> pl.Expr:
-        return (
+    def is_between(
+        column: pl.Expr, dtype: pl.DataType, classifier: IsBetween
+    ) -> pl.Expr:
+        base_expression = (
             pl.when(column.is_null())
             .then(ByteSentinel.NULL)
             .when(QExpressions.IS_NAN(column, dtype))
             .then(ByteSentinel.NAN)
-            .otherwise(column.cast(pl.Utf8).str.contains(classifier.pattern))
         )
+        core_expression = PolarsProvider._between(column, classifier)
+        return base_expression.otherwise(core_expression).cast(pl.UInt8)
+
+    @staticmethod
+    def is_not_between(
+        column: pl.Expr, dtype: pl.DataType, classifier: IsNotBetween
+    ) -> pl.Expr:
+        base_expression = (
+            pl.when(column.is_null())
+            .then(ByteSentinel.NULL)
+            .when(QExpressions.IS_NAN(column, dtype))
+            .then(ByteSentinel.NAN)
+        )
+        core_expression = ~PolarsProvider._between(column, classifier)
+        return base_expression.otherwise(core_expression).cast(pl.UInt8)
+
+    @staticmethod
+    def _in(column: pl.Expr, values: AbstractSet[Any]) -> pl.Expr:
+        return column.is_in(values)
+
+    # noinspection DuplicatedCode
+    @staticmethod
+    def is_in(column: pl.Expr, dtype: pl.DataType, classifier: IsIn) -> pl.Expr:
+        has_none = None in classifier.values
+        has_nan = any(
+            isinstance(value, float) and math.isnan(value)
+            for value in classifier.values
+        )
+        if has_none and has_nan:
+            base_expression = (
+                pl.when(column.is_null())
+                .then(ByteSentinel.TRUE)
+                .when(QExpressions.IS_NAN(column, dtype))
+                .then(ByteSentinel.TRUE)
+            )
+        elif has_none:
+            base_expression = (
+                pl.when(column.is_null())
+                .then(ByteSentinel.TRUE)
+                .when(QExpressions.IS_NAN(column, dtype))
+                .then(ByteSentinel.NAN)
+            )
+        elif has_nan:
+            base_expression = (
+                pl.when(column.is_null())
+                .then(ByteSentinel.NULL)
+                .when(QExpressions.IS_NAN(column, dtype))
+                .then(ByteSentinel.TRUE)
+            )
+        else:
+            base_expression = (
+                pl.when(column.is_null())
+                .then(ByteSentinel.NULL)
+                .when(QExpressions.IS_NAN(column, dtype))
+                .then(ByteSentinel.NAN)
+            )
+        core_expression = PolarsProvider._in(column, classifier.values)
+        return base_expression.otherwise(core_expression).cast(pl.UInt8)
+
+    # noinspection DuplicatedCode
+    @staticmethod
+    def is_not_in(column: pl.Expr, dtype: pl.DataType, classifier: IsNotIn) -> pl.Expr:
+        has_none = None in classifier.values
+        has_nan = any(
+            isinstance(value, float) and math.isnan(value)
+            for value in classifier.values
+        )
+
+        if has_none and has_nan:
+            base_expression = (
+                pl.when(column.is_null())
+                .then(ByteSentinel.FALSE)
+                .when(QExpressions.IS_NAN(column, dtype))
+                .then(ByteSentinel.FALSE)
+            )
+        elif has_none:
+            base_expression = (
+                pl.when(column.is_null())
+                .then(ByteSentinel.FALSE)
+                .when(QExpressions.IS_NAN(column, dtype))
+                .then(ByteSentinel.NAN)
+            )
+        elif has_nan:
+            base_expression = (
+                pl.when(column.is_null())
+                .then(ByteSentinel.NULL)
+                .when(QExpressions.IS_NAN(column, dtype))
+                .then(ByteSentinel.FALSE)
+            )
+        else:
+            base_expression = (
+                pl.when(column.is_null())
+                .then(ByteSentinel.NULL)
+                .when(QExpressions.IS_NAN(column, dtype))
+                .then(ByteSentinel.NAN)
+            )
+        core_expression = ~PolarsProvider._in(column, classifier.values)
+        return base_expression.otherwise(core_expression).cast(pl.UInt8)
+
+    @staticmethod
+    def _matches(column: pl.Expr, pattern: str) -> pl.Expr:
+        return column.cast(pl.Utf8).str.contains(pattern)
+
+    @staticmethod
+    def matches(column: pl.Expr, dtype: pl.DataType, classifier: Matches) -> pl.Expr:
+        base_expression = (
+            pl.when(column.is_null())
+            .then(ByteSentinel.NULL)
+            .when(QExpressions.IS_NAN(column, dtype))
+            .then(ByteSentinel.NAN)
+        )
+        core_expression = PolarsProvider._matches(column, classifier.pattern)
+        return base_expression.otherwise(core_expression).cast(pl.UInt8)
 
     @staticmethod
     def does_not_match(
         column: pl.Expr, dtype: pl.DataType, classifier: DoesNotMatch
     ) -> pl.Expr:
-        return (
+        base_expression = (
             pl.when(column.is_null())
             .then(ByteSentinel.NULL)
             .when(QExpressions.IS_NAN(column, dtype))
             .then(ByteSentinel.NAN)
-            .otherwise(~column.cast(pl.Utf8).str.contains(classifier.pattern))
+        )
+        core_expression = ~PolarsProvider._matches(column, classifier.pattern)
+        return base_expression.otherwise(core_expression).cast(pl.UInt8)
+
+    @staticmethod
+    def _has_length(column: pl.Expr, min_len: int, max_len: int) -> pl.Expr:
+        return (
+            column.cast(pl.Utf8)
+            .str.len_chars()
+            .is_between(min_len, max_len, closed="both")
         )
 
     @staticmethod
     def has_length(
         column: pl.Expr, dtype: pl.DataType, classifier: HasLength
     ) -> pl.Expr:
-        return (
+        base_expression = (
             pl.when(column.is_null())
             .then(ByteSentinel.NULL)
             .when(QExpressions.IS_NAN(column, dtype))
             .then(ByteSentinel.NAN)
-            .otherwise(
-                column.cast(pl.Utf8)
-                .str.len_chars()
-                .is_between(
-                    classifier.min,
-                    classifier.max,
-                    closed="both",
-                )
-            )
         )
+        core_expression = PolarsProvider._has_length(
+            column, classifier.min, classifier.max
+        )
+        return base_expression.otherwise(core_expression).cast(pl.UInt8)
 
 
 @dataclass(frozen=True)
@@ -405,7 +597,7 @@ class DataQualityEngine:
                 if tag not in self._tags:
                     self._tags[tag] = set()
                 self._tags[tag].add(dq_column)
-            lf_dtype = self._tf._lf.schema[lf_column]
+            lf_dtype = self._tf._lf.collect_schema()[lf_column]
             expr = metadata.polars_provider(lf_column, lf_dtype, classifier)
             dq = dq._run(expr, dq_column)
 
@@ -482,6 +674,30 @@ class DataQualityEngine:
         is_negative_or_zero: IsNegativeOrZero,
     ) -> Self:
         return self._classify(is_negative_or_zero)
+
+    def is_between(
+        self,
+        is_between: IsBetween,
+    ) -> Self:
+        return self._classify(is_between)
+
+    def is_not_between(
+        self,
+        is_not_between: IsNotBetween,
+    ) -> Self:
+        return self._classify(is_not_between)
+
+    def is_in(
+        self,
+        is_in: IsIn,
+    ) -> Self:
+        return self._classify(is_in)
+
+    def is_not_in(
+        self,
+        is_not_in: IsNotIn,
+    ) -> Self:
+        return self._classify(is_not_in)
 
     def matches(
         self,
@@ -607,28 +823,6 @@ class DataQualityEngine:
 
     # ToDo: Work in progress...
 
-    # def is_in(
-    #     self,
-    #     data_column_name: str,
-    #     data_column_values: Collection[Any],
-    #     dq_column_name: str | None = None,
-    # ) -> Self:
-    #     return self._run(
-    #         pl.col(data_column_name).is_in(data_column_values),
-    #         self._name(data_column_name, dq_column_name),
-    #     )
-    #
-    # def is_not_in(
-    #     self,
-    #     data_column_name: str,
-    #     data_column_values: Collection[Any],
-    #     dq_column_name: str | None = None,
-    # ) -> Self:
-    #     return self._run(
-    #         ~pl.col(data_column_name).is_in(data_column_values),
-    #         self._name(data_column_name, dq_column_name),
-    #     )
-    #
     # def is_between(
     #     self,
     #     data_column_name: str,
@@ -774,6 +968,26 @@ CLASSIFIER_DICTIONARY: dict[type, ClassifierMetadata] = {
         column_suffix="_is_negative_or_zero",
         classifier_family=ClassifierFamily.BOOLEAN,
         polars_provider=PolarsProvider(PolarsProvider.is_negative_or_zero),
+    ),
+    IsBetween: ClassifierMetadata(
+        column_suffix="_is_between",
+        classifier_family=ClassifierFamily.BOOLEAN,
+        polars_provider=PolarsProvider(PolarsProvider.is_between),
+    ),
+    IsNotBetween: ClassifierMetadata(
+        column_suffix="_is_not_between",
+        classifier_family=ClassifierFamily.BOOLEAN,
+        polars_provider=PolarsProvider(PolarsProvider.is_not_between),
+    ),
+    IsIn: ClassifierMetadata(
+        column_suffix="_is_in",
+        classifier_family=ClassifierFamily.BOOLEAN,
+        polars_provider=PolarsProvider(PolarsProvider.is_in),
+    ),
+    IsNotIn: ClassifierMetadata(
+        column_suffix="_is_not_in",
+        classifier_family=ClassifierFamily.BOOLEAN,
+        polars_provider=PolarsProvider(PolarsProvider.is_not_in),
     ),
     Matches: ClassifierMetadata(
         column_suffix="_matches",

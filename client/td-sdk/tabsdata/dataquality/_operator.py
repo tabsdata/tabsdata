@@ -23,6 +23,7 @@ from tabsdata.dataquality._typing import (
 )
 from tabsdata.dataquality._utils import _normalize_to_list, _td_validate_call
 from tabsdata.exceptions import ConstructorError, ErrorCode, ParameterValidationError
+
 # noinspection PyProtectedMember
 from tabsdata.typing._specs import TableName
 

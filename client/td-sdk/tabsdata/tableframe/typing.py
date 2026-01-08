@@ -81,6 +81,7 @@ ClosedInterval: TypeAlias = Literal[
     "both",
     "none",
 ]
+
 FillNullStrategy: TypeAlias = Literal[
     "forward",
     "backward",
@@ -90,8 +91,18 @@ FillNullStrategy: TypeAlias = Literal[
     "zero",
     "one",
 ]
+
 NumericLiteral: TypeAlias = Union[int, float, Decimal]
-RankMethod: TypeAlias = Literal["average", "min", "max", "dense", "ordinal", "random"]
+
+RankMethod: TypeAlias = Literal[
+    "average",
+    "min",
+    "max",
+    "dense",
+    "ordinal",
+    "random",
+]
+
 TemporalLiteral: TypeAlias = Union[date, time, datetime, timedelta]
 
 # noinspection DuplicatedCode

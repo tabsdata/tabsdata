@@ -42,10 +42,10 @@ def dq_parameters():
 
 
 @pytest.mark.dq
-@pytest.mark.parametrize("classifier,dtype,config", dq_parameters())
-def test_dq_processor(classifier, dtype, config):
+@pytest.mark.parametrize("classifier,dtype,configuration", dq_parameters())
+def test_dq_processor(classifier, dtype, configuration):
     tf = dataset(dtype)
-    action = config.actions("table00")
+    action = configuration.actions("table00", dtype)
     dtf, cols, tags = DataQualityProcessor.compute([tf], action)
     assert dtf is not None, f"Failed for {classifier.__name__} with {dtype.__name__}"
     assert cols is not None
@@ -53,6 +53,6 @@ def test_dq_processor(classifier, dtype, config):
     assert isinstance(dtf, DerivedTableFrame)
     assert dtf.derived_tf is not None
     df = dtf.derived_tf._lf.collect()
-    config.checker(df, tags)
+    configuration.checker(df, tags)
     assert "value" in df.columns
     assert "id" in df.columns
