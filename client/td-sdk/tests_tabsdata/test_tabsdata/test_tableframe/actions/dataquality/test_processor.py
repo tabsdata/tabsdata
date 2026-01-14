@@ -10,6 +10,7 @@ from tabsdata.dataquality import DataQuality, Filter, Select, Summary
 from tabsdata.dataquality._operator import AllOk, AnyFailed
 from tabsdata.exceptions import (
     DataQualityProcessingError,
+    ErrorCode,
     ParameterValidationError,
 )
 from tabsdata.tableframe._actions.dataquality.processor import DataQualityProcessor
@@ -694,7 +695,7 @@ class TestDataQualityProcessorTableNames:
         with pytest.raises(DataQualityProcessingError) as exception:
             processor.table_names()
 
-        assert exception.value.code == "DQPE-001"
+        assert exception.value.code == ErrorCode.DQPE1.code()
         assert "customers" in str(exception.value)
 
     @pytest.mark.dq
@@ -727,7 +728,7 @@ class TestDataQualityProcessorTableNames:
         with pytest.raises(DataQualityProcessingError) as exception:
             processor.table_names()
 
-        assert exception.value.code == "DQPE-001"
+        assert exception.value.code == ErrorCode.DQPE1.code()
         assert "products" in str(exception.value)
 
     @pytest.mark.dq
@@ -760,7 +761,7 @@ class TestDataQualityProcessorTableNames:
         with pytest.raises(DataQualityProcessingError) as exception:
             processor.table_names()
 
-        assert exception.value.code == "DQPE-001"
+        assert exception.value.code == ErrorCode.DQPE1.code()
         assert "collection_b/customers" in str(exception.value)
 
     @pytest.mark.dq
@@ -801,7 +802,7 @@ class TestDataQualityProcessorTableNames:
         with pytest.raises(DataQualityProcessingError) as exception:
             processor.table_names()
 
-        assert exception.value.code == "DQPE-001"
+        assert exception.value.code == ErrorCode.DQPE1.code()
 
     @pytest.mark.dq
     def test_name_collision_unresolved_empty_input_tables(self):
@@ -824,7 +825,7 @@ class TestDataQualityProcessorTableNames:
         with pytest.raises(DataQualityProcessingError) as exception:
             processor.table_names()
 
-        assert exception.value.code == "DQPE-001"
+        assert exception.value.code == ErrorCode.DQPE1.code()
         assert "customers" in str(exception.value)
 
     @pytest.mark.dq
@@ -1533,7 +1534,7 @@ class TestDataQualityProcessorTableNames:
                 Select(AllOk(), to_table="custom_select_1"),
                 Select(AllOk(), to_table="custom_select_2"),
                 Filter(AnyFailed(), to_table="custom_filter_1"),
-                Filter(AnyFailed(), to_table="custom_filter_2"),
+                Select(AnyFailed(), to_table="custom_filter_2"),
                 Summary(table="custom_summary_1"),
                 Summary(table="custom_summary_2"),
             ],
@@ -1583,7 +1584,7 @@ class TestDataQualityProcessorTableNames:
                     Select(AllOk(), to_table=f"select_{i}_1"),
                     Select(AllOk(), to_table=f"select_{i}_2"),
                     Filter(AnyFailed(), to_table=f"filter_{i}_1"),
-                    Filter(AnyFailed()),
+                    Select(AllOk(), to_table=f"select_{i}_3"),
                     Summary(table=f"summary_{i}_1"),
                 ],
             )
@@ -1599,17 +1600,19 @@ class TestDataQualityProcessorTableNames:
 
         input_tables_names, output_tables_names = processor.table_names()
 
-        assert len(input_tables_names) == 20
+        assert len(input_tables_names) == 25
 
         assert input_tables_names[0].table == "select_1_1"
         assert input_tables_names[1].table == "select_1_2"
         assert input_tables_names[2].table == "filter_1_1"
-        assert input_tables_names[3].table == "summary_1_1"
+        assert input_tables_names[3].table == "select_1_3"
+        assert input_tables_names[4].table == "summary_1_1"
 
-        assert input_tables_names[16].table == "select_5_1"
-        assert input_tables_names[17].table == "select_5_2"
-        assert input_tables_names[18].table == "filter_5_1"
-        assert input_tables_names[19].table == "summary_5_1"
+        assert input_tables_names[20].table == "select_5_1"
+        assert input_tables_names[21].table == "select_5_2"
+        assert input_tables_names[22].table == "filter_5_1"
+        assert input_tables_names[23].table == "select_5_3"
+        assert input_tables_names[24].table == "summary_5_1"
 
         assert output_tables_names == []
 
@@ -1782,7 +1785,7 @@ class TestDataQualityProcessorTableNames:
         with pytest.raises(DataQualityProcessingError) as exception:
             processor.table_names()
 
-        assert exception.value.code == "DQPE-004"
+        assert exception.value.code == ErrorCode.DQPE4.code()
         assert "duplicate_name" in str(exception.value)
         assert "appears 2 times" in str(exception.value)
 
@@ -1908,7 +1911,7 @@ class TestDataQualityProcessorTableNames:
         with pytest.raises(DataQualityProcessingError) as exception:
             processor.table_names()
 
-        assert exception.value.code == "DQPE-004"
+        assert exception.value.code == ErrorCode.DQPE4.code()
         assert "shared_output" in str(exception.value)
 
     @pytest.mark.dq
@@ -1935,7 +1938,7 @@ class TestDataQualityProcessorTableNames:
         with pytest.raises(DataQualityProcessingError) as exception:
             processor.table_names()
 
-        assert exception.value.code == "DQPE-004"
+        assert exception.value.code == ErrorCode.DQPE4.code()
         assert "duplicate_output" in str(exception.value)
 
     @pytest.mark.dq
@@ -1969,7 +1972,7 @@ class TestDataQualityProcessorTableNames:
         with pytest.raises(DataQualityProcessingError) as exception:
             processor.table_names()
 
-        assert exception.value.code == "DQPE-004"
+        assert exception.value.code == ErrorCode.DQPE4.code()
         assert "shared_name" in str(exception.value)
 
     @pytest.mark.dq
@@ -2013,7 +2016,7 @@ class TestDataQualityProcessorTableNames:
         with pytest.raises(DataQualityProcessingError) as exception:
             processor.table_names()
 
-        assert exception.value.code == "DQPE-004"
+        assert exception.value.code == ErrorCode.DQPE4.code()
         assert "conflict_name" in str(exception.value)
 
     @pytest.mark.dq
@@ -2036,7 +2039,7 @@ class TestDataQualityProcessorTableNames:
                 Select(AllOk(), to_table="dup1"),
                 Select(AllOk(), to_table="dup1"),
                 Filter(AnyFailed(), to_table="dup2"),
-                Filter(AnyFailed(), to_table="dup2"),
+                Select(AnyFailed(), to_table="dup2"),
             ],
         )
 
@@ -2051,7 +2054,7 @@ class TestDataQualityProcessorTableNames:
         with pytest.raises(DataQualityProcessingError) as exception:
             processor.table_names()
 
-        assert exception.value.code == "DQPE-004"
+        assert exception.value.code == ErrorCode.DQPE4.code()
         assert "dup1" in str(exception.value)
         assert "dup2" in str(exception.value)
         assert "appears 2 times" in str(exception.value)
@@ -2090,7 +2093,7 @@ class TestDataQualityProcessorTableNames:
         with pytest.raises(DataQualityProcessingError) as exception:
             processor.table_names()
 
-        assert exception.value.code == "DQPE-004"
+        assert exception.value.code == ErrorCode.DQPE4.code()
         assert "triple" in str(exception.value)
         assert "appears 3 times" in str(exception.value)
 
@@ -2249,7 +2252,7 @@ class TestDataQualityProcessorTableNames:
         with pytest.raises(DataQualityProcessingError) as exception:
             processor.table_names()
 
-        assert exception.value.code == "DQPE-004"
+        assert exception.value.code == ErrorCode.DQPE4.code()
         assert "processed_data" in str(exception.value)
 
     @pytest.mark.dq

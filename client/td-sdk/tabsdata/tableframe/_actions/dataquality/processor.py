@@ -3,7 +3,7 @@
 #
 
 import logging
-from typing import TYPE_CHECKING, Callable, Tuple, cast
+from typing import TYPE_CHECKING, Callable, Dict, Tuple, cast
 
 # noinspection PyProtectedMember
 import tabsdata.tableframe.typing as td_typing
@@ -202,19 +202,36 @@ class DataQualityProcessor:
         return [action for action in actions or [] if isinstance(action, DataQuality)]
 
     def table_names(self) -> tuple[list[TableInfo], list[TableInfo]]:
-        input_actions_tables = []
+
+        overridden_input_actions_tables: Dict[str, int] = {}
+        input_actions_tables: list[TableInfo] = []
         for action in self._input_actions:
             collection, table, position = self.resolve_input_table(action.table)
             input_actions_tables.extend(
                 self.build_table_names(collection, table, position, action.operators)
             )
+            for operator in action.operators:
+                if self.overriding(operator):
+                    overridden_input_actions_tables[table] = (
+                        overridden_input_actions_tables.get(table, 0) + 1
+                    )
 
-        output_actions_tables = []
+        overridden_output_actions_tables: Dict[str, int] = {}
+        output_actions_tables: list[TableInfo] = []
         for action in self._output_actions:
             collection, table, position = self.resolve_output_table(action.table)
             output_actions_tables.extend(
                 self.build_table_names(collection, table, position, action.operators)
             )
+            for operator in action.operators:
+                if self.overriding(operator):
+                    overridden_output_actions_tables[table] = (
+                        overridden_output_actions_tables.get(table, 0) + 1
+                    )
+
+        self.validate_no_multiple_times_overridden_table_names(
+            overridden_input_actions_tables, overridden_output_actions_tables
+        )
 
         self.validate_no_duplicate_table_names(
             input_actions_tables, output_actions_tables
@@ -445,6 +462,27 @@ class DataQualityProcessor:
                 ErrorCode.DQPE4, "\n".join(duplicates_report)
             )
 
+    @classmethod
+    def validate_no_multiple_times_overridden_table_names(
+        cls,
+        overridden_input_tables: Dict[str, int],
+        overridden_output_tables: Dict[str, int],
+    ) -> None:
+        overridden_tables_with_errors: list[str] = []
+        for table, count in overridden_input_tables.items():
+            if count > 1:
+                overridden_tables_with_errors.append(
+                    f"- Input table '{table}': {count}."
+                )
+        for table, count in overridden_output_tables.items():
+            if count > 1:
+                overridden_tables_with_errors.append(
+                    f"- Output table '{table}': {count}."
+                )
+        if overridden_tables_with_errors:
+            report = "\n".join(overridden_tables_with_errors)
+            raise DataQualityProcessingError(ErrorCode.DQPE15, report)
+
     def tables_data(
         self,
         input_table_frames: InputTableSpec,
@@ -638,8 +676,18 @@ class DataQualityProcessor:
 
     @classmethod
     def producing(cls, operator: Operator) -> bool:
+        if operator is None:
+            return False
         return (
             not isinstance(operator, Fail)
             and not (isinstance(operator, Enrich) and operator.to_table is None)
             and not (isinstance(operator, Filter) and operator.to_table is None)
+        )
+
+    @classmethod
+    def overriding(cls, operator: Operator) -> bool:
+        if operator is None:
+            return False
+        return (isinstance(operator, Enrich) and operator.to_table is None) or (
+            isinstance(operator, Filter)
         )

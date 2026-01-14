@@ -20,6 +20,7 @@ from test_tabsdata.test_tableframe.actions.dataquality.dq_helper import (
 import tabsdata as td
 import tabsdata.dataquality as dq
 from tabsdata.dataquality._classifier import LinearScale
+from tabsdata.exceptions import DataQualityProcessingError, ErrorCode
 from tabsdata.tableframe._actions.dataquality.engine import MAX_BINS
 
 
@@ -565,7 +566,7 @@ def test_on_missing_column_fail(enrich_to_table):
     _request = fnrun.request.as_object()
     _response = fnrun.response.as_object()
     exception = fnrun.exception.as_object()
-    assert exception.code == "DQPE-011"
+    assert exception.code == ErrorCode.DQPE11.code()
     assert "missing_column" in exception.message
     assert "Status is not 0" in str(error.value)
 
@@ -677,7 +678,7 @@ def test_on_wrong_type_fail(enrich_to_table):
     _request = fnrun.request.as_object()
     _response = fnrun.response.as_object()
     exception = fnrun.exception.as_object()
-    assert exception.code == "DQPE-012"
+    assert exception.code == ErrorCode.DQPE12.code()
     assert "str_col" in exception.message
     assert "Status is not 0" in str(error.value)
 
@@ -891,7 +892,7 @@ def test_fail_operation_boolean(criteria, threshold, should_fail):
             )
         fnrun = error.value.fnrun
         exception = fnrun.exception.as_object()
-        assert exception.code == "DQPE-014"
+        assert exception.code == ErrorCode.DQPE14.code()
     else:
         tdfnrun(
             function=dq_transformer,
@@ -1052,7 +1053,7 @@ def test_fail_operation_bins(criteria, threshold, should_fail):
             )
         fnrun = error.value.fnrun
         exception = fnrun.exception.as_object()
-        assert exception.code == "DQPE-014"
+        assert exception.code == ErrorCode.DQPE14.code()
     else:
         tdfnrun(
             function=dq_transformer,
@@ -1681,3 +1682,191 @@ def test_dq_parameters_categorizer_scales(scale):
     row = summary_table.row(0, named=True)
 
     assert row["dq.parameters"] == str(classifier)
+
+
+@pytest.mark.dq
+@pytest.mark.tdfnrun
+@pytest.mark.parametrize(
+    "specifications,should_fail,failing_tables",
+    [
+        pytest.param(
+            [
+                {
+                    "table": "table_o_1",
+                    "operators": [
+                        ("enrich", {}),
+                        ("filter", {}),
+                    ],
+                }
+            ],
+            True,
+            ["table_o_1"],
+            id="single_action_conflict",
+        ),
+        pytest.param(
+            [
+                {
+                    "table": "table_o_1",
+                    "operators": [
+                        ("enrich", {}),
+                    ],
+                },
+                {
+                    "table": "table_o_1",
+                    "operators": [
+                        ("filter", {}),
+                    ],
+                },
+            ],
+            True,
+            ["table_o_1"],
+            id="cross_action_conflict",
+        ),
+        pytest.param(
+            [
+                {
+                    "table": "table_o_1",
+                    "operators": [
+                        ("enrich", {}),
+                        ("summary", {}),
+                    ],
+                },
+                {
+                    "table": "table_o_2",
+                    "operators": [
+                        ("filter", {}),
+                    ],
+                },
+                {
+                    "table": "table_o_3",
+                    "operators": [
+                        ("filter", {"to_table": "filtered_table"}),
+                        ("enrich", {"to_table": "enriched_table"}),
+                    ],
+                },
+            ],
+            False,
+            None,
+            id="multiple_tables_no_conflict",
+        ),
+        pytest.param(
+            [
+                {
+                    "table": "table_o_1",
+                    "operators": [
+                        ("filter", {"to_table": "filtered_copy"}),
+                        ("summary", {}),
+                        ("enrich", {"to_table": "enriched_copy"}),
+                    ],
+                },
+            ],
+            False,
+            None,
+            id="single_action_allowed_override",
+        ),
+        pytest.param(
+            [
+                {
+                    "table": "table_o_1",
+                    "operators": [
+                        ("filter", {}),
+                    ],
+                },
+                {
+                    "table": "table_o_2",
+                    "operators": [
+                        ("enrich", {}),
+                    ],
+                },
+            ],
+            False,
+            None,
+            id="overrides_on_distinct_tables",
+        ),
+        pytest.param(
+            [
+                {
+                    "table": "table_o_1",
+                    "operators": [
+                        ("enrich", {}),
+                        ("filter", {}),
+                        ("filter", {"to_table": "filtered_copy"}),
+                    ],
+                },
+                {
+                    "table": "table_o_2",
+                    "operators": [
+                        ("enrich", {}),
+                        ("enrich", {}),
+                        ("summary", {}),
+                    ],
+                },
+            ],
+            True,
+            ["table_o_1", "table_o_2"],
+            id="multi_table_multi_conflict",
+        ),
+    ],
+)
+def test_dq_overriding_operations(specifications, should_fail, failing_tables):
+    def operator(operator_specification):
+        operator_type, kwargs = operator_specification
+        kwargs = kwargs or {}
+        if operator_type == "enrich":
+            return dq.Enrich(**kwargs)
+        if operator_type == "filter":
+            parameters = {"criteria": dq.AllOk()}
+            parameters.update(kwargs)
+            return dq.Filter(**parameters)
+        if operator_type == "summary":
+            return dq.Summary()
+        raise AssertionError(f"Unsupported operator: {operator_type}")
+
+    dq_actions = []
+    output_tables = []
+    for specification in specifications:
+        table = specification["table"]
+        if table not in output_tables:
+            output_tables.append(table)
+        dq_actions.append(
+            dq.DataQuality(
+                table=table,
+                classifiers=[
+                    dq.IsNull("value"),
+                ],
+                operators=[operator(op_spec) for op_spec in specification["operators"]],
+            )
+        )
+
+    @td.transformer(
+        name="transformer",
+        input_tables=["table_i"],
+        output_tables=output_tables,
+        on_output_tables=dq_actions,
+    )
+    def dq_transformer(tf: td.TableFrame):
+        if len(output_tables) == 1:
+            return tf
+        return tuple(tf for _ in output_tables)
+
+    if should_fail:
+        with pytest.raises(DataQualityProcessingError) as error:
+            tdfnrun(
+                function=dq_transformer,
+                input_tables=[
+                    boolean_dataset(td.Float32),
+                ],
+            )
+
+        assert error.value.code == ErrorCode.DQPE15.code()
+        assert failing_tables
+        for table in failing_tables:
+            assert table in error.value.message
+    else:
+        assert failing_tables is None
+        tdfnrun(
+            function=dq_transformer,
+            input_tables=[
+                boolean_dataset(td.Float32),
+            ],
+        )

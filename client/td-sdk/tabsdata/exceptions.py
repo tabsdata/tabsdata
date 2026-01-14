@@ -1308,6 +1308,10 @@ class ErrorCode(Enum):
             "threshold '{}'"
         ),
     }
+    DQPE15 = {
+        "code": "DQPE-015",
+        "message": "The following tables are overridden multiple times:\n{}",
+    }
     DQCE80 = {
         "code": "DQCE-080",
         "message": (
