@@ -41,6 +41,7 @@ from tabsdata.dataquality._classifier import (
 from tabsdata.exceptions import (
     ErrorCode,
     ParameterValidationError,
+    ParameterValueError,
 )
 
 # noinspection PyUnresolvedReferences
@@ -101,7 +102,7 @@ def test_does_not_match_classifier_multiple_column_tuples():
 
 
 def test_does_not_match_classifier_invalid_pattern():
-    with pytest.raises(ParameterValidationError) as e:
+    with pytest.raises(ParameterValueError) as e:
         DoesNotMatch(pattern="*")
     assert e.value.error_code == ErrorCode.PVDQCL35
 
@@ -245,17 +246,17 @@ def test_is_between_classifier_no_values():
 
 
 def test_is_between_classifier_wrong_min_max_types():
-    with pytest.raises(ParameterValidationError) as e:
+    with pytest.raises(ParameterValueError) as e:
         IsBetween(min_len="5", max_len=10)
     assert e.value.error_code == ErrorCode.PVDQCL10
 
-    with pytest.raises(ParameterValidationError) as e:
+    with pytest.raises(ParameterValueError) as e:
         IsBetween(min_len=5, max_len="10")
     assert e.value.error_code == ErrorCode.PVDQCL10
 
 
 def test_is_between_classifier_wrong_min_max():
-    with pytest.raises(ParameterValidationError) as e:
+    with pytest.raises(ParameterValueError) as e:
         IsBetween(min_len=10, max_len=9)
     assert e.value.error_code == ErrorCode.PVDQCL10
 
@@ -292,17 +293,17 @@ def test_is_not_between_classifier_no_values():
 
 
 def test_is_not_between_classifier_wrong_min_max_types():
-    with pytest.raises(ParameterValidationError) as e:
+    with pytest.raises(ParameterValueError) as e:
         IsNotBetween(min_len="5", max_len=10)
     assert e.value.error_code == ErrorCode.PVDQCL10
 
-    with pytest.raises(ParameterValidationError) as e:
+    with pytest.raises(ParameterValueError) as e:
         IsNotBetween(min_len=5, max_len="10")
     assert e.value.error_code == ErrorCode.PVDQCL10
 
 
 def test_is_not_between_classifier_wrong_min_max():
-    with pytest.raises(ParameterValidationError) as e:
+    with pytest.raises(ParameterValueError) as e:
         IsNotBetween(min_len=10, max_len=9)
     assert e.value.error_code == ErrorCode.PVDQCL10
 
@@ -435,7 +436,7 @@ def test_matches_classifier_wrong_patttern_type():
 
 
 def test_matches_classifier_invalid_pattern():
-    with pytest.raises(ParameterValidationError) as e:
+    with pytest.raises(ParameterValueError) as e:
         Matches(pattern="*")
     assert e.value.error_code == ErrorCode.PVDQCL36
 
@@ -502,7 +503,7 @@ def test_scale_exponential():
 
 
 def test_scale_identity_validation():
-    with pytest.raises(ParameterValidationError) as e:
+    with pytest.raises(ParameterValueError) as e:
         IdentityScale(7, 1)
     assert e.value.error_code == ErrorCode.PVDQCL23
 
@@ -512,7 +513,7 @@ def test_scale_identity_validation():
 
 
 def test_scale_lineal_validation():
-    with pytest.raises(ParameterValidationError) as e:
+    with pytest.raises(ParameterValueError) as e:
         LinearScale(7, 1)
     assert e.value.error_code == ErrorCode.PVDQCL23
 
@@ -522,7 +523,7 @@ def test_scale_lineal_validation():
 
 
 def test_scale_monomial_validation():
-    with pytest.raises(ParameterValidationError) as e:
+    with pytest.raises(ParameterValueError) as e:
         MonomialScale(7, 1, 2)
     assert e.value.error_code == ErrorCode.PVDQCL23
 
@@ -536,7 +537,7 @@ def test_scale_monomial_validation():
 
 
 def test_scale_logarithmic_validation():
-    with pytest.raises(ParameterValidationError) as e:
+    with pytest.raises(ParameterValueError) as e:
         LogarithmicScale(7, 1)
     assert e.value.error_code == ErrorCode.PVDQCL23
 
@@ -550,7 +551,7 @@ def test_scale_logarithmic_validation():
 
 
 def test_scale_exponential_validation():
-    with pytest.raises(ParameterValidationError) as e:
+    with pytest.raises(ParameterValueError) as e:
         ExponentialScale(7, 1)
     assert e.value.error_code == ErrorCode.PVDQCL23
 

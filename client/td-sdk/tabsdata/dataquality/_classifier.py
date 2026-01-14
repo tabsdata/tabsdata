@@ -12,7 +12,7 @@ import math
 import re
 import sys
 from abc import ABC
-from typing import AbstractSet, Collection, FrozenSet, Optional, Type
+from typing import AbstractSet, Collection, FrozenSet, Optional, Type, Union
 
 from tabsdata.dataquality._typing import (
     MAX_BINS,
@@ -34,11 +34,11 @@ from tabsdata.dataquality._utils import (
     _normalize_to_list,
     _normalize_to_set,
     _td_validate_call,
-    _validation_error,
 )
 from tabsdata.exceptions import (
     ErrorCode,
     ParameterValidationError,
+    ParameterValueError,
 )
 from tabsdata.tableframe.dtypes import (
     _ALL_DTYPES,
@@ -103,7 +103,13 @@ class IdentityScale(Scale):
             max_val: The maximum integer value of the scale.
             min_in_first_bin: If `True`, the minimum value is part of the first bin.
         """
-        _validate_min_max(min_val, max_val, f"{self.__class__.__name__}.__init__")
+        _validate_min_max(
+            min_val,
+            max_val,
+            "IdentityScale.__init__",
+            ["min_val", "max_val"],
+            ErrorCode.PVDQCL32,
+        )
         super().__init__((min_val, max_val), max_val - min_val, min_in_first_bin)
 
 
@@ -129,8 +135,20 @@ class LinearScale(Scale):
             bins: The number of bins to create.
             min_in_first_bin: If `True`, the minimum value is part of the first bin.
         """
-        _validate_min_max(min_val, max_val, f"{self.__class__.__name__}.__init__")
-        _validate_bins(bins, min_in_first_bin, f"{self.__class__.__name__}.__init__")
+        _validate_min_max(
+            min_val,
+            max_val,
+            "LinearScale.__init__",
+            ["min_val", "max_val"],
+            ErrorCode.PVDQCL37,
+        )
+        _validate_bins(
+            bins,
+            min_in_first_bin,
+            "LinearScale.__init__",
+            ["bins", "min_in_first_bin"],
+            ErrorCode.PVDQCL42,
+        )
         super().__init__((min_val, max_val), bins, min_in_first_bin)
 
 
@@ -158,8 +176,20 @@ class MonomialScale(Scale):
             bins: The number of bins.
             min_in_first_bin: If `True`, the minimum value is part of the first bin.
         """
-        _validate_min_max(min_val, max_val, f"{self.__class__.__name__}.__init__")
-        _validate_bins(bins, min_in_first_bin, f"{self.__class__.__name__}.__init__")
+        _validate_min_max(
+            min_val,
+            max_val,
+            "MonomialScale.__init__",
+            ["min_val", "max_val"],
+            ErrorCode.PVDQCL38,
+        )
+        _validate_bins(
+            bins,
+            min_in_first_bin,
+            "MonomialScale.__init__",
+            ["bins", "min_in_first_bin"],
+            ErrorCode.PVDQCL42,
+        )
         super().__init__((min_val, max_val), bins, min_in_first_bin)
         self._power = power
 
@@ -193,8 +223,20 @@ class LogarithmicScale(Scale):
             bins: The number of bins.
             min_in_first_bin: If `True`, the minimum value is part of the first bin.
         """
-        _validate_min_max(min_val, max_val, f"{self.__class__.__name__}.__init__")
-        _validate_bins(bins, min_in_first_bin, f"{self.__class__.__name__}.__init__")
+        _validate_min_max(
+            min_val,
+            max_val,
+            "LogarithmicScale.__init__",
+            ["min_val", "max_val"],
+            ErrorCode.PVDQCL39,
+        )
+        _validate_bins(
+            bins,
+            min_in_first_bin,
+            "LogarithmicScale.__init__",
+            ["bins", "min_in_first_bin"],
+            ErrorCode.PVDQCL42,
+        )
         super().__init__((min_val, max_val), bins, min_in_first_bin)
         self._base = base or math.e
 
@@ -228,8 +270,20 @@ class ExponentialScale(Scale):
             bins: The number of bins.
             min_in_first_bin: If `True`, the minimum value is part of the first bin.
         """
-        _validate_min_max(min_val, max_val, f"{self.__class__.__name__}.__init__")
-        _validate_bins(bins, min_in_first_bin, f"{self.__class__.__name__}.__init__")
+        _validate_min_max(
+            min_val,
+            max_val,
+            "ExponentialScale.__init__",
+            ["min_val", "max_val"],
+            ErrorCode.PVDQCL40,
+        )
+        _validate_bins(
+            bins,
+            min_in_first_bin,
+            "ExponentialScale.__init__",
+            ["bins", "min_in_first_bin"],
+            ErrorCode.PVDQCL41,
+        )
         super().__init__((min_val, max_val), bins, min_in_first_bin)
         self._base = base or math.e
 
@@ -328,25 +382,37 @@ class BoolClassifier(Classifier):
         return _ALL_DTYPES
 
 
-def _validate_min_max(min_val: ScaleLimitSpec, max_val: ScaleLimitSpec, fn_name: str):
+def _validate_min_max(
+    min_val: ScaleLimitSpec,
+    max_val: ScaleLimitSpec,
+    fn_name: str,
+    fn_params: Union[str, list[str]],
+    error_code: ErrorCode,
+):
     """Validates that `min_val` is less than `max_val`."""
     if min_val >= max_val:
-        params_with_error = (
-            f"'min': {min_val}, 'max': {max_val} - The maximum value must be strictly "
+        msg = (
+            f"min={min_val}, max={max_val}, the maximum value must be strictly "
             "greater than the minimum value."
         )
-        raise _validation_error(ErrorCode.PVDQCL32, fn_name, params_with_error)
+        raise ParameterValueError(error_code, fn_name, fn_params, msg)
 
 
-def _validate_bins(bins: BinsCriteriaSpec, min_in_first_bin: bool, fn_name: str):
+def _validate_bins(
+    bins: BinsCriteriaSpec,
+    min_in_first_bin: bool,
+    fn_name: str,
+    fn_params: Union[str, list[str]],
+    error_code: ErrorCode,
+):
     """Validates the number of bins against the allowed maximum."""
     max_allowed = MAX_BINS if min_in_first_bin else MAX_BINS + 1
     if bins > max_allowed:
-        params_with_error = (
-            f"'bins': {bins}, 'min_in_first_bin': {min_in_first_bin} - "
-            f"Exceeds the maximum allowed bins of {max_allowed}."
+        msg = (
+            f"bins={bins}, min_in_first_bin={min_in_first_bin}, "
+            f"exceeds the maximum allowed bins of {max_allowed}."
         )
-        raise _validation_error(ErrorCode.PVDQCL33, fn_name, params_with_error)
+        raise ParameterValueError(error_code, fn_name, fn_params, msg)
 
 
 class Categorizer(Classifier):
@@ -389,7 +455,7 @@ class Categorizer(Classifier):
         return self._scale
 
 
-def _validate_pattern(pattern: str, fn_name: str, error_code: ErrorCode) -> str:
+def _validate_pattern(pattern: str, fn_name, error_code: ErrorCode) -> str:
     """
     Validates a regular expression pattern.
     """
@@ -397,8 +463,8 @@ def _validate_pattern(pattern: str, fn_name: str, error_code: ErrorCode) -> str:
         re.compile(pattern)
         return pattern
     except re.error:
-        msg = f"Invalid regex pattern '{pattern}', error: {re.error}."
-        raise _validation_error(error_code, fn_name, msg)
+        msg = f"Invalid regex pattern '{pattern}': {re.error}."
+        raise ParameterValueError(error_code, fn_name, "pattern", msg)
 
 
 # noinspection DuplicatedCode
@@ -818,7 +884,7 @@ class IsBetween(BoolClassifier):
             tags: Optional tags for the classifier.
         """
         super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
-        _validate_range(min_len, max_len, ErrorCode.PVDQCL11)
+        _validate_range(min_len, max_len, "IsBetween.__init__", ErrorCode.PVDQCL11)
         self._min = min_len
         self._max = max_len
         self._closed = closed
@@ -876,7 +942,7 @@ class IsNotBetween(BoolClassifier):
             tags: Optional tags for the classifier.
         """
         super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
-        _validate_range(min_len, max_len, ErrorCode.PVDQCL11)
+        _validate_range(min_len, max_len, "IsNotBetween.__init__", ErrorCode.PVDQCL11)
         self._min = min_len
         self._max = max_len
         self._closed = closed
@@ -1004,7 +1070,9 @@ class Matches(BoolClassifier):
         """
         super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
         self._pattern = _validate_pattern(
-            pattern, f"{self.__class__.__name__}.__init__", ErrorCode.PVDQCL35
+            pattern,
+            "Matches.__init__",
+            ErrorCode.PVDQCL35,
         )
 
     @property
@@ -1046,7 +1114,9 @@ class DoesNotMatch(BoolClassifier):
         """
         super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
         self._pattern = _validate_pattern(
-            pattern, f"{self.__class__.__name__}.__init__", ErrorCode.PVDQCL36
+            pattern,
+            "DoesNotMatch.__init__",
+            ErrorCode.PVDQCL36,
         )
 
     @property
@@ -1113,20 +1183,26 @@ class HasLength(BoolClassifier):
 def _validate_range(
     min_len: Optional[RangeValueSpec],
     max_len: Optional[RangeValueSpec],
+    fn_name: str,
     error_code: ErrorCode,
 ):
     if min_len is not None and max_len is not None:
         if type(min_len) is not type(max_len):
             msg = (
-                " Parameter validation error. Function 'IsInRange.__init__', "
-                f" min_len='{min_len}' and max_len='{max_len}' must be of the same"
-                " type."
+                f" min_len={min_len} and max_len={max_len}, "
+                "values must be of the same type."
             )
-            raise ParameterValidationError(error_code, msg)
+            raise ParameterValueError(
+                error_code,
+                fn_name,
+                ["min_len", "max_len"],
+                msg,
+            )
         if min_len > max_len:
-            msg = (
-                " Parameter validation error. "
-                "Function 'IsInRange.__init__', "
-                f" min_len='{min_len}' is greater than max_len='{max_len}'."
+            msg = f" min_len={min_len} is greater than max_len={max_len}."
+            raise ParameterValueError(
+                error_code,
+                fn_name,
+                ["min_len", "max_len"],
+                msg,
             )
-            raise ParameterValidationError(error_code, msg)

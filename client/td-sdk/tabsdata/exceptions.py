@@ -1,8 +1,22 @@
 #
 # Copyright 2024 Tabs Data Inc.
 #
+import inspect
 import re
 from enum import Enum
+from typing import (
+    Annotated,
+    Any,
+    Collection,
+    Literal,
+    NamedTuple,
+    Optional,
+    Union,
+    get_args,
+    get_origin,
+)
+
+from pydantic import ValidationError
 
 
 class ErrorCode(Enum):
@@ -2179,6 +2193,13 @@ class ErrorCode(Enum):
     PVDQCL34 = {}
     PVDQCL35 = {}
     PVDQCL36 = {}
+    PVDQCL37 = {}
+    PVDQCL38 = {}
+    PVDQCL39 = {}
+    PVDQCL40 = {}
+    PVDQCL41 = {}
+    PVDQCL42 = {}
+    PVDQCL43 = {}
 
     PVDQOP1 = {}
     PVDQOP2 = {}
@@ -2433,9 +2454,307 @@ class ConstructorError(TabsDataException):
     CODE_PREFIX = "PV"
 
 
+class ParameterValueError(TabsDataException):
+    CODE_PREFIX = "PV"
+
+    def __init__(
+        self,
+        error_code: ErrorCode,
+        fn_name: str,
+        param_names: Union[str | list[str]],
+        msg: str,
+    ):
+        if isinstance(param_names, str):
+            param_names = [param_names]
+        param_names = ", ".join(str(n) for n in param_names)
+
+        msg = (
+            "Parameter value validation error, "
+            f"function: '{fn_name}', "
+            f"parameter(s): {param_names}. error: {msg}"
+        )
+        super().__init__(error_code, msg)
+
+
+class ParameterError(NamedTuple):
+    name: str
+    type: str
+    value: str
+    msg: str
+
+
 class ParameterValidationError(TabsDataException):
     """
     Exception raised when public API parameter validation fails.
     """
 
     CODE_PREFIX = "PV"
+
+    def __init__(
+        self,
+        function,
+        error_code: ErrorCode,
+        pyd_validation_error: ValidationError,
+    ):
+        if not function:
+            raise Exception("Function param cannot be None")
+        if not callable(function):
+            raise Exception("Function param is not a Callable object")
+        if not error_code:
+            raise Exception("Error_code param cannot be None")
+        if not isinstance(pyd_validation_error, ValidationError):
+            raise Exception(
+                "Parameter 'pyd_validation_error' "
+                "is not a ValidationError object"
+            )
+
+        (mod, cls, fn) = _get_function_details(function)
+        if cls:
+            f_name = f"{cls}.{fn}"
+        else:
+            f_name = f"{fn}"
+
+        # Get the parameters type hints
+        param_type_dict = _get_param_and_type_str_map(function)
+
+        # Putting errors in a dict with the param as key to keep the last
+        # error for the param
+        errors = {}
+        for p_err in pyd_validation_error.errors():
+            param_name = _format_loc(function, p_err["loc"])
+            # None means the parameter does not exist as there is
+            # no type constraint. If would be an unhinted param
+            # it would not produce an error.
+            param_type = param_type_dict.get(param_name, None)
+            param_val = _format_value(p_err["input"])
+            param_msg = p_err["msg"]
+            errors[param_name] = ParameterError(
+                param_name, param_type, param_val, param_msg
+            )
+
+        error_msg = (
+            f"{error_code.code()} Parameter(s) validation error\n"
+            f"    Function: '{f_name}'. Parameters with issues:\n"
+        )
+        errors = list(errors.values())
+        for param_name, param_type, param_val, param_msg in errors:
+            if param_type:
+                error_msg += (
+                    f"        {param_name}={param_val}. Expected type: {param_type}.\n"
+                )
+            else:
+                error_msg += (
+                    f"        {param_name}={param_val}. Unexpected parameter.\n"
+                )
+
+        super().__init__(error_code, error_msg)
+        self._mod = mod
+        self._cls = cls
+        self._fn = fn
+        self._errors = errors
+
+    @property
+    def mod(self) -> str:
+        return self._mod
+
+    @property
+    def cls(self) -> Optional[str]:
+        return self._cls
+
+    @property
+    def fn(self) -> Optional[str]:
+        return self._fn
+
+    @property
+    def errors(self) -> Collection[ParameterError]:
+        return self._errors
+
+
+def _get_function_details(func):
+    # 1. Module Name
+    module = func.__module__
+
+    # 2. Function Name
+    name = func.__name__
+
+    # 3. Class Name (Parsing __qualname__)
+    # __qualname__ returns "ClassName.func_name" for methods
+    qualname = func.__qualname__
+
+    if "." in qualname:
+        class_name = qualname.split(".")[-2]
+    else:
+        class_name = None  # It's a standalone function
+
+    return module, class_name, name
+
+
+def _format_loc(func, loc: tuple) -> str | None:
+    """
+    Resolves the parameter name from a validation error location.
+
+    Args:
+        func: The function being validated.
+        loc: The 'loc' tuple from the Pydantic error (e.g., (0,) or ('arg_name',)).
+
+    Returns:
+        The name of the parameter as a string, or None if not found.
+    """
+    if not loc:
+        return None
+
+    first_item = loc[0]
+
+    # Case 1: Pydantic gave us the name directly (Standard behavior)
+    if isinstance(first_item, str):
+        return first_item
+
+    # Case 2: Pydantic gave us an index (e.g., validating a list of args)
+    if isinstance(first_item, int):
+        try:
+            sig = inspect.signature(func)
+            param_names = list(sig.parameters.keys())
+
+            # Map index to name
+            if 0 <= first_item < len(param_names):
+                return param_names[first_item]
+
+            # Handle variable arguments (*args) if the index exceeds named params
+            # (Optional logic: return the name of the *args variable)
+            for param in sig.parameters.values():
+                if param.kind == param.VAR_POSITIONAL:
+                    return param.name
+
+        except (ValueError, IndexError):
+            return None
+
+    return None
+
+
+def _format_value(value):
+    # What we consider "basic"
+    if isinstance(value, str):
+        value = value[:10] + "..." if len(value) > 10 else value
+        return f"'{value}'"
+    basic_types = (int, float, bool, type(None))
+    if isinstance(value, basic_types):
+        value = str(value)
+        return value
+    else:
+        return _get_value_type_str(value)
+
+
+def _clean_metadata(obj: Any) -> str:
+    """
+    Cleans up the metadata objects inside Annotated.
+    - If it's a class (like Strict), returns just the name ("Strict").
+    - Otherwise returns the standard representation (e.g. "Ge(ge=0)").
+    """
+    if isinstance(obj, type):
+        return obj.__name__
+    return repr(obj)
+
+
+def _clean_type_str(annotation: Any) -> str:
+    """
+    Recursively formats type hints.
+    """
+    # 1. Handle Annotated specifically
+    if get_origin(annotation) is Annotated:
+        args = get_args(annotation)
+        base_type = _clean_type_str(args[0])
+
+        # Clean the metadata arguments (args[1:]) using our helper
+        metadata = [_clean_metadata(m) for m in args[1:]]
+
+        return f"Annotated[{base_type}, {', '.join(metadata)}]"
+
+    # 2. Handle Literal (Args are values, not types, so we use repr)
+    if get_origin(annotation) is Literal:
+        args = get_args(annotation)
+        clean_args = [repr(a) for a in args]
+        return f"Literal[{', '.join(clean_args)}]"
+
+    # 3. Handle Standard Generics (List, Union, Dict, etc.)
+    origin = get_origin(annotation)
+    if origin:
+        args = get_args(annotation)
+        # Recursively clean the inner types
+        cleaned_args = [_clean_type_str(a) for a in args]
+
+        # Get the origin name (e.g. 'list', 'Union')
+        origin_name = getattr(origin, "__name__", str(origin).replace("typing.", ""))
+
+        return f"{origin_name}[{', '.join(cleaned_args)}]"
+
+    # 4. Handle Standard Classes
+    if hasattr(annotation, "__name__"):
+        return annotation.__name__
+
+    # 5. Fallback
+    return str(annotation).replace("typing.", "")
+
+
+def _get_param_and_type_str_map(func) -> dict[str, str]:
+    try:
+        sig = inspect.signature(func)
+    except ValueError:
+        return {}
+
+    param_details = {}
+
+    for param in sig.parameters.values():
+        name = param.name
+        annotation = param.annotation
+
+        if annotation is inspect.Parameter.empty:
+            type_str = "Any"
+        else:
+            type_str = _clean_type_str(annotation)
+
+        param_details[name] = type_str
+
+    return param_details
+
+
+def _get_value_type_str(value: Any) -> str:
+    """
+    Returns the type of the value as a string.
+    - Basic types (int, str, bool) -> "int"
+    - Collections -> "list[int]", "dict[str, int]" (based on 1st element)
+    - Objects -> "ClassName"
+    """
+    if value is None:
+        return "NoneType"
+
+    # Get the raw type object
+    t = type(value)
+
+    # 1. Handle Lists, Sets, Tuples (Iterables)
+    if isinstance(value, (list, set, tuple)):
+        collection_name = t.__name__  # e.g., 'list', 'set'
+
+        if not value:
+            return f"{collection_name}[Any]"  # Empty collection fallback
+
+        # Grab the first item safely
+        first_item = value[0] if isinstance(value, (list, tuple)) else next(iter(value))
+
+        # Recursively determine the type of the content
+        inner_type = _get_value_type_str(first_item)
+        return f"{collection_name}[{inner_type}]"
+
+    # 2. Handle Dictionaries
+    if isinstance(value, dict):
+        if not value:
+            return "dict[Any, Any]"
+
+        # Grab the first key-value pair
+        k, v = next(iter(value.items()))
+
+        key_type = _get_value_type_str(k)
+        val_type = _get_value_type_str(v)
+        return f"dict[{key_type}, {val_type}]"
+
+    # 3. Handle Basic Types & Custom Objects (Base case)
+    return t.__name__

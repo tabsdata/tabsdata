@@ -7,7 +7,6 @@ are used for internal purposes such as normalizing data structures, validating
 parameters, and handling exceptions.
 """
 
-import inspect
 import math
 import re
 import typing
@@ -147,7 +146,7 @@ def _validation_error(
         f"function: '{f_name}', "
         f"parameter(s): {f_params_with_error}."
     )
-    return ParameterValidationError(error_code, msg)
+    return ParameterValidationError(_validation_error, error_code, msg)
 
 
 def _td_validate_call(error_code: ErrorCode, f=None):
@@ -181,30 +180,7 @@ def _td_validate_call(error_code: ErrorCode, f=None):
     def wrapper(*args, **kwargs):
         try:
             return validated_func(*args, **kwargs)
-        except ValidationError as e:
-
-            f_name = f.__name__ if isinstance(f, type) else f.__qualname__
-
-            validation_params = []
-            for error_details in e.errors():
-                param = error_details["loc"][0]
-                if isinstance(param, int):
-                    signature = inspect.signature(f)
-                    parameters = list(signature.parameters.keys())
-                    param = parameters[param]
-                param_value = error_details["input"]
-                pydantic_msg = error_details["msg"]
-                param_hint = _get_parameter_type_hints(f, param)
-                validation_param = _validation_param_error_message(
-                    param, param_hint, param_value, pydantic_msg
-                )
-                validation_params.append(validation_param)
-
-            validation_error = _validation_error(
-                error_code,
-                f_name,
-                ", ".join(validation_params),
-            )
-            raise validation_error from e
+        except ValidationError as pyd_err:
+            raise ParameterValidationError(f, error_code, pyd_err) from pyd_err
 
     return wrapper

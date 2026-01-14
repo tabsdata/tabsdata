@@ -2,9 +2,10 @@
 #  Copyright 2025. Tabs Data Inc.
 #
 
-from typing import List, Optional
+from typing import Annotated, List, Literal, Optional, TypeAlias, Union
 
 import pytest
+from pydantic import Field, Strict, StrictInt, validate_call
 
 from tabsdata.dataquality._utils import (
     _get_parameter_type_hints,
@@ -95,80 +96,63 @@ def test_get_parameter_type_hints_with_nonexistent_param():
 
 
 # Tests for _td_validate_call
+
+P0Spec: TypeAlias = Literal["a", "b"]
+P1Spec: TypeAlias = Union[int, str]
+P2Spec: TypeAlias = Annotated[StrictInt, Field(ge=0)]
+P3Spec: TypeAlias = Annotated[list[str], Strict]
+P4Spec: TypeAlias = list[dict[int, str]]
+
+
 @_td_validate_call(ErrorCode.PVTEST0)
-def decorated_function(a: int, b: str):
-    return a, b
+def decorated_function(
+    p0: P0Spec = None,
+    p1: P1Spec = None,
+    p2: P2Spec = None,
+    p3: P3Spec = None,
+    *,
+    p4: P4Spec = None,
+    p00: P0Spec = None,
+    **kwargs
+):
+    pass
 
 
-def test_td_validate_call_with_valid_args():
-    assert decorated_function(1, "test") == (1, "test")
+def test_decorated_function_good_values():
+    # Test with valid values
+    decorated_function(p0="a", p1=1, p2=0, p3=["a", "b"], p4=[{1: "a"}])
+    decorated_function(p0="b", p1="test", p2=100, p3=[], p4=[])
+    decorated_function()  # All have default None
 
 
-def test_td_validate_call_with_invalid_arg_type():
-    with pytest.raises(ParameterValidationError) as exc_info:
-        decorated_function("not-an-int", "test")
-
-    assert exc_info.value.error_code == ErrorCode.PVTEST0
-    assert "Parameter validation error" in str(exc_info.value)
-    assert "function: 'decorated_function'" in str(exc_info.value)
-    assert "parameter(s): 'a' : 'int' = 'not-an-int'" in str(exc_info.value)
-    assert "error: " in str(exc_info.value)
+def test_decorated_function_wrong_p0():
+    with pytest.raises(ParameterValidationError) as excinfo:
+        decorated_function(p0="c")
+    errors = excinfo.value.errors
+    assert len(errors) == 1
+    assert errors[0].name == "p0"
+    assert errors[0].type == "Literal['a', 'b']"
 
 
-def test_td_validate_call_with_invalid_kwarg_type():
-    with pytest.raises(ParameterValidationError) as exc_info:
-        decorated_function(a=1, b=123)
-
-    assert exc_info.value.error_code == ErrorCode.PVTEST0
-    assert "Parameter validation error" in str(exc_info.value)
-    assert "function: 'decorated_function'" in str(exc_info.value)
-    assert "'a' : 'int' = '1'" not in str(exc_info.value)
-    assert "'b' : 'str' = '123'" in str(exc_info.value)
-    assert "error: " in str(exc_info.value)
+def test_decorated_function_wrong_p1():
+    with pytest.raises(ParameterValidationError) as excinfo:
+        decorated_function(p1=1.5)
+    errors = excinfo.value.errors
+    assert len(errors) == 1
+    assert errors[0].name == "p1"
+    assert errors[0].type == "Union[int, str]"
 
 
-class SampleClass:
-    @_td_validate_call(ErrorCode.PVTEST0)
-    def __init__(self, a: int):
-        self.a = a
-
-    @_td_validate_call(ErrorCode.PVTEST0)
-    def method(self, b: str):
-        return self.a, b
-
-
-def test_td_validate_call_on_class_method():
-    instance = SampleClass(1)
-    assert instance.method("test") == (1, "test")
-
-    with pytest.raises(ParameterValidationError) as exc_info:
-        instance.method(b=123)
-
-    assert exc_info.value.error_code == ErrorCode.PVTEST0
-    assert "Parameter validation error" in str(exc_info.value)
-    assert "function: 'SampleClass.method'" in str(exc_info.value)
-    assert "'b' : 'str' = '123'" in str(exc_info.value)
-    assert "error: " in str(exc_info.value)
-
-
-def test_td_validate_call_on_class_init():
-    with pytest.raises(ParameterValidationError) as exc_info:
-        SampleClass("not-an-int")
-
-    assert exc_info.value.error_code == ErrorCode.PVTEST0
-    assert "Parameter validation error" in str(exc_info.value)
-    assert "function: 'SampleClass.__init__'" in str(exc_info.value)
-    assert "'a' : 'int' = 'not-an-int'" in str(exc_info.value)
-    assert "error: " in str(exc_info.value)
-
-
-def test_td_validate_call_with_multiple_invalid_args():
-    with pytest.raises(ParameterValidationError) as exc_info:
-        decorated_function("not-an-int", 123)
-
-    assert exc_info.value.error_code == ErrorCode.PVTEST0
-    assert "Parameter validation error" in str(exc_info.value)
-    assert "function: 'decorated_function'" in str(exc_info.value)
-    assert "'a' : 'int' = 'not-an-int'" in str(exc_info.value)
-    assert "'b' : 'str' = '123'" in str(exc_info.value)
-    assert "error: " in str(exc_info.value)
+def test_decorated_function_wrong_p2():
+    with pytest.raises(ParameterValidationError) as excinfo:
+        decorated_function(p1=1.5, p2=-1)
+    errors = excinfo.value.errors
+    assert len(errors) == 2
+    assert errors[0].name == "p1"
+    assert errors[0].type == "Union[int, str]"
+    assert errors[1].name == "p2"
+    assert (
+        errors[1].type
+        == "Annotated[int, Strict(strict=True), FieldInfo(annotation=NoneType,"
+        " required=True, metadata=[Ge(ge=0)])]"
+    )
