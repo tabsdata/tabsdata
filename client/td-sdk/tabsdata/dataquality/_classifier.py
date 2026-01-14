@@ -62,11 +62,11 @@ class Scale(ABC):
         self,
         scale_range: tuple[ScaleLimitSpec, ScaleLimitSpec],
         bins: Optional[BinCountSpec],
-        min_in_first_bin: bool,
+        use_bin_zero: bool,
     ):
         self._range = scale_range
         self._bins = bins
-        self._min_in_first_bin = min_in_first_bin
+        self._use_bin_zero = use_bin_zero
 
     @property
     def scale_range(self) -> tuple[ScaleLimitSpec, ScaleLimitSpec]:
@@ -79,9 +79,9 @@ class Scale(ABC):
         return self._bins
 
     @property
-    def min_in_first_bin(self) -> bool:
-        """Returns whether the minimum value is included in the first bin."""
-        return self._min_in_first_bin
+    def use_bin_zero(self) -> bool:
+        """Returns whether the minimum value is in bin zero or in bin one."""
+        return self._use_bin_zero
 
 
 class IdentityScale(Scale):
@@ -94,7 +94,7 @@ class IdentityScale(Scale):
         self,
         min_val: ScaleIdentityLimitSpec,
         max_val: ScaleIdentityLimitSpec,
-        min_in_first_bin: bool = True,
+        use_bin_zero: bool = False,
     ):
         """
         Initializes an identity scale.
@@ -102,7 +102,7 @@ class IdentityScale(Scale):
         Args:
             min_val: The minimum integer value of the scale.
             max_val: The maximum integer value of the scale.
-            min_in_first_bin: If `True`, the minimum value is part of the first bin.
+            use_bin_zero: If `False`, the minimum value is part of the first bin.
         """
         _validate_min_max(
             min_val,
@@ -111,7 +111,7 @@ class IdentityScale(Scale):
             ["min_val", "max_val"],
             ErrorCode.PVDQCL32,
         )
-        super().__init__((min_val, max_val), max_val - min_val, min_in_first_bin)
+        super().__init__((min_val, max_val), max_val - min_val, use_bin_zero)
 
 
 class LinearScale(Scale):
@@ -125,7 +125,7 @@ class LinearScale(Scale):
         min_val: ScaleLimitSpec,
         max_val: ScaleLimitSpec,
         bins: BinCountSpec = MAX_BINS,
-        min_in_first_bin: bool = True,
+        use_bin_zero: bool = False,
     ):
         """
         Initializes a linear scale.
@@ -134,7 +134,7 @@ class LinearScale(Scale):
             min_val: The minimum value of the scale.
             max_val: The maximum value of the scale.
             bins: The number of bins to create.
-            min_in_first_bin: If `True`, the minimum value is part of the first bin.
+            use_bin_zero: If `False`, the minimum value is part of the first bin.
         """
         _validate_min_max(
             min_val,
@@ -145,12 +145,12 @@ class LinearScale(Scale):
         )
         _validate_bins(
             bins,
-            min_in_first_bin,
+            use_bin_zero,
             "LinearScale.__init__",
             ["bins", "min_in_first_bin"],
             ErrorCode.PVDQCL42,
         )
-        super().__init__((min_val, max_val), bins, min_in_first_bin)
+        super().__init__((min_val, max_val), bins, use_bin_zero)
 
 
 class MonomialScale(Scale):
@@ -165,7 +165,7 @@ class MonomialScale(Scale):
         max_val: ScaleLimitSpec,
         power: ScalePowerSpec,
         bins: BinCountSpec = MAX_BINS,
-        min_in_first_bin: bool = True,
+        use_bin_zero: bool = False,
     ):
         """
         Initializes a monomial scale.
@@ -175,7 +175,7 @@ class MonomialScale(Scale):
             max_val: The maximum value of the scale.
             power: The exponent for the power-law function.
             bins: The number of bins.
-            min_in_first_bin: If `True`, the minimum value is part of the first bin.
+            use_bin_zero: If `False`, the minimum value is part of the first bin.
         """
         _validate_min_max(
             min_val,
@@ -186,12 +186,12 @@ class MonomialScale(Scale):
         )
         _validate_bins(
             bins,
-            min_in_first_bin,
+            use_bin_zero,
             "MonomialScale.__init__",
             ["bins", "min_in_first_bin"],
             ErrorCode.PVDQCL42,
         )
-        super().__init__((min_val, max_val), bins, min_in_first_bin)
+        super().__init__((min_val, max_val), bins, use_bin_zero)
         self._power = power
 
     @property
@@ -212,7 +212,7 @@ class LogarithmicScale(Scale):
         max_val: ScaleLimitSpec,
         base: Optional[ScaleBaseSpec] = None,
         bins: BinCountSpec = MAX_BINS,
-        min_in_first_bin: bool = True,
+        use_bin_zero: bool = False,
     ):
         """
         Initializes a logarithmic scale.
@@ -222,7 +222,7 @@ class LogarithmicScale(Scale):
             max_val: The maximum value of the scale.
             base: The base of the logarithm. Defaults to `math.e`.
             bins: The number of bins.
-            min_in_first_bin: If `True`, the minimum value is part of the first bin.
+            use_bin_zero: If `False`, the minimum value is part of the first bin.
         """
         _validate_min_max(
             min_val,
@@ -233,12 +233,12 @@ class LogarithmicScale(Scale):
         )
         _validate_bins(
             bins,
-            min_in_first_bin,
+            use_bin_zero,
             "LogarithmicScale.__init__",
             ["bins", "min_in_first_bin"],
             ErrorCode.PVDQCL42,
         )
-        super().__init__((min_val, max_val), bins, min_in_first_bin)
+        super().__init__((min_val, max_val), bins, use_bin_zero)
         self._base = base or math.e
 
     @property
@@ -259,7 +259,7 @@ class ExponentialScale(Scale):
         max_val: ScaleLimitSpec,
         base: Optional[ScaleBaseSpec] = None,
         bins: BinCountSpec = MAX_BINS,
-        min_in_first_bin: bool = True,
+        use_bin_zero: bool = False,
     ):
         """
         Initializes an exponential scale.
@@ -269,7 +269,7 @@ class ExponentialScale(Scale):
             max_val: The maximum value of the scale.
             base: The base of the exponent. Defaults to `math.e`.
             bins: The number of bins.
-            min_in_first_bin: If `True`, the minimum value is part of the first bin.
+            use_bin_zero: If `False`, the minimum value is part of the first bin.
         """
         _validate_min_max(
             min_val,
@@ -280,12 +280,12 @@ class ExponentialScale(Scale):
         )
         _validate_bins(
             bins,
-            min_in_first_bin,
+            use_bin_zero,
             "ExponentialScale.__init__",
             ["bins", "min_in_first_bin"],
             ErrorCode.PVDQCL41,
         )
-        super().__init__((min_val, max_val), bins, min_in_first_bin)
+        super().__init__((min_val, max_val), bins, use_bin_zero)
         self._base = base or math.e
 
     @property

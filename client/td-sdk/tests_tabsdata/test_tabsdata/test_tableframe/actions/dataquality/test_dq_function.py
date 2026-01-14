@@ -165,7 +165,7 @@ def test_summary_categorizer_min_in_first_bin(
         min_val=0,
         max_val=100,
         bins=10,
-        min_in_first_bin=True,
+        use_bin_zero=False,
     )
 
     @td.transformer(
@@ -259,7 +259,7 @@ def test_summary_categorizer_min_not_in_first_bin(
         min_val=0,
         max_val=100,
         bins=10,
-        min_in_first_bin=False,
+        use_bin_zero=True,
     )
 
     @td.transformer(

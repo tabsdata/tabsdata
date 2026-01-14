@@ -661,7 +661,7 @@ class PolarsClassifierProvider:
                 raise ValueError(f"Unsupported scale type: {type(scale)}")
 
         expression = None
-        if not scale.min_in_first_bin:
+        if scale.use_bin_zero:
             expression = pl.when(column == minimum).then(pl.lit(0))
         for i, cut in enumerate(cuts, start=1):
             if expression is None:
@@ -1435,7 +1435,7 @@ class DataQualityEngine:
                         DQColumns.DQ_NAN.value: nan_count,
                         DQColumns.DQ_NONE.value: null_count,
                     }
-                    if categorizer.scale.min_in_first_bin:
+                    if not categorizer.scale.use_bin_zero:
                         summary_row[DQColumns.column(0)] = None
                     else:
                         count = lf.select((pl.col(column) == 0).sum()).collect().item()

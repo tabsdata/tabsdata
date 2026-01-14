@@ -1571,7 +1571,7 @@ def _make_categorizer_checker(scale):
             if row_value > maximum:
                 return ByteSentinel.OVERFLOW
 
-            if not scale.min_in_first_bin and row_value == minimum:
+            if scale.use_bin_zero and row_value == minimum:
                 return 0
 
             for i, cut in enumerate(cuts, start=1):
@@ -2984,7 +2984,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         min_val=0,
                         max_val=100,
                         bins=10,
-                        min_in_first_bin=True,
+                        use_bin_zero=False,
                     ),
                     tags="linear",
                 ),
@@ -2995,7 +2995,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_val=0,
                     max_val=100,
                     bins=10,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
             actions=_make_categorizer_action(
@@ -3003,7 +3003,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_val=0,
                     max_val=100,
                     bins=10,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
             dtypes=list(Categorizer.supported_dtypes()),
@@ -3013,7 +3013,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_val=0,
                     max_val=100,
                     bins=10,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
         ),
@@ -3025,7 +3025,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         min_val=0,
                         max_val=100,
                         bins=10,
-                        min_in_first_bin=False,
+                        use_bin_zero=True,
                     ),
                     tags="linear",
                 ),
@@ -3036,7 +3036,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_val=0,
                     max_val=100,
                     bins=10,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
             actions=_make_categorizer_action(
@@ -3044,7 +3044,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_val=0,
                     max_val=100,
                     bins=10,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
             dtypes=list(Categorizer.supported_dtypes()),
@@ -3054,7 +3054,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_val=0,
                     max_val=100,
                     bins=10,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
         ),
@@ -3066,7 +3066,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         min_val=0,
                         max_val=10,
                         bins=5,
-                        min_in_first_bin=True,
+                        use_bin_zero=False,
                     ),
                     tags="linear",
                 ),
@@ -3077,7 +3077,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_val=0,
                     max_val=10,
                     bins=5,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
             actions=_make_categorizer_action(
@@ -3085,7 +3085,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_val=0,
                     max_val=10,
                     bins=5,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
             dtypes=list(Categorizer.supported_dtypes()),
@@ -3095,7 +3095,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_val=0,
                     max_val=10,
                     bins=5,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
         ),
@@ -3107,7 +3107,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         min_val=0,
                         max_val=10,
                         bins=5,
-                        min_in_first_bin=False,
+                        use_bin_zero=True,
                     ),
                     tags="linear",
                 ),
@@ -3118,7 +3118,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_val=0,
                     max_val=10,
                     bins=5,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
             actions=_make_categorizer_action(
@@ -3126,7 +3126,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_val=0,
                     max_val=10,
                     bins=5,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
             dtypes=list(Categorizer.supported_dtypes()),
@@ -3136,7 +3136,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_val=0,
                     max_val=10,
                     bins=5,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
         ),
@@ -3148,7 +3148,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         min_val=-50,
                         max_val=50,
                         bins=20,
-                        min_in_first_bin=True,
+                        use_bin_zero=False,
                     ),
                     tags="linear",
                 ),
@@ -3159,7 +3159,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_val=-50,
                     max_val=50,
                     bins=20,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
             actions=_make_categorizer_action(
@@ -3167,7 +3167,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_val=-50,
                     max_val=50,
                     bins=20,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
             dtypes=list(Categorizer.supported_dtypes()),
@@ -3177,7 +3177,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_val=-50,
                     max_val=50,
                     bins=20,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
         ),
@@ -3189,7 +3189,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         min_val=-50,
                         max_val=50,
                         bins=20,
-                        min_in_first_bin=False,
+                        use_bin_zero=True,
                     ),
                     tags="linear",
                 ),
@@ -3200,7 +3200,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_val=-50,
                     max_val=50,
                     bins=20,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
             actions=_make_categorizer_action(
@@ -3208,7 +3208,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_val=-50,
                     max_val=50,
                     bins=20,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
             dtypes=list(Categorizer.supported_dtypes()),
@@ -3218,7 +3218,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_val=-50,
                     max_val=50,
                     bins=20,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
         ),
@@ -3230,7 +3230,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         min_val=0,
                         max_val=1,
                         bins=100,
-                        min_in_first_bin=True,
+                        use_bin_zero=False,
                     ),
                     tags="linear",
                 ),
@@ -3241,7 +3241,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_val=0,
                     max_val=1,
                     bins=100,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
             actions=_make_categorizer_action(
@@ -3249,7 +3249,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_val=0,
                     max_val=1,
                     bins=100,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
             dtypes=list(Categorizer.supported_dtypes()),
@@ -3259,7 +3259,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_val=0,
                     max_val=1,
                     bins=100,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
         ),
@@ -3271,7 +3271,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         min_val=0,
                         max_val=1,
                         bins=100,
-                        min_in_first_bin=False,
+                        use_bin_zero=True,
                     ),
                     tags="linear",
                 ),
@@ -3282,7 +3282,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_val=0,
                     max_val=1,
                     bins=100,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
             actions=_make_categorizer_action(
@@ -3290,7 +3290,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_val=0,
                     max_val=1,
                     bins=100,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
             dtypes=list(Categorizer.supported_dtypes()),
@@ -3300,7 +3300,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     min_val=0,
                     max_val=1,
                     bins=100,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
         ),
@@ -3311,7 +3311,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     scale=IdentityScale(
                         min_val=0,
                         max_val=10,
-                        min_in_first_bin=True,
+                        use_bin_zero=False,
                     ),
                     tags="identity",
                 ),
@@ -3321,14 +3321,14 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                 IdentityScale(
                     min_val=0,
                     max_val=10,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
             actions=_make_categorizer_action(
                 IdentityScale(
                     min_val=0,
                     max_val=10,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
             dtypes=list(Categorizer.supported_dtypes()),
@@ -3337,7 +3337,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                 IdentityScale(
                     min_val=0,
                     max_val=10,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
         ),
@@ -3348,7 +3348,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     scale=IdentityScale(
                         min_val=0,
                         max_val=10,
-                        min_in_first_bin=False,
+                        use_bin_zero=True,
                     ),
                     tags="identity",
                 ),
@@ -3358,14 +3358,14 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                 IdentityScale(
                     min_val=0,
                     max_val=10,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
             actions=_make_categorizer_action(
                 IdentityScale(
                     min_val=0,
                     max_val=10,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
             dtypes=list(Categorizer.supported_dtypes()),
@@ -3374,7 +3374,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                 IdentityScale(
                     min_val=0,
                     max_val=10,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
         ),
@@ -3385,7 +3385,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     scale=IdentityScale(
                         min_val=1,
                         max_val=20,
-                        min_in_first_bin=True,
+                        use_bin_zero=False,
                     ),
                     tags="identity",
                 ),
@@ -3395,14 +3395,14 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                 IdentityScale(
                     min_val=1,
                     max_val=20,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
             actions=_make_categorizer_action(
                 IdentityScale(
                     min_val=1,
                     max_val=20,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
             dtypes=list(Categorizer.supported_dtypes()),
@@ -3411,7 +3411,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                 IdentityScale(
                     min_val=1,
                     max_val=20,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
         ),
@@ -3422,7 +3422,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     scale=IdentityScale(
                         min_val=1,
                         max_val=20,
-                        min_in_first_bin=False,
+                        use_bin_zero=True,
                     ),
                     tags="identity",
                 ),
@@ -3432,14 +3432,14 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                 IdentityScale(
                     min_val=1,
                     max_val=20,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
             actions=_make_categorizer_action(
                 IdentityScale(
                     min_val=1,
                     max_val=20,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
             dtypes=list(Categorizer.supported_dtypes()),
@@ -3448,7 +3448,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                 IdentityScale(
                     min_val=1,
                     max_val=20,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
         ),
@@ -3459,7 +3459,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     scale=IdentityScale(
                         min_val=0,
                         max_val=100,
-                        min_in_first_bin=True,
+                        use_bin_zero=False,
                     ),
                     tags="identity",
                 ),
@@ -3469,14 +3469,14 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                 IdentityScale(
                     min_val=0,
                     max_val=100,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
             actions=_make_categorizer_action(
                 IdentityScale(
                     min_val=0,
                     max_val=100,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
             dtypes=list(Categorizer.supported_dtypes()),
@@ -3485,7 +3485,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                 IdentityScale(
                     min_val=0,
                     max_val=100,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
         ),
@@ -3496,7 +3496,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     scale=IdentityScale(
                         min_val=0,
                         max_val=100,
-                        min_in_first_bin=False,
+                        use_bin_zero=True,
                     ),
                     tags="identity",
                 ),
@@ -3506,14 +3506,14 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                 IdentityScale(
                     min_val=0,
                     max_val=100,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
             actions=_make_categorizer_action(
                 IdentityScale(
                     min_val=0,
                     max_val=100,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
             dtypes=list(Categorizer.supported_dtypes()),
@@ -3522,7 +3522,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                 IdentityScale(
                     min_val=0,
                     max_val=100,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
         ),
@@ -3535,7 +3535,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         max_val=100,
                         power=2.0,
                         bins=10,
-                        min_in_first_bin=True,
+                        use_bin_zero=False,
                     ),
                     tags="monomial",
                 ),
@@ -3547,7 +3547,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=100,
                     power=2.0,
                     bins=10,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
             actions=_make_categorizer_action(
@@ -3556,7 +3556,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=100,
                     power=2.0,
                     bins=10,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
             dtypes=list(Categorizer.supported_dtypes()),
@@ -3567,7 +3567,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=100,
                     power=2.0,
                     bins=10,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
         ),
@@ -3580,7 +3580,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         max_val=100,
                         power=2.0,
                         bins=10,
-                        min_in_first_bin=False,
+                        use_bin_zero=True,
                     ),
                     tags="monomial",
                 ),
@@ -3592,7 +3592,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=100,
                     power=2.0,
                     bins=10,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
             actions=_make_categorizer_action(
@@ -3601,7 +3601,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=100,
                     power=2.0,
                     bins=10,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
             dtypes=list(Categorizer.supported_dtypes()),
@@ -3612,7 +3612,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=100,
                     power=2.0,
                     bins=10,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
         ),
@@ -3625,7 +3625,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         max_val=27,
                         power=3.0,
                         bins=9,
-                        min_in_first_bin=True,
+                        use_bin_zero=False,
                     ),
                     tags="monomial",
                 ),
@@ -3637,7 +3637,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=27,
                     power=3.0,
                     bins=9,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
             actions=_make_categorizer_action(
@@ -3646,7 +3646,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=27,
                     power=3.0,
                     bins=9,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
             dtypes=list(Categorizer.supported_dtypes()),
@@ -3657,7 +3657,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=27,
                     power=3.0,
                     bins=9,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
         ),
@@ -3670,7 +3670,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         max_val=27,
                         power=3.0,
                         bins=9,
-                        min_in_first_bin=False,
+                        use_bin_zero=True,
                     ),
                     tags="monomial",
                 ),
@@ -3682,7 +3682,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=27,
                     power=3.0,
                     bins=9,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
             actions=_make_categorizer_action(
@@ -3691,7 +3691,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=27,
                     power=3.0,
                     bins=9,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
             dtypes=list(Categorizer.supported_dtypes()),
@@ -3702,7 +3702,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=27,
                     power=3.0,
                     bins=9,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
         ),
@@ -3715,7 +3715,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         max_val=1000,
                         power=2.0,
                         bins=30,
-                        min_in_first_bin=True,
+                        use_bin_zero=False,
                     ),
                     tags="monomial",
                 ),
@@ -3727,7 +3727,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=1000,
                     power=2.0,
                     bins=30,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
             actions=_make_categorizer_action(
@@ -3736,7 +3736,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=1000,
                     power=2.0,
                     bins=30,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
             dtypes=list(Categorizer.supported_dtypes()),
@@ -3747,7 +3747,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=1000,
                     power=2.0,
                     bins=30,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
         ),
@@ -3760,7 +3760,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         max_val=1000,
                         power=2.0,
                         bins=30,
-                        min_in_first_bin=False,
+                        use_bin_zero=True,
                     ),
                     tags="monomial",
                 ),
@@ -3772,7 +3772,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=1000,
                     power=2.0,
                     bins=30,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
             actions=_make_categorizer_action(
@@ -3781,7 +3781,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=1000,
                     power=2.0,
                     bins=30,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
             dtypes=list(Categorizer.supported_dtypes()),
@@ -3792,7 +3792,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=1000,
                     power=2.0,
                     bins=30,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
         ),
@@ -3805,7 +3805,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         max_val=6,
                         base=10.0,
                         bins=6,
-                        min_in_first_bin=True,
+                        use_bin_zero=False,
                     ),
                     tags="logarithmic",
                 ),
@@ -3817,7 +3817,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=6,
                     base=10.0,
                     bins=6,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
             actions=_make_categorizer_action(
@@ -3826,7 +3826,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=6,
                     base=10.0,
                     bins=6,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
             dtypes=list(Categorizer.supported_dtypes()),
@@ -3837,7 +3837,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=6,
                     base=10.0,
                     bins=6,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
         ),
@@ -3850,7 +3850,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         max_val=6,
                         base=10.0,
                         bins=6,
-                        min_in_first_bin=False,
+                        use_bin_zero=True,
                     ),
                     tags="logarithmic",
                 ),
@@ -3862,7 +3862,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=6,
                     base=10.0,
                     bins=6,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
             actions=_make_categorizer_action(
@@ -3871,7 +3871,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=6,
                     base=10.0,
                     bins=6,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
             dtypes=list(Categorizer.supported_dtypes()),
@@ -3882,7 +3882,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=6,
                     base=10.0,
                     bins=6,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
         ),
@@ -3895,7 +3895,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         max_val=4,
                         base=2.0,
                         bins=4,
-                        min_in_first_bin=True,
+                        use_bin_zero=False,
                     ),
                     tags="logarithmic",
                 ),
@@ -3907,7 +3907,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=4,
                     base=2.0,
                     bins=4,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
             actions=_make_categorizer_action(
@@ -3916,7 +3916,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=4,
                     base=2.0,
                     bins=4,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
             dtypes=list(Categorizer.supported_dtypes()),
@@ -3927,7 +3927,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=4,
                     base=2.0,
                     bins=4,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
         ),
@@ -3940,7 +3940,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         max_val=4,
                         base=2.0,
                         bins=4,
-                        min_in_first_bin=False,
+                        use_bin_zero=True,
                     ),
                     tags="logarithmic",
                 ),
@@ -3952,7 +3952,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=4,
                     base=2.0,
                     bins=4,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
             actions=_make_categorizer_action(
@@ -3961,7 +3961,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=4,
                     base=2.0,
                     bins=4,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
             dtypes=list(Categorizer.supported_dtypes()),
@@ -3972,7 +3972,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=4,
                     base=2.0,
                     bins=4,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
         ),
@@ -3985,7 +3985,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         max_val=3,
                         base=math.e,
                         bins=10,
-                        min_in_first_bin=True,
+                        use_bin_zero=False,
                     ),
                     tags="logarithmic",
                 ),
@@ -3997,7 +3997,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=3,
                     base=math.e,
                     bins=10,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
             actions=_make_categorizer_action(
@@ -4006,7 +4006,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=3,
                     base=math.e,
                     bins=10,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
             dtypes=list(Categorizer.supported_dtypes()),
@@ -4017,7 +4017,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=3,
                     base=math.e,
                     bins=10,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
         ),
@@ -4030,7 +4030,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         max_val=3,
                         base=math.e,
                         bins=10,
-                        min_in_first_bin=False,
+                        use_bin_zero=True,
                     ),
                     tags="logarithmic",
                 ),
@@ -4042,7 +4042,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=3,
                     base=math.e,
                     bins=10,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
             actions=_make_categorizer_action(
@@ -4051,7 +4051,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=3,
                     base=math.e,
                     bins=10,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
             dtypes=list(Categorizer.supported_dtypes()),
@@ -4062,7 +4062,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=3,
                     base=math.e,
                     bins=10,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
         ),
@@ -4075,7 +4075,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         max_val=1000000,
                         base=10.0,
                         bins=6,
-                        min_in_first_bin=True,
+                        use_bin_zero=False,
                     ),
                     tags="exponential",
                 ),
@@ -4087,7 +4087,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=1000000,
                     base=10.0,
                     bins=6,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
             actions=_make_categorizer_action(
@@ -4096,7 +4096,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=1000000,
                     base=10.0,
                     bins=6,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
             dtypes=list(Categorizer.supported_dtypes()),
@@ -4107,7 +4107,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=1000000,
                     base=10.0,
                     bins=6,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
         ),
@@ -4120,7 +4120,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         max_val=1000000,
                         base=10.0,
                         bins=6,
-                        min_in_first_bin=False,
+                        use_bin_zero=True,
                     ),
                     tags="exponential",
                 ),
@@ -4132,7 +4132,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=1000000,
                     base=10.0,
                     bins=6,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
             actions=_make_categorizer_action(
@@ -4141,7 +4141,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=1000000,
                     base=10.0,
                     bins=6,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
             dtypes=list(Categorizer.supported_dtypes()),
@@ -4152,7 +4152,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=1000000,
                     base=10.0,
                     bins=6,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
         ),
@@ -4165,7 +4165,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         max_val=1000,
                         base=10.0,
                         bins=3,
-                        min_in_first_bin=True,
+                        use_bin_zero=False,
                     ),
                     tags="exponential",
                 ),
@@ -4177,7 +4177,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=1000,
                     base=10.0,
                     bins=3,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
             actions=_make_categorizer_action(
@@ -4186,7 +4186,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=1000,
                     base=10.0,
                     bins=3,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
             dtypes=list(Categorizer.supported_dtypes()),
@@ -4197,7 +4197,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=1000,
                     base=10.0,
                     bins=3,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
         ),
@@ -4210,7 +4210,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         max_val=1000,
                         base=10.0,
                         bins=3,
-                        min_in_first_bin=False,
+                        use_bin_zero=True,
                     ),
                     tags="exponential",
                 ),
@@ -4222,7 +4222,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=1000,
                     base=10.0,
                     bins=3,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
             actions=_make_categorizer_action(
@@ -4231,7 +4231,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=1000,
                     base=10.0,
                     bins=3,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
             dtypes=list(Categorizer.supported_dtypes()),
@@ -4242,7 +4242,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=1000,
                     base=10.0,
                     bins=3,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
         ),
@@ -4255,7 +4255,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         max_val=256,
                         base=2.0,
                         bins=8,
-                        min_in_first_bin=True,
+                        use_bin_zero=False,
                     ),
                     tags="exponential",
                 ),
@@ -4267,7 +4267,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=256,
                     base=2.0,
                     bins=8,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
             actions=_make_categorizer_action(
@@ -4276,7 +4276,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=256,
                     base=2.0,
                     bins=8,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
             dtypes=list(Categorizer.supported_dtypes()),
@@ -4287,7 +4287,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=256,
                     base=2.0,
                     bins=8,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
         ),
@@ -4300,7 +4300,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         max_val=256,
                         base=2.0,
                         bins=8,
-                        min_in_first_bin=False,
+                        use_bin_zero=True,
                     ),
                     tags="exponential",
                 ),
@@ -4312,7 +4312,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=256,
                     base=2.0,
                     bins=8,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
             actions=_make_categorizer_action(
@@ -4321,7 +4321,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=256,
                     base=2.0,
                     bins=8,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
             dtypes=list(Categorizer.supported_dtypes()),
@@ -4332,7 +4332,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=256,
                     base=2.0,
                     bins=8,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
         ),
@@ -4345,7 +4345,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         max_val=1000,
                         base=math.e,
                         bins=10,
-                        min_in_first_bin=True,
+                        use_bin_zero=False,
                     ),
                     tags="exponential",
                 ),
@@ -4357,7 +4357,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=1000,
                     base=math.e,
                     bins=10,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
             actions=_make_categorizer_action(
@@ -4366,7 +4366,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=1000,
                     base=math.e,
                     bins=10,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
             dtypes=list(Categorizer.supported_dtypes()),
@@ -4377,7 +4377,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=1000,
                     base=math.e,
                     bins=10,
-                    min_in_first_bin=True,
+                    use_bin_zero=False,
                 )
             ),
         ),
@@ -4390,7 +4390,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         max_val=1000,
                         base=math.e,
                         bins=10,
-                        min_in_first_bin=False,
+                        use_bin_zero=True,
                     ),
                     tags="exponential",
                 ),
@@ -4402,7 +4402,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=1000,
                     base=math.e,
                     bins=10,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
             actions=_make_categorizer_action(
@@ -4411,7 +4411,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=1000,
                     base=math.e,
                     bins=10,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
             dtypes=list(Categorizer.supported_dtypes()),
@@ -4422,7 +4422,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     max_val=1000,
                     base=math.e,
                     bins=10,
-                    min_in_first_bin=False,
+                    use_bin_zero=True,
                 )
             ),
         ),
