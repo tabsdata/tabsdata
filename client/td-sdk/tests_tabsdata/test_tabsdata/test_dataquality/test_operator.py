@@ -13,11 +13,9 @@ from tabsdata.dataquality._operator import (
     RowCountThreshold,
     Select,
     Summary,
-    Threshold,
 )
 from tabsdata.exceptions import (
     ConstructorError,
-    DataQualityConfigurationError,
     ErrorCode,
     ParameterValidationError,
 )

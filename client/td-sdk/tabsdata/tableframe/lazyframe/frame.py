@@ -24,6 +24,7 @@ from typing import (
 import numpy as np
 import polars as pl
 from accessify import accessify, private
+from polars import DataType
 
 import tabsdata._tabsserver.engine as engine
 
@@ -451,7 +452,7 @@ class TableFrame:
 
     @pydoc(categories="attributes")
     @property
-    def dtypes(self) -> list[td_typing.DataType]:
+    def dtypes(self) -> list[DataType]:
         return self._lf.collect_schema().dtypes()
 
     @property

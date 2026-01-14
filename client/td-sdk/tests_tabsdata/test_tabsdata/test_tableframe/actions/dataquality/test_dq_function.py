@@ -17,7 +17,6 @@ from test_tabsdata.test_tableframe.actions.dataquality.dq_helper import (
 
 import tabsdata as td
 import tabsdata.dataquality as dq
-from tabsdata import TableFrame
 from tabsdata.dataquality._classifier import LinearScale
 from tabsdata.tableframe._actions.dataquality.engine import MAX_BINS
 
@@ -36,6 +35,7 @@ def test_dq_transformer():
                     dq.IsNull("value"),
                 ],
                 operators=[
+                    dq.Enrich(),
                     dq.Summary(),
                 ],
             )
@@ -65,6 +65,7 @@ def test_summary_boolean_classifier():
                 ],
                 operators=[
                     dq.Summary(),
+                    dq.Enrich(),
                 ],
             )
         ],
@@ -78,7 +79,7 @@ def test_summary_boolean_classifier():
     )
 
     outputs = list(fnrun.output.as_pl_df(True))
-    assert len(outputs) == 2
+    assert len(outputs) == 3
 
     dq_table = outputs[0]
     summary_table = outputs[1]
@@ -141,6 +142,7 @@ def test_summary_categorizer_min_in_first_bin():
                 ],
                 operators=[
                     dq.Summary(),
+                    dq.Enrich(),
                 ],
             )
         ],
@@ -154,7 +156,7 @@ def test_summary_categorizer_min_in_first_bin():
     )
 
     outputs = list(fnrun.output.as_pl_df(True))
-    assert len(outputs) == 2
+    assert len(outputs) == 3
 
     dq_table = outputs[0]
     summary_table = outputs[1]
@@ -223,6 +225,7 @@ def test_summary_categorizer_min_not_in_first_bin():
                 ],
                 operators=[
                     dq.Summary(),
+                    dq.Enrich(),
                 ],
             )
         ],
@@ -236,7 +239,7 @@ def test_summary_categorizer_min_not_in_first_bin():
     )
 
     outputs = list(fnrun.output.as_pl_df(True))
-    assert len(outputs) == 2
+    assert len(outputs) == 3
 
     dq_table = outputs[0]
     summary_table = outputs[1]
@@ -352,6 +355,7 @@ def test_cols_none_selects_all_user_columns():
                     dq.IsNull(column_names=None),
                 ],
                 operators=[
+                    dq.Enrich(),
                     dq.Summary(),
                 ],
             )
@@ -366,18 +370,17 @@ def test_cols_none_selects_all_user_columns():
     )
 
     outputs = list(fnrun.output.as_pl_df(True))
-    assert len(outputs) == 2
+    assert len(outputs) == 3
 
-    # ToDo: check when select() & filter() are implemented...
-    # dq_table = outputs[0]
-    # dq_columns = [col for col in dq_table.columns if col.endswith("_is_null")]
-    # assert len(dq_columns) == 4, "Should have 4 DQ columns (one per user column)"
-    # assert "int_col_is_null" in dq_table.columns
-    # assert "float_col_is_null" in dq_table.columns
-    # assert "str_col_is_null" in dq_table.columns
-    # assert "bool_col_is_null" in dq_table.columns
+    enrich_table = outputs[1]
+    dq_columns = [col for col in enrich_table.columns if col.endswith("_is_null")]
+    assert len(dq_columns) == 4, "Should have 4 DQ columns (one per user column)"
+    assert "int_col_is_null" in enrich_table.columns
+    assert "float_col_is_null" in enrich_table.columns
+    assert "str_col_is_null" in enrich_table.columns
+    assert "bool_col_is_null" in enrich_table.columns
 
-    summary_table = outputs[1]
+    summary_table = outputs[2]
 
     assert len(summary_table) == 4, "Should have 4 summary rows (one per user column)"
 
@@ -412,6 +415,7 @@ def test_on_missing_column_ignore():
                     ),
                 ],
                 operators=[
+                    dq.Enrich(),
                     dq.Summary(),
                 ],
             )
@@ -426,18 +430,17 @@ def test_on_missing_column_ignore():
     )
 
     outputs = list(fnrun.output.as_pl_df(True))
-    assert len(outputs) == 2
+    assert len(outputs) == 3
 
-    # ToDo: check when select() & filter() are implemented...
-    # dq_table = outputs[0]
-    # dq_columns = [col for col in dq_table.columns if col.endswith("_is_null")]
-    # assert len(dq_columns) == 2, "Should have 2 DQ columns (missing columns ignored)"
-    # assert "int_col_is_null" in dq_table.columns
-    # assert "float_col_is_null" in dq_table.columns
-    # assert "missing_col1_is_null" not in dq_table.columns
-    # assert "missing_col2_is_null" not in dq_table.columns
+    enrich_table = outputs[1]
+    dq_columns = [col for col in enrich_table.columns if col.endswith("_is_null")]
+    assert len(dq_columns) == 2, "Should have 2 DQ columns (missing columns ignored)"
+    assert "int_col_is_null" in enrich_table.columns
+    assert "float_col_is_null" in enrich_table.columns
+    assert "missing_col1_is_null" not in enrich_table.columns
+    assert "missing_col2_is_null" not in enrich_table.columns
 
-    summary_table = outputs[1]
+    summary_table = outputs[2]
 
     assert (
         len(summary_table) == 2
@@ -465,6 +468,7 @@ def test_on_missing_column_fail():
                 ],
                 operators=[
                     dq.Summary(),
+                    dq.Enrich(),
                 ],
             )
         ],
@@ -502,6 +506,7 @@ def test_on_wrong_type_ignore():
                     ),
                 ],
                 operators=[
+                    dq.Enrich(),
                     dq.Summary(),
                 ],
             )
@@ -516,18 +521,17 @@ def test_on_wrong_type_ignore():
     )
 
     outputs = list(fnrun.output.as_pl_df(True))
-    assert len(outputs) == 2
+    assert len(outputs) == 3
 
-    # ToDo: check when select() & filter() are implemented...
-    # dq_table = outputs[0]
-    # dq_columns = [col for col in dq_table.columns if col.endswith("_is_positive")]
-    # assert len(dq_columns) == 2, "Should have 2 DQ columns (incompatible types ignored)"
-    # assert "int_col_is_positive" in dq_table.columns
-    # assert "float_col_is_positive" in dq_table.columns
-    # assert "str_col_is_positive" not in dq_table.columns
-    # assert "bool_col_is_positive" not in dq_table.columns
+    enrich_table = outputs[1]
+    dq_columns = [col for col in enrich_table.columns if col.endswith("_is_positive")]
+    assert len(dq_columns) == 2, "Should have 2 DQ columns (incompatible types ignored)"
+    assert "int_col_is_positive" in enrich_table.columns
+    assert "float_col_is_positive" in enrich_table.columns
+    assert "str_col_is_positive" not in enrich_table.columns
+    assert "bool_col_is_positive" not in enrich_table.columns
 
-    summary_table = outputs[1]
+    summary_table = outputs[2]
 
     assert (
         len(summary_table) == 2
@@ -556,6 +560,7 @@ def test_on_wrong_type_fail():
                 ],
                 operators=[
                     dq.Summary(),
+                    dq.Enrich(),
                 ],
             )
         ],
@@ -593,6 +598,7 @@ def test_combined_none_cols_with_mixed_types():
                     ),
                 ],
                 operators=[
+                    dq.Enrich(),
                     dq.Summary(),
                 ],
             )
@@ -607,16 +613,15 @@ def test_combined_none_cols_with_mixed_types():
     )
 
     outputs = list(fnrun.output.as_pl_df(True))
-    assert len(outputs) == 2
+    assert len(outputs) == 3
 
-    # ToDo: check when select() & filter() are implemented...
-    # dq_table = outputs[0]
-    # dq_columns = [col for col in dq_table.columns if col.endswith("_is_positive")]
-    # assert len(dq_columns) == 2, "Should have 2 DQ columns (only compatible types)"
-    # assert "int_col_is_positive" in dq_table.columns
-    # assert "float_col_is_positive" in dq_table.columns
+    enrich_table = outputs[1]
+    dq_columns = [col for col in enrich_table.columns if col.endswith("_is_positive")]
+    assert len(dq_columns) == 2, "Should have 2 DQ columns (only compatible types)"
+    assert "int_col_is_positive" in enrich_table.columns
+    assert "float_col_is_positive" in enrich_table.columns
 
-    summary_table = outputs[1]
+    summary_table = outputs[2]
 
     assert len(summary_table) == 2, "Should have 2 summary rows"
 

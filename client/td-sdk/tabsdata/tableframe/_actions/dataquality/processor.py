@@ -4,6 +4,8 @@
 import logging
 from typing import TYPE_CHECKING, Tuple, cast
 
+# noinspection PyProtectedMember
+import tabsdata.tableframe.typing as td_typing
 from tabsdata._table_actions.actions import OnTablesAction
 from tabsdata._tableinfo import TableInfo, TableKind
 from tabsdata._tableuri import ExtendedTableURI, build_table_uri_object
@@ -14,7 +16,7 @@ from tabsdata._tabsserver.function.typing import (
     OutputTableSpec,
 )
 from tabsdata.dataquality import DataQuality, Filter, Select, Summary
-from tabsdata.dataquality._operator import Operator
+from tabsdata.dataquality._operator import Enrich, Operator
 from tabsdata.exceptions import DataQualityProcessingError, ErrorCode
 from tabsdata.tableframe._actions.dataquality.engine import (
     ColumnInfo,
@@ -257,6 +259,19 @@ class DataQualityProcessor:
         if operations:
             for operation in operations:
                 match operation:
+                    case Enrich():
+                        has_custom_name = operation.to_table is not None
+                        table_name = operation.to_table if has_custom_name else table
+                        table_names.append(
+                            self.table_name_for_enrich(
+                                self._collection,
+                                table_name,
+                                position,
+                                has_custom_name,
+                                collection,
+                                table,
+                            )
+                        )
                     case Filter():
                         if operation.to_table is not None:
                             table_name = operation.to_table
@@ -281,14 +296,14 @@ class DataQualityProcessor:
                             )
                         )
                     case Summary():
-                        has_custom_table_name = operation.table is not None
-                        table_name = operation.table if has_custom_table_name else table
+                        has_custom_name = operation.table is not None
+                        table_name = operation.table if has_custom_name else table
                         table_names.append(
                             self.table_name_for_summary(
                                 self._collection,
                                 table_name,
                                 position,
-                                has_custom_table_name,
+                                has_custom_name,
                                 collection,
                                 table,
                             )
@@ -298,6 +313,26 @@ class DataQualityProcessor:
                             ErrorCode.DQPE3, type(operation)
                         )
         return table_names
+
+    @classmethod
+    def table_name_for_enrich(
+        cls,
+        collection: str,
+        table: str,
+        position: int,
+        is_custom: bool,
+        from_collection: str,
+        from_table: str,
+    ) -> TableInfo:
+        return cls.derived_table_name(
+            collection=collection,
+            table=table,
+            position=position,
+            kind=TableKind.DQ_ENRICH,
+            is_custom=is_custom,
+            from_table=from_table,
+            from_collection=from_collection,
+        )
 
     @classmethod
     def table_name_for_filter(
@@ -422,7 +457,9 @@ class DataQualityProcessor:
                     ErrorCode.DQPE5, position, action.table, len(input_table_frames)
                 )
             tableframe = input_table_frames[position]
-            derived_table_frame, dq_cols, dq_tags = self.compute(tableframe, action)
+            derived_table_frame, schema, dq_cols, dq_tags = self.compute(
+                tableframe, action
+            )
             if len(table_infos) != len(action.operators):
                 raise DataQualityProcessingError(
                     ErrorCode.DQPE7,
@@ -433,7 +470,12 @@ class DataQualityProcessor:
             for table_info, operation in zip(table_infos, action.operators):
                 derived_table_frames.append(
                     self.harvest(
-                        derived_table_frame, dq_cols, dq_tags, table_info, operation
+                        derived_table_frame,
+                        schema,
+                        dq_cols,
+                        dq_tags,
+                        table_info,
+                        operation,
                     )
                 )
 
@@ -447,7 +489,9 @@ class DataQualityProcessor:
                     ErrorCode.DQPE6, position, action.table, len(output_table_frames)
                 )
             tableframe = output_table_frames[position]
-            derived_table_frame, dq_cols, dq_tags = self.compute(tableframe, action)
+            derived_table_frame, schema, dq_cols, dq_tags = self.compute(
+                tableframe, action
+            )
             if len(table_infos) != len(action.operators):
                 raise DataQualityProcessingError(
                     ErrorCode.DQPE8,
@@ -458,7 +502,12 @@ class DataQualityProcessor:
             for table_info, operation in zip(table_infos, action.operators):
                 derived_table_frames.append(
                     self.harvest(
-                        derived_table_frame, dq_cols, dq_tags, table_info, operation
+                        derived_table_frame,
+                        schema,
+                        dq_cols,
+                        dq_tags,
+                        table_info,
+                        operation,
                     )
                 )
 
@@ -494,12 +543,13 @@ class DataQualityProcessor:
         action: DataQuality,
     ) -> Tuple[
         DerivedTableFrame | None,
+        td_typing.Schema | None,
         dict[str, ColumnInfo] | None,
         dict[str, set[str]] | None,
     ]:
         tf = cls.to_tableframe(tableframe)
         if tf is None:
-            return None, None, None
+            return None, None, None, None
 
         dtf: DerivedTableFrame = DerivedTableFrame(
             DerivedTableFrameStatus.INITIALIZED, tableframe, tf
@@ -515,28 +565,53 @@ class DataQualityProcessor:
 
         dtf.derived_tf = dq.tf()
         dtf.status = DerivedTableFrameStatus.COMPUTED
-        return dtf, dq._cols, dq._tags
+        return dtf, dq._schema, dq._cols, dq._tags
 
     @classmethod
     def harvest(
         cls,
-        tableframe: DerivedTableFrame | None,
+        dtf_i: DerivedTableFrame | None,
+        schema: td_typing.Schema,
         cols: dict[str, ColumnInfo],
         tags: dict[str, set[str]] | None,
         _table_info: TableInfo,
         operation: Operator,
     ) -> DerivedTableFrame | None:
-        if tableframe is None:
+        if dtf_i is None:
             return None
-        tf = tableframe.derived_tf
-        if tf is None:
+        tf_i = dtf_i.derived_tf
+        if tf_i is None:
             return None
 
-        dtf: DerivedTableFrame = DerivedTableFrame(
-            tableframe.status, tableframe.original_tf, None
+        dtf_o: DerivedTableFrame = DerivedTableFrame(
+            dtf_i.status,
+            dtf_i.derived_tf,
+            None,
         )
-        dq = DataQualityEngine(tf, cols, tags)
-        dq = dq.summary(operation.tags)
-        dtf.derived_tf = dq.tf()
-        dtf.status = DerivedTableFrameStatus.HARVESTED
-        return dtf
+
+        match operation:
+            case Enrich():
+                dq = DataQualityEngine._new(
+                    tf=dtf_i.derived_tf,
+                    dq_i=None,
+                    schema=schema,
+                    cols=cols,
+                    tags=tags,
+                )
+                dq = dq.enrich(operation.tags)
+                dtf_o.derived_tf = dq.tf()
+                dtf_o.status = DerivedTableFrameStatus.HARVESTED
+            case Summary():
+                dq = DataQualityEngine._new(
+                    tf=dtf_i.derived_tf,
+                    dq_i=None,
+                    schema=schema,
+                    cols=cols,
+                    tags=tags,
+                )
+                dq = dq.summary(operation.tags)
+                dtf_o.derived_tf = dq.tf()
+                dtf_o.status = DerivedTableFrameStatus.HARVESTED
+            case _:
+                raise DataQualityProcessingError(ErrorCode.DQPE3, type(operation))
+        return dtf_o

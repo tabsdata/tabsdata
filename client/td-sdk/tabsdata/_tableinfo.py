@@ -13,6 +13,11 @@ class TableKind(Enum):
         None,
         "Regular data table",
     )
+    DQ_ENRICH = (
+        TableType.DQData,
+        "_dq_enrich",
+        "From Data Quality Enrich operation",
+    )
     DQ_FILTER = (
         TableType.DQData,
         "_dq_filter",

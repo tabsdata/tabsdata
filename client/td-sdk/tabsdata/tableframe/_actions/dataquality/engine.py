@@ -17,6 +17,9 @@ from polars._typing import ClosedInterval
 
 import tabsdata.tableframe.expr.expr as td_expr
 import tabsdata.tableframe.lazyframe.frame as td_frame
+
+# noinspection PyProtectedMember
+import tabsdata.tableframe.typing as td_typing
 from tabsdata.dataquality import (
     DoesNotMatch,
     HasLength,
@@ -679,15 +682,33 @@ MappedColumn = namedtuple("MappedColumn", ["data_column", "dq_column"])
 
 
 class DataQualityEngine:
-    def __init__(
-        self,
+    def __init__(self, tf: td_frame.TableFrame):
+        self._tf: td_frame.TableFrame = tf
+        self._schema: td_typing.Schema = tf.schema
+        self._cols: dict[str, ColumnInfo] = {}
+        self._tags: dict[str, set[str]] = {}
+
+    @classmethod
+    def _new(
+        cls,
         tf: td_frame.TableFrame,
+        dq_i: DataQualityEngine = None,
+        schema: td_typing.Schema = None,
         cols: dict[str, ColumnInfo] = None,
         tags: dict[str, set[str]] = None,
-    ):
-        self._tf: td_frame.TableFrame = tf
-        self._cols: dict[str, ColumnInfo] = cols or {}
-        self._tags: dict[str, set[str]] = tags or {}
+    ) -> Self:
+        dq_o: DataQualityEngine = cls.__new__(cls)
+        if dq_i is None:
+            dq_o._tf = tf
+            dq_o._schema = schema
+            dq_o._cols = cols if cols is not None else {}
+            dq_o._tags = tags if tags is not None else {}
+        else:
+            dq_o._tf = tf if tf is not None else dq_i._tf
+            dq_o._schema = schema if schema is not None else dq_i._schema
+            dq_o._cols = dq_i._cols if cols is None else cols
+            dq_o._tags = dq_i._tags if tags is None else tags
+        return dq_o
 
     """> Special Functions """
 
@@ -704,9 +725,8 @@ class DataQualityEngine:
         classifier: Classifier,
         cols_spec: list[ColumnNameWithAltSpec],
     ) -> list[MappedColumn]:
-        schema = self._tf._lf.collect_schema()
-        user_columns, _ = td_frame._split_columns(schema.names())
-        user_columns = set(user_columns)
+        schema = self._schema
+        user_columns, system_columns = td_frame._split_columns(schema.names())
         supported_dtypes = classifier.supported_dtypes()
 
         columns = []
@@ -747,7 +767,7 @@ class DataQualityEngine:
                             f"{classifier.on_missing_column}"
                         )
 
-            dtype = schema[data_column]
+            dtype = self._schema[data_column]
             if type(dtype) not in supported_dtypes:
                 match classifier.on_wrong_type:
                     case "fail":
@@ -795,18 +815,18 @@ class DataQualityEngine:
     ) -> str:
         return dq_column if dq_column is not None else f"{lf_column}{classifier}"
 
-    def _new(self, tf: td_frame.TableFrame):
-        dq = DataQualityEngine(tf)
-        dq._cols = self._cols
-        dq._tags = self._tags
-        return dq
-
     def _run(
         self,
         expression: td_expr.Expr,
         column: str,
     ) -> Self:
-        return self._new(self._tf.with_columns(expression.alias(column)))
+        return DataQualityEngine._new(
+            tf=self._tf.with_columns(expression.alias(column)),
+            dq_i=self,
+            schema=None,
+            cols=None,
+            tags=None,
+        )
 
     """> Context Functions """
 
@@ -851,7 +871,7 @@ class DataQualityEngine:
                 if tag not in self._tags:
                     self._tags[tag] = set()
                 self._tags[tag].add(dq_column)
-            lf_dtype = self._tf._lf.collect_schema()[lf_column]
+            lf_dtype = self._schema[lf_column]
             expr = metadata.polars_provider(lf_column, lf_dtype, classifier)
             dq = dq._run(expr, dq_column)
 
@@ -978,6 +998,42 @@ class DataQualityEngine:
         return self._classify(categorizer)
 
     """> Quality Operation Functions """
+
+    # noinspection DuplicatedCode
+    def enrich(
+        self,
+        tags_spec: TagsSpec,
+    ) -> Self:
+        tags = set(self._tags_spec_to_list(tags_spec))
+        dq_columns = self._columns(tags)
+
+        schema = self._schema
+        user_columns, system_columns = td_frame._split_columns(schema.names())
+
+        for column in dq_columns:
+            if column not in self._cols:
+                raise DataQualityProcessingError(
+                    ErrorCode.DQPE10,
+                    column,
+                )
+        columns = list(user_columns) + sorted(dq_columns) + list(system_columns)
+
+        enrich_lf = self._tf._lf.select(columns)
+
+        enrich_tf = td_frame.TableFrame.__build__(
+            df=enrich_lf,
+            mode="tab",
+            idx=self._tf._idx,
+            properties=self._tf._properties,
+        )
+
+        return DataQualityEngine._new(
+            tf=enrich_tf,
+            dq_i=self,
+            schema=None,
+            cols={},
+            tags=None,
+        )
 
     # noinspection DuplicatedCode
     def summary(
@@ -1120,9 +1176,12 @@ class DataQualityEngine:
             properties=TableFramePropertiesBuilder.empty(),
         )
 
-        return DataQualityEngine(
+        return DataQualityEngine._new(
             tf=summary_tf,
-            tags=self._tags,
+            dq_i=self,
+            schema=None,
+            cols={},
+            tags=None,
         )
 
     # ToDo: Work in progress...
@@ -1132,16 +1191,18 @@ class DataQualityEngine:
         tags_spec: TagsSpec,
     ) -> Self:
         tags = set(self._tags_spec_to_list(tags_spec))
-        quality_columns_for_tags = self._columns(tags)
+        columns = self._columns(tags)
 
-        # ToDo...
-        columns_to_select = list(quality_columns_for_tags)
+        dq_columns = list(columns)
 
-        filtered_tf = self._tf.select(columns_to_select)
+        filter_lf = self._tf.select(dq_columns)
 
-        return DataQualityEngine(
-            tf=filtered_tf,
-            tags=self._tags,
+        return DataQualityEngine._new(
+            tf=filter_lf,
+            dq_i=self,
+            schema=None,
+            cols={},
+            tags=None,
         )
 
     # ToDo: Work in progress...
@@ -1151,20 +1212,21 @@ class DataQualityEngine:
         tags_spec: TagsSpec,
     ) -> Self:
         tags = set(self._tags_spec_to_list(tags_spec))
-        quality_columns_for_tags = self._columns(tags)
+        columns = self._columns(tags)
 
-        # ToDo...
-        columns_to_select = list(quality_columns_for_tags)
+        dq_columns = list(columns)
 
-        filtered_tf = self._tf.select(columns_to_select)
+        select_lf = self._tf.select(dq_columns)
 
-        return DataQualityEngine(
-            tf=filtered_tf,
-            tags=self._tags,
+        return DataQualityEngine._new(
+            tf=select_lf,
+            dq_i=self,
+            schema=None,
+            cols={},
+            tags=None,
         )
 
-    # ToDo: Work in progress...
-
+    # ToDo: Pending for future releases...
     # """> Quality Generic Functions """
     #
     # def expr(
@@ -1183,7 +1245,8 @@ class DataQualityEngine:
     #         expr,
     #         dq_column_name,
     #     )
-    #
+
+    # ToDo: Pending for future releases...
     # def fn(
     #     self,
     #     data_column_names: str | list[str],

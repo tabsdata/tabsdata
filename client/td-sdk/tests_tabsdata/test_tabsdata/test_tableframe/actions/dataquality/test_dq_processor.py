@@ -50,7 +50,7 @@ def test_dq_processor(classifier, dtype, configuration):
     tf = dataset(dtype)
     qrows = len(tf._lf.collect())
     action = configuration.actions("table00", dtype)
-    dtf, cols, tags = DataQualityProcessor.compute([tf], action)
+    dtf, schema, cols, tags = DataQualityProcessor.compute([tf], action)
     assert dtf is not None, f"Failed for {classifier.__name__} with {dtype.__name__}"
     assert cols is not None
     assert tags is not None
