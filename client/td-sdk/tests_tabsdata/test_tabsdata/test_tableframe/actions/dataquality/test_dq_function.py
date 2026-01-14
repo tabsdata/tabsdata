@@ -4,10 +4,11 @@
 
 import polars as pl
 import pytest
+from sqlalchemy.dialects.mssql.information_schema import columns
+
 from fntest import FnError, MockTableFrameSpec, tdfnrun
 from test_tabsdata.test_tableframe.actions.dataquality.dq_helper import (
     Q_BOOLEAN,
-    Q_CATEGORIZER,
     Q_NEGATIVE,
     Q_NULL,
     Q_POSITIVE,
@@ -1060,3 +1061,354 @@ def test_fail_operation_bins(criteria, threshold, should_fail):
             function=dq_transformer,
             input_tables=categorical_dataset(scale, td.Float32),
         )
+
+
+def filter_select_dataset() -> td.TableFrame:
+    """Dataset for testing filter and select operations with mixed data."""
+    return td.TableFrame.from_polars(
+        pl.DataFrame(
+            {
+                "id": list(range(20)),
+                "value_int": [
+                    -5,
+                    -4,
+                    -3,
+                    -2,
+                    -1,  # 5 negative
+                    0,
+                    0,
+                    0,  # 3 zeros
+                    1,
+                    2,
+                    3,
+                    4,
+                    5,  # 5 positive
+                    None,
+                    None,  # 2 nulls
+                    10,
+                    20,
+                    30,
+                    40,
+                    50,  # 5 large positive
+                ],
+                "value_float": [
+                    1.0,
+                    2.0,
+                    3.0,
+                    4.0,
+                    5.0,  # 5 in range [0-10]
+                    11.0,
+                    12.0,
+                    13.0,
+                    14.0,
+                    15.0,  # 5 in range [10-20]
+                    21.0,
+                    22.0,
+                    23.0,  # 3 in range [20-30]
+                    None,
+                    None,  # 2 nulls
+                    -1.0,
+                    -2.0,
+                    -3.0,  # 3 underflow
+                    101.0,
+                    102.0,  # 2 overflow
+                ],
+            }
+        )
+    )
+
+
+@pytest.mark.dq
+@pytest.mark.tdfnrun
+@pytest.mark.parametrize(
+    "operator,criteria,enrich,to_table,expected_ok_count,expected_ko_count",
+    [
+        pytest.param(
+            "filter",
+            dq.AllOk(tags="positive", none_is_ok=False),
+            False,
+            "failed_table",
+            10,
+            10,
+            id="filter_bool_all_ok_positive_with_to_table",
+        ),
+        pytest.param(
+            "filter",
+            dq.AllOk(tags="positive", none_is_ok=False),
+            False,
+            None,
+            10,
+            None,
+            id="filter_bool_all_ok_positive_no_to_table",
+        ),
+        pytest.param(
+            "filter",
+            dq.AnyFailed(tags="positive", none_is_ok=False),
+            False,
+            "failed_table",
+            10,
+            10,
+            id="filter_bool_any_failed_with_to_table",
+        ),
+        pytest.param(
+            "filter",
+            dq.AnyFailed(tags="positive", none_is_ok=False),
+            False,
+            None,
+            10,
+            None,
+            id="filter_bool_any_failed_no_to_table",
+        ),
+        pytest.param(
+            "filter",
+            dq.InBins("value_float_category", [1, 2]),
+            False,
+            "failed_table",
+            10,
+            10,
+            id="filter_cat_in_bins_with_to_table",
+        ),
+        pytest.param(
+            "filter",
+            dq.InBins("value_float_category", [1, 2]),
+            False,
+            None,
+            10,
+            None,
+            id="filter_cat_in_bins_no_to_table",
+        ),
+        pytest.param(
+            "filter",
+            dq.NotInBins("value_float_category", [1, 2]),
+            False,
+            "failed_table",
+            10,
+            10,
+            id="filter_cat_not_in_bins_with_to_table",
+        ),
+        pytest.param(
+            "filter",
+            dq.NotInBins("value_float_category", [1, 2]),
+            False,
+            None,
+            10,
+            None,
+            id="filter_cat_not_in_bins_no_to_table",
+        ),
+        pytest.param(
+            "filter",
+            dq.AllOk(tags="positive", none_is_ok=False),
+            True,
+            "failed_table",
+            10,
+            10,
+            id="filter_bool_all_ok_with_enrich",
+        ),
+        pytest.param(
+            "filter",
+            dq.AnyFailed(tags="positive", none_is_ok=False),
+            True,
+            "failed_table",
+            10,
+            10,
+            id="filter_bool_any_failed_with_enrich",
+        ),
+        pytest.param(
+            "filter",
+            dq.InBins("value_float_category", [1]),
+            True,
+            "failed_table",
+            5,
+            15,
+            id="filter_cat_in_bins_with_enrich",
+        ),
+        pytest.param(
+            "filter",
+            dq.NotInBins("value_float_category", [1]),
+            True,
+            "failed_table",
+            15,
+            5,
+            id="filter_cat_not_in_bins_with_enrich",
+        ),
+        pytest.param(
+            "select",
+            dq.AllOk(tags="positive", none_is_ok=False),
+            False,
+            "selected_table",
+            10,
+            None,
+            id="select_bool_all_ok",
+        ),
+        pytest.param(
+            "select",
+            dq.AnyFailed(tags="positive", none_is_ok=False),
+            False,
+            "selected_table",
+            10,
+            None,
+            id="select_bool_any_failed",
+        ),
+        pytest.param(
+            "select",
+            dq.InBins("value_float_category", [2, 3]),
+            False,
+            "selected_table",
+            8,
+            None,
+            id="select_cat_in_bins",
+        ),
+        pytest.param(
+            "select",
+            dq.NotInBins("value_float_category", [2, 3]),
+            False,
+            "selected_table",
+            12,
+            None,
+            id="select_cat_not_in_bins",
+        ),
+        pytest.param(
+            "select",
+            dq.AllOk(tags="positive", none_is_ok=False),
+            True,
+            "selected_table",
+            10,
+            None,
+            id="select_bool_all_ok_with_enrich",
+        ),
+        pytest.param(
+            "select",
+            dq.AnyFailed(tags="positive", none_is_ok=False),
+            True,
+            "selected_table",
+            10,
+            None,
+            id="select_bool_any_failed_with_enrich",
+        ),
+        pytest.param(
+            "select",
+            dq.InBins("value_float_category", [1]),
+            True,
+            "selected_table",
+            5,
+            None,
+            id="select_cat_in_bins_with_enrich",
+        ),
+        pytest.param(
+            "select",
+            dq.NotInBins("value_float_category", [1]),
+            True,
+            "selected_table",
+            15,
+            None,
+            id="select_cat_not_in_bins_with_enrich",
+        ),
+    ],
+)
+def test_filter_select_operations(
+    operator,
+    criteria,
+    enrich,
+    to_table,
+    expected_ok_count,
+    expected_ko_count,
+):
+    scale = LinearScale(min_val=0, max_val=30, bins=3)
+
+    operators = None
+    match operator:
+        case "filter":
+            operators = [dq.Filter(criteria=criteria, to_table=to_table, enrich=enrich)]
+        case "select":
+            operators = [dq.Select(criteria=criteria, to_table=to_table, enrich=enrich)]
+
+    @td.transformer(
+        name="transformer",
+        input_tables=["table_i"],
+        output_tables=["table_o"],
+        on_output_tables=[
+            dq.DataQuality(
+                table="table_o",
+                classifiers=[
+                    dq.IsPositive(
+                        "value_int",
+                        tags="positive",
+                    ),
+                    dq.Categorizer(
+                        "value_float",
+                        scale=scale,
+                    ),
+                ],
+                operators=operators,
+            )
+        ],
+    )
+    def dq_transformer(tf: td.TableFrame) -> td.TableFrame:
+        return tf
+
+    fnrun = tdfnrun(
+        function=dq_transformer,
+        input_tables=filter_select_dataset(),
+    )
+
+    outputs = list(fnrun.output.as_pl_df(True))
+
+    if to_table is None:
+        expected_outputs = 1
+    else:
+        expected_outputs = 2
+
+    assert (
+        len(outputs) == expected_outputs
+    ), f"Expected {expected_outputs} outputs, got {len(outputs)}"
+
+    ok_table = outputs[0]
+
+    match operator:
+        case "filter":
+            assert (
+                len(ok_table) == expected_ok_count
+            ), f"Expected {expected_ok_count} rows in ok_table, got {len(ok_table)}"
+        case "select":
+            assert len(ok_table) == 20, "Main output should be unchanged for select"
+
+    if to_table is not None:
+        derived_table = outputs[1]
+
+        match operator:
+            case "filter":
+                assert len(derived_table) == expected_ko_count, (
+                    f"Expected {expected_ko_count} rows in ko_table, got"
+                    f" {len(derived_table)}"
+                )
+            case "select":
+                assert len(derived_table) == expected_ok_count, (
+                    f"Expected {expected_ok_count} rows in selected_table, got"
+                    f" {len(derived_table)}"
+                )
+
+        match enrich:
+            case True:
+                match criteria:
+                    case dq.AllOk() | dq.AnyFailed():
+                        assert (
+                            "value_int_is_positive" in derived_table.columns
+                        ), "Enriched table should include DQ columns for BoolCriteria"
+                    case dq.InBins() | dq.NotInBins():
+                        assert "value_float_category" in derived_table.columns, (
+                            "Enriched table should include DQ column for"
+                            " CategoryCriteria"
+                        )
+            case False:
+                dq_columns = [
+                    columns
+                    for columns in derived_table.columns
+                    if "_is_" in columns or "_category" in columns
+                ]
+                assert (
+                    len(dq_columns) == 0
+                ), f"Non-enriched table should not have DQ columns, found: {dq_columns}"
+
+    assert "id" in ok_table.columns
+    assert "value_int" in ok_table.columns
+    assert "value_float" in ok_table.columns

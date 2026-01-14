@@ -25,6 +25,7 @@ from tabsdata.dataquality import (
     AnyFailed,
     Criteria,
     DoesNotMatch,
+    Filter,
     HasLength,
     InBins,
     IsBetween,
@@ -39,6 +40,8 @@ from tabsdata.dataquality import (
     NotInBins,
     PercentThreshold,
     RowCountThreshold,
+    Select,
+    Summary,
     Threshold,
 )
 
@@ -60,8 +63,14 @@ from tabsdata.dataquality._classifier import (
     LogarithmicScale,
     MonomialScale,
 )
+from tabsdata.dataquality._operator import BoolCriteria, CategoryCriteria, Enrich, Fail
 from tabsdata.exceptions import DataQualityProcessingError, ErrorCode
 from tabsdata.tableframe._actions.dataquality.assistant import TypeHandler
+from tabsdata.tableframe._actions.dataquality.pojo import (
+    DerivedTableFrame,
+    DerivedTableFrameStatus,
+    Harvest,
+)
 from tabsdata.tableframe.lazyframe.properties import TableFramePropertiesBuilder
 
 if TYPE_CHECKING:
@@ -1299,11 +1308,11 @@ class DataQualityEngine:
     # noinspection DuplicatedCode
     def fail(
         self,
-        criteria: Criteria,
-        threshold: Threshold,
-    ) -> None:
-        condition = self._q_criteria_plan([criteria], threshold)
+        operation: Fail,
+    ) -> Harvest:
+        condition = self._q_criteria_plan([operation.criteria], operation.threshold)
         it_is_fine = self._tf._lf.select(condition).collect().item()
+
         logger.warning(
             f"Final result (is_fine={it_is_fine}), will_raise={not it_is_fine}"
         )
@@ -1317,18 +1326,18 @@ class DataQualityEngine:
             raise DataQualityProcessingError(
                 ErrorCode.DQPE14,
                 table_name,
-                str(criteria),
-                str(threshold),
+                str(operation.criteria),
+                str(operation.threshold),
             )
-        return None
+        return Harvest(output=None, derived=None)
 
     # noinspection DuplicatedCode
     def enrich(
         self,
-        tags_spec: TagsSpec,
-    ) -> Self:
-        tags = self._tags_spec_to_list(tags_spec)
-        tags = None if tags is None else set(self._tags_spec_to_list(tags_spec))
+        operation: Enrich,
+    ) -> Harvest:
+        tags = self._tags_spec_to_list(operation.tags)
+        tags = None if tags is None else set(self._tags_spec_to_list(operation.tags))
         dq_columns = self._columns(tags)
 
         schema = self._schema
@@ -1351,21 +1360,124 @@ class DataQualityEngine:
             properties=self._tf._properties,
         )
 
-        return DataQualityEngine._new(
-            tf=enrich_tf,
-            dq_i=self,
-            schema=None,
-            cols={},
-            tags=None,
+        enrich_dtf = DerivedTableFrame(
+            status=DerivedTableFrameStatus.HARVESTED,
+            original_tf=self._tf,
+            derived_tf=enrich_tf,
         )
+
+        if operation.to_table is not None:
+            return Harvest(output=None, derived=enrich_dtf)
+        else:
+            return Harvest(output=enrich_dtf, derived=None)
+
+    # noinspection DuplicatedCode
+    def filter(
+        self,
+        operation: Filter,
+    ) -> Harvest:
+        condition = self._criteria_plan([operation.criteria])
+
+        user_columns, system_columns = td_frame._split_columns(self._schema.names())
+        if operation.enrich:
+            if isinstance(operation.criteria, BoolCriteria):
+                dq_criteria = cast(BoolCriteria, operation.criteria)
+                tags = self._tags_spec_to_list(dq_criteria.tags)
+                tags = (
+                    None
+                    if tags is None
+                    else set(self._tags_spec_to_list(dq_criteria.tags))
+                )
+                dq_columns = self._columns(tags)
+            elif isinstance(operation.criteria, CategoryCriteria):
+                dq_criteria = cast(CategoryCriteria, operation.criteria)
+                dq_columns = {dq_criteria.column_name}
+            else:
+                dq_columns = set()
+            columns = list(user_columns) + sorted(dq_columns) + list(system_columns)
+        else:
+            columns = list(user_columns) + list(system_columns)
+
+        ok_lf = self._tf._lf.filter(condition).select(columns)
+        ok_tf = td_frame.TableFrame.__build__(
+            df=ok_lf,
+            mode="tab",
+            idx=self._tf._idx,
+            properties=self._tf._properties,
+        )
+        ok_dtf = DerivedTableFrame(
+            status=DerivedTableFrameStatus.HARVESTED,
+            original_tf=self._tf,
+            derived_tf=ok_tf,
+        )
+
+        ko_lf = self._tf._lf.filter(~condition).select(columns)
+        ko_tf = td_frame.TableFrame.__build__(
+            df=ko_lf,
+            mode="tab",
+            idx=self._tf._idx,
+            properties=self._tf._properties,
+        )
+        ko_dtf = DerivedTableFrame(
+            status=DerivedTableFrameStatus.HARVESTED,
+            original_tf=self._tf,
+            derived_tf=ko_tf,
+        )
+
+        if operation.to_table is None:
+            return Harvest(output=ok_dtf, derived=None)
+        else:
+            return Harvest(output=ok_dtf, derived=ko_dtf)
+
+    # noinspection DuplicatedCode
+    def select(
+        self,
+        operation: Select,
+    ) -> Harvest:
+        condition = self._criteria_plan([operation.criteria])
+
+        user_columns, system_columns = td_frame._split_columns(self._schema.names())
+        if operation.enrich:
+            if isinstance(operation.criteria, BoolCriteria):
+                dq_criteria = cast(BoolCriteria, operation.criteria)
+                tags = self._tags_spec_to_list(dq_criteria.tags)
+                tags = (
+                    None
+                    if tags is None
+                    else set(self._tags_spec_to_list(dq_criteria.tags))
+                )
+                dq_columns = self._columns(tags)
+            elif isinstance(operation.criteria, CategoryCriteria):
+                dq_criteria = cast(CategoryCriteria, operation.criteria)
+                dq_columns = {dq_criteria.column_name}
+            else:
+                dq_columns = set()
+            columns = list(user_columns) + sorted(dq_columns) + list(system_columns)
+        else:
+            columns = list(user_columns) + list(system_columns)
+
+        ok_lf = self._tf._lf.filter(condition).select(columns)
+        ok_tf = td_frame.TableFrame.__build__(
+            df=ok_lf,
+            mode="tab",
+            idx=self._tf._idx,
+            properties=self._tf._properties,
+        )
+        ok_dtf = DerivedTableFrame(
+            status=DerivedTableFrameStatus.HARVESTED,
+            original_tf=self._tf,
+            derived_tf=ok_tf,
+        )
+
+        return Harvest(output=None, derived=ok_dtf)
 
     # noinspection DuplicatedCode
     def summary(
         self,
-        tags_spec: TagsSpec,
-    ) -> Self:
-        tags = self._tags_spec_to_list(tags_spec)
-        tags = None if tags is None else set(self._tags_spec_to_list(tags_spec))
+        operation: Summary,
+    ) -> Harvest:
+        tags = self._tags_spec_to_list(operation.tags)
+        tags = None if tags is None else set(self._tags_spec_to_list(operation.tags))
         columns = self._columns(tags)
 
         dq_columns = []
@@ -1505,57 +1617,13 @@ class DataQualityEngine:
             properties=TableFramePropertiesBuilder.empty(),
         )
 
-        return DataQualityEngine._new(
-            tf=summary_tf,
-            dq_i=self,
-            schema=None,
-            cols={},
-            tags=None,
+        summary_dtf = DerivedTableFrame(
+            status=DerivedTableFrameStatus.HARVESTED,
+            original_tf=self._tf,
+            derived_tf=summary_tf,
         )
 
-    # ToDo: Work in progress...
-    # noinspection DuplicatedCode
-    def filter(
-        self,
-        tags_spec: TagsSpec,
-    ) -> Self:
-        tags = self._tags_spec_to_list(tags_spec)
-        tags = None if tags is None else set(self._tags_spec_to_list(tags_spec))
-        columns = self._columns(tags)
-
-        dq_columns = list(columns)
-
-        filter_lf = self._tf.select(dq_columns)
-
-        return DataQualityEngine._new(
-            tf=filter_lf,
-            dq_i=self,
-            schema=None,
-            cols={},
-            tags=None,
-        )
-
-    # ToDo: Work in progress...
-    # noinspection DuplicatedCode
-    def select(
-        self,
-        tags_spec: TagsSpec,
-    ) -> Self:
-        tags = self._tags_spec_to_list(tags_spec)
-        tags = None if tags is None else set(self._tags_spec_to_list(tags_spec))
-        columns = self._columns(tags)
-
-        dq_columns = list(columns)
-
-        select_lf = self._tf.select(dq_columns)
-
-        return DataQualityEngine._new(
-            tf=select_lf,
-            dq_i=self,
-            schema=None,
-            cols={},
-            tags=None,
-        )
+        return Harvest(output=None, derived=summary_dtf)
 
     # ToDo: Pending for future releases...
     # """> Quality Generic Functions """

@@ -1292,10 +1292,12 @@ class ErrorCode(Enum):
     }
     DQPE13 = {
         "code": "DQPE-013",
-        "message": "Type conversion error: {}. "
-                   "Some value provided to evaluate a data quality operation has an "
-                   "unsupported data type. Only basic data types and comon date, time, "
-                   "or duration types are supported.”",
+        "message": (
+            "Type conversion error: {}. "
+            "Some value provided to evaluate a data quality operation has an "
+            "unsupported data type. Only basic data types and comon date, time, "
+            "or duration types are supported.”"
+        ),
     }
     DQPE14 = {
         "code": "DQPE-014",
