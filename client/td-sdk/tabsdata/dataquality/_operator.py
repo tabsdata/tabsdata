@@ -47,10 +47,10 @@ class Operator(ABC):
                   consider classifiers that share at least one of those tags.
                   If no tags are provided, the operator applies to all classifiers.
         """
-        self._tags = _normalize_to_list(tags)
+        self._tags = _normalize_to_list(tags, keep_none=True)
 
     @property
-    def tags(self) -> list[TagSpec]:
+    def tags(self) -> Optional[list[TagSpec]]:
         """
         Returns the list of tags associated with this operator.
         """

@@ -282,7 +282,7 @@ class Classifier(ABC):
         if column_names and isinstance(column_names[0], str):
             column_names = [(s, None) for s in column_names]
         self._column_names = column_names
-        self._tags = _normalize_to_list(tags)
+        self._tags = _normalize_to_list(tags, keep_none=True)
         self._on_missing_column = on_missing_column
         self._on_wrong_type = on_wrong_type
 
@@ -295,7 +295,7 @@ class Classifier(ABC):
         return self._column_names
 
     @property
-    def tags(self) -> list[TagSpec]:
+    def tags(self) -> Optional[list[TagSpec]]:
         """
         Returns the list of tags associated with the classifier.
         """

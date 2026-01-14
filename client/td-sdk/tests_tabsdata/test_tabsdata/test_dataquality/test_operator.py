@@ -136,7 +136,7 @@ def test_filter_out_class_defaults():
     assert filter_out.to_table is None
     assert filter_out.criteria.criteria_type == "any_failed"
     assert filter_out.enrich is False
-    assert filter_out.tags == []
+    assert filter_out.tags == None
 
 
 def test_filter_out_wrong_criteria_type():
@@ -169,7 +169,7 @@ def test_select_class_defaults():
     assert selector.to_table == "table_name"
     assert selector.criteria.criteria_type == "all_ok"
     assert selector.enrich is False
-    assert selector.tags == []
+    assert selector.tags == None
 
 
 def test_selector_wrong_criteria_type():
@@ -255,7 +255,7 @@ def test_fail_class_defaults():
     fail = Fail(threshold=thr)
     assert fail.threshold == thr
     assert fail.criteria.criteria_type == "any_failed"
-    assert fail.tags == []
+    assert fail.tags == None
 
 
 def test_fail_class_wrong_threshold_type():
@@ -282,7 +282,7 @@ def test_enrich_class():
 def test_enrich_class_defaults():
     enrich = Enrich()
     assert enrich.to_table is None
-    assert enrich.tags == []
+    assert enrich.tags == None
 
 
 def test_enrich_wrong_to_table_type():
