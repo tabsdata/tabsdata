@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from enum import Enum, auto
 from typing import TypeAlias
 
@@ -76,3 +77,9 @@ class DerivedTableFrame:
 
 
 DerivedTableFrameSpec: TypeAlias = list[DerivedTableFrame | None]
+
+
+@dataclass(frozen=True)
+class Harvest:
+    output: DerivedTableFrame | None
+    derived: DerivedTableFrame | None

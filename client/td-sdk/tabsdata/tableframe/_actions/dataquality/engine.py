@@ -120,6 +120,11 @@ class ByteSentinel(IntEnum):
     NULL = 255
 
 
+class ScaleShift(Enum):
+    EXPONENTIAL_RANGE_FACTOR = 0.01
+    EXPONENTIAL_MIN_SHIFT = 1e-10
+
+
 class QCallableEnum(Enum):
     def __call__(self, *args, **kwargs):
         return self.value(*args, **kwargs)
@@ -619,11 +624,18 @@ class PolarsClassifierProvider:
                 cuts = [minimum + (i + 1) * size for i in range(scale.bins)]
                 cuts[-1] = maximum
             case MonomialScale():
-                lower = minimum ** (1.0 / scale.power)
-                upper = maximum ** (1.0 / scale.power)
+                if minimum < 0:
+                    shift = minimum
+                    lower = 0.0
+                    upper = (maximum - shift) ** (1.0 / scale.power)
+                else:
+                    shift = 0.0
+                    lower = minimum ** (1.0 / scale.power)
+                    upper = maximum ** (1.0 / scale.power)
                 size = (upper - lower) / scale.bins
                 cuts = [
-                    (lower + (i + 1) * size) ** scale.power for i in range(scale.bins)
+                    (lower + (i + 1) * size) ** scale.power + shift
+                    for i in range(scale.bins)
                 ]
                 cuts[-1] = maximum
             case LogarithmicScale():
@@ -643,18 +655,27 @@ class PolarsClassifierProvider:
                     ]
                 cuts[-1] = maximum
             case ExponentialScale():
-                if scale.base == 10.0:
-                    lower = math.log10(minimum)
-                    upper = math.log10(maximum)
-                elif scale.base == math.e:
-                    lower = math.log(minimum)
-                    upper = math.log(maximum)
+                if minimum <= 0:
+                    range_size = maximum - minimum
+                    shift = -minimum + max(
+                        ScaleShift.EXPONENTIAL_RANGE_FACTOR.value * range_size,
+                        ScaleShift.EXPONENTIAL_MIN_SHIFT.value,
+                    )
                 else:
-                    lower = math.log(minimum) / math.log(scale.base)
-                    upper = math.log(maximum) / math.log(scale.base)
+                    shift = 0
+                if scale.base == 10.0:
+                    lower = math.log10(minimum + shift)
+                    upper = math.log10(maximum + shift)
+                elif scale.base == math.e:
+                    lower = math.log(minimum + shift)
+                    upper = math.log(maximum + shift)
+                else:
+                    lower = math.log(minimum + shift) / math.log(scale.base)
+                    upper = math.log(maximum + shift) / math.log(scale.base)
                 size = (upper - lower) / scale.bins
                 cuts = [
-                    scale.base ** (lower + (i + 1) * size) for i in range(scale.bins)
+                    scale.base ** (lower + (i + 1) * size) - shift
+                    for i in range(scale.bins)
                 ]
                 cuts[-1] = maximum
             case _:
@@ -1427,7 +1448,11 @@ class DataQualityEngine:
                         DQColumns.DQ_VERSION.value: DQ_VERSION,
                         DQColumns.DQ_CLASSIFIER.value: column,
                         DQColumns.DQ_TYPE.value: ClassifierFamily.CATEGORICAL.value,
-                        DQColumns.DQ_BINS.value: categorizer.scale.bins,
+                        DQColumns.DQ_BINS.value: (
+                            categorizer.scale.bins + 1
+                            if categorizer.scale.use_bin_zero
+                            else categorizer.scale.bins
+                        ),
                         DQColumns.DQ_FALSE.value: None,
                         DQColumns.DQ_TRUE.value: None,
                         DQColumns.DQ_UNDERFLOW.value: underflow_count,

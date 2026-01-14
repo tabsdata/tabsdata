@@ -3,6 +3,7 @@
 #
 
 import math
+from decimal import Decimal
 
 import polars as pl
 import pytest
@@ -13,9 +14,24 @@ from test_tabsdata.test_tableframe.actions.dataquality.dq_helper import (
     boolean_dataset,
 )
 
+import tabsdata as td
 import tabsdata.tableframe.dtypes as td_dtypes
-from tabsdata.dataquality import IsBetween, IsIn, IsNotBetween, IsNotIn
-from tabsdata.tableframe._actions.dataquality.engine import DataQualityEngine
+from tabsdata.dataquality import (
+    Categorizer,
+    ExponentialScale,
+    IdentityScale,
+    IsBetween,
+    IsIn,
+    IsNotBetween,
+    IsNotIn,
+    LinearScale,
+    LogarithmicScale,
+    MonomialScale,
+)
+from tabsdata.tableframe._actions.dataquality.engine import (
+    ByteSentinel,
+    DataQualityEngine,
+)
 from tests_tabsdata.test_tabsdata.test_tableframe.common import (
     pretty_pandas,
     pretty_polars,
@@ -115,7 +131,7 @@ def _convert_classifier_values(classifier, dtype):
     return None
 
 
-def dq_parameters():
+def dq_engine_parameters():
     parameters = []
     for classifier, configs in CLASSIFIERS.items():
         for config in configs:
@@ -136,7 +152,7 @@ def dq_parameters():
 
 
 @pytest.mark.dq
-@pytest.mark.parametrize("classifier,dtype,configuration", dq_parameters())
+@pytest.mark.parametrize("classifier,dtype,configuration", dq_engine_parameters())
 def test_dq_engine(classifier, dtype, configuration):
     dataset = (
         configuration.dataset if configuration.dataset is not None else boolean_dataset
@@ -152,3 +168,248 @@ def test_dq_engine(classifier, dtype, configuration):
     configuration.checker(df, dq_engine._tags, qrows)
     assert "value" in df.columns
     assert "id" in df.columns
+
+
+def dq_negative_parameters():
+    supported_dtypes = list(Categorizer.supported_dtypes())
+    signed_dtypes = [
+        dtype
+        for dtype in supported_dtypes
+        if dtype
+        not in [
+            td_dtypes.UInt8,
+            td_dtypes.UInt16,
+            td_dtypes.UInt32,
+            td_dtypes.UInt64,
+        ]
+    ]
+
+    test_cases = []
+
+    for dtype in signed_dtypes:
+        test_cases.append(
+            pytest.param(
+                MonomialScale(
+                    min_val=-4,
+                    max_val=16,
+                    power=2,
+                    bins=5,
+                    use_bin_zero=False,
+                ),
+                dtype,
+                id=f"monomial_quadratic_neg_min_{dtype.__name__}",
+            )
+        )
+        test_cases.append(
+            pytest.param(
+                MonomialScale(
+                    min_val=-4,
+                    max_val=16,
+                    power=2,
+                    bins=5,
+                    use_bin_zero=True,
+                ),
+                dtype,
+                id=f"monomial_quadratic_neg_min_with_bin_zero_{dtype.__name__}",
+            )
+        )
+
+    for dtype in signed_dtypes:
+        test_cases.append(
+            pytest.param(
+                ExponentialScale(
+                    min_val=-5,
+                    max_val=10,
+                    base=math.e,
+                    bins=5,
+                    use_bin_zero=False,
+                ),
+                dtype,
+                id=f"exponential_neg_min_{dtype.__name__}",
+            )
+        )
+        test_cases.append(
+            pytest.param(
+                ExponentialScale(
+                    min_val=-5,
+                    max_val=10,
+                    base=math.e,
+                    bins=5,
+                    use_bin_zero=True,
+                ),
+                dtype,
+                id=f"exponential_neg_min_with_bin_zero_{dtype.__name__}",
+            )
+        )
+        test_cases.append(
+            pytest.param(
+                IdentityScale(
+                    min_val=1,
+                    max_val=100,
+                ),
+                dtype,
+                id=f"identity_neg_min_{dtype.__name__}",
+            )
+        )
+        test_cases.append(
+            pytest.param(
+                LinearScale(
+                    min_val=-5,
+                    max_val=10,
+                    bins=5,
+                    use_bin_zero=False,
+                ),
+                dtype,
+                id=f"lineal_neg_min_{dtype.__name__}",
+            )
+        )
+        test_cases.append(
+            pytest.param(
+                LinearScale(
+                    min_val=-5,
+                    max_val=10,
+                    bins=5,
+                    use_bin_zero=True,
+                ),
+                dtype,
+                id=f"lineal_neg_min_with_bin_zero_{dtype.__name__}",
+            )
+        )
+        test_cases.append(
+            pytest.param(
+                LogarithmicScale(
+                    min_val=-5,
+                    max_val=10,
+                    base=math.e,
+                    bins=5,
+                    use_bin_zero=False,
+                ),
+                dtype,
+                id=f"logarithmic_neg_min_{dtype.__name__}",
+            )
+        )
+        test_cases.append(
+            pytest.param(
+                LogarithmicScale(
+                    min_val=-5,
+                    max_val=10,
+                    base=math.e,
+                    bins=5,
+                    use_bin_zero=True,
+                ),
+                dtype,
+                id=f"logarithmic_neg_min_with_bin_zero_{dtype.__name__}",
+            )
+        )
+
+    return test_cases
+
+
+@pytest.mark.dq
+@pytest.mark.parametrize("scale,dtype", dq_negative_parameters())
+def test_categorizer_with_negative_values(scale, dtype):
+    minimum, maximum = scale.scale_range
+
+    values = []
+
+    is_int_dtype = dtype in [
+        td_dtypes.Int8,
+        td_dtypes.Int16,
+        td_dtypes.Int32,
+        td_dtypes.Int64,
+    ]
+    is_decimal_dtype = dtype == td_dtypes.Decimal
+
+    def normalize(value):
+        if value is None:
+            return None
+        if is_int_dtype:
+            return int(round(value))
+        if is_decimal_dtype:
+            return Decimal(str(value)).quantize(Decimal("0.01"))
+        return value
+
+    values.extend([normalize(minimum - 10), normalize(maximum + 10)])
+    values.extend([normalize(minimum), normalize(maximum)])
+    values.extend(
+        [
+            normalize(minimum + (maximum - minimum) * 0.1),
+            normalize(minimum + (maximum - minimum) * 0.25),
+            normalize(minimum + (maximum - minimum) * 0.5),
+            normalize(minimum + (maximum - minimum) * 0.75),
+            normalize(minimum + (maximum - minimum) * 0.9),
+        ]
+    )
+    values.append(None)
+
+    schema = {"id": pl.Int64, "value": dtype}
+
+    data = {"id": list(range(len(values))), "value": values}
+    df = pl.DataFrame(data, schema=schema, strict=False)
+    if dtype in [td_dtypes.Float32, td_dtypes.Float64]:
+        nan_data = {"id": [len(values)], "value": [float("nan")]}
+        nan_df = pl.DataFrame(nan_data, schema=schema, strict=False)
+        df = df.vstack(nan_df)
+    tf = td.TableFrame.from_polars(df)
+
+    categorizer = Categorizer(
+        column_names=("value", "value_category"),
+        scale=scale,
+    )
+
+    dq_engine = tf._dq.categorizer(categorizer)
+    df = dq_engine.tf()._lf.collect()
+
+    assert "value_category" in df.columns
+    assert df.schema["value_category"] == pl.UInt8
+
+    expected_count = len(values) + (
+        1 if dtype in [td_dtypes.Float32, td_dtypes.Float64] else 0
+    )
+    assert len(df) == expected_count
+
+    null_mask = df["value"].is_null()
+    null_categories = df.filter(null_mask)["value_category"]
+    assert null_categories.to_list() == [ByteSentinel.NULL]
+
+    if dtype in [td_dtypes.Float32, td_dtypes.Float64]:
+        nan_mask = df["value"].is_nan()
+        nan_categories = df.filter(nan_mask)["value_category"]
+        assert nan_categories.to_list() == [ByteSentinel.NAN]
+
+    underflow_mask = (df["value"].is_not_null()) & (df["value"] < minimum)
+    if dtype in [td_dtypes.Float32, td_dtypes.Float64]:
+        underflow_mask = underflow_mask & df["value"].is_not_nan()
+    underflow_categories = df.filter(underflow_mask)["value_category"]
+    assert all(c == ByteSentinel.UNDERFLOW for c in underflow_categories.to_list())
+
+    overflow_mask = (df["value"].is_not_null()) & (df["value"] > maximum)
+    if dtype in [td_dtypes.Float32, td_dtypes.Float64]:
+        overflow_mask = overflow_mask & df["value"].is_not_nan()
+    overflow_categories = df.filter(overflow_mask)["value_category"]
+    assert all(c == ByteSentinel.OVERFLOW for c in overflow_categories.to_list())
+
+    valid_mask = (
+        df["value"].is_not_null() & (df["value"] >= minimum) & (df["value"] <= maximum)
+    )
+    if dtype in [td_dtypes.Float32, td_dtypes.Float64]:
+        valid_mask = valid_mask & df["value"].is_not_nan()
+
+    valid_categories = df.filter(valid_mask)["value_category"]
+
+    if hasattr(scale, "use_bin_zero") and scale.use_bin_zero:
+        expected_range = range(0, scale.bins + 1)
+    else:
+        expected_range = range(1, scale.bins + 1)
+
+    for cat in valid_categories.to_list():
+        assert (
+            cat in expected_range
+        ), f"Category {cat} not in expected range {list(expected_range)}"
+
+    if hasattr(scale, "use_bin_zero") and scale.use_bin_zero:
+        min_value_mask = df["value"] == minimum
+        min_categories = df.filter(min_value_mask)["value_category"]
+        assert all(
+            category == 0 for category in min_categories.to_list()
+        ), "Minimum value should be in bin 0 when use_bin_zero=True"

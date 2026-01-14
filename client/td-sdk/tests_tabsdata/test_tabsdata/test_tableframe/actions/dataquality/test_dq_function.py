@@ -300,7 +300,7 @@ def test_summary_categorizer_min_not_in_first_bin(
 
     assert row["dq.type"] == "categorical"
 
-    assert row["dq.bins"] == 10
+    assert row["dq.bins"] == 11
 
     assert row["dq.false"] is None
     assert row["dq.true"] is None

@@ -1258,7 +1258,8 @@ class ErrorCode(Enum):
         "code": "DQPE-008",
         "message": (
             "Mismatch between table_infos and operations for output action table '{}'. "
-            "Expected equal lengths, but got {} table_infos and {} operations."
+            "Expected equal lengths, but got {} table_infos and {} operators. "
+            "Total infoes is: {}; Total operators is: {}"
         ),
     }
     DQPE9 = {
