@@ -9,8 +9,8 @@ import uuid
 from dataclasses import dataclass, field
 
 import polars as pl
+from polars._typing import IntoExpr
 from polars.plugins import register_plugin_function
-from polars.type_aliases import IntoExpr
 
 import tabsdata.tableframe.functions.col as td_col
 from tabsdata.expansions.tableframe.expressions import PLUGIN_PATH

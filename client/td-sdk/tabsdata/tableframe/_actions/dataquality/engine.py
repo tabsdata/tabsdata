@@ -53,6 +53,7 @@ from tabsdata.dataquality._classifier import (
     MonomialScale,
 )
 from tabsdata.exceptions import DataQualityProcessingError, ErrorCode
+from tabsdata.tableframe._actions.dataquality.assistant import TypeHandler
 from tabsdata.tableframe.lazyframe.properties import TableFramePropertiesBuilder
 
 if TYPE_CHECKING:
@@ -375,21 +376,24 @@ class PolarsProvider:
     @staticmethod
     def _between(
         column: pl.Expr,
+        dtype: pl.DataType,
         classifier: RangeClassifier,
     ) -> pl.Expr:
-        if classifier.min is None and classifier.max is None:
+        c_min = TypeHandler.convert_value(classifier.min, dtype, allow_null=True)
+        c_max = TypeHandler.convert_value(classifier.max, dtype, allow_null=True)
+        if c_min is None and c_max is None:
             return pl.lit(True)
-        if classifier.min is None:
+        if c_min is None:
             if classifier.closed in ("both", "upper"):
-                return column.le(pl.lit(classifier.max))
-            return column.lt(pl.lit(classifier.max))
-        if classifier.max is None:
+                return column.le(pl.lit(c_max))
+            return column.lt(pl.lit(c_max))
+        if c_max is None:
             if classifier.closed in ("both", "lower"):
-                return column.ge(pl.lit(classifier.min))
-            return column.gt(pl.lit(classifier.min))
+                return column.ge(pl.lit(c_min))
+            return column.gt(pl.lit(c_min))
         return column.is_between(
-            pl.lit(classifier.min),
-            pl.lit(classifier.max),
+            pl.lit(c_min),
+            pl.lit(c_max),
             closed=CLOSED_MAPPING[classifier.closed],
         )
 
@@ -405,7 +409,7 @@ class PolarsProvider:
             .when(QExpressions.IS_NAN(column, dtype))
             .then(ByteSentinel.NAN)
         )
-        core_expression = PolarsProvider._between(column, classifier)
+        core_expression = PolarsProvider._between(column, dtype, classifier)
         return base_expression.otherwise(core_expression).cast(pl.UInt8)
 
     @staticmethod
@@ -420,15 +424,17 @@ class PolarsProvider:
             .when(QExpressions.IS_NAN(column, dtype))
             .then(ByteSentinel.NAN)
         )
-        core_expression = ~PolarsProvider._between(column, classifier)
+        core_expression = ~PolarsProvider._between(column, dtype, classifier)
         return base_expression.otherwise(core_expression).cast(pl.UInt8)
 
     @staticmethod
     def _in(
         column: pl.Expr,
+        dtype: pl.DataType,
         values: AbstractSet[Any],
     ) -> pl.Expr:
-        return column.is_in(values)
+        c_values = TypeHandler.convert_set(values, dtype)
+        return column.is_in(c_values)
 
     # noinspection DuplicatedCode
     @staticmethod
@@ -470,7 +476,7 @@ class PolarsProvider:
                 .when(QExpressions.IS_NAN(column, dtype))
                 .then(ByteSentinel.NAN)
             )
-        core_expression = PolarsProvider._in(column, classifier.values)
+        core_expression = PolarsProvider._in(column, dtype, classifier.values)
         return base_expression.otherwise(core_expression).cast(pl.UInt8)
 
     # noinspection DuplicatedCode
@@ -514,7 +520,7 @@ class PolarsProvider:
                 .when(QExpressions.IS_NAN(column, dtype))
                 .then(ByteSentinel.NAN)
             )
-        core_expression = ~PolarsProvider._in(column, classifier.values)
+        core_expression = ~PolarsProvider._in(column, dtype, classifier.values)
         return base_expression.otherwise(core_expression).cast(pl.UInt8)
 
     @staticmethod

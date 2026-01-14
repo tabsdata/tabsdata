@@ -17,6 +17,7 @@ humanize==4.14.0
 hvac==2.4.0
 ijson==3.4.0
 importlib-metadata==8.7.0
+isodate==0.7.2
 numpy==2.3.4
 packaging==25.0
 pandas==2.2.3

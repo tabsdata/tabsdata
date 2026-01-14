@@ -5,7 +5,9 @@
 from __future__ import annotations
 
 from tabsdata.dataquality._classifier import (
+    BoolClassifier,
     Categorizer,
+    Classifier,
     DoesNotMatch,
     ExponentialScale,
     HasLength,
@@ -48,6 +50,8 @@ from tabsdata.dataquality._operator import (
 
 __all__ = [
     # from tabsdata.dataquality._classifiers
+    "Classifier",
+    "BoolClassifier",
     "IsNull",
     "IsNotNull",
     "IsNan",
