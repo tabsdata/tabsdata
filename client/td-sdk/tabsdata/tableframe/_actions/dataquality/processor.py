@@ -439,7 +439,7 @@ class DataQualityProcessor:
             )
 
     # noinspection DuplicatedCode
-    def tables_data(
+    def tables_data(  # noqa: C901
         self,
         input_table_frames: InputTableSpec,
         output_table_frames: OutputTableSpec,

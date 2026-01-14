@@ -17,6 +17,7 @@ import platform
 import re
 import shutil
 import subprocess
+import sys
 import sysconfig
 import tempfile
 import time
@@ -125,6 +126,7 @@ PYTHON_VERSION_LOCK_TIMEOUT = 10  # 10 seconds
 TESTIMONY_LOCK_TIMEOUT = 2 * 60  # 2 minutes
 
 TD_INHERIT_TABSDATA_PACKAGES = "TD_INHERIT_TABSDATA_PACKAGES"
+TD_USE_CURRENT_VENV = "TD_USE_CURRENT_VENV"
 
 
 @dataclass
@@ -864,6 +866,13 @@ def create_virtual_environment(  # noqa: C901
     salt: str | None = None,
 ) -> str | None:
     """Create a Python virtual environment with pyenv"""
+
+    # Check whether to use the current virtual environment or create a new one instead.
+    if os.getenv(TD_USE_CURRENT_VENV, "").lower() in TRUE_VALUES:
+        logger.info("TD_USE_CURRENT_VENV is set; using current virtual environment.")
+        current_venv_path = sys.prefix
+        logger.info(f"Current virtual environment path: {current_venv_path}")
+        return current_venv_path
 
     requirements_data = read_yaml_file(requirements_description_file)
 

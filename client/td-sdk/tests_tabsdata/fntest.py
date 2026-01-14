@@ -33,6 +33,7 @@ from tabsdata._tabsserver.function.global_utils import (
 from tabsdata._tabsserver.function.response_utils import RESPONSE_FILE_NAME
 from tabsdata._tabsserver.invoker import REQUEST_FILE_NAME
 from tabsdata._utils.bundle_utils import create_bundle_archive
+from tabsdata._utils.constants import TRUE_VALUES
 from tabsdata._utils.tableframe import _helpers as td_helpers
 from tabsdata.tableframe._actions.dataquality.processor import DataQualityProcessor
 from tabsdata.tableframe.lazyframe.properties import TableFramePropertiesBuilder
@@ -43,19 +44,32 @@ from tests_tabsdata.conftest import (
     write_v2_function_yaml_file,
 )
 
+TD_USE_CURRENT_VENV = "TD_USE_CURRENT_VENV"
+
 
 def pytest_configure(config):
     config.addinivalue_line(
         "markers",
-        "tdfnrun: automatically add behaviours to 'tdfnrun' tests.",
+        "tdfnrun(venv=True): automatically add behaviours to 'tdfnrun' tests. Set"
+        " venv=False to use current virtual environment instead of creating a new one.",
     )
 
 
 @pytest.fixture(autouse=True)
 def tdfnrun_fixture(request):
-    if request.node.get_closest_marker("tdfnrun"):
-        with mock.patch("sys.stdin", StringIO("mock_key: mock_value\n")):
-            yield
+    marker = request.node.get_closest_marker("tdfnrun")
+    if marker:
+        venv = marker.kwargs.get("venv", False)
+        if not venv:
+            os.environ[TD_USE_CURRENT_VENV] = "true"
+        else:
+            os.environ[TD_USE_CURRENT_VENV] = "false"
+        try:
+            with mock.patch("sys.stdin", StringIO("mock_key: mock_value\n")):
+                yield
+        finally:
+            if not venv:
+                os.environ.pop(TD_USE_CURRENT_VENV, None)
     else:
         yield
 
@@ -464,12 +478,15 @@ def tdfnrun(
         td_root = Path(TDLOCAL_FOLDER) / file / test / fn
         fn_root = Path(root)
 
+        use_current_venv = os.getenv(TD_USE_CURRENT_VENV, "").lower() in TRUE_VALUES
         bundle_folder = fn_root / FunctionConstants.BUNDLE_FOLDER_NAME.value
         os.makedirs(bundle_folder, exist_ok=True)
 
         bundle_file = create_bundle_archive(
             function=function,
-            local_packages=FunctionConstants.TABSDATA_PACKAGES.value,
+            local_packages=(
+                None if use_current_venv else FunctionConstants.TABSDATA_PACKAGES.value
+            ),
             save_location=bundle_folder,
         )
 
