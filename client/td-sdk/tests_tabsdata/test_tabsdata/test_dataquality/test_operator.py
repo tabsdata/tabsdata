@@ -55,10 +55,10 @@ def test_summary_class_wrong_tags_list():
 
 def test_filter_out_class():
     criteria = AnyFailed(tags=["tag1", "tag2"])
-    filter_out = Filter(to_table="table_name", criteria=criteria, enrich=True)
+    filter_out = Filter(to_table="table_name", criteria=criteria)
     assert filter_out.to_table == "table_name"
     assert filter_out.criteria == criteria
-    assert filter_out.enrich is True
+    assert filter_out.include_quality_columns == "none"
     assert filter_out.tags == ["tag1", "tag2"]
 
 
@@ -81,11 +81,11 @@ def test_select_class():
     selector = Select(
         criteria,
         to_table="table_name",
-        enrich=True,
+        include_quality_columns="criteria",
     )
     assert selector.to_table == "table_name"
     assert selector.criteria == criteria
-    assert selector.enrich is True
+    assert selector.include_quality_columns == "criteria"
     assert selector.tags == ["tag1", "tag2"]
 
 

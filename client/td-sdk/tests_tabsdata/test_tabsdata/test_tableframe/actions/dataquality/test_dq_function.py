@@ -4,9 +4,8 @@
 
 import polars as pl
 import pytest
-from sqlalchemy.dialects.mssql.information_schema import columns
-
 from fntest import FnError, MockTableFrameSpec, tdfnrun
+from sqlalchemy.dialects.mssql.information_schema import columns
 from test_tabsdata.test_tableframe.actions.dataquality.dq_helper import (
     Q_BOOLEAN,
     Q_NEGATIVE,
@@ -1318,7 +1317,11 @@ def test_filter_select_operations(
     operators = None
     match operator:
         case "filter":
-            operators = [dq.Filter(criteria=criteria, to_table=to_table, enrich=enrich)]
+            operators = [
+                dq.Filter(
+                    criteria=criteria, to_table=to_table, include_quality_columns=enrich
+                )
+            ]
         case "select":
             operators = [dq.Select(criteria=criteria, to_table=to_table, enrich=enrich)]
 

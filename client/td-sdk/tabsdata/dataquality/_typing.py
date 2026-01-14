@@ -164,3 +164,9 @@ ScaleBaseSpec = Annotated[StrictFloat, Field(gt=0)]
 """
 A type alias for the base of a scale, which must be a float greater than 0.
 """
+
+IncludeQualityColumnsSpec: TypeAlias = Literal["none", "criteria", "all"]
+"""
+A type alias for quality columns to included in the Select or Filter target
+table.
+"""

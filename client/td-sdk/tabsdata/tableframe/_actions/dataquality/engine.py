@@ -1379,7 +1379,7 @@ class DataQualityEngine:
         condition = self._criteria_plan([operation.criteria])
 
         user_columns, system_columns = td_frame._split_columns(self._schema.names())
-        if operation.enrich:
+        if operation.include_quality_columns:
             if isinstance(operation.criteria, BoolCriteria):
                 dq_criteria = cast(BoolCriteria, operation.criteria)
                 tags = self._tags_spec_to_list(dq_criteria.tags)
@@ -1437,7 +1437,7 @@ class DataQualityEngine:
         condition = self._criteria_plan([operation.criteria])
 
         user_columns, system_columns = td_frame._split_columns(self._schema.names())
-        if operation.enrich:
+        if operation.include_quality_columns:
             if isinstance(operation.criteria, BoolCriteria):
                 dq_criteria = cast(BoolCriteria, operation.criteria)
                 tags = self._tags_spec_to_list(dq_criteria.tags)

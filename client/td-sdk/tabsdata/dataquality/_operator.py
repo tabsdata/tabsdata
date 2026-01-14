@@ -14,6 +14,7 @@ from tabsdata.dataquality._typing import (
     BinsCriteriaSpec,
     BinSpec,
     ColumnNameSpec,
+    IncludeQualityColumnsSpec,
     PercentSpec,
     RowCountSpec,
     TagSpec,
@@ -339,7 +340,7 @@ class Filter(Operator):
         self,
         criteria: Criteria,
         to_table: Optional[TableName] = None,
-        enrich: bool = False,
+        include_quality_columns: IncludeQualityColumnsSpec = "none",
     ):
         """Initializes the `Filter` operator.
 
@@ -348,14 +349,14 @@ class Filter(Operator):
                       Defaults to `Criteria.any_failed()`.
             to_table: The name of the table to which filtered rows will be sent.
                       If `None`, the filtered rows are discarded.
-            enrich: If the table with filtered data should include the data
-                    quality classifier columns used by the criteria.
+            include_quality_columns: The data quality columns to include in
+                                     the table with filtered out data.
         """
         tags = criteria.tags if isinstance(criteria, BoolCriteria) else None
         super().__init__(tags=tags)
         self._to_table = to_table
         self._criteria = criteria
-        self._enrich = enrich
+        self._include_quality_columns = include_quality_columns
 
     @property
     def to_table(self) -> Optional[TableName]:
@@ -370,16 +371,18 @@ class Filter(Operator):
         return self._criteria
 
     @property
-    def enrich(self) -> bool:
-        """Returns if the table with filtered data should include the data quality
-        classifier columns used by the criteria.
+    def include_quality_columns(self) -> IncludeQualityColumnsSpec:
         """
-        return self._enrich
+        Returns the data quality columns to included in the table with
+        filtered out data.
+        """
+        return self._include_quality_columns
 
 
 class Select(Operator):
-    """An operator that selects rows based on data quality criteria and writes them to
-    another table.
+    """
+    An operator that selects rows based on data quality criteria and writes
+    them to another table.
 
     This operation does not modify the original table.
     """
@@ -389,21 +392,23 @@ class Select(Operator):
         self,
         criteria: Criteria,
         to_table: TableName,
-        enrich: bool = False,
+        include_quality_columns: IncludeQualityColumnsSpec = "none",
     ):
         """Initializes the `Select` operator.
 
         Args:
-            criteria: The criteria for selecting rows. Defaults to `Criteria.all_ok()`.
-            to_table: The name of the table where selected rows will be written.
-            enrich: If the table with filtered data should include the data
-                    quality classifier columns used by the criteria.
+            criteria: The criteria for selecting rows. Defaults to
+                      `Criteria.all_ok()`.
+            to_table: The name of the table where selected rows will be
+                      written.
+            include_quality_columns: The data quality columns to include in
+                                     the table with selected data.
         """
         tags = criteria.tags if isinstance(criteria, BoolCriteria) else None
         super().__init__(tags=tags)
         self._to_table = to_table
         self._criteria = criteria
-        self._enrich = enrich
+        self._include_quality_columns = include_quality_columns
 
     @property
     def to_table(self) -> TableName:
@@ -416,11 +421,12 @@ class Select(Operator):
         return self._criteria
 
     @property
-    def enrich(self) -> bool:
-        """Returns if the table with filtered data should include the data quality
-        classifier columns used by the criteria.
+    def include_quality_columns(self) -> IncludeQualityColumnsSpec:
         """
-        return self._enrich
+        Returns the data quality columns to included in the table with
+        selected data.
+        """
+        return self._include_quality_columns
 
 
 class Summary(Operator):
