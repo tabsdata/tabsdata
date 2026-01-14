@@ -23,7 +23,17 @@ from tabsdata.tableframe._actions.dataquality.engine import MAX_BINS
 
 @pytest.mark.dq
 @pytest.mark.tdfnrun
-def test_dq_transformer():
+@pytest.mark.parametrize(
+    "enrich_to_table,expected_outputs",
+    [
+        (None, 2),
+        ("enrich_table", 3),
+    ],
+)
+def test_dq_transformer(
+    enrich_to_table,
+    expected_outputs,
+):
     @td.transformer(
         name="transformer",
         input_tables=["table_i"],
@@ -35,37 +45,8 @@ def test_dq_transformer():
                     dq.IsNull("value"),
                 ],
                 operators=[
-                    dq.Enrich(),
+                    dq.Enrich(to_table=enrich_to_table),
                     dq.Summary(),
-                ],
-            )
-        ],
-    )
-    def dq_transformer(tf: td.TableFrame) -> td.TableFrame:
-        return tf
-
-    _ = tdfnrun(
-        function=dq_transformer,
-        input_tables=boolean_dataset(td.Float32),
-    )
-
-
-@pytest.mark.dq
-@pytest.mark.tdfnrun
-def test_summary_boolean_classifier():
-    @td.transformer(
-        name="transformer",
-        input_tables=["table_i"],
-        output_tables=["table_o"],
-        on_output_tables=[
-            dq.DataQuality(
-                table="table_o",
-                classifiers=[
-                    dq.IsPositive("value"),
-                ],
-                operators=[
-                    dq.Summary(),
-                    dq.Enrich(),
                 ],
             )
         ],
@@ -79,9 +60,52 @@ def test_summary_boolean_classifier():
     )
 
     outputs = list(fnrun.output.as_pl_df(True))
-    assert len(outputs) == 3
+    assert len(outputs) == expected_outputs
 
-    dq_table = outputs[0]
+
+@pytest.mark.dq
+@pytest.mark.tdfnrun
+@pytest.mark.parametrize(
+    "enrich_to_table,expected_outputs,enrich_table_idx",
+    [
+        (None, 2, 0),
+        ("enrich_table", 3, 2),
+    ],
+)
+def test_summary_boolean_classifier(
+    enrich_to_table,
+    expected_outputs,
+    enrich_table_idx,
+):
+    @td.transformer(
+        name="transformer",
+        input_tables=["table_i"],
+        output_tables=["table_o"],
+        on_output_tables=[
+            dq.DataQuality(
+                table="table_o",
+                classifiers=[
+                    dq.IsPositive("value"),
+                ],
+                operators=[
+                    dq.Summary(),
+                    dq.Enrich(to_table=enrich_to_table),
+                ],
+            )
+        ],
+    )
+    def dq_transformer(tf: td.TableFrame) -> td.TableFrame:
+        return tf
+
+    fnrun = tdfnrun(
+        function=dq_transformer,
+        input_tables=boolean_dataset(td.Float32),
+    )
+
+    outputs = list(fnrun.output.as_pl_df(True))
+    assert len(outputs) == expected_outputs
+
+    dq_table = outputs[enrich_table_idx]
     summary_table = outputs[1]
 
     total_rows = len(dq_table)
@@ -122,7 +146,18 @@ def test_summary_boolean_classifier():
 
 @pytest.mark.dq
 @pytest.mark.tdfnrun
-def test_summary_categorizer_min_in_first_bin():
+@pytest.mark.parametrize(
+    "enrich_to_table,expected_outputs,enrich_table_idx",
+    [
+        (None, 2, 0),
+        ("enrich_table", 3, 2),
+    ],
+)
+def test_summary_categorizer_min_in_first_bin(
+    enrich_to_table,
+    expected_outputs,
+    enrich_table_idx,
+):
     scale = LinearScale(
         min_val=0,
         max_val=100,
@@ -142,7 +177,7 @@ def test_summary_categorizer_min_in_first_bin():
                 ],
                 operators=[
                     dq.Summary(),
-                    dq.Enrich(),
+                    dq.Enrich(to_table=enrich_to_table),
                 ],
             )
         ],
@@ -156,9 +191,9 @@ def test_summary_categorizer_min_in_first_bin():
     )
 
     outputs = list(fnrun.output.as_pl_df(True))
-    assert len(outputs) == 3
+    assert len(outputs) == expected_outputs
 
-    dq_table = outputs[0]
+    dq_table = outputs[enrich_table_idx]
     summary_table = outputs[1]
 
     total_rows = len(dq_table)
@@ -205,7 +240,18 @@ def test_summary_categorizer_min_in_first_bin():
 
 @pytest.mark.dq
 @pytest.mark.tdfnrun
-def test_summary_categorizer_min_not_in_first_bin():
+@pytest.mark.parametrize(
+    "enrich_to_table,expected_outputs,enrich_table_idx",
+    [
+        (None, 2, 0),
+        ("enrich_table", 3, 2),
+    ],
+)
+def test_summary_categorizer_min_not_in_first_bin(
+    enrich_to_table,
+    expected_outputs,
+    enrich_table_idx,
+):
     scale = LinearScale(
         min_val=0,
         max_val=100,
@@ -225,7 +271,7 @@ def test_summary_categorizer_min_not_in_first_bin():
                 ],
                 operators=[
                     dq.Summary(),
-                    dq.Enrich(),
+                    dq.Enrich(to_table=enrich_to_table),
                 ],
             )
         ],
@@ -239,9 +285,9 @@ def test_summary_categorizer_min_not_in_first_bin():
     )
 
     outputs = list(fnrun.output.as_pl_df(True))
-    assert len(outputs) == 3
+    assert len(outputs) == expected_outputs
 
-    dq_table = outputs[0]
+    dq_table = outputs[enrich_table_idx]
     summary_table = outputs[1]
 
     total_rows = len(dq_table)
@@ -343,7 +389,19 @@ def multi_column_dataset() -> MockTableFrameSpec:
 
 @pytest.mark.dq
 @pytest.mark.tdfnrun
-def test_cols_none_selects_all_user_columns():
+@pytest.mark.parametrize(
+    "enrich_to_table,expected_outputs,enrich_table_idx,summary_table_idx",
+    [
+        (None, 2, 0, 1),
+        ("enrich_table", 3, 1, 2),
+    ],
+)
+def test_cols_none_selects_all_user_columns(
+    enrich_to_table,
+    expected_outputs,
+    enrich_table_idx,
+    summary_table_idx,
+):
     @td.transformer(
         name="transformer",
         input_tables=["table_i"],
@@ -355,7 +413,7 @@ def test_cols_none_selects_all_user_columns():
                     dq.IsNull(column_names=None),
                 ],
                 operators=[
-                    dq.Enrich(),
+                    dq.Enrich(to_table=enrich_to_table),
                     dq.Summary(),
                 ],
             )
@@ -370,9 +428,9 @@ def test_cols_none_selects_all_user_columns():
     )
 
     outputs = list(fnrun.output.as_pl_df(True))
-    assert len(outputs) == 3
+    assert len(outputs) == expected_outputs
 
-    enrich_table = outputs[1]
+    enrich_table = outputs[enrich_table_idx]
     dq_columns = [col for col in enrich_table.columns if col.endswith("_is_null")]
     assert len(dq_columns) == 4, "Should have 4 DQ columns (one per user column)"
     assert "int_col_is_null" in enrich_table.columns
@@ -380,7 +438,7 @@ def test_cols_none_selects_all_user_columns():
     assert "str_col_is_null" in enrich_table.columns
     assert "bool_col_is_null" in enrich_table.columns
 
-    summary_table = outputs[2]
+    summary_table = outputs[summary_table_idx]
 
     assert len(summary_table) == 4, "Should have 4 summary rows (one per user column)"
 
@@ -395,7 +453,19 @@ def test_cols_none_selects_all_user_columns():
 
 @pytest.mark.dq
 @pytest.mark.tdfnrun
-def test_on_missing_column_ignore():
+@pytest.mark.parametrize(
+    "enrich_to_table,expected_outputs,enrich_table_idx,summary_table_idx",
+    [
+        (None, 2, 0, 1),
+        ("enrich_table", 3, 1, 2),
+    ],
+)
+def test_on_missing_column_ignore(
+    enrich_to_table,
+    expected_outputs,
+    enrich_table_idx,
+    summary_table_idx,
+):
     @td.transformer(
         name="transformer",
         input_tables=["table_i"],
@@ -415,7 +485,7 @@ def test_on_missing_column_ignore():
                     ),
                 ],
                 operators=[
-                    dq.Enrich(),
+                    dq.Enrich(to_table=enrich_to_table),
                     dq.Summary(),
                 ],
             )
@@ -430,9 +500,9 @@ def test_on_missing_column_ignore():
     )
 
     outputs = list(fnrun.output.as_pl_df(True))
-    assert len(outputs) == 3
+    assert len(outputs) == expected_outputs
 
-    enrich_table = outputs[1]
+    enrich_table = outputs[enrich_table_idx]
     dq_columns = [col for col in enrich_table.columns if col.endswith("_is_null")]
     assert len(dq_columns) == 2, "Should have 2 DQ columns (missing columns ignored)"
     assert "int_col_is_null" in enrich_table.columns
@@ -440,7 +510,7 @@ def test_on_missing_column_ignore():
     assert "missing_col1_is_null" not in enrich_table.columns
     assert "missing_col2_is_null" not in enrich_table.columns
 
-    summary_table = outputs[2]
+    summary_table = outputs[summary_table_idx]
 
     assert (
         len(summary_table) == 2
@@ -452,7 +522,14 @@ def test_on_missing_column_ignore():
 
 @pytest.mark.dq
 @pytest.mark.tdfnrun
-def test_on_missing_column_fail():
+@pytest.mark.parametrize(
+    "enrich_to_table",
+    [
+        None,
+        "enrich_table",
+    ],
+)
+def test_on_missing_column_fail(enrich_to_table):
     @td.transformer(
         name="transformer",
         input_tables=["table_i"],
@@ -468,7 +545,7 @@ def test_on_missing_column_fail():
                 ],
                 operators=[
                     dq.Summary(),
-                    dq.Enrich(),
+                    dq.Enrich(to_table=enrich_to_table),
                 ],
             )
         ],
@@ -491,7 +568,19 @@ def test_on_missing_column_fail():
 
 @pytest.mark.dq
 @pytest.mark.tdfnrun
-def test_on_wrong_type_ignore():
+@pytest.mark.parametrize(
+    "enrich_to_table,expected_outputs,enrich_table_idx,summary_table_idx",
+    [
+        (None, 2, 0, 1),
+        ("enrich_table", 3, 1, 2),
+    ],
+)
+def test_on_wrong_type_ignore(
+    enrich_to_table,
+    expected_outputs,
+    enrich_table_idx,
+    summary_table_idx,
+):
     @td.transformer(
         name="transformer",
         input_tables=["table_i"],
@@ -506,7 +595,7 @@ def test_on_wrong_type_ignore():
                     ),
                 ],
                 operators=[
-                    dq.Enrich(),
+                    dq.Enrich(to_table=enrich_to_table),
                     dq.Summary(),
                 ],
             )
@@ -521,9 +610,9 @@ def test_on_wrong_type_ignore():
     )
 
     outputs = list(fnrun.output.as_pl_df(True))
-    assert len(outputs) == 3
+    assert len(outputs) == expected_outputs
 
-    enrich_table = outputs[1]
+    enrich_table = outputs[enrich_table_idx]
     dq_columns = [col for col in enrich_table.columns if col.endswith("_is_positive")]
     assert len(dq_columns) == 2, "Should have 2 DQ columns (incompatible types ignored)"
     assert "int_col_is_positive" in enrich_table.columns
@@ -531,7 +620,7 @@ def test_on_wrong_type_ignore():
     assert "str_col_is_positive" not in enrich_table.columns
     assert "bool_col_is_positive" not in enrich_table.columns
 
-    summary_table = outputs[2]
+    summary_table = outputs[summary_table_idx]
 
     assert (
         len(summary_table) == 2
@@ -543,7 +632,14 @@ def test_on_wrong_type_ignore():
 
 @pytest.mark.dq
 @pytest.mark.tdfnrun
-def test_on_wrong_type_fail():
+@pytest.mark.parametrize(
+    "enrich_to_table",
+    [
+        None,
+        "enrich_table",
+    ],
+)
+def test_on_wrong_type_fail(enrich_to_table):
     @td.transformer(
         name="transformer",
         input_tables=["table_i"],
@@ -560,7 +656,7 @@ def test_on_wrong_type_fail():
                 ],
                 operators=[
                     dq.Summary(),
-                    dq.Enrich(),
+                    dq.Enrich(to_table=enrich_to_table),
                 ],
             )
         ],
@@ -583,7 +679,19 @@ def test_on_wrong_type_fail():
 
 @pytest.mark.dq
 @pytest.mark.tdfnrun
-def test_combined_none_cols_with_mixed_types():
+@pytest.mark.parametrize(
+    "enrich_to_table,expected_outputs,enrich_table_idx,summary_table_idx",
+    [
+        (None, 2, 0, 1),
+        ("enrich_table", 3, 1, 2),
+    ],
+)
+def test_combined_none_cols_with_mixed_types(
+    enrich_to_table,
+    expected_outputs,
+    enrich_table_idx,
+    summary_table_idx,
+):
     @td.transformer(
         name="transformer",
         input_tables=["table_i"],
@@ -598,7 +706,7 @@ def test_combined_none_cols_with_mixed_types():
                     ),
                 ],
                 operators=[
-                    dq.Enrich(),
+                    dq.Enrich(to_table=enrich_to_table),
                     dq.Summary(),
                 ],
             )
@@ -613,15 +721,15 @@ def test_combined_none_cols_with_mixed_types():
     )
 
     outputs = list(fnrun.output.as_pl_df(True))
-    assert len(outputs) == 3
+    assert len(outputs) == expected_outputs
 
-    enrich_table = outputs[1]
+    enrich_table = outputs[enrich_table_idx]
     dq_columns = [col for col in enrich_table.columns if col.endswith("_is_positive")]
     assert len(dq_columns) == 2, "Should have 2 DQ columns (only compatible types)"
     assert "int_col_is_positive" in enrich_table.columns
     assert "float_col_is_positive" in enrich_table.columns
 
-    summary_table = outputs[2]
+    summary_table = outputs[summary_table_idx]
 
     assert len(summary_table) == 2, "Should have 2 summary rows"
 
