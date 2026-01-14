@@ -4,7 +4,7 @@
 
 import polars as pl
 import pytest
-from fntest import MockTableFrameSpec, tdfnrun
+from fntest import FnError, MockTableFrameSpec, tdfnrun
 from test_tabsdata.test_tableframe.actions.dataquality.dq_helper import (
     Q_NEGATIVE,
     Q_NULL,
@@ -553,16 +553,18 @@ def test_on_missing_column_fail(enrich_to_table):
     def dq_transformer(tf: td.TableFrame) -> td.TableFrame:
         return tf
 
-    with pytest.raises(Exception) as error:
+    with pytest.raises(FnError) as error:
         tdfnrun(
             function=dq_transformer,
             input_tables=multi_column_dataset(),
         )
 
-    # ToDo: check when we propagate exception reason in executions...
-    # assert "DQPE-011" in str(error.value)
-    # assert "missing_column" in str(error.value)
-
+    fnrun = error.value.fnrun
+    _request = fnrun.request.as_object()
+    _response = fnrun.response.as_object()
+    exception = fnrun.exception.as_object()
+    assert exception.code == "DQPE-011"
+    assert "missing_column" in exception.message
     assert "Status is not 0" in str(error.value)
 
 
@@ -664,16 +666,18 @@ def test_on_wrong_type_fail(enrich_to_table):
     def dq_transformer(tf: td.TableFrame) -> td.TableFrame:
         return tf
 
-    with pytest.raises(Exception) as error:
+    with pytest.raises(FnError) as error:
         tdfnrun(
             function=dq_transformer,
             input_tables=multi_column_dataset(),
         )
 
-    # ToDo: check when we propagate exception reason in executions...
-    # assert "DQPE-012" in str(exc_info.value)
-    # assert "str_col" in str(exc_info.value)
-
+    fnrun = error.value.fnrun
+    _request = fnrun.request.as_object()
+    _response = fnrun.response.as_object()
+    exception = fnrun.exception.as_object()
+    assert exception.code == "DQPE-012"
+    assert "str_col" in exception.message
     assert "Status is not 0" in str(error.value)
 
 

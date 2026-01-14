@@ -31,10 +31,16 @@ from tabsdata._tabsserver.function.global_utils import (
     DEFAULT_DEVELOPMENT_LOCKS_LOCATION,
 )
 from tabsdata._tabsserver.function.response_utils import RESPONSE_FILE_NAME
+from tabsdata._tabsserver.function.yaml_parsing import (
+    parse_exception_yaml,
+    parse_request_yaml,
+    parse_response_yaml,
+)
 from tabsdata._tabsserver.invoker import REQUEST_FILE_NAME
 from tabsdata._utils.bundle_utils import create_bundle_archive
 from tabsdata._utils.constants import TRUE_VALUES
 from tabsdata._utils.tableframe import _helpers as td_helpers
+from tabsdata.expansions.foundation.symbols import EXCEPTION_FILE
 from tabsdata.tableframe._actions.dataquality.processor import DataQualityProcessor
 from tabsdata.tableframe.lazyframe.properties import TableFramePropertiesBuilder
 from tests_tabsdata.bootest import TDLOCAL_FOLDER
@@ -43,6 +49,8 @@ from tests_tabsdata.conftest import (
     MOCK_COLLECTION,
     write_v2_function_yaml_file,
 )
+
+EXCEPTION_FILE_NAME = EXCEPTION_FILE
 
 TD_USE_CURRENT_VENV = "TD_USE_CURRENT_VENV"
 
@@ -84,6 +92,8 @@ class FunctionConstants(Enum):
     REQUEST_FILE_NAME = REQUEST_FILE_NAME
     RESPONSE_FOLDER_NAME = "response"
     RESPONSE_FILE_NAME = RESPONSE_FILE_NAME
+    EXCEPTION_FOLDER_NAME = "response"
+    EXCEPTION_FILE_NAME = EXCEPTION_FILE_NAME
     INPUT_FOLDER_NAME = "input"
     OUTPUT_FOLDER_NAME = "output"
     OFFSET_FOLDER_NAME = "offset"
@@ -115,6 +125,57 @@ MockTableFrameSpec: TypeAlias = Union[
     list[Union[MockTableFrame, list]],
     tuple[Union[MockTableFrame, list], ...],
 ]
+
+
+class FnError(Exception):
+    def __init__(self, message: str, fnrun: "FnRun"):
+        super().__init__(message)
+        self.fnrun = fnrun
+
+
+class FnRequest:
+
+    def __init__(self, path: Path):
+        self._path = path
+
+    @property
+    def path(self) -> Path:
+        return self._path
+
+    def as_object(self) -> Any:
+        if self._path.exists():
+            return parse_request_yaml(str(self._path))
+        return None
+
+
+class FnResponse:
+
+    def __init__(self, path: Path):
+        self._path = path
+
+    @property
+    def path(self) -> Path:
+        return self._path
+
+    def as_object(self) -> Any:
+        if self._path.exists():
+            return parse_response_yaml(str(self._path))
+        return None
+
+
+class FnException:
+
+    def __init__(self, path: Path):
+        self._path = path
+
+    @property
+    def path(self) -> Path:
+        return self._path
+
+    def as_object(self) -> Any:
+        if self._path.exists():
+            return parse_exception_yaml(str(self._path))
+        return None
 
 
 def drop_system_columns_td_tf(tf: td.TableFrame) -> td.TableFrame:
@@ -237,8 +298,9 @@ class FnRun:
     def __init__(
         self,
         folder: Path,
-        request: Path,
-        response: Path,
+        request: FnRequest,
+        response: FnResponse,
+        exception: FnException,
         output: list[Path],
         offset: Path,
         environment: str,
@@ -248,49 +310,53 @@ class FnRun:
         self._folder = folder
         self._request = request
         self._response = response
+        self._exception = exception
         self._output = FnOut(output)
         self._offset = offset
         self._environment = environment
         self._status = status
         self._output_initial_values = output_initial_values
-        self.check()
 
     def check(self):
         if self._status != 0:
-            raise ValueError(f"Status is not 0: '{self._status}'")
+            raise FnError(f"Status is not 0: '{self._status}'", self)
 
         if not self._folder.exists():
-            raise FileNotFoundError(f"Function folder does not exist: '{self._folder}'")
+            raise FnError(f"Function folder does not exist: '{self._folder}'", self)
 
-        if not self._request.exists():
-            raise FileNotFoundError(f"Request file does not exist: '{self._request}'")
+        if not self._request.path.exists():
+            raise FnError(f"Request file does not exist: '{self._request.path}'", self)
 
-        if not self._response.exists():
-            raise FileNotFoundError(f"Response file does not exist: '{self._response}'")
+        if not self._response.path.exists():
+            raise FnError(
+                f"Response file does not exist: '{self._response.path}'", self
+            )
 
         for output_file in self._output:
             if not output_file.path.exists():
-                raise FileNotFoundError(
-                    f"Output file does not exist: '{output_file.path}'"
-                )
+                raise FnError(f"Output file does not exist: '{output_file.path}'", self)
 
         if self._output_initial_values and not self._offset.exists():
-            raise FileNotFoundError(f"Offset file does not exist: '{self._offset}'")
+            raise FnError(f"Offset file does not exist: '{self._offset}'", self)
 
         if self._environment is None:
-            raise ValueError("Environment is None")
+            raise FnError("Environment is None", self)
 
     @property
     def folder(self) -> Path:
         return self._folder
 
     @property
-    def request(self) -> Path:
+    def request(self) -> FnRequest:
         return self._request
 
     @property
-    def response(self) -> Path:
+    def response(self) -> FnResponse:
         return self._response
+
+    @property
+    def exception(self) -> FnException:
+        return self._exception
 
     @property
     def output(self) -> FnOut:
@@ -497,6 +563,7 @@ def tdfnrun(
 
         request_file = request_folder / FunctionConstants.REQUEST_FILE_NAME.value
         response_file = response_folder / FunctionConstants.RESPONSE_FILE_NAME.value
+        exception_file = response_folder / FunctionConstants.EXCEPTION_FILE_NAME.value
 
         input_folder = fn_root / FunctionConstants.INPUT_FOLDER_NAME.value
         os.makedirs(input_folder, exist_ok=True)
@@ -561,8 +628,9 @@ def tdfnrun(
 
         fnrun = FnRun(
             folder=fn_root,
-            request=request_file,
-            response=response_file,
+            request=FnRequest(request_file),
+            response=FnResponse(response_file),
+            exception=FnException(exception_file),
             output=output_paths,
             offset=output_offset_file,
             environment=environment,
@@ -570,4 +638,5 @@ def tdfnrun(
             output_initial_values=output_initial_values,
         )
 
+        fnrun.check()
         return fnrun

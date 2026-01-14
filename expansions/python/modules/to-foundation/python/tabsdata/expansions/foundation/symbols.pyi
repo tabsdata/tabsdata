@@ -5,6 +5,7 @@ import builtins
 import enum
 import typing
 
+EXCEPTION_FILE: builtins.str = 'exception.yaml'
 REQUEST_FILE: builtins.str = 'request.yaml'
 RESPONSE_FILE: builtins.str = 'response.yaml'
 @typing.final

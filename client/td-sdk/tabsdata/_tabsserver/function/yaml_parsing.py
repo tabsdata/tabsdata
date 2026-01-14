@@ -543,6 +543,64 @@ def parse_request_yaml(yaml_file: str) -> FunctionYaml | DataListenerYaml:
         return yaml.load(file, Loader=get_input_yaml_loader())
 
 
+def v2_response_data_constructor(loader, node):
+    return Data(**loader.construct_mapping(node))
+
+
+def v2_response_no_data_constructor(loader, node):
+    mapping = loader.construct_mapping(node)
+    return NoData(mapping.get("table"))
+
+
+def v2_response_function_constructor(loader, node):
+    loader.add_constructor("!Data", v2_response_data_constructor)
+    loader.add_constructor("!NoData", v2_response_no_data_constructor)
+    return V2ResponseFormat(loader.construct_mapping(node))
+
+
+def get_response_yaml_loader():
+    """Add constructors to PyYAML loader for response files."""
+
+    class ResponseYamlLoader(yaml.SafeLoader):
+        pass
+
+    ResponseYamlLoader.add_constructor("!FunctionV2", v2_response_function_constructor)
+    # Legacy support for old !V2 tag
+    ResponseYamlLoader.add_constructor("!V2", v2_response_function_constructor)
+    return ResponseYamlLoader
+
+
+def parse_response_yaml(yaml_file: str) -> ResponseYaml:
+    """Parse a response YAML file and return a ResponseYaml object."""
+    with open(yaml_file, "r") as file:
+        return yaml.load(file, Loader=get_response_yaml_loader())
+
+
+def v2_exception_function_constructor(loader, node):
+    return V2ExceptionFormat(loader.construct_mapping(node))
+
+
+def get_exception_yaml_loader():
+    """Add constructors to PyYAML loader for exception files."""
+
+    class ExceptionYamlLoader(yaml.SafeLoader):
+        pass
+
+    ExceptionYamlLoader.add_constructor(
+        "!FunctionV2", v2_exception_function_constructor
+    )
+    # Legacy support for old !V2 tag
+    ExceptionYamlLoader.add_constructor("!V2", v2_exception_function_constructor)
+    ExceptionYamlLoader.add_constructor("!V1", v2_exception_function_constructor)
+    return ExceptionYamlLoader
+
+
+def parse_exception_yaml(yaml_file: str) -> "ExceptionYaml":
+    """Parse a exception YAML file and return a ExceptionYaml object."""
+    with open(yaml_file, "r") as file:
+        return yaml.load(file, Loader=get_exception_yaml_loader())
+
+
 class Data:
     def __init__(
         self,
@@ -581,6 +639,10 @@ class ResponseYaml(ABC):
     """Just an abstract class to help with type hinting."""
 
 
+class ExceptionYaml(ABC):
+    """Just an abstract class to help with type hinting."""
+
+
 class V2ResponseFormat:
     """
     Simple class to enable us to generate response yaml files
@@ -588,6 +650,34 @@ class V2ResponseFormat:
 
     def __init__(self, content):
         self.content = content
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}(content={self.content})"
+
+
+class V2ExceptionFormat:
+    """
+    Simple class to enable us to generate exception yaml files
+    """
+
+    def __init__(self, content):
+        self.content = content
+
+    @property
+    def status(self) -> int:
+        return self.content["exit_status"]
+
+    @property
+    def exception(self) -> int:
+        return self.content["kind"]
+
+    @property
+    def message(self) -> int:
+        return self.content["message"]
+
+    @property
+    def code(self) -> int:
+        return self.content["error_code"]
 
     def __repr__(self):
         return f"{self.__class__.__name__}(content={self.content})"

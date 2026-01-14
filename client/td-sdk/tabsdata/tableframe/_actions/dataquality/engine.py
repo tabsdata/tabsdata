@@ -760,10 +760,14 @@ class DataQualityEngine:
             if data_column not in user_columns:
                 match classifier.on_missing_column:
                     case "fail":
+                        table_name = (
+                            self._tf._data_table.name
+                            if hasattr(self._tf, "_data_table")
+                            and self._tf._data_table is not None
+                            else "undefined"
+                        )
                         raise DataQualityProcessingError(
-                            ErrorCode.DQPE11,
-                            data_column,
-                            self._tf._data_table.name,
+                            ErrorCode.DQPE11, data_column, table_name
                         )
                     case "ignore":
                         continue
@@ -856,10 +860,13 @@ class DataQualityEngine:
 
         if metadata is None:
             # noinspection PyProtectedMember
+            table_name = (
+                self._tf._data_table.name
+                if hasattr(self._tf, "_data_table") and self._tf._data_table is not None
+                else "undefined"
+            )
             raise DataQualityProcessingError(
-                ErrorCode.DQPE9,
-                classifier_type.__name__,
-                self._tf._data_table.name,
+                ErrorCode.DQPE9, classifier_type.__name__, table_name
             )
 
         columns = self._cols_spec_to_cols_list(classifier, classifier.column_names)

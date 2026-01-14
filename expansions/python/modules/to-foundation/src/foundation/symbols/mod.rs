@@ -29,6 +29,9 @@ pub const REQUEST_FILE: &str = td_common::server::REQUEST_FILE;
 #[pyconstant(MODULE_PATH)]
 pub const RESPONSE_FILE: &str = td_common::server::RESPONSE_FILE;
 
+#[pyconstant(MODULE_PATH)]
+pub const EXCEPTION_FILE: &str = td_common::server::EXCEPTION_FILE;
+
 /*
 ToDo
 Note: This is a replica of enum TableType at td-objects::types::basic::typed_enum.

@@ -5,8 +5,11 @@
 import logging
 import os
 from abc import ABC
+from enum import Enum
 
 import yaml
+
+from tabsdata.exceptions import ErrorCode
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +50,13 @@ def v1_exception_format_representer(
     mapping["kind"] = type(e).__name__[:MAXIMUM_KIND_LENGTH]
     mapping["message"] = str(e)[:MAXIMUM_MESSAGE_LENGTH]
     if error_code := getattr(e, "error_code", None):
-        mapping["error_code"] = error_code[:MAXIMUM_ERROR_CODE_LENGTH]
+        if isinstance(error_code, ErrorCode):
+            error_code = error_code.code()
+        elif isinstance(error_code, Enum):
+            error_code = error_code.value
+        else:
+            error_code = str(error_code)
+        mapping["error_code"] = str(error_code)[:MAXIMUM_ERROR_CODE_LENGTH]
     mapping["exit_status"] = v1_exception_format.exit_status
     return dumper.represent_mapping("!V1", mapping)
 
