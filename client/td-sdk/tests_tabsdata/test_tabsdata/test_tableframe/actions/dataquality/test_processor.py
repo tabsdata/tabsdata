@@ -7,6 +7,7 @@ import pytest
 from tabsdata._tableinfo import TableKind
 from tabsdata._tableuri import ExtendedTableURI, TableURI
 from tabsdata.dataquality import DataQuality, Filter, Select, Summary
+from tabsdata.dataquality._operator import AllOk, AnyFailed
 from tabsdata.exceptions import (
     DataQualityProcessingError,
     ParameterValidationError,
@@ -46,7 +47,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "input1",
             classifiers=[],
-            operators=[Select(to_table="input1_select")],
+            operators=[Select(AllOk(), to_table="input1_select")],
         )
 
         processor = DataQualityProcessor(
@@ -83,7 +84,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "input1",
             classifiers=[],
-            operators=[Filter(to_table="input1_filter")],
+            operators=[Filter(AnyFailed(), to_table="input1_filter")],
         )
 
         processor = DataQualityProcessor(
@@ -158,8 +159,8 @@ class TestDataQualityProcessorTableNames:
             "input1",
             classifiers=[],
             operators=[
-                Select(to_table="input1_select"),
-                Filter(to_table="input1_filter"),
+                Select(AllOk(), to_table="input1_select"),
+                Filter(AnyFailed(), to_table="input1_filter"),
                 Summary(table="input1_summary"),
             ],
         )
@@ -210,13 +211,13 @@ class TestDataQualityProcessorTableNames:
         dq_action1 = DataQuality(
             "input1",
             classifiers=[],
-            operators=[Select(to_table="input1_select")],
+            operators=[Select(AllOk(), to_table="input1_select")],
         )
 
         dq_action2 = DataQuality(
             "input2",
             classifiers=[],
-            operators=[Filter(to_table="input2_filter")],
+            operators=[Filter(AnyFailed(), to_table="input2_filter")],
         )
 
         processor = DataQualityProcessor(
@@ -254,7 +255,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "table",
             classifiers=[],
-            operators=[Select(to_table="table_select")],
+            operators=[Select(AllOk(), to_table="table_select")],
         )
 
         processor = DataQualityProcessor(
@@ -289,7 +290,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "collection/table",
             classifiers=[],
-            operators=[Select(to_table="qualified_select")],
+            operators=[Select(AllOk(), to_table="qualified_select")],
         )
 
         processor = DataQualityProcessor(
@@ -324,7 +325,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "table@HEAD",
             classifiers=[],
-            operators=[Select(to_table="versioned_select")],
+            operators=[Select(AllOk(), to_table="versioned_select")],
         )
 
         processor = DataQualityProcessor(
@@ -359,7 +360,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "collection/table@HEAD~1",
             classifiers=[],
-            operators=[Select(to_table="full_uri_select")],
+            operators=[Select(AllOk(), to_table="full_uri_select")],
         )
 
         processor = DataQualityProcessor(
@@ -394,7 +395,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "table@HEAD^^",
             classifiers=[],
-            operators=[Select(to_table="caret_version_select")],
+            operators=[Select(AllOk(), to_table="caret_version_select")],
         )
 
         processor = DataQualityProcessor(
@@ -429,7 +430,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "table@ABCDEFGHIJKLMNOPQRSTUVWXY0",
             classifiers=[],
-            operators=[Select(to_table="hash_version_select")],
+            operators=[Select(AllOk(), to_table="hash_version_select")],
         )
 
         processor = DataQualityProcessor(
@@ -472,7 +473,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "table_a",
             classifiers=[],
-            operators=[Select(to_table="alias_resolved_select")],
+            operators=[Select(AllOk(), to_table="alias_resolved_select")],
         )
 
         processor = DataQualityProcessor(
@@ -507,7 +508,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "collection_a/customers",
             classifiers=[],
-            operators=[Select(to_table="qualified_resolved_select")],
+            operators=[Select(AllOk(), to_table="qualified_resolved_select")],
         )
 
         processor = DataQualityProcessor(
@@ -550,7 +551,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "collection_a/customers",
             classifiers=[],
-            operators=[Select(to_table="different_collection_select")],
+            operators=[Select(AllOk(), to_table="different_collection_select")],
         )
 
         processor = DataQualityProcessor(
@@ -585,7 +586,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "customers",
             classifiers=[],
-            operators=[Select(to_table="default_collection_select")],
+            operators=[Select(AllOk(), to_table="default_collection_select")],
         )
 
         processor = DataQualityProcessor(
@@ -636,7 +637,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "latest",
             classifiers=[],
-            operators=[Select(to_table="version_alias_select")],
+            operators=[Select(AllOk(), to_table="version_alias_select")],
         )
 
         processor = DataQualityProcessor(
@@ -679,7 +680,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "customers",
             classifiers=[],
-            operators=[Select(to_table="unresolved_select")],
+            operators=[Select(AllOk(), to_table="unresolved_select")],
         )
 
         processor = DataQualityProcessor(
@@ -712,7 +713,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "products",
             classifiers=[],
-            operators=[Select(to_table="not_found_select")],
+            operators=[Select(AllOk(), to_table="not_found_select")],
         )
 
         processor = DataQualityProcessor(
@@ -745,7 +746,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "collection_b/customers",
             classifiers=[],
-            operators=[Select(to_table="wrong_collection_select")],
+            operators=[Select(AllOk(), to_table="wrong_collection_select")],
         )
 
         processor = DataQualityProcessor(
@@ -786,7 +787,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "collection/customers",
             classifiers=[],
-            operators=[Select(to_table="ambiguous_select")],
+            operators=[Select(AllOk(), to_table="ambiguous_select")],
         )
 
         processor = DataQualityProcessor(
@@ -809,7 +810,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "customers",
             classifiers=[],
-            operators=[Select(to_table="empty_tables_select")],
+            operators=[Select(AllOk(), to_table="empty_tables_select")],
         )
 
         processor = DataQualityProcessor(
@@ -833,7 +834,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "output1",
             classifiers=[],
-            operators=[Select(to_table="output_select")],
+            operators=[Select(AllOk(), to_table="output_select")],
         )
 
         processor = DataQualityProcessor(
@@ -859,7 +860,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "output3",
             classifiers=[],
-            operators=[Select(to_table="unresolved_output_select")],
+            operators=[Select(AllOk(), to_table="unresolved_output_select")],
         )
 
         processor = DataQualityProcessor(
@@ -891,7 +892,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "input1",
             classifiers=[],
-            operators=[Filter()],
+            operators=[Filter(AnyFailed())],
         )
 
         processor = DataQualityProcessor(
@@ -977,8 +978,8 @@ class TestDataQualityProcessorTableNames:
             "customers_latest",
             classifiers=[],
             operators=[
-                Select(to_table="customers_select"),
-                Filter(to_table="customers_filter"),
+                Select(AllOk(), to_table="customers_select"),
+                Filter(AnyFailed(), to_table="customers_filter"),
                 Summary(table="customers_summary"),
             ],
         )
@@ -987,7 +988,7 @@ class TestDataQualityProcessorTableNames:
             "orders_latest",
             classifiers=[],
             operators=[
-                Filter(to_table="orders_filter"),
+                Filter(AnyFailed(), to_table="orders_filter"),
             ],
         )
 
@@ -1048,7 +1049,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "table1",
             classifiers=[],
-            operators=[Select(to_table="collection_test_select")],
+            operators=[Select(AllOk(), to_table="collection_test_select")],
         )
 
         processor = DataQualityProcessor(
@@ -1083,7 +1084,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "table_123",
             classifiers=[],
-            operators=[Select(to_table="special_chars_456")],
+            operators=[Select(AllOk(), to_table="special_chars_456")],
         )
 
         processor = DataQualityProcessor(
@@ -1119,8 +1120,8 @@ class TestDataQualityProcessorTableNames:
             "input1",
             classifiers=[],
             operators=[
-                Select(to_table="mixed_select"),
-                Filter(to_table="mixed_filter"),
+                Select(AllOk(), to_table="mixed_select"),
+                Filter(AnyFailed(), to_table="mixed_filter"),
                 Summary(table="mixed_summary"),
             ],
         )
@@ -1176,7 +1177,7 @@ class TestDataQualityProcessorTableNames:
         dq_action = DataQuality(
             "input1",
             classifiers=[],
-            operators=[Filter()],
+            operators=[Filter(AnyFailed())],
         )
 
         processor = DataQualityProcessor(
@@ -1244,8 +1245,8 @@ class TestDataQualityProcessorTableNames:
             "input1",
             classifiers=[],
             operators=[
-                Select(to_table="custom_select"),
-                Filter(),
+                Select(AllOk(), to_table="custom_select"),
+                Filter(AnyFailed()),
                 Summary(table="custom_summary"),
             ],
         )
@@ -1305,8 +1306,8 @@ class TestDataQualityProcessorTableNames:
             "table1",
             classifiers=[],
             operators=[
-                Select(to_table="sales_valid"),
-                Filter(to_table="sales_invalid"),
+                Select(AllOk(), to_table="sales_valid"),
+                Filter(AnyFailed(), to_table="sales_invalid"),
                 Summary(table="sales_report"),
             ],
         )
@@ -1315,8 +1316,8 @@ class TestDataQualityProcessorTableNames:
             "table2",
             classifiers=[],
             operators=[
-                Select(to_table="inventory_valid"),
-                Filter(),
+                Select(AllOk(), to_table="inventory_valid"),
+                Filter(AnyFailed()),
                 Summary(table="inventory_report"),
             ],
         )
@@ -1325,8 +1326,8 @@ class TestDataQualityProcessorTableNames:
             "table3",
             classifiers=[],
             operators=[
-                Select(to_table="customer_valid"),
-                Filter(to_table="customer_invalid"),
+                Select(AllOk(), to_table="customer_valid"),
+                Filter(AnyFailed(), to_table="customer_invalid"),
                 Summary(table=None),
             ],
         )
@@ -1372,8 +1373,8 @@ class TestDataQualityProcessorTableNames:
             "output1",
             classifiers=[],
             operators=[
-                Select(to_table="output1_select"),
-                Filter(to_table="output1_filter"),
+                Select(AllOk(), to_table="output1_select"),
+                Filter(AnyFailed(), to_table="output1_filter"),
                 Summary(table="output1_summary"),
             ],
         )
@@ -1382,8 +1383,8 @@ class TestDataQualityProcessorTableNames:
             "output2",
             classifiers=[],
             operators=[
-                Select(to_table="output2_select"),
-                Filter(to_table="output2_filter"),
+                Select(AllOk(), to_table="output2_select"),
+                Filter(AnyFailed(), to_table="output2_filter"),
                 Summary(table=None),
             ],
         )
@@ -1392,8 +1393,8 @@ class TestDataQualityProcessorTableNames:
             "output3",
             classifiers=[],
             operators=[
-                Select(to_table="output3_select"),
-                Filter(),
+                Select(AllOk(), to_table="output3_select"),
+                Filter(AnyFailed()),
                 Summary(table="output3_summary"),
             ],
         )
@@ -1457,8 +1458,8 @@ class TestDataQualityProcessorTableNames:
             "input1",
             classifiers=[],
             operators=[
-                Select(to_table="input1_select"),
-                Filter(),
+                Select(AllOk(), to_table="input1_select"),
+                Filter(AnyFailed()),
                 Summary(table="input1_summary"),
             ],
         )
@@ -1467,8 +1468,8 @@ class TestDataQualityProcessorTableNames:
             "input2",
             classifiers=[],
             operators=[
-                Select(to_table="input2_select"),
-                Filter(to_table="input2_filter"),
+                Select(AllOk(), to_table="input2_select"),
+                Filter(AnyFailed(), to_table="input2_filter"),
                 Summary(table=None),
             ],
         )
@@ -1477,8 +1478,8 @@ class TestDataQualityProcessorTableNames:
             "output1",
             classifiers=[],
             operators=[
-                Select(to_table="output1_select"),
-                Filter(to_table="output1_filter"),
+                Select(AllOk(), to_table="output1_select"),
+                Filter(AnyFailed(), to_table="output1_filter"),
             ],
         )
 
@@ -1529,10 +1530,10 @@ class TestDataQualityProcessorTableNames:
             "input1",
             classifiers=[],
             operators=[
-                Select(to_table="custom_select_1"),
-                Select(to_table="custom_select_2"),
-                Filter(to_table="custom_filter_1"),
-                Filter(to_table="custom_filter_2"),
+                Select(AllOk(), to_table="custom_select_1"),
+                Select(AllOk(), to_table="custom_select_2"),
+                Filter(AnyFailed(), to_table="custom_filter_1"),
+                Filter(AnyFailed(), to_table="custom_filter_2"),
                 Summary(table="custom_summary_1"),
                 Summary(table="custom_summary_2"),
             ],
@@ -1579,10 +1580,10 @@ class TestDataQualityProcessorTableNames:
                 f"input{i}",
                 classifiers=[],
                 operators=[
-                    Select(to_table=f"select_{i}_1"),
-                    Select(to_table=f"select_{i}_2"),
-                    Filter(to_table=f"filter_{i}_1"),
-                    Filter(),
+                    Select(AllOk(), to_table=f"select_{i}_1"),
+                    Select(AllOk(), to_table=f"select_{i}_2"),
+                    Filter(AnyFailed(), to_table=f"filter_{i}_1"),
+                    Filter(AnyFailed()),
                     Summary(table=f"summary_{i}_1"),
                 ],
             )
@@ -1659,8 +1660,8 @@ class TestDataQualityProcessorTableNames:
             "raw_sales",
             classifiers=[],
             operators=[
-                Select(to_table="valid_sales"),
-                Filter(to_table="invalid_sales"),
+                Select(AllOk(), to_table="valid_sales"),
+                Filter(AnyFailed(), to_table="invalid_sales"),
                 Summary(table=None),
             ],
         )
@@ -1669,8 +1670,8 @@ class TestDataQualityProcessorTableNames:
             "raw_inventory",
             classifiers=[],
             operators=[
-                Select(to_table="inventory_select"),
-                Filter(),
+                Select(AllOk(), to_table="inventory_select"),
+                Filter(AnyFailed()),
                 Summary(table="inventory_summary_report"),
             ],
         )
@@ -1679,7 +1680,7 @@ class TestDataQualityProcessorTableNames:
             "raw_customers",
             classifiers=[],
             operators=[
-                Select(to_table="verified_customers"),
+                Select(AllOk(), to_table="verified_customers"),
                 Summary(table=None),
             ],
         )
@@ -1688,7 +1689,7 @@ class TestDataQualityProcessorTableNames:
             "raw_products",
             classifiers=[],
             operators=[
-                Filter(),
+                Filter(AnyFailed()),
                 Summary(table="product_quality_report"),
             ],
         )
@@ -1697,7 +1698,7 @@ class TestDataQualityProcessorTableNames:
             "cleaned_sales",
             classifiers=[],
             operators=[
-                Select(to_table="final_sales"),
+                Select(AllOk(), to_table="final_sales"),
                 Summary(table=None),
             ],
         )
@@ -1706,7 +1707,7 @@ class TestDataQualityProcessorTableNames:
             "cleaned_inventory",
             classifiers=[],
             operators=[
-                Filter(),
+                Filter(AnyFailed()),
             ],
         )
 
@@ -1765,8 +1766,8 @@ class TestDataQualityProcessorTableNames:
             "input1",
             classifiers=[],
             operators=[
-                Select(to_table="duplicate_name"),
-                Filter(to_table="duplicate_name"),
+                Select(AllOk(), to_table="duplicate_name"),
+                Filter(AnyFailed(), to_table="duplicate_name"),
             ],
         )
 
@@ -1789,7 +1790,7 @@ class TestDataQualityProcessorTableNames:
     def test_select_rejects_none_to_table(self):
         with pytest.raises(ParameterValidationError):
             # noinspection PyTypeChecker
-            Select(to_table=None)
+            Select(AllOk(), to_table=None)
 
     @pytest.mark.dq
     def test_filter_and_select_behavior_with_to_table(self):
@@ -1807,7 +1808,7 @@ class TestDataQualityProcessorTableNames:
         dq_action_filter_with_table = DataQuality(
             "input1",
             classifiers=[],
-            operators=[Filter(to_table="filtered_output")],
+            operators=[Filter(AnyFailed(), to_table="filtered_output")],
         )
 
         processor = DataQualityProcessor(
@@ -1826,7 +1827,7 @@ class TestDataQualityProcessorTableNames:
         dq_action_filter_no_table = DataQuality(
             "input1",
             classifiers=[],
-            operators=[Filter()],
+            operators=[Filter(AnyFailed())],
         )
 
         processor2 = DataQualityProcessor(
@@ -1843,7 +1844,7 @@ class TestDataQualityProcessorTableNames:
         dq_action_select = DataQuality(
             "input1",
             classifiers=[],
-            operators=[Select(to_table="selected_output")],
+            operators=[Select(AllOk(), to_table="selected_output")],
         )
 
         processor3 = DataQualityProcessor(
@@ -1884,7 +1885,7 @@ class TestDataQualityProcessorTableNames:
             "input1",
             classifiers=[],
             operators=[
-                Select(to_table="shared_output"),
+                Select(AllOk(), to_table="shared_output"),
             ],
         )
 
@@ -1892,7 +1893,7 @@ class TestDataQualityProcessorTableNames:
             "input2",
             classifiers=[],
             operators=[
-                Filter(to_table="shared_output"),
+                Filter(AnyFailed(), to_table="shared_output"),
             ],
         )
 
@@ -1918,7 +1919,7 @@ class TestDataQualityProcessorTableNames:
             "output1",
             classifiers=[],
             operators=[
-                Select(to_table="duplicate_output"),
+                Select(AllOk(), to_table="duplicate_output"),
                 Summary(table="duplicate_output"),
             ],
         )
@@ -1945,7 +1946,7 @@ class TestDataQualityProcessorTableNames:
             "output1",
             classifiers=[],
             operators=[
-                Select(to_table="shared_name"),
+                Select(AllOk(), to_table="shared_name"),
             ],
         )
 
@@ -1953,7 +1954,7 @@ class TestDataQualityProcessorTableNames:
             "output2",
             classifiers=[],
             operators=[
-                Filter(to_table="shared_name"),
+                Filter(AnyFailed(), to_table="shared_name"),
             ],
         )
 
@@ -1989,7 +1990,7 @@ class TestDataQualityProcessorTableNames:
             "input1",
             classifiers=[],
             operators=[
-                Select(to_table="conflict_name"),
+                Select(AllOk(), to_table="conflict_name"),
             ],
         )
 
@@ -1997,7 +1998,7 @@ class TestDataQualityProcessorTableNames:
             "output1",
             classifiers=[],
             operators=[
-                Filter(to_table="conflict_name"),
+                Filter(AnyFailed(), to_table="conflict_name"),
             ],
         )
 
@@ -2032,10 +2033,10 @@ class TestDataQualityProcessorTableNames:
             "input1",
             classifiers=[],
             operators=[
-                Select(to_table="dup1"),
-                Select(to_table="dup1"),
-                Filter(to_table="dup2"),
-                Filter(to_table="dup2"),
+                Select(AllOk(), to_table="dup1"),
+                Select(AllOk(), to_table="dup1"),
+                Filter(AnyFailed(), to_table="dup2"),
+                Filter(AnyFailed(), to_table="dup2"),
             ],
         )
 
@@ -2072,8 +2073,8 @@ class TestDataQualityProcessorTableNames:
             "input1",
             classifiers=[],
             operators=[
-                Select(to_table="triple"),
-                Filter(to_table="triple"),
+                Select(AllOk(), to_table="triple"),
+                Filter(AnyFailed(), to_table="triple"),
                 Summary(table="triple"),
             ],
         )
@@ -2111,8 +2112,8 @@ class TestDataQualityProcessorTableNames:
             "input1",
             classifiers=[],
             operators=[
-                Select(to_table="unique_select"),
-                Filter(to_table="unique_filter"),
+                Select(AllOk(), to_table="unique_select"),
+                Filter(AnyFailed(), to_table="unique_filter"),
                 Summary(table="unique_summary"),
             ],
         )
@@ -2121,7 +2122,7 @@ class TestDataQualityProcessorTableNames:
             "output1",
             classifiers=[],
             operators=[
-                Select(to_table="unique_output_select"),
+                Select(AllOk(), to_table="unique_output_select"),
                 Summary(table="unique_output_summary"),
             ],
         )
@@ -2164,7 +2165,7 @@ class TestDataQualityProcessorTableNames:
             "input1",
             classifiers=[],
             operators=[
-                Select(to_table="source1_select"),
+                Select(AllOk(), to_table="source1_select"),
             ],
         )
 
@@ -2172,7 +2173,7 @@ class TestDataQualityProcessorTableNames:
             "input2",
             classifiers=[],
             operators=[
-                Select(to_table="source2_select"),
+                Select(AllOk(), to_table="source2_select"),
             ],
         )
 
@@ -2216,8 +2217,8 @@ class TestDataQualityProcessorTableNames:
             "input1",
             classifiers=[],
             operators=[
-                Select(to_table="processed_data"),
-                Filter(to_table=None),
+                Select(AllOk(), to_table="processed_data"),
+                Filter(AnyFailed(), to_table=None),
             ],
         )
 
@@ -2233,7 +2234,7 @@ class TestDataQualityProcessorTableNames:
             "output1",
             classifiers=[],
             operators=[
-                Select(to_table="final_output"),
+                Select(AllOk(), to_table="final_output"),
             ],
         )
 
@@ -2284,8 +2285,8 @@ class TestDataQualityProcessorTableNames:
             "table_a",
             classifiers=[],
             operators=[
-                Select(to_table="output_from_a"),
-                Filter(to_table="filtered_from_a"),
+                Select(AllOk(), to_table="output_from_a"),
+                Filter(AnyFailed(), to_table="filtered_from_a"),
             ],
         )
 
@@ -2301,7 +2302,7 @@ class TestDataQualityProcessorTableNames:
             "table_c",
             classifiers=[],
             operators=[
-                Select(to_table="output_from_c"),
+                Select(AllOk(), to_table="output_from_c"),
             ],
         )
 
@@ -2345,7 +2346,7 @@ class TestDataQualityProcessorTableNames:
             "output_table1",
             classifiers=[],
             operators=[
-                Select(to_table="validated_output1"),
+                Select(AllOk(), to_table="validated_output1"),
                 Summary(table="summary_output1"),
             ],
         )
@@ -2354,7 +2355,7 @@ class TestDataQualityProcessorTableNames:
             "output_table2",
             classifiers=[],
             operators=[
-                Filter(to_table="filtered_output2"),
+                Filter(AnyFailed(), to_table="filtered_output2"),
             ],
         )
 
@@ -2410,7 +2411,7 @@ class TestDataQualityProcessorTableNames:
             "sales/transactions@HEAD",
             classifiers=[],
             operators=[
-                Select(to_table="clean_transactions"),
+                Select(AllOk(), to_table="clean_transactions"),
             ],
         )
 
@@ -2418,7 +2419,7 @@ class TestDataQualityProcessorTableNames:
             "inventory/stock_levels",
             classifiers=[],
             operators=[
-                Filter(to_table="valid_stock"),
+                Filter(AnyFailed(), to_table="valid_stock"),
             ],
         )
 

@@ -36,10 +36,16 @@ from tabsdata.dataquality._classifier import (
 )
 from tabsdata.dataquality._dataquality import DataQuality
 from tabsdata.dataquality._operator import (
+    AllOk,
+    AnyFailed,
+    BoolCriteria,
+    CategoryCriteria,
     Criteria,
     Enrich,
     Fail,
     Filter,
+    InBins,
+    NotInBins,
     Operator,
     PercentThreshold,
     RowCountThreshold,
@@ -81,8 +87,14 @@ __all__ = [
     # from tabsdata.dataquality._dataquality
     "DataQuality",
     # from tabsdata.dataquality._operations
-    "Operator",
     "Criteria",
+    "BoolCriteria",
+    "AllOk",
+    "AnyFailed",
+    "CategoryCriteria",
+    "InBins",
+    "NotInBins",
+    "Operator",
     "Enrich",
     "Fail",
     "Filter",

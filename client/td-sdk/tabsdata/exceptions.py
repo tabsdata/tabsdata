@@ -2191,6 +2191,10 @@ class ErrorCode(Enum):
     PVDQOP9 = {}
     PVDQOP10 = {}
     PVDQOP11 = {}
+    PVDQOP12 = {}
+    PVDQOP13 = {}
+    PVDQOP14 = {}
+    PVDQOP15 = {}
 
     PVDQ1 = {}
     PVCX1 = {

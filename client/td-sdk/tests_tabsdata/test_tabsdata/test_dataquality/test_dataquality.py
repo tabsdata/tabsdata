@@ -6,7 +6,7 @@ import pytest
 
 from tabsdata.dataquality import DataQuality
 from tabsdata.dataquality._classifier import Matches
-from tabsdata.dataquality._operator import Fail, RowCountThreshold, Summary
+from tabsdata.dataquality._operator import AnyFailed, Fail, RowCountThreshold, Summary
 from tabsdata.exceptions import (
     DataQualityConfigurationError,
     ErrorCode,
@@ -21,7 +21,7 @@ def test_data_quality_class():
     classifier = Matches(pattern="hi")
     table = "my_table"
     thr = RowCountThreshold(1)
-    operation = Fail(thr)
+    operation = Fail(AnyFailed(), thr)
     dq = DataQuality(table, classifier, operation)
     assert dq.table == table
     assert dq.classifiers == [classifier]

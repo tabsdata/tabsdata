@@ -13,6 +13,7 @@ from tabsdata import (
 )
 from tabsdata._table_actions.actions import OnTablesAction
 from tabsdata.dataquality import LinearScale
+from tabsdata.dataquality._operator import AnyFailed
 
 # noinspection PyUnresolvedReferences
 from . import pytestmark  # noqa: F401
@@ -100,7 +101,7 @@ def test_example_publisher_with_filter():
         dq.IsPositive("age"),
         dq.IsIn("gender", values={"M", "F", "O"}),
     ]
-    op_list = [dq.Summary(), dq.Filter()]
+    op_list = [dq.Summary(), dq.Filter(AnyFailed())]
 
     @publisher(
         source=MySQLSource(
@@ -156,8 +157,10 @@ def test_example_publisher_with_filter_and_tags():
     ]
     op_list = [
         dq.Summary(),
-        dq.Filter(tags="invalid_data"),
-        dq.Filter(tags="missing_data", to_table="users_with_incomplete_data"),
+        dq.Filter(AnyFailed(tags="invalid_data")),
+        dq.Filter(
+            AnyFailed(tags="missing_data"), to_table="users_with_incomplete_data"
+        ),
     ]
 
     @publisher(

@@ -113,11 +113,22 @@ MAX_BINS = 100
 BinIdxSpec: TypeAlias = Annotated[StrictInt, Field(ge=0, le=MAX_BINS)]
 """A type alias for a zero-based bin index, constrained by MAX_BINS."""
 
-BinsSpec: TypeAlias = Annotated[StrictInt, Field(ge=1, le=MAX_BINS)]
-"""A type alias for the number of bins, ranging from 1 to MAX_BINS."""
+SpecialBinSpec: TypeAlias = Literal["none", "nan", "underflow", "overflow"]
+"""A type alias for the bins for None, NaN, undeflow and overflow values."""
 
-BinsCriteriaSpec: TypeAlias = Annotated[list[BinIdxSpec], Strict]
+BinSpec: TypeAlias = Union[BinIdxSpec, SpecialBinSpec]
+"""
+A type alias for the bin, either an index [0..100] or a special one
+[none, nan, underflow, overflow]
+"""
+
+BinsCriteriaSpec: TypeAlias = Union[BinSpec, Annotated[list[BinSpec], Strict]]
 """A type alias for a list of bin indices used in criteria."""
+
+BinCountSpec: TypeAlias = Annotated[StrictInt, Field(ge=1, le=MAX_BINS)]
+"""
+A type alias for the number of bins a Scale will have, between 1 and MAX_BINS.
+"""
 
 # --- Measurement Specifications ---
 

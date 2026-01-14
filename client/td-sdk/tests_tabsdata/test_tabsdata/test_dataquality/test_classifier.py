@@ -517,7 +517,7 @@ def test_scale_lineal_validation():
     assert e.value.error_code == ErrorCode.PVDQCL23
 
     with pytest.raises(ParameterValidationError) as e:
-        LinearScale(1, 7, bins=0)
+        LinearScale(1, 7, bins="x")
     assert e.value.error_code == ErrorCode.PVDQCL24
 
 
@@ -531,7 +531,7 @@ def test_scale_monomial_validation():
     assert e.value.error_code == ErrorCode.PVDQCL25
 
     with pytest.raises(ParameterValidationError) as e:
-        MonomialScale(1, 7, 2, 0)
+        MonomialScale(1, 7, 2, "x")
     assert e.value.error_code == ErrorCode.PVDQCL25
 
 
@@ -545,7 +545,7 @@ def test_scale_logarithmic_validation():
     assert e.value.error_code == ErrorCode.PVDQCL26
 
     with pytest.raises(ParameterValidationError) as e:
-        LogarithmicScale(1, 7, bins=0)
+        LogarithmicScale(1, 7, bins="0")
     assert e.value.error_code == ErrorCode.PVDQCL26
 
 
@@ -559,7 +559,7 @@ def test_scale_exponential_validation():
     assert e.value.error_code == ErrorCode.PVDQCL27
 
     with pytest.raises(ParameterValidationError) as e:
-        ExponentialScale(1, 7, bins=0)
+        ExponentialScale(1, 7, bins="x")
     assert e.value.error_code == ErrorCode.PVDQCL27
 
 

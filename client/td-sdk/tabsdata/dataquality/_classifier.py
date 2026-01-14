@@ -16,7 +16,7 @@ from typing import AbstractSet, Collection, FrozenSet, Optional, Type
 
 from tabsdata.dataquality._typing import (
     MAX_BINS,
-    BinsSpec,
+    BinsCriteriaSpec,
     ColumNamesWithAltSpec,
     ColumnNameWithAltSpec,
     LenSpec,
@@ -28,7 +28,7 @@ from tabsdata.dataquality._typing import (
     ScaleLimitSpec,
     ScalePowerSpec,
     TagSpec,
-    TagsSpec,
+    TagsSpec, BinCountSpec,
 )
 from tabsdata.dataquality._utils import (
     _normalize_to_list,
@@ -60,7 +60,7 @@ class Scale(ABC):
     def __init__(
         self,
         scale_range: tuple[ScaleLimitSpec, ScaleLimitSpec],
-        bins: Optional[BinsSpec],
+        bins: Optional[BinCountSpec],
         min_in_first_bin: bool,
     ):
         self._range = scale_range
@@ -73,7 +73,7 @@ class Scale(ABC):
         return self._range
 
     @property
-    def bins(self) -> Optional[BinsSpec]:
+    def bins(self) -> Optional[BinCountSpec]:
         """Returns the number of bins in the scale."""
         return self._bins
 
@@ -117,7 +117,7 @@ class LinearScale(Scale):
         self,
         min_val: ScaleLimitSpec,
         max_val: ScaleLimitSpec,
-        bins: BinsSpec = MAX_BINS,
+        bins: BinCountSpec = MAX_BINS,
         min_in_first_bin: bool = True,
     ):
         """
@@ -145,7 +145,7 @@ class MonomialScale(Scale):
         min_val: ScaleLimitSpec,
         max_val: ScaleLimitSpec,
         power: ScalePowerSpec,
-        bins: BinsSpec = MAX_BINS,
+        bins: BinCountSpec = MAX_BINS,
         min_in_first_bin: bool = True,
     ):
         """
@@ -180,7 +180,7 @@ class LogarithmicScale(Scale):
         min_val: ScaleLimitSpec,
         max_val: ScaleLimitSpec,
         base: Optional[ScaleBaseSpec] = None,
-        bins: BinsSpec = MAX_BINS,
+        bins: BinCountSpec = MAX_BINS,
         min_in_first_bin: bool = True,
     ):
         """
@@ -215,7 +215,7 @@ class ExponentialScale(Scale):
         min_val: ScaleLimitSpec,
         max_val: ScaleLimitSpec,
         base: Optional[ScaleBaseSpec] = None,
-        bins: BinsSpec = MAX_BINS,
+        bins: BinCountSpec = MAX_BINS,
         min_in_first_bin: bool = True,
     ):
         """
@@ -338,7 +338,7 @@ def _validate_min_max(min_val: ScaleLimitSpec, max_val: ScaleLimitSpec, fn_name:
         raise _validation_error(ErrorCode.PVDQCL32, fn_name, params_with_error)
 
 
-def _validate_bins(bins: BinsSpec, min_in_first_bin: bool, fn_name: str):
+def _validate_bins(bins: BinsCriteriaSpec, min_in_first_bin: bool, fn_name: str):
     """Validates the number of bins against the allowed maximum."""
     max_allowed = MAX_BINS if min_in_first_bin else MAX_BINS + 1
     if bins > max_allowed:

@@ -5,92 +5,25 @@
 import pytest
 
 from tabsdata.dataquality._operator import (
-    Criteria,
+    AllOk,
+    AnyFailed,
     Enrich,
     Fail,
     Filter,
+    InBins,
+    NotInBins,
     PercentThreshold,
     RowCountThreshold,
     Select,
     Summary,
 )
 from tabsdata.exceptions import (
-    ConstructorError,
     ErrorCode,
     ParameterValidationError,
 )
 
 # noinspection PyUnresolvedReferences
 from . import pytestmark  # noqa: F401
-
-
-def test_criteria_all_ok_class():
-    criteria = Criteria.all_ok()
-    assert criteria.criteria_type == "all_ok"
-    assert criteria.column_names is None
-    assert criteria.bins is None
-
-
-def test_criteria_any_failed_class():
-    criteria = Criteria.any_failed()
-    assert criteria.criteria_type == "any_failed"
-    assert criteria.column_names is None
-    assert criteria.bins is None
-
-
-def test_criteria_by_bin_class():
-    criteria = Criteria.in_bins("names", [1, 2, 3])
-    assert criteria.criteria_type == "in_bins"
-    assert criteria.column_names == ["names"]
-    assert criteria.bins == [1, 2, 3]
-
-
-def test_criteria_by_not_in_bin_class():
-    criteria = Criteria.not_in_bins("names", [1, 2, 3])
-    assert criteria.criteria_type == "not_in_bins"
-    assert criteria.column_names == ["names"]
-    assert criteria.bins == [1, 2, 3]
-
-
-def test_criteria_wrong_instantiation():
-    with pytest.raises(ConstructorError) as e:
-        Criteria()
-    assert e.value.error_code == ErrorCode.PVDQOP1
-
-
-def test_criteria_wrong_bin_type():
-    with pytest.raises(ParameterValidationError) as e:
-        # noinspection PyTypeChecker
-        Criteria.in_bins("name", 3)
-    assert e.value.error_code == ErrorCode.PVDQOP3
-
-
-def test_criteria_in_bins_with_multiple_columns():
-    criteria = Criteria.in_bins(["col1", "col2"], [1, 2, 3])
-    assert criteria.criteria_type == "in_bins"
-    assert criteria.column_names == ["col1", "col2"]
-    assert criteria.bins == [1, 2, 3]
-
-
-def test_criteria_not_in_bins_with_multiple_columns():
-    criteria = Criteria.not_in_bins(["col1", "col2"], [1, 2, 3])
-    assert criteria.criteria_type == "not_in_bins"
-    assert criteria.column_names == ["col1", "col2"]
-    assert criteria.bins == [1, 2, 3]
-
-
-def test_criteria_in_bins_invalid_column_type():
-    with pytest.raises(ParameterValidationError) as e:
-        # noinspection PyTypeChecker
-        Criteria.in_bins(123, [1, 2, 3])
-    assert e.value.error_code == ErrorCode.PVDQOP3
-
-
-def test_criteria_not_in_bins_invalid_column_type():
-    with pytest.raises(ParameterValidationError) as e:
-        # noinspection PyTypeChecker
-        Criteria.not_in_bins(456, [1, 2, 3])
-    assert e.value.error_code == ErrorCode.PVDQOP4
 
 
 def test_summary_class():
@@ -121,22 +54,12 @@ def test_summary_class_wrong_tags_list():
 
 
 def test_filter_out_class():
-    criteria = Criteria.any_failed()
-    filter_out = Filter(
-        to_table="table_name", criteria=criteria, enrich=True, tags=["tag1", "tag2"]
-    )
+    criteria = AnyFailed(tags=["tag1", "tag2"])
+    filter_out = Filter(to_table="table_name", criteria=criteria, enrich=True)
     assert filter_out.to_table == "table_name"
     assert filter_out.criteria == criteria
     assert filter_out.enrich is True
     assert filter_out.tags == ["tag1", "tag2"]
-
-
-def test_filter_out_class_defaults():
-    filter_out = Filter()
-    assert filter_out.to_table is None
-    assert filter_out.criteria.criteria_type == "any_failed"
-    assert filter_out.enrich is False
-    assert filter_out.tags == None
 
 
 def test_filter_out_wrong_criteria_type():
@@ -154,22 +77,16 @@ def test_filter_out_wrong_to_table_type():
 
 
 def test_select_class():
-    criteria = Criteria.any_failed()
+    criteria = AnyFailed(tags=["tag1", "tag2"])
     selector = Select(
-        to_table="table_name", criteria=criteria, enrich=True, tags=["tag1", "tag2"]
+        criteria,
+        to_table="table_name",
+        enrich=True,
     )
     assert selector.to_table == "table_name"
     assert selector.criteria == criteria
     assert selector.enrich is True
     assert selector.tags == ["tag1", "tag2"]
-
-
-def test_select_class_defaults():
-    selector = Select("table_name")
-    assert selector.to_table == "table_name"
-    assert selector.criteria.criteria_type == "all_ok"
-    assert selector.enrich is False
-    assert selector.tags == None
 
 
 def test_selector_wrong_criteria_type():
@@ -242,20 +159,12 @@ def test_threshold_percent_none():
 
 
 def test_fail_class():
-    criteria = Criteria.all_ok()
+    criteria = AllOk(tags=["tag1", "tag2"])
     thr = PercentThreshold(59)
-    fail = Fail(threshold=thr, criteria=criteria, tags=["tag1", "tag2"])
+    fail = Fail(criteria, thr)
     assert fail.threshold == thr
     assert fail.criteria == criteria
     assert fail.tags == ["tag1", "tag2"]
-
-
-def test_fail_class_defaults():
-    thr = PercentThreshold(59)
-    fail = Fail(threshold=thr)
-    assert fail.threshold == thr
-    assert fail.criteria.criteria_type == "any_failed"
-    assert fail.tags == None
 
 
 def test_fail_class_wrong_threshold_type():
@@ -290,3 +199,101 @@ def test_enrich_wrong_to_table_type():
         # noinspection PyTypeChecker
         Enrich(to_table=3)
     assert e.value.error_code == ErrorCode.PVDQOP9
+
+
+def test_all_ok_criteria():
+    criteria = AllOk()
+    assert criteria.none_is_ok is False
+    assert criteria.nan_is_ok is False
+    assert criteria.tags is None
+
+    criteria = AllOk(none_is_ok=True, nan_is_ok=True, tags=["tag1"])
+    assert criteria.none_is_ok is True
+    assert criteria.nan_is_ok is True
+    assert criteria.tags == ["tag1"]
+
+
+def test_all_ok_criteria_wrong_tags():
+    with pytest.raises(ParameterValidationError) as e:
+        AllOk(tags=1)
+    assert e.value.error_code == ErrorCode.PVDQOP1
+
+
+def test_any_failed_criteria():
+    criteria = AnyFailed()
+    assert criteria.none_is_ok is False
+    assert criteria.nan_is_ok is False
+    assert criteria.tags is None
+
+    criteria = AnyFailed(none_is_ok=True, nan_is_ok=True, tags=["tag1"])
+    assert criteria.none_is_ok is True
+    assert criteria.nan_is_ok is True
+    assert criteria.tags == ["tag1"]
+
+
+def test_any_failed_criteria_wrong_tags():
+    with pytest.raises(ParameterValidationError) as e:
+        AnyFailed(tags=1)
+    assert e.value.error_code == ErrorCode.PVDQOP1
+
+
+def test_in_bins_criteria():
+    criteria = InBins("col1", bins=[0, 1, 1])
+    assert criteria.column_name == "col1"
+    assert criteria.bins == {0, 1}
+
+    criteria = InBins(
+        "col2",
+        bins=0,
+    )
+    assert criteria.column_name == "col2"
+    assert criteria.bins == {0}
+
+
+def test_in_bins_criteria_special_bins():
+    criteria = InBins("col1", bins=["none", "nan", "overflow", "underflow", 0])
+    assert criteria.column_name == "col1"
+    assert criteria.bins == {"none", "nan", "overflow", "underflow", 0}
+
+
+def test_in_bins_criteria_wrong_column():
+    with pytest.raises(ParameterValidationError) as e:
+        InBins(column_name=123, bins=0)
+    assert e.value.error_code == ErrorCode.PVDQOP14
+
+
+def test_in_bins_criteria_wrong_bins():
+    with pytest.raises(ParameterValidationError) as e:
+        InBins(column_name="col1", bins=123)
+    assert e.value.error_code == ErrorCode.PVDQOP14
+
+
+def test_not_in_bins_criteria():
+    criteria = NotInBins("col1", bins=[0, 1, 1])
+    assert criteria.column_name == "col1"
+    assert criteria.bins == {1, 0}
+
+    criteria = NotInBins(
+        "col2",
+        bins=1,
+    )
+    assert criteria.column_name == "col2"
+    assert criteria.bins == {1}
+
+
+def test_not_in_bins_criteria_special_bins():
+    criteria = NotInBins("col1", bins=["none", "nan", "overflow", "underflow", 0])
+    assert criteria.column_name == "col1"
+    assert criteria.bins == {"none", "nan", "overflow", "underflow", 0}
+
+
+def test_not_in_bins_criteria_wrong_column():
+    with pytest.raises(ParameterValidationError) as e:
+        NotInBins(column_name=123, bins="b1")
+    assert e.value.error_code == ErrorCode.PVDQOP15
+
+
+def test_not_in_bins_criteria_wrong_bins():
+    with pytest.raises(ParameterValidationError) as e:
+        NotInBins(column_name="col1", bins=123)
+    assert e.value.error_code == ErrorCode.PVDQOP15
