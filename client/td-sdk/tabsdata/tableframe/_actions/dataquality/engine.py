@@ -797,10 +797,10 @@ class DataQualityEngine:
         return mapped_columns
 
     @classmethod
-    def _tags_spec_to_list(cls, tags_spec: TagsSpec) -> list[str]:
+    def _tags_spec_to_list(cls, tags_spec: TagsSpec) -> list[str] | None:
         match tags_spec:
             case None:
-                return []
+                return None
             case str():
                 return [tags_spec]
             case list():
@@ -809,7 +809,12 @@ class DataQualityEngine:
                 raise TypeError(f"Invalid tags specification: {tags_spec}")
 
     def _columns(self, tags: set[str] | None) -> set[str]:
-        vtags = tags if tags else self._tags.keys()
+        if tags is None:
+            vtags = self._tags.keys()
+        elif len(tags) == 0:
+            vtags = [None]
+        else:
+            vtags = tags
         return set().union(*(self._tags[tag] for tag in vtags if tag in self._tags))
 
     @classmethod
@@ -1010,7 +1015,8 @@ class DataQualityEngine:
         self,
         tags_spec: TagsSpec,
     ) -> Self:
-        tags = set(self._tags_spec_to_list(tags_spec))
+        tags = self._tags_spec_to_list(tags_spec)
+        tags = None if tags is None else set(self._tags_spec_to_list(tags_spec))
         dq_columns = self._columns(tags)
 
         schema = self._schema
@@ -1046,7 +1052,8 @@ class DataQualityEngine:
         self,
         tags_spec: TagsSpec,
     ) -> Self:
-        tags = set(self._tags_spec_to_list(tags_spec))
+        tags = self._tags_spec_to_list(tags_spec)
+        tags = None if tags is None else set(self._tags_spec_to_list(tags_spec))
         columns = self._columns(tags)
 
         dq_columns = []
@@ -1196,7 +1203,8 @@ class DataQualityEngine:
         self,
         tags_spec: TagsSpec,
     ) -> Self:
-        tags = set(self._tags_spec_to_list(tags_spec))
+        tags = self._tags_spec_to_list(tags_spec)
+        tags = None if tags is None else set(self._tags_spec_to_list(tags_spec))
         columns = self._columns(tags)
 
         dq_columns = list(columns)
@@ -1217,7 +1225,8 @@ class DataQualityEngine:
         self,
         tags_spec: TagsSpec,
     ) -> Self:
-        tags = set(self._tags_spec_to_list(tags_spec))
+        tags = self._tags_spec_to_list(tags_spec)
+        tags = None if tags is None else set(self._tags_spec_to_list(tags_spec))
         columns = self._columns(tags)
 
         dq_columns = list(columns)
