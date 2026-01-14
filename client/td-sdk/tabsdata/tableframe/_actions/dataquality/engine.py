@@ -66,7 +66,7 @@ from tabsdata.dataquality._classifier import (
 from tabsdata.dataquality._operator import BoolCriteria, CategoryCriteria, Enrich, Fail
 from tabsdata.exceptions import DataQualityProcessingError, ErrorCode
 from tabsdata.tableframe._actions.dataquality.assistant import TypeHandler
-from tabsdata.tableframe._actions.dataquality.pojo import (
+from tabsdata.tableframe._actions.dataquality.record import (
     DerivedTableFrame,
     DerivedTableFrameStatus,
     Harvest,
@@ -1379,24 +1379,34 @@ class DataQualityEngine:
         condition = self._criteria_plan([operation.criteria])
 
         user_columns, system_columns = td_frame._split_columns(self._schema.names())
-        if operation.include_quality_columns:
-            if isinstance(operation.criteria, BoolCriteria):
-                dq_criteria = cast(BoolCriteria, operation.criteria)
-                tags = self._tags_spec_to_list(dq_criteria.tags)
-                tags = (
-                    None
-                    if tags is None
-                    else set(self._tags_spec_to_list(dq_criteria.tags))
+        columns = None
+        match operation.include_quality_columns:
+            case "all":
+                dq_columns = self._columns(None)
+                columns = list(user_columns) + sorted(dq_columns) + list(system_columns)
+            case "criteria":
+                if isinstance(operation.criteria, BoolCriteria):
+                    dq_criteria = cast(BoolCriteria, operation.criteria)
+                    tags = self._tags_spec_to_list(dq_criteria.tags)
+                    tags = (
+                        None
+                        if tags is None
+                        else set(self._tags_spec_to_list(dq_criteria.tags))
+                    )
+                    dq_columns = self._columns(tags)
+                elif isinstance(operation.criteria, CategoryCriteria):
+                    dq_criteria = cast(CategoryCriteria, operation.criteria)
+                    dq_columns = {dq_criteria.column_name}
+                else:
+                    dq_columns = set()
+                columns = list(user_columns) + sorted(dq_columns) + list(system_columns)
+            case "none":
+                columns = list(user_columns) + list(system_columns)
+            case _:
+                raise ValueError(
+                    "Unsupported data quality columns inclusion policy:"
+                    f" {operation.include_quality_columns}"
                 )
-                dq_columns = self._columns(tags)
-            elif isinstance(operation.criteria, CategoryCriteria):
-                dq_criteria = cast(CategoryCriteria, operation.criteria)
-                dq_columns = {dq_criteria.column_name}
-            else:
-                dq_columns = set()
-            columns = list(user_columns) + sorted(dq_columns) + list(system_columns)
-        else:
-            columns = list(user_columns) + list(system_columns)
 
         ok_lf = self._tf._lf.filter(condition).select(columns)
         ok_tf = td_frame.TableFrame.__build__(
@@ -1437,24 +1447,34 @@ class DataQualityEngine:
         condition = self._criteria_plan([operation.criteria])
 
         user_columns, system_columns = td_frame._split_columns(self._schema.names())
-        if operation.include_quality_columns:
-            if isinstance(operation.criteria, BoolCriteria):
-                dq_criteria = cast(BoolCriteria, operation.criteria)
-                tags = self._tags_spec_to_list(dq_criteria.tags)
-                tags = (
-                    None
-                    if tags is None
-                    else set(self._tags_spec_to_list(dq_criteria.tags))
+        columns = None
+        match operation.include_quality_columns:
+            case "all":
+                dq_columns = self._columns(None)
+                columns = list(user_columns) + sorted(dq_columns) + list(system_columns)
+            case "criteria":
+                if isinstance(operation.criteria, BoolCriteria):
+                    dq_criteria = cast(BoolCriteria, operation.criteria)
+                    tags = self._tags_spec_to_list(dq_criteria.tags)
+                    tags = (
+                        None
+                        if tags is None
+                        else set(self._tags_spec_to_list(dq_criteria.tags))
+                    )
+                    dq_columns = self._columns(tags)
+                elif isinstance(operation.criteria, CategoryCriteria):
+                    dq_criteria = cast(CategoryCriteria, operation.criteria)
+                    dq_columns = {dq_criteria.column_name}
+                else:
+                    dq_columns = set()
+                columns = list(user_columns) + sorted(dq_columns) + list(system_columns)
+            case "none":
+                columns = list(user_columns) + list(system_columns)
+            case _:
+                raise ValueError(
+                    "Unsupported data quality columns inclusion policy:"
+                    f" {operation.include_quality_columns}"
                 )
-                dq_columns = self._columns(tags)
-            elif isinstance(operation.criteria, CategoryCriteria):
-                dq_criteria = cast(CategoryCriteria, operation.criteria)
-                dq_columns = {dq_criteria.column_name}
-            else:
-                dq_columns = set()
-            columns = list(user_columns) + sorted(dq_columns) + list(system_columns)
-        else:
-            columns = list(user_columns) + list(system_columns)
 
         ok_lf = self._tf._lf.filter(condition).select(columns)
         ok_tf = td_frame.TableFrame.__build__(
@@ -1587,7 +1607,7 @@ class DataQualityEngine:
                         f"Unsupported classifier family: {classifier_family}"
                     )
 
-            summary_row[DQColumns.DQ_PARAMETERS.value] = None
+            summary_row[DQColumns.DQ_PARAMETERS.value] = str(column_info.classifier)
             summary_data.append(summary_row)
 
         # Parquet format doesn't natively support 128-bit integer types.

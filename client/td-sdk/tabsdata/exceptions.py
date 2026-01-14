@@ -1,8 +1,10 @@
 #
 # Copyright 2024 Tabs Data Inc.
 #
+
 import inspect
 import re
+import types
 from enum import Enum
 from typing import (
     Annotated,
@@ -1296,7 +1298,7 @@ class ErrorCode(Enum):
             "Type conversion error: {}. "
             "Some value provided to evaluate a data quality operation has an "
             "unsupported data type. Only basic data types and comon date, time, "
-            "or duration types are supported.”"
+            "or duration types are supported."
         ),
     }
     DQPE14 = {
@@ -2309,6 +2311,8 @@ class TabsDataException(Exception):
     Base exception for all exceptions in the Tabs Data SDK.
     """
 
+    CODE_PREFIX: str
+
     def __init__(self, error_code: ErrorCode, *args):
         self.error_code = error_code
         self.code = self.error_code.code()
@@ -2502,7 +2506,7 @@ class ParameterValidationError(TabsDataException):
 
     def __init__(
         self,
-        function,
+        function: types.FunctionType | types.MethodType,
         error_code: ErrorCode,
         pyd_validation_error: ValidationError,
     ):
@@ -2533,7 +2537,7 @@ class ParameterValidationError(TabsDataException):
         for p_err in pyd_validation_error.errors():
             param_name = _format_loc(function, p_err["loc"])
             # None means the parameter does not exist as there is
-            # no type constraint. If would be an unhinted param
+            # no type constraint. If it were an unhinted parameter,
             # it would not produce an error.
             param_type = param_type_dict.get(param_name, None)
             param_val = _format_value(p_err["input"])
@@ -2580,7 +2584,9 @@ class ParameterValidationError(TabsDataException):
         return self._errors
 
 
-def _get_function_details(func):
+def _get_function_details(
+    func: types.FunctionType | types.MethodType,
+) -> tuple[str, str | None, str]:
     # 1. Module Name
     module = func.__module__
 
@@ -2599,7 +2605,7 @@ def _get_function_details(func):
     return module, class_name, name
 
 
-def _format_loc(func, loc: tuple) -> str | None:
+def _format_loc(func: types.FunctionType | types.MethodType, loc: tuple) -> str | None:
     """
     Resolves the parameter name from a validation error location.
 
@@ -2705,7 +2711,9 @@ def _clean_type_str(annotation: Any) -> str:
     return str(annotation).replace("typing.", "")
 
 
-def _get_param_and_type_str_map(func) -> dict[str, str]:
+def _get_param_and_type_str_map(
+    func: types.FunctionType | types.MethodType,
+) -> dict[str, str]:
     try:
         sig = inspect.signature(func)
     except ValueError:

@@ -22,7 +22,7 @@ from tabsdata.tableframe._actions.dataquality.engine import (
     ColumnInfo,
     DataQualityEngine,
 )
-from tabsdata.tableframe._actions.dataquality.pojo import (
+from tabsdata.tableframe._actions.dataquality.record import (
     DerivedTableFrame,
     DerivedTableFrameStatus,
     Harvest,

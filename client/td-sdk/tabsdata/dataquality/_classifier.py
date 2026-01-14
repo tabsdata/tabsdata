@@ -8,10 +8,11 @@ rules. These include boolean classifiers for simple checks (e.g., `IsNull`, `IsB
 and categorizers for binning data.
 """
 
+import json
 import math
 import re
 import sys
-from abc import ABC
+from abc import ABC, abstractmethod
 from typing import AbstractSet, Collection, FrozenSet, Optional, Type, Union
 
 from tabsdata.dataquality._typing import (
@@ -38,7 +39,6 @@ from tabsdata.dataquality._utils import (
 )
 from tabsdata.exceptions import (
     ErrorCode,
-    ParameterValidationError,
     ParameterValueError,
 )
 from tabsdata.tableframe.dtypes import (
@@ -83,6 +83,16 @@ class Scale(ABC):
         """Returns whether the minimum value is in bin zero or in bin one."""
         return self._use_bin_zero
 
+    @abstractmethod
+    def to_dict(self) -> dict:
+        pass
+
+    def __repr__(self) -> str:
+        return json.dumps(self.to_dict())
+
+    def __str__(self) -> str:
+        return json.dumps(self.to_dict())
+
 
 class IdentityScale(Scale):
     """
@@ -112,6 +122,14 @@ class IdentityScale(Scale):
             ErrorCode.PVDQCL32,
         )
         super().__init__((min_val, max_val), max_val - min_val, use_bin_zero)
+
+    def to_dict(self) -> dict:
+        return {
+            "type": self.__class__.__name__,
+            "min_val": self._range[0],
+            "max_val": self._range[1],
+            "use_bin_zero": self._use_bin_zero,
+        }
 
 
 class LinearScale(Scale):
@@ -151,6 +169,15 @@ class LinearScale(Scale):
             ErrorCode.PVDQCL42,
         )
         super().__init__((min_val, max_val), bins, use_bin_zero)
+
+    def to_dict(self) -> dict:
+        return {
+            "type": self.__class__.__name__,
+            "min_val": self._range[0],
+            "max_val": self._range[1],
+            "bins": self._bins,
+            "use_bin_zero": self._use_bin_zero,
+        }
 
 
 class MonomialScale(Scale):
@@ -199,6 +226,16 @@ class MonomialScale(Scale):
         """Returns the power of the monomial scale."""
         return self._power
 
+    def to_dict(self) -> dict:
+        return {
+            "type": self.__class__.__name__,
+            "min_val": self._range[0],
+            "max_val": self._range[1],
+            "power": self._power,
+            "bins": self._bins,
+            "use_bin_zero": self._use_bin_zero,
+        }
+
 
 class LogarithmicScale(Scale):
     """
@@ -246,6 +283,16 @@ class LogarithmicScale(Scale):
         """Returns the base of the logarithmic scale."""
         return self._base
 
+    def to_dict(self) -> dict:
+        return {
+            "type": self.__class__.__name__,
+            "min_val": self._range[0],
+            "max_val": self._range[1],
+            "base": self._base,
+            "bins": self._bins,
+            "use_bin_zero": self._use_bin_zero,
+        }
+
 
 class ExponentialScale(Scale):
     """
@@ -292,6 +339,16 @@ class ExponentialScale(Scale):
     def base(self) -> ScaleBaseSpec:
         """Returns the base of the exponential scale."""
         return self._base
+
+    def to_dict(self) -> dict:
+        return {
+            "type": self.__class__.__name__,
+            "min_val": self._range[0],
+            "max_val": self._range[1],
+            "base": self._base,
+            "bins": self._bins,
+            "use_bin_zero": self._use_bin_zero,
+        }
 
 
 class Classifier(ABC):
@@ -370,6 +427,16 @@ class Classifier(ABC):
         """
         return self._on_wrong_type
 
+    @abstractmethod
+    def to_dict(self) -> dict:
+        pass
+
+    def __repr__(self) -> str:
+        return json.dumps(self.to_dict())
+
+    def __str__(self) -> str:
+        return json.dumps(self.to_dict())
+
 
 class BoolClassifier(Classifier):
     """
@@ -381,6 +448,10 @@ class BoolClassifier(Classifier):
     def supported_dtypes(cls) -> FrozenSet[Type]:
         """Returns the set of data types supported by boolean classifiers."""
         return _ALL_DTYPES
+
+    @abstractmethod
+    def to_dict(self) -> dict:
+        pass
 
 
 def _validate_min_max(
@@ -455,6 +526,16 @@ class Categorizer(Classifier):
         """Returns the scale used for categorization."""
         return self._scale
 
+    def to_dict(self) -> dict:
+        return {
+            "type": self.__class__.__name__,
+            "column_names": self._column_names,
+            "on_missing_column": self._on_missing_column,
+            "on_wrong_type": self._on_wrong_type,
+            "scale": self._scale.to_dict(),
+            "tags": self._tags,
+        }
+
 
 def _validate_pattern(pattern: str, fn_name, error_code: ErrorCode) -> str:
     """
@@ -497,6 +578,15 @@ class IsNull(BoolClassifier):
         """
         super().__init__(column_names, on_missing_column, "ignore", tags=tags)
 
+    def to_dict(self) -> dict:
+        return {
+            "type": self.__class__.__name__,
+            "column_names": self._column_names,
+            "on_missing_column": self._on_missing_column,
+            "on_wrong_type": self._on_wrong_type,
+            "tags": self._tags,
+        }
+
 
 class IsNotNull(BoolClassifier):
     """
@@ -525,6 +615,15 @@ class IsNotNull(BoolClassifier):
             tags: Optional tags for the classifier.
         """
         super().__init__(column_names, on_missing_column, "ignore", tags=tags)
+
+    def to_dict(self) -> dict:
+        return {
+            "type": self.__class__.__name__,
+            "column_names": self._column_names,
+            "on_missing_column": self._on_missing_column,
+            "on_wrong_type": self._on_wrong_type,
+            "tags": self._tags,
+        }
 
 
 class IsNan(BoolClassifier):
@@ -558,6 +657,15 @@ class IsNan(BoolClassifier):
         """
         super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
 
+    def to_dict(self) -> dict:
+        return {
+            "type": self.__class__.__name__,
+            "column_names": self._column_names,
+            "on_missing_column": self._on_missing_column,
+            "on_wrong_type": self._on_wrong_type,
+            "tags": self._tags,
+        }
+
 
 class IsNotNan(BoolClassifier):
     """
@@ -589,6 +697,15 @@ class IsNotNan(BoolClassifier):
             tags: Optional tags for the classifier.
         """
         super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
+
+    def to_dict(self) -> dict:
+        return {
+            "type": self.__class__.__name__,
+            "column_names": self._column_names,
+            "on_missing_column": self._on_missing_column,
+            "on_wrong_type": self._on_wrong_type,
+            "tags": self._tags,
+        }
 
 
 class IsNullOrNan(BoolClassifier):
@@ -622,6 +739,15 @@ class IsNullOrNan(BoolClassifier):
         """
         super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
 
+    def to_dict(self) -> dict:
+        return {
+            "type": self.__class__.__name__,
+            "column_names": self._column_names,
+            "on_missing_column": self._on_missing_column,
+            "on_wrong_type": self._on_wrong_type,
+            "tags": self._tags,
+        }
+
 
 class IsNotNullNorNan(BoolClassifier):
     """
@@ -653,6 +779,15 @@ class IsNotNullNorNan(BoolClassifier):
             tags: Optional tags for the classifier.
         """
         super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
+
+    def to_dict(self) -> dict:
+        return {
+            "type": self.__class__.__name__,
+            "column_names": self._column_names,
+            "on_missing_column": self._on_missing_column,
+            "on_wrong_type": self._on_wrong_type,
+            "tags": self._tags,
+        }
 
 
 # noinspection DuplicatedCode
@@ -687,6 +822,15 @@ class IsZero(BoolClassifier):
         """
         super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
 
+    def to_dict(self) -> dict:
+        return {
+            "type": self.__class__.__name__,
+            "column_names": self._column_names,
+            "on_missing_column": self._on_missing_column,
+            "on_wrong_type": self._on_wrong_type,
+            "tags": self._tags,
+        }
+
 
 class IsNotZero(BoolClassifier):
     """
@@ -718,6 +862,15 @@ class IsNotZero(BoolClassifier):
             tags: Optional tags for the classifier.
         """
         super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
+
+    def to_dict(self) -> dict:
+        return {
+            "type": self.__class__.__name__,
+            "column_names": self._column_names,
+            "on_missing_column": self._on_missing_column,
+            "on_wrong_type": self._on_wrong_type,
+            "tags": self._tags,
+        }
 
 
 class IsPositive(BoolClassifier):
@@ -751,6 +904,15 @@ class IsPositive(BoolClassifier):
         """
         super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
 
+    def to_dict(self) -> dict:
+        return {
+            "type": self.__class__.__name__,
+            "column_names": self._column_names,
+            "on_missing_column": self._on_missing_column,
+            "on_wrong_type": self._on_wrong_type,
+            "tags": self._tags,
+        }
+
 
 class IsPositiveOrZero(BoolClassifier):
     """
@@ -782,6 +944,15 @@ class IsPositiveOrZero(BoolClassifier):
             tags: Optional tags for the classifier.
         """
         super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
+
+    def to_dict(self) -> dict:
+        return {
+            "type": self.__class__.__name__,
+            "column_names": self._column_names,
+            "on_missing_column": self._on_missing_column,
+            "on_wrong_type": self._on_wrong_type,
+            "tags": self._tags,
+        }
 
 
 class IsNegative(BoolClassifier):
@@ -815,6 +986,15 @@ class IsNegative(BoolClassifier):
         """
         super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
 
+    def to_dict(self) -> dict:
+        return {
+            "type": self.__class__.__name__,
+            "column_names": self._column_names,
+            "on_missing_column": self._on_missing_column,
+            "on_wrong_type": self._on_wrong_type,
+            "tags": self._tags,
+        }
+
 
 class IsNegativeOrZero(BoolClassifier):
     """
@@ -847,7 +1027,17 @@ class IsNegativeOrZero(BoolClassifier):
         """
         super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
 
+    def to_dict(self) -> dict:
+        return {
+            "type": self.__class__.__name__,
+            "column_names": self._column_names,
+            "on_missing_column": self._on_missing_column,
+            "on_wrong_type": self._on_wrong_type,
+            "tags": self._tags,
+        }
 
+
+# noinspection DuplicatedCode
 class IsBetween(BoolClassifier):
     """
     A boolean classifier that checks if a value is within a specified range.
@@ -862,8 +1052,8 @@ class IsBetween(BoolClassifier):
     def __init__(
         self,
         column_names: Optional[ColumNamesWithAltSpec] = None,
-        min_len: Optional[RangeValueSpec] = None,
-        max_len: Optional[RangeValueSpec] = None,
+        min_val: Optional[RangeValueSpec] = None,
+        max_val: Optional[RangeValueSpec] = None,
         closed: RangeClosedOnSpec = "both",
         on_missing_column: OnInvalidColumnSpec = "ignore",
         on_wrong_type: OnInvalidColumnSpec = "ignore",
@@ -875,8 +1065,8 @@ class IsBetween(BoolClassifier):
 
         Args:
             column_names: The column(s) to check.
-            min_len: The minimum value of the range.
-            max_len: The maximum value of the range.
+            min_val: The minimum value of the range.
+            max_val: The maximum value of the range.
             closed: Specifies if the range is inclusive ("both", "lower", "upper") or
                 exclusive ("none").
             on_missing_column: What to do if a column name is missing.
@@ -885,9 +1075,9 @@ class IsBetween(BoolClassifier):
             tags: Optional tags for the classifier.
         """
         super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
-        _validate_range(min_len, max_len, "IsBetween.__init__", ErrorCode.PVDQCL11)
-        self._min = min_len
-        self._max = max_len
+        _validate_range(min_val, max_val, "IsBetween.__init__", ErrorCode.PVDQCL11)
+        self._min = min_val
+        self._max = max_val
         self._closed = closed
 
     @property
@@ -905,7 +1095,20 @@ class IsBetween(BoolClassifier):
         """Returns how the range is closed."""
         return self._closed
 
+    def to_dict(self) -> dict:
+        return {
+            "type": self.__class__.__name__,
+            "column_names": self._column_names,
+            "on_missing_column": self._on_missing_column,
+            "on_wrong_type": self._on_wrong_type,
+            "min_len": self._min,
+            "max_len": self._max,
+            "closed": self._closed,
+            "tags": self._tags,
+        }
 
+
+# noinspection DuplicatedCode
 class IsNotBetween(BoolClassifier):
     """
     A boolean classifier that checks if a value is *outside* a specified range.
@@ -920,8 +1123,8 @@ class IsNotBetween(BoolClassifier):
     def __init__(
         self,
         column_names: Optional[ColumNamesWithAltSpec] = None,
-        min_len: Optional[RangeValueSpec] = None,
-        max_len: Optional[RangeValueSpec] = None,
+        min_val: Optional[RangeValueSpec] = None,
+        max_val: Optional[RangeValueSpec] = None,
         closed: RangeClosedOnSpec = "both",
         on_missing_column: OnInvalidColumnSpec = "ignore",
         on_wrong_type: OnInvalidColumnSpec = "ignore",
@@ -933,8 +1136,8 @@ class IsNotBetween(BoolClassifier):
 
         Args:
             column_names: The column(s) to check.
-            min_len: The minimum value of the range.
-            max_len: The maximum value of the range.
+            min_val: The minimum value of the range.
+            max_val: The maximum value of the range.
             closed: Specifies if the range is inclusive ("both", "lower", "upper") or
                 exclusive ("none").
             on_missing_column: What to do if a column name is missing.
@@ -943,9 +1146,9 @@ class IsNotBetween(BoolClassifier):
             tags: Optional tags for the classifier.
         """
         super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
-        _validate_range(min_len, max_len, "IsNotBetween.__init__", ErrorCode.PVDQCL11)
-        self._min = min_len
-        self._max = max_len
+        _validate_range(min_val, max_val, "IsNotBetween.__init__", ErrorCode.PVDQCL11)
+        self._min = min_val
+        self._max = max_val
         self._closed = closed
 
     @property
@@ -963,7 +1166,20 @@ class IsNotBetween(BoolClassifier):
         """Returns how the range is closed."""
         return self._closed
 
+    def to_dict(self) -> dict:
+        return {
+            "type": self.__class__.__name__,
+            "column_names": self._column_names,
+            "on_missing_column": self._on_missing_column,
+            "on_wrong_type": self._on_wrong_type,
+            "min_len": self._min,
+            "max_len": self._max,
+            "closed": self._closed,
+            "tags": self._tags,
+        }
 
+
+# noinspection DuplicatedCode
 class IsIn(BoolClassifier):
     """
     A boolean classifier that checks if a value is in a specified set of values.
@@ -1000,7 +1216,18 @@ class IsIn(BoolClassifier):
         """Returns the set of values for the check."""
         return self._values
 
+    def to_dict(self) -> dict:
+        return {
+            "type": self.__class__.__name__,
+            "column_names": self._column_names,
+            "on_missing_column": self._on_missing_column,
+            "on_wrong_type": self._on_wrong_type,
+            "values": list(self._values),
+            "tags": self._tags,
+        }
 
+
+# noinspection DuplicatedCode
 class IsNotIn(BoolClassifier):
     """
     A boolean classifier that checks if a value is *not* in a specified set of values.
@@ -1037,7 +1264,18 @@ class IsNotIn(BoolClassifier):
         """Returns the set of values for the check."""
         return self._values
 
+    def to_dict(self) -> dict:
+        return {
+            "type": self.__class__.__name__,
+            "column_names": self._column_names,
+            "on_missing_column": self._on_missing_column,
+            "on_wrong_type": self._on_wrong_type,
+            "values": list(self._values),
+            "tags": self._tags,
+        }
 
+
+# noinspection DuplicatedCode
 class Matches(BoolClassifier):
     """
     A boolean classifier that checks if a value matches a regex pattern.
@@ -1081,7 +1319,18 @@ class Matches(BoolClassifier):
         """Returns the regex pattern."""
         return self._pattern
 
+    def to_dict(self) -> dict:
+        return {
+            "type": self.__class__.__name__,
+            "column_names": self._column_names,
+            "on_missing_column": self._on_missing_column,
+            "on_wrong_type": self._on_wrong_type,
+            "pattern": self._pattern,
+            "tags": self._tags,
+        }
 
+
+# noinspection DuplicatedCode
 class DoesNotMatch(BoolClassifier):
     """
     A boolean classifier that checks if a value does *not* match a regex pattern.
@@ -1125,6 +1374,16 @@ class DoesNotMatch(BoolClassifier):
         """Returns the regex pattern."""
         return self._pattern
 
+    def to_dict(self) -> dict:
+        return {
+            "type": self.__class__.__name__,
+            "column_names": self._column_names,
+            "on_missing_column": self._on_missing_column,
+            "on_wrong_type": self._on_wrong_type,
+            "pattern": self._pattern,
+            "tags": self._tags,
+        }
+
 
 class HasLength(BoolClassifier):
     """
@@ -1161,12 +1420,13 @@ class HasLength(BoolClassifier):
         """
         super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
         if min_len > max_len:
-            msg = (
-                " Parameter validation error. "
-                "Function 'HasLen.__init__', "
-                f" min='{min_len}' is greater than max='{max_len}'."
+            msg = f" min='{min_len}' is greater than max='{max_len}'."
+            raise ParameterValueError(
+                ErrorCode.PVDQCL8,
+                "HasLength.__init__",
+                "min_len, max_len",
+                msg,
             )
-            raise ParameterValidationError(ErrorCode.PVDQCL8, msg)
         self._min = min_len
         self._max = max_len
 
@@ -1179,6 +1439,17 @@ class HasLength(BoolClassifier):
     def max(self) -> int:
         """Returns the maximum allowed length."""
         return self._max
+
+    def to_dict(self) -> dict:
+        return {
+            "type": self.__class__.__name__,
+            "column_names": self._column_names,
+            "on_missing_column": self._on_missing_column,
+            "on_wrong_type": self._on_wrong_type,
+            "min_len": self._min,
+            "max_len": self._max,
+            "tags": self._tags,
+        }
 
 
 def _validate_range(

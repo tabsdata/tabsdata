@@ -278,7 +278,7 @@ class Enrich(Operator):
 
         Args:
             to_table: The name of the table with the added data quality
-                      classifer columns.
+                      classifier columns.
                       If `None`, the original table is used.
             tags: Optional tags to link this operator to specific classifiers.
         """
@@ -287,7 +287,7 @@ class Enrich(Operator):
 
     @property
     def to_table(self) -> Optional[TableName]:
-        """Returns the destination table with the enriched data quality classifer
+        """Returns the destination table with the enriched data quality classifier
         columns. If `None`, the original table is used.
         """
         return self._to_table

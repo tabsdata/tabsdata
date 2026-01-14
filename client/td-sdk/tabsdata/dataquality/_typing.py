@@ -114,7 +114,7 @@ BinIdxSpec: TypeAlias = Annotated[StrictInt, Field(ge=0, le=MAX_BINS)]
 """A type alias for a zero-based bin index, constrained by MAX_BINS."""
 
 SpecialBinSpec: TypeAlias = Literal["none", "nan", "underflow", "overflow"]
-"""A type alias for the bins for None, NaN, undeflow and overflow values."""
+"""A type alias for the bins for None, NaN, underflow and overflow values."""
 
 BinSpec: TypeAlias = Union[BinIdxSpec, SpecialBinSpec]
 """

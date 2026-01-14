@@ -116,16 +116,16 @@ def _convert_classifier_values(classifier, dtype):
             return IsBetween(
                 column_names=classifier.column_names,
                 tags=classifier.tags,
-                min_len=converted_min,
-                max_len=converted_max,
+                min_val=converted_min,
+                max_val=converted_max,
                 closed=classifier.closed,
             )
         else:
             return IsNotBetween(
                 column_names=classifier.column_names,
                 tags=classifier.tags,
-                min_len=converted_min,
-                max_len=converted_max,
+                min_val=converted_min,
+                max_val=converted_max,
                 closed=classifier.closed,
             )
     return None

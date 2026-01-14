@@ -215,12 +215,12 @@ def test_is_in_classifier_wrong_set_type():
 
 
 def test_is_between_classifier():
-    classifier = IsBetween(min_len=5, max_len=10)
+    classifier = IsBetween(min_val=5, max_val=10)
     assert classifier.min == 5
     assert classifier.max == 10
     assert classifier.closed == "both"
 
-    classifier = IsBetween(min_len=5, max_len=5)
+    classifier = IsBetween(min_val=5, max_val=5)
     assert classifier.min == 5
     assert classifier.max == 5
     assert classifier.closed == "both"
@@ -229,13 +229,13 @@ def test_is_between_classifier():
 def test_is_between_classifier_valid_closed_options():
     valid_closed_options = get_args(RangeClosedOnSpec)
     for closed_option in valid_closed_options:
-        classifier = IsBetween(min_len=5, max_len=10, closed=closed_option)
+        classifier = IsBetween(min_val=5, max_val=10, closed=closed_option)
         assert classifier.closed == closed_option
 
 
 def test_is_between_classifier_wrong_closed_option():
     with pytest.raises(ParameterValidationError) as e:
-        IsBetween(min_len=5, max_len=10, closed="invalid_option")
+        IsBetween(min_val=5, max_val=10, closed="invalid_option")
     assert e.value.error_code == ErrorCode.PVDQCL10
 
 
@@ -247,27 +247,27 @@ def test_is_between_classifier_no_values():
 
 def test_is_between_classifier_wrong_min_max_types():
     with pytest.raises(ParameterValueError) as e:
-        IsBetween(min_len="5", max_len=10)
+        IsBetween(min_val="5", max_val=10)
     assert e.value.error_code == ErrorCode.PVDQCL10
 
     with pytest.raises(ParameterValueError) as e:
-        IsBetween(min_len=5, max_len="10")
+        IsBetween(min_val=5, max_val="10")
     assert e.value.error_code == ErrorCode.PVDQCL10
 
 
 def test_is_between_classifier_wrong_min_max():
     with pytest.raises(ParameterValueError) as e:
-        IsBetween(min_len=10, max_len=9)
+        IsBetween(min_val=10, max_val=9)
     assert e.value.error_code == ErrorCode.PVDQCL10
 
 
 def test_is_not_between_classifier():
-    classifier = IsNotBetween(min_len=5, max_len=10)
+    classifier = IsNotBetween(min_val=5, max_val=10)
     assert classifier.min == 5
     assert classifier.max == 10
     assert classifier.closed == "both"
 
-    classifier = IsNotBetween(min_len=5, max_len=5)
+    classifier = IsNotBetween(min_val=5, max_val=5)
     assert classifier.min == 5
     assert classifier.max == 5
     assert classifier.closed == "both"
@@ -276,13 +276,13 @@ def test_is_not_between_classifier():
 def test_is_not_between_classifier_valid_closed_options():
     valid_closed_options = get_args(RangeClosedOnSpec)
     for closed_option in valid_closed_options:
-        classifier = IsNotBetween(min_len=5, max_len=10, closed=closed_option)
+        classifier = IsNotBetween(min_val=5, max_val=10, closed=closed_option)
         assert classifier.closed == closed_option
 
 
 def test_is_not_between_classifier_wrong_closed_option():
     with pytest.raises(ParameterValidationError) as e:
-        IsNotBetween(min_len=5, max_len=10, closed="invalid_option")
+        IsNotBetween(min_val=5, max_val=10, closed="invalid_option")
     assert e.value.error_code == ErrorCode.PVDQCL10
 
 
@@ -294,17 +294,17 @@ def test_is_not_between_classifier_no_values():
 
 def test_is_not_between_classifier_wrong_min_max_types():
     with pytest.raises(ParameterValueError) as e:
-        IsNotBetween(min_len="5", max_len=10)
+        IsNotBetween(min_val="5", max_val=10)
     assert e.value.error_code == ErrorCode.PVDQCL10
 
     with pytest.raises(ParameterValueError) as e:
-        IsNotBetween(min_len=5, max_len="10")
+        IsNotBetween(min_val=5, max_val="10")
     assert e.value.error_code == ErrorCode.PVDQCL10
 
 
 def test_is_not_between_classifier_wrong_min_max():
     with pytest.raises(ParameterValueError) as e:
-        IsNotBetween(min_len=10, max_len=9)
+        IsNotBetween(min_val=10, max_val=9)
     assert e.value.error_code == ErrorCode.PVDQCL10
 
 
