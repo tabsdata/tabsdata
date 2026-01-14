@@ -79,10 +79,10 @@ def get_arrow_schema(lazy_frame: pl.LazyFrame) -> pa.Schema:
 def arrow_schema_hash(schema: pa.Schema, sort_schema=True) -> str:
     if sort_schema:
 
-        import pyarrow as pa
+        import pyarrow
 
         sorted_fields = sorted(schema, key=lambda field: field.name)
-        schema = pa.schema(sorted_fields)
+        schema = pyarrow.schema(sorted_fields)
     serialized_schema = schema.serialize()
     return hashlib.sha256(serialized_schema).hexdigest()
 

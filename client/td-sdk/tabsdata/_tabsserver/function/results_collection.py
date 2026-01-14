@@ -17,12 +17,14 @@ VALID_SINGLE_RESULT = Union[TableFrame | None | List[TableFrame | None]]
 
 class ResultsCollection:
 
-    def __init__(self, results: Tuple[VALID_SINGLE_RESULT] | VALID_SINGLE_RESULT):
+    def __init__(self, results: Tuple[VALID_SINGLE_RESULT, ...] | VALID_SINGLE_RESULT):
         if isinstance(results, tuple):
-            self.results = results
+            results_tuple = results
         else:
-            self.results = (results,)
-        self.results = tuple(Result(result) for result in self.results)
+            results_tuple = (results,)
+        self.results: tuple[Result, ...] = tuple(
+            Result(result) for result in results_tuple
+        )
 
     def __len__(self):
         return len(self.results)

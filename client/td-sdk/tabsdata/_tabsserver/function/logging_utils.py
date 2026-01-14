@@ -9,7 +9,7 @@ def pad_string(input_string: str, symbol: str = "-", length: int = 60):
 
     Args:
         input_string (str): The input string to pad.
-        symbol (str, optional): The symbol to use for padding. Defaults to "-".
+        symbol (str, optional): The symbol to use for padding. Defaults to ``-``.
         length (int, optional): The length to pad the string to. Defaults to 60.
 
     Returns:

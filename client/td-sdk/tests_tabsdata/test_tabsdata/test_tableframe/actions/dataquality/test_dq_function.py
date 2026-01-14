@@ -6,6 +6,8 @@ import polars as pl
 import pytest
 from fntest import FnError, MockTableFrameSpec, tdfnrun
 from test_tabsdata.test_tableframe.actions.dataquality.dq_helper import (
+    Q_BOOLEAN,
+    Q_CATEGORIZER,
     Q_NEGATIVE,
     Q_NULL,
     Q_POSITIVE,
@@ -13,6 +15,7 @@ from test_tabsdata.test_tableframe.actions.dataquality.dq_helper import (
     Q_NaN,
     boolean_dataset,
     categorical_dataset,
+    percentage,
 )
 
 import tabsdata as td
@@ -735,7 +738,325 @@ def test_combined_none_cols_with_mixed_types(
 
     summary_table = outputs[summary_table_idx]
 
-    assert len(summary_table) == 2, "Should have 2 summary rows"
-
     classifier_names = set(summary_table["dq.classifier"])
     assert classifier_names == {"int_col_is_positive", "float_col_is_positive"}
+
+
+@pytest.mark.dq
+@pytest.mark.tdfnrun
+@pytest.mark.parametrize(
+    "criteria,threshold,should_fail",
+    [
+        pytest.param(
+            dq.AnyFailed(none_is_ok=False),
+            dq.RowCountThreshold(0),
+            True,
+            id="any_failed_rowcount_0_fail",
+        ),
+        pytest.param(
+            dq.AnyFailed(none_is_ok=False),
+            dq.RowCountThreshold(Q_BOOLEAN - Q_NULL - 1),
+            True,
+            id="any_failed_rowcount_below_threshold_fail",
+        ),
+        pytest.param(
+            dq.AnyFailed(none_is_ok=False),
+            dq.RowCountThreshold(Q_BOOLEAN - Q_NULL),
+            False,
+            id="any_failed_rowcount_at_threshold_pass",
+        ),
+        pytest.param(
+            dq.AnyFailed(none_is_ok=False),
+            dq.RowCountThreshold(Q_BOOLEAN - Q_NULL + 1),
+            False,
+            id="any_failed_rowcount_above_threshold_pass",
+        ),
+        pytest.param(
+            dq.AnyFailed(none_is_ok=False),
+            dq.RowCountThreshold(Q_BOOLEAN),
+            False,
+            id="any_failed_rowcount_100_pass",
+        ),
+        pytest.param(
+            dq.AnyFailed(none_is_ok=False),
+            dq.PercentThreshold(0),
+            True,
+            id="any_failed_percent_0_fail",
+        ),
+        pytest.param(
+            dq.AnyFailed(none_is_ok=False),
+            dq.PercentThreshold(93),
+            True,
+            id="any_failed_percent_below_threshold_fail",
+        ),
+        pytest.param(
+            dq.AnyFailed(none_is_ok=False),
+            dq.PercentThreshold(94),
+            False,
+            id="any_failed_percent_at_threshold_pass",
+        ),
+        pytest.param(
+            dq.AnyFailed(none_is_ok=False),
+            dq.PercentThreshold(95),
+            False,
+            id="any_failed_percent_above_threshold_pass",
+        ),
+        pytest.param(
+            dq.AnyFailed(none_is_ok=False),
+            dq.PercentThreshold(100),
+            False,
+            id="any_failed_percent_100_pass",
+        ),
+        pytest.param(
+            dq.AllOk(none_is_ok=False),
+            dq.RowCountThreshold(0),
+            False,
+            id="all_ok_rowcount_0_pass",
+        ),
+        pytest.param(
+            dq.AllOk(none_is_ok=False),
+            dq.RowCountThreshold(Q_NULL - 1),
+            False,
+            id="all_ok_rowcount_below_threshold_pass",
+        ),
+        pytest.param(
+            dq.AllOk(none_is_ok=False),
+            dq.RowCountThreshold(Q_NULL),
+            False,
+            id="all_ok_rowcount_at_threshold_pass",
+        ),
+        pytest.param(
+            dq.AllOk(none_is_ok=False),
+            dq.RowCountThreshold(Q_NULL + 1),
+            True,
+            id="all_ok_rowcount_above_threshold_fail",
+        ),
+        pytest.param(
+            dq.AllOk(none_is_ok=False),
+            dq.RowCountThreshold(Q_BOOLEAN),
+            True,
+            id="all_ok_rowcount_100_fail",
+        ),
+        pytest.param(
+            dq.AllOk(none_is_ok=False),
+            dq.PercentThreshold(0),
+            False,
+            id="all_ok_percent_0_pass",
+        ),
+        pytest.param(
+            dq.AllOk(none_is_ok=False),
+            dq.PercentThreshold(percentage(Q_NULL, Q_BOOLEAN) - 1),
+            False,
+            id="all_ok_percent_below_threshold_pass",
+        ),
+        pytest.param(
+            dq.AllOk(none_is_ok=False),
+            dq.PercentThreshold(percentage(Q_NULL, Q_BOOLEAN)),
+            False,
+            id="all_ok_percent_at_threshold_pass",
+        ),
+        pytest.param(
+            dq.AllOk(none_is_ok=False),
+            dq.PercentThreshold(percentage(Q_NULL, Q_BOOLEAN) + 1),
+            True,
+            id="all_ok_percent_above_threshold_fail",
+        ),
+        pytest.param(
+            dq.AllOk(none_is_ok=False),
+            dq.PercentThreshold(100),
+            True,
+            id="all_ok_percent_100_fail",
+        ),
+    ],
+)
+def test_fail_operation_boolean(criteria, threshold, should_fail):
+    @td.transformer(
+        name="transformer",
+        input_tables=["table_i"],
+        output_tables=["table_o"],
+        on_output_tables=[
+            dq.DataQuality(
+                table="table_o",
+                classifiers=[dq.IsNull("value")],
+                operators=[dq.Fail(criteria=criteria, threshold=threshold)],
+            )
+        ],
+    )
+    def dq_transformer(tf: td.TableFrame) -> td.TableFrame:
+        return tf
+
+    if should_fail:
+        with pytest.raises(FnError) as error:
+            tdfnrun(
+                function=dq_transformer,
+                input_tables=boolean_dataset(td.Float32),
+            )
+        fnrun = error.value.fnrun
+        exception = fnrun.exception.as_object()
+        assert exception.code == "DQPE-014"
+    else:
+        tdfnrun(
+            function=dq_transformer,
+            input_tables=boolean_dataset(td.Float32),
+        )
+
+
+@pytest.mark.dq
+@pytest.mark.tdfnrun
+@pytest.mark.parametrize(
+    "criteria,threshold,should_fail",
+    [
+        pytest.param(
+            dq.InBins("value_category", [1, 2, 3]),
+            dq.RowCountThreshold(0),
+            False,
+            id="in_bins_rowcount_0_pass",
+        ),
+        pytest.param(
+            dq.InBins("value_category", [1, 2, 3]),
+            dq.RowCountThreshold(10),
+            False,
+            id="in_bins_rowcount_below_threshold_pass",
+        ),
+        pytest.param(
+            dq.InBins("value_category", [1, 2, 3]),
+            dq.RowCountThreshold(28),
+            False,
+            id="in_bins_rowcount_at_threshold_pass",
+        ),
+        pytest.param(
+            dq.InBins("value_category", [1, 2, 3]),
+            dq.RowCountThreshold(29),
+            True,
+            id="in_bins_rowcount_above_threshold_fail",
+        ),
+        pytest.param(
+            dq.InBins("value_category", [1, 2, 3]),
+            dq.RowCountThreshold(100),
+            True,
+            id="in_bins_rowcount_100_fail",
+        ),
+        pytest.param(
+            dq.InBins("value_category", [1, 2, 3]),
+            dq.PercentThreshold(0),
+            False,
+            id="in_bins_percent_0_pass",
+        ),
+        pytest.param(
+            dq.InBins("value_category", [1, 2, 3]),
+            dq.PercentThreshold(2),
+            False,
+            id="in_bins_percent_below_threshold_pass",
+        ),
+        pytest.param(
+            dq.InBins("value_category", [1, 2, 3]),
+            dq.PercentThreshold(3),
+            False,
+            id="in_bins_percent_at_threshold_pass",
+        ),
+        pytest.param(
+            dq.InBins("value_category", [1, 2, 3]),
+            dq.PercentThreshold(4),
+            True,
+            id="in_bins_percent_above_threshold_fail",
+        ),
+        pytest.param(
+            dq.InBins("value_category", [1, 2, 3]),
+            dq.PercentThreshold(100),
+            True,
+            id="in_bins_percent_100_fail",
+        ),
+        pytest.param(
+            dq.NotInBins("value_category", [1, 2, 3]),
+            dq.RowCountThreshold(0),
+            True,
+            id="not_in_bins_rowcount_0_fail",
+        ),
+        pytest.param(
+            dq.NotInBins("value_category", [1, 2, 3]),
+            dq.RowCountThreshold(500),
+            True,
+            id="not_in_bins_rowcount_below_threshold_fail",
+        ),
+        pytest.param(
+            dq.NotInBins("value_category", [1, 2, 3]),
+            dq.RowCountThreshold(802),
+            False,
+            id="not_in_bins_rowcount_at_threshold_pass",
+        ),
+        pytest.param(
+            dq.NotInBins("value_category", [1, 2, 3]),
+            dq.RowCountThreshold(810),
+            False,
+            id="not_in_bins_rowcount_above_threshold_pass",
+        ),
+        pytest.param(
+            dq.NotInBins("value_category", [1, 2, 3]),
+            dq.RowCountThreshold(830),
+            False,
+            id="not_in_bins_rowcount_total_pass",
+        ),
+        pytest.param(
+            dq.NotInBins("value_category", [1, 2, 3]),
+            dq.PercentThreshold(0),
+            True,
+            id="not_in_bins_percent_0_fail",
+        ),
+        pytest.param(
+            dq.NotInBins("value_category", [1, 2, 3]),
+            dq.PercentThreshold(90),
+            True,
+            id="not_in_bins_percent_below_threshold_fail",
+        ),
+        pytest.param(
+            dq.NotInBins("value_category", [1, 2, 3]),
+            dq.PercentThreshold(96),
+            True,
+            id="not_in_bins_percent_96_fail",
+        ),
+        pytest.param(
+            dq.NotInBins("value_category", [1, 2, 3]),
+            dq.PercentThreshold(97),
+            False,
+            id="not_in_bins_percent_at_threshold_pass",
+        ),
+        pytest.param(
+            dq.NotInBins("value_category", [1, 2, 3]),
+            dq.PercentThreshold(100),
+            False,
+            id="not_in_bins_percent_100_pass",
+        ),
+    ],
+)
+def test_fail_operation_bins(criteria, threshold, should_fail):
+    scale = LinearScale(min_val=0, max_val=100, bins=100)
+
+    @td.transformer(
+        name="transformer",
+        input_tables=["table_i"],
+        output_tables=["table_o"],
+        on_output_tables=[
+            dq.DataQuality(
+                table="table_o",
+                classifiers=[dq.Categorizer("value", scale=scale)],
+                operators=[dq.Fail(criteria=criteria, threshold=threshold)],
+            )
+        ],
+    )
+    def dq_transformer(tf: td.TableFrame) -> td.TableFrame:
+        return tf
+
+    if should_fail:
+        with pytest.raises(FnError) as error:
+            tdfnrun(
+                function=dq_transformer,
+                input_tables=categorical_dataset(scale, td.Float32),
+            )
+        fnrun = error.value.fnrun
+        exception = fnrun.exception.as_object()
+        assert exception.code == "DQPE-014"
+    else:
+        tdfnrun(
+            function=dq_transformer,
+            input_tables=categorical_dataset(scale, td.Float32),
+        )

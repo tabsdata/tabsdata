@@ -16,6 +16,7 @@ from typing import AbstractSet, Collection, FrozenSet, Optional, Type, Union
 
 from tabsdata.dataquality._typing import (
     MAX_BINS,
+    BinCountSpec,
     BinsCriteriaSpec,
     ColumNamesWithAltSpec,
     ColumnNameWithAltSpec,
@@ -28,7 +29,7 @@ from tabsdata.dataquality._typing import (
     ScaleLimitSpec,
     ScalePowerSpec,
     TagSpec,
-    TagsSpec, BinCountSpec,
+    TagsSpec,
 )
 from tabsdata.dataquality._utils import (
     _normalize_to_list,

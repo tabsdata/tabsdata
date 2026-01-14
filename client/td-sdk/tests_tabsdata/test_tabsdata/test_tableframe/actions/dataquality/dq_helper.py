@@ -61,7 +61,15 @@ Q_NEGATIVE = 32
 Q_NULL = 16
 Q_NaN = 8
 
+Q_BOOLEAN = Q_ZERO + Q_POSITIVE + Q_NEGATIVE + Q_NULL + Q_NaN
+
 Q_CATEGORIZER = 512
+
+
+def percentage(part: int | float, whole: int | float) -> float:
+    if whole == 0:
+        return 0
+    return (part * 100) / whole
 
 
 @dataclass(frozen=True)

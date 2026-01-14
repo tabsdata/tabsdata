@@ -21,8 +21,12 @@ import tabsdata.tableframe.lazyframe.frame as td_frame
 # noinspection PyProtectedMember
 import tabsdata.tableframe.typing as td_typing
 from tabsdata.dataquality import (
+    AllOk,
+    AnyFailed,
+    Criteria,
     DoesNotMatch,
     HasLength,
+    InBins,
     IsBetween,
     IsIn,
     IsNotBetween,
@@ -32,6 +36,10 @@ from tabsdata.dataquality import (
     IsPositiveOrZero,
     IsZero,
     Matches,
+    NotInBins,
+    PercentThreshold,
+    RowCountThreshold,
+    Threshold,
 )
 
 # noinspection PyProtectedMember
@@ -76,6 +84,7 @@ CLOSED_MAPPING: dict[str, PolarsClosedInterval] = {
 logger = logging.getLogger(__name__)
 
 ClassifierType = TypeVar("ClassifierType", bound=Classifier)
+CriteriaType = TypeVar("CriteriaType", bound=Criteria)
 
 
 class DQColumns(Enum):
@@ -122,7 +131,7 @@ class QExpressions(QCallableEnum):
     )
 
 
-class PolarsProvider:
+class PolarsClassifierProvider:
     def __init__(
         self,
         function: Callable[
@@ -160,7 +169,7 @@ class PolarsProvider:
         _: IsNull,
     ) -> pl.Expr:
         return (
-            pl.when(PolarsProvider._null(column))
+            pl.when(PolarsClassifierProvider._null(column))
             .then(ByteSentinel.TRUE)
             .when(QExpressions.IS_NAN(column, dtype))
             .then(ByteSentinel.NAN)
@@ -175,7 +184,7 @@ class PolarsProvider:
         _: IsNotNull,
     ) -> pl.Expr:
         return (
-            pl.when(PolarsProvider._null(column))
+            pl.when(PolarsClassifierProvider._null(column))
             .then(ByteSentinel.FALSE)
             .when(QExpressions.IS_NAN(column, dtype))
             .then(ByteSentinel.NAN)
@@ -199,7 +208,7 @@ class PolarsProvider:
         return (
             pl.when(column.is_null())
             .then(ByteSentinel.NULL)
-            .when(PolarsProvider._nan(column, dtype))
+            .when(PolarsClassifierProvider._nan(column, dtype))
             .then(ByteSentinel.TRUE)
             .otherwise(ByteSentinel.FALSE)
             .cast(pl.UInt8)
@@ -214,7 +223,7 @@ class PolarsProvider:
         return (
             pl.when(column.is_null())
             .then(ByteSentinel.NULL)
-            .when(PolarsProvider._nan(column, dtype))
+            .when(PolarsClassifierProvider._nan(column, dtype))
             .then(ByteSentinel.FALSE)
             .otherwise(ByteSentinel.TRUE)
             .cast(pl.UInt8)
@@ -234,7 +243,7 @@ class PolarsProvider:
         _: IsNullOrNan,
     ) -> pl.Expr:
         return (
-            pl.when(PolarsProvider._null_or_nan(column, dtype))
+            pl.when(PolarsClassifierProvider._null_or_nan(column, dtype))
             .then(ByteSentinel.TRUE)
             .otherwise(ByteSentinel.FALSE)
             .cast(pl.UInt8)
@@ -247,7 +256,7 @@ class PolarsProvider:
         _: IsNotNullNorNan,
     ) -> pl.Expr:
         return (
-            pl.when(PolarsProvider._null_or_nan(column, dtype))
+            pl.when(PolarsClassifierProvider._null_or_nan(column, dtype))
             .then(ByteSentinel.FALSE)
             .otherwise(ByteSentinel.TRUE)
             .cast(pl.UInt8)
@@ -271,7 +280,7 @@ class PolarsProvider:
             .when(QExpressions.IS_NAN(column, dtype))
             .then(ByteSentinel.NAN)
         )
-        core_expression = PolarsProvider._zero(column)
+        core_expression = PolarsClassifierProvider._zero(column)
         return base_expression.otherwise(core_expression).cast(pl.UInt8)
 
     @staticmethod
@@ -286,7 +295,7 @@ class PolarsProvider:
             .when(QExpressions.IS_NAN(column, dtype))
             .then(ByteSentinel.NAN)
         )
-        core_expression = ~PolarsProvider._zero(column)
+        core_expression = ~PolarsClassifierProvider._zero(column)
         return base_expression.otherwise(core_expression).cast(pl.UInt8)
 
     @staticmethod
@@ -307,7 +316,7 @@ class PolarsProvider:
             .when(QExpressions.IS_NAN(column, dtype))
             .then(ByteSentinel.NAN)
         )
-        core_expression = PolarsProvider._positive(column)
+        core_expression = PolarsClassifierProvider._positive(column)
         return base_expression.otherwise(core_expression).cast(pl.UInt8)
 
     @staticmethod
@@ -328,7 +337,7 @@ class PolarsProvider:
             .when(QExpressions.IS_NAN(column, dtype))
             .then(ByteSentinel.NAN)
         )
-        core_expression = PolarsProvider._positive_or_zero(column)
+        core_expression = PolarsClassifierProvider._positive_or_zero(column)
         return base_expression.otherwise(core_expression).cast(pl.UInt8)
 
     @staticmethod
@@ -349,7 +358,7 @@ class PolarsProvider:
             .when(QExpressions.IS_NAN(column, dtype))
             .then(ByteSentinel.NAN)
         )
-        core_expression = PolarsProvider._negative(column)
+        core_expression = PolarsClassifierProvider._negative(column)
         return base_expression.otherwise(core_expression).cast(pl.UInt8)
 
     @staticmethod
@@ -370,7 +379,7 @@ class PolarsProvider:
             .when(QExpressions.IS_NAN(column, dtype))
             .then(ByteSentinel.NAN)
         )
-        core_expression = PolarsProvider._negative_or_zero(column)
+        core_expression = PolarsClassifierProvider._negative_or_zero(column)
         return base_expression.otherwise(core_expression).cast(pl.UInt8)
 
     @staticmethod
@@ -409,7 +418,7 @@ class PolarsProvider:
             .when(QExpressions.IS_NAN(column, dtype))
             .then(ByteSentinel.NAN)
         )
-        core_expression = PolarsProvider._between(column, dtype, classifier)
+        core_expression = PolarsClassifierProvider._between(column, dtype, classifier)
         return base_expression.otherwise(core_expression).cast(pl.UInt8)
 
     @staticmethod
@@ -424,7 +433,7 @@ class PolarsProvider:
             .when(QExpressions.IS_NAN(column, dtype))
             .then(ByteSentinel.NAN)
         )
-        core_expression = ~PolarsProvider._between(column, dtype, classifier)
+        core_expression = ~PolarsClassifierProvider._between(column, dtype, classifier)
         return base_expression.otherwise(core_expression).cast(pl.UInt8)
 
     @staticmethod
@@ -476,7 +485,7 @@ class PolarsProvider:
                 .when(QExpressions.IS_NAN(column, dtype))
                 .then(ByteSentinel.NAN)
             )
-        core_expression = PolarsProvider._in(column, dtype, classifier.values)
+        core_expression = PolarsClassifierProvider._in(column, dtype, classifier.values)
         return base_expression.otherwise(core_expression).cast(pl.UInt8)
 
     # noinspection DuplicatedCode
@@ -520,7 +529,9 @@ class PolarsProvider:
                 .when(QExpressions.IS_NAN(column, dtype))
                 .then(ByteSentinel.NAN)
             )
-        core_expression = ~PolarsProvider._in(column, dtype, classifier.values)
+        core_expression = ~PolarsClassifierProvider._in(
+            column, dtype, classifier.values
+        )
         return base_expression.otherwise(core_expression).cast(pl.UInt8)
 
     @staticmethod
@@ -542,7 +553,7 @@ class PolarsProvider:
             .when(QExpressions.IS_NAN(column, dtype))
             .then(ByteSentinel.NAN)
         )
-        core_expression = PolarsProvider._matches(column, classifier.pattern)
+        core_expression = PolarsClassifierProvider._matches(column, classifier.pattern)
         return base_expression.otherwise(core_expression).cast(pl.UInt8)
 
     @staticmethod
@@ -557,7 +568,7 @@ class PolarsProvider:
             .when(QExpressions.IS_NAN(column, dtype))
             .then(ByteSentinel.NAN)
         )
-        core_expression = ~PolarsProvider._matches(column, classifier.pattern)
+        core_expression = ~PolarsClassifierProvider._matches(column, classifier.pattern)
         return base_expression.otherwise(core_expression).cast(pl.UInt8)
 
     @staticmethod
@@ -584,7 +595,7 @@ class PolarsProvider:
             .when(QExpressions.IS_NAN(column, dtype))
             .then(ByteSentinel.NAN)
         )
-        core_expression = PolarsProvider._has_length(
+        core_expression = PolarsClassifierProvider._has_length(
             column, classifier.min, classifier.max
         )
         return base_expression.otherwise(core_expression).cast(pl.UInt8)
@@ -671,11 +682,169 @@ class PolarsProvider:
         )
 
 
+class PolarsCriteriaProvider:
+    def __init__(
+        self,
+        function: (
+            Callable[[CriteriaType, dict[str, set[str]]], pl.Expr]
+            | Callable[[CriteriaType], pl.Expr]
+        ),
+    ):
+        self._function = function
+
+    def __call__(
+        self,
+        criteria: CriteriaType,
+        tags: dict[str, set[str]] | None = None,
+    ) -> pl.Expr:
+        if tags is not None:
+            return self._function(criteria, tags)
+        else:
+            return self._function(criteria)
+
+    @staticmethod
+    def _sentinels(bins: AbstractSet[Any]) -> set[int]:
+        sentinels = set()
+        for binv in bins:
+            match binv:
+                case "none":
+                    sentinels.add(ByteSentinel.NULL)
+                case "nan":
+                    sentinels.add(ByteSentinel.NAN)
+                case "underflow":
+                    sentinels.add(ByteSentinel.UNDERFLOW)
+                case "overflow":
+                    sentinels.add(ByteSentinel.OVERFLOW)
+                case _:
+                    sentinels.add(binv)
+        return sentinels
+
+    @staticmethod
+    def _columns_from_tags(tags_spec, tags_dict: dict[str, set[str]]) -> set[str]:
+        tags = DataQualityEngine._tags_spec_to_list(tags_spec)
+        tags = (
+            None
+            if tags is None
+            else set(DataQualityEngine._tags_spec_to_list(tags_spec))
+        )
+        columns = DataQualityEngine._tags_to_columns(tags, tags_dict)
+        return columns
+
+    @staticmethod
+    def all_ok(
+        criteria: AllOk,
+        tags: dict[str, set[str]],
+    ) -> pl.Expr:
+        columns = PolarsCriteriaProvider._columns_from_tags(criteria.tags, tags)
+        sentinels = [ByteSentinel.TRUE]
+        if criteria.none_is_ok:
+            sentinels.append(ByteSentinel.NULL)
+        if criteria.nan_is_ok:
+            sentinels.append(ByteSentinel.NAN)
+        expressions = [pl.col(column).is_in(sentinels) for column in columns]
+        return pl.all_horizontal(expressions)
+
+    @staticmethod
+    def any_failed(
+        criteria: AnyFailed,
+        tags: dict[str, set[str]],
+    ) -> pl.Expr:
+        columns = PolarsCriteriaProvider._columns_from_tags(criteria.tags, tags)
+        sentinels = [ByteSentinel.FALSE]
+        if not criteria.none_is_ok:
+            sentinels.append(ByteSentinel.NULL)
+        if not criteria.nan_is_ok:
+            sentinels.append(ByteSentinel.NAN)
+        expressions = [pl.col(column).is_in(sentinels) for column in columns]
+        return pl.any_horizontal(expressions)
+
+    @staticmethod
+    def in_bins(
+        criteria: InBins,
+    ) -> pl.Expr:
+        bins = PolarsCriteriaProvider._sentinels(criteria.bins)
+        return pl.col(criteria.column_name).is_in(bins)
+
+    @staticmethod
+    def not_in_bins(
+        criteria: NotInBins,
+    ) -> pl.Expr:
+        bins = PolarsCriteriaProvider._sentinels(criteria.bins)
+        return ~pl.col(criteria.column_name).is_in(bins)
+
+    @staticmethod
+    def _threshold(
+        condition: pl.Expr,
+        criteria: Criteria,
+        threshold: Threshold,
+    ) -> pl.Expr:
+        count = condition.sum()
+        match threshold:
+            case RowCountThreshold():
+                match criteria:
+                    case AllOk() | InBins():
+                        return count.ge(threshold.row_count)
+                    case AnyFailed() | NotInBins():
+                        return count.le(threshold.row_count)
+                    case _:
+                        raise ValueError(f"Unsupported criteria type: {type(criteria)}")
+            case PercentThreshold():
+                percent = count.cast(pl.Float64).mul(100.0).truediv(pl.len())
+                match criteria:
+                    case AllOk() | InBins():
+                        return percent.ge(threshold.percent)
+                    case AnyFailed() | NotInBins():
+                        return percent.le(threshold.percent)
+                    case _:
+                        raise ValueError(f"Unsupported criteria type: {type(criteria)}")
+            case _:
+                raise ValueError(f"Unsupported threshold type: {type(threshold)}")
+
+    @staticmethod
+    def q_all_ok(
+        criteria: AllOk,
+        tags: dict[str, set[str]],
+        threshold: Threshold,
+    ) -> pl.Expr:
+        condition = PolarsCriteriaProvider.all_ok(criteria, tags)
+        return PolarsCriteriaProvider._threshold(condition, criteria, threshold)
+
+    @staticmethod
+    def q_any_failed(
+        criteria: AnyFailed,
+        tags: dict[str, set[str]],
+        threshold: Threshold,
+    ) -> pl.Expr:
+        condition = PolarsCriteriaProvider.any_failed(criteria, tags)
+        return PolarsCriteriaProvider._threshold(condition, criteria, threshold)
+
+    @staticmethod
+    def q_in_bins(
+        criteria: InBins,
+        threshold: Threshold,
+    ) -> pl.Expr:
+        condition = PolarsCriteriaProvider.in_bins(criteria)
+        return PolarsCriteriaProvider._threshold(condition, criteria, threshold)
+
+    @staticmethod
+    def q_not_in_bins(
+        criteria: NotInBins,
+        threshold: Threshold,
+    ) -> pl.Expr:
+        condition = PolarsCriteriaProvider.not_in_bins(criteria)
+        return PolarsCriteriaProvider._threshold(condition, criteria, threshold)
+
+
 @dataclass(frozen=True)
 class ClassifierMetadata:
     column_suffix: str
     classifier_family: ClassifierFamily
-    polars_provider: PolarsProvider
+    polars_provider: PolarsClassifierProvider
+
+
+@dataclass(frozen=True)
+class CriteriaMetadata:
+    polars_provider: PolarsCriteriaProvider
 
 
 @dataclass
@@ -714,6 +883,18 @@ class DataQualityEngine:
             dq_o._schema = schema if schema is not None else dq_i._schema
             dq_o._cols = dq_i._cols if cols is None else cols
             dq_o._tags = dq_i._tags if tags is None else tags
+
+            # ToDo: before cloning we need to review in detail the chained dq loop.
+            # dq_o._cols = (
+            #     {k: ColumnInfo(v.family, v.classifier) for k, v in dq_i._cols.items()}
+            #     if cols is None and dq_i._cols is not None
+            #     else cols if cols is not None else {}
+            # )
+            # dq_o._tags = (
+            #     {k: set(v) for k, v in dq_i._tags.items()}
+            #     if tags is None and dq_i._tags is not None
+            #     else tags if tags is not None else {}
+            # )
         return dq_o
 
     """> Special Functions """
@@ -812,14 +993,20 @@ class DataQualityEngine:
             case _:
                 raise TypeError(f"Invalid tags specification: {tags_spec}")
 
-    def _columns(self, tags: set[str] | None) -> set[str]:
+    @classmethod
+    def _tags_to_columns(
+        cls, tags: set[str] | None, tags_dict: dict[str, set[str]]
+    ) -> set[str]:
         if tags is None:
-            vtags = self._tags.keys()
+            vtags = tags_dict.keys()
         elif len(tags) == 0:
             vtags = [None]
         else:
             vtags = tags
-        return set().union(*(self._tags[tag] for tag in vtags if tag in self._tags))
+        return set().union(*(tags_dict[tag] for tag in vtags if tag in tags_dict))
+
+    def _columns(self, tags: set[str] | None) -> set[str]:
+        return self._tags_to_columns(tags, self._tags)
 
     @classmethod
     def _name(
@@ -850,7 +1037,7 @@ class DataQualityEngine:
 
     """> Quality Classification Functions """
 
-    def _classify(
+    def _classifier_plan(
         self,
         classifier: Classifier,
     ) -> Self:
@@ -899,123 +1086,220 @@ class DataQualityEngine:
         self,
         is_null: IsNull,
     ) -> Self:
-        return self._classify(is_null)
+        return self._classifier_plan(is_null)
 
     def is_not_null(
         self,
         is_not_null: IsNotNull,
     ) -> Self:
-        return self._classify(is_not_null)
+        return self._classifier_plan(is_not_null)
 
     def is_nan(
         self,
         is_nan: IsNan,
     ) -> Self:
-        return self._classify(is_nan)
+        return self._classifier_plan(is_nan)
 
     def is_not_nan(
         self,
         is_not_nan: IsNotNan,
     ) -> Self:
-        return self._classify(is_not_nan)
+        return self._classifier_plan(is_not_nan)
 
     def is_null_or_nan(
         self,
         is_null_or_nan: IsNullOrNan,
     ) -> Self:
-        return self._classify(is_null_or_nan)
+        return self._classifier_plan(is_null_or_nan)
 
     def is_not_null_nor_nan(
         self,
         is_not_null_nor_nan: IsNotNullNorNan,
     ) -> Self:
-        return self._classify(is_not_null_nor_nan)
+        return self._classifier_plan(is_not_null_nor_nan)
 
     def is_zero(
         self,
         is_zero: IsZero,
     ) -> Self:
-        return self._classify(is_zero)
+        return self._classifier_plan(is_zero)
 
     def is_not_zero(
         self,
         is_not_zero: IsNotZero,
     ) -> Self:
-        return self._classify(is_not_zero)
+        return self._classifier_plan(is_not_zero)
 
     def is_positive(
         self,
         is_positive: IsPositive,
     ) -> Self:
-        return self._classify(is_positive)
+        return self._classifier_plan(is_positive)
 
     def is_positive_or_zero(
         self,
         is_positive_or_zero: IsPositiveOrZero,
     ) -> Self:
-        return self._classify(is_positive_or_zero)
+        return self._classifier_plan(is_positive_or_zero)
 
     def is_negative(
         self,
         is_negative: IsNegative,
     ) -> Self:
-        return self._classify(is_negative)
+        return self._classifier_plan(is_negative)
 
     def is_negative_or_zero(
         self,
         is_negative_or_zero: IsNegativeOrZero,
     ) -> Self:
-        return self._classify(is_negative_or_zero)
+        return self._classifier_plan(is_negative_or_zero)
 
     def is_between(
         self,
         is_between: IsBetween,
     ) -> Self:
-        return self._classify(is_between)
+        return self._classifier_plan(is_between)
 
     def is_not_between(
         self,
         is_not_between: IsNotBetween,
     ) -> Self:
-        return self._classify(is_not_between)
+        return self._classifier_plan(is_not_between)
 
     def is_in(
         self,
         is_in: IsIn,
     ) -> Self:
-        return self._classify(is_in)
+        return self._classifier_plan(is_in)
 
     def is_not_in(
         self,
         is_not_in: IsNotIn,
     ) -> Self:
-        return self._classify(is_not_in)
+        return self._classifier_plan(is_not_in)
 
     def matches(
         self,
         matches: Matches,
     ) -> Self:
-        return self._classify(matches)
+        return self._classifier_plan(matches)
 
     def does_not_match(
         self,
         does_not_match: DoesNotMatch,
     ) -> Self:
-        return self._classify(does_not_match)
+        return self._classifier_plan(does_not_match)
 
     def has_length(
         self,
         has_length: HasLength,
     ) -> Self:
-        return self._classify(has_length)
+        return self._classifier_plan(has_length)
 
     def categorizer(
         self,
         categorizer: Categorizer,
     ) -> Self:
-        return self._classify(categorizer)
+        return self._classifier_plan(categorizer)
+
+    """> Quality Criteria Functions """
+
+    def _criteria_plan(
+        self,
+        criteria_list: list[Criteria],
+    ) -> pl.Expr:
+        expressions = []
+        for criterion in criteria_list:
+            match criterion:
+                case AllOk():
+                    expressions.append(
+                        PolarsCriteriaProvider.all_ok(criterion, self._tags)
+                    )
+                case AnyFailed():
+                    expressions.append(
+                        PolarsCriteriaProvider.any_failed(criterion, self._tags)
+                    )
+                case InBins():
+                    expressions.append(PolarsCriteriaProvider.in_bins(criterion))
+                case NotInBins():
+                    expressions.append(PolarsCriteriaProvider.not_in_bins(criterion))
+                case _:
+                    raise ValueError(f"Unsupported criteria type: {type(criterion)}")
+        if len(expressions) == 1:
+            return expressions[0]
+        return pl.any_horizontal(expressions)
+
+    def _q_criteria_plan(
+        self,
+        criteria_list: list[Criteria],
+        threshold: Threshold,
+    ) -> pl.Expr:
+        expressions = []
+        for criterion in criteria_list:
+            match criterion:
+                case AllOk():
+                    expressions.append(
+                        PolarsCriteriaProvider.q_all_ok(
+                            criterion,
+                            self._tags,
+                            threshold,
+                        )
+                    )
+                case AnyFailed():
+                    expressions.append(
+                        PolarsCriteriaProvider.q_any_failed(
+                            criterion,
+                            self._tags,
+                            threshold,
+                        )
+                    )
+                case InBins():
+                    expressions.append(
+                        PolarsCriteriaProvider.q_in_bins(
+                            criterion,
+                            threshold,
+                        )
+                    )
+                case NotInBins():
+                    expressions.append(
+                        PolarsCriteriaProvider.q_not_in_bins(
+                            criterion,
+                            threshold,
+                        )
+                    )
+                case _:
+                    raise ValueError(f"Unsupported criteria type: {type(criterion)}")
+        if len(expressions) == 1:
+            return expressions[0]
+        return pl.any_horizontal(expressions)
 
     """> Quality Operation Functions """
+
+    # noinspection DuplicatedCode
+    def fail(
+        self,
+        criteria: Criteria,
+        threshold: Threshold,
+    ) -> None:
+        condition = self._q_criteria_plan([criteria], threshold)
+        it_is_fine = self._tf._lf.select(condition).collect().item()
+        logger.warning(
+            f"Final result (is_fine={it_is_fine}), will_raise={not it_is_fine}"
+        )
+
+        if not it_is_fine:
+            table_name = (
+                self._tf._data_table.name
+                if hasattr(self._tf, "_data_table") and self._tf._data_table is not None
+                else "undefined"
+            )
+            raise DataQualityProcessingError(
+                ErrorCode.DQPE14,
+                table_name,
+                str(criteria),
+                str(threshold),
+            )
+        return None
 
     # noinspection DuplicatedCode
     def enrich(
@@ -1313,101 +1597,128 @@ CLASSIFIER_DICTIONARY: dict[type, ClassifierMetadata] = {
     IsNull: ClassifierMetadata(
         column_suffix="_is_null",
         classifier_family=ClassifierFamily.BOOLEAN,
-        polars_provider=PolarsProvider(PolarsProvider.is_null),
+        polars_provider=PolarsClassifierProvider(PolarsClassifierProvider.is_null),
     ),
     IsNotNull: ClassifierMetadata(
         column_suffix="_is_not_null",
         classifier_family=ClassifierFamily.BOOLEAN,
-        polars_provider=PolarsProvider(PolarsProvider.is_not_null),
+        polars_provider=PolarsClassifierProvider(PolarsClassifierProvider.is_not_null),
     ),
     IsNan: ClassifierMetadata(
         column_suffix="_is_nan",
         classifier_family=ClassifierFamily.BOOLEAN,
-        polars_provider=PolarsProvider(PolarsProvider.is_nan),
+        polars_provider=PolarsClassifierProvider(PolarsClassifierProvider.is_nan),
     ),
     IsNotNan: ClassifierMetadata(
         column_suffix="_is_not_nan",
         classifier_family=ClassifierFamily.BOOLEAN,
-        polars_provider=PolarsProvider(PolarsProvider.is_not_nan),
+        polars_provider=PolarsClassifierProvider(PolarsClassifierProvider.is_not_nan),
     ),
     IsNullOrNan: ClassifierMetadata(
         column_suffix="_is_null_or_nan",
         classifier_family=ClassifierFamily.BOOLEAN,
-        polars_provider=PolarsProvider(PolarsProvider.is_null_or_nan),
+        polars_provider=PolarsClassifierProvider(
+            PolarsClassifierProvider.is_null_or_nan
+        ),
     ),
     IsNotNullNorNan: ClassifierMetadata(
         column_suffix="_is_not_null_nor_nan",
         classifier_family=ClassifierFamily.BOOLEAN,
-        polars_provider=PolarsProvider(PolarsProvider.is_not_null_nor_nan),
+        polars_provider=PolarsClassifierProvider(
+            PolarsClassifierProvider.is_not_null_nor_nan
+        ),
     ),
     IsZero: ClassifierMetadata(
         column_suffix="_is_zero",
         classifier_family=ClassifierFamily.BOOLEAN,
-        polars_provider=PolarsProvider(PolarsProvider.is_zero),
+        polars_provider=PolarsClassifierProvider(PolarsClassifierProvider.is_zero),
     ),
     IsNotZero: ClassifierMetadata(
         column_suffix="_is_not_zero",
         classifier_family=ClassifierFamily.BOOLEAN,
-        polars_provider=PolarsProvider(PolarsProvider.is_not_zero),
+        polars_provider=PolarsClassifierProvider(PolarsClassifierProvider.is_not_zero),
     ),
     IsPositive: ClassifierMetadata(
         column_suffix="_is_positive",
         classifier_family=ClassifierFamily.BOOLEAN,
-        polars_provider=PolarsProvider(PolarsProvider.is_positive),
+        polars_provider=PolarsClassifierProvider(PolarsClassifierProvider.is_positive),
     ),
     IsPositiveOrZero: ClassifierMetadata(
         column_suffix="_is_positive_or_zero",
         classifier_family=ClassifierFamily.BOOLEAN,
-        polars_provider=PolarsProvider(PolarsProvider.is_positive_or_zero),
+        polars_provider=PolarsClassifierProvider(
+            PolarsClassifierProvider.is_positive_or_zero
+        ),
     ),
     IsNegative: ClassifierMetadata(
         column_suffix="_is_negative",
         classifier_family=ClassifierFamily.BOOLEAN,
-        polars_provider=PolarsProvider(PolarsProvider.is_negative),
+        polars_provider=PolarsClassifierProvider(PolarsClassifierProvider.is_negative),
     ),
     IsNegativeOrZero: ClassifierMetadata(
         column_suffix="_is_negative_or_zero",
         classifier_family=ClassifierFamily.BOOLEAN,
-        polars_provider=PolarsProvider(PolarsProvider.is_negative_or_zero),
+        polars_provider=PolarsClassifierProvider(
+            PolarsClassifierProvider.is_negative_or_zero
+        ),
     ),
     IsBetween: ClassifierMetadata(
         column_suffix="_is_between",
         classifier_family=ClassifierFamily.BOOLEAN,
-        polars_provider=PolarsProvider(PolarsProvider.is_between),
+        polars_provider=PolarsClassifierProvider(PolarsClassifierProvider.is_between),
     ),
     IsNotBetween: ClassifierMetadata(
         column_suffix="_is_not_between",
         classifier_family=ClassifierFamily.BOOLEAN,
-        polars_provider=PolarsProvider(PolarsProvider.is_not_between),
+        polars_provider=PolarsClassifierProvider(
+            PolarsClassifierProvider.is_not_between
+        ),
     ),
     IsIn: ClassifierMetadata(
         column_suffix="_is_in",
         classifier_family=ClassifierFamily.BOOLEAN,
-        polars_provider=PolarsProvider(PolarsProvider.is_in),
+        polars_provider=PolarsClassifierProvider(PolarsClassifierProvider.is_in),
     ),
     IsNotIn: ClassifierMetadata(
         column_suffix="_is_not_in",
         classifier_family=ClassifierFamily.BOOLEAN,
-        polars_provider=PolarsProvider(PolarsProvider.is_not_in),
+        polars_provider=PolarsClassifierProvider(PolarsClassifierProvider.is_not_in),
     ),
     Matches: ClassifierMetadata(
         column_suffix="_matches",
         classifier_family=ClassifierFamily.BOOLEAN,
-        polars_provider=PolarsProvider(PolarsProvider.matches),
+        polars_provider=PolarsClassifierProvider(PolarsClassifierProvider.matches),
     ),
     DoesNotMatch: ClassifierMetadata(
         column_suffix="_does_not_match",
         classifier_family=ClassifierFamily.BOOLEAN,
-        polars_provider=PolarsProvider(PolarsProvider.does_not_match),
+        polars_provider=PolarsClassifierProvider(
+            PolarsClassifierProvider.does_not_match
+        ),
     ),
     HasLength: ClassifierMetadata(
         column_suffix="_has_length",
         classifier_family=ClassifierFamily.BOOLEAN,
-        polars_provider=PolarsProvider(PolarsProvider.has_length),
+        polars_provider=PolarsClassifierProvider(PolarsClassifierProvider.has_length),
     ),
     Categorizer: ClassifierMetadata(
         column_suffix="_category",
         classifier_family=ClassifierFamily.CATEGORICAL,
-        polars_provider=PolarsProvider(PolarsProvider.categorizer),
+        polars_provider=PolarsClassifierProvider(PolarsClassifierProvider.categorizer),
+    ),
+}
+
+CRITERIA_DICTIONARY: dict[type, CriteriaMetadata] = {
+    AllOk: CriteriaMetadata(
+        polars_provider=PolarsCriteriaProvider(PolarsCriteriaProvider.all_ok),
+    ),
+    AnyFailed: CriteriaMetadata(
+        polars_provider=PolarsCriteriaProvider(PolarsCriteriaProvider.any_failed),
+    ),
+    InBins: CriteriaMetadata(
+        polars_provider=PolarsCriteriaProvider(PolarsCriteriaProvider.in_bins),
+    ),
+    NotInBins: CriteriaMetadata(
+        polars_provider=PolarsCriteriaProvider(PolarsCriteriaProvider.not_in_bins),
     ),
 }

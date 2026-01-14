@@ -1296,6 +1296,13 @@ class ErrorCode(Enum):
                    "unsupported data type. Only basic data types and comon date, time, "
                    "or duration types are supported.”",
     }
+    DQPE14 = {
+        "code": "DQPE-014",
+        "message": (
+            "Data quality check failed for table '{}': criteria '{}' exceeded "
+            "threshold '{}'"
+        ),
+    }
     DQCE80 = {
         "code": "DQCE-080",
         "message": (
