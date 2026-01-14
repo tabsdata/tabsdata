@@ -183,6 +183,7 @@ def dq_negative_parameters():
             td_dtypes.UInt64,
         ]
     ]
+    signed_dtypes = sorted(signed_dtypes, key=lambda t: t.__name__)
 
     test_cases = []
 
