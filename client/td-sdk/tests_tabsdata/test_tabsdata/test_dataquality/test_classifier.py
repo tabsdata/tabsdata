@@ -68,14 +68,14 @@ def test_does_not_match_classifier_no_tags():
     classifier = DoesNotMatch(column_names="column_a", pattern="^test_.*")
     assert classifier.column_names == [("column_a", None)]
     assert classifier.pattern == "^test_.*"
-    assert classifier.tags == None
+    assert classifier.tags is None
 
 
 def test_does_not_match_classifier_no_columns():
     classifier = DoesNotMatch(pattern="^test_.*")
     assert classifier.column_names is None
     assert classifier.pattern == "^test_.*"
-    assert classifier.tags == None
+    assert classifier.tags is None
 
 
 def test_does_not_match_classifier_column_tuple():
@@ -311,7 +311,7 @@ def test_is_not_between_classifier_wrong_min_max():
 def test_is_nan_classifier():
     classifier = IsNan()
     assert classifier.column_names is None
-    assert classifier.tags == None
+    assert classifier.tags is None
 
 
 def test_is_negative_classifier():
@@ -352,7 +352,7 @@ def test_is_not_null_classifier():
 def test_is_not_null_nor_nan_classifier():
     classifier = IsNotNullNorNan(column_names="column_a")
     assert classifier.column_names == [("column_a", None)]
-    assert classifier.tags == None
+    assert classifier.tags is None
 
 
 def test_is_not_zero_classifier():
@@ -412,21 +412,21 @@ def test_matches_classifier_no_tags():
     classifier = Matches(column_names="column_a", pattern="^test_.*")
     assert classifier.column_names == [("column_a", None)]
     assert classifier.pattern == "^test_.*"
-    assert classifier.tags == None
+    assert classifier.tags is None
 
 
 def test_matches_classifier_ignore_nulls():
     classifier = Matches(column_names="column_a", pattern="^test_.*")
     assert classifier.column_names == [("column_a", None)]
     assert classifier.pattern == "^test_.*"
-    assert classifier.tags == None
+    assert classifier.tags is None
 
 
 def test_matches_classifier_no_columns():
     classifier = Matches(pattern="^test_.*")
     assert classifier.column_names is None
     assert classifier.pattern == "^test_.*"
-    assert classifier.tags == None
+    assert classifier.tags is None
 
 
 def test_matches_classifier_wrong_patttern_type():

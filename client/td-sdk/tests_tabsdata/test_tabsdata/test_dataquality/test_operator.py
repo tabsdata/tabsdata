@@ -191,7 +191,7 @@ def test_enrich_class():
 def test_enrich_class_defaults():
     enrich = Enrich()
     assert enrich.to_table is None
-    assert enrich.tags == None
+    assert enrich.tags is None
 
 
 def test_enrich_wrong_to_table_type():
