@@ -77,6 +77,8 @@ if TYPE_CHECKING:
     # noinspection PyProtectedMember
     from tabsdata.dataquality._typing import ColumnNameWithAltSpec, TagsSpec
 
+NO_TAG_COLUMNS_KEY = None
+
 DQ_VERSION = 1
 MAX_BINS = 100
 
@@ -1030,7 +1032,7 @@ class DataQualityEngine:
         if tags is None:
             vtags = tags_dict.keys()
         elif len(tags) == 0:
-            vtags = [None]
+            vtags = [NO_TAG_COLUMNS_KEY]
         else:
             vtags = tags
         return set().union(*(tags_dict[tag] for tag in vtags if tag in tags_dict))
@@ -1101,7 +1103,7 @@ class DataQualityEngine:
                     )
                 }
             )
-            vtags = tags if tags else [None]
+            vtags = tags if tags else [NO_TAG_COLUMNS_KEY]
             for tag in vtags:
                 if tag not in self._tags:
                     self._tags[tag] = set()
