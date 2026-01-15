@@ -61,7 +61,7 @@ tomlkit==0.13.3
 tqdm==4.67.1
 twine==6.2.0
 uvicorn==0.38.0
-virtualenv==20.35.4
+virtualenv==20.36.1
 wheel
 wheel-inspect
 
