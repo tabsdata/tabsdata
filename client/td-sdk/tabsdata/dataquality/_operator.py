@@ -35,7 +35,7 @@ class Operator(ABC):
     """
 
     @_td_validate_call(ErrorCode.PVDQOP1)
-    def __init__(self, *, tags: TagsSpec|None = None):
+    def __init__(self, *, tags: TagsSpec | None = None):
         """Initializes the operator with optional tags.
 
         Args:
@@ -47,7 +47,7 @@ class Operator(ABC):
         self._tags = _normalize_to_list(tags, keep_none=True)
 
     @property
-    def tags(self) -> list[TagSpec]|None:
+    def tags(self) -> list[TagSpec] | None:
         """Returns the list of tags associated with this operator."""
         return self._tags
 
@@ -65,7 +65,7 @@ class BoolCriteria(Criteria, ABC):
     """A boolean criteria to select records based on classifier results."""
 
     def __init__(
-        self, none_is_ok: bool, nan_is_ok: bool, *, tags: TagsSpec|None = None
+        self, none_is_ok: bool, nan_is_ok: bool, *, tags: TagsSpec | None = None
     ):
         """Initializes the `BoolCriteria` operator.
 
@@ -79,7 +79,7 @@ class BoolCriteria(Criteria, ABC):
         self._nan_is_ok = nan_is_ok
 
     @property
-    def tags(self) -> list[TagSpec]|None:
+    def tags(self) -> list[TagSpec] | None:
         """Returns the list of tags associated with this operator."""
         return self._tags
 
@@ -134,7 +134,7 @@ class AllOk(BoolCriteria):
         none_is_ok: bool = False,
         nan_is_ok: bool = False,
         *,
-        tags: TagsSpec|None = None,
+        tags: TagsSpec | None = None,
     ):
         """Creates a criteria that selects records where all boolean classifiers
         pass (`True`).
@@ -159,7 +159,7 @@ class AnyFailed(BoolCriteria):
         none_is_ok: bool = False,
         nan_is_ok: bool = False,
         *,
-        tags: TagsSpec|None = None,
+        tags: TagsSpec | None = None,
     ):
         """Creates a criteria that selects records where at least one boolean
         classifier fails (`False`).
@@ -272,7 +272,7 @@ class Enrich(Operator):
         self,
         to_table: Optional[TableName] = None,
         *,
-        tags: TagsSpec|None = None,
+        tags: TagsSpec | None = None,
     ):
         """Initializes the `Enrich` operator.
 
@@ -434,7 +434,7 @@ class Summary(Operator):
 
     @_td_validate_call(ErrorCode.PVDQOP11)
     def __init__(
-        self, table: Optional[TableName] = None, *, tags: TagsSpec|None = None
+        self, table: Optional[TableName] = None, *, tags: TagsSpec | None = None
     ):
         """Initializes the `Summary` operator.
 

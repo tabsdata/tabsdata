@@ -2216,6 +2216,7 @@ class ErrorCode(Enum):
     PVDQCL41 = {}
     PVDQCL42 = {}
     PVDQCL43 = {}
+    PVDQCL44 = {}
 
     PVDQOP1 = {}
     PVDQOP2 = {}
@@ -2522,8 +2523,7 @@ class ParameterValidationError(TabsDataException):
             raise Exception("Error_code param cannot be None")
         if not isinstance(pyd_validation_error, ValidationError):
             raise Exception(
-                "Parameter 'pyd_validation_error' "
-                "is not a ValidationError object"
+                "Parameter 'pyd_validation_error' is not a ValidationError object"
             )
 
         (mod, cls, fn) = _get_function_details(function)

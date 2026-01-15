@@ -114,12 +114,12 @@ class IdentityScale(Scale):
             max_val: The maximum integer value of the scale.
             use_bin_zero: If `False`, the minimum value is part of the first bin.
         """
-        _validate_min_max(
+        _validate_identity_min_max(
             min_val,
             max_val,
             "IdentityScale.__init__",
             ["min_val", "max_val"],
-            ErrorCode.PVDQCL32,
+            ErrorCode.PVDQCL44,
         )
         super().__init__((min_val, max_val), max_val - min_val, use_bin_zero)
 
@@ -372,7 +372,7 @@ class Classifier(ABC):
         on_missing_column: OnInvalidColumnSpec = "ignore",
         on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
-        tags: TagsSpec|None = None,
+        tags: TagsSpec | None = None,
     ):
         """
         Initializes the classifier.
@@ -407,7 +407,7 @@ class Classifier(ABC):
         return self._column_names
 
     @property
-    def tags(self) -> list[TagSpec]|None:
+    def tags(self) -> list[TagSpec] | None:
         """
         Returns the list of tags associated with the classifier.
         """
@@ -452,6 +452,25 @@ class BoolClassifier(Classifier):
     @abstractmethod
     def to_dict(self) -> dict:
         pass
+
+
+def _validate_identity_min_max(
+    min_val: ScaleLimitSpec,
+    max_val: ScaleLimitSpec,
+    fn_name: str,
+    fn_params: Union[str, list[str]],
+    error_code: ErrorCode,
+):
+    """Validates that `min_val` is less than `max_val`."""
+    if min_val >= max_val:
+        msg = (
+            f"min={min_val}, max={max_val}, the maximum value must be strictly "
+            "greater than the minimum value."
+        )
+        raise ParameterValueError(error_code, fn_name, fn_params, msg)
+    if max_val - min_val > 100:
+        msg = f"min={min_val}, max={max_val}, maximum delta is 100."
+        raise ParameterValueError(error_code, fn_name, fn_params, msg)
 
 
 def _validate_min_max(
@@ -505,7 +524,7 @@ class Categorizer(Classifier):
         on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
         scale: Scale,
-        tags: TagsSpec|None = None,
+        tags: TagsSpec | None = None,
     ):
         """
         Initializes a categorizer.
@@ -566,7 +585,7 @@ class IsNull(BoolClassifier):
         column_names: Optional[ColumNamesWithAltSpec] = None,
         on_missing_column: OnInvalidColumnSpec = "ignore",
         *,
-        tags: TagsSpec|None = None,
+        tags: TagsSpec | None = None,
     ):
         """
         Initializes the `IsNull` classifier.
@@ -604,7 +623,7 @@ class IsNotNull(BoolClassifier):
         column_names: Optional[ColumNamesWithAltSpec] = None,
         on_missing_column: OnInvalidColumnSpec = "ignore",
         *,
-        tags: TagsSpec|None = None,
+        tags: TagsSpec | None = None,
     ):
         """
         Initializes the `IsNotNull` classifier.
@@ -643,7 +662,7 @@ class IsNan(BoolClassifier):
         on_missing_column: OnInvalidColumnSpec = "ignore",
         on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
-        tags: TagsSpec|None = None,
+        tags: TagsSpec | None = None,
     ):
         """
         Initializes the `IsNan` classifier.
@@ -684,7 +703,7 @@ class IsNotNan(BoolClassifier):
         on_missing_column: OnInvalidColumnSpec = "ignore",
         on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
-        tags: TagsSpec|None = None,
+        tags: TagsSpec | None = None,
     ):
         """
         Initializes the `IsNotNan` classifier.
@@ -725,7 +744,7 @@ class IsNullOrNan(BoolClassifier):
         on_missing_column: OnInvalidColumnSpec = "ignore",
         on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
-        tags: TagsSpec|None = None,
+        tags: TagsSpec | None = None,
     ):
         """
         Initializes the `IsNullOrNan` classifier.
@@ -766,7 +785,7 @@ class IsNotNullNorNan(BoolClassifier):
         on_missing_column: OnInvalidColumnSpec = "ignore",
         on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
-        tags: TagsSpec|None = None,
+        tags: TagsSpec | None = None,
     ):
         """
         Initializes the `IsNotNullNorNan` classifier.
@@ -808,7 +827,7 @@ class IsZero(BoolClassifier):
         on_missing_column: OnInvalidColumnSpec = "ignore",
         on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
-        tags: TagsSpec|None = None,
+        tags: TagsSpec | None = None,
     ):
         """
         Initializes the `IsZero` classifier.
@@ -849,7 +868,7 @@ class IsNotZero(BoolClassifier):
         on_missing_column: OnInvalidColumnSpec = "ignore",
         on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
-        tags: TagsSpec|None = None,
+        tags: TagsSpec | None = None,
     ):
         """
         Initializes the `IsNotZero` classifier.
@@ -890,7 +909,7 @@ class IsPositive(BoolClassifier):
         on_missing_column: OnInvalidColumnSpec = "ignore",
         on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
-        tags: TagsSpec|None = None,
+        tags: TagsSpec | None = None,
     ):
         """
         Initializes the `IsPositive` classifier.
@@ -931,7 +950,7 @@ class IsPositiveOrZero(BoolClassifier):
         on_missing_column: OnInvalidColumnSpec = "ignore",
         on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
-        tags: TagsSpec|None = None,
+        tags: TagsSpec | None = None,
     ):
         """
         Initializes the `IsPositiveOrZero` classifier.
@@ -972,7 +991,7 @@ class IsNegative(BoolClassifier):
         on_missing_column: OnInvalidColumnSpec = "ignore",
         on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
-        tags: TagsSpec|None = None,
+        tags: TagsSpec | None = None,
     ):
         """
         Initializes the `IsNegative` classifier.
@@ -1013,7 +1032,7 @@ class IsNegativeOrZero(BoolClassifier):
         on_missing_column: OnInvalidColumnSpec = "ignore",
         on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
-        tags: TagsSpec|None = None,
+        tags: TagsSpec | None = None,
     ):
         """
         Initializes the `IsNegativeOrZero` classifier.
@@ -1058,7 +1077,7 @@ class IsBetween(BoolClassifier):
         on_missing_column: OnInvalidColumnSpec = "ignore",
         on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
-        tags: TagsSpec|None = None,
+        tags: TagsSpec | None = None,
     ):
         """
         Initializes the `IsBetween` classifier.
@@ -1129,7 +1148,7 @@ class IsNotBetween(BoolClassifier):
         on_missing_column: OnInvalidColumnSpec = "ignore",
         on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
-        tags: TagsSpec|None = None,
+        tags: TagsSpec | None = None,
     ):
         """
         Initializes the `IsNotBetween` classifier.
@@ -1197,7 +1216,7 @@ class IsIn(BoolClassifier):
         on_missing_column: OnInvalidColumnSpec = "ignore",
         *,
         values: Collection,
-        tags: TagsSpec|None = None,
+        tags: TagsSpec | None = None,
     ):
         """
         Initializes the `IsIn` classifier.
@@ -1245,7 +1264,7 @@ class IsNotIn(BoolClassifier):
         on_missing_column: OnInvalidColumnSpec = "ignore",
         *,
         values: Collection,
-        tags: TagsSpec|None = None,
+        tags: TagsSpec | None = None,
     ):
         """
         Initializes the `IsNotIn` classifier.
@@ -1294,7 +1313,7 @@ class Matches(BoolClassifier):
         on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
         pattern: str,
-        tags: TagsSpec|None = None,
+        tags: TagsSpec | None = None,
     ):
         """
         Initializes the `Matches` classifier.
@@ -1349,7 +1368,7 @@ class DoesNotMatch(BoolClassifier):
         on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
         pattern: str,
-        tags: TagsSpec|None = None,
+        tags: TagsSpec | None = None,
     ):
         """
         Initializes the `DoesNotMatch` classifier.
@@ -1404,7 +1423,7 @@ class HasLength(BoolClassifier):
         on_missing_column: OnInvalidColumnSpec = "ignore",
         on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
-        tags: TagsSpec|None = None,
+        tags: TagsSpec | None = None,
     ):
         """
         Initializes the `HasLength` classifier.

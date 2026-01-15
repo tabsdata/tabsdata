@@ -146,7 +146,7 @@ A type alias for a percentage value, which can be an integer or a float between
 
 # --- Scale Specifications ---
 
-ScaleIdentityLimitSpec = Annotated[StrictInt, Field(ge=0, le=100)]
+ScaleIdentityLimitSpec = StrictInt
 """A type alias for a limit in a scale identity, ranging from 0 to 100."""
 
 ScaleLimitSpec = Union[StrictInt, StrictFloat]
