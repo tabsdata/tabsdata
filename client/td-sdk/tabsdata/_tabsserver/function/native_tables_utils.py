@@ -85,7 +85,9 @@ def sink_lf_to_location(
     lf: pl.LazyFrame,
     execution_context: ExecutionContext,
     location: Location,
-):
+    *,
+    lazy: bool = False,
+) -> pl.LazyFrame | None:
     if location.uri is None:
         raise ValueError(
             "Location URI must be specified to sink a LazyFrame. Got "
@@ -122,6 +124,19 @@ def sink_lf_to_location(
     ]
     if columns_to_drop:
         lf = lf.drop(columns_to_drop)
-    lf.sink_parquet(uri, storage_options=storage_options, maintain_order=True)
+    sink_kwargs = dict(storage_options=storage_options, maintain_order=True)
+    if lazy:
+        sink_result = lf.sink_parquet(
+            uri,
+            lazy=True,
+            **sink_kwargs,
+        )
+        logger.debug("LazyFrame sink prepared successfully (lazy execution).")
+        return sink_result
+    lf.sink_parquet(
+        uri,
+        lazy=False,
+        **sink_kwargs,
+    )
     logger.debug("LazyFrame sunk successfully.")
-    return
+    return None

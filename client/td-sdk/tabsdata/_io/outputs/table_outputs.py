@@ -7,6 +7,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+import polars as pl
+
 from tabsdata._io.plugin import DestinationPlugin
 from tabsdata._tabsserver.function.native_tables_utils import sink_lf_to_location
 from tabsdata._tabsserver.function.store_results_utils import (
@@ -72,16 +74,16 @@ class TableOutput(DestinationPlugin):
 
     def _run(self, execution_context: ExecutionContext, results: ResultsCollection):
         self._tabsdata_internal_logger = execution_context.logger
-        logger = self._tabsdata_internal_logger
-        logger.info(f"Exporting files with plugin '{self}'")
-        logger.debug("Processing results of the user-provided function")
+        run_logger = self._tabsdata_internal_logger
+        run_logger.info(f"Exporting files with plugin '{self}'")
+        run_logger.debug("Processing results of the user-provided function")
         modified_tables = _store_results_in_table(results, self, execution_context)
-        logger.info(f"Exported files with plugin {self} successfully")
+        run_logger.info(f"Exported files with plugin {self} successfully")
         execution_context.status.modified_tables = modified_tables
 
 
 # noinspection PyProtectedMember
-def _store_results_in_table(
+def _store_results_in_table(  # noqa: C901
     results: ResultsCollection,
     destination: TableOutput,
     execution_context: ExecutionContext,
@@ -109,7 +111,7 @@ def _store_results_in_table(
     )
 
     # Note: destination.table is a list of strings, it can't be a single string because
-    # when we serialised it we stored it as such even if it was a single one.
+    # when we serialized it we stored it as such even if it was a single one.
     if len(request_output_entry_list) != len(destination_tables):
         logger.error(
             "Number of tables in the execution context output"
@@ -152,6 +154,7 @@ def _store_results_in_table(
             f"tables to store ({len(table_list)}). No data stored."
         )
     modified_tables = []
+    lazy_sinks: list[pl.LazyFrame] = []
     for result, table in zip(results, table_list):
         logger.info(f"Storing result in table '{table}'")
         if isinstance(result.value, TableFrame):
@@ -166,7 +169,16 @@ def _store_results_in_table(
                 idx=result_value._idx,
                 properties=result_value._properties,
             )
-            sink_lf_to_location(tf._to_lazy(), execution_context, table.location)
+            lazy_sink = sink_lf_to_location(
+                tf._to_lazy(),
+                execution_context,
+                table.location,
+                # Disabling parallel sink execution as feature from Polar's side is
+                # still unstable and producing errors.
+                lazy=False,
+            )
+            if lazy_sink is not None:
+                lazy_sinks.append(lazy_sink)
             table_meta_info = get_table_meta_info_from_lf(lf)
             table_info = {"name": table.name, "meta_info": table_meta_info}
             modified_tables.append(table_info)
@@ -185,6 +197,25 @@ def _store_results_in_table(
             raise TypeError(
                 f"Invalid result type: '{type(result.value)}'. No data stored."
             )
+    if lazy_sinks:
+        logger.debug(f"Collecting {len(lazy_sinks)} lazy sinks for execution.")
+
+        # Note: At this point, all `lazy_sinks` are `pl.LazyFrame` objects produced by
+        #       `sink_*` operations with `lazy=True`. According to the Polars execution
+        #       model, this does not trigger an immediate materialization (no real
+        #       collect); instead, it represents a sink execution where multiple lazy
+        #       plans are executed together.
+        #
+        #       By executing these sinks jointly, Polars can share a single optimized
+        #       execution plan across the involved lazy frames, avoiding redundant work.
+        #       This enables common source subplans to be evaluated once and reused,
+        #       improving overall performance.
+        #
+        #       This pattern is particularly beneficial for action-style workflows
+        #       (e.g. data quality checks), where multiple derived lazy frames often
+        #       originate from the same user-provided output lazy frame.
+
+        pl.collect_all(lazy_sinks)
     logger.info("Results stored in tables")
     logger.debug(f"Modified tables: {modified_tables}")
     return modified_tables
