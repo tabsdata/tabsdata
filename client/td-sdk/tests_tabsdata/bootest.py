@@ -8,6 +8,7 @@ modules are loaded.
 
 import logging
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -79,6 +80,15 @@ def _get_tdlocal_folder() -> str:
 
 
 TDLOCAL_FOLDER = _get_tdlocal_folder()
+
+
+def _clean_tdlocal_folder():
+    if os.path.isdir(TDLOCAL_FOLDER):
+        for path in Path(TDLOCAL_FOLDER).iterdir():
+            if path.is_dir() and path.name.startswith("test_"):
+                shutil.rmtree(path)
+
+_clean_tdlocal_folder()
 
 
 # Add different paths to sys.path to avoid issues with imports
