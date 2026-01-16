@@ -38,8 +38,8 @@ pub fn wait_for_attach(signal: &str) {
 /// Checks if Tabs Data No Wait flag is activated as an environment variable.
 // When debugging, this environment variable can make the supervisor not to wait for workers.
 pub fn check_nowait_env() -> bool {
-    const TABSDATA_NOWAIT: &str = "TABSDATA_NOWAIT";
-    check_flag_env(TABSDATA_NOWAIT)
+    const TD_SUPERVISOR_NOWAIT: &str = "TD_SUPERVISOR_NOWAIT";
+    check_flag_env(TD_SUPERVISOR_NOWAIT)
 }
 
 /// Checks if Tabs Data Attach flag is activated as an environment variable.
