@@ -62,6 +62,7 @@ from tabsdata.dataquality._classifier import (
     LinearScale,
     LogarithmicScale,
     MonomialScale,
+    ScaleCategorizer,
 )
 from tabsdata.dataquality._operator import BoolCriteria, CategoryCriteria, Enrich, Fail
 from tabsdata.exceptions import DataQualityProcessingError, ErrorCode
@@ -622,96 +623,104 @@ class PolarsClassifierProvider:
         dtype: pl.DataType,
         classifier: Categorizer,
     ) -> pl.Expr:
-        scale = classifier.scale
-        minimum, maximum = scale.scale_range
+        match classifier:
+            case ScaleCategorizer():
+                scale = classifier.scale
+                minimum, maximum = scale.scale_range
 
-        cuts = []
+                cuts = []
 
-        match scale:
-            case IdentityScale():
-                cuts = [minimum + i + 1 for i in range(scale.bins)]
-            case LinearScale():
-                size = (maximum - minimum) / scale.bins
-                cuts = [minimum + (i + 1) * size for i in range(scale.bins)]
-                cuts[-1] = maximum
-            case MonomialScale():
-                if minimum < 0:
-                    shift = minimum
-                    lower = 0.0
-                    upper = (maximum - shift) ** (1.0 / scale.power)
-                else:
-                    shift = 0.0
-                    lower = minimum ** (1.0 / scale.power)
-                    upper = maximum ** (1.0 / scale.power)
-                size = (upper - lower) / scale.bins
-                cuts = [
-                    (lower + (i + 1) * size) ** scale.power + shift
-                    for i in range(scale.bins)
-                ]
-                cuts[-1] = maximum
-            case LogarithmicScale():
-                lower = scale.base**minimum
-                upper = scale.base**maximum
-                size = (upper - lower) / scale.bins
-                if scale.base == 10.0:
-                    cuts = [
-                        math.log10(lower + (i + 1) * size) for i in range(scale.bins)
-                    ]
-                elif scale.base == math.e:
-                    cuts = [math.log(lower + (i + 1) * size) for i in range(scale.bins)]
-                else:
-                    cuts = [
-                        math.log(lower + (i + 1) * size) / math.log(scale.base)
-                        for i in range(scale.bins)
-                    ]
-                cuts[-1] = maximum
-            case ExponentialScale():
-                if minimum <= 0:
-                    range_size = maximum - minimum
-                    shift = -minimum + max(
-                        ScaleShift.EXPONENTIAL_RANGE_FACTOR.value * range_size,
-                        ScaleShift.EXPONENTIAL_MIN_SHIFT.value,
-                    )
-                else:
-                    shift = 0
-                if scale.base == 10.0:
-                    lower = math.log10(minimum + shift)
-                    upper = math.log10(maximum + shift)
-                elif scale.base == math.e:
-                    lower = math.log(minimum + shift)
-                    upper = math.log(maximum + shift)
-                else:
-                    lower = math.log(minimum + shift) / math.log(scale.base)
-                    upper = math.log(maximum + shift) / math.log(scale.base)
-                size = (upper - lower) / scale.bins
-                cuts = [
-                    scale.base ** (lower + (i + 1) * size) - shift
-                    for i in range(scale.bins)
-                ]
-                cuts[-1] = maximum
+                match scale:
+                    case IdentityScale():
+                        cuts = [minimum + i + 1 for i in range(scale.bins)]
+                    case LinearScale():
+                        size = (maximum - minimum) / scale.bins
+                        cuts = [minimum + (i + 1) * size for i in range(scale.bins)]
+                        cuts[-1] = maximum
+                    case MonomialScale():
+                        if minimum < 0:
+                            shift = minimum
+                            lower = 0.0
+                            upper = (maximum - shift) ** (1.0 / scale.power)
+                        else:
+                            shift = 0.0
+                            lower = minimum ** (1.0 / scale.power)
+                            upper = maximum ** (1.0 / scale.power)
+                        size = (upper - lower) / scale.bins
+                        cuts = [
+                            (lower + (i + 1) * size) ** scale.power + shift
+                            for i in range(scale.bins)
+                        ]
+                        cuts[-1] = maximum
+                    case LogarithmicScale():
+                        lower = scale.base**minimum
+                        upper = scale.base**maximum
+                        size = (upper - lower) / scale.bins
+                        if scale.base == 10.0:
+                            cuts = [
+                                math.log10(lower + (i + 1) * size)
+                                for i in range(scale.bins)
+                            ]
+                        elif scale.base == math.e:
+                            cuts = [
+                                math.log(lower + (i + 1) * size)
+                                for i in range(scale.bins)
+                            ]
+                        else:
+                            cuts = [
+                                math.log(lower + (i + 1) * size) / math.log(scale.base)
+                                for i in range(scale.bins)
+                            ]
+                        cuts[-1] = maximum
+                    case ExponentialScale():
+                        if minimum <= 0:
+                            range_size = maximum - minimum
+                            shift = -minimum + max(
+                                ScaleShift.EXPONENTIAL_RANGE_FACTOR.value * range_size,
+                                ScaleShift.EXPONENTIAL_MIN_SHIFT.value,
+                            )
+                        else:
+                            shift = 0
+                        if scale.base == 10.0:
+                            lower = math.log10(minimum + shift)
+                            upper = math.log10(maximum + shift)
+                        elif scale.base == math.e:
+                            lower = math.log(minimum + shift)
+                            upper = math.log(maximum + shift)
+                        else:
+                            lower = math.log(minimum + shift) / math.log(scale.base)
+                            upper = math.log(maximum + shift) / math.log(scale.base)
+                        size = (upper - lower) / scale.bins
+                        cuts = [
+                            scale.base ** (lower + (i + 1) * size) - shift
+                            for i in range(scale.bins)
+                        ]
+                        cuts[-1] = maximum
+                    case _:
+                        raise ValueError(f"Unsupported scale type: {type(scale)}")
+
+                expression = None
+                if scale.use_bin_zero:
+                    expression = pl.when(column == minimum).then(pl.lit(0))
+                for i, cut in enumerate(cuts, start=1):
+                    if expression is None:
+                        expression = pl.when(column <= cut).then(pl.lit(i))
+                    else:
+                        expression = expression.when(column <= cut).then(pl.lit(i))
+                return (
+                    pl.when(column.is_null())
+                    .then(ByteSentinel.NULL)
+                    .when(QExpressions.IS_NAN(column, dtype))
+                    .then(ByteSentinel.NAN)
+                    .when(column < minimum)
+                    .then(ByteSentinel.UNDERFLOW)
+                    .when(column > maximum)
+                    .then(ByteSentinel.OVERFLOW)
+                    .otherwise(expression)
+                    .cast(pl.UInt8)
+                )
             case _:
-                raise ValueError(f"Unsupported scale type: {type(scale)}")
-
-        expression = None
-        if scale.use_bin_zero:
-            expression = pl.when(column == minimum).then(pl.lit(0))
-        for i, cut in enumerate(cuts, start=1):
-            if expression is None:
-                expression = pl.when(column <= cut).then(pl.lit(i))
-            else:
-                expression = expression.when(column <= cut).then(pl.lit(i))
-        return (
-            pl.when(column.is_null())
-            .then(ByteSentinel.NULL)
-            .when(QExpressions.IS_NAN(column, dtype))
-            .then(ByteSentinel.NAN)
-            .when(column < minimum)
-            .then(ByteSentinel.UNDERFLOW)
-            .when(column > maximum)
-            .then(ByteSentinel.OVERFLOW)
-            .otherwise(expression)
-            .cast(pl.UInt8)
-        )
+                raise ValueError(f"Unsupported categorizer type: {type(classifier)}")
 
 
 class PolarsCriteriaProvider:
@@ -1557,56 +1566,76 @@ class DataQualityEngine:
                     for i in range(MAX_BINS + 1):
                         summary_row[DQColumns.column(i)] = None
                 case ClassifierFamily.CATEGORICAL:
-                    categorizer = cast(Categorizer, column_info.classifier)
-                    underflow_count = (
-                        lf.select((pl.col(column) == ByteSentinel.UNDERFLOW).sum())
-                        .collect()
-                        .item()
-                    )
-                    overflow_count = (
-                        lf.select((pl.col(column) == ByteSentinel.OVERFLOW).sum())
-                        .collect()
-                        .item()
-                    )
-                    nan_count = (
-                        lf.select((pl.col(column) == ByteSentinel.NAN).sum())
-                        .collect()
-                        .item()
-                    )
-                    null_count = (
-                        lf.select((pl.col(column) == ByteSentinel.NULL).sum())
-                        .collect()
-                        .item()
-                    )
-                    summary_row = {
-                        DQColumns.DQ_VERSION.value: DQ_VERSION,
-                        DQColumns.DQ_CLASSIFIER.value: column,
-                        DQColumns.DQ_TYPE.value: ClassifierFamily.CATEGORICAL.value,
-                        DQColumns.DQ_BINS.value: (
-                            categorizer.scale.bins + 1
-                            if categorizer.scale.use_bin_zero
-                            else categorizer.scale.bins
-                        ),
-                        DQColumns.DQ_FALSE.value: None,
-                        DQColumns.DQ_TRUE.value: None,
-                        DQColumns.DQ_UNDERFLOW.value: underflow_count,
-                        DQColumns.DQ_OVERFLOW.value: overflow_count,
-                        DQColumns.DQ_NAN.value: nan_count,
-                        DQColumns.DQ_NONE.value: null_count,
-                    }
-                    if not categorizer.scale.use_bin_zero:
-                        summary_row[DQColumns.column(0)] = None
-                    else:
-                        count = lf.select((pl.col(column) == 0).sum()).collect().item()
-                        summary_row[DQColumns.column(0)] = count
-                    for i in range(1, categorizer.scale.bins + 1):
-                        count = lf.select((pl.col(column) == i).sum()).collect().item()
-                        summary_row[DQColumns.column(i)] = count
-                    for i in range(categorizer.scale.bins + 1, MAX_BINS + 1):
-                        summary_row[DQColumns.column(i)] = None
+                    match column_info.classifier:
+                        case ScaleCategorizer():
+                            categorizer = column_info.classifier
+                            underflow_count = (
+                                lf.select(
+                                    (pl.col(column) == ByteSentinel.UNDERFLOW).sum()
+                                )
+                                .collect()
+                                .item()
+                            )
+                            overflow_count = (
+                                lf.select(
+                                    (pl.col(column) == ByteSentinel.OVERFLOW).sum()
+                                )
+                                .collect()
+                                .item()
+                            )
+                            nan_count = (
+                                lf.select((pl.col(column) == ByteSentinel.NAN).sum())
+                                .collect()
+                                .item()
+                            )
+                            null_count = (
+                                lf.select((pl.col(column) == ByteSentinel.NULL).sum())
+                                .collect()
+                                .item()
+                            )
+                            summary_row = {
+                                DQColumns.DQ_VERSION.value: DQ_VERSION,
+                                DQColumns.DQ_CLASSIFIER.value: column,
+                                DQColumns.DQ_TYPE.value: (
+                                    ClassifierFamily.CATEGORICAL.value
+                                ),
+                                DQColumns.DQ_BINS.value: (
+                                    categorizer.scale.bins + 1
+                                    if categorizer.scale.use_bin_zero
+                                    else categorizer.scale.bins
+                                ),
+                                DQColumns.DQ_FALSE.value: None,
+                                DQColumns.DQ_TRUE.value: None,
+                                DQColumns.DQ_UNDERFLOW.value: underflow_count,
+                                DQColumns.DQ_OVERFLOW.value: overflow_count,
+                                DQColumns.DQ_NAN.value: nan_count,
+                                DQColumns.DQ_NONE.value: null_count,
+                            }
+                            if not categorizer.scale.use_bin_zero:
+                                summary_row[DQColumns.column(0)] = None
+                            else:
+                                count = (
+                                    lf.select((pl.col(column) == 0).sum())
+                                    .collect()
+                                    .item()
+                                )
+                                summary_row[DQColumns.column(0)] = count
+                            for i in range(1, categorizer.scale.bins + 1):
+                                count = (
+                                    lf.select((pl.col(column) == i).sum())
+                                    .collect()
+                                    .item()
+                                )
+                                summary_row[DQColumns.column(i)] = count
+                            for i in range(categorizer.scale.bins + 1, MAX_BINS + 1):
+                                summary_row[DQColumns.column(i)] = None
+                        case _:
+                            raise ValueError(
+                                f"Unsupported categorizer type: {classifier_family}"
+                            )
                 case _:
                     raise ValueError(
-                        f"Unsupported classifier family: {classifier_family}"
+                        f"Unsupported classifier family: {type(column_info.classifier)}"
                     )
 
             summary_row[DQColumns.DQ_PARAMETERS.value] = str(column_info.classifier)
@@ -1816,7 +1845,7 @@ CLASSIFIER_DICTIONARY: dict[type, ClassifierMetadata] = {
         classifier_family=ClassifierFamily.BOOLEAN,
         polars_provider=PolarsClassifierProvider(PolarsClassifierProvider.has_length),
     ),
-    Categorizer: ClassifierMetadata(
+    ScaleCategorizer: ClassifierMetadata(
         column_suffix="_category",
         classifier_family=ClassifierFamily.CATEGORICAL,
         polars_provider=PolarsClassifierProvider(PolarsClassifierProvider.categorizer),

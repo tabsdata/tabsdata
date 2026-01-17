@@ -17,7 +17,6 @@ from test_tabsdata.test_tableframe.actions.dataquality.dq_helper import (
 import tabsdata as td
 import tabsdata.tableframe.dtypes as td_dtypes
 from tabsdata.dataquality import (
-    Categorizer,
     ExponentialScale,
     IdentityScale,
     IsBetween,
@@ -27,6 +26,7 @@ from tabsdata.dataquality import (
     LinearScale,
     LogarithmicScale,
     MonomialScale,
+    ScaleCategorizer,
 )
 from tabsdata.tableframe._actions.dataquality.engine import (
     ByteSentinel,
@@ -171,7 +171,7 @@ def test_dq_engine(classifier, dtype, configuration):
 
 
 def dq_negative_parameters():
-    supported_dtypes = list(Categorizer.supported_dtypes())
+    supported_dtypes = list(ScaleCategorizer.supported_dtypes())
     signed_dtypes = [
         dtype
         for dtype in supported_dtypes
@@ -353,7 +353,7 @@ def test_categorizer_with_negative_values(scale, dtype):
         df = df.vstack(nan_df)
     tf = td.TableFrame.from_polars(df)
 
-    categorizer = Categorizer(
+    categorizer = ScaleCategorizer(
         column_names=("value", "value_category"),
         scale=scale,
     )

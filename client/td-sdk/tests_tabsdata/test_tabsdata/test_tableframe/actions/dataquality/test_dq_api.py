@@ -1079,7 +1079,7 @@ def dq_summary_categorizer_classifiers_params() -> list[
     # (classifiers, summary_tags, has_summary_info, summary_row, summary row info)
     return [
         (
-            [dq.Categorizer(column_names="identity", scale=IdentityScale(-2, 0))],
+            [dq.ScaleCategorizer(column_names="identity", scale=IdentityScale(-2, 0))],
             None,
             True,
             "identity_category",
@@ -1100,7 +1100,7 @@ def dq_summary_categorizer_classifiers_params() -> list[
         ),
         (
             [
-                dq.Categorizer(
+                dq.ScaleCategorizer(
                     column_names="identity",
                     scale=IdentityScale(0, 2, use_bin_zero=True),
                 )
@@ -1124,7 +1124,11 @@ def dq_summary_categorizer_classifiers_params() -> list[
             },
         ),
         (
-            [dq.Categorizer(column_names="linear", scale=LinearScale(0, 2, bins=2))],
+            [
+                dq.ScaleCategorizer(
+                    column_names="linear", scale=LinearScale(0, 2, bins=2)
+                )
+            ],
             None,
             True,
             "linear_category",
@@ -1144,7 +1148,11 @@ def dq_summary_categorizer_classifiers_params() -> list[
             },
         ),
         (
-            [dq.Categorizer(column_names="linear", scale=LinearScale(-1, 1, bins=2))],
+            [
+                dq.ScaleCategorizer(
+                    column_names="linear", scale=LinearScale(-1, 1, bins=2)
+                )
+            ],
             None,
             True,
             "linear_category",
@@ -1165,7 +1173,7 @@ def dq_summary_categorizer_classifiers_params() -> list[
         ),
         (
             [
-                dq.Categorizer(
+                dq.ScaleCategorizer(
                     column_names="linear",
                     scale=LinearScale(0, 2, bins=2, use_bin_zero=True),
                 )
@@ -1190,7 +1198,7 @@ def dq_summary_categorizer_classifiers_params() -> list[
         ),
         (
             [
-                dq.Categorizer(
+                dq.ScaleCategorizer(
                     column_names="linear",
                     scale=LinearScale(0, 5, bins=2),
                 )
@@ -1215,7 +1223,7 @@ def dq_summary_categorizer_classifiers_params() -> list[
         ),
         (
             [
-                dq.Categorizer(
+                dq.ScaleCategorizer(
                     column_names="monomial", scale=MonomialScale(0, 9, power=2, bins=3)
                 )
             ],
@@ -1239,7 +1247,7 @@ def dq_summary_categorizer_classifiers_params() -> list[
         ),
         (
             [
-                dq.Categorizer(
+                dq.ScaleCategorizer(
                     column_names="monomial",
                     scale=MonomialScale(-1, 8, power=2, bins=3, use_bin_zero=True),
                 )
@@ -1264,7 +1272,7 @@ def dq_summary_categorizer_classifiers_params() -> list[
         ),
         (
             [
-                dq.Categorizer(
+                dq.ScaleCategorizer(
                     column_names="monomial", scale=MonomialScale(-3, 6, power=2, bins=3)
                 )
             ],
@@ -1288,7 +1296,7 @@ def dq_summary_categorizer_classifiers_params() -> list[
         ),
         (
             [
-                dq.Categorizer(
+                dq.ScaleCategorizer(
                     column_names="logarithmic",
                     scale=LogarithmicScale(0, 8, base=2, bins=3),
                 )
@@ -1313,7 +1321,7 @@ def dq_summary_categorizer_classifiers_params() -> list[
         ),
         (
             [
-                dq.Categorizer(
+                dq.ScaleCategorizer(
                     column_names="logarithmic",
                     scale=LogarithmicScale(1, 9, base=2, bins=3, use_bin_zero=True),
                 )
@@ -1338,7 +1346,7 @@ def dq_summary_categorizer_classifiers_params() -> list[
         ),
         (
             [
-                dq.Categorizer(
+                dq.ScaleCategorizer(
                     column_names="exponential",
                     scale=LogarithmicScale(0, 8, base=2, bins=3),
                 )
@@ -1363,7 +1371,7 @@ def dq_summary_categorizer_classifiers_params() -> list[
         ),
         (
             [
-                dq.Categorizer(
+                dq.ScaleCategorizer(
                     column_names="exponential",
                     scale=LogarithmicScale(1, 9, base=2, bins=3, use_bin_zero=True),
                 )

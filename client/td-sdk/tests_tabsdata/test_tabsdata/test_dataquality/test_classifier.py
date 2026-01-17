@@ -10,7 +10,6 @@ import pytest
 import tabsdata.tableframe.dtypes as td_dtypes
 from tabsdata import lit
 from tabsdata.dataquality._classifier import (
-    Categorizer,
     DoesNotMatch,
     ExponentialScale,
     HasLength,
@@ -37,6 +36,7 @@ from tabsdata.dataquality._classifier import (
     MonomialScale,
     RangeClosedOnSpec,
     Scale,
+    ScaleCategorizer,
 )
 from tabsdata.exceptions import (
     ErrorCode,
@@ -569,13 +569,13 @@ def test_categorizer_class():
         1,
         7,
     )
-    categorizer = Categorizer(scale=scale)
+    categorizer = ScaleCategorizer(scale=scale)
     assert categorizer.scale == scale
 
 
 def test_categorizer_wrong_scale_type_raises_error():
     with pytest.raises(ParameterValidationError) as e:
-        Categorizer(scale="hi")
+        ScaleCategorizer(scale="hi")
     assert e.value.error_code == ErrorCode.PVDQCL2
 
 
@@ -960,21 +960,21 @@ def test_is_zero_on_missing_column_and_on_wrong_type():
 def test_categorizer_on_missing_column_and_on_wrong_type():
     scale = LinearScale(1, 7)
     with pytest.raises(ParameterValidationError) as e:
-        Categorizer(scale=scale, on_missing_column="error")
+        ScaleCategorizer(scale=scale, on_missing_column="error")
     assert e.value.error_code == ErrorCode.PVDQCL2
 
-    classifier = Categorizer(scale=scale, on_missing_column="ignore")
+    classifier = ScaleCategorizer(scale=scale, on_missing_column="ignore")
     assert classifier.on_missing_column == "ignore"
 
-    classifier = Categorizer(scale=scale, on_missing_column="fail")
+    classifier = ScaleCategorizer(scale=scale, on_missing_column="fail")
     assert classifier.on_missing_column == "fail"
 
     with pytest.raises(ParameterValidationError) as e:
-        Categorizer(scale=scale, on_wrong_type="error")
+        ScaleCategorizer(scale=scale, on_wrong_type="error")
     assert e.value.error_code == ErrorCode.PVDQCL2
 
-    classifier = Categorizer(scale=scale, on_wrong_type="ignore")
+    classifier = ScaleCategorizer(scale=scale, on_wrong_type="ignore")
     assert classifier.on_wrong_type == "ignore"
 
-    classifier = Categorizer(scale=scale, on_wrong_type="fail")
+    classifier = ScaleCategorizer(scale=scale, on_wrong_type="fail")
     assert classifier.on_wrong_type == "fail"

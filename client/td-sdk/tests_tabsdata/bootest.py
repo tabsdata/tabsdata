@@ -88,6 +88,7 @@ def _clean_tdlocal_folder():
             if path.is_dir() and path.name.startswith("test_"):
                 shutil.rmtree(path)
 
+
 _clean_tdlocal_folder()
 
 

@@ -33,7 +33,6 @@ from tabsdata.dataquality import (
     Summary,
 )
 from tabsdata.dataquality._classifier import (
-    Categorizer,
     Classifier,
     ExponentialScale,
     IdentityScale,
@@ -44,6 +43,7 @@ from tabsdata.dataquality._classifier import (
     LinearScale,
     LogarithmicScale,
     MonomialScale,
+    ScaleCategorizer,
 )
 from tabsdata.dataquality._typing import RangeClosedOnSpec
 from tabsdata.tableframe._actions.dataquality.engine import (
@@ -2110,7 +2110,7 @@ def _make_categorizer_action(scale):
         return DataQuality(
             table=table,
             classifiers=[
-                Categorizer(
+                ScaleCategorizer(
                     column_names=("value", "value_category"),
                     scale=scale,
                     tags=tag,
@@ -2975,10 +2975,10 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             name="length_0_5",
         ),
     ],
-    Categorizer: [
+    ScaleCategorizer: [
         ClassifierConfiguration(
             classifiers=[
-                Categorizer(
+                ScaleCategorizer(
                     column_names=("value", "value_category"),
                     scale=LinearScale(
                         min_val=0,
@@ -3006,7 +3006,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     use_bin_zero=False,
                 )
             ),
-            dtypes=list(Categorizer.supported_dtypes()),
+            dtypes=list(ScaleCategorizer.supported_dtypes()),
             name="linear_0_100_10_with_min",
             dataset=_make_categorizer_dataset(
                 LinearScale(
@@ -3019,7 +3019,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ),
         ClassifierConfiguration(
             classifiers=[
-                Categorizer(
+                ScaleCategorizer(
                     column_names=("value", "value_category"),
                     scale=LinearScale(
                         min_val=0,
@@ -3047,7 +3047,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     use_bin_zero=True,
                 )
             ),
-            dtypes=list(Categorizer.supported_dtypes()),
+            dtypes=list(ScaleCategorizer.supported_dtypes()),
             name="linear_0_100_10_no_min",
             dataset=_make_categorizer_dataset(
                 LinearScale(
@@ -3060,7 +3060,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ),
         ClassifierConfiguration(
             classifiers=[
-                Categorizer(
+                ScaleCategorizer(
                     column_names=("value", "value_category"),
                     scale=LinearScale(
                         min_val=0,
@@ -3088,7 +3088,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     use_bin_zero=False,
                 )
             ),
-            dtypes=list(Categorizer.supported_dtypes()),
+            dtypes=list(ScaleCategorizer.supported_dtypes()),
             name="linear_0_10_5_with_min",
             dataset=_make_categorizer_dataset(
                 LinearScale(
@@ -3101,7 +3101,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ),
         ClassifierConfiguration(
             classifiers=[
-                Categorizer(
+                ScaleCategorizer(
                     column_names=("value", "value_category"),
                     scale=LinearScale(
                         min_val=0,
@@ -3129,7 +3129,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     use_bin_zero=True,
                 )
             ),
-            dtypes=list(Categorizer.supported_dtypes()),
+            dtypes=list(ScaleCategorizer.supported_dtypes()),
             name="linear_0_10_5_no_min",
             dataset=_make_categorizer_dataset(
                 LinearScale(
@@ -3142,7 +3142,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ),
         ClassifierConfiguration(
             classifiers=[
-                Categorizer(
+                ScaleCategorizer(
                     column_names=("value", "value_category"),
                     scale=LinearScale(
                         min_val=-50,
@@ -3170,7 +3170,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     use_bin_zero=False,
                 )
             ),
-            dtypes=list(Categorizer.supported_dtypes()),
+            dtypes=list(ScaleCategorizer.supported_dtypes()),
             name="linear_neg50_50_20_with_min",
             dataset=_make_categorizer_dataset(
                 LinearScale(
@@ -3183,7 +3183,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ),
         ClassifierConfiguration(
             classifiers=[
-                Categorizer(
+                ScaleCategorizer(
                     column_names=("value", "value_category"),
                     scale=LinearScale(
                         min_val=-50,
@@ -3211,7 +3211,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     use_bin_zero=True,
                 )
             ),
-            dtypes=list(Categorizer.supported_dtypes()),
+            dtypes=list(ScaleCategorizer.supported_dtypes()),
             name="linear_neg50_50_20_no_min",
             dataset=_make_categorizer_dataset(
                 LinearScale(
@@ -3224,7 +3224,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ),
         ClassifierConfiguration(
             classifiers=[
-                Categorizer(
+                ScaleCategorizer(
                     column_names=("value", "value_category"),
                     scale=LinearScale(
                         min_val=0,
@@ -3252,7 +3252,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     use_bin_zero=False,
                 )
             ),
-            dtypes=list(Categorizer.supported_dtypes()),
+            dtypes=list(ScaleCategorizer.supported_dtypes()),
             name="linear_0_1_100_with_min",
             dataset=_make_categorizer_dataset(
                 LinearScale(
@@ -3265,7 +3265,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ),
         ClassifierConfiguration(
             classifiers=[
-                Categorizer(
+                ScaleCategorizer(
                     column_names=("value", "value_category"),
                     scale=LinearScale(
                         min_val=0,
@@ -3293,7 +3293,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     use_bin_zero=True,
                 )
             ),
-            dtypes=list(Categorizer.supported_dtypes()),
+            dtypes=list(ScaleCategorizer.supported_dtypes()),
             name="linear_0_1_100_no_min",
             dataset=_make_categorizer_dataset(
                 LinearScale(
@@ -3306,7 +3306,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ),
         ClassifierConfiguration(
             classifiers=[
-                Categorizer(
+                ScaleCategorizer(
                     column_names=("value", "value_category"),
                     scale=IdentityScale(
                         min_val=0,
@@ -3331,7 +3331,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     use_bin_zero=False,
                 )
             ),
-            dtypes=list(Categorizer.supported_dtypes()),
+            dtypes=list(ScaleCategorizer.supported_dtypes()),
             name="identity_0_10_with_min",
             dataset=_make_categorizer_dataset(
                 IdentityScale(
@@ -3343,7 +3343,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ),
         ClassifierConfiguration(
             classifiers=[
-                Categorizer(
+                ScaleCategorizer(
                     column_names=("value", "value_category"),
                     scale=IdentityScale(
                         min_val=0,
@@ -3368,7 +3368,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     use_bin_zero=True,
                 )
             ),
-            dtypes=list(Categorizer.supported_dtypes()),
+            dtypes=list(ScaleCategorizer.supported_dtypes()),
             name="identity_0_10_no_min",
             dataset=_make_categorizer_dataset(
                 IdentityScale(
@@ -3380,7 +3380,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ),
         ClassifierConfiguration(
             classifiers=[
-                Categorizer(
+                ScaleCategorizer(
                     column_names=("value", "value_category"),
                     scale=IdentityScale(
                         min_val=1,
@@ -3405,7 +3405,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     use_bin_zero=False,
                 )
             ),
-            dtypes=list(Categorizer.supported_dtypes()),
+            dtypes=list(ScaleCategorizer.supported_dtypes()),
             name="identity_1_20_with_min",
             dataset=_make_categorizer_dataset(
                 IdentityScale(
@@ -3417,7 +3417,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ),
         ClassifierConfiguration(
             classifiers=[
-                Categorizer(
+                ScaleCategorizer(
                     column_names=("value", "value_category"),
                     scale=IdentityScale(
                         min_val=1,
@@ -3442,7 +3442,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     use_bin_zero=True,
                 )
             ),
-            dtypes=list(Categorizer.supported_dtypes()),
+            dtypes=list(ScaleCategorizer.supported_dtypes()),
             name="identity_1_20_no_min",
             dataset=_make_categorizer_dataset(
                 IdentityScale(
@@ -3454,7 +3454,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ),
         ClassifierConfiguration(
             classifiers=[
-                Categorizer(
+                ScaleCategorizer(
                     column_names=("value", "value_category"),
                     scale=IdentityScale(
                         min_val=0,
@@ -3479,7 +3479,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     use_bin_zero=False,
                 )
             ),
-            dtypes=list(Categorizer.supported_dtypes()),
+            dtypes=list(ScaleCategorizer.supported_dtypes()),
             name="identity_0_100_with_min",
             dataset=_make_categorizer_dataset(
                 IdentityScale(
@@ -3491,7 +3491,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ),
         ClassifierConfiguration(
             classifiers=[
-                Categorizer(
+                ScaleCategorizer(
                     column_names=("value", "value_category"),
                     scale=IdentityScale(
                         min_val=0,
@@ -3516,7 +3516,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     use_bin_zero=True,
                 )
             ),
-            dtypes=list(Categorizer.supported_dtypes()),
+            dtypes=list(ScaleCategorizer.supported_dtypes()),
             name="identity_0_100_no_min",
             dataset=_make_categorizer_dataset(
                 IdentityScale(
@@ -3528,7 +3528,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ),
         ClassifierConfiguration(
             classifiers=[
-                Categorizer(
+                ScaleCategorizer(
                     column_names=("value", "value_category"),
                     scale=MonomialScale(
                         min_val=1,
@@ -3559,7 +3559,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     use_bin_zero=False,
                 )
             ),
-            dtypes=list(Categorizer.supported_dtypes()),
+            dtypes=list(ScaleCategorizer.supported_dtypes()),
             name="monomial_quadratic_1_100_10_with_min",
             dataset=_make_categorizer_dataset(
                 MonomialScale(
@@ -3573,7 +3573,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ),
         ClassifierConfiguration(
             classifiers=[
-                Categorizer(
+                ScaleCategorizer(
                     column_names=("value", "value_category"),
                     scale=MonomialScale(
                         min_val=1,
@@ -3604,7 +3604,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     use_bin_zero=True,
                 )
             ),
-            dtypes=list(Categorizer.supported_dtypes()),
+            dtypes=list(ScaleCategorizer.supported_dtypes()),
             name="monomial_quadratic_1_100_10_no_min",
             dataset=_make_categorizer_dataset(
                 MonomialScale(
@@ -3618,7 +3618,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ),
         ClassifierConfiguration(
             classifiers=[
-                Categorizer(
+                ScaleCategorizer(
                     column_names=("value", "value_category"),
                     scale=MonomialScale(
                         min_val=0,
@@ -3649,7 +3649,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     use_bin_zero=False,
                 )
             ),
-            dtypes=list(Categorizer.supported_dtypes()),
+            dtypes=list(ScaleCategorizer.supported_dtypes()),
             name="monomial_cubic_0_27_9_with_min",
             dataset=_make_categorizer_dataset(
                 MonomialScale(
@@ -3663,7 +3663,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ),
         ClassifierConfiguration(
             classifiers=[
-                Categorizer(
+                ScaleCategorizer(
                     column_names=("value", "value_category"),
                     scale=MonomialScale(
                         min_val=0,
@@ -3694,7 +3694,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     use_bin_zero=True,
                 )
             ),
-            dtypes=list(Categorizer.supported_dtypes()),
+            dtypes=list(ScaleCategorizer.supported_dtypes()),
             name="monomial_cubic_0_27_9_no_min",
             dataset=_make_categorizer_dataset(
                 MonomialScale(
@@ -3708,7 +3708,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ),
         ClassifierConfiguration(
             classifiers=[
-                Categorizer(
+                ScaleCategorizer(
                     column_names=("value", "value_category"),
                     scale=MonomialScale(
                         min_val=1,
@@ -3739,7 +3739,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     use_bin_zero=False,
                 )
             ),
-            dtypes=list(Categorizer.supported_dtypes()),
+            dtypes=list(ScaleCategorizer.supported_dtypes()),
             name="monomial_quadratic_1_1000_30_with_min",
             dataset=_make_categorizer_dataset(
                 MonomialScale(
@@ -3753,7 +3753,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ),
         ClassifierConfiguration(
             classifiers=[
-                Categorizer(
+                ScaleCategorizer(
                     column_names=("value", "value_category"),
                     scale=MonomialScale(
                         min_val=1,
@@ -3784,7 +3784,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     use_bin_zero=True,
                 )
             ),
-            dtypes=list(Categorizer.supported_dtypes()),
+            dtypes=list(ScaleCategorizer.supported_dtypes()),
             name="monomial_quadratic_1_1000_30_no_min",
             dataset=_make_categorizer_dataset(
                 MonomialScale(
@@ -3798,7 +3798,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ),
         ClassifierConfiguration(
             classifiers=[
-                Categorizer(
+                ScaleCategorizer(
                     column_names=("value", "value_category"),
                     scale=LogarithmicScale(
                         min_val=0,
@@ -3829,7 +3829,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     use_bin_zero=False,
                 )
             ),
-            dtypes=list(Categorizer.supported_dtypes()),
+            dtypes=list(ScaleCategorizer.supported_dtypes()),
             name="logarithmic_base10_0_6_6_with_min",
             dataset=_make_categorizer_dataset(
                 LogarithmicScale(
@@ -3843,7 +3843,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ),
         ClassifierConfiguration(
             classifiers=[
-                Categorizer(
+                ScaleCategorizer(
                     column_names=("value", "value_category"),
                     scale=LogarithmicScale(
                         min_val=0,
@@ -3874,7 +3874,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     use_bin_zero=True,
                 )
             ),
-            dtypes=list(Categorizer.supported_dtypes()),
+            dtypes=list(ScaleCategorizer.supported_dtypes()),
             name="logarithmic_base10_0_6_6_no_min",
             dataset=_make_categorizer_dataset(
                 LogarithmicScale(
@@ -3888,7 +3888,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ),
         ClassifierConfiguration(
             classifiers=[
-                Categorizer(
+                ScaleCategorizer(
                     column_names=("value", "value_category"),
                     scale=LogarithmicScale(
                         min_val=1,
@@ -3919,7 +3919,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     use_bin_zero=False,
                 )
             ),
-            dtypes=list(Categorizer.supported_dtypes()),
+            dtypes=list(ScaleCategorizer.supported_dtypes()),
             name="logarithmic_base2_1_4_4_with_min",
             dataset=_make_categorizer_dataset(
                 LogarithmicScale(
@@ -3933,7 +3933,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ),
         ClassifierConfiguration(
             classifiers=[
-                Categorizer(
+                ScaleCategorizer(
                     column_names=("value", "value_category"),
                     scale=LogarithmicScale(
                         min_val=1,
@@ -3964,7 +3964,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     use_bin_zero=True,
                 )
             ),
-            dtypes=list(Categorizer.supported_dtypes()),
+            dtypes=list(ScaleCategorizer.supported_dtypes()),
             name="logarithmic_base2_1_4_4_no_min",
             dataset=_make_categorizer_dataset(
                 LogarithmicScale(
@@ -3978,7 +3978,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ),
         ClassifierConfiguration(
             classifiers=[
-                Categorizer(
+                ScaleCategorizer(
                     column_names=("value", "value_category"),
                     scale=LogarithmicScale(
                         min_val=0,
@@ -4009,7 +4009,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     use_bin_zero=False,
                 )
             ),
-            dtypes=list(Categorizer.supported_dtypes()),
+            dtypes=list(ScaleCategorizer.supported_dtypes()),
             name="logarithmic_base_e_0_3_10_with_min",
             dataset=_make_categorizer_dataset(
                 LogarithmicScale(
@@ -4023,7 +4023,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ),
         ClassifierConfiguration(
             classifiers=[
-                Categorizer(
+                ScaleCategorizer(
                     column_names=("value", "value_category"),
                     scale=LogarithmicScale(
                         min_val=0,
@@ -4054,7 +4054,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     use_bin_zero=True,
                 )
             ),
-            dtypes=list(Categorizer.supported_dtypes()),
+            dtypes=list(ScaleCategorizer.supported_dtypes()),
             name="logarithmic_base_e_0_3_10_no_min",
             dataset=_make_categorizer_dataset(
                 LogarithmicScale(
@@ -4068,7 +4068,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ),
         ClassifierConfiguration(
             classifiers=[
-                Categorizer(
+                ScaleCategorizer(
                     column_names=("value", "value_category"),
                     scale=ExponentialScale(
                         min_val=1,
@@ -4099,7 +4099,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     use_bin_zero=False,
                 )
             ),
-            dtypes=list(Categorizer.supported_dtypes()),
+            dtypes=list(ScaleCategorizer.supported_dtypes()),
             name="exponential_base10_1_1M_6_with_min",
             dataset=_make_categorizer_dataset(
                 ExponentialScale(
@@ -4113,7 +4113,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ),
         ClassifierConfiguration(
             classifiers=[
-                Categorizer(
+                ScaleCategorizer(
                     column_names=("value", "value_category"),
                     scale=ExponentialScale(
                         min_val=1,
@@ -4144,7 +4144,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     use_bin_zero=True,
                 )
             ),
-            dtypes=list(Categorizer.supported_dtypes()),
+            dtypes=list(ScaleCategorizer.supported_dtypes()),
             name="exponential_base10_1_1M_6_no_min",
             dataset=_make_categorizer_dataset(
                 ExponentialScale(
@@ -4158,7 +4158,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ),
         ClassifierConfiguration(
             classifiers=[
-                Categorizer(
+                ScaleCategorizer(
                     column_names=("value", "value_category"),
                     scale=ExponentialScale(
                         min_val=1,
@@ -4189,7 +4189,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     use_bin_zero=False,
                 )
             ),
-            dtypes=list(Categorizer.supported_dtypes()),
+            dtypes=list(ScaleCategorizer.supported_dtypes()),
             name="exponential_base10_1_1000_3_with_min",
             dataset=_make_categorizer_dataset(
                 ExponentialScale(
@@ -4203,7 +4203,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ),
         ClassifierConfiguration(
             classifiers=[
-                Categorizer(
+                ScaleCategorizer(
                     column_names=("value", "value_category"),
                     scale=ExponentialScale(
                         min_val=1,
@@ -4234,7 +4234,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     use_bin_zero=True,
                 )
             ),
-            dtypes=list(Categorizer.supported_dtypes()),
+            dtypes=list(ScaleCategorizer.supported_dtypes()),
             name="exponential_base10_1_1000_3_no_min",
             dataset=_make_categorizer_dataset(
                 ExponentialScale(
@@ -4248,7 +4248,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ),
         ClassifierConfiguration(
             classifiers=[
-                Categorizer(
+                ScaleCategorizer(
                     column_names=("value", "value_category"),
                     scale=ExponentialScale(
                         min_val=2,
@@ -4279,7 +4279,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     use_bin_zero=False,
                 )
             ),
-            dtypes=list(Categorizer.supported_dtypes()),
+            dtypes=list(ScaleCategorizer.supported_dtypes()),
             name="exponential_base2_2_256_8_with_min",
             dataset=_make_categorizer_dataset(
                 ExponentialScale(
@@ -4293,7 +4293,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ),
         ClassifierConfiguration(
             classifiers=[
-                Categorizer(
+                ScaleCategorizer(
                     column_names=("value", "value_category"),
                     scale=ExponentialScale(
                         min_val=2,
@@ -4324,7 +4324,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     use_bin_zero=True,
                 )
             ),
-            dtypes=list(Categorizer.supported_dtypes()),
+            dtypes=list(ScaleCategorizer.supported_dtypes()),
             name="exponential_base2_2_256_8_no_min",
             dataset=_make_categorizer_dataset(
                 ExponentialScale(
@@ -4338,7 +4338,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ),
         ClassifierConfiguration(
             classifiers=[
-                Categorizer(
+                ScaleCategorizer(
                     column_names=("value", "value_category"),
                     scale=ExponentialScale(
                         min_val=1,
@@ -4369,7 +4369,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     use_bin_zero=False,
                 )
             ),
-            dtypes=list(Categorizer.supported_dtypes()),
+            dtypes=list(ScaleCategorizer.supported_dtypes()),
             name="exponential_base_e_1_1000_10_with_min",
             dataset=_make_categorizer_dataset(
                 ExponentialScale(
@@ -4383,7 +4383,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ),
         ClassifierConfiguration(
             classifiers=[
-                Categorizer(
+                ScaleCategorizer(
                     column_names=("value", "value_category"),
                     scale=ExponentialScale(
                         min_val=1,
@@ -4414,7 +4414,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     use_bin_zero=True,
                 )
             ),
-            dtypes=list(Categorizer.supported_dtypes()),
+            dtypes=list(ScaleCategorizer.supported_dtypes()),
             name="exponential_base_e_1_1000_10_no_min",
             dataset=_make_categorizer_dataset(
                 ExponentialScale(

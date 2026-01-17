@@ -33,6 +33,7 @@ from tabsdata.dataquality._classifier import (
     Matches,
     MonomialScale,
     Scale,
+    ScaleCategorizer,
 )
 from tabsdata.dataquality._dataquality import DataQuality
 from tabsdata.dataquality._operator import (
@@ -78,6 +79,7 @@ __all__ = [
     "DoesNotMatch",
     "HasLength",
     "Categorizer",
+    "ScaleCategorizer",
     "Scale",
     "IdentityScale",
     "LinearScale",

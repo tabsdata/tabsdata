@@ -230,7 +230,7 @@ def test_example_transformer():
         ),
         dq.DataQuality(
             table="employees",
-            classifiers=[dq.Categorizer("country", scale=continents)],
+            classifiers=[dq.ScaleCategorizer("country", scale=continents)],
             operators=[
                 dq.Summary(),
                 dq.Filter(to_table="employees_invalid"),
@@ -243,7 +243,7 @@ def test_example_transformer():
             classifiers=[
                 dq.IsNull("country"),
                 dq.IsNull("id", tags="fail"),
-                dq.Categorizer("country", scale=continents),
+                dq.ScaleCategorizer("country", scale=continents),
             ],
             operators=[
                 dq.Summary(),

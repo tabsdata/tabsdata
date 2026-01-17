@@ -176,7 +176,7 @@ def test_summary_categorizer_min_in_first_bin(
             dq.DataQuality(
                 table="table_o",
                 classifiers=[
-                    dq.Categorizer("value", scale=scale),
+                    dq.ScaleCategorizer("value", scale=scale),
                 ],
                 operators=[
                     dq.Summary(),
@@ -270,7 +270,7 @@ def test_summary_categorizer_min_not_in_first_bin(
             dq.DataQuality(
                 table="table_o",
                 classifiers=[
-                    dq.Categorizer("value", scale=scale),
+                    dq.ScaleCategorizer("value", scale=scale),
                 ],
                 operators=[
                     dq.Summary(),
@@ -1037,7 +1037,7 @@ def test_fail_operation_bins(criteria, threshold, should_fail):
         on_output_tables=[
             dq.DataQuality(
                 table="table_o",
-                classifiers=[dq.Categorizer("value", scale=scale)],
+                classifiers=[dq.ScaleCategorizer("value", scale=scale)],
                 operators=[dq.Fail(criteria=criteria, threshold=threshold)],
             )
         ],
@@ -1379,7 +1379,7 @@ def test_filter_select_operations(
                         "value_int",
                         tags="positive",
                     ),
-                    dq.Categorizer(
+                    dq.ScaleCategorizer(
                         "value_float",
                         scale=scale,
                     ),
@@ -1653,7 +1653,7 @@ def test_dq_parameters_string_classifiers(classifier):
     ],
 )
 def test_dq_parameters_categorizer_scales(scale):
-    classifier = dq.Categorizer("value", scale=scale)
+    classifier = dq.ScaleCategorizer("value", scale=scale)
 
     @td.transformer(
         name="transformer",

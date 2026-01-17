@@ -506,7 +506,15 @@ def _validate_bins(
         raise ParameterValueError(error_code, fn_name, fn_params, msg)
 
 
-class Categorizer(Classifier):
+class Categorizer(Classifier, ABC):
+    """
+    A base class for categorizers.
+    """
+
+    pass
+
+
+class ScaleCategorizer(Categorizer):
     """
     A classifier that bucketizes data into bins based on a given scale.
     """
