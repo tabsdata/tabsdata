@@ -201,7 +201,7 @@ impl<T: Task + 'static> Task for CronTask<T> {
             }
             Some(err) = task_err_rx.recv() => {
                 // If the task fails while executing during a cron tick, we stop the cron scheduler and fail.
-                error!("Shuting down because critical error, {self}. Error: {err}");
+                error!("Shutting down because critical error, {self}. Error: {err}");
 
                 if let Err(e) = scheduler.shutdown().await {
                     warn!("Error shutting down because of critical error, {self}. Error: {e}");
@@ -229,7 +229,6 @@ mod tests {
     use std::fmt;
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
-
     use td_common::server_runner::ServerRunnable;
     use tokio::sync::watch;
     use tokio::time::sleep;

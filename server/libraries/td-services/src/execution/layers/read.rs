@@ -18,8 +18,8 @@ pub async fn with_existing_recursion_options(
     // We are using the depth defined, if any, or defaulting to EXECUTION_GRAPH_DEPTH.
     let options = execution
         .recursion_options
-        .as_ref()
-        .clone()
+        .as_deref()
+        .cloned()
         .unwrap_or(EXECUTION_GRAPH_OPTIONS);
     Ok(options)
 }

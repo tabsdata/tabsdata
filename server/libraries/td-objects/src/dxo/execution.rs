@@ -62,13 +62,13 @@ mod definitions {
         #[td_type(setter)]
         pub trigger_type: TriggerType, // Added in v4
 
-        pub recursion_options: sqlx::types::Json<Option<RecursionOptions>>, // Added in v3
+        pub recursion_options: Option<sqlx::types::Json<RecursionOptions>>, // Added in v3
     }
 
     // custom setter to convert to json
     impl Setter<RecursionOptions> for ExecutionDBBuilder {
         fn set(&mut self, value: &RecursionOptions) -> &mut Self {
-            let recursion_options = sqlx::types::Json::from(Some(value.clone()));
+            let recursion_options = Some(sqlx::types::Json::from(value.clone()));
             self.recursion_options = Some(recursion_options);
             self
         }
@@ -102,7 +102,7 @@ mod definitions {
     #[inherits(ExecutionDBWithStatus)]
     pub struct Execution {
         #[ignore]
-        pub recursion_options: sqlx::types::Json<Option<RecursionOptions>>, // Added in v3
+        pub recursion_options: Option<sqlx::types::Json<RecursionOptions>>, // Added in v3
 
         #[dto(list(filter, filter_like, order_by))]
         pub id: ExecutionId,
