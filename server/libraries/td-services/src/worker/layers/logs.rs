@@ -83,10 +83,22 @@ pub async fn resolve_worker_log_path(
 
 fn sort_log_paths(paths: &mut [PathBuf]) {
     paths.sort_by(|a, b| {
-        // Compare parent directories first (so _0, then _1, etc.).
-        let a_parent = a.parent().and_then(|p| p.to_str()).unwrap_or("");
-        let b_parent = b.parent().and_then(|p| p.to_str()).unwrap_or("");
-        let parent_cmp = a_parent.cmp(b_parent);
+        // Compare parent directories first by modified time.
+        let a_parent = a
+            .parent()
+            .and_then(|p| std::fs::metadata(p).ok())
+            .and_then(|m| m.modified().ok());
+        let b_parent = b
+            .parent()
+            .and_then(|p| std::fs::metadata(p).ok())
+            .and_then(|m| m.modified().ok());
+
+        let parent_cmp = match (a_parent, b_parent) {
+            (Some(a_parent), Some(b_parent)) => a_parent.cmp(&b_parent).reverse(),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => std::cmp::Ordering::Equal,
+        };
         if parent_cmp != std::cmp::Ordering::Equal {
             return parent_cmp;
         }
@@ -168,52 +180,116 @@ mod tests {
     use testdir::testdir;
 
     #[test]
-    fn test_sort_log_paths() {
+    fn test_sort_logs_by_filename_and_rotation() {
         let mut paths = vec![
-            PathBuf::from("/tmp/worker_1/logs/fn_2.log"),
-            PathBuf::from("/tmp/worker_0/logs/fn_1.log"),
-            PathBuf::from("/tmp/worker_0/logs/fn.log"),
-            PathBuf::from("/tmp/worker_1/logs/fn.log"),
-            PathBuf::from("/tmp/worker_1/logs/err.log"),
-            PathBuf::from("/tmp/worker_0/logs/err.log"),
-            PathBuf::from("/tmp/worker_0/logs/err_1.log"),
+            PathBuf::from("err_1.log"),
+            PathBuf::from("app.log"),
+            PathBuf::from("err.log"),
+            PathBuf::from("fn_2.log"),
+            PathBuf::from("fn.log"),
+            PathBuf::from("fn_1.log"),
         ];
+
         sort_log_paths(&mut paths);
-        let expected = vec![
-            PathBuf::from("/tmp/worker_0/logs/err.log"),
-            PathBuf::from("/tmp/worker_0/logs/err_1.log"),
-            PathBuf::from("/tmp/worker_0/logs/fn.log"),
-            PathBuf::from("/tmp/worker_0/logs/fn_1.log"),
-            PathBuf::from("/tmp/worker_1/logs/err.log"),
-            PathBuf::from("/tmp/worker_1/logs/fn.log"),
-            PathBuf::from("/tmp/worker_1/logs/fn_2.log"),
-        ];
-        assert_eq!(paths, expected);
+
+        assert_eq!(paths[0], PathBuf::from("app.log"));
+        assert_eq!(paths[1], PathBuf::from("err.log"));
+        assert_eq!(paths[2], PathBuf::from("err_1.log"));
+        assert_eq!(paths[3], PathBuf::from("fn.log"));
+        assert_eq!(paths[4], PathBuf::from("fn_1.log"));
+        assert_eq!(paths[5], PathBuf::from("fn_2.log"));
     }
 
     #[test]
-    fn test_sort_log_paths_same_parent() {
-        let mut paths = vec![
-            PathBuf::from("/a/b/c/fn_1.log"),
-            PathBuf::from("/a/b/c/err.log"),
-            PathBuf::from("/a/b/c/fn.log"),
-            PathBuf::from("/a/b/c/err_2.log"),
-        ];
+    fn test_sort_logs_by_parent_modified_time() {
+        let temp = testdir!();
+
+        let dir1 = temp.join("dir1");
+        let dir2 = temp.join("dir2");
+        std::fs::create_dir(&dir1).unwrap();
+        std::fs::create_dir(&dir2).unwrap();
+
+        let file1 = dir1.join("app.log");
+        let file2 = dir2.join("app.log");
+        std::fs::write(&file1, "").unwrap();
+        std::fs::write(&file2, "").unwrap();
+
+        // Set explicit timestamps to ensure dir2 is newer
+        let old_time = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1000);
+        let new_time = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(2000);
+
+        std::fs::File::open(&dir1)
+            .unwrap()
+            .set_modified(old_time)
+            .unwrap();
+        std::fs::File::open(&dir2)
+            .unwrap()
+            .set_modified(new_time)
+            .unwrap();
+
+        let mut paths = vec![file1.clone(), file2.clone()];
         sort_log_paths(&mut paths);
-        let expected = vec![
-            PathBuf::from("/a/b/c/err.log"),
-            PathBuf::from("/a/b/c/err_2.log"),
-            PathBuf::from("/a/b/c/fn.log"),
-            PathBuf::from("/a/b/c/fn_1.log"),
-        ];
-        assert_eq!(paths, expected);
+
+        // dir2 was modified more recently, so it should come first (reverse order)
+        assert_eq!(paths[0], file2);
+        assert_eq!(paths[1], file1);
     }
 
     #[test]
-    fn test_sort_log_paths_empty() {
+    fn test_sort_logs_empty_and_edge_cases() {
+        // Empty
         let mut paths: Vec<PathBuf> = vec![];
         sort_log_paths(&mut paths);
         assert!(paths.is_empty());
+
+        // Single path
+        let mut paths = vec![PathBuf::from("single.log")];
+        sort_log_paths(&mut paths);
+        assert_eq!(paths[0], PathBuf::from("single.log"));
+    }
+
+    #[test]
+    fn test_sort_logs_complex_scenario() {
+        let temp = testdir!();
+
+        let old_dir = temp.join("old");
+        let new_dir = temp.join("new");
+        std::fs::create_dir(&old_dir).unwrap();
+        std::fs::create_dir(&new_dir).unwrap();
+
+        let mut paths = vec![
+            old_dir.join("app_2.log"),
+            new_dir.join("app.log"),
+            old_dir.join("app.log"),
+            new_dir.join("err.log"),
+            old_dir.join("app_1.log"),
+        ];
+
+        for path in &paths {
+            std::fs::write(path, "").unwrap();
+        }
+
+        // Set explicit timestamps to ensure new_dir is newer
+        let old_time = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1000);
+        let new_time = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(2000);
+
+        std::fs::File::open(&old_dir)
+            .unwrap()
+            .set_modified(old_time)
+            .unwrap();
+        std::fs::File::open(&new_dir)
+            .unwrap()
+            .set_modified(new_time)
+            .unwrap();
+
+        sort_log_paths(&mut paths);
+
+        // New dir comes first (most recent), then within each dir, sort by name and rotation
+        assert_eq!(paths[0], new_dir.join("app.log"));
+        assert_eq!(paths[1], new_dir.join("err.log"));
+        assert_eq!(paths[2], old_dir.join("app.log"));
+        assert_eq!(paths[3], old_dir.join("app_1.log"));
+        assert_eq!(paths[4], old_dir.join("app_2.log"));
     }
 
     // Tests the resolve_worker_log_path and get_worker_logs functions. It creates a test directory,
