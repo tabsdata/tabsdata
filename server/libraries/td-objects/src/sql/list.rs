@@ -34,6 +34,8 @@ pub enum ListError {
     MissingPaginationParams = 7,
     #[error("Invalid between condition '{0}', it must be <NAME>:btw:<min>::<max>")]
     InvalidBetweenCondition(String) = 8,
+    #[error("Undefined is filter: {0}")]
+    UndefinedIsFilter(String) = 9,
 
     #[error("Error computing SQL entity value: {0}")]
     InvalidSqlEntity(#[source] TdError) = 5000,
@@ -119,16 +121,26 @@ impl FromStr for Order {
     }
 }
 
+#[td_type::typed_enum]
+pub enum IsFilter {
+    #[typed_enum(rename = "null")]
+    Null,
+    #[typed_enum(rename = "not_null")]
+    NotNull,
+}
+
 #[derive(Debug)]
 pub enum Condition<D> {
     Eq(String, Box<dyn SqlEntity>),
     Ne(String, Box<dyn SqlEntity>),
-    Lk(String, Box<LikeFilter>),
+    Lk(String, LikeFilter),
     Gt(String, Box<dyn SqlEntity>),
     Ge(String, Box<dyn SqlEntity>),
     Lt(String, Box<dyn SqlEntity>),
     Le(String, Box<dyn SqlEntity>),
     Btw(String, Box<dyn SqlEntity>, Box<dyn SqlEntity>),
+    // Similar to string like comparisons but for fixed SQL comparisons.
+    Is(String, IsFilter),
     Phantom(PhantomData<D>),
 }
 
@@ -148,6 +160,7 @@ impl<D: ListQuery + Eq> PartialEq for Condition<D> {
                     && max1.as_display() == max2.as_display()
             }
             (Lk(f1, v1), Lk(f2, v2)) => f1 == f2 && v1.as_display() == v2.as_display(),
+            (Is(c1, v1), Is(c2, v2)) => c1 == c2 && v1 == v2,
             (Phantom(_), Phantom(_)) => true,
             _ => false,
         }
@@ -165,9 +178,10 @@ impl<D: ListQuery> Condition<D> {
         const LE: &str = ":le:";
         const LK: &str = ":lk:";
         const BTW: &str = ":btw:";
+        const IS: &str = ":is:";
 
         const OPERATORS: &str = constcat::concat!(
-            EQ, "|", NE, "|", GT, "|", GE, "|", LT, "|", LE, "|", LK, "|", BTW
+            EQ, "|", NE, "|", GT, "|", GE, "|", LT, "|", LE, "|", LK, "|", BTW, "|", IS
         );
         const CONDITION_PATTERN: &str = constcat::concat!(
             "^(?<field>",
@@ -220,7 +234,7 @@ impl<D: ListQuery> Condition<D> {
                     if !D::filter_by_like_fields().contains(&field.as_str()) {
                         Err(ListError::UndefinedLikeFilter(field.clone()))?
                     }
-                    let converted = Box::new(Self::convert_to_like_pattern(&value).try_into()?);
+                    let converted = Self::convert_to_like_pattern(&value)?;
                     Self::Lk(field, converted)
                 }
                 BTW => {
@@ -233,6 +247,11 @@ impl<D: ListQuery> Condition<D> {
                     let sql_max = D::map_sql_entity_value(&field, min_max[1])?
                         .ok_or(ListError::UndefinedField(field.clone()))?;
                     Self::Btw(field, sql_min, sql_max)
+                }
+                IS => {
+                    let sql_value = IsFilter::from_str(&value)
+                        .map_err(|_| ListError::UndefinedIsFilter(value.clone()))?;
+                    Self::Is(field, sql_value)
                 }
                 _ => Err(ListError::InvalidCondition(
                     OPERATORS.to_string(),
@@ -248,21 +267,7 @@ impl<D: ListQuery> Condition<D> {
         }
     }
 
-    pub fn field(&self) -> &str {
-        match self {
-            Condition::Eq(field, _) => field,
-            Condition::Ne(field, _) => field,
-            Condition::Lk(field, _) => field,
-            Condition::Gt(field, _) => field,
-            Condition::Ge(field, _) => field,
-            Condition::Lt(field, _) => field,
-            Condition::Le(field, _) => field,
-            Condition::Btw(field, _, _) => field,
-            Condition::Phantom(_) => unreachable!(),
-        }
-    }
-
-    fn convert_to_like_pattern(value: &str) -> String {
+    fn convert_to_like_pattern(value: &str) -> Result<LikeFilter, TdError> {
         let mut converted_value = String::with_capacity(value.len() * 2);
         let mut previous_char_is_escape = false;
         for c in value.chars() {
@@ -286,19 +291,20 @@ impl<D: ListQuery> Condition<D> {
             converted_value += converted_char;
             previous_char_is_escape = is_escape;
         }
-        converted_value
+        converted_value.try_into()
     }
 
-    pub fn values(&self) -> Vec<&dyn SqlEntity> {
+    pub fn field(&self) -> &str {
         match self {
-            Condition::Eq(_, value) => vec![&**value],
-            Condition::Ne(_, value) => vec![&**value],
-            Condition::Lk(_, value) => vec![&**value],
-            Condition::Gt(_, value) => vec![&**value],
-            Condition::Ge(_, value) => vec![&**value],
-            Condition::Lt(_, value) => vec![&**value],
-            Condition::Le(_, value) => vec![&**value],
-            Condition::Btw(_, min, max) => vec![&**min, &**max],
+            Condition::Eq(field, _) => field,
+            Condition::Ne(field, _) => field,
+            Condition::Lk(field, _) => field,
+            Condition::Gt(field, _) => field,
+            Condition::Ge(field, _) => field,
+            Condition::Lt(field, _) => field,
+            Condition::Le(field, _) => field,
+            Condition::Btw(field, _, _) => field,
+            Condition::Is(field, _) => field,
             Condition::Phantom(_) => unreachable!(),
         }
     }
@@ -313,34 +319,43 @@ impl<D: ListQuery> Condition<D> {
             Condition::Lt(_, _) => "<",
             Condition::Le(_, _) => "<=",
             Condition::Btw(_, _, _) => "BETWEEN",
+            Condition::Is(_, _) => "IS",
             Condition::Phantom(_) => unreachable!(),
         }
     }
+    pub fn bind_value<'a>(
+        &'a self,
+        query_builder: &mut sqlx::query_builder::Separated<'_, 'a, sqlx::Sqlite, &str>,
+    ) {
+        // no SQL injection here, as the values are bound to the fields of the struct
+        query_builder.push(format!("{} {} ", self.field(), self.operator()));
 
-    pub fn connector(&self) -> &str {
         match self {
-            Condition::Eq(_, _)
-            | Condition::Ne(_, _)
-            | Condition::Gt(_, _)
-            | Condition::Ge(_, _)
-            | Condition::Lt(_, _)
-            | Condition::Le(_, _) => "",
-            Condition::Lk(_, _) => r#"ESCAPE '\'"#,
-            Condition::Btw(_, _, _) => "AND",
-            Condition::Phantom(_) => unreachable!(),
-        }
-    }
-
-    pub fn cardinality(&self) -> usize {
-        match self {
-            Condition::Eq(_, _)
-            | Condition::Ne(_, _)
-            | Condition::Lk(_, _)
-            | Condition::Gt(_, _)
-            | Condition::Ge(_, _)
-            | Condition::Lt(_, _)
-            | Condition::Le(_, _) => 1,
-            Condition::Btw(_, _, _) => 2,
+            Condition::Eq(_, value)
+            | Condition::Ne(_, value)
+            | Condition::Gt(_, value)
+            | Condition::Ge(_, value)
+            | Condition::Lt(_, value)
+            | Condition::Le(_, value) => {
+                value.push_bind_unseparated(query_builder);
+            }
+            Condition::Lk(_, value) => {
+                value.push_bind_unseparated(query_builder);
+                query_builder.push_unseparated(r#" ESCAPE '\' "#);
+            }
+            Condition::Btw(_, max, min) => {
+                max.push_bind_unseparated(query_builder);
+                query_builder.push_unseparated(" AND ");
+                min.push_bind_unseparated(query_builder);
+            }
+            Condition::Is(_, value) => match value {
+                IsFilter::Null => {
+                    query_builder.push_unseparated("NULL");
+                }
+                IsFilter::NotNull => {
+                    query_builder.push_unseparated("NOT NULL");
+                }
+            },
             Condition::Phantom(_) => unreachable!(),
         }
     }
@@ -630,7 +645,15 @@ mod tests {
         );
         assert_eq!(
             Condition::<TestDto>::parse("a:lk:A").unwrap(),
-            Condition::Lk("a".to_string(), Box::new("A".try_into().unwrap()))
+            Condition::Lk("a".to_string(), "A".try_into().unwrap())
+        );
+        assert_eq!(
+            Condition::<TestDto>::parse("a:is:null").unwrap(),
+            Condition::Is("a".to_string(), IsFilter::Null)
+        );
+        assert_eq!(
+            Condition::<TestDto>::parse("a:is:not_null").unwrap(),
+            Condition::Is("a".to_string(), IsFilter::NotNull)
         );
     }
 
@@ -676,7 +699,7 @@ mod tests {
             )]),
             OrConditions(vec![Condition::Lk(
                 "like".to_string(),
-                Box::new("LIKE".try_into().unwrap()),
+                "LIKE".try_into().unwrap(),
             )]),
         ]);
         assert_eq!(list_query.conditions, expect);
@@ -749,8 +772,8 @@ mod tests {
         ];
 
         for (input, expected) in test_cases {
-            let result = Condition::<TestDto>::convert_to_like_pattern(input);
-            assert_eq!(result, expected);
+            let result = Condition::<TestDto>::convert_to_like_pattern(input).unwrap();
+            assert_eq!(*result, expected);
         }
     }
 }

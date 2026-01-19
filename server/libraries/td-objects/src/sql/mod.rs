@@ -346,39 +346,14 @@ fn query_params_where<'a, T>(
 ) where
     T: ListQuery,
 {
-    query_params
-        .conditions // And
-        .conditions() // Or
-        .iter()
-        .for_each(|or| {
-            query_builder.push(" AND (");
-            let mut or_separated = query_builder.separated(" OR ");
-            for cond in or.conditions() {
-                // no SQL injection here, as the values are bound to the fields of the struct
-                or_separated.push(format!("{} {} ", cond.field(), cond.operator()));
-                let mut value = cond.values();
-
-                match cond.cardinality() {
-                    1 => {
-                        let value = value.pop().unwrap();
-                        value.push_bind_unseparated(&mut or_separated);
-                        if !cond.connector().is_empty() {
-                            let x = format!(" {} ", cond.connector());
-                            or_separated.push_unseparated(x);
-                        }
-                    }
-                    2 => {
-                        let max = value.pop().unwrap();
-                        let min = value.pop().unwrap();
-                        min.push_bind_unseparated(&mut or_separated);
-                        or_separated.push_unseparated(format!(" {} ", cond.connector()));
-                        max.push_bind_unseparated(&mut or_separated);
-                    }
-                    _ => {}
-                }
-            }
-            query_builder.push(")");
-        });
+    for or in query_params.conditions.conditions() {
+        query_builder.push(" AND (");
+        let mut or_separated = query_builder.separated(" OR ");
+        for cond in or.conditions() {
+            cond.bind_value(&mut or_separated);
+        }
+        query_builder.push(")");
+    }
 
     let mut order = query_params.order.clone();
     let mut natural_order = query_params.natural_order.clone();
@@ -1141,8 +1116,7 @@ mod tests {
 
             let list_params = ListParamsBuilder::default()
                 .order_by("name".to_string())
-                .build()
-                .unwrap();
+                .build()?;
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
             let mut query_builder = DaoQueries::default()
                 .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
@@ -1179,8 +1153,7 @@ mod tests {
 
             let list_params = ListParamsBuilder::default()
                 .order_by("name".to_string())
-                .build()
-                .unwrap();
+                .build()?;
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
             let mut query_builder = DaoQueries::default()
                 .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
@@ -1252,8 +1225,7 @@ mod tests {
 
             let list_params = ListParamsBuilder::default()
                 .filter(vec!["name:lk:A".to_string()])
-                .build()
-                .unwrap();
+                .build()?;
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
             let mut query_builder = DaoQueries::default()
                 .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
@@ -1289,8 +1261,7 @@ mod tests {
 
             let list_params = ListParamsBuilder::default()
                 .filter(vec!["name:lk:*".to_string()])
-                .build()
-                .unwrap();
+                .build()?;
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
             let mut query_builder = DaoQueries::default()
                 .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
@@ -1346,6 +1317,74 @@ mod tests {
 
         #[td_test::test(sqlx(fixture = "test_list_queries"))]
         #[tokio::test]
+        async fn test_dao_list_filter_is_null(db: DbPool) -> Result<(), TdError> {
+            #[Dto]
+            #[dto(list(on = TestDao))]
+            #[td_type(builder(try_from = TestDao))]
+            struct TestDto {
+                #[dto(list(pagination_by = "+"))]
+                id: TestId,
+                #[dto(list(filter))]
+                name: Option<TestName>,
+                modified_on: TestModifiedOn,
+            }
+
+            let list_params = ListParamsBuilder::default()
+                .filter(vec!["name:is:null".to_string()])
+                .build()?;
+            let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
+            let mut query_builder = DaoQueries::default()
+                .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
+                .await?;
+            let query = query_builder.build_query_as();
+
+            let query_str = query.sql();
+            assert_eq!(
+                query_str,
+                "SELECT id, name, modified_on FROM test_table WHERE (1=1) AND (name IS NULL) ORDER BY id ASC LIMIT ?"
+            );
+
+            let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
+            assert_eq!(result.len(), 0);
+            Ok(())
+        }
+
+        #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        #[tokio::test]
+        async fn test_dao_list_filter_is_not_null(db: DbPool) -> Result<(), TdError> {
+            #[Dto]
+            #[dto(list(on = TestDao))]
+            #[td_type(builder(try_from = TestDao))]
+            struct TestDto {
+                #[dto(list(pagination_by = "+"))]
+                id: TestId,
+                #[dto(list(filter))]
+                name: TestName,
+                modified_on: TestModifiedOn,
+            }
+
+            let list_params = ListParamsBuilder::default()
+                .filter(vec!["name:is:not_null".to_string()])
+                .build()?;
+            let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
+            let mut query_builder = DaoQueries::default()
+                .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
+                .await?;
+            let query = query_builder.build_query_as();
+
+            let query_str = query.sql();
+            assert_eq!(
+                query_str,
+                "SELECT id, name, modified_on FROM test_table WHERE (1=1) AND (name IS NOT NULL) ORDER BY id ASC LIMIT ?"
+            );
+
+            let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
+            assert_eq!(result, *FIXTURE_DAOS);
+            Ok(())
+        }
+
+        #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        #[tokio::test]
         async fn test_dao_list_len(db: DbPool) -> Result<(), TdError> {
             #[Dto]
             #[dto(list(on = TestDao))]
@@ -1394,8 +1433,7 @@ mod tests {
             let list_params = ListParamsBuilder::default()
                 .previous(FIXTURE_DAOS[1].id.to_string())
                 .pagination_id(FIXTURE_DAOS[1].id.to_string())
-                .build()
-                .unwrap();
+                .build()?;
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
             let mut query_builder = DaoQueries::default()
                 .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
@@ -1430,8 +1468,7 @@ mod tests {
             let list_params = ListParamsBuilder::default()
                 .next(FIXTURE_DAOS[2].id.to_string())
                 .pagination_id(FIXTURE_DAOS[2].id.to_string())
-                .build()
-                .unwrap();
+                .build()?;
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
             let mut query_builder = DaoQueries::default()
                 .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
@@ -1466,8 +1503,7 @@ mod tests {
             let list_params = ListParamsBuilder::default()
                 .next(FIXTURE_DAOS[1].id.to_string())
                 .pagination_id(FIXTURE_DAOS[1].id.to_string())
-                .build()
-                .unwrap();
+                .build()?;
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
             let mut query_builder = DaoQueries::default()
                 .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
@@ -1539,8 +1575,7 @@ mod tests {
                 .order_by("name+".to_string())
                 .next("A".to_string())
                 .pagination_id(FIXTURE_DAOS[1].id.to_string())
-                .build()
-                .unwrap();
+                .build()?;
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
             let mut query_builder = DaoQueries::default()
                 .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
@@ -1581,8 +1616,7 @@ mod tests {
                 .order_by("id+".to_string())
                 .previous(FIXTURE_DAOS[0].id.to_string())
                 .pagination_id(FIXTURE_DAOS[0].id.to_string())
-                .build()
-                .unwrap();
+                .build()?;
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
             let mut query_builder = DaoQueries::default()
                 .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
@@ -1620,8 +1654,7 @@ mod tests {
                 .order_by("name+".to_string())
                 .previous("A".to_string())
                 .pagination_id(FIXTURE_DAOS[1].id.to_string())
-                .build()
-                .unwrap();
+                .build()?;
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
             let mut query_builder = DaoQueries::default()
                 .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
@@ -1657,8 +1690,7 @@ mod tests {
                 .order_by("name-".to_string())
                 .next("B".to_string())
                 .pagination_id(FIXTURE_DAOS[0].id.to_string())
-                .build()
-                .unwrap();
+                .build()?;
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
             let mut query_builder = DaoQueries::default()
                 .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
@@ -1698,8 +1730,7 @@ mod tests {
                 .order_by("id-".to_string())
                 .previous(FIXTURE_DAOS[0].id.to_string())
                 .pagination_id(FIXTURE_DAOS[0].id.to_string())
-                .build()
-                .unwrap();
+                .build()?;
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
             let mut query_builder = DaoQueries::default()
                 .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
@@ -1738,8 +1769,7 @@ mod tests {
                 .order_by("name-".to_string())
                 .previous("B".to_string())
                 .pagination_id(FIXTURE_DAOS[0].id.to_string())
-                .build()
-                .unwrap();
+                .build()?;
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
             let mut query_builder = DaoQueries::default()
                 .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
@@ -1778,8 +1808,7 @@ mod tests {
                     "id:gt:00000000000000000000000000".to_string(),
                     "name:ge:Z".to_string(),
                 ])
-                .build()
-                .unwrap();
+                .build()?;
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
             let mut query_builder = DaoQueries::default()
                 .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
@@ -1818,8 +1847,7 @@ mod tests {
                 .len(1usize)
                 .filter(vec!["name:eq:C".to_string()])
                 .order_by("name-".to_string())
-                .build()
-                .unwrap();
+                .build()?;
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
             let mut query_builder = DaoQueries::default()
                 .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
