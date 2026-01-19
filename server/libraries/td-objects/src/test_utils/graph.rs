@@ -93,7 +93,7 @@ pub static TABLE_VERSION_IDS: LazyLock<HashMap<TableName, TableVersionId>> = Laz
 
 // Outputs: F0 -> T0 ; F1 -> (T1, T2) ; F2 -> T3
 // Triggers: T0 -> F1
-// Dependencies: T0 -> F1 ; T1 -> F2
+// Dependencies: T0 -> F0 ; T0 -> F1 ; T1 -> F2
 pub async fn test_graph() -> TdGraph {
     let all_tables = vec![
         table(&FUNCTION_NAMES[0], &TABLE_NAMES[0]).await,
@@ -115,6 +115,7 @@ pub async fn test_graph() -> TdGraph {
 
     let output_tables = all_tables;
     let dependencies = vec![
+        dependency(&TABLE_NAMES[0], &FUNCTION_NAMES[0]).await,
         dependency(&TABLE_NAMES[0], &FUNCTION_NAMES[1]).await,
         dependency(&TABLE_NAMES[1], &FUNCTION_NAMES[2]).await,
     ];
@@ -134,8 +135,10 @@ pub async fn test_graph() -> TdGraph {
         FUNCTION_NAMES.len() + TABLE_NAMES.len()
     );
 
-    // There is 1 trigger edge, 2 dependency edges and 4 output edges
-    assert_eq!(graph.inner.edge_count(), 7);
+    assert_eq!(
+        graph.inner.edge_count(),
+        triggers.len() + dependencies.len() + output_tables.len()
+    );
 
     graph
 }

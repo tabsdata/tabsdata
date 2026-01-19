@@ -284,6 +284,69 @@ impl<F> PartialGraph<F> {
         Ok(PartialGraph { inner: new_graph })
     }
 
+    /// Creates a partial graph containing only dependency edges.
+    pub fn dependency_graph<T, V>(
+        original: &TdGraph<F, T, V>,
+        drop_self_dependency: bool,
+    ) -> Result<PartialGraph<&T>, TdError> {
+        let mut new_graph = DiGraph::new();
+        let mut node_map = HashMap::new();
+
+        // Add nodes we want to keep (table nodes)
+        for node_idx in original.inner.node_indices() {
+            let node = &original.inner[node_idx];
+            if let GraphNode::Table(node) = node {
+                let new_idx = new_graph.add_node(node);
+                node_map.insert(node_idx, new_idx);
+            }
+        }
+
+        // Rewire edges
+        for node_idx in original.inner.node_indices() {
+            let node = &original.inner[node_idx];
+            if let GraphNode::Function(_) = node {
+                // For each ignored node, connect its predecessors to successors
+                let preds: Vec<_> = original
+                    .inner
+                    .edges_directed(node_idx, Direction::Incoming)
+                    .filter(|edge| match edge.weight() {
+                        GraphEdge::Output { .. } => true,
+                        GraphEdge::Trigger { .. } => false,
+                        GraphEdge::Dependency { dependency, .. } => {
+                            !(*dependency.self_dependency && drop_self_dependency)
+                        }
+                    })
+                    .map(|edge| edge.source())
+                    .collect();
+
+                let succs: Vec<_> = original
+                    .inner
+                    .edges_directed(node_idx, Direction::Outgoing)
+                    .filter(|edge| match edge.weight() {
+                        GraphEdge::Output { .. } => true,
+                        GraphEdge::Trigger { .. } => false,
+                        GraphEdge::Dependency { dependency, .. } => {
+                            !(*dependency.self_dependency && drop_self_dependency)
+                        }
+                    })
+                    .map(|edge| edge.target())
+                    .collect();
+
+                for pred in preds {
+                    if let Some(&new_pred) = node_map.get(&pred) {
+                        for succ in &succs {
+                            if let Some(&new_succ) = node_map.get(succ) {
+                                new_graph.add_edge(new_pred, new_succ, ());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(PartialGraph { inner: new_graph })
+    }
+
     /// Generates a DOT representation of the partial graph.
     #[allow(dead_code)]
     pub fn dot(&self) -> Dot<'_, &Graph<F, ()>> {
@@ -435,6 +498,14 @@ mod tests {
                     },
                     (GraphNode::Table(t), GraphNode::Function(f)) => match (&t.name, &f.name) {
                         (table, function)
+                            if table == &TABLE_NAMES[0] && function == &FUNCTION_NAMES[0] =>
+                        {
+                            assert!(matches!(
+                                edge.weight(),
+                                GraphEdge::Dependency { .. } | GraphEdge::Trigger { .. }
+                            ));
+                        }
+                        (table, function)
                             if table == &TABLE_NAMES[0] && function == &FUNCTION_NAMES[1] =>
                         {
                             assert!(matches!(
@@ -460,10 +531,13 @@ mod tests {
         let graph = test_graph().await;
         let relations = graph.relations();
 
-        assert_eq!(relations.len(), 7);
+        assert_eq!(relations.len(), 8);
         for (function, table, edge) in relations {
             if function.name == FUNCTION_NAMES[0] && table.name == TABLE_NAMES[0] {
-                assert!(matches!(edge, GraphEdge::Output { .. }));
+                assert!(matches!(
+                    edge,
+                    GraphEdge::Output { .. } | GraphEdge::Dependency { .. }
+                ));
             }
             if function.name == FUNCTION_NAMES[1] && table.name == TABLE_NAMES[1] {
                 assert!(matches!(edge, GraphEdge::Output { .. }));
@@ -512,6 +586,47 @@ mod tests {
         assert_eq!(source.name, FUNCTION_NAMES[0]);
         let target = trigger_graph.inner[edge.target()];
         assert_eq!(target.name, FUNCTION_NAMES[1]);
+    }
+
+    #[tokio::test]
+    async fn test_dependency_graph() {
+        let graph = test_graph().await;
+        let dependency_graph = PartialGraph::dependency_graph(&graph, true).unwrap();
+        assert_eq!(dependency_graph.inner.node_count(), TABLE_NAMES.len());
+        assert_eq!(dependency_graph.inner.edge_count(), 3);
+
+        let table_nodes = dependency_graph
+            .inner
+            .node_indices()
+            .map(|node| dependency_graph.inner[node].clone())
+            .sorted_by_key(|k| k.name.clone())
+            .collect::<Vec<_>>();
+        let expected_table_nodes = expected_table_nodes()
+            .into_iter()
+            .sorted_by_key(|k| k.name.clone())
+            .collect::<Vec<_>>();
+        assert_eq!(table_nodes, expected_table_nodes);
+
+        let edges: Vec<_> = dependency_graph.inner.edge_references().collect();
+        assert_eq!(edges.len(), 3);
+
+        let edge = edges[0];
+        let source = dependency_graph.inner[edge.source()];
+        assert_eq!(source.name, TABLE_NAMES[0]);
+        let target = dependency_graph.inner[edge.target()];
+        assert_eq!(target.name, TABLE_NAMES[2]);
+
+        let edge = edges[1];
+        let source = dependency_graph.inner[edge.source()];
+        assert_eq!(source.name, TABLE_NAMES[0]);
+        let target = dependency_graph.inner[edge.target()];
+        assert_eq!(target.name, TABLE_NAMES[1]);
+
+        let edge = edges[2];
+        let source = dependency_graph.inner[edge.source()];
+        assert_eq!(source.name, TABLE_NAMES[1]);
+        let target = dependency_graph.inner[edge.target()];
+        assert_eq!(target.name, TABLE_NAMES[3]);
     }
 
     #[tokio::test]

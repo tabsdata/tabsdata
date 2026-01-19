@@ -13,17 +13,21 @@ use td_error::{TdError, td_error};
 use td_objects::graph::{MapGraph, PartialGraph, TdGraph};
 use td_objects::table_ref::Versions;
 use td_objects::transaction::map::TransactionMapper;
-use td_objects::types::basic::{FunctionName, TransactionByStr, TransactionKey};
+use td_objects::types::basic::{FunctionName, TableName, TransactionByStr, TransactionKey};
 use td_objects::types::graph::{FunctionNode, GraphEdge, GraphNode, ResolvedVersion, TableNode};
 
 #[td_error]
 enum ExecutionPlannerError {
-    #[error("Graph is not a Direct Acyclic Graph. Cycle found in: {0:?}")]
+    #[error("Graph is not a Directed Acyclic Graph trigger wise. Cycle found in function: {0}")]
     CyclicTrigger(FunctionName) = 0,
     #[error(
-        "Graph is not a transactional Direct Acyclic Graph with transaction mode: {0:?}. Cycle found in: {1:?}"
+        "Graph is not a Directed Acyclic Graph dependency wise. A dependency cycle is only allowed by its own function. Cycle found in table: {0}"
     )]
-    CyclicTransaction(TransactionByStr, TransactionKey) = 1,
+    CyclicDependency(TableName) = 1,
+    #[error(
+        "Graph is not a transactional Directed Acyclic Graph with transaction mode: {0:?}. Cycle found in transaction: {1}"
+    )]
+    CyclicTransaction(TransactionByStr, TransactionKey) = 2,
     #[error("Trigger function '{0}' not found in execution plan.")]
     InvalidTrigger(String) = 5000,
 }
@@ -118,7 +122,7 @@ impl<T, V> ExecutionPlan<FunctionNode, T, V> {
         &self,
         transaction_mapper: &impl TransactionMapper,
     ) -> Result<(), TdError> {
-        let partial = PartialGraph::<FunctionNode>::transaction_graph(self, transaction_mapper)?;
+        let partial = PartialGraph::transaction_graph(self, transaction_mapper)?;
         toposort(&partial.inner, None).map_err(|err| {
             let key = &partial.inner[err.node_id()];
             match transaction_mapper.transaction_by() {
@@ -127,6 +131,18 @@ impl<T, V> ExecutionPlan<FunctionNode, T, V> {
                 }
                 Err(err) => err,
             }
+        })?;
+        Ok(())
+    }
+}
+
+impl<F, V> ExecutionPlan<F, TableNode, V> {
+    pub fn validate_dag_dependency(&self) -> Result<(), TdError> {
+        // drop self dependencies as those cycles are allowed, and toposort errors if present
+        let partial = PartialGraph::dependency_graph(self, true)?;
+        toposort(&partial.inner, None).map_err(|err| {
+            let table = &partial.inner[err.node_id()];
+            ExecutionPlannerError::CyclicDependency(table.name.clone())
         })?;
         Ok(())
     }
@@ -334,6 +350,15 @@ mod tests {
             .with_trigger(&function_node(&FUNCTION_NAMES[0]))
             .unwrap();
         assert!(graph.validate_dag_trigger().is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_graph_validate_dag_dependency_ok() {
+        let graph = test_graph().await;
+        let graph = graph
+            .with_trigger(&function_node(&FUNCTION_NAMES[0]))
+            .unwrap();
+        assert!(graph.validate_dag_dependency().is_ok());
     }
 
     #[tokio::test]

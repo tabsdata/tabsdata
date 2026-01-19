@@ -93,6 +93,7 @@ pub async fn validate_execution_plan(
     Input(execution_plan): Input<ExecutionPlan>,
 ) -> Result<(), TdError> {
     execution_plan.validate_dag_trigger()?;
+    execution_plan.validate_dag_dependency()?;
     execution_plan.validate_dag_transaction(transaction_by.deref())?;
     Ok(())
 }
