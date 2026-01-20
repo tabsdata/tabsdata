@@ -19,8 +19,8 @@ use pyo3_stub_gen::derive::gen_stub_pyfunction;
 use serde::Deserialize;
 use std::collections::BTreeMap;
 use td_common::logging;
-use tracing::{Level, debug};
 use td_common::logging::DEVELOPMENT_PROFILE;
+use tracing::{Level, debug};
 
 struct GrokContext {
     matcher: Arc<grok::Pattern>,

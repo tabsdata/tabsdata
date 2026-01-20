@@ -158,6 +158,38 @@ class Upgrade_1_5_1_to_1_6_0(Upgrade):
                             ignore=shutil.ignore_patterns(".gitkeep"),
                         )
 
+        source_config_folder = td_resource("resources/profile/workspace/config")
+        target_config_folder = instance / "workspace" / "config"
+
+        log_yaml_files = []
+        if source_config_folder.exists():
+            log_yaml_files = list(source_config_folder.rglob("log.yaml"))
+
+        if dry_run:
+            for log_yaml_file in log_yaml_files:
+                relative_path = log_yaml_file.relative_to(source_config_folder)
+                target_file = target_config_folder / relative_path
+                if target_file.exists():
+                    messages.append(
+                        f"[dry-run] Would replace '{target_file}' with"
+                        f" '{log_yaml_file}'."
+                    )
+                else:
+                    messages.append(
+                        f"[dry-run] Would copy '{log_yaml_file}' to '{target_file}'."
+                    )
+        else:
+            for log_yaml_file in log_yaml_files:
+                relative_path = log_yaml_file.relative_to(source_config_folder)
+                target_file = target_config_folder / relative_path
+                target_existed = target_file.exists()
+                target_file.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(log_yaml_file, target_file)
+                if target_existed:
+                    messages.append(f"Replaced '{target_file}' with '{log_yaml_file}'.")
+                else:
+                    messages.append(f"Copied '{log_yaml_file}' to '{target_file}'.")
+
         return messages
 
 
