@@ -3,7 +3,6 @@
 //
 
 use crate::env::{get_current_dir, to_absolute};
-use crate::logging::LogOutput::File;
 use crate::manifest::{Inf, WORKER_INF_FILE};
 use crate::settings::{LOG_WITH_ANSI, MANAGER, TRUE};
 use once_cell::sync::OnceCell;
@@ -16,9 +15,10 @@ use std::env;
 use std::fmt::Debug;
 use std::fs::{OpenOptions, create_dir_all, read_to_string};
 use std::io::{ErrorKind, stdout};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use tracing::field::Field;
+use tracing::level_filters::LevelFilter;
 use tracing::{Event, Level, Subscriber, debug, error, info, trace, warn};
 use tracing_subscriber::filter::Directive;
 use tracing_subscriber::fmt::MakeWriter;
@@ -26,12 +26,6 @@ use tracing_subscriber::fmt::writer::BoxMakeWriter;
 use tracing_subscriber::layer::{Context, SubscriberExt};
 use tracing_subscriber::registry::LookupSpan;
 use tracing_subscriber::{EnvFilter, Layer, Registry};
-// ToDo: Dimas: Accept logging configuration from external file. --> https://tabsdata.atlassian.net/browse/TD-249
-// ToDo: Dimas: Configure logging channel through logging configuration file. --> https://tabsdata.atlassian.net/browse/TD-250
-// ToDo: Dimas: Allow custom configuration of log format. --> https://tabsdata.atlassian.net/browse/TD-251
-// ToDo: Dimas: Support to logging configuration reload. --> https://tabsdata.atlassian.net/browse/TD-252
-// ToDo: Dimas: Enable OpenTelemetry Semantic Conventions. --> https://tabsdata.atlassian.net/browse/TD-253
-// ToDo: Dimas: Support to configurable exporters as an alternative to file or standard output. --> https://tabsdata.atlassian.net/browse/TD-254
 
 pub const SENSITIVE_MARKER: &str = "@@SENSITIVE@@";
 
@@ -43,7 +37,12 @@ pub const CURRENT_DIR: &str = ".";
 pub const DEFAULT_LOG_POSITION: &str = "..";
 pub const DEFAULT_LOG_PLACE: &str = "work";
 
-pub const PROFILE_ENV_PATTERN: &str = "TD_LOG_PROFILE_";
+pub const TD_LOG_PROFILE_ENV: &str = "TD_LOG_PROFILE";
+pub const TD_LOG_PROFILE_ENV_PATTERN: &str = "TD_LOG_PROFILE_";
+
+pub const CONSOLE_PROFILE: &str = "console";
+pub const DEVELOPMENT_PROFILE: &str = "development";
+pub const PRODUCTION_PROFILE: &str = "production";
 
 pub const LOG_CONFIG_FILE: &str = "log.yaml";
 
@@ -54,6 +53,10 @@ pub const LOG_EXTENSION: &str = "log";
 pub const WORK_ENV: &str = "TD_URI_WORK";
 pub const PYTEST_VERSION: &str = "PYTEST_VERSION";
 
+fn bootstrap_notice(message: impl Into<String>) {
+    eprintln!("[logging] {}", message.into());
+}
+
 use tracing_subscriber::reload::{Handle, Layer as ReloadLayer};
 use tracing_subscriber::util::SubscriberInitExt;
 
@@ -61,12 +64,6 @@ static LOG_RELOAD_HANDLE: OnceCell<Handle<EnvFilter, Registry>> = OnceCell::new(
 
 // Global logger provider, initialized once.
 static LOGGER_PROVIDER: OnceCell<LoggerGuard> = OnceCell::new();
-
-// Enum to specify log output type
-pub enum LogOutput {
-    StdOut,
-    File(PathBuf),
-}
 
 // Struct to hold the logger provider and ensure proper shutdown.
 struct LoggerGuard {
@@ -103,13 +100,15 @@ where
     }
 }
 
-// Initialize the logger with the specified max level and writer.
+// Initialize the logger.
 #[allow(unused_variables)]
 fn init<W: for<'a> MakeWriter<'a> + Send + Sync + 'static>(
     max_level: Level,
     writer: W,
     directives: Vec<String>,
     with_tokio_console: bool,
+    log_dir: Option<PathBuf>,
+    profile: Option<LogProfile>,
 ) -> LoggerGuard {
     let log_with_ansi = MANAGER.get(LOG_WITH_ANSI).as_deref() == Some(TRUE);
 
@@ -117,52 +116,48 @@ fn init<W: for<'a> MakeWriter<'a> + Send + Sync + 'static>(
         .with_ansi(log_with_ansi)
         .with_writer(writer);
 
-    let env_filter = match load() {
-        Some(log_config) => {
-            let profile = match obtain_name() {
-                Some(worker_name) => {
-                    let profile_env = format!("{}{}", PROFILE_ENV_PATTERN, &worker_name);
-                    env::var(profile_env).unwrap_or(log_config.profile)
-                }
-                None => log_config.profile,
-            };
-            match log_config.profiles.get(&profile) {
-                Some(log_filter) => log_filter.directives.iter().fold(
-                    EnvFilter::from_default_env().add_directive(
-                        Level::from_str(&log_filter.level)
-                            .unwrap_or_else(|_| {
-                                panic!("Unable to parse log level `{}`", log_filter.level)
-                            })
-                            .into(),
-                    ),
-                    |filter, directive| {
-                        filter.add_directive(directive.parse().unwrap_or_else(|_| {
-                            panic!("Unable to parse log directive `{directive}`")
-                        }))
-                    },
-                ),
-                None => EnvFilter::from_default_env().add_directive(max_level.into()),
-            }
-        }
-        None => directives.iter().fold(
-            EnvFilter::from_default_env().add_directive(Directive::from(max_level)),
-            |filter, directive| {
-                filter.add_directive(
-                    directive
-                        .parse()
-                        .unwrap_or_else(|_| panic!("Unable to parse log directive `{directive}`")),
-                )
-            },
-        ),
+    let (filter, sinks) = match profile {
+        Some(profile) => (build_profile_filter(&profile), profile.sinks.clone()),
+        None => (build_default_filter(max_level, &directives), Vec::new()),
     };
 
-    let (reload_filter, handle) = ReloadLayer::new(env_filter);
+    let (reload_filter, handle) = ReloadLayer::new(filter);
     LOG_RELOAD_HANDLE.set(handle).ok();
+
+    let mut sink_layers = Vec::new();
+    for sink in &sinks {
+        let writer = match sink.output {
+            LogSinkOutput::StdOut => BoxMakeWriter::new(stdout),
+            LogSinkOutput::File => match sink.file.as_deref() {
+                Some(file_name) => match resolve_sink_path(file_name, log_dir.as_deref()) {
+                    Some(path) => make_file_writer(&path),
+                    None => {
+                        bootstrap_notice(format!(
+                            "Could not resolve directory for sink '{file_name}'; defaulting to stdout."
+                        ));
+                        BoxMakeWriter::new(stdout)
+                    }
+                },
+                None => {
+                    bootstrap_notice("File sink declared without 'file'; defaulting to stdout.");
+                    BoxMakeWriter::new(stdout)
+                }
+            },
+        };
+        let filter = build_sink_filter(&sink.directives);
+        let layer = tracing_subscriber::fmt::layer()
+            .with_ansi(log_with_ansi)
+            .with_writer(writer)
+            .boxed();
+        sink_layers.push(SinkLayer { layer, filter });
+    }
+    let base_layer = tabsdata_layer.boxed();
+    let tabsdata_layers = MultiWriterLayer::new(base_layer, sink_layers);
 
     let registry = tracing_subscriber::registry()
         .with(reload_filter)
         .with(SensitiveFilterLayer)
-        .with(tabsdata_layer);
+        .with(tabsdata_layers);
     #[cfg(feature = "tokio_console")]
     let registry = registry.with(if with_tokio_console {
         Some(console_subscriber::spawn())
@@ -180,21 +175,120 @@ fn init<W: for<'a> MakeWriter<'a> + Send + Sync + 'static>(
     LoggerGuard { provider }
 }
 
-// Start the logger with the specified max level and output type.
+// Start the logger.
 // Option 'with_tokio_console' enabled requires also binaries with feature 'tokio_console'.
 // Otherwise, flag will be ignored defaulting to standard behavior.
-pub fn start(max_level: Level, output_type: Option<LogOutput>, with_tokio_console: bool) {
-    match output_type {
-        None => obtain_log_path(
+pub fn start(max_level: Level, profile: Option<String>, with_tokio_console: bool) {
+    let log_config = load();
+    let active_profile_name = determine_profile_name(profile, log_config.as_ref());
+    let active_profile = log_config
+        .as_ref()
+        .and_then(|cfg| cfg.profiles.get(&active_profile_name).cloned());
+    let log_dir = resolve_log_directory(PathBuf::from(CURRENT_DIR));
+    let writer = select_primary_writer(active_profile.as_ref(), log_dir.as_deref());
+    LOGGER_PROVIDER.get_or_init(|| {
+        init(
             max_level,
-            File(PathBuf::from(CURRENT_DIR)),
+            writer,
+            vec![],
             with_tokio_console,
-        ),
-        Some(channel) => obtain_log_path(max_level, channel, with_tokio_console),
+            log_dir.clone(),
+            active_profile.clone(),
+        )
+    });
+}
+
+fn select_primary_writer(profile: Option<&LogProfile>, log_dir: Option<&Path>) -> BoxMakeWriter {
+    let output = profile.map(|p| p.output).unwrap_or_default();
+    match output {
+        LogProfileOutput::StdOut => BoxMakeWriter::new(stdout),
+        LogProfileOutput::File => {
+            if let Some(dir) = log_dir {
+                let file_path = dir.join(LOG_FILE);
+                make_file_writer(&file_path)
+            } else {
+                bootstrap_notice(
+                    "Log directory not resolved for file output; defaulting to stdout.",
+                );
+                BoxMakeWriter::new(stdout)
+            }
+        }
     }
 }
 
-fn obtain_name() -> Option<String> {
+fn determine_profile_name(input_profile: Option<String>, log_config: Option<&LogConfig>) -> String {
+    if let Some(worker_profile) = determine_worker_profile(log_config) {
+        return worker_profile;
+    }
+
+    if let Ok(user_profile) = env::var(TD_LOG_PROFILE_ENV) {
+        if profile_exists(&user_profile, log_config) {
+            return user_profile;
+        } else {
+            bootstrap_notice(format!(
+                "Ignoring TD_LOG_PROFILE '{user_profile}' because it is not defined."
+            ));
+        }
+    }
+
+    if let Some(profile) = input_profile {
+        if profile_exists(&profile, log_config) {
+            return profile;
+        } else {
+            bootstrap_notice(format!(
+                "Input log profile '{profile}' is not defined. Ignoring it."
+            ));
+        }
+    }
+
+    if is_test_context() && profile_exists(DEVELOPMENT_PROFILE, log_config) {
+        return DEVELOPMENT_PROFILE.to_string();
+    }
+
+    if profile_exists(PRODUCTION_PROFILE, log_config) {
+        return PRODUCTION_PROFILE.to_string();
+    }
+
+    if let Some(config) = log_config
+        && profile_exists(&config.profile, log_config)
+    {
+        return config.profile.clone();
+    }
+
+    PRODUCTION_PROFILE.to_string()
+}
+
+fn determine_worker_profile(log_config: Option<&LogConfig>) -> Option<String> {
+    let worker_name = obtain_worker_name()?;
+    let profile_env = format!("{}{}", TD_LOG_PROFILE_ENV_PATTERN, worker_name);
+    let profile = env::var(profile_env).ok()?;
+    if profile_exists(&profile, log_config) {
+        Some(profile)
+    } else {
+        bootstrap_notice(format!(
+            "Worker-specific log profile '{profile}' is not defined."
+        ));
+        None
+    }
+}
+
+fn profile_exists(profile: &str, log_config: Option<&LogConfig>) -> bool {
+    log_config
+        .map(|cfg| cfg.profiles.contains_key(profile))
+        .unwrap_or(true)
+}
+
+#[cfg(not(test))]
+fn is_test_context() -> bool {
+    false
+}
+
+#[cfg(test)]
+fn is_test_context() -> bool {
+    true
+}
+
+fn obtain_worker_name() -> Option<String> {
     let inf_path = get_current_dir().join(WORKER_INF_FILE);
     if !inf_path.exists() {
         return None;
@@ -214,29 +308,7 @@ fn obtain_config_folder() -> Option<PathBuf> {
     Some(inf.config)
 }
 
-fn obtain_log_path(max_level: Level, output_type: LogOutput, with_tokio_console: bool) {
-    let writer = match output_type {
-        LogOutput::StdOut => BoxMakeWriter::new(stdout),
-        File(path) => {
-            let location = obtain_log_location(path);
-            if let Some(path) = location {
-                create_dir_all(path.parent().expect("Failed to resolve log directory {}"))
-                    .expect("Failed to create log directory {}");
-                let file = OpenOptions::new()
-                    .append(true)
-                    .create(true)
-                    .open(path)
-                    .unwrap();
-                BoxMakeWriter::new(file)
-            } else {
-                BoxMakeWriter::new(stdout)
-            }
-        }
-    };
-    LOGGER_PROVIDER.get_or_init(|| init(max_level, writer, vec![], with_tokio_console));
-}
-
-fn obtain_log_location(path: PathBuf) -> Option<PathBuf> {
+fn resolve_log_directory(path: PathBuf) -> Option<PathBuf> {
     let path = if path.is_absolute() {
         Some(path)
     } else {
@@ -245,11 +317,284 @@ fn obtain_log_location(path: PathBuf) -> Option<PathBuf> {
             .or_else(|| obtain_log_location_from_environment(path.clone()))
             .or_else(|| obtain_log_location_from_pytest(path))
     };
-    path.and_then(|path| {
-        to_absolute(&path)
-            .ok()
-            .map(|abs_path| abs_path.join(LOG_LOCATION).join(LOG_FILE))
+    path.and_then(|path| match to_absolute(&path) {
+        Ok(abs_path) => Some(abs_path.join(LOG_LOCATION)),
+        Err(err) => {
+            bootstrap_notice(format!(
+                "Failed to resolve absolute log path for '{}': {err}.",
+                path.display()
+            ));
+            None
+        }
     })
+}
+
+fn resolve_sink_path(file: &str, log_dir: Option<&Path>) -> Option<PathBuf> {
+    let sink_path = PathBuf::from(file);
+    if sink_path.is_absolute() {
+        Some(sink_path)
+    } else {
+        log_dir.map(|dir| dir.join(sink_path))
+    }
+}
+
+fn make_file_writer(path: &Path) -> BoxMakeWriter {
+    if let Some(parent) = path.parent()
+        && let Err(err) = create_dir_all(parent)
+    {
+        bootstrap_notice(format!(
+            "Failed to create log directory '{}': {err}. Defaulting to stdout.",
+            parent.display()
+        ));
+        return BoxMakeWriter::new(stdout);
+    }
+
+    match OpenOptions::new().append(true).create(true).open(path) {
+        Ok(file) => BoxMakeWriter::new(file),
+        Err(err) => {
+            bootstrap_notice(format!(
+                "Unable to open log file '{}': {err}. Defaulting to stdout.",
+                path.display()
+            ));
+            BoxMakeWriter::new(stdout)
+        }
+    }
+}
+
+fn build_sink_filter(directives: &[String]) -> EnvFilter {
+    let filter = EnvFilter::builder()
+        .with_default_directive(
+            if directives.is_empty() {
+                LevelFilter::INFO
+            } else {
+                LevelFilter::OFF
+            }
+            .into(),
+        )
+        .parse_lossy("");
+    directives
+        .iter()
+        .fold(filter, |acc, directive| match directive.parse() {
+            Ok(parsed) => acc.add_directive(parsed),
+            Err(err) => {
+                bootstrap_notice(format!(
+                    "Unable to parse log directive '{directive}': {err}. Ignoring directive."
+                ));
+                acc
+            }
+        })
+}
+
+type BoxedLayer<S> = Box<dyn Layer<S> + Send + Sync + 'static>;
+
+struct SinkLayer<S>
+where
+    S: Subscriber + for<'a> LookupSpan<'a>,
+{
+    layer: BoxedLayer<S>,
+    filter: EnvFilter,
+}
+
+struct MultiWriterLayer<S>
+where
+    S: Subscriber + for<'a> LookupSpan<'a>,
+{
+    base: BoxedLayer<S>,
+    sinks: Vec<SinkLayer<S>>,
+}
+
+impl<S> MultiWriterLayer<S>
+where
+    S: Subscriber + for<'a> LookupSpan<'a>,
+{
+    fn new(base: BoxedLayer<S>, sinks: Vec<SinkLayer<S>>) -> Self {
+        Self { base, sinks }
+    }
+}
+
+impl<S> Layer<S> for MultiWriterLayer<S>
+where
+    S: Subscriber + for<'a> LookupSpan<'a>,
+{
+    fn on_register_dispatch(&self, dispatch: &tracing::Dispatch) {
+        self.base.on_register_dispatch(dispatch);
+        for sink in &self.sinks {
+            sink.layer.on_register_dispatch(dispatch);
+        }
+    }
+
+    fn on_layer(&mut self, subscriber: &mut S) {
+        self.base.on_layer(subscriber);
+        for sink in &mut self.sinks {
+            sink.layer.on_layer(subscriber);
+        }
+    }
+
+    fn register_callsite(
+        &self,
+        metadata: &'static tracing::Metadata<'static>,
+    ) -> tracing::subscriber::Interest {
+        let mut base_interest = self.base.register_callsite(metadata);
+        for sink in &self.sinks {
+            let sink_interest = sink.layer.register_callsite(metadata);
+            if sink_interest.is_always() {
+                return tracing::subscriber::Interest::always();
+            } else if sink_interest.is_never() {
+                continue;
+            } else if !base_interest.is_always() {
+                base_interest = tracing::subscriber::Interest::sometimes();
+            }
+        }
+        base_interest
+    }
+
+    fn enabled(&self, metadata: &tracing::Metadata<'_>, ctx: Context<'_, S>) -> bool {
+        for sink in &self.sinks {
+            if sink.filter.enabled(metadata, ctx.clone()) {
+                return true;
+            }
+        }
+        self.base.enabled(metadata, ctx)
+    }
+
+    fn on_new_span(
+        &self,
+        attrs: &tracing::span::Attributes<'_>,
+        id: &tracing::span::Id,
+        ctx: Context<'_, S>,
+    ) {
+        self.base.on_new_span(attrs, id, ctx.clone());
+        for sink in &self.sinks {
+            sink.layer.on_new_span(attrs, id, ctx.clone());
+        }
+    }
+
+    fn max_level_hint(&self) -> Option<LevelFilter> {
+        let mut hint = self.base.max_level_hint();
+        for sink in &self.sinks {
+            if let Some(sink_hint) = sink.layer.max_level_hint() {
+                hint = match hint {
+                    Some(current) if current >= sink_hint => Some(current),
+                    _ => Some(sink_hint),
+                };
+            }
+        }
+        hint
+    }
+
+    fn on_record(
+        &self,
+        span: &tracing::span::Id,
+        values: &tracing::span::Record<'_>,
+        ctx: Context<'_, S>,
+    ) {
+        self.base.on_record(span, values, ctx.clone());
+        for sink in &self.sinks {
+            sink.layer.on_record(span, values, ctx.clone());
+        }
+    }
+
+    fn on_follows_from(
+        &self,
+        span: &tracing::span::Id,
+        follows: &tracing::span::Id,
+        ctx: Context<'_, S>,
+    ) {
+        self.base.on_follows_from(span, follows, ctx.clone());
+        for sink in &self.sinks {
+            sink.layer.on_follows_from(span, follows, ctx.clone());
+        }
+    }
+
+    fn event_enabled(&self, event: &Event<'_>, ctx: Context<'_, S>) -> bool {
+        for sink in &self.sinks {
+            if sink.filter.enabled(event.metadata(), ctx.clone()) {
+                return true;
+            }
+        }
+        self.base.event_enabled(event, ctx)
+    }
+
+    fn on_event(&self, event: &Event<'_>, ctx: Context<'_, S>) {
+        let mut handled = false;
+        for sink in &self.sinks {
+            if sink.filter.enabled(event.metadata(), ctx.clone()) {
+                sink.layer.on_event(event, ctx.clone());
+                handled = true;
+            }
+        }
+        if !handled {
+            self.base.on_event(event, ctx);
+        }
+    }
+
+    fn on_enter(&self, id: &tracing::span::Id, ctx: Context<'_, S>) {
+        self.base.on_enter(id, ctx.clone());
+        for sink in &self.sinks {
+            sink.layer.on_enter(id, ctx.clone());
+        }
+    }
+
+    fn on_exit(&self, id: &tracing::span::Id, ctx: Context<'_, S>) {
+        self.base.on_exit(id, ctx.clone());
+        for sink in &self.sinks {
+            sink.layer.on_exit(id, ctx.clone());
+        }
+    }
+
+    fn on_close(&self, id: tracing::span::Id, ctx: Context<'_, S>) {
+        self.base.on_close(id.clone(), ctx.clone());
+        for sink in &self.sinks {
+            sink.layer.on_close(id.clone(), ctx.clone());
+        }
+    }
+
+    fn on_id_change(&self, old: &tracing::span::Id, new: &tracing::span::Id, ctx: Context<'_, S>) {
+        self.base.on_id_change(old, new, ctx.clone());
+        for sink in &self.sinks {
+            sink.layer.on_id_change(old, new, ctx.clone());
+        }
+    }
+}
+
+fn build_default_filter(max_level: Level, directives: &[String]) -> EnvFilter {
+    directives.iter().fold(
+        EnvFilter::from_default_env().add_directive(Directive::from(max_level)),
+        |filter, directive| match directive.parse() {
+            Ok(parsed) => filter.add_directive(parsed),
+            Err(err) => {
+                bootstrap_notice(format!(
+                    "Unable to parse log directive '{directive}': {err}. Ignoring directive."
+                ));
+                filter
+            }
+        },
+    )
+}
+
+fn build_profile_filter(profile: &LogProfile) -> EnvFilter {
+    let level = match Level::from_str(&profile.level) {
+        Ok(level) => level,
+        Err(err) => {
+            bootstrap_notice(format!(
+                "Unable to parse log level '{}': {err}. Falling back to INFO.",
+                profile.level
+            ));
+            Level::INFO
+        }
+    };
+    profile.directives.iter().fold(
+        EnvFilter::from_default_env().add_directive(level.into()),
+        |filter, directive| match directive.parse() {
+            Ok(parsed) => filter.add_directive(parsed),
+            Err(err) => {
+                bootstrap_notice(format!(
+                    "Unable to parse log directive '{directive}': {err}. Ignoring directive."
+                ));
+                filter
+            }
+        },
+    )
 }
 
 fn obtain_log_location_from_info_file(path: PathBuf) -> Option<PathBuf> {
@@ -319,9 +664,41 @@ pub fn set_log_level(level: Level) {
 }
 
 #[derive(Debug, Deserialize, Clone)]
+pub struct LogSinkConfig {
+    #[serde(default)]
+    pub file: Option<String>,
+    #[serde(default)]
+    pub directives: Vec<String>,
+    #[serde(default)]
+    pub output: LogSinkOutput,
+}
+
+#[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+#[derive(Default)]
+pub enum LogSinkOutput {
+    StdOut,
+    #[default]
+    File,
+}
+
+#[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+#[derive(Default)]
+pub enum LogProfileOutput {
+    StdOut,
+    #[default]
+    File,
+}
+
+#[derive(Debug, Deserialize, Clone)]
 pub struct LogProfile {
     pub level: String,
     pub directives: Vec<String>,
+    #[serde(default)]
+    pub sinks: Vec<LogSinkConfig>,
+    #[serde(default)]
+    pub output: LogProfileOutput,
 }
 
 #[derive(Debug, Deserialize)]
@@ -332,23 +709,28 @@ pub struct LogConfig {
 
 pub fn load() -> Option<LogConfig> {
     let config_folder = obtain_config_folder()?;
-    let content = match read_to_string(config_folder.join(LOG_CONFIG_FILE)) {
+    let config_path = config_folder.join(LOG_CONFIG_FILE);
+    let content = match read_to_string(&config_path) {
         Ok(content) => content,
         Err(err) if err.kind() == ErrorKind::NotFound => {
             return None;
         }
-        Err(e) => {
-            panic!(
-                "Failed to read log configuration file '{LOG_CONFIG_FILE}' in working folder: {e}"
-            );
+        Err(err) => {
+            bootstrap_notice(format!(
+                "Failed to read log configuration file '{}': {err}. Falling back to defaults.",
+                config_path.display()
+            ));
+            return None;
         }
     };
     match serde_yaml::from_str::<LogConfig>(&content) {
         Ok(config) => Some(config),
-        Err(e) => {
-            panic!(
-                "Failed to parse log configuration file '{LOG_CONFIG_FILE}' in working folder: {e}"
-            )
+        Err(err) => {
+            bootstrap_notice(format!(
+                "Failed to parse log configuration file '{}': {err}. Falling back to defaults.",
+                config_path.display()
+            ));
+            None
         }
     }
 }
@@ -543,21 +925,22 @@ macro_rules! td_log_monad {
             fn log<Level: LogLevel>(self, msg: impl Fn(&Option<T>) -> Option<String>) -> Self;
         }
 
+        fn log_with_level(level: tracing::log::Level, msg: String) {
+            match level {
+                tracing::log::Level::Error => tracing::error!(message = msg),
+                tracing::log::Level::Warn => tracing::warn!(message = msg),
+                tracing::log::Level::Info => tracing::info!(message = msg),
+                tracing::log::Level::Debug => tracing::debug!(message = msg),
+                tracing::log::Level::Trace => tracing::trace!(message = msg),
+            }
+        }
+
         #[allow(dead_code)]
         impl<T, E> ResultLogger<T, E> for Result<T, E> {
             fn log<MD: LogLevel>(self, msg_fn: impl Fn(&Result<T, E>) -> Option<String>) -> Self {
-                //let module = module_path!();
                 let level: tracing::log::Level = MD::level();
-                // todo check if module + level logging is enabled
-                // if the msg_fn returns None, skip logging
                 if let Some(msg) = msg_fn(&self) {
-                    match level {
-                        tracing::log::Level::Error => tracing::error!(message = msg),
-                        tracing::log::Level::Warn => tracing::warn!(message = msg),
-                        tracing::log::Level::Info => tracing::info!(message = msg),
-                        tracing::log::Level::Debug => tracing::debug!(message = msg),
-                        tracing::log::Level::Trace => tracing::trace!(message = msg),
-                    }
+                    log_with_level(level, msg);
                 }
                 self
             }
@@ -566,18 +949,9 @@ macro_rules! td_log_monad {
         #[allow(dead_code)]
         impl<T> OptionLogger<T> for Option<T> {
             fn log<MD: LogLevel>(self, msg_fn: impl Fn(&Option<T>) -> Option<String>) -> Self {
-                //let module = module_path!();
                 let level: tracing::log::Level = MD::level();
-                // todo check if module + level logging is enabled
-                // if the msg_fn returns None, skip logging
                 if let Some(msg) = msg_fn(&self) {
-                    match level {
-                        tracing::log::Level::Error => tracing::error!(message = msg),
-                        tracing::log::Level::Warn => tracing::warn!(message = msg),
-                        tracing::log::Level::Info => tracing::info!(message = msg),
-                        tracing::log::Level::Debug => tracing::debug!(message = msg),
-                        tracing::log::Level::Trace => tracing::trace!(message = msg),
-                    }
+                    log_with_level(level, msg);
                 }
                 self
             }
@@ -610,6 +984,8 @@ mod tests {
             writer,
             vec!["opentelemetry_sdk=error".to_string()],
             false,
+            None,
+            None,
         );
         Mutex::new((sender, receiver, logger_provider))
     });
@@ -855,5 +1231,40 @@ mod tests {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod sink_tests {
+    use super::*;
+
+    #[test]
+    fn resolves_relative_sink_path() {
+        let log_dir = Path::new("/tmp/tabsdata/log");
+        let resolved = resolve_sink_path("sql.log", Some(log_dir)).unwrap();
+        assert_eq!(resolved, log_dir.join("sql.log"));
+    }
+
+    #[test]
+    fn keeps_absolute_sink_path() {
+        let absolute = Path::new("/var/log/sql.log");
+        let resolved = resolve_sink_path(absolute.to_str().unwrap(), None).unwrap();
+        assert_eq!(resolved, absolute);
+    }
+
+    #[test]
+    fn build_sink_filter_defaults_to_trace() {
+        let filter = build_sink_filter(&[]);
+        assert_eq!(filter.to_string(), "info");
+    }
+
+    #[test]
+    fn build_sink_filter_includes_directives() {
+        let filter = build_sink_filter(&["sqlx::query=trace".to_string()]);
+        assert!(
+            filter.to_string().contains("sqlx::query"),
+            "expected filter to contain sqlx::query directive but got {}",
+            filter
+        );
     }
 }

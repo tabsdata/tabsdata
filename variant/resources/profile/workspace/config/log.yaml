@@ -2,10 +2,15 @@
 # Copyright 2024 Tabs Data Inc.
 #
 
-profile: default
+profile: production
 
 profiles:
-  default:
+  development:
+    output: stdout
     level: debug
-    directives:
-      - tower::buffer::worker=info
+  console:
+    output: stdout
+    level: debug
+  production:
+    output: file
+    level: info

@@ -7,8 +7,8 @@ use polars::prelude::*;
 use pyo3_polars::derive::polars_expr;
 use serde::Deserialize;
 use td_common::logging;
-use td_common::logging::LogOutput;
 use tracing::{Level, debug};
+use td_common::logging::DEVELOPMENT_PROFILE;
 
 /// Arguments passed to the `_identifier_generator` Polars expression.
 ///
@@ -47,7 +47,7 @@ pub fn _identifier_generator(
     batch: &[Series],
     kwargs: IdentifierGeneratorKwargs,
 ) -> PolarsResult<Series> {
-    logging::start(Level::ERROR, Some(LogOutput::StdOut), false);
+    logging::start(Level::ERROR, Some(DEVELOPMENT_PROFILE.to_string()), false);
     debug!(
         "Executing identifier generator expression function with parameters: {:?}",
         kwargs

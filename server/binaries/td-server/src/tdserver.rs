@@ -9,7 +9,7 @@ use td_build::version::TABSDATA_VERSION;
 use td_common::attach::attach;
 use td_common::env::{TABSDATA_HOME_DIR, get_home_dir};
 use td_common::logging;
-use td_common::logging::LogOutput;
+use td_common::logging::CONSOLE_PROFILE;
 use td_common::server::TD_DETACHED_SUBPROCESSES;
 use td_common::settings::TRUE;
 use td_supervisor::services::tdserver;
@@ -64,7 +64,7 @@ fn check_polars() {
 #[tokio::main]
 #[attach(signal = "tdserver")]
 async fn main() {
-    logging::start(Level::INFO, Some(LogOutput::StdOut), false);
+    logging::start(Level::INFO, Some(CONSOLE_PROFILE.to_string()), false);
     let _ = check_banner();
     check_polars();
     // Setting env vars is not thread-safe; use with care.

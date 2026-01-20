@@ -2,15 +2,20 @@
 # Copyright 2024 Tabs Data Inc.
 #
 
-profile: default
+profile: production
 
 profiles:
-  default:
+  development:
+    output: stdout
     level: debug
     directives:
       - tower::buffer::worker=info
-      # Uncomment the following lines to set specific log levels for different components.
-      # By default, all components will inherit the level from the profile.
-      # - td_apiserver=error
-      # - td_objects::sql=error
-      # - td_services=error
+  production:
+    output: file
+    level: info
+    directives:
+      - tower::buffer::worker=info
+    sinks:
+      - file: sql.log
+        directives:
+          - sqlx::query=trace
