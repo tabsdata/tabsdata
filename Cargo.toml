@@ -95,9 +95,6 @@ dummy = []
 mock-env = []
 test-utils = []
 
-# Enable this feature to enable logging of crate sqlx, that can be very verbose and potentially exposing sensitive data.
-sqlx_log = []
-
 # Tests for the logging system can break other tests. Activate this feature to run the logging tests. They must run in
 # an isolated process. Use command "cargo test --features test_logging -- test_logging" to run the logging tests.
 # All logging tests' name must start with "test-logging", as shown in the Makefile command.

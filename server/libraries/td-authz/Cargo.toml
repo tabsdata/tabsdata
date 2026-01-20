@@ -23,7 +23,6 @@ enterprise = []
 td-test = ["dummy", "mock-env", "test-utils"]
 dummy = []
 mock-env = []
-sqlx_log = []
 test_logging = []
 test-utils = []
 

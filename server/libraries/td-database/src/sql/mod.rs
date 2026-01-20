@@ -18,11 +18,13 @@ use sqlx::{
 use std::cmp::Ordering;
 use std::fmt::Display;
 use std::future::Future;
+use std::str::FromStr;
 use std::time::Duration;
 use td_error::td_error;
 use td_schema::{DB_EDITION_NAME, DB_VERSION_NAME, DB_VERSION_VALUE};
 use te_system::edition::{Compatible, Edition, TabsdataEdition};
 use tracing::log::LevelFilter;
+use tracing::{info, warn};
 
 const SLOW_QUERIES_THRESHOLD: u64 = 5000;
 const PRAGMA_TEMP_STORE: (&str, &str) = ("temp_store", "MEMORY");
@@ -35,17 +37,19 @@ pub struct SqliteConfig {
     #[builder(setter(into))]
     pub url: Option<String>,
     /// The minimum number of database connections, defaults to `1`.
-    min_connections: u32,
+    pub min_connections: u32,
     /// The maximum number of database connections, defaults to `10`.
-    max_connections: u32,
+    pub max_connections: u32,
     /// The maximum time to wait for a database connection to be acquired, defaults to `30 seconds`.
-    acquire_timeout: u64,
+    pub acquire_timeout: u64,
     /// The maximum lifetime of a database connection, defaults to `60 minutes`.
-    max_lifetime: u64,
+    pub max_lifetime: u64,
     /// The maximum time a database connection can be idle, defaults to `60 seconds`.
-    idle_timeout: u64,
+    pub idle_timeout: u64,
     /// Whether to test the connection before acquiring it, defaults to `true`.
-    test_before_acquire: bool,
+    pub test_before_acquire: bool,
+    /// Log level to be used by the configured connection pool.
+    pub log_level: String,
 }
 
 impl Default for SqliteConfig {
@@ -58,6 +62,7 @@ impl Default for SqliteConfig {
             max_lifetime: 60 * 60,
             idle_timeout: 60,
             test_before_acquire: true,
+            log_level: LevelFilter::Off.to_string(),
         }
     }
 }
@@ -73,19 +78,6 @@ impl SqliteConfig {
 
     pub fn max_lifetime(&self) -> Duration {
         Duration::from_secs(self.max_lifetime)
-    }
-
-    pub fn to_builder(&self) -> SqliteConfigBuilder {
-        let mut builder = SqliteConfigBuilder::default();
-
-        builder.url(self.url.clone());
-        builder.min_connections(self.min_connections);
-        builder.max_connections(self.max_connections);
-        builder.acquire_timeout(self.acquire_timeout);
-        builder.max_lifetime(self.max_lifetime);
-        builder.idle_timeout(self.idle_timeout);
-        builder.test_before_acquire(self.test_before_acquire);
-        builder
     }
 
     pub fn rw_pool_options(&self) -> SqlitePoolOptions {
@@ -107,19 +99,6 @@ impl SqliteConfig {
             .idle_timeout(self.idle_timeout())
             .test_before_acquire(self.test_before_acquire)
     }
-}
-
-pub fn create_bindings_literal(offset: usize, bindings: usize) -> String {
-    let mut s = String::with_capacity(bindings * 5);
-    for i in offset + 1..=offset + bindings {
-        //SQL uses base 1
-        s.push('?');
-        s.push_str(&i.to_string());
-        if i < offset + bindings {
-            s.push(',');
-        }
-    }
-    s
 }
 
 /// A database schema. Alias for Sqlx's [`Migrator`].
@@ -217,17 +196,26 @@ impl Db {
             .busy_timeout(Duration::from_secs(10))
             .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
             .read_only(read_only)
+            .log_statements({
+                match LevelFilter::from_str(&config.log_level) {
+                    Ok(level) => {
+                        info!("Using Sqlite log level: {level}");
+                        level
+                    }
+                    Err(_) => {
+                        warn!(
+                            "Invalid Sqlite log level configured: {}. Disabling logging.",
+                            config.log_level
+                        );
+                        LevelFilter::Off
+                    }
+                }
+            })
             .log_slow_statements(
                 LevelFilter::Warn,
                 Duration::from_millis(SLOW_QUERIES_THRESHOLD),
             )
             .pragma(PRAGMA_TEMP_STORE.0, PRAGMA_TEMP_STORE.1);
-
-        let db_options = if !cfg!(feature = "sqlx_log") {
-            db_options.clone().log_statements(LevelFilter::Trace)
-        } else {
-            db_options
-        };
 
         let pool = pool_options
             .connect_with(db_options)
@@ -688,18 +676,6 @@ mod tests {
             .unwrap();
         assert_eq!(res.len(), 1);
         drop(db);
-    }
-
-    #[test]
-    fn test_create_bindings_literal() {
-        assert_eq!(sql::create_bindings_literal(0, 0), "");
-        assert_eq!(sql::create_bindings_literal(0, 1), "?1");
-        assert_eq!(sql::create_bindings_literal(0, 2), "?1,?2");
-        assert_eq!(sql::create_bindings_literal(0, 3), "?1,?2,?3");
-        assert_eq!(sql::create_bindings_literal(1, 0), "");
-        assert_eq!(sql::create_bindings_literal(1, 1), "?2");
-        assert_eq!(sql::create_bindings_literal(1, 2), "?2,?3");
-        assert_eq!(sql::create_bindings_literal(1, 3), "?2,?3,?4");
     }
 
     #[test]

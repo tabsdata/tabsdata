@@ -8,7 +8,6 @@ use crate::config::{Config, DbSchema, Params};
 use crate::scheduler::{FunctionDispatcher, FunctionRequester, SchedulerCtx};
 use std::sync::Arc;
 use std::time::Duration;
-use td_common::logging;
 use td_common::server::FileWorkerMessageQueue;
 use td_common::server_runner::ServerRunner;
 use td_common::status::ExitStatus;
@@ -17,7 +16,7 @@ use td_objects::sql::DaoQueries;
 use td_process::launcher::cli::Cli;
 use td_services::execution::services::runtime_info::RuntimeContext;
 use td_storage::Storage;
-use tracing::{Level, error, info};
+use tracing::{error, info};
 
 mod apiserver;
 pub mod config;
@@ -32,9 +31,6 @@ pub fn run() {
     Cli::<Config, Params>::exec_async(
         CONFIG_NAME,
         |config, params| async move {
-            // Initialize logging
-            logging::start(Level::INFO, None, false);
-
             // Resolve config and params
             let config = params.resolve(config).map_err(|e| {
                 error!("Error resolving API Server configuration: {e}");

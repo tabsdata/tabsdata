@@ -220,15 +220,13 @@ impl Params {
                 .ssl_folder
                 .clone()
                 .unwrap_or_else(|| config.ssl_folder.clone()),
-            database: self
-                .database_url
-                .as_ref()
-                .map(|db_url| {
-                    let mut database_config_builder = config.database.to_builder();
-                    database_config_builder.url(Some(db_url.to_string()));
-                    database_config_builder.build().unwrap()
-                })
-                .unwrap_or_else(|| config.database.clone()),
+            database: {
+                let mut config = config.database;
+                if let Some(url) = &self.database_url {
+                    config.url = Some(url.clone());
+                }
+                config
+            },
             storage: resolved_storage,
             transaction_by: self
                 .transaction_by
