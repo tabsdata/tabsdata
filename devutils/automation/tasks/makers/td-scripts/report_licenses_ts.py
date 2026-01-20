@@ -84,6 +84,7 @@ normalized_licenses = {
     "BSD LICENSE;; PUBLIC DOMAIN": "BSD Revised License (BSD-3-Clause) or Public Domain",                                                                                                      # noqa: E231,E241,E501
     "BSD LICENSE": "BSD Revised License (BSD-3-Clause)",                                                                                                                                       # noqa: E231,E241,E501
     "BSD-2-Clause": "BSD Simplified License (BSD-2-Clause)",                                                                                                                                   # noqa: E231,E241,E501
+    "BSD-2-CLAUSE": "BSD Simplified License (BSD-2-Clause)",                                                                                                                                   # noqa: E231,E241,E501
     "BSD-3-Clause AND MIT": "BSD Revised License (BSD-3-Clause), and MIT License",                                                                                                             # noqa: E231,E241,E501
     "BSD-3-Clause OR MIT": "BSD Revised License (BSD-3-Clause) or MIT License",                                                                                                                # noqa: E231,E241,E501
     "BSD-3-CLAUSE;; ISC": "BSD Revised License (BSD-3-Clause) or Internet Systems Consortium License",                                                                                         # noqa: E231,E241,E501
