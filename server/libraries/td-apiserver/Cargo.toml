@@ -96,6 +96,8 @@ utoipa-axum = { workspace = true }
 utoipa-swagger-ui = { workspace = true, features = ["axum", "reqwest"] }
 
 [dev-dependencies]
+rand = { workspace = true }
+indicatif = { workspace = true, features = ["rayon"] }
 td-common = { workspace = true, features = ["td-test"] }
 td-objects = { workspace = true, features = ["td-test"] }
 td-services = { workspace = true, features = ["td-test"] }

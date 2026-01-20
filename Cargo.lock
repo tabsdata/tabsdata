@@ -4125,6 +4125,7 @@ checksum = "9375e112e4b463ec1b1c6c011953545c65a30164fbab5b581df32b3abf0dcb88"
 dependencies = [
  "console",
  "portable-atomic",
+ "rayon",
  "unicode-segmentation",
  "unicode-width",
  "unit-prefix",
@@ -7613,8 +7614,10 @@ dependencies = [
  "clap",
  "futures",
  "http",
+ "indicatif",
  "nonempty",
  "openssl",
+ "rand 0.9.2",
  "reqwest",
  "ring",
  "rustls",
