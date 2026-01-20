@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::dxo::table::TableDBRead;
+use crate::dxo::table::TableDBWithNames;
 use crate::parse::{
     DATA_LOCATION_REGEX, parse_collection, parse_email, parse_entity, parse_execution,
     parse_function, parse_role, parse_table, parse_user,
@@ -171,10 +171,10 @@ impl TableName {
     }
 }
 
-impl TryFrom<&TableDBRead> for TableName {
+impl TryFrom<&TableDBWithNames> for TableName {
     type Error = td_error::TdError;
 
-    fn try_from(v: &TableDBRead) -> Result<Self, Self::Error> {
+    fn try_from(v: &TableDBWithNames) -> Result<Self, Self::Error> {
         let table = v.name.clone();
         Ok(table)
     }

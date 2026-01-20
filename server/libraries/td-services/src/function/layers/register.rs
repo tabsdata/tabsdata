@@ -13,7 +13,7 @@ use td_objects::dxo::dependency::{DependencyDB, DependencyDBBuilder};
 use td_objects::dxo::table::{TableDB, TableDBBuilder, TableDBWithNames};
 use td_objects::dxo::trigger::{TriggerDB, TriggerDBBuilder, TriggerDBWithNames};
 use td_objects::dxo::worker::{UpdateWorkerDB, WorkerDB, WorkerDBBuilder};
-use td_objects::sql::cte::CteQueries;
+use td_objects::sql::cte::VersionedQueries;
 use td_objects::sql::{DaoQueries, FindBy, UpdateBy};
 use td_objects::system::{
     SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES, SYSTEM_OUTPUT_TABLE_NAMES_PREFIXES,

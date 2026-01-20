@@ -155,7 +155,7 @@ mod tests {
     use td_objects::dxo::worker::WorkerDB;
     use td_objects::rest_urls::CollectionParam;
     use td_objects::sql::SelectBy;
-    use td_objects::sql::cte::CteQueries;
+    use td_objects::sql::cte::VersionedQueries;
     use td_objects::sql::recursive::RecursiveQueries;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_function::seed_function;

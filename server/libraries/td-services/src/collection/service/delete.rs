@@ -97,7 +97,7 @@ mod tests {
     use td_objects::dxo::table::TableDBWithNames;
     use td_objects::dxo::trigger::TriggerDBWithNames;
     use td_objects::rest_urls::CollectionParam;
-    use td_objects::sql::cte::CteQueries;
+    use td_objects::sql::cte::VersionedQueries;
     use td_objects::sql::{DaoQueries, SelectBy};
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_function::seed_function;

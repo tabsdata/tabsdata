@@ -9,8 +9,8 @@ mod definitions {
     use crate::dxo::function::FunctionDB;
     use crate::types::basic::{
         AtTime, CollectionId, CollectionName, FunctionId, FunctionName, FunctionVersionId,
-        Partitioned, Private, System, TableDataVersionId, TableFunctionParamPos, TableId,
-        TableName, TableStatus, TableType, TableVersionId, UserId, UserName,
+        Partitioned, Private, System, TableFunctionParamPos, TableId, TableName, TableStatus,
+        TableType, TableVersionId, UserId, UserName,
     };
     use crate::types::composed::TableVersions;
     use crate::types::graph::GraphEdge;
@@ -71,6 +71,8 @@ mod definitions {
         order_by = "function_param_pos",
         states(
             // Available user tables are all the tables that are not deleted.
+            User = [(TableStatus::Active, System::FALSE), (TableStatus::Frozen, System::FALSE)],
+            // Available system tables are all the tables that are not deleted.
             System = [(TableStatus::Active, System::TRUE), (TableStatus::Frozen, System::TRUE)],
         )
     )]
@@ -91,34 +93,19 @@ mod definitions {
         pub function: FunctionName,
     }
 
-    #[td_type::Dao]
-    #[dao(sql_table = "tables__read")]
-    #[inherits(TableDBWithNames)]
-    pub struct TableDBRead {
-        #[ignore]
-        collection: CollectionName,
-        #[ignore]
-        function: FunctionName,
-
-        pub collection_name: CollectionName,
-        pub function_name: FunctionName,
-        pub last_data_version: Option<TableDataVersionId>,
-        // pub last_data_changed_version: Option<TableDataVersionId>,
-    }
-
     #[td_type::Dto]
-    #[dto(list(on = TableDBRead))]
-    #[td_type(builder(try_from = TableDBRead))]
-    #[inherits(TableDBRead)]
+    #[dto(list(on = TableDBWithNames))]
+    #[td_type(builder(try_from = TableDBWithNames))]
+    #[inherits(TableDBWithNames)]
     pub struct Table {
         #[dto(list(pagination_by = "+"))]
         pub id: TableVersionId,
         #[dto(list(filter, filter_like, order_by))]
         pub name: TableName,
         #[dto(list(filter, filter_like, order_by))]
-        pub collection_name: CollectionName,
+        pub collection: CollectionName,
         #[dto(list(filter, filter_like, order_by))]
-        pub function_name: FunctionName,
+        pub function: FunctionName,
     }
 
     #[td_type::Dto]

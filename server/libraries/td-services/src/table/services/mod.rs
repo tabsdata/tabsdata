@@ -45,7 +45,7 @@ pub(crate) mod tests {
     use td_objects::dxo::dependency::DependencyDB;
     use td_objects::dxo::function::FunctionDB;
     use td_objects::dxo::table::TableDB;
-    use td_objects::sql::cte::CteQueries;
+    use td_objects::sql::cte::VersionedQueries;
     use td_objects::sql::{DaoQueries, SelectBy};
     use td_objects::types::basic::{FunctionStatus, TableName, TableStatus, UserId};
 

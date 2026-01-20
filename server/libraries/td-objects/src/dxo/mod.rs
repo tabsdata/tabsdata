@@ -222,3 +222,6 @@ pub trait Recursive {
     fn recurse_up() -> &'static str;
     fn recurse_down() -> &'static str;
 }
+
+/// Trait used by table_data_version__* entities to query table data versions.
+pub trait DataVersion: DataAccessObject + Versioned {}

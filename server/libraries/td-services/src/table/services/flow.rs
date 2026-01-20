@@ -82,7 +82,7 @@ mod tests {
     use td_error::TdError;
     use td_objects::dxo::crudl::{RequestContext, handle_sql_err};
     use td_objects::dxo::function::FunctionRegister;
-    use td_objects::sql::cte::CteQueries;
+    use td_objects::sql::cte::VersionedQueries;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_function::seed_function;
     use td_objects::types::basic::{

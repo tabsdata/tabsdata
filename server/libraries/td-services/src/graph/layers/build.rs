@@ -15,7 +15,7 @@ use td_objects::dxo::table::{TableDB, TableDBWithNames};
 use td_objects::dxo::trigger::TriggerDBWithNames;
 use td_objects::graph::{TdGraph, TdGraphBuilder};
 use td_objects::sql::DaoQueries;
-use td_objects::sql::cte::CteQueries;
+use td_objects::sql::cte::VersionedQueries;
 use td_objects::sql::recursive::RecursiveQueries;
 use td_objects::types::basic::{AtTime, FunctionId, TableId};
 use td_objects::types::recursion::RecursionOptions;

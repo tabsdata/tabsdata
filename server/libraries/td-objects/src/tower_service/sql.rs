@@ -4,7 +4,7 @@
 
 use crate::dxo::crudl::{ListParams, ListResponse, ListResponseBuilder, handle_sql_err};
 use crate::dxo::{DataAccessObject, ListQuery, States, Versioned};
-use crate::sql::cte::CteQueries;
+use crate::sql::cte::VersionedQueries;
 use crate::sql::list::ListQueryParams;
 use crate::sql::{
     DaoQueries, DeleteBy, FindBy, Insert, ListBy, ListFilterGenerator, SelectBy, UpdateBy,

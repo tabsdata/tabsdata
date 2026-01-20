@@ -4,7 +4,7 @@
 
 use crate::dxo::{DataAccessObject, Recursive, States, Versioned};
 use crate::sql::Queries;
-use crate::sql::cte::{ranked_versions_at, select_ranked_versions_at};
+use crate::sql::cte::{ranked_versions_at, select_latest_version_at};
 use crate::types::SqlEntity;
 use crate::types::basic::Depth;
 use crate::types::recursion::RecursionOptions;
@@ -115,6 +115,8 @@ pub trait RecursiveQueries {
     where
         D: DataAccessObject + Recursive + Versioned + States<DS>,
         R: DataAccessObject + Versioned + States<RS>,
+        <D as Versioned>::Partition: 'a,
+        <R as Versioned>::Partition: 'a,
     {
         self.select_recursive_versions_at_with::<DS, D, RS, R>(
             d_defined_on,
@@ -134,6 +136,8 @@ pub trait RecursiveQueries {
     where
         D: DataAccessObject + Recursive + Versioned + States<DS>,
         R: DataAccessObject + Versioned + States<RS>,
+        <D as Versioned>::Partition: 'a,
+        <R as Versioned>::Partition: 'a,
     {
         let mut query_builder = sqlx::QueryBuilder::default();
 
@@ -143,15 +147,17 @@ pub trait RecursiveQueries {
             LATEST_REFERENCE_VERSIONS_CTE,
             &mut query_builder,
             r_defined_on,
+            None,
         );
-        select_ranked_versions_at::<RS, R>(LATEST_REFERENCE_VERSIONS_CTE, &mut query_builder)?;
+        select_latest_version_at::<RS, R>(LATEST_REFERENCE_VERSIONS_CTE, &mut query_builder)?;
         query_builder.push(",");
         ranked_versions_at::<D>(
             LATEST_RECURSION_VERSIONS_CTE,
             &mut query_builder,
             d_defined_on,
+            None,
         );
-        select_ranked_versions_at::<DS, D>(LATEST_RECURSION_VERSIONS_CTE, &mut query_builder)?;
+        select_latest_version_at::<DS, D>(LATEST_RECURSION_VERSIONS_CTE, &mut query_builder)?;
         query_builder.push(",");
 
         recursive_versions_sql::<D, R>(&mut query_builder, direct_reference_entity, options)?;
@@ -601,7 +607,7 @@ mod tests {
         \n                COUNT(*) OVER (PARTITION BY v.reference_id) AS total_count\
         \n            FROM\
         \n                test_table_reference v\
-        \n         ),latest_reference_versions AS (\
+        \n         WHERE 1=1  ),latest_reference_versions AS (\
         \n            SELECT\
         \n                rv.*\
         \n            FROM\
@@ -616,7 +622,7 @@ mod tests {
         \n                COUNT(*) OVER (PARTITION BY v.id) AS total_count\
         \n            FROM\
         \n                test_table v\
-        \n         ),latest_recursion_versions AS (\
+        \n         WHERE 1=1  ),latest_recursion_versions AS (\
         \n            SELECT\
         \n                rv.*\
         \n            FROM\
@@ -692,7 +698,7 @@ mod tests {
         \n                COUNT(*) OVER (PARTITION BY v.reference_id) AS total_count\
         \n            FROM\
         \n                test_table_reference v\
-        \n        WHERE v.defined_on <= ? ),latest_reference_versions AS (\
+        \n         WHERE 1=1  AND v.defined_on <= ? ),latest_reference_versions AS (\
         \n            SELECT\
         \n                rv.*\
         \n            FROM\
@@ -707,7 +713,7 @@ mod tests {
         \n                COUNT(*) OVER (PARTITION BY v.id) AS total_count\
         \n            FROM\
         \n                test_table v\
-        \n        WHERE v.defined_on <= ? ),latest_recursion_versions AS (\
+        \n         WHERE 1=1  AND v.defined_on <= ? ),latest_recursion_versions AS (\
         \n            SELECT\
         \n                rv.*\
         \n            FROM\

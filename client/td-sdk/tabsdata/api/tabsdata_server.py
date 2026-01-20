@@ -2271,14 +2271,14 @@ class Table:
     """
 
     def __init__(
-        self, connection: APIServer, collection: str | Collection, name: str, **kwargs
+        self, connection: APIServer, collection_name: str | Collection, name: str, **kwargs
     ):
         self.connection = connection
-        self.collection = collection
+        self.collection = collection_name
         self.name = name
 
         self.id = kwargs.get("id")
-        self.function = kwargs.get("function_name")
+        self.function = kwargs.get("function")
         self.kwargs = kwargs
         self._data = None
 
@@ -2328,7 +2328,7 @@ class Table:
     @property
     def function(self) -> Function | None:
         if self._function is None:
-            self.function = self._data.get("function_name")
+            self.function = self._data.get("function")
         return self._function
 
     @function.setter

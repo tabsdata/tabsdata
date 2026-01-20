@@ -62,12 +62,14 @@ FROM workers w
          LEFT JOIN collections c ON w.collection_id = c.id
          LEFT JOIN executions e ON w.execution_id = e.id
          LEFT JOIN functions fv ON w.function_version_id = fv.id
-WHERE w.worker_enabled = true; -- Hiding marker workers for disabled function versions
+-- Hiding marker workers for disabled function versions
+WHERE w.worker_enabled = true;
 
 -- Trigger Type can be M (manual), C (cron), DL (data listener)
 ALTER TABLE executions
     ADD COLUMN trigger_type TEXT NOT NULL DEFAULT 'M';
 
+-- Add execution_function_version_id to function_runs
 DROP VIEW function_runs__with_names;
 CREATE VIEW function_runs__with_names AS
 SELECT f.*,

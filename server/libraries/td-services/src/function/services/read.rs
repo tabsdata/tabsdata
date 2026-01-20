@@ -6,11 +6,11 @@ use crate::function::layers::read::vec_create_table_dependency;
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
-use td_objects::dxo::dependency::DependencyDBRead;
+use td_objects::dxo::dependency::DependencyDBWithNames;
 use td_objects::dxo::function::{
     Function, FunctionBuilder, FunctionDBWithNames, FunctionWithTables, FunctionWithTablesBuilder,
 };
-use td_objects::dxo::table::{TableDBRead, TableDBWithNames};
+use td_objects::dxo::table::TableDBWithNames;
 use td_objects::dxo::trigger::TriggerDBWithNames;
 use td_objects::rest_urls::FunctionParam;
 use td_objects::sql::DaoQueries;
@@ -63,8 +63,10 @@ fn service() {
         from_fn(With::<FunctionBuilder>::build::<Function, _>),
         from_fn(With::<Function>::try_convert_to::<FunctionWithTablesBuilder, _>),
         // Read tables
-        from_fn(By::<FunctionId>::select_all_versions::<{ TableDBRead::Active }, TableDBRead>),
-        from_fn(With::<TableDBRead>::vec_convert_to::<TableName, _>),
+        from_fn(
+            By::<FunctionId>::select_all_versions::<{ TableDBWithNames::User }, TableDBWithNames>
+        ),
+        from_fn(With::<TableDBWithNames>::vec_convert_to::<TableName, _>),
         from_fn(With::<Vec<TableName>>::set::<FunctionWithTablesBuilder>),
         // Read triggers and dependencies
         // Triggers
@@ -80,9 +82,12 @@ fn service() {
         from_fn(With::<Vec<TableTrigger>>::set::<FunctionWithTablesBuilder>),
         // Dependencies
         from_fn(
-            By::<FunctionId>::select_all_versions::<{ DependencyDBRead::Active }, DependencyDBRead>
+            By::<FunctionId>::select_all_versions::<
+                { DependencyDBWithNames::User },
+                DependencyDBWithNames,
+            >
         ),
-        from_fn(With::<DependencyDBRead>::extract_vec::<TableId>),
+        from_fn(With::<DependencyDBWithNames>::extract_vec::<TableId>),
         from_fn(By::<TableId>::find_versions::<{ TableDBWithNames::Available }, TableDBWithNames>),
         from_fn(vec_create_table_dependency),
         from_fn(With::<Vec<TableDependency>>::set::<FunctionWithTablesBuilder>),
@@ -143,9 +148,12 @@ mod tests {
                 type_of_val(&With::<Function>::try_convert_to::<FunctionWithTablesBuilder, _>),
                 // Read tables
                 type_of_val(
-                    &By::<FunctionId>::select_all_versions::<{ TableDBRead::Active }, TableDBRead>,
+                    &By::<FunctionId>::select_all_versions::<
+                        { TableDBWithNames::User },
+                        TableDBWithNames,
+                    >,
                 ),
-                type_of_val(&With::<TableDBRead>::vec_convert_to::<TableName, _>),
+                type_of_val(&With::<TableDBWithNames>::vec_convert_to::<TableName, _>),
                 type_of_val(&With::<Vec<TableName>>::set::<FunctionWithTablesBuilder>),
                 // Read triggers and dependencies
                 // Triggers
@@ -167,11 +175,11 @@ mod tests {
                 // Dependencies
                 type_of_val(
                     &By::<FunctionId>::select_all_versions::<
-                        { DependencyDBRead::Active },
-                        DependencyDBRead,
+                        { DependencyDBWithNames::User },
+                        DependencyDBWithNames,
                     >,
                 ),
-                type_of_val(&With::<DependencyDBRead>::extract_vec::<TableId>),
+                type_of_val(&With::<DependencyDBWithNames>::extract_vec::<TableId>),
                 type_of_val(
                     &By::<TableId>::find_versions::<
                         { TableDBWithNames::Available },

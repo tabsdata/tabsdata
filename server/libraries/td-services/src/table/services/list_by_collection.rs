@@ -6,7 +6,7 @@ use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
-use td_objects::dxo::table::{Table, TableDBRead};
+use td_objects::dxo::table::{Table, TableDBWithNames};
 use td_objects::rest_urls::params::CollectionAtName;
 use td_objects::sql::list::ListQueryParams;
 use td_objects::sql::{DaoQueries, NoListFilter};
@@ -45,7 +45,7 @@ fn service() {
         from_fn(With::<ListRequest<CollectionAtName>>::extract::<ListParams>),
         from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<Table>, _>),
         from_fn(
-            By::<CollectionId>::list_versions_at::<NoListFilter, { TableDBRead::Available }, Table>
+            By::<CollectionId>::list_versions_at::<NoListFilter, { TableDBWithNames::User }, Table>
         ),
     )
 }
@@ -71,7 +71,7 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_tower_metadata_list_table_versions(db: DbPool) {
+    async fn test_tower_metadata_list_table_versions_by_collection(db: DbPool) {
         use td_tower::metadata::type_of_val;
 
         TableListByCollectionService::with_defaults(db)
@@ -97,7 +97,7 @@ mod tests {
                 type_of_val(
                     &By::<CollectionId>::list_versions_at::<
                         NoListFilter,
-                        { TableDBRead::Available },
+                        { TableDBWithNames::User },
                         Table,
                     >,
                 ),

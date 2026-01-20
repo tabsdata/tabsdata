@@ -5,7 +5,7 @@
 use ta_services::factory::service_factory;
 use td_authz::{Authz, AuthzContext};
 use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
-use td_objects::dxo::table::{Table, TableDBRead};
+use td_objects::dxo::table::{Table, TableDBWithNames};
 use td_objects::rest_urls::AtTimeParam;
 use td_objects::sql::DaoQueries;
 use td_objects::sql::list::ListQueryParams;
@@ -39,7 +39,7 @@ fn service() {
         from_fn(With::<ListRequest<AtTimeParam>>::extract::<ListParams>),
         from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<Table>, _>),
         from_fn(
-            By::<()>::list_versions_at::<VisibleTablesCollections, { TableDBRead::Available }, Table>
+            By::<()>::list_versions_at::<VisibleTablesCollections, { TableDBWithNames::User }, Table>
         ),
     )
 }
@@ -91,7 +91,7 @@ mod tests {
                 type_of_val(
                     &By::<()>::list_versions_at::<
                         VisibleTablesCollections,
-                        { TableDBRead::Available },
+                        { TableDBWithNames::User },
                         Table,
                     >,
                 ),

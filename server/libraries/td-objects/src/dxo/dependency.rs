@@ -21,6 +21,8 @@ mod definitions {
         states(
             // Active dependencies are dependencies that can be used in executions.
             Active = [DependencyStatus::Active],
+            // Available dependencies are active user dependencies.
+            User = [(DependencyStatus::Active, System::FALSE)],
         )
     )]
     #[td_type(
@@ -55,15 +57,10 @@ mod definitions {
     #[dao(sql_table = "dependencies__with_names")]
     #[inherits(DependencyDB)]
     pub struct DependencyDBWithNames {
-        pub collection: CollectionName,
-        pub table_collection: CollectionName,
-    }
-
-    #[td_type::Dao]
-    #[dao(sql_table = "dependencies__read")]
-    #[inherits(DependencyDBWithNames)]
-    pub struct DependencyDBRead {
         #[td_type(extractor)]
         pub table_id: TableId,
+
+        pub collection: CollectionName,
+        pub table_collection: CollectionName,
     }
 }

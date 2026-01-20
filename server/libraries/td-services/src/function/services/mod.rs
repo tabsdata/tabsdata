@@ -46,7 +46,7 @@ pub(crate) mod tests {
     use td_objects::dxo::function::{Function, FunctionDB, FunctionRegister, FunctionUpdate};
     use td_objects::dxo::table::{TableDB, TableDBWithNames};
     use td_objects::dxo::trigger::TriggerDBWithNames;
-    use td_objects::sql::cte::CteQueries;
+    use td_objects::sql::cte::VersionedQueries;
     use td_objects::sql::{DaoQueries, SelectBy};
     use td_objects::system::{
         SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES, SYSTEM_OUTPUT_TABLE_NAMES_PREFIXES,

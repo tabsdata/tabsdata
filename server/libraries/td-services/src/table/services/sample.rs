@@ -108,7 +108,6 @@ mod tests {
     async fn test_tower_metadata_sample_service(db: DbPool) {
         use crate::table::layers::storage::resolve_table_location;
         use td_objects::dxo::table::TableDBWithNames;
-        use td_objects::dxo::table_data_version::TableDataVersionDBWithNames;
         use td_objects::tower_service::from::{TryIntoService, combine};
         use td_objects::types::basic::{Sql, TableId, TableIdName, TriggeredOn};
 
@@ -166,12 +165,6 @@ mod tests {
             // Only committed transactions, at the triggered on time
             type_of_val(&With::<AtTime>::try_convert_to::<TriggeredOn, _>),
             // Find the latest data version of the table ID, at that time
-            type_of_val(
-                &By::<TableId>::select_version_optional::<
-                    { TableDataVersionDBWithNames::All },
-                    TableDataVersionDBWithNames,
-                >,
-            ),
             // Resolve the location of the data version. This takes into account versions without
             // data changes (in which the previous version is resolved)
             type_of_val(&resolve_table_location),

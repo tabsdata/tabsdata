@@ -13,7 +13,7 @@ use td_objects::dxo::crudl::handle_sql_err;
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::table_data_version::ActiveTableDataVersionDB;
 use td_objects::sql::DaoQueries;
-use td_objects::sql::cte::{CteQueries, TableQueries};
+use td_objects::sql::cte::{TableQueries, VersionedQueries};
 use td_objects::table_ref::{Version, Versions};
 use td_objects::types::basic::{FunctionId, TableDataVersionId, TableId, TriggeredOn};
 

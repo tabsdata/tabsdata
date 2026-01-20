@@ -32,10 +32,11 @@ use td_objects::rest_urls::internal::{
     DOWNLOAD_FUNCTION_STATE, FUNCTION_VERSION_EXECUTE, FUNCTION_VERSION_EXECUTION_STATUS,
     UPDATE_FUNCTION_RUN_WORKER, UPDATE_WORKER,
 };
+use td_objects::sql::cte::TableQueries;
 use td_objects::sql::{DaoQueries, SelectBy};
 use td_objects::types::addresses::InternalServerAddresses;
 use td_objects::types::basic::{
-    AtTime, Enabled, EnvPrefix, WorkerConfig, WorkerId, WorkerMessageStatus, WorkerStatus,
+    AtTime, Enabled, EnvPrefix, HasData, WorkerConfig, WorkerId, WorkerMessageStatus, WorkerStatus,
     WorkerType,
 };
 use td_storage::Storage;
@@ -152,58 +153,61 @@ pub async fn create_locked_function_runner_workers_start_request<T: WorkerMessag
                     if let (Some(dependency_pos), Some(input_idx)) =
                         (&req.requirement_dependency_pos, &req.requirement_input_idx)
                     {
-                        let (found_data_version, location) =
-                            match req.requirement_table_data_version_id {
-                                Some(data_version_id) => {
-                                    let found_data_version: TableDataVersionDBWithNames = queries
-                                        .select_by::<TableDataVersionDBWithNames>(&data_version_id)?
-                                        .build_query_as()
-                                        .fetch_one(&mut *conn)
-                                        .await
-                                        .map_err(handle_sql_err)?;
+                        let (found_data_version, location) = match req
+                            .requirement_table_data_version_id
+                        {
+                            Some(data_version_id) => {
+                                let found_data_version: TableDataVersionDBWithNames = queries
+                                    .select_by::<TableDataVersionDBWithNames>(&data_version_id)?
+                                    .build_query_as()
+                                    .fetch_one(&mut *conn)
+                                    .await
+                                    .map_err(handle_sql_err)?;
 
-                                    if let Some(with_data_data_version_id) =
-                                        found_data_version.with_data_table_data_version_id
-                                    {
-                                        let data_version_with_data =
-                                            if with_data_data_version_id == found_data_version.id {
-                                                Cow::Borrowed(&found_data_version)
-                                            } else {
-                                                let res = queries
-                                                    .select_by::<TableDataVersionDBWithNames>(
-                                                        &with_data_data_version_id,
-                                                    )?
-                                                    .build_query_as()
-                                                    .fetch_one(&mut *conn)
-                                                    .await
-                                                    .map_err(handle_sql_err)?;
-                                                Cow::Owned(res)
-                                            };
-
-                                        let (path, _) = storage_location
-                                            .builder(&data_version_with_data.data_location)
-                                            .collection(&data_version_with_data.collection_id)
-                                            .data(&data_version_with_data.id)
-                                            .table(
-                                                &data_version_with_data.table_id,
-                                                &data_version_with_data.table_version_id,
-                                            )
-                                            .build();
-                                        let (external_path, mount_def) =
-                                            storage.to_external_uri(&path)?;
-                                        let env_prefix = EnvPrefix::try_from(&mount_def.id)?;
-                                        get_states.insert(env_prefix.clone());
-                                        let location = Location::builder()
-                                            .uri(external_path)
-                                            .env_prefix(env_prefix)
-                                            .build()?;
-                                        (Some(found_data_version), Some(location))
+                                let data_version_with_data =
+                                    if matches!(found_data_version.has_data, Some(HasData::TRUE)) {
+                                        Some(Cow::Borrowed(&found_data_version))
                                     } else {
-                                        (Some(found_data_version), None)
-                                    }
+                                        let res = queries
+                                            .latest_table_data_version_with_data::<TableDataVersionDBWithNames>(
+                                                &found_data_version.triggered_on,
+                                                &found_data_version.table_id,
+                                            )?
+                                            .build_query_as()
+                                            .fetch_optional(&mut *conn)
+                                            .await
+                                            .map_err(handle_sql_err)?;
+
+                                        res.map(Cow::Owned)
+                                    };
+
+                                if let Some(data_version_with_data) =
+                                    data_version_with_data.as_ref()
+                                {
+                                    let (path, _) = storage_location
+                                        .builder(&data_version_with_data.data_location)
+                                        .collection(&data_version_with_data.collection_id)
+                                        .data(&data_version_with_data.id)
+                                        .table(
+                                            &data_version_with_data.table_id,
+                                            &data_version_with_data.table_version_id,
+                                        )
+                                        .build();
+                                    let (external_path, mount_def) =
+                                        storage.to_external_uri(&path)?;
+                                    let env_prefix = EnvPrefix::try_from(&mount_def.id)?;
+                                    get_states.insert(env_prefix.clone());
+                                    let location = Location::builder()
+                                        .uri(external_path)
+                                        .env_prefix(env_prefix)
+                                        .build()?;
+                                    (Some(found_data_version), Some(location))
+                                } else {
+                                    (Some(found_data_version), None)
                                 }
-                                None => (None, None),
-                            };
+                            }
+                            None => (None, None),
+                        };
 
                         let input_table = InputTableVersion::builder()
                             .name(req.requirement_table.clone())

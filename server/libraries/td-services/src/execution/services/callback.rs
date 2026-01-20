@@ -547,7 +547,7 @@ mod tests {
         let function_run = &function_runs[0];
 
         let table_data_versions: Vec<TableDataVersionDBWithNames> = queries
-            .select_by::<TableDataVersionDBWithNames>(&(&TableName::try_from("t_0")?))?
+            .select_by::<TableDataVersionDBWithNames>(&TableName::try_from("t_0")?)?
             .build_query_as()
             .fetch_all(&db)
             .await
@@ -564,7 +564,7 @@ mod tests {
 
         let queries = DaoQueries::default();
         let table_data_versions: Vec<TableDataVersionDBWithNames> = queries
-            .select_by::<TableDataVersionDBWithNames>(&(&TableName::try_from("t_1")?))?
+            .select_by::<TableDataVersionDBWithNames>(&TableName::try_from("t_1")?)?
             .build_query_as()
             .fetch_all(&db)
             .await

@@ -3,11 +3,12 @@
 //
 
 use polars::prelude::PolarsError;
-use std::borrow::Cow;
 use td_error::{TdError, td_error};
 use td_objects::dxo::crudl::handle_sql_err;
 use td_objects::dxo::table_data_version::TableDataVersionDBWithNames;
-use td_objects::sql::{DaoQueries, SelectBy};
+use td_objects::sql::DaoQueries;
+use td_objects::sql::cte::TableQueries;
+use td_objects::types::basic::{TableId, TriggeredOn};
 use td_storage::SPath;
 use td_storage::location::StorageLocation;
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
@@ -25,31 +26,25 @@ pub enum StorageServiceError {
 pub async fn resolve_table_location(
     Connection(connection): Connection,
     SrvCtx(queries): SrvCtx<DaoQueries>,
-    Input(data_version): Input<Option<TableDataVersionDBWithNames>>,
+    Input(triggered_on): Input<TriggeredOn>,
+    Input(table_id): Input<TableId>,
 ) -> Result<Option<SPath>, TdError> {
-    if let Some(data_version) = &*data_version {
-        if let Some(with_data_table_data_version_id) = data_version.with_data_table_data_version_id
-        {
-            let data_version_with_data = if data_version.id == with_data_table_data_version_id {
-                Cow::Borrowed(data_version)
-            } else {
-                let mut conn = connection.lock().await;
-                let conn = conn.get_mut_connection()?;
+    let mut conn = connection.lock().await;
+    let conn = conn.get_mut_connection()?;
 
-                let found = queries
-                    .select_by::<TableDataVersionDBWithNames>(&with_data_table_data_version_id)?
-                    .build_query_as()
-                    .fetch_one(&mut *conn)
-                    .await
-                    .map_err(handle_sql_err)?;
-                Cow::Owned(found)
-            };
+    let data_version = queries
+        .latest_table_data_version_with_data::<TableDataVersionDBWithNames>(
+            &triggered_on,
+            &table_id,
+        )?
+        .build_query_as()
+        .fetch_optional(&mut *conn)
+        .await
+        .map_err(handle_sql_err)?;
 
-            let (path, _) = get_spath(&data_version_with_data);
-            Ok(Some(path))
-        } else {
-            Ok(None)
-        }
+    if let Some(data_version) = data_version {
+        let (path, _) = get_spath(&data_version);
+        Ok(Some(path))
     } else {
         Ok(None)
     }
@@ -68,6 +63,7 @@ fn get_spath(data_version: &TableDataVersionDBWithNames) -> (SPath, StorageLocat
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::DaoQueries;
     use crate::function::services::update::UpdateFunctionService;
     use std::sync::Arc;
     use ta_services::service::TdService;
@@ -81,6 +77,7 @@ mod tests {
     use td_objects::dxo::table_data_version::TableDataVersionDB;
     use td_objects::dxo::transaction::TransactionDB;
     use td_objects::rest_urls::FunctionParam;
+    use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_execution::seed_execution;
     use td_objects::test_utils::seed_function::seed_function;
@@ -316,7 +313,7 @@ mod tests {
         .await;
 
         let table = queries
-            .select_by::<TableDB>(&(function.id))?
+            .select_by::<TableDB>(&function.id)?
             .build_query_as()
             .fetch_one(&db)
             .await
@@ -388,31 +385,25 @@ mod tests {
     ) -> Result<(), TdError> {
         let queries = Arc::new(DaoQueries::default());
 
-        let lookup_data_version = if let Some(lookup_data_version) = lookup_data_version {
-            let d = queries
-                .select_by::<TableDataVersionDBWithNames>(&(lookup_data_version.id))?
-                .build_query_as()
-                .fetch_one(&db)
-                .await
-                .unwrap();
-            Some(d)
+        let found = if let Some(lookup_data_version) = lookup_data_version {
+            let lookup_data_version = Arc::new(lookup_data_version);
+
+            let connection = db.acquire().await.unwrap();
+            let connection = ConnectionType::PoolConnection(connection).into();
+            resolve_table_location(
+                Connection(connection),
+                SrvCtx(queries.clone()),
+                Input::new(TriggeredOn::now()),
+                Input::new(lookup_data_version.table_id),
+            )
+            .await?
         } else {
             None
         };
-        let lookup_data_version = Arc::new(lookup_data_version);
-
-        let connection = db.acquire().await.unwrap();
-        let connection = ConnectionType::PoolConnection(connection).into();
-        let found = resolve_table_location(
-            Connection(connection),
-            SrvCtx(queries.clone()),
-            Input(lookup_data_version),
-        )
-        .await?;
 
         let expected = if let Some(expected_data_version) = expected_data_version {
             let expected_data_version: TableDataVersionDBWithNames = queries
-                .select_by::<TableDataVersionDBWithNames>(&(&expected_data_version.id))?
+                .select_by::<TableDataVersionDBWithNames>(&expected_data_version.id)?
                 .build_query_as()
                 .fetch_one(&db)
                 .await

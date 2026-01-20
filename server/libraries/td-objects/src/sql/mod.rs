@@ -7,13 +7,12 @@ pub mod list;
 pub mod recursive;
 
 use crate::dxo::{DataAccessObject, ListQuery, States, Versioned};
-use crate::sql::cte::{LATEST_VERSIONS_CTE, ranked_versions_at, select_ranked_versions_at};
+use crate::sql::cte::{LATEST_VERSIONS_CTE, ranked_versions_at, select_latest_version_at};
 use crate::sql::list::{ListQueryParams, Order, Pagination};
 use crate::types::{AsDynSqlEntities, SqlEntity};
 use async_trait::async_trait;
 use std::ops::Deref;
 use td_error::TdError;
-use tracing::trace;
 
 /// Struct holding the Queries.
 pub struct DaoQueries(Box<dyn Queries + Send + Sync>);
@@ -67,7 +66,6 @@ where
 
         let query_builder = dao.values_query_builder(sql, fields);
 
-        trace!("insert_{}: sql: {}", table, query_builder.sql());
         Ok(query_builder)
     }
 }
@@ -147,7 +145,6 @@ where
         gen_where_clause::<D, E>(&mut query_builder, std::slice::from_ref(where_))?;
         query_builder.push(" ");
         query_builder.push(D::order_by());
-        trace!("select_{}: sql: {}", table, query_builder.sql());
         Ok(query_builder)
     }
 }
@@ -179,7 +176,6 @@ where
             query_builder.push(" WHERE ");
             gen_where_clause::<D, E>(&mut query_builder, where_)?;
         }
-        trace!("find_by_{}: sql: {}", table, query_builder.sql());
         Ok(query_builder)
     }
 }
@@ -265,7 +261,6 @@ where
         list_filter_generator.where_clause::<T::Dao>(&mut query_builder)?;
         query_params_where(query_params, &mut query_builder);
 
-        trace!("list_{}: sql: {}", table, query_builder.sql());
         Ok(query_builder)
     }
 
@@ -299,7 +294,6 @@ where
         list_filter_generator.where_clause::<T::Dao>(&mut query_builder)?;
         query_params_where(query_params, &mut query_builder);
 
-        trace!("list_at_{}: sql: {}", table, query_builder.sql());
         Ok(query_builder)
     }
 
@@ -319,8 +313,13 @@ where
 
         // Build CTEs to find needed data (note natural order is needed to find the latest version, before listing)
         query_builder.push("WITH ");
-        ranked_versions_at::<T::Dao>(LATEST_VERSIONS_CTE, &mut query_builder, natural_order_by);
-        select_ranked_versions_at::<S, T::Dao>(LATEST_VERSIONS_CTE, &mut query_builder)?;
+        ranked_versions_at::<T::Dao>(
+            LATEST_VERSIONS_CTE,
+            &mut query_builder,
+            natural_order_by,
+            None,
+        );
+        select_latest_version_at::<S, T::Dao>(LATEST_VERSIONS_CTE, &mut query_builder)?;
 
         let fields = T::fields();
         let select = format!("SELECT {} FROM {}", fields.join(", "), LATEST_VERSIONS_CTE);
@@ -331,11 +330,6 @@ where
         list_filter_generator.where_clause::<T::Dao>(&mut query_builder)?;
         query_params_where(query_params, &mut query_builder);
 
-        trace!(
-            "list_versions_at_{}: sql: {}",
-            T::list_on(),
-            query_builder.sql()
-        );
         Ok(query_builder)
     }
 }
@@ -454,7 +448,6 @@ where
         let mut query_builder = dao.tuples_query_builder(sql, fields);
         query_builder.push(" WHERE ");
         gen_where_clause::<D, E>(&mut query_builder, std::slice::from_ref(where_))?;
-        trace!("update_{}: sql: {}", table, query_builder.sql());
         Ok(query_builder)
     }
 
@@ -474,7 +467,6 @@ where
             query_builder.push(" WHERE ");
             gen_where_clause::<D, E>(&mut query_builder, where_)?;
         }
-        trace!("update_all_{}: sql: {}", table, query_builder.sql());
         Ok(query_builder)
     }
 }
@@ -500,7 +492,6 @@ where
         let mut query_builder = sqlx::QueryBuilder::new(sql);
         query_builder.push(" WHERE ");
         gen_where_clause::<D, E>(&mut query_builder, std::slice::from_ref(where_))?;
-        trace!("delete_{}: sql: {}", table, query_builder.sql());
         Ok(query_builder)
     }
 }

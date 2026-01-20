@@ -595,7 +595,7 @@ pub(crate) mod tests {
                         .unwrap();
 
                     let tables: Vec<TableDB> = queries
-                        .select_by::<TableDB>(&(&function_versions.get(dependency_f).unwrap().id))
+                        .select_by::<TableDB>(&function_versions.get(dependency_f).unwrap().id)
                         .unwrap()
                         .build_query_as()
                         .fetch_all(&db)
@@ -608,7 +608,7 @@ pub(crate) mod tests {
 
                     let table_data_versions: Vec<TableDataVersionDB> = queries
                         .select_by::<TableDataVersionDBWithFunction>(
-                            &(&function_versions.get(dependency_f).unwrap().id),
+                            &function_versions.get(dependency_f).unwrap().id,
                         )
                         .unwrap()
                         .build_query_as()
@@ -738,7 +738,7 @@ pub(crate) mod tests {
 
             // Assert all table_data_versions are in expected state
             let table_data_versions: Vec<TableDataVersionDBWithFunction> = queries
-                .select_by::<TableDataVersionDBWithFunction>(&(function_version.id))?
+                .select_by::<TableDataVersionDBWithFunction>(&function_version.id)?
                 .build_query_as()
                 .fetch_all(&db)
                 .await
