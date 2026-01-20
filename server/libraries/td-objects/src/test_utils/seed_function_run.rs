@@ -21,6 +21,7 @@ pub async fn seed_function_run(
 ) -> FunctionRunDB {
     let function_db = FunctionRunDB::builder()
         .collection_id(collection.id)
+        .function_id(function_version.function_id)
         .function_version_id(function_version.id)
         .execution_id(execution.id)
         .transaction_id(transaction.id)

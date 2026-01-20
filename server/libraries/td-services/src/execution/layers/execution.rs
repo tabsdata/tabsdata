@@ -157,6 +157,7 @@ pub async fn build_function_runs(
                 .deref()
                 .clone()
                 .collection_id(f.collection_id)
+                .function_id(f.function_id)
                 .function_version_id(f.function_version_id)
                 .transaction_id(transaction.id)
                 .trigger(trigger)

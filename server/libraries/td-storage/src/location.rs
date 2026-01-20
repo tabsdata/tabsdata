@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use std::ops::Deref;
 use td_objects::types::basic::{
-    BundleId, CollectionId, DataLocation, FunctionVersionId, Partition, StorageVersion,
+    BundleId, CollectionId, DataLocation, FunctionId, FunctionVersionId, Partition, StorageVersion,
     TableDataVersionId, TableId, TableVersionId, TransactionId,
 };
 
@@ -35,6 +35,7 @@ pub enum StorageLocation {
     /// * /LOCATION/c/COLLECTION/d/DATA_VERSION/t/TABLE/TABLE_VERSION.t
     /// * /LOCATION/c/COLLECTION/d/DATA_VERSION/t/TABLE/TABLE_VERSION/p/PARTITION.p
     /// * /bundles/c/COLLECTION/f/BUNDLE.tgz
+    /// * /stages/c/COLLECTION/f/FUNCTION
     V2,
 }
 
@@ -87,6 +88,7 @@ struct LocationBuilderInfo {
     location: SPath,
     collection: Option<String>,
     bundle: Option<String>,
+    stage: Option<String>,
     data_version: Option<String>,
     transaction: Option<String>,
     function_version: Option<String>,
@@ -221,6 +223,33 @@ impl FunctionBuilder {
     }
 }
 
+#[derive(Debug)]
+pub struct StageBuilder {
+    info: LocationBuilderInfo,
+    version_builder: Box<dyn VersionLocationBuilder>,
+}
+
+impl StageBuilder {
+    /// Set the function.
+    pub fn function(&mut self, function: &FunctionId) -> &mut Self {
+        self.info.stage = Some(function.to_string());
+        self
+    }
+
+    /// Build the stage location.
+    pub fn build(&self) -> (SPath, StorageLocation) {
+        self.version_builder.build(&self.info, None)
+    }
+
+    /// Build the meta stage location.
+    pub fn build_meta(&self, meta_name: impl Into<String>) -> (SPath, StorageLocation) {
+        self.version_builder.build(
+            &self.info,
+            Some(format!("{}.meta", meta_name.into()).as_str()),
+        )
+    }
+}
+
 /// Builder for the collection location.
 #[derive(Debug)]
 pub struct CollectionBuilder {
@@ -242,6 +271,16 @@ impl CollectionBuilder {
             version_builder: self.version_builder,
         };
         builder.function(bundle);
+        builder
+    }
+
+    /// Return a [`StageBuilder`] based on the [`CollectionBuilder`]
+    pub fn stage(self, function: &FunctionId) -> StageBuilder {
+        let mut builder = StageBuilder {
+            info: self.info,
+            version_builder: self.version_builder,
+        };
+        builder.function(function);
         builder
     }
 
@@ -427,6 +466,18 @@ impl VersionLocationBuilder for V2LocationBuilder {
                     .unwrap()
                     .child(&format!("{bundle}.tgz"))
                     .unwrap();
+            } else if let Some(stage) = &info.stage {
+                // Stages are stored at /stages/c/COLLECTION/f
+                // we need to recalculate the base path accordingly.
+                path = SPath::default()
+                    .child("stages")
+                    .unwrap()
+                    .child("c")
+                    .unwrap()
+                    .child(collection)
+                    .unwrap();
+
+                path = path.child("f").unwrap().child(stage).unwrap();
             } else if let Some(data_version) = &info.data_version {
                 // function always is present if data is present
                 path = path.child("d").unwrap().child(data_version).unwrap();
@@ -547,6 +598,33 @@ mod tests {
         assert_eq!(
             builder.build().0,
             SPath::parse(format!("/bundles/c/{collection}/f/{bundle}.tgz"))?
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_stage_builder_v2() -> Result<(), TdError> {
+        let data_location = DataLocation::try_from("/L")?;
+        let collection = CollectionId::default();
+        let function = FunctionId::default();
+        let mut builder = StorageLocation::V2
+            .builder(&data_location)
+            .collection(&collection)
+            .stage(&function);
+        assert_eq!(
+            builder.build().0,
+            SPath::parse(format!("/stages/c/{collection}/f/{function}"))?
+        );
+        assert_eq!(
+            builder.build_meta("foo").0,
+            SPath::parse(format!("/stages/c/{collection}/f/{function}-foo.meta"))?
+        );
+
+        let function = FunctionId::default();
+        builder.function(&function);
+        assert_eq!(
+            builder.build().0,
+            SPath::parse(format!("/stages/c/{collection}/f/{function}"))?
         );
         Ok(())
     }

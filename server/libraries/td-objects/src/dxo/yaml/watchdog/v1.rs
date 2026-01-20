@@ -29,6 +29,7 @@ pub struct Info {
     pub function_version_id: FunctionVersionId,
     pub function: FunctionName,
     pub function_bundle: Location,
+    pub function_stage: Location,
     pub scheduled_on: AtTime,    // when the request yaml was created
     pub fn_trigger: HttpRequest, // trigger of the function
     pub fn_state: HttpRequest,   // state of the function
@@ -72,7 +73,11 @@ mod tests {
                 function_version_id,
                 function: FunctionName::try_from("function").unwrap(),
                 function_bundle: Location {
-                    uri: Url::try_from("file:///foo").unwrap(),
+                    uri: Url::try_from("file:///bundle").unwrap(),
+                    env_prefix: None,
+                },
+                function_stage: Location {
+                    uri: Url::try_from("file:///stage").unwrap(),
                     env_prefix: None,
                 },
                 scheduled_on,
@@ -117,7 +122,10 @@ info:
   function_version_id: {function_version_id}
   function: function
   function_bundle:
-    uri: file:///foo
+    uri: file:///bundle
+    env_prefix: null
+  function_stage:
+    uri: file:///stage
     env_prefix: null
   scheduled_on: {scheduled_on}
   fn_trigger:

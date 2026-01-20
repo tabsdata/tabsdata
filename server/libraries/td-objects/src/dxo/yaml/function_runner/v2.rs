@@ -43,6 +43,7 @@ pub struct FunctionInfo {
     pub function: FunctionName,
     pub function_run_id: FunctionRunId,
     pub function_bundle: Location,
+    pub function_stage: Location,
     pub triggered_on: TriggeredOn,
     pub transaction_id: TransactionId,
     pub execution_id: ExecutionId,
@@ -260,7 +261,11 @@ mod tests {
                 function: FunctionName::try_from("function").unwrap(),
                 function_run_id,
                 function_bundle: Location {
-                    uri: Url::try_from("file:///foo").unwrap(),
+                    uri: Url::try_from("file:///bundle").unwrap(),
+                    env_prefix: None,
+                },
+                function_stage: Location {
+                    uri: Url::try_from("file:///stage").unwrap(),
                     env_prefix: None,
                 },
                 triggered_on,
@@ -348,7 +353,10 @@ info:
   function: function
   function_run_id: {function_run_id}
   function_bundle:
-    uri: file:///foo
+    uri: file:///bundle
+    env_prefix: null
+  function_stage:
+    uri: file:///stage
     env_prefix: null
   triggered_on: {triggered_on}
   transaction_id: {transaction_id}
@@ -771,6 +779,7 @@ output:
             .function(FunctionName::try_from("fn")?)
             .function_run_id(FunctionRunId::default())
             .function_bundle(locations[8].clone())
+            .function_stage(locations[0].clone())
             .triggered_on(TriggeredOn::default())
             .transaction_id(TransactionId::default())
             .execution_id(ExecutionId::default())

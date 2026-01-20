@@ -110,6 +110,20 @@ pub async fn create_locked_function_runner_workers_start_request<T: WorkerMessag
                     .env_prefix(env_prefix)
                     .build()?;
 
+                // Staging location
+                let (path, _) = storage_location
+                    .builder(&f.data_location)
+                    .collection(&f.collection_id)
+                    .stage(&f.function_id)
+                    .build();
+                let (external_path, mount_def) = storage.to_external_uri(&path)?;
+                let env_prefix = EnvPrefix::try_from(&mount_def.id)?;
+                get_states.insert(env_prefix.clone());
+                let stage_location = Location::builder()
+                    .uri(external_path)
+                    .env_prefix(env_prefix)
+                    .build()?;
+
                 // Function run content location
                 let (path, _) = storage_location
                     .builder(&f.data_location)
@@ -133,6 +147,7 @@ pub async fn create_locked_function_runner_workers_start_request<T: WorkerMessag
                     .function(f.name.clone())
                     .function_run_id(f.id)
                     .function_bundle(bundle_location)
+                    .function_stage(stage_location)
                     .triggered_on(f.triggered_on)
                     .transaction_id(f.transaction_id)
                     .execution_id(f.execution_id)
@@ -602,6 +617,18 @@ pub async fn create_locked_watchdog_workers_start_request<T: WorkerMessageQueue>
                     .env_prefix(env_prefix)
                     .build()?;
 
+                let (path, _) = storage_location
+                    .builder(&f.data_location)
+                    .collection(&f.collection_id)
+                    .stage(&f.function_id)
+                    .build();
+                let (external_path, mount_def) = storage.to_external_uri(&path)?;
+                let env_prefix = EnvPrefix::try_from(&mount_def.id)?;
+                let function_stage = Location::builder()
+                    .uri(external_path)
+                    .env_prefix(env_prefix)
+                    .build()?;
+
                 // Build info
                 // TODO Urls are wrong as of now
                 let info = watchdog::v1::Info {
@@ -611,6 +638,7 @@ pub async fn create_locked_watchdog_workers_start_request<T: WorkerMessageQueue>
                     function_version_id: watchdog_worker.function_version_id,
                     function: watchdog_worker.function.clone(),
                     function_bundle,
+                    function_stage,
                     scheduled_on: AtTime::now(),
                     fn_trigger,
                     fn_state,

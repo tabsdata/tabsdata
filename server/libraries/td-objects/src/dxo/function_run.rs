@@ -8,8 +8,8 @@ mod definitions {
     use crate::dxo::worker::UpdateWorkerExecution;
     use crate::types::basic::{
         AtTime, BundleId, CollectionId, CollectionName, DataLocation, ExecutionId, ExecutionName,
-        FunctionName, FunctionRunId, FunctionRunStatus, FunctionVersionId, StorageVersion,
-        TransactionId, Trigger, TriggeredOn, UserId, UserName,
+        FunctionId, FunctionName, FunctionRunId, FunctionRunStatus, FunctionVersionId,
+        StorageVersion, TransactionId, Trigger, TriggeredOn, UserId, UserName,
     };
     use td_error::TdError;
 
@@ -24,6 +24,8 @@ mod definitions {
         #[builder(default)]
         pub id: FunctionRunId,
         pub collection_id: CollectionId, // this is not the ExecutionDB function_version_id, as that's the trigger
+        #[td_type(extractor)]
+        pub function_id: FunctionId, // added in v4
         #[td_type(extractor)]
         pub function_version_id: FunctionVersionId, // this is not the ExecutionDB function_version_id, as that's the trigger
         #[td_type(extractor, builder(field = "id"))]

@@ -83,3 +83,12 @@ FROM function_runs f
          LEFT JOIN functions fv ON f.function_version_id = fv.id
          LEFT JOIN executions e ON f.execution_id = e.id
          LEFT JOIN users u ON f.triggered_by_id = u.id;
+
+ALTER TABLE function_runs
+    ADD COLUMN function_id TEXT NOT NULL DEFAULT '';
+
+UPDATE function_runs
+SET function_id = (SELECT function_id
+                   FROM functions
+                   WHERE functions.id = function_runs.function_version_id);
+
