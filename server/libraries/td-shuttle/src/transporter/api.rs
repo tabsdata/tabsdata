@@ -134,7 +134,7 @@ fn decode_info<I: DeserializeOwned>(encoded: &str, info_type: &str) -> Result<I,
             TransporterError::CouldNotDecodeInfo(info_type.to_string(), err.to_string())
         })?;
     let x = serde_json::from_slice::<I>(&decoded);
-    x.map_err(|_| TransporterError::CouldNotDecodeInfo(info_type.to_string(), encoded.to_string()))
+    x.map_err(|err| TransporterError::CouldNotDeserializeInfo(info_type.to_string(), err.to_string()))
 }
 
 /// Splits a file path into base_path and file_name
@@ -1700,6 +1700,7 @@ mod tests {
     use chrono::{DateTime, Utc};
     use td_common::time::UniqueUtc;
     use url::Url;
+    use crate::transporter::error::TransporterError;
 
     #[test]
     fn test_import_format_using_polars() {
@@ -2043,4 +2044,25 @@ mod tests {
         let mut info = LastModifiedInfoState::new(initial);
         test_last_modified_info(&mut info, &before, &initial, &after);
     }
+
+    #[test]
+    fn test_last_modified_info_decode_error() {
+        let state = "@@JWMSI6IHsiaW5pdGlhbF9sYXN0X21vZGlmaWVkIjogIjIwMjQtMDktMDVUMDE6MDE6MDA\
+uMDEwWiIsICJlbnRyaWVzIjogeyIvdGVzdGluZ19uZXN0ZWRfaW1wb3J0LyouY3N2IjogWyIyMDI2LTAyLTE4VDE0Oj\
+A0OjE0LjQzMzcyMCIsIFsibmV3X2RhdGEuY3N2Il1dfX19";
+        let res= super::decode_info::<LastModifiedInfoState>(state, "test");
+        assert!(res.is_err());
+        assert!(matches!(res.err(), Some(TransporterError::CouldNotDecodeInfo(_,_))));
+    }
+
+    #[test]
+    fn test_last_modified_info_deser_error() {
+        let state = "eyJWMSI6IHsiaW5pdGlhbF9sYXN0X21vZGlmaWVkIjogIjIwMjQtMDktMDVUMDE6MDE6MDAuM\
+DEwWiIsICJlbnRyaWVzIjogeyIvdGVzdGluZ19uZXN0ZWRfaW1wb3J0LyouY3N2IjogWyIyMDI2LTAyLTE4VDE0OjA0OjE0LjQz\
+MzcyMCIsIFsibmV3X2RhdGEuY3N2Il1dfX19";
+        let res= super::decode_info::<LastModifiedInfoState>(state, "test");
+        assert!(res.is_err());
+        assert!(matches!(res.err(), Some(TransporterError::CouldNotDeserializeInfo(_,_))));
+    }
+
 }

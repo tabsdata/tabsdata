@@ -32,7 +32,7 @@ pub enum TransporterError {
     EnvironmentVariableNotFound(String) = 7,
     #[error("Could not encode '{0}' info: {0}")]
     CouldNotEncodeInfo(String, String) = 8,
-    #[error("Could not decode '{0}' info: {0}")]
+    #[error("Could not decode '{0}' info: {1}")]
     CouldNotDecodeInfo(String, String) = 9,
     #[error("Importer file URL does not have a path or file name: {0}")]
     InvalidImporterFileUrl(String) = 10,
@@ -42,6 +42,8 @@ pub enum TransporterError {
     CouldListFilesToImport(String, object_store::Error) = 12,
     #[error("Could not create import instructions: {0}")]
     CouldNotCreateImportInstructions(String) = 13,
+    #[error("Could not deserialize decoded '{0}' info: {1}")]
+    CouldNotDeserializeInfo(String, String) = 14,
     #[error("Could not create object store for '{0}', error: {1}")]
     CouldNotCreateObjectStore(String, object_store::Error) = 5000,
     #[error("Could not get file metadata for '{0}', error: {1}")]
