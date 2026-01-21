@@ -13,4 +13,4 @@ profiles:
     level: debug
   production:
     output: file
-    level: info
+    level: debug

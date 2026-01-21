@@ -50,6 +50,8 @@ pub const LOG_LOCATION: &str = "log";
 pub const LOG_FILE: &str = "td.log";
 pub const LOG_EXTENSION: &str = "log";
 
+pub const DEFAULT_LOG_LEVEL: Level = Level::DEBUG;
+
 pub const WORK_ENV: &str = "TD_URI_WORK";
 pub const PYTEST_VERSION: &str = "PYTEST_VERSION";
 
@@ -178,7 +180,7 @@ fn init<W: for<'a> MakeWriter<'a> + Send + Sync + 'static>(
 // Start the logger.
 // Option 'with_tokio_console' enabled requires also binaries with feature 'tokio_console'.
 // Otherwise, flag will be ignored defaulting to standard behavior.
-pub fn start(max_level: Level, profile: Option<String>, with_tokio_console: bool) {
+pub fn start(max_level: Option<Level>, profile: Option<String>, with_tokio_console: bool) {
     let log_config = load();
     let active_profile_name = determine_profile_name(profile, log_config.as_ref());
     let active_profile = log_config
@@ -186,9 +188,17 @@ pub fn start(max_level: Level, profile: Option<String>, with_tokio_console: bool
         .and_then(|cfg| cfg.profiles.get(&active_profile_name).cloned());
     let log_dir = resolve_log_directory(PathBuf::from(CURRENT_DIR));
     let writer = select_primary_writer(active_profile.as_ref(), log_dir.as_deref());
+
+    let effective_level = max_level.unwrap_or_else(|| {
+        active_profile
+            .as_ref()
+            .and_then(|profile| Level::from_str(&profile.level).ok())
+            .unwrap_or(DEFAULT_LOG_LEVEL)
+    });
+
     LOGGER_PROVIDER.get_or_init(|| {
         init(
-            max_level,
+            effective_level,
             writer,
             vec![],
             with_tokio_console,

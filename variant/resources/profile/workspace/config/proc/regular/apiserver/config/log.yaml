@@ -12,7 +12,7 @@ profiles:
       - tower::buffer::worker=info
   production:
     output: file
-    level: info
+    level: debug
     directives:
       - tower::buffer::worker=info
     sinks:

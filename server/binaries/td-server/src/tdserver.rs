@@ -64,7 +64,7 @@ fn check_polars() {
 #[tokio::main]
 #[attach(signal = "tdserver")]
 async fn main() {
-    logging::start(Level::INFO, Some(CONSOLE_PROFILE.to_string()), false);
+    logging::start(Some(Level::INFO), Some(CONSOLE_PROFILE.to_string()), false);
     let _ = check_banner();
     check_polars();
     // Setting env vars is not thread-safe; use with care.

@@ -47,7 +47,11 @@ pub fn _identifier_generator(
     batch: &[Series],
     kwargs: IdentifierGeneratorKwargs,
 ) -> PolarsResult<Series> {
-    logging::start(Level::ERROR, Some(DEVELOPMENT_PROFILE.to_string()), false);
+    logging::start(
+        Some(Level::ERROR),
+        Some(DEVELOPMENT_PROFILE.to_string()),
+        false,
+    );
     debug!(
         "Executing identifier generator expression function with parameters: {:?}",
         kwargs

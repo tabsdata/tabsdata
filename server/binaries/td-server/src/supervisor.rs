@@ -14,7 +14,7 @@ use td_common::{about, logging};
 use td_process::launcher::hooks;
 use td_supervisor::services::supervisor;
 use td_supervisor::services::supervisor::{Arguments, prepend_slash};
-use tracing::{Level, info};
+use tracing::info;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -56,7 +56,7 @@ pub fn main() {
         }
     }
 
-    logging::start(Level::INFO, None, true);
+    logging::start(None, None, true);
 
     let arguments: Vec<String> = env::args().collect();
     let command = arguments.join(" ");

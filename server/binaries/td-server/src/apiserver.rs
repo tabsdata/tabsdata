@@ -6,7 +6,7 @@ use std::{env, process};
 use td_common::attach::attach;
 use td_common::{about, logging};
 use td_process::launcher::hooks;
-use tracing::{Level, info};
+use tracing::info;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -19,7 +19,7 @@ fn main() {
         process::exit(0);
     }
 
-    logging::start(Level::INFO, None, false);
+    logging::start(None, None, false);
 
     let arguments: Vec<String> = env::args().collect();
     let command = arguments.join(" ");

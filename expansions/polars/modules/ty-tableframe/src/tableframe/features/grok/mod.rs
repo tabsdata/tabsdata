@@ -105,7 +105,11 @@ function (polars expr) + function-impl (actual implementation).
 ///   `pl.col("__grok_tmp").list.to_struct(fields=[...]).struct.unnest()`.
 ///
 pub fn _grok(batch: &[Series], kwargs: GrokKwargs) -> PolarsResult<Series> {
-    logging::start(Level::ERROR, Some(DEVELOPMENT_PROFILE.to_string()), false);
+    logging::start(
+        Some(Level::ERROR),
+        Some(DEVELOPMENT_PROFILE.to_string()),
+        false,
+    );
     debug!(
         "Executing grok expression function with parameters: {:?}",
         kwargs
