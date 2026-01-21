@@ -104,7 +104,7 @@ P3Spec: TypeAlias = Annotated[list[str], Strict]
 P4Spec: TypeAlias = list[dict[int, str]]
 
 
-@_td_validate_call(ErrorCode.PVTEST0)
+@_td_validate_call(ErrorCode.DQC0)
 def decorated_function(
     p0: P0Spec = None,
     p1: P1Spec = None,

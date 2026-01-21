@@ -11,7 +11,7 @@ import math
 import re
 import typing
 from functools import wraps
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import ConfigDict, ValidationError, validate_call
 
@@ -19,7 +19,7 @@ from tabsdata.exceptions import ErrorCode, ParameterValidationError
 
 
 def _normalize_to_set(
-    val: Optional[Any], keep_none: bool = False
+    val: Any | None, keep_none: bool = False
 ) -> None | typing.AbstractSet:
     """
     Normalizes a value into a set, ensuring deduplication if the value is a collection.
@@ -56,7 +56,7 @@ def _normalize_to_set(
     return values
 
 
-def _normalize_to_list(val: Optional[Any], keep_none: bool = False) -> None | list[Any]:
+def _normalize_to_list(val: Any | None, keep_none: bool = False) -> list[Any] | None:
     """
     Normalizes a value into a list.
 
@@ -181,6 +181,11 @@ def _td_validate_call(error_code: ErrorCode, f=None):
         try:
             return validated_func(*args, **kwargs)
         except ValidationError as pyd_err:
+            for err in pyd_err.errors():
+                # 'ctx' (context) often contains the original exception object
+                original_err = err.get("ctx", {}).get("error")
+                if original_err:
+                    raise original_err from None
             raise ParameterValidationError(f, error_code, pyd_err) from pyd_err
 
     return wrapper

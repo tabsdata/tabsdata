@@ -2171,70 +2171,102 @@ class ErrorCode(Enum):
         ),
     }
 
-    PVTEST0 = {}
+    # Testing
+    DQC0 = object()
 
-    PVDQCL1 = {}
-    PVDQCL2 = {}
-    PVDQCL3 = {}
-    PVDQCL4 = {}
-    PVDQCL5 = {}
-    PVDQCL6 = {}
-    PVDQCL7 = {}
-    PVDQCL8 = {}
-    PVDQCL9 = {}
-    PVDQCL10 = {}
-    PVDQCL11 = {}
-    PVDQCL12 = {}
-    PVDQCL13 = {}
-    PVDQCL14 = {}
-    PVDQCL15 = {}
-    PVDQCL16 = {}
-    PVDQCL17 = {}
-    PVDQCL18 = {}
-    PVDQCL19 = {}
-    PVDQCL20 = {}
-    PVDQCL21 = {}
-    PVDQCL22 = {}
-    PVDQCL23 = {}
-    PVDQCL24 = {}
-    PVDQCL25 = {}
-    PVDQCL26 = {}
-    PVDQCL27 = {}
-    PVDQCL28 = {}
-    PVDQCL29 = {}
-    PVDQCL30 = {}
-    PVDQCL31 = {}
-    PVDQCL32 = {}
-    PVDQCL33 = {}
-    PVDQCL34 = {}
-    PVDQCL35 = {}
-    PVDQCL36 = {}
-    PVDQCL37 = {}
-    PVDQCL38 = {}
-    PVDQCL39 = {}
-    PVDQCL40 = {}
-    PVDQCL41 = {}
-    PVDQCL42 = {}
-    PVDQCL43 = {}
-    PVDQCL44 = {}
+    # _operator.py
+    DQC1 = object()
+    DQC2 = object()
+    DQC3 = object()
+    DQC4 = object()
+    DQC5 = object()
+    DQC6 = object()
+    DQC7 = object()
+    DQC8 = object()
+    DQC9 = object()
+    DQC10 = object()
+    DQC11 = object()
+    DQC12 = object()
+    DQC13 = object()
+    DQC14 = object()
+    DQC15 = object()
+    DQC16 = object()
+    DQC17 = object()
+    DQC18 = object()
+    DQC19 = object()
+    DQC20 = object()
+    DQC21 = object()
+    DQC22 = object()
+    DQC23 = object()
+    DQC24 = object()
+    DQC25 = object()
+    DQC26 = object()
+    DQC27 = object()
+    DQC28 = object()
+    DQC29 = object()
+    DQC30 = object()
+    DQC31 = object()
 
-    PVDQOP1 = {}
-    PVDQOP2 = {}
-    PVDQOP3 = {}
-    PVDQOP4 = {}
-    PVDQOP5 = {}
-    PVDQOP6 = {}
-    PVDQOP7 = {}
-    PVDQOP8 = {}
-    PVDQOP9 = {}
-    PVDQOP10 = {}
-    PVDQOP11 = {}
-    PVDQOP12 = {}
-    PVDQOP13 = {}
-    PVDQOP14 = {}
-    PVDQOP15 = {}
+    # _classifier.py
+    DQC101 = object()
+    DQC102 = object()
+    DQC103 = object()
+    DQC104 = object()
+    DQC105 = object()
+    DQC106 = object()
+    DQC107 = object()
+    DQC108 = object()
+    DQC109 = object()
+    DQC110 = object()
+    DQC111 = object()
+    DQC112 = object()
+    DQC113 = object()
+    DQC114 = object()
+    DQC115 = object()
+    DQC116 = object()
+    DQC117 = object()
+    DQC118 = object()
+    DQC119 = object()
+    DQC120 = object()
+    DQC121 = object()
+    DQC122 = object()
+    DQC123 = object()
+    DQC124 = object()
+    DQC125 = object()
+    DQC126 = object()
+    DQC127 = object()
+    DQC128 = object()
+    DQC129 = object()
+    DQC130 = object()
+    DQC131 = object()
+    DQC132 = object()
+    DQC133 = object()
+    DQC134 = object()
+    DQC135 = object()
+    DQC136 = object()
+    DQC137 = object()
+    DQC138 = object()
+    DQC139 = object()
+    DQC140 = object()
+    DQC141 = object()
+    DQC142 = object()
+    DQC143 = object()
+    DQC144 = object()
+    DQC145 = object()
+    DQC146 = object()
+    DQC147 = object()
+    DQC148 = object()
+    DQC149 = object()
+    DQC150 = object()
+    DQC151 = object()
+    DQC152 = object()
 
-    PVDQ1 = {}
+    # _dataquality.py
+    DQC201 = object()
+    DQC202 = object()
+    DQC203 = object()
+    DQC204 = object()
+
     PVCX1 = {
         "code": "PVCX-001",
         "message": None,
@@ -2297,15 +2329,18 @@ class ErrorCode(Enum):
     }
 
     def code(self) -> str:
-        code = self.value.get("code")
-        if not code:
+        if type(self.value) is dict:
+            code = self.value.get("code")
+        else:
             code = self.name
             name, number = re.split(r"(?=\d)", code, maxsplit=1)
             code = f"{name}-{number.zfill(3)}"
         return code
 
     def message(self) -> str:
-        message = self.value.get("message")
+        message = None
+        if type(self.value) is dict:
+            message = self.value.get("message")
         if not message:
             message = "{}"
         return message
@@ -2319,18 +2354,23 @@ class TabsDataException(Exception):
     CODE_PREFIX: str
 
     def __init__(self, error_code: ErrorCode, *args):
-        self.error_code = error_code
-        self.code = self.error_code.code()
-        self.message = self.error_code.message().format(*args)
+        message = error_code.message().format(*args)
+        super().__init__(message if message else "Unknown error")
+        self._error_code = error_code
+        self.code = error_code.code()
+        self.message = message
         if not self.code.startswith(self.CODE_PREFIX):
             raise SDKError(
                 ErrorCode.SDKE1,
                 self.__class__.__name__,
                 self.code,
                 self.CODE_PREFIX,
-                self.message,
+                message,
             )
-        super().__init__(self.message if self.message else "Unknown error")
+
+    @property
+    def error_code(self) -> ErrorCode:
+        return self._error_code
 
 
 class ConnectionConfigurationError(TabsDataException):
@@ -2474,7 +2514,7 @@ class ConstructorError(TabsDataException):
 
 
 class ParameterValueError(TabsDataException):
-    CODE_PREFIX = "PV"
+    CODE_PREFIX = ""
 
     def __init__(
         self,
@@ -2507,7 +2547,7 @@ class ParameterValidationError(TabsDataException):
     Exception raised when public API parameter validation fails.
     """
 
-    CODE_PREFIX = "PV"
+    CODE_PREFIX = ""
 
     def __init__(
         self,

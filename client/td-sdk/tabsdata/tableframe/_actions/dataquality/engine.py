@@ -410,17 +410,17 @@ class PolarsClassifierProvider:
         if c_min is None and c_max is None:
             return pl.lit(True)
         if c_min is None:
-            if classifier.closed in ("both", "upper"):
+            if classifier.closed_on in ("both", "upper"):
                 return column.le(pl.lit(c_max))
             return column.lt(pl.lit(c_max))
         if c_max is None:
-            if classifier.closed in ("both", "lower"):
+            if classifier.closed_on in ("both", "lower"):
                 return column.ge(pl.lit(c_min))
             return column.gt(pl.lit(c_min))
         return column.is_between(
             pl.lit(c_min),
             pl.lit(c_max),
-            closed=CLOSED_MAPPING[classifier.closed],
+            closed=CLOSED_MAPPING[classifier.closed_on],
         )
 
     @staticmethod
@@ -626,7 +626,7 @@ class PolarsClassifierProvider:
         match classifier:
             case ScaleCategorizer():
                 scale = classifier.scale
-                minimum, maximum = scale.scale_range
+                minimum, maximum = scale._scale_range
 
                 cuts = []
 
@@ -1600,9 +1600,9 @@ class DataQualityEngine:
                                     ClassifierFamily.CATEGORICAL.value
                                 ),
                                 DQColumns.DQ_BINS.value: (
-                                    categorizer.scale.bins + 1
+                                    categorizer.scale._bins + 1
                                     if categorizer.scale.use_bin_zero
-                                    else categorizer.scale.bins
+                                    else categorizer.scale._bins
                                 ),
                                 DQColumns.DQ_FALSE.value: None,
                                 DQColumns.DQ_TRUE.value: None,
@@ -1620,14 +1620,14 @@ class DataQualityEngine:
                                     .item()
                                 )
                                 summary_row[DQColumns.column(0)] = count
-                            for i in range(1, categorizer.scale.bins + 1):
+                            for i in range(1, categorizer.scale._bins + 1):
                                 count = (
                                     lf.select((pl.col(column) == i).sum())
                                     .collect()
                                     .item()
                                 )
                                 summary_row[DQColumns.column(i)] = count
-                            for i in range(categorizer.scale.bins + 1, MAX_BINS + 1):
+                            for i in range(categorizer.scale._bins + 1, MAX_BINS + 1):
                                 summary_row[DQColumns.column(i)] = None
                         case _:
                             raise ValueError(

@@ -1160,7 +1160,7 @@ class TestDataQualityProcessorTableNames:
             # noinspection PyArgumentList
             Select()
 
-        assert "PVTEST-000" in str(exc_info.value)
+        assert "DQC-028" in str(exc_info.value)
 
     @pytest.mark.dq
     def test_filter_with_none_to_table_produces_no_table(self):

@@ -32,21 +32,21 @@ def test_data_quality_wrong_table_type():
     classifier = Matches(pattern="hi")
     with pytest.raises(ParameterValidationError) as e:
         DataQuality(3, classifier, Summary())
-    assert e.value.error_code == ErrorCode.PVDQ1
+    assert e.value.error_code == ErrorCode.DQC201
 
 
 def test_data_quality_wrong_classifier_type():
     table = "my_table"
     with pytest.raises(ParameterValidationError) as e:
         DataQuality(table, 3, Summary())
-    assert e.value.error_code == ErrorCode.PVDQ1
+    assert e.value.error_code == ErrorCode.DQC201
 
 
 def test_data_quality_wrong_classifier_list_type():
     table = "my_table"
     with pytest.raises(ParameterValidationError) as e:
         DataQuality(table, [3], Summary())
-    assert e.value.error_code == ErrorCode.PVDQ1
+    assert e.value.error_code == ErrorCode.DQC201
 
 
 def test_data_quality_wrong_operation_type():
@@ -54,7 +54,7 @@ def test_data_quality_wrong_operation_type():
     classifier = Matches(pattern="hi")
     with pytest.raises(ParameterValidationError) as e:
         DataQuality(table, classifier, 3)
-    assert e.value.error_code == ErrorCode.PVDQ1
+    assert e.value.error_code == ErrorCode.DQC201
 
 
 def test_data_quality_wrong_operation_list_type():
@@ -62,4 +62,4 @@ def test_data_quality_wrong_operation_list_type():
     classifier = Matches(pattern="hi")
     with pytest.raises(ParameterValidationError) as e:
         DataQuality(table, classifier, [3])
-    assert e.value.error_code == ErrorCode.PVDQ1
+    assert e.value.error_code == ErrorCode.DQC201

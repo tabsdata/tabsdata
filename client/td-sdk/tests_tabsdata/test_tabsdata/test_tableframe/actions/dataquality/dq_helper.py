@@ -723,7 +723,7 @@ def _is_negative_or_zero_checker(df: pl.DataFrame, tags: dict, _qrows: int = Non
 
 
 def _make_is_between_checker(
-    min_val: Any, max_val: Any, closed: RangeClosedOnSpec = "both"
+    min_val: Any, max_val: Any, closed_on: RangeClosedOnSpec = "both"
 ):
     def _is_between_checker(df: pl.DataFrame, tags: dict, _qrows: int = None):
         assert "value" in df.columns
@@ -747,7 +747,7 @@ def _make_is_between_checker(
         converted_min = converter(min_val) if min_val is not None else None
         converted_max = converter(max_val) if max_val is not None else None
 
-        polars_closed = CLOSED_MAPPING[closed]
+        polars_closed = CLOSED_MAPPING[closed_on]
 
         if min_val is None and max_val is None:
             if is_float:
@@ -763,7 +763,7 @@ def _make_is_between_checker(
                 nan_count = 0
                 null_count = df.filter(pl.col("value").is_null()).height
         elif min_val is None:
-            if closed in ("both", "upper"):
+            if closed_on in ("both", "upper"):
                 condition = pl.col("value").le(pl.lit(converted_max))
             else:
                 condition = pl.col("value").lt(pl.lit(converted_max))
@@ -788,7 +788,7 @@ def _make_is_between_checker(
                 nan_count = 0
                 null_count = df.filter(pl.col("value").is_null()).height
         elif max_val is None:
-            if closed in ("both", "lower"):
+            if closed_on in ("both", "lower"):
                 condition = pl.col("value").ge(pl.lit(converted_min))
             else:
                 condition = pl.col("value").gt(pl.lit(converted_min))
@@ -865,7 +865,7 @@ def _make_is_between_checker(
 
 
 def _make_is_not_between_checker(
-    min_val: Any, max_val: Any, closed: RangeClosedOnSpec = "both"
+    min_val: Any, max_val: Any, closed_on: RangeClosedOnSpec = "both"
 ):
     def _is_not_between_checker(df: pl.DataFrame, tags: dict, _qrows: int = None):
         assert "value" in df.columns
@@ -889,7 +889,7 @@ def _make_is_not_between_checker(
         converted_min = converter(min_val) if min_val is not None else None
         converted_max = converter(max_val) if max_val is not None else None
 
-        polars_closed = CLOSED_MAPPING[closed]
+        polars_closed = CLOSED_MAPPING[closed_on]
 
         if min_val is None and max_val is None:
             if is_float:
@@ -905,7 +905,7 @@ def _make_is_not_between_checker(
                 nan_count = 0
                 null_count = df.filter(pl.col("value").is_null()).height
         elif min_val is None:
-            if closed in ("both", "upper"):
+            if closed_on in ("both", "upper"):
                 condition = pl.col("value").le(pl.lit(converted_max))
             else:
                 condition = pl.col("value").lt(pl.lit(converted_max))
@@ -932,7 +932,7 @@ def _make_is_not_between_checker(
                 nan_count = 0
                 null_count = df.filter(pl.col("value").is_null()).height
         elif max_val is None:
-            if closed in ("both", "lower"):
+            if closed_on in ("both", "lower"):
                 condition = pl.col("value").ge(pl.lit(converted_min))
             else:
                 condition = pl.col("value").gt(pl.lit(converted_min))
@@ -1818,7 +1818,7 @@ def _is_negative_or_zero_action(
 
 
 def _make_is_between_action(
-    min_val: Any, max_val: Any, closed: RangeClosedOnSpec = "both"
+    min_val: Any, max_val: Any, closed_on: RangeClosedOnSpec = "both"
 ):
     def _is_between_action(
         table: str = "table00",
@@ -1869,7 +1869,7 @@ def _make_is_between_action(
                     tags="is_between",
                     min_val=converted_min,
                     max_val=converted_max,
-                    closed=closed,
+                    closed_on=closed_on,
                 ),
             ],
             operators=Summary(),
@@ -1879,7 +1879,7 @@ def _make_is_between_action(
 
 
 def _make_is_not_between_action(
-    min_val: Any, max_val: Any, closed: RangeClosedOnSpec = "both"
+    min_val: Any, max_val: Any, closed_on: RangeClosedOnSpec = "both"
 ):
     def _is_not_between_action(
         table: str = "table00",
@@ -1931,7 +1931,7 @@ def _make_is_not_between_action(
                     tags="is_not_between",
                     min_val=converted_min,
                     max_val=converted_max,
-                    closed=closed,
+                    closed_on=closed_on,
                 ),
             ],
             operators=Summary(),
@@ -2469,7 +2469,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     tags="is_between",
                     min_val=-100,
                     max_val=100,
-                    closed="both",
+                    closed_on="both",
                 ),
             ],
             method=DataQualityEngine.is_between,
@@ -2485,7 +2485,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     tags="is_between",
                     min_val=0,
                     max_val=1000,
-                    closed="lower",
+                    closed_on="lower",
                 ),
             ],
             method=DataQualityEngine.is_between,
@@ -2501,7 +2501,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     tags="is_between",
                     min_val=None,
                     max_val=0,
-                    closed="both",
+                    closed_on="both",
                 ),
             ],
             method=DataQualityEngine.is_between,
@@ -2517,7 +2517,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     tags="is_between",
                     min_val=0,
                     max_val=None,
-                    closed="both",
+                    closed_on="both",
                 ),
             ],
             method=DataQualityEngine.is_between,
@@ -2533,7 +2533,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     tags="is_between",
                     min_val=-1000,
                     max_val=0,
-                    closed="upper",
+                    closed_on="upper",
                 ),
             ],
             method=DataQualityEngine.is_between,
@@ -2551,7 +2551,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     tags="is_not_between",
                     min_val=-100,
                     max_val=100,
-                    closed="both",
+                    closed_on="both",
                 ),
             ],
             method=DataQualityEngine.is_not_between,
@@ -2567,7 +2567,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     tags="is_not_between",
                     min_val=0,
                     max_val=1000,
-                    closed="lower",
+                    closed_on="lower",
                 ),
             ],
             method=DataQualityEngine.is_not_between,
@@ -2583,7 +2583,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     tags="is_not_between",
                     min_val=None,
                     max_val=0,
-                    closed="both",
+                    closed_on="both",
                 ),
             ],
             method=DataQualityEngine.is_not_between,
@@ -2599,7 +2599,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     tags="is_not_between",
                     min_val=0,
                     max_val=None,
-                    closed="both",
+                    closed_on="both",
                 ),
             ],
             method=DataQualityEngine.is_not_between,
@@ -2615,7 +2615,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                     tags="is_not_between",
                     min_val=-1000,
                     max_val=0,
-                    closed="upper",
+                    closed_on="upper",
                 ),
             ],
             method=DataQualityEngine.is_not_between,

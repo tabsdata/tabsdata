@@ -777,7 +777,7 @@ def dq_summary_bool_classifiers_params() -> list[
             },
         ),
         (
-            [dq.IsBetween("b", 0, 2, closed="both")],
+            [dq.IsBetween("b", 0, 2, closed_on="both")],
             None,
             True,
             "b_is_between",
@@ -795,7 +795,7 @@ def dq_summary_bool_classifiers_params() -> list[
             },
         ),
         (
-            [dq.IsNotBetween("b", 0, 2, closed="both")],
+            [dq.IsNotBetween("b", 0, 2, closed_on="both")],
             None,
             True,
             "b_is_not_between",
@@ -813,7 +813,7 @@ def dq_summary_bool_classifiers_params() -> list[
             },
         ),
         (
-            [dq.IsBetween("b", 0, 2, closed="none")],
+            [dq.IsBetween("b", 0, 2, closed_on="none")],
             None,
             True,
             "b_is_between",
@@ -831,7 +831,7 @@ def dq_summary_bool_classifiers_params() -> list[
             },
         ),
         (
-            [dq.IsNotBetween("b", 0, 2, closed="none")],
+            [dq.IsNotBetween("b", 0, 2, closed_on="none")],
             None,
             True,
             "b_is_not_between",
@@ -849,7 +849,7 @@ def dq_summary_bool_classifiers_params() -> list[
             },
         ),
         (
-            [dq.IsBetween("b", 0, 2, closed="lower")],
+            [dq.IsBetween("b", 0, 2, closed_on="lower")],
             None,
             True,
             "b_is_between",
@@ -867,7 +867,7 @@ def dq_summary_bool_classifiers_params() -> list[
             },
         ),
         (
-            [dq.IsNotBetween("b", 0, 2, closed="lower")],
+            [dq.IsNotBetween("b", 0, 2, closed_on="lower")],
             None,
             True,
             "b_is_not_between",
@@ -885,7 +885,7 @@ def dq_summary_bool_classifiers_params() -> list[
             },
         ),
         (
-            [dq.IsBetween("b", 0, 2, closed="upper")],
+            [dq.IsBetween("b", 0, 2, closed_on="upper")],
             None,
             True,
             "b_is_between",
@@ -903,7 +903,7 @@ def dq_summary_bool_classifiers_params() -> list[
             },
         ),
         (
-            [dq.IsNotBetween("b", 0, 2, closed="upper")],
+            [dq.IsNotBetween("b", 0, 2, closed_on="upper")],
             None,
             True,
             "b_is_not_between",

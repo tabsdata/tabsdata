@@ -118,7 +118,7 @@ def _convert_classifier_values(classifier, dtype):
                 tags=classifier.tags,
                 min_val=converted_min,
                 max_val=converted_max,
-                closed=classifier.closed,
+                closed_on=classifier.closed_on,
             )
         else:
             return IsNotBetween(
@@ -126,7 +126,7 @@ def _convert_classifier_values(classifier, dtype):
                 tags=classifier.tags,
                 min_val=converted_min,
                 max_val=converted_max,
-                closed=classifier.closed,
+                closed_on=classifier.closed_on,
             )
     return None
 

@@ -1,6 +1,7 @@
 #
 # Copyright 2025 Tabs Data Inc.
 #
+
 """
 This module defines a set of classifiers used for data quality analysis. Classifiers
 are used to evaluate data in columns and categorize or flag them based on specific
@@ -13,7 +14,7 @@ import math
 import re
 import sys
 from abc import ABC, abstractmethod
-from typing import AbstractSet, Collection, FrozenSet, Optional, Type, Union
+from typing import AbstractSet, Collection, FrozenSet, Type, Union
 
 from tabsdata.dataquality._typing import (
     MAX_BINS,
@@ -61,37 +62,97 @@ class Scale(ABC):
     def __init__(
         self,
         scale_range: tuple[ScaleLimitSpec, ScaleLimitSpec],
-        bins: Optional[BinCountSpec],
+        bins: BinCountSpec,
         use_bin_zero: bool,
     ):
-        self._range = scale_range
-        self._bins = bins
+        self._range = None
+        self._scale_bins = None
+        self._use_bin_zero = None
+
+        self._scale_range = scale_range
+
+        class_name = "TODO"  # TODO
+        _validate_bins(
+            bins,
+            use_bin_zero,
+            f"{class_name}.bins",
+            ["bins", "use_bin_zero"],
+            ErrorCode.DQC101,
+        )
+        self._scale_bins = bins
         self._use_bin_zero = use_bin_zero
 
     @property
-    def scale_range(self) -> tuple[ScaleLimitSpec, ScaleLimitSpec]:
+    def _scale_range(self) -> tuple[ScaleLimitSpec, ScaleLimitSpec]:
         """Returns the (min, max) range of the scale."""
         return self._range
 
+    @_scale_range.setter
+    @_td_validate_call(ErrorCode.DQC101)
+    def _scale_range(self, scale_range: tuple[ScaleLimitSpec, ScaleLimitSpec]):
+        """Sets the (min, max) range of the scale."""
+        class_name = "TODO"  # TODO
+        _validate_min_max(
+            scale_range[0],
+            scale_range[1],
+            f"{class_name}.scale_range",
+            ["scale_range"],
+            ErrorCode.DQC107,
+        )
+        self._range = scale_range
+
     @property
-    def bins(self) -> Optional[BinCountSpec]:
+    def _bins(self) -> BinCountSpec:
         """Returns the number of bins in the scale."""
-        return self._bins
+        return self._scale_bins
+
+    @_bins.setter
+    @_td_validate_call(ErrorCode.DQC102)
+    def _bins(self, value: BinCountSpec):
+        """Sets the number of bins in the scale."""
+        class_name = "TODO"  # TODO
+        _validate_bins(
+            value,
+            self.use_bin_zero,
+            f"{class_name}.bins",
+            ["value"],
+            ErrorCode.DQC103,
+        )
+        self._scale_bins = value
 
     @property
     def use_bin_zero(self) -> bool:
         """Returns whether the minimum value is in bin zero or in bin one."""
         return self._use_bin_zero
 
+    @use_bin_zero.setter
+    @_td_validate_call(ErrorCode.DQC104)
+    def use_bin_zero(self, value: bool):
+        """Sets whether the minimum value is in bin zero or in bin one."""
+        class_name = "TODO"  # TODO
+        _validate_bins(
+            self._bins,
+            value,
+            f"{class_name}.use_bin_zero",
+            ["value"],
+            ErrorCode.DQC105,
+        )
+        self._use_bin_zero = value
+
     @abstractmethod
-    def to_dict(self) -> dict:
+    def _to_dict(self) -> dict:
         pass
 
     def __repr__(self) -> str:
-        return json.dumps(self.to_dict())
+        return json.dumps(self._to_dict())
 
     def __str__(self) -> str:
-        return json.dumps(self.to_dict())
+        return json.dumps(self._to_dict())
+
+    def __eq__(self, other):
+        if not isinstance(other, type(self)):
+            return NotImplemented
+        return vars(self) == vars(other)
 
 
 class IdentityScale(Scale):
@@ -99,7 +160,7 @@ class IdentityScale(Scale):
     An identity scale where each integer value corresponds to a bin.
     """
 
-    @_td_validate_call(ErrorCode.PVDQCL23)
+    @_td_validate_call(ErrorCode.DQC106)
     def __init__(
         self,
         min_val: ScaleIdentityLimitSpec,
@@ -114,16 +175,28 @@ class IdentityScale(Scale):
             max_val: The maximum integer value of the scale.
             use_bin_zero: If `False`, the minimum value is part of the first bin.
         """
-        _validate_identity_min_max(
-            min_val,
-            max_val,
-            "IdentityScale.__init__",
-            ["min_val", "max_val"],
-            ErrorCode.PVDQCL44,
-        )
         super().__init__((min_val, max_val), max_val - min_val, use_bin_zero)
 
-    def to_dict(self) -> dict:
+    @property
+    def scale_range(self) -> tuple[ScaleIdentityLimitSpec, ScaleIdentityLimitSpec]:
+        """Returns the (min, max) range of the scale."""
+        return super()._scale_range
+
+    @scale_range.setter
+    @_td_validate_call(ErrorCode.DQC107)
+    def scale_range(
+        self, scale_range: tuple[ScaleIdentityLimitSpec, ScaleIdentityLimitSpec]
+    ):
+        """Sets the (min, max) range of the scale."""
+        self._scale_range = scale_range
+        self._bins = scale_range[1] - scale_range[0]
+
+    @property
+    def bins(self):
+        """Returns the number of bins in the scale."""
+        return self._bins
+
+    def _to_dict(self) -> dict:
         return {
             "type": self.__class__.__name__,
             "min_val": self._range[0],
@@ -132,12 +205,62 @@ class IdentityScale(Scale):
         }
 
 
-class LinearScale(Scale):
+class NonIdentityScale(Scale, ABC):
     """
-    A linear scale that divides a range into equally sized bins.
+    A non identity scale that divides a range into equally sized bins.
     """
 
-    @_td_validate_call(ErrorCode.PVDQCL24)
+    def __init__(
+        self,
+        scale_range: tuple[ScaleLimitSpec, ScaleLimitSpec],
+        bins: BinCountSpec = MAX_BINS,
+        use_bin_zero: bool = False,
+    ):
+        """
+        Initializes a linear scale.
+
+        Args:
+            scale_range: The scale range.
+            bins: The number of bins to create.
+            use_bin_zero: If `False`, the minimum value is part of the first bin.
+        """
+        super().__init__(scale_range, bins, use_bin_zero)
+
+    @property
+    def scale_range(self) -> tuple[ScaleLimitSpec, ScaleLimitSpec]:
+        """Returns the (min, max) range of the scale."""
+        return super()._scale_range
+
+    @scale_range.setter
+    @_td_validate_call(ErrorCode.DQC108)
+    def scale_range(self, value: tuple[ScaleLimitSpec, ScaleLimitSpec]):
+        """Sets the (min, max) range of the scale."""
+        self._scale_range = value
+
+    @property
+    def bins(self) -> BinCountSpec | None:
+        """Returns the number of bins in the scale."""
+        return self._bins
+
+    @bins.setter
+    @_td_validate_call(ErrorCode.DQC109)
+    def bins(self, value: BinCountSpec):
+        """Sets the number of bins to create."""
+        self._bins = value
+
+    def _to_dict(self) -> dict:
+        return {
+            "type": self.__class__.__name__,
+            "min_val": self._range[0],
+            "max_val": self._range[1],
+            "bins": self._bins,
+            "use_bin_zero": self._use_bin_zero,
+        }
+
+
+class LinearScale(NonIdentityScale):
+
+    @_td_validate_call(ErrorCode.DQC110)
     def __init__(
         self,
         min_val: ScaleLimitSpec,
@@ -154,38 +277,15 @@ class LinearScale(Scale):
             bins: The number of bins to create.
             use_bin_zero: If `False`, the minimum value is part of the first bin.
         """
-        _validate_min_max(
-            min_val,
-            max_val,
-            "LinearScale.__init__",
-            ["min_val", "max_val"],
-            ErrorCode.PVDQCL37,
-        )
-        _validate_bins(
-            bins,
-            use_bin_zero,
-            "LinearScale.__init__",
-            ["bins", "min_in_first_bin"],
-            ErrorCode.PVDQCL42,
-        )
         super().__init__((min_val, max_val), bins, use_bin_zero)
 
-    def to_dict(self) -> dict:
-        return {
-            "type": self.__class__.__name__,
-            "min_val": self._range[0],
-            "max_val": self._range[1],
-            "bins": self._bins,
-            "use_bin_zero": self._use_bin_zero,
-        }
 
-
-class MonomialScale(Scale):
+class MonomialScale(NonIdentityScale):
     """
     A monomial (power-law) scale.
     """
 
-    @_td_validate_call(ErrorCode.PVDQCL25)
+    @_td_validate_call(ErrorCode.DQC111)
     def __init__(
         self,
         min_val: ScaleLimitSpec,
@@ -204,20 +304,6 @@ class MonomialScale(Scale):
             bins: The number of bins.
             use_bin_zero: If `False`, the minimum value is part of the first bin.
         """
-        _validate_min_max(
-            min_val,
-            max_val,
-            "MonomialScale.__init__",
-            ["min_val", "max_val"],
-            ErrorCode.PVDQCL38,
-        )
-        _validate_bins(
-            bins,
-            use_bin_zero,
-            "MonomialScale.__init__",
-            ["bins", "min_in_first_bin"],
-            ErrorCode.PVDQCL42,
-        )
         super().__init__((min_val, max_val), bins, use_bin_zero)
         self._power = power
 
@@ -226,7 +312,13 @@ class MonomialScale(Scale):
         """Returns the power of the monomial scale."""
         return self._power
 
-    def to_dict(self) -> dict:
+    @power.setter
+    @_td_validate_call(ErrorCode.DQC112)
+    def power(self, value: ScalePowerSpec):
+        """Sets the power of the monomial scale."""
+        self._power = value
+
+    def _to_dict(self) -> dict:
         return {
             "type": self.__class__.__name__,
             "min_val": self._range[0],
@@ -237,17 +329,18 @@ class MonomialScale(Scale):
         }
 
 
-class LogarithmicScale(Scale):
+# noinspection DuplicatedCode
+class LogarithmicScale(NonIdentityScale):
     """
     A logarithmic scale.
     """
 
-    @_td_validate_call(ErrorCode.PVDQCL26)
+    @_td_validate_call(ErrorCode.DQC113)
     def __init__(
         self,
         min_val: ScaleLimitSpec,
         max_val: ScaleLimitSpec,
-        base: Optional[ScaleBaseSpec] = None,
+        base: ScaleBaseSpec | None = None,
         bins: BinCountSpec = MAX_BINS,
         use_bin_zero: bool = False,
     ):
@@ -261,20 +354,6 @@ class LogarithmicScale(Scale):
             bins: The number of bins.
             use_bin_zero: If `False`, the minimum value is part of the first bin.
         """
-        _validate_min_max(
-            min_val,
-            max_val,
-            "LogarithmicScale.__init__",
-            ["min_val", "max_val"],
-            ErrorCode.PVDQCL39,
-        )
-        _validate_bins(
-            bins,
-            use_bin_zero,
-            "LogarithmicScale.__init__",
-            ["bins", "min_in_first_bin"],
-            ErrorCode.PVDQCL42,
-        )
         super().__init__((min_val, max_val), bins, use_bin_zero)
         self._base = base or math.e
 
@@ -283,7 +362,13 @@ class LogarithmicScale(Scale):
         """Returns the base of the logarithmic scale."""
         return self._base
 
-    def to_dict(self) -> dict:
+    @base.setter
+    @_td_validate_call(ErrorCode.DQC114)
+    def base(self, value: ScaleBaseSpec):
+        """Sets the base of the logarithmic scale."""
+        self._base = value
+
+    def _to_dict(self) -> dict:
         return {
             "type": self.__class__.__name__,
             "min_val": self._range[0],
@@ -294,17 +379,18 @@ class LogarithmicScale(Scale):
         }
 
 
-class ExponentialScale(Scale):
+# noinspection DuplicatedCode
+class ExponentialScale(NonIdentityScale):
     """
     An exponential scale.
     """
 
-    @_td_validate_call(ErrorCode.PVDQCL27)
+    @_td_validate_call(ErrorCode.DQC115)
     def __init__(
         self,
         min_val: ScaleLimitSpec,
         max_val: ScaleLimitSpec,
-        base: Optional[ScaleBaseSpec] = None,
+        base: ScaleBaseSpec | None = None,
         bins: BinCountSpec = MAX_BINS,
         use_bin_zero: bool = False,
     ):
@@ -318,20 +404,6 @@ class ExponentialScale(Scale):
             bins: The number of bins.
             use_bin_zero: If `False`, the minimum value is part of the first bin.
         """
-        _validate_min_max(
-            min_val,
-            max_val,
-            "ExponentialScale.__init__",
-            ["min_val", "max_val"],
-            ErrorCode.PVDQCL40,
-        )
-        _validate_bins(
-            bins,
-            use_bin_zero,
-            "ExponentialScale.__init__",
-            ["bins", "min_in_first_bin"],
-            ErrorCode.PVDQCL41,
-        )
         super().__init__((min_val, max_val), bins, use_bin_zero)
         self._base = base or math.e
 
@@ -340,7 +412,13 @@ class ExponentialScale(Scale):
         """Returns the base of the exponential scale."""
         return self._base
 
-    def to_dict(self) -> dict:
+    @base.setter
+    @_td_validate_call(ErrorCode.DQC116)
+    def base(self, value: ScaleBaseSpec):
+        """Sets the base of the exponential scale."""
+        self._base = value
+
+    def _to_dict(self) -> dict:
         return {
             "type": self.__class__.__name__,
             "min_val": self._range[0],
@@ -365,10 +443,9 @@ class Classifier(ABC):
         """Returns the set of data types supported by this classifier."""
         return _ALL_DTYPES
 
-    @_td_validate_call(ErrorCode.PVDQCL1)
     def __init__(
         self,
-        column_names: Optional[ColumNamesWithAltSpec] = None,
+        column_names: ColumNamesWithAltSpec | None = None,
         on_missing_column: OnInvalidColumnSpec = "ignore",
         on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
@@ -390,21 +467,26 @@ class Classifier(ABC):
             tags: A tag or list of tags to associate with the classifier. Tags help
                   filter which classifiers an operation should consider.
         """
-        column_names = _normalize_to_list(column_names, keep_none=True)
-        if column_names and isinstance(column_names[0], str):
-            column_names = [(s, None) for s in column_names]
-        self._column_names = column_names
-        self._tags = _normalize_to_list(tags, keep_none=True)
-        self._on_missing_column = on_missing_column
-        self._on_wrong_type = on_wrong_type
+        self.column_names = column_names
+        self.tags = _normalize_to_list(tags, keep_none=True)
+        self.on_missing_column = on_missing_column
+        self.on_wrong_type = on_wrong_type
 
     @property
-    def column_names(self) -> Optional[list[ColumnNameWithAltSpec]]:
+    def column_names(self) -> list[ColumnNameWithAltSpec] | None:
         """
         Returns the list of columns the classifier applies to, including optional
         destination column names.
         """
         return self._column_names
+
+    @column_names.setter
+    @_td_validate_call(ErrorCode.DQC117)
+    def column_names(self, column_names: ColumNamesWithAltSpec | None):
+        column_names = _normalize_to_list(column_names, keep_none=True)
+        if column_names and isinstance(column_names[0], str):
+            column_names = [(s, None) for s in column_names]
+        self._column_names = column_names
 
     @property
     def tags(self) -> list[TagSpec] | None:
@@ -413,12 +495,27 @@ class Classifier(ABC):
         """
         return self._tags
 
+    @tags.setter
+    @_td_validate_call(ErrorCode.DQC118)
+    def tags(self, tags: TagsSpec | None = None):
+        """Sets the tags for the classifier.
+
+        Args:
+            tags: A single tag or a list of tags.
+        """
+        self._tags = _normalize_to_list(tags, keep_none=True)
+
     @property
     def on_missing_column(self) -> OnInvalidColumnSpec:
         """
         Returns what do if the column is missing.
         """
         return self._on_missing_column
+
+    @on_missing_column.setter
+    @_td_validate_call(ErrorCode.DQC119)
+    def on_missing_column(self, on_missing_column: OnInvalidColumnSpec):
+        self._on_missing_column = on_missing_column
 
     @property
     def on_wrong_type(self) -> OnInvalidColumnSpec:
@@ -427,18 +524,23 @@ class Classifier(ABC):
         """
         return self._on_wrong_type
 
+    @on_wrong_type.setter
+    @_td_validate_call(ErrorCode.DQC120)
+    def on_wrong_type(self, on_wrong_type: OnInvalidColumnSpec):
+        self._on_wrong_type = on_wrong_type
+
     @abstractmethod
-    def to_dict(self) -> dict:
+    def _to_dict(self) -> dict:
         pass
 
     def __repr__(self) -> str:
-        return json.dumps(self.to_dict())
+        return json.dumps(self._to_dict())
 
     def __str__(self) -> str:
-        return json.dumps(self.to_dict())
+        return json.dumps(self._to_dict())
 
 
-class BoolClassifier(Classifier):
+class BoolClassifier(Classifier, ABC):
     """
     Abstract base class for classifiers that produce a boolean result
     (`True` or `False`).
@@ -450,7 +552,7 @@ class BoolClassifier(Classifier):
         return _ALL_DTYPES
 
     @abstractmethod
-    def to_dict(self) -> dict:
+    def _to_dict(self) -> dict:
         pass
 
 
@@ -524,10 +626,10 @@ class ScaleCategorizer(Categorizer):
         """Returns the set of data types supported by categorizers."""
         return _NUMERIC_DTYPES
 
-    @_td_validate_call(ErrorCode.PVDQCL2)
+    @_td_validate_call(ErrorCode.DQC121)
     def __init__(
         self,
-        column_names: Optional[ColumNamesWithAltSpec] = None,
+        column_names: ColumNamesWithAltSpec | None = None,
         on_missing_column: OnInvalidColumnSpec = "ignore",
         on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
@@ -553,13 +655,19 @@ class ScaleCategorizer(Categorizer):
         """Returns the scale used for categorization."""
         return self._scale
 
-    def to_dict(self) -> dict:
+    @scale.setter
+    @_td_validate_call(ErrorCode.DQC122)
+    def scale(self, scale: Scale):
+        """Returns the scale used for categorization."""
+        self._scale = scale
+
+    def _to_dict(self) -> dict:
         return {
             "type": self.__class__.__name__,
             "column_names": self._column_names,
             "on_missing_column": self._on_missing_column,
             "on_wrong_type": self._on_wrong_type,
-            "scale": self._scale.to_dict(),
+            "scale": self._scale._to_dict(),
             "tags": self._tags,
         }
 
@@ -587,10 +695,10 @@ class IsNull(BoolClassifier):
         """Returns the set of data types supported by IsNull classifier."""
         return _ALL_DTYPES
 
-    @_td_validate_call(ErrorCode.PVDQCL17)
+    @_td_validate_call(ErrorCode.DQC123)
     def __init__(
         self,
-        column_names: Optional[ColumNamesWithAltSpec] = None,
+        column_names: ColumNamesWithAltSpec | None = None,
         on_missing_column: OnInvalidColumnSpec = "ignore",
         *,
         tags: TagsSpec | None = None,
@@ -605,7 +713,7 @@ class IsNull(BoolClassifier):
         """
         super().__init__(column_names, on_missing_column, "ignore", tags=tags)
 
-    def to_dict(self) -> dict:
+    def _to_dict(self) -> dict:
         return {
             "type": self.__class__.__name__,
             "column_names": self._column_names,
@@ -625,10 +733,10 @@ class IsNotNull(BoolClassifier):
         """Returns the set of data types supported by IsNotNull classifier."""
         return _ALL_DTYPES
 
-    @_td_validate_call(ErrorCode.PVDQCL15)
+    @_td_validate_call(ErrorCode.DQC124)
     def __init__(
         self,
-        column_names: Optional[ColumNamesWithAltSpec] = None,
+        column_names: ColumNamesWithAltSpec | None = None,
         on_missing_column: OnInvalidColumnSpec = "ignore",
         *,
         tags: TagsSpec | None = None,
@@ -643,7 +751,7 @@ class IsNotNull(BoolClassifier):
         """
         super().__init__(column_names, on_missing_column, "ignore", tags=tags)
 
-    def to_dict(self) -> dict:
+    def _to_dict(self) -> dict:
         return {
             "type": self.__class__.__name__,
             "column_names": self._column_names,
@@ -663,10 +771,10 @@ class IsNan(BoolClassifier):
         """Returns the set of data types supported by IsNan classifier."""
         return _FLOAT_DTYPES
 
-    @_td_validate_call(ErrorCode.PVDQCL14)
+    @_td_validate_call(ErrorCode.DQC125)
     def __init__(
         self,
-        column_names: Optional[ColumNamesWithAltSpec] = None,
+        column_names: ColumNamesWithAltSpec | None = None,
         on_missing_column: OnInvalidColumnSpec = "ignore",
         on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
@@ -684,7 +792,7 @@ class IsNan(BoolClassifier):
         """
         super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
 
-    def to_dict(self) -> dict:
+    def _to_dict(self) -> dict:
         return {
             "type": self.__class__.__name__,
             "column_names": self._column_names,
@@ -704,10 +812,10 @@ class IsNotNan(BoolClassifier):
         """Returns the set of data types supported by IsNotNan classifier."""
         return _FLOAT_DTYPES
 
-    @_td_validate_call(ErrorCode.PVDQCL14)
+    @_td_validate_call(ErrorCode.DQC126)
     def __init__(
         self,
-        column_names: Optional[ColumNamesWithAltSpec] = None,
+        column_names: ColumNamesWithAltSpec | None = None,
         on_missing_column: OnInvalidColumnSpec = "ignore",
         on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
@@ -725,7 +833,7 @@ class IsNotNan(BoolClassifier):
         """
         super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
 
-    def to_dict(self) -> dict:
+    def _to_dict(self) -> dict:
         return {
             "type": self.__class__.__name__,
             "column_names": self._column_names,
@@ -745,10 +853,10 @@ class IsNullOrNan(BoolClassifier):
         """Returns the set of data types supported by IsNullOrNan classifier."""
         return _FLOAT_DTYPES
 
-    @_td_validate_call(ErrorCode.PVDQCL18)
+    @_td_validate_call(ErrorCode.DQC127)
     def __init__(
         self,
-        column_names: Optional[ColumNamesWithAltSpec] = None,
+        column_names: ColumNamesWithAltSpec | None = None,
         on_missing_column: OnInvalidColumnSpec = "ignore",
         on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
@@ -766,7 +874,7 @@ class IsNullOrNan(BoolClassifier):
         """
         super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
 
-    def to_dict(self) -> dict:
+    def _to_dict(self) -> dict:
         return {
             "type": self.__class__.__name__,
             "column_names": self._column_names,
@@ -786,10 +894,10 @@ class IsNotNullNorNan(BoolClassifier):
         """Returns the set of data types supported by IsNotNullNorNan classifier."""
         return _FLOAT_DTYPES
 
-    @_td_validate_call(ErrorCode.PVDQCL15)
+    @_td_validate_call(ErrorCode.DQC128)
     def __init__(
         self,
-        column_names: Optional[ColumNamesWithAltSpec] = None,
+        column_names: ColumNamesWithAltSpec | None = None,
         on_missing_column: OnInvalidColumnSpec = "ignore",
         on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
@@ -807,7 +915,7 @@ class IsNotNullNorNan(BoolClassifier):
         """
         super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
 
-    def to_dict(self) -> dict:
+    def _to_dict(self) -> dict:
         return {
             "type": self.__class__.__name__,
             "column_names": self._column_names,
@@ -828,10 +936,10 @@ class IsZero(BoolClassifier):
         """Returns the set of data types supported by IsZero classifier."""
         return _NUMERIC_DTYPES
 
-    @_td_validate_call(ErrorCode.PVDQCL21)
+    @_td_validate_call(ErrorCode.DQC129)
     def __init__(
         self,
-        column_names: Optional[ColumNamesWithAltSpec] = None,
+        column_names: ColumNamesWithAltSpec | None = None,
         on_missing_column: OnInvalidColumnSpec = "ignore",
         on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
@@ -849,7 +957,7 @@ class IsZero(BoolClassifier):
         """
         super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
 
-    def to_dict(self) -> dict:
+    def _to_dict(self) -> dict:
         return {
             "type": self.__class__.__name__,
             "column_names": self._column_names,
@@ -869,10 +977,10 @@ class IsNotZero(BoolClassifier):
         """Returns the set of data types supported by IsNotZero classifier."""
         return _NUMERIC_DTYPES
 
-    @_td_validate_call(ErrorCode.PVDQCL16)
+    @_td_validate_call(ErrorCode.DQC130)
     def __init__(
         self,
-        column_names: Optional[ColumNamesWithAltSpec] = None,
+        column_names: ColumNamesWithAltSpec | None = None,
         on_missing_column: OnInvalidColumnSpec = "ignore",
         on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
@@ -890,7 +998,7 @@ class IsNotZero(BoolClassifier):
         """
         super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
 
-    def to_dict(self) -> dict:
+    def _to_dict(self) -> dict:
         return {
             "type": self.__class__.__name__,
             "column_names": self._column_names,
@@ -910,10 +1018,10 @@ class IsPositive(BoolClassifier):
         """Returns the set of data types supported by IsPositive classifier."""
         return _SIGNED_NUMERIC_DTYPES
 
-    @_td_validate_call(ErrorCode.PVDQCL19)
+    @_td_validate_call(ErrorCode.DQC131)
     def __init__(
         self,
-        column_names: Optional[ColumNamesWithAltSpec] = None,
+        column_names: ColumNamesWithAltSpec | None = None,
         on_missing_column: OnInvalidColumnSpec = "ignore",
         on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
@@ -931,7 +1039,7 @@ class IsPositive(BoolClassifier):
         """
         super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
 
-    def to_dict(self) -> dict:
+    def _to_dict(self) -> dict:
         return {
             "type": self.__class__.__name__,
             "column_names": self._column_names,
@@ -951,10 +1059,10 @@ class IsPositiveOrZero(BoolClassifier):
         """Returns the set of data types supported by IsPositiveOrZero classifier."""
         return _SIGNED_NUMERIC_DTYPES
 
-    @_td_validate_call(ErrorCode.PVDQCL20)
+    @_td_validate_call(ErrorCode.DQC132)
     def __init__(
         self,
-        column_names: Optional[ColumNamesWithAltSpec] = None,
+        column_names: ColumNamesWithAltSpec | None = None,
         on_missing_column: OnInvalidColumnSpec = "ignore",
         on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
@@ -972,7 +1080,7 @@ class IsPositiveOrZero(BoolClassifier):
         """
         super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
 
-    def to_dict(self) -> dict:
+    def _to_dict(self) -> dict:
         return {
             "type": self.__class__.__name__,
             "column_names": self._column_names,
@@ -992,10 +1100,10 @@ class IsNegative(BoolClassifier):
         """Returns the set of data types supported by IsNegative classifier."""
         return _SIGNED_NUMERIC_DTYPES
 
-    @_td_validate_call(ErrorCode.PVDQCL14)
+    @_td_validate_call(ErrorCode.DQC133)
     def __init__(
         self,
-        column_names: Optional[ColumNamesWithAltSpec] = None,
+        column_names: ColumNamesWithAltSpec | None = None,
         on_missing_column: OnInvalidColumnSpec = "ignore",
         on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
@@ -1013,7 +1121,7 @@ class IsNegative(BoolClassifier):
         """
         super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
 
-    def to_dict(self) -> dict:
+    def _to_dict(self) -> dict:
         return {
             "type": self.__class__.__name__,
             "column_names": self._column_names,
@@ -1033,10 +1141,10 @@ class IsNegativeOrZero(BoolClassifier):
         """Returns the set of data types supported by IsNegativeOrZero classifier."""
         return _SIGNED_NUMERIC_DTYPES
 
-    @_td_validate_call(ErrorCode.PVDQCL14)
+    @_td_validate_call(ErrorCode.DQC134)
     def __init__(
         self,
-        column_names: Optional[ColumNamesWithAltSpec] = None,
+        column_names: ColumNamesWithAltSpec | None = None,
         on_missing_column: OnInvalidColumnSpec = "ignore",
         on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
@@ -1054,7 +1162,7 @@ class IsNegativeOrZero(BoolClassifier):
         """
         super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
 
-    def to_dict(self) -> dict:
+    def _to_dict(self) -> dict:
         return {
             "type": self.__class__.__name__,
             "column_names": self._column_names,
@@ -1065,7 +1173,7 @@ class IsNegativeOrZero(BoolClassifier):
 
 
 # noinspection DuplicatedCode
-class IsBetween(BoolClassifier):
+class BetweenClassifier(BoolClassifier, ABC):
     """
     A boolean classifier that checks if a value is within a specified range.
     """
@@ -1075,13 +1183,13 @@ class IsBetween(BoolClassifier):
         """Returns the set of data types supported by IsBetween classifier."""
         return _ALL_NON_BOOLEAN_DTYPES
 
-    @_td_validate_call(ErrorCode.PVDQCL10)
+    @_td_validate_call(ErrorCode.DQC135)
     def __init__(
         self,
-        column_names: Optional[ColumNamesWithAltSpec] = None,
-        min_val: Optional[RangeValueSpec] = None,
-        max_val: Optional[RangeValueSpec] = None,
-        closed: RangeClosedOnSpec = "both",
+        column_names: ColumNamesWithAltSpec | None = None,
+        min_val: RangeValueSpec | None = None,
+        max_val: RangeValueSpec | None = None,
+        closed_on: RangeClosedOnSpec = "both",
         on_missing_column: OnInvalidColumnSpec = "ignore",
         on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
@@ -1094,7 +1202,7 @@ class IsBetween(BoolClassifier):
             column_names: The column(s) to check.
             min_val: The minimum value of the range.
             max_val: The maximum value of the range.
-            closed: Specifies if the range is inclusive ("both", "lower", "upper") or
+            closed_on: Specifies if the range is inclusive ("both", "lower", "upper") or
                 exclusive ("none").
             on_missing_column: What to do if a column name is missing.
             on_wrong_type: Behavior when a column’s type is incompatible with the
@@ -1102,27 +1210,44 @@ class IsBetween(BoolClassifier):
             tags: Optional tags for the classifier.
         """
         super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
-        _validate_range(min_val, max_val, "IsBetween.__init__", ErrorCode.PVDQCL11)
         self._min = min_val
         self._max = max_val
-        self._closed = closed
+        _validate_range(min_val, max_val, "IsBetween.__init__", ErrorCode.DQC136)
+        self.closed_on = closed_on
 
     @property
-    def min(self) -> Optional[RangeValueSpec]:
+    def min(self) -> RangeValueSpec | None:
         """Returns the minimum value of the range."""
         return self._min
 
+    @min.setter
+    @_td_validate_call(ErrorCode.DQC137)
+    def min(self, min_val: RangeValueSpec | None):
+        _validate_range(min_val, self._max, "IsBetween.min", ErrorCode.DQC138)
+        self._min = min_val
+
     @property
-    def max(self) -> Optional[RangeValueSpec]:
+    def max(self) -> RangeValueSpec | None:
         """Returns the maximum value of the range."""
         return self._max
 
-    @property
-    def closed(self) -> RangeClosedOnSpec:
-        """Returns how the range is closed."""
-        return self._closed
+    @max.setter
+    @_td_validate_call(ErrorCode.DQC139)
+    def max(self, max_val: RangeValueSpec | None):
+        _validate_range(self._min, max_val, "IsBetween.max", ErrorCode.DQC140)
+        self._max = max_val
 
-    def to_dict(self) -> dict:
+    @property
+    def closed_on(self) -> RangeClosedOnSpec:
+        """Returns how the range is closed."""
+        return self._closed_on
+
+    @closed_on.setter
+    @_td_validate_call(ErrorCode.DQC141)
+    def closed_on(self, closed_on: RangeClosedOnSpec):
+        self._closed_on = closed_on
+
+    def _to_dict(self) -> dict:
         return {
             "type": self.__class__.__name__,
             "column_names": self._column_names,
@@ -1130,84 +1255,26 @@ class IsBetween(BoolClassifier):
             "on_wrong_type": self._on_wrong_type,
             "min_len": self._min,
             "max_len": self._max,
-            "closed": self._closed,
+            "closed": self._closed_on,
             "tags": self._tags,
         }
 
 
 # noinspection DuplicatedCode
-class IsNotBetween(BoolClassifier):
+class IsBetween(BetweenClassifier):
+    """
+    A boolean classifier that checks if a value is *inside* a specified range.
+    """
+
+
+class IsNotBetween(BetweenClassifier):
     """
     A boolean classifier that checks if a value is *outside* a specified range.
     """
 
-    @classmethod
-    def supported_dtypes(cls) -> FrozenSet[Type]:
-        """Returns the set of data types supported by IsNotBetween classifier."""
-        return _ALL_NON_BOOLEAN_DTYPES
-
-    @_td_validate_call(ErrorCode.PVDQCL12)
-    def __init__(
-        self,
-        column_names: Optional[ColumNamesWithAltSpec] = None,
-        min_val: Optional[RangeValueSpec] = None,
-        max_val: Optional[RangeValueSpec] = None,
-        closed: RangeClosedOnSpec = "both",
-        on_missing_column: OnInvalidColumnSpec = "ignore",
-        on_wrong_type: OnInvalidColumnSpec = "ignore",
-        *,
-        tags: TagsSpec | None = None,
-    ):
-        """
-        Initializes the `IsNotBetween` classifier.
-
-        Args:
-            column_names: The column(s) to check.
-            min_val: The minimum value of the range.
-            max_val: The maximum value of the range.
-            closed: Specifies if the range is inclusive ("both", "lower", "upper") or
-                exclusive ("none").
-            on_missing_column: What to do if a column name is missing.
-            on_wrong_type: Behavior when a column’s type is incompatible with the
-                           classifier.
-            tags: Optional tags for the classifier.
-        """
-        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
-        _validate_range(min_val, max_val, "IsNotBetween.__init__", ErrorCode.PVDQCL11)
-        self._min = min_val
-        self._max = max_val
-        self._closed = closed
-
-    @property
-    def min(self) -> Optional[RangeValueSpec]:
-        """Returns the minimum value of the range."""
-        return self._min
-
-    @property
-    def max(self) -> Optional[RangeValueSpec]:
-        """Returns the maximum value of the range."""
-        return self._max
-
-    @property
-    def closed(self) -> RangeClosedOnSpec:
-        """Returns how the range is closed."""
-        return self._closed
-
-    def to_dict(self) -> dict:
-        return {
-            "type": self.__class__.__name__,
-            "column_names": self._column_names,
-            "on_missing_column": self._on_missing_column,
-            "on_wrong_type": self._on_wrong_type,
-            "min_len": self._min,
-            "max_len": self._max,
-            "closed": self._closed,
-            "tags": self._tags,
-        }
-
 
 # noinspection DuplicatedCode
-class IsIn(BoolClassifier):
+class InClassifier(BoolClassifier, ABC):
     """
     A boolean classifier that checks if a value is in a specified set of values.
     """
@@ -1217,10 +1284,10 @@ class IsIn(BoolClassifier):
         """Returns the set of data types supported by IsIn classifier."""
         return _ALL_DTYPES
 
-    @_td_validate_call(ErrorCode.PVDQCL9)
+    @_td_validate_call(ErrorCode.DQC142)
     def __init__(
         self,
-        column_names: Optional[ColumNamesWithAltSpec] = None,
+        column_names: ColumNamesWithAltSpec | None = None,
         on_missing_column: OnInvalidColumnSpec = "ignore",
         *,
         values: Collection,
@@ -1236,14 +1303,19 @@ class IsIn(BoolClassifier):
             tags: Optional tags for the classifier.
         """
         super().__init__(column_names, on_missing_column, "ignore", tags=tags)
-        self._values = _normalize_to_set(values)
+        self.values = values
 
     @property
     def values(self) -> AbstractSet:
         """Returns the set of values for the check."""
         return self._values
 
-    def to_dict(self) -> dict:
+    @values.setter
+    @_td_validate_call(ErrorCode.DQC143)
+    def values(self, values: Collection):
+        self._values = _normalize_to_set(values)
+
+    def _to_dict(self) -> dict:
         return {
             "type": self.__class__.__name__,
             "column_names": self._column_names,
@@ -1254,56 +1326,21 @@ class IsIn(BoolClassifier):
         }
 
 
+class IsIn(InClassifier):
+    """
+    A boolean classifier that checks if a value is in a specified set of values.
+    """
+
+
 # noinspection DuplicatedCode
-class IsNotIn(BoolClassifier):
+class IsNotIn(InClassifier):
     """
     A boolean classifier that checks if a value is *not* in a specified set of values.
     """
 
-    @classmethod
-    def supported_dtypes(cls) -> FrozenSet[Type]:
-        """Returns the set of data types supported by IsNotIn classifier."""
-        return _ALL_DTYPES
-
-    @_td_validate_call(ErrorCode.PVDQCL10)
-    def __init__(
-        self,
-        column_names: Optional[ColumNamesWithAltSpec] = None,
-        on_missing_column: OnInvalidColumnSpec = "ignore",
-        *,
-        values: Collection,
-        tags: TagsSpec | None = None,
-    ):
-        """
-        Initializes the `IsNotIn` classifier.
-
-        Args:
-            column_names: The column(s) to check.
-            on_missing_column: What to do if a column name is missing.
-            values: The collection of values to check against.
-            tags: Optional tags for the classifier.
-        """
-        super().__init__(column_names, on_missing_column, "ignore", tags=tags)
-        self._values = _normalize_to_set(values)
-
-    @property
-    def values(self) -> AbstractSet:
-        """Returns the set of values for the check."""
-        return self._values
-
-    def to_dict(self) -> dict:
-        return {
-            "type": self.__class__.__name__,
-            "column_names": self._column_names,
-            "on_missing_column": self._on_missing_column,
-            "on_wrong_type": self._on_wrong_type,
-            "values": list(self._values),
-            "tags": self._tags,
-        }
-
 
 # noinspection DuplicatedCode
-class Matches(BoolClassifier):
+class MatchClassifier(BoolClassifier, ABC):
     """
     A boolean classifier that checks if a value matches a regex pattern.
     """
@@ -1313,10 +1350,10 @@ class Matches(BoolClassifier):
         """Returns the set of data types supported by Matches classifier."""
         return _STRING_DTYPES
 
-    @_td_validate_call(ErrorCode.PVDQCL22)
+    @_td_validate_call(ErrorCode.DQC144)
     def __init__(
         self,
-        column_names: Optional[ColumNamesWithAltSpec] = None,
+        column_names: ColumNamesWithAltSpec | None = None,
         on_missing_column: OnInvalidColumnSpec = "ignore",
         on_wrong_type: OnInvalidColumnSpec = "ignore",
         *,
@@ -1335,18 +1372,23 @@ class Matches(BoolClassifier):
             tags: Optional tags for the classifier.
         """
         super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
-        self._pattern = _validate_pattern(
-            pattern,
-            "Matches.__init__",
-            ErrorCode.PVDQCL35,
-        )
+        self.pattern = pattern
 
     @property
     def pattern(self) -> str:
         """Returns the regex pattern."""
         return self._pattern
 
-    def to_dict(self) -> dict:
+    @pattern.setter
+    @_td_validate_call(ErrorCode.DQC145)
+    def pattern(self, pattern: str):
+        self._pattern = _validate_pattern(
+            pattern,
+            "Match.pattern",
+            ErrorCode.DQC146,
+        )
+
+    def _to_dict(self) -> dict:
         return {
             "type": self.__class__.__name__,
             "column_names": self._column_names,
@@ -1355,61 +1397,19 @@ class Matches(BoolClassifier):
             "pattern": self._pattern,
             "tags": self._tags,
         }
+
+
+class Matches(MatchClassifier):
+    """
+    A boolean classifier that checks if a value matches a regex pattern.
+    """
 
 
 # noinspection DuplicatedCode
-class DoesNotMatch(BoolClassifier):
+class DoesNotMatch(MatchClassifier):
     """
     A boolean classifier that checks if a value does *not* match a regex pattern.
     """
-
-    @classmethod
-    def supported_dtypes(cls) -> FrozenSet[Type]:
-        """Returns the set of data types supported by DoesNotMatch classifier."""
-        return _STRING_DTYPES
-
-    @_td_validate_call(ErrorCode.PVDQCL3)
-    def __init__(
-        self,
-        column_names: Optional[ColumNamesWithAltSpec] = None,
-        on_missing_column: OnInvalidColumnSpec = "ignore",
-        on_wrong_type: OnInvalidColumnSpec = "ignore",
-        *,
-        pattern: str,
-        tags: TagsSpec | None = None,
-    ):
-        """
-        Initializes the `DoesNotMatch` classifier.
-
-        Args:
-            column_names: The column(s) to apply the check to.
-            pattern: The regular expression to not match against.
-            on_missing_column: What to do if a column name is missing.
-            on_wrong_type: Behavior when a column’s type is incompatible with the
-                           classifier.
-            tags: Optional tags for the classifier.
-        """
-        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
-        self._pattern = _validate_pattern(
-            pattern,
-            "DoesNotMatch.__init__",
-            ErrorCode.PVDQCL36,
-        )
-
-    @property
-    def pattern(self) -> str:
-        """Returns the regex pattern."""
-        return self._pattern
-
-    def to_dict(self) -> dict:
-        return {
-            "type": self.__class__.__name__,
-            "column_names": self._column_names,
-            "on_missing_column": self._on_missing_column,
-            "on_wrong_type": self._on_wrong_type,
-            "pattern": self._pattern,
-            "tags": self._tags,
-        }
 
 
 class HasLength(BoolClassifier):
@@ -1422,10 +1422,10 @@ class HasLength(BoolClassifier):
         """Returns the set of data types supported by HasLength classifier."""
         return _STRING_DTYPES
 
-    @_td_validate_call(ErrorCode.PVDQCL7)
+    @_td_validate_call(ErrorCode.DQC146)
     def __init__(
         self,
-        column_names: Optional[ColumNamesWithAltSpec] = None,
+        column_names: ColumNamesWithAltSpec | None = None,
         min_len: LenSpec = 0,
         max_len: LenSpec = sys.maxsize,
         on_missing_column: OnInvalidColumnSpec = "ignore",
@@ -1446,28 +1446,35 @@ class HasLength(BoolClassifier):
             tags: Optional tags for the classifier.
         """
         super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
-        if min_len > max_len:
-            msg = f" min='{min_len}' is greater than max='{max_len}'."
-            raise ParameterValueError(
-                ErrorCode.PVDQCL8,
-                "HasLength.__init__",
-                "min_len, max_len",
-                msg,
-            )
         self._min = min_len
         self._max = max_len
+        _validate_range(min_len, max_len, "HasLength.__init__", ErrorCode.DQC147)
 
     @property
     def min(self) -> int:
         """Returns the minimum allowed length."""
         return self._min
 
+    @min.setter
+    @_td_validate_call(ErrorCode.DQC148)
+    def min(self, min_len: LenSpec):
+        """Returns the minimum allowed length."""
+        _validate_range(min_len, self._max, "HasLength.min", ErrorCode.DQC150)
+        self._min = min_len
+
     @property
     def max(self) -> int:
         """Returns the maximum allowed length."""
         return self._max
 
-    def to_dict(self) -> dict:
+    @max.setter
+    @_td_validate_call(ErrorCode.DQC149)
+    def max(self, max_len: LenSpec):
+        """Returns the maximum allowed length."""
+        _validate_range(self._min, max_len, "HasLength.max", ErrorCode.DQC151)
+        self._max = max_len
+
+    def _to_dict(self) -> dict:
         return {
             "type": self.__class__.__name__,
             "column_names": self._column_names,
@@ -1480,8 +1487,8 @@ class HasLength(BoolClassifier):
 
 
 def _validate_range(
-    min_len: Optional[RangeValueSpec],
-    max_len: Optional[RangeValueSpec],
+    min_len,
+    max_len,
     fn_name: str,
     error_code: ErrorCode,
 ):

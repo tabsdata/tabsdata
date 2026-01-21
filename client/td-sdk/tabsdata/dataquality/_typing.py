@@ -1,6 +1,7 @@
 #
 # Copyright 2025 Tabs Data Inc.
 #
+
 """
 This module defines common type aliases used throughout the data quality
 feature.

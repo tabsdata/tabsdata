@@ -1,6 +1,7 @@
 #
 # Copyright 2025 Tabs Data Inc.
 #
+
 """
 This module defines the data quality operators that can be applied to a table.
 These operators, such as `Fail`, `Filter`, `Select`, and `Summary`, allow you to
@@ -8,7 +9,7 @@ define actions based on the results of data quality classifiers.
 """
 
 from abc import ABC
-from typing import AbstractSet, Optional
+from typing import AbstractSet
 
 from tabsdata.dataquality._typing import (
     BinsCriteriaSpec,
@@ -34,22 +35,10 @@ class Operator(ABC):
     which allow for selective application of classifiers.
     """
 
-    @_td_validate_call(ErrorCode.PVDQOP1)
-    def __init__(self, *, tags: TagsSpec | None = None):
-        """Initializes the operator with optional tags.
-
-        Args:
-            tags: A single tag or a list of tags. Tags are used to link operators
-                  to specific classifiers. If an operator has tags, it will only
-                  consider classifiers that share at least one of those tags.
-                  If no tags are provided, the operator applies to all classifiers.
-        """
-        self._tags = _normalize_to_list(tags, keep_none=True)
-
-    @property
-    def tags(self) -> list[TagSpec] | None:
-        """Returns the list of tags associated with this operator."""
-        return self._tags
+    def __eq__(self, other):
+        if not isinstance(other, type(self)):
+            return NotImplemented
+        return vars(self) == vars(other)
 
 
 class Criteria(ABC):
@@ -60,10 +49,16 @@ class Criteria(ABC):
     or the binning results of categorical classifiers.
     """
 
+    def __eq__(self, other):
+        if not isinstance(other, type(self)):
+            return NotImplemented
+        return vars(self) == vars(other)
+
 
 class BoolCriteria(Criteria, ABC):
     """A boolean criteria to select records based on classifier results."""
 
+    @_td_validate_call(ErrorCode.DQC3)
     def __init__(
         self, none_is_ok: bool, nan_is_ok: bool, *, tags: TagsSpec | None = None
     ):
@@ -74,29 +69,60 @@ class BoolCriteria(Criteria, ABC):
             nan_is_ok: If `NaN` values should be considered OK.
             tags: Optional tags to link this operator to specific classifiers.
         """
-        self._tags = _normalize_to_list(tags, keep_none=True)
-        self._none_is_ok = none_is_ok
-        self._nan_is_ok = nan_is_ok
+        self.tags = tags
+        self.none_is_ok = none_is_ok
+        self.nan_is_ok = nan_is_ok
 
     @property
     def tags(self) -> list[TagSpec] | None:
-        """Returns the list of tags associated with this operator."""
+        """Returns the list of tags associated with this criteria."""
         return self._tags
+
+    @tags.setter
+    @_td_validate_call(ErrorCode.DQC4)
+    def tags(self, tags: TagsSpec | None = None):
+        """Sets the tags for the criteria.
+
+        Args:
+            tags: A single tag or a list of tags.
+        """
+        self._tags = _normalize_to_list(tags, keep_none=True)
 
     @property
     def none_is_ok(self) -> bool:
         """Returns if `None` values should be considered OK."""
         return self._none_is_ok
 
+    @none_is_ok.setter
+    @_td_validate_call(ErrorCode.DQC5)
+    def none_is_ok(self, none_is_ok: bool):
+        """Sets if `None` values should be considered OK.
+
+        Args:
+            none_is_ok: A boolean value.
+        """
+        self._none_is_ok = none_is_ok
+
     @property
     def nan_is_ok(self) -> bool:
         """Returns if `NaN` values should be considered OK."""
         return self._nan_is_ok
 
+    @nan_is_ok.setter
+    @_td_validate_call(ErrorCode.DQC6)
+    def nan_is_ok(self, nan_is_ok: bool):
+        """Sets if `NaN` values should be considered OK.
+
+        Args:
+            nan_is_ok: A boolean value.
+        """
+        self._nan_is_ok = nan_is_ok
+
 
 class CategoryCriteria(Criteria, ABC):
     """A category criteria to select records based on classifier results."""
 
+    @_td_validate_call(ErrorCode.DQC7)
     def __init__(
         self,
         column_name: ColumnNameSpec,
@@ -109,17 +135,37 @@ class CategoryCriteria(Criteria, ABC):
             bins: A single bin or a list of bins.
         """
         self._column_name = column_name
-        self._bins = set(_normalize_to_list(bins))
+        self.bins = bins
 
     @property
     def column_name(self) -> ColumnNameSpec:
         """Returns the column name to check for values."""
         return self._column_name
 
+    @column_name.setter
+    @_td_validate_call(ErrorCode.DQC8)
+    def column_name(self, column_name: ColumnNameSpec):
+        """Sets the column name to check for values.
+
+        Args:
+            column_name: The column name.
+        """
+        self._column_name = column_name
+
     @property
     def bins(self) -> AbstractSet[BinSpec]:
         """Returns a set of bins."""
         return self._bins
+
+    @bins.setter
+    @_td_validate_call(ErrorCode.DQC9)
+    def bins(self, bins: BinsCriteriaSpec):
+        """Sets the bins for the criteria.
+
+        Args:
+            bins: A single bin or a list of bins.
+        """
+        self._bins = set(_normalize_to_list(bins))
 
 
 class AllOk(BoolCriteria):
@@ -128,7 +174,7 @@ class AllOk(BoolCriteria):
     pass (`True`).
     """
 
-    @_td_validate_call(ErrorCode.PVDQOP12)
+    @_td_validate_call(ErrorCode.DQC10)
     def __init__(
         self,
         none_is_ok: bool = False,
@@ -153,7 +199,7 @@ class AnyFailed(BoolCriteria):
     classifier fails (`False`).
     """
 
-    @_td_validate_call(ErrorCode.PVDQOP13)
+    @_td_validate_call(ErrorCode.DQC11)
     def __init__(
         self,
         none_is_ok: bool = False,
@@ -176,7 +222,7 @@ class InBins(CategoryCriteria):
     """A category criteria that selects records where the value in the specified
     columns falls into one of the given bins."""
 
-    @_td_validate_call(ErrorCode.PVDQOP14)
+    @_td_validate_call(ErrorCode.DQC12)
     def __init__(
         self,
         column_name: ColumnNameSpec,
@@ -200,7 +246,7 @@ class NotInBins(CategoryCriteria):
     """A category criteria that selects records where the value in the specified
     columns does not fall into any of the given bins."""
 
-    @_td_validate_call(ErrorCode.PVDQOP15)
+    @_td_validate_call(ErrorCode.DQC13)
     def __init__(
         self,
         column_name: ColumnNameSpec,
@@ -223,11 +269,16 @@ class NotInBins(CategoryCriteria):
 class Threshold(ABC):
     """Abstract base class for thresholds used in the `Fail` operator."""
 
+    def __eq__(self, other):
+        if not isinstance(other, type(self)):
+            return NotImplemented
+        return vars(self) == vars(other)
+
 
 class RowCountThreshold(Threshold):
     """A threshold based on a specific number of rows."""
 
-    @_td_validate_call(ErrorCode.PVDQOP6)
+    @_td_validate_call(ErrorCode.DQC14)
     def __init__(self, row_count: RowCountSpec):
         """Initializes the threshold with a maximum row count.
 
@@ -235,18 +286,28 @@ class RowCountThreshold(Threshold):
             row_count: The number of rows that, if met or exceeded, will trigger the
                        `Fail` operation.
         """
-        self._row_count = row_count
+        self.row_count = row_count
 
     @property
     def row_count(self) -> int:
         """Returns the row count for the threshold."""
         return self._row_count
 
+    @row_count.setter
+    @_td_validate_call(ErrorCode.DQC15)
+    def row_count(self, row_count: RowCountSpec):
+        """Sets the row count for the threshold.
+
+        Args:
+            row_count: The number of rows.
+        """
+        self._row_count = row_count
+
 
 class PercentThreshold(Threshold):
     """A threshold based on a percentage of total rows."""
 
-    @_td_validate_call(ErrorCode.PVDQOP7)
+    @_td_validate_call(ErrorCode.DQC16)
     def __init__(self, percent: PercentSpec):
         """Initializes the threshold with a percentage.
 
@@ -254,23 +315,66 @@ class PercentThreshold(Threshold):
             percent: The percentage of rows that, if met or exceeded, will trigger
                      the `Fail` operation.
         """
-        self._percent = percent
+        self.percent = percent
 
     @property
     def percent(self) -> float:
         """Returns the percentage for the threshold."""
         return self._percent
 
+    @percent.setter
+    @_td_validate_call(ErrorCode.DQC17)
+    def percent(self, percent: PercentSpec):
+        """Sets the percentage for the threshold.
 
-class Enrich(Operator):
+        Args:
+            percent: The percentage value.
+        """
+        self._percent = percent
+
+
+class TagOperator(Operator, ABC):
     """An operator that adds the data quality classifier columns to the original
     table frame. It does not remove any row from the original table.
     """
 
-    @_td_validate_call(ErrorCode.PVDQOP9)
+    @_td_validate_call(ErrorCode.DQC1)
     def __init__(
         self,
-        to_table: Optional[TableName] = None,
+        tags: TagsSpec | None,
+    ):
+        """Initializes the `Enrich` operator.
+
+        Args:
+            tags: tags to link this operator to specific classifiers.
+        """
+        self.tags = tags
+
+    @property
+    def tags(self) -> list[TagSpec] | None:
+        """Returns the list of tags associated with this operator."""
+        return self._tags
+
+    @tags.setter
+    @_td_validate_call(ErrorCode.DQC2)
+    def tags(self, tags: TagsSpec | None = None):
+        """Sets the tags for the operator.
+
+        Args:
+            tags: A single tag or a list of tags.
+        """
+        self._tags = _normalize_to_list(tags, keep_none=True)
+
+
+class Enrich(TagOperator):
+    """An operator that adds the data quality classifier columns to the original
+    table frame. It does not remove any row from the original table.
+    """
+
+    @_td_validate_call(ErrorCode.DQC18)
+    def __init__(
+        self,
+        to_table: TableName | None = None,
         *,
         tags: TagsSpec | None = None,
     ):
@@ -283,23 +387,64 @@ class Enrich(Operator):
             tags: Optional tags to link this operator to specific classifiers.
         """
         super().__init__(tags=tags)
-        self._to_table = to_table
+        self.to_table = to_table
 
     @property
-    def to_table(self) -> Optional[TableName]:
+    def to_table(self) -> TableName | None:
         """Returns the destination table with the enriched data quality classifier
         columns. If `None`, the original table is used.
         """
         return self._to_table
 
+    @to_table.setter
+    @_td_validate_call(ErrorCode.DQC19)
+    def to_table(self, to_table: TableName | None = None):
+        """Sets the destination table.
 
-class Fail(Operator):
+        Args:
+            to_table: The name of the table.
+        """
+        self._to_table = to_table
+
+
+class CriteriaOperator(Operator, ABC):
+    """An operator that uses a criteria to select records."""
+
+    @_td_validate_call(ErrorCode.DQC20)
+    def __init__(
+        self,
+        criteria: Criteria,
+    ):
+        """Initializes the `CriteriaOperator`.
+
+        Args:
+            criteria: The criteria for selecting rows.
+        """
+        self.criteria = criteria
+
+    @property
+    def criteria(self) -> Criteria:
+        """Returns the criteria for this `Fail` operation."""
+        return self._criteria
+
+    @criteria.setter
+    @_td_validate_call(ErrorCode.DQC22)
+    def criteria(self, criteria: Criteria):
+        """Sets the criteria for the operator.
+
+        Args:
+            criteria: The criteria object.
+        """
+        self._criteria = criteria
+
+
+class Fail(CriteriaOperator):
     """
     An operator that fails the current transaction if a data quality threshold
     is met.
     """
 
-    @_td_validate_call(ErrorCode.PVDQOP8)
+    @_td_validate_call(ErrorCode.DQC23)
     def __init__(
         self,
         criteria: Criteria,
@@ -312,34 +457,37 @@ class Fail(Operator):
                       Defaults to `Criteria.any_failed()`.
             threshold: The threshold that triggers the failure.
         """
-        tags = criteria.tags if isinstance(criteria, BoolCriteria) else None
-        super().__init__(tags=tags)
-        self._threshold = threshold
-        self._criteria = criteria
-
-    @property
-    def criteria(self) -> Criteria:
-        """Returns the criteria for this `Fail` operation."""
-        return self._criteria
+        super().__init__(criteria)
+        self.threshold = threshold
 
     @property
     def threshold(self) -> Threshold:
         """Returns the threshold for this `Fail` operation."""
         return self._threshold
 
+    @threshold.setter
+    @_td_validate_call(ErrorCode.DQC24)
+    def threshold(self, threshold: Threshold):
+        """Sets the threshold for the `Fail` operation.
 
-class Filter(Operator):
+        Args:
+            threshold: The threshold object.
+        """
+        self._threshold = threshold
+
+
+class Filter(CriteriaOperator):
     """An operator that filters rows from a table based on data quality criteria.
 
     The filtered rows are removed from the table being processed. They can
     either be discarded or redirected to another table.
     """
 
-    @_td_validate_call(ErrorCode.PVDQOP9)
+    @_td_validate_call(ErrorCode.DQC25)
     def __init__(
         self,
         criteria: Criteria,
-        to_table: Optional[TableName] = None,
+        to_table: TableName | None = None,
         include_quality_columns: IncludeQualityColumnsSpec = "none",
     ):
         """Initializes the `Filter` operator.
@@ -352,23 +500,26 @@ class Filter(Operator):
             include_quality_columns: The data quality columns to include in
                                      the table with filtered out data.
         """
-        tags = criteria.tags if isinstance(criteria, BoolCriteria) else None
-        super().__init__(tags=tags)
-        self._to_table = to_table
-        self._criteria = criteria
-        self._include_quality_columns = include_quality_columns
+        super().__init__(criteria)
+        self.to_table = to_table
+        self.include_quality_columns = include_quality_columns
 
     @property
-    def to_table(self) -> Optional[TableName]:
+    def to_table(self) -> TableName | None:
         """Returns the destination table for filtered rows, or `None` if they are
         discarded.
         """
         return self._to_table
 
-    @property
-    def criteria(self) -> Criteria:
-        """Returns the criteria for this `Filter` operation."""
-        return self._criteria
+    @to_table.setter
+    @_td_validate_call(ErrorCode.DQC26)
+    def to_table(self, to_table: TableName | None = None):
+        """Sets the destination table for filtered rows.
+
+        Args:
+            to_table: The name of the table.
+        """
+        self._to_table = to_table
 
     @property
     def include_quality_columns(self) -> IncludeQualityColumnsSpec:
@@ -378,8 +529,21 @@ class Filter(Operator):
         """
         return self._include_quality_columns
 
+    @include_quality_columns.setter
+    @_td_validate_call(ErrorCode.DQC27)
+    def include_quality_columns(
+        self,
+        include_quality_columns: IncludeQualityColumnsSpec = "none",
+    ):
+        """Sets the data quality columns to include in the filtered data.
 
-class Select(Operator):
+        Args:
+            include_quality_columns: The columns to include.
+        """
+        self._include_quality_columns = include_quality_columns
+
+
+class Select(CriteriaOperator):
     """
     An operator that selects rows based on data quality criteria and writes
     them to another table.
@@ -387,7 +551,7 @@ class Select(Operator):
     This operation does not modify the original table.
     """
 
-    @_td_validate_call(ErrorCode.PVDQOP10)
+    @_td_validate_call(ErrorCode.DQC28)
     def __init__(
         self,
         criteria: Criteria,
@@ -404,21 +568,24 @@ class Select(Operator):
             include_quality_columns: The data quality columns to include in
                                      the table with selected data.
         """
-        tags = criteria.tags if isinstance(criteria, BoolCriteria) else None
-        super().__init__(tags=tags)
-        self._to_table = to_table
-        self._criteria = criteria
-        self._include_quality_columns = include_quality_columns
+        super().__init__(criteria)
+        self.to_table = to_table
+        self.include_quality_columns = include_quality_columns
 
     @property
     def to_table(self) -> TableName:
         """Returns the destination table for the selected rows."""
         return self._to_table
 
-    @property
-    def criteria(self) -> Criteria:
-        """Returns the criteria for this `Select` operation."""
-        return self._criteria
+    @to_table.setter
+    @_td_validate_call(ErrorCode.DQC29)
+    def to_table(self, to_table: TableName | None = None):
+        """Sets the destination table for the selected rows.
+
+        Args:
+            to_table: The name of the table.
+        """
+        self._to_table = to_table
 
     @property
     def include_quality_columns(self) -> IncludeQualityColumnsSpec:
@@ -428,14 +595,25 @@ class Select(Operator):
         """
         return self._include_quality_columns
 
+    @include_quality_columns.setter
+    @_td_validate_call(ErrorCode.DQC30)
+    def include_quality_columns(
+        self,
+        include_quality_columns: IncludeQualityColumnsSpec = "none",
+    ):
+        """Sets the data quality columns to include in the selected data.
 
-class Summary(Operator):
+        Args:
+            include_quality_columns: The columns to include.
+        """
+        self._include_quality_columns = include_quality_columns
+
+
+class Summary(TagOperator):
     """An operator that generates a data quality summary report for a table."""
 
-    @_td_validate_call(ErrorCode.PVDQOP11)
-    def __init__(
-        self, table: Optional[TableName] = None, *, tags: TagsSpec | None = None
-    ):
+    @_td_validate_call(ErrorCode.DQC31)
+    def __init__(self, table: TableName | None = None, *, tags: TagsSpec | None = None):
         """Initializes the `Summary` operator.
 
         Args:
@@ -445,9 +623,19 @@ class Summary(Operator):
             tags: Optional tags to link this operator to specific classifiers.
         """
         super().__init__(tags=tags)
-        self._table = table
+        self.table = table
 
     @property
-    def table(self) -> Optional[TableName]:
+    def table(self) -> TableName | None:
         """Returns the name of the data quality summary table."""
         return self._table
+
+    @table.setter
+    @_td_validate_call(ErrorCode.DQC29)
+    def table(self, table: TableName | None = None):
+        """Sets the name of the data quality summary table.
+
+        Args:
+            table: The name of the table.
+        """
+        self._table = table

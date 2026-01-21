@@ -1,6 +1,7 @@
 #
 # Copyright 2025 Tabs Data Inc.
 #
+
 """
 This module defines the `DataQuality` action, which orchestrates the application
 of data quality rules on a table. It combines classifiers and operators to perform
@@ -34,7 +35,7 @@ class DataQuality(OnTablesAction):
     for a complete data quality workflow.
     """
 
-    @_td_validate_call(ErrorCode.PVDQ1)
+    @_td_validate_call(ErrorCode.DQC201)
     def __init__(
         self,
         table: TableName,
@@ -52,16 +53,21 @@ class DataQuality(OnTablesAction):
             operators: A single operator or a list of operators that define the
                        actions to take based on the classifier results.
         """
-        self._table = table
-        self._classifiers = _normalize_to_list(classifiers)
-        self._operators = _normalize_to_list(operators)
+        self.table = table
+        self.classifiers = classifiers
+        self.operators = operators
 
     @property
-    def table(self) -> str:
+    def table(self) -> TableName:
         """
         Returns the name of the table targeted by this data quality action.
         """
         return self._table
+
+    @table.setter
+    @_td_validate_call(ErrorCode.DQC202)
+    def table(self, table: TableName):
+        self._table = table
 
     @property
     def classifiers(self) -> list[Classifier]:
@@ -70,6 +76,11 @@ class DataQuality(OnTablesAction):
         """
         return self._classifiers
 
+    @classifiers.setter
+    @_td_validate_call(ErrorCode.DQC203)
+    def classifiers(self, classifiers: ClassifiersSpec):
+        self._classifiers = _normalize_to_list(classifiers)
+
     @property
     def operators(self) -> list[Operator]:
         """
@@ -77,3 +88,8 @@ class DataQuality(OnTablesAction):
         classifier results.
         """
         return self._operators
+
+    @operators.setter
+    @_td_validate_call(ErrorCode.DQC204)
+    def operators(self, operators: OperatorsSpec):
+        self._operators = _normalize_to_list(operators)
