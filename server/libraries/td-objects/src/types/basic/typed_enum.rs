@@ -26,6 +26,7 @@ pub enum DependencyStatus {
 /// Represents the status of an execution.
 /// It is a summary of the statuses of all function runs within the execution.
 #[td_type::typed_enum]
+#[derive(Hash)]
 pub enum ExecutionStatus {
     /// All function runs are scheduled.
     #[typed_enum(rename = "S")]
@@ -73,6 +74,7 @@ pub enum ExecutionStatus {
 ///     Committed --> Yanked
 /// ```
 #[td_type::typed_enum]
+#[derive(Hash)]
 pub enum FunctionRunStatus {
     #[typed_enum(rename = "S")]
     Scheduled,
@@ -221,6 +223,7 @@ pub enum TableType {
 /// do have the same status.
 /// It is a summary of the statuses of all function runs within the transaction.
 #[td_type::typed_enum]
+#[derive(Hash)]
 pub enum TransactionStatus {
     /// All function runs are scheduled.
     #[typed_enum(rename = "S")]
@@ -322,6 +325,7 @@ impl From<WorkerCallbackStatus> for WorkerStatus {
 }
 
 #[td_type::typed_enum]
+#[derive(Hash)]
 pub enum WorkerTypeDto {
     #[typed_enum(rename = "C")]
     Cron,

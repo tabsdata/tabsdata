@@ -1473,7 +1473,7 @@ pub fn typed_enum(args: TokenStream, item: TokenStream) -> TokenStream {
     let expanded = quote! {
         #[derive(
             Debug, Clone,
-            PartialEq, Eq, Hash, PartialOrd, Ord,
+            PartialEq, Eq,
             strum::EnumString, strum::Display, strum::EnumIter,
             serde::Serialize, serde::Deserialize, utoipa::ToSchema
         )]
