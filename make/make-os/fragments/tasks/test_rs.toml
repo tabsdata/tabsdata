@@ -190,8 +190,8 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TO_EXPANSIONS_PYTHON_CARGO_TOML} --features ${expansions-test-features} --all-targets --tests"
-    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TO_EXPANSIONS_PYTHON_CARGO_TOML} --features ${expansions-test-features} --all-targets --tests
+    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TO_EXPANSIONS_PYTHON_CARGO_TOML} --features ${expansions-test-features} --lib"
+    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TO_EXPANSIONS_PYTHON_CARGO_TOML} --features ${expansions-test-features} --lib
 
     debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} nextest run --build-jobs 16 --locked --no-fail-fast --test-threads 32 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TO_EXPANSIONS_PYTHON_CARGO_TOML} --features ${expansions-test-features} --all-targets"
     exit_code = exec --get-exit-code cargo %{td-toolchain-token}%{td-toolchain} nextest run --build-jobs 16 --locked --no-fail-fast --test-threads 32 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TO_EXPANSIONS_PYTHON_CARGO_TOML} --features ${expansions-test-features} --all-targets
@@ -223,8 +223,8 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_POLARS_CARGO_TOML} --features ${expansions-test-features} --all-targets --tests"
-    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_POLARS_CARGO_TOML} --features ${expansions-test-features} --all-targets --tests
+    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_POLARS_CARGO_TOML} --features ${expansions-test-features} --lib"
+    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_POLARS_CARGO_TOML} --features ${expansions-test-features} --lib
 
     debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} nextest run --build-jobs 16 --locked --no-fail-fast --test-threads 32 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_POLARS_CARGO_TOML} --features ${expansions-test-features} --all-targets"
     exit_code = exec --get-exit-code cargo %{td-toolchain-token}%{td-toolchain} nextest run --build-jobs 16 --locked --no-fail-fast --test-threads 32 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_POLARS_CARGO_TOML} --features ${expansions-test-features} --all-targets
