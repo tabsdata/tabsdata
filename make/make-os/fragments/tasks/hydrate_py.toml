@@ -264,7 +264,7 @@ script = [
 
             cd ${connector}
 
-            debug "🚀 uv pip install --quiet develop -e ."
+            debug "🚀 uv pip install --quiet -e ."
             exec --fail-on-error uv pip install --quiet -e .
 
             pytthon_target_folder = set "${connector}/target/python"

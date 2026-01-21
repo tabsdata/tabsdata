@@ -17,10 +17,12 @@ from tabsdata.exceptions import ErrorCode, StageTriggerConfigurationError
 if TYPE_CHECKING:
     pass
 
+
 class StageTriggerStatus(Enum):
     """
     Status returned by the `run()` method of `StageTrigger` implementations.
     """
+
     SUCCESS = 0
     """
     The stage trigger finished successfully.
@@ -35,6 +37,7 @@ class StageTriggerStatus(Enum):
     """
     The stage trigger finished because of a signal.
     """
+
 
 class StageTrigger(ABC):
     def __init__(
@@ -62,18 +65,11 @@ class StageTrigger(ABC):
     def start(self, start: datetime | None):
         if start is None or isinstance(start, datetime):
             current_end = getattr(self, "_end", None)
-            if (start is not None
-                    and current_end is not None
-                    and start >= current_end
-            ):
-                raise StageTriggerConfigurationError(
-                    ErrorCode.STE3, start, current_end
-                )
+            if start is not None and current_end is not None and start >= current_end:
+                raise StageTriggerConfigurationError(ErrorCode.STE3, start, current_end)
             self._start = start
         else:
-            raise StageTriggerConfigurationError(
-                ErrorCode.STE1, start, type(start)
-            )
+            raise StageTriggerConfigurationError(ErrorCode.STE1, start, type(start))
 
     @property
     def end(self) -> datetime | None:
@@ -83,18 +79,11 @@ class StageTrigger(ABC):
     def end(self, end: datetime | None):
         if end is None or isinstance(end, datetime):
             current_start = getattr(self, "_start", None)
-            if (current_start is not None
-                    and end is not None
-                    and current_start >= end
-            ):
-                raise StageTriggerConfigurationError(
-                    ErrorCode.STE3, current_start, end
-                )
+            if current_start is not None and end is not None and current_start >= end:
+                raise StageTriggerConfigurationError(ErrorCode.STE3, current_start, end)
             self._end = end
         else:
-            raise StageTriggerConfigurationError(
-                ErrorCode.STE2, end, type(end)
-            )
+            raise StageTriggerConfigurationError(ErrorCode.STE2, end, type(end))
 
     def _to_dict(self) -> dict:
         return {
@@ -114,7 +103,7 @@ class StageTrigger(ABC):
         pass
 
 
-#TODO THIS SHOULD DISAPPEAR FROM HERE INTO THE CONTEXT IMPL SUB-CLASS
+# TODO THIS SHOULD DISAPPEAR FROM HERE INTO THE CONTEXT IMPL SUB-CLASS
 class CallConfig:
 
     def __init__(
@@ -150,7 +139,8 @@ class CallConfig:
         )
 
 
-FilesToStageSpec: TypeAlias = Union[Path|list[Path]]
+FilesToStageSpec: TypeAlias = Union[Path | list[Path]]
+
 
 class StageTriggerContext(ABC):
     """

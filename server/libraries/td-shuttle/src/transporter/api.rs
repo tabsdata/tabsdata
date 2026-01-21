@@ -134,7 +134,9 @@ fn decode_info<I: DeserializeOwned>(encoded: &str, info_type: &str) -> Result<I,
             TransporterError::CouldNotDecodeInfo(info_type.to_string(), err.to_string())
         })?;
     let x = serde_json::from_slice::<I>(&decoded);
-    x.map_err(|err| TransporterError::CouldNotDeserializeInfo(info_type.to_string(), err.to_string()))
+    x.map_err(|err| {
+        TransporterError::CouldNotDeserializeInfo(info_type.to_string(), err.to_string())
+    })
 }
 
 /// Splits a file path into base_path and file_name
@@ -1695,12 +1697,12 @@ mod tests {
         LastModifiedInfo, LastModifiedInfoAccessor, LastModifiedInfoState, LastModifiedInfoV1,
         split_base_path_and_name,
     };
+    use crate::transporter::error::TransporterError;
     use base64::Engine;
     use base64::prelude::BASE64_STANDARD_NO_PAD;
     use chrono::{DateTime, Utc};
     use td_common::time::UniqueUtc;
     use url::Url;
-    use crate::transporter::error::TransporterError;
 
     #[test]
     fn test_import_format_using_polars() {
@@ -2050,9 +2052,12 @@ mod tests {
         let state = "@@JWMSI6IHsiaW5pdGlhbF9sYXN0X21vZGlmaWVkIjogIjIwMjQtMDktMDVUMDE6MDE6MDA\
 uMDEwWiIsICJlbnRyaWVzIjogeyIvdGVzdGluZ19uZXN0ZWRfaW1wb3J0LyouY3N2IjogWyIyMDI2LTAyLTE4VDE0Oj\
 A0OjE0LjQzMzcyMCIsIFsibmV3X2RhdGEuY3N2Il1dfX19";
-        let res= super::decode_info::<LastModifiedInfoState>(state, "test");
+        let res = super::decode_info::<LastModifiedInfoState>(state, "test");
         assert!(res.is_err());
-        assert!(matches!(res.err(), Some(TransporterError::CouldNotDecodeInfo(_,_))));
+        assert!(matches!(
+            res.err(),
+            Some(TransporterError::CouldNotDecodeInfo(_, _))
+        ));
     }
 
     #[test]
@@ -2060,9 +2065,11 @@ A0OjE0LjQzMzcyMCIsIFsibmV3X2RhdGEuY3N2Il1dfX19";
         let state = "eyJWMSI6IHsiaW5pdGlhbF9sYXN0X21vZGlmaWVkIjogIjIwMjQtMDktMDVUMDE6MDE6MDAuM\
 DEwWiIsICJlbnRyaWVzIjogeyIvdGVzdGluZ19uZXN0ZWRfaW1wb3J0LyouY3N2IjogWyIyMDI2LTAyLTE4VDE0OjA0OjE0LjQz\
 MzcyMCIsIFsibmV3X2RhdGEuY3N2Il1dfX19";
-        let res= super::decode_info::<LastModifiedInfoState>(state, "test");
+        let res = super::decode_info::<LastModifiedInfoState>(state, "test");
         assert!(res.is_err());
-        assert!(matches!(res.err(), Some(TransporterError::CouldNotDeserializeInfo(_,_))));
+        assert!(matches!(
+            res.err(),
+            Some(TransporterError::CouldNotDeserializeInfo(_, _))
+        ));
     }
-
 }

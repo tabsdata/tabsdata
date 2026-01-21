@@ -363,6 +363,9 @@ version = "1.1.1"
 [workspace.dependencies.dunce]
 version = "1.0.5"
 
+[workspace.dependencies.filetime]
+version = "0.2.27"
+
 [workspace.dependencies.futures]
 version = "0.3.31"
 

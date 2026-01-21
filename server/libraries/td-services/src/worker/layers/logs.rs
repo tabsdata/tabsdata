@@ -215,17 +215,11 @@ mod tests {
         std::fs::write(&file2, "").unwrap();
 
         // Set explicit timestamps to ensure dir2 is newer
-        let old_time = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1000);
-        let new_time = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(2000);
+        let old_time = filetime::FileTime::from_unix_time(1000, 0);
+        let new_time = filetime::FileTime::from_unix_time(2000, 0);
 
-        std::fs::File::open(&dir1)
-            .unwrap()
-            .set_modified(old_time)
-            .unwrap();
-        std::fs::File::open(&dir2)
-            .unwrap()
-            .set_modified(new_time)
-            .unwrap();
+        filetime::set_file_mtime(&dir1, old_time).unwrap();
+        filetime::set_file_mtime(&dir2, new_time).unwrap();
 
         let mut paths = vec![file1.clone(), file2.clone()];
         sort_log_paths(&mut paths);
@@ -270,17 +264,11 @@ mod tests {
         }
 
         // Set explicit timestamps to ensure new_dir is newer
-        let old_time = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1000);
-        let new_time = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(2000);
+        let old_time = filetime::FileTime::from_unix_time(1000, 0);
+        let new_time = filetime::FileTime::from_unix_time(2000, 0);
 
-        std::fs::File::open(&old_dir)
-            .unwrap()
-            .set_modified(old_time)
-            .unwrap();
-        std::fs::File::open(&new_dir)
-            .unwrap()
-            .set_modified(new_time)
-            .unwrap();
+        filetime::set_file_mtime(&old_dir, old_time).unwrap();
+        filetime::set_file_mtime(&new_dir, new_time).unwrap();
 
         sort_log_paths(&mut paths);
 

@@ -6,8 +6,11 @@ from datetime import datetime
 
 import pytest
 
-from tabsdata._io.stage_trigger import StageTrigger, StageTriggerContext, \
-    StageTriggerStatus
+from tabsdata._io.stage_trigger import (
+    StageTrigger,
+    StageTriggerContext,
+    StageTriggerStatus,
+)
 from tabsdata.exceptions import (
     ErrorCode,
     StageTriggerConfigurationError,
@@ -15,6 +18,7 @@ from tabsdata.exceptions import (
 
 EXAMPLE_START_DATETIME = datetime(2025, 4, 2)
 EXAMPLE_END_DATETIME = datetime(2025, 4, 3)
+
 
 class MyStageTrigger(StageTrigger):
 
@@ -33,11 +37,7 @@ def test_watchdog_class_defaults():
     watchdog = MyStageTrigger()
     assert watchdog.start is None
     assert watchdog.end is None
-    assert watchdog._to_dict() == {
-        "start": None,
-        "end": None,
-        "foo": "bar"
-    }
+    assert watchdog._to_dict() == {"start": None, "end": None, "foo": "bar"}
 
 
 @pytest.mark.unit
@@ -49,7 +49,7 @@ def test_watchdog_class_all_params():
     assert watchdog._to_dict() == {
         "start": EXAMPLE_START_DATETIME.isoformat(),
         "end": EXAMPLE_END_DATETIME.isoformat(),
-        "foo": "bar"
+        "foo": "bar",
     }
 
 
