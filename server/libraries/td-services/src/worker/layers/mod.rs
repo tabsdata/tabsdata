@@ -8,8 +8,8 @@ pub(crate) mod logs;
 pub(crate) mod tests {
     use std::env;
     use std::path::PathBuf;
-    use td_common::server::WorkerClass::EPHEMERAL;
-    use td_common::server::WorkerName::FUNCTION;
+    use td_common::server::WorkerClass::Ephemeral;
+    use td_common::server::WorkerName::Function;
     use td_common::server::{CAST_FOLDER, LOG_FOLDER, PROC_FOLDER, WORK_FOLDER, WORKSPACE_URI_ENV};
     use td_objects::rest_urls::LogsExtension;
     use td_objects::types::basic::WorkerId;
@@ -21,8 +21,8 @@ pub(crate) mod tests {
         PathBuf::from(worker_path)
             .join(WORK_FOLDER)
             .join(PROC_FOLDER)
-            .join(EPHEMERAL.as_ref())
-            .join(FUNCTION.as_ref())
+            .join(Ephemeral.as_ref())
+            .join(Function.as_ref())
             .join(WORK_FOLDER)
             .join(CAST_FOLDER)
             .join(format!("{}_{}", worker_id, &cast.to_string()))

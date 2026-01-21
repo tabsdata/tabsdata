@@ -160,7 +160,7 @@ mod tests {
             async move {
                 let response: CallbackRequest = ResponseMessagePayloadBuilder::default()
                     .id(worker.to_string())
-                    .class(WorkerClass::EPHEMERAL)
+                    .class(WorkerClass::Ephemeral)
                     .worker("".to_string())
                     .action(MessageAction::Notify)
                     .start(123)

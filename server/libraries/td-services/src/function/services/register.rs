@@ -1275,7 +1275,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .workers(Some(HashMap::from([
                 (WorkerTypeDto::Cron, WorkerConfig::default()),
-                (WorkerTypeDto::Watchdog, WorkerConfig::default()),
+                (WorkerTypeDto::StageTrigger, WorkerConfig::default()),
             ])))
             .build()?;
 

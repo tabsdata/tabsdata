@@ -173,19 +173,19 @@ pub enum QueueError {
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum WorkerClass {
-    INIT,
-    REGULAR,
+    Init,
+    Regular,
     #[default]
-    EPHEMERAL,
+    Ephemeral,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, EnumString, AsRefStr)]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum WorkerName {
-    FUNCTION,
-    CRON,
-    WATCHDOG,
+    Function,
+    Cron,
+    StageTrigger,
 }
 
 #[derive(
@@ -317,7 +317,7 @@ fn default_id() -> String {
 }
 
 fn default_class() -> WorkerClass {
-    WorkerClass::EPHEMERAL
+    WorkerClass::Ephemeral
 }
 
 fn default_worker() -> String {
@@ -745,7 +745,7 @@ mod tests_queue {
 
         let id = "test_message1";
         let payload = RequestMessagePayload::<Value> {
-            class: WorkerClass::REGULAR,
+            class: WorkerClass::Regular,
             worker: String::from("worker1"),
             run_id: id::id().to_string(),
             action: MessageAction::Start,
@@ -799,7 +799,7 @@ mod tests_queue {
 
         let id = "test_message2";
         let payload = RequestMessagePayload::<Value> {
-            class: WorkerClass::REGULAR,
+            class: WorkerClass::Regular,
             worker: String::from("worker2"),
             run_id: id::id().to_string(),
             action: MessageAction::Start,
@@ -853,7 +853,7 @@ mod tests_queue {
 
         let id = "test_message3";
         let payload = RequestMessagePayload::<Value> {
-            class: WorkerClass::REGULAR,
+            class: WorkerClass::Regular,
             worker: String::from("worker3"),
             run_id: id::id().to_string(),
             action: MessageAction::Start,

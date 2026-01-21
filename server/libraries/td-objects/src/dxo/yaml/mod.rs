@@ -10,13 +10,13 @@ use utoipa::ToSchema;
 pub mod cron;
 pub mod function_runner;
 pub mod location;
-pub mod watchdog;
+pub mod stage_trigger;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum WorkerInput {
     FunctionV2(Box<function_runner::v2::FunctionInput>),
     CronV1(Box<cron::v1::CronInput>),
-    WatchdogV1(Box<watchdog::v1::WatchdogInput>),
+    StageTriggerV1(Box<stage_trigger::v1::StageTriggerInput>),
 }
 
 impl WorkerInput {
@@ -24,7 +24,7 @@ impl WorkerInput {
         match self {
             WorkerInput::FunctionV2(i) => &i.info.collection,
             WorkerInput::CronV1(i) => &i.info.collection,
-            WorkerInput::WatchdogV1(i) => &i.info.collection,
+            WorkerInput::StageTriggerV1(i) => &i.info.collection,
         }
     }
 
@@ -32,7 +32,7 @@ impl WorkerInput {
         match self {
             WorkerInput::FunctionV2(i) => &i.info.function,
             WorkerInput::CronV1(i) => &i.info.function,
-            WorkerInput::WatchdogV1(i) => &i.info.function,
+            WorkerInput::StageTriggerV1(i) => &i.info.function,
         }
     }
 }
@@ -50,7 +50,7 @@ impl Locations for WorkerInput {
         match self {
             WorkerInput::FunctionV2(i) => i.locations(),
             WorkerInput::CronV1(i) => i.locations(),
-            WorkerInput::WatchdogV1(i) => i.locations(),
+            WorkerInput::StageTriggerV1(i) => i.locations(),
         }
     }
 }
@@ -61,5 +61,5 @@ pub enum WorkerOutput {
     V2(function_runner::v2::FunctionOutput),
     FunctionV2(function_runner::v2::FunctionOutput),
     CronV1(Box<cron::v1::CronOutput>),
-    WatchdogV1(Box<watchdog::v1::WatchdogOutput>),
+    StageTriggerV1(Box<stage_trigger::v1::StageTriggerOutput>),
 }

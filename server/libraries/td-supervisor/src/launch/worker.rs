@@ -159,7 +159,7 @@ mod tests {
     use crate::services::supervisor::WorkerLocation::Relative;
     use std::fs::create_dir_all;
     use td_common::env::{get_current_exe_name, get_current_exe_path};
-    use td_common::server::WorkerClass::REGULAR;
+    use td_common::server::WorkerClass::Regular;
     use td_common::server::{CONFIG_FOLDER, ETC_FOLDER, MSG_FOLDER, WORK_FOLDER};
     use tempfile::tempdir;
 
@@ -173,7 +173,7 @@ mod tests {
         create_dir_all(&work_folder).expect("Error creating work folder");
         let describer = TabsDataWorkerDescriberBuilder::default()
             .instance(PathBuf::from("."))
-            .class(REGULAR)
+            .class(Regular)
             .name(get_current_exe_name().unwrap())
             .runtime(None)
             .location(Relative)
@@ -207,7 +207,7 @@ mod tests {
         create_dir_all(&work_folder).expect("Error creating work folder");
         let describer = TabsDataWorkerDescriberBuilder::default()
             .instance(PathBuf::from("."))
-            .class(REGULAR)
+            .class(Regular)
             .name(get_current_exe_name().unwrap())
             .runtime(None)
             .location(Relative)

@@ -64,7 +64,7 @@ use td_common::server::SupervisorMessagePayload::{
     SupervisorExceptionMessagePayload, SupervisorRequestMessagePayload,
     SupervisorResponseMessagePayload,
 };
-use td_common::server::WorkerClass::{EPHEMERAL, INIT, REGULAR};
+use td_common::server::WorkerClass::{Ephemeral, Init, Regular};
 use td_common::server::{
     CAST_FOLDER, CONFIG_FILE, CONFIG_FOLDER, CONFIG_NAMESPACE, CONFIG_PATH_ENV, CONFIG_URI_ENV,
     ETC_FOLDER, EXTENSION_DELIMITER, INSTANCE_PATH_ENV, INSTANCE_URI_ENV, MOLD_FOLDER, MSG_FOLDER,
@@ -379,22 +379,22 @@ impl<'de> Deserialize<'de> for ControllersConfig {
             IndexMap::deserialize(deserializer)?;
         Ok(ControllersConfig {
             init: ControllerConfig {
-                name: INIT.as_ref().to_string(),
+                name: Init.as_ref().to_string(),
                 ..controllers_map
-                    .shift_remove(INIT.as_ref())
-                    .ok_or_else(|| serde::de::Error::missing_field(INIT.as_ref()))?
+                    .shift_remove(Init.as_ref())
+                    .ok_or_else(|| serde::de::Error::missing_field(Init.as_ref()))?
             },
             regular: ControllerConfig {
-                name: REGULAR.as_ref().to_string(),
+                name: Regular.as_ref().to_string(),
                 ..controllers_map
-                    .shift_remove(REGULAR.as_ref())
-                    .ok_or_else(|| serde::de::Error::missing_field(REGULAR.as_ref()))?
+                    .shift_remove(Regular.as_ref())
+                    .ok_or_else(|| serde::de::Error::missing_field(Regular.as_ref()))?
             },
             ephemeral: ControllerConfig {
-                name: EPHEMERAL.as_ref().to_string(),
+                name: Ephemeral.as_ref().to_string(),
                 ..controllers_map
-                    .shift_remove(EPHEMERAL.as_ref())
-                    .ok_or_else(|| serde::de::Error::missing_field(EPHEMERAL.as_ref()))?
+                    .shift_remove(Ephemeral.as_ref())
+                    .ok_or_else(|| serde::de::Error::missing_field(Ephemeral.as_ref()))?
             },
         })
     }
@@ -994,9 +994,9 @@ impl Supervisor {
                         }
                     };
                     let send_result = match payload.class {
-                        INIT => sender_init.send(message.clone()),
-                        REGULAR => sender_regular.send(message.clone()),
-                        EPHEMERAL => sender_ephemeral.send(message.clone()),
+                        Init => sender_init.send(message.clone()),
+                        Regular => sender_regular.send(message.clone()),
+                        Ephemeral => sender_ephemeral.send(message.clone()),
                     };
                     match send_result.await {
                         Ok(_) => {
@@ -1299,7 +1299,7 @@ impl Supervisor {
         type RunningTasksSet = FuturesUnordered<WrappedTaskFuture>;
 
         let concurrency_limit = controller.concurrency as usize;
-        let workers_map: IndexMap<String, WorkerConfig> = if controller.name == EPHEMERAL.as_ref() {
+        let workers_map: IndexMap<String, WorkerConfig> = if controller.name == Ephemeral.as_ref() {
             IndexMap::new()
         } else {
             controller.workers().clone()
@@ -1312,7 +1312,7 @@ impl Supervisor {
             concurrency_limit
         );
 
-        if workers_map.is_empty() && controller.name != EPHEMERAL.as_ref() {
+        if workers_map.is_empty() && controller.name != Ephemeral.as_ref() {
             warn!(
                 "{} workers_map is empty; no workers configured",
                 controller_class
@@ -1371,7 +1371,7 @@ impl Supervisor {
                                 }
                                 drop(map);
 
-                                let is_ephemeral = controller.name == EPHEMERAL.as_ref();
+                                let is_ephemeral = controller.name == Ephemeral.as_ref();
 
                                 if !is_ephemeral {
                                     let message = format!("{controller_class} task cancelled abruptly with error: {e:?}");
@@ -1436,7 +1436,7 @@ impl Supervisor {
                 }
                 _ = async { }, if !can_spawn_worker && matches!(mark.load(SeqCst), NA) => {
                     debug!("{} branch: marking workers as launched", controller_class);
-                    let done = if controller.name == INIT.as_ref() {
+                    let done = if controller.name == Init.as_ref() {
                         if running_tasks.is_empty() {
                             info!("All scheduled Init tasks completed!");
                             true
@@ -1574,7 +1574,7 @@ impl Supervisor {
         message: Option<SupervisorMessage>,
     ) -> Result<(), RunnerError> {
         let (_, result) = self
-            .start_worker(worker, message, None, INIT, None, None)
+            .start_worker(worker, message, None, Init, None, None)
             .await;
         result.map(|_| ())?;
         Ok(())
@@ -1586,7 +1586,7 @@ impl Supervisor {
         message: Option<SupervisorMessage>,
     ) -> Result<(), RunnerError> {
         let (_, result) = self
-            .start_worker(worker, message, None, REGULAR, None, None)
+            .start_worker(worker, message, None, Regular, None, None)
             .await;
         result.map(|_| ())?;
         Ok(())
@@ -1617,7 +1617,7 @@ impl Supervisor {
                 worker.clone(),
                 Some(message.clone()),
                 Some(start),
-                EPHEMERAL,
+                Ephemeral,
                 worker_name,
                 run_id,
             )
@@ -1989,7 +1989,7 @@ impl Supervisor {
                         Err(err) => return (Some(td_worker), Err(RunnerError::from(err))),
                     };
                 }
-                if class == REGULAR && check_nowait_env() {
+                if class == Regular && check_nowait_env() {
                     info!(
                         "Holding {} worker... '{}'",
                         class.as_ref().to_string(),
@@ -2078,7 +2078,7 @@ impl Supervisor {
                 }
             }
             Err(e) => match class {
-                INIT => {
+                Init => {
                     error!(
                         "Init worker '{}' failed with error: {:?}",
                         &describer.name(),
@@ -2086,8 +2086,8 @@ impl Supervisor {
                     );
                     self.exit(GeneralError.code());
                 }
-                REGULAR => return (Some(td_worker), Err(e)),
-                EPHEMERAL => return (Some(td_worker), Err(e)),
+                Regular => return (Some(td_worker), Err(e)),
+                Ephemeral => return (Some(td_worker), Err(e)),
             },
         };
         info!(
@@ -2106,7 +2106,7 @@ impl Supervisor {
         class: WorkerClass,
     ) -> Result<(PathBuf, PathBuf), RunnerError> {
         let config_folder = match class {
-            EPHEMERAL => self
+            Ephemeral => self
                 .params
                 .clone()
                 .work()
@@ -2128,7 +2128,7 @@ impl Supervisor {
         };
 
         let work_folder = match class {
-            EPHEMERAL => self
+            Ephemeral => self
                 .params
                 .clone()
                 .work()
@@ -2149,7 +2149,7 @@ impl Supervisor {
                 .join(WORK_FOLDER),
         };
 
-        if let EPHEMERAL = class {
+        if let Ephemeral = class {
             let worker_folder = self
                 .params
                 .clone()
@@ -2332,7 +2332,7 @@ impl Supervisor {
             });
 
         let program = match class {
-            EPHEMERAL => ScriptBuilder::SHELL.to_string(),
+            Ephemeral => ScriptBuilder::SHELL.to_string(),
             _ => PathBuf::from(worker.program())
                 .as_os_str()
                 .to_string_lossy()
@@ -2340,7 +2340,7 @@ impl Supervisor {
         };
 
         let (parameters, markers) = match class {
-            EPHEMERAL => {
+            Ephemeral => {
                 let script_path = work_folder.join(PARENT_FOLDER).join(worker.name());
                 let mut command = CommandBuilder::new().binary(
                     PathBuf::from(worker.program())
@@ -2428,7 +2428,7 @@ impl Supervisor {
             .clone()
             .work()
             .join(PROC_FOLDER)
-            .join(EPHEMERAL.as_ref())
+            .join(Ephemeral.as_ref())
             .join(worker.name())
             .join(WORK_FOLDER)
             .join(CAST_FOLDER);
@@ -2481,7 +2481,7 @@ impl Supervisor {
         worker: &WorkerConfig,
         signal: Signal,
     ) -> Result<(), RuntimeError> {
-        self.stop_common_worker(worker, REGULAR, signal).await?;
+        self.stop_common_worker(worker, Regular, signal).await?;
         Ok(())
     }
 
@@ -2500,7 +2500,7 @@ impl Supervisor {
         worker: &WorkerConfig,
         signal: Signal,
     ) -> Result<(), RuntimeError> {
-        self.stop_common_worker(worker, INIT, signal).await?;
+        self.stop_common_worker(worker, Init, signal).await?;
         Ok(())
     }
 

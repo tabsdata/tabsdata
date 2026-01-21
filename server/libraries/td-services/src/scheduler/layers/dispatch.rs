@@ -46,7 +46,7 @@ async fn unlock_workers_request_infallible<T: WorkerMessageQueue>(
                 &message.payload
         {
             let res = match WorkerName::from_str(&payload.worker) {
-                Ok(WorkerName::FUNCTION) => {
+                Ok(WorkerName::Function) => {
                     unlock_function_runner_worker(
                         queries.deref(),
                         &mut *conn,
@@ -56,7 +56,7 @@ async fn unlock_workers_request_infallible<T: WorkerMessageQueue>(
                     )
                     .await
                 }
-                Ok(WorkerName::CRON) => {
+                Ok(WorkerName::Cron) => {
                     unlock_cron_workers(
                         queries.deref(),
                         &mut *conn,
@@ -66,8 +66,8 @@ async fn unlock_workers_request_infallible<T: WorkerMessageQueue>(
                     )
                     .await
                 }
-                Ok(WorkerName::WATCHDOG) => {
-                    unlock_watchdog_workers(
+                Ok(WorkerName::StageTrigger) => {
+                    unlock_stage_trigger_workers(
                         queries.deref(),
                         &mut *conn,
                         message_queue.deref(),
@@ -265,7 +265,7 @@ pub async fn unlock_cron_workers<T: WorkerMessageQueue>(
     }
 }
 
-pub async fn unlock_watchdog_workers<T: WorkerMessageQueue>(
+pub async fn unlock_stage_trigger_workers<T: WorkerMessageQueue>(
     queries: &DaoQueries,
     conn: &mut SqliteConnection,
     message_queue: &T,
@@ -282,19 +282,19 @@ pub async fn unlock_watchdog_workers<T: WorkerMessageQueue>(
     {
         Ok(_) => match message_queue.commit(&worker_id.to_string()).await {
             Ok(_) => {
-                trace!("Watchdog locked message [{}] is dispatched", worker_id);
+                trace!("StageTrigger locked message [{}] is dispatched", worker_id);
                 Ok(())
             }
             Err(e) => Err(api_error!(
                 ApiError::InternalError,
-                "Watchdog locked message [{}] dispatch failed: {}",
+                "StageTrigger locked message [{}] dispatch failed: {}",
                 worker_id,
                 e
             ))?,
         },
         Err(e) => Err(api_error!(
             ApiError::InternalError,
-            "Watchdog locked message [{}] dispatch failed: {}",
+            "StageTrigger locked message [{}] dispatch failed: {}",
             worker_id,
             e
         ))?,

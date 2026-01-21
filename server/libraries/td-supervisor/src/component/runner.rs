@@ -23,7 +23,7 @@ use std::process::Stdio;
 use std::{env, fmt};
 use td_common::env::{check_flag_env, get_current_dir};
 use td_common::logging::LOG_LOCATION;
-use td_common::server::WorkerName::FUNCTION;
+use td_common::server::WorkerName::Function;
 use td_common::server::{
     ResponseMessagePayloadBuilderError, WORKER_ERR_FILE, WORKER_OUT_FILE, WorkerClass,
 };
@@ -101,7 +101,7 @@ impl WorkerRunner for TabsDataWorkerRunner {
             .open(&err_path)?;
 
         let mut args = worker.describer().arguments().to_vec();
-        if worker.describer().class() == &WorkerClass::EPHEMERAL {
+        if worker.describer().class() == &WorkerClass::Ephemeral {
             args.extend(worker.describer().markers().iter().cloned())
         }
 
@@ -229,7 +229,7 @@ fn obtain_env_vars(worker: &str) -> Vec<(String, String)> {
         env_vars.push(("PATH".to_string(), current_env_var_path));
     }
 
-    if worker == FUNCTION.as_ref() {
+    if worker == Function.as_ref() {
         let python_envs = [
             ENV_CONDA_PREFIX,
             ENV_PYENV_VERSION,

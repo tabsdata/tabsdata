@@ -8,8 +8,8 @@ use futures_util::{StreamExt, TryStreamExt, stream};
 use glob::glob;
 use std::env;
 use std::path::PathBuf;
-use td_common::server::WorkerClass::EPHEMERAL;
-use td_common::server::WorkerName::FUNCTION;
+use td_common::server::WorkerClass::Ephemeral;
+use td_common::server::WorkerName::Function;
 use td_common::server::{CAST_FOLDER, LOG_FOLDER, PROC_FOLDER, WORK_FOLDER, WORKSPACE_URI_ENV};
 use td_error::{TdError, td_error};
 use td_objects::rest_urls::LogsExtension;
@@ -46,8 +46,8 @@ pub async fn resolve_worker_log_path(
     let pattern = PathBuf::from(worker_path)
         .join(WORK_FOLDER)
         .join(PROC_FOLDER)
-        .join(EPHEMERAL.as_ref())
-        .join(FUNCTION.as_ref())
+        .join(Ephemeral.as_ref())
+        .join(Function.as_ref())
         .join(WORK_FOLDER)
         .join(CAST_FOLDER);
 

@@ -73,15 +73,15 @@ mod definitions {
             Ok((Enabled::TRUE, WorkerType::Cron, WorkerStatus::StopScheduled))
         }
 
-        pub async fn watchdog_to_schedule() -> Result<(Enabled, WorkerType, WorkerStatus), TdError>
+        pub async fn stage_trigger_to_schedule() -> Result<(Enabled, WorkerType, WorkerStatus), TdError>
         {
-            Ok((Enabled::TRUE, WorkerType::Watchdog, WorkerStatus::Scheduled))
+            Ok((Enabled::TRUE, WorkerType::StageTrigger, WorkerStatus::Scheduled))
         }
 
-        pub async fn watchdog_to_stop() -> Result<(Enabled, WorkerType, WorkerStatus), TdError> {
+        pub async fn stage_trigger_to_stop() -> Result<(Enabled, WorkerType, WorkerStatus), TdError> {
             Ok((
                 Enabled::TRUE,
-                WorkerType::Watchdog,
+                WorkerType::StageTrigger,
                 WorkerStatus::StopScheduled,
             ))
         }
@@ -214,7 +214,7 @@ mod definitions {
 
     #[td_type::Dto]
     #[derive(Eq, PartialEq)]
-    pub struct WatchdogConfig {
+    pub struct StageTriggerConfig {
         pub timeout_threshold_min: TimeoutThresholdMin,
         pub size_threshold: SizeThreshold,
         pub start: Option<DateTime<Utc>>,

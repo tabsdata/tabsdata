@@ -45,7 +45,7 @@ use td_build::version::TABSDATA_VERSION;
 use td_common::env::{TABSDATA_HOME_DIR, check_flag_env, get_home_dir, to_absolute};
 use td_common::logging::set_log_level;
 use td_common::os::{name_program, terminate_process};
-use td_common::server::WorkerClass::REGULAR;
+use td_common::server::WorkerClass::Regular;
 use td_common::server::{
     AVAILABLE_ENVIRONMENTS_FOLDER, CONFIG_FOLDER, DATABASE_FILE, DATABASE_FOLDER,
     ENVIRONMENTS_FOLDER, ETC_FOLDER, INSTANCES_FOLDER, MSG_FOLDER, STORAGE_FOLDER,
@@ -1784,7 +1784,7 @@ fn build_instance_describer(
 ) -> Result<TabsDataWorkerDescriber, DescriberError> {
     let describer = TabsDataWorkerDescriberBuilder::default()
         .instance(instance)
-        .class(REGULAR)
+        .class(Regular)
         .name(SUPERVISOR_NAME.to_string())
         .runtime(None)
         .location(Relative)

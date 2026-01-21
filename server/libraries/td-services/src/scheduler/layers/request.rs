@@ -25,8 +25,7 @@ use td_objects::dxo::yaml::function_runner::v2::{
     FunctionInfo, FunctionInput, InputTable, InputTableVersion, OutputTable, OutputTableVersion,
 };
 use td_objects::dxo::yaml::location::Location;
-use td_objects::dxo::yaml::watchdog::v1::WatchdogInput;
-use td_objects::dxo::yaml::{WorkerInput, cron, watchdog};
+use td_objects::dxo::yaml::{WorkerInput, cron, stage_trigger};
 use td_objects::rest_urls::BASE_URL;
 use td_objects::rest_urls::internal::{
     DOWNLOAD_FUNCTION_STATE, FUNCTION_VERSION_EXECUTE, FUNCTION_VERSION_EXECUTION_STATUS,
@@ -43,6 +42,7 @@ use td_storage::Storage;
 use td_storage::location::StorageLocation;
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
 use url::Url;
+use td_objects::dxo::yaml::stage_trigger::v1::StageTriggerInput;
 
 #[td_error]
 pub enum WorkerRequestError {
@@ -333,8 +333,8 @@ pub async fn create_locked_function_runner_workers_start_request<T: WorkerMessag
                 // Build message payload
                 // TODO ADD get_states to states
                 let message_payload = RequestMessagePayload {
-                    class: WorkerClass::EPHEMERAL,
-                    worker: WorkerName::FUNCTION.as_ref().to_string(),
+                    class: WorkerClass::Ephemeral,
+                    worker: WorkerName::Function.as_ref().to_string(),
                     run_id: worker_id.to_string(),
                     action: MessageAction::Start,
                     arguments: Vec::new(),
@@ -441,8 +441,8 @@ pub async fn create_locked_cron_workers_start_request<T: WorkerMessageQueue>(
                 // Build message payload
                 // TODO ADD get_states to states
                 let message_payload = RequestMessagePayload {
-                    class: WorkerClass::EPHEMERAL,
-                    worker: WorkerName::CRON.as_ref().to_string(),
+                    class: WorkerClass::Ephemeral,
+                    worker: WorkerName::Cron.as_ref().to_string(),
                     run_id: worker_id.clone(),
                     action: MessageAction::Start,
                     arguments: Vec::new(),
@@ -496,8 +496,8 @@ pub async fn create_locked_cron_workers_stop_request<T: WorkerMessageQueue>(
 
                 // Build message payload
                 let message_payload = RequestMessagePayload::<serde_yaml::Value> {
-                    class: WorkerClass::EPHEMERAL,
-                    worker: WorkerName::CRON.as_ref().to_string(),
+                    class: WorkerClass::Ephemeral,
+                    worker: WorkerName::Cron.as_ref().to_string(),
                     run_id: worker_id,
                     action: MessageAction::Stop,
                     arguments: Vec::new(),
@@ -515,17 +515,17 @@ pub async fn create_locked_cron_workers_stop_request<T: WorkerMessageQueue>(
     Ok(())
 }
 
-pub async fn create_locked_watchdog_workers_start_request<T: WorkerMessageQueue>(
+pub async fn create_locked_stage_trigger_workers_start_request<T: WorkerMessageQueue>(
     SrvCtx(message_queue): SrvCtx<T>,
     SrvCtx(queries): SrvCtx<DaoQueries>,
     SrvCtx(storage): SrvCtx<Storage>,
     SrvCtx(server_addresses): SrvCtx<InternalServerAddresses>,
     Connection(connection): Connection,
-    Input(watchdog_workers): Input<Vec<WorkerDBWithNames>>,
+    Input(stage_trigger_workers): Input<Vec<WorkerDBWithNames>>,
 ) -> Result<(), TdError> {
-    let futures: Vec<_> = watchdog_workers
+    let futures: Vec<_> = stage_trigger_workers
         .iter()
-        .map(|watchdog_worker| {
+        .map(|stage_trigger_worker| {
             let message_queue = message_queue.clone();
             let queries = queries.clone();
             let connection = connection.clone();
@@ -536,7 +536,7 @@ pub async fn create_locked_watchdog_workers_start_request<T: WorkerMessageQueue>
                 let conn = conn.get_mut_connection()?;
 
                 // Worker id
-                let worker_id = watchdog_worker.id.to_string();
+                let worker_id = stage_trigger_worker.id.to_string();
 
                 // This is loopback address, because this endpoint is only available to the server.
                 let server_address = server_addresses.first();
@@ -555,7 +555,7 @@ pub async fn create_locked_watchdog_workers_start_request<T: WorkerMessageQueue>
                 let callback = Callback::Http(http_callback);
 
                 // Function version id
-                let function_version_id = watchdog_worker.function_version_id.to_string();
+                let function_version_id = stage_trigger_worker.function_version_id.to_string();
 
                 // Build fn_trigger request
                 let fn_trigger = HttpRequest {
@@ -598,7 +598,7 @@ pub async fn create_locked_watchdog_workers_start_request<T: WorkerMessageQueue>
 
                 // Build function location
                 let f: FunctionDB = queries
-                    .select_by::<FunctionDB>(&watchdog_worker.function_version_id)?
+                    .select_by::<FunctionDB>(&stage_trigger_worker.function_version_id)?
                     .build_query_as()
                     .fetch_one(&mut *conn)
                     .await
@@ -631,29 +631,29 @@ pub async fn create_locked_watchdog_workers_start_request<T: WorkerMessageQueue>
 
                 // Build info
                 // TODO Urls are wrong as of now
-                let info = watchdog::v1::Info {
-                    worker_id: watchdog_worker.id,
-                    collection_id: watchdog_worker.collection_id,
-                    collection: watchdog_worker.collection.clone(),
-                    function_version_id: watchdog_worker.function_version_id,
-                    function: watchdog_worker.function.clone(),
+                let info = stage_trigger::v1::Info {
+                    worker_id: stage_trigger_worker.id,
+                    collection_id: stage_trigger_worker.collection_id,
+                    collection: stage_trigger_worker.collection.clone(),
+                    function_version_id: stage_trigger_worker.function_version_id,
+                    function: stage_trigger_worker.function.clone(),
                     function_bundle,
                     function_stage,
                     scheduled_on: AtTime::now(),
                     fn_trigger,
                     fn_state,
-                    config: WorkerConfig::serialize(&watchdog_worker.worker_config)?,
+                    config: WorkerConfig::serialize(&stage_trigger_worker.worker_config)?,
                     fn_status,
                 };
                 // Build message context
-                let cron_input = WatchdogInput { info };
-                let context = WorkerInput::WatchdogV1(Box::new(cron_input));
+                let cron_input = StageTriggerInput { info };
+                let context = WorkerInput::StageTriggerV1(Box::new(cron_input));
 
                 // Build message payload
                 // TODO ADD get_states to states
                 let message_payload = RequestMessagePayload {
-                    class: WorkerClass::EPHEMERAL,
-                    worker: WorkerName::WATCHDOG.as_ref().to_string(),
+                    class: WorkerClass::Ephemeral,
+                    worker: WorkerName::StageTrigger.as_ref().to_string(),
                     run_id: worker_id.clone(),
                     action: MessageAction::Start,
                     arguments: Vec::new(),
@@ -671,14 +671,14 @@ pub async fn create_locked_watchdog_workers_start_request<T: WorkerMessageQueue>
     Ok(())
 }
 
-pub async fn create_locked_watchdog_workers_stop_request<T: WorkerMessageQueue>(
+pub async fn create_locked_stage_trigger_workers_stop_request<T: WorkerMessageQueue>(
     SrvCtx(message_queue): SrvCtx<T>,
     SrvCtx(server_addresses): SrvCtx<InternalServerAddresses>,
-    Input(watchdog_workers): Input<Vec<WorkerDBWithNames>>,
+    Input(stage_trigger_workers): Input<Vec<WorkerDBWithNames>>,
 ) -> Result<(), TdError> {
-    let futures: Vec<_> = watchdog_workers
+    let futures: Vec<_> = stage_trigger_workers
         .iter()
-        .map(|watchdog_worker| {
+        .map(|stage_trigger_worker| {
             let message_queue = message_queue.clone();
             let server_addresses = server_addresses.clone();
             async move {
@@ -686,7 +686,7 @@ pub async fn create_locked_watchdog_workers_stop_request<T: WorkerMessageQueue>(
                 let server_address = server_addresses.first();
 
                 // Worker id
-                let worker_id = watchdog_worker.id.to_string();
+                let worker_id = stage_trigger_worker.id.to_string();
 
                 // Build callback
                 let endpoint = UPDATE_WORKER.replace("{worker_id}", &worker_id);
@@ -711,8 +711,8 @@ pub async fn create_locked_watchdog_workers_stop_request<T: WorkerMessageQueue>(
 
                 // Build message payload
                 let message_payload = RequestMessagePayload::<serde_yaml::Value> {
-                    class: WorkerClass::EPHEMERAL,
-                    worker: WorkerName::WATCHDOG.as_ref().to_string(),
+                    class: WorkerClass::Ephemeral,
+                    worker: WorkerName::StageTrigger.as_ref().to_string(),
                     run_id: worker_id.clone(),
                     action: MessageAction::Stop,
                     arguments: Vec::new(),

@@ -10,11 +10,11 @@ use td_common::server::HttpRequest;
 
 #[td_type::Dto]
 #[derive(Eq, PartialEq)]
-pub struct WatchdogInput {
+pub struct StageTriggerInput {
     pub info: Info,
 }
 
-impl Locations for WatchdogInput {
+impl Locations for StageTriggerInput {
     fn locations(&self) -> Vec<&Location> {
         vec![&self.info.function_bundle]
     }
@@ -34,15 +34,15 @@ pub struct Info {
     pub fn_trigger: HttpRequest, // trigger of the function
     pub fn_state: HttpRequest,   // state of the function
     pub fn_status: HttpRequest,  // status of the execution plan (uses ep_id and f_version_id)
-    pub config: WorkerConfig,    // WatchdogConfig serialized
+    pub config: WorkerConfig,    // StageTriggerConfig serialized
 }
 
-pub type WatchdogOutput = ();
+pub type StageTriggerOutput = ();
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dxo::worker::WatchdogConfig;
+    use crate::dxo::worker::StageTriggerConfig;
     use crate::dxo::yaml::WorkerInput;
     use crate::types::basic::{CollectionName, FunctionName, WorkerConfig};
     use chrono::DateTime;
@@ -51,7 +51,7 @@ mod tests {
     use url::Url;
 
     #[test]
-    fn test_watchdog_input_ser_deser() {
+    fn test_stage_trigger_input_ser_deser() {
         let worker_id = WorkerId::default();
         let collection_id = CollectionId::default();
         let function_version_id = FunctionVersionId::default();
@@ -59,13 +59,13 @@ mod tests {
         let start = DateTime::default();
         let end = DateTime::default();
 
-        let cfg = WatchdogConfig {
+        let cfg = StageTriggerConfig {
             timeout_threshold_min: Default::default(),
             size_threshold: Default::default(),
             start: Some(start),
             end: Some(end),
         };
-        let input = WorkerInput::WatchdogV1(Box::new(WatchdogInput {
+        let input = WorkerInput::StageTriggerV1(Box::new(StageTriggerInput {
             info: Info {
                 worker_id,
                 collection_id,
@@ -114,7 +114,7 @@ mod tests {
         assert_eq!(
             serialized.as_str(),
             format!(
-                r#"!WatchdogV1
+                r#"!StageTriggerV1
 info:
   worker_id: {worker_id}
   collection_id: {collection_id}

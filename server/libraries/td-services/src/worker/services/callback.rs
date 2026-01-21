@@ -143,8 +143,8 @@ mod tests {
         let started_on = AtTime::now();
         let response = ResponseMessagePayloadBuilder::default()
             .id(worker.id.to_string())
-            .class(WorkerClass::EPHEMERAL)
-            .worker(WorkerName::CRON.as_ref().to_string())
+            .class(WorkerClass::Ephemeral)
+            .worker(WorkerName::Cron.as_ref().to_string())
             .action(MessageAction::Notify)
             .start(started_on.as_str_millis().parse().unwrap())
             .end(None)
@@ -187,8 +187,8 @@ mod tests {
         let ended_on = AtTime::now();
         let response = ResponseMessagePayloadBuilder::default()
             .id(worker.id.to_string())
-            .class(WorkerClass::EPHEMERAL)
-            .worker(WorkerName::CRON.as_ref().to_string())
+            .class(WorkerClass::Ephemeral)
+            .worker(WorkerName::Cron.as_ref().to_string())
             .action(MessageAction::Notify)
             .start(AtTime::now().as_str_millis().parse().unwrap()) // it wont get updated anyway
             .end(Some(ended_on.as_str_millis().parse().unwrap()))

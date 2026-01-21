@@ -325,8 +325,8 @@ impl From<WorkerCallbackStatus> for WorkerStatus {
 pub enum WorkerTypeDto {
     #[typed_enum(rename = "C")]
     Cron,
-    #[typed_enum(rename = "W")]
-    Watchdog,
+    #[typed_enum(rename = "ST")]
+    StageTrigger,
 }
 
 #[td_type::typed_enum]
@@ -335,6 +335,6 @@ pub enum WorkerType {
     FunctionRunner,
     #[typed_enum(rename = "C")]
     Cron,
-    #[typed_enum(rename = "W")]
-    Watchdog,
+    #[typed_enum(rename = "ST")]
+    StageTrigger,
 }

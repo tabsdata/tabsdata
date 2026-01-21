@@ -685,7 +685,7 @@ pub async fn stop_current_workers(
         let update = UpdateWorkerDB::stop_scheduled().await?;
         let to_stop = [
             (function_version_id, WorkerType::Cron),
-            (function_version_id, WorkerType::Watchdog),
+            (function_version_id, WorkerType::StageTrigger),
         ];
         let res = queries
             .update_all_by::<_, WorkerDB>(&update, &to_stop)?
@@ -720,7 +720,7 @@ pub async fn build_workers(
                 for (worker_type_dto, worker_config) in new {
                     let worker_type = match worker_type_dto {
                         WorkerTypeDto::Cron => WorkerType::Cron,
-                        WorkerTypeDto::Watchdog => WorkerType::Watchdog,
+                        WorkerTypeDto::StageTrigger => WorkerType::StageTrigger,
                     };
                     let worker_db = builder
                         .deref()
@@ -748,7 +748,7 @@ pub async fn build_workers(
 
         let to_recreate = [
             (function_version_id, WorkerType::Cron),
-            (function_version_id, WorkerType::Watchdog),
+            (function_version_id, WorkerType::StageTrigger),
         ];
         let current_workers: Vec<WorkerDB> = queries
             .find_by::<WorkerDB>(&to_recreate)?

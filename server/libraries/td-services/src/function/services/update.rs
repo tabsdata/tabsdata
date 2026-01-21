@@ -1748,7 +1748,7 @@ mod tests {
         // Then update to add a worker
         let update = FunctionUpdate::builder()
             .workers(Some(HashMap::from([(
-                WorkerTypeDto::Watchdog,
+                WorkerTypeDto::StageTrigger,
                 WorkerConfig::default(),
             )])))
             .build()?;
@@ -1781,7 +1781,7 @@ mod tests {
         assert_eq!(worker.started_on, None);
         assert_eq!(worker.ended_on, None);
         assert_eq!(worker.status, WorkerStatus::Scheduled);
-        assert_eq!(worker.worker_type, WorkerType::Watchdog);
+        assert_eq!(worker.worker_type, WorkerType::StageTrigger);
         assert_eq!(worker.worker_config, Some(WorkerConfig::default()));
 
         // Then update with None
@@ -1817,7 +1817,7 @@ mod tests {
         assert_eq!(worker.started_on, None);
         assert_eq!(worker.ended_on, None);
         assert_eq!(worker.status, WorkerStatus::StopScheduled);
-        assert_eq!(worker.worker_type, WorkerType::Watchdog);
+        assert_eq!(worker.worker_type, WorkerType::StageTrigger);
         assert_eq!(worker.worker_config, Some(WorkerConfig::default()));
 
         // updated_function_2 should still have the same worker, recreated
@@ -1838,7 +1838,7 @@ mod tests {
         assert_eq!(worker.started_on, None);
         assert_eq!(worker.ended_on, None);
         assert_eq!(worker.status, WorkerStatus::Scheduled);
-        assert_eq!(worker.worker_type, WorkerType::Watchdog);
+        assert_eq!(worker.worker_type, WorkerType::StageTrigger);
         assert_eq!(worker.worker_config, Some(WorkerConfig::default()));
 
         // Then change the workers
@@ -1879,7 +1879,7 @@ mod tests {
         assert_eq!(worker.started_on, None);
         assert_eq!(worker.ended_on, None);
         assert_eq!(worker.status, WorkerStatus::StopScheduled);
-        assert_eq!(worker.worker_type, WorkerType::Watchdog);
+        assert_eq!(worker.worker_type, WorkerType::StageTrigger);
         assert_eq!(worker.worker_config, Some(WorkerConfig::default()));
 
         // updated_function_3 should have a same worker
@@ -1985,7 +1985,7 @@ mod tests {
         let update = FunctionUpdate::builder()
             .workers(Some(HashMap::from([
                 (WorkerTypeDto::Cron, WorkerConfig::default()),
-                (WorkerTypeDto::Watchdog, WorkerConfig::default()),
+                (WorkerTypeDto::StageTrigger, WorkerConfig::default()),
             ])))
             .build()?;
         let request =
