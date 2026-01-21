@@ -12,7 +12,7 @@ import polars as pl
 
 # noinspection PyProtectedMember
 import tabsdata._utils.tableframe._generators as td_generators
-from tabsdata._io.watchdog import SourceListenerContext
+from tabsdata._io.stage_trigger import StageTriggerContext
 from tabsdata._table_actions.actions import OnTablesAction
 from tabsdata._tabsserver.function import environment_import_utils
 from tabsdata._tabsserver.function.logging_utils import pad_string
@@ -89,7 +89,7 @@ def execute_listener(
     fn_state = request.fn_state
     fn_status = request.fn_status
     fn_trigger = request.fn_trigger
-    listener_context = SourceListenerContext(fn_state, fn_status, fn_trigger)
+    listener_context = StageTriggerContext(fn_state, fn_status, fn_trigger)
     logger.debug(f"Listener context: {listener_context}")
     logger.debug(f"Calling the 'listen' method of the provided listener {listener}")
     result = listener.listen(listener_context)

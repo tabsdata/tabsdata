@@ -18,7 +18,7 @@ from tabsdata._crontab import Crontab
 from tabsdata._io.inputs.table_inputs import TableInput
 from tabsdata._io.outputs.table_outputs import TableOutput
 from tabsdata._io.plugin import DestinationPlugin, SourcePlugin
-from tabsdata._io.watchdog import WatchDog
+from tabsdata._io.stage_trigger import StageTrigger
 from tabsdata._table_actions._typing import OnTablesSpec
 from tabsdata._table_actions.actions import (
     OnTablesAction,
@@ -57,7 +57,7 @@ class TabsdataFunction:
         name: str | None,
         input: SourcePlugin = None,
         output: DestinationPlugin = None,
-        trigger_by: str | List[str] | None = None,
+        trigger_by: str | list[str] | Crontab | StageTrigger | None = None,
         # input_actions: OnTablesSpec = None,TODO: Uncomment this when reverting TD-1089
         output_actions: OnTablesSpec = None,
     ):
@@ -66,19 +66,19 @@ class TabsdataFunction:
         trigger.
 
         Args:
-            func (Callable): The function to decorate.
-            name (str): The name with which the function will
+            func: The function to decorate.
+            name: The name with which the function will
                 be registered. If None, the original_function name will be used.
-            input (SourcePlugin, optional): The data to be used when
+            input: The data to be used when
                 running the function. Must be an instance of SourcePlugin.
             output (DestinationPlugin, optional): The location where the
                 function results will be saved when run. Must be an instance of
                 DestinationPlugin.
-            trigger_by (str | List[str], optional): The trigger(s) that will cause the
+            trigger_by: The trigger(s) that will cause the
                 function to execute. It can be a table in the system, a list of
                 tables or None (in which case it will be inferred from the
                 dependencies).
-            output_actions (OnTablesSpec, optional): Actions to perform on the
+            output_actions: Actions to perform on the
                 output tables.
         Raises:
             FunctionConfigurationError
@@ -273,7 +273,7 @@ class TabsdataFunction:
             raise FunctionConfigurationError(ErrorCode.FCE6, type(name))
 
     @property
-    def trigger_by(self) -> list[str] | Crontab | WatchDog | None:
+    def trigger_by(self) -> list[str] | Crontab | StageTrigger | None:
         """
         List[str]: The trigger(s) that will cause the function to execute. It must be
             another table or tables in the system, a Crontab, or a Watchdog in the
@@ -282,12 +282,12 @@ class TabsdataFunction:
         return self._trigger_by
 
     @trigger_by.setter
-    def trigger_by(self, trigger_by: str | list[str] | Crontab | WatchDog | None):
+    def trigger_by(self, trigger_by: str | list[str] | Crontab | StageTrigger | None):
         """
         Sets the trigger(s) that will cause the function to execute
 
         Args:
-            trigger_by (str | list[str] | WatchDog | Crontab | None): The trigger(s)
+            trigger_by (str | list[str] | StageTrigger | Crontab | None): The trigger(s)
                 that will
                 cause the function to execute. It must be another table or tables in
                 the system, a Crontab, or a Watchdog in the case of a publisher. If
@@ -302,7 +302,7 @@ class TabsdataFunction:
             self._trigger_by = trigger_by
         elif isinstance(trigger_by, Crontab):
             self._trigger_by = trigger_by
-        elif isinstance(trigger_by, WatchDog):
+        elif isinstance(trigger_by, StageTrigger):
             self._trigger_by = trigger_by
         else:
             raise FunctionConfigurationError(ErrorCode.FCE2, type(trigger_by))
@@ -367,10 +367,10 @@ class TabsdataFunction:
             and self.trigger_by
         ):
             if isinstance(self.input, TableInput) and isinstance(
-                self.trigger_by, WatchDog
+                self.trigger_by, StageTrigger
             ):
                 raise FunctionConfigurationError(ErrorCode.FCE13)
-            if isinstance(self.trigger_by, WatchDog):
+            if isinstance(self.trigger_by, StageTrigger):
                 if not self.input.allows_listener:
                     raise FunctionConfigurationError(
                         ErrorCode.FCE14, self.input.__class__.__name__

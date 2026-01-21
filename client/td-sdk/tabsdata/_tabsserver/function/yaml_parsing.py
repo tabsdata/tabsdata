@@ -12,7 +12,7 @@ from dataclasses import dataclass
 import yaml
 
 from tabsdata._format import CSVFormat
-from tabsdata._io.watchdog import CallConfig
+from tabsdata._io.stage_trigger import CallConfig
 
 logger = logging.getLogger(__name__)
 

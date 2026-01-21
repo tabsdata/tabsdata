@@ -6,7 +6,7 @@ import os
 import pathlib
 import platform
 
-from tabsdata._io.watchdog import CallConfig
+from tabsdata._io.stage_trigger import CallConfig
 from tabsdata._tabsserver.function.yaml_parsing import (
     DataListenerYaml,
     FunctionV2,

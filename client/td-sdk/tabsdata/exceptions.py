@@ -2135,36 +2135,22 @@ class ErrorCode(Enum):
         "code": "TUCE-015",
         "message": "A TableURI object must have a valid 'table' parameter.",
     }
-    WCE1 = {
-        "code": "WCE-001",
-        "message": (
-            "The 'timeout_mins' parameter of a Watchdog object must be a "
-            "positive integer or None; got '{}' of type {} instead."
-        ),
-    }
-    WCE2 = {
-        "code": "WCE-002",
-        "message": (
-            "The 'size' parameter of a Watchdog object must be a positive "
-            "integer or None; got '{}' of type {} instead."
-        ),
-    }
-    WCE3 = {
-        "code": "WCE-003",
+    STE1 = {
+        "code": "STE-001",
         "message": (
             "The 'start' parameter of a Watchdog object must be a datetime object "
             "or None; got '{}' of type {} instead."
         ),
     }
-    WCE4 = {
-        "code": "WCE-004",
+    STE2 = {
+        "code": "STE-002",
         "message": (
             "The 'end' parameter of a Watchdog object must be a datetime object "
             "or None; got '{}' of type {} instead."
         ),
     }
-    WCE5 = {
-        "code": "WCE-005",
+    STE3 = {
+        "code": "STE-003",
         "message": (
             "The 'start' parameter of a Watchdog object must be earlier than the 'end' "
             "parameter. Got start='{}' and end='{}'."
@@ -2495,13 +2481,13 @@ class TableURIConfigurationError(TabsDataException):
     CODE_PREFIX = "TUCE"
 
 
-class WatchDogConfigurationError(TabsDataException):
+class StageTriggerConfigurationError(TabsDataException):
     """
     Exception raised when the creation or modification of a Watchdog object or one of
     its auxiliary objects fails.
     """
 
-    CODE_PREFIX = "WCE"
+    CODE_PREFIX = "STE"
 
 
 class ConstructorError(TabsDataException):

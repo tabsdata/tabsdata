@@ -3,54 +3,44 @@
 #
 
 import tabsdata as td
-from tabsdata._io.watchdog import SourceListener, SourceListenerContext, WatchDog
-
-# In this example, we are obtaining the data from two tables in the database.
-# INVOICE_HEADER contains the following data:
-# [{"id":1,"name":"Arvind"},{"id":2,"name":"Tucu"},{"id":3,"name":"Dimas"},
-# {"id":4,"name":"Joaquin"},{"id":5,"name":"Jennifer"},{"id":6,"name":"Aleix"}]
-# INVOICE_ITEM contains the following data:
-# [{"id":1,"name":"Leonardo"},{"id":2,"name":"Donatello"},{"id":3,
-# "name":"Michelangelo"},{"id":4,"name":"Raphael"},{"id":5,"name":"Splinter"}]
+from tabsdata import SourcePlugin
+from tabsdata._io.stage_trigger import (
+    StageTrigger,
+    StageTriggerContext,
+    StageTriggerStatus,
+)
 
 
-class FakeSourcePlugin(td.SourcePlugin):
+class MyStageTrigger(StageTrigger):
+
+    def run(self, ctx: StageTriggerContext) -> StageTriggerStatus:
+        pass
+
+    def _to_dict(self) -> dict:
+        return super()._to_dict()
+
+
+class MyStageTriggerPlugin(SourcePlugin):
+
     def __init__(self):
         pass
 
-    def allows_listener(self) -> bool:
-        return True
-
     @property
-    def listener(self) -> SourceListener:
-        return SampleWatchdogRunner(self._injected_watchdog)
-
-
-class SampleWatchdogRunner(SourceListener):
-
-    def __init__(self, watchdog: WatchDog):
-        super().__init__(watchdog)
-
-    def listen(self, ctx: SourceListenerContext):
-        assert isinstance(ctx, SourceListenerContext)
-        assert ctx.trigger_config.url
-        assert ctx.state_config.url
-        assert ctx.status_config.url
+    def allows_listener(self) -> bool:
         return True
 
 
 def testing_tabsdata_function():
 
     @td.publisher(
-        trigger_by=WatchDog(),
+        source=MyStageTriggerPlugin(),
+        tables=["output1", "output2"],
         name="test_input_watchdog",
-        source=FakeSourcePlugin(),
-        tables=["output1", "output2"],  # required,
+        trigger_by=MyStageTrigger(),
     )
     def input_watchdog(
         headers: td.TableFrame, items: td.TableFrame
-    ) -> (td.TableFrame, td.TableFrame):
-        # transformations can be done here
+    ) -> tuple[td.TableFrame, td.TableFrame]:
         return headers, items
 
     return input_watchdog

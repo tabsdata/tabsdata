@@ -13,7 +13,7 @@ from tabsdata import (
 )
 from tabsdata._crontab import Crontab
 from tabsdata._decorators import ALL_DEPS, publisher, subscriber, transformer
-from tabsdata._io.watchdog import WatchDog
+from tabsdata._io.stage_trigger import StageTrigger
 from tabsdata.exceptions import (
     DecoratorConfigurationError,
     ErrorCode,
@@ -22,6 +22,7 @@ from tabsdata.exceptions import (
 
 # noinspection PyUnresolvedReferences
 from . import pytestmark  # noqa: F401
+from .test_io.test_stage_trigger import MyStageTrigger
 
 
 def test_transformer_wrong_data_type_raises_exception():
@@ -325,7 +326,7 @@ def test_publisher_with_crontab_trigger():
 
 
 def test_subscriber_with_watchdog_trigger_raises_error():
-    watchdog = WatchDog()
+    watchdog = MyStageTrigger()
 
     with pytest.raises(FunctionConfigurationError) as e:
 
@@ -342,7 +343,7 @@ def test_subscriber_with_watchdog_trigger_raises_error():
 
 
 def test_transformer_with_watchdog_trigger_raises_error():
-    watchdog = WatchDog()
+    watchdog = MyStageTrigger()
 
     with pytest.raises(FunctionConfigurationError) as e:
 
@@ -359,7 +360,7 @@ def test_transformer_with_watchdog_trigger_raises_error():
 
 
 def test_publisher_with_watchdog_trigger():
-    watchdog = WatchDog()
+    watchdog = MyStageTrigger()
 
     class ValidWatchDogPlugin(SourcePlugin):
 
@@ -384,7 +385,7 @@ def test_publisher_with_watchdog_trigger():
 
 
 def test_publisher_with_watchdog_trigger_not_allowed_raises_error():
-    watchdog = WatchDog()
+    watchdog = MyStageTrigger()
 
     class InvalidWatchDogPlugin(SourcePlugin):
 
