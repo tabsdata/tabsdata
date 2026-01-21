@@ -2271,7 +2271,11 @@ class Table:
     """
 
     def __init__(
-        self, connection: APIServer, collection_name: str | Collection, name: str, **kwargs
+        self,
+        connection: APIServer,
+        collection_name: str | Collection,
+        name: str,
+        **kwargs,
     ):
         self.connection = connection
         self.collection = collection_name

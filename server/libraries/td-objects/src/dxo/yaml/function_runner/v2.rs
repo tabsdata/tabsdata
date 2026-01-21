@@ -261,7 +261,7 @@ mod tests {
                 collection: CollectionName::try_from("collection").unwrap(),
                 function_version_id,
                 function: FunctionName::try_from("function").unwrap(),
-                function_defined_on: defined_on.clone(),
+                function_defined_on: defined_on,
                 function_run_id,
                 function_bundle: Location {
                     uri: Url::try_from("file:///bundle").unwrap(),
