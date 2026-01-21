@@ -116,6 +116,14 @@ pub trait SqlSelectService<E> {
     where
         D: DataAccessObject;
 
+    async fn select_optional<D>(
+        connection: Connection,
+        queries: SrvCtx<DaoQueries>,
+        by: Input<E>,
+    ) -> Result<Option<D>, TdError>
+    where
+        D: DataAccessObject;
+
     async fn select_version<const S: u8, D>(
         connection: Connection,
         queries: SrvCtx<DaoQueries>,
@@ -156,6 +164,33 @@ where
             .select_by::<D>(by)?
             .build_query_as()
             .fetch_one(&mut *conn)
+            .await
+            .map_err(|e| {
+                formatted_entity::<D, _>(by).and_then(|(columns, values, table)| {
+                    Err(SqlError::SelectError(columns, values, table, e))?
+                })
+            })
+            .map_err(|e| e.unwrap_or_else(|e| e))?;
+
+        Ok(result)
+    }
+
+    async fn select_optional<D>(
+        Connection(connection): Connection,
+        SrvCtx(queries): SrvCtx<DaoQueries>,
+        Input(by): Input<E>,
+    ) -> Result<Option<D>, TdError>
+    where
+        D: DataAccessObject,
+    {
+        let mut conn = connection.lock().await;
+        let conn = conn.get_mut_connection()?;
+
+        let by = by.deref();
+        let result = queries
+            .select_by::<D>(by)?
+            .build_query_as()
+            .fetch_optional(&mut *conn)
             .await
             .map_err(|e| {
                 formatted_entity::<D, _>(by).and_then(|(columns, values, table)| {
