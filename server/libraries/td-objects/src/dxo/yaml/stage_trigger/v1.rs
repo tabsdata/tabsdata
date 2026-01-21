@@ -27,6 +27,7 @@ pub struct Info {
     pub collection_id: CollectionId,
     pub collection: CollectionName,
     pub function_version_id: FunctionVersionId,
+    pub function_defined_on: AtTime,
     pub function: FunctionName,
     pub function_bundle: Location,
     pub function_stage: Location,
@@ -58,6 +59,7 @@ mod tests {
         let scheduled_on = AtTime::default();
         let start = DateTime::default();
         let end = DateTime::default();
+        let defined_on = AtTime::default();
 
         let cfg = StageTriggerConfig {
             timeout_threshold_min: Default::default(),
@@ -72,6 +74,7 @@ mod tests {
                 collection: CollectionName::try_from("collection").unwrap(),
                 function_version_id,
                 function: FunctionName::try_from("function").unwrap(),
+                function_defined_on: defined_on.clone(),
                 function_bundle: Location {
                     uri: Url::try_from("file:///bundle").unwrap(),
                     env_prefix: None,
@@ -111,6 +114,9 @@ mod tests {
         let scheduled_on = scheduled_on.as_str_millis();
         let start = serde_json::to_string(&start).unwrap();
         let end = serde_json::to_string(&end).unwrap();
+
+        let defined_on = serde_json::to_string(&defined_on).unwrap();
+
         assert_eq!(
             serialized.as_str(),
             format!(
@@ -120,6 +126,7 @@ info:
   collection_id: {collection_id}
   collection: collection
   function_version_id: {function_version_id}
+  function_defined_on: {defined_on}
   function: function
   function_bundle:
     uri: file:///bundle

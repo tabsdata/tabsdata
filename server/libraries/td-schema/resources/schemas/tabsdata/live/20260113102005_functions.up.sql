@@ -36,7 +36,8 @@ WITH
 SELECT f.*,
        fv.data_location,
        fv.storage_version,
-       fv.bundle_id
+       fv.bundle_id,
+       fv.defined_on
 FROM function_runs__with_names f
          JOIN functions fv ON f.function_version_id = fv.id
 -- We want to exclude runs that have pending requirements.

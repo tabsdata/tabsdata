@@ -40,6 +40,7 @@ pub struct FunctionInfo {
     pub collection_id: CollectionId,
     pub collection: CollectionName,
     pub function_version_id: FunctionVersionId,
+    pub function_defined_on: AtTime,
     pub function: FunctionName,
     pub function_run_id: FunctionRunId,
     pub function_bundle: Location,
@@ -252,6 +253,7 @@ mod tests {
         let transaction_id = TransactionId::default();
         let execution_id = ExecutionId::default();
         let scheduled_on = AtTime::default();
+        let defined_on = AtTime::default();
 
         let input = WorkerInput::FunctionV2(Box::new(FunctionInput {
             info: FunctionInfo {
@@ -259,6 +261,7 @@ mod tests {
                 collection: CollectionName::try_from("collection").unwrap(),
                 function_version_id,
                 function: FunctionName::try_from("function").unwrap(),
+                function_defined_on: defined_on.clone(),
                 function_run_id,
                 function_bundle: Location {
                     uri: Url::try_from("file:///bundle").unwrap(),
@@ -342,6 +345,9 @@ mod tests {
 
         let triggered_on = triggered_on.as_str_millis();
         let scheduled_on = scheduled_on.as_str_millis();
+
+        let defined_on = serde_json::to_string(&defined_on).unwrap();
+
         assert_eq!(
             serialized.as_str(),
             format!(
@@ -350,6 +356,7 @@ info:
   collection_id: {collection_id}
   collection: collection
   function_version_id: {function_version_id}
+  function_defined_on: {defined_on}
   function: function
   function_run_id: {function_run_id}
   function_bundle:
@@ -776,6 +783,7 @@ output:
             .collection_id(CollectionId::default())
             .collection(CollectionName::try_from("cn")?)
             .function_version_id(FunctionVersionId::default())
+            .function_defined_on(AtTime::default())
             .function(FunctionName::try_from("fn")?)
             .function_run_id(FunctionRunId::default())
             .function_bundle(locations[8].clone())

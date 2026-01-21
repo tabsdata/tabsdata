@@ -88,3 +88,20 @@ FROM function_runs f
       HAVING COUNT(CASE WHEN fr.status IN ('D') THEN 1 END) = COUNT(fr.status)
          AND COUNT(CASE WHEN req.status IN ('D', 'C') THEN 1 END) = COUNT(req.status)) t
      ON f.transaction_id = t.transaction_id;
+
+
+DROP VIEW function_runs__to_execute;
+CREATE VIEW function_runs__to_execute AS
+WITH
+    runs_with_pending_reqs AS (SELECT DISTINCT function_run_id
+                               FROM function_requirements__with_status
+                               WHERE status NOT IN ('D', 'C'))
+SELECT f.*,
+       fv.data_location,
+       fv.storage_version,
+       fv.bundle_id
+FROM function_runs__with_names f
+         JOIN functions fv ON f.function_version_id = fv.id
+         LEFT JOIN runs_with_pending_reqs p ON f.id = p.function_run_id
+WHERE f.status IN ('S', 'RS')
+  AND p.function_run_id IS NULL;

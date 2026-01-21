@@ -66,6 +66,7 @@ mod definitions {
         pub data_location: DataLocation,
         pub storage_version: StorageVersion,
         pub bundle_id: BundleId,
+        pub defined_on: AtTime,
     }
 
     #[td_type::Dao]

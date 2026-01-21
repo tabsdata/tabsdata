@@ -5,7 +5,8 @@
 use crate::scheduler::layers::request::{
     create_locked_cron_workers_start_request, create_locked_cron_workers_stop_request,
     create_locked_function_runner_workers_start_request,
-    create_locked_stage_trigger_workers_start_request, create_locked_stage_trigger_workers_stop_request,
+    create_locked_stage_trigger_workers_start_request,
+    create_locked_stage_trigger_workers_stop_request,
 };
 use ta_services::factory::service_factory;
 use td_common::server::{FileWorkerMessageQueue, WorkerMessageQueue};
@@ -251,7 +252,9 @@ mod tests {
                 type_of_val(
                     &By::<(Enabled, WorkerType, WorkerStatus)>::select_all::<WorkerDBWithNames>,
                 ),
-                type_of_val(&create_locked_stage_trigger_workers_stop_request::<FileWorkerMessageQueue>),
+                type_of_val(
+                    &create_locked_stage_trigger_workers_stop_request::<FileWorkerMessageQueue>,
+                ),
                 // Update statuses.
                 type_of_val(&With::<WorkerDBWithNames>::extract_vec::<WorkerId>),
                 type_of_val(&UpdateWorkerDB::stop_requested),

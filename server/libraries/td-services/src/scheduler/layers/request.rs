@@ -25,6 +25,7 @@ use td_objects::dxo::yaml::function_runner::v2::{
     FunctionInfo, FunctionInput, InputTable, InputTableVersion, OutputTable, OutputTableVersion,
 };
 use td_objects::dxo::yaml::location::Location;
+use td_objects::dxo::yaml::stage_trigger::v1::StageTriggerInput;
 use td_objects::dxo::yaml::{WorkerInput, cron, stage_trigger};
 use td_objects::rest_urls::BASE_URL;
 use td_objects::rest_urls::internal::{
@@ -42,7 +43,6 @@ use td_storage::Storage;
 use td_storage::location::StorageLocation;
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
 use url::Url;
-use td_objects::dxo::yaml::stage_trigger::v1::StageTriggerInput;
 
 #[td_error]
 pub enum WorkerRequestError {
@@ -144,6 +144,7 @@ pub async fn create_locked_function_runner_workers_start_request<T: WorkerMessag
                     .collection_id(f.collection_id)
                     .collection(f.collection.clone())
                     .function_version_id(f.function_version_id)
+                    .function_defined_on(f.defined_on)
                     .function(f.name.clone())
                     .function_run_id(f.id)
                     .function_bundle(bundle_location)
@@ -637,6 +638,7 @@ pub async fn create_locked_stage_trigger_workers_start_request<T: WorkerMessageQ
                     collection: stage_trigger_worker.collection.clone(),
                     function_version_id: stage_trigger_worker.function_version_id,
                     function: stage_trigger_worker.function.clone(),
+                    function_defined_on: f.defined_on,
                     function_bundle,
                     function_stage,
                     scheduled_on: AtTime::now(),

@@ -73,12 +73,17 @@ mod definitions {
             Ok((Enabled::TRUE, WorkerType::Cron, WorkerStatus::StopScheduled))
         }
 
-        pub async fn stage_trigger_to_schedule() -> Result<(Enabled, WorkerType, WorkerStatus), TdError>
-        {
-            Ok((Enabled::TRUE, WorkerType::StageTrigger, WorkerStatus::Scheduled))
+        pub async fn stage_trigger_to_schedule()
+        -> Result<(Enabled, WorkerType, WorkerStatus), TdError> {
+            Ok((
+                Enabled::TRUE,
+                WorkerType::StageTrigger,
+                WorkerStatus::Scheduled,
+            ))
         }
 
-        pub async fn stage_trigger_to_stop() -> Result<(Enabled, WorkerType, WorkerStatus), TdError> {
+        pub async fn stage_trigger_to_stop() -> Result<(Enabled, WorkerType, WorkerStatus), TdError>
+        {
             Ok((
                 Enabled::TRUE,
                 WorkerType::StageTrigger,
