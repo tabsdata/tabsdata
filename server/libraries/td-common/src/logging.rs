@@ -1247,7 +1247,7 @@ mod sink_tests {
 
     #[test]
     fn keeps_absolute_sink_path() {
-        let absolute = Path::new("/var/log/sql.log");
+        let absolute = std::env::temp_dir().join("sql.log");
         let resolved = resolve_sink_path(absolute.to_str().unwrap(), None).unwrap();
         assert_eq!(resolved, absolute);
     }
