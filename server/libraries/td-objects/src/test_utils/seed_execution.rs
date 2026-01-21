@@ -9,6 +9,18 @@ use crate::types::basic::{ExecutionName, TriggerType, TriggeredOn, UserId};
 use td_database::sql::DbPool;
 
 pub async fn seed_execution(db: &DbPool, function_version: &FunctionDB) -> ExecutionDB {
+    _seed_execution(db, function_version, TriggerType::Manual).await
+}
+
+pub async fn seed_cron_execution(db: &DbPool, function_version: &FunctionDB) -> ExecutionDB {
+    _seed_execution(db, function_version, TriggerType::Cron).await
+}
+
+async fn _seed_execution(
+    db: &DbPool,
+    function_version: &FunctionDB,
+    trigger_type: TriggerType,
+) -> ExecutionDB {
     let execution_db = ExecutionDB::builder()
         .name(ExecutionName::try_from("test_execution").unwrap())
         .collection_id(function_version.collection_id)
@@ -17,7 +29,7 @@ pub async fn seed_execution(db: &DbPool, function_version: &FunctionDB) -> Execu
         .triggered_on(TriggeredOn::now())
         .triggered_by_id(UserId::admin())
         .recursion_options(None)
-        .trigger_type(TriggerType::Manual)
+        .trigger_type(trigger_type)
         .build()
         .unwrap();
 

@@ -38,15 +38,6 @@ pub async fn trigger_type_manual() -> Result<TriggerType, TdError> {
     Ok(TriggerType::Manual)
 }
 
-pub async fn trigger_type_cron() -> Result<TriggerType, TdError> {
-    Ok(TriggerType::Cron)
-}
-
-// pub async fn trigger_type_data_listener(
-// ) -> Result<TriggerType, TdError> {
-//     Ok(TriggerType::DataListener)
-// }
-
 pub async fn assert_function_status(
     Input(function): Input<FunctionDBWithNames>,
 ) -> Result<(), TdError> {
@@ -513,6 +504,7 @@ pub async fn build_response(
         id: execution.id,
         name: execution.name.clone(),
         triggered_on: execution.triggered_on,
+        trigger_type: execution.trigger_type.clone(),
         transactions,
         dot,
         all_functions,

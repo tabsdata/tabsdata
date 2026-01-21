@@ -16,7 +16,7 @@ mod routes {
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::dxo::execution::{ExecutionRequest, ExecutionResponse};
+    use td_objects::dxo::execution::{ExecutionRequestInternal, ExecutionResponseInternal};
     use td_objects::dxo::file::ParquetFile;
     use td_objects::dxo::function_run::FunctionRun;
     use td_objects::dxo::worker::CallbackRequest;
@@ -68,8 +68,8 @@ mod routes {
         State(state): State<Arc<ExecutionServices>>,
         Extension(context): Extension<RequestContext>,
         Path(function_param): Path<FunctionVersionIdParam>,
-        Json(request): Json<ExecutionRequest>,
-    ) -> Result<CreateStatus<ExecutionResponse>, ErrorStatus> {
+        Json(request): Json<ExecutionRequestInternal>,
+    ) -> Result<CreateStatus<ExecutionResponseInternal>, ErrorStatus> {
         let request = context.create(function_param, request);
         let response = state
             .execute_version

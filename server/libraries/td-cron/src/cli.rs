@@ -12,10 +12,10 @@ use td_common::logging;
 use td_common::server::{REQUEST_FILE, WORKER_PID_FILE};
 use td_common::server_runner::ServerRunner;
 use td_common::status::ExitStatus;
-use td_objects::dxo::execution::ExecutionRequest;
+use td_objects::dxo::execution::ExecutionRequestInternal;
 use td_objects::dxo::worker::CronConfig;
 use td_objects::dxo::yaml::WorkerInput;
-use td_objects::types::basic::ExecutionName;
+use td_objects::types::basic::{ExecutionName, FunctionOnly, SkipIfRunning, TriggerType};
 use td_process::launcher::cli::{Cli, NoConfig};
 use td_process::launcher::params::ArgumentParameters;
 use tracing::{Level, error};
@@ -74,9 +74,11 @@ pub fn run() {
             let execution_name = format!("by cron mask '{}'", mask);
 
             let execution_request = ExecutionName::try_from(execution_name)
-                .map(|name| ExecutionRequest {
+                .map(|name| ExecutionRequestInternal {
                     name: Some(name),
-                    function_only: Default::default(),
+                    function_only: FunctionOnly::FALSE,
+                    skip_if_running: SkipIfRunning::FALSE,
+                    trigger_type: TriggerType::Cron,
                 })
                 .map(|r| serde_json::to_string_pretty(&r).unwrap_or_default())
                 .unwrap_or_default();

@@ -52,6 +52,9 @@ pub struct ReuseFrozen;
 pub struct SelfDependency;
 
 #[td_type::typed(bool)]
+pub struct SkipIfRunning;
+
+#[td_type::typed(bool)]
 pub struct SysAdmin;
 
 #[td_type::typed(bool)]

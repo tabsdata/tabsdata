@@ -11,8 +11,8 @@ mod definitions {
     use crate::types::basic::{
         AtTime, CollectionId, CollectionName, Dot, Enabled, ExecutionId, ExecutionName,
         ExecutionStatus, FunctionId, FunctionName, FunctionOnly, FunctionRunStatus,
-        FunctionVersionId, StatusCount, System, TableDataVersionId, TableName, TableVersionId,
-        TransactionId, TriggerType, TriggeredOn, UserId, UserName,
+        FunctionVersionId, SkipIfRunning, StatusCount, System, TableDataVersionId, TableName,
+        TableVersionId, TransactionId, TriggerType, TriggeredOn, UserId, UserName,
     };
     use crate::types::composed::TableVersions;
     use crate::types::graph::GraphEdge;
@@ -28,6 +28,30 @@ mod definitions {
         #[serde(default)]
         #[td_type(extractor)]
         pub function_only: FunctionOnly,
+    }
+
+    impl From<&ExecutionRequestInternal> for ExecutionRequest {
+        fn from(value: &ExecutionRequestInternal) -> Self {
+            ExecutionRequest {
+                name: value.name.clone(),
+                function_only: value.function_only,
+            }
+        }
+    }
+
+    #[td_type::Dto]
+    pub struct ExecutionRequestInternal {
+        pub name: Option<ExecutionName>,
+        #[builder(default)]
+        #[serde(default)]
+        #[td_type(extractor)]
+        pub function_only: FunctionOnly,
+        #[builder(default)]
+        #[serde(default)]
+        #[td_type(extractor)]
+        pub skip_if_running: SkipIfRunning,
+        #[td_type(extractor)]
+        pub trigger_type: TriggerType,
     }
 
     #[td_type::Dao]
@@ -178,6 +202,7 @@ mod definitions {
         pub id: ExecutionId,
         pub name: Option<ExecutionName>,
         pub triggered_on: TriggeredOn,
+        pub trigger_type: TriggerType,
         pub dot: Dot,
         // functions info
         pub all_functions: HashMap<FunctionVersionId, FunctionNodeResponse>,
@@ -197,5 +222,11 @@ mod definitions {
             GraphEdge<ResolvedVersionResponse>,
         )>,
         pub relations_info: HashMap<TableDataVersionId, ExecutionTableDataVersionRead>,
+    }
+
+    #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+    pub enum ExecutionResponseInternal {
+        Executed(Box<ExecutionResponse>),
+        AlreadyRunning(ExecutionId),
     }
 }
