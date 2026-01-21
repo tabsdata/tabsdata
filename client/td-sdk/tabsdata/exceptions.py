@@ -2313,6 +2313,10 @@ class ErrorCode(Enum):
         "code": "PVSOC-010",
         "message": None,
     }
+    PVSOC11 = {
+        "code": "PVSOC-011",
+        "message": None,
+    }
 
     def code(self) -> str:
         if type(self.value) is dict:

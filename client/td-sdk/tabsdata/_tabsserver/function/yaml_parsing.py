@@ -221,8 +221,28 @@ class FunctionYaml(ABC):
 
     @property
     @abstractmethod
+    def function_defined_on(self) -> str:
+        """Return the time the function was registered or updated."""
+
+    @property
+    @abstractmethod
     def function_run_id(self) -> str:
         """Return the function run ID of the request."""
+
+    @property
+    @abstractmethod
+    def function_stage(self) -> Location:
+        """Return the function staging information."""
+
+    @property
+    @abstractmethod
+    def function_stage_env_prefix(self) -> str:
+        """Return the function stage env prefix."""
+
+    @property
+    @abstractmethod
+    def function_stage_uri(self) -> str:
+        """Return the function stage URI."""
 
     @property
     @abstractmethod
@@ -329,8 +349,24 @@ class FunctionV2(FunctionYaml):
         return self.function_data.uri if self.function_data else None
 
     @property
+    def function_defined_on(self) -> str:
+        return self.info.get("function_defined_on") if self.info else None
+
+    @property
     def function_run_id(self) -> str:
         return self.info["function_run_id"]
+
+    @property
+    def function_stage(self) -> Location:
+        return Location(self.info.get("function_stage")) if self.info else None
+
+    @property
+    def function_stage_env_prefix(self) -> str:
+        return self.function_stage.env_prefix if self.function_stage else None
+
+    @property
+    def function_stage_uri(self) -> str:
+        return self.function_stage.uri if self.function_stage else None
 
     @property
     def function_version_id(self) -> str:

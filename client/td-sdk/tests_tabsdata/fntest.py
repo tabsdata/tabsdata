@@ -29,6 +29,7 @@ from tabsdata import (
 from tabsdata._tabsserver import invoker
 from tabsdata._tabsserver.function.global_utils import (
     DEFAULT_DEVELOPMENT_LOCKS_LOCATION,
+    convert_path_to_uri,
 )
 from tabsdata._tabsserver.function.response_utils import RESPONSE_FILE_NAME
 from tabsdata._tabsserver.function.yaml_parsing import (
@@ -317,7 +318,7 @@ class FnRun:
         self._status = status
         self._output_initial_values = output_initial_values
 
-    def check(self):
+    def check(self, require_output=True):
         if self._status != 0:
             raise FnError(f"Status is not 0: '{self._status}'", self)
 
@@ -332,9 +333,12 @@ class FnRun:
                 f"Response file does not exist: '{self._response.path}'", self
             )
 
-        for output_file in self._output:
-            if not output_file.path.exists():
-                raise FnError(f"Output file does not exist: '{output_file.path}'", self)
+        if require_output:
+            for output_file in self._output:
+                if not output_file.path.exists():
+                    raise FnError(
+                        f"Output file does not exist: '{output_file.path}'", self
+                    )
 
         if self._output_initial_values and not self._offset.exists():
             raise FnError(f"Offset file does not exist: '{self._offset}'", self)
@@ -503,6 +507,9 @@ def tdfnrun(
     input_tables: MockTableFrameSpec = None,
     input_initial_values: MockTableFrame = None,
     output_initial_values: bool = False,
+    staged_files: MockTableFrameSpec = None,
+    function_defined_on: float = None,
+    require_output: bool = True,
 ) -> FnRun:
     tdtest = Path(tempfile.gettempdir()) / FunctionConstants.TEMP_ROOT.value
     os.makedirs(tdtest, exist_ok=True)
@@ -555,6 +562,11 @@ def tdfnrun(
             ),
             save_location=bundle_folder,
         )
+
+        staging_folder = fn_root / "staging"
+        os.makedirs(staging_folder, exist_ok=True)
+        save_tables(staged_files, staging_folder)
+        staging_uri = staging_folder.as_uri()
 
         request_folder = fn_root / FunctionConstants.REQUEST_FOLDER_NAME.value
         os.makedirs(request_folder, exist_ok=True)
@@ -609,6 +621,8 @@ def tdfnrun(
                 None if output_initial_values is None else str(output_offset_file)
             ),
             function_data_path=str(data_folder),
+            staging_uri=staging_uri,
+            function_defined_on=function_defined_on,
         )
 
         assert request_file.exists()
@@ -638,5 +652,5 @@ def tdfnrun(
             output_initial_values=output_initial_values,
         )
 
-        fnrun.check()
+        fnrun.check(require_output=require_output)
         return fnrun

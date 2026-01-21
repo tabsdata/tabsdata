@@ -17,6 +17,7 @@ from tabsdata._tabsserver.function.yaml_parsing import (
 )
 from tests_tabsdata.conftest import (
     FAKE_EXECUTION_ID,
+    FAKE_FUNCTION_DEFINED_ON,
     FAKE_FUNCTION_RUN_ID,
     FAKE_SCHEDULED_TIME,
     FAKE_TRANSACTION_ID,
@@ -186,6 +187,7 @@ def test_parse_minimal_input_yaml(tmp_path):
         tmp_yaml_file,
         context_file,
         function_data_path=function_data_folder,
+        function_defined_on=FAKE_FUNCTION_DEFINED_ON,
     )
     config = parse_request_yaml(tmp_yaml_file)
     assert isinstance(config, FunctionV2)
@@ -205,6 +207,7 @@ def test_parse_minimal_input_yaml(tmp_path):
         "scheduled_on": FAKE_SCHEDULED_TIME,
         "transaction_id": FAKE_TRANSACTION_ID,
         "triggered_on": FAKE_TRIGGERED_TIME,
+        "function_defined_on": FAKE_FUNCTION_DEFINED_ON,
     }
     assert config.function_bundle == Location(
         {

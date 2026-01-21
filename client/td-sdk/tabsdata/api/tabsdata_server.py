@@ -10,7 +10,7 @@ import json
 import os
 import sys
 import tempfile
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Generator, List, cast
 
@@ -24,6 +24,7 @@ from tabsdata._io.outputs.table_outputs import TableOutput
 from tabsdata._io.stage_trigger import StageTrigger
 from tabsdata._tdfunction import TabsdataFunction
 from tabsdata._utils.bundle_utils import create_bundle_archive
+from tabsdata._utils.datetime import _convert_timestamp_to_string
 from tabsdata._utils.temps import tabsdata_temp_folder
 from tabsdata.api.apiserver import APIServer, obtain_connection
 from tabsdata.api.status_utils.data_version import data_version_status_to_mapping
@@ -4569,14 +4570,6 @@ class TabsdataServer:
                 built_worker = Worker(self.connection, **raw_worker)
                 yield built_worker
             first_page = False
-
-
-def _convert_timestamp_to_string(timestamp: int | None) -> str:
-    if not timestamp:
-        return str(timestamp)
-    return str(
-        datetime.fromtimestamp(timestamp / 1e3, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-    )
 
 
 def _create_archive(

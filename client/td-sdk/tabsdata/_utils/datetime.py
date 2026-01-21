@@ -2,7 +2,15 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
-from datetime import datetime
+from datetime import UTC, datetime
+
+
+def _convert_timestamp_to_string(timestamp: int | None) -> str:
+    if not timestamp:
+        return str(timestamp)
+    return str(
+        datetime.fromtimestamp(timestamp / 1e3, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    )
 
 
 class NoTimezoneError(Exception):

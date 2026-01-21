@@ -27,6 +27,7 @@ import urllib.parse
 import uuid
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
+from pathlib import Path
 from time import sleep
 from typing import Any
 
@@ -299,6 +300,9 @@ FAKE_FUNCTION_RUN_ID = 60
 FAKE_SCHEDULED_TIME = 1248067890123
 FAKE_TRANSACTION_ID = 42
 FAKE_TRIGGERED_TIME = 1234567890123
+FAKE_FUNCTION_DEFINED_ON = (
+    datetime.fromtimestamp(0, tz=timezone.utc).timestamp() * 1000.0
+)
 
 # Expected output of the foo1 function when called with f1="o1" and f2="o2"
 EXPECTED_FOO1_OUTPUT = ("o1", "o2")
@@ -1977,7 +1981,12 @@ def write_v2_function_yaml_file(
     input_initial_values_path: str | None = None,
     output_initial_values_path: str | None = None,
     function_data_path: str | None = None,
+    staging_uri: str | Path | None = None,
+    function_defined_on: float | None = None,
 ):
+    # Using explicit None check as condition evaluates to False when == 0.0
+    if function_defined_on is None:
+        function_defined_on = datetime.now().timestamp() * 1000.0
     content: dict[str, Any] = {
         "info": {
             "collection": MOCK_COLLECTION,
@@ -1991,6 +2000,7 @@ def write_v2_function_yaml_file(
                 "uri": pathlib.Path(function_data_path).as_uri(),
                 "env_prefix": None,
             },
+            "function_defined_on": function_defined_on,
             "function_run_id": FAKE_FUNCTION_RUN_ID,
             "scheduled_on": FAKE_SCHEDULED_TIME,
             "transaction_id": FAKE_TRANSACTION_ID,
@@ -1998,6 +2008,11 @@ def write_v2_function_yaml_file(
         },
         "input": [],
     }
+    if staging_uri:
+        content["info"]["function_stage"] = {
+            "uri": staging_uri,
+            "env_prefix": "STAGE",
+        }
     if mock_dependency_location:
         for position, mocked_table in enumerate(mock_dependency_location):
             if isinstance(mocked_table, str):

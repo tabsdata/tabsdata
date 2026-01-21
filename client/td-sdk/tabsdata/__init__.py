@@ -51,6 +51,7 @@ from tabsdata._io.inputs.sql_inputs import (
     OracleSource,
     PostgresSource,
 )
+from tabsdata._io.inputs.stage_input import Stage
 
 # noinspection PyProtectedMember
 from tabsdata._io.inputs.table_inputs import TableInput
@@ -159,6 +160,8 @@ __all__ = [
     "PostgresSource",
     "S3Source",
     "TableInput",
+    # from tabsdata._io.inputs.stage_input
+    "Stage",
     # from tabsdata._io.inputs.sql.mysql_input
     "MySQLSrc",
     # from tabsdata._io.inputs.sql.postgres_input
