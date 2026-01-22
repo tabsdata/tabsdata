@@ -99,6 +99,42 @@ ClassifierType = TypeVar("ClassifierType", bound=Classifier)
 CriteriaType = TypeVar("CriteriaType", bound=Criteria)
 
 
+class SkipColumnException(Exception):
+    pass
+
+
+class ValueConversionFailure(Exception):
+    def __init__(
+        self,
+        classifier: Classifier,
+        name: str,
+        dtype: pl.DataType,
+        value: Any,
+    ):
+        self.classifier = classifier
+        self.name = name
+        self.dtype = dtype
+        self.value = value
+        super().__init__()
+
+
+def handle_value_conversion_error(
+    classifier: Classifier,
+    name: str,
+    dtype: pl.DataType,
+    value: Any,
+) -> None:
+    match classifier.on_wrong_value:
+        case "ignore":
+            raise SkipColumnException()
+        case "fail":
+            raise ValueConversionFailure(classifier, name, dtype, value)
+        case _:
+            raise ValueError(
+                f"Unknown on_wrong_value value: {classifier.on_wrong_value}"
+            )
+
+
 class DQColumns(Enum):
     DQ_VERSION = "dq.version"
     DQ_CLASSIFIER = "dq.classifier"
@@ -400,13 +436,43 @@ class PolarsClassifierProvider:
         return base_expression.otherwise(core_expression).cast(pl.UInt8)
 
     @staticmethod
-    def _between(
+    def _between(  # noqa: C901
         column: pl.Expr,
         dtype: pl.DataType,
         classifier: RangeClassifier,
     ) -> pl.Expr:
-        c_min = TypeHandler.convert_value(classifier.min, dtype, allow_null=True)
-        c_max = TypeHandler.convert_value(classifier.max, dtype, allow_null=True)
+        try:
+            c_min = TypeHandler.convert_value(
+                classifier.min,
+                dtype,
+                allow_null=True,
+            )
+        except DataQualityProcessingError as error:
+            if error.code == ErrorCode.DQPE13.code():
+                handle_value_conversion_error(
+                    classifier,
+                    "min_val",
+                    dtype,
+                    classifier.min,
+                )
+            raise
+
+        try:
+            c_max = TypeHandler.convert_value(
+                classifier.max,
+                dtype,
+                allow_null=True,
+            )
+        except DataQualityProcessingError as error:
+            if error.code == ErrorCode.DQPE13.code():
+                handle_value_conversion_error(
+                    classifier,
+                    "max_val",
+                    dtype,
+                    classifier.max,
+                )
+            raise
+
         if c_min is None and c_max is None:
             return pl.lit(True)
         if c_min is None:
@@ -502,7 +568,21 @@ class PolarsClassifierProvider:
                 .when(QExpressions.IS_NAN(column, dtype))
                 .then(ByteSentinel.NAN)
             )
-        core_expression = PolarsClassifierProvider._in(column, dtype, classifier.values)
+        try:
+            core_expression = PolarsClassifierProvider._in(
+                column,
+                dtype,
+                classifier.values,
+            )
+        except DataQualityProcessingError as error:
+            if error.code == ErrorCode.DQPE13.code():
+                handle_value_conversion_error(
+                    classifier,
+                    "values",
+                    dtype,
+                    classifier.values,
+                )
+            raise
         return base_expression.otherwise(core_expression).cast(pl.UInt8)
 
     # noinspection DuplicatedCode
@@ -546,9 +626,21 @@ class PolarsClassifierProvider:
                 .when(QExpressions.IS_NAN(column, dtype))
                 .then(ByteSentinel.NAN)
             )
-        core_expression = ~PolarsClassifierProvider._in(
-            column, dtype, classifier.values
-        )
+        try:
+            core_expression = ~PolarsClassifierProvider._in(
+                column,
+                dtype,
+                classifier.values,
+            )
+        except DataQualityProcessingError as error:
+            if error.code == ErrorCode.DQPE13.code():
+                handle_value_conversion_error(
+                    classifier,
+                    "values",
+                    dtype,
+                    classifier.values,
+                )
+            raise
         return base_expression.otherwise(core_expression).cast(pl.UInt8)
 
     @staticmethod
@@ -1104,6 +1196,24 @@ class DataQualityEngine:
         for column in columns:
             lf_column = column.data_column
             dq_column = self._name(metadata.column_suffix, lf_column, column.dq_column)
+            lf_dtype = self._schema[lf_column]
+
+            try:
+                expr = metadata.polars_provider(lf_column, lf_dtype, classifier)
+            except SkipColumnException:
+                continue
+            except ValueConversionFailure as failure:
+                raise DataQualityProcessingError(
+                    ErrorCode.DQPE16,
+                    lf_column,
+                    failure.classifier.__class__.__name__,
+                    failure.name,
+                    failure.value,
+                    type(failure.dtype).__name__,
+                )
+            except DataQualityProcessingError:
+                raise
+
             self._cols.update(
                 {
                     dq_column: ColumnInfo(
@@ -1117,8 +1227,7 @@ class DataQualityEngine:
                 if tag not in self._tags:
                     self._tags[tag] = set()
                 self._tags[tag].add(dq_column)
-            lf_dtype = self._schema[lf_column]
-            expr = metadata.polars_provider(lf_column, lf_dtype, classifier)
+
             dq = dq._run(expr, dq_column)
 
         return dq

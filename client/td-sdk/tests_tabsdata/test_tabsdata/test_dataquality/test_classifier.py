@@ -983,7 +983,6 @@ def test_is_null_to_dict():
         "column_names": [("col_a", None)],
         "on_missing_column": "fail",
         "on_wrong_type": "ignore",  # default
-        "on_wrong_value": "ignore",
         "tags": ["tag1"],
     }
     assert classifier._to_dict() == expected
@@ -1029,7 +1028,6 @@ def test_matches_to_dict():
         "tags": ["t1"],
         "on_missing_column": "ignore",
         "on_wrong_type": "fail",
-        "on_wrong_value": "ignore",
     }
     assert classifier._to_dict() == expected
 
@@ -1073,7 +1071,6 @@ def test_scale_categorizer_to_dict():
         "column_names": [("c1", None)],
         "on_missing_column": "fail",
         "on_wrong_type": "fail",
-        "on_wrong_value": "fail",
         "scale": {
             "type": "LinearScale",
             "min_val": 0,

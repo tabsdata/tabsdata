@@ -28,10 +28,12 @@ from tabsdata.dataquality import (
     MonomialScale,
     ScaleCategorizer,
 )
+from tabsdata.exceptions import DataQualityProcessingError, ErrorCode
 from tabsdata.tableframe._actions.dataquality.engine import (
     ByteSentinel,
     DataQualityEngine,
 )
+from tabsdata.tableframe.lazyframe.properties import TableFramePropertiesBuilder
 from tests_tabsdata.test_tabsdata.test_tableframe.common import (
     pretty_pandas,
     pretty_polars,
@@ -414,3 +416,270 @@ def test_categorizer_with_negative_values(scale, dtype):
         assert all(
             category == 0 for category in min_categories.to_list()
         ), "Minimum value should be in bin 0 when use_bin_zero=True"
+
+
+def wrong_value_dataset() -> td.TableFrame:
+    schema = {
+        "id": pl.Int64,
+        "int_col": td_dtypes.Int32,
+        "float_col": td_dtypes.Float64,
+        "str_col": td_dtypes.String,
+    }
+    data = {
+        "id": list(range(10)),
+        "int_col": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+        "float_col": [1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5, 9.5, 10.5],
+        "str_col": ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"],
+    }
+    df = pl.DataFrame(data, schema=schema, strict=False)
+    lf = df.lazy()
+    tf = td.TableFrame.__build__(
+        df=lf,
+        mode="raw",
+        idx=0,
+        properties=TableFramePropertiesBuilder.empty(),
+    )
+    return tf
+
+
+@pytest.mark.dq
+def test_on_wrong_value_ignore_is_between():
+    tf = wrong_value_dataset()
+    dq_engine = tf._dq
+    classifier = IsBetween(
+        column_names=["int_col"],
+        min_val="invalid_string",
+        max_val="valid_string_larger",
+        on_wrong_value="ignore",
+    )
+    dq = dq_engine.is_between(classifier)
+    df = dq.tf()._lf.collect()
+    assert "int_col_is_between" not in df.columns
+    assert "int_col" in df.columns
+
+
+@pytest.mark.dq
+def test_on_wrong_value_fail_is_between_min():
+    tf = wrong_value_dataset()
+    dq_engine = tf._dq
+    classifier = IsBetween(
+        column_names=["int_col"],
+        min_val="invalid_string",
+        max_val="valid_string_larger",
+        on_wrong_value="fail",
+    )
+    with pytest.raises(DataQualityProcessingError) as exc_info:
+        dq_engine.is_between(classifier)
+    assert exc_info.value.code == ErrorCode.DQPE16.code()
+    assert "int_col" in exc_info.value.message
+    assert "min_val" in exc_info.value.message
+    assert "invalid_string" in exc_info.value.message
+    assert "Int32" in exc_info.value.message
+
+
+@pytest.mark.dq
+def test_on_wrong_value_fail_is_between_max():
+    tf = wrong_value_dataset()
+    dq_engine = tf._dq
+    classifier = IsBetween(
+        column_names=["float_col"],
+        min_val="not_a_number",
+        max_val="really_not_a_number",
+        on_wrong_value="fail",
+    )
+    with pytest.raises(DataQualityProcessingError) as exc_info:
+        dq_engine.is_between(classifier)
+    assert exc_info.value.code == ErrorCode.DQPE16.code()
+    assert "float_col" in exc_info.value.message
+    assert "min_val" in exc_info.value.message
+    assert "not_a_number" in exc_info.value.message
+
+
+@pytest.mark.dq
+def test_on_wrong_value_ignore_is_not_between():
+    tf = wrong_value_dataset()
+    dq_engine = tf._dq
+    classifier = IsNotBetween(
+        column_names=["int_col"],
+        min_val="bad_value",
+        max_val="good_value_larger",
+        on_wrong_value="ignore",
+    )
+    dq = dq_engine.is_not_between(classifier)
+    df = dq.tf()._lf.collect()
+    assert "int_col_is_not_between" not in df.columns
+
+
+@pytest.mark.dq
+def test_on_wrong_value_fail_is_not_between():
+    tf = wrong_value_dataset()
+    dq_engine = tf._dq
+    classifier = IsNotBetween(
+        column_names=["int_col"],
+        min_val="invalid_max",
+        max_val="valid_max_larger",
+        on_wrong_value="fail",
+    )
+    with pytest.raises(DataQualityProcessingError) as exc_info:
+        dq_engine.is_not_between(classifier)
+    assert exc_info.value.code == ErrorCode.DQPE16.code()
+    assert "int_col" in exc_info.value.message
+    assert "min_val" in exc_info.value.message
+
+
+@pytest.mark.dq
+def test_on_wrong_value_ignore_is_in():
+    tf = wrong_value_dataset()
+    dq_engine = tf._dq
+    classifier = IsIn(
+        column_names=["int_col"],
+        values=frozenset(["abc", "def", "ghi"]),
+        on_wrong_value="ignore",
+    )
+    dq = dq_engine.is_in(classifier)
+    df = dq.tf()._lf.collect()
+    assert "int_col_is_in" not in df.columns
+
+
+@pytest.mark.dq
+def test_on_wrong_value_fail_is_in():
+    tf = wrong_value_dataset()
+    dq_engine = tf._dq
+    classifier = IsIn(
+        column_names=["int_col"],
+        values=frozenset(["not", "numbers"]),
+        on_wrong_value="fail",
+    )
+    with pytest.raises(DataQualityProcessingError) as exc_info:
+        dq_engine.is_in(classifier)
+    assert exc_info.value.code == ErrorCode.DQPE16.code()
+    assert "int_col" in exc_info.value.message
+    assert "values" in exc_info.value.message
+
+
+@pytest.mark.dq
+def test_on_wrong_value_ignore_is_not_in():
+    tf = wrong_value_dataset()
+    dq_engine = tf._dq
+    classifier = IsNotIn(
+        column_names=["float_col"],
+        values=frozenset(["invalid", "float", "values"]),
+        on_wrong_value="ignore",
+    )
+    result_dq = dq_engine.is_not_in(classifier)
+    result_df = result_dq.tf()._lf.collect()
+    assert "float_col_is_not_in" not in result_df.columns
+
+
+@pytest.mark.dq
+def test_on_wrong_value_fail_is_not_in():
+    tf = wrong_value_dataset()
+    dq_engine = tf._dq
+    classifier = IsNotIn(
+        column_names=["int_col"],
+        values=frozenset(["x", "y", "z"]),
+        on_wrong_value="fail",
+    )
+    with pytest.raises(DataQualityProcessingError) as exc_info:
+        dq_engine.is_not_in(classifier)
+    assert exc_info.value.code == ErrorCode.DQPE16.code()
+
+
+@pytest.mark.dq
+def test_on_wrong_value_ignore_multiple_columns():
+    tf = wrong_value_dataset()
+    dq_engine = tf._dq
+    classifier = IsBetween(
+        column_names=["int_col", "float_col", "str_col"],
+        min_val="a",
+        max_val="b",
+        on_wrong_value="ignore",
+    )
+    dq = dq_engine.is_between(classifier)
+    df = dq.tf()._lf.collect()
+    assert "int_col_is_between" not in df.columns
+    assert "float_col_is_between" not in df.columns
+    assert "str_col_is_between" in df.columns
+
+
+@pytest.mark.dq
+def test_on_wrong_value_with_valid_values():
+    tf = wrong_value_dataset()
+    dq_engine = tf._dq
+    classifier = IsBetween(
+        column_names=["int_col"],
+        min_val=0,
+        max_val=100,
+        on_wrong_value="fail",
+    )
+    result_dq = dq_engine.is_between(classifier)
+    result_df = result_dq.tf()._lf.collect()
+    assert "int_col_is_between" in result_df.columns
+    assert all(
+        value == ByteSentinel.TRUE
+        for value in result_df["int_col_is_between"].to_list()
+    )
+
+
+@pytest.mark.dq
+@pytest.mark.parametrize(
+    "classifier_type,param_values",
+    [
+        (IsBetween, {"min_val": "invalid", "max_val": "invalid"}),
+        (IsNotBetween, {"min_val": "bad", "max_val": "bad"}),
+        (IsIn, {"values": frozenset(["a", "b", "c"])}),
+        (IsNotIn, {"values": frozenset(["x", "y", "z"])}),
+    ],
+    ids=[
+        "is_between_bad_types",
+        "is_not_between_bad_types",
+        "is_in_bad_values",
+        "is_not_in_bad_values",
+    ],
+)
+def test_on_wrong_value_fail_parametrized(classifier_type, param_values):
+    tf = wrong_value_dataset()
+    dq_engine = tf._dq
+    parameters = {"column_names": ["int_col"], "on_wrong_value": "fail"}
+    parameters.update(param_values)
+    classifier = classifier_type(**parameters)
+    method_name = (
+        classifier_type.__name__.lower().replace("is", "is_").replace("not", "not_")
+    )
+    method = getattr(dq_engine, method_name)
+    with pytest.raises(DataQualityProcessingError) as exc_info:
+        method(classifier)
+    assert exc_info.value.code == ErrorCode.DQPE16.code()
+    assert "int_col" in exc_info.value.message
+
+
+@pytest.mark.dq
+@pytest.mark.parametrize(
+    "classifier_type,param_values",
+    [
+        (IsBetween, {"min_val": "invalid", "max_val": "invalid"}),
+        (IsNotBetween, {"min_val": "bad", "max_val": "bad"}),
+        (IsIn, {"values": frozenset(["a", "b", "c"])}),
+        (IsNotIn, {"values": frozenset(["x", "y", "z"])}),
+    ],
+    ids=[
+        "is_between_bad_min",
+        "is_not_between_bad_min",
+        "is_in_bad_values",
+        "is_not_in_bad_values",
+    ],
+)
+def test_on_wrong_value_ignore_parametrized(classifier_type, param_values):
+    tf = wrong_value_dataset()
+    dq_engine = tf._dq
+    parameters = {"column_names": ["int_col"], "on_wrong_value": "ignore"}
+    parameters.update(param_values)
+    classifier = classifier_type(**parameters)
+    method_name = (
+        classifier_type.__name__.lower().replace("is", "is_").replace("not", "not_")
+    )
+    method = getattr(dq_engine, method_name)
+    result_dq = method(classifier)
+    result_df = result_dq.tf()._lf.collect()
+    expected_col_suffix = method_name
+    assert f"int_col_{expected_col_suffix}" not in result_df.columns

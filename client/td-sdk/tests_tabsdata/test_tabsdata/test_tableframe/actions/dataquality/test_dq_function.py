@@ -1870,3 +1870,372 @@ def test_dq_overriding_operations(specifications, should_fail, failing_tables):
                 boolean_dataset(td.Float32),
             ],
         )
+
+
+@pytest.mark.dq
+@pytest.mark.tdfnrun
+@pytest.mark.parametrize(
+    "enrich_to_table",
+    [
+        None,
+        "enrich_table",
+    ],
+)
+def test_on_wrong_value_fail_is_between(enrich_to_table):
+    @td.transformer(
+        name="transformer",
+        input_tables=["table_i"],
+        output_tables=["table_o"],
+        on_output_tables=[
+            dq.DataQuality(
+                table="table_o",
+                classifiers=[
+                    dq.IsBetween(
+                        column_names=["int_col"],
+                        min_val="invalid_string",
+                        max_val="more_invalid_string",
+                        on_wrong_value="fail",
+                    ),
+                ],
+                operators=[
+                    dq.Summary(),
+                    dq.Enrich(to_table=enrich_to_table),
+                ],
+            )
+        ],
+    )
+    def dq_transformer(tf: td.TableFrame) -> td.TableFrame:
+        return tf
+
+    with pytest.raises(FnError) as error:
+        tdfnrun(
+            function=dq_transformer,
+            input_tables=multi_column_dataset(),
+        )
+    fnrun = error.value.fnrun
+    exception = fnrun.exception.as_object()
+    assert exception.code == ErrorCode.DQPE16.code()
+    assert "int_col" in exception.message
+    assert "min_val" in exception.message
+    assert "invalid_string" in exception.message
+    assert "Status is not 0" in str(error.value)
+
+
+@pytest.mark.dq
+@pytest.mark.tdfnrun
+@pytest.mark.parametrize(
+    "enrich_to_table,expected_outputs",
+    [
+        (None, 2),
+        ("enrich_table", 3),
+    ],
+)
+def test_on_wrong_value_ignore_is_between(enrich_to_table, expected_outputs):
+    @td.transformer(
+        name="transformer",
+        input_tables=["table_i"],
+        output_tables=["table_o"],
+        on_output_tables=[
+            dq.DataQuality(
+                table="table_o",
+                classifiers=[
+                    dq.IsBetween(
+                        column_names=["int_col"],
+                        min_val="invalid_string",
+                        max_val="more_invalid_string",
+                        on_wrong_value="ignore",
+                    ),
+                ],
+                operators=[
+                    dq.Summary(),
+                    dq.Enrich(to_table=enrich_to_table),
+                ],
+            )
+        ],
+    )
+    def dq_transformer(tf: td.TableFrame) -> td.TableFrame:
+        return tf
+
+    fnrun = tdfnrun(
+        function=dq_transformer,
+        input_tables=multi_column_dataset(),
+    )
+    outputs = list(fnrun.output.as_pl_df(True))
+    assert len(outputs) == expected_outputs
+    enrich_idx = 0 if enrich_to_table is None else 2
+    enrich_table = outputs[enrich_idx]
+    assert "int_col_is_between" not in enrich_table.columns
+    assert "int_col" in enrich_table.columns
+
+
+@pytest.mark.dq
+@pytest.mark.tdfnrun
+@pytest.mark.parametrize(
+    "enrich_to_table",
+    [
+        None,
+        "enrich_table",
+    ],
+)
+def test_on_wrong_value_fail_is_in(enrich_to_table):
+    @td.transformer(
+        name="transformer",
+        input_tables=["table_i"],
+        output_tables=["table_o"],
+        on_output_tables=[
+            dq.DataQuality(
+                table="table_o",
+                classifiers=[
+                    dq.IsIn(
+                        column_names=["int_col"],
+                        values=frozenset(["not", "numbers"]),
+                        on_wrong_value="fail",
+                    ),
+                ],
+                operators=[
+                    dq.Summary(),
+                    dq.Enrich(to_table=enrich_to_table),
+                ],
+            )
+        ],
+    )
+    def dq_transformer(tf: td.TableFrame) -> td.TableFrame:
+        return tf
+
+    with pytest.raises(FnError) as error:
+        tdfnrun(
+            function=dq_transformer,
+            input_tables=multi_column_dataset(),
+        )
+    fnrun = error.value.fnrun
+    exception = fnrun.exception.as_object()
+    assert exception.code == ErrorCode.DQPE16.code()
+    assert "int_col" in exception.message
+    assert "values" in exception.message
+
+
+@pytest.mark.dq
+@pytest.mark.tdfnrun
+@pytest.mark.parametrize(
+    "enrich_to_table,expected_outputs",
+    [
+        (None, 2),
+        ("enrich_table", 3),
+    ],
+)
+def test_on_wrong_value_ignore_is_in(enrich_to_table, expected_outputs):
+    @td.transformer(
+        name="transformer",
+        input_tables=["table_i"],
+        output_tables=["table_o"],
+        on_output_tables=[
+            dq.DataQuality(
+                table="table_o",
+                classifiers=[
+                    dq.IsIn(
+                        column_names=["float_col"],
+                        values=frozenset(["invalid", "float", "values"]),
+                        on_wrong_value="ignore",
+                    ),
+                ],
+                operators=[
+                    dq.Summary(),
+                    dq.Enrich(to_table=enrich_to_table),
+                ],
+            )
+        ],
+    )
+    def dq_transformer(tf: td.TableFrame) -> td.TableFrame:
+        return tf
+
+    fnrun = tdfnrun(
+        function=dq_transformer,
+        input_tables=multi_column_dataset(),
+    )
+    outputs = list(fnrun.output.as_pl_df(True))
+    assert len(outputs) == expected_outputs
+    enrich_idx = 0 if enrich_to_table is None else 2
+    enrich_table = outputs[enrich_idx]
+
+    print(enrich_table)
+    assert "float_col_is_in" not in enrich_table.columns
+    assert "float_col" in enrich_table.columns
+
+
+@pytest.mark.dq
+@pytest.mark.tdfnrun
+@pytest.mark.parametrize(
+    "enrich_to_table,expected_outputs",
+    [
+        (None, 2),
+        ("enrich_table", 3),
+    ],
+)
+def test_on_wrong_value_ignore_mixed_columns(enrich_to_table, expected_outputs):
+    @td.transformer(
+        name="transformer",
+        input_tables=["table_i"],
+        output_tables=["table_o"],
+        on_output_tables=[
+            dq.DataQuality(
+                table="table_o",
+                classifiers=[
+                    dq.IsBetween(
+                        column_names=["int_col", "float_col", "str_col"],
+                        min_val="a",
+                        max_val="b",
+                        on_wrong_value="ignore",
+                    ),
+                ],
+                operators=[
+                    dq.Summary(),
+                    dq.Enrich(to_table=enrich_to_table),
+                ],
+            )
+        ],
+    )
+    def dq_transformer(tf: td.TableFrame) -> td.TableFrame:
+        return tf
+
+    fnrun = tdfnrun(
+        function=dq_transformer,
+        input_tables=multi_column_dataset(),
+    )
+    outputs = list(fnrun.output.as_pl_df(True))
+    assert len(outputs) == expected_outputs
+    enrich_idx = 0 if enrich_to_table is None else 2
+    enrich_table = outputs[enrich_idx]
+    assert "int_col_is_between" not in enrich_table.columns
+    assert "float_col_is_between" not in enrich_table.columns
+    assert "str_col_is_between" in enrich_table.columns
+
+
+@pytest.mark.dq
+@pytest.mark.tdfnrun
+@pytest.mark.parametrize(
+    "enrich_to_table,expected_outputs",
+    [
+        (None, 2),
+        ("enrich_table", 3),
+    ],
+)
+def test_on_wrong_value_with_valid_values(enrich_to_table, expected_outputs):
+    @td.transformer(
+        name="transformer",
+        input_tables=["table_i"],
+        output_tables=["table_o"],
+        on_output_tables=[
+            dq.DataQuality(
+                table="table_o",
+                classifiers=[
+                    dq.IsBetween(
+                        column_names=["int_col"],
+                        min_val=0,
+                        max_val=100,
+                        on_wrong_value="fail",
+                    ),
+                ],
+                operators=[
+                    dq.Summary(),
+                    dq.Enrich(to_table=enrich_to_table),
+                ],
+            )
+        ],
+    )
+    def dq_transformer(tf: td.TableFrame) -> td.TableFrame:
+        return tf
+
+    fnrun = tdfnrun(
+        function=dq_transformer,
+        input_tables=multi_column_dataset(),
+    )
+    outputs = list(fnrun.output.as_pl_df(True))
+    assert len(outputs) == expected_outputs
+    enrich_idx = 0 if enrich_to_table is None else 2
+    enrich_table = outputs[enrich_idx]
+    assert "int_col_is_between" in enrich_table.columns
+
+
+@pytest.mark.dq
+@pytest.mark.tdfnrun
+@pytest.mark.parametrize(
+    "classifier,on_wrong_value,should_fail",
+    [
+        (
+            lambda: dq.IsBetween(
+                column_names=["int_col"],
+                min_val="invalid",
+                max_val="more_invalid",
+                on_wrong_value="fail",
+            ),
+            "fail",
+            True,
+        ),
+        (
+            lambda: dq.IsBetween(
+                column_names=["int_col"],
+                min_val="invalid",
+                max_val="more_invalid",
+                on_wrong_value="ignore",
+            ),
+            "ignore",
+            False,
+        ),
+        (
+            lambda: dq.IsIn(
+                column_names=["int_col"],
+                values=frozenset(["x", "y"]),
+                on_wrong_value="fail",
+            ),
+            "fail",
+            True,
+        ),
+        (
+            lambda: dq.IsIn(
+                column_names=["float_col"],
+                values=frozenset(["a", "b"]),
+                on_wrong_value="ignore",
+            ),
+            "ignore",
+            False,
+        ),
+    ],
+    ids=[
+        "is_between_fail",
+        "is_between_ignore",
+        "is_in_fail",
+        "is_in_ignore",
+    ],
+)
+def test_on_wrong_value_parametrized(classifier, on_wrong_value, should_fail):
+    @td.transformer(
+        name="transformer",
+        input_tables=["table_i"],
+        output_tables=["table_o"],
+        on_output_tables=[
+            dq.DataQuality(
+                table="table_o",
+                classifiers=[classifier()],
+                operators=[dq.Summary()],
+            )
+        ],
+    )
+    def dq_transformer(tf: td.TableFrame) -> td.TableFrame:
+        return tf
+
+    if should_fail:
+        with pytest.raises(FnError) as error:
+            tdfnrun(
+                function=dq_transformer,
+                input_tables=multi_column_dataset(),
+            )
+        fnrun = error.value.fnrun
+        exception = fnrun.exception.as_object()
+        assert exception.code == ErrorCode.DQPE16.code()
+    else:
+        fnrun = tdfnrun(
+            function=dq_transformer,
+            input_tables=multi_column_dataset(),
+        )
+        outputs = list(fnrun.output.as_pl_df(True))
+        assert len(outputs) > 0

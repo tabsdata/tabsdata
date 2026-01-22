@@ -1312,6 +1312,14 @@ class ErrorCode(Enum):
         "code": "DQPE-015",
         "message": "The following tables are overridden multiple times:\n{}",
     }
+    DQPE16 = {
+        "code": "DQPE-016",
+        "message": (
+            "Column '{}' has incompatible value for classifier '{}'. "
+            "The classifier's parameter '{}' with value '{}' cannot be converted to "
+            "the column's data type '{}'."
+        ),
+    }
     DQCE80 = {
         "code": "DQCE-080",
         "message": (
