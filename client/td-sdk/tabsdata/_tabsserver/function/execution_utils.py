@@ -90,14 +90,17 @@ def execute_listener(
     staging_folder = convert_uri_to_path(execution_context.request.function_stage_uri)
     os.makedirs(staging_folder, exist_ok=True)
     stage_context = LocalFileStageTriggerContext(
-        staging_folder, fn_trigger, execution_context.logger
+        staging_folder,
+        fn_trigger,
+        execution_context.logger,
+        working_dir=execution_context.paths.output_folder,
     )
     logger.debug(f"Stage trigger context: {stage_context}")
     logger.info(
         f"Calling the 'run' method of the provided stage trigger {stage_trigger}"
     )
     result = stage_trigger.run(stage_context)
-    logger.info("Stage trigger executed successfully")
+    logger.info(f"Stage trigger executed with result '{result}'")
     return result
 
 

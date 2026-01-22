@@ -1,3 +1,9 @@
+import os
+import time
+from pathlib import Path
+
+import polars as pl
+
 import tabsdata as td
 from tabsdata._io.stage_trigger import (
     StageTrigger,
@@ -9,16 +15,25 @@ from tabsdata._io.stage_trigger import (
 class MyStageTrigger(StageTrigger):
 
     def run(self, ctx: StageTriggerContext) -> StageTriggerStatus:
-        ctx.trigger()
-        ctx.stage([])
-        ctx.trigger_monitor()
-
-    def _to_dict(self) -> dict:
-        d = super()._to_dict()
-        d["foo"] = "bar"
-        return d
+        working_dir = ctx.working_dir
+        idx = 0
+        df = pl.DataFrame(
+            {
+                "id": range(1, 7),
+                "name": ["Arvind", "Tucu", "Dimas", "Joaquin", "Jennifer", "Aleix"],
+            }
+        )
+        file = Path(os.path.join(working_dir, f"dummy_file_{idx}.parquet"))
+        df.write_parquet(file)
+        # ctx.stage(file)
+        while True:
+            idx += 1
+            ctx.trigger_monitor()
+            time.sleep(10)
+            ctx.trigger()
+        return StageTriggerStatus.SUCCESS
 
 
 @td.publisher(trigger_by=MyStageTrigger(), source=td.Stage(), tables="output")
-def my_testing_fn(*args):
+def my_testing_fn(dataframes):
     return None

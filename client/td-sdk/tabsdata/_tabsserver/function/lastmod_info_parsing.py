@@ -17,7 +17,10 @@ class Entry:
 class LastModInfo:
 
     def __init__(self, lastmod_info: str):
-        lastmod_dict = json.loads(base64.b64decode(lastmod_info))
+        lastmod_dict = json.loads(base64.b64decode(lastmod_info + "=="))  # Adding
+        # padding just in case there was none. There is no need to verify the length
+        # of the string to do this, as b64decode takes care of shaving any excess
+        # of padding that exists.
         self.data = lastmod_dict
 
     @property

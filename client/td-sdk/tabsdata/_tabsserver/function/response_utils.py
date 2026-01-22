@@ -12,8 +12,8 @@ from tabsdata.expansions.foundation.symbols import RESPONSE_FILE
 from .yaml_parsing import (
     Data,
     NoData,
-    store_data_listener_response_as_yaml,
     store_function_response_as_yaml,
+    store_stage_trigger_response_as_yaml,
 )
 
 if TYPE_CHECKING:
@@ -125,5 +125,4 @@ def create_data_listener_response(
 ):
     response_file = execution_context.paths.response_file
     logger.debug(f"Response file: {response_file}")
-    logger.debug("Exit status: 0")
-    store_data_listener_response_as_yaml(response_file, 0)
+    store_stage_trigger_response_as_yaml(response_file)

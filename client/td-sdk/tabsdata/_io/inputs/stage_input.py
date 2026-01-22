@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 class Stage(SourcePlugin):
     """
-    Inputs that have been placed in a stage, usually from a Writer trigger.
+    Inputs that have been placed in a stage, usually from a StageTrigger.
     """
 
     @_td_validate_call(ErrorCode.PVSOC11)
@@ -142,6 +142,11 @@ class Stage(SourcePlugin):
                     )
                     self._ec.status.offset.use_decorator_values = True
         params = auxiliary_plugin._run(execution_context)
+        logger.debug(
+            f"Copying final initial values from the auxiliary plugin {auxiliary_plugin}"
+        )
+        self.initial_values = auxiliary_plugin.initial_values
+        logger.debug(f"Copied initial values {self.initial_values}")
         return params
 
     def __repr__(self) -> str:
@@ -237,11 +242,14 @@ def _obtain_lastmod_info_datetime(execution_context: ExecutionContext):
     if lastmod_info is None:
         return None
     lastmod_info = LastModInfo(lastmod_info)
-    if len(lastmod_info.entries) != 1:
+    if len(lastmod_info.entries) > 1:
         raise ValueError(
             "Error trying to obtain the time of the last execution. The "
             f"JSON containing the information is {lastmod_info}"
         )
+    elif len(lastmod_info.entries) == 0:
+        logger.debug("No last offset found. Using the registration time as the offset.")
+        return None
     current_entry = lastmod_info.entries[0]
     lastmod_info_str_datetime = current_entry.time
     logger.debug(

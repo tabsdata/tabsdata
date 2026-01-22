@@ -148,6 +148,11 @@ class StageTriggerContext(ABC):
     Stage publisher to consume and to trigger the Stage as needed.
     """
 
+    @property
+    @abstractmethod
+    def working_dir(self) -> Path:
+        """Returns the working dir to be used to store intermediate files."""
+
     @abstractmethod
     def trigger_monitor(self) -> bool:
         """
@@ -193,10 +198,16 @@ class LocalFileStageTriggerContext(StageTriggerContext):
         staging_folder: str,
         trigger_config: CallConfig,
         logger,
+        working_dir: str,
     ):
         self.staging_folder = staging_folder
         self.trigger_config = trigger_config
         self.logger = logger
+        self._working_dir = Path(working_dir)
+
+    @property
+    def working_dir(self) -> Path:
+        return self._working_dir
 
     def trigger_monitor(self) -> bool:
         self.logger.debug("Monitoring triggering of the function")
@@ -215,6 +226,8 @@ class LocalFileStageTriggerContext(StageTriggerContext):
                     file_path.unlink()  # Deletes the file
                     found_and_deleted = True
             except OSError as e:
+                # TODO: This is one of the pieces that should be rethought once there
+                #  is a resiliency reimplementation
                 self.logger.error(f"Error deleting file {file_path}: {e}")
                 raise
         if found_and_deleted:
@@ -238,11 +251,15 @@ class LocalFileStageTriggerContext(StageTriggerContext):
                 shutil.copy2(source_file, self.staging_folder)
                 self.logger.debug(f"  - Copied '{source_file}'")
             except FileNotFoundError:
+                # TODO: This is one of the pieces that should be rethought once there
+                #  is a resiliency reimplementation
                 self.logger.error(
                     f"  - Error: Source file not found at '{source_file}'"
                 )
                 raise
             except Exception as e:
+                # TODO: This is one of the pieces that should be rethought once there
+                #  is a resiliency reimplementation
                 self.logger.error(f"  - Error copying '{source_file}': {e}")
                 raise
         self.logger.debug("All files staged successfully")
@@ -291,6 +308,8 @@ def _check_success(result):
     result_json = result.json()
     data_dict = result_json.get("data")
     if not data_dict or len(data_dict.keys()) != 1:
+        # TODO: This is one of the pieces that should be rethought once there
+        #  is a resiliency reimplementation
         raise ValueError(
             "Trying to assess the success of a trigger attempt, "
             "but the resulting JSON does not have the required fields. "

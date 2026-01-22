@@ -4779,13 +4779,7 @@ def _complete_utc_datetime(incomplete_datetime: str | None) -> int | None:
     return None
 
 
-def _dynamic_import_function_from_path(path: str) -> TabsdataFunction:  # noqa: C901
-    """
-    Dynamically import a function from a path in the form of 'path::function_name'.
-    :param path:
-    :return:
-    """
-
+def _split_python_function_path(path: str):
     if not len(path.split("::")) == 2:
         raise ValueError(
             f"Failed to split path '{path}' in two parts. Please make "
@@ -4794,6 +4788,16 @@ def _dynamic_import_function_from_path(path: str) -> TabsdataFunction:  # noqa: 
             "'/path/to/file.py::function_name'"
         )
     file_path, function_name = path.split("::")
+    return file_path, function_name
+
+
+def _dynamic_import_function_from_path(path: str) -> TabsdataFunction:  # noqa: C901
+    """
+    Dynamically import a function from a path in the form of 'path::function_name'.
+    :param path:
+    :return:
+    """
+    file_path, function_name = _split_python_function_path(path)
     file_path = os.path.abspath(file_path)
     if not os.path.exists(file_path):
         if not file_path.endswith(".py"):

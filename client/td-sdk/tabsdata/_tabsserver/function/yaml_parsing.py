@@ -618,7 +618,7 @@ def v2_response_no_data_constructor(loader, node):
 def v2_response_function_constructor(loader, node):
     loader.add_constructor("!Data", v2_response_data_constructor)
     loader.add_constructor("!NoData", v2_response_no_data_constructor)
-    return V2ResponseFormat(loader.construct_mapping(node))
+    return V2FunctionResponseFormat(loader.construct_mapping(node))
 
 
 def get_response_yaml_loader():
@@ -706,7 +706,19 @@ class ExceptionYaml(ABC):
     """Just an abstract class to help with type hinting."""
 
 
-class V2ResponseFormat:
+class V2FunctionResponseFormat:
+    """
+    Simple class to enable us to generate response yaml files
+    """
+
+    def __init__(self, content):
+        self.content = content
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}(content={self.content})"
+
+
+class V1StageTriggerResponseFormat:
     """
     Simple class to enable us to generate response yaml files
     """
@@ -746,13 +758,23 @@ class V2ExceptionFormat:
         return f"{self.__class__.__name__}(content={self.content})"
 
 
-def v2_response_format_representer(
-    dumper: yaml.SafeDumper, v2_response_format: V2ResponseFormat
+def v2_function_response_format_representer(
+    dumper: yaml.SafeDumper, v2_function_response_format: V2FunctionResponseFormat
 ) -> yaml.nodes.MappingNode:
-    """Represent a V1_yaml instance as a YAML mapping node."""
+    """Represent a V2_yaml instance as a YAML mapping node."""
     dumper.add_representer(Data, v2_data_representer)
     dumper.add_representer(NoData, v2_no_data_representer)
-    return dumper.represent_mapping("!FunctionV2", v2_response_format.content)
+    return dumper.represent_mapping("!FunctionV2", v2_function_response_format.content)
+
+
+def v1_stage_trigger_response_format_representer(
+    dumper: yaml.SafeDumper,
+    v1_stage_trigger_response_format: V1StageTriggerResponseFormat,
+) -> yaml.nodes.MappingNode:
+    """Represent a V1_yaml instance as a YAML mapping node."""
+    return dumper.represent_mapping(
+        "!StageTriggerV1", v1_stage_trigger_response_format.content
+    )
 
 
 def v2_data_representer(dumper: yaml.SafeDumper, data: Data) -> yaml.nodes.MappingNode:
@@ -774,14 +796,19 @@ def get_response_dumper():
     class ResponseDumper(yaml.SafeDumper):
         pass
 
-    ResponseDumper.add_representer(V2ResponseFormat, v2_response_format_representer)
+    ResponseDumper.add_representer(
+        V2FunctionResponseFormat, v2_function_response_format_representer
+    )
+    ResponseDumper.add_representer(
+        V1StageTriggerResponseFormat, v1_stage_trigger_response_format_representer
+    )
     return ResponseDumper
 
 
 def store_function_response_as_yaml(tables: list[Data | NoData], response_file: str):
     with open(response_file, "w") as file:
         yaml.dump(
-            V2ResponseFormat(
+            V2FunctionResponseFormat(
                 content={
                     "output": tables,
                 }
@@ -791,15 +818,14 @@ def store_function_response_as_yaml(tables: list[Data | NoData], response_file: 
         )
 
 
-def store_data_listener_response_as_yaml(response_file: str, exit_status):
+def store_stage_trigger_response_as_yaml(response_file: str):
     with open(response_file, "w") as file:
-        yaml.dump(
-            V2ResponseFormat(
-                content={"exit_status": exit_status},
-            ),
-            file,
-            Dumper=get_response_dumper(),
-        )
+        # Note: we want to print the object tag without any content inside. The yaml
+        # dumper doesn't support it (either an empty dictionary or an empty string
+        # will be printed alongside it), so this is the best solution right now. If
+        # we want to print more information in the future, we can add a proper
+        # dumper, as the supporting code already exists.
+        file.write("!StageTriggerV1")
 
 
 class CopyYaml(ABC):

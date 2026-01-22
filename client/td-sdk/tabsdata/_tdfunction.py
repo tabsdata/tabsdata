@@ -7,7 +7,7 @@ from __future__ import annotations
 import inspect
 import logging
 import os
-from typing import TYPE_CHECKING, Any, Callable, List, Type
+from typing import TYPE_CHECKING, Any, Callable, Type
 
 import polars as pl
 
