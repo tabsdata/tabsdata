@@ -13,6 +13,7 @@ PYTHON_EDITABLE_PACKAGE_SUFFIX = "_finder"
 TABSDATA_CONNECTORS_NAMES = [
     "bigquery",
     "databricks",
+    "kafka",
     "mongodb",
     "mssql",
     "salesforce",
