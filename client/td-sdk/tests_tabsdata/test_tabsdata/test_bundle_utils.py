@@ -20,6 +20,7 @@ from tabsdata._utils.bundle_utils import (
     CONFIG_INPUTS_KEY,
     CONFIG_OUTPUT_ACTIONS_KEY,
     CONFIG_OUTPUT_KEY,
+    CONFIG_TRIGGERBY_KEY,
     LOCAL_PACKAGES_FOLDER,
     PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES_KEY,
     PYTHON_INSTALL_DEPENDENCIES_KEY,
@@ -71,6 +72,7 @@ class DummyFunction:
         output=None,
         input_actions=None,
         output_actions=None,
+        trigger_by=None,
     ):
         self.__name__ = name
         self.__module__ = module
@@ -82,6 +84,7 @@ class DummyFunction:
         self.original_function = BaseDummyFunction(name, module)
         self.input_actions = input_actions
         self.output_actions = output_actions
+        self.trigger_by = trigger_by
 
 
 def test_create_configuration_json(tmp_path):
@@ -91,6 +94,7 @@ def test_create_configuration_json(tmp_path):
         input=CORRECT_SOURCE,
         original_file="dummy_file.py",
         output=CORRECT_DESTINATION,
+        trigger_by=None,
     )
     save_location = tmp_path / "save_location"
     save_location.mkdir()
@@ -103,6 +107,7 @@ def test_create_configuration_json(tmp_path):
         CONFIG_OUTPUT_KEY: CORRECT_DESTINATION._to_dict(),
         CONFIG_INPUT_ACTIONS_KEY: CORRECT_INPUT_ACTIONS,
         CONFIG_OUTPUT_ACTIONS_KEY: CORRECT_OUTPUT_ACTIONS,
+        CONFIG_TRIGGERBY_KEY: {},
     }
     expected_load = {
         CONFIG_INPUTS_KEY: CORRECT_SOURCE._to_dict(),
@@ -112,6 +117,7 @@ def test_create_configuration_json(tmp_path):
         CONFIG_OUTPUT_KEY: CORRECT_DESTINATION._to_dict(),
         CONFIG_INPUT_ACTIONS_KEY: CORRECT_INPUT_ACTIONS,
         CONFIG_OUTPUT_ACTIONS_KEY: CORRECT_OUTPUT_ACTIONS,
+        CONFIG_TRIGGERBY_KEY: {},
     }
     print(f"result: {result}")
     assert result == expected
@@ -138,6 +144,7 @@ def test_create_configuration_json_output_dict(tmp_path):
         CONFIG_OUTPUT_KEY: CORRECT_DESTINATION._to_dict(),
         CONFIG_INPUT_ACTIONS_KEY: CORRECT_INPUT_ACTIONS,
         CONFIG_OUTPUT_ACTIONS_KEY: CORRECT_OUTPUT_ACTIONS,
+        CONFIG_TRIGGERBY_KEY: {},
     }
     expected_load = {
         CONFIG_INPUTS_KEY: CORRECT_SOURCE._to_dict(),
@@ -147,6 +154,7 @@ def test_create_configuration_json_output_dict(tmp_path):
         CONFIG_OUTPUT_KEY: CORRECT_DESTINATION._to_dict(),
         CONFIG_INPUT_ACTIONS_KEY: CORRECT_INPUT_ACTIONS,
         CONFIG_OUTPUT_ACTIONS_KEY: CORRECT_OUTPUT_ACTIONS,
+        CONFIG_TRIGGERBY_KEY: {},
     }
     assert result == expected
     with open(save_location / CONFIG_FILE_NAME) as f:

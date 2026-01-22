@@ -93,6 +93,7 @@ class FunctionConstants(Enum):
     REQUEST_FILE_NAME = REQUEST_FILE_NAME
     RESPONSE_FOLDER_NAME = "response"
     RESPONSE_FILE_NAME = RESPONSE_FILE_NAME
+    STAGING_FOLDER_NAME = "staging"
     EXCEPTION_FOLDER_NAME = "response"
     EXCEPTION_FILE_NAME = EXCEPTION_FILE_NAME
     INPUT_FOLDER_NAME = "input"
@@ -563,7 +564,7 @@ def tdfnrun(
             save_location=bundle_folder,
         )
 
-        staging_folder = fn_root / "staging"
+        staging_folder = fn_root / FunctionConstants.STAGING_FOLDER_NAME.value
         os.makedirs(staging_folder, exist_ok=True)
         save_tables(staged_files, staging_folder)
         staging_uri = staging_folder.as_uri()

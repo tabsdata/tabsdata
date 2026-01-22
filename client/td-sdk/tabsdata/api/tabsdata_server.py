@@ -4638,7 +4638,7 @@ def _create_archive(
         workers = {"C": json.dumps(function.trigger_by._to_dict())}
     elif isinstance(function.trigger_by, StageTrigger):
         trigger_string_list = None
-        workers = {"W": json.dumps(function.trigger_by._to_dict())}
+        workers = {"ST": json.dumps(function.trigger_by._to_dict())}
     else:
         trigger_string_list = function.trigger_by
         workers = None
@@ -4786,6 +4786,13 @@ def _dynamic_import_function_from_path(path: str) -> TabsdataFunction:  # noqa: 
     :return:
     """
 
+    if not len(path.split("::")) == 2:
+        raise ValueError(
+            f"Failed to split path '{path}' in two parts. Please make "
+            "sure "
+            "that the path to the registered function is of the form "
+            "'/path/to/file.py::function_name'"
+        )
     file_path, function_name = path.split("::")
     file_path = os.path.abspath(file_path)
     if not os.path.exists(file_path):

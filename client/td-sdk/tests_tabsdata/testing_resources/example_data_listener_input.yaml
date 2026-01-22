@@ -5,7 +5,7 @@
 # Example of an input.yaml for tabsserver main function. Used in
 # test_tabsserver/test_yaml_parsing.py::test_parse_data_listener_input_yaml
 
-!DataListenerInputV1
+!StageTriggerV1
 info:
   collection_id: 06DGHE4NM1RG3CK8OE7MA02V24
   collection: collection

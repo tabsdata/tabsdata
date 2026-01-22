@@ -155,10 +155,10 @@ controllers:
           - td-function
           - td-worker
           - td-attempt
-      - name: watchdog
+      - name: stagetrigger
         kind: processor
         location: system
-        program: td_watchdog
+        program: td_stagetrigger
         concurrency: 0
         retries: 2
         arguments:

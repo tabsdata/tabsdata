@@ -155,6 +155,18 @@ def main():
             )
             store_exception_yaml(e, exit_status, arguments.response_folder)
             sys.exit(exit_status)
+        else:
+            logger.info(pad_string("[Exiting listener execution]"))
+            logger.error(f"Error executing the listener: {e}")
+            logger.error(traceback.format_exc())
+            is_user_error = isinstance(e, CustomException)
+            exit_status = (
+                TABSDATA_ERROR_EXIT_STATUS
+                if is_user_error
+                else GENERAL_ERROR_EXIT_STATUS
+            )
+            store_exception_yaml(e, exit_status, arguments.response_folder)
+            sys.exit(exit_status)
 
 
 if __name__ == "__main__":

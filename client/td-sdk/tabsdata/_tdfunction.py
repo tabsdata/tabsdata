@@ -15,6 +15,7 @@ import polars as pl
 import tabsdata._utils.tableframe._helpers as td_helpers
 import tabsdata.tableframe.lazyframe.frame as td_frame
 from tabsdata._crontab import Crontab
+from tabsdata._io.inputs.stage_input import Stage
 from tabsdata._io.inputs.table_inputs import TableInput
 from tabsdata._io.outputs.table_outputs import TableOutput
 from tabsdata._io.plugin import DestinationPlugin, SourcePlugin
@@ -187,7 +188,7 @@ class TabsdataFunction:
             raise FunctionConfigurationError(ErrorCode.FCE7, type(input))
         self._verify_valid_input_output()
         self._verify_valid_action_plugin_combination()
-        self._validate_trigger_by_and_inject()
+        self._validate_trigger_by()
 
     @property
     def original_folder(self) -> str:
@@ -315,7 +316,7 @@ class TabsdataFunction:
                 if not trigger_uri.table:
                     raise FunctionConfigurationError(ErrorCode.FCE3, trigger)
 
-        self._validate_trigger_by_and_inject()
+        self._validate_trigger_by()
 
         # @property TODO: Uncomment this when reverting TD-1089
         # def input_actions(self) -> list[OnTablesAction]:
@@ -359,25 +360,18 @@ class TabsdataFunction:
         )
         self._verify_valid_action_plugin_combination()
 
-    def _validate_trigger_by_and_inject(self):
+    def _validate_trigger_by(self):
         if (
             hasattr(self, "_trigger_by")
             and hasattr(self, "_input")
-            and self.input
-            and self.trigger_by
+            and self._input
+            and self._trigger_by
         ):
-            if isinstance(self.input, TableInput) and isinstance(
-                self.trigger_by, StageTrigger
-            ):
-                raise FunctionConfigurationError(ErrorCode.FCE13)
-            if isinstance(self.trigger_by, StageTrigger):
-                if not self.input.allows_listener:
+            if isinstance(self._trigger_by, StageTrigger):
+                if not isinstance(self._input, Stage):
                     raise FunctionConfigurationError(
                         ErrorCode.FCE14, self.input.__class__.__name__
                     )
-                self.input._injected_watchdog = self.trigger_by
-            else:
-                self.input._injected_watchdog = None
 
     def _verify_valid_input_output(self):
         """

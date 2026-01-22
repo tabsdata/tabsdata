@@ -186,7 +186,10 @@ def test_stage_function_re_registered_no_use_existing():
 @pytest.mark.slow
 @pytest.mark.tdfnrun
 @pytest.mark.parametrize("use_existing_data", [True, False])
-@pytest.mark.skip
+@pytest.mark.skip(
+    "Pending a decision about whether to mock the test or turn it "
+    "into an integration test."
+)
 def test_stage_function_re_registered_second_run(use_existing_data):
     """In this test case, the staging directory will have 2 files, which are put
     there before the mocked function_defined_on time. Therefore, the function should

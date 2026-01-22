@@ -416,7 +416,7 @@ class FunctionV2(FunctionYaml):
         return f"FunctionV2(content={self.content})"
 
 
-class DataListenerYaml(ABC):
+class StageTriggerYaml(ABC):
     """Just an abstract class to help with type hinting."""
 
     @property
@@ -474,8 +474,23 @@ class DataListenerYaml(ABC):
     def function_bundle_uri(self) -> str:
         """Return the function bundle URI."""
 
+    @property
+    @abstractmethod
+    def function_stage(self) -> Location:
+        """Return the function staging information."""
 
-class DataListenerV1(DataListenerYaml):
+    @property
+    @abstractmethod
+    def function_stage_env_prefix(self) -> str:
+        """Return the function stage env prefix."""
+
+    @property
+    @abstractmethod
+    def function_stage_uri(self) -> str:
+        """Return the function stage URI."""
+
+
+class StageTriggerV1(StageTriggerYaml):
     def __init__(self, content):
         self.content = content
 
@@ -520,6 +535,18 @@ class DataListenerV1(DataListenerYaml):
         return self.function_bundle.uri if self.function_bundle else None
 
     @property
+    def function_stage(self) -> Location:
+        return Location(self.info.get("function_stage")) if self.info else None
+
+    @property
+    def function_stage_env_prefix(self) -> str:
+        return self.function_stage.env_prefix if self.function_stage else None
+
+    @property
+    def function_stage_uri(self) -> str:
+        return self.function_stage.uri if self.function_stage else None
+
+    @property
     def function_version_id(self) -> str:
         return self.info["function_version_id"]
 
@@ -528,7 +555,7 @@ class DataListenerV1(DataListenerYaml):
         return self.content.get("info", {})
 
     def __repr__(self):
-        return f"DataListenerV1(content={self.content})"
+        return f"{self.__class__.__name__}(content={self.content})"
 
 
 def v2_table_constructor(loader, node):
@@ -545,8 +572,8 @@ def v2_function_constructor(loader, node):
     return FunctionV2(loader.construct_mapping(node))
 
 
-def v1_data_listener_constructor(loader, node):
-    return DataListenerV1(loader.construct_mapping(node))
+def v1_stage_trigger_constructor(loader, node):
+    return StageTriggerV1(loader.construct_mapping(node))
 
 
 def get_input_yaml_loader():
@@ -568,13 +595,13 @@ def get_input_yaml_loader():
         v2_function_constructor,
     )
     InputYamlLoader.add_constructor(
-        "!DataListenerInputV1",
-        v1_data_listener_constructor,
+        "!StageTriggerV1",
+        v1_stage_trigger_constructor,
     )
     return InputYamlLoader
 
 
-def parse_request_yaml(yaml_file: str) -> FunctionYaml | DataListenerYaml:
+def parse_request_yaml(yaml_file: str) -> FunctionYaml | StageTriggerYaml:
     with open(yaml_file, "r") as file:
         return yaml.load(file, Loader=get_input_yaml_loader())
 

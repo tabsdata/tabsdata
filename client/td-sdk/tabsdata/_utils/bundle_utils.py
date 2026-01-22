@@ -18,6 +18,7 @@ import cloudpickle
 import yaml
 
 from tabsdata._io.plugin import DestinationPlugin, SourcePlugin
+from tabsdata._io.stage_trigger import StageTrigger
 from tabsdata._tdfunction import TabsdataFunction
 from tabsdata._utils.constants import TABSDATA_MODULE_NAME, TRUE_VALUES
 from tabsdata._utils.envs import is_env_enabled
@@ -43,6 +44,7 @@ CONFIG_ENTRY_POINT_KEY = "entryPoint"
 CONFIG_FILE_NAME = "configuration.json"
 CONFIG_INPUTS_KEY = "inputs"
 CONFIG_OUTPUT_KEY = "output"
+CONFIG_TRIGGERBY_KEY = "triggerBy"
 IGNORED_FOLDERS = (
     ".cargo",
     ".coverage",
@@ -81,8 +83,11 @@ LOCAL_PACKAGES_FOLDER = "local_packages"
 
 PLUGINS_FOLDER = "plugins"
 
-ACTIONS_FOLDER = "actions"
+STAGE_TRIGGER_FOLDER = "stageTrigger"
+STAGE_TRIGGER_FILE = "StageTrigger.pkl"
+STAGE_TRIGGER_KEY = "stage-trigger"
 
+ACTIONS_FOLDER = "actions"
 CONFIG_INPUT_ACTIONS_KEY = "input_actions"
 INPUT_ACTIONS_KEY = "on-input-actions"
 INPUT_ACTIONS_FILE = "InputActions.pkl"
@@ -128,6 +133,9 @@ def create_configuration(function: TabsdataFunction, save_location: str):
         function, save_location
     )
     configuration[CONFIG_OUTPUT_ACTIONS_KEY] = create_output_actions_configuration(
+        function, save_location
+    )
+    configuration[CONFIG_TRIGGERBY_KEY] = create_trigger_by_configuration(
         function, save_location
     )
 
@@ -191,6 +199,25 @@ def create_input_actions_configuration(
     ) as f:
         cloudpickle.dump(function.input_actions, f)
     return {INPUT_ACTIONS_KEY: INPUT_ACTIONS_FILE}
+
+
+def create_trigger_by_configuration(
+    function: TabsdataFunction, save_location: str
+) -> dict:
+    if not isinstance(function.trigger_by, StageTrigger):
+        return {}
+
+    actions_location = os.path.join(save_location, STAGE_TRIGGER_FOLDER)
+    os.makedirs(actions_location, exist_ok=True)
+    with open(
+        os.path.join(
+            actions_location,
+            STAGE_TRIGGER_FILE,
+        ),
+        "wb",
+    ) as f:
+        cloudpickle.dump(function.trigger_by, f)
+    return {STAGE_TRIGGER_KEY: STAGE_TRIGGER_FILE}
 
 
 def create_output_actions_configuration(

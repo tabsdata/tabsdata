@@ -6,17 +6,17 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 import cloudpickle
 
 from tabsdata._io.plugin import DestinationPlugin, SourcePlugin
+from tabsdata._io.stage_trigger import StageTrigger
 from tabsdata._table_actions.actions import OnTablesAction
 from tabsdata._tabsserver.function.configuration_utils import load_function_config
 from tabsdata._tabsserver.function.response_utils import RESPONSE_FILE_NAME
 from tabsdata._tabsserver.function.status import Status
 from tabsdata._tabsserver.function.yaml_parsing import parse_request_yaml
-from tabsdata._tdfunction import TabsdataFunction
 from tabsdata._utils.bundle_utils import (
     ACTIONS_FOLDER,
     CODE_FOLDER,
@@ -26,9 +26,12 @@ from tabsdata._utils.bundle_utils import (
     CONFIG_INPUTS_KEY,
     CONFIG_OUTPUT_ACTIONS_KEY,
     CONFIG_OUTPUT_KEY,
+    CONFIG_TRIGGERBY_KEY,
     INPUT_ACTIONS_KEY,
     OUTPUT_ACTIONS_KEY,
     PLUGINS_FOLDER,
+    STAGE_TRIGGER_FOLDER,
+    STAGE_TRIGGER_KEY,
 )
 
 if TYPE_CHECKING:
@@ -70,7 +73,7 @@ class ExecutionContext:
         self.mount_options = MountOptions(mount_options_dict or {})
 
     @property
-    def user_provided_function(self) -> TabsdataFunction:
+    def user_provided_function(self) -> Callable:
         if not hasattr(self, "_user_provided_function"):
             with open(self.paths.function_file, "rb") as f:
                 self._user_provided_function = cloudpickle.load(f)
@@ -138,6 +141,20 @@ class ExecutionContext:
                 ) as f:
                     self._output_actions = cloudpickle.load(f)
         return self._output_actions
+
+    @property
+    def stage_trigger(self) -> StageTrigger | None:
+        if not hasattr(self, "_stage_trigger"):
+            stage_trigger_file = self.function_config.trigger_by.get(STAGE_TRIGGER_KEY)
+            if stage_trigger_file is None:
+                self._stage_trigger = None
+            else:
+                with open(
+                    os.path.join(self.paths.stage_trigger_folder, stage_trigger_file),
+                    "rb",
+                ) as f:
+                    self._stage_trigger = cloudpickle.load(f)
+        return self._stage_trigger
 
     @property
     def function_config(self) -> FunctionConfig:
@@ -242,6 +259,13 @@ class FunctionConfig:
         """
         return self.function_config.get(CONFIG_OUTPUT_ACTIONS_KEY, {})
 
+    @property
+    def trigger_by(self) -> dict:
+        """
+        Get the trigger by configuration.
+        """
+        return self.function_config.get(CONFIG_TRIGGERBY_KEY, {})
+
     def __getitem__(self, item):
         """
         Get the item from the function configuration.
@@ -276,6 +300,7 @@ class ExecutionPaths:
         self.code_folder = os.path.join(bundle_folder, CODE_FOLDER)
         self.plugins_folder = os.path.join(bundle_folder, PLUGINS_FOLDER)
         self.actions_folder = os.path.join(bundle_folder, ACTIONS_FOLDER)
+        self.stage_trigger_folder = os.path.join(bundle_folder, STAGE_TRIGGER_FOLDER)
         self.parent_context = parent_context
 
     @property

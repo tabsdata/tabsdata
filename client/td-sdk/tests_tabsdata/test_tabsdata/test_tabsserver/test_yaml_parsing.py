@@ -8,9 +8,9 @@ import platform
 
 from tabsdata._io.stage_trigger import CallConfig
 from tabsdata._tabsserver.function.yaml_parsing import (
-    DataListenerYaml,
     FunctionV2,
     Location,
+    StageTriggerYaml,
     Table,
     TableVersions,
     parse_request_yaml,
@@ -123,8 +123,8 @@ def test_parse_data_listener_input_yaml():
         TESTING_RESOURCES_FOLDER,
         "example_data_listener_input.yaml",
     )
-    config: DataListenerYaml = parse_request_yaml(input_yaml)
-    assert isinstance(config, DataListenerYaml)
+    config: StageTriggerYaml = parse_request_yaml(input_yaml)
+    assert isinstance(config, StageTriggerYaml)
     assert config.function_bundle == Location(
         {
             "uri": "file:///foo",
@@ -150,21 +150,21 @@ def test_parse_data_listener_input_yaml():
     assert fn_trigger.method == "POST"
     assert fn_trigger.url == "http://localhost:2457/internal/fn_trigger"
     assert fn_trigger.headers == []
-    assert fn_trigger.body is None
+    assert fn_trigger.allows_body is None
 
     fn_state = config.fn_state
     assert isinstance(fn_state, CallConfig)
     assert fn_state.method == "GET"
     assert fn_state.url == "http://localhost:2457/internal/fn_state"
     assert fn_state.headers == [["content-type", "application/parquet"]]
-    assert fn_state.body is None
+    assert fn_state.allows_body is None
 
     fn_status = config.fn_status
     assert isinstance(fn_status, CallConfig)
     assert fn_status.method == "GET"
     assert fn_status.url == "http://localhost:2457/internal/fn_status"
     assert fn_status.headers == []
-    assert fn_status.body is None
+    assert fn_status.allows_body is None
 
 
 def test_parse_minimal_input_yaml(tmp_path):

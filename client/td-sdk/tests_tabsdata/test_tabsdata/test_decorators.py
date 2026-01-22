@@ -13,7 +13,7 @@ from tabsdata import (
 )
 from tabsdata._crontab import Crontab
 from tabsdata._decorators import ALL_DEPS, publisher, subscriber, transformer
-from tabsdata._io.stage_trigger import StageTrigger
+from tabsdata._io.inputs.stage_input import Stage
 from tabsdata.exceptions import (
     DecoratorConfigurationError,
     ErrorCode,
@@ -326,7 +326,7 @@ def test_publisher_with_crontab_trigger():
 
 
 def test_subscriber_with_watchdog_trigger_raises_error():
-    watchdog = MyStageTrigger()
+    stage_trigger = MyStageTrigger()
 
     with pytest.raises(FunctionConfigurationError) as e:
 
@@ -334,12 +334,12 @@ def test_subscriber_with_watchdog_trigger_raises_error():
             TableInput("input"),
             LocalFileDestination("output.csv"),
             name="func_name",
-            trigger_by=watchdog,
+            trigger_by=stage_trigger,
         )
         def func():
             pass
 
-    assert e.value.error_code == ErrorCode.FCE13
+    assert e.value.error_code == ErrorCode.FCE14
 
 
 def test_transformer_with_watchdog_trigger_raises_error():
@@ -356,23 +356,14 @@ def test_transformer_with_watchdog_trigger_raises_error():
         def func():
             pass
 
-    assert e.value.error_code == ErrorCode.FCE13
+    assert e.value.error_code == ErrorCode.FCE14
 
 
 def test_publisher_with_watchdog_trigger():
     watchdog = MyStageTrigger()
 
-    class ValidWatchDogPlugin(SourcePlugin):
-
-        def __init__(self):
-            pass
-
-        @property
-        def allows_listener(self) -> bool:
-            return True
-
     @publisher(
-        ValidWatchDogPlugin(),
+        Stage(),
         TableOutput("output"),
         name="func_name",
         trigger_by=watchdog,
@@ -381,7 +372,6 @@ def test_publisher_with_watchdog_trigger():
         pass
 
     assert func.trigger_by == watchdog
-    assert func.input._injected_watchdog == watchdog
 
 
 def test_publisher_with_watchdog_trigger_not_allowed_raises_error():

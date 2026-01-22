@@ -4,18 +4,20 @@
 
 from __future__ import annotations
 
+import os
+import shutil
+import uuid
 from abc import ABC, abstractmethod
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, TypeAlias, Union
+from typing import Any, Literal, TypeAlias, Union
 
 import requests
 
 from tabsdata.exceptions import ErrorCode, StageTriggerConfigurationError
 
-if TYPE_CHECKING:
-    pass
+TRIGGER_FILE_PREFIX = "TD_INTERNAL_TRIGGER_FILE_"
 
 
 class StageTriggerStatus(Enum):
@@ -103,25 +105,23 @@ class StageTrigger(ABC):
         pass
 
 
-# TODO THIS SHOULD DISAPPEAR FROM HERE INTO THE CONTEXT IMPL SUB-CLASS
 class CallConfig:
 
     def __init__(
         self,
         method: Literal["GET", "POST", "PUT"],
         url: str,
-        headers: list[list[str]],
+        headers: dict,
         body: Any,
     ):
         self.method = method
         self.url = url
         self.headers = headers
-        self.body = body
+        self.allows_body = body
 
-    def call(self):
+    def call(self, body=None):
         url = self.url
-        body = self.body
-        headers = {v[0]: v[1] for v in self.headers}
+        headers = self.headers
         if self.method == "POST":
             method = requests.post
         elif self.method == "PUT":
@@ -134,8 +134,8 @@ class CallConfig:
 
     def __repr__(self):
         return (
-            f"CallConfig(method={self.method!r},"
-            f" url={self.url!r},headers={self.headers!r}, body={self.body!r})"
+            f"CallConfig(method={self.method!r}, url={self.url!r},"
+            f" headers={self.headers!r}, allows_body={self.allows_body!r})"
         )
 
 
@@ -148,23 +148,24 @@ class StageTriggerContext(ABC):
     Stage publisher to consume and to trigger the Stage as needed.
     """
 
+    @abstractmethod
     def trigger_monitor(self) -> bool:
         """
         Returns `True` if the publisher was triggered, `False` if not.
 
-        Checks if there s a trigger pending because of a `trigger()`
+        Checks if there's a trigger pending because of a `trigger()`
         invocation while the Stage publisher was running. If so, it tries to
         trigger it again, resetting the trigger pending flag only if the
         trigger was successful.
 
         It must be invoked periodically by the StageTrigger.run().
         """
-        pass
 
+    @abstractmethod
     def stage(self, parquet_files: FilesToStageSpec):
         """Writes the given files to the Stage consumption folder"""
-        pass
 
+    @abstractmethod
     def trigger(self) -> bool:
         """
         Returns `True` if the publisher was triggered, `False` if not.
@@ -177,10 +178,123 @@ class StageTriggerContext(ABC):
         trigger pending flag. The `trigger_monitor()` will trigger the
         publisher once the previous execution plan completes.
 
-        Trigger pendings are not cummulative, if this method is invoked
+        Triggers pending are not cumulative, if this method is invoked
         multiple times while the publisher is running, the first
         `trigger_monitor()`  invocation that triggers the publisher will
         reset the trigger pending, regardless of how many times the trigger()
         method was invoked.
         """
-        pass
+
+
+class LocalFileStageTriggerContext(StageTriggerContext):
+
+    def __init__(
+        self,
+        staging_folder: str,
+        trigger_config: CallConfig,
+        logger,
+    ):
+        self.staging_folder = staging_folder
+        self.trigger_config = trigger_config
+        self.logger = logger
+
+    def trigger_monitor(self) -> bool:
+        self.logger.debug("Monitoring triggering of the function")
+        self.logger.debug(
+            "Looking for files indicating the need to trigger the function."
+        )
+        folder = Path(self.staging_folder)
+
+        found_and_deleted = False
+        # Use glob() to efficiently find all items matching the pattern
+        for file_path in folder.glob(f"{TRIGGER_FILE_PREFIX}*"):
+            try:
+                # Ensure we are only deleting files, not directories
+                if file_path.is_file():
+                    self.logger.debug(f"Found matching file, deleting: {file_path}")
+                    file_path.unlink()  # Deletes the file
+                    found_and_deleted = True
+            except OSError as e:
+                self.logger.error(f"Error deleting file {file_path}: {e}")
+                raise
+        if found_and_deleted:
+            self.logger.debug("A trigger was pending, trying to launch it.")
+            return self.trigger()
+        else:
+            self.logger.debug("No trigger was pending. Nothing will be done.")
+            return False
+
+    def stage(self, parquet_files: FilesToStageSpec):
+        # Ensure the destination directory exists. If not, create it.
+        self.logger.debug(f"Staging files: {parquet_files}")
+        os.makedirs(self.staging_folder, exist_ok=True)
+        self.logger.debug(f"Destination folder: '{self.staging_folder}'")
+        parquet_files = (
+            parquet_files if isinstance(parquet_files, list) else [parquet_files]
+        )
+        for source_file in parquet_files:
+            try:
+                # Use shutil.copy2 to copy the file and its metadata
+                shutil.copy2(source_file, self.staging_folder)
+                self.logger.debug(f"  - Copied '{source_file}'")
+            except FileNotFoundError:
+                self.logger.error(
+                    f"  - Error: Source file not found at '{source_file}'"
+                )
+                raise
+            except Exception as e:
+                self.logger.error(f"  - Error copying '{source_file}': {e}")
+                raise
+        self.logger.debug("All files staged successfully")
+
+    def trigger(self) -> bool:
+        self.logger.debug("Requesting trigger of the function")
+        result = self.trigger_config.call(
+            {
+                "skip_if_running": False,
+                "trigger_type": "DL",
+            }
+        )
+        self.logger.debug(f"Result of the request: {result}")
+        result.raise_for_status()
+        success = _check_success(result)
+        if not success:
+            self.logger.debug(
+                "The trigger request was not successful. This is not an "
+                "error, but instead indicates that an execution of the "
+                "function is already running. Marking the trigger of the "
+                "function as pending."
+            )
+            trigger_file_name = (
+                TRIGGER_FILE_PREFIX + str(uuid.uuid4().hex[:16]) + ".txt"
+            )
+            trigger_file_path = Path(
+                os.path.join(self.staging_folder, trigger_file_name)
+            )
+            trigger_file_path.touch()
+            self.logger.debug(
+                f"Created file '{trigger_file_path}' to indicate that a "
+                "trigger is pending for the function."
+            )
+        else:
+            self.logger.debug("The function was triggered successfully.")
+        return success
+
+    def __repr__(self):
+        return (
+            f"{self.__class__.__name__}(staging_f"
+            f"older={self.staging_folder}, trigger_config={self.trigger_config}"
+        )
+
+
+def _check_success(result):
+    result_json = result.json()
+    data_dict = result_json.get("data")
+    if not data_dict or len(data_dict.keys()) != 1:
+        raise ValueError(
+            "Trying to assess the success of a trigger attempt, "
+            "but the resulting JSON does not have the required fields. "
+            f"The JSON is: {result_json}"
+        )
+    result = next(iter(data_dict.keys()))
+    return result == "Executed"

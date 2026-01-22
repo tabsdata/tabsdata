@@ -1337,7 +1337,7 @@ class ErrorCode(Enum):
         "code": "FCE-002",
         "message": (
             "The 'trigger_by' parameter of a TabsDataFunction must be a str, "
-            "a list of strings, a Crontab, or a Watchdog in the case of a "
+            "a list of strings, a Crontab, or a StageTrigger in the case of a "
             "publisher. Got an "
             "object of type '{}' instead."
         ),
@@ -1414,18 +1414,17 @@ class ErrorCode(Enum):
     FCE13 = {
         "code": "FCE-013",
         "message": (
-            "The 'trigger_by' parameter of a TabsdataFunction can only be a Watchdog "
-            "when the function is a publisher."
+            "The 'trigger_by' parameter of a TabsdataFunction can only be a"
+            " StageTrigger when the function is a publisher."
         ),
     }
     FCE14 = {
         "code": "FCE-014",
         "message": (
-            "The 'trigger_by' parameter of a TabsdataFunction can only be a Watchdog "
-            "when the function is a publisher and the source allows listeners. The "
-            "current function was provided with a Watchdog as the trigger, but the "
-            "source {} does not allow listeners. You can check if a source allows "
-            "listeners through the 'source.allows_listeners' property."
+            "The 'trigger_by' parameter of a TabsdataFunction can only be a"
+            " StageTrigger when the function is a publisher and the source is a Stage."
+            " The current function was provided with a StageTrigger as the"
+            " trigger, but the source {} is not a Stage."
         ),
     }
     FOCE1 = {
@@ -2138,22 +2137,22 @@ class ErrorCode(Enum):
     STE1 = {
         "code": "STE-001",
         "message": (
-            "The 'start' parameter of a Watchdog object must be a datetime object "
+            "The 'start' parameter of a StageTrigger object must be a datetime object "
             "or None; got '{}' of type {} instead."
         ),
     }
     STE2 = {
         "code": "STE-002",
         "message": (
-            "The 'end' parameter of a Watchdog object must be a datetime object "
+            "The 'end' parameter of a StageTrigger object must be a datetime object "
             "or None; got '{}' of type {} instead."
         ),
     }
     STE3 = {
         "code": "STE-003",
         "message": (
-            "The 'start' parameter of a Watchdog object must be earlier than the 'end' "
-            "parameter. Got start='{}' and end='{}'."
+            "The 'start' parameter of a StageTrigger object must be earlier than the"
+            " 'end' parameter. Got start='{}' and end='{}'."
         ),
     }
 
@@ -2487,8 +2486,8 @@ class TableURIConfigurationError(TabsDataException):
 
 class StageTriggerConfigurationError(TabsDataException):
     """
-    Exception raised when the creation or modification of a Watchdog object or one of
-    its auxiliary objects fails.
+    Exception raised when the creation or modification of a StageTrigger object or one
+    of its auxiliary objects fails.
     """
 
     CODE_PREFIX = "STE"

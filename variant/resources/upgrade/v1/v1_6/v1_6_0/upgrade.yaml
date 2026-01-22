@@ -7,10 +7,10 @@ instance:
     action: insert_sibling
     position: after
     data:
-      name: watchdog
+      name: stagetrigger
       kind: processor
       location: system
-      program: td_watchdog
+      program: td_stagetrigger
       concurrency: 0
       retries: 2
       arguments:

@@ -12,9 +12,10 @@ import polars as pl
 
 # noinspection PyProtectedMember
 import tabsdata._utils.tableframe._generators as td_generators
-from tabsdata._io.stage_trigger import StageTriggerContext
+from tabsdata._io.stage_trigger import LocalFileStageTriggerContext, StageTrigger
 from tabsdata._table_actions.actions import OnTablesAction
 from tabsdata._tabsserver.function import environment_import_utils
+from tabsdata._tabsserver.function.global_utils import convert_uri_to_path
 from tabsdata._tabsserver.function.logging_utils import pad_string
 from tabsdata._tabsserver.function.native_tables_utils import (
     scan_lf_from_location,
@@ -27,7 +28,7 @@ from tabsdata._tabsserver.function.typing import (
     InputTableSpec,
     OutputTableSpec,
 )
-from tabsdata._tabsserver.function.yaml_parsing import DataListenerYaml, Location
+from tabsdata._tabsserver.function.yaml_parsing import Location, StageTriggerYaml
 from tabsdata._utils.tableframe._constants import EMPTY_VERSION
 
 # noinspection PyProtectedMember
@@ -76,24 +77,27 @@ def execute_listener_from_config(
 def execute_listener(
     execution_context: ExecutionContext,
 ):
-    logger.info(pad_string("[Executing listener]"))
-
-    source = execution_context.source
-    listener = execution_context.source.listener
-    request: DataListenerYaml = execution_context.request
-    if not execution_context.source.allows_listener:
+    logger.info(pad_string("[Executing stage trigger]"))
+    stage_trigger = execution_context.stage_trigger
+    logger.debug(f"Using stage trigger: {stage_trigger}")
+    request: StageTriggerYaml = execution_context.request
+    if not isinstance(stage_trigger, StageTrigger):
         raise ValueError(
-            f"Requested a listener run for source {source}, but that "
-            "source does not allow listeners."
+            f"Requested a stage trigger run for {stage_trigger}, but that "
+            "class does not inherit from StageTrigger."
         )
-    fn_state = request.fn_state
-    fn_status = request.fn_status
     fn_trigger = request.fn_trigger
-    listener_context = StageTriggerContext(fn_state, fn_status, fn_trigger)
-    logger.debug(f"Listener context: {listener_context}")
-    logger.debug(f"Calling the 'listen' method of the provided listener {listener}")
-    result = listener.listen(listener_context)
-    logger.info("Listener executed successfully")
+    staging_folder = convert_uri_to_path(execution_context.request.function_stage_uri)
+    os.makedirs(staging_folder, exist_ok=True)
+    stage_context = LocalFileStageTriggerContext(
+        staging_folder, fn_trigger, execution_context.logger
+    )
+    logger.debug(f"Stage trigger context: {stage_context}")
+    logger.info(
+        f"Calling the 'run' method of the provided stage trigger {stage_trigger}"
+    )
+    result = stage_trigger.run(stage_context)
+    logger.info("Stage trigger executed successfully")
     return result
 
 
