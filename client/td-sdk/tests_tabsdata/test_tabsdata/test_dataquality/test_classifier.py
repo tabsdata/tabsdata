@@ -9,6 +9,7 @@ import pytest
 
 import tabsdata.tableframe.dtypes as td_dtypes
 from tabsdata import lit
+from tabsdata.api.tabsdata_server import Collection
 from tabsdata.dataquality._classifier import (
     DoesNotMatch,
     ExponentialScale,
@@ -973,3 +974,113 @@ def test_categorizer_on_missing_column_and_on_wrong_type():
 
     classifier = ScaleCategorizer(scale=scale, on_wrong_type="fail")
     assert classifier.on_wrong_type == "fail"
+
+
+def test_is_null_to_dict():
+    classifier = IsNull(column_names="col_a", tags="tag1", on_missing_column="fail")
+    expected = {
+        "type": "IsNull",
+        "column_names": [("col_a", None)],
+        "on_missing_column": "fail",
+        "on_wrong_type": "ignore",  # default
+        "on_wrong_value": "ignore",
+        "tags": ["tag1"],
+    }
+    assert classifier._to_dict() == expected
+
+
+def test_is_between_to_dict():
+    classifier = IsBetween(
+        column_names="col_a",
+        min_val=5,
+        max_val=10,
+        closed_on="both",
+        tags=["t1", "t2"],
+        on_missing_column="fail",
+        on_wrong_type="fail",
+        on_wrong_value="fail",
+    )
+    expected = {
+        "type": "IsBetween",
+        "column_names": [("col_a", None)],
+        "min_len": 5,
+        "max_len": 10,
+        "closed_on": "both",
+        "tags": ["t1", "t2"],
+        "on_missing_column": "fail",
+        "on_wrong_type": "fail",
+        "on_wrong_value": "fail",
+    }
+    assert classifier._to_dict() == expected
+
+
+def test_matches_to_dict():
+    classifier = Matches(
+        column_names=[("c1", "c2")],
+        pattern=".*",
+        tags="t1",
+        on_missing_column="ignore",
+        on_wrong_type="fail",
+    )
+    expected = {
+        "type": "Matches",
+        "column_names": [("c1", "c2")],
+        "pattern": ".*",
+        "tags": ["t1"],
+        "on_missing_column": "ignore",
+        "on_wrong_type": "fail",
+        "on_wrong_value": "ignore",
+    }
+    assert classifier._to_dict() == expected
+
+
+def test_is_in_to_dict():
+    classifier = IsIn(
+        column_names="c1",
+        values=[1, "a", 3.0],
+        tags="t1",
+        on_missing_column="fail",
+        on_wrong_value="fail",
+    )
+    result_dict = classifier._to_dict()
+    result_values = result_dict.pop("values")
+
+    expected_dict = {
+        "type": "IsIn",
+        "column_names": [("c1", None)],
+        "on_missing_column": "fail",
+        "on_wrong_type": "ignore",
+        "on_wrong_value": "fail",
+        "tags": ["t1"],
+    }
+    assert result_dict == expected_dict
+    assert isinstance(result_values, list)
+    assert set(result_values) == {1, "a", 3.0}
+
+
+def test_scale_categorizer_to_dict():
+    scale = LinearScale(min_val=0, max_val=100, bins=10)
+    classifier = ScaleCategorizer(
+        column_names="c1",
+        scale=scale,
+        tags="t1",
+        on_missing_column="fail",
+        on_wrong_type="fail",
+        on_wrong_scale_value="fail",
+    )
+    expected = {
+        "type": "ScaleCategorizer",
+        "column_names": [("c1", None)],
+        "on_missing_column": "fail",
+        "on_wrong_type": "fail",
+        "on_wrong_value": "fail",
+        "scale": {
+            "type": "LinearScale",
+            "min_val": 0,
+            "max_val": 100,
+            "bins": 10,
+            "use_bin_zero": False,
+        },
+        "tags": ["t1"],
+    }
+    assert classifier._to_dict() == expected

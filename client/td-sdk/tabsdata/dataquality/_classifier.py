@@ -13,7 +13,7 @@ import json
 import math
 import re
 import sys
-from abc import ABC, abstractmethod
+from abc import ABC
 from typing import AbstractSet, Collection, FrozenSet, Type, Union
 
 from tabsdata.dataquality._typing import (
@@ -24,6 +24,7 @@ from tabsdata.dataquality._typing import (
     ColumnNameWithAltSpec,
     LenSpec,
     OnInvalidColumnSpec,
+    OnInvalidValueSpec,
     RangeClosedOnSpec,
     RangeValueSpec,
     ScaleBaseSpec,
@@ -42,6 +43,8 @@ from tabsdata.exceptions import (
     ErrorCode,
     ParameterValueError,
 )
+
+# noinspection PyProtectedMember
 from tabsdata.tableframe.dtypes import (
     _ALL_DTYPES,
     _ALL_NON_BOOLEAN_DTYPES,
@@ -139,9 +142,14 @@ class Scale(ABC):
         )
         self._use_bin_zero = value
 
-    @abstractmethod
     def _to_dict(self) -> dict:
-        pass
+        return {
+            "type": self.__class__.__name__,
+            "min_val": self._range[0],
+            "max_val": self._range[1],
+            "bins": self._bins,
+            "use_bin_zero": self._use_bin_zero,
+        }
 
     def __repr__(self) -> str:
         return json.dumps(self._to_dict())
@@ -196,14 +204,6 @@ class IdentityScale(Scale):
         """Returns the number of bins in the scale."""
         return self._bins
 
-    def _to_dict(self) -> dict:
-        return {
-            "type": self.__class__.__name__,
-            "min_val": self._range[0],
-            "max_val": self._range[1],
-            "use_bin_zero": self._use_bin_zero,
-        }
-
 
 class NonIdentityScale(Scale, ABC):
     """
@@ -247,15 +247,6 @@ class NonIdentityScale(Scale, ABC):
     def bins(self, value: BinCountSpec):
         """Sets the number of bins to create."""
         self._bins = value
-
-    def _to_dict(self) -> dict:
-        return {
-            "type": self.__class__.__name__,
-            "min_val": self._range[0],
-            "max_val": self._range[1],
-            "bins": self._bins,
-            "use_bin_zero": self._use_bin_zero,
-        }
 
 
 class LinearScale(NonIdentityScale):
@@ -319,14 +310,9 @@ class MonomialScale(NonIdentityScale):
         self._power = value
 
     def _to_dict(self) -> dict:
-        return {
-            "type": self.__class__.__name__,
-            "min_val": self._range[0],
-            "max_val": self._range[1],
-            "power": self._power,
-            "bins": self._bins,
-            "use_bin_zero": self._use_bin_zero,
-        }
+        d = super()._to_dict()
+        d["power"] = self._power
+        return d
 
 
 # noinspection DuplicatedCode
@@ -369,14 +355,9 @@ class LogarithmicScale(NonIdentityScale):
         self._base = value
 
     def _to_dict(self) -> dict:
-        return {
-            "type": self.__class__.__name__,
-            "min_val": self._range[0],
-            "max_val": self._range[1],
-            "base": self._base,
-            "bins": self._bins,
-            "use_bin_zero": self._use_bin_zero,
-        }
+        d = super()._to_dict()
+        d["base"] = self._base
+        return d
 
 
 # noinspection DuplicatedCode
@@ -419,14 +400,9 @@ class ExponentialScale(NonIdentityScale):
         self._base = value
 
     def _to_dict(self) -> dict:
-        return {
-            "type": self.__class__.__name__,
-            "min_val": self._range[0],
-            "max_val": self._range[1],
-            "base": self._base,
-            "bins": self._bins,
-            "use_bin_zero": self._use_bin_zero,
-        }
+        d = super()._to_dict()
+        d["base"] = self._base
+        return d
 
 
 class Classifier(ABC):
@@ -448,6 +424,7 @@ class Classifier(ABC):
         column_names: ColumNamesWithAltSpec | None = None,
         on_missing_column: OnInvalidColumnSpec = "ignore",
         on_wrong_type: OnInvalidColumnSpec = "ignore",
+        on_wrong_value: OnInvalidValueSpec = "ignore",
         *,
         tags: TagsSpec | None = None,
     ):
@@ -464,6 +441,8 @@ class Classifier(ABC):
             on_missing_column: What to do if a column name is missing.
             on_wrong_type: Behavior when a column’s type is incompatible with the
                            classifier.
+            on_wrong_value: Behavior when a classifier's value is incompatible
+                            with the column type.
             tags: A tag or list of tags to associate with the classifier. Tags help
                   filter which classifiers an operation should consider.
         """
@@ -471,6 +450,7 @@ class Classifier(ABC):
         self.tags = _normalize_to_list(tags, keep_none=True)
         self.on_missing_column = on_missing_column
         self.on_wrong_type = on_wrong_type
+        self.on_wrong_value = on_wrong_value
 
     @property
     def column_names(self) -> list[ColumnNameWithAltSpec] | None:
@@ -529,9 +509,26 @@ class Classifier(ABC):
     def on_wrong_type(self, on_wrong_type: OnInvalidColumnSpec):
         self._on_wrong_type = on_wrong_type
 
-    @abstractmethod
+    @property
+    def on_wrong_value(self) -> OnInvalidValueSpec:
+        """
+        Returns what do if the column type is incompatible with the classifier.
+        """
+        return self._on_wrong_value
+
+    @on_wrong_value.setter
+    @_td_validate_call(ErrorCode.DQC153)
+    def on_wrong_value(self, on_wrong_value: OnInvalidValueSpec):
+        self._on_wrong_value = on_wrong_value
+
     def _to_dict(self) -> dict:
-        pass
+        return {
+            "type": self.__class__.__name__,
+            "column_names": self._column_names,
+            "on_missing_column": self._on_missing_column,
+            "on_wrong_type": self._on_wrong_type,
+            "tags": self._tags,
+        }
 
     def __repr__(self) -> str:
         return json.dumps(self._to_dict())
@@ -550,10 +547,6 @@ class BoolClassifier(Classifier, ABC):
     def supported_dtypes(cls) -> FrozenSet[Type]:
         """Returns the set of data types supported by boolean classifiers."""
         return _ALL_DTYPES
-
-    @abstractmethod
-    def _to_dict(self) -> dict:
-        pass
 
 
 def _validate_identity_min_max(
@@ -632,6 +625,7 @@ class ScaleCategorizer(Categorizer):
         column_names: ColumNamesWithAltSpec | None = None,
         on_missing_column: OnInvalidColumnSpec = "ignore",
         on_wrong_type: OnInvalidColumnSpec = "ignore",
+        on_wrong_scale_value: OnInvalidValueSpec = "ignore",
         *,
         scale: Scale,
         tags: TagsSpec | None = None,
@@ -644,10 +638,18 @@ class ScaleCategorizer(Categorizer):
             on_missing_column: What to do if a column name is missing.
             on_wrong_type: Behavior when a column’s type is incompatible with the
                            classifier.
+            on_wrong_scale_value: Behavior when the scale's min or max values
+                                  are incompatible with the column type.
             scale: The scale to use for categorization.
             tags: Optional tags for the classifier.
         """
-        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
+        super().__init__(
+            column_names=column_names,
+            on_missing_column=on_missing_column,
+            on_wrong_type=on_wrong_type,
+            on_wrong_value=on_wrong_scale_value,
+            tags=tags,
+        )
         self._scale = scale
 
     @property
@@ -662,14 +664,10 @@ class ScaleCategorizer(Categorizer):
         self._scale = scale
 
     def _to_dict(self) -> dict:
-        return {
-            "type": self.__class__.__name__,
-            "column_names": self._column_names,
-            "on_missing_column": self._on_missing_column,
-            "on_wrong_type": self._on_wrong_type,
-            "scale": self._scale._to_dict(),
-            "tags": self._tags,
-        }
+        d = super()._to_dict()
+        # noinspection PyProtectedMember
+        d["scale"] = self._scale._to_dict()
+        return d
 
 
 def _validate_pattern(pattern: str, fn_name, error_code: ErrorCode) -> str:
@@ -711,16 +709,13 @@ class IsNull(BoolClassifier):
             on_missing_column: What to do if a column name is missing.
             tags: Optional tags for the classifier.
         """
-        super().__init__(column_names, on_missing_column, "ignore", tags=tags)
-
-    def _to_dict(self) -> dict:
-        return {
-            "type": self.__class__.__name__,
-            "column_names": self._column_names,
-            "on_missing_column": self._on_missing_column,
-            "on_wrong_type": self._on_wrong_type,
-            "tags": self._tags,
-        }
+        super().__init__(
+            column_names=column_names,
+            on_missing_column=on_missing_column,
+            on_wrong_type="ignore",
+            on_wrong_value="ignore",
+            tags=tags,
+        )
 
 
 class IsNotNull(BoolClassifier):
@@ -749,16 +744,13 @@ class IsNotNull(BoolClassifier):
             on_missing_column: What to do if a column name is missing.
             tags: Optional tags for the classifier.
         """
-        super().__init__(column_names, on_missing_column, "ignore", tags=tags)
-
-    def _to_dict(self) -> dict:
-        return {
-            "type": self.__class__.__name__,
-            "column_names": self._column_names,
-            "on_missing_column": self._on_missing_column,
-            "on_wrong_type": self._on_wrong_type,
-            "tags": self._tags,
-        }
+        super().__init__(
+            column_names=column_names,
+            on_missing_column=on_missing_column,
+            on_wrong_type="ignore",
+            on_wrong_value="ignore",
+            tags=tags,
+        )
 
 
 class IsNan(BoolClassifier):
@@ -790,16 +782,13 @@ class IsNan(BoolClassifier):
                            classifier.
             tags: Optional tags for the classifier.
         """
-        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
-
-    def _to_dict(self) -> dict:
-        return {
-            "type": self.__class__.__name__,
-            "column_names": self._column_names,
-            "on_missing_column": self._on_missing_column,
-            "on_wrong_type": self._on_wrong_type,
-            "tags": self._tags,
-        }
+        super().__init__(
+            column_names=column_names,
+            on_missing_column=on_missing_column,
+            on_wrong_type=on_wrong_type,
+            on_wrong_value="ignore",
+            tags=tags,
+        )
 
 
 class IsNotNan(BoolClassifier):
@@ -831,16 +820,13 @@ class IsNotNan(BoolClassifier):
                            classifier.
             tags: Optional tags for the classifier.
         """
-        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
-
-    def _to_dict(self) -> dict:
-        return {
-            "type": self.__class__.__name__,
-            "column_names": self._column_names,
-            "on_missing_column": self._on_missing_column,
-            "on_wrong_type": self._on_wrong_type,
-            "tags": self._tags,
-        }
+        super().__init__(
+            column_names=column_names,
+            on_missing_column=on_missing_column,
+            on_wrong_type=on_wrong_type,
+            on_wrong_value="ignore",
+            tags=tags,
+        )
 
 
 class IsNullOrNan(BoolClassifier):
@@ -872,16 +858,13 @@ class IsNullOrNan(BoolClassifier):
                            classifier.
             tags: Optional tags for the classifier.
         """
-        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
-
-    def _to_dict(self) -> dict:
-        return {
-            "type": self.__class__.__name__,
-            "column_names": self._column_names,
-            "on_missing_column": self._on_missing_column,
-            "on_wrong_type": self._on_wrong_type,
-            "tags": self._tags,
-        }
+        super().__init__(
+            column_names=column_names,
+            on_missing_column=on_missing_column,
+            on_wrong_type=on_wrong_type,
+            on_wrong_value="ignore",
+            tags=tags,
+        )
 
 
 class IsNotNullNorNan(BoolClassifier):
@@ -913,16 +896,13 @@ class IsNotNullNorNan(BoolClassifier):
                            classifier.
             tags: Optional tags for the classifier.
         """
-        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
-
-    def _to_dict(self) -> dict:
-        return {
-            "type": self.__class__.__name__,
-            "column_names": self._column_names,
-            "on_missing_column": self._on_missing_column,
-            "on_wrong_type": self._on_wrong_type,
-            "tags": self._tags,
-        }
+        super().__init__(
+            column_names=column_names,
+            on_missing_column=on_missing_column,
+            on_wrong_type=on_wrong_type,
+            on_wrong_value="ignore",
+            tags=tags,
+        )
 
 
 # noinspection DuplicatedCode
@@ -955,16 +935,13 @@ class IsZero(BoolClassifier):
                            classifier.
             tags: Optional tags for the classifier.
         """
-        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
-
-    def _to_dict(self) -> dict:
-        return {
-            "type": self.__class__.__name__,
-            "column_names": self._column_names,
-            "on_missing_column": self._on_missing_column,
-            "on_wrong_type": self._on_wrong_type,
-            "tags": self._tags,
-        }
+        super().__init__(
+            column_names=column_names,
+            on_missing_column=on_missing_column,
+            on_wrong_type=on_wrong_type,
+            on_wrong_value="ignore",
+            tags=tags,
+        )
 
 
 class IsNotZero(BoolClassifier):
@@ -996,16 +973,13 @@ class IsNotZero(BoolClassifier):
                            classifier.
             tags: Optional tags for the classifier.
         """
-        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
-
-    def _to_dict(self) -> dict:
-        return {
-            "type": self.__class__.__name__,
-            "column_names": self._column_names,
-            "on_missing_column": self._on_missing_column,
-            "on_wrong_type": self._on_wrong_type,
-            "tags": self._tags,
-        }
+        super().__init__(
+            column_names=column_names,
+            on_missing_column=on_missing_column,
+            on_wrong_type=on_wrong_type,
+            on_wrong_value="ignore",
+            tags=tags,
+        )
 
 
 class IsPositive(BoolClassifier):
@@ -1037,16 +1011,13 @@ class IsPositive(BoolClassifier):
                            classifier.
             tags: Optional tags for the classifier.
         """
-        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
-
-    def _to_dict(self) -> dict:
-        return {
-            "type": self.__class__.__name__,
-            "column_names": self._column_names,
-            "on_missing_column": self._on_missing_column,
-            "on_wrong_type": self._on_wrong_type,
-            "tags": self._tags,
-        }
+        super().__init__(
+            column_names=column_names,
+            on_missing_column=on_missing_column,
+            on_wrong_type=on_wrong_type,
+            on_wrong_value="ignore",
+            tags=tags,
+        )
 
 
 class IsPositiveOrZero(BoolClassifier):
@@ -1078,16 +1049,13 @@ class IsPositiveOrZero(BoolClassifier):
                            classifier.
             tags: Optional tags for the classifier.
         """
-        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
-
-    def _to_dict(self) -> dict:
-        return {
-            "type": self.__class__.__name__,
-            "column_names": self._column_names,
-            "on_missing_column": self._on_missing_column,
-            "on_wrong_type": self._on_wrong_type,
-            "tags": self._tags,
-        }
+        super().__init__(
+            column_names=column_names,
+            on_missing_column=on_missing_column,
+            on_wrong_type=on_wrong_type,
+            on_wrong_value="ignore",
+            tags=tags,
+        )
 
 
 class IsNegative(BoolClassifier):
@@ -1119,16 +1087,13 @@ class IsNegative(BoolClassifier):
                            classifier.
             tags: Optional tags for the classifier.
         """
-        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
-
-    def _to_dict(self) -> dict:
-        return {
-            "type": self.__class__.__name__,
-            "column_names": self._column_names,
-            "on_missing_column": self._on_missing_column,
-            "on_wrong_type": self._on_wrong_type,
-            "tags": self._tags,
-        }
+        super().__init__(
+            column_names=column_names,
+            on_missing_column=on_missing_column,
+            on_wrong_type=on_wrong_type,
+            on_wrong_value="ignore",
+            tags=tags,
+        )
 
 
 class IsNegativeOrZero(BoolClassifier):
@@ -1160,16 +1125,13 @@ class IsNegativeOrZero(BoolClassifier):
                            classifier.
             tags: Optional tags for the classifier.
         """
-        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
-
-    def _to_dict(self) -> dict:
-        return {
-            "type": self.__class__.__name__,
-            "column_names": self._column_names,
-            "on_missing_column": self._on_missing_column,
-            "on_wrong_type": self._on_wrong_type,
-            "tags": self._tags,
-        }
+        super().__init__(
+            column_names=column_names,
+            on_missing_column=on_missing_column,
+            on_wrong_type=on_wrong_type,
+            on_wrong_value="ignore",
+            tags=tags,
+        )
 
 
 # noinspection DuplicatedCode
@@ -1192,6 +1154,7 @@ class BetweenClassifier(BoolClassifier, ABC):
         closed_on: RangeClosedOnSpec = "both",
         on_missing_column: OnInvalidColumnSpec = "ignore",
         on_wrong_type: OnInvalidColumnSpec = "ignore",
+        on_wrong_value: OnInvalidValueSpec = "ignore",
         *,
         tags: TagsSpec | None = None,
     ):
@@ -1207,9 +1170,17 @@ class BetweenClassifier(BoolClassifier, ABC):
             on_missing_column: What to do if a column name is missing.
             on_wrong_type: Behavior when a column’s type is incompatible with the
                            classifier.
+            on_wrong_value: Behavior when a classifier's value isincompatible with the
+                            column type.
             tags: Optional tags for the classifier.
         """
-        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
+        super().__init__(
+            column_names=column_names,
+            on_missing_column=on_missing_column,
+            on_wrong_type=on_wrong_type,
+            on_wrong_value=on_wrong_value,
+            tags=tags,
+        )
         self._min = min_val
         self._max = max_val
         _validate_range(min_val, max_val, "IsBetween.__init__", ErrorCode.DQC136)
@@ -1248,16 +1219,12 @@ class BetweenClassifier(BoolClassifier, ABC):
         self._closed_on = closed_on
 
     def _to_dict(self) -> dict:
-        return {
-            "type": self.__class__.__name__,
-            "column_names": self._column_names,
-            "on_missing_column": self._on_missing_column,
-            "on_wrong_type": self._on_wrong_type,
-            "min_len": self._min,
-            "max_len": self._max,
-            "closed": self._closed_on,
-            "tags": self._tags,
-        }
+        d = super()._to_dict()
+        d["min_len"] = self._min
+        d["max_len"] = self._max
+        d["closed_on"] = self._closed_on
+        d["on_wrong_value"] = self._on_wrong_value
+        return d
 
 
 # noinspection DuplicatedCode
@@ -1289,6 +1256,7 @@ class InClassifier(BoolClassifier, ABC):
         self,
         column_names: ColumNamesWithAltSpec | None = None,
         on_missing_column: OnInvalidColumnSpec = "ignore",
+        on_wrong_value: OnInvalidValueSpec = "ignore",
         *,
         values: Collection,
         tags: TagsSpec | None = None,
@@ -1299,10 +1267,18 @@ class InClassifier(BoolClassifier, ABC):
         Args:
             column_names: The column(s) to check.
             on_missing_column: What to do if a column name is missing.
+            on_wrong_value: Behavior when a classifier's value isincompatible with the
+                            column type.
             values: The collection of values to check against.
             tags: Optional tags for the classifier.
         """
-        super().__init__(column_names, on_missing_column, "ignore", tags=tags)
+        super().__init__(
+            column_names=column_names,
+            on_missing_column=on_missing_column,
+            on_wrong_type="ignore",
+            on_wrong_value=on_wrong_value,
+            tags=tags,
+        )
         self.values = values
 
     @property
@@ -1316,14 +1292,10 @@ class InClassifier(BoolClassifier, ABC):
         self._values = _normalize_to_set(values)
 
     def _to_dict(self) -> dict:
-        return {
-            "type": self.__class__.__name__,
-            "column_names": self._column_names,
-            "on_missing_column": self._on_missing_column,
-            "on_wrong_type": self._on_wrong_type,
-            "values": list(self._values),
-            "tags": self._tags,
-        }
+        d = super()._to_dict()
+        d["values"] = list(self._values)
+        d["on_wrong_value"] = self._on_wrong_value
+        return d
 
 
 class IsIn(InClassifier):
@@ -1371,7 +1343,13 @@ class MatchClassifier(BoolClassifier, ABC):
             pattern: The regular expression to match against.
             tags: Optional tags for the classifier.
         """
-        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
+        super().__init__(
+            column_names=column_names,
+            on_missing_column=on_missing_column,
+            on_wrong_type=on_wrong_type,
+            on_wrong_value="ignore",
+            tags=tags,
+        )
         self.pattern = pattern
 
     @property
@@ -1389,14 +1367,9 @@ class MatchClassifier(BoolClassifier, ABC):
         )
 
     def _to_dict(self) -> dict:
-        return {
-            "type": self.__class__.__name__,
-            "column_names": self._column_names,
-            "on_missing_column": self._on_missing_column,
-            "on_wrong_type": self._on_wrong_type,
-            "pattern": self._pattern,
-            "tags": self._tags,
-        }
+        d = super()._to_dict()
+        d["pattern"] = self._pattern
+        return d
 
 
 class Matches(MatchClassifier):
@@ -1445,7 +1418,13 @@ class HasLength(BoolClassifier):
                            classifier.
             tags: Optional tags for the classifier.
         """
-        super().__init__(column_names, on_missing_column, on_wrong_type, tags=tags)
+        super().__init__(
+            column_names=column_names,
+            on_missing_column=on_missing_column,
+            on_wrong_type=on_wrong_type,
+            on_wrong_value="ignore",
+            tags=tags,
+        )
         self._min = min_len
         self._max = max_len
         _validate_range(min_len, max_len, "HasLength.__init__", ErrorCode.DQC147)
@@ -1475,15 +1454,10 @@ class HasLength(BoolClassifier):
         self._max = max_len
 
     def _to_dict(self) -> dict:
-        return {
-            "type": self.__class__.__name__,
-            "column_names": self._column_names,
-            "on_missing_column": self._on_missing_column,
-            "on_wrong_type": self._on_wrong_type,
-            "min_len": self._min,
-            "max_len": self._max,
-            "tags": self._tags,
-        }
+        d = super()._to_dict()
+        d["min_len"] = self._min
+        d["max_len"] = self._max
+        return d
 
 
 def _validate_range(

@@ -2245,6 +2245,7 @@ class ErrorCode(Enum):
     DQC150 = object()
     DQC151 = object()
     DQC152 = object()
+    DQC153 = object()
 
     # _dataquality.py
     DQC201 = object()
