@@ -56,7 +56,7 @@ pub fn main() {
         }
     }
 
-    logging::start(None, None, true);
+    logging::start(None, None, true, true);
 
     let arguments: Vec<String> = env::args().collect();
     let command = arguments.join(" ");

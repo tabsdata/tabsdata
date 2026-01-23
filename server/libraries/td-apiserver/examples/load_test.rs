@@ -82,7 +82,12 @@ struct Args {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize tracing
-    logging::start(Some(Level::INFO), Some(CONSOLE_PROFILE.to_string()), false);
+    logging::start(
+        Some(Level::INFO),
+        Some(CONSOLE_PROFILE.to_string()),
+        false,
+        true,
+    );
 
     // let args = Args::parse();
     let args = Args {

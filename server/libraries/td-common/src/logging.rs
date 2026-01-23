@@ -25,6 +25,8 @@ use tracing_subscriber::fmt::MakeWriter;
 use tracing_subscriber::fmt::writer::BoxMakeWriter;
 use tracing_subscriber::layer::{Context, SubscriberExt};
 use tracing_subscriber::registry::LookupSpan;
+use tracing_subscriber::reload::{Handle, Layer as ReloadLayer};
+use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer, Registry};
 
 pub const SENSITIVE_MARKER: &str = "@@SENSITIVE@@";
@@ -55,12 +57,13 @@ pub const DEFAULT_LOG_LEVEL: Level = Level::DEBUG;
 pub const WORK_ENV: &str = "TD_URI_WORK";
 pub const PYTEST_VERSION: &str = "PYTEST_VERSION";
 
-fn bootstrap_notice(message: impl Into<String>) {
-    eprintln!("[logging] {}", message.into());
-}
+static BOOTSTRAP_NOTICE_ENABLED: OnceCell<bool> = OnceCell::new();
 
-use tracing_subscriber::reload::{Handle, Layer as ReloadLayer};
-use tracing_subscriber::util::SubscriberInitExt;
+fn bootstrap_notice(message: impl Into<String>) {
+    if *BOOTSTRAP_NOTICE_ENABLED.get().unwrap_or(&true) {
+        eprintln!("[logging] {}", message.into());
+    }
+}
 
 static LOG_RELOAD_HANDLE: OnceCell<Handle<EnvFilter, Registry>> = OnceCell::new();
 
@@ -114,9 +117,15 @@ fn init<W: for<'a> MakeWriter<'a> + Send + Sync + 'static>(
 ) -> LoggerGuard {
     let log_with_ansi = MANAGER.get(LOG_WITH_ANSI).as_deref() == Some(TRUE);
 
+    let base_filter = match &profile {
+        Some(profile) => build_base_layer_filter(Some(profile)),
+        None => build_default_filter(max_level, &directives),
+    };
+
     let tabsdata_layer = tracing_subscriber::fmt::layer()
         .with_ansi(log_with_ansi)
-        .with_writer(writer);
+        .with_writer(writer)
+        .with_filter(base_filter);
 
     let (filter, sinks) = match profile {
         Some(profile) => (build_profile_filter(&profile), profile.sinks.clone()),
@@ -180,7 +189,14 @@ fn init<W: for<'a> MakeWriter<'a> + Send + Sync + 'static>(
 // Start the logger.
 // Option 'with_tokio_console' enabled requires also binaries with feature 'tokio_console'.
 // Otherwise, flag will be ignored defaulting to standard behavior.
-pub fn start(max_level: Option<Level>, profile: Option<String>, with_tokio_console: bool) {
+pub fn start(
+    max_level: Option<Level>,
+    profile: Option<String>,
+    with_tokio_console: bool,
+    enable_bootstrap_notice: bool,
+) {
+    BOOTSTRAP_NOTICE_ENABLED.get_or_init(|| enable_bootstrap_notice);
+
     let log_config = load();
     let active_profile_name = determine_profile_name(profile, log_config.as_ref());
     let active_profile = log_config
@@ -583,17 +599,47 @@ fn build_default_filter(max_level: Level, directives: &[String]) -> EnvFilter {
 }
 
 fn build_profile_filter(profile: &LogProfile) -> EnvFilter {
-    let level = match Level::from_str(&profile.level) {
-        Ok(level) => level,
-        Err(err) => {
-            bootstrap_notice(format!(
-                "Unable to parse log level '{}': {err}. Falling back to INFO.",
-                profile.level
-            ));
-            Level::INFO
+    let base_level = if !profile.sinks.is_empty()
+        && profile
+            .sinks
+            .iter()
+            .any(|sink_config| !sink_config.directives.is_empty())
+    {
+        Level::TRACE
+    } else {
+        match Level::from_str(&profile.level) {
+            Ok(level) => level,
+            Err(err) => {
+                bootstrap_notice(format!(
+                    "Unable to parse log level '{}': {err}. Falling back to INFO.",
+                    profile.level
+                ));
+                Level::INFO
+            }
         }
     };
     profile.directives.iter().fold(
+        EnvFilter::from_default_env().add_directive(base_level.into()),
+        |filter, directive| match directive.parse() {
+            Ok(parsed) => filter.add_directive(parsed),
+            Err(err) => {
+                bootstrap_notice(format!(
+                    "Unable to parse log directive '{directive}': {err}. Ignoring directive."
+                ));
+                filter
+            }
+        },
+    )
+}
+
+fn build_base_layer_filter(profile: Option<&LogProfile>) -> EnvFilter {
+    let level = profile
+        .and_then(|p| Level::from_str(&p.level).ok())
+        .unwrap_or(Level::INFO);
+
+    let directives = profile.map(|p| p.directives.as_slice()).unwrap_or(&[]);
+
+    directives.iter().fold(
         EnvFilter::from_default_env().add_directive(level.into()),
         |filter, directive| match directive.parse() {
             Ok(parsed) => filter.add_directive(parsed),

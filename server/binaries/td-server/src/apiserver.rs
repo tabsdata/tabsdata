@@ -19,7 +19,7 @@ fn main() {
         process::exit(0);
     }
 
-    logging::start(None, None, false);
+    logging::start(None, None, false, true);
 
     let arguments: Vec<String> = env::args().collect();
     let command = arguments.join(" ");

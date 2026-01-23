@@ -51,6 +51,7 @@ pub fn _identifier_generator(
         Some(Level::ERROR),
         Some(DEVELOPMENT_PROFILE.to_string()),
         false,
+        true,
     );
     debug!(
         "Executing identifier generator expression function with parameters: {:?}",

@@ -152,7 +152,7 @@ async fn run_impl(
     }
 
     // Initialize logging
-    logging::start(Some(Level::INFO), None, false);
+    logging::start(Some(Level::INFO), None, false, true);
 
     let request = params.request.ok_or_else(|| {
         TransporterReport::ErrorV1(ErrorReport::new(
