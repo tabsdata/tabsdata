@@ -67,8 +67,8 @@ script = [
         crates = array_join ${crates_array} " "
 
         exec --fail-on-error rustup component add %{components}
-        exec --fail-on-error cargo install --quiet --jobs 8 %{crates}
+        exec --fail-on-error cargo install --quiet --locked --jobs 8 %{crates}
 
-        exec --fail-on-error cargo install --quiet --git https://github.com/tabsdata/cargo-pants --branch main
+        exec --fail-on-error cargo install --quiet --locked --git https://github.com/tabsdata/cargo-pants --branch main
     end
     ''']
