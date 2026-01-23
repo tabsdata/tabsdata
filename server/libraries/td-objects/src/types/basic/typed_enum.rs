@@ -214,6 +214,8 @@ pub enum TableType {
     #[default]
     #[typed_enum(rename = "R")]
     Regular,
+    #[typed_enum(rename = "DQD")]
+    DQData,
     #[typed_enum(rename = "DQS")]
     DQSummary,
 }
