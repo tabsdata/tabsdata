@@ -12,7 +12,7 @@ from pydantic import PositiveInt
 from tabsdata._io.connections.postgres_connection import PostgresConn
 from tabsdata._io.constants import _LoaderSpec
 from tabsdata._io.inputs.sql.shared_types import (
-    PostgresLoaderSpec,
+    PostgresSrcLoaderSpec,
     QueriesSpec,
     SchemaOverrideSpec,
 )
@@ -51,7 +51,7 @@ class PostgresSrc(SourcePlugin):
         initial_values: Optional[dict[str, Any]] = None,
         transactional: bool = True,
         chunk_size: PositiveInt = 100000,
-        loader: PostgresLoaderSpec = "polars_sqlalchemy",
+        loader: PostgresSrcLoaderSpec = "polars_sqlalchemy",
         schema_overrides: SchemaOverrideSpec = None,
     ):
         """
@@ -152,23 +152,23 @@ class PostgresSrc(SourcePlugin):
         return self._chunk_size
 
     @property
-    def loader(self) -> PostgresLoaderSpec:
+    def loader(self) -> PostgresSrcLoaderSpec:
         """
         The data processing loader to use for executing SQL imports.
         """
         return self._loader.value
 
-    def _validate_loader(self, loader: PostgresLoaderSpec):
+    def _validate_loader(self, loader: PostgresSrcLoaderSpec):
         """
         Validate the loader parameter used to execute SQL imports.
         Args:
             loader: The data processing loader to use for executing SQL imports.
         """
-        if loader not in get_args(PostgresLoaderSpec):
+        if loader not in get_args(PostgresSrcLoaderSpec):
             raise SourceConfigurationError(
                 ErrorCode.SOCE52,
                 self.__class__.__name__,
-                get_args(PostgresLoaderSpec),
+                get_args(PostgresSrcLoaderSpec),
                 loader,
             )
         return _LoaderSpec(loader)

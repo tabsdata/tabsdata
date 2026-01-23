@@ -944,6 +944,32 @@ def create_docker_postgres_database(
             )
         """
         )
+        mycursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS type_check_test_schema.all_postgres_dest_types (
+                id SERIAL PRIMARY KEY,
+                c_smallint SMALLINT,
+                c_integer INTEGER,
+                c_bigint BIGINT,
+                c_decimal DECIMAL(10,2),
+                c_numeric NUMERIC(10,2),
+                c_real REAL,
+                c_double DOUBLE PRECISION,
+                c_money MONEY,
+                c_char CHAR(10),
+                c_varchar VARCHAR(50),
+                c_text TEXT,
+                c_bytea BYTEA,
+                c_boolean BOOLEAN,
+                c_date DATE,
+                c_time TIME,
+                c_timetz TIME WITH TIME ZONE,
+                c_timestamp TIMESTAMP,
+                c_timestamptz TIMESTAMP WITH TIME ZONE,
+                c_interval INTERVAL
+            )
+        """
+        )
         sql = """
             INSERT INTO type_check_test_schema.all_postgres_types (
                 c_smallint, c_integer, c_bigint, c_decimal, c_numeric, c_real, c_double,
@@ -984,6 +1010,22 @@ def create_docker_postgres_database(
         mycursor.execute(
             "CREATE TABLE second_output_postgres_transaction (Duration INT, "
             "Pulse INT, Maxpulse INT, Calories FLOAT)"
+        )
+        mycursor.execute(
+            'CREATE TABLE output_new_postgres_transaction ("Duration" INT, "Pulse" INT,'
+            ' "Maxpulse" INT, "Calories" FLOAT)'
+        )
+        mycursor.execute(
+            'CREATE TABLE second_output_new_postgres_transaction ("Duration" INT,'
+            ' "Pulse" INT, "Maxpulse" INT, "Calories" FLOAT)'
+        )
+        mycursor.execute(
+            'CREATE TABLE output_new_postgres_wo_transaction ("Duration" INT, "Pulse"'
+            ' INT, "Maxpulse" INT, "Calories" FLOAT)'
+        )
+        mycursor.execute(
+            'CREATE TABLE second_output_new_postgres_wo_transaction ("Duration" INT,'
+            ' "Pulse" INT, "Maxpulse" INT, "Calories" FLOAT)'
         )
         mycursor.execute("CREATE SCHEMA testing_schema")
         mydb.commit()

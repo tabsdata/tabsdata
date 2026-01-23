@@ -123,3 +123,11 @@ class PostgresConn(Conn):
             and self.cx_src_configs_postgres == other.cx_src_configs_postgres
             and self.cx_dst_configs_postgres == other.cx_dst_configs_postgres
         )
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}(uri='{self.uri}', "
+            f"enforce_connection_params={self.enforce_connection_params}, "
+            f"cx_src_configs_postgres={self.cx_src_configs_postgres}, "
+            f"cx_dst_configs_postgres={self.cx_dst_configs_postgres})"
+        )

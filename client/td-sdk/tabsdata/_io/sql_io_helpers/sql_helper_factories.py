@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from tabsdata._io.inputs.sql.oracle_input import OracleSrc
     from tabsdata._io.inputs.sql.postgres_input import PostgresSrc
     from tabsdata._io.outputs.sql.mysql_output import MySQLDest
+    from tabsdata._io.outputs.sql.postgres_output import PostgresDest
     from tabsdata_mssql.input.mssql_input import MSSQLSrc
 
 logger = logging.getLogger(__name__)
@@ -60,7 +61,9 @@ def get_sql_source_helper(
     return helper
 
 
-def get_sql_dest_helper(dest: Union[MySQLDest]) -> Union[SQLAlchemyDestHelper]:
+def get_sql_dest_helper(
+    dest: Union[MySQLDest, PostgresDest],
+) -> Union[SQLAlchemyDestHelper]:
     """
     Factory function to get the appropriate SQL destination helper based on the
     destination type.
@@ -180,9 +183,10 @@ def _get_sql_source_config(
         raise TypeError(f"Unsupported source type: {type(source)}")
 
 
-def _get_sql_dest_config(dest: Union[MySQLDest]) -> SQLDestConfig:
+def _get_sql_dest_config(dest: Union[MySQLDest, PostgresDest]) -> SQLDestConfig:
     # Runtime import for isinstance checks:
     from tabsdata._io.outputs.sql.mysql_output import MySQLDest as _MySQLDest
+    from tabsdata._io.outputs.sql.postgres_output import PostgresDest as _PostgresDest
 
     if isinstance(dest, _MySQLDest):
         return SQLDestConfig(
@@ -192,6 +196,21 @@ def _get_sql_dest_config(dest: Union[MySQLDest]) -> SQLDestConfig:
                 enforce_connection_params=dest.conn.enforce_connection_params,
                 cx_src_configs_sql=dest.conn.cx_src_configs_mysql,
                 cx_dst_configs_sql=dest.conn.cx_dst_configs_mysql,
+            ),
+            destination_tables=dest.destination_tables,
+            if_table_exists=dest.if_table_exists,
+            transactional=dest.transactional,
+            chunk_size=dest.chunk_size,
+            loader=dest.loader,
+        )
+    elif isinstance(dest, _PostgresDest):
+        return SQLDestConfig(
+            conn=SQLConnConfig(
+                uri=dest.conn.uri,
+                credentials=dest.conn.credentials,
+                enforce_connection_params=dest.conn.enforce_connection_params,
+                cx_src_configs_sql=dest.conn.cx_src_configs_postgres,
+                cx_dst_configs_sql=dest.conn.cx_dst_configs_postgres,
             ),
             destination_tables=dest.destination_tables,
             if_table_exists=dest.if_table_exists,

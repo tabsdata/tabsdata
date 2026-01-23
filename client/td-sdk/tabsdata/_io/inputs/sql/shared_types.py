@@ -13,6 +13,6 @@ SchemaOverrideSpec = Union[dict[str, DataType], list[dict[str, DataType]], None]
 # that arise when importing _td_validate_call from dataquality module into the SQL input
 # files.
 OracleLoaderSpec = Literal["polars_sqlalchemy", "pandas"]
-PostgresLoaderSpec = Literal["polars_sqlalchemy", "pandas"]
+PostgresSrcLoaderSpec = Literal["polars_sqlalchemy", "pandas"]
 MariaDBLoaderSpec = Literal["polars_sqlalchemy", "pandas"]
 MySQLSrcLoaderSpec = Literal["polars_sqlalchemy", "pandas"]

@@ -1,0 +1,21 @@
+{
+  "c_smallint": 1,
+  "c_integer": 42,
+  "c_bigint": 1234567890123,
+  "c_decimal": 12345.67,
+  "c_numeric": 23456.78,
+  "c_real": 3.14,
+  "c_double": 2.71828,
+  "c_money": 100.5,
+  "c_char": "char10",
+  "c_varchar": "varchar50",
+  "c_text": "some text",
+  "c_bytea": "\\xDEADBEEF",
+  "c_boolean": true,
+  "c_date": "2024-01-01",
+  "c_time": "12:34:56",
+  "c_timetz": "13:45:01+02",
+  "c_timestamp": "2024-01-01 12:34:56",
+  "c_timestamptz": "2024-01-01 12:34:56+02",
+  "c_interval": "1 year 2 months 3 days"
+}
