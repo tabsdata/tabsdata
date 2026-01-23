@@ -277,7 +277,7 @@ class TabsdataFunction:
     def trigger_by(self) -> list[str] | Crontab | StageTrigger | None:
         """
         List[str]: The trigger(s) that will cause the function to execute. It must be
-            another table or tables in the system, a Crontab, or a Watchdog in the
+            another table or tables in the system, a Crontab, or a StageTrigger in the
             case of a publisher.
         """
         return self._trigger_by
@@ -291,7 +291,7 @@ class TabsdataFunction:
             trigger_by (str | list[str] | StageTrigger | Crontab | None): The trigger(s)
                 that will
                 cause the function to execute. It must be another table or tables in
-                the system, a Crontab, or a Watchdog in the case of a publisher. If
+                the system, a Crontab, or a StageTrigger in the case of a publisher. If
                 None, all the tables in the dependencies will be used.
         """
         if isinstance(trigger_by, str):

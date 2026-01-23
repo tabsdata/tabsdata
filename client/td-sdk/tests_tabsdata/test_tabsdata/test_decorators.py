@@ -325,7 +325,7 @@ def test_publisher_with_crontab_trigger():
     assert func.trigger_by == crontab
 
 
-def test_subscriber_with_watchdog_trigger_raises_error():
+def test_subscriber_with_stagetrigger_trigger_raises_error():
     stage_trigger = MyStageTrigger()
 
     with pytest.raises(FunctionConfigurationError) as e:
@@ -342,8 +342,8 @@ def test_subscriber_with_watchdog_trigger_raises_error():
     assert e.value.error_code == ErrorCode.FCE14
 
 
-def test_transformer_with_watchdog_trigger_raises_error():
-    watchdog = MyStageTrigger()
+def test_transformer_with_stagetrigger_trigger_raises_error():
+    stagetrigger = MyStageTrigger()
 
     with pytest.raises(FunctionConfigurationError) as e:
 
@@ -351,7 +351,7 @@ def test_transformer_with_watchdog_trigger_raises_error():
             TableInput("input"),
             TableOutput("output"),
             name="func_name",
-            trigger_by=watchdog,
+            trigger_by=stagetrigger,
         )
         def func():
             pass
@@ -359,25 +359,25 @@ def test_transformer_with_watchdog_trigger_raises_error():
     assert e.value.error_code == ErrorCode.FCE14
 
 
-def test_publisher_with_watchdog_trigger():
-    watchdog = MyStageTrigger()
+def test_publisher_with_stagetrigger_trigger():
+    stagetrigger = MyStageTrigger()
 
     @publisher(
         Stage(),
         TableOutput("output"),
         name="func_name",
-        trigger_by=watchdog,
+        trigger_by=stagetrigger,
     )
     def func():
         pass
 
-    assert func.trigger_by == watchdog
+    assert func.trigger_by == stagetrigger
 
 
-def test_publisher_with_watchdog_trigger_not_allowed_raises_error():
-    watchdog = MyStageTrigger()
+def test_publisher_with_stagetrigger_trigger_not_allowed_raises_error():
+    stagetrigger = MyStageTrigger()
 
-    class InvalidWatchDogPlugin(SourcePlugin):
+    class InvalidStageTriggerPlugin(SourcePlugin):
 
         def __init__(self):
             pass
@@ -389,10 +389,10 @@ def test_publisher_with_watchdog_trigger_not_allowed_raises_error():
     with pytest.raises(FunctionConfigurationError) as e:
 
         @publisher(
-            InvalidWatchDogPlugin(),
+            InvalidStageTriggerPlugin(),
             TableOutput("output"),
             name="func_name",
-            trigger_by=watchdog,
+            trigger_by=stagetrigger,
         )
         def func():
             pass

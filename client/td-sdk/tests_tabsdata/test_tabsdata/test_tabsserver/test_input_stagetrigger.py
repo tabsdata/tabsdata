@@ -21,8 +21,8 @@ from tests_tabsdata.conftest import (
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
     write_v1_listener_yaml_file,
 )
-from tests_tabsdata.testing_resources.test_input_watchdog.example import (
-    testing_tabsdata_function as input_watchdog,
+from tests_tabsdata.testing_resources.test_input_stagetrigger.example import (
+    testing_tabsdata_function as input_stagetrigger,
 )
 
 # noinspection PyUnresolvedReferences
@@ -40,13 +40,13 @@ LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
 
 
 @pytest.mark.skip("This test became outdated. Please refactor!")
-@pytest.mark.watchdog
+@pytest.mark.stagetrigger
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-def test_input_watchdog(tmp_path):
+def test_input_stagetrigger(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
-    testing_function = input_watchdog()
+    testing_function = input_stagetrigger()
     context_archive = create_bundle_archive(
         testing_function, local_packages=LOCAL_PACKAGES_LIST, save_location=tmp_path
     )
@@ -69,5 +69,5 @@ def test_input_watchdog(tmp_path):
         temp_cwd=True,
     )
     assert result == 0
-    # ToDo: Uncomment when finishing watchdog refactor
+    # ToDo: Uncomment when finishing stagetrigger refactor
     # assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))

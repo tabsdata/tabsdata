@@ -35,12 +35,12 @@ def testing_tabsdata_function():
     @td.publisher(
         source=MyStageTriggerPlugin(),
         tables=["output1", "output2"],
-        name="test_input_watchdog",
+        name="test_input_stagetrigger",
         trigger_by=MyStageTrigger(),
     )
-    def input_watchdog(
+    def input_stagetrigger(
         headers: td.TableFrame, items: td.TableFrame
     ) -> tuple[td.TableFrame, td.TableFrame]:
         return headers, items
 
-    return input_watchdog
+    return input_stagetrigger

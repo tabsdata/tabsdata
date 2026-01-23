@@ -48,12 +48,12 @@ class StageTrigger(ABC):
         end: datetime | None = None,
     ):
         """
-        Defines the watchdog parameters for a watchdog of a publisher.
-        The source plugin being used must support watchdog functionality.
+        Defines the parameters for a stage trigger of a publisher.
+        The source plugin being used must support stage trigger functionality.
 
         Args:
-            start: datetime for the watchdog to start working.
-            end: datetime for the watchdog to stop working.
+            start: datetime for the stage trigger to start working.
+            end: datetime for the stage trigger to stop working.
         """
 
         self.start = start
@@ -96,9 +96,9 @@ class StageTrigger(ABC):
     @abstractmethod
     def run(self, ctx: StageTriggerContext) -> StageTriggerStatus:
         """
-        Continuously runs the watchdog logic using the received context to
+        Continuously runs the stage trigger logic using the received context to
         trigger and monitor executions.
-        SUCCESS if the Watchdog.end datetime is reached. exit with 0.
+        SUCCESS if the StageTrigger.end datetime is reached. exit with 0.
         ERROR if any issue stops it from working or recovering. exit with 1.
         STOPPED upon a signal. exit with 0.
         """
