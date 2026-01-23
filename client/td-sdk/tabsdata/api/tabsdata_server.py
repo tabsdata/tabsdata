@@ -4600,6 +4600,7 @@ def _create_archive(
     tables: List[str] = (
         function_output._table_list if isinstance(function_output, TableOutput) else []
     )
+    tables = [table for table in tables]
     table_types: dict[str, str] = {}
     if function.output_actions:
         from tabsdata.tableframe._actions.dataquality.processor import (
