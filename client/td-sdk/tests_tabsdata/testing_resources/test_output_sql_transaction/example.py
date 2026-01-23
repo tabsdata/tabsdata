@@ -13,9 +13,7 @@ def testing_tabsdata_function(uri: str, credentials=None, destination_table=None
         name="output_sql_transaction",
         tables="collection/table",
         destination=td.MySQLDestination(
-            uri,
-            destination_table,
-            credentials=credentials,
+            uri, destination_table, credentials=credentials
         ),
     )
     def output_sql_transaction(df: td.TableFrame):

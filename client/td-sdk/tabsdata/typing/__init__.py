@@ -4,7 +4,7 @@
 
 from tabsdata._io.inputs.sql.shared_types import (
     MariaDBLoaderSpec,
-    MySQLLoaderSpec,
+    MySQLSrcLoaderSpec,
     OracleLoaderSpec,
     PostgresLoaderSpec,
     QueriesSpec,
@@ -12,6 +12,7 @@ from tabsdata._io.inputs.sql.shared_types import (
 )
 from tabsdata._io.outputs.shared_enums import (
     IfTableExistStrategySpec,
+    MySQLDestWriterSpec,
     SchemaStrategySpec,
 )
 from tabsdata._table_actions._typing import OnTablesSpec
@@ -28,7 +29,7 @@ __all__ = [
     # from tabsdata._io.inputs.sql.shared_types
     "QueriesSpec",
     "SchemaOverrideSpec",
-    "MySQLLoaderSpec",
+    "MySQLSrcLoaderSpec",
     "PostgresLoaderSpec",
     "MariaDBLoaderSpec",
     "OracleLoaderSpec",
@@ -37,6 +38,7 @@ __all__ = [
     # from tabsdata._io.outputs.shared_enums
     "IfTableExistStrategySpec",
     "SchemaStrategySpec",
+    "MySQLDestWriterSpec",
     # from tabsdata._table_actions.actions
     "OnTablesAction",
     # from tabsdata._table_actions._typing

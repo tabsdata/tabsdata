@@ -573,6 +573,20 @@ class ErrorCode(Enum):
             "'GCPCredentials' object, got '{}' instead"
         ),
     }
+    DECE53 = {
+        "code": "DECE-053",
+        "message": (
+            "The number of destination tables provided ({}) does not match the number"
+            " of results ({}) to write to {}."
+        ),
+    }
+    DECE54 = {
+        "code": "DECE-054",
+        "message": (
+            "The 'destination_table' parameter in a {} cannot be an empty string."
+            " Got {}."
+        ),
+    }
     DQCE1 = {
         "code": "DQCE-001",
         "message": (
@@ -2323,6 +2337,22 @@ class ErrorCode(Enum):
     }
     PVSOC11 = {
         "code": "PVSOC-011",
+        "message": None,
+    }
+    PVTRGR1 = {
+        "code": "PVTRGR-001",
+        "message": None,
+    }
+    PVRLVR1 = {
+        "code": "PVRLVR-001",
+        "message": None,
+    }
+    PVRLVR2 = {
+        "code": "PVRLVR-002",
+        "message": None,
+    }
+    PVDST1 = {
+        "code": "PVDST-001",
         "message": None,
     }
 

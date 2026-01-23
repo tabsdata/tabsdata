@@ -2,7 +2,7 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
-from enum import Enum
+from enum import Enum, StrEnum
 
 AZURE_SCHEME = "az"
 FILE_SCHEME = "file"
@@ -54,3 +54,14 @@ class SupportedAWSS3Regions(Enum):
     SaoPaulo = "sa-east-1"
     GovCloudUSEast = "us-gov-east-1"
     GovCloudUSWest = "us-gov-west-1"
+
+
+class _LoaderSpec(StrEnum):
+    PANDAS = "pandas"
+    POLARS_ADBC = "polars_adbc"
+    POLARS_CONNECTORX = "polars_connectorx"
+    POLARS_SQLALCHEMY = "polars_sqlalchemy"
+
+    @classmethod
+    def values(cls) -> tuple[str, ...]:
+        return tuple(item.value for item in cls)

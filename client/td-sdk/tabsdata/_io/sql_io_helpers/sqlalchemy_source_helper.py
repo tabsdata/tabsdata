@@ -9,22 +9,17 @@ from typing import Any
 
 import polars as pl
 from sqlalchemy import TextClause, create_engine, text
-from sqlalchemy.engine import URL, Connection, make_url
+from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Session
 
-from tabsdata._io.constants import ODBC_CONNECT_PARAM
-from tabsdata._io.inputs.helpers.helper_constants import (
+from tabsdata._io.constants import (
     _LoaderSpec,
 )
-from tabsdata._io.inputs.helpers.helper_sql_configs import SQLSourceConfig
-from tabsdata._io.inputs.helpers.helper_utils import (
+from tabsdata._io.sql_io_helpers.helper_utils import (
     get_numpy_dtype_from_polars,
+    obtain_sqlalchemy_url,
 )
-from tabsdata._utils.sql_utils import (
-    add_driver_to_uri,
-    obtain_uri,
-    validate_user_password,
-)
+from tabsdata._io.sql_io_helpers.sql_helper_configs import SQLSourceConfig
 from tabsdata.exceptions import ErrorCode, TabsDataException
 from tabsdata.tableframe.typing import DataType
 
@@ -66,28 +61,6 @@ class SQLAlchemySourceHelper:
             )
         self._source = source
 
-    def _obtain_url(self) -> URL:
-        uri = obtain_uri(self.source.conn, log=True)
-
-        # If the driver is missing, add it.
-        # If the driver is already present, this is a no-op.
-        uri = add_driver_to_uri(uri, log=True)
-
-        conn_url = make_url(uri)
-
-        user = self.source.conn.credentials.user.secret_value
-        password = self.source.conn.credentials.password.secret_value
-        validate_user_password(user=user, password=password)
-        if ODBC_CONNECT_PARAM in conn_url.query:
-            self.source.conn.cx_src_configs_sql["UID"] = user
-            self.source.conn.cx_src_configs_sql["PWD"] = password
-        else:
-            conn_url = conn_url.set(
-                username=user,
-                password=password,
-            )
-        return conn_url
-
     def _chunk(self, working_dir: str) -> list[list[str]]:
         """
         Execute the SQL queries and return the list of resulting Parquet file names.
@@ -97,7 +70,7 @@ class SQLAlchemySourceHelper:
             A nested list of Parquet file names where each element of
                 the outer list corresponds to each given query
         """
-        conn_url = self._obtain_url()
+        conn_url = obtain_sqlalchemy_url(self.source.conn)
 
         queries = self.source.queries
         schema_overrides_list = self.source.schema_overrides
@@ -126,7 +99,7 @@ class SQLAlchemySourceHelper:
                         schema_overrides_list,
                     )
         except Exception as e:
-            logger.warning("Error reading data from SQL source")
+            logger.warning(f"Error reading data from SQL source: {e}")
             raise e
         finally:
             engine.dispose()

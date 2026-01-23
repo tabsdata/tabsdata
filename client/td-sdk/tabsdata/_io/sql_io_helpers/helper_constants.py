@@ -1,24 +1,10 @@
 #
-# Copyright 2025 Tabs Data Inc.
+# Copyright 2026 Tabs Data Inc.
 #
-
-from enum import StrEnum
 
 import numpy as np
 
 import tabsdata.tableframe.dtypes as td_dtypes
-
-
-class _LoaderSpec(StrEnum):
-    PANDAS = "pandas"
-    POLARS_ADBC = "polars_adbc"
-    POLARS_CONNECTORX = "polars_connectorx"
-    POLARS_SQLALCHEMY = "polars_sqlalchemy"
-
-    @classmethod
-    def values(cls) -> tuple[str, ...]:
-        return tuple(item.value for item in cls)
-
 
 # Mapping from Polars dtypes to NumPy dtypes
 POLARS_TO_NUMPY_DTYPE_MAP = {

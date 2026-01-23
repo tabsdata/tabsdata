@@ -64,6 +64,7 @@ from tabsdata._io.outputs.file_outputs import (
     LocalFileDestination,
     S3Destination,
 )
+from tabsdata._io.outputs.sql.mysql_output import MySQLDest
 
 # noinspection PyProtectedMember
 from tabsdata._io.outputs.sql_outputs import (
@@ -181,6 +182,8 @@ __all__ = [
     "PostgresDestination",
     "S3Destination",
     "TableOutput",
+    # from tabsdata._io.outputs.sql.mysql_output
+    "MySQLDest",
     # from plugin.py
     "SourcePlugin",
     "DestinationPlugin",

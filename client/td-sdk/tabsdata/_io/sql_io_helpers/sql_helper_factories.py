@@ -1,5 +1,5 @@
 #
-# Copyright 2025 Tabs Data Inc.
+# Copyright 2026 Tabs Data Inc.
 #
 
 from __future__ import annotations
@@ -7,12 +7,14 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Union
 
-from tabsdata._io.inputs.helpers.helper_constants import _LoaderSpec
-from tabsdata._io.inputs.helpers.helper_sql_configs import (
+from tabsdata._io.constants import _LoaderSpec
+from tabsdata._io.sql_io_helpers.sql_helper_configs import (
     SQLConnConfig,
+    SQLDestConfig,
     SQLSourceConfig,
 )
-from tabsdata._io.inputs.helpers.sqlalchemy_source_helper import SQLAlchemySourceHelper
+from tabsdata._io.sql_io_helpers.sqlalchemy_dest_helper import SQLAlchemyDestHelper
+from tabsdata._io.sql_io_helpers.sqlalchemy_source_helper import SQLAlchemySourceHelper
 
 # Conditional import for type hinting only:
 # This import is guarded by TYPE_CHECKING so it is only used by static type checkers
@@ -23,6 +25,7 @@ if TYPE_CHECKING:
     from tabsdata._io.inputs.sql.mysql_input import MySQLSrc
     from tabsdata._io.inputs.sql.oracle_input import OracleSrc
     from tabsdata._io.inputs.sql.postgres_input import PostgresSrc
+    from tabsdata._io.outputs.sql.mysql_output import MySQLDest
     from tabsdata_mssql.input.mssql_input import MSSQLSrc
 
 logger = logging.getLogger(__name__)
@@ -49,11 +52,34 @@ def get_sql_source_helper(
         helper = SQLAlchemySourceHelper(sql_source_config)
     # Future TODO: Add more SQL source helpers based on different engines
     else:
-        return ValueError(
+        raise ValueError(
             f"Unsupported loader value: {sql_source_config.loader}. "
             f"Supported loader values are: {_LoaderSpec.values()}."
         )
     logger.debug(f"Created SQL source helper: {helper}")
+    return helper
+
+
+def get_sql_dest_helper(dest: Union[MySQLDest]) -> Union[SQLAlchemyDestHelper]:
+    """
+    Factory function to get the appropriate SQL destination helper based on the
+    destination type.
+    Args:
+        dest: The SQL destination configuration.
+    Returns:
+        The appropriate SQL destination helper instance.
+    """
+    sql_dest_config = _get_sql_dest_config(dest)
+    logger.debug(f"Created SQL dest config for {dest}")
+    if sql_dest_config.loader == _LoaderSpec.POLARS_SQLALCHEMY:
+        helper = SQLAlchemyDestHelper(sql_dest_config)
+    # Future TODO: Add more SQL dest helpers based on different loaders/engines
+    else:
+        raise ValueError(
+            f"Unsupported loader value: {sql_dest_config.loader}. "
+            f"Supported loader values are: {_LoaderSpec.values()}"
+        )
+    logger.debug(f"Created SQL dest helper: {helper}")
     return helper
 
 
@@ -152,3 +178,26 @@ def _get_sql_source_config(
         )
     else:
         raise TypeError(f"Unsupported source type: {type(source)}")
+
+
+def _get_sql_dest_config(dest: Union[MySQLDest]) -> SQLDestConfig:
+    # Runtime import for isinstance checks:
+    from tabsdata._io.outputs.sql.mysql_output import MySQLDest as _MySQLDest
+
+    if isinstance(dest, _MySQLDest):
+        return SQLDestConfig(
+            conn=SQLConnConfig(
+                uri=dest.conn.uri,
+                credentials=dest.conn.credentials,
+                enforce_connection_params=dest.conn.enforce_connection_params,
+                cx_src_configs_sql=dest.conn.cx_src_configs_mysql,
+                cx_dst_configs_sql=dest.conn.cx_dst_configs_mysql,
+            ),
+            destination_tables=dest.destination_tables,
+            if_table_exists=dest.if_table_exists,
+            transactional=dest.transactional,
+            chunk_size=dest.chunk_size,
+            loader=dest.loader,
+        )
+    else:
+        raise TypeError(f"Unsupported destination type: {type(dest)}")

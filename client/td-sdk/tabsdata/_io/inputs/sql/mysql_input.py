@@ -10,16 +10,16 @@ from typing import Any, Optional, get_args
 from pydantic import PositiveInt
 
 from tabsdata._io.connections.mysql_connection import MySQLConn
-from tabsdata._io.inputs.helpers.helper_constants import _LoaderSpec
-from tabsdata._io.inputs.helpers.source_helper_factory import (
-    get_sql_source_helper,
-)
+from tabsdata._io.constants import _LoaderSpec
 from tabsdata._io.inputs.sql.shared_types import (
-    MySQLLoaderSpec,
+    MySQLSrcLoaderSpec,
     QueriesSpec,
     SchemaOverrideSpec,
 )
 from tabsdata._io.plugin import SourcePlugin
+from tabsdata._io.sql_io_helpers.sql_helper_factories import (
+    get_sql_source_helper,
+)
 from tabsdata._tabsserver.function.offset_utils import OffsetReturn
 from tabsdata._utils.sql_utils import (
     get_tableframes_from_sources,
@@ -51,7 +51,7 @@ class MySQLSrc(SourcePlugin):
         initial_values: Optional[dict[str, Any]] = None,
         transactional: bool = True,
         chunk_size: PositiveInt = 100000,
-        loader: MySQLLoaderSpec = "polars_sqlalchemy",
+        loader: MySQLSrcLoaderSpec = "polars_sqlalchemy",
         schema_overrides: SchemaOverrideSpec = None,
     ):
         """
@@ -152,23 +152,23 @@ class MySQLSrc(SourcePlugin):
         return self._chunk_size
 
     @property
-    def loader(self) -> MySQLLoaderSpec:
+    def loader(self) -> MySQLSrcLoaderSpec:
         """
         The data processing loader to use for executing SQL imports.
         """
         return self._loader.value
 
-    def _validate_loader(self, loader: MySQLLoaderSpec):
+    def _validate_loader(self, loader: MySQLSrcLoaderSpec):
         """
         Validate the loader parameter used to execute SQL imports.
         Args:
             loader: The data processing loader to use for executing SQL imports.
         """
-        if loader not in get_args(MySQLLoaderSpec):
+        if loader not in get_args(MySQLSrcLoaderSpec):
             raise SourceConfigurationError(
                 ErrorCode.SOCE52,
                 self.__class__.__name__,
-                get_args(MySQLLoaderSpec),
+                get_args(MySQLSrcLoaderSpec),
                 loader,
             )
         return _LoaderSpec(loader)

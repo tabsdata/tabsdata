@@ -1,12 +1,15 @@
 #
-# Copyright 2025 Tabs Data Inc.
+# Copyright 2026 Tabs Data Inc.
 #
 
 from dataclasses import dataclass
 from typing import Any
 
 from tabsdata._credentials import UserPasswordCredentials
-from tabsdata._io.inputs.helpers.helper_constants import _LoaderSpec
+from tabsdata._io.constants import _LoaderSpec
+from tabsdata._io.outputs.shared_enums import (
+    IfTableExistStrategySpec,
+)
 from tabsdata.tableframe.typing import DataType
 
 
@@ -28,3 +31,13 @@ class SQLSourceConfig:
     chunk_size: int
     loader: _LoaderSpec
     schema_overrides: list[dict[str, DataType]] | None
+
+
+@dataclass
+class SQLDestConfig:
+    conn: SQLConnConfig
+    destination_tables: list[str]
+    if_table_exists: IfTableExistStrategySpec
+    transactional: bool
+    chunk_size: int
+    loader: _LoaderSpec

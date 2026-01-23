@@ -112,7 +112,6 @@ class MySQLConn(Conn):
     def __repr__(self):
         return (
             f"{self.__class__.__name__}(uri='{self.uri}', "
-            f"credentials={self.credentials}, "
             f"enforce_connection_params={self.enforce_connection_params}, "
             f"cx_src_configs_mysql={self.cx_src_configs_mysql}, "
             f"cx_dst_configs_mysql={self.cx_dst_configs_mysql})"

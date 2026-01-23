@@ -819,9 +819,10 @@ def _create_session_and_store(
 
 def _store_result_in_sql_table(
     intermediate_file: str | None,
-    session: sqlalchemy.orm.Session,
+    session: sqlalchemy.orm.Session | sqlalchemy.engine.base.Connection,
     destination_table: str,
     if_table_exists: str,
+    chunk_size: int = 10000,
 ):
 
     import pyarrow as pa
@@ -844,7 +845,6 @@ def _store_result_in_sql_table(
             ". No data stored."
         )
     logger.debug(f"Using strategy in case table exists: {if_table_exists}")
-    chunk_size = 10000
     parquet_file = pq.ParquetFile(intermediate_file)
     for batch in parquet_file.iter_batches(batch_size=chunk_size):
         chunk_table = pa.Table.from_batches(batches=[batch])

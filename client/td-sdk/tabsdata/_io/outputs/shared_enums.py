@@ -8,6 +8,10 @@ from typing import Literal, TypeAlias
 IfTableExistStrategySpec: TypeAlias = Literal["append", "replace"]
 SchemaStrategySpec: TypeAlias = Literal["update", "strict"]
 
+# Not including 'pandas' in the loader spec since pl.write_database uses pandas.to_sql
+# under the hood by default
+MySQLDestWriterSpec = Literal["polars_sqlalchemy"]
+
 
 class IfTableExistsStrategy(Enum):
     """
