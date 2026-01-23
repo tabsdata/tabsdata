@@ -474,7 +474,7 @@ version = "0.2.16"
 
 [workspace.dependencies.polars]
 version = "0.52.0"
-features = ["lazy", "polars-lazy", "async", "csv", "json", "parquet", "cloud", "aws", "azure", "gcp", "sql"]
+features = ["lazy", "polars-lazy", "async", "csv", "json", "parquet", "cloud", "aws", "azure", "gcp", "sql", "dtype-u8"]
 
 [workspace.dependencies.polars-io]
 version = "0.52.0"
