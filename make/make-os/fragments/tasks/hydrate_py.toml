@@ -2,6 +2,15 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
+# https://setuptools.pypa.io/en/latest/userguide/development_mode.html#strict-editable-installs
+# Alternatives to editable installs:
+#    - uv pip install -e . --quiet --config-settings editable_mode=stric
+#        Uses import hooks, strictest mode
+#    - uv pip install -e . --quiet --config-settings editable_mode=compat
+#        Creates a tree of .pth files (default)
+#    - uv pip install -e . --quiet --config-settings editable_mode=lenient
+#        Similar to legacy python setup.py develop
+
 [tasks.__os__hydrate_py]
 plugin = "td-task-tracker"
 category = "11 - Development"
