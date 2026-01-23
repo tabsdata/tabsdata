@@ -1,0 +1,28 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+import tabsdata as td
+
+
+def testing_tabsdata_function(
+    uri: str,
+    credentials=None,
+    destination_tables=None,
+):
+    @td.subscriber(
+        name="output_mariadb_with_collation",
+        tables="collection/table",
+        destination=td.MariaDBDest(
+            td.MariaDBConn(
+                uri + "?charset=utf8mb4&collation=utf8mb4_unicode_520_ci",
+                credentials=credentials,
+            ),
+            destination_tables=destination_tables,
+        ),
+    )
+    def output_new_mariadb_with_collation(df: td.TableFrame):
+        new_df = df.drop_nulls()
+        return new_df
+
+    return output_new_mariadb_with_collation

@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from tabsdata._io.inputs.sql.mysql_input import MySQLSrc
     from tabsdata._io.inputs.sql.oracle_input import OracleSrc
     from tabsdata._io.inputs.sql.postgres_input import PostgresSrc
+    from tabsdata._io.outputs.sql.mariadb_output import MariaDBDest
     from tabsdata._io.outputs.sql.mysql_output import MySQLDest
     from tabsdata._io.outputs.sql.postgres_output import PostgresDest
     from tabsdata_mssql.input.mssql_input import MSSQLSrc
@@ -62,7 +63,7 @@ def get_sql_source_helper(
 
 
 def get_sql_dest_helper(
-    dest: Union[MySQLDest, PostgresDest],
+    dest: Union[MySQLDest, PostgresDest, MariaDBDest],
 ) -> Union[SQLAlchemyDestHelper]:
     """
     Factory function to get the appropriate SQL destination helper based on the
@@ -183,8 +184,11 @@ def _get_sql_source_config(
         raise TypeError(f"Unsupported source type: {type(source)}")
 
 
-def _get_sql_dest_config(dest: Union[MySQLDest, PostgresDest]) -> SQLDestConfig:
+def _get_sql_dest_config(
+    dest: Union[MySQLDest, PostgresDest, MariaDBDest],
+) -> SQLDestConfig:
     # Runtime import for isinstance checks:
+    from tabsdata._io.outputs.sql.mariadb_output import MariaDBDest as _MariaDBDest
     from tabsdata._io.outputs.sql.mysql_output import MySQLDest as _MySQLDest
     from tabsdata._io.outputs.sql.postgres_output import PostgresDest as _PostgresDest
 
@@ -211,6 +215,21 @@ def _get_sql_dest_config(dest: Union[MySQLDest, PostgresDest]) -> SQLDestConfig:
                 enforce_connection_params=dest.conn.enforce_connection_params,
                 cx_src_configs_sql=dest.conn.cx_src_configs_postgres,
                 cx_dst_configs_sql=dest.conn.cx_dst_configs_postgres,
+            ),
+            destination_tables=dest.destination_tables,
+            if_table_exists=dest.if_table_exists,
+            transactional=dest.transactional,
+            chunk_size=dest.chunk_size,
+            loader=dest.loader,
+        )
+    elif isinstance(dest, _MariaDBDest):
+        return SQLDestConfig(
+            conn=SQLConnConfig(
+                uri=dest.conn._uri_with_collation,
+                credentials=dest.conn.credentials,
+                enforce_connection_params=dest.conn.enforce_connection_params,
+                cx_src_configs_sql=dest.conn.cx_src_configs_mariadb,
+                cx_dst_configs_sql=dest.conn.cx_dst_configs_mariadb,
             ),
             destination_tables=dest.destination_tables,
             if_table_exists=dest.if_table_exists,

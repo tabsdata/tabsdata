@@ -121,3 +121,11 @@ class MariaDBConn(Conn):
             and self.cx_src_configs_mariadb == other.cx_src_configs_mariadb
             and self.cx_dst_configs_mariadb == other.cx_dst_configs_mariadb
         )
+
+    def __repr__(self):
+        return (
+            f"{self.__class__.__name__}(uri='{self.uri}', "
+            f"enforce_connection_params={self.enforce_connection_params}, "
+            f"cx_src_configs_mariadb={self.cx_src_configs_mariadb}, "
+            f"cx_dst_configs_mariadb={self.cx_dst_configs_mariadb})"
+        )

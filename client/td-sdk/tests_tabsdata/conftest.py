@@ -1739,6 +1739,22 @@ def create_docker_mariadb_database(
             "CREATE TABLE second_output_mariadb_transaction (Duration INT, "
             "Pulse INT, Maxpulse INT, Calories FLOAT)"
         )
+        mycursor.execute(
+            "CREATE TABLE output_new_mariadb_transaction (Duration INT, "
+            "Pulse INT, Maxpulse INT, Calories FLOAT)"
+        )
+        mycursor.execute(
+            "CREATE TABLE second_output_new_mariadb_transaction (Duration INT, "
+            "Pulse INT, Maxpulse INT, Calories FLOAT)"
+        )
+        mycursor.execute(
+            "CREATE TABLE output_new_mariadb_wo_transaction (Duration INT, "
+            "Pulse INT, Maxpulse INT, Calories FLOAT)"
+        )
+        mycursor.execute(
+            "CREATE TABLE second_output_new_mariadb_wo_transaction (Duration INT, "
+            "Pulse INT, Maxpulse INT, Calories FLOAT)"
+        )
         mydb.commit()
         logger.info("MariaDB container created successfully")
         return port

@@ -64,6 +64,7 @@ from tabsdata._io.outputs.file_outputs import (
     LocalFileDestination,
     S3Destination,
 )
+from tabsdata._io.outputs.sql.mariadb_output import MariaDBDest
 from tabsdata._io.outputs.sql.mysql_output import MySQLDest
 from tabsdata._io.outputs.sql.postgres_output import PostgresDest
 
@@ -187,6 +188,8 @@ __all__ = [
     "MySQLDest",
     # from tabsdata._io.outputs.sql.postgres_output
     "PostgresDest",
+    # from tabsdata._io.outputs.sql.mariadb_output
+    "MariaDBDest",
     # from plugin.py
     "SourcePlugin",
     "DestinationPlugin",

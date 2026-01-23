@@ -12,6 +12,7 @@ SchemaStrategySpec: TypeAlias = Literal["update", "strict"]
 # under the hood by default
 MySQLDestWriterSpec = Literal["polars_sqlalchemy"]
 PostgresDestWriterSpec = Literal["polars_sqlalchemy"]
+MariaDBDestWriterSpec = Literal["polars_sqlalchemy"]
 
 
 class IfTableExistsStrategy(Enum):

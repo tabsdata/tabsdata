@@ -14,5 +14,5 @@ SchemaOverrideSpec = Union[dict[str, DataType], list[dict[str, DataType]], None]
 # files.
 OracleLoaderSpec = Literal["polars_sqlalchemy", "pandas"]
 PostgresSrcLoaderSpec = Literal["polars_sqlalchemy", "pandas"]
-MariaDBLoaderSpec = Literal["polars_sqlalchemy", "pandas"]
+MariaDBSrcLoaderSpec = Literal["polars_sqlalchemy", "pandas"]
 MySQLSrcLoaderSpec = Literal["polars_sqlalchemy", "pandas"]

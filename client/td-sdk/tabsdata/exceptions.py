@@ -2359,6 +2359,10 @@ class ErrorCode(Enum):
         "code": "PVDST-002",
         "message": None,
     }
+    PVDST3 = {
+        "code": "PVDST-003",
+        "message": None,
+    }
 
     def code(self) -> str:
         if type(self.value) is dict:
