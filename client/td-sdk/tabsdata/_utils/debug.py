@@ -60,8 +60,8 @@ def remote_debug(force: bool = False) -> bool:
                 host=REMOTE_DEBUG_HOST,
                 port=REMOTE_DEBUG_PORT,
                 suspend=False,
-                stdoutToServer=True,
-                stderrToServer=True,
+                stdout_to_server=True,
+                stderr_to_server=True,
             )
             message = "Execution suspended. Continue in your debug tool"
             logger.info("Remote debug enabled...")
