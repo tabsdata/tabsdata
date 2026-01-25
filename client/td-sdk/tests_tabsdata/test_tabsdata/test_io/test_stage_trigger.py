@@ -2,7 +2,7 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 
@@ -16,8 +16,8 @@ from tabsdata.exceptions import (
     StageTriggerConfigurationError,
 )
 
-EXAMPLE_START_DATETIME = datetime(2025, 4, 2)
-EXAMPLE_END_DATETIME = datetime(2025, 4, 3)
+EXAMPLE_START_DATETIME = datetime(2025, 4, 2, tzinfo=timezone.utc)
+EXAMPLE_END_DATETIME = datetime(2025, 4, 3, tzinfo=timezone.utc)
 
 
 class MyStageTrigger(StageTrigger):

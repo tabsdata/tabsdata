@@ -8,7 +8,7 @@ import os
 import shutil
 import uuid
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Literal, TypeAlias, Union
@@ -69,6 +69,8 @@ class StageTrigger(ABC):
             current_end = getattr(self, "_end", None)
             if start is not None and current_end is not None and start >= current_end:
                 raise StageTriggerConfigurationError(ErrorCode.STE3, start, current_end)
+            if start is not None and not start.tzinfo:
+                raise StageTriggerConfigurationError(ErrorCode.STE4, start)
             self._start = start
         else:
             raise StageTriggerConfigurationError(ErrorCode.STE1, start, type(start))
@@ -83,6 +85,8 @@ class StageTrigger(ABC):
             current_start = getattr(self, "_start", None)
             if current_start is not None and end is not None and current_start >= end:
                 raise StageTriggerConfigurationError(ErrorCode.STE3, current_start, end)
+            if end is not None and not end.tzinfo:
+                raise StageTriggerConfigurationError(ErrorCode.STE5, end)
             self._end = end
         else:
             raise StageTriggerConfigurationError(ErrorCode.STE2, end, type(end))
@@ -167,6 +171,15 @@ class StageTriggerContext(ABC):
         """
 
     @abstractmethod
+    def is_active(self) -> bool:
+        """
+        Verifies if the run method of the Stage Trigger should continue executing.
+        Usually, that will mean verifying if the end datetime of the Stage Trigger has
+        been reached. Will return True if the method should continue running,
+        or False otherwise (for example if the end datetime has been reached).
+        """
+
+    @abstractmethod
     def stage(self, parquet_files: FilesToStageSpec):
         """Writes the given files to the Stage consumption folder"""
 
@@ -199,11 +212,13 @@ class LocalFileStageTriggerContext(StageTriggerContext):
         trigger_config: CallConfig,
         logger,
         working_dir: str,
+        end: datetime,
     ):
         self.staging_folder = staging_folder
         self.trigger_config = trigger_config
         self.logger = logger
         self._working_dir = Path(working_dir)
+        self.end = end
 
     @property
     def working_dir(self) -> Path:
@@ -235,6 +250,18 @@ class LocalFileStageTriggerContext(StageTriggerContext):
             return self.trigger()
         else:
             self.logger.debug("No trigger was pending. Nothing will be done.")
+            return False
+
+    def is_active(self) -> bool:
+        time_now = datetime.now(tz=timezone.utc)
+        if self.end is None or self.end > time_now:
+            return True
+        else:
+            self.logger.info(
+                f"The current time '{time_now}' is latter than the "
+                f"configured end time '{self.end}'. The "
+                "stage trigger should stop running."
+            )
             return False
 
     def stage(self, parquet_files: FilesToStageSpec):

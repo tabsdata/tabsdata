@@ -2177,6 +2177,24 @@ class ErrorCode(Enum):
             " 'end' parameter. Got start='{}' and end='{}'."
         ),
     }
+    STE4 = {
+        "code": "STE-004",
+        "message": (
+            "The 'start' parameter of a StageTrigger object must be either None or a "
+            "datetime object with the timezone parameter informed. Got start='{}', "
+            "which is a datetime object but does not have the timezone parameter "
+            "informed."
+        ),
+    }
+    STE5 = {
+        "code": "STE-005",
+        "message": (
+            "The 'end' parameter of a StageTrigger object must be either None or a "
+            "datetime object with the timezone parameter informed. Got end='{}', "
+            "which is a datetime object but does not have the timezone parameter "
+            "informed."
+        ),
+    }
 
     # Testing
     DQC0 = object()

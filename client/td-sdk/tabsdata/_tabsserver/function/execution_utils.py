@@ -6,11 +6,14 @@ from __future__ import annotations
 
 import logging
 import os
+
+# noinspection PyProtectedMember
+import time
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
 import polars as pl
 
-# noinspection PyProtectedMember
 import tabsdata._utils.tableframe._generators as td_generators
 from tabsdata._io.stage_trigger import LocalFileStageTriggerContext, StageTrigger
 from tabsdata._table_actions.actions import OnTablesAction
@@ -63,18 +66,18 @@ def execute_function_from_config(
     return result
 
 
-def execute_listener_from_config(
+def execute_stage_trigger_from_config(
     execution_context: ExecutionContext,
 ):
     environment_import_utils.update_syspath(execution_context.paths.code_folder)
     # Decided to keep this logic with the code_folder to make it OS-agnostic. If we
     # stored the function_file with the code_folder prefix, we would have to handle
     # the path differently for different OSs.
-    result = execute_listener(execution_context)
+    result = execute_stage_trigger(execution_context)
     return result
 
 
-def execute_listener(
+def execute_stage_trigger(
     execution_context: ExecutionContext,
 ):
     logger.info(pad_string("[Executing stage trigger]"))
@@ -89,11 +92,40 @@ def execute_listener(
     fn_trigger = request.fn_trigger
     staging_folder = convert_uri_to_path(execution_context.request.function_stage_uri)
     os.makedirs(staging_folder, exist_ok=True)
+    start_time = stage_trigger.start
+    time_now = datetime.now(tz=timezone.utc)
+    if start_time is not None:
+        logger.info(
+            f"The starting time for the stage trigger is '{start_time}', "
+            "verifying whether to start or wait for that time."
+        )
+        if not start_time.tzinfo:
+            raise ValueError(
+                f"Start time '{start_time}' does not have any timezone information."
+            )
+        if start_time > time_now:
+            time_to_sleep: timedelta = start_time - time_now
+            # time_to_sleep.total_seconds() returns the duration in seconds (float)
+            sleep_seconds = time_to_sleep.total_seconds()
+
+            logger.info(
+                f"Current time '{time_now}' is before target time '{start_time}'."
+                f" Sleeping for {sleep_seconds:.2f} seconds until target time is"
+                " reached."
+            )
+            time.sleep(sleep_seconds)
+            logger.info(f"Woke up. Target time '{start_time}' should now be reached.")
+        else:
+            logger.info(
+                f"Target datetime '{start_time}' is in the past or present "
+                f"(current time '{time_now}'). No sleep needed."
+            )
     stage_context = LocalFileStageTriggerContext(
         staging_folder,
         fn_trigger,
         execution_context.logger,
         working_dir=execution_context.paths.output_folder,
+        end=stage_trigger.end,
     )
     logger.debug(f"Stage trigger context: {stage_context}")
     logger.info(

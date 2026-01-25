@@ -23,7 +23,7 @@ from tabsdata._tabsserver.function.execution_exceptions import (
 )
 from tabsdata._tabsserver.function.execution_utils import (
     execute_function_from_config,
-    execute_listener_from_config,
+    execute_stage_trigger_from_config,
 )
 from tabsdata._tabsserver.function.global_utils import ABSOLUTE_LOCATION, setup_logging
 from tabsdata._tabsserver.function.logging_utils import pad_string
@@ -57,7 +57,7 @@ def execute_listener(
     execution_context: ExecutionContext,
 ) -> ResultsCollection:
     # Execute the listener
-    results = execute_listener_from_config(execution_context)
+    results = execute_stage_trigger_from_config(execution_context)
     create_data_listener_response(execution_context)
     return results
 
