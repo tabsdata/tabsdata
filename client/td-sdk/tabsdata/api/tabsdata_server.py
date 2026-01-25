@@ -1446,6 +1446,11 @@ class Function:
         )
         return representation
 
+    def __hash__(self):
+        """Generates a hash value for the object."""
+        # The hash should be based on the same attributes used in __eq__
+        return hash((self.name, self.collection.name))
+
     def __str__(self) -> str:
         string_representation = f"Name: {self.name!s}, collection: {self.collection!s}"
         return string_representation
@@ -2995,6 +3000,12 @@ class Worker:
         **kwargs: Additional keyword arguments.
     """
 
+    started_on = _LazyProperty("started_on")
+    started_on_str = _LazyProperty("started_on_str", subordinate_time_string=True)
+    ended_on = _LazyProperty("ended_on")
+    ended_on_str = _LazyProperty("ended_on_str", subordinate_time_string=True)
+    function_version_id = _LazyProperty("function_version_id")
+
     def __init__(
         self,
         connection: APIServer,
@@ -3022,6 +3033,12 @@ class Worker:
         self.transaction = kwargs.get("transaction_id")
         self.execution = kwargs.get("execution_id")
         self.status = kwargs.get("status")
+        self.type = kwargs.get("worker_type")
+        self.started_on = kwargs.get("started_on")
+        self.started_on_str = None
+        self.ended_on = kwargs.get("ended_on")
+        self.ended_on_str = None
+        self.function_version_id = kwargs.get("function_version_id")
         self._data = None
         self.kwargs = kwargs
 

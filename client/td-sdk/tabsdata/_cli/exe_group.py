@@ -783,14 +783,15 @@ def list_worker(
 
 
 def obtain_list_worker_filters(
-    status: List[str],
-    exe_name: str,
-    execution_id: str,
-    fn: str,
-    fn_run: str,
-    collection: str,
-    trx: str,
-) -> List[str]:
+    status: list[str] = None,
+    exe_name: str = None,
+    execution_id: str = None,
+    fn: str = None,
+    fn_run: str = None,
+    collection: str = None,
+    trx: str = None,
+    worker_type: str = None,
+) -> list[str]:
     """
     Helper function to obtain the filters for listing workers.
     """
@@ -812,6 +813,8 @@ def obtain_list_worker_filters(
         request_filter.append(f"collection:eq:{collection}")
     if trx:
         request_filter.append(f"transaction_id:eq:{trx}")
+    if worker_type:
+        request_filter.append(f"worker_type:eq:{worker_type}")
     return request_filter
 
 

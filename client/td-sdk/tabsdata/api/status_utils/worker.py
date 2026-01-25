@@ -11,6 +11,10 @@ class WorkerStatus(Enum):
     FAILED = "F"
     RUNNING = "R"
     RUN_REQUESTED = "RR"
+    SCHEDULED = "S"
+    STOPPED = "SP"
+    STOPREQUESTED = "SPR"
+    STOPSCHEDULED = "SPS"
     CANCELED = "X"
 
 
@@ -20,6 +24,10 @@ WORKER_STATUS_MAPPING = {
     WorkerStatus.FAILED.value: "Failed",
     WorkerStatus.RUNNING.value: "Running",
     WorkerStatus.RUN_REQUESTED.value: "Run Requested",
+    WorkerStatus.SCHEDULED.value: "Scheduled",
+    WorkerStatus.STOPPED.value: "Stopped",
+    WorkerStatus.STOPREQUESTED.value: "Stop Requested",
+    WorkerStatus.STOPSCHEDULED.value: "Stop Scheduled",
     WorkerStatus.CANCELED.value: "Canceled",
 }
 

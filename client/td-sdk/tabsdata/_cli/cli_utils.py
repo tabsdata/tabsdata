@@ -18,7 +18,7 @@ from tabsdata.api.apiserver import (
     APIServerError,
     obtain_connection,
 )
-from tabsdata.api.tabsdata_server import TabsdataServer
+from tabsdata.api.tabsdata_server import Function, TabsdataServer
 
 CONNECTION_FILE = "connection.json"
 
@@ -302,3 +302,9 @@ def hint_common_solutions(ctx: click.Context, e: Exception):
             "It seems like you might have an expired session. You can "
             "log in again with 'td login'.",
         )
+
+
+def verify_trigger_type(function: Function, type: str):
+    # TODO: Awaiting the information needed to be added to the function information
+    #  endpoint.
+    return True
