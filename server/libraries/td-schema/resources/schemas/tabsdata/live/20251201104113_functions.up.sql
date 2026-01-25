@@ -42,7 +42,7 @@ SELECT id,
        ended_on,
        status,
        'F',
-       false,
+       true,
        NULL
 FROM workers;
 

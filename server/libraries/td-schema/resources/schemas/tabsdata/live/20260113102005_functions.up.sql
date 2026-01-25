@@ -2,6 +2,37 @@
 --  Copyright 2026 Tabs Data Inc.
 --
 
+-- Adding data columns to table_data_versions.
+ALTER TABLE table_data_versions
+    ADD COLUMN with_data_table_data_version_id TEXT NULL;
+
+-- And insert missing information (using same logic we had in the view).
+WITH with_data AS (SELECT tdv.id                  AS tdv_id,
+                          tdv_latest.id           AS with_data_table_data_version_id,
+                          tdv_latest.column_count AS with_data_column_count,
+                          tdv_latest.row_count    AS with_data_row_count,
+                          tdv_latest.schema_hash  AS with_data_schema_hash
+                   FROM table_data_versions tdv
+                            LEFT JOIN function_runs fr ON tdv.function_run_id = fr.id
+                            LEFT JOIN table_data_versions tdv_latest
+                                      ON tdv_latest.id = (SELECT tdv2.id
+                                                          FROM table_data_versions tdv2
+                                                                   LEFT JOIN function_runs fr2 ON tdv2.function_run_id = fr2.id
+                                                          WHERE tdv2.table_id = tdv.table_id
+                                                            AND tdv2.has_data = TRUE
+                                                            AND fr2.triggered_on <= fr.triggered_on
+                                                          ORDER BY fr2.triggered_on DESC
+                                                          LIMIT 1))
+UPDATE table_data_versions
+SET (with_data_table_data_version_id, column_count, row_count, schema_hash) =
+        (SELECT with_data.with_data_table_data_version_id,
+                with_data.with_data_column_count,
+                with_data.with_data_row_count,
+                with_data.with_data_schema_hash
+         FROM with_data
+         WHERE with_data.tdv_id = table_data_versions.id)
+WHERE EXISTS(SELECT 1 FROM with_data WHERE with_data.tdv_id = table_data_versions.id);
+
 -- Dropping with_data subquery for performance reasons.
 DROP VIEW table_data_versions__with_function;
 CREATE VIEW table_data_versions__with_function AS

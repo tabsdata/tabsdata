@@ -10,13 +10,16 @@ use td_objects::dxo::function_requirement::FunctionRequirementDBWithNames;
 use td_objects::dxo::function_run::{
     CommitFunctionRunDB, FunctionRunDB, FunctionRunToCommitDB, UpdateFunctionRunDB,
 };
-use td_objects::dxo::table_data_version::{TableDataVersionDB, UpdateTableDataVersionDB};
+use td_objects::dxo::table_data_version::{
+    TableDataVersionDB, TableDataVersionDBWithNames, UpdateTableDataVersionDB,
+};
 use td_objects::dxo::worker::{CallbackRequest, UpdateWorkerDB, WorkerDB};
 use td_objects::dxo::yaml::WorkerOutput;
 use td_objects::dxo::yaml::function_runner::v2::WrittenTable;
+use td_objects::sql::cte::TableQueries;
 use td_objects::sql::recursive::RecursiveQueries;
 use td_objects::sql::{DaoQueries, SelectBy, UpdateBy};
-use td_objects::types::basic::{FunctionRunId, FunctionRunStatus, WorkerId};
+use td_objects::types::basic::{FunctionRunId, FunctionRunStatus, HasData, WorkerId};
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, ReqCtx, SrvCtx};
 
 #[td_error]
@@ -247,51 +250,87 @@ pub async fn update_table_data_version_status(
     Input(callback): Input<CallbackRequest>,
 ) -> Result<(), TdError> {
     if let Some(context) = &callback.context {
-        let futures: Vec<_> =
-            if let WorkerOutput::V2(output) | WorkerOutput::FunctionV2(output) = context {
-                output
-                    .output
-                    .iter()
-                    .map(|written| {
-                        let queries = queries.clone();
-                        let connection = connection.clone();
-                        let function_run_id = function_run_id.clone();
-                        async move {
-                            let (table_name, has_data) = match written {
-                                WrittenTable::NoData { table } => (table, None),
-                                WrittenTable::Data { table, info } => (table, Some(info)),
-                                // TODO partitions should be handled differently, creating partitions and setting
-                                // the table to has_data = true and partition = true.
-                                WrittenTable::Partitions { table, info, .. } => (table, Some(info)),
-                            };
+        let futures: Vec<_> = if let WorkerOutput::V2(output) | WorkerOutput::FunctionV2(output) =
+            context
+        {
+            output
+                .output
+                .iter()
+                .map(|written| {
+                    let queries = queries.clone();
+                    let connection = connection.clone();
+                    let function_run_id = function_run_id.clone();
+                    async move {
+                        let mut conn = connection.lock().await;
+                        let conn = conn.get_mut_connection()?;
 
-                            let update = UpdateTableDataVersionDB::builder()
-                                .has_data(Some(has_data.is_some().into()))
-                                .column_count(has_data.map(|info| info.column_count))
-                                .row_count(has_data.map(|info| info.row_count))
-                                .schema_hash(has_data.map(|info| info.schema_hash.clone()))
-                                .build()?;
+                        let (table_name, table_info) = match written {
+                            WrittenTable::NoData { table } => (table, None),
+                            WrittenTable::Data { table, info } => (table, Some(info)),
+                            // TODO partitions should be handled differently, creating partitions and setting
+                            // the table to has_data = true and partition = true.
+                            WrittenTable::Partitions { table, info, .. } => (table, Some(info)),
+                        };
 
-                            let mut conn = connection.lock().await;
-                            let conn = conn.get_mut_connection()?;
+                        let data_version: TableDataVersionDBWithNames = queries
+                            .select_by::<TableDataVersionDBWithNames>(&(&*function_run_id, table_name))?
+                            .build_query_as()
+                            .fetch_one(&mut *conn) // one because single table data version per execution
+                            .await
+                            .map_err(handle_sql_err)?;
 
-                            let res = queries
-                                .update_by::<_, TableDataVersionDB>(
-                                    &update,
-                                    &(&*function_run_id, table_name),
+                        let update = if let Some(table_info) = table_info {
+                            UpdateTableDataVersionDB {
+                                has_data: Some(HasData::TRUE),
+                                column_count: Some(table_info.column_count),
+                                row_count: Some(table_info.row_count),
+                                schema_hash: Some(table_info.schema_hash.clone()),
+                                with_data_table_data_version_id: Some(data_version.id),
+                            }
+                        } else {
+                            let latest_version_with_data: Option<TableDataVersionDBWithNames> = queries
+                                .latest_table_data_version_with_data::<TableDataVersionDBWithNames>(
+                                    &data_version.triggered_on,
+                                    &data_version.table_id,
                                 )?
-                                .build()
-                                .execute(&mut *conn)
+                                .build_query_as()
+                                .fetch_optional(&mut *conn)
                                 .await
                                 .map_err(handle_sql_err)?;
-                            assert_one(res)?;
-                            Ok::<_, TdError>(())
-                        }
-                    })
-                    .collect()
-            } else {
-                Vec::new()
-            };
+
+                            if let Some(latest_version_with_data) = latest_version_with_data {
+                                UpdateTableDataVersionDB {
+                                    has_data: Some(HasData::FALSE),
+                                    column_count: latest_version_with_data.column_count,
+                                    row_count: latest_version_with_data.row_count,
+                                    schema_hash: latest_version_with_data.schema_hash.clone(),
+                                    with_data_table_data_version_id: Some(latest_version_with_data.id),
+                                }
+                            } else {
+                                UpdateTableDataVersionDB {
+                                    has_data: Some(HasData::FALSE),
+                                    column_count: None,
+                                    row_count: None,
+                                    schema_hash: None,
+                                    with_data_table_data_version_id: None,
+                                }
+                            }
+                        };
+
+                        let res = queries
+                            .update_by::<_, TableDataVersionDB>(&update, &data_version.id)?
+                            .build()
+                            .execute(&mut *conn)
+                            .await
+                            .map_err(handle_sql_err)?;
+                        assert_one(res)?;
+                        Ok::<_, TdError>(())
+                    }
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
 
         let _ = futures::future::try_join_all(futures).await?;
     }
@@ -310,7 +349,7 @@ pub(crate) mod tests {
     use td_objects::dxo::collection::CollectionDB;
     use td_objects::dxo::crudl::handle_sql_err;
     use td_objects::dxo::execution::{ExecutionDB, ExecutionDBWithStatus};
-    use td_objects::dxo::function::FunctionRegister;
+    use td_objects::dxo::function::{FunctionDB, FunctionRegister};
     use td_objects::dxo::function_run::FunctionRunDB;
     use td_objects::dxo::table::TableDB;
     use td_objects::dxo::table_data_version::{TableDataVersionDB, TableDataVersionDBWithFunction};
@@ -354,6 +393,8 @@ pub(crate) mod tests {
         pub(crate) expected_status: FunctionRunStatus,
     }
 
+    // Creates proper setup for status update tests. It creates entities in test_executions. If names
+    // are the same, they are not recreated, but reused.
     pub(crate) async fn test_status_update<F, Fut>(
         db: DbPool,
         test_executions: &Vec<TestExecution>,
@@ -415,29 +456,40 @@ pub(crate) mod tests {
             .flat_map(|e| &e.transactions)
             .flat_map(|t| &t.functions)
         {
-            let tables = test_function
-                .tables
-                .iter()
-                .cloned()
-                .chain(std::iter::once(default_table.clone()))
-                .collect::<Vec<_>>();
-
-            let create = FunctionRegister::builder()
-                .name(&test_function.name)
-                .try_description("foo description")?
-                .bundle_id(BundleId::default())
-                .try_snippet("foo snippet")?
-                .decorator(Decorator::Publisher)
-                .dependencies(test_function.dependencies.clone())
-                .triggers(None)
-                .tables(tables)
-                .runtime_values(FunctionRuntimeValues::default())
-                .reuse_frozen_tables(false)
-                .build()?;
-
             let collection = collections.get(&test_function.collection).unwrap();
-            let function_version = seed_function(&db, collection, &create).await;
-            function_versions.insert(test_function, function_version);
+            let existing: Option<FunctionDB> = queries
+                .select_by::<FunctionDB>(&(&collection.id, &test_function.name))?
+                .build_query_as()
+                .fetch_optional(&db)
+                .await
+                .unwrap();
+
+            if let Some(existing) = existing {
+                function_versions.insert(test_function, existing);
+            } else {
+                let tables = test_function
+                    .tables
+                    .iter()
+                    .cloned()
+                    .chain(std::iter::once(default_table.clone()))
+                    .collect::<Vec<_>>();
+
+                let create = FunctionRegister::builder()
+                    .name(&test_function.name)
+                    .try_description("foo description")?
+                    .bundle_id(BundleId::default())
+                    .try_snippet("foo snippet")?
+                    .decorator(Decorator::Publisher)
+                    .dependencies(test_function.dependencies.clone())
+                    .triggers(None)
+                    .tables(tables)
+                    .runtime_values(FunctionRuntimeValues::default())
+                    .reuse_frozen_tables(false)
+                    .build()?;
+
+                let function_version = seed_function(&db, collection, &create).await;
+                function_versions.insert(test_function, function_version);
+            }
         }
 
         // Create executions
@@ -723,11 +775,11 @@ pub(crate) mod tests {
             .flat_map(|e| &e.transactions)
             .flat_map(|t| &t.functions)
         {
-            let function_version = function_versions.get(test_function).unwrap();
+            let function_run = function_runs.get(test_function).unwrap();
 
             // Assert all function_runs are in expected state
             let function_runs: Vec<FunctionRunDB> = queries
-                .select_by::<FunctionRunDB>(&(&function_runs.get(test_function).unwrap().id))?
+                .select_by::<FunctionRunDB>(&function_run.id)?
                 .build_query_as()
                 .fetch_all(&db)
                 .await
@@ -738,7 +790,7 @@ pub(crate) mod tests {
 
             // Assert all table_data_versions are in expected state
             let table_data_versions: Vec<TableDataVersionDBWithFunction> = queries
-                .select_by::<TableDataVersionDBWithFunction>(&function_version.id)?
+                .select_by::<TableDataVersionDBWithFunction>(&function_run.id)?
                 .build_query_as()
                 .fetch_all(&db)
                 .await

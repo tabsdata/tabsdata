@@ -87,7 +87,7 @@ mod tests {
     use td_objects::sql::SelectBy;
     use td_objects::types::basic::{
         AccessTokenId, CollectionName, ColumnCount, ExecutionStatus, FunctionName,
-        FunctionRunStatus, RoleId, RowCount, SchemaHash, TableName, TableNameDto,
+        FunctionRunStatus, HasData, RoleId, RowCount, SchemaHash, TableName, TableNameDto,
         TransactionStatus, UserId,
     };
     use td_objects::types::composed::TableDependencyDto;
@@ -537,7 +537,7 @@ mod tests {
 
         // Assertions
         let queries = DaoQueries::default();
-        let function_runs: Vec<FunctionRunDB> = queries
+        let function_runs: Vec<FunctionRunDBWithNames> = queries
             .select_by::<FunctionRunDBWithNames>(&FunctionName::try_from("f_0")?)?
             .build_query_as()
             .fetch_all(&db)
@@ -560,7 +560,7 @@ mod tests {
             function_run.triggered_by_id
         );
         assert_eq!(table_data_version.status, function_run.status);
-        assert_eq!(table_data_version.has_data, Some(false.into()));
+        assert_eq!(table_data_version.has_data, Some(HasData::FALSE));
 
         let queries = DaoQueries::default();
         let table_data_versions: Vec<TableDataVersionDBWithNames> = queries
@@ -577,7 +577,7 @@ mod tests {
             function_run.triggered_by_id
         );
         assert_eq!(table_data_version.status, function_run.status);
-        assert_eq!(table_data_version.has_data, Some(true.into()));
+        assert_eq!(table_data_version.has_data, Some(HasData::TRUE));
         assert_eq!(
             table_data_version.column_count,
             Some(ColumnCount::try_from(1i64)?)
@@ -591,6 +591,214 @@ mod tests {
             Some(SchemaHash::try_from("hash")?)
         );
 
+        Ok(())
+    }
+
+    #[td_test::test(sqlx)]
+    #[tokio::test]
+    async fn test_callback_table_data_version_data_information(db: DbPool) -> Result<(), TdError> {
+        test_callback(
+            db.clone(),
+            vec![TestExecution {
+                expected_status: ExecutionStatus::Finished,
+                transactions: vec![TestTransaction {
+                    expected_status: TransactionStatus::Committed,
+                    functions: vec![TestFunction {
+                        collection: CollectionName::try_from("c_0")?,
+                        name: FunctionName::try_from("f_0")?,
+                        dependencies: vec![],
+                        tables: vec![
+                            TableNameDto::try_from("t_0")?,
+                            TableNameDto::try_from("t_1")?,
+                        ],
+                        initial_status: FunctionRunStatus::Running,
+                        expected_status: FunctionRunStatus::Committed,
+                    }],
+                }],
+            }],
+            "f_0",
+            WorkerCallbackStatus::Done,
+            Some(WorkerOutput::FunctionV2(
+                FunctionOutput::builder()
+                    .output(vec![
+                        WrittenTable::NoData {
+                            table: TableName::try_from("t_0")?,
+                        },
+                        WrittenTable::Data {
+                            table: TableName::try_from("t_1")?,
+                            info: TableInfo::builder()
+                                .column_count(ColumnCount::try_from(1i64)?)
+                                .row_count(RowCount::try_from(2i64)?)
+                                .schema_hash(SchemaHash::try_from("hash")?)
+                                .build()
+                                .unwrap(),
+                        },
+                    ])
+                    .build()?,
+            )),
+        )
+        .await?;
+
+        test_callback(
+            db.clone(),
+            vec![TestExecution {
+                expected_status: ExecutionStatus::Finished,
+                transactions: vec![TestTransaction {
+                    expected_status: TransactionStatus::Committed,
+                    functions: vec![TestFunction {
+                        collection: CollectionName::try_from("c_0")?,
+                        name: FunctionName::try_from("f_0")?,
+                        dependencies: vec![],
+                        tables: vec![
+                            TableNameDto::try_from("t_0")?,
+                            TableNameDto::try_from("t_1")?,
+                        ],
+                        initial_status: FunctionRunStatus::Running,
+                        expected_status: FunctionRunStatus::Committed,
+                    }],
+                }],
+            }],
+            "f_0",
+            WorkerCallbackStatus::Done,
+            Some(WorkerOutput::FunctionV2(
+                FunctionOutput::builder()
+                    .output(vec![
+                        WrittenTable::Data {
+                            table: TableName::try_from("t_0")?,
+                            info: TableInfo::builder()
+                                .column_count(ColumnCount::try_from(3i64)?)
+                                .row_count(RowCount::try_from(4i64)?)
+                                .schema_hash(SchemaHash::try_from("hash")?)
+                                .build()
+                                .unwrap(),
+                        },
+                        WrittenTable::NoData {
+                            table: TableName::try_from("t_1")?,
+                        },
+                    ])
+                    .build()?,
+            )),
+        )
+        .await?;
+
+        // Assertions
+        let queries = DaoQueries::default();
+        let function_runs: Vec<FunctionRunDBWithNames> = queries
+            .select_by::<FunctionRunDBWithNames>(&FunctionName::try_from("f_0")?)?
+            .build_query_as()
+            .fetch_all(&db)
+            .await
+            .map_err(handle_sql_err)?;
+        assert_eq!(function_runs.len(), 2);
+        let function_run_0 = &function_runs[0];
+        let function_run_1 = &function_runs[1];
+
+        // t_0
+        let table_data_versions: Vec<TableDataVersionDBWithNames> = queries
+            .select_by::<TableDataVersionDBWithNames>(&TableName::try_from("t_0")?)?
+            .build_query_as()
+            .fetch_all(&db)
+            .await
+            .map_err(handle_sql_err)?;
+        assert_eq!(table_data_versions.len(), 2);
+        let table_data_version_0 = &table_data_versions[0];
+        let table_data_version_1 = &table_data_versions[1];
+
+        assert_eq!(
+            table_data_version_0.triggered_on,
+            function_run_0.triggered_on
+        );
+        assert_eq!(
+            table_data_version_1.triggered_on,
+            function_run_1.triggered_on
+        );
+        assert_eq!(
+            table_data_version_0.triggered_by_id,
+            function_run_0.triggered_by_id
+        );
+        assert_eq!(
+            table_data_version_1.triggered_by_id,
+            function_run_1.triggered_by_id
+        );
+        assert_eq!(table_data_version_0.status, function_run_0.status);
+        assert_eq!(table_data_version_1.status, function_run_1.status);
+
+        // version_0 has no data, and version_1 does
+        assert_eq!(table_data_version_0.has_data, Some(HasData::FALSE));
+        assert_eq!(table_data_version_0.column_count, None);
+        assert_eq!(table_data_version_0.row_count, None);
+        assert_eq!(table_data_version_0.schema_hash, None);
+        assert_eq!(table_data_version_1.has_data, Some(HasData::TRUE));
+        assert_eq!(
+            table_data_version_1.column_count,
+            Some(ColumnCount::try_from(3i64)?)
+        );
+        assert_eq!(
+            table_data_version_1.row_count,
+            Some(RowCount::try_from(4i64)?)
+        );
+        assert_eq!(
+            table_data_version_1.schema_hash,
+            Some(SchemaHash::try_from("hash")?)
+        );
+
+        // t_1
+        let table_data_versions: Vec<TableDataVersionDBWithNames> = queries
+            .select_by::<TableDataVersionDBWithNames>(&TableName::try_from("t_1")?)?
+            .build_query_as()
+            .fetch_all(&db)
+            .await
+            .map_err(handle_sql_err)?;
+        assert_eq!(table_data_versions.len(), 2);
+        let table_data_version_0 = &table_data_versions[0];
+        let table_data_version_1 = &table_data_versions[1];
+
+        assert_eq!(
+            table_data_version_0.triggered_on,
+            function_run_0.triggered_on
+        );
+        assert_eq!(
+            table_data_version_1.triggered_on,
+            function_run_1.triggered_on
+        );
+        assert_eq!(
+            table_data_version_0.triggered_by_id,
+            function_run_0.triggered_by_id
+        );
+        assert_eq!(
+            table_data_version_1.triggered_by_id,
+            function_run_1.triggered_by_id
+        );
+        assert_eq!(table_data_version_0.status, function_run_0.status);
+        assert_eq!(table_data_version_1.status, function_run_1.status);
+
+        // version_0 has data, and version_1 does not. so version_1 is the data expected in both
+        assert_eq!(table_data_version_0.has_data, Some(HasData::TRUE));
+        assert_eq!(
+            table_data_version_0.column_count,
+            Some(ColumnCount::try_from(1i64)?)
+        );
+        assert_eq!(
+            table_data_version_0.row_count,
+            Some(RowCount::try_from(2i64)?)
+        );
+        assert_eq!(
+            table_data_version_0.schema_hash,
+            Some(SchemaHash::try_from("hash")?)
+        );
+        assert_eq!(table_data_version_1.has_data, Some(HasData::FALSE));
+        assert_eq!(
+            table_data_version_1.column_count,
+            Some(ColumnCount::try_from(1i64)?)
+        );
+        assert_eq!(
+            table_data_version_1.row_count,
+            Some(RowCount::try_from(2i64)?)
+        );
+        assert_eq!(
+            table_data_version_1.schema_hash,
+            Some(SchemaHash::try_from("hash")?)
+        );
         Ok(())
     }
 }

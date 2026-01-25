@@ -92,10 +92,9 @@ FROM function_runs f
 
 DROP VIEW function_runs__to_execute;
 CREATE VIEW function_runs__to_execute AS
-WITH
-    runs_with_pending_reqs AS (SELECT DISTINCT function_run_id
-                               FROM function_requirements__with_status
-                               WHERE status NOT IN ('D', 'C'))
+WITH runs_with_pending_reqs AS (SELECT DISTINCT function_run_id
+                                FROM function_requirements__with_status
+                                WHERE status NOT IN ('D', 'C'))
 SELECT f.*,
        fv.data_location,
        fv.storage_version,
@@ -105,3 +104,7 @@ FROM function_runs__with_names f
          LEFT JOIN runs_with_pending_reqs p ON f.id = p.function_run_id
 WHERE f.status IN ('S', 'RS')
   AND p.function_run_id IS NULL;
+
+-- Drop data columns to table_data_versions.
+ALTER TABLE table_data_versions
+    DROP COLUMN with_data_table_data_version_id;
