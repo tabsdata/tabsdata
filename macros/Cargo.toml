@@ -38,6 +38,7 @@ members = [
     "facets/tm-error",
     "facets/tm-pyo3",
     "facets/tm-services",
+    "facets/tm-sql",
     "facets/tm-test",
     "facets/tm-tower",
     "facets/tm-workspace"

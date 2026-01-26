@@ -3391,6 +3391,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "tm-sql"
+version = "1.6.0"
+dependencies = [
+ "openssl",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "tm-test"
 version = "1.6.0"
 dependencies = [

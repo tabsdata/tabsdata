@@ -72,6 +72,7 @@ exclude = [
     "macros/facets/tm-error",
     "macros/facets/tm-pyo3",
     "macros/facets/tm-services",
+    "macros/facets/tm-sql",
     "macros/facets/tm-test",
     "macros/facets/tm-tower",
     "macros/facets/tm-workspace",
@@ -156,14 +157,17 @@ path = "devutils/automation/tasks/cargo/td-build"
 [workspace.dependencies.td-type]
 path = "macros/facets/td-type"
 
-[workspace.dependencies.tm-services]
-path = "macros/facets/tm-services"
-
 [workspace.dependencies.tm-error]
 path = "macros/facets/tm-error"
 
 [workspace.dependencies.tm-pyo3]
 path = "macros/facets/tm-pyo3"
+
+[workspace.dependencies.tm-services]
+path = "macros/facets/tm-services"
+
+[workspace.dependencies.tm-sql]
+path = "macros/facets/tm-sql"
 
 [workspace.dependencies.tm-test]
 path = "macros/facets/tm-test"

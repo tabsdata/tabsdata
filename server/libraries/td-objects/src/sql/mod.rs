@@ -143,7 +143,7 @@ where
         let mut query_builder = sqlx::QueryBuilder::new(sql);
         query_builder.push(" WHERE ");
         gen_where_clause::<D, E>(&mut query_builder, std::slice::from_ref(where_))?;
-        query_builder.push(" ");
+        query_builder.push(" ORDER BY ");
         query_builder.push(D::order_by());
         Ok(query_builder)
     }

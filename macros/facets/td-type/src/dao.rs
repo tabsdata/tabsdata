@@ -126,10 +126,10 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
     let order_by = match parsed_args.order_by {
         Some(order_by) => {
             let order_by = order_by.as_str();
-            quote! { concat!("ORDER BY ", #order_by) }
+            quote! { #order_by }
         }
         None => {
-            quote! { "ORDER BY 1 DESC" }
+            quote! { "1 DESC" }
         }
     };
     let versioned = match parsed_args.versioned {

@@ -66,7 +66,7 @@ where
         gen_where_clause::<D, E>(&mut query_builder, std::slice::from_ref(e))?;
 
         // And last, order by
-        query_builder.push(" ");
+        query_builder.push(" ORDER BY ");
         query_builder.push(<D as DataAccessObject>::order_by());
 
         Ok(query_builder)
@@ -98,14 +98,14 @@ where
         // Where clause
         if e.is_empty() {
             // Safeguard so empty lookups don't find all rows
-            query_builder.push(" WHERE 1 = 0");
+            query_builder.push(" WHERE 1 = 0 ");
         } else {
             query_builder.push(" WHERE ");
             gen_where_clause::<D, E>(&mut query_builder, e)?;
         }
 
         // And last, order by
-        query_builder.push(" ");
+        query_builder.push("ORDER BY ");
         query_builder.push(<D as DataAccessObject>::order_by());
 
         Ok(query_builder)
