@@ -88,3 +88,9 @@ instance:
     action: edit_node
     position: same
     data: td_function
+
+apiserver:
+  - path: [ "database" ]
+    action: insert_child
+    position: end
+    data: { log_level: off }

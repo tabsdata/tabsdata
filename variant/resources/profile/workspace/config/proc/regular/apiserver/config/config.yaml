@@ -25,6 +25,7 @@ database:
   max_lifetime: 3600
   idle_timeout: 60
   test_before_acquire: true
+  log_level: off
 storage:
   mounts:
     - id: ROOT

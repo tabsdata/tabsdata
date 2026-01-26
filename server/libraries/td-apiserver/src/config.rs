@@ -141,6 +141,9 @@ pub struct Params {
     /// Database URL (it must be a file:// URI)
     database_url: Option<String>,
     #[clap(long)]
+    /// Database log level
+    database_log_level: Option<String>,
+    #[clap(long)]
     /// Storage location (it must be a file:// URI)
     storage_url: Option<String>,
     #[clap(short, long, value_parser = parse_socket_addr, num_args = 1.., value_delimiter = ',')]
@@ -224,6 +227,9 @@ impl Params {
                 let mut config = config.database;
                 if let Some(url) = &self.database_url {
                     config.url = Some(url.clone());
+                }
+                if let Some(log_level) = &self.database_log_level {
+                    config.log_level = log_level.clone();
                 }
                 config
             },
@@ -319,6 +325,7 @@ mod tests {
             database_url: Some(String::from("file:///c:/test.db")),
             #[cfg(not(target_os = "windows"))]
             database_url: Some(String::from("file:///test.db")),
+            database_log_level: None,
             #[cfg(target_os = "windows")]
             storage_url: Some(String::from("file:///c:/storage")),
             #[cfg(not(target_os = "windows"))]
@@ -384,6 +391,7 @@ mod tests {
             database_url: Some(String::from("file:///c:/test.db")),
             #[cfg(not(target_os = "windows"))]
             database_url: Some(String::from("file:///test.db")),
+            database_log_level: None,
             #[cfg(target_os = "windows")]
             storage_url: Some(String::from("file:///c:/storage")),
             #[cfg(not(target_os = "windows"))]

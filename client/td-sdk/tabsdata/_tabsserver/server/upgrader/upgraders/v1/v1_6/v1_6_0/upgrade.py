@@ -31,6 +31,7 @@ class Upgrade_1_5_1_to_1_6_0(Upgrade):
         messages: list[str] = []
 
         messages.extend(self.upgrade_instance(instance, dry_run))
+        messages.extend(self.upgrade_apiserver(instance, dry_run))
 
         return messages
 
@@ -192,6 +193,68 @@ class Upgrade_1_5_1_to_1_6_0(Upgrade):
 
         return messages
 
+    @staticmethod
+    def upgrade_apiserver(
+        instance: Path,
+        dry_run: bool,
+    ) -> list[str]:
+        messages: list[str] = []
+
+        apiserver_config_path = (
+                instance
+                / "workspace"
+                / "config"
+                / "proc"
+                / "regular"
+                / "apiserver"
+                / "config"
+                / "config.yaml"
+        )
+        if not apiserver_config_path.exists():
+            logger.warning(
+                "Instance apiserver config file "
+                f"'{apiserver_config_path}' not found; "
+                "skipping apiserver upgrade."
+            )
+            return messages
+
+        apiserver_config_spec_path = td_resource(
+            "resources/upgrade/v1/v1_6/v1_6_0/upgrade.yaml"
+        )
+
+        apiserver_config_upgrade_spec_yaml = YAML()
+        apiserver_config_upgrade_spec_yaml.preserve_quotes = True
+        with open(apiserver_config_spec_path, "r", encoding="utf-8") as f:
+            upgrade_spec = apiserver_config_upgrade_spec_yaml.load(f)
+        apiserver_config_upgrade_spec = (
+            upgrade_spec.get("apiserver", []) if isinstance(upgrade_spec, dict) else []
+        )
+
+        apiserver_config_upgrade_editor = YamlEditor(
+            spec=apiserver_config_upgrade_spec,
+            source=apiserver_config_path,
+        )
+
+        if dry_run:
+            apiserver_config_content_upgraded = apiserver_config_upgrade_editor.apply(
+                dry_run=True
+            )
+            with open(apiserver_config_path, "r", encoding="utf-8") as f:
+                apiserver_config_content = f.read()
+            if (
+                    apiserver_config_content_upgraded
+                    and apiserver_config_content_upgraded.strip()
+                    != apiserver_config_content.strip()
+            ):
+                messages.append(
+                    f"[dry-run] Would upgrade '{apiserver_config_path}' "
+                    "using upgrade spec."
+                )
+        else:
+            apiserver_config_upgrade_editor.apply(dry_run=False)
+            messages.append(f"Upgraded '{apiserver_config_path}' using upgrade spec.")
+
+        return messages
 
 if __name__ == "__main__":
     print(
