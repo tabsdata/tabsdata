@@ -136,6 +136,7 @@ fn service() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::function::layers::register::RegisterFunctionError;
     use crate::function::services::tests::assert_register;
     use std::collections::HashMap;
     use ta_services::service::TdService;
@@ -428,6 +429,61 @@ mod tests {
         let response = response?;
 
         assert_register(&db, &UserId::admin(), &collection, &create, &response).await
+    }
+
+    #[td_test::test(sqlx)]
+    #[tokio::test]
+    async fn test_register_table_output_duplicate_output_tables_err(
+        db: DbPool,
+    ) -> Result<(), TdError> {
+        let collection_name = CollectionName::try_from("cofnig")?;
+        let _collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
+
+        let dependencies = None;
+        let triggers = None;
+        let tables = Some(vec![
+            TableNameDto::try_from("table_foo")?,
+            TableNameDto::try_from("table_foo")?,
+        ]);
+
+        let bundle_id = BundleId::default();
+        let create = FunctionRegister::builder()
+            .try_name("function_foo")?
+            .try_description("function_foo description")?
+            .bundle_id(bundle_id)
+            .try_snippet("function_foo snippet")?
+            .decorator(Decorator::Publisher)
+            .dependencies(dependencies.clone())
+            .triggers(triggers.clone())
+            .tables(tables.clone())
+            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
+            .reuse_frozen_tables(false)
+            .build()?;
+
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
+                CollectionParam::builder()
+                    .try_collection(collection_name.as_str())?
+                    .build()?,
+                create.clone(),
+            );
+
+        let service = RegisterFunctionService::with_defaults(db.clone())
+            .service()
+            .await;
+        let response = service.raw_oneshot(request).await;
+        let err = response.unwrap_err();
+        let err = err.domain_err::<RegisterFunctionError>();
+        if let RegisterFunctionError::DuplicateTableDefinition(duplicate) = err {
+            assert_eq!(duplicate.len(), 1);
+            assert_eq!(
+                duplicate[0],
+                TableNameDto::try_from("table_foo")?.try_into()?
+            );
+        } else {
+            panic!("Unexpected error: {:?}", err);
+        }
+        Ok(())
     }
 
     #[td_test::test(sqlx)]

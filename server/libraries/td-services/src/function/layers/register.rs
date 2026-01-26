@@ -2,6 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
 use td_error::display_vec::DisplayVec;
@@ -44,6 +45,8 @@ pub enum RegisterFunctionError {
     FrozenTableAlreadyExists(TableName, CollectionName, String) = 4,
     #[error("Cannot use private table '{0}/{1}' from another collection")]
     PrivateTableDependency(CollectionName, TableName) = 5,
+    #[error("Duplicate output tables defined: [{0}]")]
+    DuplicateTableDefinition(DisplayVec<TableName>) = 6,
 }
 
 pub async fn data_location(
@@ -66,6 +69,18 @@ pub async fn validate_tables_do_not_exist(
     let conn = conn.get_mut_connection()?;
 
     if let Some(new_tables) = new_tables.as_ref() {
+        // First, validate there are no duplicates in the new tables.
+        let duplicates = new_tables
+            .iter()
+            .duplicates()
+            .map(TableName::try_from)
+            .collect::<Result<Vec<_>, _>>()?;
+        if !duplicates.is_empty() {
+            Err(RegisterFunctionError::DuplicateTableDefinition(
+                duplicates.into(),
+            ))?
+        }
+
         // We use existing tables to discard lookups in updates (as when registering a function,
         // there is no existing tables).
         let existing_tables_map = existing_versions
