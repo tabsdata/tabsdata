@@ -151,37 +151,25 @@ impl From<UninitializedFieldError> for TdError {
 #[macro_export]
 macro_rules! api_error {
     ($api_error:expr, $($arg:tt)*) => {{
-        $crate::TdError::new($crate::InlineError::new(
-            format!($($arg)*),
-            format!(
+        $crate::TdError::new($crate::InlineError {
+            msg: format!($($arg)*),
+            domain: format!(
                 "{}:{}[{}]",
                 module_path!(),
                 file!(),
                 line!(),
             ),
-            format!("Error::{:04}", $api_error as u16),
-            $api_error,
-        ))
+            code: format!("Error::{:04}", $api_error as u16),
+            api_error: $api_error,
+        })
     }};
 }
 
 pub struct InlineError {
-    msg: String,
-    domain: String,
-    code: String,
-    api_error: ApiError,
-}
-
-impl InlineError {
-    /// Creates a new inline error with the given message, domain, code, and API error.
-    pub fn new(msg: String, domain: String, code: String, api_error: ApiError) -> Self {
-        Self {
-            msg,
-            domain,
-            code,
-            api_error,
-        }
-    }
+    pub msg: String,
+    pub domain: String,
+    pub code: String,
+    pub api_error: ApiError,
 }
 
 impl Display for InlineError {

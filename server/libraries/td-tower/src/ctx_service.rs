@@ -6,9 +6,9 @@ use async_trait::async_trait;
 use derive_builder::Builder;
 use getset::Getters;
 use serde::Serialize;
+use std::fmt::Debug;
 use std::ops::Deref;
 use std::sync::Arc;
-use td_error::TdError;
 use tokio::sync::Mutex;
 use tower::ServiceExt;
 use tower_service::Service;
@@ -46,29 +46,18 @@ impl<U> Deref for CtxResponse<U> {
     }
 }
 
-#[derive(utoipa::ToSchema, Debug, Clone, Eq, PartialEq, Serialize, Builder)]
-#[builder(setter(into))]
+#[derive(Default, Debug, Clone, Eq, PartialEq, Serialize, utoipa::ToSchema)]
 pub struct Message {
-    code: String,
-    group: String,
-    message: String,
-    #[builder(default = None)]
-    template: Option<String>,
-    #[builder(default = None)]
-    args: Option<Vec<String>>,
-    #[builder(default = None)]
-    link: Option<String>,
+    pub code: String,
+    pub group: String,
+    pub message: String,
+    pub template: Option<String>,
+    pub args: Option<Vec<String>>,
+    pub link: Option<String>,
 }
 
-impl Message {
-    pub fn builder() -> MessageBuilder {
-        MessageBuilder::default()
-    }
-}
-
-impl<E: Into<TdError>> From<E> for Message {
+impl<E: td_error::TdDomainError> From<E> for Message {
     fn from(value: E) -> Self {
-        let value = value.into();
         Message {
             code: value.code().to_string(),
             group: value.domain().to_string(),
@@ -78,6 +67,29 @@ impl<E: Into<TdError>> From<E> for Message {
             link: None,
         }
     }
+}
+
+#[macro_export]
+macro_rules! api_message {
+    ($($arg:tt)*) => {{
+        {
+            let message = $crate::ctx_service::Message {
+                code: "Message::0000".to_string(),
+                group: format!(
+                    "{}:{}[{}]",
+                    module_path!(),
+                    file!(),
+                    line!(),
+                ),
+                message: format!($($arg)*),
+                template: None,
+                args: None,
+                link: None,
+            };
+            tracing::debug!("api_message: {message:?}");
+            message
+        }
+    }};
 }
 
 pub type Error = Message;
@@ -233,14 +245,11 @@ mod tests {
 
     #[test]
     fn test_message_from_td_error() {
-        let error: TdError = TestError::FatalError("terrible".to_string()).into();
+        let error = TestError::FatalError("terrible".to_string());
         let message: Message = error.into();
         assert_eq!(message.code, "TestError::1234");
         assert_eq!(message.group, "TestError");
-        assert_eq!(
-            message.message,
-            "td::error NotFound[TestError::1234] - Fatal error: terrible"
-        );
+        assert_eq!(message.message, "Fatal error: terrible");
     }
 
     #[tokio::test]
@@ -263,14 +272,12 @@ mod tests {
     async fn test_inner_context_error() {
         let context = InnerContext::default();
         context
-            .error(
-                Message::builder()
-                    .code("123")
-                    .group("error_group")
-                    .message("error_message")
-                    .build()
-                    .unwrap(),
-            )
+            .error(Message {
+                code: "123".to_string(),
+                group: "error_group".to_string(),
+                message: "error_message".to_string(),
+                ..Default::default()
+            })
             .await;
         assert_eq!(context.error_count().await, 1);
         assert_eq!(context.warning_count().await, 0);
@@ -281,14 +288,12 @@ mod tests {
     async fn test_inner_context_warning() {
         let context = InnerContext::default();
         context
-            .warning(
-                Message::builder()
-                    .code("123")
-                    .group("error_group")
-                    .message("error_message")
-                    .build()
-                    .unwrap(),
-            )
+            .warning(Message {
+                code: "123".to_string(),
+                group: "error_group".to_string(),
+                message: "error_message".to_string(),
+                ..Default::default()
+            })
             .await;
         assert_eq!(context.error_count().await, 0);
         assert_eq!(context.warning_count().await, 1);
@@ -299,14 +304,12 @@ mod tests {
     async fn test_inner_context_notification() {
         let context = InnerContext::default();
         context
-            .notification(
-                Message::builder()
-                    .code("123")
-                    .group("error_group")
-                    .message("error_message")
-                    .build()
-                    .unwrap(),
-            )
+            .notification(Message {
+                code: "123".to_string(),
+                group: "error_group".to_string(),
+                message: "error_message".to_string(),
+                ..Default::default()
+            })
             .await;
         assert_eq!(context.error_count().await, 0);
         assert_eq!(context.warning_count().await, 0);
@@ -317,14 +320,12 @@ mod tests {
     async fn test_raw_oneshot() {
         let service = service_fn(|req: String| async move {
             let mut ctx = CtxMap::default();
-            ctx.errors.push(
-                Message::builder()
-                    .code("123")
-                    .group("error_group")
-                    .message("error_message")
-                    .build()
-                    .unwrap(),
-            );
+            ctx.errors.push(Message {
+                code: "123".to_string(),
+                group: "error_group".to_string(),
+                message: "error_message".to_string(),
+                ..Default::default()
+            });
             Ok::<_, Infallible>(CtxResponse::new(req.clone(), ctx))
         });
 
