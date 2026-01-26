@@ -174,7 +174,7 @@ mod tests {
     use crate::dxo::function::FunctionDB;
     use crate::dxo::trigger::{TriggerDB, TriggerDBWithNames};
     use crate::sql::{DaoQueries, Insert};
-    use crate::types::basic::{AtTime, CollectionId, FunctionId};
+    use crate::types::basic::{AtTime, CollectionId, Depth, FunctionId};
     use chrono::{DateTime, Utc};
     use std::sync::LazyLock;
     use td_database::sql::DbPool;
@@ -204,7 +204,7 @@ mod tests {
         versioned(order_by = "defined_on", partition_by = "id"),
         recursive(up = "current", down = "downstream"),
         states(
-            Active = [TestStatus::Active],
+            Active = [&TestStatus::Active],
         )
     )]
     struct TestDao {
@@ -220,7 +220,7 @@ mod tests {
         sql_table = "test_table_reference",
         versioned(order_by = "defined_on", partition_by = "reference_id"),
         states(
-            Active = [TestStatus::Active],
+            Active = [&TestStatus::Active],
         )
     )]
     struct RecursionReference {

@@ -91,6 +91,12 @@ impl<const N: usize> AsDynSqlEntities for [&dyn SqlEntity; N] {
     }
 }
 
+impl AsDynSqlEntities for &dyn AsDynSqlEntities {
+    fn as_dyn_entities(&self) -> Vec<&dyn SqlEntity> {
+        (**self).as_dyn_entities()
+    }
+}
+
 impl<T> AsDynSqlEntities for [T]
 where
     T: AsDynSqlEntities,

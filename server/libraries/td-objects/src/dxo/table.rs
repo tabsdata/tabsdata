@@ -25,11 +25,11 @@ mod definitions {
         ),
         states(
             // Active tables are tables that can be generated and consumed.
-            Active = [TableStatus::Active],
+            Active = [&TableStatus::Active],
             // Frozen tables are tables that cannot be generated, but can be consumed.
-            Frozen = [TableStatus::Frozen],
+            Frozen = [&TableStatus::Frozen],
             // Available tables are all the tables that are not deleted.
-            Available = [TableStatus::Active, TableStatus::Frozen],
+            Available = [&TableStatus::Active, &TableStatus::Frozen],
         )
     )]
     #[td_type(
@@ -71,9 +71,9 @@ mod definitions {
         order_by = "function_param_pos",
         states(
             // Available user tables are all the tables that are not deleted.
-            User = [(TableStatus::Active, System::FALSE), (TableStatus::Frozen, System::FALSE)],
+            User = [&(TableStatus::Active, System::FALSE), &(TableStatus::Frozen, System::FALSE)],
             // Available system tables are all the tables that are not deleted.
-            System = [(TableStatus::Active, System::TRUE), (TableStatus::Frozen, System::TRUE)],
+            System = [&(TableStatus::Active, System::TRUE), &(TableStatus::Frozen, System::TRUE)],
         )
     )]
     #[inherits(TableDB)]

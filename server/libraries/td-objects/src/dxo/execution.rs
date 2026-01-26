@@ -11,8 +11,9 @@ mod definitions {
     use crate::types::basic::{
         AtTime, CollectionId, CollectionName, Dot, Enabled, ExecutionId, ExecutionName,
         ExecutionStatus, FunctionId, FunctionName, FunctionOnly, FunctionRunStatus,
-        FunctionVersionId, SkipIfRunning, StatusCount, System, TableDataVersionId, TableName,
-        TableVersionId, TransactionId, TriggerType, TriggeredOn, UserId, UserName,
+        FunctionVersionId, OverrideDisabledTrigger, SkipIfRunning, StatusCount, System,
+        TableDataVersionId, TableName, TableVersionId, TransactionId, TriggerType, TriggeredOn,
+        UserId, UserName,
     };
     use crate::types::composed::TableVersions;
     use crate::types::graph::GraphEdge;
@@ -28,6 +29,10 @@ mod definitions {
         #[serde(default)]
         #[td_type(extractor)]
         pub function_only: FunctionOnly,
+        #[builder(default)]
+        #[serde(default)]
+        #[td_type(extractor)]
+        pub override_disabled_trigger: OverrideDisabledTrigger,
     }
 
     impl From<&ExecutionRequestInternal> for ExecutionRequest {
@@ -35,6 +40,7 @@ mod definitions {
             ExecutionRequest {
                 name: value.name.clone(),
                 function_only: value.function_only,
+                override_disabled_trigger: OverrideDisabledTrigger::FALSE,
             }
         }
     }

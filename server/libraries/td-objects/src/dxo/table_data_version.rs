@@ -16,7 +16,7 @@ mod definitions {
         sql_table = "table_data_versions",
         states(
             // Table data versions that can be consumed.
-            WithData = [Some(HasData::TRUE)],
+            WithData = [&Some(HasData::TRUE)],
         )
     )]
     pub struct TableDataVersionDB {
@@ -61,7 +61,7 @@ mod definitions {
         versioned(order_by = "triggered_on", partition_by = "table_id"),
         states(
             // Table data versions that can be consumed.
-            Committed = [FunctionRunStatus::Committed],
+            Committed = [&FunctionRunStatus::Committed],
         )
     )]
     #[inherits(TableDataVersionDB)]
