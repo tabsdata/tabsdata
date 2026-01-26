@@ -54,6 +54,7 @@ td-error = { workspace = true }
 td-security = { workspace = true }
 td-test = { workspace = true }
 td-tower = { workspace = true }
+tm-sql = { workspace = true }
 
 # External dependencies
 

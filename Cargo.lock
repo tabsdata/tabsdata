@@ -7882,6 +7882,7 @@ dependencies = [
  "td-tower",
  "td-type",
  "thiserror 2.0.18",
+ "tm-sql",
  "tokio",
  "tracing",
  "url",
@@ -8493,6 +8494,16 @@ name = "tm-services"
 version = "1.6.0"
 dependencies = [
  "openssl",
+ "quote",
+ "syn 2.0.114",
+]
+
+[[package]]
+name = "tm-sql"
+version = "1.6.0"
+dependencies = [
+ "openssl",
+ "proc-macro2",
  "quote",
  "syn 2.0.114",
 ]
