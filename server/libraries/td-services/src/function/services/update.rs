@@ -154,16 +154,17 @@ mod tests {
     use td_objects::dxo::trigger::TriggerDB;
     use td_objects::dxo::worker::WorkerDB;
     use td_objects::rest_urls::CollectionParam;
-    use td_objects::sql::SelectBy;
     use td_objects::sql::cte::VersionedQueries;
     use td_objects::sql::recursive::RecursiveQueries;
+    use td_objects::sql::{SelectBy, recursive};
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_function::seed_function;
     use td_objects::test_utils::seed_inter_collection_permission::seed_inter_collection_permission;
     use td_objects::types::basic::{
-        AccessTokenId, Decorator, Enabled, FunctionRuntimeValues, RoleId, TableName, TableStatus,
-        ToCollectionId, UserId, WorkerMessageStatus, WorkerStatus, WorkerType,
+        AccessTokenId, Decorator, Depth, Enabled, FunctionRuntimeValues, RoleId, TableName,
+        TableStatus, ToCollectionId, UserId, WorkerMessageStatus, WorkerStatus, WorkerType,
     };
+    use td_objects::types::recursion::RecursionOptions;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -1500,10 +1501,11 @@ mod tests {
         .await?;
 
         let recursive_downstream_trigger: Vec<TriggerDB> = DaoQueries::default()
-            .select_recursive_versions_at::<{ TriggerDB::Active }, TriggerDB, { FunctionDB::Executable }, FunctionDB>(
-                None,
-                None,
-                &response.function_id,
+            .select_recursive_versions::<{ TriggerDB::Active }, TriggerDB, { FunctionDB::Executable }, FunctionDB>(
+                recursive::OptionsBuilder::default()
+                    .recursion(RecursionOptions::new(Some(Depth::ZERO), None))
+                    .direct_reference(&response.function_id)
+                    .build()?,
             )?
             .build_query_as()
             .fetch_all(&db)
@@ -1617,10 +1619,11 @@ mod tests {
         .await?;
 
         let recursive_downstream_trigger: Vec<TriggerDB> = DaoQueries::default()
-            .select_recursive_versions_at::<{ TriggerDB::Active }, TriggerDB, { FunctionDB::Executable }, FunctionDB>(
-                None,
-                None,
-                &response.function_id,
+            .select_recursive_versions::<{ TriggerDB::Active }, TriggerDB, { FunctionDB::Executable }, FunctionDB>(
+                recursive::OptionsBuilder::default()
+                    .recursion(RecursionOptions::new(Some(Depth::ZERO), None))
+                    .direct_reference(&response.function_id)
+                    .build()?,
             )?
             .build_query_as()
             .fetch_all(&db)

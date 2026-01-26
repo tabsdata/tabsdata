@@ -36,6 +36,9 @@ pub struct HasData;
 #[td_type::typed(bool)]
 pub struct IsEmptyVersions;
 
+#[td_type::typed(bool(default = false))]
+pub struct OverrideDisabledTrigger;
+
 #[td_type::typed(bool)]
 pub struct Partitioned;
 

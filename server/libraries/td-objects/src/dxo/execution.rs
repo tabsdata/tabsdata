@@ -98,7 +98,7 @@ mod definitions {
     // custom setter to convert to json
     impl Setter<RecursionOptions> for ExecutionDBBuilder {
         fn set(&mut self, value: &RecursionOptions) -> &mut Self {
-            let recursion_options = Some(sqlx::types::Json::from(value.clone()));
+            let recursion_options = Some(sqlx::types::Json::from(*value));
             self.recursion_options = Some(recursion_options);
             self
         }

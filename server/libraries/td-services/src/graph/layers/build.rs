@@ -14,9 +14,9 @@ use td_objects::dxo::function::{FunctionDB, FunctionDBWithNames};
 use td_objects::dxo::table::{TableDB, TableDBWithNames};
 use td_objects::dxo::trigger::TriggerDBWithNames;
 use td_objects::graph::{TdGraph, TdGraphBuilder};
-use td_objects::sql::DaoQueries;
 use td_objects::sql::cte::VersionedQueries;
 use td_objects::sql::recursive::RecursiveQueries;
+use td_objects::sql::{DaoQueries, recursive};
 use td_objects::types::basic::{AtTime, FunctionId, TableId};
 use td_objects::types::recursion::RecursionOptions;
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
@@ -57,11 +57,21 @@ where
         let trigger_graph = match function_or_table.deref() {
             FunctionOrTable::Function(function_id) => {
                 queries
-                    .select_recursive_versions_at_with::<TRIGGER_STATE, TriggerDBWithNames, FUNCTION_STATE, FunctionDB>(
-                        Some(&at_time),
-                        Some(&at_time),
-                        function_id,
-                        recursion_options.deref(),
+                    .select_recursive_versions::<TRIGGER_STATE, TriggerDBWithNames, FUNCTION_STATE, FunctionDB>(
+                        {
+                            let mut opts = recursive::OptionsBuilder::default()
+                                .recursion(*recursion_options)
+                                .direct_reference(function_id)
+                                .d_defined_on(&*at_time)
+                                .r_defined_on(&*at_time);
+                            if recursion_options.override_disabled_trigger() {
+                                opts = opts.override_direct_reference_state(
+                                    // move from Executable to Active
+                                    Some(<FunctionDB as States<{ FunctionDB::Active }>>::state())
+                                );
+                            }
+                            opts.build()?
+                        },
                     )?
                     .build_query_as()
                     .fetch_all(&mut *conn)
@@ -70,11 +80,13 @@ where
             }
             FunctionOrTable::Table(table_id) => {
                 queries
-                    .select_recursive_versions_at_with::<TRIGGER_STATE, TriggerDBWithNames, TABLE_STATE, TableDB>(
-                        Some(&at_time),
-                        Some(&at_time),
-                        table_id,
-                        recursion_options.deref(),
+                    .select_recursive_versions::<TRIGGER_STATE, TriggerDBWithNames, TABLE_STATE, TableDB>(
+                        recursive::OptionsBuilder::default()
+                            .recursion(*recursion_options)
+                            .direct_reference(table_id)
+                            .d_defined_on(&*at_time)
+                            .r_defined_on(&*at_time)
+                            .build()?,
                     )?
                     .build_query_as()
                     .fetch_all(&mut *conn)
@@ -99,11 +111,13 @@ where
         let dep_graph = match function_or_table.deref() {
             FunctionOrTable::Function(function_id) =>{
                 queries
-                    .select_recursive_versions_at_with::<DEPENDENCY_STATE, DependencyDBWithNames, FUNCTION_STATE, FunctionDB>(
-                        Some(&at_time),
-                        Some(&at_time),
-                        function_id,
-                        recursion_options.deref(),
+                    .select_recursive_versions::<DEPENDENCY_STATE, DependencyDBWithNames, FUNCTION_STATE, FunctionDB>(
+                        recursive::OptionsBuilder::default()
+                            .recursion(*recursion_options)
+                            .direct_reference(function_id)
+                            .d_defined_on(&*at_time)
+                            .r_defined_on(&*at_time)
+                            .build()?,
                     )?
                     .build_query_as()
                     .fetch_all(&mut *conn)
@@ -112,11 +126,13 @@ where
             }
             FunctionOrTable::Table(table_id)=> {
                 queries
-                    .select_recursive_versions_at_with::<DEPENDENCY_STATE, DependencyDBWithNames, TABLE_STATE, TableDB>(
-                        Some(&at_time),
-                        Some(&at_time),
-                        table_id,
-                        recursion_options.deref(),
+                    .select_recursive_versions::<DEPENDENCY_STATE, DependencyDBWithNames, TABLE_STATE, TableDB>(
+                        recursive::OptionsBuilder::default()
+                            .recursion(*recursion_options)
+                            .direct_reference(table_id)
+                            .d_defined_on(&*at_time)
+                            .r_defined_on(&*at_time)
+                            .build()?,
                     )?
                     .build_query_as()
                     .fetch_all(&mut *conn)

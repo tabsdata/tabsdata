@@ -60,6 +60,7 @@ fn service() {
 pub(crate) mod tests {
     use super::*;
     use std::collections::HashSet;
+    use std::error::Error;
     use std::sync::LazyLock;
     use ta_services::service::TdService;
     use td_database::sql::DbPool;
@@ -84,9 +85,10 @@ pub(crate) mod tests {
     use td_objects::test_utils::seed_transaction::seed_transaction;
     use td_objects::tower_service::authz::AuthzError;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, Decorator, Depth, ExecutionName, ExecutionStatus,
-        FunctionName, FunctionRunStatus, FunctionRuntimeValues, RoleId, TableName, TableNameDto,
-        ToCollectionId, TransactionKey, TransactionStatus, TriggeredOn, UserId,
+        AccessTokenId, BundleId, CollectionName, Decorator, Depth, Enabled, ExecutionName,
+        ExecutionStatus, FunctionName, FunctionRunStatus, FunctionRuntimeValues,
+        OverrideDisabledTrigger, RoleId, TableName, TableNameDto, ToCollectionId, TransactionKey,
+        TransactionStatus, TriggeredOn, UserId,
     };
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
     use td_tower::ctx_service::RawOneshot;
@@ -163,6 +165,7 @@ pub(crate) mod tests {
             ),
             type_of_val(&trigger_type_manual),
             // execute()
+            type_of_val(&With::<ExecutionRequest>::extract::<OverrideDisabledTrigger>),
             type_of_val(&assert_function_status),
             // check requester is coll_admin or coll_exec for the function's collection
             type_of_val(&With::<FunctionDBWithNames>::extract::<CollectionId>),
@@ -867,5 +870,128 @@ pub(crate) mod tests {
         // and in OnHold status, because even tho function_1 is Done, function_0 is not ready
         assert_eq!(function_run.status, expected_initial_status);
         Ok(())
+    }
+
+    #[td_test::test(sqlx)]
+    #[tokio::test]
+    async fn test_execute_disabled_trigger_err(db: DbPool) -> Result<(), TdError> {
+        let res = test_execute_disabled_trigger(db, OverrideDisabledTrigger::FALSE).await?;
+        let err = res.unwrap_err();
+        assert_eq!(
+            "Function 'function_0' must be enabled to be executed".to_string(),
+            err.source().unwrap().to_string()
+        );
+        Ok(())
+    }
+
+    #[td_test::test(sqlx)]
+    #[tokio::test]
+    async fn test_execute_disabled_trigger_override(db: DbPool) -> Result<(), TdError> {
+        let response = test_execute_disabled_trigger(db, OverrideDisabledTrigger::TRUE).await?;
+        let response = response?;
+
+        // Assert that the disabled function as executed, and downstream was OK as well.
+        // Note that test_execute_disabled_trigger only created function 0 and 1.
+        let graph_depth = EXECUTION_GRAPH_OPTIONS.max_downstream_depth();
+
+        assert_eq!(
+            response.name,
+            Some(ExecutionName::try_from("test_execution")?)
+        );
+        assert!(response.triggered_on < TriggeredOn::now());
+
+        let manual_trigger = &response.all_functions[&response.manual_trigger];
+        assert_eq!(manual_trigger.name, FUNCTION_NAMES[0]);
+
+        let expected_all_functions = match graph_depth {
+            Some(depth) => FUNCTION_NAMES[0..2]
+                .iter()
+                .take(*depth as usize + 1)
+                .collect::<Vec<_>>(),
+            None => FUNCTION_NAMES[0..2].iter().collect::<Vec<_>>(),
+        };
+        let mut all_functions: Vec<_> = response.all_functions.values().map(|t| &t.name).collect();
+        all_functions.sort();
+        assert_eq!(expected_all_functions, all_functions);
+
+        let all_tables_with_collection = vec![
+            TableName::try_from("collection_0/table_0")?,
+            TableName::try_from("collection_0/table_1")?,
+        ];
+        let expected_all_tables = match graph_depth {
+            Some(depth) => all_tables_with_collection
+                .into_iter()
+                .take(*depth as usize + 1)
+                .collect::<Vec<_>>(),
+            None => all_tables_with_collection.into_iter().collect::<Vec<_>>(),
+        };
+        let mut created_tables: Vec<_> = response
+            .created_tables
+            .iter()
+            .map(|t| {
+                TableName::try_from(format!(
+                    "{}/{}",
+                    &response.all_tables[t].collection, &response.all_tables[t].name
+                ))
+                .unwrap()
+            })
+            .collect();
+        created_tables.sort();
+        assert_eq!(expected_all_tables, created_tables);
+        Ok(())
+    }
+
+    async fn test_execute_disabled_trigger(
+        db: DbPool,
+        override_disabled_trigger: OverrideDisabledTrigger,
+    ) -> Result<Result<ExecutionResponse, TdError>, TdError> {
+        let collection = seed_collection(&db, &COLLECTION_NAMES[0], &UserId::admin()).await;
+
+        let create = FunctionRegister::builder()
+            .name(FUNCTION_NAMES[0].clone())
+            .try_description("foo description")?
+            .bundle_id(BundleId::default())
+            .try_snippet("foo snippet")?
+            .decorator(Decorator::Publisher)
+            .dependencies(None)
+            .triggers(None)
+            .tables(vec![TableNameDto::try_from("table_0")?])
+            .runtime_values(FunctionRuntimeValues::try_from("foo runtime values")?)
+            .reuse_frozen_tables(false)
+            .enabled(Enabled::FALSE)
+            .build()?;
+        let _function_0 = seed_function(&db, &collection, &create).await;
+
+        let create = FunctionRegister::builder()
+            .name(FUNCTION_NAMES[1].clone())
+            .try_description("foo description")?
+            .bundle_id(BundleId::default())
+            .try_snippet("foo snippet")?
+            .decorator(Decorator::Publisher)
+            .dependencies(vec![TableDependencyDto::try_from("table_0")?])
+            .triggers(vec![TableTriggerDto::try_from("table_0")?])
+            .tables(vec![TableNameDto::try_from("table_1")?])
+            .runtime_values(FunctionRuntimeValues::try_from("foo runtime values")?)
+            .reuse_frozen_tables(false)
+            .build()?;
+        let _function_1 = seed_function(&db, &collection, &create).await;
+
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
+                FunctionParam::builder()
+                    .try_collection(collection.name.to_string())?
+                    .try_function(FUNCTION_NAMES[0].to_string())?
+                    .build()?,
+                ExecutionRequest::builder()
+                    .name(Some(ExecutionName::try_from("test_execution")?))
+                    .override_disabled_trigger(override_disabled_trigger)
+                    .build()?,
+            );
+
+        let service = ExecuteFunctionService::with_defaults(db.clone())
+            .service()
+            .await;
+
+        Ok(service.raw_oneshot(request).await)
     }
 }

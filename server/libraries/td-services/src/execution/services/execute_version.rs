@@ -148,7 +148,9 @@ mod tests {
         };
         use td_objects::tower_service::from::{ConvertIntoMapService, VecBuildService};
         use td_objects::tower_service::sql::{insert, insert_vec};
-        use td_objects::types::basic::{CollectionId, FunctionId, FunctionOnly, TriggerType};
+        use td_objects::types::basic::{
+            CollectionId, FunctionId, FunctionOnly, OverrideDisabledTrigger, TriggerType,
+        };
         use td_objects::types::recursion::RecursionOptions;
         use td_tower::metadata::type_of_val;
 
@@ -202,6 +204,7 @@ mod tests {
                 type_of_val(&With::<ExecutionRequestInternal>::convert_to::<ExecutionRequest>),
 
                 // execute()
+                type_of_val(&With::<ExecutionRequest>::extract::<OverrideDisabledTrigger>),
                 type_of_val(&assert_function_status),
                 // check requester is coll_admin or coll_exec for the function's collection
                 type_of_val(&With::<FunctionDBWithNames>::extract::<CollectionId>),

@@ -4,50 +4,42 @@
 
 use crate::dxo::{DataAccessObject, Recursive, States, Versioned};
 use crate::sql::{Queries, gen_where_clause};
-use crate::types::SqlEntity;
-use crate::types::basic::Depth;
 use crate::types::recursion::RecursionOptions;
+use crate::types::{AsDynSqlEntities, SqlEntity};
+use derive_builder::Builder;
 use std::ops::Deref;
 use td_error::TdError;
 use tm_sql::sql;
 
 impl<Q: Deref<Target = dyn Queries>> RecursiveQueries for Q {}
 
-pub trait RecursiveQueries {
-    fn select_recursive_versions_at<'a, const DS: u8, D, const RS: u8, R>(
-        &self,
-        d_defined_on: Option<&'a <D as Versioned>::Order>,
-        r_defined_on: Option<&'a <R as Versioned>::Order>,
-        direct_reference_entity: &'a dyn SqlEntity, // has to be in R
-    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, TdError>
-    where
-        D: DataAccessObject + Recursive + Versioned + States<DS>,
-        R: DataAccessObject + Versioned + States<RS>,
-        <D as Versioned>::Partition: 'a,
-        <R as Versioned>::Partition: 'a,
-    {
-        self.select_recursive_versions_at_with::<DS, D, RS, R>(
-            d_defined_on,
-            r_defined_on,
-            direct_reference_entity,
-            &RecursionOptions::new(Some(Depth::ZERO), None),
-        )
-    }
+#[derive(Builder)]
+#[builder(pattern = "owned", build_fn(error = "TdError"))]
+pub struct Options<'a, D, R>
+where
+    D: DataAccessObject + Recursive + Versioned,
+    R: DataAccessObject + Versioned,
+{
+    recursion: RecursionOptions,
+    direct_reference: &'a dyn SqlEntity, // has to be in R
+    #[builder(default, setter(into))]
+    d_defined_on: Option<&'a <D as Versioned>::Order>,
+    #[builder(default, setter(into))]
+    r_defined_on: Option<&'a <R as Versioned>::Order>,
+    #[builder(default)]
+    override_direct_reference_state: Option<&'a [&'a dyn AsDynSqlEntities]>, // state to override with
+}
 
-    fn select_recursive_versions_at_with<'a, const DS: u8, D, const RS: u8, R>(
+pub trait RecursiveQueries {
+    fn select_recursive_versions<'a, const DS: u8, D, const RS: u8, R>(
         &self,
-        d_defined_on: Option<&'a <D as Versioned>::Order>,
-        r_defined_on: Option<&'a <R as Versioned>::Order>,
-        direct_reference_entity: &'a dyn SqlEntity, // has to be in R
-        options: &RecursionOptions,
+        opts: Options<'a, D, R>,
     ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, TdError>
     where
         D: DataAccessObject + Recursive + Versioned + States<DS>,
         R: DataAccessObject + Versioned + States<RS>,
-        <D as Versioned>::Partition: 'a,
-        <R as Versioned>::Partition: 'a,
     {
-        let starting_at = R::sql_field_for_type(direct_reference_entity.type_id())?;
+        let starting_at = R::sql_field_for_type(opts.direct_reference.type_id())?;
         let recursion_ref = R::sql_field_for_type(std::any::TypeId::of::<D::Recursive>())?;
 
         let query = sql! {
@@ -57,9 +49,12 @@ pub trait RecursiveQueries {
             reference_versions AS (
                 SELECT rv.*
                 FROM " %{R::sql_table()} " rv
-                WHERE
-                "[ gen_where_clause::<R, _>(&mut builder, R::state())?; ] {}"
-                AND id = (
+                WHERE "[ gen_where_clause::<R, _>(&mut builder, R::state())?; ] {}
+                [if let Some(state) = opts.override_direct_reference_state] {
+                    "OR (" %{starting_at} " = " {opts.direct_reference} "
+                        AND "[ gen_where_clause::<R, _>(&mut builder, state)?; ] {} ")"
+                }
+                "AND id = (
                     SELECT MAX(id)
                     FROM " %{R::sql_table()} " rv2
                     WHERE rv2." %{R::partition_by()} " = rv." %{R::partition_by()} "
@@ -67,7 +62,7 @@ pub trait RecursiveQueries {
                             SELECT MAX(" %{<R as Versioned>::order_by()} ")
                             FROM " %{R::sql_table()} " rv3
                             WHERE rv3." %{R::partition_by()} " = rv2." %{R::partition_by()}
-                                [if let Some(r_defined_on) = r_defined_on] {
+                                [if let Some(r_defined_on) = opts.r_defined_on] {
                                     " AND rv3." %{<R as Versioned>::order_by()} " <= " {r_defined_on}
                                 }"
                     )
@@ -85,8 +80,8 @@ pub trait RecursiveQueries {
                         AND rv2." %{<D as Versioned>::order_by()} " = (
                             SELECT MAX(" %{<D as Versioned>::order_by()} ")
                             FROM " %{D::sql_table()} " rv3
-                            WHERE rv3." %{D::partition_by()} " = rv2." %{D::partition_by()} "
-                                "[if let Some(d_defined_on) = d_defined_on] {
+                            WHERE rv3." %{D::partition_by()} " = rv2." %{D::partition_by()}
+                                [if let Some(d_defined_on) = opts.d_defined_on] {
                                     " AND rv3." %{<D as Versioned>::order_by()} " <= " {d_defined_on}
                                 }"
                     )
@@ -102,9 +97,9 @@ pub trait RecursiveQueries {
                     1 AS depth_up
                 FROM recursion_versions rcv
                 INNER JOIN reference_versions rfv ON rfv." %{recursion_ref} " = rcv." %{D::recurse_down()} "
-                WHERE rfv." %{starting_at} " = " {direct_reference_entity} "
+                WHERE rfv." %{starting_at} " = " {opts.direct_reference} "
                     AND EXISTS (SELECT 1 FROM reference_versions rfv2 WHERE rfv2." %{recursion_ref} " = rcv." %{D::recurse_up()} ")"
-                [if let Some(max_up) = options.max_upstream_depth()] {
+                [if let Some(max_up) = opts.recursion.max_upstream_depth()] {
                     " AND 0 < " %{max_up}
                 }"
                 UNION ALL
@@ -118,7 +113,7 @@ pub trait RecursiveQueries {
                 WHERE instr(uv.path_up, rcv." %{D::recurse_up()} ") = 0
                     AND EXISTS (SELECT 1 FROM reference_versions fx WHERE fx." %{recursion_ref} " = rcv." %{D::recurse_down()} ")
                     AND EXISTS (SELECT 1 FROM reference_versions fy WHERE fy." %{recursion_ref} " = rcv." %{D::recurse_up()} ")"
-                [if let Some(max_up) = options.max_upstream_depth()] {
+                [if let Some(max_up) = opts.recursion.max_upstream_depth()] {
                     " AND uv.depth_up < " %{max_up}
                 }"
             ),
@@ -131,9 +126,9 @@ pub trait RecursiveQueries {
                     1 AS depth_down
                 FROM recursion_versions rcv
                 INNER JOIN reference_versions rfv ON rfv." %{recursion_ref} " = rcv." %{D::recurse_up()} "
-                WHERE rfv." %{starting_at} " = " {direct_reference_entity} "
+                WHERE rfv." %{starting_at} " = " {opts.direct_reference} "
                     AND EXISTS (SELECT 1 FROM reference_versions rfv2 WHERE rfv2." %{recursion_ref} " = rcv." %{D::recurse_down()} ")"
-                [if let Some(max_down) = options.max_downstream_depth()] {
+                [if let Some(max_down) = opts.recursion.max_downstream_depth()] {
                     " AND 0 < " %{max_down}
                 }"
                 UNION ALL
@@ -147,7 +142,7 @@ pub trait RecursiveQueries {
                 WHERE instr(dv.path_down, rcv." %{D::recurse_down()} ") = 0
                   AND EXISTS (SELECT 1 FROM reference_versions fx WHERE fx." %{recursion_ref} " = rcv." %{D::recurse_down()} ")
                   AND EXISTS (SELECT 1 FROM reference_versions fy WHERE fy." %{recursion_ref} " = rcv." %{D::recurse_up()} ")"
-                [if let Some(max_down) = options.max_downstream_depth()] {
+                [if let Some(max_down) = opts.recursion.max_downstream_depth()] {
                     " AND dv.depth_down < " %{max_down}
                 }"
             ),
@@ -331,8 +326,12 @@ mod tests {
     async fn test_select_active_versions_none_fetch_all(db: DbPool) {
         let id = TestId::try_from("MMM").unwrap();
         let mut query_builder = DaoQueries::default()
-            .select_recursive_versions_at::<{ TestDao::All }, TestDao, { RecursionReference::All }, RecursionReference>(
-                None, None, &id,
+            .select_recursive_versions::<{ TestDao::All }, TestDao, { RecursionReference::All }, RecursionReference>(
+                OptionsBuilder::default()
+                    .recursion(RecursionOptions::new(Some(Depth::ZERO), None))
+                    .direct_reference(&id)
+                    .build()
+                    .unwrap(),
             )
             .unwrap();
         let result: Vec<TestDao> = query_builder.build_query_as().fetch_all(&db).await.unwrap();
@@ -352,11 +351,12 @@ mod tests {
     async fn test_select_active_versions_none_fetch_all_upstream(db: DbPool) {
         let id = TestId::try_from("SSS").unwrap();
         let mut query_builder = DaoQueries::default()
-            .select_recursive_versions_at_with::<{ TestDao::All }, TestDao, { RecursionReference::All }, RecursionReference>(
-                None, None, &id, &RecursionOptions::new(
-                     None,
-                     Some(Depth::ZERO),
-                )
+            .select_recursive_versions::<{ TestDao::All }, TestDao, { RecursionReference::All }, RecursionReference>(
+                OptionsBuilder::default()
+                    .recursion(RecursionOptions::new(None, Some(Depth::ZERO)))
+                    .direct_reference(&id)
+                    .build()
+                    .unwrap()
             )
             .unwrap();
         let result: Vec<TestDao> = query_builder.build_query_as().fetch_all(&db).await.unwrap();
@@ -374,10 +374,14 @@ mod tests {
         let at = time(1);
         let id = TestId::try_from("MMM").unwrap();
         let mut query_builder = DaoQueries::default()
-            .select_recursive_versions_at::<{ TestDao::All }, TestDao, { RecursionReference::All }, RecursionReference>(
-                Some(&at),
-                Some(&at),
-                &id,
+            .select_recursive_versions::<{ TestDao::All }, TestDao, { RecursionReference::All }, RecursionReference>(
+                OptionsBuilder::default()
+                    .recursion(RecursionOptions::new(Some(Depth::ZERO), None))
+                    .direct_reference(&id)
+                    .d_defined_on(&at)
+                    .r_defined_on(&at)
+                    .build()
+                    .unwrap(),
             )
             .unwrap();
         let result: Vec<TestDao> = query_builder.build_query_as().fetch_all(&db).await.unwrap();
@@ -396,10 +400,14 @@ mod tests {
         let id = TestId::try_from("MMM").unwrap();
         // PPP is D at time 2, so it will stop the recursion
         let mut query_builder = DaoQueries::default()
-            .select_recursive_versions_at::<{ TestDao::Active }, TestDao, { RecursionReference::Active }, RecursionReference>(
-                Some(&at),
-                Some(&at),
-                &id,
+            .select_recursive_versions::<{ TestDao::Active }, TestDao, { RecursionReference::Active }, RecursionReference>(
+                OptionsBuilder::default()
+                    .recursion(RecursionOptions::new(Some(Depth::ZERO), None))
+                    .direct_reference(&id)
+                    .d_defined_on(&at)
+                    .r_defined_on(&at)
+                    .build()
+                    .unwrap(),
             )
             .unwrap();
         println!("{}", query_builder.sql());
@@ -416,11 +424,13 @@ mod tests {
     async fn test_select_active_versions_none_last_in_stream(db: DbPool) {
         let id = TestId::try_from("SSS").unwrap();
         let mut query_builder = DaoQueries::default()
-            .select_recursive_versions_at_with::<{ TestDao::All }, TestDao, { RecursionReference::All }, RecursionReference>(
-                None, None, &id, &RecursionOptions::new(
-                    Some(Depth::try_from(1).unwrap()),
-                    None
-                ))
+            .select_recursive_versions::<{ TestDao::All }, TestDao, { RecursionReference::All }, RecursionReference>(
+                OptionsBuilder::default()
+                    .recursion(RecursionOptions::new(Some(Depth::try_from(1).unwrap()), None))
+                    .direct_reference(&id)
+                    .build()
+                    .unwrap()
+                )
             .unwrap();
         let result: Vec<TestDao> = query_builder.build_query_as().fetch_all(&db).await.unwrap();
         // SSS: EEE (direct upstream)
@@ -434,8 +444,12 @@ mod tests {
         // OOO is active, but PPP has the same partition_id and is deleted
         let id = TestId::try_from("OOO").unwrap();
         let mut query_builder = DaoQueries::default()
-            .select_recursive_versions_at::<{ TestDao::All }, TestDao, { RecursionReference::All }, RecursionReference>(
-                None, None, &id,
+            .select_recursive_versions::<{ TestDao::All }, TestDao, { RecursionReference::All }, RecursionReference>(
+                OptionsBuilder::default()
+                    .recursion(RecursionOptions::new(Some(Depth::ZERO), None))
+                    .direct_reference(&id)
+                    .build()
+                    .unwrap(),
             )
             .unwrap();
         let result: Vec<TestDao> = query_builder.build_query_as().fetch_all(&db).await.unwrap();
@@ -480,8 +494,12 @@ mod tests {
 
         let id = TestId::try_from(format!("YYY{:04}", 0))?;
         let mut query_builder = DaoQueries::default()
-            .select_recursive_versions_at::<{ TestDao::All }, TestDao, { RecursionReference::All }, RecursionReference>(
-                None, None, &id,
+            .select_recursive_versions::<{ TestDao::All }, TestDao, { RecursionReference::All }, RecursionReference>(
+                OptionsBuilder::default()
+                    .recursion(RecursionOptions::new(Some(Depth::ZERO), None))
+                    .direct_reference(&id)
+                    .build()
+                    .unwrap(),
             )?;
         let result: Vec<TestDao> = query_builder.build_query_as().fetch_all(&db).await.unwrap();
         assert_eq!(result.len(), size);
@@ -503,7 +521,13 @@ mod tests {
             R: DataAccessObject + Versioned + States<RS>,
         {
             let mut query_builder = DaoQueries::default()
-                .select_recursive_versions_at::<DS, D, RS, R>(None, None, recursion_ref)?;
+                .select_recursive_versions::<DS, D, RS, R>(
+                    OptionsBuilder::default()
+                        .recursion(RecursionOptions::new(Some(Depth::ZERO), None))
+                        .direct_reference(recursion_ref)
+                        .build()
+                        .unwrap(),
+                )?;
             let _result: Vec<D> = query_builder.build_query_as().fetch_all(db).await.unwrap();
             Ok(())
         }

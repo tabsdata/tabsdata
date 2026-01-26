@@ -10,4 +10,5 @@ pub mod transaction;
 pub const EXECUTION_GRAPH_OPTIONS: RecursionOptions = RecursionOptions::V1(RecursionOptionsV1 {
     max_upstream_depth: Some(Depth::ZERO),
     max_downstream_depth: Some(Depth::ZERO),
+    override_disabled_trigger: None,
 });

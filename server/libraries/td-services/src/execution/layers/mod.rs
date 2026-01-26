@@ -26,7 +26,9 @@ use td_objects::tower_service::from::{
     BuildService, ExtractService, IntoService, SetService, TryIntoService, UpdateService, With,
 };
 use td_objects::tower_service::sql::{insert, insert_vec};
-use td_objects::types::basic::{CollectionId, FunctionId, FunctionOnly, TriggerType};
+use td_objects::types::basic::{
+    CollectionId, FunctionId, FunctionOnly, OverrideDisabledTrigger, TriggerType,
+};
 use td_objects::types::recursion::RecursionOptions;
 use td_tower::from_fn::from_fn;
 use td_tower::{layer, layers};
@@ -57,11 +59,13 @@ impl
 // - Transaction connection
 // - DaoQueries
 // - AuthzContext
+// - ExecutionRequest
 // - TransactionBy
 // - FunctionDBWithNames (trigger)
 #[layer]
 pub fn execute() {
     layers!(
+        from_fn(With::<ExecutionRequest>::extract::<OverrideDisabledTrigger>),
         from_fn(assert_function_status),
         // check requester is coll_admin or coll_exec for the function's collection
         from_fn(With::<FunctionDBWithNames>::extract::<CollectionId>),

@@ -18,8 +18,9 @@ use td_objects::dxo::yaml::WorkerOutput;
 use td_objects::dxo::yaml::function_runner::v2::WrittenTable;
 use td_objects::sql::cte::TableQueries;
 use td_objects::sql::recursive::RecursiveQueries;
-use td_objects::sql::{DaoQueries, SelectBy, UpdateBy};
-use td_objects::types::basic::{FunctionRunId, FunctionRunStatus, HasData, WorkerId};
+use td_objects::sql::{DaoQueries, SelectBy, UpdateBy, recursive};
+use td_objects::types::basic::{Depth, FunctionRunId, FunctionRunStatus, HasData, WorkerId};
+use td_objects::types::recursion::RecursionOptions;
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, ReqCtx, SrvCtx};
 
 #[td_error]
@@ -208,8 +209,11 @@ pub async fn update_function_run_status(
 
         if let Some(downstream_status) = downstream_status {
             let function_runs: Vec<FunctionRequirementDBWithNames> = queries
-                .select_recursive_versions_at::<{ FunctionRequirementDBWithNames::All }, FunctionRequirementDBWithNames, { FunctionRunDB::All }, FunctionRunDB>(
-                    None, None, current,
+                .select_recursive_versions::<{ FunctionRequirementDBWithNames::All }, FunctionRequirementDBWithNames, { FunctionRunDB::All }, FunctionRunDB>(
+                    recursive::OptionsBuilder::default()
+                        .recursion(RecursionOptions::new(Some(Depth::ZERO), None))
+                        .direct_reference(current)
+                        .build()?,
                 )?
                 .build_query_as()
                 .fetch_all(&mut *conn)

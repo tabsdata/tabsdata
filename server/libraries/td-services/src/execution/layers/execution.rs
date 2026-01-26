@@ -27,19 +27,22 @@ use td_objects::graph::{MapGraph, TdGraph};
 use td_objects::sql::{DaoQueries, FindBy, UpdateBy};
 use td_objects::transaction::map::{TransactionMap, TransactionMapper};
 use td_objects::types::basic::{
-    Depth, Dot, Enabled, FunctionOnly, FunctionRunStatus, FunctionStatus, InputIdx, Trigger,
-    TriggerType, VersionPos,
+    Depth, Dot, FunctionOnly, FunctionRunStatus, FunctionStatus, InputIdx, OverrideDisabledTrigger,
+    Trigger, TriggerType, VersionPos,
 };
 use td_objects::types::graph::{FunctionNodeBuilder, GraphEdge, GraphNode, ResolvedVersion};
 use td_objects::types::recursion::RecursionOptions;
-use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
+use td_tower::api_message;
+use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, ReqCtx, SrvCtx};
 
 pub async fn trigger_type_manual() -> Result<TriggerType, TdError> {
     Ok(TriggerType::Manual)
 }
 
 pub async fn assert_function_status(
+    ReqCtx(ctx): ReqCtx,
     Input(function): Input<FunctionDBWithNames>,
+    Input(override_disabled_trigger): Input<OverrideDisabledTrigger>,
 ) -> Result<(), TdError> {
     if !matches!(function.status, FunctionStatus::Active) {
         Err(api_error!(
@@ -49,24 +52,34 @@ pub async fn assert_function_status(
             function.status
         ))?
     }
-    if !matches!(function.enabled, Enabled::TRUE) {
-        Err(api_error!(
-            ApiError::InputError,
-            "Function '{}' must be enabled to execute",
-            function.name,
-        ))?
+    if !*function.enabled {
+        if **override_disabled_trigger {
+            ctx.notification(api_message!(
+                "Trigger function '{}' is disabled but override_disabled_trigger is set to true",
+                function.name
+            ))
+            .await;
+        } else {
+            Err(api_error!(
+                ApiError::InputError,
+                "Function '{}' must be enabled to be executed",
+                function.name,
+            ))?
+        }
     }
     Ok(())
 }
 
 pub async fn with_recursion_options(
     Input(function_only): Input<FunctionOnly>,
+    Input(override_disabled_trigger): Input<OverrideDisabledTrigger>,
 ) -> Result<RecursionOptions, TdError> {
-    let recursion_options = if **function_only {
+    let mut recursion_options = if **function_only {
         RecursionOptions::new(Some(Depth::ZERO), Some(Depth::ZERO))
     } else {
         EXECUTION_GRAPH_OPTIONS
     };
+    recursion_options.with_override_disabled_trigger(*override_disabled_trigger);
     Ok(recursion_options)
 }
 
