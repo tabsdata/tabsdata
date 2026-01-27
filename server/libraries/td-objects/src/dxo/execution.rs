@@ -147,6 +147,8 @@ mod definitions {
         pub collection: CollectionName,
         #[dto(list(filter, filter_like, order_by))]
         pub function: FunctionName,
+        #[dto(list(filter))]
+        pub function_version_id: FunctionVersionId,
         #[dto(list(filter, filter_like, order_by))]
         pub triggered_by: UserName,
         #[dto(list(filter, filter_like, order_by))]
