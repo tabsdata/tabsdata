@@ -32,12 +32,13 @@ DEFAULT_PYTEST_KAFKA_DOCKER_CONTAINER_NAME = (
 KAFKA_INTERNAL_LISTENER_PORT = 9092
 KAFKA_EXTERNAL_LISTENER_PORT = 19092
 KAFKA_SCHEMA_REGISTRY_INTERNAL_PORT = 8081
+KAFKA_SCHEMA_REGISTRY_EXTERNAL_PORT = 18081
 KAFKA_ADMIN_INTERNAL_PORT = 9644
 KAFKA_ADMIN_EXTERNAL_PORT = 19644
 KAFKA_RPC_INTERNAL_PORT = 33145
 
 KAFKA_BIND_ADDRESS = "0.0.0.0"
-KAFKA_ADVERTISE_ADDRESS = "127.0.0.1"
+KAFKA_ADVERTISE_ADDRESS = "localhost"
 
 KAFKA_ADMIN_USER = "admin"
 KAFKA_ADMIN_PASSWORD = "secret"
@@ -231,6 +232,10 @@ def create_docker_kafka_container(
             str(KAFKA_SCHEMA_REGISTRY_INTERNAL_PORT),
         )
         startup_command = startup_command.replace(
+            "${KAFKA_SCHEMA_REGISTRY_EXTERNAL_PORT}",
+            str(KAFKA_SCHEMA_REGISTRY_EXTERNAL_PORT),
+        )
+        startup_command = startup_command.replace(
             "${KAFKA_SCHEMA_REGISTRY_HOST_PORT}",
             str(schema_registry_port),
         )
@@ -255,6 +260,8 @@ def create_docker_kafka_container(
             KAFKA_ADMIN_PASSWORD,
         )
 
+        startup_command = "\n".join(line.lstrip() for line in startup_command.splitlines())
+
         container = client.containers.run(
             "redpandadata/redpanda:latest",
             name=name,
@@ -262,7 +269,7 @@ def create_docker_kafka_container(
             command=["-c", startup_command],
             ports={
                 f"{KAFKA_EXTERNAL_LISTENER_PORT}/tcp": kafka_port,
-                f"{KAFKA_SCHEMA_REGISTRY_INTERNAL_PORT}/tcp": schema_registry_port,
+                f"{KAFKA_SCHEMA_REGISTRY_EXTERNAL_PORT}/tcp": schema_registry_port,
                 f"{KAFKA_ADMIN_EXTERNAL_PORT}/tcp": admin_port,
             },
             labels={
@@ -279,7 +286,7 @@ def create_docker_kafka_container(
             container, f"{KAFKA_EXTERNAL_LISTENER_PORT}/tcp"
         )
         actual_schema_port = get_container_port_binding(
-            container, f"{KAFKA_SCHEMA_REGISTRY_INTERNAL_PORT}/tcp"
+            container, f"{KAFKA_SCHEMA_REGISTRY_EXTERNAL_PORT}/tcp"
         )
         actual_admin_port = get_container_port_binding(
             container, f"{KAFKA_ADMIN_EXTERNAL_PORT}/tcp"
@@ -298,7 +305,7 @@ def create_docker_kafka_container(
 
         logger.info("Waiting for Redpanda to be ready...")
         retry = 0
-        ready_marker = "[TABSDATA-FIXTURE] Redpanda is Ready!"
+        ready_marker = "[td fixture] Redpanda is Ready!"
         while True:
             try:
                 logs = container.logs(tail=100).decode("utf-8")
@@ -394,6 +401,34 @@ def create_docker_kafka_container(
                 else:
                     logger.warning(
                         f"Error checking Schema Registry; retrying in {retry} second(s)"
+                    )
+                    sleep(retry)
+
+        logger.info("Verifying Kafka SASL-enabled API...")
+        retry = 0
+        while True:
+            try:
+                from confluent_kafka.admin import AdminClient
+
+                test_admin_config = {
+                    "bootstrap.servers": f"{KAFKA_ADVERTISE_ADDRESS}:{kafka_port}",
+                    "security.protocol": "SASL_PLAINTEXT",
+                    "sasl.mechanism": "SCRAM-SHA-256",
+                    "sasl.username": KAFKA_ADMIN_USER,
+                    "sasl.password": KAFKA_ADMIN_PASSWORD,
+                }
+                test_admin = AdminClient(test_admin_config)
+                test_admin.list_topics(timeout=5)
+                logger.info("Kafka SASL API check passed")
+                break
+            except Exception as error:
+                retry += 1
+                if retry == MAXIMUM_RETRY_COUNT:
+                    logger.error(f"Error checking Kafka SASL API: {error}")
+                    raise error
+                else:
+                    logger.warning(
+                        f"Error checking Kafka SASL API; retrying in {retry} second(s)"
                     )
                     sleep(retry)
 

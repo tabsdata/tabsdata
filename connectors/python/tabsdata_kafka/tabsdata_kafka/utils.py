@@ -16,18 +16,17 @@ from google.protobuf import descriptor_pb2, message, message_factory
 
 from tabsdata._io.outputs.file_outputs import SERVER_SIDE_AWS_ACCESS_KEY_ID
 from tabsdata._io.stage_trigger import StageTriggerContext
-
 from tabsdata_kafka.constants import (
     AWS_ACCESS_KEY_ID,
-    AWS_SECRET_ACCESS_KEY,
     AWS_DEFAULT_REGION,
-)
-from tabsdata_kafka.shared_types import (
-    AwsGlueAccessKeyCredentials,
+    AWS_SECRET_ACCESS_KEY,
 )
 from tabsdata_kafka.consumer.consumer import KafkaConsumer
 from tabsdata_kafka.consumer.messages_buffer import MessagesBuffer
 from tabsdata_kafka.consumer.rollovers import RolloverReason
+from tabsdata_kafka.shared_types import (
+    AwsGlueAccessKeyCredentials,
+)
 
 logger = logging.getLogger(__name__)
 

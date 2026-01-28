@@ -134,10 +134,10 @@ from tabsdata_bigquery._connector import BigQueryConn, BigQueryDest
 # noinspection PyProtectedMember
 from tabsdata_databricks._connector import DatabricksDestination
 from tabsdata_kafka._connector import (
+    AwsGlueSchemaRegistry,
+    ConfluentSchemaRegistry,
     KafkaConn,
     KafkaStageTrigger,
-    ConfluentSchemaRegistry,
-    AwsGlueSchemaRegistry,
 )
 from tabsdata_kafka.consumer.rollovers import MessagesRollover, SizeRollover
 from tabsdata_kafka.shared_types import AwsGlueAccessKeyCredentials

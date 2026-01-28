@@ -27,6 +27,7 @@ from xdist.workermanage import WorkerController
 
 from tabsdata._utils.tdlogging import setup_tests_logging
 from tests_tabsdata.conftest import (
+    clean_everything,
     clean_python_virtual_environments,
     pytest_addoption,
     pytest_generate_tests,
@@ -82,6 +83,7 @@ def pytest_configure(config: pytest.Config):
     setup_tests_logging()
     if not hasattr(config, "workerinput"):
         setup_temp_folder(config)
+        clean_everything()
 
 
 def pytest_configure_node(node: WorkerController):
@@ -95,4 +97,4 @@ def pytest_sessionfinish(session, exitstatus):
     if getattr(session.config, "workerinput", None) is not None:
         # No need to download, the master process has already done that.
         return
-    clean_python_virtual_environments()
+    clean_everything()

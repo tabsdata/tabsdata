@@ -27,9 +27,9 @@ from tabsdata.typing._specs import (
 )
 from tabsdata_kafka.shared_types import (
     KafkaMessageFormatSpec,
-    SchemaIdSpec,
-    SchemaIdCompatibles,
     KafkaServersSpec,
+    SchemaIdCompatibles,
+    SchemaIdSpec,
 )
 from tabsdata_mssql.constants import MSSQLLoaderSpec
 

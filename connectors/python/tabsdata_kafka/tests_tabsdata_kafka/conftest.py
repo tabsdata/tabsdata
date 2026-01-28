@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 from tests_tabsdata.bootest import enrich_sys_path
+from tests_tabsdata.common.backend import KafkaConfig
 from tests_tabsdata_kafka.bootest import TESTING_RESOURCES_PATH
 
 
@@ -28,6 +29,7 @@ from tabsdata._utils.tdlogging import setup_tests_logging
 
 # noinspection PyUnusedImports
 from tests_tabsdata.conftest import (
+    clean_everything,
     clean_python_virtual_environments,
     pytest_addoption,
     pytest_generate_tests,
@@ -40,6 +42,7 @@ def pytest_configure(config: pytest.Config):
     setup_tests_logging()
     if not hasattr(config, "workerinput"):
         setup_temp_folder(config)
+        clean_everything()
 
 
 def pytest_configure_node(node: WorkerController):
@@ -53,7 +56,7 @@ def pytest_sessionfinish(session, exitstatus):
     if getattr(session.config, "workerinput", None) is not None:
         # No need to download, the master process has already done that.
         return
-    clean_python_virtual_environments()
+    clean_everything()
 
 
 #
@@ -76,6 +79,7 @@ from confluent_kafka.schema_registry._sync.mock_schema_registry_client import (
 )
 from confluent_kafka.serialization import MessageField, SerializationContext
 from mypy_boto3_glue.client import GlueClient
+import requests
 
 from tabsdata_kafka.serdes.aws_glue_sr_serde import (
     AvroGlueKafkaSerde,
@@ -342,45 +346,52 @@ def aws_glue_sr_protobuf_glue_serde(
 
 
 @pytest.fixture
-def kafka_topic_creator():
-    print("Kafka Servers:", os.environ.get("KF0__KAFKA_SERVERS"))
-    config = {
-        "bootstrap.servers": os.environ.get("KF0__KAFKA_SERVERS", "localhost:19092"),
+def kafka_topic_creator(kafka_config: KafkaConfig):
+    admin_config = {
+        "bootstrap.servers": kafka_config.bootstrap_servers,
         "security.protocol": "sasl_plaintext",
         "sasl.mechanism": "SCRAM-SHA-256",
-        "sasl.username": os.environ.get("KF0__KAFKA_SASL_USERNAME", "admin"),
-        "sasl.password": os.environ.get("KF0__KAFKA_SASL_PASSWORD", "secret"),
+        "sasl.username": kafka_config.user,
+        "sasl.password": kafka_config.password,
     }
 
     def topic_creator(topic_name: str):
-        admin_client = AdminClient(config)
+        admin_client = AdminClient(admin_config)
         admin_client.list_topics(timeout=5)
         topic = [NewTopic(topic_name, num_partitions=1, replication_factor=1)]
+
+        topics = admin_client.list_topics(timeout=5)
+
         fs = admin_client.create_topics(topic)
+
+        topics = admin_client.list_topics(timeout=5)
+
         for topic, f in fs.items():
             try:
-                f.result()
-                print(f"Topic '{topic}' created")
+                f.result(timeout=10)
+                logger.debug(f"Topic '{topic}' created")
             except Exception as e:
-                if "TOPIC_ALREADY_EXISTS" in str(e):
-                    print(f"Topic '{topic}' already exists. Moving on...")
+                error_message = str(e)
+                if "TOPIC_ALREADY_EXISTS" in error_message:
+                    logger.debug(f"Topic '{topic}' already exists. Moving on...")
                 else:
-                    print(f"Failed to create topic {topic}: {e}")
+                    logger.debug(f"Failed to create topic {topic}: {e}")
+                    raise
 
     return topic_creator
 
 
 @pytest.fixture
-def kafka_producer() -> Producer:
-    config = {
-        "bootstrap.servers": os.environ.get("KF0__KAFKA_SERVERS", "localhost:19092"),
-        "security.protocol": "sasl_plaintext",
+def kafka_producer(kafka_config: KafkaConfig) -> Producer:
+    producer_config = {
+        "bootstrap.servers": kafka_config.bootstrap_servers,
+        "security.protocol": "SASL_PLAINTEXT",
         "sasl.mechanism": "SCRAM-SHA-256",
-        "sasl.username": os.environ.get("KF0__KAFKA_SASL_USERNAME", "admin"),
-        "sasl.password": os.environ.get("KF0__KAFKA_SASL_PASSWORD", "secret"),
+        "sasl.username": kafka_config.user,
+        "sasl.password": kafka_config.password,
     }
-    producer = Producer(config)
-    producer.list_topics(timeout=5)
+    producer = Producer(producer_config)
+    topics = producer.list_topics(timeout=5)
 
     return producer
 

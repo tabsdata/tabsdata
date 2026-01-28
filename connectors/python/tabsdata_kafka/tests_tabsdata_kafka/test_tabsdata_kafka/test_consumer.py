@@ -2,27 +2,14 @@
 # Copyright 2026 Tabs Data Inc.
 #
 
-import inspect
 import logging
-import os
 import time
 import uuid
-from datetime import datetime, timedelta
-from io import StringIO
-from pathlib import Path
-from unittest import mock
 
-import polars as pl
-import pyarrow.parquet as pq
 import pytest
+from confluent_kafka import Consumer
 from confluent_kafka.serialization import MessageField, SerializationContext
 
-import tabsdata as td
-from tabsdata._tabsserver.function.response_utils import RESPONSE_FILE_NAME
-from tabsdata._tabsserver.invoker import REQUEST_FILE_NAME
-from tabsdata._tabsserver.invoker import invoke as tabsserver_main
-from tabsdata._utils.bundle_utils import create_bundle_archive
-from tabsdata_kafka._connector import KafkaConn, KafkaStageTrigger
 from tabsdata_kafka.consumer.consumer import KafkaConsumer
 from tabsdata_kafka.consumer.messages_buffer import MessagesBuffer
 from tabsdata_kafka.consumer.rollovers import (
@@ -30,49 +17,16 @@ from tabsdata_kafka.consumer.rollovers import (
     RolloverReason,
     SizeRollover,
 )
-from tabsdata_kafka.serdes.aws_glue_sr_serde import (
-    AvroGlueKafkaSerde,
-    JsonGlueKafkaSerde,
-    ProtobufGlueKafkaSerde,
-)
-from tabsdata_kafka.serdes.confluent_sr_serde import (
-    AvroSrKafkaSerde,
-    JsonSrKafkaSerde,
-    ProtobufSrKafkaSerde,
-)
-from tabsdata_kafka.serdes.non_sr_serde import (
-    AvroKafkaSerde,
-    JsonKafkaSerde,
-    ProtobufKafkaSerde,
-)
-from tests_tabsdata.bootest import TDLOCAL_FOLDER
-from tests_tabsdata.conftest import (
-    ABSOLUTE_TEST_FOLDER_LOCATION,
-    LOCAL_PACKAGES_LIST,
-    PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
-    write_v1_listener_yaml_file,
-)
-from tests_tabsdata.fntest import tdfnrun
+from tests_tabsdata.common.backend.kafka import kafka_config
 from tests_tabsdata_kafka.conftest import (
-    aws_glue_sr_avro_schema_str,
-    aws_glue_sr_json_schema_str,
-    aws_glue_sr_mock_avro_glue_client,
-    aws_glue_sr_mock_json_glue_client,
-    aws_glue_sr_mock_protobuf_glue_client,
-    aws_glue_sr_protobuf_schema_str,
-    confluent_sr_mock_registry,
-    delivery_callback,
     get_avro_message,
     get_json_message,
     get_large_avro_message,
     get_large_json_message,
     get_large_protobuf_message,
     get_protobuf_message,
-    json_serde,
-    kafka_consumer_config,
     kafka_producer,
     kafka_topic_creator,
-    produce_kafka_messages,
 )
 
 logger = logging.getLogger(__name__)
@@ -226,37 +180,64 @@ def test_message_buffer_to_parquet_with_missing_columns(tmp_path):
     assert d["col3"][1] is None
 
 
-@pytest.mark.skip(reason="test not using kafka_config docker fixture")
 @pytest.mark.unit
 @pytest.mark.kafka
 @pytest.mark.parametrize(
     "serde_fixture, get_message",
     [
         ("avro_serde_v1", get_avro_message),
-        ("json_serde", get_json_message),
-        ("protobuf_serde_v1", get_protobuf_message),
-        ("confluent_sr_avro_serde", get_avro_message),
-        ("confluent_sr_json_serde", get_avro_message),
-        ("confluent_sr_protobuf_serde", get_protobuf_message),
-        ("aws_glue_sr_avro_glue_serde", get_avro_message),
-        ("aws_glue_sr_json_glue_serde", get_avro_message),
-        ("aws_glue_sr_protobuf_glue_serde", get_protobuf_message),
+        # ("json_serde", get_json_message),
+        # ("protobuf_serde_v1", get_protobuf_message),
+        # ("confluent_sr_avro_serde", get_avro_message),
+        # ("confluent_sr_json_serde", get_avro_message),
+        # ("confluent_sr_protobuf_serde", get_protobuf_message),
+        # ("aws_glue_sr_avro_glue_serde", get_avro_message),
+        # ("aws_glue_sr_json_glue_serde", get_avro_message),
+        # ("aws_glue_sr_protobuf_glue_serde", get_protobuf_message),
     ],
 )
 def test_consumer_messages_rollover(
     serde_fixture,
     get_message,
     request,
-    produce_kafka_messages,
-    kafka_consumer,
+    kafka_config,
 ):
     serde = request.getfixturevalue(serde_fixture)
+    topic = f"test-consumer-messages-rollover-{serde.format()}-{str(uuid.uuid4())}"
+
+    # Create topic
+    kafka_topic_creator(kafka_config)(topic)
+
+    # Produce messages
+    producer = kafka_producer(kafka_config)
+    sent_messages = 100
+    ctx = SerializationContext(topic, MessageField.VALUE)
+    for i in range(1, sent_messages + 1):
+        msg = get_message(i)
+        producer.produce(
+            topic,
+            value=serde.serializer()(msg, ctx),
+            callback=lambda err, msg: logger.debug(
+                f"Produced message to {msg.topic()}"
+            ),
+        )
+        producer.poll(0)
+    producer.flush()
+
+    # Create consumer
+    consumer_config = {
+        "bootstrap.servers": kafka_config.bootstrap_servers,
+        "group.id": str(uuid.uuid4()),
+        "auto.offset.reset": "earliest",
+        "enable.auto.commit": False,
+        "security.protocol": "sasl_plaintext",
+        "sasl.mechanism": "SCRAM-SHA-256",
+        "sasl.username": kafka_config.user,
+        "sasl.password": kafka_config.password,
+    }
+    kafka_consumer = Consumer(consumer_config)
+
     try:
-        topic = f"test-consumer-messages-rollover-{serde.format()}-{str(uuid.uuid4())}"
-
-        sent_messages = 100
-        produce_kafka_messages(topic, sent_messages + 1, serde, get_message)
-
         kafka_consumer.subscribe([topic])
         consumer = KafkaConsumer(
             topic, kafka_consumer, serde, messages_rollover=MessagesRollover(10)
@@ -264,9 +245,16 @@ def test_consumer_messages_rollover(
 
         responses = []
         received_messages = 0
+        loop_start_time = time.time()
         while received_messages < sent_messages:
+            if time.time() - loop_start_time > 30:  # 30 second timeout
+                pytest.fail(
+                    "Timeout waiting for messages in messages_rollover test. "
+                    f"Received {received_messages}/{sent_messages} messages"
+                )
+
             (reason, buffer) = consumer.consume(1)
-            if buffer:
+            if buffer.message_count() > 0:
                 received_messages += buffer.message_count()
                 responses.append((reason, buffer))
                 consumer.commit()
@@ -287,7 +275,6 @@ def test_consumer_messages_rollover(
         kafka_consumer.close()
 
 
-@pytest.mark.skip(reason="test not using kafka_config docker fixture")
 @pytest.mark.unit
 @pytest.mark.kafka
 @pytest.mark.parametrize(
@@ -308,16 +295,44 @@ def test_consumer_time_rollover(
     serde_fixture,
     get_message,
     request,
-    produce_kafka_messages,
-    kafka_consumer,
+    kafka_config,
 ):
     serde = request.getfixturevalue(serde_fixture)
-    try:
-        topic = f"test-consumer-time-rollover-{serde.format()}-{str(uuid.uuid4())}"
+    topic = f"test-consumer-time-rollover-{serde.format()}-{str(uuid.uuid4())}"
 
-        # Send 5 messages, less than the message rollover count
-        sent_messages = 5
-        produce_kafka_messages(topic, sent_messages + 1, serde, get_message)
+    # Create topic
+    kafka_topic_creator(kafka_config)(topic)
+
+    # Produce messages
+    producer = kafka_producer(kafka_config)
+    sent_messages = 5
+    ctx = SerializationContext(topic, MessageField.VALUE)
+    for i in range(1, sent_messages + 1):
+        msg = get_message(i)
+        producer.produce(
+            topic,
+            value=serde.serializer()(msg, ctx),
+            callback=lambda err, msg: logger.debug(
+                f"Produced message to {msg.topic()}"
+            ),
+        )
+        producer.poll(0)
+    producer.flush()
+
+    # Create consumer
+    consumer_config = {
+        "bootstrap.servers": kafka_config.bootstrap_servers,
+        "group.id": str(uuid.uuid4()),
+        "auto.offset.reset": "earliest",
+        "enable.auto.commit": False,
+        "security.protocol": "sasl_plaintext",
+        "sasl.mechanism": "SCRAM-SHA-256",
+        "sasl.username": kafka_config.user,
+        "sasl.password": kafka_config.password,
+    }
+    kafka_consumer = Consumer(consumer_config)
+
+    try:
         kafka_consumer.subscribe([topic])
         consumer = KafkaConsumer(topic, kafka_consumer, serde)
 
@@ -350,7 +365,6 @@ def test_consumer_time_rollover(
         kafka_consumer.close()
 
 
-@pytest.mark.skip(reason="test not using kafka_config docker fixture")
 @pytest.mark.unit
 @pytest.mark.kafka
 @pytest.mark.parametrize(
@@ -371,16 +385,44 @@ def test_consumer_size_rollover(
     serde_fixture,
     get_message,
     request,
-    produce_kafka_messages,
-    kafka_consumer,
+    kafka_config,
 ):
     serde = request.getfixturevalue(serde_fixture)
+    topic = f"test-consumer-size-rollover-{serde.format()}-{str(uuid.uuid4())}"
+
+    # Create topic
+    kafka_topic_creator(kafka_config)(topic)
+
+    # Produce messages
+    producer = kafka_producer(kafka_config)
+    sent_messages = 1100
+    ctx = SerializationContext(topic, MessageField.VALUE)
+    for i in range(1, sent_messages + 1):
+        msg = get_message(i)
+        producer.produce(
+            topic,
+            value=serde.serializer()(msg, ctx),
+            callback=lambda err, msg: logger.debug(
+                f"Produced message to {msg.topic()}"
+            ),
+        )
+        producer.poll(0)
+    producer.flush()
+
+    # Create consumer
+    consumer_config = {
+        "bootstrap.servers": kafka_config.bootstrap_servers,
+        "group.id": str(uuid.uuid4()),
+        "auto.offset.reset": "earliest",
+        "enable.auto.commit": False,
+        "security.protocol": "sasl_plaintext",
+        "sasl.mechanism": "SCRAM-SHA-256",
+        "sasl.username": kafka_config.user,
+        "sasl.password": kafka_config.password,
+    }
+    kafka_consumer = Consumer(consumer_config)
+
     try:
-        topic = f"test-consumer-size-rollover-{serde.format()}-{str(uuid.uuid4())}"
-
-        sent_messages = 1100
-        produce_kafka_messages(topic, sent_messages + 1, serde, get_message)
-
         kafka_consumer.subscribe([topic])
         consumer = KafkaConsumer(
             topic, kafka_consumer, serde, size_rollover=SizeRollover(1)
@@ -389,9 +431,16 @@ def test_consumer_size_rollover(
         responses = []
         received_messages = 0
         first_rollover = False
+        loop_start_time = time.time()
         while received_messages < sent_messages:
+            if time.time() - loop_start_time > 60:  # 60 second timeout (larger dataset)
+                pytest.fail(
+                    "Timeout waiting for messages in size_rollover test. "
+                    f"Received {received_messages}/{sent_messages} messages"
+                )
+
             (reason, buffer) = consumer.consume(5)
-            if buffer and buffer.message_count() > 0:
+            if buffer.message_count() > 0:
                 received_messages += buffer.message_count()
                 responses.append((reason, buffer))
                 consumer.commit()

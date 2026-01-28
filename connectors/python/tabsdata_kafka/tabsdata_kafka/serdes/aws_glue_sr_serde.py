@@ -19,13 +19,13 @@ from google.protobuf.message import Message
 from tabsdata_kafka.constants import (
     MessageFormat,
 )
+from tabsdata_kafka.serdes.serde import (
+    KafkaSerde,
+)
 from tabsdata_kafka.shared_types import (
     KafkaMessageFormatSpec,
     SchemaIdCompatibles,
     SchemaIdSpec,
-)
-from tabsdata_kafka.serdes.serde import (
-    KafkaSerde,
 )
 from tabsdata_kafka.utils import get_protobuf_class
 

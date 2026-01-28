@@ -2577,6 +2577,14 @@ class StageTriggerConfigurationError(TabsDataException):
     CODE_PREFIX = "STE"
 
 
+class StageTriggerExecutionError(TabsDataException):
+    """
+    Exception raised when a StageTrigger execution fails during runtime.
+    """
+
+    CODE_PREFIX = "STR"
+
+
 class ConstructorError(TabsDataException):
     """
     Exception raised when public API classes don't support using their

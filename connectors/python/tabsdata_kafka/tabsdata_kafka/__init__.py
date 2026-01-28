@@ -5,19 +5,19 @@
 import importlib.metadata
 
 from tabsdata_kafka._connector import (
+    AwsGlueSchemaRegistry,
+    ConfluentSchemaRegistry,
     KafkaConn,
     KafkaStageTrigger,
-    ConfluentSchemaRegistry,
-    AwsGlueSchemaRegistry,
-)
-from tabsdata_kafka.shared_types import (
-    KafkaMessageFormatSpec,
-    SchemaIdCompatibles,
-    SchemaIdSpec,
-    KafkaServersSpec,
-    AwsGlueAccessKeyCredentials,
 )
 from tabsdata_kafka.consumer.rollovers import MessagesRollover, SizeRollover
+from tabsdata_kafka.shared_types import (
+    AwsGlueAccessKeyCredentials,
+    KafkaMessageFormatSpec,
+    KafkaServersSpec,
+    SchemaIdCompatibles,
+    SchemaIdSpec,
+)
 
 __all__ = [
     "KafkaConn",

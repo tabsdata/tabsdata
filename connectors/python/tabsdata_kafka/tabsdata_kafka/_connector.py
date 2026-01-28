@@ -4,43 +4,39 @@
 
 from __future__ import annotations
 
-from abc import ABC
 import logging
 import signal
 import sys
 import time
-import boto3
-from datetime import datetime
-from typing import Optional, TypeAlias, Union, Literal
+from abc import ABC
+from datetime import datetime, timezone
+from typing import Optional
 
+import boto3
+from botocore.client import BaseClient
 from confluent_kafka import Consumer, Producer
 from confluent_kafka.schema_registry import SchemaRegistryClient
 from mypy_boto3_glue.client import GlueClient
-from botocore.client import BaseClient
 from pydantic import PositiveInt
 
+from tabsdata._credentials import UserPasswordCredentials
 from tabsdata._io.connections.connections import Conn
 from tabsdata._io.stage_trigger import (
     StageTrigger,
     StageTriggerContext,
     StageTriggerStatus,
 )
-from tabsdata._credentials import UserPasswordCredentials
 from tabsdata.dataquality._utils import _td_validate_call
-from tabsdata.exceptions import ErrorCode, StageTriggerConfigurationError
+from tabsdata.exceptions import (
+    ErrorCode,
+    StageTriggerConfigurationError,
+    StageTriggerExecutionError,
+)
 from tabsdata_kafka.constants import (
     CONNECTION_TIMEOUT_SECS,
     CONSUME_TIMEOUT_SECS,
     MessageFormat,
 )
-from tabsdata_kafka.shared_types import (
-    KafkaMessageFormatSpec,
-    KafkaServersSpec,
-    SchemaIdCompatibles,
-    SchemaIdSpec,
-    AwsGlueAccessKeyCredentials,
-)
-
 from tabsdata_kafka.consumer.consumer import KafkaConsumer
 from tabsdata_kafka.consumer.messages_buffer import MessagesBuffer
 from tabsdata_kafka.consumer.rollovers import (
@@ -65,6 +61,11 @@ from tabsdata_kafka.serdes.non_sr_serde import (
 )
 from tabsdata_kafka.serdes.serde import (
     KafkaSerde,
+)
+from tabsdata_kafka.shared_types import (
+    AwsGlueAccessKeyCredentials,
+    KafkaMessageFormatSpec,
+    KafkaServersSpec,
 )
 from tabsdata_kafka.utils import handle_rollover, obtain_and_set_aws_glue_credentials
 
@@ -485,15 +486,16 @@ class KafkaStageTrigger(StageTrigger):
         )
         logger.debug(f"Kafka consumer created. {kafka_consumer}")
 
+        stage_trigger_status = None
         try:
-            start = time.time()  # we keep track of the start time to be able to timeout
+            start = time.time()  # keep track of the start time to be able to time out
             buffer = MessagesBuffer(self.topic, serde.schema_id_compatibles_checker())
             rollover_reason: RolloverReason = None
             reset_buffer_on_time_rollover = False
             stage_trigger_status = StageTriggerStatus.SUCCESS
             while True:
                 # Break the loop if end time is set and current time exceeds it
-                if self._end is not None and datetime.now() > self._end:
+                if self._end is not None and datetime.now(timezone.utc) > self._end:
                     stage_trigger_status = StageTriggerStatus.SUCCESS
                     logger.info("KafkaStageTrigger end time reached, exiting loop.")
                     break
@@ -545,7 +547,17 @@ class KafkaStageTrigger(StageTrigger):
             kafka_consumer.close()
             consumer.close()
             logger.debug("Kafka consumer closed.")
-            sys.exit(stage_trigger_status.value)
+
+            # Check if return_on_end attribute exists and is True
+            if getattr(self, 'return_on_end', False):
+                if stage_trigger_status == StageTriggerStatus.SUCCESS:
+                    pass
+                else:
+                    raise StageTriggerExecutionError(
+                        f"KafkaStageTrigger execution failed with status: {stage_trigger_status.name}"
+                    )
+            else:
+                sys.exit(stage_trigger_status.value)
 
     def _get_serde(self, working_dir: str) -> KafkaSerde:
         """

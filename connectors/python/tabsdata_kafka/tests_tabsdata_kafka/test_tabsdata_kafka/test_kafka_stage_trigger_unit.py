@@ -7,19 +7,18 @@ from unittest.mock import MagicMock, patch
 import pytest
 from mypy_boto3_glue.client import GlueClient
 
+from tabsdata._credentials import UserPasswordCredentials
 from tabsdata.exceptions import (
     ErrorCode,
     ParameterValidationError,
 )
-from tabsdata._credentials import UserPasswordCredentials
 from tabsdata_kafka._connector import (
-    KafkaConn,
-    KafkaStageTrigger,
+    AwsGlueAccessKeyCredentials,
     AwsGlueSchemaRegistry,
     ConfluentSchemaRegistry,
-    AwsGlueAccessKeyCredentials,
+    KafkaConn,
+    KafkaStageTrigger,
 )
-from tabsdata_kafka.shared_types import KafkaMessageFormatSpec
 from tabsdata_kafka.consumer.rollovers import MessagesRollover, SizeRollover
 from tabsdata_kafka.serdes.aws_glue_sr_serde import (
     AvroGlueKafkaSerde,
@@ -36,6 +35,7 @@ from tabsdata_kafka.serdes.non_sr_serde import (
     JsonKafkaSerde,
     ProtobufKafkaSerde,
 )
+from tabsdata_kafka.shared_types import KafkaMessageFormatSpec
 from tests_tabsdata_kafka.conftest import (
     aws_glue_sr_avro_schema_str,
     aws_glue_sr_json_schema_str,
