@@ -7,7 +7,7 @@ from datetime import datetime
 import pytest
 from dateutil import tz
 
-from tabsdata._crontab import Crontab
+from tabsdata._cron_trigger import CronTrigger
 from tabsdata.exceptions import (
     DecoratorConfigurationError,
     ErrorCode,
@@ -20,7 +20,7 @@ EXAMPLE_END_DATETIME = datetime(2025, 4, 3, tzinfo=tz.UTC)
 @pytest.mark.unit
 @pytest.mark.crontab
 def test_crontab_class_defaults():
-    crontab = Crontab(mask="25 19 * * 1,3,5")
+    crontab = CronTrigger(mask="25 19 * * 1,3,5")
     assert crontab.mask == "25 19 * * 1,3,5"
     assert crontab.start is None
     assert crontab.end is None
@@ -30,7 +30,7 @@ def test_crontab_class_defaults():
 @pytest.mark.unit
 @pytest.mark.crontab
 def test_crontab_class_all_params():
-    crontab = Crontab("25 19 * * 1,3,5", EXAMPLE_START_DATETIME, EXAMPLE_END_DATETIME)
+    crontab = CronTrigger("25 19 * * 1,3,5", EXAMPLE_START_DATETIME, EXAMPLE_END_DATETIME)
     assert crontab.mask == "25 19 * * 1,3,5"
     assert crontab.start == EXAMPLE_START_DATETIME.isoformat(timespec="microseconds")
     assert crontab.end == EXAMPLE_END_DATETIME.isoformat(timespec="microseconds")
@@ -46,14 +46,14 @@ def test_crontab_class_all_params():
 def test_crontab_wrong_mask_element_counts():
     with pytest.raises(DecoratorConfigurationError) as e:
         # noinspection PyTypeChecker
-        Crontab(
+        CronTrigger(
             mask="1 * * *",
         )
     assert e.value.error_code == ErrorCode.DCE14
 
     with pytest.raises(DecoratorConfigurationError) as e:
         # noinspection PyTypeChecker
-        Crontab(
+        CronTrigger(
             mask="* 1 * * * *",
         )
     assert e.value.error_code == ErrorCode.DCE14
@@ -64,7 +64,7 @@ def test_crontab_wrong_mask_element_counts():
 def test_crontab_wrong_start_value():
     with pytest.raises(DecoratorConfigurationError) as e:
         # noinspection PyTypeChecker
-        Crontab(mask="25 19 * * 1,3,5", start="2")
+        CronTrigger(mask="25 19 * * 1,3,5", start="2")
     assert e.value.error_code == ErrorCode.DCE11
 
 
@@ -73,14 +73,14 @@ def test_crontab_wrong_start_value():
 def test_crontab_wrong_end_value():
     with pytest.raises(DecoratorConfigurationError) as e:
         # noinspection PyTypeChecker
-        Crontab(mask="25 19 * * 1,3,5", end="2")
+        CronTrigger(mask="25 19 * * 1,3,5", end="2")
     assert e.value.error_code == ErrorCode.DCE12
 
 
 @pytest.mark.unit
 @pytest.mark.crontab
 def test_crontab_mask_validation_success():
-    crontab = Crontab(mask="*/5 * * * *")
+    crontab = CronTrigger(mask="*/5 * * * *")
     assert crontab.mask == "*/5 * * * *"
 
 
@@ -88,17 +88,17 @@ def test_crontab_mask_validation_success():
 @pytest.mark.crontab
 def test_crontab_mask_validation_failure():
     with pytest.raises(DecoratorConfigurationError) as e:
-        Crontab(mask="A * * * *")
+        CronTrigger(mask="A * * * *")
     assert e.value.error_code == ErrorCode.DCE15
 
     with pytest.raises(DecoratorConfigurationError) as e:
-        Crontab(mask=None)
+        CronTrigger(mask=None)
     assert e.value.error_code == ErrorCode.DCE16
 
     with pytest.raises(DecoratorConfigurationError) as e:
-        Crontab(mask=1)
+        CronTrigger(mask=1)
     assert e.value.error_code == ErrorCode.DCE16
 
     with pytest.raises(DecoratorConfigurationError) as e:
-        Crontab(mask="@hourly")
+        CronTrigger(mask="@hourly")
     assert e.value.error_code == ErrorCode.DCE19

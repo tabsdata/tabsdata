@@ -17,7 +17,7 @@ from typing import Generator, List, cast
 import polars as pl
 import requests
 
-from tabsdata._crontab import Crontab
+from tabsdata._cron_trigger import CronTrigger
 from tabsdata._io.inputs.table_inputs import TableInput
 from tabsdata._io.outputs.sql_outputs import verify_output_sql_drivers
 from tabsdata._io.outputs.table_outputs import TableOutput
@@ -4651,7 +4651,7 @@ def _create_archive(
     string_dependencies: list[str] = (
         function.input._table_list if isinstance(function.input, TableInput) else []
     )
-    if isinstance(function.trigger_by, Crontab):
+    if isinstance(function.trigger_by, CronTrigger):
         trigger_string_list = None
         workers = {"C": json.dumps(function.trigger_by._to_dict())}
     elif isinstance(function.trigger_by, StageTrigger):

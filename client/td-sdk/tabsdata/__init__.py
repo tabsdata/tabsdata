@@ -20,7 +20,7 @@ from tabsdata._credentials import (
     S3AccessKeyCredentials,
     UserPasswordCredentials,
 )
-from tabsdata._crontab import Crontab
+from tabsdata._cron_trigger import CronTrigger
 from tabsdata._decorators import ALL_DEPS, publisher, subscriber, transformer
 from tabsdata._format import (
     AvroFormat,
@@ -163,7 +163,7 @@ logging.basicConfig(
 
 __all__ = [
     # from tabsdata._crontab.py
-    "Crontab",
+    "CronTrigger",
     # from tabsdatafunction.py Inputs
     "AzureSource",
     "GCSSource",

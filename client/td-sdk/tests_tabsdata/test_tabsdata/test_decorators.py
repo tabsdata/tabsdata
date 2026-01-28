@@ -11,7 +11,7 @@ from tabsdata import (
     TableInput,
     TableOutput,
 )
-from tabsdata._crontab import Crontab
+from tabsdata._cron_trigger import CronTrigger
 from tabsdata._decorators import ALL_DEPS, publisher, subscriber, transformer
 from tabsdata._io.inputs.stage_input import Stage
 from tabsdata.exceptions import (
@@ -281,7 +281,7 @@ def test_subscriber_with_optional_parameters():
 
 
 def test_subscriber_with_crontab_trigger():
-    crontab = Crontab("25 19 * * 1,3,5")
+    crontab = CronTrigger("25 19 * * 1,3,5")
 
     @subscriber(
         TableInput("input"),
@@ -296,7 +296,7 @@ def test_subscriber_with_crontab_trigger():
 
 
 def test_transformer_with_crontab_trigger():
-    crontab = Crontab("25 19 * * 1,3,5")
+    crontab = CronTrigger("25 19 * * 1,3,5")
 
     @transformer(
         TableInput("input"),
@@ -311,7 +311,7 @@ def test_transformer_with_crontab_trigger():
 
 
 def test_publisher_with_crontab_trigger():
-    crontab = Crontab("25 19 * * 1,3,5")
+    crontab = CronTrigger("25 19 * * 1,3,5")
 
     @publisher(
         LocalFileSource("input.csv"),

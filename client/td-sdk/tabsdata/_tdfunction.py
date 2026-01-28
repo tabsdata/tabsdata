@@ -14,7 +14,7 @@ import polars as pl
 # noinspection PyProtectedMember
 import tabsdata._utils.tableframe._helpers as td_helpers
 import tabsdata.tableframe.lazyframe.frame as td_frame
-from tabsdata._crontab import Crontab
+from tabsdata._cron_trigger import CronTrigger
 from tabsdata._io.inputs.stage_input import Stage
 from tabsdata._io.inputs.table_inputs import TableInput
 from tabsdata._io.outputs.table_outputs import TableOutput
@@ -58,7 +58,7 @@ class TabsdataFunction:
         name: str | None,
         input: SourcePlugin = None,
         output: DestinationPlugin = None,
-        trigger_by: str | list[str] | Crontab | StageTrigger | None = None,
+        trigger_by: str | list[str] | CronTrigger | StageTrigger | None = None,
         # input_actions: OnTablesSpec = None,TODO: Uncomment this when reverting TD-1089
         output_actions: OnTablesSpec = None,
     ):
@@ -274,7 +274,7 @@ class TabsdataFunction:
             raise FunctionConfigurationError(ErrorCode.FCE6, type(name))
 
     @property
-    def trigger_by(self) -> list[str] | Crontab | StageTrigger | None:
+    def trigger_by(self) -> list[str] | CronTrigger | StageTrigger | None:
         """
         List[str]: The trigger(s) that will cause the function to execute. It must be
             another table or tables in the system, a Crontab, or a StageTrigger in the
@@ -283,12 +283,12 @@ class TabsdataFunction:
         return self._trigger_by
 
     @trigger_by.setter
-    def trigger_by(self, trigger_by: str | list[str] | Crontab | StageTrigger | None):
+    def trigger_by(self, trigger_by: str | list[str] | CronTrigger | StageTrigger | None):
         """
         Sets the trigger(s) that will cause the function to execute
 
         Args:
-            trigger_by (str | list[str] | StageTrigger | Crontab | None): The trigger(s)
+            trigger_by (str | list[str] | StageTrigger | CronTrigger | None): The trigger(s)
                 that will
                 cause the function to execute. It must be another table or tables in
                 the system, a Crontab, or a StageTrigger in the case of a publisher. If
@@ -301,7 +301,7 @@ class TabsdataFunction:
             self._trigger_by = None
         elif isinstance(trigger_by, list):
             self._trigger_by = trigger_by
-        elif isinstance(trigger_by, Crontab):
+        elif isinstance(trigger_by, CronTrigger):
             self._trigger_by = trigger_by
         elif isinstance(trigger_by, StageTrigger):
             self._trigger_by = trigger_by
