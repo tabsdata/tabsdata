@@ -260,7 +260,9 @@ def create_docker_kafka_container(
             KAFKA_ADMIN_PASSWORD,
         )
 
-        startup_command = "\n".join(line.lstrip() for line in startup_command.splitlines())
+        startup_command = "\n".join(
+            line.lstrip() for line in startup_command.splitlines()
+        )
 
         container = client.containers.run(
             "redpandadata/redpanda:latest",

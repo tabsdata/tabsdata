@@ -283,16 +283,18 @@ class TabsdataFunction:
         return self._trigger_by
 
     @trigger_by.setter
-    def trigger_by(self, trigger_by: str | list[str] | CronTrigger | StageTrigger | None):
+    def trigger_by(
+        self, trigger_by: str | list[str] | CronTrigger | StageTrigger | None
+    ):
         """
         Sets the trigger(s) that will cause the function to execute
 
         Args:
-            trigger_by (str | list[str] | StageTrigger | CronTrigger | None): The trigger(s)
-                that will
-                cause the function to execute. It must be another table or tables in
-                the system, a Crontab, or a StageTrigger in the case of a publisher. If
-                None, all the tables in the dependencies will be used.
+            trigger_by (str | list[str] | StageTrigger | CronTrigger | None): The
+                trigger(s) that will cause the function to execute. It must be another
+                table or tables in the system, a Crontab, or a StageTrigger in the case
+                of a publisher. If None, all the tables in the dependencies will be
+                used.
         """
         if isinstance(trigger_by, str):
             trigger_by = [trigger_by]

@@ -1,5 +1,5 @@
 #
-# Copyright 2025 Tabs Data Inc.
+# Copyright 2026 Tabs Data Inc.
 #
 
 from typing import TypeAlias, Union
@@ -12,3 +12,11 @@ TableSpec: TypeAlias = Union[TableName, list[TableName], None]
 TransformerTriggerBySpec: TypeAlias = Union[TableSpec, CronTrigger]
 PublisherTriggerBySpec: TypeAlias = Union[TableSpec, CronTrigger, StageTrigger]
 SubscriberTriggerBySpec: TypeAlias = Union[TableSpec, CronTrigger]
+
+__all__ = [
+    "TableName",
+    "TableSpec",
+    "TransformerTriggerBySpec",
+    "PublisherTriggerBySpec",
+    "SubscriberTriggerBySpec",
+]

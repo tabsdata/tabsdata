@@ -4,16 +4,13 @@
 
 import logging
 import os
-import tempfile
 from typing import Optional, Tuple
 
 import pandas as pd
 import polars as pl
-import requests
 from conftest import TESTING_RESOURCES_FOLDER
 
 import tabsdata as td
-from tabsdata._utils.temps import tabsdata_temp_folder
 from tabsdata.tableframe.lazyframe.properties import TableFramePropertiesBuilder
 
 logger = logging.getLogger(__name__)

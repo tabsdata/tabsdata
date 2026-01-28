@@ -4,7 +4,7 @@
 
 from typing import Callable, Literal, TypeAlias, Union
 
-from tabsdata._credentials import S3AccessKeyCredentials, UserPasswordCredentials
+from tabsdata._credentials import S3AccessKeyCredentials
 
 SchemaIdSpec: TypeAlias = Union[str, dict[str, str]]
 

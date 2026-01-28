@@ -12,12 +12,13 @@ from typing import Union
 
 from typing_extensions import TypeAlias
 
+# noinspection PyProtectedMember
+from tabsdata._specs import TableName
 from tabsdata._table_actions.actions import OnTablesAction
 from tabsdata.dataquality._classifier import Classifier
 from tabsdata.dataquality._operator import Operator
 from tabsdata.dataquality._utils import _normalize_to_list, _td_validate_call
 from tabsdata.exceptions import ErrorCode
-from tabsdata.typing._specs import TableName
 
 ClassifiersSpec: TypeAlias = Union[Classifier, list[Classifier]]
 """A type alias for one or more `Classifier` instances."""

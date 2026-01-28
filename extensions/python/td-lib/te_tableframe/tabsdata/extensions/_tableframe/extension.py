@@ -140,14 +140,15 @@ class TableFrameExtension(Extension):
     def required_columns_metadata(self) -> dict[str, Any]:
         return REQUIRED_COLUMNS_METADATA
 
+    @classmethod
     def apply_system_column(
-        self,
+        cls,
         lf: pl.LazyFrame,
         column: str,
         dtype: pl.DataType,
         default: Any,
         function: str,
-        properties: TableFrameProperties = None,
+        properties: TableFrameProperties | None = None,
     ) -> pl.LazyFrame:
         return apply_constant_system_column(
             lf,

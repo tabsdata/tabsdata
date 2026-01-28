@@ -14,11 +14,9 @@ from pathlib import Path
 
 from google.protobuf import descriptor_pb2, message, message_factory
 
-from tabsdata._io.outputs.file_outputs import SERVER_SIDE_AWS_ACCESS_KEY_ID
 from tabsdata._io.stage_trigger import StageTriggerContext
 from tabsdata_kafka.constants import (
     AWS_ACCESS_KEY_ID,
-    AWS_DEFAULT_REGION,
     AWS_SECRET_ACCESS_KEY,
 )
 from tabsdata_kafka.consumer.consumer import KafkaConsumer
@@ -113,8 +111,8 @@ def get_protobuf_class(
 
 
 def obtain_and_set_aws_glue_credentials(credentials: AwsGlueAccessKeyCredentials):
-    """Given the AwsGlueAccessKeyCredentials object, obtain the secret values and set them as
-    required for the aws glue client to use them."""
+    """Given the AwsGlueAccessKeyCredentials object, obtain the secret values and set
+    them as required for the aws glue client to use them."""
     logger.info("Setting AWS Glue credentials.")
     if isinstance(credentials, AwsGlueAccessKeyCredentials):
         os.environ[AWS_ACCESS_KEY_ID] = credentials.aws_access_key_id.secret_value

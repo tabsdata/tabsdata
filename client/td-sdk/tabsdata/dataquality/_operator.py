@@ -11,6 +11,8 @@ define actions based on the results of data quality classifiers.
 from abc import ABC
 from typing import AbstractSet
 
+# noinspection PyProtectedMember
+from tabsdata._specs import TableName
 from tabsdata.dataquality._typing import (
     BinsCriteriaSpec,
     BinSpec,
@@ -23,9 +25,6 @@ from tabsdata.dataquality._typing import (
 )
 from tabsdata.dataquality._utils import _normalize_to_list, _td_validate_call
 from tabsdata.exceptions import ErrorCode
-
-# noinspection PyProtectedMember
-from tabsdata.typing._specs import TableName
 
 
 class Operator(ABC):

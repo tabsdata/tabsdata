@@ -380,7 +380,8 @@ class KafkaStageTrigger(StageTrigger):
             sr_configs["url"] = sr.url
             if sr.credentials:
                 sr_configs["basic.auth.user.info"] = (
-                    f"{sr.credentials.user.secret_value}:{sr.credentials.password.secret_value}"
+                    f"{sr.credentials.user.secret_value}:"
+                    f"{sr.credentials.password.secret_value}"
                 )
             return SchemaRegistryClient(sr_configs)
         elif isinstance(sr, AwsGlueSchemaRegistry):
@@ -437,7 +438,10 @@ class KafkaStageTrigger(StageTrigger):
 
         return kafka_configs
 
-    def run(self, context: StageTriggerContext):
+    def run(  # noqa: C901
+        self,
+        context: StageTriggerContext,
+    ):
         """
         Run the Kafka stage trigger to consume messages, buffer them, and stage them
         based on rollover conditions.
@@ -549,12 +553,13 @@ class KafkaStageTrigger(StageTrigger):
             logger.debug("Kafka consumer closed.")
 
             # Check if return_on_end attribute exists and is True
-            if getattr(self, 'return_on_end', False):
+            if getattr(self, "return_on_end", False):
                 if stage_trigger_status == StageTriggerStatus.SUCCESS:
                     pass
                 else:
                     raise StageTriggerExecutionError(
-                        f"KafkaStageTrigger execution failed with status: {stage_trigger_status.name}"
+                        "KafkaStageTrigger execution failed with status:"
+                        f" {stage_trigger_status.name}"
                     )
             else:
                 sys.exit(stage_trigger_status.value)

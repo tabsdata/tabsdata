@@ -30,7 +30,9 @@ def test_crontab_class_defaults():
 @pytest.mark.unit
 @pytest.mark.crontab
 def test_crontab_class_all_params():
-    crontab = CronTrigger("25 19 * * 1,3,5", EXAMPLE_START_DATETIME, EXAMPLE_END_DATETIME)
+    crontab = CronTrigger(
+        "25 19 * * 1,3,5", EXAMPLE_START_DATETIME, EXAMPLE_END_DATETIME
+    )
     assert crontab.mask == "25 19 * * 1,3,5"
     assert crontab.start == EXAMPLE_START_DATETIME.isoformat(timespec="microseconds")
     assert crontab.end == EXAMPLE_END_DATETIME.isoformat(timespec="microseconds")

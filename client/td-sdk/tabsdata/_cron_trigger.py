@@ -80,9 +80,7 @@ class CronTrigger:
             raise DecoratorConfigurationError(ErrorCode.DCE19, mask)
         mask_elements = len(mask.split())
         if mask_elements != 5:
-            raise DecoratorConfigurationError(
-                ErrorCode.DCE14, mask, mask_elements
-            )
+            raise DecoratorConfigurationError(ErrorCode.DCE14, mask, mask_elements)
         if not croniter.is_valid(mask):
             raise DecoratorConfigurationError(ErrorCode.DCE15, mask)
         self._mask = mask
@@ -119,9 +117,7 @@ class CronTrigger:
         except NoTimezoneError:
             raise DecoratorConfigurationError(ErrorCode.DCE17, start)
         except Exception:
-            raise DecoratorConfigurationError(
-                ErrorCode.DCE11, start, type(start)
-            )
+            raise DecoratorConfigurationError(ErrorCode.DCE11, start, type(start))
 
         end = getattr(self, "_end", None)
         if start is not None and end is not None and self._start >= end:

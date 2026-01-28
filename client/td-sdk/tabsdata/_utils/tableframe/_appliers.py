@@ -23,7 +23,7 @@ def apply_constant_system_column(
     dtype: pl.DataType,
     default: Any,
     function: str,
-    properties: TableFrameProperties = None,
+    properties: TableFrameProperties | None = None,
 ) -> pl.LazyFrame:
     if function.startswith(td_constants.TD_VER_COLUMN_PREFIX):
         if properties is None:

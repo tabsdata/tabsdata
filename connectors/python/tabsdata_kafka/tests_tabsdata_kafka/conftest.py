@@ -70,6 +70,7 @@ from typing import Any, Generator
 from unittest.mock import MagicMock
 
 import avro.schema
+import requests
 from confluent_kafka import Consumer, Producer
 from confluent_kafka.admin import AdminClient
 from confluent_kafka.cimpl import NewTopic
@@ -79,7 +80,6 @@ from confluent_kafka.schema_registry._sync.mock_schema_registry_client import (
 )
 from confluent_kafka.serialization import MessageField, SerializationContext
 from mypy_boto3_glue.client import GlueClient
-import requests
 
 from tabsdata_kafka.serdes.aws_glue_sr_serde import (
     AvroGlueKafkaSerde,

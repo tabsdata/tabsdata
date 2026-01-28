@@ -1,5 +1,5 @@
 #
-# Copyright 2025 Tabs Data Inc.
+# Copyright 2026 Tabs Data Inc.
 #
 
 from tabsdata._io.inputs.sql.shared_types import (
@@ -17,14 +17,16 @@ from tabsdata._io.outputs.shared_enums import (
     PostgresDestWriterSpec,
     SchemaStrategySpec,
 )
-from tabsdata._table_actions._typing import OnTablesSpec
-from tabsdata._table_actions.actions import OnTablesAction
-from tabsdata.typing._specs import (
+
+# noinspection PyProtectedMember
+from tabsdata._specs import (
     PublisherTriggerBySpec,
     SubscriberTriggerBySpec,
     TableSpec,
     TransformerTriggerBySpec,
 )
+from tabsdata._table_actions._typing import OnTablesSpec
+from tabsdata._table_actions.actions import OnTablesAction
 from tabsdata_kafka.shared_types import (
     KafkaMessageFormatSpec,
     KafkaServersSpec,
@@ -34,32 +36,25 @@ from tabsdata_kafka.shared_types import (
 from tabsdata_mssql.constants import MSSQLLoaderSpec
 
 __all__ = [
-    # from tabsdata._io.inputs.sql.shared_types
-    "QueriesSpec",
-    "SchemaOverrideSpec",
-    "MySQLSrcLoaderSpec",
-    "PostgresSrcLoaderSpec",
-    "MariaDBSrcLoaderSpec",
-    "OracleLoaderSpec",
-    # from tabsdata_mssql.constants
-    "MSSQLLoaderSpec",
-    # from tabsdata_kafka.shared_types
-    "KafkaMessageFormatSpec",
-    "SchemaIdSpec",
-    "SchemaIdCompatibles",
-    "KafkaServersSpec",
-    # from tabsdata._io.outputs.shared_enums
     "IfTableExistStrategySpec",
-    "SchemaStrategySpec",
-    "MySQLDestWriterSpec",
-    "PostgresDestWriterSpec",
+    "KafkaMessageFormatSpec",
+    "KafkaServersSpec",
     "MariaDBDestWriterSpec",
-    # from tabsdata._table_actions.actions
+    "MariaDBSrcLoaderSpec",
+    "MSSQLLoaderSpec",
+    "MySQLDestWriterSpec",
+    "MySQLSrcLoaderSpec",
     "OnTablesAction",
-    # from tabsdata._table_actions._typing
     "OnTablesSpec",
-    # from tabsdata.typing.__init__
+    "OracleLoaderSpec",
+    "PostgresDestWriterSpec",
+    "PostgresSrcLoaderSpec",
     "PublisherTriggerBySpec",
+    "QueriesSpec",
+    "SchemaIdCompatibles",
+    "SchemaIdSpec",
+    "SchemaOverrideSpec",
+    "SchemaStrategySpec",
     "SubscriberTriggerBySpec",
     "TableSpec",
     "TransformerTriggerBySpec",
