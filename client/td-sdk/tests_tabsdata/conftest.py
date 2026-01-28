@@ -5,53 +5,24 @@
 from __future__ import annotations
 
 import logging
-from zoneinfo import ZoneInfo
-
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-
-from tests_tabsdata.bootest import TESTING_RESOURCES_PATH, check_assets, enrich_sys_path
-
-TESTING_RESOURCES_FOLDER = TESTING_RESOURCES_PATH
-enrich_sys_path()
-check_assets()
-
-pytest_plugins = ["tests_tabsdata.fntest"]
-
 import os
 import pathlib
 import re
-import socket
 import sys
-import urllib.parse
-import uuid
-from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from time import sleep
 from typing import Any
 
-# noinspection PyPackageRequirements
 import pytest
 import yaml
-from filelock import FileLock
 from xdist.workermanage import WorkerController
 
-import tabsdata as td
 import tabsdata as _td
 
 # noinspection PyProtectedMember
 import tabsdata._utils.tableframe._constants as td_constants
-from tabsdata._credentials import Credentials, UserPasswordCredentials
-from tabsdata._secret import HashiCorpSecret
-from tabsdata._tabsserver.function.sql_utils import MARIADB_COLLATION
-from tabsdata._tabsserver.pyenv_creation import (
-    DEFAULT_ENVIRONMENT_TESTIMONY_FOLDER,
-    delete_virtual_environment,
-    read_testimony,
-)
 from tabsdata._tdfunction import TableInput, TableOutput
-from tabsdata._utils.constants import TRUE_VALUES
 
 # noinspection PyProtectedMember
 from tabsdata._utils.tableframe._generators import _id
@@ -63,6 +34,36 @@ from tabsdata.api.status_utils.data_version import (
     data_version_status_to_mapping,
 )
 from tabsdata.api.tabsdata_server import TabsdataServer
+
+# Import fixtures from backend modules so pytest can discover them
+# These imports make the fixtures available to all tests
+from tests_tabsdata.common.backend import (  # noqa: F401
+    azure_client,
+    azure_config,
+    gcs_client,
+    gcs_config,
+    mariadb_config,
+    mysql_config,
+    oracle_config,
+    postgres_config,
+    s3_client,
+    s3_config,
+    testing_hashicorp_vault,
+)
+from tests_tabsdata.common.constants import MAXIMUM_RETRY_COUNT
+from tests_tabsdata.common.docker import clean_docker_containers
+from tests_tabsdata.common.venv import clean_python_virtual_environments
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+from tests_tabsdata.bootest import TESTING_RESOURCES_PATH, check_assets, enrich_sys_path
+
+TESTING_RESOURCES_FOLDER = TESTING_RESOURCES_PATH
+enrich_sys_path()
+check_assets()
+
+pytest_plugins = ["tests_tabsdata.fntest"]
 
 
 def pytest_configure(config: pytest.Config):
@@ -121,40 +122,9 @@ CORRECT_OUTPUT_ACTIONS = {}
 
 DEFAULT_LOGS_FILE = "fn.log"
 
-PYTEST_DEFAULT_ENVIRONMENT_PREFIX = "tdpytest_"
-DOCKER_REGULAR_CONTAINER_INFIX = "c_"
-DOCKER_COMPOSE_CONTAINER_INFIX = "k_"
-DEFAULT_PYTEST_MARIADB_DOCKER_CONTAINER_NAME = (
-    f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}{DOCKER_REGULAR_CONTAINER_INFIX}mariadb"
-)
-DEFAULT_PYTEST_MYSQL_DOCKER_CONTAINER_NAME = (
-    f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}{DOCKER_REGULAR_CONTAINER_INFIX}mysql"
-)
-DEFAULT_PYTEST_ORACLE_DOCKER_CONTAINER_NAME = (
-    f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}{DOCKER_REGULAR_CONTAINER_INFIX}oracle"
-)
-DEFAULT_PYTEST_POSTGRES_DOCKER_CONTAINER_NAME = (
-    f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}{DOCKER_REGULAR_CONTAINER_INFIX}postgres"
-)
-DEFAULT_PYTEST_HASHICORP_DOCKER_CONTAINER_NAME = (
-    f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}{DOCKER_REGULAR_CONTAINER_INFIX}hashicorp"
-)
-
-HASHICORP_PORT = 8200
-HASHICORP_TESTING_SECRET_PATH = "tabsdata/testing/path"
-HASHICORP_TESTING_SECRET_NAME = "testing_secret_name"
-HASHICORP_TESTING_SECRET_VALUE = "testing_secret_value"
-HASHICORP_TESTING_TOKEN = "testing_token"
-HASHICORP_TESTING_URL = "http://127.0.0.1:8200"
-
 ROOT_PROJECT_DIR = os.path.dirname(
     os.path.dirname(os.path.dirname(ABSOLUTE_TEST_FOLDER_LOCATION))
 )
-
-VALID_MYSQL_PREFIXES = ["MYSQL0"]
-VALID_MARIADB_PREFIXES = ["MARIADB0"]
-VALID_POSTGRES_PREFIXES = ["POSTGRES0"]
-VALID_ORACLE_PREFIXES = ["ORACLE0"]
 
 
 class TestInstance:
@@ -274,25 +244,6 @@ for connector in gather_connectors():
         os.path.join(ROOT_PROJECT_DIR, "connectors", "python", connector)
     )
 
-TESTING_AWS_ACCESS_KEY_ID = "TRANSPORTER_AWS_ACCESS_KEY_ID"
-TESTING_AWS_SECRET_ACCESS_KEY = "TRANSPORTER_AWS_SECRET_ACCESS_KEY"
-TESTING_AZURE_ACCOUNT_NAME = "TRANSPORTER_AZURE_ACCOUNT_NAME"
-TESTING_AZURE_ACCOUNT_KEY = "TRANSPORTER_AZURE_ACCOUNT_KEY"
-
-DB_HOST = "127.0.0.1"
-DB_NAME = "testing"
-DB_PASSWORD = "p@ssw0rd#"
-DB_USER = "@dmIn"
-MARIADB_PORT = 3307
-MYSQL_FORWARDED_PORT = "3306/tcp"
-MARIADB_FORWARDED_PORT = "3306/tcp"
-ORACLE_PORT = 1521
-ORACLE_FORWARDED_PORT = "1521/tcp"
-ORACLE_DB_NAME = "FREE"
-ORACLE_DB_USER = "system"
-POSTGRES_PORT = 5432
-POSTGRES_FORWARDED_PORT = "5432/tcp"
-
 MOCK_COLLECTION = "td_collection"
 MOCK_COLLECTION_ID = 19
 FAKE_EXECUTION_ID = 24
@@ -342,7 +293,6 @@ FORMAT_TYPE_TO_CONFIG = {
 
 FUNCTION_DATA_FOLDER = "function_data_folder"
 
-MAXIMUM_RETRY_COUNT = int(os.environ.get("PYTEST_MAXIMUM_RETRY_COUNT", "36"))
 if not os.environ.get("TD_CLI_SHOW"):
     os.environ["TD_CLI_SHOW"] = "false"
 
@@ -367,7 +317,7 @@ def pytest_generate_tests(metafunc):
 
 
 def read_json_and_clean(path, sort=True):
-    """Reads a json file and removes the td.id column. Also sorts it to make
+    """Reads a JSON file and removes the td.id column. Also sorts it to make
     comparison more stable"""
     import polars as pl  # Lazy import
 
@@ -390,653 +340,6 @@ def clean_polars_df(df, sort=True):
 
 
 @pytest.fixture(scope="session")
-def testing_hashicorp_vault(tmp_path_factory, worker_id, s3_config):
-    os.environ[HashiCorpSecret.VAULT_URL_ENV_VAR] = HASHICORP_TESTING_URL
-    os.environ[HashiCorpSecret.VAULT_TOKEN_ENV_VAR] = HASHICORP_TESTING_TOKEN
-    # Needed for test_input_s3_hashicorp_secret_vault_name to work
-    os.environ[HashiCorpSecret.VAULT_URL_ENV_VAR.replace("HASHICORP", "H1")] = (
-        HASHICORP_TESTING_URL
-    )
-    os.environ[HashiCorpSecret.VAULT_TOKEN_ENV_VAR.replace("HASHICORP", "H1")] = (
-        HASHICORP_TESTING_TOKEN
-    )
-    if worker_id == "master":
-        # not executing in with multiple workers, just produce the data and let
-        # pytest's fixture caching do its job
-        yield create_docker_hashicorp_vault(s3_config)
-    else:
-        # get the temp directory shared by all workers
-        root_tmp_dir = tmp_path_factory.getbasetemp().parent
-
-        fn = root_tmp_dir / "docker_hashicorp_vault_creation"
-        with FileLock(str(fn) + ".lock"):
-            # only one worker will be able to create the database
-            create_docker_hashicorp_vault(s3_config)
-        yield
-
-
-@dataclass
-class OracleConfig:
-    host: str
-    port: int
-    user: str
-    password: str
-    database: str
-    uri: str
-    uri_with_credentials: str
-    credentials: Credentials
-
-
-@pytest.fixture(scope="function")
-def oracle_config(tmp_path_factory, worker_id, request) -> OracleConfig:
-    marker = request.node.get_closest_marker("oracle")
-    prefix = marker.kwargs.get("env_prefix", "ORACLE0") if marker else "ORACLE0"
-    if prefix not in VALID_ORACLE_PREFIXES:
-        raise Exception(
-            f"The prefix '{prefix}' is not valid. Valid prefixes are:"
-            f" {', '.join(VALID_ORACLE_PREFIXES)}. If you want to extend the list of"
-            " valid prefixes, please modify the 'VALID_ORACLE_PREFIXES' variable in"
-            " the 'conftest.py' file."
-        )
-    if os.environ.get(f"{prefix}__ORACLE_ENVS") in TRUE_VALUES:
-        uri = os.environ.get(f"{prefix}__ORACLE_URI")
-        if not uri:
-            raise Exception(
-                f"The environment variable {prefix}__ORACLE_URI is not set. Unable to"
-                " run tests using the 'oracle_config' fixture."
-            )
-        pattern = r"^oracle://([^:/]+):(\d+)/(.*)$"
-        match = re.match(pattern, uri)
-        if not match:
-            raise Exception(
-                f"The ORACLE URI '{uri}' is not valid. Unable to run tests using the "
-                "'oracle_config' fixture."
-            )
-        host, port, _ = match.groups()
-        user = os.environ.get(f"{prefix}__ORACLE_USER")
-        if not user:
-            raise Exception(
-                f"The environment variable {prefix}__ORACLE_USER is not set. Unable"
-                " to run tests using the 'oracle_config' fixture."
-            )
-        password = os.environ.get(f"{prefix}__ORACLE_PASSWORD")
-        if not password:
-            raise Exception(
-                f"The environment variable {prefix}__ORACLE_PASSWORD is not set."
-                " Unable to run tests using the 'oracle_config' fixture."
-            )
-        database = os.environ.get(f"{prefix}__ORACLE_DATABASE")
-        if not database:
-            raise Exception(
-                f"The environment variable {prefix}__ORACLE_DATABASE is not set."
-                " Unable to run tests using the 'oracle_config' fixture."
-            )
-        escaped_user = urllib.parse.quote(user)
-        escaped_password = urllib.parse.quote(password)
-        config = OracleConfig(
-            host=host,
-            port=int(port),
-            user=user,
-            password=password,
-            database=database,
-            uri=uri,
-            uri_with_credentials=(
-                f"oracle://{escaped_user}:{escaped_password}@{host}:{port}/{database}"
-            ),
-            credentials=UserPasswordCredentials(user, password),
-        )
-        return config
-    else:
-        name = os.environ.get(
-            f"{prefix}__ORACLE_DOCKER_CONTAINER_NAME",
-            DEFAULT_PYTEST_ORACLE_DOCKER_CONTAINER_NAME,
-        )
-        if worker_id == "master":
-            port = create_docker_oracle_database(name)
-        else:
-            root_tmp_dir = tmp_path_factory.getbasetemp().parent
-            fn = root_tmp_dir / "docker_oracle_creation"
-            with FileLock(str(fn) + ".lock"):
-                port = create_docker_oracle_database(name)
-        config = OracleConfig(
-            host=DB_HOST,
-            port=int(port),
-            user=ORACLE_DB_USER,
-            password=DB_PASSWORD,
-            database=ORACLE_DB_NAME,
-            uri=f"oracle://{DB_HOST}:{port}/{ORACLE_DB_NAME}",
-            uri_with_credentials=(
-                f"oracle://{urllib.parse.quote(ORACLE_DB_USER)}:"
-                f"{urllib.parse.quote(DB_PASSWORD)}@{DB_HOST}:{port}/{ORACLE_DB_NAME}"
-            ),
-            credentials=UserPasswordCredentials(ORACLE_DB_USER, DB_PASSWORD),
-        )
-        return config
-
-
-@dataclass
-class PostgresConfig:
-    host: str
-    port: int
-    user: str
-    password: str
-    database: str
-    uri: str
-    uri_with_credentials: str
-    credentials: Credentials
-
-
-@pytest.fixture(scope="function")
-def postgres_config(tmp_path_factory, worker_id, request) -> PostgresConfig:
-    marker = request.node.get_closest_marker("postgres")
-    prefix = marker.kwargs.get("env_prefix", "POSTGRES0") if marker else "POSTGRES0"
-    if prefix not in VALID_POSTGRES_PREFIXES:
-        raise Exception(
-            f"The prefix '{prefix}' is not valid. Valid prefixes are:"
-            f" {', '.join(VALID_POSTGRES_PREFIXES)}. If you want to extend the list of"
-            " valid prefixes, please modify the 'VALID_POSTGRES_PREFIXES' variable in"
-            " the 'conftest.py' file."
-        )
-    if os.environ.get(f"{prefix}__POSTGRES_ENVS") in TRUE_VALUES:
-        uri = os.environ.get(f"{prefix}__POSTGRES_URI")
-        if not uri:
-            raise Exception(
-                f"The environment variable {prefix}__POSTGRES_URI is not set. Unable to"
-                " run tests using the 'postgres_config' fixture."
-            )
-        pattern = r"^postgres://([^:/]+):(\d+)/(.*)$"
-        match = re.match(pattern, uri)
-        if not match:
-            raise Exception(
-                f"The POSTGRES URI '{uri}' is not valid. Unable to run tests using the "
-                "'postgres_config' fixture."
-            )
-        host, port, _ = match.groups()
-        user = os.environ.get(f"{prefix}__POSTGRES_USER")
-        if not user:
-            raise Exception(
-                f"The environment variable {prefix}__POSTGRES_USER is not set. Unable"
-                " to run tests using the 'postgres_config' fixture."
-            )
-        password = os.environ.get(f"{prefix}__POSTGRES_PASSWORD")
-        if not password:
-            raise Exception(
-                f"The environment variable {prefix}__POSTGRES_PASSWORD is not set."
-                " Unable to run tests using the 'postgres_config' fixture."
-            )
-        database = os.environ.get(f"{prefix}__POSTGRES_DATABASE")
-        if not database:
-            raise Exception(
-                f"The environment variable {prefix}__POSTGRES_DATABASE is not set."
-                " Unable to run tests using the 'postgres_config' fixture."
-            )
-        escaped_user = urllib.parse.quote(user)
-        escaped_password = urllib.parse.quote(password)
-        config = PostgresConfig(
-            host=host,
-            port=int(port),
-            user=user,
-            password=password,
-            database=database,
-            uri=uri,
-            uri_with_credentials=(
-                f"postgres://{escaped_user}:{escaped_password}@{host}:{port}/{database}"
-            ),
-            credentials=UserPasswordCredentials(user, password),
-        )
-        return config
-    else:
-        name = os.environ.get(
-            f"{prefix}__POSTGRES_DOCKER_CONTAINER_NAME",
-            DEFAULT_PYTEST_POSTGRES_DOCKER_CONTAINER_NAME,
-        )
-        if worker_id == "master":
-            # not executing in with multiple workers, just produce the data and let
-            # pytest's fixture caching do its job
-            port = create_docker_postgres_database(name)
-        else:
-            # get the temp directory shared by all workers
-            root_tmp_dir = tmp_path_factory.getbasetemp().parent
-
-            fn = root_tmp_dir / "docker_postgresql_creation"
-            with FileLock(str(fn) + ".lock"):
-                # only one worker will be able to create the database
-                port = create_docker_postgres_database(name)
-        config = PostgresConfig(
-            host=DB_HOST,
-            port=int(port),
-            user=DB_USER,
-            password=DB_PASSWORD,
-            database=DB_NAME,
-            uri=f"postgres://{DB_HOST}:{port}/{DB_NAME}",
-            uri_with_credentials=(
-                f"postgres://{urllib.parse.quote(DB_USER)}:"
-                f"{urllib.parse.quote(DB_PASSWORD)}@{DB_HOST}:{port}/{
-                                 DB_NAME}"
-            ),
-            credentials=UserPasswordCredentials(DB_USER, DB_PASSWORD),
-        )
-        return config
-
-
-@dataclass
-class MariaDBConfig:
-    host: str
-    port: int
-    user: str
-    password: str
-    database: str
-    uri: str
-    uri_with_credentials: str
-    credentials: Credentials
-
-
-@pytest.fixture(scope="function")
-def mariadb_config(tmp_path_factory, worker_id, request) -> MariaDBConfig:
-    marker = request.node.get_closest_marker("mariadb")
-    prefix = marker.kwargs.get("env_prefix", "MARIADB0") if marker else "MARIADB0"
-    if prefix not in VALID_MARIADB_PREFIXES:
-        raise Exception(
-            f"The prefix '{prefix}' is not valid. Valid prefixes are: "
-            f"{', '.join(VALID_MARIADB_PREFIXES)}. If you want to extend the list of "
-            "valid prefixes, please modify the 'VALID_MARIADB_PREFIXES' variable in the"
-            " 'conftest.py' file."
-        )
-    if os.environ.get(f"{prefix}__MARIADB_ENVS") in TRUE_VALUES:
-        uri = os.environ.get(f"{prefix}__MARIADB_URI")
-        if not uri:
-            raise Exception(
-                f"The environment variable {prefix}__MARIADB_URI is not set. Unable to "
-                "run "
-                "tests using the 'mariadb_config' fixture."
-            )
-        pattern = r"^mariadb:://([^:/]+):(\d+)/(.*)$"
-        match = re.match(pattern, uri)
-        if not match:
-            raise Exception(
-                f"The MARIADB URI '{uri}' is not valid. Unable to run tests using the "
-                "'mariadb_config' fixture."
-            )
-        host, port, _ = match.groups()
-        user = os.environ.get(f"{prefix}__MARIADB_USER")
-        if not user:
-            raise Exception(
-                f"The environment variable {prefix}__MARIADB_USER is not set. Unable to"
-                " run tests using the 'mariadb_config' fixture."
-            )
-        password = os.environ.get(f"{prefix}__MARIADB_PASSWORD")
-        if not password:
-            raise Exception(
-                f"The environment variable {prefix}__MARIADB_PASSWORD is not set."
-                " Unable to run tests using the 'mariadb_config' fixture."
-            )
-        database = os.environ.get(f"{prefix}__MARIADB_DATABASE")
-        if not database:
-            raise Exception(
-                f"The environment variable {prefix}__MARIADB_DATABASE is not set."
-                " Unable to run tests using the 'mariadb_config' fixture."
-            )
-        escaped_user = urllib.parse.quote(user)
-        escaped_password = urllib.parse.quote(password)
-        config = MariaDBConfig(
-            host=host,
-            port=int(port),
-            user=user,
-            password=password,
-            database=database,
-            uri=uri,
-            uri_with_credentials=(
-                f"mariadb://{escaped_user}:{escaped_password}@{host}:{port}/{database}"
-            ),
-            credentials=UserPasswordCredentials(user, password),
-        )
-        return config
-    else:
-        name = os.environ.get(
-            f"{prefix}__MARIADB_DOCKER_CONTAINER_NAME",
-            DEFAULT_PYTEST_MARIADB_DOCKER_CONTAINER_NAME,
-        )
-        if worker_id == "master":
-            # not executing in with multiple workers, just produce the data and let
-            # pytest's fixture caching do its job
-            port = create_docker_mariadb_database(name)
-        else:
-            # get the temp directory shared by all workers
-            root_tmp_dir = tmp_path_factory.getbasetemp().parent
-
-            fn = root_tmp_dir / "docker_mariadb_creation"
-            with FileLock(str(fn) + ".lock"):
-                # only one worker will be able to create the database
-                port = create_docker_mariadb_database(name)
-        config = MariaDBConfig(
-            host=DB_HOST,
-            port=int(port),
-            user=DB_USER,
-            password=DB_PASSWORD,
-            database=DB_NAME,
-            uri=f"mariadb://{DB_HOST}:{port}/{DB_NAME}",
-            uri_with_credentials=(
-                f"mysql://{urllib.parse.quote(DB_USER)}:"
-                f"{urllib.parse.quote(DB_PASSWORD)}@{DB_HOST}:{port}/{
-                                 DB_NAME}"
-            ),
-            credentials=UserPasswordCredentials(DB_USER, DB_PASSWORD),
-        )
-        return config
-
-
-@dataclass
-class MySQLConfig:
-    host: str
-    port: int
-    user: str
-    password: str
-    database: str
-    uri: str
-    uri_with_credentials: str
-    credentials: Credentials
-
-
-@pytest.fixture(scope="function")
-def mysql_config(tmp_path_factory, worker_id, request) -> MySQLConfig:
-    marker = request.node.get_closest_marker("mysql")
-    prefix = marker.kwargs.get("env_prefix", "MYSQL0") if marker else "MYSQL0"
-    if prefix not in VALID_MYSQL_PREFIXES:
-        raise Exception(
-            f"The prefix '{prefix}' is not valid. Valid prefixes are: "
-            f"{', '.join(VALID_MYSQL_PREFIXES)}. If you want to extend the list of "
-            "valid prefixes, please modify the 'VALID_MYSQL_PREFIXES' variable in the"
-            " 'conftest.py' file."
-        )
-    if os.environ.get(f"{prefix}__MYSQL_ENVS") in TRUE_VALUES:
-        uri = os.environ.get(f"{prefix}__MYSQL_URI")
-        if not uri:
-            raise Exception(
-                f"The environment variable {prefix}__MYSQL_URI is not set. Unable to "
-                "run "
-                "tests using the 'mysql_config' fixture."
-            )
-        pattern = (
-            r"^mysql://(?:([^:@/]+)(?::([^@/]*))?@)?([^:/]+):(\d+)(?:/([^/?#]+))?$"
-        )
-        match = re.match(pattern, uri)
-        if not match:
-            raise Exception(
-                f"The MYSQL URI '{uri}' is not valid. Unable to run tests using the "
-                "'mysql_config' fixture."
-            )
-        _, _, host, port, _ = match.groups()
-        user = os.environ.get(f"{prefix}__MYSQL_USER")
-        if not user:
-            raise Exception(
-                f"The environment variable {prefix}__MYSQL_USER is not set and the "
-                f"user is not part of the {prefix}__MYSQL_URI. Unable to "
-                "run tests using the 'mysql_config' fixture."
-            )
-        password = os.environ.get(f"{prefix}__MYSQL_PASSWORD")
-        if not password:
-            raise Exception(
-                f"The environment variable {prefix}__MYSQL_PASSWORD is not set and "
-                f"the password is not part of the {prefix}__MYSQL_URI. Unable to "
-                "run tests using the 'mysql_config' fixture."
-            )
-        database = os.environ.get(f"{prefix}__MYSQL_DATABASE")
-        if not database:
-            raise Exception(
-                f"The environment variable {prefix}__MYSQL_DATABASE is not set and "
-                f"the database is not part of the {prefix}__MYSQL_URI. Unable to "
-                "run tests using the 'mysql_config' fixture."
-            )
-        escaped_user = urllib.parse.quote(user)
-        escaped_password = urllib.parse.quote(password)
-        config = MySQLConfig(
-            host=host,
-            port=int(port),
-            user=user,
-            password=password,
-            database=database,
-            uri=uri,
-            uri_with_credentials=(
-                f"mysql://{escaped_user}:{escaped_password}@{host}:{port}/{database}"
-            ),
-            credentials=UserPasswordCredentials(user, password),
-        )
-        return config
-    else:
-        port = None
-        name = os.environ.get(
-            f"{prefix}__MYSQL_DOCKER_CONTAINER_NAME",
-            DEFAULT_PYTEST_MYSQL_DOCKER_CONTAINER_NAME,
-        )
-        if worker_id == "master":
-            # not executing in with multiple workers, just produce the data and let
-            # pytest's fixture caching do its job
-            port = create_docker_mysql_database(name)
-        else:
-            # get the temp directory shared by all workers
-            root_tmp_dir = tmp_path_factory.getbasetemp().parent
-
-            fn = root_tmp_dir / "docker_mysql_creation"
-            with FileLock(str(fn) + ".lock"):
-                # only one worker will be able to create the database
-                port = create_docker_mysql_database(name)
-        config = MySQLConfig(
-            host=DB_HOST,
-            port=int(port),
-            user=DB_USER,
-            password=DB_PASSWORD,
-            database=DB_NAME,
-            uri=f"mysql://{DB_HOST}:{port}/{DB_NAME}",
-            uri_with_credentials=(
-                f"mysql://{urllib.parse.quote(DB_USER)}:"
-                f"{urllib.parse.quote(DB_PASSWORD)}@{DB_HOST}:{port}/{DB_NAME}"
-            ),
-            credentials=UserPasswordCredentials(DB_USER, DB_PASSWORD),
-        )
-        return config
-
-
-def create_docker_postgres_database(
-    name: str = DEFAULT_PYTEST_POSTGRES_DOCKER_CONTAINER_NAME,
-):
-    # noinspection PyPackageRequirements
-    import docker  # Lazy import
-
-    # noinspection PyPackageRequirements
-    import psycopg2  # Lazy import
-
-    logger.info("Starting Postgres container")
-    client = docker.from_env()
-    if containers := client.containers.list(filters={"name": name}):
-        logger.info("Postgres container already exists")
-        container = containers[0]
-        return get_container_port_binding(container, POSTGRES_FORWARDED_PORT)
-    else:
-        container = client.containers.run(
-            "postgres:17.2",
-            name=name,
-            environment=[
-                f"POSTGRES_DB={DB_NAME}",
-                f"POSTGRES_USER={DB_USER}",
-                f"POSTGRES_PASSWORD={DB_PASSWORD}",
-            ],
-            ports={POSTGRES_FORWARDED_PORT: None},
-            detach=True,
-        )
-        container.reload()
-        port = get_container_port_binding(container, POSTGRES_FORWARDED_PORT)
-        # Wait for the database to be ready
-        retry = 0
-        while True:
-            connection_params = {
-                "dbname": DB_NAME,
-                "user": DB_USER,
-                "password": DB_PASSWORD,
-                "host": DB_HOST,
-                "port": str(port),
-            }
-            try:
-                mydb = psycopg2.connect(**connection_params)
-                break
-            except Exception as err:
-                retry += 1
-                # Waiting for up to 10' & 30'', as young Gauss already knew.
-                if retry == MAXIMUM_RETRY_COUNT:
-                    logger.error(f"Error connecting to Postgres: {err}")
-                    raise err
-                else:
-                    logger.warning(
-                        f"Error connecting to Postgres, retrying in {retry} second(s)"
-                    )
-                    sleep(retry)
-        mycursor = mydb.cursor()
-        mycursor.execute(
-            "CREATE TABLE INVOICE_HEADER (id int GENERATED ALWAYS AS IDENTITY PRIMARY"
-            " KEY, name VARCHAR(255))"
-        )
-        sql = "INSERT INTO INVOICE_HEADER (name) VALUES (%s)"
-        val = [
-            ("Arvind",),
-            ("Tucu",),
-            ("Dimas",),
-            ("Joaquin",),
-            ("Jennifer",),
-            ("Aleix",),
-        ]
-        mycursor.executemany(sql, val)
-        mycursor.execute(
-            "CREATE TABLE INVOICE_ITEM (id int GENERATED ALWAYS AS IDENTITY PRIMARY "
-            "KEY, name VARCHAR(255))"
-        )
-        sql = "INSERT INTO INVOICE_ITEM (name) VALUES (%s)"
-        val = [
-            ("Leonardo",),
-            ("Donatello",),
-            ("Michelangelo",),
-            ("Raphael",),
-            ("Splinter",),
-        ]
-        mycursor.executemany(sql, val)
-        mycursor.execute("CREATE SCHEMA IF NOT EXISTS type_check_test_schema")
-        mycursor.execute("""
-            CREATE TABLE IF NOT EXISTS type_check_test_schema.all_postgres_types (
-                id SERIAL PRIMARY KEY,
-                c_smallint SMALLINT,
-                c_integer INTEGER,
-                c_bigint BIGINT,
-                c_decimal DECIMAL(10,2),
-                c_numeric NUMERIC(10,2),
-                c_real REAL,
-                c_double DOUBLE PRECISION,
-                c_money MONEY,
-                c_char CHAR(10),
-                c_varchar VARCHAR(50),
-                c_text TEXT,
-                c_bytea BYTEA,
-                c_boolean BOOLEAN,
-                c_date DATE,
-                c_time TIME,
-                c_timetz TIME WITH TIME ZONE,
-                c_timestamp TIMESTAMP,
-                c_timestamptz TIMESTAMP WITH TIME ZONE,
-                c_interval INTERVAL
-            )
-        """)
-        mycursor.execute("""
-            CREATE TABLE IF NOT EXISTS type_check_test_schema.all_postgres_dest_types (
-                id SERIAL PRIMARY KEY,
-                c_smallint SMALLINT,
-                c_integer INTEGER,
-                c_bigint BIGINT,
-                c_decimal DECIMAL(10,2),
-                c_numeric NUMERIC(10,2),
-                c_real REAL,
-                c_double DOUBLE PRECISION,
-                c_money MONEY,
-                c_char CHAR(10),
-                c_varchar VARCHAR(50),
-                c_text TEXT,
-                c_bytea BYTEA,
-                c_boolean BOOLEAN,
-                c_date DATE,
-                c_time TIME,
-                c_timetz TIME WITH TIME ZONE,
-                c_timestamp TIMESTAMP,
-                c_timestamptz TIMESTAMP WITH TIME ZONE,
-                c_interval INTERVAL
-            )
-        """)
-        sql = """
-            INSERT INTO type_check_test_schema.all_postgres_types (
-                c_smallint, c_integer, c_bigint, c_decimal, c_numeric, c_real, c_double,
-                c_money, c_char, c_varchar, c_text, c_bytea, c_boolean, c_date, c_time, 
-                c_timetz, c_timestamp, c_timestamptz, c_interval
-            ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, %s, %s, %s,
-                %s, %s, %s
-            )
-        """
-        val = (
-            1,
-            42,
-            1234567890123,
-            12345.67,
-            23456.78,
-            3.14,
-            2.71828,
-            100.50,
-            "char10",
-            "varchar50",
-            "some text",
-            b"\\xDEADBEEF",
-            True,
-            "2024-01-01",
-            "12:34:56",
-            "13:45:01+02",
-            "2024-01-01 12:34:56",
-            "2024-01-01 12:34:56+02",
-            "1 year 2 months 3 days",
-        )
-        mycursor.execute(sql, val)
-        mycursor.execute(
-            "CREATE TABLE output_postgres_transaction (Duration INT, "
-            "Pulse INT, Maxpulse INT, Calories FLOAT)"
-        )
-        mycursor.execute(
-            "CREATE TABLE second_output_postgres_transaction (Duration INT, "
-            "Pulse INT, Maxpulse INT, Calories FLOAT)"
-        )
-        mycursor.execute(
-            'CREATE TABLE output_new_postgres_transaction ("Duration" INT, "Pulse" INT,'
-            ' "Maxpulse" INT, "Calories" FLOAT)'
-        )
-        mycursor.execute(
-            'CREATE TABLE second_output_new_postgres_transaction ("Duration" INT,'
-            ' "Pulse" INT, "Maxpulse" INT, "Calories" FLOAT)'
-        )
-        mycursor.execute(
-            'CREATE TABLE output_new_postgres_wo_transaction ("Duration" INT, "Pulse"'
-            ' INT, "Maxpulse" INT, "Calories" FLOAT)'
-        )
-        mycursor.execute(
-            'CREATE TABLE second_output_new_postgres_wo_transaction ("Duration" INT,'
-            ' "Pulse" INT, "Maxpulse" INT, "Calories" FLOAT)'
-        )
-        mycursor.execute("CREATE SCHEMA testing_schema")
-        mydb.commit()
-        logger.info("Postgres container created successfully")
-        return port
-
-
-def get_free_port():
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("", 0))
-        port = s.getsockname()[1]
-    return port
-
-
-@pytest.fixture(scope="session")
 def apiserver_connection() -> APIServer:
     return obtain_connection(APISERVER_URL, "admin", "tabsdata", "sys_admin")
 
@@ -1046,857 +349,9 @@ def tabsserver_connection() -> TabsdataServer:
     return TabsdataServer(APISERVER_URL, "admin", "tabsdata", "sys_admin")
 
 
-@pytest.fixture(scope="session")
-def s3_config():
-
-    config = {
-        "ACCESS_KEY_ENV": "S30__S3_ACCESS_KEY",
-        "SECRET_KEY_ENV": "S30__S3_SECRET_KEY",
-        "URI_ENV": "S30__S3_URI",
-        "REGION_ENV": "S30__S3_REGION",
-    }
-    access_key_id = os.environ.get(config["ACCESS_KEY_ENV"])
-    secret_key = os.environ.get(config["SECRET_KEY_ENV"])
-    if not access_key_id or not secret_key:
-        raise Exception(
-            f"The environment variables {config['ACCESS_KEY_ENV']} and/or "
-            f"{config['SECRET_KEY_ENV']} are not set. Unable to run tests "
-            "using the 's3_config' fixture."
-        )
-    credentials = td.S3AccessKeyCredentials(
-        td.EnvironmentSecret(config["ACCESS_KEY_ENV"]),
-        td.EnvironmentSecret(config["SECRET_KEY_ENV"]),
-    )
-    config["ACCESS_KEY"] = access_key_id
-    config["SECRET_KEY"] = secret_key
-    config["CREDENTIALS"] = credentials
-    region = os.environ.get(config["REGION_ENV"])
-    if not region:
-        raise Exception(
-            f"The environment variable {config['REGION_ENV']} is not set. Unable to "
-            "run tests using the 's3_config' fixture."
-        )
-    config["REGION"] = region
-
-    uri = os.environ.get(config["URI_ENV"])
-    if not uri:
-        raise Exception(
-            f"The environment variable {config['URI_ENV']} is not set. Unable to run "
-            "tests using the 'azure_config' fixture."
-        )
-    config["URI"] = uri
-    bucket_name = uri.replace("s3://", "").split("/", 1)[0]
-    config["BUCKET_NAME"] = bucket_name
-
-    catalog_definition = {
-        "name": "default",
-        "type": "glue",
-        "client.access-key-id": config["ACCESS_KEY"],
-        "client.secret-access-key": config["SECRET_KEY"],
-        "client.region": config["REGION"],
-    }
-    config["CATALOG_DEFINITION"] = catalog_definition
-
-    config["CATALOG_BUCKET_NAME_PREFIX"] = (
-        f'tabsdata-{config["REGION"]}-catalog-metadata'
-    )
-
-    yield config
-
-
-@pytest.fixture(scope="session")
-def s3_client(s3_config):
-    # noinspection PyPackageRequirements
-    import boto3  # Lazy import
-
-    session = boto3.Session(
-        aws_access_key_id=os.environ.get(s3_config["ACCESS_KEY_ENV"]),
-        aws_secret_access_key=os.environ.get(s3_config["SECRET_KEY_ENV"]),
-        region_name=s3_config["REGION"],
-    )
-    client = session.client("s3")
-
-    # noinspection PyBroadException
-    try:
-        bucket_name = s3_config["BUCKET_NAME"]
-
-        create_bucket_configurations = (
-            {"LocationConstraint": s3_config["REGION"]}  # Change region as needed
-            if s3_config["REGION"] != "us-east-1"
-            else {}
-        )
-
-        client.create_bucket(
-            Bucket=bucket_name, CreateBucketConfiguration=create_bucket_configurations
-        )
-    except:
-        pass
-
-    yield client
-
-
-@pytest.fixture(scope="session")
-def azure_config():
-
-    config = {
-        "ACCOUNT_NAME_ENV": "AZ0__AZ_ACCOUNT_NAME",
-        "ACCOUNT_KEY_ENV": "AZ0__AZ_ACCOUNT_KEY",
-        "URI_ENV": "AZ0__AZ_URI",
-    }
-    account_name = os.environ.get(config["ACCOUNT_NAME_ENV"])
-    account_key = os.environ.get(config["ACCOUNT_KEY_ENV"])
-    if not account_name or not account_key:
-        raise Exception(
-            f"The environment variables {config['ACCOUNT_NAME_ENV']} and/or "
-            f"{config['ACCOUNT_KEY_ENV']} are not set. Unable to run tests "
-            "using the 'azure_config' fixture."
-        )
-    credentials = td.AzureAccountKeyCredentials(
-        td.EnvironmentSecret(config["ACCOUNT_NAME_ENV"]),
-        td.EnvironmentSecret(config["ACCOUNT_KEY_ENV"]),
-    )
-    config["CREDENTIALS"] = credentials
-    uri = os.environ.get(config["URI_ENV"])
-    if not uri:
-        raise Exception(
-            f"The environment variable {config['URI_ENV']} is not set. Unable to run "
-            "tests using the 'azure_config' fixture."
-        )
-    config["URI"] = uri
-    container_name = uri.replace("az://", "").split("/", 1)[0]
-    config["CONTAINER_NAME"] = container_name
-    yield config
-
-
-@pytest.fixture(scope="session")
-def azure_client(azure_config):
-    # noinspection PyPackageRequirements
-    from azure.storage.blob import BlobServiceClient  # Lazy import
-
-    account_name = os.environ.get(azure_config["ACCOUNT_NAME_ENV"])
-    account_key = os.environ.get(azure_config["ACCOUNT_KEY_ENV"])
-    service = BlobServiceClient(
-        account_url=f"https://{account_name}.blob.core.windows.net",
-        credential=account_key,
-    )
-    yield service
-
-
-@pytest.fixture(scope="session")
-def gcs_config():
-    # Note: this is currently very simple, but if needed it can be extended. This
-    # dictionary will provide all the pieces necessary for testing against GCP
-
-    config = {
-        "ENV": "GCP0__GCP_SERVICE_ACCOUNT_KEY",
-        "URI_ENV": "GCP0__GCP_STORAGE_URI",
-    }
-    uri = os.environ.get(config["URI_ENV"])
-    if not uri:
-        raise Exception(
-            f"The environment variable {config['URI_ENV']} is not set. Unable to run "
-            "tests using the 'gcp_config' fixture."
-        )
-    bucket_name = uri.replace("gs://", "").split("/", 1)[0]
-    config["BUCKET"] = bucket_name
-    yield config
-
-
-@pytest.fixture
-def gcs_client(tmp_path, gcs_config):
-    from google.cloud import storage  # Lazy import
-
-    gcs_credentials_path = os.path.join(
-        tmp_path, f"gcs_credentials_{uuid.uuid4().hex[:16]}.json"
-    )
-    with open(gcs_credentials_path, "w", encoding="utf-8") as f:
-        if not os.environ.get(gcs_config["ENV"]):
-            raise Exception(
-                "The environment variable "
-                f"{gcs_config['ENV']} is not set. Unable to run "
-                "tests using the 'gcp_client' fixture."
-            )
-        f.write(os.environ.get(gcs_config["ENV"]))
-    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = gcs_credentials_path
-    yield storage.Client()
-    if os.path.exists(gcs_credentials_path):
-        os.remove(gcs_credentials_path)
-    if "GOOGLE_APPLICATION_CREDENTIALS" in os.environ:
-        del os.environ["GOOGLE_APPLICATION_CREDENTIALS"]
-
-
-def get_container_port_binding(container, port: str) -> int:
-    port_binding = container.attrs["NetworkSettings"]["Ports"].get(port)
-    if port_binding and len(port_binding) > 0:
-        return int(port_binding[0]["HostPort"])
-    else:
-        raise Exception(f"Port {port} is not bound in the container.")
-
-
-def create_docker_mysql_database(
-    name: str = DEFAULT_PYTEST_MYSQL_DOCKER_CONTAINER_NAME,
-):
-    # noinspection PyPackageRequirements
-    import docker  # Lazy import
-
-    # noinspection PyPackageRequirements
-    import mysql.connector  # Lazy import
-
-    logger.info("Starting MySQL container")
-    client = docker.from_env()
-    if containers := client.containers.list(filters={"name": name}):
-        logger.info("MySQL container already exists")
-        container = containers[0]
-        return get_container_port_binding(container, MYSQL_FORWARDED_PORT)
-    else:
-        container = client.containers.run(
-            "mysql:9.1.0",
-            name=name,
-            environment=[
-                "MYSQL_ROOT_PASSWORD=password",
-                f"MYSQL_DATABASE={DB_NAME}",
-                f"MYSQL_USER={DB_USER}",
-                f"MYSQL_PASSWORD={DB_PASSWORD}",
-            ],
-            ports={MYSQL_FORWARDED_PORT: None},
-            detach=True,
-        )
-        container.reload()
-        port = get_container_port_binding(container, MYSQL_FORWARDED_PORT)
-        # Wait for the database to be ready
-        retry = 0
-        while True:
-            try:
-                mydb = mysql.connector.connect(
-                    host=DB_HOST,
-                    user=DB_USER,
-                    password=DB_PASSWORD,
-                    database=DB_NAME,
-                    port=port,
-                )
-                break
-            except mysql.connector.Error as err:
-                retry += 1
-                # Waiting for up to 10' & 30'', as young Gauss already knew.
-                if retry == MAXIMUM_RETRY_COUNT:
-                    logger.error(f"Error connecting to MySQL: {err}")
-                    raise err
-                else:
-                    logger.warning(
-                        f"Error connecting to MySQL, retrying in {retry} second(s)"
-                    )
-                    sleep(retry)
-        mycursor = mydb.cursor()
-        mycursor.execute(
-            "CREATE TABLE INVOICE_HEADER (id INT AUTO_INCREMENT PRIMARY KEY, "
-            "name VARCHAR(255))"
-        )
-        sql = "INSERT INTO INVOICE_HEADER (name) VALUES (%s)"
-        val = [
-            ("Arvind",),
-            ("Tucu",),
-            ("Dimas",),
-            ("Joaquin",),
-            ("Jennifer",),
-            ("Aleix",),
-        ]
-        mycursor.executemany(sql, val)
-        mycursor.execute(
-            "CREATE TABLE INVOICE_ITEM (id INT AUTO_INCREMENT PRIMARY KEY, "
-            "name VARCHAR(255))"
-        )
-        sql = "INSERT INTO INVOICE_ITEM (name) VALUES (%s)"
-        val = [
-            ("Leonardo",),
-            ("Donatello",),
-            ("Michelangelo",),
-            ("Raphael",),
-            ("Splinter",),
-        ]
-        mycursor.executemany(sql, val)
-        mycursor.execute(
-            "CREATE TABLE output_sql_transaction (Duration INT, "
-            "Pulse INT, Maxpulse INT, Calories FLOAT)"
-        )
-        mycursor.execute(
-            "CREATE TABLE output_new_sql_transaction (Duration INT, "
-            "Pulse INT, Maxpulse INT, Calories FLOAT)"
-        )
-        mycursor.execute(
-            "CREATE TABLE output_new_sql_wo_transaction (Duration INT, "
-            "Pulse INT, Maxpulse INT, Calories FLOAT)"
-        )
-        mycursor.execute(
-            "CREATE TABLE second_output_sql_transaction (Duration INT, "
-            "Pulse INT, Maxpulse INT, Calories FLOAT)"
-        )
-        mycursor.execute(
-            "CREATE TABLE second_output_new_sql_transaction (Duration INT, "
-            "Pulse INT, Maxpulse INT, Calories FLOAT)"
-        )
-        mycursor.execute(
-            "CREATE TABLE second_output_new_sql_wo_transaction (Duration INT, "
-            "Pulse INT, Maxpulse INT, Calories FLOAT)"
-        )
-        mycursor.execute("""
-            CREATE TABLE ALL_MYSQL_TYPES (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                c_tinyint TINYINT,
-                c_smallint SMALLINT,
-                c_mediumint MEDIUMINT,
-                c_int INT,
-                c_bigint BIGINT,
-                c_float FLOAT,
-                c_double DOUBLE,
-                c_decimal DECIMAL(10,2),
-                c_char CHAR(10),
-                c_varchar VARCHAR(50),
-                c_binary BINARY(8),
-                c_varbinary VARBINARY(16),
-                c_tinyblob TINYBLOB,
-                c_blob BLOB,
-                c_mediumblob MEDIUMBLOB,
-                c_longblob LONGBLOB,
-                c_tinytext TINYTEXT,
-                c_text TEXT,
-                c_mediumtext MEDIUMTEXT,
-                c_longtext LONGTEXT,
-                c_enum ENUM('A', 'B', 'C'),
-                c_set SET('X', 'Y', 'Z'),
-                c_date DATE,
-                c_datetime DATETIME,
-                c_timestamp TIMESTAMP NULL,
-                c_time TIME,
-                c_year YEAR
-            )
-            """)
-        sql = """
-            INSERT INTO ALL_MYSQL_TYPES (
-                c_tinyint, c_smallint, c_mediumint, c_int, c_bigint,
-                c_float, c_double, c_decimal, c_char, c_varchar,
-                c_binary, c_varbinary, c_tinyblob, c_blob, c_mediumblob, c_longblob,
-                c_tinytext, c_text, c_mediumtext, c_longtext,
-                c_enum, c_set, c_date, c_datetime, c_timestamp, c_time, c_year
-            ) VALUES (
-                %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, %s, %s
-            )
-        """
-        val = [
-            (
-                0,
-                2,
-                1000,
-                10000,
-                100000,
-                1.23,
-                2.34,
-                12345.67,
-                "char1",
-                "varchar1",
-                b"binary1",
-                b"varbinary1",
-                b"tinyblob1",
-                b"blob1",
-                b"mediumblob1",
-                b"longblob1",
-                "tinytext1",
-                "text1",
-                "mediumtext1",
-                "longtext1",
-                "A",
-                "X,Y",
-                "2024-01-01",
-                "2024-01-01 12:34:56",
-                "2024-01-01 12:34:56",
-                "12:34:56",
-                2024,
-            ),
-            (
-                0,
-                200,
-                2000,
-                20000,
-                200000,
-                3.45,
-                4.56,
-                23456.78,
-                "char2",
-                "varchar2",
-                b"binary2",
-                b"varbinary2",
-                b"tinyblob2",
-                b"blob2",
-                b"mediumblob2",
-                b"longblob2",
-                "tinytext2",
-                "text2",
-                "mediumtext2",
-                "longtext2",
-                "B",
-                "Y,Z",
-                "2025-02-02",
-                "2025-02-02 23:45:01",
-                "2025-02-02 23:45:01",
-                "23:45:01",
-                2025,
-            ),
-        ]
-        mycursor.executemany(sql, val)
-        mydb.commit()
-        logger.info("MySQL container created successfully")
-        return port
-
-
-def create_docker_hashicorp_vault(s3_config: dict):
-    # noinspection PyPackageRequirements
-    import docker  # Lazy import
-    import hvac  # Lazy import
-
-    logger.info("Starting HashiCorp vault container")
-    client = docker.from_env()
-    if client.containers.list(
-        filters={"name": DEFAULT_PYTEST_HASHICORP_DOCKER_CONTAINER_NAME}
-    ):
-        logger.info("HashiCorp vault container already exists")
-        return
-    else:
-        client.containers.run(
-            "hashicorp/vault",
-            name=DEFAULT_PYTEST_HASHICORP_DOCKER_CONTAINER_NAME,
-            environment=[
-                f"VAULT_DEV_ROOT_TOKEN_ID={HASHICORP_TESTING_TOKEN}",
-            ],
-            ports={"8200/tcp": HASHICORP_PORT},
-            detach=True,
-        )
-        # Wait for the database to be ready
-        retry = 0
-        while True:
-            try:
-                hashicorp_client = hvac.Client(
-                    url=HASHICORP_TESTING_URL,
-                    token=HASHICORP_TESTING_TOKEN,
-                    verify=True,
-                )
-                hashicorp_client.secrets.kv.v2.create_or_update_secret(
-                    path=HASHICORP_TESTING_SECRET_PATH,
-                    secret={
-                        HASHICORP_TESTING_SECRET_NAME: HASHICORP_TESTING_SECRET_VALUE
-                    },
-                )
-                # Needed for test_input_s3_hashicorp_secret to work
-                hashicorp_client.secrets.kv.v2.create_or_update_secret(
-                    path="aws/s3creds",
-                    secret={
-                        "access_key_id": os.environ.get(s3_config["ACCESS_KEY_ENV"])
-                    },
-                )
-                # Needed for the config_resolver tests to work
-                hashicorp_client.secrets.kv.v2.create_or_update_secret(
-                    path="/tabsdata/dev",
-                    secret={"jwt_secret": "jwt_secret_value"},
-                )
-                hashicorp_client.secrets.kv.v2.create_or_update_secret(
-                    path="/tabsdata/dev/s3a",
-                    secret={
-                        "bucket": "bucket_value",
-                        "region": "region_value",
-                        "access_key": "access_key_value",
-                        "secret_key": "secret_key_value",
-                    },
-                )
-                hashicorp_client.secrets.kv.v2.create_or_update_secret(
-                    path="/td/dev/aza",
-                    secret={
-                        "azure_account_name": "azure_account_name_value",
-                        "azure_account_key": "azure_account_key_value",
-                    },
-                )
-                return
-            except Exception as err:
-                retry += 1
-                # Waiting for up to 10' & 30'', as young Gauss already knew.
-                if retry == MAXIMUM_RETRY_COUNT:
-                    logger.error(f"Error connecting to HashiCorp vault: {err}")
-                    raise err
-                else:
-                    logger.warning(
-                        f"Error connecting to HashiCorp vault, retrying in {retry} "
-                        "second(s)"
-                    )
-                    sleep(retry)
-
-
-def create_docker_mariadb_database(
-    name: str = DEFAULT_PYTEST_MARIADB_DOCKER_CONTAINER_NAME,
-):
-    # noinspection PyPackageRequirements
-    import docker  # Lazy import
-
-    # noinspection PyPackageRequirements
-    import mysql.connector  # Lazy import
-
-    logger.info("Starting MariaDB container")
-    client = docker.from_env()
-    if containers := client.containers.list(filters={"name": name}):
-        logger.info("MariaDB container already exists")
-        container = containers[0]
-        return get_container_port_binding(container, MARIADB_FORWARDED_PORT)
-    else:
-        container = client.containers.run(
-            "mariadb:11.4.4",
-            name=name,
-            environment=[
-                "MARIADB_ROOT_PASSWORD=password",
-                f"MARIADB_DATABASE={DB_NAME}",
-                f"MARIADB_USER={DB_USER}",
-                f"MARIADB_PASSWORD={DB_PASSWORD}",
-            ],
-            ports={MARIADB_FORWARDED_PORT: None},
-            detach=True,
-        )
-        container.reload()
-        port = get_container_port_binding(container, MARIADB_FORWARDED_PORT)
-        # Wait for the database to be ready
-        retry = 0
-        while True:
-            try:
-                mydb = mysql.connector.connect(
-                    host=DB_HOST,
-                    user=DB_USER,
-                    password=DB_PASSWORD,
-                    database=DB_NAME,
-                    port=port,
-                    collation=MARIADB_COLLATION,
-                )
-                break
-            except mysql.connector.Error as err:
-                retry += 1
-                # Waiting for up to 10' & 30'', as young Gauss already knew.
-                if retry == MAXIMUM_RETRY_COUNT:
-                    logger.error(f"Error connecting to MariaDB: {err}")
-                    raise err
-                else:
-                    logger.warning(
-                        f"Error connecting to MariaDB, retrying in {retry} second(s)"
-                    )
-                    sleep(retry)
-        mycursor = mydb.cursor()
-        mycursor.execute(
-            "CREATE TABLE INVOICE_HEADER (id INT AUTO_INCREMENT PRIMARY KEY, "
-            "name VARCHAR(255))"
-        )
-        sql = "INSERT INTO INVOICE_HEADER (name) VALUES (%s)"
-        val = [
-            ("Arvind",),
-            ("Tucu",),
-            ("Dimas",),
-            ("Joaquin",),
-            ("Jennifer",),
-            ("Aleix",),
-        ]
-        mycursor.executemany(sql, val)
-        mycursor.execute(
-            "CREATE TABLE INVOICE_ITEM (id INT AUTO_INCREMENT PRIMARY KEY, "
-            "name VARCHAR(255))"
-        )
-        sql = "INSERT INTO INVOICE_ITEM (name) VALUES (%s)"
-        val = [
-            ("Leonardo",),
-            ("Donatello",),
-            ("Michelangelo",),
-            ("Raphael",),
-            ("Splinter",),
-        ]
-        mycursor.executemany(sql, val)
-        mycursor.execute("""
-                CREATE TABLE ALL_MARIADB_TYPES (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                c_tinyint TINYINT,
-                c_smallint SMALLINT,
-                c_mediumint MEDIUMINT,
-                c_int INT,
-                c_bigint BIGINT,
-                c_float FLOAT,
-                c_double DOUBLE,
-                c_decimal DECIMAL(10,2),
-                c_char CHAR(10),
-                c_varchar VARCHAR(50),
-                c_binary BINARY(8),
-                c_varbinary VARBINARY(16),
-                c_tinyblob TINYBLOB,
-                c_blob BLOB,
-                c_mediumblob MEDIUMBLOB,
-                c_longblob LONGBLOB,
-                c_tinytext TINYTEXT,
-                c_text TEXT,
-                c_mediumtext MEDIUMTEXT,
-                c_longtext LONGTEXT,
-                c_enum ENUM('A', 'B', 'C'),
-                c_set SET('X', 'Y', 'Z'),
-                c_date DATE,
-                c_datetime DATETIME,
-                c_timestamp TIMESTAMP NULL,
-                c_time TIME,
-                c_year YEAR
-            );
-            """)
-
-        sql = """
-            INSERT INTO ALL_MARIADB_TYPES (
-                c_tinyint, c_smallint, c_mediumint, c_int, c_bigint,
-                c_float, c_double, c_decimal, c_char, c_varchar,
-                c_binary, c_varbinary, c_tinyblob, c_blob, c_mediumblob, c_longblob,
-                c_tinytext, c_text, c_mediumtext, c_longtext,
-                c_enum, c_set, c_date, c_datetime, c_timestamp, c_time, c_year
-            ) VALUES (
-                %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, %s, %s
-            )
-        """
-        val = [
-            (
-                1,
-                2,
-                1000,
-                10000,
-                100000,
-                1.23,
-                2.34,
-                12345.67,
-                "char1",
-                "varchar1",
-                b"binary1",
-                b"varbinary1",
-                b"tinyblob1",
-                b"blob1",
-                b"mediumblob1",
-                b"longblob1",
-                "tinytext1",
-                "text1",
-                "mediumtext1",
-                "longtext1",
-                "A",
-                "X,Y",
-                "2024-01-01",
-                "2024-01-01 12:34:56",
-                "2024-01-01 12:34:56",
-                "12:34:56",
-                2024,
-            ),
-            (
-                2,
-                200,
-                2000,
-                20000,
-                200000,
-                3.45,
-                4.56,
-                23456.78,
-                "char2",
-                "varchar2",
-                b"binary2",
-                b"varbinary2",
-                b"tinyblob2",
-                b"blob2",
-                b"mediumblob2",
-                b"longblob2",
-                "tinytext2",
-                "text2",
-                "mediumtext2",
-                "longtext2",
-                "B",
-                "Y,Z",
-                "2025-02-02",
-                "2025-02-02 23:45:01",
-                "2025-02-02 23:45:01",
-                "23:45:01",
-                2025,
-            ),
-        ]
-        mycursor.executemany(sql, val)
-
-        mycursor.execute(
-            "CREATE TABLE output_mariadb_transaction (Duration INT, "
-            "Pulse INT, Maxpulse INT, Calories FLOAT)"
-        )
-        mycursor.execute(
-            "CREATE TABLE second_output_mariadb_transaction (Duration INT, "
-            "Pulse INT, Maxpulse INT, Calories FLOAT)"
-        )
-        mycursor.execute(
-            "CREATE TABLE output_new_mariadb_transaction (Duration INT, "
-            "Pulse INT, Maxpulse INT, Calories FLOAT)"
-        )
-        mycursor.execute(
-            "CREATE TABLE second_output_new_mariadb_transaction (Duration INT, "
-            "Pulse INT, Maxpulse INT, Calories FLOAT)"
-        )
-        mycursor.execute(
-            "CREATE TABLE output_new_mariadb_wo_transaction (Duration INT, "
-            "Pulse INT, Maxpulse INT, Calories FLOAT)"
-        )
-        mycursor.execute(
-            "CREATE TABLE second_output_new_mariadb_wo_transaction (Duration INT, "
-            "Pulse INT, Maxpulse INT, Calories FLOAT)"
-        )
-        mydb.commit()
-        logger.info("MariaDB container created successfully")
-        return port
-
-
-def create_docker_oracle_database(
-    name: str = DEFAULT_PYTEST_ORACLE_DOCKER_CONTAINER_NAME,
-):
-    # noinspection PyPackageRequirements
-    import docker  # Lazy import
-
-    # noinspection PyPackageRequirements
-    import oracledb  # Lazy import
-
-    logger.info("Starting Oracle container")
-    client = docker.from_env()
-    if containers := client.containers.list(filters={"name": name}):
-        logger.info("Oracle container already exists")
-        container = containers[0]
-        return get_container_port_binding(container, ORACLE_FORWARDED_PORT)
-    else:
-        container = client.containers.run(
-            "container-registry.oracle.com/database/free:23.6.0.0-lite",
-            name=name,
-            environment=[
-                f"ORACLE_PWD={DB_PASSWORD}",
-            ],
-            ports={ORACLE_FORWARDED_PORT: None},
-            detach=True,
-        )
-        container.reload()
-        port = get_container_port_binding(container, ORACLE_FORWARDED_PORT)
-        # Wait for the database to be ready
-        retry = 0
-        while True:
-            try:
-                dsn_tns = oracledb.makedsn(DB_HOST, port, service_name="FREE")
-                mydb = oracledb.connect(
-                    user="system", password=DB_PASSWORD, dsn=dsn_tns
-                )
-                break
-            except (Exception, oracledb.DatabaseError) as err:
-                retry += 1
-                # Waiting for up to 10' & 30'', as young Gauss already knew.
-                if retry == MAXIMUM_RETRY_COUNT:
-                    logger.error(f"Error connecting to Oracle: {err}")
-                    raise err
-                else:
-                    logger.warning(
-                        f"Error connecting to Oracle, retrying in {retry} second(s)"
-                    )
-                    sleep(retry)
-        mycursor = mydb.cursor()
-        mycursor.execute(
-            "CREATE TABLE INVOICE_HEADER (id INT GENERATED BY DEFAULT AS IDENTITY, name"
-            " VARCHAR2(255))"
-        )
-        names = ["Arvind", "Tucu", "Dimas", "Joaquin", "Jennifer", "Aleix"]
-        for name in names:
-            sql = f"INSERT INTO INVOICE_HEADER (name) VALUES ('{name}')"
-            mycursor.execute(sql)
-        mycursor.execute(
-            "CREATE TABLE INVOICE_ITEM (id INT GENERATED BY DEFAULT AS IDENTITY, name"
-            " VARCHAR2(255))"
-        )
-        names = ["Leonardo", "Donatello", "Michelangelo", "Raphael", "Splinter"]
-        for name in names:
-            sql = f"INSERT INTO INVOICE_ITEM (name) VALUES ('{name}')"
-            mycursor.execute(sql)
-        mycursor.execute(
-            'CREATE TABLE output_oracle_list ("Duration" INT, '
-            '"Pulse" INT, "Maxpulse" INT, "Calories" FLOAT)'
-        )
-        mycursor.execute(
-            'CREATE TABLE output_oracle_driver_provided ("Duration" INT, '
-            '"Pulse" INT, "Maxpulse" INT, "Calories" FLOAT)'
-        )
-        mycursor.execute(
-            'CREATE TABLE second_output_oracle_list ("Duration" INT, '
-            '"Pulse" INT, "Maxpulse" INT, "Calories" FLOAT)'
-        )
-        mycursor.execute(
-            'CREATE TABLE output_oracle_transaction ("Duration" INT, '
-            '"Pulse" INT, "Maxpulse" INT, "Calories" FLOAT)'
-        )
-        mycursor.execute(
-            'CREATE TABLE second_output_oracle_transaction ("Duration" INT, '
-            '"Pulse" INT, "Maxpulse" INT, "Calories" FLOAT)'
-        )
-        mycursor.execute("""
-            CREATE TABLE all_oracle_types (
-                id NUMBER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-                c_number NUMBER,
-                c_float FLOAT,
-                c_binary_float BINARY_FLOAT,
-                c_binary_double BINARY_DOUBLE,
-                c_char CHAR(10),
-                c_varchar2 VARCHAR2(50),
-                c_nchar NCHAR(10),
-                c_nvarchar2 NVARCHAR2(50),
-                c_date DATE,
-                c_timestamp TIMESTAMP,
-                c_timestamp_tz TIMESTAMP WITH TIME ZONE,
-                c_timestamp_ltz TIMESTAMP WITH LOCAL TIME ZONE,
-                c_interval_ym INTERVAL YEAR TO MONTH,
-                c_interval_ds INTERVAL DAY TO SECOND,
-                c_clob CLOB,
-                c_nclob NCLOB,
-                c_blob BLOB,
-                c_raw RAW(16),
-                c_long LONG
-            )
-        """)
-
-        sql = """
-            INSERT INTO all_oracle_types (
-                c_number, c_float, c_binary_float, c_binary_double, c_char, c_varchar2,
-                c_nchar, c_nvarchar2, c_date, c_timestamp, c_timestamp_tz, c_timestamp_ltz,
-                c_interval_ym, c_interval_ds, c_clob, c_nclob, c_blob, c_raw, c_long
-            ) VALUES (
-                :1, :2, :3, :4, :5, :6, :7, :8, :9, :10, :11, :12, :13, :14, :15, :16, :17, :18, :19
-            )
-        """
-        val = (
-            42,
-            3.14,
-            1.23,
-            2.34,
-            "char10",
-            "varchar50",
-            "nchar10",
-            "nvarchar50",
-            date(2024, 1, 1),  # c_date
-            datetime(2024, 1, 1, 13, 0, 0),  # c_timestamp
-            datetime(
-                2024, 1, 1, 12, 34, 56, tzinfo=ZoneInfo("Australia/Sydney")
-            ),  # c_timestamp_tz
-            datetime(2024, 1, 1, 12, 34, 56, tzinfo=ZoneInfo("Australia/Sydney")),
-            "2-6",  # INTERVAL YEAR TO MONTH
-            "5 12:30:16.123",  # INTERVAL DAY TO SECOND
-            "some clob data",
-            "some nclob data",
-            b"some blob data",
-            b"\x00\x11\x22\x33\x44\x55\x66\x77\x88\x99\xaa\xbb\xcc\xdd\xee\xff",
-            "some long data",
-        )
-        mycursor.execute(sql, val)
-        mydb.commit()
-        logger.info("Oracle container created successfully")
-        return port
+def clean_everything():
+    clean_python_virtual_environments()
+    clean_docker_containers()
 
 
 # noinspection PyUnusedLocal
@@ -1909,76 +364,8 @@ def pytest_sessionfinish(session, exitstatus):
     clean_everything()
 
 
-def clean_everything():
-    clean_python_virtual_environments()
-    try:
-        docker_containters_to_clean = [
-            DEFAULT_PYTEST_MARIADB_DOCKER_CONTAINER_NAME,
-            DEFAULT_PYTEST_ORACLE_DOCKER_CONTAINER_NAME,
-            DEFAULT_PYTEST_HASHICORP_DOCKER_CONTAINER_NAME,
-            DEFAULT_PYTEST_POSTGRES_DOCKER_CONTAINER_NAME,
-        ]
-        for prefix in VALID_MYSQL_PREFIXES:
-            # Check for {prefix}__MYSQL_DOCKER_CONTAINER_NAME environment variables
-            mysql_env_var = f"{prefix}__MYSQL_DOCKER_CONTAINER_NAME"
-            if (
-                os.environ.get(f"{prefix}__MYSQL_DONT_KILL") not in TRUE_VALUES
-                and os.environ.get(f"{prefix}__MYSQL_ENVS") not in TRUE_VALUES
-            ):
-                mysql_container_name = os.environ.get(
-                    mysql_env_var,
-                    DEFAULT_PYTEST_MYSQL_DOCKER_CONTAINER_NAME,
-                )
-                docker_containters_to_clean.append(mysql_container_name)
-        name_pattern = "^(" + "|".join(docker_containters_to_clean) + ")$"
-        remove_docker_containers(name_pattern)
-    except Exception as e:
-        logger.warning(
-            "Error removing Docker containers. You can safely ignore it if running"
-            f" tests on a Docker-less machine: {e}"
-        )
-
-
-def clean_python_virtual_environments():
-    if not os.path.exists(DEFAULT_ENVIRONMENT_TESTIMONY_FOLDER):
-        logger.info("No virtual environments to clean up.")
-        return
-
-    try:
-        existing_virtual_environments = sorted(
-            os.listdir(DEFAULT_ENVIRONMENT_TESTIMONY_FOLDER)
-        )
-        logger.debug("Existing virtual environments:")
-        for environment in existing_virtual_environments:
-            logger.debug(f"· {environment}")
-        for environment in existing_virtual_environments:
-            if PYTEST_DEFAULT_ENVIRONMENT_PREFIX in environment:
-                testimony_data = read_testimony(environment)
-                real_name = testimony_data.real_name
-                logger.info(
-                    f"Cleaning up environment {environment} with real name {real_name}"
-                )
-                delete_virtual_environment(environment, real_name)
-    except Exception as e:
-        logger.warning(f"Error cleaning up the virtual environments: {e}.")
-        logger.warning("Ignoring this exception as it is not critical.")
-
-
-def remove_docker_containers(name_pattern):
-    # noinspection PyPackageRequirements
-    import docker  # Lazy import
-
-    client = docker.from_env()
-    for container in client.containers.list(all=True, filters={"name": name_pattern}):
-        try:
-            logger.info(f"Removing container {container}")
-            container.remove(v=True, force=True)
-        except Exception as e:
-            logger.error(f"Failed to remove container {container}. Error: {e}")
-
-
 class V2FunctionContext:
-    """Simple class to enable us to generate yaml files for testing that emulate the
+    """Simple class to enable us to generate YAML files for testing that emulate the
     ones generated by the rust backend"""
 
     def __init__(self, content):
@@ -1986,7 +373,7 @@ class V2FunctionContext:
 
 
 class V1StageTriggerContext:
-    """Simple class to enable us to generate yaml files for testing that emulate the
+    """Simple class to enable us to generate YAML files for testing that emulate the
     ones generated by the rust backend"""
 
     def __init__(self, content):
@@ -2006,7 +393,7 @@ class MockTableVersions:
 def v2_function_context_format_representer(
     dumper: yaml.SafeDumper, v1_execution_context_format: V2FunctionContext
 ) -> yaml.nodes.MappingNode:
-    """Represent a V2_yaml instance as a YAML mapping node."""
+    """Represent a V2_YAML instance as a YAML mapping node."""
     dumper.add_representer(MockTable, v1_mock_table_representer)
     dumper.add_representer(MockTableVersions, v1_mock_table_versions_representer)
     return dumper.represent_mapping("!FunctionV2", v1_execution_context_format.content)
@@ -2029,12 +416,12 @@ def v1_mock_table_versions_representer(
 def v1_listener_context_format_representer(
     dumper: yaml.SafeDumper, v1_listener_context: V1StageTriggerContext
 ) -> yaml.nodes.MappingNode:
-    """Represent a V2_yaml instance as a YAML mapping node."""
+    """Represent a V2_YAML instance as a YAML mapping node."""
     return dumper.represent_mapping("!StageTriggerV1", v1_listener_context.content)
 
 
 def get_dumper():
-    """Add representers to a YAML seriailizer."""
+    """Add representers to a YAML serializer."""
     safe_dumper = yaml.SafeDumper
     safe_dumper.add_representer(
         V2FunctionContext, v2_function_context_format_representer
@@ -2179,7 +566,6 @@ def write_v2_function_yaml_file(
 def write_v1_listener_yaml_file(
     filename: str,
     bundle_archive_location: str,
-    staging_uri: str | None = None,
 ):
     content: dict[str, Any] = {
         "info": {
@@ -2215,11 +601,6 @@ def write_v1_listener_yaml_file(
             ),
         },
     }
-    if staging_uri:
-        content["info"]["function_stage"] = {
-            "uri": staging_uri,
-            "env_prefix": "STAGE",
-        }
 
     v1_listener_context = V1StageTriggerContext(content)
     with open(filename, "w") as stream:
@@ -2316,7 +697,7 @@ def testing_collection_with_table(worker_id, tabsserver_connection):
         ):
             logger.debug(
                 f"Dataversion '{dataversion}' is in status '"
-                f"{dataversion.status}', indicating that the data is ready "
+                f"{dataversion.status}, indicating that the data is ready "
                 "to be consumed."
             )
             break
@@ -2324,7 +705,7 @@ def testing_collection_with_table(worker_id, tabsserver_connection):
             if dataversion:
                 logger.debug(
                     f"Dataversion '{dataversion}' is in status '"
-                    f"{dataversion.status}', indicating that the data is NOT "
+                    f"{dataversion.status}, indicating that the data is NOT "
                     "ready to be consumed yet."
                 )
             else:
@@ -2334,7 +715,7 @@ def testing_collection_with_table(worker_id, tabsserver_connection):
             logger.debug(f"Table '{random_id}' - '{file_path}' does not have data yet")
             logger.debug(f"Retrying '{random_id}' - '{file_path}' in {retry} seconds")
             retry += 1
-            # Waiting for up to 10' & 30'', as young Gauss already knew.
+            # Waiting for up to 10'' & 30'', as young Gauss already knew.
             if retry == MAXIMUM_RETRY_COUNT:
                 raise ValueError(
                     f"Failed to get data from the table after {retry} retries."

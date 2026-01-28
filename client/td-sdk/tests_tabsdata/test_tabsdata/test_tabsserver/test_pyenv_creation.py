@@ -31,7 +31,9 @@ from tabsdata._utils.bundle_utils import (
     PYTHON_VERSION_KEY,
     TABSDATA_MODULE_NAME,
 )
-from tests_tabsdata.conftest import PYTEST_DEFAULT_ENVIRONMENT_PREFIX
+from tests_tabsdata.common.constants import (
+    PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+)
 
 # noinspection PyUnresolvedReferences
 from . import pytestmark  # noqa: F401

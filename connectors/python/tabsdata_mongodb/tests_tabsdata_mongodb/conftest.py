@@ -6,7 +6,11 @@ from __future__ import annotations
 
 import logging
 
-from conftest import DOCKER_COMPOSE_CONTAINER_INFIX, PYTEST_DEFAULT_ENVIRONMENT_PREFIX
+from tests_tabsdata.common.constants import (
+    DOCKER_COMPOSE_CONTAINER_INFIX,
+    PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+)
+from tests_tabsdata.common.docker import remove_docker_containers
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -31,16 +35,17 @@ from filelock import FileLock
 from xdist.workermanage import WorkerController
 
 from tabsdata._utils.tdlogging import setup_tests_logging
-from tests_tabsdata.conftest import (
+from tests_tabsdata.common.constants import (
     DB_HOST,
     DB_PASSWORD,
     DB_USER,
     DOCKER_REGULAR_CONTAINER_INFIX,
+)
+from tests_tabsdata.conftest import (
     MAXIMUM_RETRY_COUNT,
     clean_python_virtual_environments,
     pytest_addoption,
     pytest_generate_tests,
-    remove_docker_containers,
     setup_temp_folder,
     setup_temp_folder_node,
 )

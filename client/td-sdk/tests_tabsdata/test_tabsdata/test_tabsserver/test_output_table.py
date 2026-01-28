@@ -18,11 +18,11 @@ from tabsdata._utils.bundle_utils import create_bundle_archive
 from tabsdata._utils.tableframe._common import drop_system_columns
 from tabsdata._utils.tableframe._helpers import SYSTEM_COLUMNS
 from tests_tabsdata.bootest import TDLOCAL_FOLDER
+from tests_tabsdata.common.constants import PYTEST_DEFAULT_ENVIRONMENT_PREFIX
 from tests_tabsdata.conftest import (
     ABSOLUTE_TEST_FOLDER_LOCATION,
     FUNCTION_DATA_FOLDER,
     LOCAL_PACKAGES_LIST,
-    PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
     TESTING_RESOURCES_FOLDER,
     clean_polars_df,
     read_json_and_clean,

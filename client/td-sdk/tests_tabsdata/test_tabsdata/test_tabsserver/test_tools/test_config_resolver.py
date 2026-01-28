@@ -8,9 +8,11 @@ import pytest
 import yaml
 
 from tabsdata._tabsserver.tools.config_resolver import ConfigResolver
-from tests_tabsdata.conftest import (
+from tests_tabsdata.common.backend import (
     HASHICORP_TESTING_TOKEN,
     HASHICORP_TESTING_URL,
+)
+from tests_tabsdata.conftest import (
     TESTING_RESOURCES_FOLDER,
 )
 

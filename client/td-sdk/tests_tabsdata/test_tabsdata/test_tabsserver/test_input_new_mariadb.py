@@ -19,16 +19,18 @@ from tabsdata._tabsserver.invoker import invoke as tabsserver_main
 from tabsdata._utils.bundle_utils import create_bundle_archive
 from tabsdata.tableframe import dtypes as td_dtypes
 from tests_tabsdata.bootest import TDLOCAL_FOLDER
-from tests_tabsdata.conftest import (
-    ABSOLUTE_TEST_FOLDER_LOCATION,
+from tests_tabsdata.common.backend import MARIADB_PORT
+from tests_tabsdata.common.constants import (
     DB_HOST,
     DB_NAME,
     DB_PASSWORD,
     DB_USER,
+    PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+)
+from tests_tabsdata.conftest import (
+    ABSOLUTE_TEST_FOLDER_LOCATION,
     FUNCTION_DATA_FOLDER,
     LOCAL_PACKAGES_LIST,
-    MARIADB_PORT,
-    PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
     TESTING_RESOURCES_FOLDER,
     clean_polars_df,
     read_json_and_clean,

@@ -15,10 +15,10 @@ from tabsdata._tabsserver.invoker import REQUEST_FILE_NAME
 from tabsdata._tabsserver.invoker import invoke as tabsserver_main
 from tabsdata._utils.bundle_utils import create_bundle_archive
 from tests_tabsdata.bootest import TDLOCAL_FOLDER
+from tests_tabsdata.common.constants import PYTEST_DEFAULT_ENVIRONMENT_PREFIX
 from tests_tabsdata.conftest import (
     ABSOLUTE_TEST_FOLDER_LOCATION,
     LOCAL_PACKAGES_LIST,
-    PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
     write_v1_listener_yaml_file,
 )
 from tests_tabsdata.testing_resources.test_input_stagetrigger.example import (

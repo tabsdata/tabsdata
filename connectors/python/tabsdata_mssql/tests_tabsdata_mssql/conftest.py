@@ -9,7 +9,10 @@ import os
 import urllib
 from dataclasses import dataclass
 
-from conftest import DOCKER_REGULAR_CONTAINER_INFIX, PYTEST_DEFAULT_ENVIRONMENT_PREFIX
+from tests_tabsdata.common.constants import (
+    DOCKER_REGULAR_CONTAINER_INFIX,
+    PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -35,15 +38,17 @@ from filelock import FileLock
 from xdist.workermanage import WorkerController
 
 from tabsdata._utils.tdlogging import setup_tests_logging
-from tests_tabsdata.conftest import (
+from tests_tabsdata.common.constants import (
     DB_HOST,
     DB_NAME,
     DB_PASSWORD,
     MAXIMUM_RETRY_COUNT,
-    clean_python_virtual_environments,
-    pytest_addoption,
-    pytest_generate_tests,
+)
+from tests_tabsdata.common.docker import (
     remove_docker_containers,
+)
+from tests_tabsdata.conftest import (
+    clean_python_virtual_environments,
     setup_temp_folder,
     setup_temp_folder_node,
 )

@@ -22,10 +22,10 @@ from tabsdata._utils.bundle_utils import create_bundle_archive
 
 # noinspection PyProtectedMember
 from tests_tabsdata.bootest import ROOT_FOLDER, TDLOCAL_FOLDER
+from tests_tabsdata.common.constants import PYTEST_DEFAULT_ENVIRONMENT_PREFIX
 from tests_tabsdata.conftest import (
     FUNCTION_DATA_FOLDER,
     LOCAL_PACKAGES_LIST,
-    PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
     clean_polars_df,
     get_lf,
     read_json_and_clean,

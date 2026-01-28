@@ -23,10 +23,10 @@ from tabsdata._tabsserver.invoker import REQUEST_FILE_NAME
 from tabsdata._tabsserver.invoker import invoke as tabsserver_main
 from tabsdata._utils.bundle_utils import create_bundle_archive
 from tests_tabsdata.bootest import ROOT_FOLDER, TDLOCAL_FOLDER
+from tests_tabsdata.common.constants import PYTEST_DEFAULT_ENVIRONMENT_PREFIX
 from tests_tabsdata.conftest import (
     FUNCTION_DATA_FOLDER,
     LOCAL_PACKAGES_LIST,
-    PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
     clean_polars_df,
     read_json_and_clean,
     write_v2_function_yaml_file,
