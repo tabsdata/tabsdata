@@ -2202,6 +2202,10 @@ class ErrorCode(Enum):
             " instead."
         ),
     }
+    STR1 = {
+        "code": "STR-001",
+        "message": "KafkaStageTrigger execution failed with status: {}",
+    }
 
     # Testing
     DQC0 = object()

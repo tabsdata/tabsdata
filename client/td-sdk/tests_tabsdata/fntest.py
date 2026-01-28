@@ -9,7 +9,7 @@ import tempfile
 from enum import Enum
 from io import StringIO
 from pathlib import Path
-from typing import Any, Callable, TypeAlias, Union, cast
+from typing import Any, Callable, Literal, TypeAlias, Union, cast
 from unittest import mock
 
 import pandas as pd
@@ -26,13 +26,23 @@ from tabsdata import (
     subscriber,
     transformer,
 )
+from tabsdata._io.stage_trigger import (
+    CallConfig,
+    LocalFileStageTriggerContext,
+    StageTrigger,
+    StageTriggerContext,
+    StageTriggerStatus,
+)
 from tabsdata._tabsserver import invoker
 from tabsdata._tabsserver.function.global_utils import (
     DEFAULT_DEVELOPMENT_LOCKS_LOCATION,
-    convert_path_to_uri,
 )
 from tabsdata._tabsserver.function.response_utils import RESPONSE_FILE_NAME
 from tabsdata._tabsserver.function.yaml_parsing import (
+    ExceptionYaml,
+    FunctionYaml,
+    ResponseYaml,
+    StageTriggerYaml,
     parse_exception_yaml,
     parse_request_yaml,
     parse_response_yaml,
@@ -41,6 +51,7 @@ from tabsdata._tabsserver.invoker import REQUEST_FILE_NAME
 from tabsdata._utils.bundle_utils import create_bundle_archive
 from tabsdata._utils.constants import TRUE_VALUES
 from tabsdata._utils.tableframe import _helpers as td_helpers
+from tabsdata.exceptions import StageTriggerExecutionError
 from tabsdata.expansions.foundation.symbols import EXCEPTION_FILE
 from tabsdata.tableframe._actions.dataquality.processor import DataQualityProcessor
 from tabsdata.tableframe.lazyframe.properties import TableFramePropertiesBuilder
@@ -51,6 +62,8 @@ from tests_tabsdata.conftest import (
     write_v2_function_yaml_file,
 )
 
+HTTP_METHODS: TypeAlias = Literal["GET", "POST", "PUT"]
+
 EXCEPTION_FILE_NAME = EXCEPTION_FILE
 
 TD_USE_CURRENT_VENV = "TD_USE_CURRENT_VENV"
@@ -59,33 +72,77 @@ TD_USE_CURRENT_VENV = "TD_USE_CURRENT_VENV"
 def pytest_configure(config):
     config.addinivalue_line(
         "markers",
-        "tdfnrun(venv=True): automatically add behaviours to 'tdfnrun' tests. Set"
-        " venv=False to use current virtual environment instead of creating a new one.",
+        "tdfntrigger(venv=True): automatically add behaviours to 'tdfntrigger' tests. "
+        "Set venv=False to use current virtual environment instead of creating a new "
+        "one.",
     )
+    config.addinivalue_line(
+        "markers",
+        "tdfnrun(venv=True): automatically add behaviours to 'tdfnrun' tests."
+        "Set venv=False to use current virtual environment instead of creating a new"
+        "one.",
+    )
+    config.addinivalue_line(
+        "markers",
+        "tdfnjob(venv=True): automatically add behaviours to 'tdfnjob' tests."
+        "Set venv=False to use current virtual environment instead of creating a new"
+        "one.",
+    )
+
+
+from contextlib import contextmanager
+
+
+@contextmanager
+def handle_venv(venv: bool):
+    if not venv:
+        os.environ[TD_USE_CURRENT_VENV] = "true"
+    else:
+        os.environ[TD_USE_CURRENT_VENV] = "false"
+    try:
+        yield
+    finally:
+        if not venv:
+            os.environ.pop(TD_USE_CURRENT_VENV, None)
+
+
+@contextmanager
+def handle_stdin():
+    with mock.patch("sys.stdin", StringIO("mock_key: mock_value\n")):
+        yield
+
+
+@contextmanager
+def setup(marker):
+    if marker:
+        venv = marker.kwargs.get("venv", False)
+        with handle_venv(venv), handle_stdin():
+            yield
+    else:
+        yield
+
+
+@pytest.fixture(autouse=True)
+def tdfntrigger_fixture(request):
+    with setup(request.node.get_closest_marker("tdfntrigger")):
+        yield
 
 
 @pytest.fixture(autouse=True)
 def tdfnrun_fixture(request):
-    marker = request.node.get_closest_marker("tdfnrun")
-    if marker:
-        venv = marker.kwargs.get("venv", False)
-        if not venv:
-            os.environ[TD_USE_CURRENT_VENV] = "true"
-        else:
-            os.environ[TD_USE_CURRENT_VENV] = "false"
-        try:
-            with mock.patch("sys.stdin", StringIO("mock_key: mock_value\n")):
-                yield
-        finally:
-            if not venv:
-                os.environ.pop(TD_USE_CURRENT_VENV, None)
-    else:
+    with setup(request.node.get_closest_marker("tdfnrun")):
+        yield
+
+
+@pytest.fixture(autouse=True)
+def tdfnjob_fixture(request):
+    with setup(request.node.get_closest_marker("tdfnjob")):
         yield
 
 
 class FunctionConstants(Enum):
     ENVIRONMENT_PREFIX = "tdtest"
-    INSTANCE = "tdfnrun"
+    INSTANCE = "tdfntest"
     WORK = "0"
     COLLECTION = MOCK_COLLECTION
     BUNDLE_FOLDER_NAME = "bundle"
@@ -94,13 +151,14 @@ class FunctionConstants(Enum):
     RESPONSE_FOLDER_NAME = "response"
     RESPONSE_FILE_NAME = RESPONSE_FILE_NAME
     STAGING_FOLDER_NAME = "staging"
+    WORKING_FOLDER_NAME = "working"
     EXCEPTION_FOLDER_NAME = "response"
     EXCEPTION_FILE_NAME = EXCEPTION_FILE_NAME
     INPUT_FOLDER_NAME = "input"
     OUTPUT_FOLDER_NAME = "output"
     OFFSET_FOLDER_NAME = "offset"
     INPUT_OFFSET_FILE_NAME = "offset.i.parquet"
-    OUTPUT_OFFSET_FILE_NAME = "offset.i.parquet"
+    OUTPUT_OFFSET_FILE_NAME = "offset.o.parquet"
     DATA_FOLDER_NAME = "data"
     BIN_FOLDER_NAME = "bin"
     LOG_FOLDER_NAME = "log"
@@ -109,6 +167,8 @@ class FunctionConstants(Enum):
     TEMP_ROOT = ".tdtest"
     TEMP_PREFIX = "td_"
     TEMP_SUFFIX = ".run"
+    TRIGGER_HTTP_METHOD = "POST"
+    TRIGGER_HTTP_URL = "http://127.0.0.1:2457"
 
 
 MockTableFrame: TypeAlias = Union[
@@ -118,7 +178,19 @@ MockTableFrame: TypeAlias = Union[
     pd.DataFrame,
     Path,
     str,
-    dict[str, list[Any]],
+    dict[
+        str,
+        list[
+            Union[
+                td.TableFrame,
+                pl.LazyFrame,
+                pl.DataFrame,
+                pd.DataFrame,
+                Path,
+                str,
+            ]
+        ],
+    ],
 ]
 
 MockTableFrameSpec: TypeAlias = Union[
@@ -130,8 +202,14 @@ MockTableFrameSpec: TypeAlias = Union[
 
 
 class FnError(Exception):
-    def __init__(self, message: str, fnrun: "FnRun"):
+    def __init__(
+        self,
+        message: str,
+        fntrigger: "FnTrigger | None" = None,
+        fnrun: "FnRun | None" = None,
+    ):
         super().__init__(message)
+        self.fntrigger = fntrigger
         self.fnrun = fnrun
 
 
@@ -144,7 +222,7 @@ class FnRequest:
     def path(self) -> Path:
         return self._path
 
-    def as_object(self) -> Any:
+    def as_object(self) -> Union[FunctionYaml, StageTriggerYaml, None]:
         if self._path.exists():
             return parse_request_yaml(str(self._path))
         return None
@@ -159,7 +237,7 @@ class FnResponse:
     def path(self) -> Path:
         return self._path
 
-    def as_object(self) -> Any:
+    def as_object(self) -> Union[ResponseYaml, None]:
         if self._path.exists():
             return parse_response_yaml(str(self._path))
         return None
@@ -174,7 +252,7 @@ class FnException:
     def path(self) -> Path:
         return self._path
 
-    def as_object(self) -> Any:
+    def as_object(self) -> Union[ExceptionYaml, None]:
         if self._path.exists():
             return parse_exception_yaml(str(self._path))
         return None
@@ -296,9 +374,64 @@ class FnOut:
         return [path.as_pd_df(with_sys_columns) for path in self._paths]
 
 
+class FnTrigger:
+    def __init__(
+        self,
+        staging: Path,
+        context: StageTriggerContext,
+        trigger: StageTrigger,
+        status: StageTriggerStatus,
+    ):
+        self._staging = staging
+        self._context = context
+        self._trigger = trigger
+        self._status = status
+
+    def check(self):
+        if self._status != StageTriggerStatus.SUCCESS:
+            raise FnError(
+                message=f"Status is not 0: '{self._status}'",
+                fntrigger=self,
+                fnrun=None,
+            )
+
+        if not self._staging.exists():
+            raise FnError(
+                message=f"Staging folder does not exist: '{self._staging}'",
+                fntrigger=self,
+                fnrun=None,
+            )
+
+    @property
+    def staging(self) -> Path:
+        return self._staging
+
+    @property
+    def context(self) -> StageTriggerContext:
+        return self._context
+
+    @property
+    def trigger(self) -> StageTrigger:
+        return self._trigger
+
+    @property
+    def status(self) -> StageTriggerStatus:
+        return self._status
+
+    @property
+    def output(self) -> FnOut:
+        files = (
+            sorted(file for file in self._staging.iterdir() if file.is_file())
+            if self._staging.exists()
+            else []
+        )
+        return FnOut(files)
+
+
 class FnRun:
     def __init__(
         self,
+        fntrigger: FnTrigger | None,
         folder: Path,
         request: FnRequest,
         response: FnResponse,
@@ -309,6 +442,7 @@ class FnRun:
         status: int,
         output_initial_values: bool = False,
     ):
+        self._fntrigger = fntrigger
         self._folder = folder
         self._request = request
         self._response = response
@@ -321,31 +455,59 @@ class FnRun:
 
     def check(self, require_output=True):
         if self._status != 0:
-            raise FnError(f"Status is not 0: '{self._status}'", self)
+            raise FnError(
+                message=f"Status is not 0: '{self._status}'",
+                fntrigger=self.fntrigger,
+                fnrun=self,
+            )
 
         if not self._folder.exists():
-            raise FnError(f"Function folder does not exist: '{self._folder}'", self)
+            raise FnError(
+                message=f"Function folder does not exist: '{self._folder}'",
+                fntrigger=self.fntrigger,
+                fnrun=self,
+            )
 
         if not self._request.path.exists():
-            raise FnError(f"Request file does not exist: '{self._request.path}'", self)
+            raise FnError(
+                message=f"Request file does not exist: '{self._request.path}'",
+                fntrigger=self.fntrigger,
+                fnrun=self,
+            )
 
         if not self._response.path.exists():
             raise FnError(
-                f"Response file does not exist: '{self._response.path}'", self
+                message=f"Response file does not exist: '{self._response.path}'",
+                fntrigger=self.fntrigger,
+                fnrun=self,
             )
 
         if require_output:
             for output_file in self._output:
                 if not output_file.path.exists():
                     raise FnError(
-                        f"Output file does not exist: '{output_file.path}'", self
+                        message=f"Output file does not exist: '{output_file.path}'",
+                        fntrigger=self.fntrigger,
+                        fnrun=self,
                     )
 
         if self._output_initial_values and not self._offset.exists():
-            raise FnError(f"Offset file does not exist: '{self._offset}'", self)
+            raise FnError(
+                message=f"Offset file does not exist: '{self._offset}'",
+                fntrigger=self.fntrigger,
+                fnrun=self,
+            )
 
         if self._environment is None:
-            raise FnError("Environment is None", self)
+            raise FnError(
+                message="Environment is None",
+                fntrigger=self.fntrigger,
+                fnrun=self,
+            )
+
+    @property
+    def fntrigger(self) -> FnTrigger:
+        return self._fntrigger
 
     @property
     def folder(self) -> Path:
@@ -451,13 +613,12 @@ def save_offset(table: MockTableFrame, filepath: Path):
 def name_files(
     function: TabsdataFunction | Callable[..., Any], output_folder: Path
 ) -> list[Path]:
-    tdfunction = cast(TabsdataFunction, function)
-    fntype = tdfunction.type
+    fntype = function.type
     if fntype == subscriber.__name__:
         paths = []
     elif fntype in (transformer.__name__, publisher.__name__):
-        if isinstance(tdfunction.output, TableOutput):
-            tdoutput = cast(TableOutput, tdfunction.output)
+        if isinstance(function.output, TableOutput):
+            tdoutput = cast(TableOutput, function.output)
             tables = tdoutput.table
             output_tables = tables if isinstance(tables, list) else [tables]
             paths = [
@@ -471,18 +632,17 @@ def name_files(
 
     collection = FunctionConstants.COLLECTION.value
     input_tables = (
-        cast(TableInput, tdfunction.input)._table_uris_map
-        if isinstance(tdfunction.input, TableInput)
+        cast(TableInput, function.input)._table_uris_map
+        if isinstance(function.input, TableInput)
         else {}
     )
     output_tables = (
-        cast(TableOutput, tdfunction.output)._table_list
-        if isinstance(tdfunction.output, TableOutput)
+        cast(TableOutput, function.output)._table_list
+        if isinstance(function.output, TableOutput)
         else []
     )
-    # ToDo: Modify when support to input actions is added.
     input_actions = []
-    output_actions = tdfunction.output_actions
+    output_actions = function.output_actions
     dq_processor = DataQualityProcessor(
         collection=collection,
         input_tables=input_tables,
@@ -502,13 +662,211 @@ def name_files(
     return paths
 
 
-# ToDo: implement a mechanism that allows avoiding the creation a the running venv.
+def _trigger(
+    fn_root: Path,
+    trigger: StageTrigger,
+) -> FnTrigger:
+    logger = logging.getLogger(__name__)
+    logger.debug("Performing trigger...")
+
+    staging = fn_root / FunctionConstants.STAGING_FOLDER_NAME.value
+    os.makedirs(staging, exist_ok=True)
+
+    working_folder = fn_root / FunctionConstants.WORKING_FOLDER_NAME.value
+    os.makedirs(working_folder, exist_ok=True)
+
+    context = LocalFileStageTriggerContext(
+        staging_folder=str(staging),
+        trigger_config=CallConfig(
+            method=cast(
+                HTTP_METHODS,
+                FunctionConstants.TRIGGER_HTTP_METHOD.value,
+            ),
+            url=FunctionConstants.TRIGGER_HTTP_URL.value,
+            headers={},
+            body=None,
+        ),
+        logger=logger,
+        working_dir=str(fn_root),
+        end=trigger.end,
+    )
+    context.trigger = lambda: True
+    context.trigger_monitor = lambda: True
+
+    trigger.return_on_end = True
+    try:
+        trigger.run(context)
+        status = StageTriggerStatus.SUCCESS
+    except StageTriggerExecutionError:
+        status = StageTriggerStatus.ERROR
+
+    return FnTrigger(
+        staging=staging,
+        context=context,
+        trigger=trigger,
+        status=status,
+    )
+
+
+def _run(
+    fntrigger: FnTrigger | None,
+    function: TabsdataFunction | Callable[..., Any],
+    fn_root: Path,
+    td_root: Path,
+    input_tables: MockTableFrameSpec,
+    input_initial_values: MockTableFrame,
+    output_initial_values: bool,
+    staging_files: MockTableFrameSpec,
+    function_defined_on: float,
+    require_output: bool,
+    staging_folder: Path = None,
+    staging_uri: str = None,
+) -> FnRun:
+    logger = logging.getLogger(__name__)
+    logger.debug("Performing run...")
+
+    pretty_polars()
+    pretty_pandas()
+    pl.Config.set_verbose(False)
+
+    use_current_venv = os.getenv(TD_USE_CURRENT_VENV, "").lower() in TRUE_VALUES
+    bundle_folder = fn_root / FunctionConstants.BUNDLE_FOLDER_NAME.value
+    os.makedirs(bundle_folder, exist_ok=True)
+
+    bundle_file = create_bundle_archive(
+        function=function,
+        local_packages=(
+            None if use_current_venv else FunctionConstants.TABSDATA_PACKAGES.value
+        ),
+        save_location=bundle_folder,
+    )
+
+    if staging_folder is None:
+        staging_folder = fn_root / FunctionConstants.STAGING_FOLDER_NAME.value
+        os.makedirs(staging_folder, exist_ok=True)
+        save_tables(staging_files, staging_folder)
+        staging_uri = staging_folder.as_uri()
+    elif staging_uri is None:
+        staging_uri = staging_folder.as_uri()
+
+    request_folder = fn_root / FunctionConstants.REQUEST_FOLDER_NAME.value
+    os.makedirs(request_folder, exist_ok=True)
+    response_folder = fn_root / FunctionConstants.RESPONSE_FOLDER_NAME.value
+    os.makedirs(response_folder, exist_ok=True)
+
+    request_file = request_folder / FunctionConstants.REQUEST_FILE_NAME.value
+    response_file = response_folder / FunctionConstants.RESPONSE_FILE_NAME.value
+    exception_file = response_folder / FunctionConstants.EXCEPTION_FILE_NAME.value
+
+    input_folder = fn_root / FunctionConstants.INPUT_FOLDER_NAME.value
+    os.makedirs(input_folder, exist_ok=True)
+    output_folder = fn_root / FunctionConstants.OUTPUT_FOLDER_NAME.value
+    os.makedirs(output_folder, exist_ok=True)
+
+    offset_folder = fn_root / FunctionConstants.OFFSET_FOLDER_NAME.value
+    os.makedirs(offset_folder, exist_ok=True)
+
+    input_offset_file = offset_folder / FunctionConstants.INPUT_OFFSET_FILE_NAME.value
+    output_offset_file = offset_folder / FunctionConstants.OUTPUT_OFFSET_FILE_NAME.value
+
+    data_folder = fn_root / FunctionConstants.DATA_FOLDER_NAME.value
+    os.makedirs(data_folder, exist_ok=True)
+
+    input_paths = save_tables(input_tables, input_folder)
+    input_files = paths_to_strings(input_paths)
+
+    output_paths = name_files(function, output_folder)
+    output_files = paths_to_strings(output_paths)
+
+    if input_initial_values is not None:
+        save_offset(input_initial_values, input_offset_file)
+
+    bin_folder = fn_root / FunctionConstants.BIN_FOLDER_NAME.value
+    os.makedirs(bin_folder, exist_ok=True)
+
+    log_folder = td_root / FunctionConstants.LOG_FOLDER_NAME.value
+
+    write_v2_function_yaml_file(
+        filename=str(request_file),
+        bundle_archive_location=bundle_file,
+        mock_dependency_location=input_files,
+        mock_table_location=output_files,
+        input_initial_values_path=(
+            None if input_initial_values is None else str(input_offset_file)
+        ),
+        output_initial_values_path=(
+            None if output_initial_values is None else str(output_offset_file)
+        ),
+        function_data_path=str(data_folder),
+        staging_uri=staging_uri,
+        function_defined_on=function_defined_on,
+    )
+
+    assert request_file.exists()
+
+    environment, status = invoker.invoke(
+        request_folder=request_folder,
+        response_folder=str(response_folder),
+        output_folder=str(output_folder),
+        current_instance=FunctionConstants.INSTANCE.value,
+        bin_folder=str(bin_folder),
+        environment_prefix=FunctionConstants.ENVIRONMENT_PREFIX.value,
+        locks_folder=FunctionConstants.LOCK_FOLDER.value,
+        logs_folder=str(log_folder),
+        work=FunctionConstants.WORK.value,
+        temp_cwd=True,
+    )
+
+    fnrun = FnRun(
+        fntrigger=fntrigger,
+        folder=fn_root,
+        request=FnRequest(request_file),
+        response=FnResponse(response_file),
+        exception=FnException(exception_file),
+        output=output_paths,
+        offset=output_offset_file,
+        environment=environment,
+        status=status,
+        output_initial_values=output_initial_values,
+    )
+
+    fnrun.check(require_output=require_output)
+    return fnrun
+
+
+def tdfntrigger(
+    trigger: StageTrigger,
+) -> FnTrigger:
+    tdtest = Path(tempfile.gettempdir()) / FunctionConstants.TEMP_ROOT.value
+    os.makedirs(tdtest, exist_ok=True)
+    with tempfile.TemporaryDirectory(
+        suffix=FunctionConstants.TEMP_SUFFIX.value,
+        prefix=FunctionConstants.TEMP_PREFIX.value,
+        dir=str(tdtest),
+        ignore_cleanup_errors=True,
+        delete=False,
+    ) as root:
+        os.chdir(root)
+
+        logger = logging.getLogger(__name__)
+        logger.debug(f"Running test: {inspect.stack()[1].function} @ folder {root}")
+
+        fn_root = Path(root)
+
+        fn_trigger = _trigger(
+            fn_root=fn_root,
+            trigger=trigger,
+        )
+
+        return fn_trigger
+
+
 def tdfnrun(
     function: TabsdataFunction | Callable[..., Any],
     input_tables: MockTableFrameSpec = None,
     input_initial_values: MockTableFrame = None,
     output_initial_values: bool = False,
-    staged_files: MockTableFrameSpec = None,
+    staging_files: MockTableFrameSpec = None,
     function_defined_on: float = None,
     require_output: bool = True,
 ) -> FnRun:
@@ -524,11 +882,6 @@ def tdfnrun(
         os.chdir(root)
 
         logger = logging.getLogger(__name__)
-
-        pretty_polars()
-        pretty_pandas()
-        pl.Config.set_verbose(False)
-
         logger.debug(f"Running test: {inspect.stack()[1].function} @ folder {root}")
 
         # noinspection PyBroadException
@@ -552,106 +905,82 @@ def tdfnrun(
         td_root = Path(TDLOCAL_FOLDER) / file / test / fn
         fn_root = Path(root)
 
-        use_current_venv = os.getenv(TD_USE_CURRENT_VENV, "").lower() in TRUE_VALUES
-        bundle_folder = fn_root / FunctionConstants.BUNDLE_FOLDER_NAME.value
-        os.makedirs(bundle_folder, exist_ok=True)
-
-        bundle_file = create_bundle_archive(
+        return _run(
+            fntrigger=None,
             function=function,
-            local_packages=(
-                None if use_current_venv else FunctionConstants.TABSDATA_PACKAGES.value
-            ),
-            save_location=bundle_folder,
-        )
-
-        staging_folder = fn_root / FunctionConstants.STAGING_FOLDER_NAME.value
-        os.makedirs(staging_folder, exist_ok=True)
-        save_tables(staged_files, staging_folder)
-        staging_uri = staging_folder.as_uri()
-
-        request_folder = fn_root / FunctionConstants.REQUEST_FOLDER_NAME.value
-        os.makedirs(request_folder, exist_ok=True)
-        response_folder = fn_root / FunctionConstants.RESPONSE_FOLDER_NAME.value
-        os.makedirs(response_folder, exist_ok=True)
-
-        request_file = request_folder / FunctionConstants.REQUEST_FILE_NAME.value
-        response_file = response_folder / FunctionConstants.RESPONSE_FILE_NAME.value
-        exception_file = response_folder / FunctionConstants.EXCEPTION_FILE_NAME.value
-
-        input_folder = fn_root / FunctionConstants.INPUT_FOLDER_NAME.value
-        os.makedirs(input_folder, exist_ok=True)
-        output_folder = fn_root / FunctionConstants.OUTPUT_FOLDER_NAME.value
-        os.makedirs(output_folder, exist_ok=True)
-
-        offset_folder = fn_root / FunctionConstants.OFFSET_FOLDER_NAME.value
-        os.makedirs(offset_folder, exist_ok=True)
-
-        input_offset_file = (
-            offset_folder / FunctionConstants.INPUT_OFFSET_FILE_NAME.value
-        )
-        output_offset_file = (
-            offset_folder / FunctionConstants.OUTPUT_OFFSET_FILE_NAME.value
-        )
-
-        data_folder = fn_root / FunctionConstants.DATA_FOLDER_NAME.value
-        os.makedirs(data_folder, exist_ok=True)
-
-        input_paths = save_tables(input_tables, input_folder)
-        input_files = paths_to_strings(input_paths)
-
-        output_paths = name_files(function, output_folder)
-        output_files = paths_to_strings(output_paths)
-
-        if input_initial_values is not None:
-            save_offset(input_initial_values, input_offset_file)
-
-        bin_folder = fn_root / FunctionConstants.BIN_FOLDER_NAME.value
-        os.makedirs(bin_folder, exist_ok=True)
-
-        log_folder = td_root / FunctionConstants.LOG_FOLDER_NAME.value
-
-        write_v2_function_yaml_file(
-            filename=str(request_file),
-            bundle_archive_location=bundle_file,
-            mock_dependency_location=input_files,
-            mock_table_location=output_files,
-            input_initial_values_path=(
-                None if input_initial_values is None else str(input_offset_file)
-            ),
-            output_initial_values_path=(
-                None if output_initial_values is None else str(output_offset_file)
-            ),
-            function_data_path=str(data_folder),
-            staging_uri=staging_uri,
-            function_defined_on=function_defined_on,
-        )
-
-        assert request_file.exists()
-
-        environment, status = invoker.invoke(
-            request_folder=request_folder,
-            response_folder=str(response_folder),
-            output_folder=str(output_folder),
-            current_instance=FunctionConstants.INSTANCE.value,
-            bin_folder=str(bin_folder),
-            environment_prefix=FunctionConstants.ENVIRONMENT_PREFIX.value,
-            locks_folder=FunctionConstants.LOCK_FOLDER.value,
-            logs_folder=str(log_folder),
-            work=FunctionConstants.WORK.value,
-            temp_cwd=True,
-        )
-
-        fnrun = FnRun(
-            folder=fn_root,
-            request=FnRequest(request_file),
-            response=FnResponse(response_file),
-            exception=FnException(exception_file),
-            output=output_paths,
-            offset=output_offset_file,
-            environment=environment,
-            status=status,
+            fn_root=fn_root,
+            td_root=td_root,
+            input_tables=input_tables,
+            input_initial_values=input_initial_values,
             output_initial_values=output_initial_values,
+            staging_files=staging_files,
+            function_defined_on=function_defined_on,
+            require_output=require_output,
         )
 
-        fnrun.check(require_output=require_output)
-        return fnrun
+
+def tdfnjob(
+    trigger: StageTrigger,
+    function: TabsdataFunction | Callable[..., Any],
+    input_tables: MockTableFrameSpec = None,
+    input_initial_values: MockTableFrame = None,
+    output_initial_values: bool = False,
+    staging_files: MockTableFrameSpec = None,
+    function_defined_on: float = None,
+    require_output: bool = True,
+) -> tuple[FnTrigger, FnRun]:
+    tdtest = Path(tempfile.gettempdir()) / FunctionConstants.TEMP_ROOT.value
+    os.makedirs(tdtest, exist_ok=True)
+    with tempfile.TemporaryDirectory(
+        suffix=FunctionConstants.TEMP_SUFFIX.value,
+        prefix=FunctionConstants.TEMP_PREFIX.value,
+        dir=str(tdtest),
+        ignore_cleanup_errors=True,
+        delete=False,
+    ) as root:
+        os.chdir(root)
+
+        logger = logging.getLogger(__name__)
+        logger.debug(f"Running test: {inspect.stack()[1].function} @ folder {root}")
+
+        # noinspection PyBroadException
+        try:
+            file = function._func_original_file
+        except Exception:
+            file = None
+        file = Path(file).stem if file else "unknown.p"
+        # noinspection PyBroadException
+        try:
+            test = inspect.stack()[1].function
+        except Exception:
+            test = None
+        test = test if test else "unknown.t"
+        # noinspection PyBroadException
+        try:
+            fn = function._func.__name__
+        except Exception:
+            fn = None
+        fn = fn if fn else "unknown.f"
+        td_root = Path(TDLOCAL_FOLDER) / file / test / fn
+        fn_root = Path(root)
+
+        fn_trigger = _trigger(
+            fn_root=fn_root,
+            trigger=trigger,
+        )
+
+        fn_run = _run(
+            fntrigger=fn_trigger,
+            function=function,
+            fn_root=fn_root,
+            td_root=td_root,
+            input_tables=input_tables,
+            input_initial_values=input_initial_values,
+            output_initial_values=output_initial_values,
+            staging_files=staging_files,
+            function_defined_on=function_defined_on,
+            require_output=require_output,
+            staging_folder=fn_trigger.staging,
+        )
+
+        return fn_trigger, fn_run

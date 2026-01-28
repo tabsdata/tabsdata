@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import logging
 
+from tabsdata._io.stage_trigger import LocalFileStageTriggerContext
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
@@ -37,6 +39,8 @@ from tests_tabsdata.conftest import (
     setup_temp_folder_node,
 )
 
+pytest_plugins = ["tests_tabsdata.fntest"]
+
 
 def pytest_configure(config: pytest.Config):
     setup_tests_logging()
@@ -59,9 +63,6 @@ def pytest_sessionfinish(session, exitstatus):
     clean_everything()
 
 
-#
-#  Copyright 2025. Tabs Data Inc.
-#
 import json
 import os
 import shutil
@@ -96,6 +97,15 @@ from tabsdata_kafka.serdes.non_sr_serde import (
     JsonKafkaSerde,
     ProtobufKafkaSerde,
 )
+
+
+class MockLocalFileStageTriggerContext(LocalFileStageTriggerContext):
+
+    def trigger(self) -> bool:
+        return True
+
+    def trigger_monitor(self) -> bool:
+        return True
 
 
 # Non Schema Registry

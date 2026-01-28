@@ -490,11 +490,12 @@ class KafkaStageTrigger(StageTrigger):
         )
         logger.debug(f"Kafka consumer created. {kafka_consumer}")
 
-        stage_trigger_status = None
+        stage_trigger_status: StageTriggerStatus = StageTriggerStatus.SUCCESS
+        buffer: MessagesBuffer | None = None
+        rollover_reason: RolloverReason | None = None
         try:
             start = time.time()  # keep track of the start time to be able to time out
             buffer = MessagesBuffer(self.topic, serde.schema_id_compatibles_checker())
-            rollover_reason: RolloverReason = None
             reset_buffer_on_time_rollover = False
             stage_trigger_status = StageTriggerStatus.SUCCESS
             while True:
@@ -520,7 +521,7 @@ class KafkaStageTrigger(StageTrigger):
                         context=context,
                         buffer=buffer,
                         rollover_reason=rollover_reason,
-                        working_dir=context.working_dir,
+                        working_dir=str(context.working_dir),
                         kafka_consumer=kafka_consumer,
                     )
                     buffer = MessagesBuffer(
@@ -541,7 +542,7 @@ class KafkaStageTrigger(StageTrigger):
                     context=context,
                     buffer=buffer,
                     rollover_reason=rollover_reason,
-                    working_dir=context.working_dir,
+                    working_dir=str(context.working_dir),
                     kafka_consumer=kafka_consumer,
                 )
             if dlq_producer:
@@ -558,8 +559,7 @@ class KafkaStageTrigger(StageTrigger):
                     pass
                 else:
                     raise StageTriggerExecutionError(
-                        "KafkaStageTrigger execution failed with status:"
-                        f" {stage_trigger_status.name}"
+                        ErrorCode.STR1, stage_trigger_status.name
                     )
             else:
                 sys.exit(stage_trigger_status.value)

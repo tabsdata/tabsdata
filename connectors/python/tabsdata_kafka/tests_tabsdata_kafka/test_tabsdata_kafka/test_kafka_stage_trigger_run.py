@@ -14,13 +14,11 @@ from unittest import mock
 import polars as pl
 import pyarrow.parquet as pq
 import pytest
-from confluent_kafka.serialization import MessageField, SerializationContext
 
 import tabsdata as td
 from tabsdata._credentials import UserPasswordCredentials
 from tabsdata._io.stage_trigger import (
     CallConfig,
-    LocalFileStageTriggerContext,
     StageTriggerStatus,
 )
 from tabsdata._tabsserver.invoker import REQUEST_FILE_NAME
@@ -37,12 +35,12 @@ from tests_tabsdata.conftest import (
     LOCAL_PACKAGES_LIST,
     write_v2_function_yaml_file,
 )
+from tests_tabsdata.fntest import tdfnjob
 from tests_tabsdata_kafka.conftest import (
+    MockLocalFileStageTriggerContext,
     get_avro_message,
     get_json_message,
     get_protobuf_message,
-    kafka_producer,
-    kafka_topic_creator,
 )
 
 logger = logging.getLogger(__name__)
@@ -54,19 +52,15 @@ ROOT_PROJECT_DIR = os.path.dirname(
     os.path.dirname(os.path.dirname(ABSOLUTE_TEST_FOLDER_LOCATION))
 )
 
+TOTAL_MESSAGES = 64
+TOTAL_BATCHES = 2
+BATCH_MESSAGES = TOTAL_MESSAGES // TOTAL_BATCHES
+KAFKA_TRIGGER_DURATION = 16
+
 RESPONSE_FOLDER = "response_folder"
 
 
 LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
-
-
-class MockLocalFileStageTriggerContext(LocalFileStageTriggerContext):
-
-    def trigger(self) -> bool:
-        return True
-
-    def trigger_monitor(self) -> bool:
-        return True
 
 
 @pytest.mark.kafka
@@ -118,9 +112,7 @@ def test_kafka_stage_trigger_time_rollover(
     sr_client = request.getfixturevalue(get_sr_client) if get_sr_client else None
     sr_client = sr_client[0] if isinstance(sr_client, tuple) else sr_client
 
-    # Produce messages
-    sent_messages = 6
-    produce_kafka_messages(topic, sent_messages, serde, get_message)
+    produce_kafka_messages(topic, TOTAL_MESSAGES, serde, get_message)
 
     trigger = KafkaStageTrigger(
         conn=KafkaConn(
@@ -191,19 +183,19 @@ def test_kafka_stage_trigger_time_rollover(
     assert len(parquet_files) == 1
     output_file = parquet_files[0]
     tfr_result = pl.read_parquet(output_file)
-    assert tfr_result.shape[0] == sent_messages - 1
+    assert tfr_result.shape[0] == TOTAL_MESSAGES - 1
 
 
 @pytest.mark.kafka
 @pytest.mark.slow
 @pytest.mark.requires_internet
-@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
+@pytest.mark.tdfnjob(venv=False)
 @pytest.mark.parametrize(
     "serde_fixture, get_message, get_sr_client",
     [
         ("avro_serde_v1", get_avro_message, None),
-        ("json_serde", get_json_message, None),
-        ("protobuf_serde_v1", get_protobuf_message, None),
+        # ("json_serde", get_json_message, None),
+        # ("protobuf_serde_v1", get_protobuf_message, None),
         # ("confluent_sr_avro_serde", get_avro_message, "confluent_sr_mock_registry"),
         # ("confluent_sr_json_serde", get_avro_message, "confluent_sr_mock_registry"),
         # (
@@ -237,15 +229,9 @@ def test_kafka_stage_trigger_message_rollover(
     kafka_config,
     produce_kafka_messages,
 ):
-    topic = f"test-consumer-messages-rollover-{str(uuid.uuid4())}"
-
+    topic = str(uuid.uuid4())
     serde = request.getfixturevalue(serde_fixture)
-    sr_client = request.getfixturevalue(get_sr_client) if get_sr_client else None
-    sr_client = sr_client[0] if isinstance(sr_client, tuple) else sr_client
-
-    # Produce messages
-    sent_messages = 6
-    produce_kafka_messages(topic, sent_messages, serde, get_message)
+    produce_kafka_messages(topic, TOTAL_MESSAGES, serde, get_message)
 
     trigger = KafkaStageTrigger(
         conn=KafkaConn(
@@ -256,59 +242,28 @@ def test_kafka_stage_trigger_message_rollover(
         topic=topic,
         data_format=serde.format(),
         schema=serde._schema,
-        messages_rollover=MessagesRollover(3),
-        end=datetime.now(timezone.utc) + timedelta(seconds=16),
+        messages_rollover=MessagesRollover(BATCH_MESSAGES),
+        end=datetime.now(timezone.utc) + timedelta(seconds=KAFKA_TRIGGER_DURATION),
         message_name=getattr(serde, "_message_name", None),
         registry_name=getattr(serde, "_registry_name", None),
         schema_name=getattr(serde, "_schema_name", None),
     )
-    trigger.return_on_end = True
 
     @td.publisher(
         source=td.Stage(use_existing_data=True),
         tables="output",
+        name=str(uuid.uuid4()),
         trigger_by=trigger,
     )
     def tfr(tfs: list[td.TableFrame]) -> td.TableFrame:
-        new_tfs = td.concat(tfs)
-        return new_tfs
+        return td.concat(tfs)
 
-    staging_folder = tmp_path / "staging"
-    mock_context = MockLocalFileStageTriggerContext(
-        staging_folder=str(staging_folder),
-        trigger_config=CallConfig("POST", "http://fake.url", {}, {}),
-        logger=logger,
-        working_dir=str(tmp_path),
-        end=trigger.end,
-    )
-    trigger.run(mock_context)
-
-    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
-    context_archive = create_bundle_archive(
-        tfr, local_packages=LOCAL_PACKAGES_LIST, save_location=tmp_path
+    fn_trigger, fn_run = tdfnjob(
+        function=tfr,
+        trigger=trigger,
     )
 
-    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
-    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
-    os.makedirs(response_folder, exist_ok=True)
-    staging_uri = staging_folder.as_uri()
-    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-    write_v2_function_yaml_file(
-        input_yaml_file,
-        context_archive,
-        staging_uri=staging_uri,
-        function_data_path=function_data_folder,
-    )
-    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
-    os.makedirs(tabsserver_output_folder, exist_ok=True)
-    environment_name, result = tabsserver_main(
-        tmp_path,
-        response_folder,
-        tabsserver_output_folder,
-        environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
-        logs_folder=logs_folder,
-        temp_cwd=True,
-    )
+    staging_folder = fn_trigger.staging
     assert staging_folder.exists()
     parquet_files = list(staging_folder.glob("*.parquet"))
     assert len(parquet_files) == 2

@@ -38,6 +38,8 @@ from tests_tabsdata.conftest import (
     setup_temp_folder_node,
 )
 
+pytest_plugins = ["tests_tabsdata.fntest"]
+
 
 def pytest_configure(config: pytest.Config):
     setup_tests_logging()
