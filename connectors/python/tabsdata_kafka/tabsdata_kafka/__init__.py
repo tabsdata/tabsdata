@@ -4,7 +4,34 @@
 
 import importlib.metadata
 
-__all__ = []
+from tabsdata_kafka._connector import (
+    KafkaConn,
+    KafkaStageTrigger,
+    ConfluentSchemaRegistry,
+    AwsGlueSchemaRegistry,
+)
+from tabsdata_kafka.shared_types import (
+    KafkaMessageFormatSpec,
+    SchemaIdCompatibles,
+    SchemaIdSpec,
+    KafkaServersSpec,
+    AwsGlueAccessKeyCredentials,
+)
+from tabsdata_kafka.consumer.rollovers import MessagesRollover, SizeRollover
+
+__all__ = [
+    "KafkaConn",
+    "KafkaStageTrigger",
+    "KafkaMessageFormatSpec",
+    "SchemaIdCompatibles",
+    "SchemaIdSpec",
+    "KafkaServersSpec",
+    "AwsGlueAccessKeyCredentials",
+    "ConfluentSchemaRegistry",
+    "AwsGlueSchemaRegistry",
+    "MessagesRollover",
+    "SizeRollover",
+]
 
 # noinspection PyBroadException
 try:

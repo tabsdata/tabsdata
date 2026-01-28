@@ -54,3 +54,429 @@ def pytest_sessionfinish(session, exitstatus):
         # No need to download, the master process has already done that.
         return
     clean_python_virtual_environments()
+
+
+#
+#  Copyright 2025. Tabs Data Inc.
+#
+import json
+import os
+import shutil
+import uuid
+from typing import Any, Generator
+from unittest.mock import MagicMock
+
+import avro.schema
+from confluent_kafka import Consumer, Producer
+from confluent_kafka.admin import AdminClient
+from confluent_kafka.cimpl import NewTopic
+from confluent_kafka.schema_registry import Schema, SchemaRegistryClient
+from confluent_kafka.schema_registry._sync.mock_schema_registry_client import (
+    MockSchemaRegistryClient,
+)
+from confluent_kafka.serialization import MessageField, SerializationContext
+from mypy_boto3_glue.client import GlueClient
+
+from tabsdata_kafka.serdes.aws_glue_sr_serde import (
+    AvroGlueKafkaSerde,
+    JsonGlueKafkaSerde,
+    ProtobufGlueKafkaSerde,
+)
+from tabsdata_kafka.serdes.confluent_sr_serde import (
+    AvroSrKafkaSerde,
+    JsonSrKafkaSerde,
+    ProtobufSrKafkaSerde,
+)
+from tabsdata_kafka.serdes.non_sr_serde import (
+    AvroKafkaSerde,
+    JsonKafkaSerde,
+    ProtobufKafkaSerde,
+)
+
+
+# Non Schema Registry
+@pytest.fixture(scope="module")
+def avro_serde_v1():
+    """Fixture for the original Avro schema (v1)."""
+    schema_path = os.path.join(TESTING_RESOURCES_PATH, "schemas", "user_v1.avsc")
+    schema = open(schema_path, "r").read()
+    return AvroKafkaSerde(schema)
+
+
+@pytest.fixture(scope="module")
+def avro_serde_v2():
+    """Fixture for the updated Avro schema (v2), which is backward compatible."""
+    schema_path = os.path.join(TESTING_RESOURCES_PATH, "schemas", "user_v2.avsc")
+    schema = open(schema_path, "r").read()
+    return AvroKafkaSerde(schema)
+
+
+PERSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "name": {"type": "string"},
+        "age": {"type": "integer", "minimum": 0},
+        "city": {"type": "string"},
+    },
+    "required": ["name", "age"],
+    "additionalProperties": False,
+}
+
+
+@pytest.fixture
+def json_serde():
+    """
+    Fixture to provide an instance of JsonKafkaSerde with a schema.
+    """
+    return JsonKafkaSerde(json_schema=json.dumps(PERSON_SCHEMA))
+
+
+@pytest.fixture
+def json_serde_no_schema():
+    """
+    Fixture to provide an instance of JsonKafkaSerde without a schema.
+    """
+    return JsonKafkaSerde(json_schema=None)
+
+
+@pytest.fixture(scope="module")
+def protobuf_serde_v1(tmp_path_factory):
+    """Fixture for the original Protobuf schema (v1)."""
+    working_dir = tmp_path_factory.mktemp("protobuf_gen_v1")
+    proto_file_path = os.path.join(TESTING_RESOURCES_PATH, "schemas", "person_v1.proto")
+    proto_schema = open(proto_file_path, "r").read()
+    message_name = "PersonV1"
+    serde = ProtobufKafkaSerde(proto_schema, message_name, str(working_dir))
+    yield serde
+    shutil.rmtree(working_dir)
+
+
+@pytest.fixture(scope="module")
+def protobuf_serde_v2(tmp_path_factory):
+    """Fixture for the updated Protobuf schema (v2)."""
+    working_dir = tmp_path_factory.mktemp("protobuf_gen_v2")
+    proto_file_path = os.path.join(TESTING_RESOURCES_PATH, "schemas", "person_v2.proto")
+    proto_schema = open(proto_file_path, "r").read()
+    message_name = "PersonV2"
+    serde = ProtobufKafkaSerde(proto_schema, message_name, str(working_dir))
+    yield serde
+    shutil.rmtree(working_dir)
+
+
+# Confluent Schema Registry
+
+
+@pytest.fixture(scope="function")
+def confluent_sr_mock_registry():
+    """
+    Fixture to provide a mock schema registry client, ensuring it is reset for each test.
+    """
+    # The MockSchemaRegistryClient is a singleton, so we need to reset it for each test.
+    MockSchemaRegistryClient._instance = None
+    return MockSchemaRegistryClient({"url": "http://mock-url"})
+
+
+@pytest.fixture(scope="function")
+def confluent_sr_avro_serde(confluent_sr_mock_registry):
+    """
+    Fixture to provide an AvroSrKafkaSerde instance with a mock schema registry.
+    """
+    schema_path = os.path.join(TESTING_RESOURCES_PATH, "schemas", "user_v1.avsc")
+    with open(schema_path, "r") as f:
+        schema_str = f.read()
+
+    # The Avro Deserializer needs a parsed schema, not just a string
+    parsed_schema = avro.schema.parse(schema_str)
+
+    return AvroSrKafkaSerde(confluent_sr_mock_registry, schema_str)
+
+
+@pytest.fixture(scope="function")
+def confluent_sr_json_serde(confluent_sr_mock_registry):
+    """
+    Fixture to provide a JsonSrKafkaSerde instance with a mock schema registry.
+    """
+    schema_path = os.path.join(TESTING_RESOURCES_PATH, "schemas", "user.json")
+    with open(schema_path, "r") as f:
+        schema_str = f.read()
+    schema = Schema(schema_str, schema_type="JSON")
+
+    return JsonSrKafkaSerde(
+        schema_registry_client=confluent_sr_mock_registry, json_schema=schema_str
+    )
+
+
+@pytest.fixture(scope="function")
+def confluent_sr_protobuf_serde(confluent_sr_mock_registry, tmp_path_factory):
+    """
+    Fixture to provide a ProtobufSrKafkaSerde instance with a mock schema registry.
+    """
+    working_dir = tmp_path_factory.mktemp("protobuf_gen")
+
+    proto_file_path = os.path.join(TESTING_RESOURCES_PATH, "schemas", "person_v1.proto")
+    proto_schema = open(proto_file_path, "r").read()
+
+    message_name = "PersonV1"
+
+    return ProtobufSrKafkaSerde(
+        schema_registry_client=confluent_sr_mock_registry,
+        protobuf_schema=proto_schema,
+        message_name=message_name,
+        working_dir=str(working_dir),
+    )
+
+
+# AWS Glue Schema Registry
+
+
+@pytest.fixture(scope="module")
+def aws_glue_sr_json_schema_str():
+    schema_path = os.path.join(TESTING_RESOURCES_PATH, "schemas", "user.json")
+    with open(schema_path, "r") as f:
+        return f.read()
+
+
+@pytest.fixture
+def aws_glue_sr_mock_json_glue_client(aws_glue_sr_json_schema_str):
+    mock_client = MagicMock(spec=GlueClient)
+    schema_version_id = str(uuid.uuid4())
+
+    mock_client.get_schema_by_definition.return_value = {
+        "SchemaVersionId": schema_version_id
+    }
+    mock_client.get_schema_version.return_value = {
+        "SchemaDefinition": aws_glue_sr_json_schema_str
+    }
+    return mock_client, schema_version_id
+
+
+@pytest.fixture
+def aws_glue_sr_json_glue_serde(
+    aws_glue_sr_json_schema_str, aws_glue_sr_mock_json_glue_client
+):
+    mock_client, _ = aws_glue_sr_mock_json_glue_client
+    return JsonGlueKafkaSerde(
+        glue_client=mock_client,
+        registry_name="test-registry",
+        schema_name="user-schema",
+        json_schema=aws_glue_sr_json_schema_str,
+        validate_schema=True,
+    )
+
+
+@pytest.fixture(scope="module")
+def aws_glue_sr_avro_schema_str():
+    schema_path = os.path.join(TESTING_RESOURCES_PATH, "schemas", "user_v1.avsc")
+    with open(schema_path, "r") as f:
+        return f.read()
+
+
+@pytest.fixture
+def aws_glue_sr_mock_avro_glue_client(aws_glue_sr_avro_schema_str):
+    mock_client = MagicMock(spec=GlueClient)
+    schema_version_id = str(uuid.uuid4())
+
+    mock_client.get_schema_by_definition.return_value = {
+        "SchemaVersionId": schema_version_id
+    }
+    mock_client.get_schema_version.return_value = {
+        "SchemaDefinition": aws_glue_sr_avro_schema_str
+    }
+    return mock_client, schema_version_id
+
+
+@pytest.fixture
+def aws_glue_sr_avro_glue_serde(
+    aws_glue_sr_avro_schema_str, aws_glue_sr_mock_avro_glue_client
+):
+    mock_client, _ = aws_glue_sr_mock_avro_glue_client
+    return AvroGlueKafkaSerde(
+        glue_client=mock_client,
+        registry_name="test-registry",
+        schema_name="user-schema",
+        avro_schema=aws_glue_sr_avro_schema_str,
+    )
+
+
+@pytest.fixture(scope="module")
+def aws_glue_sr_protobuf_schema_str():
+    schema_path = os.path.join(TESTING_RESOURCES_PATH, "schemas", "person_v1.proto")
+    with open(schema_path, "r") as f:
+        return f.read()
+
+
+@pytest.fixture
+def aws_glue_sr_mock_protobuf_glue_client(aws_glue_sr_protobuf_schema_str):
+    mock_client = MagicMock(spec=GlueClient)
+    schema_version_id = str(uuid.uuid4())
+
+    mock_client.get_schema_by_definition.return_value = {
+        "SchemaVersionId": schema_version_id
+    }
+    mock_client.get_schema_version.return_value = {
+        "SchemaDefinition": aws_glue_sr_protobuf_schema_str
+    }
+    return mock_client, schema_version_id
+
+
+@pytest.fixture
+def aws_glue_sr_protobuf_glue_serde(
+    aws_glue_sr_protobuf_schema_str,
+    aws_glue_sr_mock_protobuf_glue_client,
+    tmp_path_factory,
+):
+    mock_client, _ = aws_glue_sr_mock_protobuf_glue_client
+    working_dir = tmp_path_factory.mktemp("protobuf_gen")
+
+    return ProtobufGlueKafkaSerde(
+        glue_client=mock_client,
+        registry_name="test-registry",
+        schema_name="person-schema",
+        protobuf_schema=aws_glue_sr_protobuf_schema_str,
+        message_name="PersonV1",
+        working_dir=str(working_dir),
+    )
+
+
+# Kafka Fixtures
+
+
+@pytest.fixture
+def kafka_topic_creator():
+    print("Kafka Servers:", os.environ.get("KF0__KAFKA_SERVERS"))
+    config = {
+        "bootstrap.servers": os.environ.get("KF0__KAFKA_SERVERS", "localhost:19092"),
+        "security.protocol": "sasl_plaintext",
+        "sasl.mechanism": "SCRAM-SHA-256",
+        "sasl.username": os.environ.get("KF0__KAFKA_SASL_USERNAME", "admin"),
+        "sasl.password": os.environ.get("KF0__KAFKA_SASL_PASSWORD", "secret"),
+    }
+
+    def topic_creator(topic_name: str):
+        admin_client = AdminClient(config)
+        admin_client.list_topics(timeout=5)
+        topic = [NewTopic(topic_name, num_partitions=1, replication_factor=1)]
+        fs = admin_client.create_topics(topic)
+        for topic, f in fs.items():
+            try:
+                f.result()
+                print(f"Topic '{topic}' created")
+            except Exception as e:
+                if "TOPIC_ALREADY_EXISTS" in str(e):
+                    print(f"Topic '{topic}' already exists. Moving on...")
+                else:
+                    print(f"Failed to create topic {topic}: {e}")
+
+    return topic_creator
+
+
+@pytest.fixture
+def kafka_producer() -> Producer:
+    config = {
+        "bootstrap.servers": os.environ.get("KF0__KAFKA_SERVERS", "localhost:19092"),
+        "security.protocol": "sasl_plaintext",
+        "sasl.mechanism": "SCRAM-SHA-256",
+        "sasl.username": os.environ.get("KF0__KAFKA_SASL_USERNAME", "admin"),
+        "sasl.password": os.environ.get("KF0__KAFKA_SASL_PASSWORD", "secret"),
+    }
+    producer = Producer(config)
+    producer.list_topics(timeout=5)
+
+    return producer
+
+
+@pytest.fixture
+def kafka_consumer() -> Generator[Consumer, Any, None]:
+    config = {
+        "bootstrap.servers": os.environ.get("KF0__KAFKA_SERVERS", "localhost:19092"),
+        "group.id": os.environ.get("KF0__KAFKA_GROUP_ID", str(uuid.uuid4())),
+        "auto.offset.reset": "earliest",
+        "enable.auto.commit": False,
+        "security.protocol": "sasl_plaintext",
+        "sasl.mechanism": "SCRAM-SHA-256",
+        "sasl.username": os.environ.get("KF0__KAFKA_SASL_USERNAME", "admin"),
+        "sasl.password": os.environ.get("KF0__KAFKA_SASL_PASSWORD", "secret"),
+    }
+    consumer = Consumer(config)
+    consumer.list_topics(timeout=5)
+    yield consumer
+
+    consumer.close()
+
+
+@pytest.fixture
+def kafka_consumer_config() -> dict:
+    config = {
+        "bootstrap.servers": os.environ.get("KF0__KAFKA_SERVERS", "localhost:19092"),
+        "group.id": os.environ.get("KF0__KAFKA_GROUP_ID", str(uuid.uuid4())),
+        "auto.offset.reset": "earliest",
+        "enable.auto.commit": False,
+        "security.protocol": "sasl_plaintext",
+        "sasl.mechanism": "SCRAM-SHA-256",
+        "sasl.username": os.environ.get("KF0__KAFKA_SASL_USERNAME", "admin"),
+        "sasl.password": os.environ.get("KF0__KAFKA_SASL_PASSWORD", "secret"),
+    }
+    return config
+
+
+@pytest.fixture
+def kafka_schema_registry():
+    schema_registry_url = os.environ.get(
+        "KF0__KAFKA_CONFLUENT_SCHEMA_REGISTRY_URL", "http://localhost:18081"
+    )
+    sr_client = SchemaRegistryClient({"url": schema_registry_url})
+
+    return sr_client
+
+
+@pytest.fixture
+def produce_kafka_messages(kafka_topic_creator, kafka_producer):
+    def _produce(topic, sent_messages, serde, get_message):
+        kafka_topic_creator(topic)
+        ctx = SerializationContext(topic, MessageField.VALUE)
+        for i in range(1, sent_messages):
+            msg = get_message(i)
+            kafka_producer.produce(
+                topic,
+                value=serde.serializer()(msg, ctx),
+                callback=lambda err, msg: logger.debug(
+                    f"Produced message to {msg.topic()}"
+                ),
+            )
+            kafka_producer.poll(0)
+        kafka_producer.flush()
+
+    return _produce
+
+
+def delivery_callback(err, msg):
+    if err:
+        print(f"ERROR: Message failed delivery: {err}")
+
+
+def get_avro_message(i: int):
+    return {"name": f"name_{i}", "favorite_number": i, "favorite_color": "blue"}
+
+
+def get_json_message(i: int):
+    return {"name": f"name_{i}", "age": i, "city": "some city"}
+
+
+def get_protobuf_message(i: int):
+    return {"name": f"name_{i}", "id": i, "email": f"name_{i}@provider.com"}
+
+
+def get_large_avro_message(i: int):
+    return {"name": f"name_{i}", "favorite_number": i, "favorite_color": "a" * 1024}
+
+
+def get_large_json_message(i: int):
+    return {"name": f"name_{i}", "age": i, "city": "a" * 1024}
+
+
+def get_large_protobuf_message(i: int):
+    return {
+        "name": f"name_{i}" + "a" * 1024,
+        "id": i,
+        "email": f"name_{i}@provider.com",
+    }

@@ -2195,6 +2195,13 @@ class ErrorCode(Enum):
             "informed."
         ),
     }
+    STE6 = {
+        "code": "STE-006",
+        "message": (
+            "The 'group_id' parameter must be defined either in {} or in {}, got {}"
+            " instead."
+        ),
+    }
 
     # Testing
     DQC0 = object()
@@ -2311,6 +2318,18 @@ class ErrorCode(Enum):
     }
     PVCX5 = {
         "code": "PVCX-005",
+        "message": None,
+    }
+    PVCX6 = {
+        "code": "PVCX-006",
+        "message": None,
+    }
+    PVCX7 = {
+        "code": "PVCX-007",
+        "message": None,
+    }
+    PVCX8 = {
+        "code": "PVCX-008",
         "message": None,
     }
     PVSOC1 = {

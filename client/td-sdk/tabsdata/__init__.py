@@ -133,6 +133,14 @@ from tabsdata_bigquery._connector import BigQueryConn, BigQueryDest
 
 # noinspection PyProtectedMember
 from tabsdata_databricks._connector import DatabricksDestination
+from tabsdata_kafka._connector import (
+    KafkaConn,
+    KafkaStageTrigger,
+    ConfluentSchemaRegistry,
+    AwsGlueSchemaRegistry,
+)
+from tabsdata_kafka.consumer.rollovers import MessagesRollover, SizeRollover
+from tabsdata_kafka.shared_types import AwsGlueAccessKeyCredentials
 
 # noinspection PyProtectedMember
 from tabsdata_mongodb._connector import MongoDBDestination
@@ -284,6 +292,15 @@ __all__ = [
     "DatabricksDestination",
     # From tabsdata_mongodb.connector
     "MongoDBDestination",
+    # From tabsdata_kafka.connector
+    "KafkaConn",
+    "KafkaStageTrigger",
+    "SizeRollover",
+    "MessagesRollover",
+    "AwsGlueSchemaRegistry",
+    "ConfluentSchemaRegistry",
+    # from tabsdata_kafka.shared_types
+    "AwsGlueAccessKeyCredentials",
     # From tabsdata_mssql.connector
     "MSSQLDestination",
     "MSSQLSource",

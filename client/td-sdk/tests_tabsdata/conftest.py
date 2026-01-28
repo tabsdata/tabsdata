@@ -2179,6 +2179,7 @@ def write_v2_function_yaml_file(
 def write_v1_listener_yaml_file(
     filename: str,
     bundle_archive_location: str,
+    staging_uri: str | None = None,
 ):
     content: dict[str, Any] = {
         "info": {
@@ -2214,6 +2215,11 @@ def write_v1_listener_yaml_file(
             ),
         },
     }
+    if staging_uri:
+        content["info"]["function_stage"] = {
+            "uri": staging_uri,
+            "env_prefix": "STAGE",
+        }
 
     v1_listener_context = V1StageTriggerContext(content)
     with open(filename, "w") as stream:

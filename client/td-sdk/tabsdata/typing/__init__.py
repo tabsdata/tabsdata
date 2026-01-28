@@ -25,6 +25,12 @@ from tabsdata.typing._specs import (
     TableSpec,
     TransformerTriggerBySpec,
 )
+from tabsdata_kafka.shared_types import (
+    KafkaMessageFormatSpec,
+    SchemaIdSpec,
+    SchemaIdCompatibles,
+    KafkaServersSpec,
+)
 from tabsdata_mssql.constants import MSSQLLoaderSpec
 
 __all__ = [
@@ -37,6 +43,11 @@ __all__ = [
     "OracleLoaderSpec",
     # from tabsdata_mssql.constants
     "MSSQLLoaderSpec",
+    # from tabsdata_kafka.shared_types
+    "KafkaMessageFormatSpec",
+    "SchemaIdSpec",
+    "SchemaIdCompatibles",
+    "KafkaServersSpec",
     # from tabsdata._io.outputs.shared_enums
     "IfTableExistStrategySpec",
     "SchemaStrategySpec",
