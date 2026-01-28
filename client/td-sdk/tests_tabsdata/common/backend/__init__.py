@@ -16,6 +16,14 @@ from tests_tabsdata.common.backend.hashicorp import (
     HASHICORP_TESTING_URL,
     testing_hashicorp_vault,
 )
+from tests_tabsdata.common.backend.kafka import (
+    DEFAULT_PYTEST_KAFKA_DOCKER_CONTAINER_NAME,
+    KAFKA_ADMIN_PASSWORD,
+    KAFKA_ADMIN_USER,
+    VALID_KAFKA_PREFIXES,
+    KafkaConfig,
+    kafka_config,
+)
 from tests_tabsdata.common.backend.mariadb import (
     DEFAULT_PYTEST_MARIADB_DOCKER_CONTAINER_NAME,
     MARIADB_FORWARDED_PORT,
@@ -79,6 +87,13 @@ __all__ = [
     "HASHICORP_TESTING_TOKEN",
     "HASHICORP_TESTING_URL",
     "testing_hashicorp_vault",
+    # Kafka
+    "DEFAULT_PYTEST_KAFKA_DOCKER_CONTAINER_NAME",
+    "KAFKA_ADMIN_PASSWORD",
+    "KAFKA_ADMIN_USER",
+    "KafkaConfig",
+    "VALID_KAFKA_PREFIXES",
+    "kafka_config",
     # MariaDB
     "DEFAULT_PYTEST_MARIADB_DOCKER_CONTAINER_NAME",
     "MARIADB_FORWARDED_PORT",

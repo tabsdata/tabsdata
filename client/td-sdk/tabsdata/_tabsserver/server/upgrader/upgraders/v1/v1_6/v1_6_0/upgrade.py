@@ -201,14 +201,14 @@ class Upgrade_1_5_1_to_1_6_0(Upgrade):
         messages: list[str] = []
 
         apiserver_config_path = (
-                instance
-                / "workspace"
-                / "config"
-                / "proc"
-                / "regular"
-                / "apiserver"
-                / "config"
-                / "config.yaml"
+            instance
+            / "workspace"
+            / "config"
+            / "proc"
+            / "regular"
+            / "apiserver"
+            / "config"
+            / "config.yaml"
         )
         if not apiserver_config_path.exists():
             logger.warning(
@@ -242,9 +242,9 @@ class Upgrade_1_5_1_to_1_6_0(Upgrade):
             with open(apiserver_config_path, "r", encoding="utf-8") as f:
                 apiserver_config_content = f.read()
             if (
-                    apiserver_config_content_upgraded
-                    and apiserver_config_content_upgraded.strip()
-                    != apiserver_config_content.strip()
+                apiserver_config_content_upgraded
+                and apiserver_config_content_upgraded.strip()
+                != apiserver_config_content.strip()
             ):
                 messages.append(
                     f"[dry-run] Would upgrade '{apiserver_config_path}' "
@@ -255,6 +255,7 @@ class Upgrade_1_5_1_to_1_6_0(Upgrade):
             messages.append(f"Upgraded '{apiserver_config_path}' using upgrade spec.")
 
         return messages
+
 
 if __name__ == "__main__":
     print(

@@ -42,6 +42,7 @@ from tests_tabsdata.common.backend import (  # noqa: F401
     azure_config,
     gcs_client,
     gcs_config,
+    kafka_config,
     mariadb_config,
     mysql_config,
     oracle_config,

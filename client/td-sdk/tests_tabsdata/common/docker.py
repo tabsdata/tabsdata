@@ -14,6 +14,7 @@ from tabsdata._utils.constants import TRUE_VALUES
 # Import after container/system to avoid circular dependency
 from tests_tabsdata.common.backend import (
     DEFAULT_PYTEST_HASHICORP_DOCKER_CONTAINER_NAME,
+    DEFAULT_PYTEST_KAFKA_DOCKER_CONTAINER_NAME,
     DEFAULT_PYTEST_MARIADB_DOCKER_CONTAINER_NAME,
     DEFAULT_PYTEST_MYSQL_DOCKER_CONTAINER_NAME,
     DEFAULT_PYTEST_ORACLE_DOCKER_CONTAINER_NAME,
@@ -35,23 +36,27 @@ __all__ = [
 def clean_docker_containers():
     try:
         docker_containers_to_clean = [
+            DEFAULT_PYTEST_HASHICORP_DOCKER_CONTAINER_NAME,
+            DEFAULT_PYTEST_KAFKA_DOCKER_CONTAINER_NAME,
             DEFAULT_PYTEST_MARIADB_DOCKER_CONTAINER_NAME,
             DEFAULT_PYTEST_ORACLE_DOCKER_CONTAINER_NAME,
-            DEFAULT_PYTEST_HASHICORP_DOCKER_CONTAINER_NAME,
             DEFAULT_PYTEST_POSTGRES_DOCKER_CONTAINER_NAME,
         ]
-        for prefix in ["MYSQL0", "MARIADB0", "POSTGRES0", "ORACLE0"]:
-            # Check for {prefix}__MYSQL_DOCKER_CONTAINER_NAME environment variables
-            mysql_env_var = f"{prefix}__MYSQL_DOCKER_CONTAINER_NAME"
+        for prefix in ["MYSQL0", "MARIADB0", "POSTGRES0", "ORACLE0", "KAFKA0"]:
+            # Check for {prefix}__<BACKEND>_DOCKER_CONTAINER_NAME environment variables
+            backend_type = prefix.rstrip("0")
+            env_var = f"{prefix}__{backend_type}_DOCKER_CONTAINER_NAME"
             if (
-                os.environ.get(f"{prefix}__MYSQL_DONT_KILL") not in TRUE_VALUES
-                and os.environ.get(f"{prefix}__MYSQL_ENVS") not in TRUE_VALUES
+                os.environ.get(f"{prefix}__{backend_type}_DONT_KILL") not in TRUE_VALUES
+                and os.environ.get(f"{prefix}__{backend_type}_ENVS") not in TRUE_VALUES
             ):
-                mysql_container_name = os.environ.get(
-                    mysql_env_var,
-                    DEFAULT_PYTEST_MYSQL_DOCKER_CONTAINER_NAME,
-                )
-                docker_containers_to_clean.append(mysql_container_name)
+                container_name = os.environ.get(env_var)
+                if container_name:
+                    docker_containers_to_clean.append(container_name)
+                elif "MYSQL" in backend_type:
+                    docker_containers_to_clean.append(
+                        DEFAULT_PYTEST_MYSQL_DOCKER_CONTAINER_NAME
+                    )
         name_pattern = "^(" + "|".join(docker_containers_to_clean) + ")$"
         remove_docker_containers(name_pattern)
     except Exception as e:
