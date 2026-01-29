@@ -70,8 +70,8 @@ impl UpdateUserDBBuilderUpdate for With<UserUpdate> {
         Input(builder): Input<UserUpdateDBBuilder>,
     ) -> Result<UserUpdateDBBuilder, TdError> {
         let mut builder = builder.deref().clone();
-        if update.full_name.is_some() {
-            builder.full_name(update.full_name.as_ref().unwrap());
+        if let Some(full_name) = &update.full_name {
+            builder.full_name(full_name);
         }
         if update.email.is_some() {
             builder.email(update.email.as_ref().cloned());
@@ -84,8 +84,8 @@ impl UpdateUserDBBuilderUpdate for With<UserUpdate> {
             builder.try_password_set_on(&*request_time)?;
             builder.password_must_change(true);
         };
-        if update.enabled.is_some() {
-            builder.enabled(update.enabled.as_ref().unwrap());
+        if let Some(enabled) = &update.enabled {
+            builder.enabled(enabled);
         }
 
         Ok(builder)

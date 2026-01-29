@@ -34,11 +34,11 @@ impl UpdateCollectionDBBuilderUpdate for With<CollectionUpdate> {
         Input(builder): Input<CollectionUpdateDBBuilder>,
     ) -> Result<CollectionUpdateDBBuilder, TdError> {
         let mut builder = builder.deref().clone();
-        if update.name.is_some() {
-            builder.name(update.name.as_ref().unwrap());
+        if let Some(name) = &update.name {
+            builder.name(name);
         }
-        if update.description.is_some() {
-            builder.description(update.description.as_ref().unwrap());
+        if let Some(description) = &update.description {
+            builder.description(description);
         }
 
         Ok(builder)

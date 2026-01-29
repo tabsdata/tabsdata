@@ -86,14 +86,12 @@ impl MountDefBuilder {
     }
 
     fn validate(&self) -> Result<()> {
-        if self.path.is_some() {
-            let mount_path = self.path.as_ref().unwrap();
+        if let Some(mount_path) = &self.path {
             SPath::parse(mount_path).map_err(|e| {
                 StorageError::ConfigurationError(format!("Invalid mount path {mount_path} : {e}"))
             })?;
         }
-        if self.uri.is_some() {
-            let uri_str = self.uri.as_ref().unwrap();
+        if let Some(uri_str) = &self.uri {
             if uri_str.len() != uri_str.trim().len() {
                 return Err(StorageError::ConfigurationError(format!(
                     "URI cannot have leading or trailing spaces: '{uri_str}'"
