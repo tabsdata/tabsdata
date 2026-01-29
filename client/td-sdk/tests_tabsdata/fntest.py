@@ -169,6 +169,7 @@ class FunctionConstants(Enum):
     TEMP_SUFFIX = ".run"
     TRIGGER_HTTP_METHOD = "POST"
     TRIGGER_HTTP_URL = "http://127.0.0.1:2457"
+    PARQUET_EXTENSION_PATTERN = "*.parquet"
 
 
 MockTableFrame: TypeAlias = Union[
@@ -421,7 +422,13 @@ class FnTrigger:
     @property
     def output(self) -> FnOut:
         files = (
-            sorted(file for file in self._staging.iterdir() if file.is_file())
+            sorted(
+                file
+                for file in self._staging.glob(
+                    FunctionConstants.PARQUET_EXTENSION_PATTERN.value
+                )
+                if file.is_file()
+            )
             if self._staging.exists()
             else []
         )

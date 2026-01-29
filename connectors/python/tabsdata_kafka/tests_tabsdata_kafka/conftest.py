@@ -455,11 +455,11 @@ def produce_kafka_messages(kafka_topic_creator, kafka_producer):
     def _produce(topic, sent_messages, serde, get_message):
         kafka_topic_creator(topic)
         ctx = SerializationContext(topic, MessageField.VALUE)
-        for i in range(1, sent_messages):
-            msg = get_message(i)
+        for i in range(1, sent_messages + 1):
+            message = get_message(i)
             kafka_producer.produce(
                 topic,
-                value=serde.serializer()(msg, ctx),
+                value=serde.serializer()(message, ctx),
                 callback=lambda err, msg: logger.debug(
                     f"Produced message to {msg.topic()}"
                 ),
