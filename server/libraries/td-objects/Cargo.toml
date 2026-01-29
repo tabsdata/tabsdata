@@ -86,7 +86,6 @@ thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 url = { workspace = true }
 utoipa = { workspace = true, features = ["axum_extras", "chrono", "preserve_order", "url", "uuid"] }
-tracing = { workspace = true }
 
 [dev-dependencies]
 td-database = { workspace = true, features = ["td-test"] }
