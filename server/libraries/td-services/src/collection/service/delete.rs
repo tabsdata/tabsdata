@@ -2,7 +2,9 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use crate::collection::service::layer::delete::{build_deleted_functions, build_deleted_tables};
+use crate::collection::service::layer::delete::{
+    build_deleted_functions, build_deleted_tables, update_deleted_workers,
+};
 use crate::table::layers::delete::{
     build_deleted_dependencies, build_deleted_triggers, build_frozen_functions,
 };
@@ -81,6 +83,8 @@ fn service() {
         // in the same collection)
         from_fn(build_deleted_functions),
         from_fn(insert_vec::<FunctionDB>),
+        // And last, set to stop whatever workers are running in the collection.
+        from_fn(update_deleted_workers),
     )
 }
 
@@ -96,15 +100,21 @@ mod tests {
     use td_objects::dxo::function::{FunctionDBWithNames, FunctionRegister};
     use td_objects::dxo::table::TableDBWithNames;
     use td_objects::dxo::trigger::TriggerDBWithNames;
+    use td_objects::dxo::worker::WorkerDB;
     use td_objects::rest_urls::CollectionParam;
     use td_objects::sql::cte::VersionedQueries;
     use td_objects::sql::{DaoQueries, SelectBy};
     use td_objects::test_utils::seed_collection::seed_collection;
+    use td_objects::test_utils::seed_execution::seed_execution;
     use td_objects::test_utils::seed_function::seed_function;
+    use td_objects::test_utils::seed_function_run::seed_function_run;
+    use td_objects::test_utils::seed_transaction::seed_transaction;
+    use td_objects::test_utils::seed_worker::{seed_function_runner_worker, seed_worker};
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, DependencyStatus, FunctionName,
-        FunctionRuntimeValues, FunctionStatus, RoleId, TableName, TableNameDto, TableStatus,
-        TriggerStatus, UserId,
+        FunctionRunStatus, FunctionRuntimeValues, FunctionStatus, RoleId, TableName, TableNameDto,
+        TableStatus, TransactionKey, TriggerStatus, UserId, WorkerMessageStatus, WorkerStatus,
+        WorkerType,
     };
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
     use td_tower::ctx_service::RawOneshot;
@@ -160,6 +170,8 @@ mod tests {
                 // in the same collection)
                 type_of_val(&build_deleted_functions),
                 type_of_val(&insert_vec::<FunctionDB>),
+                // And last, set to stop whatever workers are running in the collection.
+                type_of_val(&update_deleted_workers),
             ]);
     }
 
@@ -186,6 +198,7 @@ mod tests {
             let _ = seed_function(&db, &collection, &create).await;
         }
 
+        // Create another one with triggers and dependencies
         let create = FunctionRegister::builder()
             .try_name("function_3")?
             .try_description("description")?
@@ -201,8 +214,42 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::default())
             .reuse_frozen_tables(false)
             .build()?;
-        let _ = seed_function(&db, &collection, &create).await;
+        let function = seed_function(&db, &collection, &create).await;
 
+        // Create workers for function_3
+        let _cron_worker = seed_worker(
+            &db,
+            &collection,
+            &function,
+            &WorkerType::Cron,
+            &WorkerStatus::Running,
+            &WorkerMessageStatus::Unlocked,
+        )
+        .await;
+
+        // Create function runner worker
+        let execution = seed_execution(&db, &function).await;
+        let transaction_key = TransactionKey::try_from("ANY").unwrap();
+        let transaction = seed_transaction(&db, &execution, &transaction_key).await;
+        let function_run = seed_function_run(
+            &db,
+            &collection,
+            &function,
+            &execution,
+            &transaction,
+            &FunctionRunStatus::Scheduled,
+        )
+        .await;
+        let _function_worker = seed_function_runner_worker(
+            &db,
+            &execution,
+            &transaction,
+            &function_run,
+            &WorkerMessageStatus::Unlocked,
+        )
+        .await;
+
+        // Test delete
         let request = RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
@@ -285,6 +332,22 @@ mod tests {
             assert!(matches!(dep.status, DependencyStatus::Deleted));
         }
 
+        // Assert non function runner workers are stopped
+        let found: Vec<WorkerDB> = DaoQueries::default()
+            .select_by::<WorkerDB>(&())?
+            .build_query_as()
+            .fetch_all(&db)
+            .await
+            .unwrap();
+        assert_eq!(found.len(), 2);
+        for worker in found {
+            if matches!(worker.worker_type, WorkerType::FunctionRunner) {
+                // unchanged status from seed method
+                assert!(matches!(worker.status, WorkerStatus::RunRequested));
+            } else {
+                assert!(matches!(worker.status, WorkerStatus::StopScheduled));
+            }
+        }
         Ok(())
     }
 

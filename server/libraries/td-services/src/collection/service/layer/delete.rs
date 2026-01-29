@@ -5,11 +5,16 @@
 use std::ops::Deref;
 use td_error::TdError;
 use td_objects::dxo::TryUpdater;
-use td_objects::dxo::crudl::RequestContext;
+use td_objects::dxo::crudl::{RequestContext, handle_sql_err};
 use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::table::TableDB;
-use td_objects::types::basic::{FunctionStatus, FunctionVersionId, TableStatus, TableVersionId};
-use td_tower::extractors::Input;
+use td_objects::dxo::worker::{UpdateWorkerDB, WorkerDB};
+use td_objects::sql::{DaoQueries, UpdateBy};
+use td_objects::types::basic::{
+    CollectionId, FunctionStatus, FunctionVersionId, TableStatus, TableVersionId, WorkerType,
+};
+use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
+use tracing::debug;
 
 pub async fn build_deleted_functions(
     Input(request_context): Input<RequestContext>,
@@ -45,4 +50,33 @@ pub async fn build_deleted_tables(
         })
         .collect::<Result<_, _>>()?;
     Ok(deleted)
+}
+
+pub async fn update_deleted_workers(
+    Connection(connection): Connection,
+    SrvCtx(queries): SrvCtx<DaoQueries>,
+    Input(collection_id): Input<CollectionId>,
+) -> Result<(), TdError> {
+    let mut conn = connection.lock().await;
+    let conn = conn.get_mut_connection()?;
+
+    let update = UpdateWorkerDB::stop_scheduled().await?;
+    let to_stop = [
+        (*collection_id, WorkerType::Cron),
+        (*collection_id, WorkerType::StageTrigger),
+    ];
+
+    let res = queries
+        .update_all_by::<_, WorkerDB>(&update, &to_stop)?
+        .build()
+        .execute(&mut *conn)
+        .await
+        .map_err(handle_sql_err)?;
+    debug!(
+        "Set stopped status in {} workers for collection {}.",
+        res.rows_affected(),
+        collection_id
+    );
+
+    Ok(())
 }
