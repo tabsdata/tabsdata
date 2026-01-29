@@ -1,21 +1,18 @@
 #
 # Copyright 2026 Tabs Data Inc.
 #
+from __future__ import annotations
 
 import json
 import logging
 import time
-from typing import Optional, Tuple
+from enum import Enum
+from typing import Tuple
 
 from confluent_kafka import Consumer, KafkaError, Message, Producer
 from confluent_kafka.serialization import MessageField, SerializationContext
 
 from tabsdata_kafka.consumer.messages_buffer import MessagesBuffer
-from tabsdata_kafka.consumer.rollovers import (
-    MessagesRollover,
-    RolloverReason,
-    SizeRollover,
-)
 from tabsdata_kafka.serdes.serde import KafkaSerde
 
 logger = logging.getLogger(__name__)
@@ -41,17 +38,17 @@ class KafkaConsumer:
         consumer: Consumer,
         serde: KafkaSerde,
         *,
-        size_rollover: SizeRollover = None,
-        messages_rollover: MessagesRollover = None,
-        dlq_producer: Optional[Producer] = None,
-        dlq_topic: Optional[str] = None,
+        size_rollover_mb: int = None,
+        messages_rollover: int = None,
+        dlq_producer: Producer | None = None,
+        dlq_topic: str | None = None,
     ):
         """
         :param topic: the Kafka topic to consume from
         :param consumer: a pre-configured `confluent_kafka.Consumer` instance.
                          Must be already subscribed to the topic.
         :param serde: a `KafkaSerde` instance for deserialization
-        :param size_rollover: an optional `SizeRollover` condition
+        :param size_rollover_mb: an optional `SizeRollover` condition
         :param messages_rollover: an optional `MessagesRollover` condition
         """
         self._topic = topic
@@ -59,7 +56,7 @@ class KafkaConsumer:
         # here
         self._consumer = consumer
         self._serde = serde
-        self._size_rollover = size_rollover
+        self._size_rollover_mb = size_rollover_mb
         self._messages_rollover = messages_rollover
         self._buffer = self._new_buffer()
         self._commit_message = None
@@ -101,6 +98,7 @@ class KafkaConsumer:
         messages when one of the rollover conditions is met.
 
         :param timeout_secs: the maximum time to wait for messages before returning
+        :param reset_buffer: if the buffer should be reset to empty or kept.
         :return: a tuple containing the `RolloverReason` and the `MessagesBuffer`
         :raises: "Cannot consume before a commit is done"
         """
@@ -119,7 +117,7 @@ class KafkaConsumer:
             if msg is None:
                 return RolloverReason.Time, self._buffer
             if msg.error():
-                # noinspection PyProtectedMember
+                # noinspection PyProtectedMember,PyUnresolvedReferences
                 if msg.error().code() == KafkaError._PARTITION_EOF:
                     continue
                 else:
@@ -149,16 +147,13 @@ class KafkaConsumer:
                 self._commit_message = msg
 
                 if self._messages_rollover:
-                    if (
-                        self._buffer.message_count()
-                        >= self._messages_rollover.message_count()
-                    ):
+                    if self._buffer.message_count() >= self._messages_rollover:
                         message_buffer = self._buffer
                         self._buffer = self._new_buffer()
                         return RolloverReason.Messages, message_buffer
 
-                if self._size_rollover:
-                    if self._buffer.size_mb() >= self._size_rollover.size_mb():
+                if self._size_rollover_mb:
+                    if self._buffer.size_mb() >= self._size_rollover_mb:
                         message_buffer = self._buffer
                         self._buffer = self._new_buffer()
                         return RolloverReason.Size, message_buffer
@@ -186,3 +181,14 @@ class KafkaConsumer:
         Closes the underlying Kafka consumer and DLQ topic producer, if provided.
         """
         self._consumer.close()
+
+
+class RolloverReason(Enum):
+    """
+    Enumerates the reasons for a buffer rollover.
+    """
+
+    SchemaChange = 1, "A message with an incompatible schema was received"
+    Size = 2, "The buffer size limit was reached"
+    Messages = 3, "The message count limit was reached"
+    Time = 4, "The consume timeout was reached"

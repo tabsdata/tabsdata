@@ -10,13 +10,8 @@ import pytest
 from confluent_kafka import Consumer
 from confluent_kafka.serialization import MessageField, SerializationContext
 
-from tabsdata_kafka.consumer.consumer import KafkaConsumer
+from tabsdata_kafka.consumer.consumer import KafkaConsumer, RolloverReason
 from tabsdata_kafka.consumer.messages_buffer import MessagesBuffer
-from tabsdata_kafka.consumer.rollovers import (
-    MessagesRollover,
-    RolloverReason,
-    SizeRollover,
-)
 from tests_tabsdata.common.backend.kafka import kafka_config
 from tests_tabsdata_kafka.conftest import (
     get_avro_message,
@@ -425,7 +420,7 @@ def test_consumer_size_rollover(
     try:
         kafka_consumer.subscribe([topic])
         consumer = KafkaConsumer(
-            topic, kafka_consumer, serde, size_rollover=SizeRollover(1)
+            topic, kafka_consumer, serde, size_rollover_mb=SizeRollover(1)
         )
 
         responses = []

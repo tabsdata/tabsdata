@@ -8,9 +8,8 @@ from tabsdata_kafka._connector import (
     AwsGlueSchemaRegistry,
     ConfluentSchemaRegistry,
     KafkaConn,
-    KafkaStageTrigger,
+    KafkaTrigger,
 )
-from tabsdata_kafka.consumer.rollovers import MessagesRollover, SizeRollover
 from tabsdata_kafka.shared_types import (
     AwsGlueAccessKeyCredentials,
     KafkaMessageFormatSpec,
@@ -21,7 +20,7 @@ from tabsdata_kafka.shared_types import (
 
 __all__ = [
     "KafkaConn",
-    "KafkaStageTrigger",
+    "KafkaTrigger",
     "KafkaMessageFormatSpec",
     "SchemaIdCompatibles",
     "SchemaIdSpec",
@@ -29,8 +28,6 @@ __all__ = [
     "AwsGlueAccessKeyCredentials",
     "ConfluentSchemaRegistry",
     "AwsGlueSchemaRegistry",
-    "MessagesRollover",
-    "SizeRollover",
 ]
 
 # noinspection PyBroadException

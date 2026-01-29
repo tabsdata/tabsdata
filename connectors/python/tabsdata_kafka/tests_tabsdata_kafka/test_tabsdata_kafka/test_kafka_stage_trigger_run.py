@@ -24,8 +24,7 @@ from tabsdata._io.stage_trigger import (
 from tabsdata._tabsserver.invoker import REQUEST_FILE_NAME
 from tabsdata._tabsserver.invoker import invoke as tabsserver_main
 from tabsdata._utils.bundle_utils import create_bundle_archive
-from tabsdata_kafka._connector import KafkaConn, KafkaStageTrigger
-from tabsdata_kafka.consumer.rollovers import MessagesRollover
+from tabsdata_kafka._connector import KafkaConn, KafkaTrigger
 from tests_tabsdata.bootest import TDLOCAL_FOLDER
 from tests_tabsdata.common.backend.kafka import kafka_config
 from tests_tabsdata.common.constants import PYTEST_DEFAULT_ENVIRONMENT_PREFIX
@@ -114,7 +113,7 @@ def test_kafka_stage_trigger_time_rollover(
 
     produce_kafka_messages(topic, TOTAL_MESSAGES, serde, get_message)
 
-    trigger = KafkaStageTrigger(
+    trigger = KafkaTrigger(
         conn=KafkaConn(
             servers=kafka_config.bootstrap_servers,
             credentials=cast(UserPasswordCredentials, kafka_config.credentials),
@@ -233,7 +232,7 @@ def test_kafka_stage_trigger_message_rollover(
     serde = request.getfixturevalue(serde_fixture)
     produce_kafka_messages(topic, TOTAL_MESSAGES, serde, get_message)
 
-    trigger = KafkaStageTrigger(
+    trigger = KafkaTrigger(
         conn=KafkaConn(
             servers=kafka_config.bootstrap_servers,
             credentials=cast(UserPasswordCredentials, kafka_config.credentials),
@@ -242,7 +241,7 @@ def test_kafka_stage_trigger_message_rollover(
         topic=topic,
         data_format=serde.format(),
         schema=serde._schema,
-        messages_rollover=MessagesRollover(BATCH_MESSAGES),
+        messages_rollover=BATCH_MESSAGES,
         end=datetime.now(timezone.utc) + timedelta(seconds=KAFKA_TRIGGER_DURATION),
         message_name=getattr(serde, "_message_name", None),
         registry_name=getattr(serde, "_registry_name", None),

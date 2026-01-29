@@ -19,9 +19,8 @@ from tabsdata_kafka.constants import (
     AWS_ACCESS_KEY_ID,
     AWS_SECRET_ACCESS_KEY,
 )
-from tabsdata_kafka.consumer.consumer import KafkaConsumer
+from tabsdata_kafka.consumer.consumer import KafkaConsumer, RolloverReason
 from tabsdata_kafka.consumer.messages_buffer import MessagesBuffer
-from tabsdata_kafka.consumer.rollovers import RolloverReason
 from tabsdata_kafka.shared_types import (
     AwsGlueAccessKeyCredentials,
 )

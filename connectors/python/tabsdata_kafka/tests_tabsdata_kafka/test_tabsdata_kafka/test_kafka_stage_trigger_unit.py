@@ -17,9 +17,8 @@ from tabsdata_kafka._connector import (
     AwsGlueSchemaRegistry,
     ConfluentSchemaRegistry,
     KafkaConn,
-    KafkaStageTrigger,
+    KafkaTrigger,
 )
-from tabsdata_kafka.consumer.rollovers import MessagesRollover, SizeRollover
 from tabsdata_kafka.serdes.aws_glue_sr_serde import (
     AvroGlueKafkaSerde,
     JsonGlueKafkaSerde,
@@ -143,8 +142,8 @@ def test_confluent_schema_registry_properties():
 
 def test_aws_glue_schema_registry_properties():
     creds = AwsGlueAccessKeyCredentials(
-        access_key_id="AKIA...",
-        secret_access_key="SECRET...",
+        aws_access_key_id="AKIA...",
+        aws_secret_access_key="SECRET...",
     )
     configs = {"endpoint_url": "http://localhost:4566"}
     sr = AwsGlueSchemaRegistry(
@@ -196,7 +195,7 @@ def test_kafka_conn_servers_str(confluent_schema_registry):
 @pytest.mark.unit
 @pytest.mark.kafka
 def test_properties_minimal(kafka_conn):
-    trigger = KafkaStageTrigger(
+    trigger = KafkaTrigger(
         conn=kafka_conn,
         topic="test-topic",
         data_format="json",
@@ -219,7 +218,7 @@ def test_properties_minimal(kafka_conn):
 @pytest.mark.unit
 @pytest.mark.kafka
 def test_properties_full(kafka_conn):
-    trigger = KafkaStageTrigger(
+    trigger = KafkaTrigger(
         conn=kafka_conn,
         topic="topic-x",
         data_format="avro",
@@ -229,8 +228,8 @@ def test_properties_full(kafka_conn):
         registry_name="RegName",
         schema_name="SchemaName",
         time_rollover_secs=120,
-        size_rollover_mb=SizeRollover(size_mb=10),
-        messages_rollover=MessagesRollover(message_count=100),
+        size_rollover_mb=10,
+        messages_rollover=100,
         dlq_topic="dlq-topic-x",
     )
     assert trigger.conn == kafka_conn
@@ -242,8 +241,8 @@ def test_properties_full(kafka_conn):
     assert trigger.registry_name == "RegName"
     assert trigger.schema_name == "SchemaName"
     assert trigger.time_rollover_secs == 120
-    assert trigger.size_rollover_mb == SizeRollover(size_mb=10)
-    assert trigger.messages_rollover == MessagesRollover(message_count=100)
+    assert trigger.size_rollover_mb == 10
+    assert trigger.messages_rollover == 100
     assert trigger.dlq_topic == "dlq-topic-x"
 
 
@@ -252,7 +251,7 @@ def test_properties_full(kafka_conn):
 def test_type_validation(kafka_conn):
     # Should raise if time_rollover_secs is not positive int
     with pytest.raises(ParameterValidationError) as e:
-        KafkaStageTrigger(
+        KafkaTrigger(
             conn=kafka_conn,
             topic="t",
             data_format="json",
@@ -263,7 +262,7 @@ def test_type_validation(kafka_conn):
 
     # Should raise if topic is not a string
     with pytest.raises(ParameterValidationError) as e:
-        KafkaStageTrigger(
+        KafkaTrigger(
             conn=kafka_conn,
             topic=123,
             data_format="json",
@@ -273,7 +272,7 @@ def test_type_validation(kafka_conn):
 
     # Should raise if data_format is not a valid KafkaMessageFormatSpec or string
     with pytest.raises(ParameterValidationError) as e:
-        KafkaStageTrigger(
+        KafkaTrigger(
             conn=kafka_conn,
             topic="t",
             data_format=123,
@@ -283,7 +282,7 @@ def test_type_validation(kafka_conn):
 
     # Should raise if schema is not a string
     with pytest.raises(ParameterValidationError) as e:
-        KafkaStageTrigger(
+        KafkaTrigger(
             conn=kafka_conn,
             topic="t",
             data_format="json",
@@ -291,51 +290,40 @@ def test_type_validation(kafka_conn):
         )
     assert e.value.error_code == ErrorCode.PVTRGR1
 
-    # Should raise if size_rollover_mb is not a SizeRollover or None
     with pytest.raises(ParameterValidationError) as e:
-        KafkaStageTrigger(
+        KafkaTrigger(
             conn=kafka_conn,
             topic="t",
             data_format="json",
             schema="{}",
-            size_rollover_mb=123,
+            size_rollover_mb=-1,
         )
     assert e.value.error_code == ErrorCode.PVTRGR1
-
-    with pytest.raises(ParameterValidationError) as e:
-        KafkaStageTrigger(
-            conn=kafka_conn,
-            topic="t",
-            data_format="json",
-            schema="{}",
-            size_rollover_mb=SizeRollover(size_mb=-1),
-        )
-    assert e.value.error_code == ErrorCode.PVRLVR1
 
     # Should raise if messages_rollover is not a MessagesRollover or None
     with pytest.raises(ParameterValidationError) as e:
-        KafkaStageTrigger(
+        KafkaTrigger(
             conn=kafka_conn,
             topic="t",
             data_format="json",
             schema="{}",
-            messages_rollover=123,
+            messages_rollover="a",
         )
     assert e.value.error_code == ErrorCode.PVTRGR1
 
     with pytest.raises(ParameterValidationError) as e:
-        KafkaStageTrigger(
+        KafkaTrigger(
             conn=kafka_conn,
             topic="t",
             data_format="json",
             schema="{}",
-            messages_rollover=MessagesRollover(message_count=-1),
+            messages_rollover=-1,
         )
-    assert e.value.error_code == ErrorCode.PVRLVR2
+    assert e.value.error_code == ErrorCode.PVTRGR1
 
     # Should raise if dlq_topic is not a string or None
     with pytest.raises(ParameterValidationError) as e:
-        KafkaStageTrigger(
+        KafkaTrigger(
             conn=kafka_conn,
             topic="t",
             data_format="json",
@@ -419,7 +407,7 @@ def test_serde_factory(
     conn = request.getfixturevalue(conn_fixture) if conn_fixture is not None else None
     schema = request.getfixturevalue(schema_fixture)
     mock_client, _ = mock_boto3_glue_client
-    trigger = KafkaStageTrigger(
+    trigger = KafkaTrigger(
         conn=conn,
         topic="topic-x",
         data_format=data_format,

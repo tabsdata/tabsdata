@@ -2198,8 +2198,8 @@ class ErrorCode(Enum):
     STE6 = {
         "code": "STE-006",
         "message": (
-            "The 'group_id' parameter must be defined either in {} or in {}, got {}"
-            " instead."
+            "The 'group_id' parameter must be defined either in {} or in {}, "
+            "but it was not defined in either of them."
         ),
     }
     STR1 = {

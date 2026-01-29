@@ -138,9 +138,8 @@ from tabsdata_kafka._connector import (
     AwsGlueSchemaRegistry,
     ConfluentSchemaRegistry,
     KafkaConn,
-    KafkaStageTrigger,
+    KafkaTrigger,
 )
-from tabsdata_kafka.consumer.rollovers import MessagesRollover, SizeRollover
 from tabsdata_kafka.shared_types import AwsGlueAccessKeyCredentials
 
 # noinspection PyProtectedMember
@@ -215,7 +214,7 @@ __all__ = [
     "SnowflakeDestination",
     # Triggers
     "CronTrigger",
-    "KafkaStageTrigger",
+    "KafkaTrigger",
     # Connections
     "BigQueryConn",
     "KafkaConn",
@@ -243,8 +242,6 @@ __all__ = [
     # Support
     "AwsGlueSchemaRegistry",
     "ConfluentSchemaRegistry",
-    "MessagesRollover",
-    "SizeRollover",
     # Keywords
     "ALL_DEPS",
     # TableFrame
