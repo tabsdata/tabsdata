@@ -8,7 +8,7 @@ import zlib
 from abc import ABC
 from functools import lru_cache
 from io import BytesIO
-from typing import Callable, Dict
+from typing import Callable
 
 import jsonschema
 from confluent_kafka.serialization import Deserializer, SerializationContext, Serializer
@@ -32,7 +32,7 @@ from tabsdata_kafka.utils import get_protobuf_class
 
 class GlueKafkaSerde(KafkaSerde, ABC):
 
-    def extract_schema_id(self, data: bytes, _message: Dict) -> SchemaIdSpec:
+    def extract_schema_id(self, data: bytes, _message: dict) -> SchemaIdSpec:
         if len(data) < 18:
             raise ValueError(
                 "Payload is too short to be an AWS Glue Schema Registry message"
@@ -72,6 +72,16 @@ class AwsGlueSerializer(AwsGlueSerdeBase, Serializer):
         schema_definition: str,
         data_format: str,
     ):
+        """
+        Initializes the AWS Glue Schema Registry serializer.
+
+        Args:
+            glue_client: Boto3 Glue client.
+            registry_name: Name of the Glue Schema Registry.
+            schema_name: Name of the schema.
+            schema_definition: Definition of the schema.
+            data_format: Data format (e.g., 'avro', 'json', 'protobuf').
+        """
         super().__init__(glue_client=glue_client)
         self.registry_name = registry_name
         self.schema_name = schema_name
@@ -114,6 +124,10 @@ class AwsGlueSerializer(AwsGlueSerdeBase, Serializer):
         """
         Packs the data with the AWS Glue wire format.
         [Header(1)] + [Compression(1)] + [UUID(16)] + [Data(N)]
+        Args:
+            data: The data to be packed.
+        Returns:
+            The packed data.
         """
         schema_version_id_bytes = uuid.UUID(self._schema_version_id).bytes
         compression_byte = self.COMPRESSION_DEFAULT
@@ -131,6 +145,12 @@ class AwsGlueDeserializer(AwsGlueSerdeBase, Deserializer):
     """
 
     def __init__(self, glue_client, **configs):
+        """
+        Initializes the AWS Glue Schema Registry deserializer.
+
+        Args:
+            glue_client: Boto3 Glue client.
+        """
         super().__init__(glue_client=glue_client, **configs)
 
     @lru_cache(maxsize=1000)
@@ -140,6 +160,14 @@ class AwsGlueDeserializer(AwsGlueSerdeBase, Deserializer):
         return response["SchemaDefinition"]
 
     def unpack_data(self, payload):
+        """
+        Unpacks the data from the AWS Glue wire format.
+
+        Args:
+            payload: The packed data.
+        Returns:
+            A tuple of schema UUID and unpacked data.
+        """
         if len(payload) < 18:
             raise ValueError(
                 "Payload is too short to be an AWS Glue Schema Registry message"
@@ -166,11 +194,24 @@ class JsonGlueSerializer(AwsGlueSerializer):
     def __init__(
         self, glue_client, registry_name: str, schema_name: str, schema_definition: str
     ):
+        """
+        Initializes the JSON Glue Schema Registry serializer.
+
+        Args:
+            glue_client: Boto3 Glue client.
+            registry_name: Name of the Glue Schema Registry.
+            schema_name: Name of the schema.
+            schema_definition: Definition of the schema.
+        """
         super().__init__(
-            glue_client, registry_name, schema_name, schema_definition, "JSON"
+            glue_client,
+            registry_name,
+            schema_name,
+            schema_definition,
+            MessageFormat.JSON.value,
         )
 
-    def __call__(self, obj: Dict, ctx: SerializationContext = None) -> bytes:
+    def __call__(self, obj: dict, ctx: SerializationContext = None) -> bytes:
         if obj is None:
             return None
         json_bytes = json.dumps(obj).encode("utf-8")
@@ -179,10 +220,17 @@ class JsonGlueSerializer(AwsGlueSerializer):
 
 class JsonGlueDeserializer(AwsGlueDeserializer):
     def __init__(self, glue_client, validate_schema: bool = True):
+        """
+        Initializes the JSON Glue Schema Registry deserializer.
+
+        Args:
+            glue_client: Boto3 Glue client.
+            validate_schema: Whether to validate the JSON against the schema.
+        """
         super().__init__(glue_client=glue_client)
         self.validate = validate_schema
 
-    def __call__(self, data: bytes, ctx: SerializationContext = None) -> Dict:
+    def __call__(self, data: bytes, ctx: SerializationContext = None) -> dict:
         if data is None:
             return None
 
@@ -206,6 +254,16 @@ class JsonGlueKafkaSerde(GlueKafkaSerde):
         json_schema: str,
         validate_schema: bool = True,
     ):
+        """
+        Initializes the JSON Glue Schema Registry serde.
+
+        Args:
+            glue_client: Boto3 Glue client.
+            registry_name: Name of the Glue Schema Registry.
+            schema_name: Name of the schema.
+            json_schema: Definition of the schema.
+            validate_schema: Whether to validate the JSON against the schema.
+        """
         super().__init__()
         self._serializer = JsonGlueSerializer(
             glue_client, registry_name, schema_name, json_schema
@@ -216,14 +274,21 @@ class JsonGlueKafkaSerde(GlueKafkaSerde):
         self._schema_name = schema_name
         self._glue_client = glue_client
 
+    @property
     def format(self) -> KafkaMessageFormatSpec:
         return MessageFormat.JSON.value
 
-    def serializer(self) -> Callable[[Dict, SerializationContext], bytes]:
+    def serializer(self) -> Callable[[dict, SerializationContext], bytes]:
         return self._serializer
 
-    def deserializer(self) -> Callable[[bytes, SerializationContext], Dict]:
+    def deserializer(self) -> Callable[[bytes, SerializationContext], dict]:
         return self._deserializer
+
+    def __repr__(self):
+        return (
+            f"JsonGlueKafkaSerde(registry_name={self._registry_name},"
+            f" schema_name={self._schema_name})"
+        )
 
 
 class AvroGlueSerializer(AwsGlueSerializer):
@@ -231,11 +296,15 @@ class AvroGlueSerializer(AwsGlueSerializer):
         self, glue_client, registry_name: str, schema_name: str, schema_definition: str
     ):
         super().__init__(
-            glue_client, registry_name, schema_name, schema_definition, "AVRO"
+            glue_client,
+            registry_name,
+            schema_name,
+            schema_definition,
+            MessageFormat.AVRO.value,
         )
         self.parsed_schema = parse_schema(json.loads(schema_definition))
 
-    def __call__(self, obj: Dict, ctx: SerializationContext = None) -> bytes:
+    def __call__(self, obj: dict, ctx: SerializationContext = None) -> bytes:
         if obj is None:
             return None
 
@@ -259,7 +328,7 @@ class AvroGlueDeserializer(AwsGlueDeserializer):
             )
         return self._parsed_schema_cache[schema_uuid]
 
-    def __call__(self, data: bytes, ctx: SerializationContext = None) -> Dict:
+    def __call__(self, data: bytes, ctx: SerializationContext = None) -> dict:
         if data is None:
             return None
 
@@ -274,6 +343,15 @@ class AvroGlueKafkaSerde(GlueKafkaSerde):
     def __init__(
         self, glue_client, registry_name: str, schema_name: str, avro_schema: str
     ):
+        """
+        Initializes the Avro Glue Schema Registry serde.
+
+        Args:
+            glue_client: Boto3 Glue client.
+            registry_name: Name of the Glue Schema Registry.
+            schema_name: Name of the schema.
+            avro_schema: Definition of the Avro schema.
+        """
         super().__init__()
         self._serializer = AvroGlueSerializer(
             glue_client, registry_name, schema_name, avro_schema
@@ -284,14 +362,21 @@ class AvroGlueKafkaSerde(GlueKafkaSerde):
         self._schema_name = schema_name
         self._glue_client = glue_client
 
+    @property
     def format(self) -> KafkaMessageFormatSpec:
         return MessageFormat.AVRO.value
 
-    def serializer(self) -> Callable[[Dict, SerializationContext], bytes]:
+    def serializer(self) -> Callable[[dict, SerializationContext], bytes]:
         return self._serializer
 
-    def deserializer(self) -> Callable[[bytes, SerializationContext], Dict]:
+    def deserializer(self) -> Callable[[bytes, SerializationContext], dict]:
         return self._deserializer
+
+    def __repr__(self):
+        return (
+            f"AvroGlueKafkaSerde(registry_name={self._registry_name},"
+            f" schema_name={self._schema_name})"
+        )
 
 
 class ProtobufGlueSerializer(AwsGlueSerializer):
@@ -304,7 +389,11 @@ class ProtobufGlueSerializer(AwsGlueSerializer):
         msg_class: Message,
     ):
         super().__init__(
-            glue_client, registry_name, schema_name, schema_definition, "PROTOBUF"
+            glue_client,
+            registry_name,
+            schema_name,
+            schema_definition,
+            MessageFormat.PROTOBUF.value,
         )
         self.msg_class = msg_class
 
@@ -321,7 +410,7 @@ class ProtobufGlueDeserializer(AwsGlueDeserializer):
         super().__init__(glue_client=glue_client)
         self.msg_class = msg_class
 
-    def __call__(self, data: bytes, ctx: SerializationContext = None) -> Dict:
+    def __call__(self, data: bytes, ctx: SerializationContext = None) -> dict:
         if data is None:
             return None
 
@@ -342,31 +431,24 @@ class ProtobufGlueKafkaSerde(GlueKafkaSerde):
         message_name: str,
         working_dir: str,
     ):
+        """
+        Initializes the Protobuf Glue Schema Registry serde.
+
+        Args:
+            glue_client: Boto3 Glue client.
+            registry_name: Name of the Glue Schema Registry.
+            schema_name: Name of the schema.
+            protobuf_schema: Definition of the Protobuf schema.
+            message_name: Name of the message class.
+            working_dir: Working directory for runtime files.
+        """
         super().__init__()
         msg_class = get_protobuf_class(working_dir, protobuf_schema, message_name)
 
-        class_serializer = ProtobufGlueSerializer(
+        self._serializer = self._make_serializer(
             glue_client, registry_name, schema_name, protobuf_schema, msg_class
         )
-
-        def serializer(dict_obj: Dict, ctx: SerializationContext) -> bytes:
-            obj = msg_class()
-            ParseDict(dict_obj, obj)
-            return class_serializer(obj, ctx)
-
-        self._serializer = serializer
-
-        class_deserializer = ProtobufGlueDeserializer(glue_client, msg_class)
-
-        def deserializer(data: bytes, ctx: SerializationContext) -> Dict:
-            obj = class_deserializer(data, ctx)
-            return MessageToDict(
-                obj,
-                preserving_proto_field_name=True,
-                always_print_fields_with_no_presence=False,
-            )
-
-        self._deserializer = deserializer
+        self._deserializer = self._make_deserializer(glue_client, msg_class)
         self._schema = protobuf_schema
         self._registry_name = registry_name
         self._schema_name = schema_name
@@ -374,11 +456,47 @@ class ProtobufGlueKafkaSerde(GlueKafkaSerde):
         self._working_dir = working_dir
         self._glue_client = glue_client
 
+    @staticmethod
+    def _make_serializer(
+        glue_client, registry_name, schema_name, protobuf_schema, msg_class
+    ):
+        class_serializer = ProtobufGlueSerializer(
+            glue_client, registry_name, schema_name, protobuf_schema, msg_class
+        )
+
+        def serializer(dict_obj: dict, ctx: SerializationContext) -> bytes:
+            obj = msg_class()
+            ParseDict(dict_obj, obj)
+            return class_serializer(obj, ctx)
+
+        return serializer
+
+    @staticmethod
+    def _make_deserializer(glue_client, msg_class):
+        class_deserializer = ProtobufGlueDeserializer(glue_client, msg_class)
+
+        def deserializer(data: bytes, ctx: SerializationContext) -> dict:
+            obj = class_deserializer(data, ctx)
+            return MessageToDict(
+                obj,
+                preserving_proto_field_name=True,
+                always_print_fields_with_no_presence=False,
+            )
+
+        return deserializer
+
+    @property
     def format(self) -> KafkaMessageFormatSpec:
         return MessageFormat.PROTOBUF.value
 
-    def serializer(self) -> Callable[[Dict, SerializationContext], bytes]:
+    def serializer(self) -> Callable[[dict, SerializationContext], bytes]:
         return self._serializer
 
-    def deserializer(self) -> Callable[[bytes, SerializationContext], Dict]:
+    def deserializer(self) -> Callable[[bytes, SerializationContext], dict]:
         return self._deserializer
+
+    def __repr__(self):
+        return (
+            f"ProtobufGlueKafkaSerde(registry_name={self._registry_name},"
+            f" schema_name={self._schema_name}, message_name={self._message_name})"
+        )

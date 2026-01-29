@@ -7,11 +7,11 @@ import json
 import logging
 import time
 from enum import Enum
-from typing import Tuple
 
 from confluent_kafka import Consumer, KafkaError, Message, Producer
 from confluent_kafka.serialization import MessageField, SerializationContext
 
+from tabsdata_kafka.constants import CONNECTION_TIMEOUT_SECS
 from tabsdata_kafka.consumer.messages_buffer import MessagesBuffer
 from tabsdata_kafka.serdes.serde import KafkaSerde
 
@@ -69,7 +69,11 @@ class KafkaConsumer:
     def _send_to_dlq(self, msg: Message, error: Exception):
         if self._dlq_producer and self._dlq_topic:
             dlq_message = {
-                "original_value": msg.value(),
+                "original_value": (
+                    msg.value().decode("utf-8", errors="replace")
+                    if msg.value() is not None
+                    else None
+                ),
                 "error": str(error),
                 "topic": msg.topic(),
                 "partition": msg.partition(),
@@ -84,87 +88,96 @@ class KafkaConsumer:
                     f"DLQ delivery failed: {err}" if err else "DLQ message delivered"
                 ),
             )
+            # Force timeout if DLQ is not reachable
+            self._dlq_producer.list_topics(timeout=CONNECTION_TIMEOUT_SECS)
             self._dlq_producer.poll(0)
             self._dlq_producer.flush()
 
-    # ToDo: Simplify or reorganize to make liter exception unnecessary.
-    def consume(  # noqa: C901
+    def consume(
         self, timeout_secs: int, reset_buffer: bool = False
-    ) -> Tuple[RolloverReason, MessagesBuffer]:
+    ) -> tuple[RolloverReason, MessagesBuffer]:
         """
         Consumes messages from the Kafka topic and buffers them.
 
         This method will block for at most `timeout_secs`. It returns a buffer of
         messages when one of the rollover conditions is met.
 
-        :param timeout_secs: the maximum time to wait for messages before returning
-        :param reset_buffer: if the buffer should be reset to empty or kept.
-        :return: a tuple containing the `RolloverReason` and the `MessagesBuffer`
-        :raises: "Cannot consume before a commit is done"
+        Args:
+            timeout_secs: Maximum time to block while consuming messages.
+            reset_buffer: If True, resets the current buffer before consuming.
+        Returns:
+            A tuple containing the reason for the rollover and the buffered messages.
         """
         if reset_buffer:
             self._buffer = self._new_buffer()
 
-        start = time.time()  # we keep track of the start time to be able to timeout
+        start = time.time()
         while True:
-            max_timeout = timeout_secs - (
-                time.time() - start
-            )  # adjusting kafka timeout based on the remaining timeout
+            max_timeout = timeout_secs - (time.time() - start)
             msg = self._consumer.poll(max_timeout)
-            # logger.debug(f"Polled message: {msg}")
-            if time.time() - start > timeout_secs:  # timeout
-                return RolloverReason.Time, self._buffer
-            if msg is None:
+            if self._is_timeout(start, timeout_secs, msg):
                 return RolloverReason.Time, self._buffer
             if msg.error():
-                # noinspection PyProtectedMember,PyUnresolvedReferences
                 if msg.error().code() == KafkaError._PARTITION_EOF:
-                    continue
+                    continue  # continue polling
                 else:
                     logger.error(f"Kafka Error: {msg.error()}")
                     self._send_to_dlq(msg, msg.error())
-                    continue
-
+                    continue  # continue polling
             try:
-                # noinspection PyArgumentList
-                data = msg.value()
-
-                (record, schema_id) = self._serde.deserializer_with_schema_id()(
-                    data, SerializationContext(msg.topic(), MessageField.VALUE)
-                )
-
-                entry = (len(data), record, schema_id)
-                if not self._buffer.append(entry):
-                    message_buffer = self._buffer
-                    self._buffer = self._new_buffer()
-                    self._buffer.append(entry)
-                    # We don't update the commit message a the message is in the new
-                    # buffer
-                    return RolloverReason.SchemaChange, message_buffer
-
-                # We update the commit message a message has been added to the current
-                # buffer
-                self._commit_message = msg
-
-                if self._messages_rollover:
-                    if self._buffer.message_count() >= self._messages_rollover:
-                        message_buffer = self._buffer
-                        self._buffer = self._new_buffer()
-                        return RolloverReason.Messages, message_buffer
-
-                if self._size_rollover_mb:
-                    if self._buffer.size_mb() >= self._size_rollover_mb:
-                        message_buffer = self._buffer
-                        self._buffer = self._new_buffer()
-                        return RolloverReason.Size, message_buffer
+                rollover_reason = self._process_message(msg)
+                if rollover_reason:
+                    return rollover_reason
             except Exception as e:
                 logger.error(
                     f"Error occurred while consuming message {msg.value()}: {e}"
                 )
                 self._send_to_dlq(msg, e)
                 continue
-        # noinspection PyTypeChecker
-        # We never reach here
+        logger.error("Exited consume loop unexpectedly")
+        raise RuntimeError("Exited consume loop unexpectedly")
+
+    def _is_timeout(self, start, timeout_secs, msg):
+        if time.time() - start > timeout_secs or msg is None:
+            return True
+        return False
+
+    def _handle_error(self, msg):
+        # noinspection PyProtectedMember,PyUnresolvedReferences
+        if msg.error().code() == KafkaError._PARTITION_EOF:
+            return True  # continue polling
+        else:
+            logger.error(f"Kafka Error: {msg.error()}")
+            self._send_to_dlq(msg, msg.error())
+            return True  # continue polling
+
+    def _process_message(self, msg):
+        data = msg.value()
+        (record, schema_id) = self._serde.deserializer_with_schema_id()(
+            data, SerializationContext(msg.topic(), MessageField.VALUE)
+        )
+        entry = (len(data), record, schema_id)
+        if not self._buffer.append(entry):
+            message_buffer = self._buffer
+            self._buffer = self._new_buffer()
+            self._buffer.append(entry)
+            return (RolloverReason.SchemaChange, message_buffer)
+
+        self._commit_message = msg
+
+        if (
+            self._messages_rollover
+            and self._buffer.message_count >= self._messages_rollover
+        ):
+            message_buffer = self._buffer
+            self._buffer = self._new_buffer()
+            return (RolloverReason.Messages, message_buffer)
+
+        if self._size_rollover_mb and self._buffer.size_mb >= self._size_rollover_mb:
+            message_buffer = self._buffer
+            self._buffer = self._new_buffer()
+            return (RolloverReason.Size, message_buffer)
+
         return None
 
     def commit(self):
@@ -181,6 +194,15 @@ class KafkaConsumer:
         Closes the underlying Kafka consumer and DLQ topic producer, if provided.
         """
         self._consumer.close()
+
+    def __repr__(self):
+        return (
+            f"KafkaConsumer(topic={self._topic}, consumer={self._consumer},"
+            f" serde={self._serde}, size_rollover_mb={self._size_rollover_mb},"
+            f" messages_rollover={self._messages_rollover}),"
+            f" dlq_topic={self._dlq_topic}), dlq_producer={self._dlq_producer},"
+            f" buffer={self._buffer})"
+        )
 
 
 class RolloverReason(Enum):

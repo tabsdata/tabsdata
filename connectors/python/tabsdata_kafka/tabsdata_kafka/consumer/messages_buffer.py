@@ -5,7 +5,6 @@
 import time
 import uuid
 from pathlib import Path
-from typing import Dict, List, Tuple
 
 from tabsdata_kafka.shared_types import SchemaIdCompatibles, SchemaIdSpec
 
@@ -25,7 +24,7 @@ class MessagesBuffer:
         self._size = 0
         self._flushed = False
 
-    def append(self, message_schema_id: Tuple[int, Dict, SchemaIdSpec]) -> bool:
+    def append(self, message_schema_id: tuple[int, dict, SchemaIdSpec]) -> bool:
         """
         Appends a message to the buffer if its schema is compatible with the existing
         messages.
@@ -52,30 +51,35 @@ class MessagesBuffer:
         else:
             return False
 
-    def messages(self) -> List[Dict]:
+    @property
+    def messages(self) -> list[dict]:
         """
         Returns the list of messages in the buffer.
         """
         return self._messages
 
+    @property
     def schema_id(self) -> SchemaIdSpec:
         """
         Returns the schema ID of the messages in the buffer.
         """
         return self._schema_id
 
+    @property
     def message_count(self) -> int:
         """
         Returns the number of messages in the buffer.
         """
         return len(self._messages)
 
+    @property
     def size_mb(self) -> int:
         """
         Returns the approximate size of the messages in the buffer in megabytes.
         """
         return int(self._size / (1024 * 1024))
 
+    @property
     def is_flushed(self):
         """
         Returns whether the buffer has been flushed to a Parquet file."""
@@ -89,7 +93,7 @@ class MessagesBuffer:
             to write
         """
 
-        if self.message_count() == 0:
+        if self.message_count == 0:
             return None
 
         file_path = (
@@ -106,11 +110,17 @@ class MessagesBuffer:
         # we sort the column names so the order of columns in the parquet files are
         # always the same
         # for the same column names, thus 'same schema'
-        column_names = sorted(list(self.messages()[0].keys()))
+        column_names = sorted(list(self.messages[0].keys()))
 
         table = pa.Table.from_pydict(
-            {k: [message.get(k) for message in self.messages()] for k in column_names}
+            {k: [message.get(k) for message in self.messages] for k in column_names}
         )
         pq.write_table(table, file_path)
         self._flushed = True
         return file_path
+
+    def __repr__(self):
+        return (
+            f"MessagesBuffer(topic={self._topic}, schema_id={self._schema_id},"
+            f" message_count={self.message_count}, size_mb={self.size_mb})"
+        )

@@ -2,6 +2,8 @@
 # Copyright 2026 Tabs Data Inc.
 #
 
+import os
+import uuid
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -13,8 +15,8 @@ from tabsdata.exceptions import (
     ParameterValidationError,
 )
 from tabsdata_kafka._connector import (
-    AwsGlueAccessKeyCredentials,
     AwsGlueSchemaRegistry,
+    AwsGlueSchemaRegistryCredentialsSpec,
     ConfluentSchemaRegistry,
     KafkaConn,
     KafkaTrigger,
@@ -43,8 +45,22 @@ from tests_tabsdata_kafka.conftest import (
     aws_glue_sr_mock_protobuf_glue_client,
     aws_glue_sr_protobuf_schema_str,
     confluent_sr_mock_registry,
-    kafka_consumer_config,
 )
+
+
+@pytest.fixture
+def kafka_consumer_config() -> dict:
+    config = {
+        "bootstrap.servers": os.environ.get("KF0__KAFKA_SERVERS", "localhost:19092"),
+        "group.id": os.environ.get("KF0__KAFKA_GROUP_ID", str(uuid.uuid4())),
+        "auto.offset.reset": "earliest",
+        "enable.auto.commit": False,
+        "security.protocol": "sasl_plaintext",
+        "sasl.mechanism": "SCRAM-SHA-256",
+        "sasl.username": os.environ.get("KF0__KAFKA_SASL_USERNAME", "admin"),
+        "sasl.password": os.environ.get("KF0__KAFKA_SASL_PASSWORD", "secret"),
+    }
+    return config
 
 
 @pytest.fixture
@@ -63,7 +79,7 @@ def confluent_schema_registry():
 def aws_glue_schema_registry():
     return AwsGlueSchemaRegistry(
         region_name="us-east-1",
-        credentials=AwsGlueAccessKeyCredentials(
+        credentials=AwsGlueSchemaRegistryCredentialsSpec(
             aws_access_key_id="test_access_key_id",
             aws_secret_access_key="test_secret_access_key",
         ),
@@ -141,7 +157,7 @@ def test_confluent_schema_registry_properties():
 
 
 def test_aws_glue_schema_registry_properties():
-    creds = AwsGlueAccessKeyCredentials(
+    creds = AwsGlueSchemaRegistryCredentialsSpec(
         aws_access_key_id="AKIA...",
         aws_secret_access_key="SECRET...",
     )
@@ -287,6 +303,17 @@ def test_type_validation(kafka_conn):
             topic="t",
             data_format="json",
             schema=123,
+        )
+    assert e.value.error_code == ErrorCode.PVTRGR1
+
+    # Should raise if size_rollover_mb is not a SizeRollover or None
+    with pytest.raises(ParameterValidationError) as e:
+        KafkaTrigger(
+            conn=kafka_conn,
+            topic="t",
+            data_format="json",
+            schema="{}",
+            size_rollover_mb=-2,
         )
     assert e.value.error_code == ErrorCode.PVTRGR1
 

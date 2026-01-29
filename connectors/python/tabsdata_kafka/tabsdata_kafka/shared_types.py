@@ -4,7 +4,7 @@
 
 from typing import Callable, Literal, TypeAlias, Union
 
-from tabsdata._credentials import S3AccessKeyCredentials
+from tabsdata._credentials import S3AccessKeyCredentials, UserPasswordCredentials
 
 SchemaIdSpec: TypeAlias = Union[str, dict[str, str]]
 
@@ -14,4 +14,8 @@ KafkaServersSpec: TypeAlias = Union[str, list[str]]
 
 KafkaMessageFormatSpec = Literal["avro", "json", "protobuf"]
 
-AwsGlueAccessKeyCredentials: TypeAlias = S3AccessKeyCredentials
+AwsGlueSchemaRegistryCredentialsSpec: TypeAlias = S3AccessKeyCredentials
+
+ConfluentSchemaRegistryCredentialsSpec: TypeAlias = UserPasswordCredentials
+
+KafkaCredentialsSpec: TypeAlias = UserPasswordCredentials

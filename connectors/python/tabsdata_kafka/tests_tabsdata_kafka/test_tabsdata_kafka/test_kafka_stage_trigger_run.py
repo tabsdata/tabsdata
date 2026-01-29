@@ -14,6 +14,9 @@ from unittest import mock
 import polars as pl
 import pyarrow.parquet as pq
 import pytest
+from confluent_kafka.schema_registry._sync.mock_schema_registry_client import (
+    MockSchemaRegistryClient,
+)
 
 import tabsdata as td
 from tabsdata._credentials import UserPasswordCredentials
@@ -36,12 +39,19 @@ from tests_tabsdata.conftest import (
 )
 from tests_tabsdata.fntest import tdfnjob
 from tests_tabsdata_kafka.conftest import (
+    TIMEOUT_SECS,
     MockLocalFileStageTriggerContext,
+    aws_glue_schema_registry,
     aws_glue_sr_avro_glue_serde,
     aws_glue_sr_mock_avro_glue_client,
+    confluent_schema_registry,
     get_avro_message,
     get_json_message,
+    get_large_avro_message,
+    get_large_json_message,
+    get_large_protobuf_message,
     get_protobuf_message,
+    kafka_consumer_fixture,
 )
 
 logger = logging.getLogger(__name__)
@@ -66,194 +76,76 @@ RESPONSE_FOLDER = "response_folder"
 LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
 
 
-# @pytest.mark.kafka
-# @pytest.mark.slow
-# @pytest.mark.requires_internet
-# @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
-# @pytest.mark.parametrize(
-#     "serde_fixture, get_message, get_sr_client",
-#     [
-#         ("avro_serde_v1", get_avro_message, None),
-#         ("json_serde", get_json_message, None),
-#         ("protobuf_serde_v1", get_protobuf_message, None),
-#         ("confluent_sr_avro_serde", get_avro_message, "confluent_sr_mock_registry"),
-#         ("confluent_sr_json_serde", get_avro_message, "confluent_sr_mock_registry"),
-#         (
-#             "confluent_sr_protobuf_serde",
-#             get_protobuf_message,
-#             "confluent_sr_mock_registry",
-#         ),
-#         (
-#             aws_glue_sr_avro_glue_serde,
-#             get_avro_message,
-#             aws_glue_sr_mock_avro_glue_client,
-#         ),
-#         (
-#             "aws_glue_sr_json_glue_serde",
-#             get_avro_message,
-#             "aws_glue_sr_mock_json_glue_client",
-#         ),
-#         (
-#             "aws_glue_sr_protobuf_glue_serde",
-#             get_protobuf_message,
-#             "aws_glue_sr_mock_protobuf_glue_client",
-#         ),
-#     ],
-# )
-# def test_kafka_stage_trigger_time_rollover(
-#     serde_fixture,
-#     get_message,
-#     get_sr_client,
-#     tmp_path,
-#     request,
-#     kafka_config,
-#     produce_kafka_messages,
-# ):
-#     topic = f"test-consumer-messages-rollover-{str(uuid.uuid4())}"
-#
-#     serde = request.getfixturevalue(serde_fixture)
-#     sr_client = request.getfixturevalue(get_sr_client) if get_sr_client else None
-#     sr_client = sr_client[0] if isinstance(sr_client, tuple) else sr_client
-#
-#     produce_kafka_messages(topic, TOTAL_MESSAGES, serde, get_message)
-#
-#     trigger = KafkaTrigger(
-#         conn=KafkaConn(
-#             servers=kafka_config.bootstrap_servers,
-#             credentials=cast(UserPasswordCredentials, kafka_config.credentials),
-#             group_id=str(uuid.uuid4()),
-#         ),
-#         topic=topic,
-#         data_format=serde.format(),
-#         schema=serde._schema,
-#         time_rollover_secs=5,
-#         end=datetime.now(timezone.utc) + timedelta(seconds=70),
-#         message_name=getattr(serde, "_message_name", None),
-#         registry_name=getattr(serde, "_registry_name", None),
-#         schema_name=getattr(serde, "_schema_name", None),
-#     )
-#
-#     @td.publisher(
-#         source=td.Stage(use_existing_data=True),
-#         tables="output",
-#         trigger_by=trigger,
-#     )
-#     def tfr(tfs: list[td.TableFrame]) -> td.TableFrame:
-#
-#         new_tfs = td.concat(tfs)
-#
-#         return new_tfs
-#
-#     staging_folder = tmp_path / "staging"
-#     mock_context = MockLocalFileStageTriggerContext(
-#         staging_folder=str(staging_folder),
-#         trigger_config=CallConfig("POST", "http://fake.url", {}, {}),
-#         logger=logger,
-#         working_dir=str(tmp_path),
-#         end=trigger.end,
-#     )
-#
-#     result = trigger.run(mock_context)
-#     assert result == StageTriggerStatus.SUCCESS
-#     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
-#     context_archive = create_bundle_archive(
-#         tfr, local_packages=LOCAL_PACKAGES_LIST, save_location=tmp_path
-#     )
-#     input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
-#     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
-#     os.makedirs(response_folder, exist_ok=True)
-#     staging_uri = staging_folder.as_uri()
-#     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
-#     write_v2_function_yaml_file(
-#         input_yaml_file,
-#         context_archive,
-#         staging_uri=staging_uri,
-#         function_data_path=function_data_folder,
-#     )
-#
-#     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
-#     os.makedirs(tabsserver_output_folder, exist_ok=True)
-#     environment_name, result = tabsserver_main(
-#         tmp_path,
-#         response_folder,
-#         tabsserver_output_folder,
-#         environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
-#         logs_folder=logs_folder,
-#         temp_cwd=True,
-#     )
-#     assert staging_folder.exists()
-#     parquet_files = list(staging_folder.glob("*.parquet"))
-#     assert len(parquet_files) == 1
-#     output_file = parquet_files[0]
-#     tfr_result = pl.read_parquet(output_file)
-#     assert tfr_result.shape[0] == TOTAL_MESSAGES - 1
-
-
 @pytest.mark.kafka
 @pytest.mark.slow
 @pytest.mark.requires_internet
 @pytest.mark.tdfnjob(venv=False)
 @pytest.mark.parametrize(
-    "serde_fixture, get_message, get_sr_client",
+    "serde_fixture, get_message, get_sr",
     [
-        # (
-        #     "avro_serde_v1",
-        #     get_avro_message,
-        #     None,
-        # ),
-        # (
-        #     "json_serde",
-        #     get_json_message,
-        #     None,
-        # ),
-        # (
-        #     "protobuf_serde_v1",
-        #     get_protobuf_message,
-        #     None,
-        # ),
-        # (
-        #     "confluent_sr_avro_serde",
-        #     get_avro_message,
-        #     "confluent_sr_mock_registry",
-        # ),
-        # (
-        #     "confluent_sr_json_serde",
-        #     get_avro_message,
-        #     "confluent_sr_mock_registry",
-        # ),
-        # (
-        #     "confluent_sr_protobuf_serde",
-        #     get_protobuf_message,
-        #     "confluent_sr_mock_registry",
-        # ),
         (
-            "aws_glue_sr_avro_glue_serde",
+            "avro_serde_v1",
             get_avro_message,
-            "aws_glue_sr_mock_avro_glue_client",
+            None,
         ),
-        # (
-        #     "aws_glue_sr_json_glue_serde",
-        #     get_avro_message,
-        #     "aws_glue_sr_mock_json_glue_client",
-        # ),
-        # (
-        #     "aws_glue_sr_protobuf_glue_serde",
-        #     get_protobuf_message,
-        #     "aws_glue_sr_mock_protobuf_glue_client",
-        # ),
+            (
+                "json_serde",
+                get_json_message,
+                None,
+            ),
+            (
+                "protobuf_serde_v1",
+                get_protobuf_message,
+                None,
+            ),
+            (
+                "confluent_sr_avro_serde",
+                get_avro_message,
+                "confluent_schema_registry",
+            ),
+            (
+                "confluent_sr_json_serde",
+                get_avro_message,
+                "confluent_schema_registry",
+            ),
+            (
+                "confluent_sr_protobuf_serde",
+                get_protobuf_message,
+                "confluent_schema_registry",
+            ),
+            (
+                "aws_glue_sr_avro_glue_serde",
+                get_avro_message,
+                "aws_glue_schema_registry",
+            ),
+            (
+                "aws_glue_sr_json_glue_serde",
+                get_avro_message,
+                "aws_glue_schema_registry",
+            ),
+            (
+                "aws_glue_sr_protobuf_glue_serde",
+                get_protobuf_message,
+                "aws_glue_schema_registry",
+            ),
     ],
 )
-def test_kafka_stage_trigger_message_rollover(
+def test_kafka_stage_trigger_time_rollover(
     serde_fixture,
     get_message,
-    get_sr_client,
-    tmp_path,
+    get_sr,
     request,
     kafka_config,
     produce_kafka_messages,
 ):
     topic = str(uuid.uuid4())
-    serde = request.getfixturevalue(serde_fixture)
+    serde_obj = request.getfixturevalue(serde_fixture)
+    if callable(serde_obj):
+        serde = serde_obj(kafka_config)
+    else:
+        serde = serde_obj
+    sr = request.getfixturevalue(get_sr)(kafka_config) if get_sr else None
+
     produce_kafka_messages(topic, TOTAL_MESSAGES, serde, get_message)
 
     trigger = KafkaTrigger(
@@ -261,9 +153,263 @@ def test_kafka_stage_trigger_message_rollover(
             servers=kafka_config.bootstrap_servers,
             credentials=cast(UserPasswordCredentials, kafka_config.credentials),
             group_id=str(uuid.uuid4()),
+            schema_registry=sr,
         ),
         topic=topic,
-        data_format=serde.format(),
+        data_format=serde.format,
+        schema=serde._schema,
+        time_rollover_secs=5,
+        end=datetime.now(timezone.utc) + timedelta(seconds=KAFKA_TRIGGER_DURATION),
+        message_name=getattr(serde, "_message_name", None),
+        registry_name=getattr(serde, "_registry_name", None),
+        schema_name=getattr(serde, "_schema_name", None),
+    )
+
+    @td.publisher(
+        source=td.Stage(use_existing_data=True),
+        tables="output",
+        name=str(uuid.uuid4()),
+        trigger_by=trigger,
+    )
+    def tfr(tfs: list[td.TableFrame]) -> td.TableFrame:
+        return td.concat(tfs)
+
+    fn_trigger, fn_run = tdfnjob(
+        trigger=trigger,
+        function=tfr,
+        function_defined_on=EDGE_OF_TIME,
+    )
+    parquet_files = fn_trigger.output.as_os_fd()
+    assert len(parquet_files) == TOTAL_BATCHES - 1
+    parquet_files_sorted = sorted(parquet_files, key=lambda f: f.stat().st_ctime)
+    for i, parquet_file in enumerate(parquet_files_sorted):
+        rows = pq.read_table(parquet_file).num_rows
+        assert rows == TOTAL_MESSAGES
+
+
+@pytest.mark.kafka
+@pytest.mark.slow
+@pytest.mark.requires_internet
+@pytest.mark.tdfnjob(venv=False)
+@pytest.mark.parametrize(
+    "serde_fixture, get_message, get_sr",
+    [
+        (
+            "avro_serde_v1",
+            get_avro_message,
+            None,
+        ),
+        (
+            "json_serde",
+            get_json_message,
+            None,
+        ),
+        (
+            "protobuf_serde_v1",
+            get_protobuf_message,
+            None,
+        ),
+        (
+            "confluent_sr_avro_serde",
+            get_avro_message,
+            "confluent_schema_registry",
+        ),
+        (
+            "confluent_sr_json_serde",
+            get_avro_message,
+            "confluent_schema_registry",
+        ),
+        (
+            "confluent_sr_protobuf_serde",
+            get_protobuf_message,
+            "confluent_schema_registry",
+        ),
+        (
+            "aws_glue_sr_avro_glue_serde",
+            get_avro_message,
+            "aws_glue_schema_registry",
+        ),
+        (
+            "aws_glue_sr_json_glue_serde",
+            get_avro_message,
+            "aws_glue_schema_registry",
+        ),
+        (
+            "aws_glue_sr_protobuf_glue_serde",
+            get_protobuf_message,
+            "aws_glue_schema_registry",
+        ),
+    ],
+)
+def test_kafka_stage_trigger_time_rollover_w_dlq(
+    serde_fixture,
+    get_message,
+    get_sr,
+    request,
+    kafka_config,
+    produce_kafka_messages,
+    kafka_producer,
+    kafka_topic_creator,
+    kafka_consumer_fixture,
+):
+    topic = str(uuid.uuid4())
+    serde_obj = request.getfixturevalue(serde_fixture)
+    if callable(serde_obj):
+        serde = serde_obj(kafka_config)
+    else:
+        serde = serde_obj
+    sr = request.getfixturevalue(get_sr)(kafka_config) if get_sr else None
+
+    dlq_topic = f"{uuid.uuid4()}_dlq"
+
+    kafka_topic_creator(dlq_topic)
+
+    # Send a bad message (invalid for the serde)
+    for _ in range(BATCH_MESSAGES):
+        bad_value = b"this is not valid for the expected schema"
+        kafka_producer.produce(topic, value=bad_value)
+        kafka_producer.list_topics(timeout=TIMEOUT_SECS)
+        kafka_producer.poll(0)
+        kafka_producer.flush()
+
+    produce_kafka_messages(topic, TOTAL_MESSAGES, serde, get_message)
+
+    trigger = KafkaTrigger(
+        conn=KafkaConn(
+            servers=kafka_config.bootstrap_servers,
+            credentials=cast(UserPasswordCredentials, kafka_config.credentials),
+            group_id=str(uuid.uuid4()),
+            schema_registry=sr,
+        ),
+        topic=topic,
+        data_format=serde.format,
+        schema=serde._schema,
+        time_rollover_secs=5,
+        end=datetime.now(timezone.utc) + timedelta(seconds=KAFKA_TRIGGER_DURATION),
+        message_name=getattr(serde, "_message_name", None),
+        registry_name=getattr(serde, "_registry_name", None),
+        schema_name=getattr(serde, "_schema_name", None),
+        dlq_topic=dlq_topic,
+    )
+
+    @td.publisher(
+        source=td.Stage(use_existing_data=True),
+        tables="output",
+        name=str(uuid.uuid4()),
+        trigger_by=trigger,
+    )
+    def tfr(tfs: list[td.TableFrame]) -> td.TableFrame:
+        return td.concat(tfs)
+
+    fn_trigger, fn_run = tdfnjob(
+        trigger=trigger,
+        function=tfr,
+        function_defined_on=EDGE_OF_TIME,
+    )
+    parquet_files = fn_trigger.output.as_os_fd()
+    assert len(parquet_files) == TOTAL_BATCHES - 1
+    parquet_files_sorted = sorted(parquet_files, key=lambda f: f.stat().st_ctime)
+    for i, parquet_file in enumerate(parquet_files_sorted):
+        rows = pq.read_table(parquet_file).num_rows
+        assert rows == TOTAL_MESSAGES
+
+    dlq_consumer = kafka_consumer_fixture
+    dlq_consumer.subscribe([dlq_topic])
+    dlq_consumer.list_topics(timeout=TIMEOUT_SECS)
+
+    dlq_messages = []
+    while len(dlq_messages) < BATCH_MESSAGES:
+        msg = dlq_consumer.poll(timeout=TIMEOUT_SECS)
+        if msg is None:
+            break  # No more messages
+        if msg.error():
+            continue
+        dlq_messages.append(msg.value())
+    dlq_consumer.close()
+
+    assert len(dlq_messages) == BATCH_MESSAGES
+
+
+@pytest.mark.kafka
+@pytest.mark.slow
+@pytest.mark.requires_internet
+@pytest.mark.tdfnjob(venv=False)
+@pytest.mark.parametrize(
+    "serde_fixture, get_message, get_sr",
+    [
+        (
+            "avro_serde_v1",
+            get_avro_message,
+            None,
+        ),
+        (
+            "json_serde",
+            get_json_message,
+            None,
+        ),
+        (
+            "protobuf_serde_v1",
+            get_protobuf_message,
+            None,
+        ),
+        (
+            "confluent_sr_avro_serde",
+            get_avro_message,
+            "confluent_schema_registry",
+        ),
+        (
+            "confluent_sr_json_serde",
+            get_avro_message,
+            "confluent_schema_registry",
+        ),
+        (
+            "confluent_sr_protobuf_serde",
+            get_protobuf_message,
+            "confluent_schema_registry",
+        ),
+        (
+            "aws_glue_sr_avro_glue_serde",
+            get_avro_message,
+            "aws_glue_schema_registry",
+        ),
+        (
+            "aws_glue_sr_json_glue_serde",
+            get_avro_message,
+            "aws_glue_schema_registry",
+        ),
+        (
+            "aws_glue_sr_protobuf_glue_serde",
+            get_protobuf_message,
+            "aws_glue_schema_registry",
+        ),
+    ],
+)
+def test_kafka_stage_trigger_message_rollover(
+    serde_fixture,
+    get_message,
+    get_sr,
+    request,
+    kafka_config,
+    produce_kafka_messages,
+):
+    topic = str(uuid.uuid4())
+    serde_obj = request.getfixturevalue(serde_fixture)
+    if callable(serde_obj):
+        serde = serde_obj(kafka_config)
+    else:
+        serde = serde_obj
+    sr = request.getfixturevalue(get_sr)(kafka_config) if get_sr else None
+    produce_kafka_messages(topic, TOTAL_MESSAGES, serde, get_message)
+
+    trigger = KafkaTrigger(
+        conn=KafkaConn(
+            servers=kafka_config.bootstrap_servers,
+            credentials=cast(UserPasswordCredentials, kafka_config.credentials),
+            group_id=str(uuid.uuid4()),
+            schema_registry=sr,
+        ),
+        topic=topic,
+        data_format=serde.format,
         schema=serde._schema,
         messages_rollover=BATCH_MESSAGES,
         end=datetime.now(timezone.utc) + timedelta(seconds=KAFKA_TRIGGER_DURATION),
@@ -293,3 +439,120 @@ def test_kafka_stage_trigger_message_rollover(
     for i, parquet_file in enumerate(parquet_files_sorted):
         rows = pq.read_table(parquet_file).num_rows
         assert rows == BATCH_MESSAGES
+
+
+@pytest.mark.kafka
+@pytest.mark.slow
+@pytest.mark.requires_internet
+@pytest.mark.tdfnjob(venv=False)
+@pytest.mark.parametrize(
+    "serde_fixture, get_message, get_sr",
+    [
+        (
+            "avro_serde_v1",
+            get_large_avro_message,
+            None,
+        ),
+        (
+            "json_serde",
+            get_large_json_message,
+            None,
+        ),
+        (
+            "protobuf_serde_v1",
+            get_large_protobuf_message,
+            None,
+        ),
+        (
+            "confluent_sr_avro_serde",
+            get_large_avro_message,
+            "confluent_schema_registry",
+        ),
+        (
+            "confluent_sr_json_serde",
+            get_large_avro_message,
+            "confluent_schema_registry",
+        ),
+        (
+            "confluent_sr_protobuf_serde",
+            get_large_protobuf_message,
+            "confluent_schema_registry",
+        ),
+        (
+            "aws_glue_sr_avro_glue_serde",
+            get_large_avro_message,
+            "aws_glue_schema_registry",
+        ),
+        (
+            "aws_glue_sr_json_glue_serde",
+            get_large_avro_message,
+            "aws_glue_schema_registry",
+        ),
+        (
+            "aws_glue_sr_protobuf_glue_serde",
+            get_large_protobuf_message,
+            "aws_glue_schema_registry",
+        ),
+    ],
+)
+def test_kafka_stage_trigger_size_rollover(
+    serde_fixture,
+    get_message,
+    get_sr,
+    request,
+    kafka_config,
+    produce_kafka_messages,
+):
+    topic = str(uuid.uuid4())
+    serde_obj = request.getfixturevalue(serde_fixture)
+    if callable(serde_obj):
+        serde = serde_obj(kafka_config)
+    else:
+        serde = serde_obj
+    sr = request.getfixturevalue(get_sr)(kafka_config) if get_sr else None
+
+    size_rollover_messages = TOTAL_MESSAGES * 20
+
+    produce_kafka_messages(topic, size_rollover_messages, serde, get_message)
+
+    trigger = KafkaTrigger(
+        conn=KafkaConn(
+            servers=kafka_config.bootstrap_servers,
+            credentials=cast(UserPasswordCredentials, kafka_config.credentials),
+            group_id=str(uuid.uuid4()),
+            schema_registry=sr,
+        ),
+        topic=topic,
+        data_format=serde.format,
+        schema=serde._schema,
+        size_rollover_mb=1,
+        end=datetime.now(timezone.utc) + timedelta(seconds=KAFKA_TRIGGER_DURATION),
+        message_name=getattr(serde, "_message_name", None),
+        registry_name=getattr(serde, "_registry_name", None),
+        schema_name=getattr(serde, "_schema_name", None),
+    )
+
+    @td.publisher(
+        source=td.Stage(use_existing_data=True),
+        tables="output",
+        name=str(uuid.uuid4()),
+        trigger_by=trigger,
+    )
+    def tfr(tfs: list[td.TableFrame]) -> td.TableFrame:
+        return td.concat(tfs)
+
+    fn_trigger, fn_run = tdfnjob(
+        trigger=trigger,
+        function=tfr,
+        function_defined_on=EDGE_OF_TIME,
+    )
+
+    parquet_files = fn_trigger.output.as_os_fd()
+    assert len(parquet_files) == TOTAL_BATCHES
+    parquet_files_sorted = sorted(parquet_files, key=lambda f: f.stat().st_ctime)
+    for i, parquet_file in enumerate(parquet_files_sorted):
+        size = round(pq.read_table(parquet_file).nbytes / (1024 * 1024))
+        if i == 0:
+            assert size >= 1
+        else:
+            assert size <= 1

@@ -19,7 +19,6 @@ from confluent_kafka.schema_registry import SchemaRegistryClient
 from mypy_boto3_glue.client import GlueClient
 from pydantic import PositiveInt
 
-from tabsdata._credentials import UserPasswordCredentials
 from tabsdata._io.connections.connections import Conn
 from tabsdata._io.stage_trigger import (
     StageTrigger,
@@ -33,8 +32,19 @@ from tabsdata.exceptions import (
     StageTriggerExecutionError,
 )
 from tabsdata_kafka.constants import (
+    AUTO_OFFSET_RESET_KEY,
+    BASIC_AUTH_USER_INFO_KEY,
+    BOOTSTRAP_SERVERS_KEY,
     CONNECTION_TIMEOUT_SECS,
     CONSUME_TIMEOUT_SECS,
+    ENABLE_AUTO_COMMIT_KEY,
+    GROUP_ID_KEY,
+    REGION_NAME_KEY,
+    SASL_MECHANISM_KEY,
+    SASL_PASSWORD_KEY,
+    SASL_USERNAME_KEY,
+    SECURITY_PROTOCOL_KEY,
+    URL_KEY,
     MessageFormat,
 )
 from tabsdata_kafka.consumer.consumer import KafkaConsumer, RolloverReason
@@ -58,7 +68,9 @@ from tabsdata_kafka.serdes.serde import (
     KafkaSerde,
 )
 from tabsdata_kafka.shared_types import (
-    AwsGlueAccessKeyCredentials,
+    AwsGlueSchemaRegistryCredentialsSpec,
+    ConfluentSchemaRegistryCredentialsSpec,
+    KafkaCredentialsSpec,
     KafkaMessageFormatSpec,
     KafkaServersSpec,
 )
@@ -79,7 +91,7 @@ class ConfluentSchemaRegistry(KafkaSchemaRegistry):
     def __init__(
         self,
         url: str,
-        credentials: UserPasswordCredentials | None = None,
+        credentials: ConfluentSchemaRegistryCredentialsSpec | None = None,
         configs: dict | None = None,
     ):
         self._url = url
@@ -91,7 +103,7 @@ class ConfluentSchemaRegistry(KafkaSchemaRegistry):
         return self._url
 
     @property
-    def credentials(self) -> UserPasswordCredentials | None:
+    def credentials(self) -> ConfluentSchemaRegistryCredentialsSpec | None:
         return self._credentials
 
     @property
@@ -111,7 +123,7 @@ class AwsGlueSchemaRegistry(KafkaSchemaRegistry):
     def __init__(
         self,
         region_name: str,
-        credentials: AwsGlueAccessKeyCredentials | None = None,
+        credentials: AwsGlueSchemaRegistryCredentialsSpec | None = None,
         configs: dict | None = None,
     ):
         self._region_name = region_name
@@ -123,7 +135,7 @@ class AwsGlueSchemaRegistry(KafkaSchemaRegistry):
         return self._region_name
 
     @property
-    def credentials(self) -> AwsGlueAccessKeyCredentials | None:
+    def credentials(self) -> AwsGlueSchemaRegistryCredentialsSpec | None:
         return self._credentials
 
     @property
@@ -146,7 +158,7 @@ class KafkaConn(Conn):
     def __init__(
         self,
         servers: KafkaServersSpec,
-        credentials: UserPasswordCredentials | None = None,
+        credentials: KafkaCredentialsSpec | None = None,
         group_id: str | None = None,
         schema_registry: Optional[
             ConfluentSchemaRegistry | AwsGlueSchemaRegistry
@@ -182,7 +194,7 @@ class KafkaConn(Conn):
         return self._servers
 
     @property
-    def credentials(self) -> UserPasswordCredentials | None:
+    def credentials(self) -> KafkaCredentialsSpec | None:
         """
         Kafka credentials.
         """
@@ -275,6 +287,7 @@ class KafkaTrigger(StageTrigger):
         self._size_rollover_mb = size_rollover_mb
         self._messages_rollover = messages_rollover
         self._dlq_topic = dlq_topic
+        self._setup_sigterm_handler()
 
     @property
     def conn(self) -> KafkaConn:
@@ -369,16 +382,16 @@ class KafkaTrigger(StageTrigger):
             if sr.configs:
                 sr_configs = sr_configs | sr.configs
 
-            sr_configs["url"] = sr.url
+            sr_configs[URL_KEY] = sr.url
             if sr.credentials:
-                sr_configs["basic.auth.user.info"] = (
+                sr_configs[BASIC_AUTH_USER_INFO_KEY] = (
                     f"{sr.credentials.user.secret_value}:"
                     f"{sr.credentials.password.secret_value}"
                 )
             return SchemaRegistryClient(sr_configs)
         elif isinstance(sr, AwsGlueSchemaRegistry):
 
-            boto_kwargs = {"region_name": sr.region_name}
+            boto_kwargs = {REGION_NAME_KEY: sr.region_name}
             if sr.configs:
                 boto_kwargs = boto_kwargs | sr.configs
             if sr.credentials:
@@ -391,87 +404,87 @@ class KafkaTrigger(StageTrigger):
         if self.conn.cx_src_configs:
             kafka_configs = kafka_configs | self.conn.cx_src_configs
 
-        kafka_configs["bootstrap.servers"] = (
+        kafka_configs[BOOTSTRAP_SERVERS_KEY] = (
             self.conn.servers
             if isinstance(self.conn.servers, str)
             else ",".join(self.conn.servers)
         )
-        kafka_configs["auto.offset.reset"] = "earliest"
-
-        kafka_configs["enable.auto.commit"] = False
+        kafka_configs[AUTO_OFFSET_RESET_KEY] = "earliest"
+        kafka_configs[ENABLE_AUTO_COMMIT_KEY] = False
 
         if self.conn.credentials:
-            kafka_configs["security.protocol"] = "sasl_plaintext"
-            kafka_configs["sasl.mechanism"] = "SCRAM-SHA-256"
-            kafka_configs["sasl.username"] = self.conn.credentials.user.secret_value
-            kafka_configs["sasl.password"] = self.conn.credentials.password.secret_value
+            kafka_configs[SECURITY_PROTOCOL_KEY] = "sasl_plaintext"
+            kafka_configs[SASL_MECHANISM_KEY] = "SCRAM-SHA-256"
+            kafka_configs[SASL_USERNAME_KEY] = self.conn.credentials.user.secret_value
+            kafka_configs[SASL_PASSWORD_KEY] = (
+                self.conn.credentials.password.secret_value
+            )
 
         # Set group.id based on enforce_connection_params flag
-        # If enforce_connection_params is True, use conn.group_id if provided,
-        # otherwise use the group_id passed to the trigger
-        # If enforce_connection_params is False, always use the group_id passed to the
-        # trigger
         if self.conn.enforce_connection_params:
-            kafka_configs["group.id"] = (
+            kafka_configs[GROUP_ID_KEY] = (
                 self.conn.group_id if self.conn.group_id else self.group_id
             )
         else:
-            kafka_configs["group.id"] = self.group_id
+            kafka_configs[GROUP_ID_KEY] = self.group_id
 
         # Validate that group.id is set
-        if not kafka_configs.get("group.id", None):
+        if not kafka_configs.get(GROUP_ID_KEY):
             raise StageTriggerConfigurationError(
                 ErrorCode.STE6,
                 self.conn.__class__.__name__,
                 self.__class__.__name__,
-                kafka_configs.get("group.id", None),
+                kafka_configs.get(GROUP_ID_KEY),
             )
 
         return kafka_configs
 
-    def run(  # noqa: C901
-        self,
-        context: StageTriggerContext,
-    ):
+    def run(self, context: StageTriggerContext):
         """
         Run the Kafka stage trigger to consume messages, buffer them, and stage them
         based on rollover conditions.
-
         Args:
             context: The StageTriggerContext instance.
         """
+        serde = self._get_serde(str(context.working_dir))
+        logger.debug(f"Using serde: {type(serde).__name__}")
 
-        # Add SIGTERM handler to raise KeyboardInterrupt
+        kafka_configs = self._build_kafka_configs()
+        consumer = self._create_consumer(kafka_configs)
+        dlq_producer = self._create_dlq_producer(kafka_configs)
+
+        consumer.subscribe([self.topic])
+        kafka_consumer = self._create_kafka_consumer(consumer, serde, dlq_producer)
+
+        self._consume_loop(context, kafka_consumer, consumer, dlq_producer, serde)
+
+    def _setup_sigterm_handler(self):
         def _sigterm_handler(signum, frame):
             raise KeyboardInterrupt
 
         signal.signal(signal.SIGTERM, _sigterm_handler)
 
-        serde = self._get_serde(str(context.working_dir))
-        logger.debug(f"Using serde: {type(serde).__name__}")
-
-        kafka_configs = self._build_kafka_configs()
-
-        consumer = None
+    def _create_consumer(self, kafka_configs):
         try:
             consumer = Consumer(kafka_configs)
-            # This forces a connection timeout if the broker is unreachable
             consumer.list_topics(timeout=CONNECTION_TIMEOUT_SECS)
+            return consumer
         except Exception as e:
             logger.error(f"Error connecting to the Kafka broker: {e}")
             raise e
 
-        dlq_producer = None
+    def _create_dlq_producer(self, kafka_configs):
         try:
-            dlq_producer = Producer(kafka_configs) if self.dlq_topic else None
-            # This forces a connection timeout if the broker is unreachable
-            if dlq_producer:
+            if self.dlq_topic:
+                dlq_producer = Producer(kafka_configs)
                 dlq_producer.list_topics(timeout=CONNECTION_TIMEOUT_SECS)
+                return dlq_producer
+            return None
         except Exception as e:
             logger.error(f"Error creating DLQ producer: {e}")
             raise e
 
-        consumer.subscribe([self.topic])
+    def _create_kafka_consumer(self, consumer, serde, dlq_producer):
         kafka_consumer = KafkaConsumer(
             topic=self.topic,
             consumer=consumer,
@@ -482,17 +495,25 @@ class KafkaTrigger(StageTrigger):
             dlq_topic=self.dlq_topic,
         )
         logger.debug(f"Kafka consumer created. {kafka_consumer}")
+        return kafka_consumer
 
+    def _consume_loop(
+        self,
+        context: StageTriggerContext,
+        kafka_consumer: KafkaConsumer,
+        consumer: Consumer,
+        dlq_producer: Producer | None,
+        serde: KafkaSerde,
+    ):
         buffer: MessagesBuffer | None = None
         stage_trigger_status = None
         rollover_reason: RolloverReason | None = None
         try:
-            start = time.time()  # keep track of the start time to be able to time out
+            start = time.time()
             buffer = MessagesBuffer(self.topic, serde.schema_id_compatibles_checker())
             reset_buffer_on_time_rollover = False
             stage_trigger_status = StageTriggerStatus.SUCCESS
             while True:
-                # Break the loop if end time is set and current time exceeds it
                 if self._end is not None and datetime.now(timezone.utc) > self._end:
                     stage_trigger_status = StageTriggerStatus.SUCCESS
                     logger.info("KafkaStageTrigger end time reached, exiting loop.")
@@ -504,13 +525,12 @@ class KafkaTrigger(StageTrigger):
                 )
                 logger.debug(
                     f"Rollover reason: {rollover_reason}, Buffer size:"
-                    f" {buffer.size_mb()} MB, Message count: {buffer.message_count()}"
+                    f" {buffer.size_mb} MB, Message count: {buffer.message_count}"
                 )
                 max_timeout = self.time_rollover_secs - (time.time() - start)
                 if buffer is not None and (
                     rollover_reason != RolloverReason.Time or max_timeout <= 0
                 ):
-                    # noinspection PyTypeChecker
                     start = handle_rollover(
                         context=context,
                         buffer=buffer,
@@ -530,36 +550,55 @@ class KafkaTrigger(StageTrigger):
             logger.error(f"Error in KafkaStageTrigger run loop: {e}")
             raise e
         finally:
-            if buffer is not None:
-                logger.debug("Final buffer rollover before shutdown.")
-                # noinspection PyTypeChecker
-                handle_rollover(
-                    context=context,
-                    buffer=buffer,
-                    rollover_reason=rollover_reason,
-                    working_dir=str(context.working_dir),
-                    kafka_consumer=kafka_consumer,
-                )
-            if dlq_producer:
-                logger.debug("Flushing DLQ producer before shutdown.")
-                dlq_producer.flush()
-            logger.debug("Closing Kafka consumer.")
-            kafka_consumer.close()
-            consumer.close()
-            logger.debug("Kafka consumer closed.")
+            self._finalize_consumption(
+                context,
+                buffer,
+                rollover_reason,
+                kafka_consumer,
+                consumer,
+                dlq_producer,
+                stage_trigger_status,
+            )
 
-            # Check if return_on_end attribute exists and is True
-            if getattr(self, "return_on_end", False):
-                if stage_trigger_status == StageTriggerStatus.SUCCESS:
-                    pass
-                else:
-                    raise StageTriggerExecutionError(
-                        ErrorCode.STR1,
-                        "KafkaStageTrigger execution failed with status:"
-                        f" {stage_trigger_status.name}",
-                    )
+    def _finalize_consumption(
+        self,
+        context,
+        buffer,
+        rollover_reason,
+        kafka_consumer,
+        consumer,
+        dlq_producer,
+        stage_trigger_status,
+    ):
+        if buffer is not None:
+            logger.debug("Final buffer rollover before shutdown.")
+            handle_rollover(
+                context=context,
+                buffer=buffer,
+                rollover_reason=rollover_reason,
+                working_dir=str(context.working_dir),
+                kafka_consumer=kafka_consumer,
+            )
+        if dlq_producer:
+            logger.debug("Flushing DLQ producer before shutdown.")
+            dlq_producer.flush()
+        logger.debug("Closing Kafka consumer.")
+        kafka_consumer.close()
+        consumer.close()
+        logger.debug("Kafka consumer closed.")
+
+        # Check if return_on_end attribute exists and is True
+        if getattr(self, "return_on_end", False):
+            if stage_trigger_status == StageTriggerStatus.SUCCESS:
+                pass
             else:
-                sys.exit(stage_trigger_status.value)
+                raise StageTriggerExecutionError(
+                    ErrorCode.STR1,
+                    "KafkaStageTrigger execution failed with status:"
+                    f" {stage_trigger_status.name}",
+                )
+        else:
+            sys.exit(stage_trigger_status.value)
 
     def _get_serde(self, working_dir: str) -> KafkaSerde:
         """

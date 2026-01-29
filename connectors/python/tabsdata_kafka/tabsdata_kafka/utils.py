@@ -22,7 +22,7 @@ from tabsdata_kafka.constants import (
 from tabsdata_kafka.consumer.consumer import KafkaConsumer, RolloverReason
 from tabsdata_kafka.consumer.messages_buffer import MessagesBuffer
 from tabsdata_kafka.shared_types import (
-    AwsGlueAccessKeyCredentials,
+    AwsGlueSchemaRegistryCredentialsSpec,
 )
 
 logger = logging.getLogger(__name__)
@@ -50,7 +50,7 @@ def handle_rollover(
     """
     logger.debug(f"Rollover reason: {rollover_reason}")
     buffer_file_path = None
-    if not buffer.is_flushed():
+    if not buffer.is_flushed:
         buffer_file_path = buffer.to_parquet(dir_path=working_dir)
 
     if buffer_file_path is not None:
@@ -109,11 +109,19 @@ def get_protobuf_class(
         return message_class
 
 
-def obtain_and_set_aws_glue_credentials(credentials: AwsGlueAccessKeyCredentials):
-    """Given the AwsGlueAccessKeyCredentials object, obtain the secret values and set
-    them as required for the aws glue client to use them."""
+def obtain_and_set_aws_glue_credentials(
+    credentials: AwsGlueSchemaRegistryCredentialsSpec,
+):
+    """
+    Given the AwsGlueSchemaRegistryCredentialsSpec object, obtain the secret values
+    and set them as required for the aws glue client to use them.
+
+    Args:
+        credentials: The AwsGlueSchemaRegistryCredentialsSpec object containing AWS Glue
+            credentials.
+    """
     logger.info("Setting AWS Glue credentials.")
-    if isinstance(credentials, AwsGlueAccessKeyCredentials):
+    if isinstance(credentials, AwsGlueSchemaRegistryCredentialsSpec):
         os.environ[AWS_ACCESS_KEY_ID] = credentials.aws_access_key_id.secret_value
         os.environ[AWS_SECRET_ACCESS_KEY] = (
             credentials.aws_secret_access_key.secret_value

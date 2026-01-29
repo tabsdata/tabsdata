@@ -29,7 +29,7 @@ from tests_tabsdata_kafka.conftest import (
 @pytest.mark.unit
 @pytest.mark.kafka
 def test_json_glue_serializer_deserializer(aws_glue_sr_json_glue_serde):
-    assert aws_glue_sr_json_glue_serde.format() == "json"
+    assert aws_glue_sr_json_glue_serde.format == "json"
 
     test_data = {"name": "test_user", "favorite_number": 123, "favorite_color": "blue"}
     ctx = SerializationContext("test_topic", MessageField.VALUE)
@@ -70,7 +70,7 @@ def test_json_glue_deserializer_with_schema_id(
 @pytest.mark.unit
 @pytest.mark.kafka
 def test_avro_glue_serializer_deserializer(aws_glue_sr_avro_glue_serde):
-    assert aws_glue_sr_avro_glue_serde.format() == "avro"
+    assert aws_glue_sr_avro_glue_serde.format == "avro"
 
     test_data = {"name": "test_user", "favorite_number": 123, "favorite_color": "blue"}
     ctx = SerializationContext("test_topic", MessageField.VALUE)
@@ -111,7 +111,7 @@ def test_avro_glue_deserializer_with_schema_id(
 @pytest.mark.unit
 @pytest.mark.kafka
 def test_protobuf_glue_serializer_deserializer(aws_glue_sr_protobuf_glue_serde):
-    assert aws_glue_sr_protobuf_glue_serde.format() == "protobuf"
+    assert aws_glue_sr_protobuf_glue_serde.format == "protobuf"
 
     test_data = {"name": "John Doe", "id": 123, "email": "john.doe@example.com"}
 

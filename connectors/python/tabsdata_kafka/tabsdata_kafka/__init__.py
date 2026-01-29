@@ -11,7 +11,9 @@ from tabsdata_kafka._connector import (
     KafkaTrigger,
 )
 from tabsdata_kafka.shared_types import (
-    AwsGlueAccessKeyCredentials,
+    AwsGlueSchemaRegistryCredentialsSpec,
+    ConfluentSchemaRegistryCredentialsSpec,
+    KafkaCredentialsSpec,
     KafkaMessageFormatSpec,
     KafkaServersSpec,
     SchemaIdCompatibles,
@@ -25,7 +27,9 @@ __all__ = [
     "SchemaIdCompatibles",
     "SchemaIdSpec",
     "KafkaServersSpec",
-    "AwsGlueAccessKeyCredentials",
+    "KafkaCredentialsSpec",
+    "ConfluentSchemaRegistryCredentialsSpec",
+    "AwsGlueSchemaRegistryCredentialsSpec",
     "ConfluentSchemaRegistry",
     "AwsGlueSchemaRegistry",
 ]

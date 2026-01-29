@@ -6,7 +6,10 @@ from __future__ import annotations
 
 import logging
 
+from tabsdata._credentials import UserPasswordCredentials
 from tabsdata._io.stage_trigger import LocalFileStageTriggerContext
+from tabsdata_kafka._connector import AwsGlueSchemaRegistry, ConfluentSchemaRegistry
+from tabsdata_kafka.shared_types import AwsGlueSchemaRegistryCredentialsSpec
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -14,6 +17,8 @@ logger.setLevel(logging.INFO)
 from tests_tabsdata.bootest import enrich_sys_path
 from tests_tabsdata.common.backend import KafkaConfig
 from tests_tabsdata_kafka.bootest import TESTING_RESOURCES_PATH
+
+TIMEOUT_SECS = 5
 
 
 def _enrich_sys_path():
@@ -190,57 +195,113 @@ def confluent_sr_mock_registry():
     return MockSchemaRegistryClient({"url": "http://mock-url"})
 
 
+@pytest.fixture
+def confluent_schema_registry():
+    def _sr(config: KafkaConfig):
+        return ConfluentSchemaRegistry(
+            url=config.schema_registry_url,
+            credentials=UserPasswordCredentials(
+                user=config.credentials.user.secret_value,
+                password=config.credentials.password.secret_value,
+            ),
+            configs=None,
+        )
+
+    return _sr
+
+
 @pytest.fixture(scope="function")
-def confluent_sr_avro_serde(confluent_sr_mock_registry):
+def confluent_sr_avro_serde(
+    confluent_sr_mock_registry, kafka_schema_registry, monkeypatch
+):
     """
     Fixture to provide an AvroSrKafkaSerde instance with a mock schema registry.
     """
-    schema_path = os.path.join(TESTING_RESOURCES_PATH, "schemas", "user_v1.avsc")
-    with open(schema_path, "r") as f:
-        schema_str = f.read()
 
-    # The Avro Deserializer needs a parsed schema, not just a string
-    parsed_schema = avro.schema.parse(schema_str)
+    def _factory(config: KafkaConfig, mock=False):
+        schema_path = os.path.join(TESTING_RESOURCES_PATH, "schemas", "user_v1.avsc")
+        with open(schema_path, "r") as f:
+            schema_str = f.read()
+        # The Avro Deserializer needs a parsed schema, not just a string
+        parsed_schema = avro.schema.parse(schema_str)
+        sr_client = (
+            kafka_schema_registry(config) if not mock else confluent_sr_mock_registry
+        )
+        return AvroSrKafkaSerde(sr_client, schema_str)
 
-    return AvroSrKafkaSerde(confluent_sr_mock_registry, schema_str)
+    return _factory
 
 
 @pytest.fixture(scope="function")
-def confluent_sr_json_serde(confluent_sr_mock_registry):
+def confluent_sr_json_serde(confluent_sr_mock_registry, kafka_schema_registry):
     """
     Fixture to provide a JsonSrKafkaSerde instance with a mock schema registry.
     """
-    schema_path = os.path.join(TESTING_RESOURCES_PATH, "schemas", "user.json")
-    with open(schema_path, "r") as f:
-        schema_str = f.read()
-    schema = Schema(schema_str, schema_type="JSON")
 
-    return JsonSrKafkaSerde(
-        schema_registry_client=confluent_sr_mock_registry, json_schema=schema_str
-    )
+    def _factory(config: KafkaConfig, mock=False):
+        schema_path = os.path.join(TESTING_RESOURCES_PATH, "schemas", "user.json")
+        with open(schema_path, "r") as f:
+            schema_str = f.read()
+        schema = Schema(schema_str, schema_type="JSON")
+        sr_client = (
+            kafka_schema_registry(config) if not mock else confluent_sr_mock_registry
+        )
+        return JsonSrKafkaSerde(
+            schema_registry_client=sr_client, json_schema=schema_str
+        )
+
+    return _factory
 
 
 @pytest.fixture(scope="function")
-def confluent_sr_protobuf_serde(confluent_sr_mock_registry, tmp_path_factory):
+def confluent_sr_protobuf_serde(
+    confluent_sr_mock_registry,
+    kafka_schema_registry,
+    tmp_path_factory,
+):
     """
     Fixture to provide a ProtobufSrKafkaSerde instance with a mock schema registry.
     """
-    working_dir = tmp_path_factory.mktemp("protobuf_gen")
 
-    proto_file_path = os.path.join(TESTING_RESOURCES_PATH, "schemas", "person_v1.proto")
-    proto_schema = open(proto_file_path, "r").read()
+    def _factory(config: KafkaConfig = None, mock=False):
+        working_dir = tmp_path_factory.mktemp("protobuf_gen")
 
-    message_name = "PersonV1"
+        proto_file_path = os.path.join(
+            TESTING_RESOURCES_PATH, "schemas", "person_v1.proto"
+        )
+        proto_schema = open(proto_file_path, "r").read()
 
-    return ProtobufSrKafkaSerde(
-        schema_registry_client=confluent_sr_mock_registry,
-        protobuf_schema=proto_schema,
-        message_name=message_name,
-        working_dir=str(working_dir),
-    )
+        message_name = "PersonV1"
+        sr_client = (
+            kafka_schema_registry(config) if not mock else confluent_sr_mock_registry
+        )
+
+        return ProtobufSrKafkaSerde(
+            schema_registry_client=sr_client,
+            protobuf_schema=proto_schema,
+            message_name=message_name,
+            working_dir=str(working_dir),
+        )
+
+    return _factory
 
 
 # AWS Glue Schema Registry
+
+
+@pytest.fixture
+def aws_glue_schema_registry():
+    def _sr(config: KafkaConfig):
+        return AwsGlueSchemaRegistry(
+            region_name="us-east-1",
+            credentials=AwsGlueSchemaRegistryCredentialsSpec(
+                aws_access_key_id="test_access_key_id",
+                aws_secret_access_key="test_secret_access_key",
+            ),
+            configs=None,
+        )
+
+    return _sr
 
 
 @pytest.fixture(scope="module")
@@ -266,9 +327,10 @@ def aws_glue_sr_mock_json_glue_client(aws_glue_sr_json_schema_str):
 
 @pytest.fixture
 def aws_glue_sr_json_glue_serde(
-    aws_glue_sr_json_schema_str, aws_glue_sr_mock_json_glue_client
+    aws_glue_sr_json_schema_str, aws_glue_sr_mock_json_glue_client, monkeypatch
 ):
     mock_client, _ = aws_glue_sr_mock_json_glue_client
+    monkeypatch.setattr("boto3.client", lambda *args, **kwargs: mock_client)
     return JsonGlueKafkaSerde(
         glue_client=mock_client,
         registry_name="test-registry",
@@ -301,9 +363,12 @@ def aws_glue_sr_mock_avro_glue_client(aws_glue_sr_avro_schema_str):
 
 @pytest.fixture
 def aws_glue_sr_avro_glue_serde(
-    aws_glue_sr_avro_schema_str, aws_glue_sr_mock_avro_glue_client
+    aws_glue_sr_avro_schema_str,
+    aws_glue_sr_mock_avro_glue_client,
+    monkeypatch,
 ):
     mock_client, _ = aws_glue_sr_mock_avro_glue_client
+    monkeypatch.setattr("boto3.client", lambda *args, **kwargs: mock_client)
     return AvroGlueKafkaSerde(
         glue_client=mock_client,
         registry_name="test-registry",
@@ -338,10 +403,11 @@ def aws_glue_sr_protobuf_glue_serde(
     aws_glue_sr_protobuf_schema_str,
     aws_glue_sr_mock_protobuf_glue_client,
     tmp_path_factory,
+    monkeypatch,
 ):
     mock_client, _ = aws_glue_sr_mock_protobuf_glue_client
     working_dir = tmp_path_factory.mktemp("protobuf_gen")
-
+    monkeypatch.setattr("boto3.client", lambda *args, **kwargs: mock_client)
     return ProtobufGlueKafkaSerde(
         glue_client=mock_client,
         registry_name="test-registry",
@@ -367,18 +433,17 @@ def kafka_topic_creator(kafka_config: KafkaConfig):
 
     def topic_creator(topic_name: str):
         admin_client = AdminClient(admin_config)
-        admin_client.list_topics(timeout=5)
+        admin_client.list_topics(timeout=TIMEOUT_SECS)
         topic = [NewTopic(topic_name, num_partitions=1, replication_factor=1)]
 
-        topics = admin_client.list_topics(timeout=5)
+        topics = admin_client.list_topics(timeout=TIMEOUT_SECS)
 
         fs = admin_client.create_topics(topic)
 
-        topics = admin_client.list_topics(timeout=5)
-
+        topics = admin_client.list_topics(timeout=TIMEOUT_SECS)
         for topic, f in fs.items():
             try:
-                f.result(timeout=10)
+                f.result(timeout=TIMEOUT_SECS)
                 logger.debug(f"Topic '{topic}' created")
             except Exception as e:
                 error_message = str(e)
@@ -401,53 +466,41 @@ def kafka_producer(kafka_config: KafkaConfig) -> Producer:
         "sasl.password": kafka_config.password,
     }
     producer = Producer(producer_config)
-    topics = producer.list_topics(timeout=5)
+    topics = producer.list_topics(timeout=TIMEOUT_SECS)
 
     return producer
 
 
 @pytest.fixture
-def kafka_consumer() -> Generator[Consumer, Any, None]:
+def kafka_consumer_fixture(kafka_config: KafkaConfig) -> Consumer:
     config = {
-        "bootstrap.servers": os.environ.get("KF0__KAFKA_SERVERS", "localhost:19092"),
-        "group.id": os.environ.get("KF0__KAFKA_GROUP_ID", str(uuid.uuid4())),
+        "bootstrap.servers": kafka_config.bootstrap_servers,
+        "group.id": str(uuid.uuid4()),
         "auto.offset.reset": "earliest",
         "enable.auto.commit": False,
-        "security.protocol": "sasl_plaintext",
+        "security.protocol": "SASL_PLAINTEXT",
         "sasl.mechanism": "SCRAM-SHA-256",
-        "sasl.username": os.environ.get("KF0__KAFKA_SASL_USERNAME", "admin"),
-        "sasl.password": os.environ.get("KF0__KAFKA_SASL_PASSWORD", "secret"),
+        "sasl.username": kafka_config.user,
+        "sasl.password": kafka_config.password,
     }
     consumer = Consumer(config)
-    consumer.list_topics(timeout=5)
-    yield consumer
-
-    consumer.close()
-
-
-@pytest.fixture
-def kafka_consumer_config() -> dict:
-    config = {
-        "bootstrap.servers": os.environ.get("KF0__KAFKA_SERVERS", "localhost:19092"),
-        "group.id": os.environ.get("KF0__KAFKA_GROUP_ID", str(uuid.uuid4())),
-        "auto.offset.reset": "earliest",
-        "enable.auto.commit": False,
-        "security.protocol": "sasl_plaintext",
-        "sasl.mechanism": "SCRAM-SHA-256",
-        "sasl.username": os.environ.get("KF0__KAFKA_SASL_USERNAME", "admin"),
-        "sasl.password": os.environ.get("KF0__KAFKA_SASL_PASSWORD", "secret"),
-    }
-    return config
+    consumer.list_topics(timeout=TIMEOUT_SECS)
+    return consumer
 
 
 @pytest.fixture
 def kafka_schema_registry():
-    schema_registry_url = os.environ.get(
-        "KF0__KAFKA_CONFLUENT_SCHEMA_REGISTRY_URL", "http://localhost:18081"
-    )
-    sr_client = SchemaRegistryClient({"url": schema_registry_url})
+    def _sr_client(config: KafkaConfig):
+        sr_client = SchemaRegistryClient(
+            {
+                "url": config.schema_registry_url,
+                "basic.auth.user.info": f"{config.user}:{config.password}",
+                "timeout": TIMEOUT_SECS,  # milliseconds
+            }
+        )
+        return sr_client
 
-    return sr_client
+    return _sr_client
 
 
 @pytest.fixture
@@ -464,8 +517,11 @@ def produce_kafka_messages(kafka_topic_creator, kafka_producer):
                     f"Produced message to {msg.topic()}"
                 ),
             )
+            kafka_producer.list_topics(timeout=TIMEOUT_SECS)
             kafka_producer.poll(0)
+            kafka_producer.list_topics(timeout=TIMEOUT_SECS)
         kafka_producer.flush()
+        kafka_producer.list_topics(timeout=TIMEOUT_SECS)
 
     return _produce
 

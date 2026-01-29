@@ -140,7 +140,11 @@ from tabsdata_kafka._connector import (
     KafkaConn,
     KafkaTrigger,
 )
-from tabsdata_kafka.shared_types import AwsGlueAccessKeyCredentials
+from tabsdata_kafka.shared_types import (
+    AwsGlueSchemaRegistryCredentialsSpec,
+    ConfluentSchemaRegistryCredentialsSpec,
+    KafkaCredentialsSpec,
+)
 
 # noinspection PyProtectedMember
 from tabsdata_mongodb._connector import MongoDBDestination
@@ -224,7 +228,9 @@ __all__ = [
     "OracleConn",
     "PostgresConn",
     # Credentials
-    "AwsGlueAccessKeyCredentials",
+    "AwsGlueSchemaRegistryCredentialsSpec",
+    "KafkaCredentialsSpec",
+    "ConfluentSchemaRegistryCredentialsSpec",
     "AzureAccountKeyCredentials",
     "GCPServiceAccountKeyCredentials",
     "S3AccessKeyCredentials",

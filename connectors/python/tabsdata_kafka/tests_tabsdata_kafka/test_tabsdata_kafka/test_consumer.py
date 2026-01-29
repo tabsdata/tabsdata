@@ -20,12 +20,13 @@ from tests_tabsdata_kafka.conftest import (
     get_large_json_message,
     get_large_protobuf_message,
     get_protobuf_message,
-    kafka_producer,
-    kafka_topic_creator,
+    produce_kafka_messages,
 )
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
+TIMEOUT_SECS = 10
 
 
 @pytest.mark.unit
@@ -36,21 +37,21 @@ def test_message_buffer_add_and_get_messages():
 
     buffer = MessagesBuffer("test-topic", schema_ids_compatibles_checker)
 
-    assert buffer.message_count() == 0
+    assert buffer.message_count == 0
 
-    assert buffer.messages() == []
+    assert buffer.messages == []
 
     buffer.append((10, {"key": "value1"}, "schema1"))
 
-    assert buffer.message_count() == 1
+    assert buffer.message_count == 1
 
-    assert buffer.messages() == [{"key": "value1"}]
+    assert buffer.messages == [{"key": "value1"}]
 
     buffer.append((10, {"key": "value2"}, "schema1"))
 
-    assert buffer.message_count() == 2
+    assert buffer.message_count == 2
 
-    assert buffer.messages() == [{"key": "value1"}, {"key": "value2"}]
+    assert buffer.messages == [{"key": "value1"}, {"key": "value2"}]
 
 
 @pytest.mark.unit
@@ -76,12 +77,12 @@ def test_message_buffer_message_count():
 
     buffer = MessagesBuffer("test-topic", schema_ids_compatibles_checker)
 
-    assert buffer.message_count() == 0
+    assert buffer.message_count == 0
 
     for i in range(5):
         buffer.append((10, {f"key{i}": f"value{i}"}, "schema1"))
 
-    assert buffer.message_count() == 5
+    assert buffer.message_count == 5
 
 
 @pytest.mark.unit
@@ -92,17 +93,17 @@ def test_message_buffer_size_mb():
 
     buffer = MessagesBuffer("test-topic", schema_ids_compatibles_checker)
 
-    assert buffer.size_mb() == 0
+    assert buffer.size_mb == 0
 
     one_mb = 1024 * 1024
 
     buffer.append((one_mb, {"key": "value1"}, "schema1"))
 
-    assert buffer.size_mb() == 1
+    assert buffer.size_mb == 1
 
     buffer.append((one_mb * 2, {"key": "value2"}, "schema1"))
 
-    assert buffer.size_mb() == 3
+    assert buffer.size_mb == 3
 
 
 @pytest.mark.unit
@@ -181,43 +182,28 @@ def test_message_buffer_to_parquet_with_missing_columns(tmp_path):
     "serde_fixture, get_message",
     [
         ("avro_serde_v1", get_avro_message),
-        # ("json_serde", get_json_message),
-        # ("protobuf_serde_v1", get_protobuf_message),
-        # ("confluent_sr_avro_serde", get_avro_message),
-        # ("confluent_sr_json_serde", get_avro_message),
-        # ("confluent_sr_protobuf_serde", get_protobuf_message),
-        # ("aws_glue_sr_avro_glue_serde", get_avro_message),
-        # ("aws_glue_sr_json_glue_serde", get_avro_message),
-        # ("aws_glue_sr_protobuf_glue_serde", get_protobuf_message),
+        ("json_serde", get_json_message),
+        ("protobuf_serde_v1", get_protobuf_message),
+        ("confluent_sr_avro_serde", get_avro_message),
+        ("confluent_sr_json_serde", get_avro_message),
+        ("confluent_sr_protobuf_serde", get_protobuf_message),
+        ("aws_glue_sr_avro_glue_serde", get_avro_message),
+        ("aws_glue_sr_json_glue_serde", get_avro_message),
+        ("aws_glue_sr_protobuf_glue_serde", get_protobuf_message),
     ],
 )
 def test_consumer_messages_rollover(
-    serde_fixture,
-    get_message,
-    request,
-    kafka_config,
+    serde_fixture, get_message, request, kafka_config, produce_kafka_messages
 ):
-    serde = request.getfixturevalue(serde_fixture)
-    topic = f"test-consumer-messages-rollover-{serde.format()}-{str(uuid.uuid4())}"
+    serde_obj = request.getfixturevalue(serde_fixture)
+    if callable(serde_obj):
+        serde = serde_obj(kafka_config)
+    else:
+        serde = serde_obj
+    topic = f"test-consumer-messages-rollover-{serde.format}-{str(uuid.uuid4())}"
 
-    # Create topic
-    kafka_topic_creator(kafka_config)(topic)
-
-    # Produce messages
-    producer = kafka_producer(kafka_config)
-    sent_messages = 100
-    ctx = SerializationContext(topic, MessageField.VALUE)
-    for i in range(1, sent_messages + 1):
-        msg = get_message(i)
-        producer.produce(
-            topic,
-            value=serde.serializer()(msg, ctx),
-            callback=lambda err, msg: logger.debug(
-                f"Produced message to {msg.topic()}"
-            ),
-        )
-        producer.poll(0)
-    producer.flush()
+    TOTAL_MESSAGES = 100
+    produce_kafka_messages(topic, TOTAL_MESSAGES, serde, get_message)
 
     # Create consumer
     consumer_config = {
@@ -231,6 +217,7 @@ def test_consumer_messages_rollover(
         "sasl.password": kafka_config.password,
     }
     kafka_consumer = Consumer(consumer_config)
+    kafka_consumer.list_topics(timeout=TIMEOUT_SECS)
 
     try:
         kafka_consumer.subscribe([topic])
@@ -239,20 +226,20 @@ def test_consumer_messages_rollover(
         responses = []
         received_messages = 0
         loop_start_time = time.time()
-        while received_messages < sent_messages:
+        while received_messages < TOTAL_MESSAGES:
             if time.time() - loop_start_time > 30:  # 30 second timeout
                 pytest.fail(
                     "Timeout waiting for messages in messages_rollover test. "
-                    f"Received {received_messages}/{sent_messages} messages"
+                    f"Received {received_messages}/{TOTAL_MESSAGES} messages"
                 )
 
             (reason, buffer) = consumer.consume(1)
-            if buffer.message_count() > 0:
-                received_messages += buffer.message_count()
+            if buffer.message_count > 0:
+                received_messages += buffer.message_count
                 responses.append((reason, buffer))
                 consumer.commit()
 
-        assert sent_messages == received_messages
+        assert TOTAL_MESSAGES == received_messages
 
         for reason, buffer in responses:
             assert reason in [
@@ -260,9 +247,9 @@ def test_consumer_messages_rollover(
                 RolloverReason.Time,
                 RolloverReason.SchemaChange,
             ]
-            assert buffer.message_count() <= 10
+            assert buffer.message_count <= 10
             if reason == RolloverReason.Messages:
-                assert buffer.message_count() == 10
+                assert buffer.message_count == 10
 
     finally:
         kafka_consumer.close()
@@ -285,32 +272,17 @@ def test_consumer_messages_rollover(
     ],
 )
 def test_consumer_time_rollover(
-    serde_fixture,
-    get_message,
-    request,
-    kafka_config,
+    serde_fixture, get_message, request, kafka_config, produce_kafka_messages
 ):
-    serde = request.getfixturevalue(serde_fixture)
-    topic = f"test-consumer-time-rollover-{serde.format()}-{str(uuid.uuid4())}"
+    serde_obj = request.getfixturevalue(serde_fixture)
+    if callable(serde_obj):
+        serde = serde_obj(kafka_config)
+    else:
+        serde = serde_obj
+    topic = f"test-consumer-time-rollover-{serde.format}-{str(uuid.uuid4())}"
 
-    # Create topic
-    kafka_topic_creator(kafka_config)(topic)
-
-    # Produce messages
-    producer = kafka_producer(kafka_config)
     sent_messages = 5
-    ctx = SerializationContext(topic, MessageField.VALUE)
-    for i in range(1, sent_messages + 1):
-        msg = get_message(i)
-        producer.produce(
-            topic,
-            value=serde.serializer()(msg, ctx),
-            callback=lambda err, msg: logger.debug(
-                f"Produced message to {msg.topic()}"
-            ),
-        )
-        producer.poll(0)
-    producer.flush()
+    produce_kafka_messages(topic, sent_messages, serde, get_message)
 
     # Create consumer
     consumer_config = {
@@ -324,6 +296,7 @@ def test_consumer_time_rollover(
         "sasl.password": kafka_config.password,
     }
     kafka_consumer = Consumer(consumer_config)
+    kafka_consumer.list_topics(timeout=TIMEOUT_SECS)
 
     try:
         kafka_consumer.subscribe([topic])
@@ -336,9 +309,9 @@ def test_consumer_time_rollover(
                 pytest.fail("Timeout waiting for messages in time_rollover test")
 
             (reason, buffer) = consumer.consume(2, reset_buffer=True)
-            if buffer.message_count() > 0:
+            if buffer.message_count > 0:
                 assert reason in [RolloverReason.Time, RolloverReason.SchemaChange]
-                received_messages += buffer.message_count()
+                received_messages += buffer.message_count
                 consumer.commit()
 
         assert received_messages == sent_messages
@@ -349,7 +322,7 @@ def test_consumer_time_rollover(
         end_time = time.time()
 
         assert reason == RolloverReason.Time
-        assert buffer.message_count() == 0
+        assert buffer.message_count == 0
         assert (
             end_time - start_time >= 2
         )  # checking for 2 instead of 3 due to some fractions randomness
@@ -375,32 +348,17 @@ def test_consumer_time_rollover(
     ],
 )
 def test_consumer_size_rollover(
-    serde_fixture,
-    get_message,
-    request,
-    kafka_config,
+    serde_fixture, get_message, request, kafka_config, produce_kafka_messages
 ):
-    serde = request.getfixturevalue(serde_fixture)
-    topic = f"test-consumer-size-rollover-{serde.format()}-{str(uuid.uuid4())}"
+    serde_obj = request.getfixturevalue(serde_fixture)
+    if callable(serde_obj):
+        serde = serde_obj(kafka_config)
+    else:
+        serde = serde_obj
+    topic = f"test-consumer-size-rollover-{serde.format}-{str(uuid.uuid4())}"
 
-    # Create topic
-    kafka_topic_creator(kafka_config)(topic)
-
-    # Produce messages
-    producer = kafka_producer(kafka_config)
     sent_messages = 1100
-    ctx = SerializationContext(topic, MessageField.VALUE)
-    for i in range(1, sent_messages + 1):
-        msg = get_message(i)
-        producer.produce(
-            topic,
-            value=serde.serializer()(msg, ctx),
-            callback=lambda err, msg: logger.debug(
-                f"Produced message to {msg.topic()}"
-            ),
-        )
-        producer.poll(0)
-    producer.flush()
+    produce_kafka_messages(topic, sent_messages, serde, get_message)
 
     # Create consumer
     consumer_config = {
@@ -414,6 +372,7 @@ def test_consumer_size_rollover(
         "sasl.password": kafka_config.password,
     }
     kafka_consumer = Consumer(consumer_config)
+    kafka_consumer.list_topics(timeout=TIMEOUT_SECS)
 
     try:
         kafka_consumer.subscribe([topic])
@@ -431,8 +390,8 @@ def test_consumer_size_rollover(
                 )
 
             (reason, buffer) = consumer.consume(5)
-            if buffer.message_count() > 0:
-                received_messages += buffer.message_count()
+            if buffer.message_count > 0:
+                received_messages += buffer.message_count
                 responses.append((reason, buffer))
                 consumer.commit()
                 if not first_rollover:

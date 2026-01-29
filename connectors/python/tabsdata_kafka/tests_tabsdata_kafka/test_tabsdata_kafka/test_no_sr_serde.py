@@ -44,7 +44,7 @@ def test_json_serde_serialization_deserialization_with_schema(json_serde):
     Tests successful serialization and deserialization of a JSON message that conforms to the schema.
     """
 
-    assert json_serde.format() == "json"
+    assert json_serde.format == "json"
 
     original_data = {"name": "test", "age": 30}  # 'city' is not required by schema
 
@@ -71,7 +71,7 @@ def test_json_serde_serialization_deserialization_with_no_schema(json_serde_no_s
     Tests successful serialization and deserialization of a JSON message that conforms to the schema.
     """
 
-    assert json_serde_no_schema.format() == "json"
+    assert json_serde_no_schema.format == "json"
 
     original_data = {"name": "test", "age": 30}  # 'city' is not required by schema
 
@@ -343,7 +343,7 @@ def test_avro_serializer_deserializer(avro_serde_v1):
     Tests the serialization and deserialization of a message using AvroKafkaSerde.
     """
 
-    assert avro_serde_v1.format() == "avro"
+    assert avro_serde_v1.format == "avro"
 
     test_data = {"name": "test_user", "favorite_number": 123, "favorite_color": "blue"}
 
@@ -477,7 +477,7 @@ def test_protobuf_serializer_deserializer(protobuf_serde_v1):
     Tests the serialization and deserialization of a message using ProtobufKafkaSerde.
     """
 
-    assert protobuf_serde_v1.format() == "protobuf"
+    assert protobuf_serde_v1.format == "protobuf"
 
     test_data = {"name": "John Doe", "id": 123, "email": "john.doe@example.com"}
 

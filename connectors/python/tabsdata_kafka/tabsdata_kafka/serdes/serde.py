@@ -3,13 +3,13 @@
 #
 
 from abc import ABC, abstractmethod
-from typing import Callable, Dict, Literal, Tuple, TypeAlias, Union
+from typing import Callable, Literal, TypeAlias, Union
 
 from confluent_kafka.serialization import SerializationContext
 
 MsgFormatSpec: TypeAlias = Literal["avro", "json", "protobuf"]
 
-SchemaIdSpec: TypeAlias = Union[str, Dict[str, str]]
+SchemaIdSpec: TypeAlias = Union[str, dict[str, str]]
 
 SchemaIdCompatibles: TypeAlias = Callable[[SchemaIdSpec, SchemaIdSpec], bool]
 """
@@ -26,13 +26,14 @@ class KafkaSerde(ABC):
     def __init__(self):
         def deserializer_with_schema_id(
             data: bytes, ctx: SerializationContext
-        ) -> Tuple[Dict, SchemaIdSpec]:
+        ) -> tuple[dict, SchemaIdSpec]:
             message = self.deserializer()(data, ctx)
             schema_id = self.extract_schema_id(data, message)
             return message, schema_id
 
         self._deserializer_with_schema_id = deserializer_with_schema_id
 
+    @property
     @abstractmethod
     def format(self) -> MsgFormatSpec:
         """
@@ -41,7 +42,7 @@ class KafkaSerde(ABC):
         pass
 
     @abstractmethod
-    def serializer(self) -> Callable[[Dict, SerializationContext], bytes]:
+    def serializer(self) -> Callable[[dict, SerializationContext], bytes]:
         """
         Returns a serializer function that takes an object and a SerializationContext
         and returns bytes.
@@ -49,15 +50,15 @@ class KafkaSerde(ABC):
         pass
 
     @abstractmethod
-    def deserializer(self) -> Callable[[bytes, SerializationContext], Dict]:
+    def deserializer(self) -> Callable[[bytes, SerializationContext], dict]:
         """
         Returns a deserializer function that takes bytes and a SerializationContext
-        and returns a Dict for the message.
+        and returns a dict for the message.
         """
         pass
 
     @abstractmethod
-    def extract_schema_id(self, data: bytes, message: Dict) -> SchemaIdSpec:
+    def extract_schema_id(self, data: bytes, message: dict) -> SchemaIdSpec:
         """
         Returns the Schema ID of the message.
         :param data: raw message.
@@ -68,10 +69,10 @@ class KafkaSerde(ABC):
 
     def deserializer_with_schema_id(
         self,
-    ) -> Callable[[bytes, SerializationContext], Tuple[Dict, SchemaIdSpec]]:
+    ) -> Callable[[bytes, SerializationContext], tuple[dict, SchemaIdSpec]]:
         """
         Returns a deserializer function that takes bytes and a SerializationContext
-        and returns a Dict and the schema_id for the message.
+        and returns a dict and the schema_id for the message.
         """
         return self._deserializer_with_schema_id
 

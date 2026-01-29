@@ -3,7 +3,7 @@
 #
 
 from abc import ABC
-from typing import Callable, Dict
+from typing import Callable
 
 from confluent_kafka.schema_registry import SchemaRegistryClient
 from confluent_kafka.schema_registry.avro import AvroDeserializer, AvroSerializer
@@ -31,7 +31,7 @@ from tabsdata_kafka.utils import get_protobuf_class
 
 class SrKafkaSerde(KafkaSerde, ABC):
 
-    def extract_schema_id(self, data: bytes, _message: Dict) -> SchemaIdSpec:
+    def extract_schema_id(self, data: bytes, _message: dict) -> SchemaIdSpec:
         if len(data) < 5:
             raise ValueError(
                 "Payload is too short to be a Confluent Schema Registry message"
@@ -52,6 +52,13 @@ class AvroSrKafkaSerde(SrKafkaSerde):
     def __init__(
         self, schema_registry_client: SchemaRegistryClient, avro_schema: str = None
     ):
+        """
+        Initializes the Confluent Avro serde with an Avro schema.
+
+        Args:
+            schema_registry_client: Confluent Schema Registry client.
+            avro_schema: Avro schema string.
+        """
         super().__init__()
         self._serializer = AvroSerializer(
             schema_str=avro_schema,
@@ -65,14 +72,18 @@ class AvroSrKafkaSerde(SrKafkaSerde):
         )
         self._schema = avro_schema
 
+    @property
     def format(self) -> KafkaMessageFormatSpec:
         return MessageFormat.AVRO.value
 
-    def serializer(self) -> Callable[[Dict, SerializationContext], bytes]:
+    def serializer(self) -> Callable[[dict, SerializationContext], bytes]:
         return self._serializer
 
-    def deserializer(self) -> Callable[[bytes, SerializationContext], Dict]:
+    def deserializer(self) -> Callable[[bytes, SerializationContext], dict]:
         return self._deserializer
+
+    def __repr__(self):
+        return f"AvroSrKafkaSerde(schema={self._schema})"
 
 
 class JsonSrKafkaSerde(SrKafkaSerde):
@@ -83,6 +94,13 @@ class JsonSrKafkaSerde(SrKafkaSerde):
     def __init__(
         self, schema_registry_client: SchemaRegistryClient, json_schema: str = None
     ):
+        """
+        Initializes the Confluent JSON serde with a JSON schema.
+
+        Args:
+            schema_registry_client: Confluent Schema Registry client.
+            json_schema: JSON schema string.
+        """
         super().__init__()
         self._serializer = JSONSerializer(
             schema_str=json_schema, schema_registry_client=schema_registry_client
@@ -92,14 +110,18 @@ class JsonSrKafkaSerde(SrKafkaSerde):
         )
         self._schema = json_schema
 
+    @property
     def format(self) -> KafkaMessageFormatSpec:
         return MessageFormat.JSON.value
 
-    def serializer(self) -> Callable[[Dict, SerializationContext], bytes]:
+    def serializer(self) -> Callable[[dict, SerializationContext], bytes]:
         return self._serializer
 
-    def deserializer(self) -> Callable[[bytes, SerializationContext], Dict]:
+    def deserializer(self) -> Callable[[bytes, SerializationContext], dict]:
         return self._deserializer
+
+    def __repr__(self):
+        return f"JsonSrKafkaSerde(schema={self._schema})"
 
 
 class ProtobufSrKafkaSerde(SrKafkaSerde):
@@ -115,33 +137,46 @@ class ProtobufSrKafkaSerde(SrKafkaSerde):
         working_dir: str,
     ):
         """
-        Initializes the Protobuf serde.
-        :param protobuf_schema: The protobuf schema.
-        :param message_name: The name of the message class to be used for
-                             serialization/deserialization (e.g., 'MyMessage').
-        :param working_dir: A working directory used for runtime files by the serde.
+        Initializes the Confluent Protobuf serde with a Protobuf schema.
+
+        Args:
+            schema_registry_client: Confluent Schema Registry client.
+            protobuf_schema: Protobuf schema string.
+            message_name: The name of the message class to be used for
+                          serialization/deserialization.
+            working_dir: A working directory used for runtime files by the serde.
         """
         super().__init__()
         msg_class = get_protobuf_class(working_dir, protobuf_schema, message_name)
 
+        self._serializer = self._make_serializer(schema_registry_client, msg_class)
+        self._deserializer = self._make_deserializer(schema_registry_client, msg_class)
+        self._schema = protobuf_schema
+        self._message_name = message_name
+        self._working_dir = working_dir
+
+    @staticmethod
+    def _make_serializer(schema_registry_client, msg_class):
         class_serializer = ProtobufSerializer(
             msg_type=msg_class,
             schema_registry_client=schema_registry_client,
         )
 
-        def serializer(dict_obj: Dict, ctx: SerializationContext) -> bytes:
+        def serializer(dict_obj: dict, ctx: SerializationContext) -> bytes:
             obj = msg_class()
             ParseDict(dict_obj, obj)
             return class_serializer(obj, ctx)
 
-        self._serializer = serializer
+        return serializer
 
+    @staticmethod
+    def _make_deserializer(schema_registry_client, msg_class):
         class_deserializer = ProtobufDeserializer(
             message_type=msg_class,
             schema_registry_client=schema_registry_client,
         )
 
-        def deserializer(data: bytes, ctx: SerializationContext) -> Dict:
+        def deserializer(data: bytes, ctx: SerializationContext) -> dict:
             obj = class_deserializer(data, ctx)
             return MessageToDict(
                 obj,
@@ -149,16 +184,20 @@ class ProtobufSrKafkaSerde(SrKafkaSerde):
                 always_print_fields_with_no_presence=False,
             )
 
-        self._deserializer = deserializer
-        self._schema = protobuf_schema
-        self._message_name = message_name
-        self._working_dir = working_dir
+        return deserializer
 
+    @property
     def format(self) -> KafkaMessageFormatSpec:
         return MessageFormat.PROTOBUF.value
 
-    def serializer(self) -> Callable[[Dict, SerializationContext], bytes]:
+    def serializer(self) -> Callable[[dict, SerializationContext], bytes]:
         return self._serializer
 
-    def deserializer(self) -> Callable[[bytes, SerializationContext], Dict]:
+    def deserializer(self) -> Callable[[bytes, SerializationContext], dict]:
         return self._deserializer
+
+    def __repr__(self):
+        return (
+            f"ProtobufSrKafkaSerde(schema={self._schema},"
+            f" message_name={self._message_name}, working_dir={self._working_dir})"
+        )
