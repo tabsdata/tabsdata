@@ -10,6 +10,7 @@ import uuid
 from typing import TYPE_CHECKING
 
 import polars as pl
+from typing_extensions import deprecated
 
 from tabsdata._credentials import UserPasswordCredentials, build_credentials
 from tabsdata._io.inputs.sql_inputs import (
@@ -23,6 +24,7 @@ from tabsdata._io.outputs.shared_enums import (
 from tabsdata._io.plugin import DestinationPlugin, SourcePlugin
 from tabsdata._secret import Secret
 from tabsdata._tabsserver.function.offset_utils import OffsetReturn
+from tabsdata._utils.annotations import deprecation
 from tabsdata.exceptions import ErrorCode, SourceConfigurationError
 
 if TYPE_CHECKING:
@@ -32,6 +34,18 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
+@deprecated(
+    "Publisher 'MSSQLSource' is deprecated.",
+    category=deprecation(
+        reason=(
+            "The use of 'MSSQLSrc' is preferred, as it provides several "
+            "enhancements, improved attribute organization, and support for managed "
+            "connections."
+        ),
+        since="1.6.0",
+        replacement="Replaced by 'MSSQLSrc'.",
+    ),
+)
 class MSSQLSource(SourcePlugin):
     """
     Microsoft SQL Server based data inputs.

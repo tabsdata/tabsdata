@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, List
 from urllib.parse import urlparse
 
 import polars as pl
+from typing_extensions import deprecated
 
 from tabsdata._credentials import (
     UserPasswordCredentials,
@@ -28,6 +29,7 @@ from tabsdata._io.outputs.shared_enums import (
 )
 from tabsdata._io.plugin import DestinationPlugin
 from tabsdata._tabsserver.function.sql_utils import add_mariadb_collation
+from tabsdata._utils.annotations import deprecation
 from tabsdata._utils.sql_utils import add_driver_to_uri, obtain_uri
 from tabsdata.exceptions import (
     DestinationConfigurationError,
@@ -42,6 +44,18 @@ logging.getLogger("sqlalchemy").setLevel(logging.ERROR)
 logging.getLogger("urllib3").setLevel(logging.ERROR)
 
 
+@deprecated(
+    "Subscriber 'MariaDBDestination' is deprecated.",
+    category=deprecation(
+        reason=(
+            "The use of 'MariaDBDest' is preferred, as it provides several "
+            "enhancements, improved attribute organization, and support for managed "
+            "connections."
+        ),
+        since="1.6.0",
+        replacement="Replaced by 'MariaDBDest'.",
+    ),
+)
 class MariaDBDestination(DestinationPlugin):
     """
     MariaDB-based data outputs.
@@ -209,6 +223,18 @@ class MariaDBDestination(DestinationPlugin):
         logger.debug("Results written to SQL destination successfully")
 
 
+@deprecated(
+    "Subscriber 'MySQLDestination' is deprecated.",
+    category=deprecation(
+        reason=(
+            "The use of 'MySQLDest' is preferred, as it provides several "
+            "enhancements, improved attribute organization, and support for managed "
+            "connections."
+        ),
+        since="1.6.0",
+        replacement="Replaced by 'MySQLDest'.",
+    ),
+)
 class MySQLDestination(DestinationPlugin):
     """
     MySQL-based data outputs.
@@ -532,6 +558,18 @@ class OracleDestination(DestinationPlugin):
         logger.debug("Results written to SQL destination successfully")
 
 
+@deprecated(
+    "Subscriber 'PostgresDestination' is deprecated.",
+    category=deprecation(
+        reason=(
+            "The use of 'PostgresDest' is preferred, as it provides several "
+            "enhancements, improved attribute organization, and support for managed "
+            "connections."
+        ),
+        since="1.6.0",
+        replacement="Replaced by 'PostgresDest'.",
+    ),
+)
 class PostgresDestination(DestinationPlugin):
     """
     Postgres-based data outputs.

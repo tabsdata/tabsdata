@@ -9,6 +9,7 @@ from typing import List
 from urllib.parse import urlparse
 
 import polars as pl
+from typing_extensions import deprecated
 
 from tabsdata._credentials import (
     UserPasswordCredentials,
@@ -22,6 +23,7 @@ from tabsdata._io.constants import (
 )
 from tabsdata._io.plugin import SourcePlugin
 from tabsdata._tabsserver.function.offset_utils import OffsetReturn
+from tabsdata._utils.annotations import deprecation
 from tabsdata._utils.sql_utils import obtain_uri
 from tabsdata.exceptions import (
     ErrorCode,
@@ -46,6 +48,18 @@ def _validate_initial_values_type(initial_values: dict):
             raise SourceConfigurationError(ErrorCode.SOCE40, type(key))
 
 
+@deprecated(
+    "Publisher 'MariaDBSource' is deprecated.",
+    category=deprecation(
+        reason=(
+            "The use of 'MariaDBSrc' is preferred, as it provides several "
+            "enhancements, improved attribute organization, and support for managed "
+            "connections."
+        ),
+        since="1.6.0",
+        replacement="Replaced by 'MariaDBSrc'.",
+    ),
+)
 class MariaDBSource(SourcePlugin):
     """
     MariaDB-based data inputs.
@@ -203,6 +217,18 @@ class MariaDBSource(SourcePlugin):
         return f"{self.__class__.__name__}(uri={self.uri}, query={self.query})"
 
 
+@deprecated(
+    "Publisher 'MySQLSource' is deprecated.",
+    category=deprecation(
+        reason=(
+            "The use of 'MySQLSrc' is preferred, as it provides several"
+            "enhancements, improved attribute organization, and support for managed"
+            "connections."
+        ),
+        since="1.6.0",
+        replacement="Replaced by 'MySQLSrc'.",
+    ),
+)
 class MySQLSource(SourcePlugin):
     """
     MySQL-based data inputs.
@@ -359,6 +385,18 @@ class MySQLSource(SourcePlugin):
         return f"{self.__class__.__name__}(uri={self.uri}, query={self.query})"
 
 
+@deprecated(
+    "Publisher 'OracleSource' is deprecated.",
+    category=deprecation(
+        reason=(
+            "The use of 'OracleSrc' is preferred, as it provides several"
+            "enhancements, improved attribute organization, and support for managed"
+            "connections."
+        ),
+        since="1.6.0",
+        replacement="Replaced by 'OracleSrc'.",
+    ),
+)
 class OracleSource(SourcePlugin):
     """
     Oracle-based data inputs.
@@ -513,6 +551,18 @@ class OracleSource(SourcePlugin):
         return f"{self.__class__.__name__}(uri={self.uri}, query={self.query})"
 
 
+@deprecated(
+    "Publisher 'PostgresSource' is deprecated.",
+    category=deprecation(
+        reason=(
+            "The use of 'PostgresSrc' is preferred, as it provides several"
+            "enhancements, improved attribute organization, and support for managed"
+            "connections."
+        ),
+        since="1.6.0",
+        replacement="Replaced by 'PostgresSrc'.",
+    ),
+)
 class PostgresSource(SourcePlugin):
     """
     Postgres-based data inputs.
