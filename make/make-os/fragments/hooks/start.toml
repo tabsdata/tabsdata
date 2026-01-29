@@ -107,4 +107,29 @@ script = [
         td_build_timestamp = get_env TD_BUILD_TIMESTAMP
         info "🔩 TD_OVERRIDE_BUILD_TIMESTAMP is 'true'. Using 'TD_BUILD_TIMESTAMP': '${td_build_timestamp}'."
     end
+
+    on_ga = get_env TD_ON_GA
+    on_ga_true = eq ${on_ga} "true"
+    if ${on_ga_true}
+        td_vcore_path = get_env TD_VCORE_PATH
+        if eq ${td_vcore_path} ""
+            noop
+        else
+            echo "🐵 CI python virtual environment is set: ${td_vcore_path}"
+
+            # source ${td_vcore_path}
+
+            python_version = exec python --version
+            python_version = trim ${python_version.stdout}
+            echo "🐵 CI Core python version: ${python_version}"
+
+            python_path = exec which python
+            python_path = trim ${python_path.stdout}
+            echo "🐵 CI python path: ${python_path}"
+
+            pip_path = exec which pip
+            pip_path = trim ${pip_path.stdout}
+            echo "🐵 CI pip path: ${pip_path}"
+        end
+    end
     ''']
