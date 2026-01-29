@@ -371,7 +371,7 @@ pub(crate) mod tests {
     use td_objects::types::basic::{
         BundleId, CollectionName, Decorator, DependencyPos, ExecutionStatus, FunctionName,
         FunctionRunStatus, FunctionRuntimeValues, TableName, TableNameDto, TransactionStatus,
-        UserId, VersionPos, WorkerMessageStatus, WorkerType,
+        UserId, VersionPos, WorkerMessageStatus,
     };
     use td_objects::types::composed::TableDependencyDto;
 
@@ -721,7 +721,6 @@ pub(crate) mod tests {
                         transactions.get(t).unwrap(),
                         function_runs.get(f).unwrap(),
                         &WorkerMessageStatus::Unlocked,
-                        WorkerType::FunctionRunner,
                     )
                     .await;
 

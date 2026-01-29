@@ -9,12 +9,14 @@ use glob::glob;
 use std::env;
 use std::path::PathBuf;
 use td_common::server::WorkerClass::Ephemeral;
-use td_common::server::WorkerName::Function;
-use td_common::server::{CAST_FOLDER, LOG_FOLDER, PROC_FOLDER, WORK_FOLDER, WORKSPACE_URI_ENV};
+use td_common::server::{
+    CAST_FOLDER, LOG_FOLDER, PROC_FOLDER, WORK_FOLDER, WORKSPACE_URI_ENV, WorkerName,
+};
 use td_error::{TdError, td_error};
+use td_objects::dxo::worker::WorkerDB;
 use td_objects::rest_urls::LogsExtension;
 use td_objects::stream::BoxedSyncStream;
-use td_objects::types::basic::{LogsCastNumber, WorkerId};
+use td_objects::types::basic::{LogsCastNumber, WorkerType};
 use td_tower::extractors::Input;
 use tokio::fs::File;
 use tokio_util::codec::{BytesCodec, FramedRead};
@@ -38,16 +40,21 @@ const PATH_SEPARATOR: &str = "-";
 const LOG_SEPARATOR: &str = "=";
 
 pub async fn resolve_worker_log_path(
-    Input(worker_id): Input<WorkerId>,
+    Input(worker): Input<WorkerDB>,
     Input(extensions): Input<Vec<LogsExtension>>,
     Input(casts): Input<Vec<LogsCastNumber>>,
 ) -> Result<Vec<PathBuf>, TdError> {
     let worker_path = env::var(WORKSPACE_URI_ENV).map_err(ReadWorkerLogsError::EnvVar)?;
+    let worker_name = match worker.worker_type {
+        WorkerType::FunctionRunner => WorkerName::Function,
+        WorkerType::Cron => WorkerName::Cron,
+        WorkerType::StageTrigger => WorkerName::StageTrigger,
+    };
     let pattern = PathBuf::from(worker_path)
         .join(WORK_FOLDER)
         .join(PROC_FOLDER)
         .join(Ephemeral.as_ref())
-        .join(Function.as_ref())
+        .join(worker_name.as_ref())
         .join(WORK_FOLDER)
         .join(CAST_FOLDER);
 
@@ -62,7 +69,7 @@ pub async fn resolve_worker_log_path(
         for extension in extensions.iter() {
             let pattern = pattern
                 .clone()
-                .join(format!("{worker_id}_{cast_pattern}"))
+                .join(format!("{}_{}", worker.id, cast_pattern))
                 .join(WORK_FOLDER)
                 .join(LOG_FOLDER)
                 .join(extension.glob_pattern());
@@ -177,6 +184,7 @@ mod tests {
     use super::*;
     use crate::worker::layers::tests::{create_log_files, worker_path};
     use strum::IntoEnumIterator;
+    use td_objects::types::basic::{Enabled, WorkerMessageStatus, WorkerStatus};
     use testdir::testdir;
 
     #[test]
@@ -292,16 +300,31 @@ mod tests {
         rotations: usize,                    // number of logs created (per cast)
     ) -> Result<(Vec<PathBuf>, String), TdError> {
         let test_dir = testdir!();
-        let worker_id = WorkerId::default();
+        let worker_db = WorkerDB {
+            id: Default::default(),
+            collection_id: Default::default(),
+            execution_id: None,
+            transaction_id: None,
+            function_run_id: None,
+            function_version_id: Default::default(),
+            message_status: WorkerMessageStatus::Unlocked,
+            started_on: None,
+            ended_on: None,
+            status: WorkerStatus::Scheduled,
+            worker_type: WorkerType::FunctionRunner,
+            worker_enabled: Enabled::TRUE,
+            worker_config: None,
+        };
 
+        let worker = worker_db.clone();
         let (paths, stream) =
             temp_env::async_with_vars([(WORKSPACE_URI_ENV, Some(test_dir.to_str().unwrap()))], {
                 let logs_extensions = logs_extensions.clone();
                 let casts = casts.clone();
                 async move {
-                    create_log_files(&worker_id, iterations, rotations).await;
+                    create_log_files(&worker, iterations, rotations).await;
                     let paths = resolve_worker_log_path(
-                        Input::new(worker_id),
+                        Input::new(worker),
                         Input::new(logs_extensions),
                         Input::new(casts),
                     )
@@ -317,7 +340,7 @@ mod tests {
             let mut sorted = paths.clone();
             sort_log_paths(&mut sorted);
             sorted
-        },);
+        });
 
         // Get file content (there is only one file with all the logs).
         let content = stream.into_inner().try_collect::<Vec<Bytes>>().await?;
@@ -350,7 +373,7 @@ mod tests {
                 let keep = log_file.parent()
                     != Some(&*worker_path(
                         &test_dir.to_string_lossy(),
-                        &worker_id,
+                        &worker_db,
                         **cast as usize,
                     ));
                 if !keep {

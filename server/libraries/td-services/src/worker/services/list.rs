@@ -44,10 +44,10 @@ mod tests {
     use td_objects::test_utils::seed_function::seed_function;
     use td_objects::test_utils::seed_function_run::seed_function_run;
     use td_objects::test_utils::seed_transaction::seed_transaction;
-    use td_objects::test_utils::seed_worker::seed_function_runner_worker;
+    use td_objects::test_utils::seed_worker::{seed_function_runner_worker, seed_worker};
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionRunStatus, RoleId,
-        TransactionKey, UserId, WorkerMessageStatus, WorkerType,
+        TransactionKey, UserId, WorkerMessageStatus, WorkerStatus, WorkerType,
     };
     use td_tower::ctx_service::RawOneshot;
 
@@ -116,7 +116,6 @@ mod tests {
                 &transaction,
                 &function_run,
                 &WorkerMessageStatus::Locked,
-                WorkerType::FunctionRunner,
             )
             .await,
             seed_function_runner_worker(
@@ -125,7 +124,6 @@ mod tests {
                 &transaction,
                 &function_run,
                 &WorkerMessageStatus::Locked,
-                WorkerType::FunctionRunner,
             )
             .await,
             seed_function_runner_worker(
@@ -134,7 +132,6 @@ mod tests {
                 &transaction,
                 &function_run,
                 &WorkerMessageStatus::Locked,
-                WorkerType::FunctionRunner,
             )
             .await,
             seed_function_runner_worker(
@@ -143,16 +140,15 @@ mod tests {
                 &transaction,
                 &function_run,
                 &WorkerMessageStatus::Locked,
-                WorkerType::FunctionRunner,
             )
             .await,
-            seed_function_runner_worker(
+            seed_worker(
                 &db,
-                &execution,
-                &transaction,
-                &function_run,
-                &WorkerMessageStatus::Unlocked,
-                WorkerType::Cron,
+                &collection,
+                &function_version,
+                &WorkerType::Cron,
+                &WorkerStatus::RunRequested,
+                &WorkerMessageStatus::Locked,
             )
             .await,
         ];
