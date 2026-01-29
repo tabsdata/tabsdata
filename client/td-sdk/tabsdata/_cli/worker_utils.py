@@ -41,7 +41,7 @@ def start(worker_type: str, ctx: click.Context, name: str, coll: str):
         if not verify_trigger_type(function, worker_type):
             raise click.ClickException(
                 f"Function '{name}' in collection '{coll}' "
-                f"does not have a {worker_name} trigger."
+                f"does not have a {worker_name}."
             )
         if function.enabled:
             click.echo(
@@ -54,7 +54,7 @@ def start(worker_type: str, ctx: click.Context, name: str, coll: str):
                 function_name=name,
                 enabled=True,
             )
-            click.echo(f"The {worker_name} started successfully")
+            click.echo(f"{worker_name.capitalize()} started successfully")
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to start {worker_name}: {e}")
@@ -81,7 +81,7 @@ def stop(worker_type: str, ctx: click.Context, name: str, coll: str):
         if not verify_trigger_type(function, worker_type):
             raise click.ClickException(
                 f"Function '{name}' in collection '{coll}' "
-                f"does not have a {worker_name} trigger."
+                f"does not have a {worker_name}."
             )
         if not function.enabled:
             click.echo(
@@ -94,7 +94,7 @@ def stop(worker_type: str, ctx: click.Context, name: str, coll: str):
                 function_name=name,
                 enabled=False,
             )
-            click.echo(f"The {worker_name} stopped successfully")
+            click.echo(f"{worker_name.capitalize()} stopped successfully")
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to stop {worker_name}: {e}")
@@ -132,8 +132,6 @@ def list(
         elif state == "disabled":
             status = DISABLED_STATUSES
 
-        print(f">>>> STATUS: {status}")
-
         request_filter = obtain_list_worker_filters(
             status=status,
             collection=coll,
@@ -141,7 +139,7 @@ def list(
         )
         list_of_workers = server.list_workers(filter=request_filter)
 
-        table = Table(title=f"{worker_name} workers")
+        table = Table(title=f"{worker_name.capitalize()} workers")
         table.add_column("Collection", style="cyan", no_wrap=True)
         table.add_column("Function", style="cyan", no_wrap=True)
         table.add_column("Function Version ID")

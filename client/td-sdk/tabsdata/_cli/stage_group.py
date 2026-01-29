@@ -4,7 +4,7 @@
 
 import rich_click as click
 
-import tabsdata._cli.worker_group as worker
+import tabsdata._cli.worker_utils as worker
 from tabsdata.api.status_utils.worker import (
     WORKER_VALID_USER_PROVIDED_STATUSES,
 )
