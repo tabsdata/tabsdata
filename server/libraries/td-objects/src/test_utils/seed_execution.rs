@@ -13,7 +13,7 @@ pub async fn seed_execution(db: &DbPool, function_version: &FunctionDB) -> Execu
 }
 
 pub async fn seed_cron_execution(db: &DbPool, function_version: &FunctionDB) -> ExecutionDB {
-    _seed_execution(db, function_version, TriggerType::Cron).await
+    _seed_execution(db, function_version, TriggerType::CronTrigger).await
 }
 
 async fn _seed_execution(

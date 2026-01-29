@@ -56,8 +56,8 @@ async fn unlock_workers_request_infallible<T: WorkerMessageQueue>(
                     )
                     .await
                 }
-                Ok(WorkerName::Cron) => {
-                    unlock_cron_workers(
+                Ok(WorkerName::CronTrigger) => {
+                    unlock_cron_trigger_workers(
                         queries.deref(),
                         &mut *conn,
                         message_queue.deref(),
@@ -229,7 +229,7 @@ async fn rollback_function_run_db(
     Ok(())
 }
 
-pub async fn unlock_cron_workers<T: WorkerMessageQueue>(
+pub async fn unlock_cron_trigger_workers<T: WorkerMessageQueue>(
     queries: &DaoQueries,
     conn: &mut SqliteConnection,
     message_queue: &T,
@@ -246,19 +246,19 @@ pub async fn unlock_cron_workers<T: WorkerMessageQueue>(
     {
         Ok(_) => match message_queue.commit(&worker_id.to_string()).await {
             Ok(_) => {
-                trace!("Cron locked message [{}] is dispatched", worker_id);
+                trace!("CronTrigger locked message [{}] is dispatched", worker_id);
                 Ok(())
             }
             Err(e) => Err(api_error!(
                 ApiError::InternalError,
-                "Cron locked message [{}] dispatch failed: {}",
+                "CronTrigger locked message [{}] dispatch failed: {}",
                 worker_id,
                 e
             ))?,
         },
         Err(e) => Err(api_error!(
             ApiError::InternalError,
-            "Cron locked message [{}] dispatch failed: {}",
+            "CronTrigger locked message [{}] dispatch failed: {}",
             worker_id,
             e
         ))?,

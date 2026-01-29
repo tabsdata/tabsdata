@@ -3,7 +3,8 @@
 //
 
 use crate::scheduler::layers::request::{
-    create_locked_cron_workers_start_request, create_locked_cron_workers_stop_request,
+    create_locked_cron_trigger_workers_start_request,
+    create_locked_cron_trigger_workers_stop_request,
     create_locked_function_runner_workers_start_request,
     create_locked_stage_trigger_workers_start_request,
     create_locked_stage_trigger_workers_stop_request,
@@ -38,10 +39,10 @@ fn service() {
     layers!(
         // Request function runners that need to be started
         request_function_runners::<_, FileWorkerMessageQueue>(),
-        // Stop cron runners that need to be stopped
-        stop_cron_runners::<_, FileWorkerMessageQueue>(),
-        // Request cron runners that need to be started
-        request_cron_runners::<_, FileWorkerMessageQueue>(),
+        // Stop cron trigger runners that need to be stopped
+        stop_cron_trigger_runners::<_, FileWorkerMessageQueue>(),
+        // Request cron trigger runners that need to be started
+        request_cron_trigger_runners::<_, FileWorkerMessageQueue>(),
         // Stop stage trigger runners that need to be stopped
         stop_stage_trigger_runners::<_, FileWorkerMessageQueue>(),
         // Request stage trigger runners that need to be started
@@ -81,14 +82,14 @@ where
 // - T(MessageQueue)
 // - ServerUrl
 #[layer]
-pub fn request_cron_runners<T>()
+pub fn request_cron_trigger_runners<T>()
 where
     T: WorkerMessageQueue,
 {
     layers!(
-        from_fn(WorkerDBWithNames::cron_to_schedule),
+        from_fn(WorkerDBWithNames::cron_trigger_to_schedule),
         from_fn(By::<(Enabled, WorkerType, WorkerStatus)>::select_all::<WorkerDBWithNames>),
-        from_fn(create_locked_cron_workers_start_request::<T>),
+        from_fn(create_locked_cron_trigger_workers_start_request::<T>),
         // Update statuses.
         from_fn(With::<WorkerDBWithNames>::extract_vec::<WorkerId>),
         from_fn(UpdateWorkerDB::run_requested),
@@ -104,14 +105,14 @@ where
 // - T(MessageQueue)
 // - ServerUrl
 #[layer]
-pub fn stop_cron_runners<T>()
+pub fn stop_cron_trigger_runners<T>()
 where
     T: WorkerMessageQueue,
 {
     layers!(
-        from_fn(WorkerDBWithNames::cron_to_stop),
+        from_fn(WorkerDBWithNames::cron_trigger_to_stop),
         from_fn(By::<(Enabled, WorkerType, WorkerStatus)>::select_all::<WorkerDBWithNames>),
-        from_fn(create_locked_cron_workers_stop_request::<T>),
+        from_fn(create_locked_cron_trigger_workers_stop_request::<T>),
         // Update statuses.
         from_fn(With::<WorkerDBWithNames>::extract_vec::<WorkerId>),
         from_fn(UpdateWorkerDB::stop_requested),
@@ -221,13 +222,15 @@ mod tests {
                 type_of_val(&With::<FunctionRunToExecuteDB>::extract_vec::<FunctionRunId>),
                 type_of_val(&UpdateFunctionRunDB::run_requested),
                 type_of_val(&By::<FunctionRunId>::update_all::<UpdateFunctionRunDB, FunctionRunDB>),
-                // Cron
+                // CronTrigger
                 // Stop
-                type_of_val(&WorkerDBWithNames::cron_to_stop),
+                type_of_val(&WorkerDBWithNames::cron_trigger_to_stop),
                 type_of_val(
                     &By::<(Enabled, WorkerType, WorkerStatus)>::select_all::<WorkerDBWithNames>,
                 ),
-                type_of_val(&create_locked_cron_workers_stop_request::<FileWorkerMessageQueue>),
+                type_of_val(
+                    &create_locked_cron_trigger_workers_stop_request::<FileWorkerMessageQueue>,
+                ),
                 // Update statuses.
                 type_of_val(&With::<WorkerDBWithNames>::extract_vec::<WorkerId>),
                 type_of_val(&UpdateWorkerDB::stop_requested),
@@ -235,11 +238,13 @@ mod tests {
                 type_of_val(&UpdateWorkerMessageStatusDB::locked),
                 type_of_val(&By::<WorkerId>::update_all::<UpdateWorkerMessageStatusDB, WorkerDB>),
                 // Start
-                type_of_val(&WorkerDBWithNames::cron_to_schedule),
+                type_of_val(&WorkerDBWithNames::cron_trigger_to_schedule),
                 type_of_val(
                     &By::<(Enabled, WorkerType, WorkerStatus)>::select_all::<WorkerDBWithNames>,
                 ),
-                type_of_val(&create_locked_cron_workers_start_request::<FileWorkerMessageQueue>),
+                type_of_val(
+                    &create_locked_cron_trigger_workers_start_request::<FileWorkerMessageQueue>,
+                ),
                 // Update statuses.
                 type_of_val(&With::<WorkerDBWithNames>::extract_vec::<WorkerId>),
                 type_of_val(&UpdateWorkerDB::run_requested),

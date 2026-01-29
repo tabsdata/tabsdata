@@ -65,12 +65,22 @@ mod definitions {
 
     impl WorkerDBWithNames {
         // TODO this can be converted to states if creating a stateful select without versioned
-        pub async fn cron_to_schedule() -> Result<(Enabled, WorkerType, WorkerStatus), TdError> {
-            Ok((Enabled::TRUE, WorkerType::Cron, WorkerStatus::Scheduled))
+        pub async fn cron_trigger_to_schedule()
+        -> Result<(Enabled, WorkerType, WorkerStatus), TdError> {
+            Ok((
+                Enabled::TRUE,
+                WorkerType::CronTrigger,
+                WorkerStatus::Scheduled,
+            ))
         }
 
-        pub async fn cron_to_stop() -> Result<(Enabled, WorkerType, WorkerStatus), TdError> {
-            Ok((Enabled::TRUE, WorkerType::Cron, WorkerStatus::StopScheduled))
+        pub async fn cron_trigger_to_stop() -> Result<(Enabled, WorkerType, WorkerStatus), TdError>
+        {
+            Ok((
+                Enabled::TRUE,
+                WorkerType::CronTrigger,
+                WorkerStatus::StopScheduled,
+            ))
         }
 
         pub async fn stage_trigger_to_schedule()
@@ -211,7 +221,7 @@ mod definitions {
 
     #[td_type::Dto]
     #[derive(Eq, PartialEq)]
-    pub struct CronConfig {
+    pub struct CronTriggerConfig {
         pub start: Option<DateTime<Utc>>,
         pub end: Option<DateTime<Utc>>,
         pub mask: CronMask,

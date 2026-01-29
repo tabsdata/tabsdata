@@ -221,7 +221,7 @@ mod tests {
             &db,
             &collection,
             &function,
-            &WorkerType::Cron,
+            &WorkerType::CronTrigger,
             &WorkerStatus::Running,
             &WorkerMessageStatus::Unlocked,
         )

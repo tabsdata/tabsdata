@@ -173,7 +173,7 @@ class ErrorCode(Enum):
     DCE11 = {
         "code": "DCE-011",
         "message": (
-            "The 'start' parameter of a Crontab object must be a "
+            "The 'start' parameter of a CronTrigger object must be a "
             "string in ISO 8601 format, a datetime object or None; "
             "got an object of type '{}' instead."
         ),
@@ -181,7 +181,7 @@ class ErrorCode(Enum):
     DCE12 = {
         "code": "DCE-012",
         "message": (
-            "The 'end' parameter of a Crontab object must be a "
+            "The 'end' parameter of a CronTrigger object must be a "
             "string in ISO 8601 format, a datetime object or None; "
             "got an object of type '{}' instead."
         ),
@@ -189,21 +189,21 @@ class ErrorCode(Enum):
     DCE13 = {
         "code": "DCE-013",
         "message": (
-            "The 'start' parameter of a Crontab object must be earlier than the 'end' "
-            "parameter. Got start='{}' and end='{}'."
+            "The 'start' parameter of a CronTrigger object must be earlier than the"
+            " 'end' parameter. Got start='{}' and end='{}'."
         ),
     }
     DCE14 = {
         "code": "DCE-014",
         "message": (
-            "The 'mask' parameter of a Crontab object must have 5 elements, "
+            "The 'mask' parameter of a CronTrigger object must have 5 elements, "
             "for minute precision; mask '{}' has '{}'."
         ),
     }
     DCE15 = {
         "code": "DCE-015",
         "message": (
-            "The 'mask' parameter of a Crontab object must be a valid cron"
+            "The 'mask' parameter of a CronTrigger object must be a valid cron"
             " specification; got '{}' instead."
         ),
     }
@@ -217,7 +217,7 @@ class ErrorCode(Enum):
     DCE17 = {
         "code": "DCE-17",
         "message": (
-            "The 'start' parameter of a Crontab object must be a "
+            "The 'start' parameter of a CronTrigger object must be a "
             "string in ISO 8601 format or a datetime object with timezone "
             "information. Got '{}', which does not have timezone information. "
             "Ensure that it does by checking that 'start.tzinfo' is not None."
@@ -226,7 +226,7 @@ class ErrorCode(Enum):
     DCE18 = {
         "code": "DCE-18",
         "message": (
-            "The 'end' parameter of a Crontab object must be a "
+            "The 'end' parameter of a CronTrigger object must be a "
             "string in ISO 8601 format or a datetime object with timezone "
             "information. Got '{}', which does not have timezone information. "
             "Ensure that it does by checking that 'end.tzinfo' is not None."
@@ -235,7 +235,7 @@ class ErrorCode(Enum):
     DCE19 = {
         "code": "DCE-019",
         "message": (
-            "The 'mask' parameter '{}' for Crontab object does not support "
+            "The 'mask' parameter '{}' for CronTrigger object does not support "
             "'@' mask aliasing."
         ),
     }
@@ -1359,7 +1359,7 @@ class ErrorCode(Enum):
         "code": "FCE-002",
         "message": (
             "The 'trigger_by' parameter of a TabsDataFunction must be a str, "
-            "a list of strings, a Crontab, or a StageTrigger in the case of a "
+            "a list of strings, a CronTrigger, or a StageTrigger in the case of a "
             "publisher. Got an "
             "object of type '{}' instead."
         ),

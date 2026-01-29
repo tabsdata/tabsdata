@@ -134,10 +134,10 @@ controllers:
         get-states:
           - state-type: map
             state-key: apiserver-mounts-options
-      - name: cron
+      - name: crontrigger
         kind: processor
         location: system
-        program: td_cron
+        program: td_crontrigger
         concurrency: 0
         retries: 2
         arguments:

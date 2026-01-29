@@ -234,9 +234,7 @@ def test_consumer_messages_rollover(
 
     try:
         kafka_consumer.subscribe([topic])
-        consumer = KafkaConsumer(
-            topic, kafka_consumer, serde, messages_rollover=MessagesRollover(10)
-        )
+        consumer = KafkaConsumer(topic, kafka_consumer, serde, messages_rollover=10)
 
         responses = []
         received_messages = 0
@@ -419,9 +417,7 @@ def test_consumer_size_rollover(
 
     try:
         kafka_consumer.subscribe([topic])
-        consumer = KafkaConsumer(
-            topic, kafka_consumer, serde, size_rollover_mb=SizeRollover(1)
-        )
+        consumer = KafkaConsumer(topic, kafka_consumer, serde, size_rollover_mb=1)
 
         responses = []
         received_messages = 0

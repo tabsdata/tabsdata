@@ -9,7 +9,7 @@ use td_process::launcher::hooks;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-#[attach(signal = "cron")]
+#[attach(signal = "crontrigger")]
 fn main() {
     hooks::panic();
 
@@ -18,5 +18,5 @@ fn main() {
         process::exit(0);
     }
 
-    td_cron::run();
+    td_crontrigger::run();
 }

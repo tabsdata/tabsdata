@@ -20,13 +20,13 @@ use td_objects::dxo::function_requirement::FunctionRequirementDBWithNames;
 use td_objects::dxo::function_run::FunctionRunToExecuteDB;
 use td_objects::dxo::table_data_version::TableDataVersionDBWithNames;
 use td_objects::dxo::worker::{WorkerDB, WorkerDBWithNames};
-use td_objects::dxo::yaml::cron::v1::CronInput;
+use td_objects::dxo::yaml::cron_trigger::v1::CronTriggerInput;
 use td_objects::dxo::yaml::function_runner::v2::{
     FunctionInfo, FunctionInput, InputTable, InputTableVersion, OutputTable, OutputTableVersion,
 };
 use td_objects::dxo::yaml::location::Location;
 use td_objects::dxo::yaml::stage_trigger::v1::StageTriggerInput;
-use td_objects::dxo::yaml::{WorkerInput, cron, stage_trigger};
+use td_objects::dxo::yaml::{WorkerInput, cron_trigger, stage_trigger};
 use td_objects::rest_urls::BASE_URL;
 use td_objects::rest_urls::internal::{
     DOWNLOAD_FUNCTION_STATE, FUNCTION_VERSION_EXECUTE, FUNCTION_VERSION_EXECUTION_STATUS,
@@ -375,19 +375,19 @@ pub async fn create_locked_function_runner_workers_start_request<T: WorkerMessag
     Ok(res)
 }
 
-pub async fn create_locked_cron_workers_start_request<T: WorkerMessageQueue>(
+pub async fn create_locked_cron_trigger_workers_start_request<T: WorkerMessageQueue>(
     SrvCtx(message_queue): SrvCtx<T>,
     SrvCtx(server_addresses): SrvCtx<InternalServerAddresses>,
-    Input(cron_workers): Input<Vec<WorkerDBWithNames>>,
+    Input(cron_trigger_workers): Input<Vec<WorkerDBWithNames>>,
 ) -> Result<(), TdError> {
-    let futures: Vec<_> = cron_workers
+    let futures: Vec<_> = cron_trigger_workers
         .iter()
-        .map(|cron_worker| {
+        .map(|cron_trigger_worker| {
             let message_queue = message_queue.clone();
             let server_addresses = server_addresses.clone();
             async move {
                 // Worker id
-                let worker_id = cron_worker.id.to_string();
+                let worker_id = cron_trigger_worker.id.to_string();
 
                 // This is loopback address, because this endpoint is only available to the server.
                 let server_address = server_addresses.first();
@@ -406,7 +406,7 @@ pub async fn create_locked_cron_workers_start_request<T: WorkerMessageQueue>(
                 let callback = Callback::Http(http_callback);
 
                 // Function version id
-                let function_version_id = cron_worker.function_version_id.to_string();
+                let function_version_id = cron_trigger_worker.function_version_id.to_string();
 
                 // Build trigger task
                 let task = HttpRequest {
@@ -425,25 +425,25 @@ pub async fn create_locked_cron_workers_start_request<T: WorkerMessageQueue>(
                 };
 
                 // Build info
-                let info = cron::v1::Info {
-                    worker_id: cron_worker.id,
-                    collection_id: cron_worker.collection_id,
-                    collection: cron_worker.collection.clone(),
-                    function_version_id: cron_worker.function_version_id,
-                    function: cron_worker.function.clone(),
+                let info = cron_trigger::v1::Info {
+                    worker_id: cron_trigger_worker.id,
+                    collection_id: cron_trigger_worker.collection_id,
+                    collection: cron_trigger_worker.collection.clone(),
+                    function_version_id: cron_trigger_worker.function_version_id,
+                    function: cron_trigger_worker.function.clone(),
                     scheduled_on: AtTime::now(),
                     task,
-                    config: WorkerConfig::serialize(&cron_worker.worker_config)?,
+                    config: WorkerConfig::serialize(&cron_trigger_worker.worker_config)?,
                 };
                 // Build message context
-                let cron_input = CronInput { info };
-                let context = WorkerInput::CronV1(Box::new(cron_input));
+                let cron_trigger_input = CronTriggerInput { info };
+                let context = WorkerInput::CronTriggerV1(Box::new(cron_trigger_input));
 
                 // Build message payload
                 // TODO ADD get_states to states
                 let message_payload = RequestMessagePayload {
                     class: WorkerClass::Ephemeral,
-                    worker: WorkerName::Cron.as_ref().to_string(),
+                    worker: WorkerName::CronTrigger.as_ref().to_string(),
                     run_id: worker_id.clone(),
                     action: MessageAction::Start,
                     arguments: Vec::new(),
@@ -461,19 +461,19 @@ pub async fn create_locked_cron_workers_start_request<T: WorkerMessageQueue>(
     Ok(())
 }
 
-pub async fn create_locked_cron_workers_stop_request<T: WorkerMessageQueue>(
+pub async fn create_locked_cron_trigger_workers_stop_request<T: WorkerMessageQueue>(
     SrvCtx(message_queue): SrvCtx<T>,
     SrvCtx(server_addresses): SrvCtx<InternalServerAddresses>,
-    Input(cron_workers): Input<Vec<WorkerDBWithNames>>,
+    Input(cron_trigger_workers): Input<Vec<WorkerDBWithNames>>,
 ) -> Result<(), TdError> {
-    let futures: Vec<_> = cron_workers
+    let futures: Vec<_> = cron_trigger_workers
         .iter()
-        .map(|cron_worker| {
+        .map(|cron_trigger_worker| {
             let message_queue = message_queue.clone();
             let server_addresses = server_addresses.clone();
             async move {
                 // Worker id
-                let worker_id = cron_worker.id.to_string();
+                let worker_id = cron_trigger_worker.id.to_string();
 
                 // This is loopback address, because this endpoint is only available to the server.
                 let server_address = server_addresses.first();
@@ -498,7 +498,7 @@ pub async fn create_locked_cron_workers_stop_request<T: WorkerMessageQueue>(
                 // Build message payload
                 let message_payload = RequestMessagePayload::<serde_yaml::Value> {
                     class: WorkerClass::Ephemeral,
-                    worker: WorkerName::Cron.as_ref().to_string(),
+                    worker: WorkerName::CronTrigger.as_ref().to_string(),
                     run_id: worker_id,
                     action: MessageAction::Stop,
                     arguments: Vec::new(),
@@ -648,8 +648,8 @@ pub async fn create_locked_stage_trigger_workers_start_request<T: WorkerMessageQ
                     fn_status,
                 };
                 // Build message context
-                let cron_input = StageTriggerInput { info };
-                let context = WorkerInput::StageTriggerV1(Box::new(cron_input));
+                let stage_trigger_input = StageTriggerInput { info };
+                let context = WorkerInput::StageTriggerV1(Box::new(stage_trigger_input));
 
                 // Build message payload
                 // TODO ADD get_states to states

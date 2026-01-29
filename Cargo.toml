@@ -40,7 +40,7 @@ members = [
     "server/libraries/td-apiserver",
     "server/libraries/td-authz",
     "server/libraries/td-common",
-    "server/libraries/td-cron",
+    "server/libraries/td-crontrigger",
     "server/libraries/td-database",
     "server/libraries/td-error",
     "server/libraries/td-execution",
@@ -201,8 +201,8 @@ path = "server/libraries/td-authz"
 [workspace.dependencies.td-common]
 path = "server/libraries/td-common"
 
-[workspace.dependencies.td-cron]
-path = "server/libraries/td-cron"
+[workspace.dependencies.td-crontrigger]
+path = "server/libraries/td-crontrigger"
 
 [workspace.dependencies.td-database]
 path = "server/libraries/td-database"

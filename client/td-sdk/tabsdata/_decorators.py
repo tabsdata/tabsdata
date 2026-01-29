@@ -70,7 +70,7 @@ def transformer(
         trigger_by (TransformerTriggerBySpec, optional): The trigger that will cause
             the function to execute. It can be a table in the system, a list of
             tables, None (in which case it must be triggered manually),
-            or a Crontab. Defaults to all dependencies.
+            or a CronTrigger. Defaults to all dependencies.
         on_output_tables (OnTablesSpec, optional):
             Actions to perform on output tables after executing the function.
             Can be a single action or a list of them.
@@ -167,7 +167,8 @@ def publisher(
             If not provided, the current function name will be used.
         trigger_by: The trigger that will cause
             the function to execute. It can be a table in the system, a list of
-            tables, None (in which case it must be triggered manually), or a Crontab.
+            tables, None (in which case it must be triggered manually), or a
+            CronTrigger.
         on_tables (OnTablesSpec, optional): Actions
             to perform on output tables after executing the function. Can be a
             single action or a list of them.
@@ -234,7 +235,7 @@ def subscriber(
         trigger_by: The trigger that will cause
             the function to execute. It can be a table in the system, a list of
             tables, None (in which case it must be triggered manually),
-            or a Crontab. Defaults to all dependencies.
+            or a CronTrigger. Defaults to all dependencies.
     Returns:
         callable: The function converted to a Tabsdata Function.
     """

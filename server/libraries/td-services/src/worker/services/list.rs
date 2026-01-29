@@ -146,7 +146,7 @@ mod tests {
                 &db,
                 &collection,
                 &function_version,
-                &WorkerType::Cron,
+                &WorkerType::CronTrigger,
                 &WorkerStatus::RunRequested,
                 &WorkerMessageStatus::Locked,
             )
@@ -177,7 +177,7 @@ mod tests {
         assert_eq!(response.data[4].id, workers[4].id);
         assert_eq!(response.data[4].message_status, workers[4].message_status);
         assert_eq!(response.data[4].worker_type, workers[4].worker_type);
-        assert_eq!(response.data[4].worker_type, WorkerType::Cron);
+        assert_eq!(response.data[4].worker_type, WorkerType::CronTrigger);
         Ok(())
     }
 }

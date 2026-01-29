@@ -22,7 +22,7 @@ from tabsdata.exceptions import (
 
 # noinspection PyUnresolvedReferences
 from . import pytestmark  # noqa: F401
-from .test_io.test_stage_trigger import MyStageTrigger
+from .test_io.test_stagetrigger import MyStageTrigger
 
 
 def test_transformer_wrong_data_type_raises_exception():
@@ -280,49 +280,49 @@ def test_subscriber_with_optional_parameters():
     assert func.trigger_by == ["trigger_table"]
 
 
-def test_subscriber_with_crontab_trigger():
-    crontab = CronTrigger("25 19 * * 1,3,5")
+def test_subscriber_with_crontrigger_trigger():
+    crontrigger = CronTrigger("25 19 * * 1,3,5")
 
     @subscriber(
         TableInput("input"),
         LocalFileDestination("output.csv"),
         name="func_name",
-        trigger_by=crontab,
+        trigger_by=crontrigger,
     )
     def func():
         pass
 
-    assert func.trigger_by == crontab
+    assert func.trigger_by == crontrigger
 
 
-def test_transformer_with_crontab_trigger():
-    crontab = CronTrigger("25 19 * * 1,3,5")
+def test_transformer_with_crontrigger_trigger():
+    crontrigger = CronTrigger("25 19 * * 1,3,5")
 
     @transformer(
         TableInput("input"),
         TableOutput("output"),
         name="func_name",
-        trigger_by=crontab,
+        trigger_by=crontrigger,
     )
     def func():
         pass
 
-    assert func.trigger_by == crontab
+    assert func.trigger_by == crontrigger
 
 
-def test_publisher_with_crontab_trigger():
-    crontab = CronTrigger("25 19 * * 1,3,5")
+def test_publisher_with_crontrigger_trigger():
+    crontrigger = CronTrigger("25 19 * * 1,3,5")
 
     @publisher(
         LocalFileSource("input.csv"),
         TableOutput("output"),
         name="func_name",
-        trigger_by=crontab,
+        trigger_by=crontrigger,
     )
     def func():
         pass
 
-    assert func.trigger_by == crontab
+    assert func.trigger_by == crontrigger
 
 
 def test_subscriber_with_stagetrigger_trigger_raises_error():

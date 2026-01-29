@@ -65,7 +65,7 @@ FROM workers w
 -- Hiding marker workers for disabled function versions
 WHERE w.worker_enabled = true;
 
--- Trigger Type can be M (manual), C (cron), DL (data listener)
+-- Trigger Type can be M (manual), C (crontrigger), ST (stage trigger)
 ALTER TABLE executions
     ADD COLUMN trigger_type TEXT NOT NULL DEFAULT 'M';
 

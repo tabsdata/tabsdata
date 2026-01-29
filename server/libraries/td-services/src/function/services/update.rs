@@ -1847,7 +1847,7 @@ mod tests {
         // Then change the workers
         let update = FunctionUpdate::builder()
             .workers(Some(HashMap::from([(
-                WorkerTypeDto::Cron,
+                WorkerTypeDto::CronTrigger,
                 WorkerConfig::default(),
             )])))
             .build()?;
@@ -1903,7 +1903,7 @@ mod tests {
         assert_eq!(worker.started_on, None);
         assert_eq!(worker.ended_on, None);
         assert_eq!(worker.status, WorkerStatus::Scheduled);
-        assert_eq!(worker.worker_type, WorkerType::Cron);
+        assert_eq!(worker.worker_type, WorkerType::CronTrigger);
         assert_eq!(worker.worker_config, Some(WorkerConfig::default()));
 
         // And last, drop them all, by passing empty map
@@ -1941,7 +1941,7 @@ mod tests {
         assert_eq!(worker.started_on, None);
         assert_eq!(worker.ended_on, None);
         assert_eq!(worker.status, WorkerStatus::StopScheduled);
-        assert_eq!(worker.worker_type, WorkerType::Cron);
+        assert_eq!(worker.worker_type, WorkerType::CronTrigger);
         assert_eq!(worker.worker_config, Some(WorkerConfig::default()));
 
         // updated_function_4 should have a no worker
@@ -1987,7 +1987,7 @@ mod tests {
         // Then update to add more than 1 worker
         let update = FunctionUpdate::builder()
             .workers(Some(HashMap::from([
-                (WorkerTypeDto::Cron, WorkerConfig::default()),
+                (WorkerTypeDto::CronTrigger, WorkerConfig::default()),
                 (WorkerTypeDto::StageTrigger, WorkerConfig::default()),
             ])))
             .build()?;

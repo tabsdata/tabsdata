@@ -200,7 +200,7 @@ impl<T: Task + 'static> Task for CronTask<T> {
                 Ok(())
             }
             Some(err) = task_err_rx.recv() => {
-                // If the task fails while executing during a cron tick, we stop the cron scheduler and fail.
+                // If the task fails while executing during a cron tick, we stop the crontrigger scheduler and fail.
                 error!("Shutting down because critical error, {self}. Error: {err}");
 
                 if let Err(e) = scheduler.shutdown().await {

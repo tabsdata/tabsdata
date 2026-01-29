@@ -184,7 +184,7 @@ pub enum WorkerClass {
 #[strum(serialize_all = "lowercase")]
 pub enum WorkerName {
     Function,
-    Cron,
+    CronTrigger,
     StageTrigger,
 }
 

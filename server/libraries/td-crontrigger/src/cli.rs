@@ -13,16 +13,16 @@ use td_common::server::{REQUEST_FILE, WORKER_PID_FILE};
 use td_common::server_runner::ServerRunner;
 use td_common::status::ExitStatus;
 use td_objects::dxo::execution::ExecutionRequestInternal;
-use td_objects::dxo::worker::CronConfig;
+use td_objects::dxo::worker::CronTriggerConfig;
 use td_objects::dxo::yaml::WorkerInput;
 use td_objects::types::basic::{ExecutionName, FunctionOnly, SkipIfRunning, TriggerType};
 use td_process::launcher::cli::{Cli, NoConfig};
 use td_process::launcher::params::ArgumentParameters;
 use tracing::{Level, error};
 
-const CONFIG_NAME: &str = "cron";
+const CONFIG_NAME: &str = "crontrigger";
 
-/// Run the cron scheduler. This function is the entry point for the `cron` binary.
+/// Run the crontrigger scheduler. This function is the entry point for the `crontrigger` binary.
 /// This binary is able to post to the given endpoint (trigger endpoint) at a cron mask rate.
 pub fn run() {
     Cli::<NoConfig, ArgumentParameters>::exec_async(
@@ -45,23 +45,24 @@ pub fn run() {
                 ExitStatus::GeneralError
             })?;
 
-            // extract cron input
-            let cron = match request {
-                WorkerInput::CronV1(cron) => cron,
+            // extract cron trigger input
+            let cron_trigger = match request {
+                WorkerInput::CronTriggerV1(cron_trigger) => cron_trigger,
                 input => {
                     error!("Unsupported WorkerInput type. Request is {input:?}.");
                     Err(ExitStatus::GeneralError)?
                 }
             };
 
-            // get cron info
-            let cron_config = deserialize_json_string::<CronConfig>(cron.info.config.as_str())
-                .map_err(|e| {
-                    error!("Error deserializing cron config: {e}");
-                    ExitStatus::GeneralError
-                })?;
+            // get cron trigger info
+            let cron_trigger_config =
+                deserialize_json_string::<CronTriggerConfig>(cron_trigger.info.config.as_str())
+                    .map_err(|e| {
+                        error!("Error deserializing cron trigger config: {e}");
+                        ExitStatus::GeneralError
+                    })?;
 
-            let mask = cron_config
+            let mask = cron_trigger_config
                 .mask
                 .into_cron()
                 .map_err(|e| {
@@ -78,7 +79,7 @@ pub fn run() {
                     name: Some(name),
                     function_only: FunctionOnly::FALSE,
                     skip_if_running: SkipIfRunning::FALSE,
-                    trigger_type: TriggerType::Cron,
+                    trigger_type: TriggerType::CronTrigger,
                 })
                 .map(|r| serde_json::to_string_pretty(&r).unwrap_or_default())
                 .unwrap_or_default();
@@ -87,7 +88,7 @@ pub fn run() {
             let body = move || execution_request.clone();
 
             // function trigger
-            let trigger_task = HttpTask::new(cron.info.task).with_body(body);
+            let trigger_task = HttpTask::new(cron_trigger.info.task).with_body(body);
 
             // task that periodically executes the trigger based on the cron mask
             let cron_task = CronTask::new(&mask, trigger_task).map_err(|e| {
@@ -99,11 +100,11 @@ pub fn run() {
             let touch_file = get_current_dir().join(WORKER_PID_FILE);
             let heartbeat_task = TouchFileTask::new(touch_file);
 
-            // runs  the cron_task and the heartbeat_task
+            // runs the cron_task and the heartbeat_task
             let task_runner = TaskRunner::new_with_heartbeat(
                 cron_task,
-                cron_config.start,
-                cron_config.end,
+                cron_trigger_config.start,
+                cron_trigger_config.end,
                 heartbeat_task,
                 Duration::from_secs(30),
             );

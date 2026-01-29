@@ -47,7 +47,7 @@ pub async fn resolve_worker_log_path(
     let worker_path = env::var(WORKSPACE_URI_ENV).map_err(ReadWorkerLogsError::EnvVar)?;
     let worker_name = match worker.worker_type {
         WorkerType::FunctionRunner => WorkerName::Function,
-        WorkerType::Cron => WorkerName::Cron,
+        WorkerType::CronTrigger => WorkerName::CronTrigger,
         WorkerType::StageTrigger => WorkerName::StageTrigger,
     };
     let pattern = PathBuf::from(worker_path)

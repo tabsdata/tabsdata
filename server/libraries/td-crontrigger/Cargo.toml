@@ -3,8 +3,8 @@
 #
 
 [package]
-description = "Tabsdata Cron Scheduler"
-name = "td-cron"
+description = "Tabsdata CronTrigger Scheduler"
+name = "td-crontrigger"
 build = "build.rs"
 
 authors = { workspace = true }

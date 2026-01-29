@@ -319,7 +319,7 @@ mod tests {
             db,
             Some(PreviousRun {
                 status: FunctionRunStatus::Running,
-                trigger_type: TriggerType::Cron,
+                trigger_type: TriggerType::CronTrigger,
             }),
             SkipIfRunning::FALSE,
         )
@@ -340,7 +340,7 @@ mod tests {
             db.clone(),
             Some(PreviousRun {
                 status: FunctionRunStatus::Running,
-                trigger_type: TriggerType::Cron,
+                trigger_type: TriggerType::CronTrigger,
             }),
             SkipIfRunning::TRUE,
         )
@@ -367,7 +367,7 @@ mod tests {
             db,
             Some(PreviousRun {
                 status: FunctionRunStatus::Committed,
-                trigger_type: TriggerType::Cron,
+                trigger_type: TriggerType::CronTrigger,
             }),
             SkipIfRunning::FALSE,
         )
@@ -388,7 +388,7 @@ mod tests {
             db,
             Some(PreviousRun {
                 status: FunctionRunStatus::Committed,
-                trigger_type: TriggerType::Cron,
+                trigger_type: TriggerType::CronTrigger,
             }),
             SkipIfRunning::TRUE,
         )
@@ -478,7 +478,7 @@ mod tests {
         if let Some(previous_run) = previous_run {
             let execution = match previous_run.trigger_type {
                 TriggerType::Manual => seed_execution(&db, &function).await,
-                TriggerType::Cron => seed_cron_execution(&db, &function).await,
+                TriggerType::CronTrigger => seed_cron_execution(&db, &function).await,
                 _ => panic!("Unexpected trigger type"),
             };
             let transaction_key = TransactionKey::try_from("ANY")?;
@@ -504,7 +504,7 @@ mod tests {
                 ExecutionRequestInternal::builder()
                     .name(Some(ExecutionName::try_from("test_execution")?))
                     .skip_if_running(skip_if_running)
-                    .trigger_type(TriggerType::Cron)
+                    .trigger_type(TriggerType::CronTrigger)
                     .build()?,
             );
 
@@ -565,7 +565,7 @@ mod tests {
                 },
                 ExecutionRequestInternal::builder()
                     .name(Some(ExecutionName::try_from("test_execution")?))
-                    .trigger_type(TriggerType::Cron)
+                    .trigger_type(TriggerType::CronTrigger)
                     .build()?,
             );
 

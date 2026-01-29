@@ -134,7 +134,7 @@ mod tests {
             &db,
             &collection,
             &function,
-            &WorkerType::Cron,
+            &WorkerType::CronTrigger,
             &WorkerStatus::RunRequested,
             &WorkerMessageStatus::Unlocked,
         )
@@ -144,7 +144,7 @@ mod tests {
         let response = ResponseMessagePayloadBuilder::default()
             .id(worker.id.to_string())
             .class(WorkerClass::Ephemeral)
-            .worker(WorkerName::Cron.as_ref().to_string())
+            .worker(WorkerName::CronTrigger.as_ref().to_string())
             .action(MessageAction::Notify)
             .start(started_on.as_str_millis().parse().unwrap())
             .end(None)
@@ -179,7 +179,7 @@ mod tests {
             .fetch_one(&db)
             .await
             .map_err(handle_sql_err)?;
-        assert_eq!(worker.worker_type, WorkerType::Cron);
+        assert_eq!(worker.worker_type, WorkerType::CronTrigger);
         assert_eq!(worker.status, WorkerStatus::Running);
         assert_eq!(worker.started_on, Some(started_on));
         assert_eq!(worker.ended_on, None);
@@ -188,7 +188,7 @@ mod tests {
         let response = ResponseMessagePayloadBuilder::default()
             .id(worker.id.to_string())
             .class(WorkerClass::Ephemeral)
-            .worker(WorkerName::Cron.as_ref().to_string())
+            .worker(WorkerName::CronTrigger.as_ref().to_string())
             .action(MessageAction::Notify)
             .start(AtTime::now().as_str_millis().parse().unwrap()) // it wont get updated anyway
             .end(Some(ended_on.as_str_millis().parse().unwrap()))
@@ -223,7 +223,7 @@ mod tests {
             .fetch_one(&db)
             .await
             .map_err(handle_sql_err)?;
-        assert_eq!(worker.worker_type, WorkerType::Cron);
+        assert_eq!(worker.worker_type, WorkerType::CronTrigger);
         assert_eq!(worker.status, WorkerStatus::Done);
         assert_eq!(worker.started_on, Some(started_on));
         assert_eq!(worker.ended_on, Some(ended_on));

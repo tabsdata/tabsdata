@@ -553,7 +553,7 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .reuse_frozen_tables(false)
             .workers(Some(HashMap::from([(
-                WorkerTypeDto::Cron,
+                WorkerTypeDto::CronTrigger,
                 WorkerConfig::default(),
             )])))
             .build()?;
@@ -600,7 +600,7 @@ mod tests {
         assert_eq!(worker.started_on, None);
         assert_eq!(worker.ended_on, None);
         assert_eq!(worker.status, WorkerStatus::StopScheduled);
-        assert_eq!(worker.worker_type, WorkerType::Cron);
+        assert_eq!(worker.worker_type, WorkerType::CronTrigger);
         assert_eq!(worker.worker_config, Some(WorkerConfig::default()));
         Ok(())
     }

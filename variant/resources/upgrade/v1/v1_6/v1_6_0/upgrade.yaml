@@ -35,10 +35,10 @@ instance:
     action: insert_sibling
     position: after
     data:
-      name: cron
+      name: crontrigger
       kind: processor
       location: system
-      program: td_cron
+      program: td_crontrigger
       concurrency: 0
       retries: 2
       arguments:

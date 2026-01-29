@@ -62,7 +62,7 @@ pub async fn update_deleted_workers(
 
     let update = UpdateWorkerDB::stop_scheduled().await?;
     let to_stop = [
-        (*collection_id, WorkerType::Cron),
+        (*collection_id, WorkerType::CronTrigger),
         (*collection_id, WorkerType::StageTrigger),
     ];
 

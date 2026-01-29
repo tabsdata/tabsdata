@@ -18,25 +18,31 @@ EXAMPLE_END_DATETIME = datetime(2025, 4, 3, tzinfo=tz.UTC)
 
 
 @pytest.mark.unit
-@pytest.mark.crontab
-def test_crontab_class_defaults():
-    crontab = CronTrigger(mask="25 19 * * 1,3,5")
-    assert crontab.mask == "25 19 * * 1,3,5"
-    assert crontab.start is None
-    assert crontab.end is None
-    assert crontab._to_dict() == {"mask": "25 19 * * 1,3,5", "start": None, "end": None}
+@pytest.mark.crontrigger
+def test_crontrigger_class_defaults():
+    crontrigger = CronTrigger(mask="25 19 * * 1,3,5")
+    assert crontrigger.mask == "25 19 * * 1,3,5"
+    assert crontrigger.start is None
+    assert crontrigger.end is None
+    assert crontrigger._to_dict() == {
+        "mask": "25 19 * * 1,3,5",
+        "start": None,
+        "end": None,
+    }
 
 
 @pytest.mark.unit
-@pytest.mark.crontab
-def test_crontab_class_all_params():
-    crontab = CronTrigger(
+@pytest.mark.crontrigger
+def test_crontrigger_class_all_params():
+    crontrigger = CronTrigger(
         "25 19 * * 1,3,5", EXAMPLE_START_DATETIME, EXAMPLE_END_DATETIME
     )
-    assert crontab.mask == "25 19 * * 1,3,5"
-    assert crontab.start == EXAMPLE_START_DATETIME.isoformat(timespec="microseconds")
-    assert crontab.end == EXAMPLE_END_DATETIME.isoformat(timespec="microseconds")
-    assert crontab._to_dict() == {
+    assert crontrigger.mask == "25 19 * * 1,3,5"
+    assert crontrigger.start == EXAMPLE_START_DATETIME.isoformat(
+        timespec="microseconds"
+    )
+    assert crontrigger.end == EXAMPLE_END_DATETIME.isoformat(timespec="microseconds")
+    assert crontrigger._to_dict() == {
         "mask": "25 19 * * 1,3,5",
         "start": EXAMPLE_START_DATETIME.isoformat(timespec="microseconds"),
         "end": EXAMPLE_END_DATETIME.isoformat(timespec="microseconds"),
@@ -44,8 +50,8 @@ def test_crontab_class_all_params():
 
 
 @pytest.mark.unit
-@pytest.mark.crontab
-def test_crontab_wrong_mask_element_counts():
+@pytest.mark.crontrigger
+def test_crontrigger_wrong_mask_element_counts():
     with pytest.raises(DecoratorConfigurationError) as e:
         # noinspection PyTypeChecker
         CronTrigger(
@@ -62,8 +68,8 @@ def test_crontab_wrong_mask_element_counts():
 
 
 @pytest.mark.unit
-@pytest.mark.crontab
-def test_crontab_wrong_start_value():
+@pytest.mark.crontrigger
+def test_crontrigger_wrong_start_value():
     with pytest.raises(DecoratorConfigurationError) as e:
         # noinspection PyTypeChecker
         CronTrigger(mask="25 19 * * 1,3,5", start="2")
@@ -71,8 +77,8 @@ def test_crontab_wrong_start_value():
 
 
 @pytest.mark.unit
-@pytest.mark.crontab
-def test_crontab_wrong_end_value():
+@pytest.mark.crontrigger
+def test_crontrigger_wrong_end_value():
     with pytest.raises(DecoratorConfigurationError) as e:
         # noinspection PyTypeChecker
         CronTrigger(mask="25 19 * * 1,3,5", end="2")
@@ -80,15 +86,15 @@ def test_crontab_wrong_end_value():
 
 
 @pytest.mark.unit
-@pytest.mark.crontab
-def test_crontab_mask_validation_success():
-    crontab = CronTrigger(mask="*/5 * * * *")
-    assert crontab.mask == "*/5 * * * *"
+@pytest.mark.crontrigger
+def test_crontrigger_mask_validation_success():
+    crontrigger = CronTrigger(mask="*/5 * * * *")
+    assert crontrigger.mask == "*/5 * * * *"
 
 
 @pytest.mark.unit
-@pytest.mark.crontab
-def test_crontab_mask_validation_failure():
+@pytest.mark.crontrigger
+def test_crontrigger_mask_validation_failure():
     with pytest.raises(DecoratorConfigurationError) as e:
         CronTrigger(mask="A * * * *")
     assert e.value.error_code == ErrorCode.DCE15

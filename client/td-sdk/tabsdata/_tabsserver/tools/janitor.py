@@ -248,12 +248,21 @@ def main():
         .joinpath("work")
         .joinpath("cast")
     )
-    cron_cast_folder = (
+    crontrigger_cast_folder = (
         arguments.instance.joinpath("workspace")
         .joinpath("work")
         .joinpath("proc")
         .joinpath("ephemeral")
-        .joinpath("cron")
+        .joinpath("crontrigger")
+        .joinpath("work")
+        .joinpath("cast")
+    )
+    stagetrigger_cast_folder = (
+        arguments.instance.joinpath("workspace")
+        .joinpath("work")
+        .joinpath("proc")
+        .joinpath("ephemeral")
+        .joinpath("stagetrigger")
         .joinpath("work")
         .joinpath("cast")
     )
@@ -274,7 +283,8 @@ def main():
 
     folders_requiring_ok = [
         function_cast_folder,
-        cron_cast_folder,
+        crontrigger_cast_folder,
+        stagetrigger_cast_folder,
     ]
 
     process(

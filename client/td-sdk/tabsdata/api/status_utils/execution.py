@@ -7,14 +7,14 @@ from enum import Enum
 
 class TriggerTypeStatus(Enum):
     MANUAL = "M"
-    CRON = "C"
-    DATA_LISTENER = "DL"
+    CRON_TRIGGER = "C"
+    STAGE_TRIGGER = "ST"
 
 
 EXECUTION_TRIGGER_TYPE_MAPPING = {
     TriggerTypeStatus.MANUAL.value: "Manual",
-    TriggerTypeStatus.CRON.value: "Cron",
-    TriggerTypeStatus.DATA_LISTENER.value: "Listener",
+    TriggerTypeStatus.CRON_TRIGGER.value: "Cron Trigger",
+    TriggerTypeStatus.STAGE_TRIGGER.value: "Stage Trigger",
 }
 
 

@@ -26,7 +26,7 @@ pub(crate) mod tests {
             .join(Ephemeral.as_ref())
             .join(match worker_db.worker_type {
                 WorkerType::FunctionRunner => WorkerName::Function.as_ref(),
-                WorkerType::Cron => WorkerName::Cron.as_ref(),
+                WorkerType::CronTrigger => WorkerName::CronTrigger.as_ref(),
                 WorkerType::StageTrigger => WorkerName::StageTrigger.as_ref(),
             })
             .join(WORK_FOLDER)

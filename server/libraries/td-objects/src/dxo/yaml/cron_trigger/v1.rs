@@ -10,11 +10,11 @@ use td_common::server::HttpRequest;
 
 #[td_type::Dto]
 #[derive(Eq, PartialEq)]
-pub struct CronInput {
+pub struct CronTriggerInput {
     pub info: Info,
 }
 
-impl Locations for CronInput {
+impl Locations for CronTriggerInput {
     fn locations(&self) -> Vec<&Location> {
         vec![]
     }
@@ -29,16 +29,16 @@ pub struct Info {
     pub function_version_id: FunctionVersionId,
     pub function: FunctionName,
     pub scheduled_on: AtTime, // when the request yaml was created
-    pub task: HttpRequest,    // http task of the cron
-    pub config: WorkerConfig, // CronConfig serialized
+    pub task: HttpRequest,    // http task of the cron trigger
+    pub config: WorkerConfig, // cron trigger config serialized
 }
 
-pub type CronOutput = ();
+pub type CronTriggerOutput = ();
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dxo::worker::CronConfig;
+    use crate::dxo::worker::CronTriggerConfig;
     use crate::dxo::yaml::WorkerInput;
     use crate::types::basic::{AtTime, CollectionName, CronMask, FunctionName, WorkerConfig};
     use chrono::DateTime;
@@ -54,12 +54,12 @@ mod tests {
         let start = DateTime::default();
         let end = DateTime::default();
 
-        let cfg = CronConfig {
+        let cfg = CronTriggerConfig {
             start: Some(start),
             end: Some(end),
             mask: CronMask::try_from("* * * * *").unwrap(),
         };
-        let input = WorkerInput::CronV1(Box::new(CronInput {
+        let input = WorkerInput::CronTriggerV1(Box::new(CronTriggerInput {
             info: Info {
                 worker_id,
                 collection_id,
@@ -85,7 +85,7 @@ mod tests {
         assert_eq!(
             serialized.as_str(),
             format!(
-                r#"!CronV1
+                r#"!CronTriggerV1
 info:
   worker_id: {worker_id}
   collection_id: {collection_id}
