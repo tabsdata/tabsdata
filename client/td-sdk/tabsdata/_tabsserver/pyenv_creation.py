@@ -27,7 +27,7 @@ import tomllib
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal, Tuple, TypeAlias
+from typing import Any, Literal, Tuple, TypeAlias
 
 import importlib_metadata
 import yaml
@@ -537,9 +537,9 @@ def get_build_timestamp() -> str:
     td_build_timestamp = os.getenv(TD_BUILD_TIMESTAMP)
     if td_build_timestamp:
         return td_build_timestamp
+    metadata: dict[str, Any] = {}
     try:
         build = td_resource(BUILD_MANIFEST_LOCATION)
-        metadata = {}
         try:
             with open(build, "r", encoding="utf-8") as f:
                 metadata = yaml.safe_load(f) or {}
