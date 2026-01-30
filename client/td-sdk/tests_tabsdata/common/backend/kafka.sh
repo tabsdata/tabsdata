@@ -13,9 +13,16 @@ rpk redpanda start \
   &
 
 echo '[td fixture] Waiting for Redpanda...'
-until rpk cluster health --api-urls ${KAFKA_ADVERTISE_ADDRESS}:${KAFKA_ADMIN_INTERNAL_PORT} >/dev/null 2>&1; do
-  sleep 2
-done
+timeout 120s bash -c '
+  until rpk cluster health --api-urls ${KAFKA_ADVERTISE_ADDRESS}:${KAFKA_ADMIN_INTERNAL_PORT} >/dev/null 2>&1; do
+    sleep 2
+  done
+'
+
+if [ $? -ne 0 ]; then
+  echo "[td fixture] Redpanda failed to start within 120 seconds."
+  exit 1
+fi
 
 echo '[td fixture] Creating Admin User...'
 rpk acl user create ${KAFKA_ADMIN_USER} -p ${KAFKA_ADMIN_PASSWORD} --mechanism SCRAM-SHA-256 --api-urls ${KAFKA_ADVERTISE_ADDRESS}:${KAFKA_ADMIN_INTERNAL_PORT}
