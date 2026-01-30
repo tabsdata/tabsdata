@@ -17,7 +17,10 @@ from tabsdata._cli.exe_group import obtain_list_worker_filters
 from tabsdata.api.status_utils.worker import WorkerStatus
 from tabsdata.api.tabsdata_server import TabsdataServer
 
-WORKER_NAME = {"CT": "cron trigger", "ST": "stage trigger",}
+WORKER_NAME = {
+    "CT": "cron trigger",
+    "ST": "stage trigger",
+}
 
 
 def start(worker_type: str, ctx: click.Context, name: str, coll: str):

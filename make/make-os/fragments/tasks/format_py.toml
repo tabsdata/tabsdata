@@ -12,8 +12,29 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    debug "🚀 black --preview --enable-unstable-feature string_processing . --force-exclude \\.pyi$"
-    exec --fail-on-error black --preview --enable-unstable-feature string_processing . --force-exclude \\.pyi$
+    on_ga = get_env TD_ON_GA
+    on_ga_true = eq ${on_ga} "true"
+    if ${on_ga_true}
+        debug "🚀 black --preview --enable-unstable-feature string_processing . --force-exclude \\.pyi$"
+        exec --fail-on-error black --preview --enable-unstable-feature string_processing . --force-exclude \\.pyi$
+    else
+        project_root_folder = get_env PROJECT_ROOT_FOLDER
+        project_root_folder_basename = basename ${project_root_folder}
+        is_tabsdata_ee = eq ${project_root_folder_basename} "tabsdata-ee"
+        if ${is_tabsdata_ee}
+            debug "🚀 black --preview --enable-unstable-feature string_processing . --force-exclude \\.pyi$"
+            exec --fail-on-error black --preview --enable-unstable-feature string_processing . --force-exclude \\.pyi$
+
+            info "🐡 Switching to tabsdata-os"
+            cd "${PROJECT_TABSDATA_ROOT_FOLDER}/../tabsdata-os"
+
+            debug "🚀 black --preview --enable-unstable-feature string_processing . --force-exclude \\.pyi$"
+            exec --fail-on-error black --preview --enable-unstable-feature string_processing . --force-exclude \\.pyi$
+        else
+            debug "🚀 black --preview --enable-unstable-feature string_processing . --force-exclude \\.pyi$"
+            exec --fail-on-error black --preview --enable-unstable-feature string_processing . --force-exclude \\.pyi$
+        end
+    end
     ''']
 
 [tasks.__os__format_py_isort]
@@ -26,9 +47,39 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    debug "🚀 isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv"
-    exec --fail-on-error isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv
+    on_ga = get_env TD_ON_GA
+    on_ga_true = eq ${on_ga} "true"
+    if ${on_ga_true}
+        debug "🚀 isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv"
+        exec --fail-on-error isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv
 
-    # debug "🚀 isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_*"
-    # exec --fail-on-error isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_*
+        # debug "🚀 isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_*"
+        # exec --fail-on-error isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_*
+    else
+        project_root_folder = get_env PROJECT_ROOT_FOLDER
+        project_root_folder_basename = basename ${project_root_folder}
+        is_tabsdata_ee = eq ${project_root_folder_basename} "tabsdata-ee"
+        if ${is_tabsdata_ee}
+            debug "🚀 isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv"
+            exec --fail-on-error isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv
+
+            # debug "🚀 isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_*"
+            # exec --fail-on-error isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_*
+
+            info "🐡 Switching to tabsdata-os"
+            cd "${PROJECT_TABSDATA_ROOT_FOLDER}/../tabsdata-os"
+
+            debug "🚀 isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv"
+            exec --fail-on-error isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv
+
+            # debug "🚀 isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_*"
+            # exec --fail-on-error isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_*
+        else
+            debug "🚀 isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv"
+            exec --fail-on-error isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv
+
+            # debug "🚀 isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_*"
+            # exec --fail-on-error isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_*
+        end
+    end
     ''']
