@@ -51,7 +51,7 @@ from tabsdata.tableframe.dtypes import (
     _FLOAT_DTYPES,
     _NUMERIC_DTYPES,
     _SIGNED_NUMERIC_DTYPES,
-    _STRING_DTYPES,
+    _STRING_DTYPES, _BOOLEAN_DTYPES,
 )
 
 
@@ -681,6 +681,79 @@ def _validate_pattern(pattern: str, fn_name, error_code: ErrorCode) -> str:
         msg = f"Invalid regex pattern '{pattern}': {re.error}."
         raise ParameterValueError(error_code, fn_name, "pattern", msg)
 
+
+class IsTrue(BoolClassifier):
+    """
+    A boolean classifier that checks if a value is `True`.
+    """
+
+    @classmethod
+    def supported_dtypes(cls) -> FrozenSet[Type]:
+        """Returns the set of data types supported by IsTrue classifier."""
+        return _BOOLEAN_DTYPES
+
+    @_td_validate_call(ErrorCode.DQC154)
+    def __init__(
+        self,
+        column_names: ColumNamesWithAltSpec | None = None,
+        on_missing_column: OnInvalidColumnSpec = "ignore",
+        on_wrong_type: OnInvalidColumnSpec = "ignore",
+        *,
+        tags: TagsSpec | None = None,
+    ):
+        """
+        Initializes the `IsTrue` classifier.
+
+        Args:
+            column_names: The column(s) to check.
+            on_missing_column: What to do if a column name is missing.
+            on_wrong_type: Behavior when a column’s type is incompatible with the
+                           classifier.
+            tags: Optional tags for the classifier.
+        """
+        super().__init__(
+            column_names=column_names,
+            on_missing_column=on_missing_column,
+            on_wrong_type=on_wrong_type,
+            on_wrong_value="ignore",
+            tags=tags,
+        )
+
+
+class IsFalse(BoolClassifier):
+    """
+    A boolean classifier that checks if a value is `False`.
+    """
+
+    @classmethod
+    def supported_dtypes(cls) -> FrozenSet[Type]:
+        """Returns the set of data types supported by IsFalse classifier."""
+        return _BOOLEAN_DTYPES
+
+    @_td_validate_call(ErrorCode.DQC155)
+    def __init__(
+        self,
+        column_names: ColumNamesWithAltSpec | None = None,
+        on_missing_column: OnInvalidColumnSpec = "ignore",
+        on_wrong_type: OnInvalidColumnSpec = "ignore",
+        *,
+        tags: TagsSpec | None = None,
+    ):
+        """
+        Initializes the `IsFalse` classifier.
+
+        Args:
+            column_names: The column(s) to check.
+            on_missing_column: What to do if a column name is missing.
+            tags: Optional tags for the classifier.
+        """
+        super().__init__(
+            column_names=column_names,
+            on_missing_column=on_missing_column,
+            on_wrong_type=on_wrong_type,
+            on_wrong_value="ignore",
+            tags=tags,
+        )
 
 # noinspection DuplicatedCode
 class IsNull(BoolClassifier):

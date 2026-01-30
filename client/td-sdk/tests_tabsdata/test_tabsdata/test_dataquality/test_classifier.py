@@ -16,6 +16,7 @@ from tabsdata.dataquality._classifier import (
     HasLength,
     IdentityScale,
     IsBetween,
+    IsFalse,
     IsIn,
     IsNan,
     IsNegative,
@@ -30,6 +31,7 @@ from tabsdata.dataquality._classifier import (
     IsNullOrNan,
     IsPositive,
     IsPositiveOrZero,
+    IsTrue,
     IsZero,
     LinearScale,
     LogarithmicScale,
@@ -1081,3 +1083,87 @@ def test_scale_categorizer_to_dict():
         "tags": ["t1"],
     }
     assert classifier._to_dict() == expected
+
+
+def test_is_true_classifier():
+    classifier = IsTrue(column_names="column_a", tags="tag1")
+    assert classifier.column_names == [("column_a", None)]
+    assert classifier.tags == ["tag1"]
+
+
+def test_is_true_to_dict():
+    classifier = IsTrue(column_names="col_a", tags="tag1", on_missing_column="fail")
+    expected = {
+        "type": "IsTrue",
+        "column_names": [("col_a", None)],
+        "on_missing_column": "fail",
+        "on_wrong_type": "ignore",
+        "tags": ["tag1"],
+    }
+    assert classifier._to_dict() == expected
+
+
+def test_is_true_on_missing_column():
+    with pytest.raises(ParameterValidationError) as e:
+        IsTrue(on_missing_column="error")
+    assert e.value.error_code == ErrorCode.DQC154
+
+    classifier = IsTrue(on_missing_column="ignore")
+    assert classifier.on_missing_column == "ignore"
+
+    classifier = IsTrue(on_missing_column="fail")
+    assert classifier.on_missing_column == "fail"
+
+
+def test_is_false_classifier():
+    classifier = IsFalse(column_names="column_a", tags="tag1")
+    assert classifier.column_names == [("column_a", None)]
+    assert classifier.tags == ["tag1"]
+
+
+def test_is_false_to_dict():
+    classifier = IsFalse(column_names="col_a", tags="tag1", on_missing_column="fail")
+    expected = {
+        "type": "IsFalse",
+        "column_names": [("col_a", None)],
+        "on_missing_column": "fail",
+        "on_wrong_type": "ignore",
+        "tags": ["tag1"],
+    }
+    assert classifier._to_dict() == expected
+
+
+def test_is_false_on_missing_column():
+    with pytest.raises(ParameterValidationError) as e:
+        IsFalse(on_missing_column="error")
+    assert e.value.error_code == ErrorCode.DQC155
+
+    classifier = IsFalse(on_missing_column="ignore")
+    assert classifier.on_missing_column == "ignore"
+
+    classifier = IsFalse(on_missing_column="fail")
+    assert classifier.on_missing_column == "fail"
+
+
+def test_is_true_on_wrong_type():
+    with pytest.raises(ParameterValidationError) as e:
+        IsTrue(on_wrong_type="error")
+    assert e.value.error_code == ErrorCode.DQC154
+
+    classifier = IsTrue(on_wrong_type="ignore")
+    assert classifier.on_wrong_type == "ignore"
+
+    classifier = IsTrue(on_wrong_type="fail")
+    assert classifier.on_wrong_type == "fail"
+
+
+def test_is_false_on_wrong_type():
+    with pytest.raises(ParameterValidationError) as e:
+        IsFalse(on_wrong_type="error")
+    assert e.value.error_code == ErrorCode.DQC155
+
+    classifier = IsFalse(on_wrong_type="ignore")
+    assert classifier.on_wrong_type == "ignore"
+
+    classifier = IsFalse(on_wrong_type="fail")
+    assert classifier.on_wrong_type == "fail"

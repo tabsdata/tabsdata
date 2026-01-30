@@ -533,6 +533,42 @@ def dq_summary_bool_classifiers_params() -> list[
     # (classifiers, summary_tags, has_summary_info, summary_row, summary row info)
     return [
         (
+            [dq.IsTrue("a")],
+            None,
+            True,
+            "a_is_true",
+            {
+                "dq.type": "boolean",
+                "dq.false": 1,
+                "dq.true": 1,
+                "dq.bins": None,
+                "dq.none": 3,
+                "dq.nan": 0,
+                "dq.under": None,
+                "dq.over": None,
+                "dq.p000": None,
+                "dq.p001": None,
+            },
+        ),
+        (
+            [dq.IsFalse("a")],
+            None,
+            True,
+            "a_is_false",
+            {
+                "dq.type": "boolean",
+                "dq.false": 1,
+                "dq.true": 1,
+                "dq.bins": None,
+                "dq.none": 3,
+                "dq.nan": 0,
+                "dq.under": None,
+                "dq.over": None,
+                "dq.p000": None,
+                "dq.p001": None,
+            },
+        ),
+        (
             [dq.IsNull("a")],
             None,
             True,
