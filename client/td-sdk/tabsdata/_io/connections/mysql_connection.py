@@ -19,7 +19,7 @@ class MySQLConn(Conn):
     Represents a connection configuration to MySQL.
     """
 
-    @_td_validate_call(ErrorCode.PVCX2)
+    @_td_validate_call(ErrorCode.DECE101)
     def __init__(
         self,
         uri: str,

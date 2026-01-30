@@ -42,7 +42,7 @@ class OracleSrc(SourcePlugin):
     Source plugin for reading data from Oracle.
     """
 
-    @_td_validate_call(ErrorCode.PVSOC5)
+    @_td_validate_call(ErrorCode.SOCE104)
     def __init__(
         self,
         conn: OracleConn,
@@ -118,7 +118,7 @@ class OracleSrc(SourcePlugin):
         return self._initial_values
 
     @initial_values.setter
-    @_td_validate_call(ErrorCode.PVSOC6)
+    @_td_validate_call(ErrorCode.SOCE105)
     def initial_values(self, initial_values: Optional[dict[str, Any]]):
         """
         Set the initial values for the parameters in the SQL queries.

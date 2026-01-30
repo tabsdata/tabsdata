@@ -73,21 +73,21 @@ def test_postgres_dest_chunk_size_validation():
         PostgresDest(conn, "table1", chunk_size=-10)
     with pytest.raises(ParameterValidationError) as e:
         PostgresDest(conn, "table1", chunk_size="a")
-    assert e.value.error_code == ErrorCode.PVDST2
+    assert e.value.error_code == ErrorCode.DECE107
 
 
 def test_postgres_dest_invalid_loader_raises():
     conn = PostgresConn("postgresql://host:5432/db")
     with pytest.raises(ParameterValidationError) as e:
         PostgresDest(conn, "table1", loader="not_a_loader")
-    assert e.value.error_code == ErrorCode.PVDST2
+    assert e.value.error_code == ErrorCode.DECE107
 
 
 def test_postgres_dest_invalid_if_table_exists_raises():
     conn = PostgresConn("postgresql://host:5432/db")
     with pytest.raises(ParameterValidationError) as e:
         PostgresDest(conn, "table1", if_table_exists="not_a_strategy")
-    assert e.value.error_code == ErrorCode.PVDST2
+    assert e.value.error_code == ErrorCode.DECE107
 
 
 def test_postgres_dest_transactional_param():
@@ -102,10 +102,10 @@ def test_postgres_dest_invalid_transactional_values():
     conn = PostgresConn("postgresql://host:5432/db")
     with pytest.raises(ParameterValidationError) as e:
         PostgresDest(conn, "table1", transactional="yeah")
-    assert e.value.error_code == ErrorCode.PVDST2
+    assert e.value.error_code == ErrorCode.DECE107
     with pytest.raises(ParameterValidationError) as e:
         PostgresDest(conn, "table1", transactional=4)
-    assert e.value.error_code == ErrorCode.PVDST2
+    assert e.value.error_code == ErrorCode.DECE107
 
 
 def test_postgres_dest_repr_and_properties():
@@ -151,7 +151,7 @@ def test_postgres_dest_invalid_destination_tables_type():
         PostgresDest(conn, None)
     with pytest.raises(ParameterValidationError) as e:
         PostgresDest(conn, [None, "table2"])
-    assert e.value.error_code == ErrorCode.PVDST2
+    assert e.value.error_code == ErrorCode.DECE107
 
 
 def test_postgres_dest_empty_destination_table_raises():

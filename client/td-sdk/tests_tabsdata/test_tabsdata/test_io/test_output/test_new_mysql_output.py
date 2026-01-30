@@ -77,21 +77,21 @@ def test_mysql_dest_chunk_size_validation():
         MySQLDest(conn, "table1", chunk_size=-10)
     with pytest.raises(ParameterValidationError) as e:
         MySQLDest(conn, "table1", chunk_size="a")
-    assert e.value.error_code == ErrorCode.PVDST1
+    assert e.value.error_code == ErrorCode.DECE106
 
 
 def test_mysql_dest_invalid_loader_raises():
     conn = MySQLConn("mysql://host:3306/db")
     with pytest.raises(ParameterValidationError) as e:
         MySQLDest(conn, "table1", loader="not_a_loader")
-    assert e.value.error_code == ErrorCode.PVDST1
+    assert e.value.error_code == ErrorCode.DECE106
 
 
 def test_mysql_dest_invalid_if_table_exists_raises():
     conn = MySQLConn("mysql://host:3306/db")
     with pytest.raises(ParameterValidationError) as e:
         MySQLDest(conn, "table1", if_table_exists="not_a_strategy")
-    assert e.value.error_code == ErrorCode.PVDST1
+    assert e.value.error_code == ErrorCode.DECE106
 
 
 def test_mysql_dest_transactional_param():
@@ -106,10 +106,10 @@ def test_mysql_dest_invalid_transactional_values():
     conn = MySQLConn("mysql://host:3306/db")
     with pytest.raises(ParameterValidationError) as e:
         MySQLDest(conn, "table1", transactional="yeah")
-    assert e.value.error_code == ErrorCode.PVDST1
+    assert e.value.error_code == ErrorCode.DECE106
     with pytest.raises(ParameterValidationError) as e:
         MySQLDest(conn, "table1", transactional=4)
-    assert e.value.error_code == ErrorCode.PVDST1
+    assert e.value.error_code == ErrorCode.DECE106
 
 
 def test_mysql_dest_repr_and_properties():
@@ -155,7 +155,7 @@ def test_mysql_dest_invalid_destination_tables_type():
         MySQLDest(conn, None)
     with pytest.raises(ParameterValidationError) as e:
         MySQLDest(conn, [None, "table2"])
-    assert e.value.error_code == ErrorCode.PVDST1
+    assert e.value.error_code == ErrorCode.DECE106
 
 
 def test_mysql_dest_empty_destination_table_raises():

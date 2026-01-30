@@ -29,7 +29,7 @@ class PostgresDest(DestinationPlugin):
     Destination plugin for writing data to PostgreSQL.
     """
 
-    @_td_validate_call(ErrorCode.PVDST2)
+    @_td_validate_call(ErrorCode.DECE107)
     def __init__(
         self,
         conn: PostgresConn,

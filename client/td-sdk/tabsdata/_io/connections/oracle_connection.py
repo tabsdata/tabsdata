@@ -19,7 +19,7 @@ class OracleConn(Conn):
     Represents a connection configuration to Oracle.
     """
 
-    @_td_validate_call(ErrorCode.PVCX3)
+    @_td_validate_call(ErrorCode.DECE102)
     def __init__(
         self,
         uri: str,

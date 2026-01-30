@@ -266,7 +266,7 @@ def test_type_validation(kafka_conn):
             schema="{}",
             time_rollover_secs=-1,
         )
-    assert e.value.error_code == ErrorCode.PVTRGR1
+    assert e.value.error_code == ErrorCode.STCE103
 
     # Should raise if topic is not a string
     with pytest.raises(ParameterValidationError) as e:
@@ -277,7 +277,7 @@ def test_type_validation(kafka_conn):
             data_format="json",
             schema="{}",
         )
-    assert e.value.error_code == ErrorCode.PVTRGR1
+    assert e.value.error_code == ErrorCode.STCE103
 
     # Should raise if data_format is not a valid KafkaMessageFormatSpec or string
     with pytest.raises(ParameterValidationError) as e:
@@ -288,7 +288,7 @@ def test_type_validation(kafka_conn):
             data_format=123,
             schema="{}",
         )
-    assert e.value.error_code == ErrorCode.PVTRGR1
+    assert e.value.error_code == ErrorCode.STCE103
 
     # Should raise if schema is not a string
     with pytest.raises(ParameterValidationError) as e:
@@ -299,7 +299,7 @@ def test_type_validation(kafka_conn):
             data_format="json",
             schema=123,
         )
-    assert e.value.error_code == ErrorCode.PVTRGR1
+    assert e.value.error_code == ErrorCode.STCE103
 
     # Should raise if size_rollover_mb is not a SizeRollover or None
     with pytest.raises(ParameterValidationError) as e:
@@ -310,7 +310,7 @@ def test_type_validation(kafka_conn):
             schema="{}",
             size_rollover_mb=-2,
         )
-    assert e.value.error_code == ErrorCode.PVTRGR1
+    assert e.value.error_code == ErrorCode.STCE103
 
     with pytest.raises(ParameterValidationError) as e:
         KafkaTrigger(
@@ -320,7 +320,7 @@ def test_type_validation(kafka_conn):
             schema="{}",
             size_rollover_mb=-1,
         )
-    assert e.value.error_code == ErrorCode.PVTRGR1
+    assert e.value.error_code == ErrorCode.STCE103
 
     # Should raise if messages_rollover is not a MessagesRollover or None
     with pytest.raises(ParameterValidationError) as e:
@@ -332,7 +332,7 @@ def test_type_validation(kafka_conn):
             schema="{}",
             messages_rollover="a",
         )
-    assert e.value.error_code == ErrorCode.PVTRGR1
+    assert e.value.error_code == ErrorCode.STCE103
 
     with pytest.raises(ParameterValidationError) as e:
         KafkaTrigger(
@@ -342,7 +342,7 @@ def test_type_validation(kafka_conn):
             schema="{}",
             messages_rollover=-1,
         )
-    assert e.value.error_code == ErrorCode.PVTRGR1
+    assert e.value.error_code == ErrorCode.STCE103
 
     # Should raise if dlq_topic is not a string or None
     with pytest.raises(ParameterValidationError) as e:
@@ -354,7 +354,7 @@ def test_type_validation(kafka_conn):
             schema="{}",
             dlq_topic=123,
         )
-    assert e.value.error_code == ErrorCode.PVTRGR1
+    assert e.value.error_code == ErrorCode.STCE103
 
 
 @pytest.mark.parametrize(

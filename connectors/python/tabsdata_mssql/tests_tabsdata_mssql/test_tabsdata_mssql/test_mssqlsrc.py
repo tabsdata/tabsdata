@@ -88,7 +88,7 @@ def test_query_wrong_type_raises_type_error():
     conn = MSSQLConn(connection_string_or_uri=conn_str)
     with pytest.raises(ParameterValidationError) as e:
         MSSQLSrc(conn, query)
-    assert e.value.error_code == ErrorCode.PVSOC9
+    assert e.value.error_code == ErrorCode.SOCE108
 
 
 @pytest.mark.mssql
@@ -107,7 +107,7 @@ def test_query_list_wrong_type_raises_type_error():
     conn = MSSQLConn(connection_string_or_uri=conn_str)
     with pytest.raises(ParameterValidationError) as e:
         MSSQLSrc(conn, query)
-    assert e.value.error_code == ErrorCode.PVSOC9
+    assert e.value.error_code == ErrorCode.SOCE108
 
 
 @pytest.mark.mssql
@@ -146,7 +146,7 @@ def test_enforce_connection_params_invalid_type_raises():
         MSSQLConn(
             connection_string_or_uri=conn_str, enforce_connection_params="not_bool"
         )
-    assert e.value.error_code == ErrorCode.PVCX5
+    assert e.value.error_code == ErrorCode.DECE104
 
 
 @pytest.mark.mssql
@@ -178,7 +178,7 @@ def test_cx_src_configs_mssql_invalid_type_raises():
         conn = MSSQLConn(
             connection_string_or_uri=conn_str, cx_dst_configs_mssql="not_a_dict"
         )
-    assert e.value.error_code == ErrorCode.PVCX5
+    assert e.value.error_code == ErrorCode.DECE104
 
 
 @pytest.mark.mssql
@@ -210,7 +210,7 @@ def test_cx_dst_configs_mssql_invalid_type_raises():
         conn = MSSQLConn(
             connection_string_or_uri=conn_str, cx_dst_configs_mssql="not_a_dict"
         )
-    assert e.value.error_code == ErrorCode.PVCX5
+    assert e.value.error_code == ErrorCode.DECE104
 
 
 @pytest.mark.mssql
@@ -285,7 +285,7 @@ def test_wrong_type_initial_values_raises_type_error():
     conn = MSSQLConn(connection_string_or_uri=conn_str)
     with pytest.raises(ParameterValidationError) as e:
         MSSQLSrc(conn, query, initial_values=initial_values)
-    assert e.value.error_code == ErrorCode.PVSOC9
+    assert e.value.error_code == ErrorCode.SOCE108
 
 
 @pytest.mark.mssql
@@ -343,7 +343,7 @@ def test_transactional_invalid_type_raises():
     conn = MSSQLConn(connection_string_or_uri=conn_str)
     with pytest.raises(ParameterValidationError) as e:
         MSSQLSrc(conn, query, transactional=3)
-    assert e.value.error_code == ErrorCode.PVSOC9
+    assert e.value.error_code == ErrorCode.SOCE108
 
 
 @pytest.mark.mssql
@@ -386,7 +386,7 @@ def test_chunk_size_invalid_type_raises():
     conn = MSSQLConn(connection_string_or_uri=conn_str)
     with pytest.raises(ParameterValidationError) as e:
         MSSQLSrc(conn, query, chunk_size="not_an_int")
-    assert e.value.error_code == ErrorCode.PVSOC9
+    assert e.value.error_code == ErrorCode.SOCE108
 
 
 @pytest.mark.mssql
@@ -401,7 +401,7 @@ def test_chunk_size_invalid_value_raises():
     conn = MSSQLConn(connection_string_or_uri=conn_str)
     with pytest.raises(ParameterValidationError) as e:
         MSSQLSrc(conn, query, chunk_size=-2)
-    assert e.value.error_code == ErrorCode.PVSOC9
+    assert e.value.error_code == ErrorCode.SOCE108
 
 
 @pytest.mark.mssql
@@ -444,7 +444,7 @@ def test_loader_param_invalid_raises_type_error():
     conn = MSSQLConn(connection_string_or_uri=conn_str)
     with pytest.raises(ParameterValidationError) as e:
         MSSQLSrc(conn, query, loader="sqlalchemy")
-    assert e.value.error_code == ErrorCode.PVSOC9
+    assert e.value.error_code == ErrorCode.SOCE108
 
 
 @pytest.mark.mssql
@@ -503,7 +503,7 @@ def test_schema_overrides_wrong_type_raises():
     conn = MSSQLConn(connection_string_or_uri=conn_str)
     with pytest.raises(ParameterValidationError) as e:
         MSSQLSrc(conn, query, schema_overrides="not_a_dict")
-    assert e.value.error_code == ErrorCode.PVSOC9
+    assert e.value.error_code == ErrorCode.SOCE108
 
 
 @pytest.mark.mssql
@@ -519,7 +519,7 @@ def test_schema_overrides_list_with_non_dict_raises():
     schema_overrides = [{"col1": Float64()}, "not_a_dict"]
     with pytest.raises(ParameterValidationError) as e:
         MSSQLSrc(conn, query, schema_overrides=schema_overrides)
-    assert e.value.error_code == ErrorCode.PVSOC9
+    assert e.value.error_code == ErrorCode.SOCE108
 
 
 @pytest.mark.mssql
@@ -535,7 +535,7 @@ def test_schema_overrides_dict_with_non_str_key_raises():
     schema_overrides = {42: Float64()}
     with pytest.raises(ParameterValidationError) as e:
         MSSQLSrc(conn, query, schema_overrides=schema_overrides)
-    assert e.value.error_code == ErrorCode.PVSOC9
+    assert e.value.error_code == ErrorCode.SOCE108
 
 
 @pytest.mark.mssql
@@ -551,7 +551,7 @@ def test_schema_overrides_dict_with_non_datatype_value_raises():
     schema_overrides = {"col1": float()}
     with pytest.raises(ParameterValidationError) as e:
         MSSQLSrc(conn, query, schema_overrides=schema_overrides)
-    assert e.value.error_code == ErrorCode.PVSOC9
+    assert e.value.error_code == ErrorCode.SOCE108
 
 
 @pytest.mark.mssql
@@ -599,4 +599,4 @@ def test_wrong_type_initial_values_key_raises_error():
     conn = MSSQLConn(connection_string_or_uri=conn_str)
     with pytest.raises(ParameterValidationError) as e:
         MSSQLSrc(conn, query, initial_values=initial_values)
-    assert e.value.error_code == ErrorCode.PVSOC9
+    assert e.value.error_code == ErrorCode.SOCE108

@@ -20,7 +20,7 @@ class MariaDBConn(Conn):
     Represents a connection configuration to MariaDB.
     """
 
-    @_td_validate_call(ErrorCode.PVCX1)
+    @_td_validate_call(ErrorCode.DECE100)
     def __init__(
         self,
         uri: str,

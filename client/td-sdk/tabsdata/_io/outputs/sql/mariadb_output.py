@@ -29,7 +29,7 @@ class MariaDBDest(DestinationPlugin):
     Destination plugin for writing data to MySQL.
     """
 
-    @_td_validate_call(ErrorCode.PVDST3)
+    @_td_validate_call(ErrorCode.DECE105)
     def __init__(
         self,
         conn: MariaDBConn,

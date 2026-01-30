@@ -40,7 +40,7 @@ class MSSQLSrc(SourcePlugin):
     Source Plugin for reading data from a Microsoft SQL Server (MSSQL) database.
     """
 
-    @_td_validate_call(ErrorCode.PVSOC9)
+    @_td_validate_call(ErrorCode.SOCE108)
     def __init__(
         self,
         conn: MSSQLConn,
@@ -120,7 +120,7 @@ class MSSQLSrc(SourcePlugin):
         return self._initial_values
 
     @initial_values.setter
-    @_td_validate_call(ErrorCode.PVSOC10)
+    @_td_validate_call(ErrorCode.SOCE109)
     def initial_values(self, initial_values: Optional[dict[str, Any]]):
         """
         Sets the initial values for the parameters in the SQL queries.

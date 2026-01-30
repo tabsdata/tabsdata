@@ -85,7 +85,7 @@ class ConfluentSchemaRegistry(KafkaSchemaRegistry):
     Configuration for Confluent Schema Registry.
     """
 
-    @_td_validate_call(ErrorCode.PVCX7)
+    @_td_validate_call(ErrorCode.STCE101)
     def __init__(
         self,
         url: str,
@@ -134,7 +134,7 @@ class AwsGlueSchemaRegistry(KafkaSchemaRegistry):
     Configuration for AWS Glue Schema Registry.
     """
 
-    @_td_validate_call(ErrorCode.PVCX8)
+    @_td_validate_call(ErrorCode.STCE102)
     def __init__(
         self,
         region_name: str,
@@ -209,7 +209,7 @@ class KafkaConn(Conn):
     Kafka Consumer Connection configuration.
     """
 
-    @_td_validate_call(ErrorCode.PVCX6)
+    @_td_validate_call(ErrorCode.STCE100)
     def __init__(
         self,
         servers: KafkaServersSpec,
@@ -291,7 +291,7 @@ class KafkaTrigger(StageTrigger):
     buffer and stage the data.
     """
 
-    @_td_validate_call(ErrorCode.PVTRGR1)
+    @_td_validate_call(ErrorCode.STCE103)
     def __init__(
         self,
         conn: KafkaConn,

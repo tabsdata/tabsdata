@@ -23,7 +23,7 @@ class MSSQLConn(Conn):
     Represents a connection configuration to Microsoft SQL Server (MSSQL).
     """
 
-    @_td_validate_call(ErrorCode.PVCX5)
+    @_td_validate_call(ErrorCode.DECE104)
     def __init__(
         self,
         connection_string_or_uri: str,

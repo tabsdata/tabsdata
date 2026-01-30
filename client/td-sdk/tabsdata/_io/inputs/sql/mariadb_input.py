@@ -43,7 +43,7 @@ class MariaDBSrc(SourcePlugin):
     Source plugin for reading data from MariaDB.
     """
 
-    @_td_validate_call(ErrorCode.PVSOC1)
+    @_td_validate_call(ErrorCode.SOCE100)
     def __init__(
         self,
         conn: MariaDBConn,
@@ -113,7 +113,7 @@ class MariaDBSrc(SourcePlugin):
         return self._initial_values
 
     @initial_values.setter
-    @_td_validate_call(ErrorCode.PVSOC2)
+    @_td_validate_call(ErrorCode.SOCE101)
     def initial_values(self, initial_values: Optional[dict[str, Any]]):
         """
         Set the initial values for the parameters in the SQL queries.

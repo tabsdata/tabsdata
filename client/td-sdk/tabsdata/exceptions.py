@@ -2304,106 +2304,34 @@ class ErrorCode(Enum):
     DQC203 = object()
     DQC204 = object()
 
-    PVCX1 = {
-        "code": "PVCX-001",
-        "message": None,
-    }
-    PVCX2 = {
-        "code": "PVCX-002",
-        "message": None,
-    }
-    PVCX3 = {
-        "code": "PVCX-003",
-        "message": None,
-    }
-    PVCX4 = {
-        "code": "PVCX-004",
-        "message": None,
-    }
-    PVCX5 = {
-        "code": "PVCX-005",
-        "message": None,
-    }
-    PVCX6 = {
-        "code": "PVCX-006",
-        "message": None,
-    }
-    PVCX7 = {
-        "code": "PVCX-007",
-        "message": None,
-    }
-    PVCX8 = {
-        "code": "PVCX-008",
-        "message": None,
-    }
-    PVSOC1 = {
-        "code": "PVSOC-001",
-        "message": None,
-    }
-    PVSOC2 = {
-        "code": "PVSOC-002",
-        "message": None,
-    }
-    PVSOC3 = {
-        "code": "PVSOC-003",
-        "message": None,
-    }
-    PVSOC4 = {
-        "code": "PVSOC-004",
-        "message": None,
-    }
-    PVSOC5 = {
-        "code": "PVSOC-005",
-        "message": None,
-    }
-    PVSOC6 = {
-        "code": "PVSOC-006",
-        "message": None,
-    }
-    PVSOC7 = {
-        "code": "PVSOC-007",
-        "message": None,
-    }
-    PVSOC8 = {
-        "code": "PVSOC-008",
-        "message": None,
-    }
-    PVSOC9 = {
-        "code": "PVSOC-009",
-        "message": None,
-    }
-    PVSOC10 = {
-        "code": "PVSOC-010",
-        "message": None,
-    }
-    PVSOC11 = {
-        "code": "PVSOC-011",
-        "message": None,
-    }
-    PVTRGR1 = {
-        "code": "PVTRGR-001",
-        "message": None,
-    }
-    PVRLVR1 = {
-        "code": "PVRLVR-001",
-        "message": None,
-    }
-    PVRLVR2 = {
-        "code": "PVRLVR-002",
-        "message": None,
-    }
-    PVDST1 = {
-        "code": "PVDST-001",
-        "message": None,
-    }
-    PVDST2 = {
-        "code": "PVDST-002",
-        "message": None,
-    }
-    PVDST3 = {
-        "code": "PVDST-003",
-        "message": None,
-    }
+    # destination configuration errors
+    DECE100 = object()
+    DECE101 = object()
+    DECE102 = object()
+    DECE103 = object()
+    DECE104 = object()
+    DECE105 = object()
+    DECE106 = object()
+    DECE107 = object()
+
+    # source configuration errors
+    SOCE100 = object()
+    SOCE101 = object()
+    SOCE102 = object()
+    SOCE103 = object()
+    SOCE104 = object()
+    SOCE105 = object()
+    SOCE106 = object()
+    SOCE107 = object()
+    SOCE108 = object()
+    SOCE109 = object()
+    SOCE110 = object()
+
+    # stage trigger configuration errors
+    STCE100 = object()
+    STCE101 = object()
+    STCE102 = object()
+    STCE103 = object()
 
     def code(self) -> str:
         if type(self.value) is dict:

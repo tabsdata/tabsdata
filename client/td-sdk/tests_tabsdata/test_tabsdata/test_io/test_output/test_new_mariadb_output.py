@@ -73,21 +73,21 @@ def test_mariadb_dest_chunk_size_validation():
         MariaDBDest(conn, "table1", chunk_size=-10)
     with pytest.raises(ParameterValidationError) as e:
         MariaDBDest(conn, "table1", chunk_size="a")
-    assert e.value.error_code == ErrorCode.PVDST3
+    assert e.value.error_code == ErrorCode.DECE105
 
 
 def test_mariadb_dest_invalid_loader_raises():
     conn = MariaDBConn("mariadb://host:3306/db")
     with pytest.raises(ParameterValidationError) as e:
         MariaDBDest(conn, "table1", loader="not_a_loader")
-    assert e.value.error_code == ErrorCode.PVDST3
+    assert e.value.error_code == ErrorCode.DECE105
 
 
 def test_mariadb_dest_invalid_if_table_exists_raises():
     conn = MariaDBConn("mariadb://host:3306/db")
     with pytest.raises(ParameterValidationError) as e:
         MariaDBDest(conn, "table1", if_table_exists="not_a_strategy")
-    assert e.value.error_code == ErrorCode.PVDST3
+    assert e.value.error_code == ErrorCode.DECE105
 
 
 def test_mariadb_dest_transactional_param():
@@ -102,10 +102,10 @@ def test_mariadb_dest_invalid_transactional_values():
     conn = MariaDBConn("mariadb://host:3306/db")
     with pytest.raises(ParameterValidationError) as e:
         MariaDBDest(conn, "table1", transactional="yeah")
-    assert e.value.error_code == ErrorCode.PVDST3
+    assert e.value.error_code == ErrorCode.DECE105
     with pytest.raises(ParameterValidationError) as e:
         MariaDBDest(conn, "table1", transactional=4)
-    assert e.value.error_code == ErrorCode.PVDST3
+    assert e.value.error_code == ErrorCode.DECE105
 
 
 def test_mariadb_dest_repr_and_properties():
@@ -151,7 +151,7 @@ def test_mariadb_dest_invalid_destination_tables_type():
         MariaDBDest(conn, None)
     with pytest.raises(ParameterValidationError) as e:
         MariaDBDest(conn, [None, "table2"])
-    assert e.value.error_code == ErrorCode.PVDST3
+    assert e.value.error_code == ErrorCode.DECE105
 
 
 def test_mariadb_dest_empty_destination_table_raises():

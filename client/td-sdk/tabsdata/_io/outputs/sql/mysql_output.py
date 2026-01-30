@@ -29,7 +29,7 @@ class MySQLDest(DestinationPlugin):
     Destination plugin for writing data to MySQL.
     """
 
-    @_td_validate_call(ErrorCode.PVDST1)
+    @_td_validate_call(ErrorCode.DECE106)
     def __init__(
         self,
         conn: MySQLConn,

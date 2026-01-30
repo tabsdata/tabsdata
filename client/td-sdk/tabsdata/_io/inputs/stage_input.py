@@ -38,7 +38,7 @@ class Stage(SourcePlugin):
     Inputs that have been placed in a stage, usually from a StageTrigger.
     """
 
-    @_td_validate_call(ErrorCode.PVSOC11)
+    @_td_validate_call(ErrorCode.SOCE110)
     def __init__(
         self,
         use_existing_data: bool = True,
@@ -57,7 +57,7 @@ class Stage(SourcePlugin):
         return self._use_existing_data
 
     @use_existing_data.setter
-    @_td_validate_call(ErrorCode.PVSOC11)
+    @_td_validate_call(ErrorCode.SOCE110)
     def use_existing_data(self, value: bool):
         self._use_existing_data = value
 

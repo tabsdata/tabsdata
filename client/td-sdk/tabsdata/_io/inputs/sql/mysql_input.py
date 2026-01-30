@@ -43,7 +43,7 @@ class MySQLSrc(SourcePlugin):
     Source plugin for reading data from MySQL.
     """
 
-    @_td_validate_call(ErrorCode.PVSOC3)
+    @_td_validate_call(ErrorCode.SOCE102)
     def __init__(
         self,
         conn: MySQLConn,
@@ -119,7 +119,7 @@ class MySQLSrc(SourcePlugin):
         return self._initial_values
 
     @initial_values.setter
-    @_td_validate_call(ErrorCode.PVSOC4)
+    @_td_validate_call(ErrorCode.SOCE103)
     def initial_values(self, initial_values: Optional[dict[str, Any]]):
         """
         Set the initial values for the parameters in the SQL queries.

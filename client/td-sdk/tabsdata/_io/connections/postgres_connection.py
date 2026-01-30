@@ -20,7 +20,7 @@ class PostgresConn(Conn):
     Represents a connection configuration to Postgres.
     """
 
-    @_td_validate_call(ErrorCode.PVCX4)
+    @_td_validate_call(ErrorCode.DECE103)
     def __init__(
         self,
         uri: str,

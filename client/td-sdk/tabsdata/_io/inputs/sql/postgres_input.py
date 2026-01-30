@@ -43,7 +43,7 @@ class PostgresSrc(SourcePlugin):
     Source plugin for reading data from Postgres.
     """
 
-    @_td_validate_call(ErrorCode.PVSOC7)
+    @_td_validate_call(ErrorCode.SOCE106)
     def __init__(
         self,
         conn: PostgresConn,
@@ -119,7 +119,7 @@ class PostgresSrc(SourcePlugin):
         return self._initial_values
 
     @initial_values.setter
-    @_td_validate_call(ErrorCode.PVSOC8)
+    @_td_validate_call(ErrorCode.SOCE107)
     def initial_values(self, initial_values: Optional[dict[str, Any]]):
         """
         Set the initial values for the parameters in the SQL queries.
