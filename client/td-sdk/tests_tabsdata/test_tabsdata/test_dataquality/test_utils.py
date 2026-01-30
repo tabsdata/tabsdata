@@ -5,7 +5,7 @@
 from typing import Annotated, List, Literal, Optional, TypeAlias, Union
 
 import pytest
-from pydantic import Field, Strict, StrictInt, validate_call
+from pydantic import Field, Strict, StrictInt
 
 from tabsdata.dataquality._utils import (
     _get_parameter_type_hints,

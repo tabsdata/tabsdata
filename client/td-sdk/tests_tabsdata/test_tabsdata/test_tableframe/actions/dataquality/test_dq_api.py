@@ -226,6 +226,16 @@ def dq_operators_on_wrong_type_params(on_wrong_type: OnInvalidColumnSpec):
         (dq.IsNull(None), [], "_is_null"),
         (dq.IsNotNull(None), [], "_is_not_null"),
         (
+            dq.IsTrue(on_wrong_type=on_wrong_type),
+            ["int", "float", "decimal", "str", "datetime", "date", "time", "duration"],
+            "_is_true",
+        ),
+        (
+            dq.IsFalse(on_wrong_type=on_wrong_type),
+            ["int", "float", "decimal", "str", "datetime", "date", "time", "duration"],
+            "_is_false",
+        ),
+        (
             dq.IsNan(on_wrong_type=on_wrong_type),
             ["bool", "int", "decimal", "str", "datetime", "date", "time", "duration"],
             "_is_nan",

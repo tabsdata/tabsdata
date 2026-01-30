@@ -1,15 +1,13 @@
 #
 # Copyright 2025 Tabs Data Inc.
 #
+
 import math
 import sys
-from typing import cast, get_args
+from typing import get_args
 
 import pytest
 
-import tabsdata.tableframe.dtypes as td_dtypes
-from tabsdata import lit
-from tabsdata.api.tabsdata_server import Collection
 from tabsdata.dataquality._classifier import (
     DoesNotMatch,
     ExponentialScale,
@@ -45,7 +43,6 @@ from tabsdata.exceptions import (
     ErrorCode,
     ParameterValidationError,
     ParameterValueError,
-    TabsDataException,
 )
 
 # noinspection PyUnresolvedReferences

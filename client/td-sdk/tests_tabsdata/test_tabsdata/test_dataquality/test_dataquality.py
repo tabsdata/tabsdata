@@ -8,7 +8,6 @@ from tabsdata.dataquality import DataQuality
 from tabsdata.dataquality._classifier import Matches
 from tabsdata.dataquality._operator import AnyFailed, Fail, RowCountThreshold, Summary
 from tabsdata.exceptions import (
-    DataQualityConfigurationError,
     ErrorCode,
     ParameterValidationError,
 )

@@ -51,6 +51,7 @@ from tabsdata.dataquality._classifier import (
     Classifier,
     ExponentialScale,
     IdentityScale,
+    IsFalse,
     IsNan,
     IsNegative,
     IsNegativeOrZero,
@@ -59,6 +60,7 @@ from tabsdata.dataquality._classifier import (
     IsNotNullNorNan,
     IsNull,
     IsNullOrNan,
+    IsTrue,
     LinearScale,
     LogarithmicScale,
     MonomialScale,
@@ -242,6 +244,48 @@ class PolarsClassifierProvider:
             .when(QExpressions.IS_NAN(column, dtype))
             .then(ByteSentinel.NAN)
             .otherwise(ByteSentinel.TRUE)
+            .cast(pl.UInt8)
+        )
+
+    @staticmethod
+    def _true(
+        column: pl.Expr,
+    ) -> pl.Expr:
+        return column.eq(True)
+
+    @staticmethod
+    def is_true(
+        column: pl.Expr,
+        dtype: pl.DataType,
+        _: IsTrue,
+    ) -> pl.Expr:
+        return (
+            pl.when(column.is_null())
+            .then(ByteSentinel.NULL)
+            .when(PolarsClassifierProvider._true(column))
+            .then(ByteSentinel.TRUE)
+            .otherwise(ByteSentinel.FALSE)
+            .cast(pl.UInt8)
+        )
+
+    @staticmethod
+    def _false(
+        column: pl.Expr,
+    ) -> pl.Expr:
+        return column.eq(False)
+
+    @staticmethod
+    def is_false(
+        column: pl.Expr,
+        dtype: pl.DataType,
+        _: IsFalse,
+    ) -> pl.Expr:
+        return (
+            pl.when(column.is_null())
+            .then(ByteSentinel.NULL)
+            .when(PolarsClassifierProvider._false(column))
+            .then(ByteSentinel.TRUE)
+            .otherwise(ByteSentinel.FALSE)
             .cast(pl.UInt8)
         )
 
@@ -1244,6 +1288,18 @@ class DataQualityEngine:
     ) -> Self:
         return self._classifier_plan(is_not_null)
 
+    def is_true(
+        self,
+        is_true: IsTrue,
+    ) -> Self:
+        return self._classifier_plan(is_true)
+
+    def is_false(
+        self,
+        is_false: IsFalse,
+    ) -> Self:
+        return self._classifier_plan(is_false)
+
     def is_nan(
         self,
         is_nan: IsNan,
@@ -1856,6 +1912,16 @@ CLASSIFIER_DICTIONARY: dict[type, ClassifierMetadata] = {
         column_suffix="_is_not_null",
         classifier_family=ClassifierFamily.BOOLEAN,
         polars_provider=PolarsClassifierProvider(PolarsClassifierProvider.is_not_null),
+    ),
+    IsTrue: ClassifierMetadata(
+        column_suffix="_is_true",
+        classifier_family=ClassifierFamily.BOOLEAN,
+        polars_provider=PolarsClassifierProvider(PolarsClassifierProvider.is_true),
+    ),
+    IsFalse: ClassifierMetadata(
+        column_suffix="_is_false",
+        classifier_family=ClassifierFamily.BOOLEAN,
+        polars_provider=PolarsClassifierProvider(PolarsClassifierProvider.is_false),
     ),
     IsNan: ClassifierMetadata(
         column_suffix="_is_nan",

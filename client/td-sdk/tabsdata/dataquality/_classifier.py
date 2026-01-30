@@ -48,10 +48,11 @@ from tabsdata.exceptions import (
 from tabsdata.tableframe.dtypes import (
     _ALL_DTYPES,
     _ALL_NON_BOOLEAN_DTYPES,
+    _BOOLEAN_DTYPES,
     _FLOAT_DTYPES,
     _NUMERIC_DTYPES,
     _SIGNED_NUMERIC_DTYPES,
-    _STRING_DTYPES, _BOOLEAN_DTYPES,
+    _STRING_DTYPES,
 )
 
 
@@ -754,6 +755,7 @@ class IsFalse(BoolClassifier):
             on_wrong_value="ignore",
             tags=tags,
         )
+
 
 # noinspection DuplicatedCode
 class IsNull(BoolClassifier):

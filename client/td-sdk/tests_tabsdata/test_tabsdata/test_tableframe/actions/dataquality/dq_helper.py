@@ -18,6 +18,7 @@ from tabsdata.dataquality import (
     DoesNotMatch,
     HasLength,
     IsBetween,
+    IsFalse,
     IsIn,
     IsNan,
     IsNegative,
@@ -28,6 +29,7 @@ from tabsdata.dataquality import (
     IsNull,
     IsPositive,
     IsPositiveOrZero,
+    IsTrue,
     IsZero,
     Matches,
     Summary,
@@ -249,6 +251,82 @@ def _is_not_null_checker(df: pl.DataFrame, tags: dict, _qrows: int = None):
     assert (
         dq_null_count == null_count
     ), f"is_not_null NULL: dq={dq_null_count}, expected={null_count}"
+
+
+def _is_true_checker(df: pl.DataFrame, tags: dict, _qrows: int = None):
+    assert "value" in df.columns
+    assert "value_is_true" in df.columns
+    assert "true" in tags
+    assert "value_is_true" in tags["true"]
+    assert (
+        df.schema["value_is_true"] == pl.UInt8
+    ), f"Expected UInt8 dtype for DQ result column; got {df.schema['value_is_true']}"
+
+    dtype = df.schema["value"]
+    assert (
+        dtype == pl.Boolean
+    ), f"is_true checker should only be called for Boolean types; got {dtype}"
+
+    true_count = df.filter(pl.col("value").is_not_null() & pl.col("value")).height
+    false_count = df.filter(pl.col("value").is_not_null() & ~pl.col("value")).height
+    nan_count = 0
+    null_count = df.filter(pl.col("value").is_null()).height
+
+    dq_false_count = df.filter(pl.col("value_is_true") == ByteSentinel.FALSE).height
+    dq_true_count = df.filter(pl.col("value_is_true") == ByteSentinel.TRUE).height
+    dq_nan_count = df.filter(pl.col("value_is_true") == ByteSentinel.NAN).height
+    dq_null_count = df.filter(pl.col("value_is_true") == ByteSentinel.NULL).height
+
+    assert (
+        dq_false_count == false_count
+    ), f"is_true FALSE: dq={dq_false_count}, expected={false_count}"
+    assert (
+        dq_true_count == true_count
+    ), f"is_true TRUE: dq={dq_true_count}, expected={true_count}"
+    assert (
+        dq_nan_count == nan_count
+    ), f"is_true NAN: dq={dq_nan_count}, expected={nan_count}"
+    assert (
+        dq_null_count == null_count
+    ), f"is_true NULL: dq={dq_null_count}, expected={null_count}"
+
+
+def _is_false_checker(df: pl.DataFrame, tags: dict, _qrows: int = None):
+    assert "value" in df.columns
+    assert "value_is_false" in df.columns
+    assert "false" in tags
+    assert "value_is_false" in tags["false"]
+    assert (
+        df.schema["value_is_false"] == pl.UInt8
+    ), f"Expected UInt8 dtype for DQ result column; got {df.schema['value_is_false']}"
+
+    dtype = df.schema["value"]
+    assert (
+        dtype == pl.Boolean
+    ), f"is_false checker should only be called for Boolean types; got {dtype}"
+
+    false_count = df.filter(pl.col("value").is_not_null() & pl.col("value")).height
+    true_count = df.filter(pl.col("value").is_not_null() & ~pl.col("value")).height
+    nan_count = 0
+    null_count = df.filter(pl.col("value").is_null()).height
+
+    dq_false_count = df.filter(pl.col("value_is_false") == ByteSentinel.FALSE).height
+    dq_true_count = df.filter(pl.col("value_is_false") == ByteSentinel.TRUE).height
+    dq_nan_count = df.filter(pl.col("value_is_false") == ByteSentinel.NAN).height
+    dq_null_count = df.filter(pl.col("value_is_false") == ByteSentinel.NULL).height
+
+    assert (
+        dq_false_count == false_count
+    ), f"is_false FALSE: dq={dq_false_count}, expected={false_count}"
+    assert (
+        dq_true_count == true_count
+    ), f"is_false TRUE: dq={dq_true_count}, expected={true_count}"
+    assert (
+        dq_nan_count == nan_count
+    ), f"is_false NAN: dq={dq_nan_count}, expected={nan_count}"
+    assert (
+        dq_null_count == null_count
+    ), f"is_false NULL: dq={dq_null_count}, expected={null_count}"
 
 
 def _is_nan_checker(df: pl.DataFrame, tags: dict, _qrows: int = None):
@@ -1669,6 +1747,34 @@ def _is_not_null_action(
     )
 
 
+def _is_true_action(
+    table: str = "table00",
+    _dtype: type = None,
+) -> DataQuality:
+    return DataQuality(
+        table=table,
+        classifiers=IsTrue(
+            column_names=("value", "value_is_true"),
+            tags="true",
+        ),
+        operators=Summary(),
+    )
+
+
+def _is_false_action(
+    table: str = "table00",
+    _dtype: type = None,
+) -> DataQuality:
+    return DataQuality(
+        table=table,
+        classifiers=IsFalse(
+            column_names=("value", "value_is_false"),
+            tags="false",
+        ),
+        operators=Summary(),
+    )
+
+
 def _is_nan_action(
     table: str = "table00",
     _dtype: type = None,
@@ -2319,6 +2425,34 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
             checker=_is_not_null_checker,
             actions=_is_not_null_action,
             dtypes=list(IsNotNull.supported_dtypes()),
+        ),
+    ],
+    IsTrue: [
+        ClassifierConfiguration(
+            classifiers=[
+                IsTrue(
+                    column_names=("value", "value_is_true"),
+                    tags="true",
+                )
+            ],
+            method=DataQualityEngine.is_true,
+            checker=_is_true_checker,
+            actions=_is_true_action,
+            dtypes=list(IsTrue.supported_dtypes()),
+        ),
+    ],
+    IsFalse: [
+        ClassifierConfiguration(
+            classifiers=[
+                IsFalse(
+                    column_names=("value", "value_is_false"),
+                    tags="false",
+                )
+            ],
+            method=DataQualityEngine.is_false,
+            checker=_is_false_checker,
+            actions=_is_false_action,
+            dtypes=list(IsFalse.supported_dtypes()),
         ),
     ],
     IsNan: [

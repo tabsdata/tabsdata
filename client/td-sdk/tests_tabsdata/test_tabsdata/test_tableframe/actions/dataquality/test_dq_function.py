@@ -692,6 +692,230 @@ def test_on_wrong_type_fail(enrich_to_table):
         ("enrich_table", 3, 1, 2),
     ],
 )
+def test_on_wrong_type_ignore_is_true(
+    enrich_to_table,
+    expected_outputs,
+    enrich_table_idx,
+    summary_table_idx,
+):
+    @td.transformer(
+        name="transformer",
+        input_tables=["table_i"],
+        output_tables=["table_o"],
+        on_output_tables=[
+            dq.DataQuality(
+                table="table_o",
+                classifiers=[
+                    dq.IsTrue(
+                        column_names=["int_col", "float_col", "str_col", "bool_col"],
+                        on_wrong_type="ignore",
+                    ),
+                ],
+                operators=[
+                    dq.Enrich(to_table=enrich_to_table),
+                    dq.Summary(),
+                ],
+            )
+        ],
+    )
+    def dq_transformer(tf: td.TableFrame) -> td.TableFrame:
+        return tf
+
+    fnrun = tdfnrun(
+        function=dq_transformer,
+        input_tables=multi_column_dataset(),
+    )
+
+    outputs = list(fnrun.output.as_pl_df(True))
+    assert len(outputs) == expected_outputs
+
+    enrich_table = outputs[enrich_table_idx]
+    dq_columns = [col for col in enrich_table.columns if col.endswith("_is_true")]
+    assert len(dq_columns) == 1, "Should have 1 DQ column (only bool_col is compatible)"
+    assert "bool_col_is_true" in enrich_table.columns
+    assert "int_col_is_true" not in enrich_table.columns
+    assert "float_col_is_true" not in enrich_table.columns
+    assert "str_col_is_true" not in enrich_table.columns
+
+    summary_table = outputs[summary_table_idx]
+
+    assert (
+        len(summary_table) == 1
+    ), "Should have 1 summary row (only bool_col is compatible)"
+
+    classifier_names = set(summary_table["dq.classifier"])
+    assert classifier_names == {"bool_col_is_true"}
+
+
+@pytest.mark.dq
+@pytest.mark.tdfnrun
+@pytest.mark.parametrize(
+    "enrich_to_table",
+    [
+        None,
+        "enrich_table",
+    ],
+)
+def test_on_wrong_type_fail_is_true(enrich_to_table):
+    @td.transformer(
+        name="transformer",
+        input_tables=["table_i"],
+        output_tables=["table_o"],
+        on_output_tables=[
+            dq.DataQuality(
+                table="table_o",
+                classifiers=[
+                    dq.IsTrue(
+                        column_names=["bool_col", "int_col"],
+                        on_wrong_type="fail",
+                    ),
+                ],
+                operators=[
+                    dq.Summary(),
+                    dq.Enrich(to_table=enrich_to_table),
+                ],
+            )
+        ],
+    )
+    def dq_transformer(tf: td.TableFrame) -> td.TableFrame:
+        return tf
+
+    with pytest.raises(FnError) as error:
+        tdfnrun(
+            function=dq_transformer,
+            input_tables=multi_column_dataset(),
+        )
+
+    fnrun = error.value.fnrun
+    _request = fnrun.request.as_object()
+    _response = fnrun.response.as_object()
+    exception = fnrun.exception.as_object()
+    assert exception.code == ErrorCode.DQPE12.code()
+    assert "int_col" in exception.message
+    assert "Status is not 0" in str(error.value)
+
+
+@pytest.mark.dq
+@pytest.mark.tdfnrun
+@pytest.mark.parametrize(
+    "enrich_to_table,expected_outputs,enrich_table_idx,summary_table_idx",
+    [
+        (None, 2, 0, 1),
+        ("enrich_table", 3, 1, 2),
+    ],
+)
+def test_on_wrong_type_ignore_is_false(
+    enrich_to_table,
+    expected_outputs,
+    enrich_table_idx,
+    summary_table_idx,
+):
+    @td.transformer(
+        name="transformer",
+        input_tables=["table_i"],
+        output_tables=["table_o"],
+        on_output_tables=[
+            dq.DataQuality(
+                table="table_o",
+                classifiers=[
+                    dq.IsFalse(
+                        column_names=["int_col", "float_col", "str_col", "bool_col"],
+                        on_wrong_type="ignore",
+                    ),
+                ],
+                operators=[
+                    dq.Enrich(to_table=enrich_to_table),
+                    dq.Summary(),
+                ],
+            )
+        ],
+    )
+    def dq_transformer(tf: td.TableFrame) -> td.TableFrame:
+        return tf
+
+    fnrun = tdfnrun(
+        function=dq_transformer,
+        input_tables=multi_column_dataset(),
+    )
+
+    outputs = list(fnrun.output.as_pl_df(True))
+    assert len(outputs) == expected_outputs
+
+    enrich_table = outputs[enrich_table_idx]
+    dq_columns = [col for col in enrich_table.columns if col.endswith("_is_false")]
+    assert len(dq_columns) == 1, "Should have 1 DQ column (only bool_col is compatible)"
+    assert "bool_col_is_false" in enrich_table.columns
+    assert "int_col_is_false" not in enrich_table.columns
+    assert "float_col_is_false" not in enrich_table.columns
+    assert "str_col_is_false" not in enrich_table.columns
+
+    summary_table = outputs[summary_table_idx]
+
+    assert (
+        len(summary_table) == 1
+    ), "Should have 1 summary row (only bool_col is compatible)"
+
+    classifier_names = set(summary_table["dq.classifier"])
+    assert classifier_names == {"bool_col_is_false"}
+
+
+@pytest.mark.dq
+@pytest.mark.tdfnrun
+@pytest.mark.parametrize(
+    "enrich_to_table",
+    [
+        None,
+        "enrich_table",
+    ],
+)
+def test_on_wrong_type_fail_is_false(enrich_to_table):
+    @td.transformer(
+        name="transformer",
+        input_tables=["table_i"],
+        output_tables=["table_o"],
+        on_output_tables=[
+            dq.DataQuality(
+                table="table_o",
+                classifiers=[
+                    dq.IsFalse(
+                        column_names=["bool_col", "str_col"],
+                        on_wrong_type="fail",
+                    ),
+                ],
+                operators=[
+                    dq.Summary(),
+                    dq.Enrich(to_table=enrich_to_table),
+                ],
+            )
+        ],
+    )
+    def dq_transformer(tf: td.TableFrame) -> td.TableFrame:
+        return tf
+
+    with pytest.raises(FnError) as error:
+        tdfnrun(
+            function=dq_transformer,
+            input_tables=multi_column_dataset(),
+        )
+
+    fnrun = error.value.fnrun
+    _request = fnrun.request.as_object()
+    _response = fnrun.response.as_object()
+    exception = fnrun.exception.as_object()
+    assert exception.code == ErrorCode.DQPE12.code()
+    assert "str_col" in exception.message
+    assert "Status is not 0" in str(error.value)
+
+
+@pytest.mark.dq
+@pytest.mark.tdfnrun
+@pytest.mark.parametrize(
+    "enrich_to_table,expected_outputs,enrich_table_idx,summary_table_idx",
+    [
+        (None, 2, 0, 1),
+        ("enrich_table", 3, 1, 2),
+    ],
+)
 def test_combined_none_cols_with_mixed_types(
     enrich_to_table,
     expected_outputs,
@@ -1474,6 +1698,51 @@ def test_filter_select_operations(
     assert "id" in ok_table.columns
     assert "value_int" in ok_table.columns
     assert "value_float" in ok_table.columns
+
+
+@pytest.mark.dq
+@pytest.mark.tdfnrun
+@pytest.mark.parametrize(
+    "classifier",
+    [
+        pytest.param(
+            dq.IsTrue("bool_col"),
+            id="is_true",
+        ),
+        pytest.param(
+            dq.IsFalse("bool_col"),
+            id="is_false",
+        ),
+    ],
+)
+def test_dq_parameters_bool_classifiers(classifier):
+    @td.transformer(
+        name="transformer",
+        input_tables=["table_i"],
+        output_tables=["table_o"],
+        on_output_tables=[
+            dq.DataQuality(
+                table="table_o",
+                classifiers=[classifier],
+                operators=[dq.Summary()],
+            )
+        ],
+    )
+    def dq_transformer(tf: td.TableFrame) -> td.TableFrame:
+        return tf
+
+    fnrun = tdfnrun(
+        function=dq_transformer,
+        input_tables=multi_column_dataset(),
+    )
+
+    outputs = list(fnrun.output.as_pl_df(True))
+    summary_table = outputs[1]
+
+    assert len(summary_table) == 1
+    row = summary_table.row(0, named=True)
+
+    assert row["dq.parameters"] == str(classifier)
 
 
 @pytest.mark.dq
