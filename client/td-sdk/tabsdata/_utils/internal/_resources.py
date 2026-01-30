@@ -7,7 +7,7 @@ import logging
 import os
 from importlib.metadata import distribution
 from importlib.resources import as_file, files
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from tabsdata._utils.constants import TABSDATA_MODULE_NAME
 
@@ -22,6 +22,7 @@ EDITABLE = "editable"
 FILE_PROTOCOL = "file://"
 WINDOWS_OS_NAME = "nt"
 WINDOWS_URL_PREFIX = "/"
+SLASH = "/"
 BACK_SLASH = "\\"
 WHEEL_EXTENSION = ".whl"
 
@@ -58,16 +59,18 @@ def is_editable_package(package: str) -> tuple[bool, Path | None]:
 
 # noinspection PyBroadException
 def td_resource(resource: str) -> Path:
-    if resource.startswith(f"{RESOURCES}{os.sep}"):
+    normalized_resource = resource.replace(BACK_SLASH, SLASH)
+    resource_parts = PurePosixPath(normalized_resource).parts
+    if normalized_resource.startswith(f"{RESOURCES}{SLASH}"):
         editable, root = is_editable_package(TABSDATA_MODULE_NAME)
         if editable and root:
             try:
-                variant_path = root / VARIANT / resource
+                variant_path = root.joinpath(VARIANT, *resource_parts)
                 if variant_path.exists():
                     return variant_path
             except Exception:
                 pass
-    traversable = files(TABSDATA_MODULE_NAME).joinpath(resource)
+    traversable = files(TABSDATA_MODULE_NAME).joinpath(*resource_parts)
     with as_file(traversable) as path:
         if not path.exists():
             raise FileNotFoundError(
