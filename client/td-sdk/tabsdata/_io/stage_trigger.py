@@ -296,7 +296,7 @@ class LocalFileStageTriggerContext(StageTriggerContext):
         result = self.trigger_config.call(
             {
                 "skip_if_running": False,
-                "trigger_type": "DL",
+                "trigger_type": "ST",
             }
         )
         self.logger.debug(f"Result of the request: {result}")
