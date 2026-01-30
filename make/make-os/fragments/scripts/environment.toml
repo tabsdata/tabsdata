@@ -360,18 +360,28 @@ env_scripts = [
 
     malloc_stack_loggin = get_env MallocStackLogging
     malloc_stack_loggin_compact = get_env MallocStackLoggingNoCompact
+    malloc_scribble = get_env MallocScribble
+    malloc_guard_edges = get_env MallocGuardEdges
 
     debug "🏗 Environment variable 'MallocStackLogging' former value is '${malloc_stack_loggin}'."
     debug "🏗 Environment variable 'MallocStackLoggingNoCompact' former value is '${malloc_stack_loggin_compact}'."
+    debug "🏗 Environment variable 'MallocScribble' former value is '${malloc_scribble}'."
+    debug "🏗 Environment variable 'MallocGuardEdges' former value is '${malloc_guard_edges}'."
 
     unset_env MallocStackLogging
     unset_env MallocStackLoggingNoCompact
+    unset_env MallocScribble
+    unset_env MallocGuardEdges
 
-    debug "🔧 Cleared environment variables 'MallocStackLogging' & 'MallocStackLoggingNoCompact'."
+    debug "🔧 Cleared environment variables 'Malloc*'."
 
     malloc_stack_loggin = get_env MallocStackLogging
     malloc_stack_loggin_compact = get_env MallocStackLoggingNoCompact
+    malloc_scribble = get_env MallocScribble
+    malloc_guard_edges = get_env MallocGuardEdges
 
     debug "🏗 Environment variable 'MallocStackLogging' current value is '${malloc_stack_loggin}'."
     debug "🏗 Environment variable 'MallocStackLoggingNoCompact' current value is '${malloc_stack_loggin_compact}'."
+    debug "🏗 Environment variable 'MallocScribble' former value is '${malloc_scribble}'."
+    debug "🏗 Environment variable 'MallocGuardEdges' former value is '${malloc_guard_edges}'."
     ''']

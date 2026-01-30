@@ -51,38 +51,34 @@ script = [
     debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} clean --locked --manifest-path ${PROJECT_RS_TO_EXPANSIONS_PYTHON_CARGO_TOML}"
     exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} clean --locked --manifest-path ${PROJECT_RS_TO_EXPANSIONS_PYTHON_CARGO_TOML}
 
-    cd "${PROJECT_RS_TO_EXPANSIONS_PYTHON_FOLDER}/modules"
+    modules_path = join_path ${PROJECT_RS_TO_EXPANSIONS_PYTHON_FOLDER} modules
+    cd "${modules_path}"
     extensions = array .so .dll .dylib .pyd
     for extension in ${extensions}
         debug "Cleaning extension: ${extension}"
         glob_files = glob_array ./**/*${extension}*
         for file in ${glob_files}
-            debug "Cleaning file: ${file}"
+            file = join_path ${modules_path} ${file}
+            debug "🧹 Cleaning file: ${file}"
             retries = set 36
             retry = set 0
             keep = set true
             while ${keep}
-                if is_path_exists "${file}"
-                    rm --ignore-error "${file}"
-                    if is_path_exists "${file}"
-                        output = exec python -c "import os, sys; os.unlink(sys.argv[1])" ${file}
-                        exists = is_path_exists "${file}"
-                        if ${exists}
-                            retry = calc ${retry} + 1
-                            if greater_than ${retry} ${retries}
-                                error "❌ Failed to delete file after 3 minutes: ${file}"
-                                code = exit 1
-                            else
-                                info "⏳ Failed to delete ${file}. Retrying in 5 seconds... (${retry}/${retries})"
-                                sleep 5000
-                            end
-                        else
-                            info "❎ Successfully deleted file: ${file}"
-                            keep = set false
-                        end
-                    else
-                        debug "✅ Successfully deleted file: ${file}"
+                file_Exists = exec python -c "import os, sys; sys.exit(0 if os.path.lexists(sys.argv[1]) else 1)" "${file}"
+                if equals ${file_Exists.code} 0
+                    output = exec python -c "import os, sys; os.unlink(sys.argv[1])" "${file}"
+                    if equals ${output.code} 0
+                        info "✅ Successfully deleted file: ${file}"
                         keep = set false
+                    else
+                        retry = calc ${retry} + 1
+                        if greater_than ${retry} ${retries}
+                            error "❌ Failed to delete file after 3 minutes: ${file}"
+                            code = exit 1
+                        else
+                            info "⏳ Failed to delete ${file}. Retrying in 5 seconds... (${retry}/${retries})"
+                            sleep 5000
+                        end
                     end
                 else
                     info "🚹 File no longer exists: ${file}. Break."
@@ -105,38 +101,34 @@ script = [
     debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} clean --locked --manifest-path ${PROJECT_RS_TY_EXPANSIONS_POLARS_CARGO_TOML}"
     exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} clean --locked --manifest-path ${PROJECT_RS_TY_EXPANSIONS_POLARS_CARGO_TOML}
 
-    cd "${PROJECT_RS_TY_EXPANSIONS_POLARS_FOLDER}/modules"
+    modules_path = join_path ${PROJECT_RS_TY_EXPANSIONS_POLARS_FOLDER} modules
+    cd "${modules_path}"
     extensions = array .so .dll .dylib .pyd
     for extension in ${extensions}
-        debug "Cleaning extension: ${extension}"
+        debug "🧹 Cleaning extension: ${extension}"
         glob_files = glob_array ./**/*${extension}*
         for file in ${glob_files}
-            debug "Cleaning file: ${file}"
+            file = join_path ${modules_path} ${file}
+            info "Cleaning file: ${file}"
             retries = set 36
             retry = set 0
             keep = set true
             while ${keep}
-                if is_path_exists "${file}"
-                    rm --ignore-error "${file}"
-                    if is_path_exists "${file}"
-                        output = exec python -c "import os, sys; os.unlink(sys.argv[1])" ${file}
-                        exists = is_path_exists "${file}"
-                        if ${exists}
-                            retry = calc ${retry} + 1
-                            if greater_than ${retry} ${retries}
-                                error "❌ Failed to delete file after 3 minutes: ${file}"
-                                code = exit 1
-                            else
-                                info "⏳ Failed to delete ${file}. Retrying in 5 seconds... (${retry}/${retries})"
-                                sleep 5000
-                            end
-                        else
-                            info "❎ Successfully deleted file: ${file}"
-                            keep = set false
-                        end
-                    else
-                        debug "✅ Successfully deleted file: ${file}"
+                file_Exists = exec python -c "import os, sys; sys.exit(0 if os.path.lexists(sys.argv[1]) else 1)" "${file}"
+                if equals ${file_Exists.code} 0
+                    output = exec python -c "import os, sys; os.unlink(sys.argv[1])" "${file}"
+                    if equals ${output.code} 0
+                        info "✅ Successfully deleted file: ${file}"
                         keep = set false
+                    else
+                        retry = calc ${retry} + 1
+                        if greater_than ${retry} ${retries}
+                            error "❌ Failed to delete file after 3 minutes: ${file}"
+                            code = exit 1
+                        else
+                            info "⏳ Failed to delete ${file}. Retrying in 5 seconds... (${retry}/${retries})"
+                            sleep 5000
+                        end
                     end
                 else
                     info "🚹 File no longer exists: ${file}. Break."
