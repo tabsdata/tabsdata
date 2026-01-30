@@ -3,9 +3,6 @@
 //
 
 //! A `Task` implementation that runs another `Task` on a cron schedule.
-//
-// Copyright 2026. Tabs Data Inc.
-//
 
 use crate::Task;
 use async_trait::async_trait;
@@ -158,7 +155,7 @@ impl<T: Task + 'static> CronTask<T> {
                         }
                     })
                 })
-                .map_err(CronTaskError::SchedulingJobError)?,
+                    .map_err(CronTaskError::SchedulingJobError)?,
             )
             .await
             .map_err(CronTaskError::SchedulingJobError)?;

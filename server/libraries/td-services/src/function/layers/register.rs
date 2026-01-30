@@ -23,7 +23,7 @@ use td_objects::types::basic::{
     AtTime, CollectionId, CollectionName, DataLocation, DependencyId, DependencyPos,
     DependencyStatus, FunctionId, FunctionVersionId, ReuseFrozen, TableFunctionParamPos, TableId,
     TableName, TableNameDto, TableStatus, TableType, TriggerId, TriggerStatus, TriggerVersionId,
-    TriggeredOn, WorkerConfig, WorkerType, WorkerTypeDto,
+    TriggeredOn, WorkerConfig, WorkerStatus, WorkerType, WorkerTypeDto,
 };
 use td_objects::types::composed::{
     TableDependency, TableDependencyDto, TableTrigger, TableTriggerDto,
@@ -697,11 +697,44 @@ pub async fn stop_current_workers(
 
     if let Some(function_version_id) = function_version_id.deref() {
         // we cannot stop function workers
-        let update = UpdateWorkerDB::stop_scheduled().await?;
         let to_stop = [
             (function_version_id, WorkerType::CronTrigger),
             (function_version_id, WorkerType::StageTrigger),
         ];
+        let workers: Vec<WorkerDB> = queries
+            .find_by::<WorkerDB>(&to_stop)?
+            .build_query_as()
+            .fetch_all(&mut *conn)
+            .await
+            .map_err(handle_sql_err)?;
+
+        // only if the status is allowed to be updated
+        let mut to_stop = vec![];
+        for worker in workers {
+            match worker.status {
+                WorkerStatus::Scheduled | WorkerStatus::RunRequested | WorkerStatus::Running => {
+                    debug!(
+                        "Stopping worker {} with status {}",
+                        worker.id, worker.status
+                    );
+                    to_stop.push(worker.id);
+                }
+                WorkerStatus::Done
+                | WorkerStatus::StopScheduled
+                | WorkerStatus::StopRequested
+                | WorkerStatus::Stopped
+                | WorkerStatus::Error
+                | WorkerStatus::Failed
+                | WorkerStatus::Canceled => {
+                    debug!(
+                        "Ignoring stop of worker {}, as it is already in status {}",
+                        worker.id, worker.status
+                    )
+                }
+            }
+        }
+
+        let update = UpdateWorkerDB::stop_scheduled().await?;
         let res = queries
             .update_all_by::<_, WorkerDB>(&update, &to_stop)?
             .build()
