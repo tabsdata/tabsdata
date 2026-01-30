@@ -55,6 +55,7 @@ normalized_licenses = {
     "APACHE LICENSE_ VERSION 2.0": "Apache License Version 2.0",                                                                                                                               # noqa: E231,E241,E501
     "APACHE SOFTWARE LICENSE V2": "Apache License Version 2.0",                                                                                                                                # noqa: E231,E241,E501
     "APACHE SOFTWARE LICENSE;; BSD LICENSE": "Apache License Version 2.0 or BSD License",                                                                                                      # noqa: E231,E241,E501
+    "APACHE SOFTWARE LICENSE;; MIT LICENSE;; MOZILLA PUBLIC LICENSE 2.0 _MPL 2.0_": "Apache License Version 2.0 or MIT License or Mozilla Public License Version 2.0",                         # noqa: E231,E241,E501
     "APACHE SOFTWARE LICENSE;; MIT LICENSE": "Apache License Version 2.0 or MIT License",                                                                                                      # noqa: E231,E241,E501
     "APACHE SOFTWARE LICENSE": "Apache License Version 2.0",                                                                                                                                   # noqa: E231,E241,E501
     "Apache-2.0 AND ISC": "Apache License Version 2.0, and Internet Systems Consortium License",                                                                                               # noqa: E231,E241,E501
