@@ -14,7 +14,9 @@ from pathlib import Path
 from typing import Any, Literal, TypeAlias, Union
 
 import requests
+from typing_extensions import deprecated
 
+from tabsdata._utils.annotations import unstable, unstable_category
 from tabsdata.exceptions import ErrorCode, StageTriggerConfigurationError
 
 TRIGGER_FILE_PREFIX = "TD_INTERNAL_TRIGGER_FILE_"
@@ -41,6 +43,18 @@ class StageTriggerStatus(Enum):
     """
 
 
+@unstable()
+@deprecated(
+    """Class 'StageTrigger' is considered unstable and is subject to change in future releases.""",  # noqa: E231,E241,E501
+    category=unstable_category(
+        reason=(
+            "Class 'StageTrigger' may undergo API and feature changes as it evolves"
+            " toward full capability and stability."
+        ),
+        since="1.6.0",
+        replacement="There is no current stable replacement for this class.",
+    ),
+)
 class StageTrigger(ABC):
     def __init__(
         self,
@@ -196,11 +210,10 @@ class StageTriggerContext(ABC):
         trigger pending flag. The `trigger_monitor()` will trigger the
         publisher once the previous execution plan completes.
 
-        Triggers pending are not cumulative, if this method is invoked
-        multiple times while the publisher is running, the first
-        `trigger_monitor()`  invocation that triggers the publisher will
-        reset the trigger pending, regardless of how many times the trigger()
-        method was invoked.
+        Pending triggers are not cumulative. If this method is invoked multiple
+        times while the publisher is running, only the first trigger_monitor()
+        call that activates the publisher will reset the pending trigger.
+        Additional calls to trigger() have no effect.
         """
 
 

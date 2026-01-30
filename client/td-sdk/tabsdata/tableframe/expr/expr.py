@@ -32,7 +32,7 @@ import tabsdata.tableframe.functions.datetime as td_datetime
 import tabsdata.tableframe.typing as td_typing
 
 # noinspection PyProtectedMember
-from tabsdata._utils.annotations import deprecation, pydoc
+from tabsdata._utils.annotations import deprecated_category, pydoc
 from tabsdata.exceptions import ErrorCode, TableFrameError
 
 T = TypeVar("T")
@@ -2027,7 +2027,7 @@ class Expr:
 
     @deprecated(
         "Method 'shrink_dtype' is deprecated.",
-        category=deprecation(
+        category=deprecated_category(
             reason=(
                 "It had no practical effect on expressions, because data type "
                 "shrinking only makes sense on materialized data."

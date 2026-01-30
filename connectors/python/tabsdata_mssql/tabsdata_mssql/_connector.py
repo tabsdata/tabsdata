@@ -24,7 +24,7 @@ from tabsdata._io.outputs.shared_enums import (
 from tabsdata._io.plugin import DestinationPlugin, SourcePlugin
 from tabsdata._secret import Secret
 from tabsdata._tabsserver.function.offset_utils import OffsetReturn
-from tabsdata._utils.annotations import deprecation
+from tabsdata._utils.annotations import deprecated_category
 from tabsdata.exceptions import ErrorCode, SourceConfigurationError
 
 if TYPE_CHECKING:
@@ -36,7 +36,7 @@ logger.setLevel(logging.DEBUG)
 
 @deprecated(
     "Publisher 'MSSQLSource' is deprecated.",
-    category=deprecation(
+    category=deprecated_category(
         reason=(
             "The use of 'MSSQLSrc' is preferred, as it provides several "
             "enhancements, improved attribute organization, and support for managed "

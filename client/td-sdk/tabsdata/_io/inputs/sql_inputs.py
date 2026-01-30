@@ -23,7 +23,7 @@ from tabsdata._io.constants import (
 )
 from tabsdata._io.plugin import SourcePlugin
 from tabsdata._tabsserver.function.offset_utils import OffsetReturn
-from tabsdata._utils.annotations import deprecation
+from tabsdata._utils.annotations import deprecated_category
 from tabsdata._utils.sql_utils import obtain_uri
 from tabsdata.exceptions import (
     ErrorCode,
@@ -50,7 +50,7 @@ def _validate_initial_values_type(initial_values: dict):
 
 @deprecated(
     "Publisher 'MariaDBSource' is deprecated.",
-    category=deprecation(
+    category=deprecated_category(
         reason=(
             "The use of 'MariaDBSrc' is preferred, as it provides several "
             "enhancements, improved attribute organization, and support for managed "
@@ -219,7 +219,7 @@ class MariaDBSource(SourcePlugin):
 
 @deprecated(
     "Publisher 'MySQLSource' is deprecated.",
-    category=deprecation(
+    category=deprecated_category(
         reason=(
             "The use of 'MySQLSrc' is preferred, as it provides several"
             "enhancements, improved attribute organization, and support for managed"
@@ -387,7 +387,7 @@ class MySQLSource(SourcePlugin):
 
 @deprecated(
     "Publisher 'OracleSource' is deprecated.",
-    category=deprecation(
+    category=deprecated_category(
         reason=(
             "The use of 'OracleSrc' is preferred, as it provides several"
             "enhancements, improved attribute organization, and support for managed"
@@ -553,7 +553,7 @@ class OracleSource(SourcePlugin):
 
 @deprecated(
     "Publisher 'PostgresSource' is deprecated.",
-    category=deprecation(
+    category=deprecated_category(
         reason=(
             "The use of 'PostgresSrc' is preferred, as it provides several"
             "enhancements, improved attribute organization, and support for managed"

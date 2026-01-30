@@ -29,7 +29,7 @@ from tabsdata._io.outputs.shared_enums import (
 )
 from tabsdata._io.plugin import DestinationPlugin
 from tabsdata._tabsserver.function.sql_utils import add_mariadb_collation
-from tabsdata._utils.annotations import deprecation
+from tabsdata._utils.annotations import deprecated_category
 from tabsdata._utils.sql_utils import add_driver_to_uri, obtain_uri
 from tabsdata.exceptions import (
     DestinationConfigurationError,
@@ -46,7 +46,7 @@ logging.getLogger("urllib3").setLevel(logging.ERROR)
 
 @deprecated(
     "Subscriber 'MariaDBDestination' is deprecated.",
-    category=deprecation(
+    category=deprecated_category(
         reason=(
             "The use of 'MariaDBDest' is preferred, as it provides several "
             "enhancements, improved attribute organization, and support for managed "
@@ -225,7 +225,7 @@ class MariaDBDestination(DestinationPlugin):
 
 @deprecated(
     "Subscriber 'MySQLDestination' is deprecated.",
-    category=deprecation(
+    category=deprecated_category(
         reason=(
             "The use of 'MySQLDest' is preferred, as it provides several "
             "enhancements, improved attribute organization, and support for managed "
@@ -560,7 +560,7 @@ class OracleDestination(DestinationPlugin):
 
 @deprecated(
     "Subscriber 'PostgresDestination' is deprecated.",
-    category=deprecation(
+    category=deprecated_category(
         reason=(
             "The use of 'PostgresDest' is preferred, as it provides several "
             "enhancements, improved attribute organization, and support for managed "

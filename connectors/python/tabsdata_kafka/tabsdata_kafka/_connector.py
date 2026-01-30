@@ -16,6 +16,7 @@ import boto3
 from botocore.client import BaseClient
 from mypy_boto3_glue.client import GlueClient
 from pydantic import PositiveInt
+from typing_extensions import deprecated
 
 # noinspection PyProtectedMember
 from tabsdata._io.connections.connections import Conn
@@ -26,6 +27,7 @@ from tabsdata._io.stage_trigger import (
     StageTriggerContext,
     StageTriggerStatus,
 )
+from tabsdata._utils.annotations import unstable, unstable_category
 
 # noinspection PyProtectedMember
 from tabsdata.dataquality._utils import _td_validate_call
@@ -74,12 +76,36 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
+@unstable()
+@deprecated(
+    """Class 'KafkaSchemaRegistry' is considered unstable and is subject to change in future releases.""",  # noqa: E231,E241,E501
+    category=unstable_category(
+        reason=(
+            "Class 'KafkaSchemaRegistry' may undergo API and feature changes as it"
+            " evolves toward full capability and stability."
+        ),
+        since="1.6.0",
+        replacement="There is no current stable replacement for this class.",
+    ),
+)
 class KafkaSchemaRegistry(ABC):
     """
     Base class for schema registry configurations.
     """
 
 
+@unstable()
+@deprecated(
+    """Class 'ConfluentSchemaRegistry' is considered unstable and is subject to change in future releases.""",  # noqa: E231,E241,E501
+    category=unstable_category(
+        reason=(
+            "Class 'ConfluentSchemaRegistry' may undergo API and feature changes as it"
+            " evolves toward full capability and stability."
+        ),
+        since="1.6.0",
+        replacement="There is no current stable replacement for this class.",
+    ),
+)
 class ConfluentSchemaRegistry(KafkaSchemaRegistry):
     """
     Configuration for Confluent Schema Registry.
@@ -129,6 +155,18 @@ class ConfluentSchemaRegistry(KafkaSchemaRegistry):
         return f"ConfluentSchemaRegistry(url={self.url}, configs={self.configs})"
 
 
+@unstable()
+@deprecated(
+    """Class 'AwsGlueSchemaRegistry' is considered unstable and is subject to change in future releases.""",  # noqa: E231,E241,E501
+    category=unstable_category(
+        reason=(
+            "Class 'AwsGlueSchemaRegistry' may undergo API and feature changes as it"
+            " evolves toward full capability and stability."
+        ),
+        since="1.6.0",
+        replacement="There is no current stable replacement for this class.",
+    ),
+)
 class AwsGlueSchemaRegistry(KafkaSchemaRegistry):
     """
     Configuration for AWS Glue Schema Registry.
@@ -204,6 +242,18 @@ class AwsGlueSchemaRegistry(KafkaSchemaRegistry):
 SchemaRegistrySpec: TypeAlias = Union[ConfluentSchemaRegistry | AwsGlueSchemaRegistry]
 
 
+@unstable()
+@deprecated(
+    """Class 'KafkaConn' is considered unstable and is subject to change in future releases.""",  # noqa: E231,E241,E501
+    category=unstable_category(
+        reason=(
+            "Class 'KafkaConn' may undergo API and feature changes as it evolves toward"
+            " full capability and stability."
+        ),
+        since="1.6.0",
+        replacement="There is no current stable replacement for this class.",
+    ),
+)
 class KafkaConn(Conn):
     """
     Kafka Consumer Connection configuration.
@@ -282,6 +332,18 @@ class KafkaConn(Conn):
         return self._cx_src_configs
 
 
+@unstable()
+@deprecated(
+    """Class 'KafkaTrigger' is considered unstable and is subject to change in future releases.""",  # noqa: E231,E241,E501
+    category=unstable_category(
+        reason=(
+            "Class 'KafkaTrigger' may undergo API and feature changes as it evolves"
+            " toward full capability and stability."
+        ),
+        since="1.6.0",
+        replacement="There is no current stable replacement for this class.",
+    ),
+)
 class KafkaTrigger(StageTrigger):
     """
     A `StageTrigger` that consumes messages from a Kafka topic and stages them.
