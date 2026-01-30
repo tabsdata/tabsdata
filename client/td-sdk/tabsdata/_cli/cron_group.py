@@ -29,7 +29,7 @@ def cron():
 @click.pass_context
 def start(ctx: click.Context, name: str, coll: str):
     """Start a cron"""
-    worker.start("C", ctx, name, coll)
+    worker.start("CT", ctx, name, coll)
 
 
 @cron.command()
@@ -46,7 +46,7 @@ def start(ctx: click.Context, name: str, coll: str):
 @click.pass_context
 def stop(ctx: click.Context, name: str, coll: str):
     """Stop a cron"""
-    worker.stop("C", ctx, name, coll)
+    worker.stop("CT", ctx, name, coll)
 
 
 @cron.command()
@@ -80,4 +80,4 @@ def list(
     """
     List all cron workers.
     """
-    worker.list("C", ctx, status, coll, state)
+    worker.list("CT", ctx, status, coll, state)

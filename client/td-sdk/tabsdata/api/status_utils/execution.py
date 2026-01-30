@@ -7,7 +7,7 @@ from enum import Enum
 
 class TriggerTypeStatus(Enum):
     MANUAL = "M"
-    CRON_TRIGGER = "C"
+    CRON_TRIGGER = "CT"
     STAGE_TRIGGER = "ST"
 
 

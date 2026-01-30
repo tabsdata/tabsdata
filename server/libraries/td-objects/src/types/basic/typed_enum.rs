@@ -274,7 +274,7 @@ pub enum TriggerStatus {
 pub enum TriggerType {
     #[typed_enum(rename = "M")]
     Manual,
-    #[typed_enum(rename = "C")]
+    #[typed_enum(rename = "CT")]
     CronTrigger,
     #[typed_enum(rename = "ST")]
     StageTrigger,
@@ -329,7 +329,7 @@ impl From<WorkerCallbackStatus> for WorkerStatus {
 #[td_type::typed_enum]
 #[derive(Hash)]
 pub enum WorkerTypeDto {
-    #[typed_enum(rename = "C")]
+    #[typed_enum(rename = "CT")]
     CronTrigger,
     #[typed_enum(rename = "ST")]
     StageTrigger,
@@ -339,7 +339,7 @@ pub enum WorkerTypeDto {
 pub enum WorkerType {
     #[typed_enum(rename = "F")]
     FunctionRunner,
-    #[typed_enum(rename = "C")]
+    #[typed_enum(rename = "CT")]
     CronTrigger,
     #[typed_enum(rename = "ST")]
     StageTrigger,

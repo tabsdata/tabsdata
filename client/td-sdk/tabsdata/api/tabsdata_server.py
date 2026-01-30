@@ -4653,7 +4653,7 @@ def _create_archive(
     )
     if isinstance(function.trigger_by, CronTrigger):
         trigger_string_list = None
-        workers = {"C": json.dumps(function.trigger_by._to_dict())}
+        workers = {"CT": json.dumps(function.trigger_by._to_dict())}
     elif isinstance(function.trigger_by, StageTrigger):
         trigger_string_list = None
         workers = {"ST": json.dumps(function.trigger_by._to_dict())}
