@@ -19,6 +19,7 @@ version = { workspace = true }
 [[bin]]
 name = "pystubs"
 path = "src/pystubs.rs"
+required-features = ["pyconfig-init"]
 
 [[bin]]
 name = "td_python"
@@ -33,6 +34,7 @@ name = "foundation"
 
 [features]
 
+pyconfig-init = []
 without-polars-alloc = []
 
 td-test = ["dummy"]

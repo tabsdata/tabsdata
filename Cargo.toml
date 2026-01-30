@@ -427,7 +427,7 @@ features = ["aws_lc_rs"]
 version = "0.3.0"
 
 [workspace.dependencies.libc]
-version = "0.2.177"
+version = "0.2.180"
 
 [workspace.dependencies.netstat2]
 version = "0.11.2"

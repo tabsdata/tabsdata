@@ -102,6 +102,9 @@ path = "../../server/libraries/td-error"
 
 # External dependencies
 
+[workspace.dependencies.libc]
+version = "0.2.180"
+
 [workspace.dependencies.openssl]
 version = "0.10.75"
 features = ["vendored"]

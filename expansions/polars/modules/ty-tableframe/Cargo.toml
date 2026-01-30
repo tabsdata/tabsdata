@@ -32,7 +32,7 @@ crate-type = ["cdylib", "rlib"]
 name = "tableframe"
 
 [features]
-
+pyconfig-init = []
 without-polars-alloc = []
 
 td-test = ["dummy"]

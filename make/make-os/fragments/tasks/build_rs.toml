@@ -49,7 +49,9 @@ private = true
 run_task = [
     { name = [
         "__os__clean_rs_expansions",
+        "__os__pyo3_help_start",
         "__os__compile_all_rs_expansions",
+        "__os__pyo3_help_stop",
         "__os__link_all_rs_expansions"
     ] }
 ]
@@ -101,10 +103,162 @@ private = true
 run_task = [
     { name = [
         "__os__clean_rs_expansions",
+        "__os__pyo3_help_start",
         "__os__compile_none_rs_expansions",
+        "__os__pyo3_help_stop",
         "__os__link_none_rs_expansions"
     ] }
 ]
+
+[tasks.__os__pyo3_help_start]
+plugin = "td-task-tracker"
+category = "03 - Build"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    on_ga = get_env TD_ON_GA
+    on_ga_true = eq ${on_ga} "true"
+    os_family = os_family
+    is_linux = eq ${os_family} "linux"
+    is_mac = eq ${os_family} "mac"
+    is_windows = eq ${os_family} "windows"
+    if ${on_ga_true}
+        if ${is_linux} or ${is_mac}
+            info "🛟 Helping PyO3 to find the Python standard library..."
+
+            python_home_defined = exec python -c "import os; print('true' if 'PYTHONHOME' in os.environ else 'false')"
+            python_home_defined = trim ${python_home_defined.stdout}
+            set_env TD_PYO3_ORIGINAL_PYTHONHOME_DEFINED ${python_home_defined}
+            python_home = get_env PYTHONHOME
+            set_env TD_PYO3_ORIGINAL_PYTHONHOME ${python_home}
+            info "🔸 🛟 Current PYTHONHOME is ${python_home}"
+
+            python_path_defined = exec python -c "import os; print('true' if 'PYTHONPATH' in os.environ else 'false')"
+            python_path_defined = trim ${python_path_defined.stdout}
+            set_env TD_PYO3_ORIGINAL_PYTHONPATH_DEFINED ${python_path_defined}
+            python_path = get_env PYTHONPATH
+            set_env TD_PYO3_ORIGINAL_PYTHONPATH ${python_path}
+            info "🔸 🛟 Current PYTHONPATH is ${python_path}"
+
+            python_executable = exec --fail-on-error python -c "import sys; print(sys.executable)"
+            python_executable = trim ${python_executable.stdout}
+            info "🚑 Current Python executable is ${python_executable}"
+
+            python_prefix = exec --fail-on-error python -c "import sys; print(sys.prefix)"
+            python_prefix = trim ${python_prefix.stdout}
+            info "🚑 Current Python sys.prefix is ${python_prefix}"
+
+            python_base_prefix = exec python -c "import sys; print(sys.base_prefix)"
+            python_base_prefix = trim ${python_base_prefix.stdout}
+            set_env TD_PYO3_PYTHON_BASE_PREFIX ${python_base_prefix}
+            info "🚑 Current Python sys.base_prefix: ${python_base_prefix}"
+
+            python_site_packages = exec python -c "import site; print(site.getsitepackages()[0])"
+            python_site_packages = trim ${python_site_packages.stdout}
+            set_env TD_PYO3_PYTHON_SITE_PACKAGES ${python_site_packages}
+            info "🚑 Current Python site packages ${python_site_packages}"
+
+            python_stdlib = exec python -c "import sysconfig; print(sysconfig.get_path('stdlib'))"
+            python_stdlib = trim ${python_stdlib.stdout}
+            set_env TD_PYO3_PYTHON_STDLIB ${python_stdlib}
+            info "🚑 Current Python stdlib path ${python_stdlib}"
+
+            python_dynload = exec python -c "import sysconfig; print(sysconfig.get_config_var('DESTSHARED'))"
+            python_dynload = trim ${python_dynload.stdout}
+            python_dynload_is_empty = is_empty ${python_dynload}
+            if ${python_dynload_is_empty}
+                python_dynload = concat ${python_stdlib} "/lib-dynload"
+            end
+            set_env TD_PYO3_PYTHON_DYNLOAD ${python_dynload}
+            info "🚑 Current Python dynload path ${python_dynload}"
+
+            set_env PYO3_PYTHON ${python_executable}
+            info "🔸 🛟 PYO3_PYTHON set to: ${python_executable}"
+
+            info "🚛 PyO3 is on ga mac/linux - setting PYTHONHOME and PYTHONPATH"
+            set_env PYTHONHOME ${python_base_prefix}
+            path_separator = set ":"
+            if ${is_windows}
+                path_separator = set ";"
+            end
+            pythonpath_pyo3 = concat ${python_stdlib} ${path_separator} ${python_dynload}
+            pythonpath_pyo3 = concat ${pythonpath_pyo3} ${path_separator} ${python_site_packages}
+            python_path_is_empty = is_empty ${python_path}
+            if ${python_path_is_empty}
+                noop
+            else
+                pythonpath_pyo3 = concat ${pythonpath_pyo3} ${path_separator} ${python_path}
+            end
+            set_env PYTHONPATH ${pythonpath_pyo3}
+            pythonhome = get_env PYTHONHOME
+            pythonpath = get_env PYTHONPATH
+            info "🔸 🚛 PyO3 PYTHONHOME set to ${pythonhome}"
+            info "🔸 🚛 PyO3 PYTHONPATH set to ${pythonpath}"
+            set_env TD_PYO3_NEEDS_HELP true
+        end
+    end
+    ''']
+
+[tasks.__os__pyo3_help_stop]
+plugin = "td-task-tracker"
+category = "03 - Build"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    on_ga = get_env TD_ON_GA
+    on_ga_true = eq ${on_ga} "true"
+    os_family = os_family
+    is_linux = eq ${os_family} "linux"
+    is_mac = eq ${os_family} "mac"
+    is_windows = eq ${os_family} "windows"
+    if ${on_ga_true}
+        if ${is_linux} or ${is_mac}
+            pyo3_needs_help = get_env TD_PYO3_NEEDS_HELP
+            pyo3_stop_help = eq ${pyo3_needs_help} "true"
+            if ${pyo3_stop_help}
+                info "🔄 Restoring original PYTHONHOME and PYTHONPATH"
+
+                python_home_defined = get_env TD_PYO3_ORIGINAL_PYTHONHOME_DEFINED
+                python_home_was_defined = eq ${python_home_defined} "true"
+                python_home = get_env TD_PYO3_ORIGINAL_PYTHONHOME
+
+                python_path_defined = get_env TD_PYO3_ORIGINAL_PYTHONPATH_DEFINED
+                python_path_was_defined = eq ${python_path_defined} "true"
+                python_path = get_env TD_PYO3_ORIGINAL_PYTHONPATH
+
+                if ${python_home_was_defined}
+                    set_env PYTHONHOME ${python_home}
+                else
+                    unset_env PYTHONHOME
+                end
+
+                if ${python_path_was_defined}
+                    set_env PYTHONPATH ${python_path}
+                else
+                    unset_env PYTHONPATH
+                end
+            else
+                trace "ⓘ PyO3 environment did not need restoration"
+            end
+
+            unset_env TD_PYO3_NEEDS_HELP
+            unset_env TD_PYO3_ORIGINAL_PYTHONHOME_DEFINED
+            unset_env TD_PYO3_ORIGINAL_PYTHONHOME
+            unset_env TD_PYO3_ORIGINAL_PYTHONPATH_DEFINED
+            unset_env TD_PYO3_ORIGINAL_PYTHONPATH
+            unset_env TD_PYO3_PYTHON_BASE_PREFIX
+            unset_env TD_PYO3_PYTHON_SITE_PACKAGES
+            unset_env TD_PYO3_PYTHON_STDLIB
+            unset_env TD_PYO3_PYTHON_DYNLOAD
+        end
+    end
+    ''']
 
 [tasks.__os__compile_all_rs_expansions]
 plugin = "td-task-tracker"
@@ -132,58 +286,8 @@ script = [
 
     cd ${PROJECT_RS_TO_FOUNDATION_FOLDER}
 
-    info "🛟 Helping PyO3 to find the Python standard library..."
-
-    python_home = get_env PYTHONHOME
-    info "🔸 🛟 Current PYTHONHOME is ${python_home}"
-
-    python_path = get_env PYTHONPATH
-    info "🔸 🛟 Current PYTHONPATH is ${python_path}"
-
-    python_executable = exec --fail-on-error python -c "import sys; print(sys.executable)"
-    python_executable = trim ${python_executable.stdout}
-    info "🚑 Current Python executable is ${python_executable}"
-
-    python_prefix = exec --fail-on-error python -c "import sys; print(sys.prefix)"
-    python_prefix = trim ${python_prefix.stdout}
-    info "🚑 Current Python sys.prefix is ${python_prefix}"
-
-    python_base_prefix = exec python -c "import sys; print(sys.base_prefix)"
-    python_base_prefix = trim ${python_base_prefix.stdout}
-    info "🚑 Current Python sys.base_prefix: ${python_base_prefix}"
-
-    python_site_packages = exec python -c "import site; print(site.getsitepackages()[0])"
-    python_site_packages = trim ${python_site_packages.stdout}
-    info "🚑 Current Python site packages ${python_site_packages}"
-
-    set_env PYO3_PYTHON ${python_executable}
-    info "🔸 🛟 PYO3_PYTHON set to: ${python_executable}"
-
-    on_ga = get_env TD_ON_GA
-    on_ga_true = eq ${on_ga} "true"
-    if ${on_ga_true}
-        os_family = os_family
-        if eq ${os_family} "mac"
-            info "🚛 PyO3 is on GA macOS - setting PYTHONHOME and PYTHONPATH"
-            set_env PYTHONHOME ${python_base_prefix}
-            set_env PYTHONPATH ${python_site_packages}
-            pythonhome = get_env PYTHONHOME
-            pythonpath = get_env PYTHONPATH
-            info "🔸 🚛 PyO3 PYTHONHOME set to ${pythonhome}"
-            info "🔸 🚛 PyO3 PYTHONPATH set to ${pythonpath}"
-        end
-    end
-
-    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TO_FOUNDATION_CARGO_TOML} --features without-polars-alloc --bin pystubs"
-    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TO_FOUNDATION_CARGO_TOML} --features without-polars-alloc --bin pystubs
-
-    if ${on_ga_true}
-        if eq ${os_family} "mac"
-            info "🔄 Restoring original PYTHONHOME and PYTHONPATH"
-            set_env PYTHONHOME ${python_home}
-            set_env PYTHONPATH ${python_path}
-        end
-    end
+    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TO_FOUNDATION_CARGO_TOML} --features without-polars-alloc,pyconfig-init --bin pystubs ${PROJECT_RS_TO_FOUNDATION_FOLDER}"
+    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TO_FOUNDATION_CARGO_TOML} --features without-polars-alloc,pyconfig-init --bin pystubs ${PROJECT_RS_TO_FOUNDATION_FOLDER}
     ''']
 
 [tasks.__os__compile_all_rs_expansions_polars]
@@ -201,58 +305,8 @@ script = [
 
     cd ${PROJECT_RS_TY_TABLEFRAME_FOLDER}
 
-    info "🛟 Helping PyO3 to find the Python standard library..."
-
-    python_home = get_env PYTHONHOME
-    info "🔸 🛟 Current PYTHONHOME is ${python_home}"
-
-    python_path = get_env PYTHONPATH
-    info "🔸 🛟 Current PYTHONPATH is ${python_path}"
-
-    python_executable = exec --fail-on-error python -c "import sys; print(sys.executable)"
-    python_executable = trim ${python_executable.stdout}
-    info "🚑 Current Python executable is ${python_executable}"
-
-    python_prefix = exec --fail-on-error python -c "import sys; print(sys.prefix)"
-    python_prefix = trim ${python_prefix.stdout}
-    info "🚑 Current Python sys.prefix is ${python_prefix}"
-
-    python_base_prefix = exec python -c "import sys; print(sys.base_prefix)"
-    python_base_prefix = trim ${python_base_prefix.stdout}
-    info "🚑 Current Python sys.base_prefix: ${python_base_prefix}"
-
-    python_site_packages = exec python -c "import site; print(site.getsitepackages()[0])"
-    python_site_packages = trim ${python_site_packages.stdout}
-    info "🚑 Current Python site packages ${python_site_packages}"
-
-    set_env PYO3_PYTHON ${python_executable}
-    info "🔸 🛟 PYO3_PYTHON set to: ${python_executable}"
-
-    on_ga = get_env TD_ON_GA
-    on_ga_true = eq ${on_ga} "true"
-    if ${on_ga_true}
-        os_family = os_family
-        if eq ${os_family} "mac"
-            info "🚛 PyO3 is on GA macOS - setting PYTHONHOME and PYTHONPATH"
-            set_env PYTHONHOME ${python_base_prefix}
-            set_env PYTHONPATH ${python_site_packages}
-            pythonhome = get_env PYTHONHOME
-            pythonpath = get_env PYTHONPATH
-            info "🔸 🚛 PyO3 PYTHONHOME set to ${pythonhome}"
-            info "🔸 🚛 PyO3 PYTHONPATH set to ${pythonpath}"
-        end
-    end
-
-    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TY_TABLEFRAME_CARGO_TOML} --features without-polars-alloc --bin pystubs"
-    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TY_TABLEFRAME_CARGO_TOML} --features without-polars-alloc --bin pystubs
-
-    if ${on_ga_true}
-        if eq ${os_family} "mac"
-            info "🔄 Restoring original PYTHONHOME and PYTHONPATH"
-            set_env PYTHONHOME ${python_home}
-            set_env PYTHONPATH ${python_path}
-        end
-    end
+    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TY_TABLEFRAME_CARGO_TOML} --features without-polars-alloc,pyconfig-init --bin pystubs ${PROJECT_RS_TY_TABLEFRAME_FOLDER}"
+    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TY_TABLEFRAME_CARGO_TOML} --features without-polars-alloc,pyconfig-init --bin pystubs ${PROJECT_RS_TY_TABLEFRAME_FOLDER}
     ''']
 
 [tasks.__os__compile_none_rs_expansions]
@@ -281,58 +335,8 @@ script = [
 
     cd ${PROJECT_RS_TO_FOUNDATION_FOLDER}
 
-    info "🛟 Helping PyO3 to find the Python standard library..."
-
-    python_home = get_env PYTHONHOME
-    info "🔸 🛟 Current PYTHONHOME is ${python_home}"
-
-    python_path = get_env PYTHONPATH
-    info "🔸 🛟 Current PYTHONPATH is ${python_path}"
-
-    python_executable = exec --fail-on-error python -c "import sys; print(sys.executable)"
-    python_executable = trim ${python_executable.stdout}
-    info "🚑 Current Python executable is ${python_executable}"
-
-    python_prefix = exec --fail-on-error python -c "import sys; print(sys.prefix)"
-    python_prefix = trim ${python_prefix.stdout}
-    info "🚑 Current Python sys.prefix is ${python_prefix}"
-
-    python_base_prefix = exec python -c "import sys; print(sys.base_prefix)"
-    python_base_prefix = trim ${python_base_prefix.stdout}
-    info "🚑 Current Python sys.base_prefix: ${python_base_prefix}"
-
-    python_site_packages = exec python -c "import site; print(site.getsitepackages()[0])"
-    python_site_packages = trim ${python_site_packages.stdout}
-    info "🚑 Current Python site packages ${python_site_packages}"
-
-    set_env PYO3_PYTHON ${python_executable}
-    info "🔸 🛟 PYO3_PYTHON set to: ${python_executable}"
-
-    on_ga = get_env TD_ON_GA
-    on_ga_true = eq ${on_ga} "true"
-    if ${on_ga_true}
-        os_family = os_family
-        if eq ${os_family} "mac"
-            info "🚛 PyO3 is on GA macOS - setting PYTHONHOME and PYTHONPATH"
-            set_env PYTHONHOME ${python_base_prefix}
-            set_env PYTHONPATH ${python_site_packages}
-            pythonhome = get_env PYTHONHOME
-            pythonpath = get_env PYTHONPATH
-            info "🔸 🚛 PyO3 PYTHONHOME set to ${pythonhome}"
-            info "🔸 🚛 PyO3 PYTHONPATH set to ${pythonpath}"
-        end
-    end
-
-    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TO_FOUNDATION_CARGO_TOML} --features without-polars-alloc --bin pystubs"
-    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TO_FOUNDATION_CARGO_TOML} --features without-polars-alloc --bin pystubs
-
-    if ${on_ga_true}
-        if eq ${os_family} "mac"
-            info "🔄 Restoring original PYTHONHOME and PYTHONPATH"
-            set_env PYTHONHOME ${python_home}
-            set_env PYTHONPATH ${python_path}
-        end
-    end
+    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TO_FOUNDATION_CARGO_TOML} --features without-polars-alloc,pyconfig-init --bin pystubs ${PROJECT_RS_TO_FOUNDATION_FOLDER}"
+    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TO_FOUNDATION_CARGO_TOML} --features without-polars-alloc,pyconfig-init --bin pystubs ${PROJECT_RS_TO_FOUNDATION_FOLDER}
     ''']
 
 [tasks.__os__compile_none_rs_expansions_polars]
@@ -350,58 +354,8 @@ script = [
 
     cd ${PROJECT_RS_TY_TABLEFRAME_FOLDER}
 
-    info "🛟 Helping PyO3 to find the Python standard library..."
-
-    python_home = get_env PYTHONHOME
-    info "🔸 🛟 Current PYTHONHOME is ${python_home}"
-
-    python_path = get_env PYTHONPATH
-    info "🔸 🛟 Current PYTHONPATH is ${python_path}"
-
-    python_executable = exec --fail-on-error python -c "import sys; print(sys.executable)"
-    python_executable = trim ${python_executable.stdout}
-    info "🚑 Current Python executable is ${python_executable}"
-
-    python_prefix = exec --fail-on-error python -c "import sys; print(sys.prefix)"
-    python_prefix = trim ${python_prefix.stdout}
-    info "🚑 Current Python sys.prefix is ${python_prefix}"
-
-    python_base_prefix = exec python -c "import sys; print(sys.base_prefix)"
-    python_base_prefix = trim ${python_base_prefix.stdout}
-    info "🚑 Current Python sys.base_prefix: ${python_base_prefix}"
-
-    python_site_packages = exec python -c "import site; print(site.getsitepackages()[0])"
-    python_site_packages = trim ${python_site_packages.stdout}
-    info "🚑 Current Python site packages ${python_site_packages}"
-
-    set_env PYO3_PYTHON ${python_executable}
-    info "🔸 🛟 PYO3_PYTHON set to: ${python_executable}"
-
-    on_ga = get_env TD_ON_GA
-    on_ga_true = eq ${on_ga} "true"
-    if ${on_ga_true}
-        os_family = os_family
-        if eq ${os_family} "mac"
-            info "🚛 PyO3 is on GA macOS - setting PYTHONHOME and PYTHONPATH"
-            set_env PYTHONHOME ${python_base_prefix}
-            set_env PYTHONPATH ${python_site_packages}
-            pythonhome = get_env PYTHONHOME
-            pythonpath = get_env PYTHONPATH
-            info "🔸 🚛 PyO3 PYTHONHOME set to ${pythonhome}"
-            info "🔸 🚛 PyO3 PYTHONPATH set to ${pythonpath}"
-        end
-    end
-
-    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TY_TABLEFRAME_CARGO_TOML} --features without-polars-alloc --bin pystubs"
-    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TY_TABLEFRAME_CARGO_TOML} --features without-polars-alloc --bin pystubs
-
-    if ${on_ga_true}
-        if eq ${os_family} "mac"
-            info "🔄 Restoring original PYTHONHOME and PYTHONPATH"
-            set_env PYTHONHOME ${python_home}
-            set_env PYTHONPATH ${python_path}
-        end
-    end
+    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TY_TABLEFRAME_CARGO_TOML} --features without-polars-alloc,pyconfig-init --bin pystubs ${PROJECT_RS_TY_TABLEFRAME_FOLDER}"
+    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TY_TABLEFRAME_CARGO_TOML} --features without-polars-alloc,pyconfig-init --bin pystubs ${PROJECT_RS_TY_TABLEFRAME_FOLDER}
     ''']
 
 [tasks.__os__link_all_rs]
