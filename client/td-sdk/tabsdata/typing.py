@@ -27,7 +27,7 @@ from tabsdata._specs import (
 )
 from tabsdata._table_actions._typing import OnTablesSpec
 from tabsdata._table_actions.actions import OnTablesAction
-from tabsdata_kafka.shared_types import (
+from tabsdata_kafka.typing import (
     KafkaMessageFormatSpec,
     KafkaServersSpec,
     SchemaIdCompatibles,

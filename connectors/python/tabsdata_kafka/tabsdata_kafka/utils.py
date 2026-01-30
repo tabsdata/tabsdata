@@ -21,7 +21,7 @@ from tabsdata_kafka.constants import (
 )
 from tabsdata_kafka.consumer.consumer import KafkaConsumer, RolloverReason
 from tabsdata_kafka.consumer.messages_buffer import MessagesBuffer
-from tabsdata_kafka.shared_types import (
+from tabsdata_kafka.typing import (
     AwsGlueSchemaRegistryCredentialsSpec,
 )
 

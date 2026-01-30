@@ -22,7 +22,7 @@ from tabsdata_kafka.constants import (
 from tabsdata_kafka.serdes.serde import (
     KafkaSerde,
 )
-from tabsdata_kafka.shared_types import (
+from tabsdata_kafka.typing import (
     KafkaMessageFormatSpec,
     SchemaIdCompatibles,
     SchemaIdSpec,

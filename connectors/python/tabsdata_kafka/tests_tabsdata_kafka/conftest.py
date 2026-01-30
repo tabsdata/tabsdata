@@ -9,7 +9,7 @@ import logging
 from tabsdata._credentials import UserPasswordCredentials
 from tabsdata._io.stage_trigger import LocalFileStageTriggerContext
 from tabsdata_kafka._connector import AwsGlueSchemaRegistry, ConfluentSchemaRegistry
-from tabsdata_kafka.shared_types import AwsGlueSchemaRegistryCredentialsSpec
+from tabsdata_kafka.typing import AwsGlueSchemaRegistryCredentialsSpec
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)

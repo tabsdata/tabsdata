@@ -36,7 +36,7 @@ from tabsdata_kafka.serdes.non_sr_serde import (
     JsonKafkaSerde,
     ProtobufKafkaSerde,
 )
-from tabsdata_kafka.shared_types import KafkaMessageFormatSpec
+from tabsdata_kafka.typing import KafkaMessageFormatSpec
 from tests_tabsdata_kafka.conftest import (
     aws_glue_sr_avro_schema_str,
     aws_glue_sr_json_schema_str,

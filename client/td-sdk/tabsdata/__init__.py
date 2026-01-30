@@ -140,7 +140,7 @@ from tabsdata_kafka._connector import (
     KafkaConn,
     KafkaTrigger,
 )
-from tabsdata_kafka.shared_types import (
+from tabsdata_kafka.typing import (
     AwsGlueSchemaRegistryCredentialsSpec,
     ConfluentSchemaRegistryCredentialsSpec,
     KafkaCredentialsSpec,

@@ -10,12 +10,10 @@ import sys
 import time
 from abc import ABC
 from datetime import datetime, timezone
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import boto3
 from botocore.client import BaseClient
-from confluent_kafka import Consumer, Producer
-from confluent_kafka.schema_registry import SchemaRegistryClient
 from mypy_boto3_glue.client import GlueClient
 from pydantic import PositiveInt
 
@@ -67,7 +65,7 @@ from tabsdata_kafka.serdes.non_sr_serde import (
 from tabsdata_kafka.serdes.serde import (
     KafkaSerde,
 )
-from tabsdata_kafka.shared_types import (
+from tabsdata_kafka.typing import (
     AwsGlueSchemaRegistryCredentialsSpec,
     ConfluentSchemaRegistryCredentialsSpec,
     KafkaCredentialsSpec,
@@ -75,6 +73,10 @@ from tabsdata_kafka.shared_types import (
     KafkaServersSpec,
 )
 from tabsdata_kafka.utils import handle_rollover, obtain_and_set_aws_glue_credentials
+
+if TYPE_CHECKING:
+    from confluent_kafka import Consumer, Producer
+    from confluent_kafka.schema_registry import SchemaRegistryClient
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -275,6 +277,16 @@ class KafkaTrigger(StageTrigger):
             end: Optional datetime for the trigger to stop working.
         """
         super().__init__(start=start, end=end)
+        try:
+            from confluent_kafka import Consumer, Producer  # noqa: F401
+            from confluent_kafka.schema_registry import (  # noqa: F401
+                SchemaRegistryClient,
+            )
+        except ImportError:
+            raise ImportError(
+                "The 'tabsdata_kafka' package is missing some dependencies. You "
+                "can get them by installing 'tabsdata['kafka']'"
+            )
         self._conn = conn
         self._topic = topic
         self._data_format = data_format
@@ -374,6 +386,8 @@ class KafkaTrigger(StageTrigger):
         return self._dlq_topic
 
     def _build_schema_registry_client(self) -> SchemaRegistryClient | GlueClient | None:
+        from confluent_kafka.schema_registry import SchemaRegistryClient
+
         sr = self.conn.schema_registry
         if not sr:
             return None
@@ -465,6 +479,8 @@ class KafkaTrigger(StageTrigger):
         signal.signal(signal.SIGTERM, _sigterm_handler)
 
     def _create_consumer(self, kafka_configs):
+        from confluent_kafka import Consumer
+
         try:
             consumer = Consumer(kafka_configs)
             consumer.list_topics(timeout=CONNECTION_TIMEOUT_SECS)
@@ -474,6 +490,8 @@ class KafkaTrigger(StageTrigger):
             raise e
 
     def _create_dlq_producer(self, kafka_configs):
+        from confluent_kafka import Producer
+
         try:
             if self.dlq_topic:
                 dlq_producer = Producer(kafka_configs)
@@ -613,6 +631,8 @@ class KafkaTrigger(StageTrigger):
         """
 
         schema_registry_client = self._build_schema_registry_client()
+
+        from confluent_kafka.schema_registry import SchemaRegistryClient
 
         def _raise_unsupported():
             raise ValueError(

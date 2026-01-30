@@ -6,7 +6,7 @@ import time
 import uuid
 from pathlib import Path
 
-from tabsdata_kafka.shared_types import SchemaIdCompatibles, SchemaIdSpec
+from tabsdata_kafka.typing import SchemaIdCompatibles, SchemaIdSpec
 
 
 class MessagesBuffer:
