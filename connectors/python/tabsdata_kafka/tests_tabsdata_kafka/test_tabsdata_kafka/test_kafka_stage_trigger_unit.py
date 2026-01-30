@@ -37,6 +37,7 @@ from tabsdata_kafka.serdes.non_sr_serde import (
     JsonKafkaSerde,
     ProtobufKafkaSerde,
 )
+from tabsdata_kafka.typing import Protobuf
 from tests_tabsdata_kafka.conftest import (
     aws_glue_sr_mock_protobuf_glue_client,
 )
@@ -77,6 +78,8 @@ def aws_glue_schema_registry():
             aws_access_key_id="test_access_key_id",
             aws_secret_access_key="test_secret_access_key",
         ),
+        registry_name="registry-name",
+        schema_name="schema-name",
         configs=None,
     )
 
@@ -160,11 +163,15 @@ def test_aws_glue_schema_registry_properties():
         region_name="us-west-2",
         credentials=creds,
         configs=configs,
+        registry_name="registry-name",
+        schema_name="schema-name",
     )
     assert sr.region_name == "us-west-2"
     assert sr.credentials == creds
     assert sr.configs == configs
     assert "AwsGlueSchemaRegistry" in repr(sr)
+    assert sr.registry_name == "registry-name"
+    assert sr.schema_name == "schema-name"
 
 
 def test_kafka_conn_properties(confluent_schema_registry):
@@ -192,7 +199,7 @@ def test_kafka_conn_servers_str(confluent_schema_registry):
     servers = "localhost:9092"
     conn = KafkaConn(
         servers=servers,
-        credentials=None,
+        credentials=UserPasswordCredentials("u", "p"),
         group_id=None,
         schema_registry=confluent_schema_registry,
         enforce_connection_params=True,
@@ -216,9 +223,6 @@ def test_properties_minimal(kafka_conn):
     assert trigger.data_format == "json"
     assert trigger.schema == "{}"
     assert trigger.group_id is None
-    assert trigger.message_name is None
-    assert trigger.registry_name is None
-    assert trigger.schema_name is None
     assert trigger.time_rollover_secs == 60
     assert trigger.size_rollover_mb is None
     assert trigger.messages_rollover is None
@@ -234,9 +238,6 @@ def test_properties_full(kafka_conn):
         data_format="avro",
         schema="{avro_schema}",
         group_id="group-x",
-        message_name="MsgName",
-        registry_name="RegName",
-        schema_name="SchemaName",
         time_rollover_secs=120,
         size_rollover_mb=10,
         messages_rollover=100,
@@ -247,9 +248,6 @@ def test_properties_full(kafka_conn):
     assert trigger.data_format == "avro"
     assert trigger.schema == "{avro_schema}"
     assert trigger.group_id == "group-x"
-    assert trigger.message_name == "MsgName"
-    assert trigger.registry_name == "RegName"
-    assert trigger.schema_name == "SchemaName"
     assert trigger.time_rollover_secs == 120
     assert trigger.size_rollover_mb == 10
     assert trigger.messages_rollover == 100
@@ -433,14 +431,15 @@ def test_serde_factory(
     conn = request.getfixturevalue(conn_fixture) if conn_fixture is not None else None
     schema = request.getfixturevalue(schema_fixture)
     mock_client, _ = mock_boto3_glue_client
+
+    if data_format == "protobuf":
+        data_format = Protobuf("PersonV1")
+
     trigger = KafkaTrigger(
         conn=conn,
         topic="topic-x",
         data_format=cast(KafkaMessageFormatSpec, data_format),
         schema=schema,
-        registry_name="test-registry",
-        schema_name="user-schema",
-        message_name="PersonV1",
     )
 
     tr_sr = trigger._get_serde(str(tmp_path))

@@ -16,15 +16,17 @@ from confluent_kafka.serialization import SerializationContext
 from google.protobuf.json_format import MessageToDict, ParseDict
 
 from tabsdata_kafka.constants import (
-    MessageFormat,
+    _AVRO,
+    _JSON,
+    _PROTOBUF,
 )
 from tabsdata_kafka.serdes.serde import (
     KafkaSerde,
 )
 from tabsdata_kafka.typing import (
-    KafkaMessageFormatSpec,
     SchemaIdCompatibles,
     SchemaIdSpec,
+    _KafkaMessageFormatNameSpec,
 )
 from tabsdata_kafka.utils import get_protobuf_class
 
@@ -76,8 +78,8 @@ class AvroSrKafkaSerde(SrKafkaSerde):
         self._schema = avro_schema
 
     @property
-    def format(self) -> KafkaMessageFormatSpec:
-        return cast(KafkaMessageFormatSpec, MessageFormat.AVRO.value)
+    def format(self) -> _KafkaMessageFormatNameSpec:
+        return cast(_KafkaMessageFormatNameSpec, _AVRO)
 
     def serializer(self) -> Callable[[dict, SerializationContext], bytes]:
         return self._serializer
@@ -119,8 +121,8 @@ class JsonSrKafkaSerde(SrKafkaSerde):
         self._schema = json_schema
 
     @property
-    def format(self) -> KafkaMessageFormatSpec:
-        return cast(KafkaMessageFormatSpec, MessageFormat.JSON.value)
+    def format(self) -> _KafkaMessageFormatNameSpec:
+        return cast(_KafkaMessageFormatNameSpec, _JSON)
 
     def serializer(self) -> Callable[[dict, SerializationContext], bytes]:
         return self._serializer
@@ -199,8 +201,8 @@ class ProtobufSrKafkaSerde(SrKafkaSerde):
         return deserializer
 
     @property
-    def format(self) -> KafkaMessageFormatSpec:
-        return cast(KafkaMessageFormatSpec, MessageFormat.PROTOBUF.value)
+    def format(self) -> _KafkaMessageFormatNameSpec:
+        return cast(_KafkaMessageFormatNameSpec, _PROTOBUF)
 
     def serializer(self) -> Callable[[dict, SerializationContext], bytes]:
         return self._serializer

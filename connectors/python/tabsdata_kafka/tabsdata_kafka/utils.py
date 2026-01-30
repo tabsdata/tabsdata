@@ -14,6 +14,7 @@ from pathlib import Path
 
 from google.protobuf import descriptor_pb2, message, message_factory
 
+# noinspection PyProtectedMember
 from tabsdata._io.stage_trigger import StageTriggerContext
 from tabsdata_kafka.constants import (
     AWS_ACCESS_KEY_ID,

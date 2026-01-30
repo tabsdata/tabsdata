@@ -14,11 +14,13 @@ import pytest
 import tabsdata as td
 from tabsdata._credentials import UserPasswordCredentials
 from tabsdata_kafka._connector import KafkaConn, KafkaTrigger
+from tabsdata_kafka.typing import Protobuf
 from tests_tabsdata.bootest import TDLOCAL_FOLDER
 from tests_tabsdata.common.backend.kafka import kafka_config
 from tests_tabsdata.conftest import ABSOLUTE_TEST_FOLDER_LOCATION
 from tests_tabsdata.fntest import tdfnjob
 from tests_tabsdata_kafka.conftest import (
+    PROTOBUF_MESSAGE_NAME,
     TIMEOUT_SECS,
     get_avro_message,
     get_json_message,
@@ -119,9 +121,14 @@ def test_kafka_stage_trigger_time_rollover(
         serde = serde_obj(kafka_config)
     else:
         serde = serde_obj
-    sr = request.getfixturevalue(get_sr)(kafka_config) if get_sr else None
+    sr = request.getfixturevalue(get_sr)(kafka_config, serde) if get_sr else None
 
     produce_kafka_messages(topic, TOTAL_MESSAGES, serde, get_message)
+
+    if serde.format == "protobuf":
+        data_format = Protobuf(PROTOBUF_MESSAGE_NAME)
+    else:
+        data_format = serde.format
 
     trigger = KafkaTrigger(
         conn=KafkaConn(
@@ -131,13 +138,10 @@ def test_kafka_stage_trigger_time_rollover(
             schema_registry=sr,
         ),
         topic=topic,
-        data_format=serde.format,
+        data_format=data_format,
         schema=serde._schema,
         time_rollover_secs=5,
         end=datetime.now(timezone.utc) + timedelta(seconds=KAFKA_TRIGGER_DURATION),
-        message_name=getattr(serde, "_message_name", None),
-        registry_name=getattr(serde, "_registry_name", None),
-        schema_name=getattr(serde, "_schema_name", None),
     )
 
     @td.publisher(
@@ -233,7 +237,7 @@ def test_kafka_stage_trigger_time_rollover_w_dlq(
         serde = serde_obj(kafka_config)
     else:
         serde = serde_obj
-    sr = request.getfixturevalue(get_sr)(kafka_config) if get_sr else None
+    sr = request.getfixturevalue(get_sr)(kafka_config, serde) if get_sr else None
 
     dlq_topic = f"{uuid.uuid4()}_dlq"
 
@@ -249,6 +253,11 @@ def test_kafka_stage_trigger_time_rollover_w_dlq(
 
     produce_kafka_messages(topic, TOTAL_MESSAGES, serde, get_message)
 
+    if serde.format == "protobuf":
+        data_format = Protobuf(PROTOBUF_MESSAGE_NAME)
+    else:
+        data_format = serde.format
+
     trigger = KafkaTrigger(
         conn=KafkaConn(
             servers=kafka_config.bootstrap_servers,
@@ -257,13 +266,10 @@ def test_kafka_stage_trigger_time_rollover_w_dlq(
             schema_registry=sr,
         ),
         topic=topic,
-        data_format=serde.format,
+        data_format=data_format,
         schema=serde._schema,
         time_rollover_secs=5,
         end=datetime.now(timezone.utc) + timedelta(seconds=KAFKA_TRIGGER_DURATION),
-        message_name=getattr(serde, "_message_name", None),
-        registry_name=getattr(serde, "_registry_name", None),
-        schema_name=getattr(serde, "_schema_name", None),
         dlq_topic=dlq_topic,
     )
 
@@ -373,8 +379,13 @@ def test_kafka_stage_trigger_message_rollover(
         serde = serde_obj(kafka_config)
     else:
         serde = serde_obj
-    sr = request.getfixturevalue(get_sr)(kafka_config) if get_sr else None
+    sr = request.getfixturevalue(get_sr)(kafka_config, serde) if get_sr else None
     produce_kafka_messages(topic, TOTAL_MESSAGES, serde, get_message)
+
+    if serde.format == "protobuf":
+        data_format = Protobuf(PROTOBUF_MESSAGE_NAME)
+    else:
+        data_format = serde.format
 
     trigger = KafkaTrigger(
         conn=KafkaConn(
@@ -384,13 +395,10 @@ def test_kafka_stage_trigger_message_rollover(
             schema_registry=sr,
         ),
         topic=topic,
-        data_format=serde.format,
+        data_format=data_format,
         schema=serde._schema,
         messages_rollover=BATCH_MESSAGES,
         end=datetime.now(timezone.utc) + timedelta(seconds=KAFKA_TRIGGER_DURATION),
-        message_name=getattr(serde, "_message_name", None),
-        registry_name=getattr(serde, "_registry_name", None),
-        schema_name=getattr(serde, "_schema_name", None),
     )
 
     @td.publisher(
@@ -484,11 +492,16 @@ def test_kafka_stage_trigger_size_rollover(
         serde = serde_obj(kafka_config)
     else:
         serde = serde_obj
-    sr = request.getfixturevalue(get_sr)(kafka_config) if get_sr else None
+    sr = request.getfixturevalue(get_sr)(kafka_config, serde) if get_sr else None
 
     size_rollover_messages = TOTAL_MESSAGES * 20
 
     produce_kafka_messages(topic, size_rollover_messages, serde, get_message)
+
+    if serde.format == "protobuf":
+        data_format = Protobuf(PROTOBUF_MESSAGE_NAME)
+    else:
+        data_format = serde.format
 
     trigger = KafkaTrigger(
         conn=KafkaConn(
@@ -498,13 +511,10 @@ def test_kafka_stage_trigger_size_rollover(
             schema_registry=sr,
         ),
         topic=topic,
-        data_format=serde.format,
+        data_format=data_format,
         schema=serde._schema,
         size_rollover_mb=1,
         end=datetime.now(timezone.utc) + timedelta(seconds=KAFKA_TRIGGER_DURATION),
-        message_name=getattr(serde, "_message_name", None),
-        registry_name=getattr(serde, "_registry_name", None),
-        schema_name=getattr(serde, "_schema_name", None),
     )
 
     @td.publisher(

@@ -2,7 +2,7 @@
 # Copyright 2026 Tabs Data Inc.
 #
 
-from enum import Enum
+DEFAULT_TIME_ROLLOVER_SECS = 60
 
 AWS_ACCESS_KEY_ID = "AWS_ACCESS_KEY_ID"
 AWS_SECRET_ACCESS_KEY = "AWS_SECRET_ACCESS_KEY"
@@ -24,8 +24,6 @@ URL_KEY = "url"
 BASIC_AUTH_USER_INFO_KEY = "basic.auth.user.info"
 REGION_NAME_KEY = "region_name"
 
-
-class MessageFormat(Enum):
-    AVRO = "avro"
-    JSON = "json"
-    PROTOBUF = "protobuf"
+_AVRO = "avro"
+_JSON = "json"
+_PROTOBUF = "protobuf"

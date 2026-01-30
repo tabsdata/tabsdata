@@ -10,19 +10,24 @@ import sys
 import time
 from abc import ABC
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Optional, cast
+from typing import TYPE_CHECKING, TypeAlias, Union, cast
 
 import boto3
 from botocore.client import BaseClient
 from mypy_boto3_glue.client import GlueClient
 from pydantic import PositiveInt
 
+# noinspection PyProtectedMember
 from tabsdata._io.connections.connections import Conn
+
+# noinspection PyProtectedMember
 from tabsdata._io.stage_trigger import (
     StageTrigger,
     StageTriggerContext,
     StageTriggerStatus,
 )
+
+# noinspection PyProtectedMember
 from tabsdata.dataquality._utils import _td_validate_call
 from tabsdata.exceptions import (
     ErrorCode,
@@ -30,11 +35,15 @@ from tabsdata.exceptions import (
     StageTriggerExecutionError,
 )
 from tabsdata_kafka.constants import (
+    _AVRO,
+    _JSON,
+    _PROTOBUF,
     AUTO_OFFSET_RESET_KEY,
     BASIC_AUTH_USER_INFO_KEY,
     BOOTSTRAP_SERVERS_KEY,
     CONNECTION_TIMEOUT_SECS,
     CONSUME_TIMEOUT_SECS,
+    DEFAULT_TIME_ROLLOVER_SECS,
     ENABLE_AUTO_COMMIT_KEY,
     GROUP_ID_KEY,
     REGION_NAME_KEY,
@@ -43,9 +52,9 @@ from tabsdata_kafka.constants import (
     SASL_USERNAME_KEY,
     SECURITY_PROTOCOL_KEY,
     URL_KEY,
-    MessageFormat,
 )
 from tabsdata_kafka.consumer.consumer import KafkaConsumer, RolloverReason
+from tabsdata_kafka.consumer.messages_buffer import MessagesBuffer
 from tabsdata_kafka.serdes.serde import KafkaSerde
 from tabsdata_kafka.typing import (
     AwsGlueSchemaRegistryCredentialsSpec,
@@ -53,6 +62,7 @@ from tabsdata_kafka.typing import (
     KafkaCredentialsSpec,
     KafkaMessageFormatSpec,
     KafkaServersSpec,
+    Protobuf,
 )
 from tabsdata_kafka.utils import handle_rollover, obtain_and_set_aws_glue_credentials
 
@@ -71,6 +81,10 @@ class KafkaSchemaRegistry(ABC):
 
 
 class ConfluentSchemaRegistry(KafkaSchemaRegistry):
+    """
+    Configuration for Confluent Schema Registry.
+    """
+
     @_td_validate_call(ErrorCode.PVCX7)
     def __init__(
         self,
@@ -78,20 +92,37 @@ class ConfluentSchemaRegistry(KafkaSchemaRegistry):
         credentials: ConfluentSchemaRegistryCredentialsSpec | None = None,
         configs: dict | None = None,
     ):
+        """
+        Initializes the Confluent Schema Registry configuration.
+
+        Args:
+            url: The URL of the Schema Registry.
+            credentials: Credentials for authentication.
+            configs: Optional dictionary of additional configuration properties.
+        """
         self._url = url
         self._credentials = credentials
         self._configs = configs or {}
 
     @property
     def url(self) -> str:
+        """
+        The URL of the Schema Registry.
+        """
         return self._url
 
     @property
     def credentials(self) -> ConfluentSchemaRegistryCredentialsSpec | None:
+        """
+        Credentials for authenticating with the Schema Registry.
+        """
         return self._credentials
 
     @property
     def configs(self) -> dict:
+        """
+        Additional configuration properties for the Schema Registry client.
+        """
         return self._configs
 
     def __repr__(self):
@@ -107,23 +138,60 @@ class AwsGlueSchemaRegistry(KafkaSchemaRegistry):
     def __init__(
         self,
         region_name: str,
-        credentials: AwsGlueSchemaRegistryCredentialsSpec | None = None,
+        credentials: AwsGlueSchemaRegistryCredentialsSpec,
+        registry_name: str,
+        schema_name: str,
         configs: dict | None = None,
     ):
+        """
+        Initializes the AWS Glue Schema Registry configuration.
+
+        Args:
+            region_name: The AWS region where the registry is located.
+            credentials: Credentials for authenticating with AWS.
+            registry_name: The name of the Glue Schema Registry.
+            schema_name: The name of the schema within the registry.
+            configs: Optional dictionary of additional configuration properties.
+        """
         self._region_name = region_name
         self._credentials = credentials
+        self._registry_name = registry_name
+        self._schema_name = schema_name
         self._configs = configs or {}
 
     @property
     def region_name(self) -> str:
+        """
+        The AWS region of the Schema Registry.
+        """
         return self._region_name
 
     @property
-    def credentials(self) -> AwsGlueSchemaRegistryCredentialsSpec | None:
+    def credentials(self) -> AwsGlueSchemaRegistryCredentialsSpec:
+        """
+        Credentials for authenticating with AWS Glue.
+        """
         return self._credentials
 
     @property
+    def registry_name(self) -> str:
+        """
+        Registry name for AWS Glue Schema Registry.
+        """
+        return self._registry_name
+
+    @property
+    def schema_name(self) -> str:
+        """
+        Schema name for AWS Glue Schema Registry.
+        """
+        return self._schema_name
+
+    @property
     def configs(self) -> dict:
+        """
+        Additional configuration properties for the AWS Glue client.
+        """
         return self._configs
 
     def __repr__(self):
@@ -131,6 +199,9 @@ class AwsGlueSchemaRegistry(KafkaSchemaRegistry):
             f"AwsGlueSchemaRegistry(region_name={self.region_name},"
             f" configs={self.configs})"
         )
+
+
+SchemaRegistrySpec: TypeAlias = Union[ConfluentSchemaRegistry | AwsGlueSchemaRegistry]
 
 
 class KafkaConn(Conn):
@@ -142,11 +213,9 @@ class KafkaConn(Conn):
     def __init__(
         self,
         servers: KafkaServersSpec,
-        credentials: KafkaCredentialsSpec | None = None,
+        credentials: KafkaCredentialsSpec,
         group_id: str | None = None,
-        schema_registry: Optional[
-            ConfluentSchemaRegistry | AwsGlueSchemaRegistry
-        ] = None,
+        schema_registry: SchemaRegistrySpec | None = None,
         enforce_connection_params: bool = True,
         cx_src_configs: dict | None = None,
     ):
@@ -178,7 +247,7 @@ class KafkaConn(Conn):
         return self._servers
 
     @property
-    def credentials(self) -> KafkaCredentialsSpec | None:
+    def credentials(self) -> KafkaCredentialsSpec:
         """
         Kafka credentials.
         """
@@ -192,9 +261,7 @@ class KafkaConn(Conn):
         return self._group_id
 
     @property
-    def schema_registry(
-        self,
-    ) -> ConfluentSchemaRegistry | AwsGlueSchemaRegistry | None:
+    def schema_registry(self) -> SchemaRegistrySpec | None:
         """
         Kafka schema registry configuration.
         """
@@ -216,6 +283,13 @@ class KafkaConn(Conn):
 
 
 class KafkaTrigger(StageTrigger):
+    """
+    A `StageTrigger` that consumes messages from a Kafka topic and stages them.
+
+    This trigger connects to a Kafka cluster, consumes messages from a specified
+    topic, and uses rollover conditions (time, size, and message count) to
+    buffer and stage the data.
+    """
 
     @_td_validate_call(ErrorCode.PVTRGR1)
     def __init__(
@@ -225,10 +299,7 @@ class KafkaTrigger(StageTrigger):
         data_format: KafkaMessageFormatSpec,
         schema: str,
         group_id: str | None = None,
-        message_name: str | None = None,
-        registry_name: str | None = None,
-        schema_name: str | None = None,
-        time_rollover_secs: PositiveInt = 60,
+        time_rollover_secs: PositiveInt = DEFAULT_TIME_ROLLOVER_SECS,
         size_rollover_mb: PositiveInt | None = None,
         messages_rollover: PositiveInt | None = None,
         dlq_topic: str | None = None,
@@ -245,8 +316,6 @@ class KafkaTrigger(StageTrigger):
                          ("avro", "json", "protobuf").
             schema: The schema string for deserializing messages.
             group_id: Optional Kafka consumer group ID.
-            message_name: Optional message name for Protobuf schemas.
-            registry_name: Optional registry name for AWS Glue Schema Registry.
             schema_name: Optional schema name for AWS Glue Schema Registry.
             time_rollover_secs: The timeout in seconds before staging and
                                 committing a message buffer. Defaults to 60.
@@ -274,14 +343,10 @@ class KafkaTrigger(StageTrigger):
         self._data_format = data_format
         self._schema = schema
         self._group_id = group_id
-        self._message_name = message_name
-        self._registry_name = registry_name
-        self._schema_name = schema_name
         self._time_rollover_secs = time_rollover_secs
         self._size_rollover_mb = size_rollover_mb
         self._messages_rollover = messages_rollover
         self._dlq_topic = dlq_topic
-        self._setup_sigterm_handler()
 
     @property
     def conn(self) -> KafkaConn:
@@ -319,27 +384,6 @@ class KafkaTrigger(StageTrigger):
         return self._group_id
 
     @property
-    def message_name(self) -> str | None:
-        """
-        Message name for Protobuf schemas.
-        """
-        return self._message_name
-
-    @property
-    def registry_name(self) -> str | None:
-        """
-        Registry name for AWS Glue Schema Registry.
-        """
-        return self._registry_name
-
-    @property
-    def schema_name(self) -> str | None:
-        """
-        Schema name for AWS Glue Schema Registry.
-        """
-        return self._schema_name
-
-    @property
     def time_rollover_secs(self) -> int:
         """
         Timeout in seconds for consuming each message.
@@ -368,6 +412,16 @@ class KafkaTrigger(StageTrigger):
         return self._dlq_topic
 
     def _build_schema_registry_client(self) -> SchemaRegistryClient | GlueClient | None:
+        """
+        Builds and returns a client for the configured schema registry.
+
+        Returns:
+            A `SchemaRegistryClient` for Confluent, a `GlueClient` for AWS Glue,
+            or `None` if no schema registry is configured.
+
+        Raises:
+            ValueError: If the schema registry type is not supported.
+        """
         from confluent_kafka.schema_registry import SchemaRegistryClient
 
         sr = self.conn.schema_registry
@@ -395,7 +449,16 @@ class KafkaTrigger(StageTrigger):
             return boto3.client("glue", **boto_kwargs)
         raise ValueError(f"Unsupported schema registry type: {type(sr)}")
 
-    def _build_kafka_configs(self):
+    def _build_kafka_configs(self) -> dict:
+        """
+        Builds the configuration dictionary for the Kafka consumer.
+
+        Returns:
+            A dictionary of Kafka consumer configurations.
+
+        Raises:
+            StageTriggerConfigurationError: If `group.id` is not set.
+        """
         kafka_configs = {}
         if self.conn.cx_src_configs:
             kafka_configs = kafka_configs | self.conn.cx_src_configs
@@ -439,9 +502,11 @@ class KafkaTrigger(StageTrigger):
         """
         Run the Kafka stage trigger to consume messages, buffer them, and stage them
         based on rollover conditions.
+
         Args:
             context: The StageTriggerContext instance.
         """
+        self._setup_sigterm_handler()
         serde = self._get_serde(str(context.working_dir))
         logger.debug(f"Using serde: {type(serde).__name__}")
 
@@ -456,13 +521,30 @@ class KafkaTrigger(StageTrigger):
 
     @staticmethod
     def _setup_sigterm_handler():
+        """
+        Sets up a signal handler for SIGTERM to raise a KeyboardInterrupt.
+        This allows for graceful shutdown when the process is terminated.
+        """
+
         def _sigterm_handler(_signum, _frame):
             raise KeyboardInterrupt
 
         signal.signal(signal.SIGTERM, _sigterm_handler)
 
     @staticmethod
-    def _create_consumer(kafka_configs):
+    def _create_consumer(kafka_configs: dict) -> Consumer:
+        """
+        Creates and returns a Kafka Consumer instance.
+
+        Args:
+            kafka_configs: The configuration for the Kafka consumer.
+
+        Returns:
+            A configured `confluent_kafka.Consumer` instance.
+
+        Raises:
+            Exception: If the connection to the Kafka broker fails.
+        """
         from confluent_kafka import Consumer
 
         try:
@@ -473,7 +555,20 @@ class KafkaTrigger(StageTrigger):
             logger.error(f"Error connecting to the Kafka broker: {e}")
             raise e
 
-    def _create_dlq_producer(self, kafka_configs):
+    def _create_dlq_producer(self, kafka_configs: dict) -> Producer | None:
+        """
+        Creates a Kafka Producer for the dead-letter queue if configured.
+
+        Args:
+            kafka_configs: The configuration for the Kafka producer.
+
+        Returns:
+            A `confluent_kafka.Producer` instance if a DLQ topic is set,
+            otherwise `None`.
+
+        Raises:
+            Exception: If the producer fails to connect to the Kafka broker.
+        """
         from confluent_kafka import Producer
 
         try:
@@ -486,7 +581,20 @@ class KafkaTrigger(StageTrigger):
             logger.error(f"Error creating DLQ producer: {e}")
             raise e
 
-    def _create_kafka_consumer(self, consumer, serde, dlq_producer):
+    def _create_kafka_consumer(
+        self, consumer: Consumer, serde: KafkaSerde, dlq_producer: Producer | None
+    ) -> KafkaConsumer:
+        """
+        Creates the internal `KafkaConsumer` wrapper.
+
+        Args:
+            consumer: The `confluent_kafka.Consumer` instance.
+            serde: The serializer/deserializer instance.
+            dlq_producer: The producer for the dead-letter queue.
+
+        Returns:
+            An initialized `KafkaConsumer` instance.
+        """
         kafka_consumer = KafkaConsumer(
             topic=self.topic,
             consumer=consumer,
@@ -507,6 +615,19 @@ class KafkaTrigger(StageTrigger):
         dlq_producer: Producer | None,
         serde: KafkaSerde,
     ):
+        """
+        The main loop for consuming messages from Kafka.
+
+        This method continuously polls for messages, handles rollovers, and manages
+        the message buffer.
+
+        Args:
+            context: The trigger context for monitoring and staging.
+            kafka_consumer: The internal consumer wrapper.
+            consumer: The underlying `confluent_kafka.Consumer`.
+            dlq_producer: The DLQ producer.
+            serde: The serializer/deserializer.
+        """
         from tabsdata_kafka.consumer.messages_buffer import MessagesBuffer
 
         buffer: MessagesBuffer | None = None
@@ -566,14 +687,29 @@ class KafkaTrigger(StageTrigger):
 
     def _finalize_consumption(
         self,
-        context,
-        buffer,
-        rollover_reason,
-        kafka_consumer,
-        consumer,
-        dlq_producer,
-        stage_trigger_status,
+        context: StageTriggerContext,
+        buffer: MessagesBuffer | None,
+        rollover_reason: RolloverReason | None,
+        kafka_consumer: KafkaConsumer,
+        consumer: Consumer,
+        dlq_producer: Producer | None,
+        stage_trigger_status: StageTriggerStatus | None,
     ):
+        """
+        Handles the final steps of consumption before shutting down.
+
+        This includes a final buffer rollover, flushing the DLQ producer, and
+        closing the Kafka consumer.
+
+        Args:
+            context: The trigger context.
+            buffer: The current message buffer.
+            rollover_reason: The reason for the last rollover.
+            kafka_consumer: The internal consumer wrapper.
+            consumer: The underlying `confluent_kafka.Consumer`.
+            dlq_producer: The DLQ producer.
+            stage_trigger_status: The final status of the trigger.
+        """
         if buffer is not None:
             logger.debug("Final buffer rollover before shutdown.")
             handle_rollover(
@@ -641,62 +777,64 @@ class KafkaTrigger(StageTrigger):
                 f"Serde not created: unsupported data format '{self.data_format}'."
             )
 
+        def format_key() -> str:
+            if isinstance(self.data_format, Protobuf):
+                return _PROTOBUF
+            else:
+                return cast(str, self.data_format)
+
         def non_sr_serde():
             return {
-                MessageFormat.AVRO.value: lambda: AvroKafkaSerde(
-                    avro_schema=self.schema
-                ),
-                MessageFormat.JSON.value: lambda: JsonKafkaSerde(
-                    json_schema=self.schema
-                ),
-                MessageFormat.PROTOBUF.value: lambda: ProtobufKafkaSerde(
+                _AVRO: lambda: AvroKafkaSerde(avro_schema=self.schema),
+                _JSON: lambda: JsonKafkaSerde(json_schema=self.schema),
+                _PROTOBUF: lambda: ProtobufKafkaSerde(
                     protobuf_schema=self.schema,
-                    message_name=self.message_name,
+                    message_name=self.data_format.message_name,
                     working_dir=working_dir,
                 ),
-            }.get(self.data_format, lambda: _raise_unsupported())()
+            }.get(format_key(), lambda: _raise_unsupported())()
 
         def sr_serde():
             return {
-                MessageFormat.AVRO.value: lambda: AvroSrKafkaSerde(
+                _AVRO: lambda: AvroSrKafkaSerde(
                     schema_registry_client=schema_registry_client,
                     avro_schema=self.schema,
                 ),
-                MessageFormat.JSON.value: lambda: JsonSrKafkaSerde(
+                _JSON: lambda: JsonSrKafkaSerde(
                     schema_registry_client=schema_registry_client,
                     json_schema=self.schema,
                 ),
-                MessageFormat.PROTOBUF.value: lambda: ProtobufSrKafkaSerde(
+                _PROTOBUF: lambda: ProtobufSrKafkaSerde(
                     schema_registry_client=schema_registry_client,
                     protobuf_schema=self.schema,
-                    message_name=self.message_name,
+                    message_name=self.data_format.message_name,
                     working_dir=working_dir,
                 ),
-            }.get(self.data_format, lambda: _raise_unsupported())()
+            }.get(format_key(), lambda: _raise_unsupported())()
 
         def glue_serde():
             return {
-                MessageFormat.AVRO.value: lambda: AvroGlueKafkaSerde(
+                _AVRO: lambda: AvroGlueKafkaSerde(
                     glue_client=schema_registry_client,
-                    registry_name=self.registry_name,
-                    schema_name=self.schema_name,
+                    registry_name=self.conn.schema_registry.registry_name,
+                    schema_name=self.conn.schema_registry.schema_name,
                     avro_schema=self.schema,
                 ),
-                MessageFormat.JSON.value: lambda: JsonGlueKafkaSerde(
+                _JSON: lambda: JsonGlueKafkaSerde(
                     glue_client=schema_registry_client,
-                    registry_name=self.registry_name,
-                    schema_name=self.schema_name,
+                    registry_name=self.conn.schema_registry.registry_name,
+                    schema_name=self.conn.schema_registry.schema_name,
                     json_schema=self.schema,
                 ),
-                MessageFormat.PROTOBUF.value: lambda: ProtobufGlueKafkaSerde(
+                _PROTOBUF: lambda: ProtobufGlueKafkaSerde(
                     glue_client=schema_registry_client,
-                    registry_name=self.registry_name,
-                    schema_name=self.schema_name,
+                    registry_name=self.conn.schema_registry.registry_name,
+                    schema_name=self.conn.schema_registry.schema_name,
                     protobuf_schema=self.schema,
-                    message_name=self.message_name,
+                    message_name=self.data_format.message_name,
                     working_dir=working_dir,
                 ),
-            }.get(self.data_format, lambda: _raise_unsupported())()
+            }.get(format_key(), lambda: _raise_unsupported())()
 
         match schema_registry_client:
             case None:

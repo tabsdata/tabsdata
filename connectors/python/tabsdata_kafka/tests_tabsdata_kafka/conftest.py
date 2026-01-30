@@ -9,6 +9,7 @@ import logging
 from tabsdata._credentials import UserPasswordCredentials
 from tabsdata._io.stage_trigger import LocalFileStageTriggerContext
 from tabsdata_kafka._connector import AwsGlueSchemaRegistry, ConfluentSchemaRegistry
+from tabsdata_kafka.serdes.serde import KafkaSerde
 from tabsdata_kafka.typing import AwsGlueSchemaRegistryCredentialsSpec
 
 logger = logging.getLogger(__name__)
@@ -87,6 +88,7 @@ from mypy_boto3_glue.client import GlueClient
 
 from tabsdata_kafka.serdes.aws_glue_sr_serde import (
     AvroGlueKafkaSerde,
+    GlueKafkaSerde,
     JsonGlueKafkaSerde,
     ProtobufGlueKafkaSerde,
 )
@@ -156,6 +158,9 @@ def json_serde_no_schema():
     return JsonKafkaSerde(json_schema=None)
 
 
+PROTOBUF_MESSAGE_NAME = "PersonV1"
+
+
 @pytest.fixture(scope="module")
 def protobuf_serde_v1(tmp_path_factory):
     """Fixture for the original Protobuf schema (v1)."""
@@ -195,7 +200,7 @@ def confluent_sr_mock_registry():
 
 @pytest.fixture
 def confluent_schema_registry():
-    def _sr(config: KafkaConfig):
+    def _sr(config: KafkaConfig, _serde: KafkaSerde):
         return ConfluentSchemaRegistry(
             url=config.schema_registry_url,
             credentials=UserPasswordCredentials(
@@ -289,13 +294,17 @@ def confluent_sr_protobuf_serde(
 
 @pytest.fixture
 def aws_glue_schema_registry():
-    def _sr(config: KafkaConfig):
+    def _sr(_config: KafkaConfig, serde: GlueKafkaSerde):
+        registry_name = getattr(serde, "_registry_name")
+        schema_name = getattr(serde, "_schema_name")
         return AwsGlueSchemaRegistry(
             region_name="us-east-1",
             credentials=AwsGlueSchemaRegistryCredentialsSpec(
                 aws_access_key_id="test_access_key_id",
                 aws_secret_access_key="test_secret_access_key",
             ),
+            registry_name=registry_name,
+            schema_name=schema_name,
             configs=None,
         )
 

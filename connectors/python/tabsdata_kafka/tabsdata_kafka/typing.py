@@ -1,7 +1,7 @@
 #
 # Copyright 2026 Tabs Data Inc.
 #
-
+from dataclasses import dataclass
 from typing import Callable, Literal, TypeAlias, Union
 
 from tabsdata._credentials import S3AccessKeyCredentials, UserPasswordCredentials
@@ -12,10 +12,29 @@ SchemaIdCompatibles: TypeAlias = Callable[[SchemaIdSpec, SchemaIdSpec], bool]
 
 KafkaServersSpec: TypeAlias = Union[str, list[str]]
 
-KafkaMessageFormatSpec = Literal["avro", "json", "protobuf"]
-
 AwsGlueSchemaRegistryCredentialsSpec: TypeAlias = S3AccessKeyCredentials
 
 ConfluentSchemaRegistryCredentialsSpec: TypeAlias = UserPasswordCredentials
 
 KafkaCredentialsSpec: TypeAlias = UserPasswordCredentials
+
+
+@dataclass(frozen=True)
+class Protobuf:
+    """
+    Represents the Protobuf message format configuration.
+
+    This class is used to specify the details required for handling Protobuf
+    messages, particularly the name of the message type to be used for
+    deserialization.
+
+    Attributes:
+        message_name: The name of the Protobuf message type.
+    """
+
+    message_name: str
+
+
+KafkaMessageFormatSpec: TypeAlias = Union[Literal["avro", "json"], Protobuf]
+
+_KafkaMessageFormatNameSpec: TypeAlias = Literal["avro", "json", "protobuf"]
