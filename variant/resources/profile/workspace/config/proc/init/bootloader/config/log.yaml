@@ -8,6 +8,8 @@ profiles:
   development:
     output: stdout
     level: debug
+    directives:
   production:
     output: file
     level: debug
+    directives:
