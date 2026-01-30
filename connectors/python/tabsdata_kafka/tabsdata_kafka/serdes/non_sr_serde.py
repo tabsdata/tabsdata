@@ -2,16 +2,20 @@
 #  Copyright 2026. Tabs Data Inc.
 #
 
+from __future__ import annotations
+
 import io
 import json
 from abc import ABC
-from typing import Callable
+from typing import TYPE_CHECKING, Callable, cast
 
 import avro.io
 import avro.schema
 import jsonschema
-from confluent_kafka.serialization import SerializationContext
 from google.protobuf.json_format import MessageToDict, ParseDict
+
+if TYPE_CHECKING:
+    from confluent_kafka.serialization import SerializationContext
 
 from tabsdata_kafka.constants import (
     MessageFormat,
@@ -68,7 +72,7 @@ class JsonKafkaSerde(NonSrKafkaSerde):
 
     @staticmethod
     def _make_serializer(json_schema):
-        def serialize(obj: dict, ctx: SerializationContext) -> bytes:
+        def serialize(obj: dict, _: SerializationContext) -> bytes:
             if obj is None:
                 raise RuntimeError("Serialization failed: 'obj' is None")
 
@@ -91,7 +95,7 @@ class JsonKafkaSerde(NonSrKafkaSerde):
 
     @staticmethod
     def _make_deserializer(json_schema):
-        def deserialize(bytes_data: bytes, ctx: SerializationContext) -> dict:
+        def deserialize(bytes_data: bytes, _: SerializationContext) -> dict:
             if bytes_data is None:
                 raise RuntimeError("Deserialization failed: 'bytes_data' is None")
 
@@ -121,7 +125,7 @@ class JsonKafkaSerde(NonSrKafkaSerde):
 
     @property
     def format(self) -> KafkaMessageFormatSpec:
-        return MessageFormat.JSON.value
+        return cast(KafkaMessageFormatSpec, MessageFormat.JSON.value)
 
     def serializer(self) -> Callable[[dict, SerializationContext], bytes]:
         """
@@ -185,7 +189,7 @@ class AvroKafkaSerde(NonSrKafkaSerde):
 
     @property
     def format(self) -> KafkaMessageFormatSpec:
-        return MessageFormat.AVRO.value
+        return cast(KafkaMessageFormatSpec, MessageFormat.AVRO.value)
 
     def serializer(self) -> Callable[[dict, SerializationContext], bytes]:
         return self._serializer
@@ -245,7 +249,7 @@ class ProtobufKafkaSerde(NonSrKafkaSerde):
 
     @property
     def format(self) -> KafkaMessageFormatSpec:
-        return MessageFormat.PROTOBUF.value
+        return cast(KafkaMessageFormatSpec, MessageFormat.PROTOBUF.value)
 
     def serializer(self) -> Callable[[dict, SerializationContext], bytes]:
         return self._serializer

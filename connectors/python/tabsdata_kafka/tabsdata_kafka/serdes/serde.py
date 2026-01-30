@@ -2,10 +2,13 @@
 # Copyright 2026 Tabs Data Inc.
 #
 
-from abc import ABC, abstractmethod
-from typing import Callable, Literal, TypeAlias, Union
+from __future__ import annotations
 
-from confluent_kafka.serialization import SerializationContext
+from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING, Callable, Literal, TypeAlias, Union
+
+if TYPE_CHECKING:
+    from confluent_kafka.serialization import SerializationContext
 
 MsgFormatSpec: TypeAlias = Literal["avro", "json", "protobuf"]
 

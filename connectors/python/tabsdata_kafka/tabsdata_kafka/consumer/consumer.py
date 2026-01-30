@@ -1,15 +1,18 @@
 #
 # Copyright 2026 Tabs Data Inc.
 #
+
 from __future__ import annotations
 
 import json
 import logging
 import time
 from enum import Enum
+from typing import TYPE_CHECKING
 
-from confluent_kafka import Consumer, KafkaError, Message, Producer
-from confluent_kafka.serialization import MessageField, SerializationContext
+if TYPE_CHECKING:
+    from confluent_kafka import Consumer, KafkaError, Message, Producer
+
 
 from tabsdata_kafka.constants import CONNECTION_TIMEOUT_SECS
 from tabsdata_kafka.consumer.messages_buffer import MessagesBuffer
@@ -66,7 +69,7 @@ class KafkaConsumer:
     def _new_buffer(self) -> MessagesBuffer:
         return MessagesBuffer(self._topic, self._serde.schema_id_compatibles_checker())
 
-    def _send_to_dlq(self, msg: Message, error: Exception):
+    def _send_to_dlq(self, msg: Message, error: Exception | KafkaError):
         if self._dlq_producer and self._dlq_topic:
             dlq_message = {
                 "original_value": (
@@ -82,7 +85,7 @@ class KafkaConsumer:
             }
             self._dlq_producer.produce(
                 topic=self._dlq_topic,
-                key=str(msg.key()),
+                key=msg.key(),
                 value=json.dumps(dlq_message).encode("utf-8"),
                 callback=lambda err, _msg: logger.debug(
                     f"DLQ delivery failed: {err}" if err else "DLQ message delivered"
@@ -118,6 +121,9 @@ class KafkaConsumer:
             if self._is_timeout(start, timeout_secs, msg):
                 return RolloverReason.Time, self._buffer
             if msg.error():
+                from confluent_kafka import KafkaError
+
+                # noinspection PyProtectedMember,PyUnresolvedReferences
                 if msg.error().code() == KafkaError._PARTITION_EOF:
                     continue  # continue polling
                 else:
@@ -137,12 +143,15 @@ class KafkaConsumer:
         logger.error("Exited consume loop unexpectedly")
         raise RuntimeError("Exited consume loop unexpectedly")
 
-    def _is_timeout(self, start, timeout_secs, msg):
+    @staticmethod
+    def _is_timeout(start, timeout_secs, msg):
         if time.time() - start > timeout_secs or msg is None:
             return True
         return False
 
     def _handle_error(self, msg):
+        from confluent_kafka import KafkaError
+
         # noinspection PyProtectedMember,PyUnresolvedReferences
         if msg.error().code() == KafkaError._PARTITION_EOF:
             return True  # continue polling
@@ -152,6 +161,8 @@ class KafkaConsumer:
             return True  # continue polling
 
     def _process_message(self, msg):
+        from confluent_kafka.serialization import MessageField, SerializationContext
+
         data = msg.value()
         (record, schema_id) = self._serde.deserializer_with_schema_id()(
             data, SerializationContext(msg.topic(), MessageField.VALUE)
@@ -161,7 +172,7 @@ class KafkaConsumer:
             message_buffer = self._buffer
             self._buffer = self._new_buffer()
             self._buffer.append(entry)
-            return (RolloverReason.SchemaChange, message_buffer)
+            return RolloverReason.SchemaChange, message_buffer
 
         self._commit_message = msg
 
@@ -171,12 +182,12 @@ class KafkaConsumer:
         ):
             message_buffer = self._buffer
             self._buffer = self._new_buffer()
-            return (RolloverReason.Messages, message_buffer)
+            return RolloverReason.Messages, message_buffer
 
         if self._size_rollover_mb and self._buffer.size_mb >= self._size_rollover_mb:
             message_buffer = self._buffer
             self._buffer = self._new_buffer()
-            return (RolloverReason.Size, message_buffer)
+            return RolloverReason.Size, message_buffer
 
         return None
 
@@ -214,3 +225,11 @@ class RolloverReason(Enum):
     Size = 2, "The buffer size limit was reached"
     Messages = 3, "The message count limit was reached"
     Time = 4, "The consume timeout was reached"
+
+    @property
+    def code(self) -> int:
+        return self.value[0]
+
+    @property
+    def description(self) -> str:
+        return self.value[1]

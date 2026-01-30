@@ -8,7 +8,7 @@ import zlib
 from abc import ABC
 from functools import lru_cache
 from io import BytesIO
-from typing import Callable
+from typing import Callable, cast
 
 import jsonschema
 from confluent_kafka.serialization import Deserializer, SerializationContext, Serializer
@@ -211,7 +211,7 @@ class JsonGlueSerializer(AwsGlueSerializer):
             MessageFormat.JSON.value,
         )
 
-    def __call__(self, obj: dict, ctx: SerializationContext = None) -> bytes:
+    def __call__(self, obj: dict, ctx: SerializationContext = None) -> bytes | None:
         if obj is None:
             return None
         json_bytes = json.dumps(obj).encode("utf-8")
@@ -230,7 +230,7 @@ class JsonGlueDeserializer(AwsGlueDeserializer):
         super().__init__(glue_client=glue_client)
         self.validate = validate_schema
 
-    def __call__(self, data: bytes, ctx: SerializationContext = None) -> dict:
+    def __call__(self, data: bytes, ctx: SerializationContext = None) -> dict | None:
         if data is None:
             return None
 
@@ -245,6 +245,7 @@ class JsonGlueDeserializer(AwsGlueDeserializer):
         return obj
 
 
+# noinspection DuplicatedCode
 class JsonGlueKafkaSerde(GlueKafkaSerde):
     def __init__(
         self,
@@ -276,7 +277,7 @@ class JsonGlueKafkaSerde(GlueKafkaSerde):
 
     @property
     def format(self) -> KafkaMessageFormatSpec:
-        return MessageFormat.JSON.value
+        return cast(KafkaMessageFormatSpec, MessageFormat.JSON.value)
 
     def serializer(self) -> Callable[[dict, SerializationContext], bytes]:
         return self._serializer
@@ -304,7 +305,7 @@ class AvroGlueSerializer(AwsGlueSerializer):
         )
         self.parsed_schema = parse_schema(json.loads(schema_definition))
 
-    def __call__(self, obj: dict, ctx: SerializationContext = None) -> bytes:
+    def __call__(self, obj: dict, ctx: SerializationContext = None) -> bytes | None:
         if obj is None:
             return None
 
@@ -328,7 +329,7 @@ class AvroGlueDeserializer(AwsGlueDeserializer):
             )
         return self._parsed_schema_cache[schema_uuid]
 
-    def __call__(self, data: bytes, ctx: SerializationContext = None) -> dict:
+    def __call__(self, data: bytes, ctx: SerializationContext = None) -> dict | None:
         if data is None:
             return None
 
@@ -339,6 +340,7 @@ class AvroGlueDeserializer(AwsGlueDeserializer):
             return schemaless_reader(bio, writer_schema)
 
 
+# noinspection DuplicatedCode
 class AvroGlueKafkaSerde(GlueKafkaSerde):
     def __init__(
         self, glue_client, registry_name: str, schema_name: str, avro_schema: str
@@ -364,7 +366,7 @@ class AvroGlueKafkaSerde(GlueKafkaSerde):
 
     @property
     def format(self) -> KafkaMessageFormatSpec:
-        return MessageFormat.AVRO.value
+        return cast(KafkaMessageFormatSpec, MessageFormat.AVRO.value)
 
     def serializer(self) -> Callable[[dict, SerializationContext], bytes]:
         return self._serializer
@@ -397,7 +399,7 @@ class ProtobufGlueSerializer(AwsGlueSerializer):
         )
         self.msg_class = msg_class
 
-    def __call__(self, obj: Message, ctx: SerializationContext = None) -> bytes:
+    def __call__(self, obj: Message, ctx: SerializationContext = None) -> bytes | None:
         if obj is None:
             return None
 
@@ -406,11 +408,11 @@ class ProtobufGlueSerializer(AwsGlueSerializer):
 
 
 class ProtobufGlueDeserializer(AwsGlueDeserializer):
-    def __init__(self, glue_client, msg_class: Message):
+    def __init__(self, glue_client, msg_class: type[Message]):
         super().__init__(glue_client=glue_client)
         self.msg_class = msg_class
 
-    def __call__(self, data: bytes, ctx: SerializationContext = None) -> dict:
+    def __call__(self, data: bytes, ctx: SerializationContext = None) -> Message | None:
         if data is None:
             return None
 
@@ -475,7 +477,7 @@ class ProtobufGlueKafkaSerde(GlueKafkaSerde):
     def _make_deserializer(glue_client, msg_class):
         class_deserializer = ProtobufGlueDeserializer(glue_client, msg_class)
 
-        def deserializer(data: bytes, ctx: SerializationContext) -> dict:
+        def deserializer(data: bytes, ctx: SerializationContext) -> dict | None:
             obj = class_deserializer(data, ctx)
             return MessageToDict(
                 obj,
@@ -487,7 +489,7 @@ class ProtobufGlueKafkaSerde(GlueKafkaSerde):
 
     @property
     def format(self) -> KafkaMessageFormatSpec:
-        return MessageFormat.PROTOBUF.value
+        return cast(KafkaMessageFormatSpec, MessageFormat.PROTOBUF.value)
 
     def serializer(self) -> Callable[[dict, SerializationContext], bytes]:
         return self._serializer

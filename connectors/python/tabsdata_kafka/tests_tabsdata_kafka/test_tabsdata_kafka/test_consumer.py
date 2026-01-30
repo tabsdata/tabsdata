@@ -8,7 +8,6 @@ import uuid
 
 import pytest
 from confluent_kafka import Consumer
-from confluent_kafka.serialization import MessageField, SerializationContext
 
 from tabsdata_kafka.consumer.consumer import KafkaConsumer, RolloverReason
 from tabsdata_kafka.consumer.messages_buffer import MessagesBuffer
@@ -202,8 +201,8 @@ def test_consumer_messages_rollover(
         serde = serde_obj
     topic = f"test-consumer-messages-rollover-{serde.format}-{str(uuid.uuid4())}"
 
-    TOTAL_MESSAGES = 100
-    produce_kafka_messages(topic, TOTAL_MESSAGES, serde, get_message)
+    total_messages = 100
+    produce_kafka_messages(topic, total_messages, serde, get_message)
 
     # Create consumer
     consumer_config = {
@@ -226,11 +225,11 @@ def test_consumer_messages_rollover(
         responses = []
         received_messages = 0
         loop_start_time = time.time()
-        while received_messages < TOTAL_MESSAGES:
+        while received_messages < total_messages:
             if time.time() - loop_start_time > 30:  # 30 second timeout
                 pytest.fail(
                     "Timeout waiting for messages in messages_rollover test. "
-                    f"Received {received_messages}/{TOTAL_MESSAGES} messages"
+                    f"Received {received_messages}/{total_messages} messages"
                 )
 
             (reason, buffer) = consumer.consume(1)
@@ -239,7 +238,7 @@ def test_consumer_messages_rollover(
                 responses.append((reason, buffer))
                 consumer.commit()
 
-        assert TOTAL_MESSAGES == received_messages
+        assert total_messages == received_messages
 
         for reason, buffer in responses:
             assert reason in [

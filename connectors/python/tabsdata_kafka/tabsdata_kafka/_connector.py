@@ -10,7 +10,7 @@ import sys
 import time
 from abc import ABC
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, cast
 
 import boto3
 from botocore.client import BaseClient
@@ -46,25 +46,7 @@ from tabsdata_kafka.constants import (
     MessageFormat,
 )
 from tabsdata_kafka.consumer.consumer import KafkaConsumer, RolloverReason
-from tabsdata_kafka.consumer.messages_buffer import MessagesBuffer
-from tabsdata_kafka.serdes.aws_glue_sr_serde import (
-    AvroGlueKafkaSerde,
-    JsonGlueKafkaSerde,
-    ProtobufGlueKafkaSerde,
-)
-from tabsdata_kafka.serdes.confluent_sr_serde import (
-    AvroSrKafkaSerde,
-    JsonSrKafkaSerde,
-    ProtobufSrKafkaSerde,
-)
-from tabsdata_kafka.serdes.non_sr_serde import (
-    AvroKafkaSerde,
-    JsonKafkaSerde,
-    ProtobufKafkaSerde,
-)
-from tabsdata_kafka.serdes.serde import (
-    KafkaSerde,
-)
+from tabsdata_kafka.serdes.serde import KafkaSerde
 from tabsdata_kafka.typing import (
     AwsGlueSchemaRegistryCredentialsSpec,
     ConfluentSchemaRegistryCredentialsSpec,
@@ -472,13 +454,15 @@ class KafkaTrigger(StageTrigger):
 
         self._consume_loop(context, kafka_consumer, consumer, dlq_producer, serde)
 
-    def _setup_sigterm_handler(self):
-        def _sigterm_handler(signum, frame):
+    @staticmethod
+    def _setup_sigterm_handler():
+        def _sigterm_handler(_signum, _frame):
             raise KeyboardInterrupt
 
         signal.signal(signal.SIGTERM, _sigterm_handler)
 
-    def _create_consumer(self, kafka_configs):
+    @staticmethod
+    def _create_consumer(kafka_configs):
         from confluent_kafka import Consumer
 
         try:
@@ -523,6 +507,8 @@ class KafkaTrigger(StageTrigger):
         dlq_producer: Producer | None,
         serde: KafkaSerde,
     ):
+        from tabsdata_kafka.consumer.messages_buffer import MessagesBuffer
+
         buffer: MessagesBuffer | None = None
         stage_trigger_status = None
         rollover_reason: RolloverReason | None = None
@@ -552,7 +538,7 @@ class KafkaTrigger(StageTrigger):
                     start = handle_rollover(
                         context=context,
                         buffer=buffer,
-                        rollover_reason=rollover_reason,
+                        rollover_reason=cast(RolloverReason, rollover_reason),
                         working_dir=str(context.working_dir),
                         kafka_consumer=kafka_consumer,
                     )
@@ -629,6 +615,22 @@ class KafkaTrigger(StageTrigger):
         Returns:
             A KafkaSerde instance.
         """
+
+        from tabsdata_kafka.serdes.aws_glue_sr_serde import (
+            AvroGlueKafkaSerde,
+            JsonGlueKafkaSerde,
+            ProtobufGlueKafkaSerde,
+        )
+        from tabsdata_kafka.serdes.confluent_sr_serde import (
+            AvroSrKafkaSerde,
+            JsonSrKafkaSerde,
+            ProtobufSrKafkaSerde,
+        )
+        from tabsdata_kafka.serdes.non_sr_serde import (
+            AvroKafkaSerde,
+            JsonKafkaSerde,
+            ProtobufKafkaSerde,
+        )
 
         schema_registry_client = self._build_schema_registry_client()
 

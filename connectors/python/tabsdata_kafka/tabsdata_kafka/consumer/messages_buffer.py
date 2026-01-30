@@ -104,16 +104,18 @@ class MessagesBuffer:
         import pyarrow as pa
         import pyarrow.parquet as pq
 
-        # Pyarrow infers schema from the list of dicts
-        # all messages have the same column names or a subset of the colum names of the
-        # first one
-        # we sort the column names so the order of columns in the parquet files are
-        # always the same
-        # for the same column names, thus 'same schema'
+        # PyArrow infers schema from the list of dicts.
+        # Messages have the same column names or a subset of the first message's
+        # columns.
+        # Sorting ensures consistent column order in parquet files for identical
+        # schemas.
         column_names = sorted(list(self.messages[0].keys()))
 
+        # noinspection PyArgumentList
         table = pa.Table.from_pydict(
-            {k: [message.get(k) for message in self.messages] for k in column_names}
+            mapping={
+                k: [message.get(k) for message in self.messages] for k in column_names
+            }
         )
         pq.write_table(table, file_path)
         self._flushed = True

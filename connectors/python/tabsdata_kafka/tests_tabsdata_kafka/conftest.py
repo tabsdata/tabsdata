@@ -72,11 +72,9 @@ import json
 import os
 import shutil
 import uuid
-from typing import Any, Generator
 from unittest.mock import MagicMock
 
 import avro.schema
-import requests
 from confluent_kafka import Consumer, Producer
 from confluent_kafka.admin import AdminClient
 from confluent_kafka.cimpl import NewTopic

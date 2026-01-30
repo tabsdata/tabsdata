@@ -4,16 +4,17 @@
 
 import os
 import uuid
-from unittest.mock import MagicMock, patch
+from typing import cast
+from unittest.mock import patch
 
 import pytest
-from mypy_boto3_glue.client import GlueClient
 
 from tabsdata._credentials import UserPasswordCredentials
 from tabsdata.exceptions import (
     ErrorCode,
     ParameterValidationError,
 )
+from tabsdata_kafka import KafkaMessageFormatSpec
 from tabsdata_kafka._connector import (
     AwsGlueSchemaRegistry,
     AwsGlueSchemaRegistryCredentialsSpec,
@@ -36,15 +37,8 @@ from tabsdata_kafka.serdes.non_sr_serde import (
     JsonKafkaSerde,
     ProtobufKafkaSerde,
 )
-from tabsdata_kafka.typing import KafkaMessageFormatSpec
 from tests_tabsdata_kafka.conftest import (
-    aws_glue_sr_avro_schema_str,
-    aws_glue_sr_json_schema_str,
-    aws_glue_sr_mock_avro_glue_client,
-    aws_glue_sr_mock_json_glue_client,
     aws_glue_sr_mock_protobuf_glue_client,
-    aws_glue_sr_protobuf_schema_str,
-    confluent_sr_mock_registry,
 )
 
 
@@ -158,8 +152,8 @@ def test_confluent_schema_registry_properties():
 
 def test_aws_glue_schema_registry_properties():
     creds = AwsGlueSchemaRegistryCredentialsSpec(
-        aws_access_key_id="AKIA...",
-        aws_secret_access_key="SECRET...",
+        aws_access_key_id="AWS_ACCESS_KEY_ID...",
+        aws_secret_access_key="AWS_SECRET_ACCESS_KEY...",
     )
     configs = {"endpoint_url": "http://localhost:4566"}
     sr = AwsGlueSchemaRegistry(
@@ -278,6 +272,7 @@ def test_type_validation(kafka_conn):
 
     # Should raise if topic is not a string
     with pytest.raises(ParameterValidationError) as e:
+        # noinspection PyTypeChecker
         KafkaTrigger(
             conn=kafka_conn,
             topic=123,
@@ -288,6 +283,7 @@ def test_type_validation(kafka_conn):
 
     # Should raise if data_format is not a valid KafkaMessageFormatSpec or string
     with pytest.raises(ParameterValidationError) as e:
+        # noinspection PyTypeChecker
         KafkaTrigger(
             conn=kafka_conn,
             topic="t",
@@ -298,6 +294,7 @@ def test_type_validation(kafka_conn):
 
     # Should raise if schema is not a string
     with pytest.raises(ParameterValidationError) as e:
+        # noinspection PyTypeChecker
         KafkaTrigger(
             conn=kafka_conn,
             topic="t",
@@ -329,6 +326,7 @@ def test_type_validation(kafka_conn):
 
     # Should raise if messages_rollover is not a MessagesRollover or None
     with pytest.raises(ParameterValidationError) as e:
+        # noinspection PyTypeChecker
         KafkaTrigger(
             conn=kafka_conn,
             topic="t",
@@ -350,6 +348,7 @@ def test_type_validation(kafka_conn):
 
     # Should raise if dlq_topic is not a string or None
     with pytest.raises(ParameterValidationError) as e:
+        # noinspection PyTypeChecker
         KafkaTrigger(
             conn=kafka_conn,
             topic="t",
@@ -437,12 +436,12 @@ def test_serde_factory(
     trigger = KafkaTrigger(
         conn=conn,
         topic="topic-x",
-        data_format=data_format,
+        data_format=cast(KafkaMessageFormatSpec, data_format),
         schema=schema,
         registry_name="test-registry",
         schema_name="user-schema",
         message_name="PersonV1",
     )
 
-    tr_sr = trigger._get_serde(tmp_path)
+    tr_sr = trigger._get_serde(str(tmp_path))
     assert isinstance(tr_sr, expected_serde_class)

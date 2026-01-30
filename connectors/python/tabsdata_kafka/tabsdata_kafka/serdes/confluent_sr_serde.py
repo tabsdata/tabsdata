@@ -3,7 +3,7 @@
 #
 
 from abc import ABC
-from typing import Callable
+from typing import Callable, cast
 
 from confluent_kafka.schema_registry import SchemaRegistryClient
 from confluent_kafka.schema_registry.avro import AvroDeserializer, AvroSerializer
@@ -44,6 +44,7 @@ class SrKafkaSerde(KafkaSerde, ABC):
         return lambda a, b: a == b
 
 
+# noinspection DuplicatedCode
 class AvroSrKafkaSerde(SrKafkaSerde):
     """
     KafkaSerde implementation for Avro schemas with Schema Registry.
@@ -60,11 +61,13 @@ class AvroSrKafkaSerde(SrKafkaSerde):
             avro_schema: Avro schema string.
         """
         super().__init__()
+        # noinspection PyArgumentList
         self._serializer = AvroSerializer(
             schema_str=avro_schema,
             schema_registry_client=schema_registry_client,
             to_dict=lambda obj, ctx: obj,
         )
+        # noinspection PyArgumentList
         self._deserializer = AvroDeserializer(
             schema_str=avro_schema,
             schema_registry_client=schema_registry_client,
@@ -74,7 +77,7 @@ class AvroSrKafkaSerde(SrKafkaSerde):
 
     @property
     def format(self) -> KafkaMessageFormatSpec:
-        return MessageFormat.AVRO.value
+        return cast(KafkaMessageFormatSpec, MessageFormat.AVRO.value)
 
     def serializer(self) -> Callable[[dict, SerializationContext], bytes]:
         return self._serializer
@@ -86,6 +89,7 @@ class AvroSrKafkaSerde(SrKafkaSerde):
         return f"AvroSrKafkaSerde(schema={self._schema})"
 
 
+# noinspection DuplicatedCode
 class JsonSrKafkaSerde(SrKafkaSerde):
     """
     KafkaSerde implementation for Json schemas.
@@ -102,21 +106,26 @@ class JsonSrKafkaSerde(SrKafkaSerde):
             json_schema: JSON schema string.
         """
         super().__init__()
+        # noinspection PyArgumentList
         self._serializer = JSONSerializer(
-            schema_str=json_schema, schema_registry_client=schema_registry_client
+            schema_str=json_schema,
+            schema_registry_client=schema_registry_client,
         )
+        # noinspection PyArgumentList
         self._deserializer = JSONDeserializer(
-            schema_str=json_schema, schema_registry_client=schema_registry_client
+            schema_str=json_schema,
+            schema_registry_client=schema_registry_client,
         )
         self._schema = json_schema
 
     @property
     def format(self) -> KafkaMessageFormatSpec:
-        return MessageFormat.JSON.value
+        return cast(KafkaMessageFormatSpec, MessageFormat.JSON.value)
 
     def serializer(self) -> Callable[[dict, SerializationContext], bytes]:
         return self._serializer
 
+    # noinspection PyTypeChecker
     def deserializer(self) -> Callable[[bytes, SerializationContext], dict]:
         return self._deserializer
 
@@ -157,6 +166,7 @@ class ProtobufSrKafkaSerde(SrKafkaSerde):
 
     @staticmethod
     def _make_serializer(schema_registry_client, msg_class):
+        # noinspection PyArgumentList
         class_serializer = ProtobufSerializer(
             msg_type=msg_class,
             schema_registry_client=schema_registry_client,
@@ -171,6 +181,7 @@ class ProtobufSrKafkaSerde(SrKafkaSerde):
 
     @staticmethod
     def _make_deserializer(schema_registry_client, msg_class):
+        # noinspection PyArgumentList
         class_deserializer = ProtobufDeserializer(
             message_type=msg_class,
             schema_registry_client=schema_registry_client,
@@ -178,6 +189,7 @@ class ProtobufSrKafkaSerde(SrKafkaSerde):
 
         def deserializer(data: bytes, ctx: SerializationContext) -> dict:
             obj = class_deserializer(data, ctx)
+            # noinspection PyTypeChecker
             return MessageToDict(
                 obj,
                 preserving_proto_field_name=True,
@@ -188,7 +200,7 @@ class ProtobufSrKafkaSerde(SrKafkaSerde):
 
     @property
     def format(self) -> KafkaMessageFormatSpec:
-        return MessageFormat.PROTOBUF.value
+        return cast(KafkaMessageFormatSpec, MessageFormat.PROTOBUF.value)
 
     def serializer(self) -> Callable[[dict, SerializationContext], bytes]:
         return self._serializer

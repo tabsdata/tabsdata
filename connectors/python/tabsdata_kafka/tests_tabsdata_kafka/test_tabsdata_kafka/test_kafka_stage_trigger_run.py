@@ -2,49 +2,24 @@
 # Copyright 2026 Tabs Data Inc.
 #
 
-import inspect
 import logging
 import os
 import uuid
 from datetime import datetime, timedelta, timezone
-from io import StringIO
 from typing import cast
-from unittest import mock
 
-import polars as pl
 import pyarrow.parquet as pq
 import pytest
-from confluent_kafka.schema_registry._sync.mock_schema_registry_client import (
-    MockSchemaRegistryClient,
-)
 
 import tabsdata as td
 from tabsdata._credentials import UserPasswordCredentials
-from tabsdata._io.stage_trigger import (
-    CallConfig,
-    StageTriggerStatus,
-)
-from tabsdata._tabsserver.invoker import REQUEST_FILE_NAME
-from tabsdata._tabsserver.invoker import invoke as tabsserver_main
-from tabsdata._utils.bundle_utils import create_bundle_archive
 from tabsdata_kafka._connector import KafkaConn, KafkaTrigger
 from tests_tabsdata.bootest import TDLOCAL_FOLDER
 from tests_tabsdata.common.backend.kafka import kafka_config
-from tests_tabsdata.common.constants import PYTEST_DEFAULT_ENVIRONMENT_PREFIX
-from tests_tabsdata.conftest import (
-    ABSOLUTE_TEST_FOLDER_LOCATION,
-    FUNCTION_DATA_FOLDER,
-    LOCAL_PACKAGES_LIST,
-    write_v2_function_yaml_file,
-)
+from tests_tabsdata.conftest import ABSOLUTE_TEST_FOLDER_LOCATION
 from tests_tabsdata.fntest import tdfnjob
 from tests_tabsdata_kafka.conftest import (
     TIMEOUT_SECS,
-    MockLocalFileStageTriggerContext,
-    aws_glue_schema_registry,
-    aws_glue_sr_avro_glue_serde,
-    aws_glue_sr_mock_avro_glue_client,
-    confluent_schema_registry,
     get_avro_message,
     get_json_message,
     get_large_avro_message,
@@ -88,46 +63,46 @@ LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
             get_avro_message,
             None,
         ),
-            (
-                "json_serde",
-                get_json_message,
-                None,
-            ),
-            (
-                "protobuf_serde_v1",
-                get_protobuf_message,
-                None,
-            ),
-            (
-                "confluent_sr_avro_serde",
-                get_avro_message,
-                "confluent_schema_registry",
-            ),
-            (
-                "confluent_sr_json_serde",
-                get_avro_message,
-                "confluent_schema_registry",
-            ),
-            (
-                "confluent_sr_protobuf_serde",
-                get_protobuf_message,
-                "confluent_schema_registry",
-            ),
-            (
-                "aws_glue_sr_avro_glue_serde",
-                get_avro_message,
-                "aws_glue_schema_registry",
-            ),
-            (
-                "aws_glue_sr_json_glue_serde",
-                get_avro_message,
-                "aws_glue_schema_registry",
-            ),
-            (
-                "aws_glue_sr_protobuf_glue_serde",
-                get_protobuf_message,
-                "aws_glue_schema_registry",
-            ),
+        (
+            "json_serde",
+            get_json_message,
+            None,
+        ),
+        (
+            "protobuf_serde_v1",
+            get_protobuf_message,
+            None,
+        ),
+        (
+            "confluent_sr_avro_serde",
+            get_avro_message,
+            "confluent_schema_registry",
+        ),
+        (
+            "confluent_sr_json_serde",
+            get_avro_message,
+            "confluent_schema_registry",
+        ),
+        (
+            "confluent_sr_protobuf_serde",
+            get_protobuf_message,
+            "confluent_schema_registry",
+        ),
+        (
+            "aws_glue_sr_avro_glue_serde",
+            get_avro_message,
+            "aws_glue_schema_registry",
+        ),
+        (
+            "aws_glue_sr_json_glue_serde",
+            get_avro_message,
+            "aws_glue_schema_registry",
+        ),
+        (
+            "aws_glue_sr_protobuf_glue_serde",
+            get_protobuf_message,
+            "aws_glue_schema_registry",
+        ),
     ],
 )
 def test_kafka_stage_trigger_time_rollover(
