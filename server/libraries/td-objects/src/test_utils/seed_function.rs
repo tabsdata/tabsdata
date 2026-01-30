@@ -9,10 +9,12 @@ use crate::dxo::dependency::DependencyDBBuilder;
 use crate::dxo::function::{FunctionDB, FunctionDBBuilder, FunctionRegister};
 use crate::dxo::table::{TableDBBuilder, TableDBWithNames};
 use crate::dxo::trigger::TriggerDBBuilder;
+use crate::dxo::worker::WorkerDBBuilder;
 use crate::sql::{DaoQueries, Insert, SelectBy};
 use crate::types::basic::{
     AccessTokenId, DataLocation, DependencyPos, DependencyStatus, RoleId, StorageVersion,
-    TableFunctionParamPos, TableId, TableName, TableStatus, TriggerStatus, UserId,
+    TableFunctionParamPos, TableId, TableName, TableStatus, TriggerStatus, UserId, WorkerType,
+    WorkerTypeDto,
 };
 use td_database::sql::DbPool;
 
@@ -162,6 +164,31 @@ pub async fn seed_function(
 
             queries
                 .insert(&trigger)
+                .unwrap()
+                .build()
+                .execute(db)
+                .await
+                .unwrap();
+        }
+    }
+
+    // Very similar to build_worker
+    if let Some(workers) = &function_create.workers {
+        let builder = WorkerDBBuilder::try_from(&function_db).unwrap();
+
+        for (worker_type, worker_config) in workers {
+            let worker = builder
+                .clone()
+                .worker_type(match worker_type {
+                    WorkerTypeDto::CronTrigger => WorkerType::CronTrigger,
+                    WorkerTypeDto::StageTrigger => WorkerType::StageTrigger,
+                })
+                .worker_config(Some(worker_config.clone()))
+                .build()
+                .unwrap();
+
+            queries
+                .insert(&worker)
                 .unwrap()
                 .build()
                 .execute(db)

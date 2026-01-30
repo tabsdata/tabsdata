@@ -20,14 +20,14 @@ mod routes {
     use td_objects::dxo::bundle::Bundle;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::dxo::function::{
-        Function, FunctionRegister, FunctionUpdate, FunctionWithTables,
+        Function, FunctionEnable, FunctionRegister, FunctionUpdate, FunctionWithTables,
     };
     use td_objects::dxo::function_upload::FunctionUpload;
     use td_objects::rest_urls::params::{CollectionAtName, FunctionAtIdName};
     use td_objects::rest_urls::{
-        AtTimeParam, CollectionParam, FUNCTION_CREATE, FUNCTION_DELETE, FUNCTION_GET,
-        FUNCTION_HISTORY, FUNCTION_LIST, FUNCTION_LIST_BY_COLL, FUNCTION_UPDATE, FUNCTION_UPLOAD,
-        FunctionParam,
+        AtTimeParam, CollectionParam, FUNCTION_CREATE, FUNCTION_DELETE, FUNCTION_ENABLE,
+        FUNCTION_GET, FUNCTION_HISTORY, FUNCTION_LIST, FUNCTION_LIST_BY_COLL, FUNCTION_UPDATE,
+        FUNCTION_UPLOAD, FunctionParam,
     };
     use td_services::function::services::FunctionServices;
     use tower::ServiceExt;
@@ -127,6 +127,19 @@ mod routes {
     ) -> Result<UpdateStatus<Function>, ErrorStatus> {
         let request = context.update(function_param, request);
         let response = state.update.service().await.oneshot(request).await?;
+        Ok(UpdateStatus::OK(response))
+    }
+
+    #[apiserver_path(method = post, path = FUNCTION_ENABLE, tag = FUNCTIONS_TAG)]
+    #[doc = "Enables/disables a function"]
+    pub async fn enable(
+        State(state): State<Arc<FunctionServices>>,
+        Extension(context): Extension<RequestContext>,
+        Path(function_param): Path<FunctionParam>,
+        Json(request): Json<FunctionEnable>,
+    ) -> Result<UpdateStatus<Function>, ErrorStatus> {
+        let request = context.update(function_param, request);
+        let response = state.enable.service().await.oneshot(request).await?;
         Ok(UpdateStatus::OK(response))
     }
 

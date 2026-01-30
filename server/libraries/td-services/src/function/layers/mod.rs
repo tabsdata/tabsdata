@@ -25,6 +25,7 @@ use td_tower::from_fn::from_fn;
 use td_tower::{layer, layers};
 
 pub mod delete;
+pub mod enable;
 pub mod read;
 pub mod register;
 pub mod update;

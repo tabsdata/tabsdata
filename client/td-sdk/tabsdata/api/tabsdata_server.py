@@ -1425,7 +1425,7 @@ class Function:
 
     def enable(self, enabled: bool = True, raise_for_status: bool = True) -> Function:
         collection = self.collection
-        result = self.connection.function_update(
+        result = self.connection.function_enable(
             collection_name=collection.name,
             function_name=self.name,
             enabled=enabled,

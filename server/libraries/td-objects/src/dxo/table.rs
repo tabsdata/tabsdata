@@ -47,9 +47,9 @@ mod definitions {
         pub table_id: TableId,
         #[td_type(extractor)]
         pub name: TableName,
-        #[td_type(builder(try_from = FunctionDB, field = "function_id"))]
+        #[td_type(setter, builder(try_from = FunctionDB, field = "function_id"))]
         pub function_id: FunctionId,
-        #[td_type(builder(try_from = FunctionDB, field = "id"))]
+        #[td_type(setter, builder(try_from = FunctionDB, field = "id"))]
         pub function_version_id: FunctionVersionId,
         pub function_param_pos: Option<TableFunctionParamPos>,
         #[builder(default = "Private::FALSE")]

@@ -290,8 +290,8 @@ impl<T> With<Option<T>> {
 #[async_trait]
 pub trait VecUpdateService<T> {
     async fn vec_update<F, E>(
-        try_from: Input<Vec<T>>,
-        updater: Input<F>,
+        try_from: Input<Vec<F>>,
+        updater: Input<T>,
     ) -> Result<Vec<F>, TdError>
     where
         for<'a> T: Send + Sync + 'a,
@@ -305,20 +305,20 @@ where
     T: Send + Sync,
 {
     async fn vec_update<F, E>(
-        Input(try_from): Input<Vec<T>>,
-        Input(updater): Input<F>,
+        Input(to_update): Input<Vec<F>>,
+        Input(updater): Input<T>,
     ) -> Result<Vec<F>, TdError>
     where
         for<'a> T: Send + Sync + 'a,
         F: TryUpdater<T, Error = E> + Clone + Send + Sync,
         E: Into<TdError>,
     {
-        try_from
+        to_update
             .iter()
             .map(|item| {
-                let mut updater = updater.deref().clone();
-                updater.try_update_from(item).map_err(Into::into)?;
-                Ok(updater)
+                let mut item = item.clone();
+                item.try_update_from(&*updater).map_err(Into::into)?;
+                Ok(item)
             })
             .collect()
     }

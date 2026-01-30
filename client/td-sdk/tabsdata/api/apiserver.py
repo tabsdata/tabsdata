@@ -794,6 +794,19 @@ class APIServer:
         response = self.post(endpoint, json=data)
         return self.raise_for_status_or_return(raise_for_status, response)
 
+    def function_enable(
+        self,
+        collection_name: str,
+        function_name: str,
+        enabled: bool,
+        raise_for_status: bool = True,
+    ):
+        endpoint = f"/collections/{collection_name}/functions/{function_name}/enable"
+
+        data = self.get_params_dict(["enabled"], [enabled])
+        response = self.post(endpoint, json=data)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
     def function_upload_bundle(
         self,
         collection_name: str,

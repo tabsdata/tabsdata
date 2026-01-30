@@ -3,6 +3,7 @@
 //
 
 use crate::function::services::delete::DeleteFunctionService;
+use crate::function::services::enable::EnableFunctionService;
 use crate::function::services::history::FunctionHistoryService;
 use crate::function::services::list::FunctionListService;
 use crate::function::services::list_by_collection::FunctionListByCollectionService;
@@ -14,6 +15,7 @@ use getset::Getters;
 use ta_services::factory::ServiceFactory;
 
 pub(crate) mod delete;
+pub(crate) mod enable;
 pub(crate) mod history;
 pub(crate) mod list;
 pub(crate) mod list_by_collection;
@@ -31,6 +33,7 @@ pub struct FunctionServices {
     pub list_by_collection: FunctionListByCollectionService,
     pub list: FunctionListService,
     pub update: UpdateFunctionService,
+    pub enable: EnableFunctionService,
     pub delete: DeleteFunctionService,
     pub history: FunctionHistoryService,
 }

@@ -161,8 +161,8 @@ mod tests {
     use td_objects::test_utils::seed_function::seed_function;
     use td_objects::test_utils::seed_inter_collection_permission::seed_inter_collection_permission;
     use td_objects::types::basic::{
-        AccessTokenId, Decorator, Depth, Enabled, FunctionRuntimeValues, RoleId, TableName,
-        TableStatus, ToCollectionId, UserId, WorkerMessageStatus, WorkerStatus, WorkerType,
+        AccessTokenId, Decorator, Depth, FunctionRuntimeValues, RoleId, TableName, TableStatus,
+        ToCollectionId, UserId, WorkerMessageStatus, WorkerStatus, WorkerType,
     };
     use td_objects::types::recursion::RecursionOptions;
     use td_tower::ctx_service::RawOneshot;
@@ -1644,78 +1644,6 @@ mod tests {
             .unwrap();
         assert_eq!(dependency_function.len(), 1); // only implicit self dependency
         assert_eq!(dependency_function[0].name, dependant.name);
-        Ok(())
-    }
-
-    #[td_test::test(sqlx)]
-    #[tokio::test]
-    async fn test_update_enable_disable(db: DbPool) -> Result<(), TdError> {
-        let collection_name = CollectionName::try_from("cofnig")?;
-        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
-
-        // Create it as enabled = false
-        let create = FunctionRegister::builder()
-            .try_name("function_1")?
-            .try_description("function_foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(None)
-            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
-            .enabled(Enabled::FALSE)
-            .reuse_frozen_tables(false)
-            .build()?;
-        let function_db = seed_function(&db, &collection, &create).await;
-        assert_eq!(function_db.enabled, Enabled::FALSE);
-
-        // Then update to enable it
-        let update = FunctionUpdate::builder().enabled(Enabled::TRUE).build()?;
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
-                FunctionParam::builder()
-                    .try_collection(collection.name.to_string())?
-                    .try_function("function_1")?
-                    .build()?,
-                update.clone(),
-            );
-
-        let service = UpdateFunctionService::with_defaults(db.clone())
-            .service()
-            .await;
-        let response = service.raw_oneshot(request).await?;
-        let function_db: FunctionDB = DaoQueries::default()
-            .select_by::<FunctionDB>(&response.id)?
-            .build_query_as()
-            .fetch_one(&db)
-            .await
-            .map_err(handle_sql_err)?;
-        assert_eq!(function_db.enabled, Enabled::TRUE);
-
-        // Then update to disable it again
-        let update = FunctionUpdate::builder().enabled(Enabled::FALSE).build()?;
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
-                FunctionParam::builder()
-                    .try_collection(collection.name.to_string())?
-                    .try_function("function_1")?
-                    .build()?,
-                update.clone(),
-            );
-
-        let service = UpdateFunctionService::with_defaults(db.clone())
-            .service()
-            .await;
-        let response = service.raw_oneshot(request).await?;
-        let function_db: FunctionDB = DaoQueries::default()
-            .select_by::<FunctionDB>(&response.id)?
-            .build_query_as()
-            .fetch_one(&db)
-            .await
-            .map_err(handle_sql_err)?;
-        assert_eq!(function_db.enabled, Enabled::FALSE);
-
         Ok(())
     }
 

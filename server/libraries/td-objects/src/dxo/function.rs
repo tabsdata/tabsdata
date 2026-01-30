@@ -77,6 +77,11 @@ mod definitions {
         pub workers: Option<HashMap<WorkerTypeDto, WorkerConfig>>, // added in v4
     }
 
+    #[td_type::Dto]
+    pub struct FunctionEnable {
+        pub enabled: Enabled, // added in v4
+    }
+
     #[td_type::Dao]
     #[derive(Eq, PartialEq)]
     #[dao(
@@ -98,6 +103,7 @@ mod definitions {
     #[td_type(
         builder(try_from = FunctionDB),
         builder(try_from = FunctionRegister, skip_all),
+        updater(try_from = FunctionEnable, skip_all),
         updater(try_from = RequestContext, skip_all)
     )]
     pub struct FunctionDB {
@@ -134,7 +140,7 @@ mod definitions {
         pub defined_by_id: UserId,
         #[builder(default = FunctionStatus::Active)]
         pub status: FunctionStatus,
-        #[td_type(setter)]
+        #[td_type(setter, updater(include, try_from = FunctionEnable))]
         pub enabled: Enabled, // added in v4
     }
 

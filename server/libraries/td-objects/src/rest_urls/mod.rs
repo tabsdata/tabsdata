@@ -222,6 +222,7 @@ pub const FUNCTION_DELETE: &str = url!(FUNCTION);
 pub const FUNCTION_LIST_BY_COLL: &str = url!(FUNCTIONS);
 pub const FUNCTION_LIST: &str = url!("/functions");
 pub const FUNCTION_UPDATE: &str = url!(FUNCTION);
+pub const FUNCTION_ENABLE: &str = url!(FUNCTION, "/enable");
 pub const FUNCTION_UPLOAD: &str = url!(COLLECTION, "/function-bundle-upload");
 
 pub const FUNCTION_HISTORY: &str = url!(FUNCTION, "/history");
