@@ -192,6 +192,54 @@ env_scripts = [
         debug "🔔 Configuring Rust in manual verbose mode"
     end
 
+    td_nextest_build_jobs = set "16"
+    td_nextest_test_threads = set "32"
+    os_family = os_family
+    info "👾 Current os family: ${os_family}"
+    is_mac = eq ${os_family} "mac"
+    is_windows = eq ${os_family} "windows"
+    if ${on_ga_true}
+        if ${is_mac}
+            cpu_info_output = exec sysctl -n hw.logicalcpu
+            cpu_info = trim ${cpu_info_output.stdout}
+            cpu_info_is_empty = is_empty ${cpu_info}
+            if ${cpu_info_is_empty}
+                debug "🐌 Could not detect macOS logical CPU count; keeping default Rust nextest parallelism."
+            else
+                former_build_jobs = set ${td_nextest_build_jobs}
+                former_test_threads = set ${td_nextest_test_threads}
+                info "🐌 Updating nextest parallelism from: build=${former_build_jobs} - test=${former_test_threads} to ${cpu_info} on GA macOS runner."
+                td_nextest_build_jobs = set ${cpu_info}
+                td_nextest_test_threads = set ${cpu_info}
+                info "🐌 The new nextest parallelism is now: build=${td_nextest_build_jobs} - test=${td_nextest_test_threads} on GA macOS runner."
+            end
+        end
+    end
+    set_env td-nextest-build-jobs ${td_nextest_build_jobs}
+    set_env td-nextest-test-threads ${td_nextest_test_threads}
+
+    enable_sccache = set false
+    if ${on_ga_true}
+        if ${is_mac}
+            enable_sccache = set true
+        else
+            if ${is_windows}
+                enable_sccache = set true
+            end
+        end
+    end
+    if ${enable_sccache}
+        sccache_lookup = exec python -c "import shutil,sys; path = shutil.which('sccache') or ''; sys.stdout.write(path)"
+        sccache_path = trim ${sccache_lookup.stdout}
+        sccache_missing = is_empty ${sccache_path}
+        if ${sccache_missing}
+            warn "🧰 Unable to locate sccache on PATH; skipping RUSTC_WRAPPER setup."
+        else
+            set_env RUSTC_WRAPPER ${sccache_path}
+            set_env SCCACHE_CACHE_SIZE "32G"
+            info "🧰 Enabled sccache wrapper '${sccache_path}' with 32G cache."
+        end
+    end
 
     old_path = get_env PATH
     new_path = set ${old_path}
