@@ -9,7 +9,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub const TD_VCORE_PATH: &str = "TD_VCORE_PATH";
+const TD_VCORE_PATH: &str = "TD_VCORE_PATH";
 const STUBS_SENTINEL: &str = ".ok.pystubs";
 
 const SLASH: &str = "/";
@@ -35,6 +35,7 @@ fn main() -> Result<()> {
 
             let stub = ty_tableframe::stub_info()?;
             stub.generate()?;
+            remove_init_pyi_stubs();
 
             if let Some(ref sentinel_path) = sentinel {
                 create_home(sentinel_path)?;
@@ -48,6 +49,7 @@ fn main() -> Result<()> {
 
         let stub = ty_tableframe::stub_info()?;
         stub.generate()?;
+        remove_init_pyi_stubs();
 
         Ok(())
     }
@@ -137,4 +139,38 @@ fn env(key: &str) -> Option<String> {
         Ok(value) if !value.is_empty() => Some(value),
         _ => None,
     }
+}
+
+//noinspection DuplicatedCode
+fn remove_init_pyi_stubs() {
+    let cargo_manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let python_folder = PathBuf::from(cargo_manifest_dir).join("python");
+    println!(
+        "🧹 Removing __init__.pyi files from: {}",
+        python_folder.display()
+    );
+    if let Err(err) = remove_init_pyi_files(&python_folder) {
+        eprintln!("⚠️ Error during stub removal: {}", err);
+    }
+}
+
+//noinspection DuplicatedCode
+fn remove_init_pyi_files(root: &Path) -> std::io::Result<()> {
+    if !root.is_dir() {
+        return Ok(());
+    }
+    for entry in fs::read_dir(root)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_dir() {
+            remove_init_pyi_files(&path)?;
+        } else if path.file_name().is_some_and(|n| n == "__init__.pyi") {
+            match fs::remove_file(&path) {
+                Ok(_) => println!("🧹 ✅ Removed: {}", path.display()),
+                Err(err) => eprintln!("⚠️ Failed to remove {}: {}", path.display(), err),
+            }
+        }
+    }
+
+    Ok(())
 }
