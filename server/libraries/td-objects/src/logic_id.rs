@@ -1,6 +1,14 @@
 //
 // Copyright 2026. Tabs Data Inc.
 //
+//! This module is responsible for initializing the logical ID generators for IDs that use IdL
+//! in the system. It ensures that each type of logical ID starts with a correct
+//! sequence number based on the last ID stored in the database.
+//!
+//! The main function, `initialialize_logical_ids`, fetches the last used ID for several key
+//! entities (executions, transactions, function versions, and table data versions) and
+//! initializes their respective ID generators. This is crucial for maintaining the uniqueness
+//! and chronological order of new IDs created during the application's lifecycle.
 
 use crate::dxo::DataAccessObject;
 use crate::sql::{DaoQueries, SelectBy};
@@ -12,36 +20,46 @@ use td_common::logic_id::KeyId;
 use td_database::sql::DbPool;
 use td_error::TdError;
 
+/// A DAO for fetching the last `ExecutionId`.
 #[td_type::Dao]
 #[dao(sql_table = "executions", order_by = "id DESC")]
 struct ExecutionIdDao {
     id: ExecutionId,
 }
 
+/// A DAO for fetching the last `TransactionId`.
 #[td_type::Dao]
 #[dao(sql_table = "transactions", order_by = "id DESC")]
 struct TransactionIdDao {
     id: TransactionId,
 }
 
+/// A DAO for fetching the last `FunctionVersionId`.
 #[td_type::Dao]
 #[dao(sql_table = "functions", order_by = "id DESC")]
 struct FunctionVersionIdDao {
     id: FunctionVersionId,
 }
 
+/// A DAO for fetching the last `TableDataVersionId`.
 #[td_type::Dao]
 #[dao(sql_table = "table_data_versions", order_by = "id DESC")]
 struct TableDataVersionIdDao {
     id: TableDataVersionId,
 }
 
+/// Errors that can occur during logical ID initialization.
 #[td_error::td_error]
 enum LogicIdsError {
+    /// Indicates that the last ID for a given key could not be found.
     #[error("Could not find last id for '{0}': {1}")]
     CouldNotFindLastId(String, Box<dyn std::error::Error + Send + Sync>),
 }
 
+/// Fetches the last logical ID for a given DAO from the database.
+///
+/// This generic function queries the database for the last entry in the table associated with
+/// the `DAO` type, ordered by ID in descending order. It then extracts and returns the ID.
 async fn find_last_idl<DAO: Debug + DataAccessObject, ID, K: KeyId>(
     db: &DbPool,
     mapping: impl Fn(DAO) -> ID,
@@ -57,6 +75,11 @@ async fn find_last_idl<DAO: Debug + DataAccessObject, ID, K: KeyId>(
     Ok(res.map(mapping))
 }
 
+/// Initializes the logical ID generators for all relevant entities.
+///
+/// This function should be called at application startup to ensure that the ID generators
+/// are properly seeded with the last used IDs from the database. This prevents ID collisions
+/// and maintains the integrity of the logical ID system.
 pub async fn initialialize_logical_ids(db: &DbPool) -> Result<(), TdError> {
     let id = find_last_idl::<ExecutionIdDao, ExecutionId, EP>(db, |dao| dao.id).await?;
     ExecutionId::init(id);
