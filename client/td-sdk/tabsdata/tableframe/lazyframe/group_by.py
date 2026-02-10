@@ -123,7 +123,7 @@ class TableFrameGroupBy:
                 #     receives individual values (as integers) instead of
                 #     list[bytes].
                 #
-                # Using implode() restores back the expected behaviour.
+                # Using implode() restores back the expected behavior.
                 #
                 # Eventually whe should move to map_batches, that gives direct
                 #     access to the agg_list flag.
