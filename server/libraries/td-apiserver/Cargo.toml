@@ -80,7 +80,7 @@ clap = { workspace = true }
 futures = { workspace = true }
 http = { workspace = true }
 nonempty = { workspace = true, features = ["serialize"] }
-reqwest = { workspace = true }
+reqwest = { workspace = true, features = ["json", "stream"] }
 ring = { workspace = true }
 rustls = { workspace = true, features = ["aws-lc-rs"] }
 serde = { workspace = true }

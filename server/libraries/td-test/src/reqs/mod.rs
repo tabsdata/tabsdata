@@ -38,7 +38,7 @@ const TESTS_TIMESTAMP_KEY: &str = "TESTS_TIMESTAMP";
 pub(crate) fn user(vars: &HashMap<String, String>) -> String {
     vars.get(TESTS_USER_KEY)
         .cloned()
-        .unwrap_or_else(whoami::username)
+        .unwrap_or_else(|| whoami::username().unwrap_or("unknown".to_string()))
 }
 
 fn format_timestamp(datetime: &DateTime<Utc>) -> String {

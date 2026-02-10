@@ -51,6 +51,18 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
+def json_to_polars_type(value):
+    if isinstance(value, str):
+        return getattr(pl, value)
+    elif isinstance(value, dict):
+        if "Struct" in value:
+            fields = value["Struct"]
+            return pl.Struct(
+                [pl.Field(name, getattr(pl, dtype)) for name, dtype in fields.items()]
+            )
+    raise ValueError(f"Unknown type definition: {value}")
+
+
 ESCAPED_USER = urllib.parse.quote(DB_USER)
 ESCAPED_PASSWORD = urllib.parse.quote(DB_PASSWORD)
 ORACLE_URI = f"oracle://system:{ESCAPED_PASSWORD}@{DB_HOST}:{ORACLE_PORT}/FREE"
@@ -434,7 +446,7 @@ def test_input_new_oracle_types_check(oracle_config, tmp_path):
     with open(expected_output_schema_file, "r") as f:
         expected_output_schema = json.load(f)
     expected_output_schema = {
-        k.lower(): getattr(pl, v) for k, v in expected_output_schema.items()
+        k.lower(): json_to_polars_type(v) for k, v in expected_output_schema.items()
     }
     expected_output_schema = dict(sorted(expected_output_schema.items()))
 
@@ -496,7 +508,7 @@ def test_input_new_oracle_types_check_pandas(oracle_config, tmp_path):
     with open(expected_output_schema_file, "r") as f:
         expected_output_schema = json.load(f)
     expected_output_schema = {
-        k.lower(): getattr(pl, v) for k, v in expected_output_schema.items()
+        k.lower(): json_to_polars_type(v) for k, v in expected_output_schema.items()
     }
     expected_output_schema = dict(sorted(expected_output_schema.items()))
 
@@ -564,7 +576,7 @@ def test_input_new_oracle_types_check_w_schema_overrides(oracle_config, tmp_path
     with open(expected_output_schema_file, "r") as f:
         expected_output_schema = json.load(f)
     expected_output_schema = {
-        k.lower(): getattr(pl, v) for k, v in expected_output_schema.items()
+        k.lower(): json_to_polars_type(v) for k, v in expected_output_schema.items()
     }
     expected_output_schema = dict(sorted(expected_output_schema.items()))
 
@@ -635,7 +647,7 @@ def test_input_new_oracle_types_check_pandas_w_schema_overrides(
     with open(expected_output_schema_file, "r") as f:
         expected_output_schema = json.load(f)
     expected_output_schema = {
-        k.lower(): getattr(pl, v) for k, v in expected_output_schema.items()
+        k.lower(): json_to_polars_type(v) for k, v in expected_output_schema.items()
     }
     expected_output_schema = dict(sorted(expected_output_schema.items()))
 

@@ -12,7 +12,7 @@
   "C_TIMESTAMP": "Datetime",
   "C_TIMESTAMP_TZ": "Datetime",
   "C_TIMESTAMP_LTZ": "Datetime",
-  "C_INTERVAL_YM": "List",
+  "C_INTERVAL_YM": {"Struct": {"years": "Int64", "months": "Int64"}},
   "C_INTERVAL_DS": "Duration",
   "C_CLOB": "String",
   "C_NCLOB": "String",

@@ -81,7 +81,7 @@ pin-project-lite = { workspace = true }
 polars = { workspace = true, features = ["lazy", "polars-lazy", "async", "csv", "json", "parquet", "cloud", "aws", "azure", "gcp", "sql"] }
 polars-io = { workspace = true, features = ["cloud"]  }
 polars-parquet-format = { workspace = true }
-reqwest = { workspace = true }
+reqwest = { workspace = true, features = ["json", "stream"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
@@ -95,7 +95,7 @@ tracing = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 wildmatch = { workspace = true }
 uuid = {  workspace = true, features = ["v4"] }
-libflate = "2.2.0"
+libflate = { workspace = true }
 
 [dev-dependencies]
 td-common = { workspace = true, features = ["td-test"] }

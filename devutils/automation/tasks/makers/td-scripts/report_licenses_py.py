@@ -50,6 +50,7 @@ normalized_licenses = {
     "(MIT OR Apache-2.0) AND Unicode-3.0": "MIT License or Apache License Version 2.0, and Unicode License Version 3.0",                                                                       # noqa: E231,E241,E501
     "(MIT OR CC0-1.0)": "MIT License, and Creative Commons Zero Version 1.0 Universal",                                                                                                        # noqa: E231,E241,E501
     "0BSD OR Apache-2.0 OR MIT": "BSD Zero-Clause License or Apache License Version 2.0 or MIT License",                                                                                       # noqa: E231,E241,E501
+    "0BSD;; BSD-3-CLAUSE;; CC0-1.0;; MIT;; ZLIB": "BSD Zero-Clause License or BSD Revised License (BSD-3-Clause) or Creative Commons Zero Version 1.0 Universal or MIT License",               # noqa: E231,E241,E501
     "0BSD": "BSD Zero-Clause License",                                                                                                                                                         # noqa: E231,E241,E501
     "3-CLAUSE BSD LICENSE": "BSD Revised License (BSD-3-Clause)",                                                                                                                              # noqa: E231,E241,E501
     "APACHE 2.0": "Apache License Version 2.0",                                                                                                                                                # noqa: E231,E241,E501
@@ -115,6 +116,7 @@ normalized_licenses = {
     "MIT OR Unlicense": "MIT License or The Unlicense",                                                                                                                                        # noqa: E231,E241,E501
     "MIT-0": "MIT No Attribution License",                                                                                                                                                     # noqa: E231,E241,E501
     "MIT-CMU": "MIT License (CMU Variant)",                                                                                                                                                    # noqa: E231,E241,E501
+    "MIT;; MPL-2.0": "MIT License or Mozilla Public License Version 2.0",                                                                                                                      # noqa: E231,E241,E501
     "MIT;; PYTHON-2.0": "MIT License or Python Software Foundation License Version 2.0",                                                                                                       # noqa: E231,E241,E501
     "MIT": "MIT License",                                                                                                                                                                      # noqa: E231,E241,E501
     "MOZILLA PUBLIC LICENSE 2.0 _MPL 2.0_": "Mozilla Public License Version 2.0",                                                                                                              # noqa: E231,E241,E501

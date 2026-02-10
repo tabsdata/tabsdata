@@ -232,7 +232,7 @@ def test_consumer_messages_rollover(
                     f"Received {received_messages}/{total_messages} messages"
                 )
 
-            (reason, buffer) = consumer.consume(1)
+            reason, buffer = consumer.consume(1)
             if buffer.message_count > 0:
                 received_messages += buffer.message_count
                 responses.append((reason, buffer))
@@ -307,7 +307,7 @@ def test_consumer_time_rollover(
             if time.time() - loop_start_time > 10:  # 10 second timeout for the loop
                 pytest.fail("Timeout waiting for messages in time_rollover test")
 
-            (reason, buffer) = consumer.consume(2, reset_buffer=True)
+            reason, buffer = consumer.consume(2, reset_buffer=True)
             if buffer.message_count > 0:
                 assert reason in [RolloverReason.Time, RolloverReason.SchemaChange]
                 received_messages += buffer.message_count
@@ -317,7 +317,7 @@ def test_consumer_time_rollover(
 
         # Second consume should timeout and return no messages
         start_time = time.time()
-        (reason, buffer) = consumer.consume(3, reset_buffer=True)
+        reason, buffer = consumer.consume(3, reset_buffer=True)
         end_time = time.time()
 
         assert reason == RolloverReason.Time
@@ -388,7 +388,7 @@ def test_consumer_size_rollover(
                     f"Received {received_messages}/{sent_messages} messages"
                 )
 
-            (reason, buffer) = consumer.consume(5)
+            reason, buffer = consumer.consume(5)
             if buffer.message_count > 0:
                 received_messages += buffer.message_count
                 responses.append((reason, buffer))

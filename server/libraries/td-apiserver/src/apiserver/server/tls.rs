@@ -45,6 +45,7 @@ impl Server for TlsServer {
                     .map_err(|e| ServerError::StdTcpListener(dbg_listener.clone(), e))?;
 
                 let server = axum_server::from_tcp_rustls(listener, tls_config)
+                    .map_err(|e| ServerError::Server(dbg_listener.clone(), e))?
                     .handle(handle.clone())
                     .serve(router.into_make_service_with_connect_info::<SocketAddr>());
 

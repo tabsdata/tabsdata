@@ -164,7 +164,7 @@ class KafkaConsumer:
         from confluent_kafka.serialization import MessageField, SerializationContext
 
         data = msg.value()
-        (record, schema_id) = self._serde.deserializer_with_schema_id()(
+        record, schema_id = self._serde.deserializer_with_schema_id()(
             data, SerializationContext(msg.topic(), MessageField.VALUE)
         )
         entry = (len(data), record, schema_id)

@@ -2581,7 +2581,7 @@ class ParameterValidationError(TabsDataException):
                 "Parameter 'pyd_validation_error' is not a ValidationError object"
             )
 
-        (mod, cls, fn) = _get_function_details(function)
+        mod, cls, fn = _get_function_details(function)
         if cls:
             f_name = f"{cls}.{fn}"
         else:

@@ -203,7 +203,15 @@ class TableFrameGroupBy:
         """
         with self._transient_state(STATE, td_constants.RowOperation.GROUP_LEN):
             return td_frame.TableFrame.__build__(
-                df=self.agg(functions.all().exclude(system_agg_columns()).len()),
+                df=self.agg(
+                    functions.all()
+                    .exclude(
+                        system_agg_columns(
+                            operation=td_constants.RowOperation.GROUP_LEN
+                        )
+                    )
+                    .len()
+                ),
                 mode="tab",
                 idx=None,
                 properties=None,
@@ -257,7 +265,15 @@ class TableFrameGroupBy:
         """
         with self._transient_state(STATE, td_constants.RowOperation.GROUP_COUNT):
             return td_frame.TableFrame.__build__(
-                df=self.agg(functions.all().exclude(system_agg_columns()).count()),
+                df=self.agg(
+                    functions.all()
+                    .exclude(
+                        system_agg_columns(
+                            operation=td_constants.RowOperation.GROUP_COUNT
+                        )
+                    )
+                    .count()
+                ),
                 mode="tab",
                 idx=None,
                 properties=None,
@@ -310,7 +326,15 @@ class TableFrameGroupBy:
         """
         with self._transient_state(STATE, td_constants.RowOperation.GROUP_MAX):
             return td_frame.TableFrame.__build__(
-                df=self.agg(functions.all().exclude(system_agg_columns()).max()),
+                df=self.agg(
+                    functions.all()
+                    .exclude(
+                        system_agg_columns(
+                            operation=td_constants.RowOperation.GROUP_MAX
+                        )
+                    )
+                    .max()
+                ),
                 mode="tab",
                 idx=None,
                 properties=None,
@@ -365,7 +389,15 @@ class TableFrameGroupBy:
         """
         with self._transient_state(STATE, td_constants.RowOperation.GROUP_MEEAN):
             return td_frame.TableFrame.__build__(
-                df=self.agg(functions.all().exclude(system_agg_columns()).mean()),
+                df=self.agg(
+                    functions.all()
+                    .exclude(
+                        system_agg_columns(
+                            operation=td_constants.RowOperation.GROUP_MEEAN
+                        )
+                    )
+                    .mean()
+                ),
                 mode="tab",
                 idx=None,
                 properties=None,
@@ -420,7 +452,15 @@ class TableFrameGroupBy:
         """
         with self._transient_state(STATE, td_constants.RowOperation.GROUP_MEDIAN):
             return td_frame.TableFrame.__build__(
-                df=self.agg(functions.all().exclude(system_agg_columns()).median()),
+                df=self.agg(
+                    functions.all()
+                    .exclude(
+                        system_agg_columns(
+                            operation=td_constants.RowOperation.GROUP_MEDIAN
+                        )
+                    )
+                    .median()
+                ),
                 mode="tab",
                 idx=None,
                 properties=None,
@@ -473,7 +513,15 @@ class TableFrameGroupBy:
         """
         with self._transient_state(STATE, td_constants.RowOperation.GROUP_MIN):
             return td_frame.TableFrame.__build__(
-                df=self.agg(functions.all().exclude(system_agg_columns()).min()),
+                df=self.agg(
+                    functions.all()
+                    .exclude(
+                        system_agg_columns(
+                            operation=td_constants.RowOperation.GROUP_MIN
+                        )
+                    )
+                    .min()
+                ),
                 mode="tab",
                 idx=None,
                 properties=None,
@@ -526,7 +574,15 @@ class TableFrameGroupBy:
         """
         with self._transient_state(STATE, td_constants.RowOperation.GROUP_UNIQUE):
             return td_frame.TableFrame.__build__(
-                df=self.agg(functions.all().exclude(system_agg_columns()).n_unique()),
+                df=self.agg(
+                    functions.all()
+                    .exclude(
+                        system_agg_columns(
+                            operation=td_constants.RowOperation.GROUP_UNIQUE
+                        )
+                    )
+                    .n_unique()
+                ),
                 mode="tab",
                 idx=None,
                 properties=None,
@@ -581,16 +637,25 @@ class TableFrameGroupBy:
         """
         with self._transient_state(STATE, td_constants.RowOperation.GROUP_SUM):
             return td_frame.TableFrame.__build__(
-                df=self.agg(functions.all().exclude(system_agg_columns()).sum()),
+                df=self.agg(
+                    functions.all()
+                    .exclude(
+                        system_agg_columns(
+                            operation=td_constants.RowOperation.GROUP_SUM
+                        )
+                    )
+                    .sum()
+                ),
                 mode="tab",
                 idx=None,
                 properties=None,
             )
 
 
-def system_agg_columns() -> list[str]:
+def system_agg_columns(operation: td_constants.RowOperation) -> list[str]:
     return [
         column
         for column, metadata in td_helpers.REQUIRED_COLUMNS_METADATA.items()
-        if metadata.aggregation is not None
+        if operation == td_constants.RowOperation.GROUP_SUM
+        or metadata.aggregation is not None
     ]
