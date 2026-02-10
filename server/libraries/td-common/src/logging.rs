@@ -38,6 +38,8 @@ pub const WORK_PARAMETER: &str = "--work";
 pub const CURRENT_DIR: &str = ".";
 pub const DEFAULT_LOG_POSITION: &str = "..";
 pub const DEFAULT_LOG_PLACE: &str = "work";
+pub const TARGET_FOLDER: &str = "target";
+pub const TDUDF_FOLDER: &str = "tdudf";
 
 pub const TD_LOG_PROFILE_ENV: &str = "TD_LOG_PROFILE";
 pub const TD_LOG_PROFILE_ENV_PATTERN: &str = "TD_LOG_PROFILE_";
@@ -684,7 +686,7 @@ fn obtain_log_location_from_environment(path: PathBuf) -> Option<PathBuf> {
 
 fn obtain_log_location_from_pytest(_: PathBuf) -> Option<PathBuf> {
     if env::var(PYTEST_VERSION).is_ok() {
-        Some(get_current_dir())
+        Some(get_current_dir().join(TARGET_FOLDER).join(TDUDF_FOLDER))
     } else {
         None
     }
