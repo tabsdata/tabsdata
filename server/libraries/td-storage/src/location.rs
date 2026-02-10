@@ -633,7 +633,7 @@ mod tests {
     fn test_data_builder_v2() -> Result<(), TdError> {
         let data_location = DataLocation::try_from("/L")?;
         let collection = CollectionId::default();
-        let table_data_version = TableDataVersionId::default();
+        let table_data_version = TableDataVersionId::new();
         let mut builder = StorageLocation::V2
             .builder(&data_location)
             .collection(&collection)
@@ -647,7 +647,7 @@ mod tests {
             builder.build_meta("foo").0,
             SPath::parse(format!("/L/c/{collection}/d/{table_data_version}-foo.meta"))?
         );
-        let table_data_version = TableDataVersionId::default();
+        let table_data_version = TableDataVersionId::new();
         builder.data(&table_data_version);
         assert_eq!(
             builder.build().0,
@@ -660,7 +660,7 @@ mod tests {
     fn test_table_builder_v2() -> Result<(), TdError> {
         let data_location = DataLocation::try_from("/L")?;
         let collection = CollectionId::default();
-        let table_data_version = TableDataVersionId::default();
+        let table_data_version = TableDataVersionId::new();
         let table = TableId::default();
         let table_version = TableVersionId::default();
         let mut builder = StorageLocation::V2

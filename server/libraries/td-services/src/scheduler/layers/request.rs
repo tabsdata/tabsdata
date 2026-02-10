@@ -169,7 +169,7 @@ pub async fn create_locked_function_runner_workers_start_request<T: WorkerMessag
                     if let (Some(dependency_pos), Some(input_idx)) =
                         (&req.requirement_dependency_pos, &req.requirement_input_idx)
                     {
-                        let (found_data_version, location) = match req
+                        let (found_data_version, location) = match &req
                             .requirement_table_data_version_id
                         {
                             Some(data_version_id) => {
@@ -240,7 +240,7 @@ pub async fn create_locked_function_runner_workers_start_request<T: WorkerMessag
                                     .map(|v| v.triggered_on.try_into())
                                     .transpose()?,
                             )
-                            .table_data_version_id(found_data_version.as_ref().map(|v| v.id))
+                            .table_data_version_id(found_data_version.as_ref().map(|v| v.id.clone()))
                             .location(location)
                             .input_idx(input_idx)
                             .table_pos(dependency_pos)
@@ -284,7 +284,7 @@ pub async fn create_locked_function_runner_workers_start_request<T: WorkerMessag
                         .collection(table.collection.clone())
                         .table_id(table.table_id)
                         .table_version_id(table.table_version_id)
-                        .table_data_version_id(table.id)
+                        .table_data_version_id(&table.id)
                         .location(location)
                         .table_pos(table.function_param_pos)
                         .build()?;

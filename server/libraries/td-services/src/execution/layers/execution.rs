@@ -332,7 +332,7 @@ pub async fn build_function_requirements(
                 if let Some(version) = version {
                     builder
                         .requirement_function_run_id(version.function_run_id)
-                        .requirement_table_data_version_id(version.id);
+                        .requirement_table_data_version_id(version.id.clone());
                 }
 
                 conditions.push(builder.build()?);
@@ -449,8 +449,8 @@ pub async fn build_response(
                     .map(|v| {
                         v.as_ref()
                             .map(|t| {
-                                collected_info.push((t.id, t.clone()));
-                                Ok::<_, TdError>(t.id)
+                                collected_info.push((t.id.clone(), t.clone()));
+                                Ok::<_, TdError>(t.id.clone())
                             })
                             .transpose()
                     })

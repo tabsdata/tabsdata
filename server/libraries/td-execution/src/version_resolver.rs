@@ -68,7 +68,7 @@ impl<'a> VersionResolver<'a> {
                         .await
                         .map_err(|_| {
                             VersionResolverError::FixedTableDataVersionsNotFound(display_vec![
-                                *version,
+                                version.clone(),
                             ])
                         })?;
                     vec![Some(v)]
@@ -105,7 +105,8 @@ impl<'a> VersionResolver<'a> {
                         &Versions::List(version_list),
                     )
                     .await?;
-                    let found: HashMap<_, _> = found.into_iter().map(|v| (*v.id, v)).collect();
+                    let found: HashMap<_, _> =
+                        found.into_iter().map(|v| (v.id.clone(), v)).collect();
 
                     let (absolute_versions, not_found): (HashMap<_, _>, Vec<_>) =
                         fixed_versions.iter().partition_map(|(i, v)| {
@@ -115,7 +116,7 @@ impl<'a> VersionResolver<'a> {
                             };
                             match found.get(id) {
                                 Some(v) => Either::Left((*i, Some(v.clone()))),
-                                None => Either::Right(*id),
+                                None => Either::Right(id.clone()),
                             }
                         });
 
@@ -206,7 +207,7 @@ impl<'a> VersionResolver<'a> {
                         match relative {
                             Some(relative) => Some(&Version::Head((-relative + 1) as isize)),
                             None => {
-                                not_found.push(*id);
+                                not_found.push(id.clone());
                                 None
                             }
                         }
@@ -222,7 +223,7 @@ impl<'a> VersionResolver<'a> {
                         match relative {
                             Some(relative) => Some(&Version::Head((-relative + 1) as isize)),
                             None => {
-                                not_found.push(*id);
+                                not_found.push(id.clone());
                                 None
                             }
                         }
@@ -916,7 +917,7 @@ mod tests {
 
         // Check fixed versions are found with its ids.
         let (versions, triggered_on) = (
-            Versions::Single(Version::Fixed(version_1.id)),
+            Versions::Single(Version::Fixed(version_1.id.clone())),
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
@@ -933,7 +934,7 @@ mod tests {
         assert_eq!(version_found.id, version_1.id);
 
         let (versions, triggered_on) = (
-            Versions::Single(Version::Fixed(version_2.id)),
+            Versions::Single(Version::Fixed(version_2.id.clone())),
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
@@ -950,9 +951,9 @@ mod tests {
         assert_eq!(version_found.id, version_2.id);
 
         // But an error is found if the id is not found.
-        let not_found_id = TableDataVersionId::default();
+        let not_found_id = TableDataVersionId::new();
         let (versions, triggered_on) = (
-            Versions::Single(Version::Fixed(not_found_id)),
+            Versions::Single(Version::Fixed(not_found_id.clone())),
             TriggeredOn::now(),
         );
         let res = VersionResolver::builder()
@@ -1063,8 +1064,8 @@ mod tests {
         // Check fixed versions are found with its ids.
         let (versions, triggered_on) = (
             Versions::List(vec![
-                Version::Fixed(version_1.id),
-                Version::Fixed(version_2.id),
+                Version::Fixed(version_1.id.clone()),
+                Version::Fixed(version_2.id.clone()),
             ]),
             TriggeredOn::now(),
         );
@@ -1111,7 +1112,7 @@ mod tests {
         let (versions, triggered_on) = (
             Versions::List(vec![
                 Version::Head(-1),
-                Version::Fixed(version_1.id),
+                Version::Fixed(version_1.id.clone()),
                 Version::Head(0),
                 Version::Initial(0),
             ]),
@@ -1165,12 +1166,12 @@ mod tests {
         let table_id = version_1.table_id;
 
         // Check fixed versions are not found.
-        let not_found_id_1 = TableDataVersionId::default();
-        let not_found_id_2 = TableDataVersionId::default();
+        let not_found_id_1 = TableDataVersionId::new();
+        let not_found_id_2 = TableDataVersionId::new();
         let (versions, triggered_on) = (
             Versions::List(vec![
-                Version::Fixed(not_found_id_1),
-                Version::Fixed(not_found_id_2),
+                Version::Fixed(not_found_id_1.clone()),
+                Version::Fixed(not_found_id_2.clone()),
             ]),
             TriggeredOn::now(),
         );
@@ -1570,7 +1571,10 @@ mod tests {
 
         // Check fixed versions are found with its ids.
         let (versions, triggered_on) = (
-            Versions::Range(Version::Fixed(version_1.id), Version::Fixed(version_3.id)),
+            Versions::Range(
+                Version::Fixed(version_1.id.clone()),
+                Version::Fixed(version_3.id.clone()),
+            ),
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
@@ -1623,7 +1627,10 @@ mod tests {
 
         // Check versions found is empty: range is inverted.
         let (versions, triggered_on) = (
-            Versions::Range(Version::Fixed(version_3.id), Version::Fixed(version_1.id)),
+            Versions::Range(
+                Version::Fixed(version_3.id.clone()),
+                Version::Fixed(version_1.id.clone()),
+            ),
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
@@ -1811,7 +1818,10 @@ mod tests {
 
         // Check version is found.
         let (versions, triggered_on) = (
-            Versions::Range(Version::Fixed(version_1.id), Version::Fixed(version_1.id)),
+            Versions::Range(
+                Version::Fixed(version_1.id.clone()),
+                Version::Fixed(version_1.id.clone()),
+            ),
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
@@ -1850,7 +1860,7 @@ mod tests {
 
         // Check versions are found.
         let (versions, triggered_on) = (
-            Versions::Range(Version::Fixed(version_1.id), Version::Head(0)),
+            Versions::Range(Version::Fixed(version_1.id.clone()), Version::Head(0)),
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
@@ -1894,7 +1904,7 @@ mod tests {
 
         // Check versions are found.
         let (versions, triggered_on) = (
-            Versions::Range(Version::Fixed(version_1.id), Version::Initial(1)),
+            Versions::Range(Version::Fixed(version_1.id.clone()), Version::Initial(1)),
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
@@ -1938,7 +1948,7 @@ mod tests {
 
         // Check versions are found.
         let (versions, triggered_on) = (
-            Versions::Range(Version::Head(-1), Version::Fixed(version_1.id)),
+            Versions::Range(Version::Head(-1), Version::Fixed(version_1.id.clone())),
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
@@ -2017,7 +2027,7 @@ mod tests {
 
         // Check versions are found.
         let (versions, triggered_on) = (
-            Versions::Range(Version::Initial(0), Version::Fixed(version_1.id)),
+            Versions::Range(Version::Initial(0), Version::Fixed(version_1.id.clone())),
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
@@ -2057,7 +2067,7 @@ mod tests {
 
         // Check versions are found.
         let (versions, triggered_on) = (
-            Versions::Range(Version::Head(-5), Version::Fixed(version_1.id)),
+            Versions::Range(Version::Head(-5), Version::Fixed(version_1.id.clone())),
             TriggeredOn::now(),
         );
         let versions_found = VersionResolver::builder()
@@ -2132,10 +2142,10 @@ mod tests {
             Versions::New,
             Versions::Range(Version::Initial(3), Version::Head(0)),
             Versions::Range(Version::Initial(3), Version::Head(-1)),
-            Versions::Range(Version::Fixed(version_1.id), Version::Head(-3)),
-            Versions::Range(Version::Head(0), Version::Fixed(version_1.id)),
-            Versions::Range(Version::Fixed(version_2.id), Version::Initial(0)),
-            Versions::Range(Version::Initial(3), Version::Fixed(version_1.id)),
+            Versions::Range(Version::Fixed(version_1.id.clone()), Version::Head(-3)),
+            Versions::Range(Version::Head(0), Version::Fixed(version_1.id.clone())),
+            Versions::Range(Version::Fixed(version_2.id.clone()), Version::Initial(0)),
+            Versions::Range(Version::Initial(3), Version::Fixed(version_1.id.clone())),
         ];
         let triggered_on = TriggeredOn::now();
 

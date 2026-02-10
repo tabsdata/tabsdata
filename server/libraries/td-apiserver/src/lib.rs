@@ -13,6 +13,7 @@ use td_common::server_runner::ServerRunner;
 use td_common::status::ExitStatus;
 use td_database::sql::DbError;
 use td_objects::sql::DaoQueries;
+use td_objects::types::basic::{ExecutionId, FunctionVersionId, TableDataVersionId, TransactionId};
 use td_process::launcher::cli::Cli;
 use td_services::execution::services::runtime_info::RuntimeContext;
 use td_storage::Storage;
@@ -142,6 +143,12 @@ pub fn run() {
                     Err(ExitStatus::GeneralError)?
                 }
             };
+
+            // setup IdL Generators
+            ExecutionId::init(None);
+            TransactionId::init(None);
+            FunctionVersionId::init(None);
+            TableDataVersionId::init(None);
 
             // Create storage
             let mount_defs = config.storage_mounts().map_err(|e| {

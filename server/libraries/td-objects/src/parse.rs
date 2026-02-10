@@ -3,11 +3,11 @@
 //
 
 use crate::table_ref::{TableRef, Version, VersionedTableRef, Versions};
-use crate::types::basic::CollectionName;
+use crate::types::basic::{CollectionName, TableDataVersionId};
 use constcat::concat;
 use regex::Regex;
 use std::sync::LazyLock;
-use td_common::id::Id;
+use td_common::logic_id::IdL;
 use td_error::{TdError, td_error};
 
 const IDENTIFIER_LEN: &str = "99";
@@ -114,7 +114,7 @@ const VERSION_PATTERN: &str = concat!(
     "|HEAD~(?<head_minus>[0-9]{1,7})",
     "|INITIAL(?<initial_forward>\\^{0,10})",
     "|INITIAL~(?<initial_plus>[0-9]{1,7})",
-    "|(?<id>[A-Z0-9]{26})",
+    "|(?<id>([A-Z0-9]{26}|[0-9]{8}[A-Z]{1,3}[0-9]{1,10}))",
     ")$"
 );
 
@@ -144,10 +144,8 @@ pub fn parse_version(s: impl Into<String>) -> Result<Version, TdError> {
                 Version::Initial(plus)
             } else {
                 let version = captures.name("id").unwrap().as_str();
-                let id = Id::try_from(version).map_err(|_| {
-                    ParserError::CouldNotParse(s.clone(), "a valid version ID".to_string())
-                })?;
-                Version::Fixed(id.into())
+                let id = TableDataVersionId::from(IdL::parse(version)?);
+                Version::Fixed(id)
             };
             Ok(version)
         }
@@ -404,7 +402,10 @@ mod tests {
         assert!(parse_version("INITIAL~a").is_err());
         let id = id::id();
         let version = parse_version(id).unwrap();
-        assert_eq!(version, Version::Fixed(id.into()));
+        assert_eq!(
+            version,
+            Version::Fixed(TableDataVersionId::from(IdL::new_legacy(id)))
+        );
         assert!(parse_version("A".repeat(26)).is_err());
     }
 
@@ -467,26 +468,43 @@ mod tests {
 
         let id = id::id();
         let versions = parse_versions(format!("{id}")).unwrap();
-        assert_eq!(versions, Versions::Single(Version::Fixed(id.into())));
+        assert_eq!(
+            versions,
+            Versions::Single(Version::Fixed(TableDataVersionId::from(IdL::new_legacy(
+                id
+            ))))
+        );
         let versions = parse_versions(format!("{id},HEAD~2")).unwrap();
         assert_eq!(
             versions,
-            Versions::List(vec![Version::Fixed(id.into()), Version::Head(-2)])
+            Versions::List(vec![
+                Version::Fixed(TableDataVersionId::from(IdL::new_legacy(id))),
+                Version::Head(-2)
+            ])
         );
         let versions = parse_versions(format!("HEAD~2,{id}")).unwrap();
         assert_eq!(
             versions,
-            Versions::List(vec![Version::Head(-2), Version::Fixed(id.into())])
+            Versions::List(vec![
+                Version::Head(-2),
+                Version::Fixed(TableDataVersionId::from(IdL::new_legacy(id)))
+            ])
         );
         let versions = parse_versions(format!("{id},INITIAL~2")).unwrap();
         assert_eq!(
             versions,
-            Versions::List(vec![Version::Fixed(id.into()), Version::Initial(2)])
+            Versions::List(vec![
+                Version::Fixed(TableDataVersionId::from(IdL::new_legacy(id))),
+                Version::Initial(2)
+            ])
         );
         let versions = parse_versions(format!("INITIAL~2,{id}")).unwrap();
         assert_eq!(
             versions,
-            Versions::List(vec![Version::Initial(2), Version::Fixed(id.into())])
+            Versions::List(vec![
+                Version::Initial(2),
+                Version::Fixed(TableDataVersionId::from(IdL::new_legacy(id)))
+            ])
         );
 
         assert!(parse_versions("HEAD~a").is_err());

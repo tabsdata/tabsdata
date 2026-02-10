@@ -20,7 +20,7 @@ mod definitions {
         )
     )]
     pub struct TableDataVersionDB {
-        #[builder(default)]
+        #[builder(default = "TableDataVersionId::new()")]
         #[td_type(extractor)]
         pub id: TableDataVersionId,
         #[sqlx(try_from = "String")]

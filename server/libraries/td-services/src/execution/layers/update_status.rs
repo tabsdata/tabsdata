@@ -289,7 +289,7 @@ pub async fn update_table_data_version_status(
                                 column_count: Some(table_info.column_count),
                                 row_count: Some(table_info.row_count),
                                 schema_hash: Some(table_info.schema_hash.clone()),
-                                with_data_table_data_version_id: Some(data_version.id),
+                                with_data_table_data_version_id: Some(data_version.id.clone()),
                             }
                         } else {
                             let latest_version_with_data: Option<TableDataVersionDBWithNames> = queries
@@ -322,7 +322,7 @@ pub async fn update_table_data_version_status(
                         };
 
                         let res = queries
-                            .update_by::<_, TableDataVersionDB>(&update, &data_version.id)?
+                            .update_by::<_, TableDataVersionDB>(&update, &data_version.id.clone())?
                             .build()
                             .execute(&mut *conn)
                             .await

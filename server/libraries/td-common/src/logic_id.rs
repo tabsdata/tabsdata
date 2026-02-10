@@ -106,9 +106,7 @@ impl<K: KeyId> IdL<K> {
 
     fn parse(s: &str) -> Result<Self, IdLError> {
         // Legacy IDs must be 26 chars, Logical Ids must be between 19 and 21 chars.
-        if s.len() == id::ID_LENGTH
-            && let Ok(_) = Id::try_from(s)
-        {
+        if s.len() == id::ID_LENGTH && let Ok(_) = Id::try_from(s) {
             return Ok(IdL::Legacy(s.to_string(), PhantomData));
         }
 
@@ -131,6 +129,10 @@ impl<K: KeyId> IdL<K> {
             .map_err(|_| IdLError::CannotParse(K::key().to_string(), s.to_string()))?;
 
         Ok(Self::new_logic(date, counter))
+    }
+
+    pub fn new_legacy(id: Id) -> Self {
+        Self::Legacy(id.to_string(), PhantomData)
     }
 
     fn new_logic(date: NaiveDate, counter: usize) -> Self {

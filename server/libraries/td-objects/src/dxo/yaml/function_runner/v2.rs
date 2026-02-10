@@ -248,7 +248,7 @@ mod tests {
         let function_run_id = FunctionRunId::default();
         let table_id = TableId::default();
         let table_version_id = TableVersionId::default();
-        let table_data_version_id = TableDataVersionId::default();
+        let table_data_version_id = TableDataVersionId::new();
         let triggered_on = TriggeredOn::default();
         let transaction_id = TransactionId::new();
         let execution_id = ExecutionId::new();
@@ -319,7 +319,7 @@ mod tests {
                 collection: CollectionName::try_from("collection").unwrap(),
                 table_id,
                 table_version_id,
-                table_data_version_id,
+                table_data_version_id: table_data_version_id.clone(),
                 location: Location {
                     uri: Url::try_from("file:///foo").unwrap(),
                     env_prefix: None,
@@ -332,7 +332,7 @@ mod tests {
                 collection: CollectionName::try_from("collection").unwrap(),
                 table_id,
                 table_version_id,
-                table_data_version_id,
+                table_data_version_id: table_data_version_id.clone(),
                 location: Location {
                     uri: Url::try_from("file:///foo").unwrap(),
                     env_prefix: None,
@@ -351,6 +351,7 @@ mod tests {
         let function_version_id = function_version_id.unpadded_str();
         let transaction_id = transaction_id.unpadded_str();
         let execution_id = execution_id.unpadded_str();
+        let table_data_version_id = table_data_version_id.unpadded_str();
 
         assert_eq!(
             serialized.as_str(),
@@ -466,7 +467,7 @@ output:
             .table_version_id(TableVersionId::default())
             .execution_id(ExecutionId::new())
             .transaction_id(TransactionId::new())
-            .table_data_version_id(TableDataVersionId::default())
+            .table_data_version_id(TableDataVersionId::new())
             .location(location.clone())
             .try_input_idx(1)?
             .try_table_pos(1)?
@@ -488,7 +489,7 @@ output:
             .transaction_id(TransactionId::new())
             .function_run_id(FunctionRunId::default())
             .triggered_on(AtTime::default())
-            .table_data_version_id(TableDataVersionId::default())
+            .table_data_version_id(TableDataVersionId::new())
             .try_input_idx(1)?
             .try_table_pos(1)?
             .try_version_pos(1)?
@@ -510,7 +511,7 @@ output:
             .transaction_id(TransactionId::new())
             .function_run_id(FunctionRunId::default())
             .triggered_on(AtTime::default())
-            .table_data_version_id(TableDataVersionId::default())
+            .table_data_version_id(TableDataVersionId::new())
             .try_input_idx(1)?
             .try_table_pos(1)?
             .try_version_pos(1)?
@@ -535,7 +536,7 @@ output:
             .transaction_id(TransactionId::new())
             .function_run_id(FunctionRunId::default())
             .triggered_on(AtTime::default())
-            .table_data_version_id(TableDataVersionId::default())
+            .table_data_version_id(TableDataVersionId::new())
             .location(location.clone())
             .try_input_idx(1)?
             .try_table_pos(1)?
@@ -561,7 +562,7 @@ output:
             .transaction_id(TransactionId::new())
             .function_run_id(FunctionRunId::default())
             .triggered_on(AtTime::default())
-            .table_data_version_id(TableDataVersionId::default())
+            .table_data_version_id(TableDataVersionId::new())
             .try_input_idx(1)?
             .try_table_pos(1)?
             .try_version_pos(1)?
@@ -597,7 +598,7 @@ output:
                 .try_collection("cn")?
                 .table_id(TableId::default())
                 .table_version_id(TableVersionId::default())
-                .table_data_version_id(TableDataVersionId::default())
+                .table_data_version_id(TableDataVersionId::new())
                 .location(location.clone())
                 .try_table_pos(1)?
                 .build()?,
@@ -612,7 +613,7 @@ output:
                 .try_collection("cn")?
                 .table_id(TableId::default())
                 .table_version_id(TableVersionId::default())
-                .table_data_version_id(TableDataVersionId::default())
+                .table_data_version_id(TableDataVersionId::new())
                 .base_location(location.clone())
                 .try_table_pos(1)?
                 .build()?,
@@ -692,7 +693,7 @@ output:
             .table_version_id(TableVersionId::default())
             .execution_id(ExecutionId::new())
             .transaction_id(TransactionId::new())
-            .table_data_version_id(TableDataVersionId::default())
+            .table_data_version_id(TableDataVersionId::new())
             .location(locations[1].clone())
             .try_input_idx(0)?
             .try_table_pos(-1)?
@@ -708,7 +709,7 @@ output:
             .transaction_id(TransactionId::new())
             .function_run_id(FunctionRunId::default())
             .triggered_on(AtTime::default())
-            .table_data_version_id(TableDataVersionId::default())
+            .table_data_version_id(TableDataVersionId::new())
             .location(locations[2].clone())
             .try_input_idx(0)?
             .try_table_pos(0)?
@@ -724,7 +725,7 @@ output:
             .transaction_id(TransactionId::new())
             .function_run_id(FunctionRunId::default())
             .triggered_on(AtTime::default())
-            .table_data_version_id(TableDataVersionId::default())
+            .table_data_version_id(TableDataVersionId::new())
             .location(locations[3].clone())
             .try_input_idx(1)?
             .try_table_pos(0)?
@@ -740,7 +741,7 @@ output:
             .transaction_id(TransactionId::new())
             .function_run_id(FunctionRunId::default())
             .triggered_on(AtTime::default())
-            .table_data_version_id(TableDataVersionId::default())
+            .table_data_version_id(TableDataVersionId::new())
             .location(locations[4].clone())
             .try_input_idx(2)?
             .try_table_pos(1)?
@@ -753,7 +754,7 @@ output:
                 .try_collection("collection_1")?
                 .table_id(TableId::default())
                 .table_version_id(TableVersionId::default())
-                .table_data_version_id(TableDataVersionId::default())
+                .table_data_version_id(TableDataVersionId::new())
                 .location(locations[5].clone())
                 .try_table_pos(-1)?
                 .build()?,
@@ -765,7 +766,7 @@ output:
                 .try_collection("collection_1")?
                 .table_id(TableId::default())
                 .table_version_id(TableVersionId::default())
-                .table_data_version_id(TableDataVersionId::default())
+                .table_data_version_id(TableDataVersionId::new())
                 .location(locations[6].clone())
                 .try_table_pos(1)?
                 .build()?,
@@ -777,7 +778,7 @@ output:
                 .try_collection("collection_1")?
                 .table_id(TableId::default())
                 .table_version_id(TableVersionId::default())
-                .table_data_version_id(TableDataVersionId::default())
+                .table_data_version_id(TableDataVersionId::new())
                 .location(locations[7].clone())
                 .try_table_pos(1)?
                 .build()?,

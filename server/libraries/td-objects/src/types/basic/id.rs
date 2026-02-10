@@ -104,7 +104,7 @@ pub struct SessionId;
 #[td_type::typed(id)]
 pub struct TableDataId;
 
-#[td_type::typed(id)]
+#[td_type::typed(idlogic(key = DV))]
 pub struct TableDataVersionId;
 
 #[td_type::typed(id)]
@@ -116,7 +116,7 @@ pub struct TableVersionId;
 #[td_type::typed(id, try_from = CollectionId)]
 pub struct ToCollectionId;
 
-#[td_type::typed(idlogic(key = TRX))]
+#[td_type::typed(idlogic(key = TX))]
 pub struct TransactionId;
 
 #[td_type::typed(id)]
