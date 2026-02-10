@@ -230,7 +230,8 @@ fn move_file(source: &Path, target: &Path) -> io::Result<()> {
 mod tests {
     use super::*;
     use rand::distr::Alphanumeric;
-    use rand::{Rng, rng};
+    use rand::rng;
+    use rand::RngExt;
     use serde_yaml::to_string;
     use std::collections::HashMap;
     use std::fs::File;

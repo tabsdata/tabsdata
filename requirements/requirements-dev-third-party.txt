@@ -20,7 +20,7 @@ devpi-client==7.2.0
 devpi-server==6.19.0
 devpi-web==5.0.1
 docker==7.1.0
-fastapi==0.128.4
+fastapi==0.128.5
 flake8==7.3.0
 gitpython==3.1.46
 gita==0.16.8.2

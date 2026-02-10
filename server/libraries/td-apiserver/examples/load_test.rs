@@ -4,8 +4,8 @@
 
 use clap::Parser;
 use indicatif::{ProgressBar, ProgressStyle};
-use rand::Rng;
 use rand::prelude::{IndexedRandom, IteratorRandom};
+use rand::RngExt;
 use std::collections::HashMap;
 use std::time::Instant;
 use strum::IntoEnumIterator;
@@ -172,7 +172,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // we will always end up with dag constructions given that we can only depend on previous functions
         // build deps
         let dependency_functions = functions
-            .choose_multiple(&mut rand::rng(), rand::rng().random_range(0..=5))
+            .sample(&mut rand::rng(), rand::rng().random_range(0..=5))
             .cloned()
             .collect::<Vec<FunctionDB>>();
         let mut dependencies = Vec::new();
@@ -192,7 +192,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // build triggers
         let trigger_functions = functions
-            .choose_multiple(&mut rand::rng(), rand::rng().random_range(0..=5))
+            .sample(&mut rand::rng(), rand::rng().random_range(0..=5))
             .cloned()
             .collect::<Vec<FunctionDB>>();
         let mut triggers = Vec::new();

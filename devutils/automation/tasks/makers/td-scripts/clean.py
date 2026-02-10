@@ -142,26 +142,26 @@ def clean_py(project_folder):
         ".pytest_cache",
         ".tox",
         "*.egg-info",
+        "*.log.*",
+        "*.log",
+        "client/platform/src/main/python/tabsdata/assets",
+        "client/platform/src/main/python/tabsdata/resources",
+        "coverage.xml",
+        "docs/_build",
+        "htmlcov",
+        "local_dev",
+        "local_development_artifacts",
+        "site",
+        "SOURCETRACK.yaml",
+        "tabsdata.libs",
+        "tabsdata/service/agent/assets",
         "target/build",
         "target/pytest",
         "target/python",
         "target/reports",
         "target/tdlocal",
         "target/wheels",
-        "coverage.xml",
-        "docs/_build",
-        "htmlcov",
-        "*.log",
-        "*.log.*",
-        "site",
-        "local_dev",
         "tdlocal",
-        "local_development_artifacts",
-        "client/platform/src/main/python/tabsdata/assets",
-        "client/platform/src/main/python/tabsdata/resources",
-        "tabsdata/service/agent/assets",
-        "SOURCETRACK.yaml",
-        "tabsdata.libs",
         EXAMPLES_GUIDES_BOOK_PATH,
     ]
 
@@ -203,8 +203,8 @@ def clean_py(project_folder):
 
     exclusion_patterns = [
         ".coveragerc",
-        "data.log",
         "another_file.log",
+        "data.log",
         "source_1.log",
         "source_2.log",
     ]
@@ -215,17 +215,18 @@ def clean_py(project_folder):
 def clean_rs(project_folder):
     inclusion_patterns = [
         # "Cargo.lock",
-        "target",
-        "*.log",
         "*.log.*",
+        "*.log",
         "books/dguide/book",
+        "CLAUDE.md",
+        "target",
         "variant/assets/manifest/THIRD-PARTY",
     ]
 
     exclusion_patterns = [
         ".coveragerc",
-        "data.log",
         "another_file.log",
+        "data.log",
         "source_1.log",
         "source_2.log",
     ]
@@ -236,18 +237,18 @@ def clean_rs(project_folder):
 def clean_ts(project_folder):
     inclusion_patterns = [
         "node_modules",
-        "src/tests/coverage",
-        "src/e2e/test-results",
         "src/e2e/playwright-report",
         "src/e2e/setup/storageState.json",
+        "src/e2e/test-results",
+        "src/tests/coverage",
         "target",
         "test-results",
     ]
 
     exclusion_patterns = [
         ".coveragerc",
-        "data.log",
         "another_file.log",
+        "data.log",
         "source_1.log",
         "source_2.log",
     ]

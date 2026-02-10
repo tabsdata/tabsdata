@@ -114,7 +114,7 @@ version = "1.0.106"
 version = "1.0.44"
 
 [workspace.dependencies.rand]
-version = "0.9.2"
+version = "0.10.0"
 
 [workspace.dependencies.serde]
 version = "1.0.228"
