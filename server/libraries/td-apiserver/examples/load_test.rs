@@ -275,7 +275,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 collection_id: collection.id,
                 collection: collection.name.clone(),
                 function_id: function.function_id,
-                function_version_id: function.id,
+                function_version_id: function.id.clone(),
                 name: function.name.clone(),
                 enabled: Default::default(),
             };

@@ -26,7 +26,7 @@ pub async fn build_deleted_functions(
             v.clone()
                 .to_builder()
                 .try_update_from(request_context.deref())?
-                .id(FunctionVersionId::default())
+                .id(FunctionVersionId::new())
                 .status(FunctionStatus::Deleted)
                 .build()
         })

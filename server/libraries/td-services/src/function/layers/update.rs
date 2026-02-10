@@ -61,7 +61,7 @@ pub async fn update_function_db_builder(
 ) -> Result<FunctionDBBuilder, TdError> {
     let mut builder = builder.deref().clone();
     // change the version id and set it to active
-    builder.id(FunctionVersionId::default());
+    builder.id(FunctionVersionId::new());
     builder.status(FunctionStatus::Active);
 
     if let Some(name) = &update.name {

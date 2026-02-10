@@ -49,7 +49,7 @@ mod tests {
     fn test_cron_input_ser_deser() {
         let worker_id = WorkerId::default();
         let collection_id = CollectionId::default();
-        let function_version_id = FunctionVersionId::default();
+        let function_version_id = FunctionVersionId::new();
         let scheduled_on = AtTime::default();
         let start = DateTime::default();
         let end = DateTime::default();
@@ -64,7 +64,7 @@ mod tests {
                 worker_id,
                 collection_id,
                 collection: CollectionName::try_from("collection").unwrap(),
-                function_version_id,
+                function_version_id: function_version_id.clone(),
                 function: FunctionName::try_from("function").unwrap(),
                 scheduled_on,
                 task: HttpRequest {
@@ -82,6 +82,7 @@ mod tests {
         let scheduled_on = scheduled_on.as_str_millis();
         let start = serde_json::to_string(&start).unwrap();
         let end = serde_json::to_string(&end).unwrap();
+        let function_version_id = function_version_id.unpadded_str();
         assert_eq!(
             serialized.as_str(),
             format!(

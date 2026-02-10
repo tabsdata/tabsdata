@@ -14,7 +14,7 @@ pub async fn update_function_db_builder(
 ) -> Result<FunctionDBBuilder, TdError> {
     let mut builder = builder.deref().clone();
     // change the version id
-    builder.id(FunctionVersionId::default());
+    builder.id(FunctionVersionId::new());
     Ok(builder)
 }
 
@@ -28,7 +28,7 @@ pub async fn update_table_db_builder(
         // change the version id
         builder
             .id(TableVersionId::default())
-            .function_version_id(function.id);
+            .function_version_id(&function.id);
         new_builders.push(builder);
     }
     Ok(new_builders)

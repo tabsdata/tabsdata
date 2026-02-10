@@ -59,7 +59,7 @@ impl<T: TransactionMapper> TransactionMap<T> {
         let key = self.mapper.key(v)?;
         if !self.map.contains_key(&key) {
             let value = TransactionValue {
-                id: TransactionId::default(),
+                id: TransactionId::new(),
                 collection_id: v.collection_id,
                 execution_id: e.id.clone(),
                 transaction_by: self.mapper.transaction_by()?,
@@ -87,7 +87,7 @@ mod tests {
     use crate::dxo::execution::ExecutionDB;
     use crate::test_utils::graph::{FUNCTION_NAMES, function_node};
     use crate::test_utils::transaction::TestTransactionBy;
-    use crate::types::basic::{ExecutionId, TriggerType};
+    use crate::types::basic::{ExecutionId, FunctionVersionId, TriggerType};
 
     fn dummy_execution() -> ExecutionDB {
         ExecutionDB {
@@ -95,7 +95,7 @@ mod tests {
             name: None,
             collection_id: Default::default(),
             function_id: Default::default(),
-            function_version_id: Default::default(),
+            function_version_id: FunctionVersionId::new(),
             triggered_on: Default::default(),
             triggered_by_id: Default::default(),
             recursion_options: Default::default(),

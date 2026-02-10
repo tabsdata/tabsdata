@@ -14,7 +14,7 @@ pub async fn seed_transaction(
     transaction_key: &TransactionKey,
 ) -> TransactionDB {
     let transaction_db = TransactionDB::builder()
-        .id(TransactionId::default())
+        .id(TransactionId::new())
         .collection_id(execution.collection_id)
         .execution_id(&execution.id)
         .try_transaction_by("ANY")

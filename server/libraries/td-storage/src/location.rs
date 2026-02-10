@@ -724,8 +724,8 @@ mod tests {
     fn test_transaction_function_version_builder_v2() -> Result<(), TdError> {
         let data_location = DataLocation::try_from("/L")?;
         let collection = CollectionId::default();
-        let transaction = TransactionId::default();
-        let function_version = FunctionVersionId::default();
+        let transaction = TransactionId::new();
+        let function_version = FunctionVersionId::new();
         let builder = StorageLocation::V2
             .builder(&data_location)
             .collection(&collection)

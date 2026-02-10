@@ -177,6 +177,8 @@ mod tests {
             .find(|t| t.name.starts_with(TD_FN_STATE_PREFIX))
             .unwrap();
 
+        let function_version_id = function.id.clone();
+
         let get_download = async move |context: &Context,
                                        _table: &str, // not using table because always getting state table of the fn
                                        at_time: &AtTime|
@@ -185,7 +187,7 @@ mod tests {
             let request =
                 RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
                     .read(FunctionVersionAtId {
-                        function_version_id: function.id,
+                        function_version_id: function_version_id.clone(),
                         at: *at_time,
                     });
             let service = TableStateDownloadService::build(context);
@@ -199,7 +201,7 @@ mod tests {
             let request =
                 RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
                     .read(FunctionVersionAtId {
-                        function_version_id: function.id,
+                        function_version_id: function_version_id.clone(),
                         at: *at_time,
                     });
             let service = TableStateDownloadService::build(context);

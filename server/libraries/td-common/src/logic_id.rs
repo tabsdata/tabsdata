@@ -45,11 +45,11 @@ pub enum IdL<K: KeyId> {
 }
 
 impl<K: KeyId> IdL<K> {
-    fn is_legacy(&self) -> bool {
+    pub fn is_legacy(&self) -> bool {
         matches!(self, IdL::Legacy(_, _))
     }
 
-    fn is_logic(&self) -> bool {
+    pub fn is_logic(&self) -> bool {
         matches!(self, IdL::Logic(_, _))
     }
 

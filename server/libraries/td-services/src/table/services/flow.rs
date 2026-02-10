@@ -196,7 +196,7 @@ mod tests {
         let central_table: TableDBWithNames = DaoQueries::default()
             .select_versions_at::<{ TableDBWithNames::All }, TableDBWithNames>(
                 None,
-                &(function_0.id, TableName::try_from("table_0")?),
+                &(function_0.id.clone(), TableName::try_from("table_0")?),
             )?
             .build_query_as()
             .fetch_one(&db)
@@ -206,12 +206,12 @@ mod tests {
 
         let expected_functions = [&function_0]
             .iter()
-            .map(|f| (f.id, f.name.clone()))
+            .map(|f| (f.id.clone(), f.name.clone()))
             .collect::<HashMap<_, _>>();
         let functions = response
             .all_functions
             .iter()
-            .map(|(f_id, f)| (*f_id, f.name.clone()))
+            .map(|(f_id, f)| (f_id.clone(), f.name.clone()))
             .collect::<HashMap<_, _>>();
         assert_eq!(functions, expected_functions);
 
@@ -319,7 +319,7 @@ mod tests {
         let central_table: TableDBWithNames = DaoQueries::default()
             .select_versions_at::<{ TableDBWithNames::All }, TableDBWithNames>(
                 None,
-                &(function_0.id, TableName::try_from("table_0")?),
+                &(function_0.id.clone(), TableName::try_from("table_0")?),
             )?
             .build_query_as()
             .fetch_one(&db)
@@ -329,12 +329,12 @@ mod tests {
 
         let expected_functions = [&function_0, &function_1, &function_2]
             .iter()
-            .map(|f| (f.id, f.name.clone()))
+            .map(|f| (f.id.clone(), f.name.clone()))
             .collect::<HashMap<_, _>>();
         let functions = response
             .all_functions
             .iter()
-            .map(|(f_id, f)| (*f_id, f.name.clone()))
+            .map(|(f_id, f)| (f_id.clone(), f.name.clone()))
             .collect::<HashMap<_, _>>();
         assert_eq!(functions, expected_functions);
 
@@ -465,7 +465,7 @@ mod tests {
         let central_table: TableDBWithNames = DaoQueries::default()
             .select_versions_at::<{ TableDBWithNames::All }, TableDBWithNames>(
                 None,
-                &(function_2.id, TableName::try_from("table_3")?),
+                &(function_2.id.clone(), TableName::try_from("table_3")?),
             )?
             .build_query_as()
             .fetch_one(&db)
@@ -475,12 +475,12 @@ mod tests {
 
         let expected_functions = [&function_0, &function_2]
             .iter()
-            .map(|f| (f.id, f.name.clone()))
+            .map(|f| (f.id.clone(), f.name.clone()))
             .collect::<HashMap<_, _>>();
         let functions = response
             .all_functions
             .iter()
-            .map(|(f_id, f)| (*f_id, f.name.clone()))
+            .map(|(f_id, f)| (f_id.clone(), f.name.clone()))
             .collect::<HashMap<_, _>>();
         assert_eq!(functions, expected_functions);
 

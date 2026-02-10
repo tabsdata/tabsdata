@@ -244,13 +244,13 @@ mod tests {
     #[test]
     fn test_function_runner_input_ser_deser() {
         let collection_id = CollectionId::default();
-        let function_version_id = FunctionVersionId::default();
+        let function_version_id = FunctionVersionId::new();
         let function_run_id = FunctionRunId::default();
         let table_id = TableId::default();
         let table_version_id = TableVersionId::default();
         let table_data_version_id = TableDataVersionId::default();
         let triggered_on = TriggeredOn::default();
-        let transaction_id = TransactionId::default();
+        let transaction_id = TransactionId::new();
         let execution_id = ExecutionId::new();
         let scheduled_on = AtTime::default();
         let defined_on = AtTime::default();
@@ -259,7 +259,7 @@ mod tests {
             info: FunctionInfo {
                 collection_id,
                 collection: CollectionName::try_from("collection").unwrap(),
-                function_version_id,
+                function_version_id: function_version_id.clone(),
                 function: FunctionName::try_from("function").unwrap(),
                 function_defined_on: defined_on,
                 function_run_id,
@@ -272,7 +272,7 @@ mod tests {
                     env_prefix: None,
                 },
                 triggered_on,
-                transaction_id,
+                transaction_id: transaction_id.clone(),
                 execution_id: execution_id.clone(),
                 execution_name: None,
                 function_data: Location {
@@ -347,6 +347,10 @@ mod tests {
         let scheduled_on = scheduled_on.as_str_millis();
 
         let defined_on = serde_json::to_string(&defined_on).unwrap();
+
+        let function_version_id = function_version_id.unpadded_str();
+        let transaction_id = transaction_id.unpadded_str();
+        let execution_id = execution_id.unpadded_str();
 
         assert_eq!(
             serialized.as_str(),
@@ -461,7 +465,7 @@ output:
             .table_id(TableId::default())
             .table_version_id(TableVersionId::default())
             .execution_id(ExecutionId::new())
-            .transaction_id(TransactionId::default())
+            .transaction_id(TransactionId::new())
             .table_data_version_id(TableDataVersionId::default())
             .location(location.clone())
             .try_input_idx(1)?
@@ -481,7 +485,7 @@ output:
             .table_id(TableId::default())
             .table_version_id(TableVersionId::default())
             .execution_id(ExecutionId::new())
-            .transaction_id(TransactionId::default())
+            .transaction_id(TransactionId::new())
             .function_run_id(FunctionRunId::default())
             .triggered_on(AtTime::default())
             .table_data_version_id(TableDataVersionId::default())
@@ -503,7 +507,7 @@ output:
             .table_id(TableId::default())
             .table_version_id(TableVersionId::default())
             .execution_id(ExecutionId::new())
-            .transaction_id(TransactionId::default())
+            .transaction_id(TransactionId::new())
             .function_run_id(FunctionRunId::default())
             .triggered_on(AtTime::default())
             .table_data_version_id(TableDataVersionId::default())
@@ -528,7 +532,7 @@ output:
             .table_id(TableId::default())
             .table_version_id(TableVersionId::default())
             .execution_id(ExecutionId::new())
-            .transaction_id(TransactionId::default())
+            .transaction_id(TransactionId::new())
             .function_run_id(FunctionRunId::default())
             .triggered_on(AtTime::default())
             .table_data_version_id(TableDataVersionId::default())
@@ -554,7 +558,7 @@ output:
             .table_id(TableId::default())
             .table_version_id(TableVersionId::default())
             .execution_id(ExecutionId::new())
-            .transaction_id(TransactionId::default())
+            .transaction_id(TransactionId::new())
             .function_run_id(FunctionRunId::default())
             .triggered_on(AtTime::default())
             .table_data_version_id(TableDataVersionId::default())
@@ -687,7 +691,7 @@ output:
             .table_id(TableId::default())
             .table_version_id(TableVersionId::default())
             .execution_id(ExecutionId::new())
-            .transaction_id(TransactionId::default())
+            .transaction_id(TransactionId::new())
             .table_data_version_id(TableDataVersionId::default())
             .location(locations[1].clone())
             .try_input_idx(0)?
@@ -701,7 +705,7 @@ output:
             .table_id(TableId::default())
             .table_version_id(TableVersionId::default())
             .execution_id(ExecutionId::new())
-            .transaction_id(TransactionId::default())
+            .transaction_id(TransactionId::new())
             .function_run_id(FunctionRunId::default())
             .triggered_on(AtTime::default())
             .table_data_version_id(TableDataVersionId::default())
@@ -717,7 +721,7 @@ output:
             .table_id(TableId::default())
             .table_version_id(TableVersionId::default())
             .execution_id(ExecutionId::new())
-            .transaction_id(TransactionId::default())
+            .transaction_id(TransactionId::new())
             .function_run_id(FunctionRunId::default())
             .triggered_on(AtTime::default())
             .table_data_version_id(TableDataVersionId::default())
@@ -733,7 +737,7 @@ output:
             .table_id(TableId::default())
             .table_version_id(TableVersionId::default())
             .execution_id(ExecutionId::new())
-            .transaction_id(TransactionId::default())
+            .transaction_id(TransactionId::new())
             .function_run_id(FunctionRunId::default())
             .triggered_on(AtTime::default())
             .table_data_version_id(TableDataVersionId::default())
@@ -782,14 +786,14 @@ output:
         let info = FunctionInfo::builder()
             .collection_id(CollectionId::default())
             .collection(CollectionName::try_from("cn")?)
-            .function_version_id(FunctionVersionId::default())
+            .function_version_id(FunctionVersionId::new())
             .function_defined_on(AtTime::default())
             .function(FunctionName::try_from("fn")?)
             .function_run_id(FunctionRunId::default())
             .function_bundle(locations[8].clone())
             .function_stage(locations[0].clone())
             .triggered_on(TriggeredOn::default())
-            .transaction_id(TransactionId::default())
+            .transaction_id(TransactionId::new())
             .execution_id(ExecutionId::new())
             .execution_name(Some(ExecutionName::try_from("en")?))
             .function_data(locations[0].clone())

@@ -66,7 +66,7 @@ pub static FUNCTION_VERSION_IDS: LazyLock<HashMap<FunctionName, FunctionVersionI
     LazyLock::new(|| {
         let mut map = HashMap::new();
         for name in FUNCTIONS.keys() {
-            map.insert(name.clone(), FunctionVersionId::default());
+            map.insert(name.clone(), FunctionVersionId::new());
         }
         map
     });

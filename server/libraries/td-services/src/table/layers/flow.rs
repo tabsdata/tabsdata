@@ -46,7 +46,7 @@ pub async fn build_response(
     let relations = graph
         .relations()
         .into_iter()
-        .map(|(f, t, e)| (f.function_version_id, t.table_version_id, e.clone()))
+        .map(|(f, t, e)| (f.function_version_id.clone(), t.table_version_id, e.clone()))
         .sorted()
         .collect();
 
@@ -54,7 +54,7 @@ pub async fn build_response(
     let all_functions = graph
         .functions()
         .into_iter()
-        .map(|f| (f.function_version_id, f.clone()))
+        .map(|f| (f.function_version_id.clone(), f.clone()))
         .collect();
 
     // Tables info

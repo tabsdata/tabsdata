@@ -66,7 +66,7 @@ pub struct FunctionId;
 #[td_type::typed(id)]
 pub struct FunctionRunId;
 
-#[td_type::typed(id)]
+#[td_type::typed(idlogic(key = FV))]
 pub struct FunctionVersionId;
 
 #[td_type::typed(id)]
@@ -116,7 +116,7 @@ pub struct TableVersionId;
 #[td_type::typed(id, try_from = CollectionId)]
 pub struct ToCollectionId;
 
-#[td_type::typed(id)]
+#[td_type::typed(idlogic(key = TRX))]
 pub struct TransactionId;
 
 #[td_type::typed(id)]

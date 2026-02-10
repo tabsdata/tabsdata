@@ -143,14 +143,14 @@ pub async fn create_locked_function_runner_workers_start_request<T: WorkerMessag
                 let info = FunctionInfo::builder()
                     .collection_id(f.collection_id)
                     .collection(f.collection.clone())
-                    .function_version_id(f.function_version_id)
+                    .function_version_id(&f.function_version_id)
                     .function_defined_on(f.defined_on)
                     .function(f.name.clone())
                     .function_run_id(f.id)
                     .function_bundle(bundle_location)
                     .function_stage(stage_location)
                     .triggered_on(f.triggered_on)
-                    .transaction_id(f.transaction_id)
+                    .transaction_id(&f.transaction_id)
                     .execution_id(&f.execution_id)
                     .execution_name(f.execution.clone())
                     .function_data(function_run_location)
@@ -232,7 +232,7 @@ pub async fn create_locked_function_runner_workers_start_request<T: WorkerMessag
                             .table_id(req.requirement_table_id)
                             .table_version_id(req.requirement_table_version_id)
                             .execution_id(found_data_version.as_ref().map(|v| v.execution_id.clone()))
-                            .transaction_id(found_data_version.as_ref().map(|v| v.transaction_id))
+                            .transaction_id(found_data_version.as_ref().map(|v| v.transaction_id.clone()))
                             .function_run_id(found_data_version.as_ref().map(|v| v.function_run_id))
                             .triggered_on(
                                 found_data_version
@@ -348,9 +348,9 @@ pub async fn create_locked_function_runner_workers_start_request<T: WorkerMessag
                     id: worker_id,
                     collection_id: f.collection_id,
                     execution_id: Some(f.execution_id.clone()),
-                    transaction_id: Some(f.transaction_id),
+                    transaction_id: Some(f.transaction_id.clone()),
                     function_run_id: Some(f.id),
-                    function_version_id: f.function_version_id,
+                    function_version_id: f.function_version_id.clone(),
                     message_status: WorkerMessageStatus::Locked,
                     started_on: None,
                     ended_on: None,
@@ -429,7 +429,7 @@ pub async fn create_locked_cron_trigger_workers_start_request<T: WorkerMessageQu
                     worker_id: cron_trigger_worker.id,
                     collection_id: cron_trigger_worker.collection_id,
                     collection: cron_trigger_worker.collection.clone(),
-                    function_version_id: cron_trigger_worker.function_version_id,
+                    function_version_id: cron_trigger_worker.function_version_id.clone(),
                     function: cron_trigger_worker.function.clone(),
                     scheduled_on: AtTime::now(),
                     task,
@@ -636,7 +636,7 @@ pub async fn create_locked_stage_trigger_workers_start_request<T: WorkerMessageQ
                     worker_id: stage_trigger_worker.id,
                     collection_id: stage_trigger_worker.collection_id,
                     collection: stage_trigger_worker.collection.clone(),
-                    function_version_id: stage_trigger_worker.function_version_id,
+                    function_version_id: stage_trigger_worker.function_version_id.clone(),
                     function: stage_trigger_worker.function.clone(),
                     function_defined_on: f.defined_on,
                     function_bundle,

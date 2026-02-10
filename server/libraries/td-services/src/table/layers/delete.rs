@@ -32,7 +32,7 @@ pub async fn build_frozen_functions(
             v.clone()
                 .to_builder()
                 .try_update_from(request_context.deref())?
-                .id(FunctionVersionId::default())
+                .id(FunctionVersionId::new())
                 .status(FunctionStatus::Frozen)
                 .build()
         })

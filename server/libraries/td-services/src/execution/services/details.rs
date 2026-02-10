@@ -121,7 +121,7 @@ mod tests {
         assert_eq!(response.execution.id, execution.id);
 
         // Ensure no missing nor duplicate functions in execution details
-        let ids: HashSet<_> = response.functions.iter().map(|fr| fr.id).collect();
+        let ids: HashSet<_> = response.functions.iter().map(|fr| fr.id.clone()).collect();
         assert_eq!(
             ids.len(),
             response.functions.len(),

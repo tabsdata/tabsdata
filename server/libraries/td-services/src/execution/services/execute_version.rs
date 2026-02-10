@@ -499,7 +499,7 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
                 FunctionVersionIdParam {
-                    function_version_id: function.id,
+                    function_version_id: function.id.clone(),
                 },
                 ExecutionRequestInternal::builder()
                     .name(Some(ExecutionName::try_from("test_execution")?))
@@ -561,7 +561,7 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
                 FunctionVersionIdParam {
-                    function_version_id: function.id,
+                    function_version_id: function.id.clone(),
                 },
                 ExecutionRequestInternal::builder()
                     .name(Some(ExecutionName::try_from("test_execution")?))

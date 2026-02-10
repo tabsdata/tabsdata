@@ -107,7 +107,7 @@ mod definitions {
         updater(try_from = RequestContext, skip_all)
     )]
     pub struct FunctionDB {
-        #[builder(default)]
+        #[builder(default = "FunctionVersionId::new()")]
         #[td_type(extractor)]
         pub id: FunctionVersionId,
         #[td_type(setter)]

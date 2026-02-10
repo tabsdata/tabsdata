@@ -55,7 +55,7 @@ mod tests {
     fn test_stage_trigger_input_ser_deser() {
         let worker_id = WorkerId::default();
         let collection_id = CollectionId::default();
-        let function_version_id = FunctionVersionId::default();
+        let function_version_id = FunctionVersionId::new();
         let scheduled_on = AtTime::default();
         let start = DateTime::default();
         let end = DateTime::default();
@@ -72,7 +72,7 @@ mod tests {
                 worker_id,
                 collection_id,
                 collection: CollectionName::try_from("collection").unwrap(),
-                function_version_id,
+                function_version_id: function_version_id.clone(),
                 function: FunctionName::try_from("function").unwrap(),
                 function_defined_on: defined_on,
                 function_bundle: Location {
@@ -116,6 +116,8 @@ mod tests {
         let end = serde_json::to_string(&end).unwrap();
 
         let defined_on = serde_json::to_string(&defined_on).unwrap();
+
+        let function_version_id = function_version_id.unpadded_str();
 
         assert_eq!(
             serialized.as_str(),

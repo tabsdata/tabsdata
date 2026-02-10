@@ -85,7 +85,7 @@ impl GraphNode<FunctionNode, TableNode> {
                     .collection_id(function.collection_id)
                     .collection(function.collection.clone())
                     .function_id(function.function_id)
-                    .function_version_id(function.id)
+                    .function_version_id(function.id.clone())
                     .name(function.name.clone())
                     .enabled(function.enabled)
                     .build()?,
@@ -94,7 +94,7 @@ impl GraphNode<FunctionNode, TableNode> {
                 TableNode::builder()
                     .collection_id(table.collection_id)
                     .collection(table.collection.clone())
-                    .function_version_id(table.function_version_id)
+                    .function_version_id(table.function_version_id.clone())
                     .table_id(table.table_id)
                     .table_version_id(table.id)
                     .name(table.name.clone())

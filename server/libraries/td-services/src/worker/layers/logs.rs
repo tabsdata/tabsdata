@@ -184,6 +184,7 @@ mod tests {
     use super::*;
     use crate::worker::layers::tests::{create_log_files, worker_path};
     use strum::IntoEnumIterator;
+    use td_objects::types::basic::FunctionVersionId;
     use td_objects::types::basic::{Enabled, WorkerMessageStatus, WorkerStatus};
     use testdir::testdir;
 
@@ -306,7 +307,7 @@ mod tests {
             execution_id: None,
             transaction_id: None,
             function_run_id: None,
-            function_version_id: Default::default(),
+            function_version_id: FunctionVersionId::new(),
             message_status: WorkerMessageStatus::Unlocked,
             started_on: None,
             ended_on: None,

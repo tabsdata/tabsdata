@@ -46,12 +46,12 @@ mod tests {
     fn test_transaction_by_key() -> Result<(), TdError> {
         let mapper = TransactionBy::Function;
 
-        let key = FunctionVersionId::default();
+        let key = FunctionVersionId::new();
         let function = FunctionNode::builder()
             .collection_id(CollectionId::default())
             .collection(CollectionName::try_from("test")?)
             .function_id(FunctionId::default())
-            .function_version_id(key)
+            .function_version_id(&key)
             .name(FunctionName::try_from("name")?)
             .enabled(Enabled::TRUE)
             .build()?;

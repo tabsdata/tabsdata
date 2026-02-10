@@ -43,7 +43,10 @@ pub async fn skip_if_running(
             let conn = conn.get_mut_connection()?;
 
             let function_run: FunctionRunDB = queries
-                .select_by::<FunctionRunDB>(&(*function_version_id, latest_execution.id.clone()))?
+                .select_by::<FunctionRunDB>(&(
+                    function_version_id.deref().clone(),
+                    latest_execution.id.clone(),
+                ))?
                 .build_query_as()
                 .fetch_one(conn)
                 .await

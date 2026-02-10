@@ -127,7 +127,7 @@ pub async fn build_transactions(
             transaction_builder
                 .deref()
                 .clone()
-                .id(transaction.id)
+                .id(transaction.id.clone())
                 .collection_id(transaction.collection_id)
                 .transaction_by(transaction.transaction_by.clone())
                 .transaction_key(transaction.transaction_key.clone())
@@ -162,8 +162,8 @@ pub async fn build_function_runs(
                 .clone()
                 .collection_id(f.collection_id)
                 .function_id(f.function_id)
-                .function_version_id(f.function_version_id)
-                .transaction_id(transaction.id)
+                .function_version_id(&f.function_version_id)
+                .transaction_id(&transaction.id)
                 .trigger(trigger)
                 .build()
                 .map_err(TdError::from)
@@ -180,7 +180,7 @@ pub async fn build_table_data_versions(
 ) -> Result<Vec<TableDataVersionDB>, TdError> {
     let function_runs_map: HashMap<_, _> = function_runs
         .iter()
-        .map(|f| (f.function_version_id, f))
+        .map(|f| (f.function_version_id.clone(), f))
         .collect();
 
     let new_table_data_versions = execution_plan
@@ -193,9 +193,9 @@ pub async fn build_table_data_versions(
                 .table_id(t.table_id)
                 .name(t.name.clone())
                 .table_version_id(t.table_version_id)
-                .function_version_id(t.function_version_id)
+                .function_version_id(&t.function_version_id)
                 .execution_id(&transaction.execution_id)
-                .transaction_id(transaction.id)
+                .transaction_id(&transaction.id)
                 .function_run_id(function_runs_map[&f.function_version_id].id)
                 .function_param_pos(edge.output_pos().cloned().expect("must have output pos"))
                 .build()
@@ -289,7 +289,7 @@ pub async fn build_function_requirements(
 
     let function_runs_map: HashMap<_, _> = function_runs
         .iter()
-        .map(|f| (f.function_version_id, f))
+        .map(|f| (f.function_version_id.clone(), f))
         .collect();
 
     let mut input_idx = 0;
@@ -300,11 +300,11 @@ pub async fn build_function_requirements(
             // current
             .collection_id(function.collection_id)
             .execution_id(&transaction.execution_id)
-            .transaction_id(transaction.id)
+            .transaction_id(&transaction.id)
             .function_run_id(function_runs_map[&function.function_version_id].id)
             // condition
             .requirement_table_id(table.table_id)
-            .requirement_function_version_id(table.function_version_id)
+            .requirement_function_version_id(&table.function_version_id)
             .requirement_table_version_id(table.table_version_id);
 
         if let Some(dependency) = edge.dependency_pos() {
@@ -421,8 +421,8 @@ pub async fn build_response(
         .chain(std::iter::once(execution_plan.main_trigger()))
         .try_fold(HashMap::new(), |mut acc, f| {
             let transaction = transaction_map.get(&transaction_by.key(f)?)?;
-            let entry: &mut HashSet<_> = acc.entry(transaction.id).or_default();
-            entry.insert(f.function_version_id);
+            let entry: &mut HashSet<_> = acc.entry(transaction.id.clone()).or_default();
+            entry.insert(f.function_version_id.clone());
             Ok::<_, TdError>(acc)
         })?;
 
@@ -474,7 +474,11 @@ pub async fn build_response(
             let (resolved_version, info) = e.versions();
             let resolved_version = e.versioned(resolved_version.clone());
             relations_info.extend(info.clone());
-            (f.function_version_id, t.table_version_id, resolved_version)
+            (
+                f.function_version_id.clone(),
+                t.table_version_id,
+                resolved_version,
+            )
         })
         .sorted()
         .collect();
@@ -483,12 +487,12 @@ pub async fn build_response(
     let all_functions = execution_plan
         .functions()
         .into_iter()
-        .map(|f| (f.function_version_id, f.clone()))
+        .map(|f| (f.function_version_id.clone(), f.clone()))
         .collect();
     let triggered_functions = execution_plan
         .triggered_functions()
         .into_iter()
-        .map(|f| f.function_version_id)
+        .map(|f| f.function_version_id.clone())
         .collect();
 
     // Tables info
@@ -522,7 +526,7 @@ pub async fn build_response(
         dot,
         all_functions,
         triggered_functions,
-        manual_trigger: execution.function_version_id,
+        manual_trigger: execution.function_version_id.clone(),
         all_tables,
         created_tables,
         system_tables,

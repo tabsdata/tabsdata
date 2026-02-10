@@ -14,7 +14,7 @@ pub async fn build_deleted_function_version(
     let deleted_version = existing_function_version
         .deref()
         .clone()
-        .id(FunctionVersionId::default())
+        .id(FunctionVersionId::new())
         .status(FunctionStatus::Deleted)
         .build()?;
     Ok(deleted_version)

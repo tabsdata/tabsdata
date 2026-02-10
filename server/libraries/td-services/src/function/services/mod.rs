@@ -102,7 +102,7 @@ pub(crate) mod tests {
         assert_eq!(response.enabled, Enabled::TRUE);
 
         let queries = DaoQueries::default();
-        let function_version_id = response.id;
+        let function_version_id = response.id.clone();
         let function_id = response.function_id;
 
         // Assert function was created
@@ -269,7 +269,7 @@ pub(crate) mod tests {
             let table = &TableName::try_from(table_dto)?;
             // We will always have the old active version
             let old_version: Vec<TableDB> = queries
-                .select_by::<TableDB>(&(collection.id, table, created_function.id))?
+                .select_by::<TableDB>(&(collection.id, table, created_function.id.clone()))?
                 .build_query_as()
                 .fetch_all(db)
                 .await
@@ -279,7 +279,7 @@ pub(crate) mod tests {
 
             // And a new one, which will be active if still present, or else frozen
             let new_version: Vec<TableDB> = queries
-                .select_by::<TableDB>(&(collection.id, table, response.id))?
+                .select_by::<TableDB>(&(collection.id, table, response.id.clone()))?
                 .build_query_as()
                 .fetch_all(db)
                 .await
@@ -486,7 +486,7 @@ pub(crate) mod tests {
             let table = &TableName::try_from(table_dto)?;
             // We will always have the old active version
             let old_version: Vec<TableDB> = queries
-                .select_by::<TableDB>(&(collection.id, table, created_function.id))?
+                .select_by::<TableDB>(&(collection.id, table, created_function.id.clone()))?
                 .build_query_as()
                 .fetch_all(db)
                 .await
