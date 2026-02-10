@@ -110,7 +110,7 @@ def clean_py(project_folder):
 
             for entry in os.scandir(connectors_folder):
                 if entry.is_dir():
-                    connector_name_parts = entry.name.split("_", 1)
+                    connector_name_parts = entry.name.split("-", 1)
                     if (
                         len(connector_name_parts) != 2
                         or connector_name_parts[0] != "tabsdata"
@@ -158,12 +158,13 @@ def clean_py(project_folder):
 
     connectors = gather_connectors()
     for connector in connectors:
+        connector_module = connector.replace("-", "_")
         inclusion_patterns.append(
             os.path.join(
                 "connectors",
                 "python",
                 connector,
-                connector,
+                connector_module,
                 "assets",
                 "manifest",
                 "BANNER",
@@ -174,7 +175,7 @@ def clean_py(project_folder):
                 "connectors",
                 "python",
                 connector,
-                connector,
+                connector_module,
                 "assets",
                 "manifest",
                 "LICENSE",

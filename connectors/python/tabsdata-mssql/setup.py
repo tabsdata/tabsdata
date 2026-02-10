@@ -613,7 +613,7 @@ def global_spinner(desc: str):
 
 with global_spinner("Building package 'tabsdata-mssql' (SQL Server Connector)..."):
     setup(
-        name="tabsdata_mssql",
+        name="tabsdata-mssql",
         version=read(
             os.path.join(
                 "tabsdata_mssql",

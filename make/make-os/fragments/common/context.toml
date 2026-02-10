@@ -45,12 +45,13 @@ script = [
     set_td_tabsdata_dev_pkg = get_env TD_TABSDATA_DEV_PKG
     debug "🔅 tabsdata development python package location set to: ${set_td_tabsdata_dev_pkg}"
 
-    connectors = glob_array ${OS_CONNECTORS_PY_ROOT_FOLDER}/tabsdata_*
+    connectors = glob_array ${OS_CONNECTORS_PY_ROOT_FOLDER}/tabsdata-*
     for connector in ${connectors}
         is_connector = is_dir ${connector}
         if ${is_connector}
             connector_name = basename ${connector}
-            connector_name_upper = uppercase ${connector_name}
+            connector_name_underscore = replace ${connector_name} "-" "_"
+            connector_name_upper = uppercase ${connector_name_underscore}
             connector_name_env = set TD_${connector_name_upper}_DEV_PKG
 
             debug "🔷 _____ Setting up ${connector} development package mode..."

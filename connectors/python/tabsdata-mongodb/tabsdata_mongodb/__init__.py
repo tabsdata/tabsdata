@@ -10,7 +10,7 @@ __all__ = ["MongoDBDestination"]
 
 # noinspection PyBroadException
 try:
-    __version__ = importlib.metadata.version("tabsdata_mongodb")
+    __version__ = importlib.metadata.version("tabsdata-mongodb")
 except Exception:
     __version__ = "unknown"
 

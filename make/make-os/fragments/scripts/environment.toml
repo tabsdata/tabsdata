@@ -245,7 +245,7 @@ env_scripts = [
     new_path = set ${old_path}
 
     debug "✅ Using os connectors folder: '${OS_CONNECTORS_PY_ROOT_FOLDER}'"
-    connectors = glob_array ${OS_CONNECTORS_PY_ROOT_FOLDER}/tabsdata_*
+    connectors = glob_array ${OS_CONNECTORS_PY_ROOT_FOLDER}/tabsdata-*
     for connector in ${connectors}
         is_connector = is_dir ${connector}
         if ${is_connector}
@@ -262,7 +262,7 @@ env_scripts = [
         noop
     else
         debug "✅ Using ee connectors folder: '${EE_CONNECTORS_PY_ROOT_FOLDER}'"
-        connectors = glob_array ${EE_CONNECTORS_PY_ROOT_FOLDER}/tabsdata_*
+        connectors = glob_array ${EE_CONNECTORS_PY_ROOT_FOLDER}/tabsdata-*
         for connector in ${connectors}
             is_connector = is_dir ${connector}
             if ${is_connector}

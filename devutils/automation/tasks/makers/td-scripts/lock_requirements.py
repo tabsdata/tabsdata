@@ -64,7 +64,7 @@ def gather_connectors(root: str) -> list[tuple[str, str]]:
 
         for entry in os.scandir(connectors_folder):
             if entry.is_dir():
-                connector_name_parts = entry.name.split("_", 1)
+                connector_name_parts = entry.name.split("-", 1)
                 if (
                     len(connector_name_parts) != 2
                     or connector_name_parts[0] != "tabsdata"
@@ -289,12 +289,19 @@ def lock_pyprojects(
 
         known_first_party_entry = isort_entry.get("known_first_party", [])
         known_first_party_entry_set = {
-            v for v in known_first_party_entry if isinstance(v, str)
+            entry for entry in known_first_party_entry if isinstance(entry, str)
         }
 
-        test_connector_modules = {f"tests_{name}" for name in connector_modules}
+        connector_modules_underscore = {
+            name.replace("-", "_") for name in connector_modules
+        }
+        test_connector_modules = {
+            f"tests_{name}" for name in connector_modules_underscore
+        }
         merged = (
-            known_first_party_entry_set | connector_modules | test_connector_modules
+            known_first_party_entry_set
+            | connector_modules_underscore
+            | test_connector_modules
         )
 
         tabsdata_packages = sorted(

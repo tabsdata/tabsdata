@@ -613,7 +613,7 @@ def global_spinner(desc: str):
 
 with global_spinner("Building package 'tabsdata-snowflake' (Snowflake Connector)..."):
     setup(
-        name="tabsdata_snowflake",
+        name="tabsdata-snowflake",
         version=read(
             os.path.join(
                 "tabsdata_snowflake",

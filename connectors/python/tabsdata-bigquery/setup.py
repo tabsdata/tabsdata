@@ -613,7 +613,7 @@ def global_spinner(desc: str):
 
 with global_spinner("Building package 'tabsdata-bigquery' (BigQuery Connector)..."):
     setup(
-        name="tabsdata_bigquery",
+        name="tabsdata-bigquery",
         version=read(
             os.path.join(
                 "tabsdata_bigquery",

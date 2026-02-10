@@ -695,7 +695,7 @@ def build_extras_require(root: str) -> dict[str, list[str]]:
 
     all_connectors_requirements: list[str] = []
 
-    requirement_template = "tabsdata_{connector}[deps]=={version}"
+    requirement_template = "tabsdata-{connector}[deps]=={version}"
 
     for folder in connectors_folders:
         if not os.path.isdir(folder):
@@ -703,7 +703,7 @@ def build_extras_require(root: str) -> dict[str, list[str]]:
 
         for entry in os.scandir(folder):
             if entry.is_dir():
-                connector_name = entry.name.split("_", 1)
+                connector_name = entry.name.split("-", 1)
                 if len(connector_name) != 2 or connector_name[0] != "tabsdata":
                     logger.debug(f"⛔️ Invalid connector folder name: {entry.name}")
                 else:

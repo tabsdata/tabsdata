@@ -10,7 +10,7 @@ __all__ = ["SalesforceSource"]
 
 # noinspection PyBroadException
 try:
-    __version__ = importlib.metadata.version("tabsdata_salesforce")
+    __version__ = importlib.metadata.version("tabsdata-salesforce")
 except Exception:
     __version__ = "unknown"
 

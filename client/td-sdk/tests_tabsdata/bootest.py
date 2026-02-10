@@ -110,7 +110,7 @@ def enrich_sys_path():
 
             for entry in os.scandir(connectors_folder):
                 if entry.is_dir():
-                    connector_name_parts = entry.name.split("_", 1)
+                    connector_name_parts = entry.name.split("-", 1)
                     if (
                         len(connector_name_parts) != 2
                         or connector_name_parts[0] != "tabsdata"

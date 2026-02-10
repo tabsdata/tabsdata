@@ -19,7 +19,7 @@ __all__ = [
 
 # noinspection PyBroadException
 try:
-    __version__ = importlib.metadata.version("tabsdata_mssql")
+    __version__ = importlib.metadata.version("tabsdata-mssql")
 except Exception:
     __version__ = "unknown"
 

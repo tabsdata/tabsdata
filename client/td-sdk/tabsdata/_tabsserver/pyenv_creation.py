@@ -1886,7 +1886,7 @@ def retrieve_tabsdata_requirements_packages(
     for requirement in tabsdata_requirements:
         requirement_object = Requirement(requirement)
         module_name = requirement_object.name
-        is_dev_env = f"TD_{requirement_object.name.upper()}_DEV_PKG"
+        is_dev_env = f"TD_{requirement_object.name.upper().replace('-', '_')}_DEV_PKG"
         provider, location = get_tabsdata_package_metadata(
             module_name,
             is_dev_env,

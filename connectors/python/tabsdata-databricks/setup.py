@@ -613,7 +613,7 @@ def global_spinner(desc: str):
 
 with global_spinner("Building package 'tabsdata-databricks' (Databricks Connector)..."):
     setup(
-        name="tabsdata_databricks",
+        name="tabsdata-databricks",
         version=read(
             os.path.join(
                 "tabsdata_databricks",

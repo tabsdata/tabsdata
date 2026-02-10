@@ -613,7 +613,7 @@ def global_spinner(desc: str):
 
 with global_spinner("Building package 'tabsdata-kafka' (Kafka Connector)..."):
     setup(
-        name="tabsdata_kafka",
+        name="tabsdata-kafka",
         version=read(
             os.path.join(
                 "tabsdata_kafka",

@@ -590,12 +590,13 @@ script = [
     array_push ${tests_folders} ${PROJECT_PY_TY_TABLEFRAME_FOLDER}/${TESTS_PY_TY_TABLEFRAME_FOLDER}
     array_push ${tests_folders} ${PROJECT_PY_TD_TABSDATA_FOLDER}/${TESTS_PY_TD_TABSDATA_FOLDER}
 
-    connectors = glob_array ${OS_CONNECTORS_PY_ROOT_FOLDER}/tabsdata_*
+    connectors = glob_array ${OS_CONNECTORS_PY_ROOT_FOLDER}/tabsdata-*
     for connector in ${connectors}
         is_connector = is_dir ${connector}
         if ${is_connector}
             connector_name = basename ${connector}
-            connector_tests_folder_name = set tests_${connector_name}
+            connector_name_underscore = replace ${connector_name} "-" "_"
+            connector_tests_folder_name = set tests_${connector_name_underscore}
             connector_tests_folder_path = join_path ${connector} ${connector_tests_folder_name}
             array_push ${tests_folders} ${connector_tests_folder_path}
         end

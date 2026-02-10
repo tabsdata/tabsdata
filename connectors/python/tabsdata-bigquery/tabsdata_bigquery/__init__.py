@@ -10,7 +10,7 @@ __all__ = ["BigQueryDest"]
 
 # noinspection PyBroadException
 try:
-    __version__ = importlib.metadata.version("tabsdata_bigquery")
+    __version__ = importlib.metadata.version("tabsdata-bigquery")
 except Exception:
     __version__ = "unknown"
 

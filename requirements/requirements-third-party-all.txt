@@ -3,10 +3,10 @@
 #
 
 -r requirements-third-party.txt
--r ../connectors/python/tabsdata_bigquery/requirements/requirements-third-party.txt
--r ../connectors/python/tabsdata_databricks/requirements/requirements-third-party.txt
--r ../connectors/python/tabsdata_kafka/requirements/requirements-third-party.txt
--r ../connectors/python/tabsdata_mongodb/requirements/requirements-third-party.txt
--r ../connectors/python/tabsdata_mssql/requirements/requirements-third-party.txt
--r ../connectors/python/tabsdata_salesforce/requirements/requirements-third-party.txt
--r ../connectors/python/tabsdata_snowflake/requirements/requirements-third-party.txt
+-r ../connectors/python/tabsdata-bigquery/requirements/requirements-third-party.txt
+-r ../connectors/python/tabsdata-databricks/requirements/requirements-third-party.txt
+-r ../connectors/python/tabsdata-kafka/requirements/requirements-third-party.txt
+-r ../connectors/python/tabsdata-mongodb/requirements/requirements-third-party.txt
+-r ../connectors/python/tabsdata-mssql/requirements/requirements-third-party.txt
+-r ../connectors/python/tabsdata-salesforce/requirements/requirements-third-party.txt
+-r ../connectors/python/tabsdata-snowflake/requirements/requirements-third-party.txt

@@ -36,7 +36,7 @@ __all__ = [
 
 # noinspection PyBroadException
 try:
-    __version__ = importlib.metadata.version("tabsdata_kafka")
+    __version__ = importlib.metadata.version("tabsdata-kafka")
 except Exception:
     __version__ = "unknown"
 

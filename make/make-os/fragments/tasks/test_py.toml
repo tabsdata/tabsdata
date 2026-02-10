@@ -399,7 +399,7 @@ script = [
 
     verbose = get_env TD_VERBOSE
 
-    connectors = glob_array ${OS_CONNECTORS_PY_ROOT_FOLDER}/tabsdata_*
+    connectors = glob_array ${OS_CONNECTORS_PY_ROOT_FOLDER}/tabsdata-*
 
     for connector in ${connectors}
         is_connector = is_dir ${connector}
@@ -410,7 +410,8 @@ script = [
             set_env COVERAGE_FILE ${td_temp}/.tabsdata/.coverage.${PYTEST_XDIST_WORKER}
 
             connector_name = basename ${connector}
-            tests_folder_name = set tests_${connector_name}
+            connector_name_underscore = replace ${connector_name} "-" "_"
+            tests_folder_name = set tests_${connector_name_underscore}
             tests_folder_path = join_path ${connector} ${tests_folder_name}
 
             report_folder = set ${connector}/target/reports/pytest/${connector_name}

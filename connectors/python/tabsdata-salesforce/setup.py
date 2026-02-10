@@ -613,7 +613,7 @@ def global_spinner(desc: str):
 
 with global_spinner("Building package 'tabsdata-salesforce' (Salesforce Connector)..."):
     setup(
-        name="tabsdata_salesforce",
+        name="tabsdata-salesforce",
         version=read(
             os.path.join(
                 "tabsdata_salesforce",

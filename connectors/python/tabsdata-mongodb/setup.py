@@ -613,7 +613,7 @@ def global_spinner(desc: str):
 
 with global_spinner("Building package 'tabsdata-mongodb' (MongoDB Connector)..."):
     setup(
-        name="tabsdata_mongodb",
+        name="tabsdata-mongodb",
         version=read(
             os.path.join(
                 "tabsdata_mongodb",

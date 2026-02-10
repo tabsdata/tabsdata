@@ -10,7 +10,7 @@ __all__ = ["DatabricksDestination"]
 
 # noinspection PyBroadException
 try:
-    __version__ = importlib.metadata.version("tabsdata_databricks")
+    __version__ = importlib.metadata.version("tabsdata-databricks")
 except Exception:
     __version__ = "unknown"
 
