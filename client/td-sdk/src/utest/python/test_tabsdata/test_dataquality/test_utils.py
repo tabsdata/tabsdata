@@ -7,7 +7,7 @@ from typing import Annotated, List, Literal, Optional, TypeAlias, Union
 import pytest
 from pydantic import Field, Strict, StrictInt
 
-from tabsdata.dataquality._utils import (
+from tabsdata._utils.validation import (
     _get_parameter_type_hints,
     _normalize_to_list,
     _normalize_to_set,

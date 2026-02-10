@@ -23,7 +23,7 @@ from tabsdata.dataquality._typing import (
     TagSpec,
     TagsSpec,
 )
-from tabsdata.dataquality._utils import _normalize_to_list, _td_validate_call
+from tabsdata._utils.validation import _normalize_to_list, _td_validate_call
 from tabsdata.exceptions import ErrorCode
 
 

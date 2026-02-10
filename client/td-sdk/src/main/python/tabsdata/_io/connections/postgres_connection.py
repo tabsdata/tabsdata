@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 from tabsdata._credentials import UserPasswordCredentials, build_credentials
 from tabsdata._io.connections.connections import Conn
 from tabsdata._io.constants import POSTGRES_SCHEMES
-from tabsdata.dataquality._utils import _td_validate_call
+from tabsdata._utils.validation import _td_validate_call
 from tabsdata.exceptions import (
     ConnectionConfigurationError,
     ErrorCode,

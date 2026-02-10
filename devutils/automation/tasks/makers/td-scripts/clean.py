@@ -161,7 +161,7 @@ def clean_py(project_folder):
         "local_development_artifacts",
         "client/td-sdk/src/main/python/tabsdata/assets",
         "client/td-sdk/src/main/python/tabsdata/resources",
-        "tabsdata_agent/assets",
+        "tabsdata/service/agent/assets",
         "SOURCETRACK.yaml",
         "tabsdata.libs",
         EXAMPLES_GUIDES_BOOK_PATH,
@@ -169,7 +169,7 @@ def clean_py(project_folder):
 
     connectors = gather_connectors()
     for connector in connectors:
-        connector_module = connector.replace("-", "_")
+        connector_submodule_name = connector.split("-", 1)[1]
         inclusion_patterns.append(
             os.path.join(
                 "connectors",
@@ -178,7 +178,9 @@ def clean_py(project_folder):
                 "src",
                 "main",
                 "python",
-                connector_module,
+                "tabsdata",
+                "connector",
+                connector_submodule_name,
                 "assets",
                 "manifest",
                 "BANNER",
@@ -192,7 +194,9 @@ def clean_py(project_folder):
                 "src",
                 "main",
                 "python",
-                connector_module,
+                "tabsdata",
+                "connector",
+                connector_submodule_name,
                 "assets",
                 "manifest",
                 "LICENSE",

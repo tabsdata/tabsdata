@@ -63,6 +63,7 @@ from tabsdata._utils.bundle_utils import (
 
 # noinspection PyProtectedMember
 from tabsdata._utils.constants import (
+    BUILD_DEPENDENCIES,
     PYTHON_EDITABLE_PACKAGE_PREFIX,
     PYTHON_EDITABLE_PACKAGE_SUFFIX,
     TABSDATA_AGENT_MODULE_NAME,
@@ -658,7 +659,7 @@ def get_current_tabsdata_version():
     real_modules = []
     for module in available_modules:
         if module in mapping:
-            real_modules.append(mapping[module][0])
+            real_modules.extend(mapping[module])
         elif module.startswith(PYTHON_EDITABLE_PACKAGE_PREFIX) and module.endswith(
             PYTHON_EDITABLE_PACKAGE_SUFFIX
         ):
@@ -1573,13 +1574,14 @@ def install_host_package(
             "--link-mode",
             "hardlink",
         ]
+        use_editable = False
         if package_provider in [
             "Archive (Project)",
             "Archive (Folder)",
             "Folder (Editable)",
             "Folder (Frozen)",
         ]:
-            install_command.append("-e")
+            use_editable = True
             link_base_binaries(package_location, real_environment_name)
         elif source == "Local":
             logger.info(f"Identified a local package: '{package_location}'")
@@ -1602,10 +1604,27 @@ def install_host_package(
                         "Identified a tabsdata local package: "
                         f"'{package_location}' - '{package_name}'"
                     )
-                    install_command.append("-e")
+                    use_editable = True
                     if package_name == TABSDATA_MODULE_NAME:
                         link_base_binaries(package_location, real_environment_name)
+        if use_editable:
+            install_command.append("-e")
         install_command.append(package_location)
+        if use_editable:
+            build_dependencies_install_command = add_python_target_and_join_commands(
+                [UV_EXECUTABLE, "pip", "install", "--quiet"] + list(BUILD_DEPENDENCIES),
+                real_environment_name,
+            )
+            logger.info(f"Installing build dependencies: {build_dependencies_install_command}")
+            subprocess.run(
+                build_dependencies_install_command,
+                shell=True,
+                capture_output=True,
+                text=True,
+            )
+            install_command.extend(
+                ["--config-settings", "editable_mode=compat", "--no-build-isolation",]
+            )
         pip_install_requirements_command = add_python_target_and_join_commands(
             install_command,
             real_environment_name,
@@ -1863,7 +1882,7 @@ def retrieve_tabsdata_agent_package() -> (
         TD_TABSDATA_AGENT_DEV_PKG,
     )
     logger.info(
-        f"Module tabsdata_agent classified as: provider: {provider} - location:"
+        f"Package tabsdata-agent classified as: provider: {provider} - location:"
         f" {location}"
     )
 

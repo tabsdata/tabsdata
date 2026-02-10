@@ -62,6 +62,51 @@ warnings.filterwarnings(
     "ignore", message=".*is absent from the `packages` configuration.*"
 )
 
+EDITABLE_EXTRA_PATHS = [
+    "client/td-lib/ta_features/src/main/python",
+    "client/td-lib/ta_tableframe/src/main/python",
+    "extensions/python/td-lib/te_examples/src/main/python",
+    "extensions/python/td-lib/te_tableframe/src/main/python",
+    "extensions/python/td-lib/te_variant/src/main/python",
+    "expansions/python/modules/to-foundation/python/src/main/python",
+    "expansions/polars/modules/ty-tableframe/python/src/main/python",
+]
+
+
+def _create_editable_extra_pth_file():
+    is_editable = "editable_wheel" in sys.argv or "develop" in sys.argv
+
+    if not is_editable:
+        return
+    try:
+        import site
+
+        site_packages_list = site.getsitepackages()
+        if not site_packages_list:
+            return
+        site_packages = site_packages_list[0]
+    except (AttributeError, IndexError):
+        return
+
+    project_root = os.path.dirname(os.path.abspath(__file__))
+    pth_file = os.path.join(site_packages, "tabsdata_extra_paths.pth")
+
+    pth_lines = []
+    for relative_editable_extra_path in EDITABLE_EXTRA_PATHS:
+        absolute_editable_extra_path = os.path.join(project_root, relative_editable_extra_path)
+        if os.path.isdir(absolute_editable_extra_path):
+            pth_lines.append(absolute_editable_extra_path)
+
+    if pth_lines:
+        try:
+            with open(pth_file, "w") as f:
+                f.write("\n".join(pth_lines) + "\n")
+        except (OSError, IOError):
+            pass
+
+
+_create_editable_extra_pth_file()
+
 
 # noinspection DuplicatedCode
 def root_folder() -> str:
@@ -871,7 +916,7 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
         },
         packages=[
             # tabsdata
-            *find_packages(
+            *find_namespace_packages(
                 where=os.path.join(
                     "client",
                     "td-sdk",
@@ -983,6 +1028,13 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
             ),
         ],
         package_dir={
+            "": os.path.join(
+                "client",
+                "td-sdk",
+                "src",
+                "main",
+                "python",
+            ),
             "tabsdata": os.path.join(
                 "client",
                 "td-sdk",
@@ -1153,6 +1205,6 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
         entry_points={"console_scripts": console_scripts},
         include_package_data=True,
         exclude_package_data={
-            "": [".gitkeep"],
+            "": [".gitkeep", "*.pyc", "__pycache__/*"],
         },
     )

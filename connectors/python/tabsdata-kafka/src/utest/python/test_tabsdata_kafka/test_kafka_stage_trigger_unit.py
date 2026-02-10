@@ -14,30 +14,30 @@ from tabsdata.exceptions import (
     ErrorCode,
     ParameterValidationError,
 )
-from tabsdata_kafka import KafkaMessageFormatSpec
-from tabsdata_kafka._connector import (
+from tabsdata.connector.kafka import KafkaMessageFormatSpec
+from tabsdata.connector.kafka._connector import (
     AwsGlueSchemaRegistry,
     AwsGlueSchemaRegistryCredentialsSpec,
     ConfluentSchemaRegistry,
     KafkaConn,
     KafkaTrigger,
 )
-from tabsdata_kafka.serdes.aws_glue_sr_serde import (
+from tabsdata.connector.kafka.serdes.aws_glue_sr_serde import (
     AvroGlueKafkaSerde,
     JsonGlueKafkaSerde,
     ProtobufGlueKafkaSerde,
 )
-from tabsdata_kafka.serdes.confluent_sr_serde import (
+from tabsdata.connector.kafka.serdes.confluent_sr_serde import (
     AvroSrKafkaSerde,
     JsonSrKafkaSerde,
     ProtobufSrKafkaSerde,
 )
-from tabsdata_kafka.serdes.non_sr_serde import (
+from tabsdata.connector.kafka.serdes.non_sr_serde import (
     AvroKafkaSerde,
     JsonKafkaSerde,
     ProtobufKafkaSerde,
 )
-from tabsdata_kafka.typing import Protobuf
+from tabsdata.connector.kafka.typing import Protobuf
 from test_tabsdata_kafka.conftest import (
     aws_glue_sr_mock_protobuf_glue_client,
 )

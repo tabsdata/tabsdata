@@ -11,7 +11,7 @@ from pytest import MonkeyPatch
 
 # noinspection PyPackageRequirements
 import tabsdata as td
-from tabsdata_mssql._connector import _add_field_to_string, _obtain_connection_string
+from tabsdata.connector.mssql._connector import _add_field_to_string, _obtain_connection_string
 from test_tabsdata.common.backend import (
     DB_HOST,
     DB_NAME,

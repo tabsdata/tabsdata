@@ -27,13 +27,13 @@ from tabsdata._specs import (
 )
 from tabsdata._table_actions._typing import OnTablesSpec
 from tabsdata._table_actions.actions import OnTablesAction
-from tabsdata_kafka.typing import (
+from tabsdata.connector.kafka.typing import (
     KafkaMessageFormatSpec,
     KafkaServersSpec,
     SchemaIdCompatibles,
     SchemaIdSpec,
 )
-from tabsdata_mssql.constants import MSSQLLoaderSpec
+from tabsdata.connector.mssql.constants import MSSQLLoaderSpec
 
 __all__ = [
     "IfTableExistStrategySpec",

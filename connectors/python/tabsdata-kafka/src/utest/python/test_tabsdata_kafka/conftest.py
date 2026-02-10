@@ -8,9 +8,9 @@ import logging
 
 from tabsdata._credentials import UserPasswordCredentials
 from tabsdata._io.stage_trigger import LocalFileStageTriggerContext
-from tabsdata_kafka._connector import AwsGlueSchemaRegistry, ConfluentSchemaRegistry
-from tabsdata_kafka.serdes.serde import KafkaSerde
-from tabsdata_kafka.typing import AwsGlueSchemaRegistryCredentialsSpec
+from tabsdata.connector.kafka._connector import AwsGlueSchemaRegistry, ConfluentSchemaRegistry
+from tabsdata.connector.kafka.serdes.serde import KafkaSerde
+from tabsdata.connector.kafka.typing import AwsGlueSchemaRegistryCredentialsSpec
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -87,18 +87,18 @@ from confluent_kafka.schema_registry._sync.mock_schema_registry_client import (
 from confluent_kafka.serialization import MessageField, SerializationContext
 from mypy_boto3_glue.client import GlueClient
 
-from tabsdata_kafka.serdes.aws_glue_sr_serde import (
+from tabsdata.connector.kafka.serdes.aws_glue_sr_serde import (
     AvroGlueKafkaSerde,
     GlueKafkaSerde,
     JsonGlueKafkaSerde,
     ProtobufGlueKafkaSerde,
 )
-from tabsdata_kafka.serdes.confluent_sr_serde import (
+from tabsdata.connector.kafka.serdes.confluent_sr_serde import (
     AvroSrKafkaSerde,
     JsonSrKafkaSerde,
     ProtobufSrKafkaSerde,
 )
-from tabsdata_kafka.serdes.non_sr_serde import (
+from tabsdata.connector.kafka.serdes.non_sr_serde import (
     AvroKafkaSerde,
     JsonKafkaSerde,
     ProtobufKafkaSerde,

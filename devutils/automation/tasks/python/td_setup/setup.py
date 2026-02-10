@@ -26,6 +26,6 @@ setup(
         ),
     },
     exclude_package_data={
-        "": [".gitkeep"],
+        "": [".gitkeep", "*.pyc", "__pycache__/*"],
     },
 )

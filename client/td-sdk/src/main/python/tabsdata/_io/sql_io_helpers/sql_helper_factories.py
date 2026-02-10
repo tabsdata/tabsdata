@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     from tabsdata._io.outputs.sql.mariadb_output import MariaDBDest
     from tabsdata._io.outputs.sql.mysql_output import MySQLDest
     from tabsdata._io.outputs.sql.postgres_output import PostgresDest
-    from tabsdata_mssql.input.mssql_input import MSSQLSrc
+    from tabsdata.connector.mssql.input.mssql_input import MSSQLSrc
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -98,7 +98,7 @@ def _get_sql_source_config(
     from tabsdata._io.inputs.sql.mysql_input import MySQLSrc as _MySQLSrc
     from tabsdata._io.inputs.sql.oracle_input import OracleSrc as _OracleSrc
     from tabsdata._io.inputs.sql.postgres_input import PostgresSrc as _PostgresSrc
-    from tabsdata_mssql.input.mssql_input import MSSQLSrc as _MSSQLSrc
+    from tabsdata.connector.mssql.input.mssql_input import MSSQLSrc as _MSSQLSrc
 
     if isinstance(source, _MySQLSrc):
         return SQLSourceConfig(

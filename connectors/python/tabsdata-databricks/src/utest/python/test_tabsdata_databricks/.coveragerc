@@ -3,7 +3,7 @@
 #
 
 [run]
-source = tabsdata_databricks
+source = tabsdata.connector.databricks
 omit =
     test*
     test*/**

@@ -292,15 +292,12 @@ def lock_pyprojects(
             entry for entry in known_first_party_entry if isinstance(entry, str)
         }
 
-        connector_modules_underscore = {
-            name.replace("-", "_") for name in connector_modules
-        }
         test_connector_modules = {
-            f"test_{name}" for name in connector_modules_underscore
+            f"test_{name.replace('-', '_')}" for name in connector_modules
         }
         merged = (
             known_first_party_entry_set
-            | connector_modules_underscore
+            | {"tabsdata"}
             | test_connector_modules
         )
 

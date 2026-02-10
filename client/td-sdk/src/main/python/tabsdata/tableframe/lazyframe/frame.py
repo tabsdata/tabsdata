@@ -64,8 +64,6 @@ from tabsdata.exceptions import ErrorCode, TableFrameError
 # noinspection PyProtectedMember
 from tabsdata.expansions.tableframe.features.grok.api._handler import GrokParser
 
-# noinspection PyProtectedMember
-from tabsdata.extensions._tableframe.extension import TableFrameExtension
 from tabsdata.tableframe.lazyframe.properties import (
     TableFrameProperties,
     TableFramePropertiesBuilder,
@@ -2828,6 +2826,8 @@ TdType = TypeVar("TdType", "TableFrame", "td_typing.Series", "td_expr.Expr")
 
 # noinspection PyUnreachableCode
 def _assemble_system_columns(f: TableFrame | pl.LazyFrame) -> TableFrame:
+    from tabsdata.extensions._tableframe.extension import TableFrameExtension
+
     if isinstance(f, pl.LazyFrame):
         return TableFrame.__build__(
             df=TableFrameExtension.instance().assemble_system_columns(f),

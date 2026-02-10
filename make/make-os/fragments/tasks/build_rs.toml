@@ -48,7 +48,7 @@ category = "03 - Build"
 private = true
 run_task = [
     { name = [
-        "__os__clean_rs_expansions",
+        # "__os__clean_rs_expansions",
         "__os__pyo3_help_start",
         "__os__compile_all_rs_expansions",
         "__os__pyo3_help_stop",
@@ -102,7 +102,7 @@ category = "03 - Build"
 private = true
 run_task = [
     { name = [
-        "__os__clean_rs_expansions",
+        # "__os__clean_rs_expansions",
         "__os__pyo3_help_start",
         "__os__compile_none_rs_expansions",
         "__os__pyo3_help_stop",

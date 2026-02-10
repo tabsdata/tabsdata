@@ -3,7 +3,7 @@
 #
 
 [run]
-source = tabsdata_mssql
+source = tabsdata.connector.mssql
 omit =
     test*
     test*/**

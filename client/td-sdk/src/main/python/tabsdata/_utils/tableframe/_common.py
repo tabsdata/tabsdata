@@ -14,8 +14,6 @@ import tabsdata._utils.tableframe._constants as td_constants
 import tabsdata._utils.tableframe._helpers as td_helpers
 from tabsdata.exceptions import ErrorCode, TableFrameError
 
-# noinspection PyProtectedMember
-from tabsdata.extensions._tableframe.extension import TableFrameExtension
 from tabsdata.tableframe.lazyframe.properties import TableFrameProperties
 
 logger = logging.getLogger(__name__)
@@ -106,6 +104,8 @@ def add_system_columns(
             continue
 
         if isinstance(metadata.generator, str):
+            from tabsdata.extensions._tableframe.extension import TableFrameExtension
+
             lf = TableFrameExtension.instance().apply_system_column(
                 lf,
                 column,

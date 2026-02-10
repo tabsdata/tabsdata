@@ -21,7 +21,7 @@ from tabsdata._tabsserver.function.offset_utils import (
     OFFSET_LAST_MODIFIED_VARIABLE_NAME,
 )
 from tabsdata._utils.datetime import _convert_timestamp_to_string
-from tabsdata.dataquality._utils import _td_validate_call
+from tabsdata._utils.validation import _td_validate_call
 from tabsdata.exceptions import (
     ErrorCode,
 )

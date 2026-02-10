@@ -18,7 +18,6 @@ from tabsdata._utils.annotations import pydoc
 
 # noinspection PyProtectedMember
 from tabsdata._utils.tableframe import _constants as td_constants
-from tabsdata.extensions._tableframe.extension import SystemColumns
 
 # noinspection PyProtectedMember
 from tabsdata.tableframe import typing as td_typing
@@ -198,6 +197,8 @@ def last() -> SelectorProxy:
         │ 87.5  │
         └───────┘
     """
+    from tabsdata.extensions._tableframe.extension import SystemColumns
+
     return SelectorProxy(
         pl.selectors.by_index(-(len(SystemColumns) + 1)) & _exclude_system_columns()
     )
@@ -258,6 +259,8 @@ def by_index(*indices: int | range | Sequence[int | range]) -> SelectorProxy:
         │ "H"  ┆ 89.5  │
         └──────┴───────┘
     """
+    from tabsdata.extensions._tableframe.extension import SystemColumns
+
     system_columns_length = len(SystemColumns)
 
     def fix(i: int) -> int:

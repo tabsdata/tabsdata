@@ -26,7 +26,7 @@ from tabsdata._utils.sql_utils import (
     validate_schema_overrides_dict,
     validate_schema_overrides_list,
 )
-from tabsdata.dataquality._utils import _td_validate_call
+from tabsdata._utils.validation import _td_validate_call
 from tabsdata.exceptions import (
     ErrorCode,
     SourceConfigurationError,

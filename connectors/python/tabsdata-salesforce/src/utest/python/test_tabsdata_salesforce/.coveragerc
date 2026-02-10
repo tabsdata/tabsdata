@@ -3,7 +3,7 @@
 #
 
 [run]
-source = tabsdata_salesforce
+source = tabsdata.connector.salesforce
 omit =
     test*
     test*/**

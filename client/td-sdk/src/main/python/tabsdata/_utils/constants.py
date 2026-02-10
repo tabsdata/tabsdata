@@ -43,3 +43,15 @@ COPYRIGHT_HEADER = "#\n# Copyright {} Tabs Data Inc.\n#\n\n"
 INTERNAL_ERROR_MESSAGE = (
     "Internal error: {}. Contact Tabsdata for help and to report it."
 )
+
+BUILD_DEPENDENCIES = [
+    "archspec==0.2.5",
+    "colorama==0.4.6",
+    "psutil==7.2.2",
+    "py-cpuinfo==9.0.0",
+    "PyYAML==6.0.3",
+    "setuptools==78.1.1",
+    "tqdm==4.67.3",
+    "tzlocal==5.3.1",
+    "wheel",
+]

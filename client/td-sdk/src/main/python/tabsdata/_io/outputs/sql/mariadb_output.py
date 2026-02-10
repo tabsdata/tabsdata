@@ -18,7 +18,7 @@ from tabsdata._io.outputs.shared_enums import (
 )
 from tabsdata._io.plugin import DestinationPlugin
 from tabsdata._io.sql_io_helpers.sql_helper_factories import get_sql_dest_helper
-from tabsdata.dataquality._utils import _td_validate_call
+from tabsdata._utils.validation import _td_validate_call
 from tabsdata.exceptions import DestinationConfigurationError, ErrorCode
 
 logger = logging.getLogger(__name__)

@@ -34,7 +34,7 @@ from tabsdata.dataquality._typing import (
     TagSpec,
     TagsSpec,
 )
-from tabsdata.dataquality._utils import (
+from tabsdata._utils.validation import (
     _normalize_to_list,
     _normalize_to_set,
     _td_validate_call,

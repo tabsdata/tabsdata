@@ -381,30 +381,8 @@ def enrich_sys_path():
             )
         ),
     )
-    ## ToDo: Unnecessary when using only hydrate in make...
-    sys.path.append(
-        os.path.abspath(
-            os.path.join(
-                root,
-                "target",
-                "python",
-                "pytest",
-            )
-        ),
-    )
     connectors = gather_connectors()
     for connector in connectors:
-        # Add connector root folder (contains the actual package like tabsdata_kafka/)
-        sys.path.append(
-            os.path.abspath(
-                os.path.join(
-                    root,
-                    "connectors",
-                    "python",
-                    connector,
-                )
-            ),
-        )
         sys.path.append(
             os.path.abspath(
                 os.path.join(

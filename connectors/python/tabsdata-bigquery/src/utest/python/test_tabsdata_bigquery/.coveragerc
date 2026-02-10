@@ -3,7 +3,7 @@
 #
 
 [run]
-source = tabsdata_bigquery
+source = tabsdata.connector.bigquery
 omit =
     test*
     test*/**

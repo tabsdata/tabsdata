@@ -10,8 +10,8 @@ from tabsdata.exceptions import (
 )
 from tabsdata.tableframe.dtypes import Float64, Int64
 from tabsdata.tableframe.typing import DataType
-from tabsdata_mssql.connection.mssql_connection import MSSQLConn
-from tabsdata_mssql.input.mssql_input import MSSQLSrc
+from tabsdata.connector.mssql.connection.mssql_connection import MSSQLConn
+from tabsdata.connector.mssql.input.mssql_input import MSSQLSrc
 
 
 @pytest.mark.mssql

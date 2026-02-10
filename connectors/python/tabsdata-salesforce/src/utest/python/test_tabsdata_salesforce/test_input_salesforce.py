@@ -394,7 +394,7 @@ def test_replace_last_modified_token():
 @pytest.mark.salesforce
 @pytest.mark.unit
 def test_maximum_date():
-    from tabsdata_salesforce._connector import _maximum_date
+    from tabsdata.connector.salesforce._connector import _maximum_date
 
     date1 = "2098-02-05T11:27:47.000000+0000"
     date2 = "2068-06-16T18:47:39.000000-0400"
@@ -458,7 +458,7 @@ def test_chunk(tmp_path, sf_config):
 @pytest.mark.requires_internet
 @pytest.mark.salesforce
 def test_login(sf_config):
-    from tabsdata_salesforce._connector import _log_into_salesforce
+    from tabsdata.connector.salesforce._connector import _log_into_salesforce
 
     date5 = "1934-04-16T14:10:02.000000+0000"
     source = td.SalesforceSource(
@@ -475,7 +475,7 @@ def test_login(sf_config):
 @pytest.mark.salesforce
 def test_login_fails():
 
-    from tabsdata_salesforce._connector import _log_into_salesforce
+    from tabsdata.connector.salesforce._connector import _log_into_salesforce
 
     date5 = "1934-04-16T14:10:02.000000+0000"
     source = td.SalesforceSource(

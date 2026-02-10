@@ -52,8 +52,11 @@ script = [
     os_family = os_family
     debug "🔸🔸🔸 OS family: ${os_family}"
 
-    debug "🚀 pip unistall tabsdata --yes"
+    debug "🚀 pip uninstall tabsdata --yes"
     exec --fail-on-error pip uninstall tabsdata --yes
+
+    debug "🔸🔸🔸 Cleaning up tabsdata_extra_paths.pth..."
+    exec python -c "import site, os; pth = os.path.join(site.getsitepackages()[0], 'tabsdata_extra_paths.pth'); os.remove(pth) if os.path.exists(pth) else None"
 
     exec python setup.py --quiet clean --all
 

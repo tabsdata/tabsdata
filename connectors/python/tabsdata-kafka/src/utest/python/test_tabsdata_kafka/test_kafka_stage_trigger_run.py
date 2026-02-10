@@ -13,8 +13,8 @@ import pytest
 
 import tabsdata as td
 from tabsdata._credentials import UserPasswordCredentials
-from tabsdata_kafka._connector import KafkaConn, KafkaTrigger
-from tabsdata_kafka.typing import Protobuf
+from tabsdata.connector.kafka._connector import KafkaConn, KafkaTrigger
+from tabsdata.connector.kafka.typing import Protobuf
 from test_tabsdata.bootest import TDLOCAL_FOLDER
 from test_tabsdata.conftest import ABSOLUTE_TEST_FOLDER_LOCATION
 from test_tabsdata.fntest import tdfnjob

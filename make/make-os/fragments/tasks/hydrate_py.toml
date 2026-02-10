@@ -4,7 +4,7 @@
 
 # https://setuptools.pypa.io/en/latest/userguide/development_mode.html#strict-editable-installs
 # Alternatives to editable installs:
-#    - uv pip install -e . --quiet --config-settings editable_mode=stric
+#    - uv pip install -e . --quiet --config-settings editable_mode=strict
 #        Uses import hooks, strictest mode
 #    - uv pip install -e . --quiet --config-settings editable_mode=compat
 #        Creates a tree of .pth files (default)
@@ -164,8 +164,11 @@ script = [
     os_family = os_family
     debug "🔸🔸🔸 OS family: ${os_family}"
 
-    debug "🚀 uv pip install --quiet -e ."
-    exec --fail-on-error uv pip install --quiet -e .
+    debug "🔸🔸🔸 Cleaning up tabsdata_extra_paths.pth..."
+    exec python -c "import site, os; pth = os.path.join(site.getsitepackages()[0], 'tabsdata_extra_paths.pth'); os.remove(pth) if os.path.exists(pth) else None"
+
+    debug "🚀 uv pip install --quiet -e . --config-settings editable_mode=compat --no-build-isolation"
+    exec --fail-on-error uv pip install --quiet -e . --config-settings editable_mode=compat --no-build-isolation
 
     setup_toml_file = set "${PROJECT_TABSDATA_ROOT_FOLDER}/setup.toml"
     if is_path_exists ${setup_toml_file}
@@ -273,8 +276,8 @@ script = [
 
             cd ${connector}
 
-            debug "🚀 uv pip install --quiet -e ."
-            exec --fail-on-error uv pip install --quiet -e .
+            debug "🚀 uv pip install --quiet -e . --config-settings editable_mode=compat"
+            exec --fail-on-error uv pip install --quiet -e . --config-settings editable_mode=compat
 
             pytthon_target_folder = set "${connector}/target/python"
             if ${pytthon_target_folder}

@@ -40,15 +40,6 @@ profile = "black"
 skip_glob = ["*.pyi"]
 known_first_party = [
     "tabsdata",
-    "tabsdata_agent",
-    "tabsdata_bigquery",
-    "tabsdata_databricks",
-    "tabsdata_example",
-    "tabsdata_kafka",
-    "tabsdata_mongodb",
-    "tabsdata_mssql",
-    "tabsdata_salesforce",
-    "tabsdata_snowflake",
     "ta_features",
     "ta_tableframe",
     "te_examples",

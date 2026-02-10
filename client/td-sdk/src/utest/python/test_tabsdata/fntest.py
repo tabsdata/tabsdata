@@ -2,6 +2,8 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
+from __future__ import annotations
+
 import inspect
 import logging
 import os
@@ -17,14 +19,7 @@ import polars as pl
 import pytest
 
 import tabsdata as td
-from tabsdata import (
-    TableInput,
-    TableOutput,
-    TabsdataFunction,
-    publisher,
-    subscriber,
-    transformer,
-)
+
 from tabsdata._io.stage_trigger import (
     CallConfig,
     LocalFileStageTriggerContext,
@@ -618,14 +613,14 @@ def save_offset(table: MockTableFrame, filepath: Path):
 
 
 def name_files(
-    function: TabsdataFunction | Callable[..., Any], output_folder: Path
+    function: td.TabsdataFunction | Callable[..., Any], output_folder: Path
 ) -> list[Path]:
     fntype = function.type
-    if fntype == subscriber.__name__:
+    if fntype == td.subscriber.__name__:
         paths = []
-    elif fntype in (transformer.__name__, publisher.__name__):
-        if isinstance(function.output, TableOutput):
-            tdoutput = cast(TableOutput, function.output)
+    elif fntype in (td.transformer.__name__, td.publisher.__name__):
+        if isinstance(function.output, td.TableOutput):
+            tdoutput = cast(td.TableOutput, function.output)
             tables = tdoutput.table
             output_tables = tables if isinstance(tables, list) else [tables]
             paths = [
@@ -639,13 +634,13 @@ def name_files(
 
     collection = FunctionConstants.COLLECTION.value
     input_tables = (
-        cast(TableInput, function.input)._table_uris_map
-        if isinstance(function.input, TableInput)
+        cast(td.TableInput, function.input)._table_uris_map
+        if isinstance(function.input, td.TableInput)
         else {}
     )
     output_tables = (
-        cast(TableOutput, function.output)._table_list
-        if isinstance(function.output, TableOutput)
+        cast(td.TableOutput, function.output)._table_list
+        if isinstance(function.output, td.TableOutput)
         else []
     )
     input_actions = []
@@ -717,7 +712,7 @@ def _trigger(
 
 def _run(
     fntrigger: FnTrigger | None,
-    function: TabsdataFunction | Callable[..., Any],
+    function: td.TabsdataFunction | Callable[..., Any],
     fn_root: Path,
     td_root: Path,
     input_tables: MockTableFrameSpec,
@@ -869,7 +864,7 @@ def tdfntrigger(
 
 
 def tdfnrun(
-    function: TabsdataFunction | Callable[..., Any],
+    function: td.TabsdataFunction | Callable[..., Any],
     input_tables: MockTableFrameSpec = None,
     input_initial_values: MockTableFrame = None,
     output_initial_values: bool = False,
@@ -928,7 +923,7 @@ def tdfnrun(
 
 def tdfnjob(
     trigger: StageTrigger,
-    function: TabsdataFunction | Callable[..., Any],
+    function: td.TabsdataFunction | Callable[..., Any],
     input_tables: MockTableFrameSpec = None,
     input_initial_values: MockTableFrame = None,
     output_initial_values: bool = False,

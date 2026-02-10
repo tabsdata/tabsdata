@@ -9,8 +9,8 @@ import uuid
 import pytest
 from confluent_kafka import Consumer
 
-from tabsdata_kafka.consumer.consumer import KafkaConsumer, RolloverReason
-from tabsdata_kafka.consumer.messages_buffer import MessagesBuffer
+from tabsdata.connector.kafka.consumer.consumer import KafkaConsumer, RolloverReason
+from tabsdata.connector.kafka.consumer.messages_buffer import MessagesBuffer
 from test_tabsdata_kafka.conftest import (
     get_avro_message,
     get_json_message,

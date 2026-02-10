@@ -14,16 +14,18 @@ script = [
     debug "🔷 _____ Setting up tabsdata pytest context (tabsdata & connectors)..."
 
     cd ${PROJECT_TABSDATA_ROOT_FOLDER}
-    cm_run_task egg_py
+    cm_run_task dehydrate_py
+    cm_run_task hydrate_py
 
     debug "🔷 _____ Setting up tabsdata pytest python path..."
 
     debug "🚀 python ${PROJECT_PY_TD_TABSDATA_FOLDER}/src/utest/python/test_tabsdata/bootest.py"
     output = exec --fail-on-error python ${PROJECT_PY_TD_TABSDATA_FOLDER}/src/utest/python/test_tabsdata/bootest.py
-
     debug "📦 The received pythonpath is ${output.stdout}"
+
     pythonpath = set ${output.stdout}
-    debug "✅ Python system path will be added: ${pythonpath}"
+    debug "✅ Python system path will set to: ${pythonpath}"
+
     old_pythonpath = get_env PYTHONPATH
     debug "✅ Python system path before adjusting: ${old_pythonpath}"
     os_name = get_env OS
@@ -33,11 +35,15 @@ script = [
     else
         separator = set ":"
     end
-    new_pythonpath = concat ${pythonpath} ${separator} ${old_path}
+
+    new_pythonpath = set ${pythonpath}
     debug "✅ Python system path after adjusting: ${new_pythonpath}"
     set_env PYTHONPATH ${new_pythonpath}
+
     set_pythonpath = get_env PYTHONPATH
     debug "🔅 Python system path persisted: ${set_pythonpath}"
+
+    debug "🔅 Python system path set to: ${pythonpath}"
 
     debug "🔷 _____ Setting up tabsdata development package mode..."
 

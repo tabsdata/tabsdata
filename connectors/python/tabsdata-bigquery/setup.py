@@ -17,7 +17,7 @@ from sysconfig import get_platform
 
 import colorama
 import tqdm
-from setuptools import find_packages, setup
+from setuptools import find_namespace_packages, setup
 from setuptools.command.bdist_egg import bdist_egg as _bdist_egg
 from setuptools.command.build import build as _build
 from setuptools.command.sdist import sdist as _sdist
@@ -480,7 +480,7 @@ package_manifest_folder = os.path.join(
     "src",
     "main",
     "python",
-    "tabsdata_bigquery",
+    "tabsdata/connector/bigquery",
     "assets",
     "manifest",
 )
@@ -631,7 +631,7 @@ with global_spinner("Building package 'tabsdata-bigquery' (BigQuery Connector)..
                 "src",
                 "main",
                 "python",
-                "tabsdata_bigquery",
+                "tabsdata/connector/bigquery",
                 "assets",
                 "manifest",
                 "VERSION",
@@ -643,7 +643,7 @@ with global_spinner("Building package 'tabsdata-bigquery' (BigQuery Connector)..
                 "src",
                 "main",
                 "python",
-                "tabsdata_bigquery",
+                "tabsdata/connector/bigquery",
                 "assets",
                 "manifest",
                 "README-PyPi.md",
@@ -655,7 +655,7 @@ with global_spinner("Building package 'tabsdata-bigquery' (BigQuery Connector)..
                 "src",
                 "main",
                 "python",
-                "tabsdata_bigquery",
+                "tabsdata/connector/bigquery",
                 "assets",
                 "manifest",
                 "LICENSE",
@@ -675,18 +675,13 @@ with global_spinner("Building package 'tabsdata-bigquery' (BigQuery Connector)..
             "bdist_wheel": CustomBDistWheel,
             "bdist_egg": CustomBDistEgg,
         },
-        packages=find_packages(
+        packages=find_namespace_packages(
             where=os.path.join(
                 "src",
                 "main",
                 "python",
             ),
-            exclude=[
-                "test",
-                "test*",
-                "tests",
-                "tests*",
-            ],
+            include=["tabsdata.connector.bigquery*"],
         ),
         package_dir={
             "": os.path.join(
@@ -696,7 +691,7 @@ with global_spinner("Building package 'tabsdata-bigquery' (BigQuery Connector)..
             ),
         },
         package_data={
-            "tabsdata_bigquery": [
+            "tabsdata.connector.bigquery": [
                 os.path.join(
                     "assets",
                     "manifest",
@@ -708,6 +703,6 @@ with global_spinner("Building package 'tabsdata-bigquery' (BigQuery Connector)..
         entry_points={},
         include_package_data=True,
         exclude_package_data={
-            "": [".gitkeep"],
+            "": [".gitkeep", "*.pyc", "__pycache__/*"],
         },
     )

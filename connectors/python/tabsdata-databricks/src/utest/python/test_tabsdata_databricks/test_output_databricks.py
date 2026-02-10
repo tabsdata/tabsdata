@@ -26,7 +26,7 @@ from tabsdata._tabsserver.invoker import invoke as tabsserver_main
 from tabsdata._utils.bundle_utils import create_bundle_archive
 
 # noinspection PyProtectedMember
-from tabsdata_databricks._connector import _table_fqn_4sql
+from tabsdata.connector.databricks._connector import _table_fqn_4sql
 from test_tabsdata.bootest import ROOT_FOLDER, TDLOCAL_FOLDER
 from test_tabsdata.common.constants import PYTEST_DEFAULT_ENVIRONMENT_PREFIX
 from test_tabsdata.conftest import (
