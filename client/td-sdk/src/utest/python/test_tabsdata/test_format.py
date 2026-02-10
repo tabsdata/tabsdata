@@ -9,7 +9,7 @@ import pytest
 from tabsdata import AvroFormat, CSVFormat, LogFormat, NDJSONFormat, ParquetFormat
 from tabsdata._format import build_file_format, get_implicit_format_from_list
 from tabsdata.exceptions import ErrorCode, FormatConfigurationError
-from tests_tabsdata.conftest import FORMAT_TYPE_TO_CONFIG
+from test_tabsdata.conftest import FORMAT_TYPE_TO_CONFIG
 
 # noinspection PyUnresolvedReferences
 from . import pytestmark  # noqa: F401

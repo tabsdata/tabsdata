@@ -9,7 +9,7 @@ import logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-from tests_tabsdata.bootest import TESTING_RESOURCES_PATH, enrich_sys_path
+from test_tabsdata.bootest import TESTING_RESOURCES_PATH, enrich_sys_path
 
 
 def _enrich_sys_path():
@@ -24,7 +24,7 @@ import pytest
 from xdist.workermanage import WorkerController
 
 from tabsdata._utils.tdlogging import setup_tests_logging
-from tests_tabsdata.conftest import setup_temp_folder, setup_temp_folder_node
+from test_tabsdata.conftest import setup_temp_folder, setup_temp_folder_node
 
 logger = logging.getLogger(__name__)
 

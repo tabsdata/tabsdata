@@ -13,7 +13,7 @@ from tabsdata.tableframe.udf.function import (
     UDFList,
     UDFUnpacked,
 )
-from tests_tabsdata.test_tabsdata.test_tableframe.common import pretty_polars
+from test_tabsdata.test_tableframe.common import pretty_polars
 
 pretty_polars()
 

@@ -9,13 +9,13 @@ from datetime import datetime, timedelta, timezone
 
 import polars as pl
 import pytest
-from fntest import tdfnrun
 
 import tabsdata as td
 from tabsdata._tabsserver.function.offset_utils import (
     OFFSET_LAST_MODIFIED_VARIABLE_NAME,
 )
-from tests_tabsdata.bootest import TDLOCAL_FOLDER
+from test_tabsdata.bootest import TDLOCAL_FOLDER
+from test_tabsdata.fntest import tdfnrun
 
 # noinspection PyUnresolvedReferences
 from . import pytestmark  # noqa: F401

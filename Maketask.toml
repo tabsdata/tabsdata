@@ -569,7 +569,7 @@ script = [
 
     verbose = get_env TD_VERBOSE
 
-    cd "${PROJECT_PY_TD_TABSDATA_FOLDER}"
+    cd "${PROJECT_TABSDATA_ROOT_FOLDER}"
 
     td_temp = temp_dir
     set_env COVERAGE_FILE ${td_temp}/.tabsdata/.coverage.${PYTEST_XDIST_WORKER}
@@ -594,22 +594,19 @@ script = [
     for connector in ${connectors}
         is_connector = is_dir ${connector}
         if ${is_connector}
-            connector_name = basename ${connector}
-            connector_name_underscore = replace ${connector_name} "-" "_"
-            connector_tests_folder_name = set tests_${connector_name_underscore}
-            connector_tests_folder_path = join_path ${connector} ${connector_tests_folder_name}
-            array_push ${tests_folders} ${connector_tests_folder_path}
+            connector_test_folder_path = join_path ${connector} src utest python
+            array_push ${tests_folders} ${connector_test_folder_path}
         end
     end
 
     pytest_tests_folders = array_join ${tests_folders} " "
 
     if eq ${verbose} "false"
-        debug "🚀 pytest --import-mode=importlib -n 16 --dist=loadfile %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest --import-mode=importlib -n 16 --dist=loadfile %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m "${MARKERS}"
+        debug "🚀 pytest --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -n 16 --dist=loadfile %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -n 16 --dist=loadfile %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m "${MARKERS}"
     else
-        debug "🚀 pytest --import-mode=importlib -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest --import-mode=importlib -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m "${MARKERS}"
+        debug "🚀 pytest --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m "${MARKERS}"
     end
     is_zero = eq ${exit_code} "0"
     is_five = eq ${exit_code} "5"

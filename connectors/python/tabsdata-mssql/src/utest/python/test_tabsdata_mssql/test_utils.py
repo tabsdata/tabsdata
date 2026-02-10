@@ -12,13 +12,13 @@ from pytest import MonkeyPatch
 # noinspection PyPackageRequirements
 import tabsdata as td
 from tabsdata_mssql._connector import _add_field_to_string, _obtain_connection_string
-from tests_tabsdata.common.constants import (
+from test_tabsdata.common.backend import (
     DB_HOST,
     DB_NAME,
     DB_PASSWORD,
     DB_USER,
 )
-from tests_tabsdata_mssql.conftest import MSSQL_2022_PORT
+from test_tabsdata_mssql.conftest import MSSQL_2022_PORT
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

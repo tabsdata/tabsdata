@@ -8,14 +8,13 @@ from unittest import mock
 import polars as pl
 import pytest
 
-import tabsdata as td
 from tabsdata._tabsserver.function.response_utils import RESPONSE_FILE_NAME
 from tabsdata._tabsserver.invoker import REQUEST_FILE_NAME
 from tabsdata._tabsserver.invoker import invoke as tabsserver_main
 from tabsdata._utils.bundle_utils import create_bundle_archive
-from tests_tabsdata.bootest import ROOT_FOLDER, TDLOCAL_FOLDER
-from tests_tabsdata.common.constants import PYTEST_DEFAULT_ENVIRONMENT_PREFIX
-from tests_tabsdata.conftest import (
+from test_tabsdata.bootest import ROOT_FOLDER, TDLOCAL_FOLDER
+from test_tabsdata.common.constants import PYTEST_DEFAULT_ENVIRONMENT_PREFIX
+from test_tabsdata.conftest import (
     FUNCTION_DATA_FOLDER,
     LOCAL_PACKAGES_LIST,
     clean_polars_df,
@@ -24,20 +23,17 @@ from tests_tabsdata.conftest import (
 )
 
 # noinspection PyPackageRequirements
-from tests_tabsdata_mssql.conftest import (
+from test_tabsdata_mssql.conftest import (
     DB_PASSWORD,
-    INVOICE_HEADER_DF,
-    INVOICE_ITEM_DF,
-    MSSQL_USER,
     TESTING_RESOURCES_FOLDER,
 )
-from tests_tabsdata_mssql.testing_resources.test_input_new_mssql.example import (
+from test_tabsdata_mssql.test_input_new_mssql_basic.example import (
     testing_tabsdata_function as input_new_mssql,
 )
-from tests_tabsdata_mssql.testing_resources.test_input_new_mssql_initial_values.example import (
+from test_tabsdata_mssql.test_input_new_mssql_initial_values.example import (
     testing_tabsdata_function as input_new_mssql_initial_values,
 )
-from tests_tabsdata_mssql.testing_resources.test_input_new_mssql_types_check.example import (
+from test_tabsdata_mssql.test_input_new_mssql_types_check.example import (
     testing_tabsdata_function as input_new_mssql_types_check,
 )
 
@@ -98,7 +94,7 @@ def test_input_new_mssql(mssql_connection, tmp_path, mssql_version):
     output = clean_polars_df(output)
     expected_output_file = os.path.join(
         TESTING_RESOURCES_FOLDER,
-        "test_input_new_mssql",
+        "test_input_new_mssql_basic",
         "expected_result1.json",
     )
     expected_output = read_json_and_clean(expected_output_file)
@@ -109,7 +105,7 @@ def test_input_new_mssql(mssql_connection, tmp_path, mssql_version):
     output = clean_polars_df(output)
     expected_output_file = os.path.join(
         TESTING_RESOURCES_FOLDER,
-        "test_input_new_mssql",
+        "test_input_new_mssql_basic",
         "expected_result2.json",
     )
     expected_output = read_json_and_clean(expected_output_file)
@@ -166,7 +162,7 @@ def test_input_new_mssql_pandas(mssql_connection, tmp_path, mssql_version):
     output = clean_polars_df(output)
     expected_output_file = os.path.join(
         TESTING_RESOURCES_FOLDER,
-        "test_input_new_mssql",
+        "test_input_new_mssql_basic",
         "expected_result1.json",
     )
     expected_output = read_json_and_clean(expected_output_file)
@@ -177,7 +173,7 @@ def test_input_new_mssql_pandas(mssql_connection, tmp_path, mssql_version):
     output = clean_polars_df(output)
     expected_output_file = os.path.join(
         TESTING_RESOURCES_FOLDER,
-        "test_input_new_mssql",
+        "test_input_new_mssql_basic",
         "expected_result2.json",
     )
     expected_output = read_json_and_clean(expected_output_file)
@@ -234,7 +230,7 @@ def test_input_new_mssql_chunk_size(mssql_connection, tmp_path, mssql_version):
     output = clean_polars_df(output)
     expected_output_file = os.path.join(
         TESTING_RESOURCES_FOLDER,
-        "test_input_new_mssql",
+        "test_input_new_mssql_basic",
         "expected_result1.json",
     )
     expected_output = read_json_and_clean(expected_output_file)
@@ -245,7 +241,7 @@ def test_input_new_mssql_chunk_size(mssql_connection, tmp_path, mssql_version):
     output = clean_polars_df(output)
     expected_output_file = os.path.join(
         TESTING_RESOURCES_FOLDER,
-        "test_input_new_mssql",
+        "test_input_new_mssql_basic",
         "expected_result2.json",
     )
     expected_output = read_json_and_clean(expected_output_file)
@@ -303,7 +299,7 @@ def test_input_new_mssql_chunk_size_pandas(mssql_connection, tmp_path, mssql_ver
     output = clean_polars_df(output)
     expected_output_file = os.path.join(
         TESTING_RESOURCES_FOLDER,
-        "test_input_new_mssql",
+        "test_input_new_mssql_basic",
         "expected_result1.json",
     )
     expected_output = read_json_and_clean(expected_output_file)
@@ -314,7 +310,7 @@ def test_input_new_mssql_chunk_size_pandas(mssql_connection, tmp_path, mssql_ver
     output = clean_polars_df(output)
     expected_output_file = os.path.join(
         TESTING_RESOURCES_FOLDER,
-        "test_input_new_mssql",
+        "test_input_new_mssql_basic",
         "expected_result2.json",
     )
     expected_output = read_json_and_clean(expected_output_file)
@@ -371,7 +367,7 @@ def test_input_new_mssql_transactional_false(mssql_connection, tmp_path, mssql_v
     output = clean_polars_df(output)
     expected_output_file = os.path.join(
         TESTING_RESOURCES_FOLDER,
-        "test_input_new_mssql",
+        "test_input_new_mssql_basic",
         "expected_result1.json",
     )
     expected_output = read_json_and_clean(expected_output_file)
@@ -382,7 +378,7 @@ def test_input_new_mssql_transactional_false(mssql_connection, tmp_path, mssql_v
     output = clean_polars_df(output)
     expected_output_file = os.path.join(
         TESTING_RESOURCES_FOLDER,
-        "test_input_new_mssql",
+        "test_input_new_mssql_basic",
         "expected_result2.json",
     )
     expected_output = read_json_and_clean(expected_output_file)

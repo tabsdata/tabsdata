@@ -13,9 +13,10 @@ from xdist.workermanage import WorkerController
 from tabsdata._cli.cli import cli
 from tabsdata._utils.tableframe._generators import _id
 from tabsdata._utils.tdlogging import setup_tests_logging
-from tests_tabsdata.conftest import (
+from test_tabsdata.conftest import (
     ABSOLUTE_TEST_FOLDER_LOCATION,
     APISERVER_URL,
+    TESTING_RESOURCES_FOLDER,
     setup_temp_folder,
     setup_temp_folder_node,
 )
@@ -108,8 +109,7 @@ def testing_collection(login, worker_id):
 @pytest.fixture(scope="module")
 def function_path():
     file_path = os.path.join(
-        ABSOLUTE_TEST_FOLDER_LOCATION,
-        "testing_resources",
+        TESTING_RESOURCES_FOLDER,
         "test_input_plugin",
         "example.py",
     )

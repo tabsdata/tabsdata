@@ -8,10 +8,10 @@ from typing import Optional, Tuple
 
 import pandas as pd
 import polars as pl
-from conftest import TESTING_RESOURCES_FOLDER
 
 import tabsdata as td
 from tabsdata.tableframe.lazyframe.properties import TableFramePropertiesBuilder
+from test_tabsdata.conftest import TESTING_RESOURCES_FOLDER
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

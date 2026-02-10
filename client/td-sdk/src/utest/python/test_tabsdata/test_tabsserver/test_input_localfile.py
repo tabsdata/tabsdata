@@ -15,9 +15,9 @@ from tabsdata._tabsserver.function.response_utils import RESPONSE_FILE_NAME
 from tabsdata._tabsserver.invoker import REQUEST_FILE_NAME
 from tabsdata._tabsserver.invoker import invoke as tabsserver_main
 from tabsdata._utils.bundle_utils import create_bundle_archive
-from tests_tabsdata.bootest import TDLOCAL_FOLDER
-from tests_tabsdata.common.constants import PYTEST_DEFAULT_ENVIRONMENT_PREFIX
-from tests_tabsdata.conftest import (
+from test_tabsdata.bootest import TDLOCAL_FOLDER
+from test_tabsdata.common.constants import PYTEST_DEFAULT_ENVIRONMENT_PREFIX
+from test_tabsdata.conftest import (
     FUNCTION_DATA_FOLDER,
     LOCAL_PACKAGES_LIST,
     TESTING_RESOURCES_FOLDER,
@@ -25,52 +25,52 @@ from tests_tabsdata.conftest import (
     read_json_and_clean,
     write_v2_function_yaml_file,
 )
-from tests_tabsdata.testing_resources.test_input_file_avro_string_format.example import (
+from test_tabsdata.test_input_file_avro_string_format.example import (
     input_file_avro_string_format,
 )
-from tests_tabsdata.testing_resources.test_input_file_avro_wildcard.example import (
+from test_tabsdata.test_input_file_avro_wildcard.example import (
     input_file_avro_wildcard,
 )
-from tests_tabsdata.testing_resources.test_input_file_csv_dtype_inference.example import (
+from test_tabsdata.test_input_file_csv_dtype_inference.example import (
     input_file_csv_dtype_inference,
 )
-from tests_tabsdata.testing_resources.test_input_file_csv_modified_format.example import (
+from test_tabsdata.test_input_file_csv_modified_format.example import (
     input_file_csv_modified_format,
 )
-from tests_tabsdata.testing_resources.test_input_file_csv_modified_path.example import (
+from test_tabsdata.test_input_file_csv_modified_path.example import (
     input_file_csv_modified_path,
 )
-from tests_tabsdata.testing_resources.test_input_file_csv_separator.example import (
+from test_tabsdata.test_input_file_csv_separator.example import (
     input_file_csv_separator,
 )
-from tests_tabsdata.testing_resources.test_input_file_csv_string_format.example import (
+from test_tabsdata.test_input_file_csv_string_format.example import (
     input_file_csv_string_format,
 )
-from tests_tabsdata.testing_resources.test_input_file_log_string_format.example import (
+from test_tabsdata.test_input_file_log_string_format.example import (
     input_file_log_string_format,
 )
-from tests_tabsdata.testing_resources.test_input_file_log_wildcard.example import (
+from test_tabsdata.test_input_file_log_wildcard.example import (
     input_file_log_wildcard,
 )
-from tests_tabsdata.testing_resources.test_input_file_ndjson_dtype_inference.example import (
+from test_tabsdata.test_input_file_ndjson_dtype_inference.example import (
     input_file_ndjson_dtype_inference,
 )
-from tests_tabsdata.testing_resources.test_input_file_ndjson_string_format.example import (
+from test_tabsdata.test_input_file_ndjson_string_format.example import (
     input_file_ndjson_string_format,
 )
-from tests_tabsdata.testing_resources.test_input_file_ndjson_wildcard.example import (
+from test_tabsdata.test_input_file_ndjson_wildcard.example import (
     input_file_ndjson_wildcard,
 )
-from tests_tabsdata.testing_resources.test_input_file_not_found.example import (
+from test_tabsdata.test_input_file_not_found.example import (
     input_file_not_found,
 )
-from tests_tabsdata.testing_resources.test_input_file_parquet_string_format.example import (
+from test_tabsdata.test_input_file_parquet_string_format.example import (
     input_file_parquet_string_format,
 )
-from tests_tabsdata.testing_resources.test_input_file_parquet_wildcard.example import (
+from test_tabsdata.test_input_file_parquet_wildcard.example import (
     input_file_parquet_wildcard,
 )
-from tests_tabsdata.testing_resources.test_input_file_wildcard.example import (
+from test_tabsdata.test_input_file_wildcard.example import (
     input_file_wildcard,
 )
 

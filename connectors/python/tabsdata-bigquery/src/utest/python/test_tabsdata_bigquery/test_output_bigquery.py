@@ -21,9 +21,9 @@ from tabsdata._tabsserver.invoker import invoke as tabsserver_main
 from tabsdata._utils.bundle_utils import create_bundle_archive
 
 # noinspection PyProtectedMember
-from tests_tabsdata.bootest import ROOT_FOLDER, TDLOCAL_FOLDER
-from tests_tabsdata.common.constants import PYTEST_DEFAULT_ENVIRONMENT_PREFIX
-from tests_tabsdata.conftest import (
+from test_tabsdata.bootest import ROOT_FOLDER, TDLOCAL_FOLDER
+from test_tabsdata.common.constants import PYTEST_DEFAULT_ENVIRONMENT_PREFIX
+from test_tabsdata.conftest import (
     FUNCTION_DATA_FOLDER,
     LOCAL_PACKAGES_LIST,
     clean_polars_df,
@@ -31,14 +31,14 @@ from tests_tabsdata.conftest import (
     read_json_and_clean,
     write_v2_function_yaml_file,
 )
-from tests_tabsdata_bigquery.conftest import TESTING_RESOURCES_FOLDER
-from tests_tabsdata_bigquery.testing_resources.test_multiple_outputs_bigquery.example import (
+from test_tabsdata_bigquery.conftest import TESTING_RESOURCES_FOLDER
+from test_tabsdata_bigquery.test_multiple_outputs_bigquery.example import (
     testing_tabsdata_function as multiple_outputs_bigquery_generator,
 )
-from tests_tabsdata_bigquery.testing_resources.test_output_bigquery.example import (
+from test_tabsdata_bigquery.test_output_bigquery_basic.example import (
     testing_tabsdata_function as output_bigquery_generator,
 )
-from tests_tabsdata_bigquery.testing_resources.test_output_bigquery_none.example import (
+from test_tabsdata_bigquery.test_output_bigquery_none.example import (
     testing_tabsdata_function as output_bigquery_none_generator,
 )
 
@@ -421,7 +421,7 @@ def test_output_bigquery(tmp_path, bigquery_config, bigquery_client):
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     mock_parquet_table = os.path.join(
-        TESTING_RESOURCES_FOLDER, "test_output_bigquery", "mock_table.parquet"
+        TESTING_RESOURCES_FOLDER, "test_output_bigquery_basic", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_function_yaml_file(
@@ -446,7 +446,7 @@ def test_output_bigquery(tmp_path, bigquery_config, bigquery_client):
 
         expected_output_file = os.path.join(
             TESTING_RESOURCES_FOLDER,
-            "test_output_bigquery",
+            "test_output_bigquery_basic",
             "expected_result.json",
         )
         output = download_bigquery_table_as_df(bigquery_client, full_table_name)
@@ -493,7 +493,7 @@ def test_output_bigquery_replace(tmp_path, bigquery_config, bigquery_client):
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     mock_parquet_table = os.path.join(
-        TESTING_RESOURCES_FOLDER, "test_output_bigquery", "mock_table.parquet"
+        TESTING_RESOURCES_FOLDER, "test_output_bigquery_basic", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_function_yaml_file(
@@ -519,7 +519,7 @@ def test_output_bigquery_replace(tmp_path, bigquery_config, bigquery_client):
 
             expected_output_file = os.path.join(
                 TESTING_RESOURCES_FOLDER,
-                "test_output_bigquery",
+                "test_output_bigquery_basic",
                 "expected_result.json",
             )
             output = download_bigquery_table_as_df(bigquery_client, full_table_name)
@@ -566,7 +566,7 @@ def test_output_bigquery_append(tmp_path, bigquery_config, bigquery_client):
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     mock_parquet_table = os.path.join(
-        TESTING_RESOURCES_FOLDER, "test_output_bigquery", "mock_table.parquet"
+        TESTING_RESOURCES_FOLDER, "test_output_bigquery_basic", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_function_yaml_file(
@@ -592,7 +592,7 @@ def test_output_bigquery_append(tmp_path, bigquery_config, bigquery_client):
 
             expected_output_file = os.path.join(
                 TESTING_RESOURCES_FOLDER,
-                "test_output_bigquery",
+                "test_output_bigquery_basic",
                 "expected_result.json",
             )
             output = download_bigquery_table_as_df(bigquery_client, full_table_name)
@@ -645,7 +645,9 @@ def test_output_bigquery_schema_strict(tmp_path, bigquery_config, bigquery_clien
                 "mock_table_small_schema.parquet" if i == 0 else "mock_table.parquet"
             )
             mock_parquet_table = os.path.join(
-                TESTING_RESOURCES_FOLDER, "test_output_bigquery", mocked_table_name
+                TESTING_RESOURCES_FOLDER,
+                "test_output_bigquery_basic",
+                mocked_table_name,
             )
             function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
             write_v2_function_yaml_file(
@@ -671,7 +673,7 @@ def test_output_bigquery_schema_strict(tmp_path, bigquery_config, bigquery_clien
 
                 expected_output_file = os.path.join(
                     TESTING_RESOURCES_FOLDER,
-                    "test_output_bigquery",
+                    "test_output_bigquery_basic",
                     "expected_result.json",
                 )
                 output = download_bigquery_table_as_df(bigquery_client, full_table_name)
@@ -726,7 +728,9 @@ def test_output_bigquery_schema_update(tmp_path, bigquery_config, bigquery_clien
                 "mock_table_small_schema.parquet" if i == 0 else "mock_table.parquet"
             )
             mock_parquet_table = os.path.join(
-                TESTING_RESOURCES_FOLDER, "test_output_bigquery", mocked_table_name
+                TESTING_RESOURCES_FOLDER,
+                "test_output_bigquery_basic",
+                mocked_table_name,
             )
             function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
             write_v2_function_yaml_file(
@@ -751,7 +755,7 @@ def test_output_bigquery_schema_update(tmp_path, bigquery_config, bigquery_clien
 
             expected_output_file = os.path.join(
                 TESTING_RESOURCES_FOLDER,
-                "test_output_bigquery",
+                "test_output_bigquery_basic",
                 "expected_result.json",
             )
             output = download_bigquery_table_as_df(bigquery_client, full_table_name)
@@ -822,7 +826,7 @@ def test_multiple_outputs_bigquery(tmp_path, bigquery_config, bigquery_client):
 
         expected_output_file = os.path.join(
             TESTING_RESOURCES_FOLDER,
-            "test_output_bigquery",
+            "test_output_bigquery_basic",
             "expected_result.json",
         )
         output = download_bigquery_table_as_df(bigquery_client, full_table1_name)
@@ -871,7 +875,7 @@ def test_output_bigquery_with_none(tmp_path, bigquery_config, bigquery_client):
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     mock_parquet_table = os.path.join(
-        TESTING_RESOURCES_FOLDER, "test_output_bigquery", "mock_table.parquet"
+        TESTING_RESOURCES_FOLDER, "test_output_bigquery_basic", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_function_yaml_file(
@@ -937,7 +941,7 @@ def test_output_bigquery_none_table_name(tmp_path, bigquery_config, bigquery_cli
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     mock_parquet_table = os.path.join(
-        TESTING_RESOURCES_FOLDER, "test_output_bigquery", "mock_table.parquet"
+        TESTING_RESOURCES_FOLDER, "test_output_bigquery_basic", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_function_yaml_file(
@@ -962,7 +966,7 @@ def test_output_bigquery_none_table_name(tmp_path, bigquery_config, bigquery_cli
 
         expected_output_file = os.path.join(
             TESTING_RESOURCES_FOLDER,
-            "test_output_bigquery",
+            "test_output_bigquery_basic",
             "expected_result.json",
         )
         output = download_bigquery_table_as_df(bigquery_client, full_table_name)

@@ -31,10 +31,11 @@ from tabsdata.api.tabsdata_server import (
     _convert_timestamp_to_string,
     _top_and_convert_to_timestamp,
 )
-from tests_tabsdata.conftest import (
+from test_tabsdata.conftest import (
     ABSOLUTE_TEST_FOLDER_LOCATION,
     APISERVER_URL,
     LOCAL_PACKAGES_LIST,
+    TESTING_RESOURCES_FOLDER,
 )
 
 # noinspection PyUnresolvedReferences
@@ -231,10 +232,8 @@ def test_function_get(tabsserver_connection):
         tabsserver_connection.register_function(
             collection_name="test_function_get_collection",
             description="test_function_get_description",
-            function_path=(
-                f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
-                                "test_input_plugin", "example.py")}::input_plugin"
-            ),
+            function_path=f"{os.path.join(TESTING_RESOURCES_FOLDER,
+                                "test_input_plugin", "example.py")}::input_plugin",
             local_packages=LOCAL_PACKAGES_LIST,
         )
         function = tabsserver_connection.get_function(
@@ -263,10 +262,8 @@ def test_function_list_history(tabsserver_connection):
         tabsserver_connection.register_function(
             collection_name="test_function_list_history_collection",
             description="test_function_list_history_description",
-            function_path=(
-                f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
-                                "test_input_plugin", "example.py")}::input_plugin"
-            ),
+            function_path=f"{os.path.join(TESTING_RESOURCES_FOLDER,
+                                "test_input_plugin", "example.py")}::input_plugin",
             local_packages=LOCAL_PACKAGES_LIST,
         )
         functions = tabsserver_connection.list_function_history(
@@ -296,10 +293,8 @@ def test_function_trigger(tabsserver_connection):
         tabsserver_connection.register_function(
             collection_name="test_function_trigger_collection",
             description="test_function_trigger_description",
-            function_path=(
-                f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
-                                "test_input_plugin", "example.py")}::input_plugin"
-            ),
+            function_path=f"{os.path.join(TESTING_RESOURCES_FOLDER,
+                                "test_input_plugin", "example.py")}::input_plugin",
             local_packages=LOCAL_PACKAGES_LIST,
         )
         response = tabsserver_connection.trigger_function(
@@ -328,10 +323,8 @@ def test_function_trigger_execution_name(tabsserver_connection):
         tabsserver_connection.register_function(
             collection_name="test_function_trigger_execution_name_collection",
             description="test_function_trigger_execution_name_description",
-            function_path=(
-                f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
-                                "test_input_plugin", "example.py")}::input_plugin"
-            ),
+            function_path=f"{os.path.join(TESTING_RESOURCES_FOLDER,
+                                "test_input_plugin", "example.py")}::input_plugin",
             local_packages=LOCAL_PACKAGES_LIST,
         )
         execution = tabsserver_connection.trigger_function(
@@ -363,10 +356,8 @@ def test_function_register(tabsserver_connection):
         tabsserver_connection.register_function(
             collection_name="test_function_register_collection",
             description="test_function_register_description",
-            function_path=(
-                f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
-                                "test_input_plugin", "example.py")}::input_plugin"
-            ),
+            function_path=f"{os.path.join(TESTING_RESOURCES_FOLDER,
+                                "test_input_plugin", "example.py")}::input_plugin",
             local_packages=LOCAL_PACKAGES_LIST,
         )
         functions = tabsserver_connection.list_functions(
@@ -395,10 +386,8 @@ def test_function_update(tabsserver_connection):
         tabsserver_connection.register_function(
             collection_name="test_function_update_server_collection",
             description="test_function_update_server_description",
-            function_path=(
-                f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
-                                "test_input_plugin", "example.py")}::input_plugin"
-            ),
+            function_path=f"{os.path.join(TESTING_RESOURCES_FOLDER,
+                                "test_input_plugin", "example.py")}::input_plugin",
             local_packages=LOCAL_PACKAGES_LIST,
         )
         functions = tabsserver_connection.list_functions(
@@ -407,7 +396,7 @@ def test_function_update(tabsserver_connection):
         assert any(function.name == "test_input_plugin" for function in functions)
         new_description = "test_function_update_server_new_description"
         new_function_path = (
-            f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, 'testing_resources',
+            f"{os.path.join(TESTING_RESOURCES_FOLDER,
                             'test_input_file_csv_modified_format', 'example.py')}"
             "::input_file_csv_modified_format"
         )
@@ -445,10 +434,8 @@ def test_function_delete(tabsserver_connection):
         tabsserver_connection.register_function(
             collection_name="test_function_delete_collection",
             description="test_function_delete_description",
-            function_path=(
-                f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
-                                "test_input_plugin", "example.py")}::input_plugin"
-            ),
+            function_path=f"{os.path.join(TESTING_RESOURCES_FOLDER,
+                                "test_input_plugin", "example.py")}::input_plugin",
             local_packages=LOCAL_PACKAGES_LIST,
         )
         functions = tabsserver_connection.list_functions(
@@ -1013,8 +1000,7 @@ def test_tabsdata_server_class_read_run(tabsserver_connection):
         f"test_tabsdata_server_class_read_run_{uuid.uuid4().hex[:16]}"
     )
     file_path = os.path.join(
-        ABSOLUTE_TEST_FOLDER_LOCATION,
-        "testing_resources",
+        TESTING_RESOURCES_FOLDER,
         "test_input_file_csv_string_format",
         "example.py",
     )
@@ -1044,10 +1030,8 @@ def test_tabsdata_server_execution_cancel(tabsserver_connection):
         tabsserver_connection.register_function(
             collection_name="test_tabsdata_server_execution_cancel_collection",
             description="test_tabsdata_server_execution_cancel_description",
-            function_path=(
-                f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
-                                "test_input_plugin", "example.py")}::input_plugin"
-            ),
+            function_path=f"{os.path.join(TESTING_RESOURCES_FOLDER,
+                                "test_input_plugin", "example.py")}::input_plugin",
             local_packages=LOCAL_PACKAGES_LIST,
         )
         execution = tabsserver_connection.trigger_function(
@@ -1079,10 +1063,8 @@ def test_tabsdata_server_execution_recover(tabsserver_connection):
         tabsserver_connection.register_function(
             collection_name="test_tabsdata_server_execution_recover_collection",
             description="test_tabsdata_server_execution_recover_description",
-            function_path=(
-                f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
-                                "test_input_plugin", "example.py")}::input_plugin"
-            ),
+            function_path=f"{os.path.join(TESTING_RESOURCES_FOLDER,
+                                "test_input_plugin", "example.py")}::input_plugin",
             local_packages=LOCAL_PACKAGES_LIST,
         )
         execution = tabsserver_connection.trigger_function(
@@ -1151,10 +1133,8 @@ def test_tabsdata_server_transaction_cancel(tabsserver_connection):
         tabsserver_connection.register_function(
             collection_name="test_tabsdata_server_transaction_cancel_collection",
             description="test_tabsdata_server_transaction_cancel_description",
-            function_path=(
-                f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
-                                "test_input_plugin", "example.py")}::input_plugin"
-            ),
+            function_path=f"{os.path.join(TESTING_RESOURCES_FOLDER,
+                                "test_input_plugin", "example.py")}::input_plugin",
             local_packages=LOCAL_PACKAGES_LIST,
         )
         execution = tabsserver_connection.trigger_function(
@@ -1187,10 +1167,8 @@ def test_tabsdata_server_transaction_recover(tabsserver_connection):
         tabsserver_connection.register_function(
             collection_name="test_tabsdata_server_transaction_recover_collection",
             description="test_tabsdata_server_transaction_recover_description",
-            function_path=(
-                f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
-                                "test_input_plugin", "example.py")}::input_plugin"
-            ),
+            function_path=f"{os.path.join(TESTING_RESOURCES_FOLDER,
+                                "test_input_plugin", "example.py")}::input_plugin",
             local_packages=LOCAL_PACKAGES_LIST,
         )
         execution = tabsserver_connection.trigger_function(
@@ -1319,10 +1297,8 @@ def test_tabsserver_class_table_delete(tabsserver_connection):
         tabsserver_connection.register_function(
             collection_name="test_tabsserver_class_table_delete_collection",
             description="test_table_delete_description",
-            function_path=(
-                f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
-                                "test_input_plugin", "example.py")}::input_plugin"
-            ),
+            function_path=f"{os.path.join(TESTING_RESOURCES_FOLDER,
+                                "test_input_plugin", "example.py")}::input_plugin",
             local_packages=LOCAL_PACKAGES_LIST,
         )
         functions = tabsserver_connection.list_functions(

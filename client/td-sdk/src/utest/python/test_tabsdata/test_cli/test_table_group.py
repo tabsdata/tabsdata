@@ -13,9 +13,10 @@ from click.testing import CliRunner
 
 from tabsdata._cli.cli import cli
 from tabsdata.api.tabsdata_server import Table
-from tests_tabsdata.conftest import (
+from test_tabsdata.conftest import (
     ABSOLUTE_TEST_FOLDER_LOCATION,
     LOCAL_PACKAGES_LIST,
+    TESTING_RESOURCES_FOLDER,
 )
 
 # noinspection PyUnresolvedReferences
@@ -761,8 +762,7 @@ def test_cli_table_delete(
             collection_name="test_cli_table_delete_collection",
             description="test_table_delete_description",
             function_path=(
-                f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
-                                "test_input_plugin", "example.py")}::input_plugin"
+                f"{os.path.join(TESTING_RESOURCES_FOLDER, 'test_input_plugin', 'example.py')}::input_plugin"
             ),
             local_packages=LOCAL_PACKAGES_LIST,
         )

@@ -15,11 +15,10 @@ import tabsdata as td
 from tabsdata._credentials import UserPasswordCredentials
 from tabsdata_kafka._connector import KafkaConn, KafkaTrigger
 from tabsdata_kafka.typing import Protobuf
-from tests_tabsdata.bootest import TDLOCAL_FOLDER
-from tests_tabsdata.common.backend.kafka import kafka_config
-from tests_tabsdata.conftest import ABSOLUTE_TEST_FOLDER_LOCATION
-from tests_tabsdata.fntest import tdfnjob
-from tests_tabsdata_kafka.conftest import (
+from test_tabsdata.bootest import TDLOCAL_FOLDER
+from test_tabsdata.conftest import ABSOLUTE_TEST_FOLDER_LOCATION
+from test_tabsdata.fntest import tdfnjob
+from test_tabsdata_kafka.conftest import (
     PROTOBUF_MESSAGE_NAME,
     TIMEOUT_SECS,
     get_avro_message,

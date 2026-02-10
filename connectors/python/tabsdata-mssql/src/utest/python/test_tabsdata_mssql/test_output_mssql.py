@@ -25,9 +25,9 @@ from tabsdata._tabsserver.function.response_utils import RESPONSE_FILE_NAME
 from tabsdata._tabsserver.invoker import REQUEST_FILE_NAME
 from tabsdata._tabsserver.invoker import invoke as tabsserver_main
 from tabsdata._utils.bundle_utils import create_bundle_archive
-from tests_tabsdata.bootest import ROOT_FOLDER, TDLOCAL_FOLDER
-from tests_tabsdata.common.constants import PYTEST_DEFAULT_ENVIRONMENT_PREFIX
-from tests_tabsdata.conftest import (
+from test_tabsdata.bootest import ROOT_FOLDER, TDLOCAL_FOLDER
+from test_tabsdata.common.constants import PYTEST_DEFAULT_ENVIRONMENT_PREFIX
+from test_tabsdata.conftest import (
     FUNCTION_DATA_FOLDER,
     LOCAL_PACKAGES_LIST,
     clean_polars_df,
@@ -35,9 +35,8 @@ from tests_tabsdata.conftest import (
     read_json_and_clean,
     write_v2_function_yaml_file,
 )
-from tests_tabsdata_mssql.conftest import (
+from test_tabsdata_mssql.conftest import (
     DB_PASSWORD,
-    MSSQL_USER,
     TESTING_RESOURCES_FOLDER,
     MSSQLConfig,
 )
@@ -343,7 +342,7 @@ def test_single_element_table_list(tmp_path, size, mssql_connection):
 @pytest.mark.tabsserver
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_mssql(tmp_path, mssql_connection, mssql_version):
-    from tests_tabsdata_mssql.testing_resources.test_output_mssql.example import (
+    from test_tabsdata_mssql.test_output_mssql_basic.example import (
         output_mssql,
     )
 
@@ -368,7 +367,7 @@ def test_output_mssql(tmp_path, mssql_connection, mssql_version):
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     mock_parquet_table = os.path.join(
-        TESTING_RESOURCES_FOLDER, "test_output_mssql", "mock_table.parquet"
+        TESTING_RESOURCES_FOLDER, "test_output_mssql_basic", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_function_yaml_file(
@@ -393,7 +392,7 @@ def test_output_mssql(tmp_path, mssql_connection, mssql_version):
     output = clean_polars_df(output)
     expected_output_file = os.path.join(
         TESTING_RESOURCES_FOLDER,
-        "test_output_mssql",
+        "test_output_mssql_basic",
         "expected_result.json",
     )
     expected_output = read_json_and_clean(expected_output_file)
@@ -406,7 +405,7 @@ def test_output_mssql(tmp_path, mssql_connection, mssql_version):
 @pytest.mark.tabsserver
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_multiple_outputs_mssql(tmp_path, mssql_connection, mssql_version):
-    from tests_tabsdata_mssql.testing_resources.test_multiple_outputs_mssql.example import (
+    from test_tabsdata_mssql.test_multiple_outputs_mssql.example import (
         multiple_outputs_mssql,
     )
 
@@ -489,7 +488,7 @@ def test_multiple_outputs_mssql(tmp_path, mssql_connection, mssql_version):
 @pytest.mark.tabsserver
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_mssql_with_none(tmp_path, mssql_connection, mssql_version):
-    from tests_tabsdata_mssql.testing_resources.test_output_mssql_none.example import (
+    from test_tabsdata_mssql.test_output_mssql_none.example import (
         output_mssql_none,
     )
 

@@ -18,8 +18,8 @@ script = [
 
     debug "🔷 _____ Setting up tabsdata pytest python path..."
 
-    debug "🚀 python ${PROJECT_PY_TD_TABSDATA_FOLDER}/tests_tabsdata/bootest.py"
-    output = exec --fail-on-error python ${PROJECT_PY_TD_TABSDATA_FOLDER}tests_tabsdata/bootest.py
+    debug "🚀 python ${PROJECT_PY_TD_TABSDATA_FOLDER}/src/utest/python/test_tabsdata/bootest.py"
+    output = exec --fail-on-error python ${PROJECT_PY_TD_TABSDATA_FOLDER}/src/utest/python/test_tabsdata/bootest.py
 
     debug "📦 The received pythonpath is ${output.stdout}"
     pythonpath = set ${output.stdout}

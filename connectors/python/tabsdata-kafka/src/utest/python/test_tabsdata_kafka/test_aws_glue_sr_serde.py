@@ -6,12 +6,7 @@ import pytest
 from confluent_kafka.serialization import MessageField, SerializationContext
 
 # noinspection PyUnusedImports
-# noinspection PyUnusedImports
-# noinspection PyUnusedImports
-# noinspection PyUnusedImports
-# noinspection PyUnusedImports
-# noinspection PyUnusedImports
-from tests_tabsdata_kafka.conftest import (
+from test_tabsdata_kafka.conftest import (
     aws_glue_sr_avro_glue_serde,
     aws_glue_sr_avro_schema_str,
     aws_glue_sr_json_glue_serde,

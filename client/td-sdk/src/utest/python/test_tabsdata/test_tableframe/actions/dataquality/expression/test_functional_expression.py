@@ -10,7 +10,7 @@ from pycountries import Country
 
 import tabsdata as td
 from tabsdata.tableframe.lazyframe.properties import TableFramePropertiesBuilder
-from tests_tabsdata.test_tabsdata.test_tableframe.common import (
+from test_tabsdata.test_tableframe.common import (
     pretty_pandas,
     pretty_polars,
 )

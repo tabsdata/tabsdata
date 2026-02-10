@@ -17,12 +17,12 @@
       "reason": "Affects crate openssl. This vulnerability is currently awaiting analysis. The vulnerability affects the legacy PKCS#1v1.5 RSA encryption padding mode."
     },
     {
-      "id": "CVE-2026-21895",
-      "reason": "Improper check or handling of exceptional conditions in RSA implementation in crate rsa."
-    },
-    {
       "id": "CVE-2026-0810",
       "reason": "Incorrect Calculation of Multi-Byte String Length in crate gix-date."
+    },
+    {
+      "id": "CVE-2026-21895",
+      "reason": "Improper check or handling of exceptional conditions in RSA implementation in crate rsa."
     }
   ]
 }

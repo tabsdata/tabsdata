@@ -27,9 +27,9 @@ from tabsdata._utils.bundle_utils import create_bundle_archive
 
 # noinspection PyProtectedMember
 from tabsdata_databricks._connector import _table_fqn_4sql
-from tests_tabsdata.bootest import ROOT_FOLDER, TDLOCAL_FOLDER
-from tests_tabsdata.common.constants import PYTEST_DEFAULT_ENVIRONMENT_PREFIX
-from tests_tabsdata.conftest import (
+from test_tabsdata.bootest import ROOT_FOLDER, TDLOCAL_FOLDER
+from test_tabsdata.common.constants import PYTEST_DEFAULT_ENVIRONMENT_PREFIX
+from test_tabsdata.conftest import (
     FUNCTION_DATA_FOLDER,
     LOCAL_PACKAGES_LIST,
     clean_polars_df,
@@ -37,17 +37,17 @@ from tests_tabsdata.conftest import (
     read_json_and_clean,
     write_v2_function_yaml_file,
 )
-from tests_tabsdata_databricks.conftest import TESTING_RESOURCES_FOLDER
-from tests_tabsdata_databricks.testing_resources.test_multiple_outputs_databricks.example import (
+from test_tabsdata_databricks.conftest import TESTING_RESOURCES_FOLDER
+from test_tabsdata_databricks.test_multiple_outputs_databricks.example import (
     multiple_outputs_databricks,
 )
-from tests_tabsdata_databricks.testing_resources.test_output_databricks.example import (
+from test_tabsdata_databricks.test_output_databricks_basic.example import (
     output_databricks,
 )
-from tests_tabsdata_databricks.testing_resources.test_output_databricks_list_none.example import (
+from test_tabsdata_databricks.test_output_databricks_list_none.example import (
     output_databricks_list_none,
 )
-from tests_tabsdata_databricks.testing_resources.test_output_databricks_none.example import (
+from test_tabsdata_databricks.test_output_databricks_none.example import (
     output_databricks_none,
 )
 
@@ -661,7 +661,7 @@ def test_output_databricks(tmp_path, databricks_client, sql_conn, databricks_con
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     mock_parquet_table = os.path.join(
-        TESTING_RESOURCES_FOLDER, "test_output_databricks", "mock_table.parquet"
+        TESTING_RESOURCES_FOLDER, "test_output_databricks_basic", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_function_yaml_file(
@@ -686,7 +686,7 @@ def test_output_databricks(tmp_path, databricks_client, sql_conn, databricks_con
 
         expected_output_file = os.path.join(
             TESTING_RESOURCES_FOLDER,
-            "test_output_databricks",
+            "test_output_databricks_basic",
             "expected_result.json",
         )
         query = f"SELECT * FROM {full_table_name}"

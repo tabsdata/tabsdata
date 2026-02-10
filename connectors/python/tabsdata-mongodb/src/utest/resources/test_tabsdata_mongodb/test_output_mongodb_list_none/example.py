@@ -6,8 +6,8 @@ import os
 
 import tabsdata as td
 from tabsdata._utils.bundle_utils import create_bundle_archive
-from tests_tabsdata.bootest import TDLOCAL_FOLDER
-from tests_tabsdata_mongodb.conftest import (
+from test_tabsdata.bootest import TDLOCAL_FOLDER
+from test_tabsdata_mongodb.conftest import (
     DB_PASSWORD,
     DB_USER,
     MONGODB_URI_WITHOUT_CREDENTIALS,

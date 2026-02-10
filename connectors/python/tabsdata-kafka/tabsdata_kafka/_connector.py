@@ -378,7 +378,7 @@ class KafkaTrigger(StageTrigger):
                          ("avro", "json", "protobuf").
             schema: The schema string for deserializing messages.
             group_id: Optional Kafka consumer group ID.
-            schema_name: Optional schema name for AWS Glue Schema Registry.
+            schema: Optional schema name for AWS Glue Schema Registry.
             time_rollover_secs: The timeout in seconds before staging and
                                 committing a message buffer. Defaults to 60.
             size_rollover_mb: Optional size-based rollover configuration. Size

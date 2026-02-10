@@ -4,9 +4,9 @@
 
 """Backend fixtures for database, vault, and cloud storage testing."""
 
-from src.utest.python.common.backend.azure import azure_client, azure_config
-from src.utest.python.common.backend.gcs import gcs_client, gcs_config
-from src.utest.python.common.backend.hashicorp import (
+from test_tabsdata.common.backend.azure import azure_client, azure_config
+from test_tabsdata.common.backend.gcs import gcs_client, gcs_config
+from test_tabsdata.common.backend.hashicorp import (
     DEFAULT_PYTEST_HASHICORP_DOCKER_CONTAINER_NAME,
     HASHICORP_PORT,
     HASHICORP_TESTING_SECRET_NAME,
@@ -16,7 +16,7 @@ from src.utest.python.common.backend.hashicorp import (
     HASHICORP_TESTING_URL,
     testing_hashicorp_vault,
 )
-from src.utest.python.common.backend.kafka import (
+from test_tabsdata.common.backend.kafka import (
     DEFAULT_PYTEST_KAFKA_DOCKER_CONTAINER_NAME,
     KAFKA_ADMIN_PASSWORD,
     KAFKA_ADMIN_USER,
@@ -24,7 +24,7 @@ from src.utest.python.common.backend.kafka import (
     KafkaConfig,
     kafka_config,
 )
-from src.utest.python.common.backend.mariadb import (
+from test_tabsdata.common.backend.mariadb import (
     DEFAULT_PYTEST_MARIADB_DOCKER_CONTAINER_NAME,
     MARIADB_FORWARDED_PORT,
     MARIADB_PORT,
@@ -32,14 +32,14 @@ from src.utest.python.common.backend.mariadb import (
     MariaDBConfig,
     mariadb_config,
 )
-from src.utest.python.common.backend.mysql import (
+from test_tabsdata.common.backend.mysql import (
     DEFAULT_PYTEST_MYSQL_DOCKER_CONTAINER_NAME,
     MYSQL_FORWARDED_PORT,
     VALID_MYSQL_PREFIXES,
     MySQLConfig,
     mysql_config,
 )
-from src.utest.python.common.backend.oracle import (
+from test_tabsdata.common.backend.oracle import (
     DEFAULT_PYTEST_ORACLE_DOCKER_CONTAINER_NAME,
     ORACLE_DB_NAME,
     ORACLE_DB_USER,
@@ -49,7 +49,7 @@ from src.utest.python.common.backend.oracle import (
     OracleConfig,
     oracle_config,
 )
-from src.utest.python.common.backend.postgres import (
+from test_tabsdata.common.backend.postgres import (
     DEFAULT_PYTEST_POSTGRES_DOCKER_CONTAINER_NAME,
     POSTGRES_FORWARDED_PORT,
     POSTGRES_PORT,
@@ -57,8 +57,8 @@ from src.utest.python.common.backend.postgres import (
     PostgresConfig,
     postgres_config,
 )
-from src.utest.python.common.backend.s3 import s3_client, s3_config
-from src.utest.python.common.constants import (
+from test_tabsdata.common.backend.s3 import s3_client, s3_config
+from test_tabsdata.common.constants import (
     DB_HOST,
     DB_NAME,
     DB_PASSWORD,
@@ -67,7 +67,7 @@ from src.utest.python.common.constants import (
     MAXIMUM_RETRY_COUNT,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
 )
-from src.utest.python.common.container import get_container_port_binding
+from test_tabsdata.common.container import get_container_port_binding
 
 __all__ = [
     # Shared constants

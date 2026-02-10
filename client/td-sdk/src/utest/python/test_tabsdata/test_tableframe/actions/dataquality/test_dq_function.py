@@ -4,7 +4,13 @@
 
 import polars as pl
 import pytest
-from fntest import FnError, MockTableFrameSpec, tdfnrun
+
+import tabsdata as td
+import tabsdata.dataquality as dq
+from tabsdata.dataquality._classifier import LinearScale
+from tabsdata.exceptions import DataQualityProcessingError, ErrorCode
+from tabsdata.tableframe._actions.dataquality.engine import MAX_BINS
+from test_tabsdata.fntest import FnError, MockTableFrameSpec, tdfnrun
 from test_tabsdata.test_tableframe.actions.dataquality.dq_helper import (
     Q_BOOLEAN,
     Q_NEGATIVE,
@@ -16,12 +22,6 @@ from test_tabsdata.test_tableframe.actions.dataquality.dq_helper import (
     categorical_dataset,
     percentage,
 )
-
-import tabsdata as td
-import tabsdata.dataquality as dq
-from tabsdata.dataquality._classifier import LinearScale
-from tabsdata.exceptions import DataQualityProcessingError, ErrorCode
-from tabsdata.tableframe._actions.dataquality.engine import MAX_BINS
 
 
 @pytest.mark.dq

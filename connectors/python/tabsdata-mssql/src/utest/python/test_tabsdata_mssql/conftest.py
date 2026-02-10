@@ -9,7 +9,7 @@ import os
 import urllib
 from dataclasses import dataclass
 
-from src.utest.python.common import (
+from test_tabsdata.common.constants import (
     DOCKER_REGULAR_CONTAINER_INFIX,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
 )
@@ -19,8 +19,8 @@ logger.setLevel(logging.INFO)
 
 from tabsdata._credentials import UserPasswordCredentials
 from tabsdata._utils.constants import TRUE_VALUES
-from tests_tabsdata.bootest import enrich_sys_path
-from tests_tabsdata_mssql.bootest import TESTING_RESOURCES_PATH
+from test_tabsdata.bootest import enrich_sys_path
+from test_tabsdata_mssql.bootest import TESTING_RESOURCES_PATH
 
 
 def _enrich_sys_path():
@@ -38,22 +38,23 @@ from filelock import FileLock
 from xdist.workermanage import WorkerController
 
 from tabsdata._utils.tdlogging import setup_tests_logging
-from src.utest.python.common import (
+from test_tabsdata.common.constants import (
     DB_HOST,
     DB_NAME,
     DB_PASSWORD,
     MAXIMUM_RETRY_COUNT,
 )
-from src.utest.python.common import (
+from test_tabsdata.common.docker import (
     remove_docker_containers,
 )
-from tests_tabsdata.conftest import (
+from test_tabsdata.conftest import (
     clean_python_virtual_environments,
+    pytest_addoption,
     setup_temp_folder,
     setup_temp_folder_node,
 )
 
-pytest_plugins = ["tests_tabsdata.fntest"]
+pytest_plugins = ["test_tabsdata.fntest"]
 
 
 def pytest_configure(config: pytest.Config):
@@ -85,7 +86,7 @@ def _create_invoice_dataframes():
     """Create dataframes with lazy polars import"""
     import polars as pl  # Lazy import
 
-    from tests_tabsdata.conftest import clean_polars_df
+    from test_tabsdata.conftest import clean_polars_df
 
     invoice_header = clean_polars_df(
         pl.DataFrame(

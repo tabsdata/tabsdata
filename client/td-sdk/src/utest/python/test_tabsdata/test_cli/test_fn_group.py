@@ -10,7 +10,11 @@ import pytest
 from click.testing import CliRunner
 
 from tabsdata._cli.cli import cli
-from tests_tabsdata.conftest import ABSOLUTE_TEST_FOLDER_LOCATION, LOCAL_PACKAGES_LIST
+from test_tabsdata.conftest import (
+    ABSOLUTE_TEST_FOLDER_LOCATION,
+    LOCAL_PACKAGES_LIST,
+    TESTING_RESOURCES_FOLDER,
+)
 
 # noinspection PyUnresolvedReferences
 from . import pytestmark  # noqa: F401
@@ -563,8 +567,7 @@ def test_function_cli_read_run(login, tabsserver_connection):
         f"test_function_class_read_run_{uuid.uuid4().hex[:16]}"
     )
     file_path = os.path.join(
-        ABSOLUTE_TEST_FOLDER_LOCATION,
-        "testing_resources",
+        TESTING_RESOURCES_FOLDER,
         "test_input_file_csv_string_format",
         "example.py",
     )

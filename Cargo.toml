@@ -270,7 +270,7 @@ path = "extensions/rust/te-execution"
 # External dependencies
 
 [workspace.dependencies.anyhow]
-version = "1.0.100"
+version = "1.0.101"
 
 [workspace.dependencies.aquamarine]
 version = "0.6.0"

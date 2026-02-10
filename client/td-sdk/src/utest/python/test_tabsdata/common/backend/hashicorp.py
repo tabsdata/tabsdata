@@ -13,7 +13,7 @@ import pytest
 from filelock import FileLock
 
 from tabsdata._secret import HashiCorpSecret
-from src.utest.python.common.constants import (
+from test_tabsdata.common.constants import (
     MAXIMUM_RETRY_COUNT,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
 )

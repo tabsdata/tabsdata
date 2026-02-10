@@ -15,7 +15,7 @@ from tabsdata._tabsserver.function.yaml_parsing import (
     TableVersions,
     parse_request_yaml,
 )
-from tests_tabsdata.conftest import (
+from test_tabsdata.conftest import (
     FAKE_EXECUTION_ID,
     FAKE_FUNCTION_DEFINED_ON,
     FAKE_FUNCTION_RUN_ID,

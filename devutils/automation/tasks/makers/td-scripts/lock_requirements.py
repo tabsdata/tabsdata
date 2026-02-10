@@ -296,7 +296,7 @@ def lock_pyprojects(
             name.replace("-", "_") for name in connector_modules
         }
         test_connector_modules = {
-            f"tests_{name}" for name in connector_modules_underscore
+            f"test_{name}" for name in connector_modules_underscore
         }
         merged = (
             known_first_party_entry_set
@@ -308,21 +308,21 @@ def lock_pyprojects(
             name for name in merged if name.startswith("tabsdata")
         )
         tests_tabsdata_packages = sorted(
-            name for name in merged if name.startswith("tests_tabsdata")
+            name for name in merged if name.startswith("test_tabsdata")
         )
         tabsdata_libraries = sorted(
             name
             for name in merged
             if not (
                 name.startswith("tabsdata")
-                or name.startswith("tests_tabsdata")
-                or name.startswith("tests_")
+                or name.startswith("test_tabsdata")
+                or name.startswith("test_")
             )
         )
         tests_tabsdata_libraries = sorted(
             name
             for name in merged
-            if (name.startswith("tests_") and not name.startswith("tests_tabsdata"))
+            if (name.startswith("test_") and not name.startswith("test_tabsdata"))
         )
 
         sorted_array = array()
@@ -381,7 +381,16 @@ def lock_pyprojects(
 
 
 def lock_pytest_ini(root: str) -> None:
-    tabsdata_pytest_ini_file = os.path.join(root, "client", "td-sdk", "pytest.ini")
+    tabsdata_pytest_ini_file = os.path.join(
+        root,
+        "client",
+        "td-sdk",
+        "src",
+        "utest",
+        "python",
+        "test_tabsdata",
+        "pytest.ini",
+    )
     tabsdata_pytest_ini_path = Path(tabsdata_pytest_ini_file).resolve()
     if not tabsdata_pytest_ini_path.is_file():
         raise FileNotFoundError(

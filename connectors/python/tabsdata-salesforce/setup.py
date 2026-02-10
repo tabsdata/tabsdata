@@ -657,10 +657,12 @@ with global_spinner("Building package 'tabsdata-salesforce' (Salesforce Connecto
         packages=find_packages(
             where=os.getcwd(),
             exclude=[
+                "test",
+                "test*",
                 "tests",
                 "tests*",
-                "tests_tabsdata_salesforce",
-                "tests_tabsdata_salesforce*",
+                "src.utest",
+                "src.utest*",
             ],
         ),
         package_dir={

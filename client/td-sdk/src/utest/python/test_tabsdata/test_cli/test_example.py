@@ -16,7 +16,7 @@ from tabsdata._cli.cli import cli
 from tabsdata._tdfunction import TabsdataFunction
 from tabsdata._utils.temps import tabsdata_temp_folder
 from tabsdata.extensions._tableframe.extension_test import instance as checker
-from tests_tabsdata.conftest import LOCAL_PACKAGES_LIST, MAXIMUM_RETRY_COUNT
+from test_tabsdata.conftest import LOCAL_PACKAGES_LIST, MAXIMUM_RETRY_COUNT
 
 # noinspection PyUnresolvedReferences
 from . import pytestmark  # noqa: F401

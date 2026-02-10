@@ -7,15 +7,22 @@ from __future__ import annotations
 import logging
 import os
 
+from tabsdata.tableframe.lazyframe.properties import TableFramePropertiesBuilder
+
 # import sys
 
-# from tests_te_tableframe.bootest import TESTS_ROOT_FOLDER
+# from test_te_tableframe.bootest import TESTS_ROOT_FOLDER
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-from tests_tabsdata.bootest import enrich_sys_path
-from tests_te_tableframe.bootest import TESTING_RESOURCES_PATH, _enrich_sys_path
+from test_tabsdata.bootest import enrich_sys_path
+from test_te_tableframe.bootest import TESTING_RESOURCES_PATH
+
+
+def _enrich_sys_path():
+    pass
+
 
 TESTING_RESOURCES_FOLDER = TESTING_RESOURCES_PATH
 enrich_sys_path()
@@ -28,7 +35,7 @@ from xdist.workermanage import WorkerController
 
 # noinspection PyProtectedMember
 from tabsdata._utils.tdlogging import setup_tests_logging
-from tests_tabsdata.conftest import setup_temp_folder, setup_temp_folder_node
+from test_tabsdata.conftest import setup_temp_folder, setup_temp_folder_node
 
 
 def pytest_configure(config: pytest.Config):

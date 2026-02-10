@@ -13,7 +13,7 @@ from tabsdata.api.apiserver import (
     APIServerError,
     obtain_connection,
 )
-from tests_tabsdata.conftest import APISERVER_URL
+from test_tabsdata.conftest import APISERVER_URL
 
 # noinspection PyUnresolvedReferences
 from . import pytestmark  # noqa: F401

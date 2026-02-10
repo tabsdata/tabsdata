@@ -8,7 +8,7 @@ import pytest
 from confluent_kafka.serialization import MessageField, SerializationContext
 
 from tabsdata_kafka.serdes.non_sr_serde import JsonKafkaSerde
-from tests_tabsdata_kafka.conftest import (
+from test_tabsdata_kafka.conftest import (
     avro_serde_v1,
     avro_serde_v2,
     json_serde,

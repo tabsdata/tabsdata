@@ -17,9 +17,9 @@ from tabsdata._tabsserver.function.response_utils import RESPONSE_FILE_NAME
 from tabsdata._tabsserver.invoker import REQUEST_FILE_NAME
 from tabsdata._tabsserver.invoker import invoke as tabsserver_main
 from tabsdata._utils.bundle_utils import create_bundle_archive
-from tests_tabsdata.bootest import TDLOCAL_FOLDER
-from tests_tabsdata.common.constants import PYTEST_DEFAULT_ENVIRONMENT_PREFIX
-from tests_tabsdata.conftest import (
+from test_tabsdata.bootest import TDLOCAL_FOLDER
+from test_tabsdata.common.constants import PYTEST_DEFAULT_ENVIRONMENT_PREFIX
+from test_tabsdata.conftest import (
     ABSOLUTE_TEST_FOLDER_LOCATION,
     FUNCTION_DATA_FOLDER,
     LOCAL_PACKAGES_LIST,
@@ -28,19 +28,19 @@ from tests_tabsdata.conftest import (
     read_json_and_clean,
     write_v2_function_yaml_file,
 )
-from tests_tabsdata.testing_resources.test_output_file.example import (
+from test_tabsdata.test_output_file.example import (
     output_file as output_file_format_testing,
 )
-from tests_tabsdata.testing_resources.test_output_file_frame_list.example import (
+from test_tabsdata.test_output_file_frame_list.example import (
     output_file_frame_list,
 )
-from tests_tabsdata.testing_resources.test_output_file_multiple_files.example import (
+from test_tabsdata.test_output_file_multiple_files.example import (
     output_file_multiple_files,
 )
-from tests_tabsdata.testing_resources.test_output_file_multiple_files_with_none.example import (
+from test_tabsdata.test_output_file_multiple_files_with_none.example import (
     output_file_multiple_files_with_none,
 )
-from tests_tabsdata.testing_resources.test_output_file_with_none.example import (
+from test_tabsdata.test_output_file_with_none.example import (
     output_file_with_none,
 )
 

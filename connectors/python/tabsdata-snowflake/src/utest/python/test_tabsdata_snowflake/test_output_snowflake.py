@@ -22,28 +22,28 @@ from tabsdata._tabsserver.function.response_utils import RESPONSE_FILE_NAME
 from tabsdata._tabsserver.invoker import REQUEST_FILE_NAME
 from tabsdata._tabsserver.invoker import invoke as tabsserver_main
 from tabsdata._utils.bundle_utils import create_bundle_archive
-from tests_tabsdata.bootest import ROOT_FOLDER, TDLOCAL_FOLDER
-from tests_tabsdata.common.constants import PYTEST_DEFAULT_ENVIRONMENT_PREFIX
-from tests_tabsdata.conftest import (
+from test_tabsdata.bootest import ROOT_FOLDER, TDLOCAL_FOLDER
+from test_tabsdata.common.constants import PYTEST_DEFAULT_ENVIRONMENT_PREFIX
+from test_tabsdata.conftest import (
     FUNCTION_DATA_FOLDER,
     LOCAL_PACKAGES_LIST,
     clean_polars_df,
     read_json_and_clean,
     write_v2_function_yaml_file,
 )
-from tests_tabsdata_snowflake.conftest import (
+from test_tabsdata_snowflake.conftest import (
     TESTING_RESOURCES_FOLDER,
 )
-from tests_tabsdata_snowflake.testing_resources.test_multiple_outputs_snowflake.example import (
+from test_tabsdata_snowflake.test_multiple_outputs_snowflake.example import (
     multiple_outputs_snowflake,
 )
-from tests_tabsdata_snowflake.testing_resources.test_output_snowflake.example import (
+from test_tabsdata_snowflake.test_output_snowflake_basic.example import (
     output_snowflake,
 )
-from tests_tabsdata_snowflake.testing_resources.test_output_snowflake_list_none.example import (
+from test_tabsdata_snowflake.test_output_snowflake_list_none.example import (
     output_snowflake_list_none,
 )
-from tests_tabsdata_snowflake.testing_resources.test_output_snowflake_none.example import (
+from test_tabsdata_snowflake.test_output_snowflake_none.example import (
     output_snowflake_none,
 )
 
@@ -331,7 +331,7 @@ def test_output_snowflake(tmp_path, snowflake_connection, snowflake_config):
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     mock_parquet_table = os.path.join(
-        TESTING_RESOURCES_FOLDER, "test_output_snowflake", "mock_table.parquet"
+        TESTING_RESOURCES_FOLDER, "test_output_snowflake_basic", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_function_yaml_file(
@@ -362,7 +362,7 @@ def test_output_snowflake(tmp_path, snowflake_connection, snowflake_config):
         output = clean_polars_df(output)
         expected_output_file = os.path.join(
             TESTING_RESOURCES_FOLDER,
-            "test_output_snowflake",
+            "test_output_snowflake_basic",
             "expected_result.json",
         )
         expected_output = read_json_and_clean(expected_output_file)

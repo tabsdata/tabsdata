@@ -37,7 +37,7 @@ from tabsdata.api.tabsdata_server import TabsdataServer
 
 # Import fixtures from backend modules so pytest can discover them
 # These imports make the fixtures available to all tests
-from src.utest.python.common import (  # noqa: F401
+from test_tabsdata.common.backend import (  # noqa: F401
     azure_client,
     azure_config,
     gcs_client,
@@ -51,20 +51,20 @@ from src.utest.python.common import (  # noqa: F401
     s3_config,
     testing_hashicorp_vault,
 )
-from src.utest.python.common import MAXIMUM_RETRY_COUNT
-from src.utest.python.common import clean_docker_containers
-from src.utest.python.common import clean_python_virtual_environments
+from test_tabsdata.common.constants import MAXIMUM_RETRY_COUNT
+from test_tabsdata.common.docker import clean_docker_containers
+from test_tabsdata.common.venv import clean_python_virtual_environments
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-from tests_tabsdata.bootest import TESTING_RESOURCES_PATH, check_assets, enrich_sys_path
+from test_tabsdata.bootest import TESTING_RESOURCES_PATH, check_assets, enrich_sys_path
 
 TESTING_RESOURCES_FOLDER = TESTING_RESOURCES_PATH
 enrich_sys_path()
 check_assets()
 
-pytest_plugins = ["tests_tabsdata.fntest"]
+pytest_plugins = ["test_tabsdata.fntest"]
 
 
 def pytest_configure(config: pytest.Config):
@@ -91,28 +91,24 @@ def setup_temp_folder_node(node: WorkerController) -> None:
         node.config.option.basetemp = worker_temp
 
 
-TABSDATA_OS = "tabsdata-os"
-TABSDATA_EE = "tabsdata-ee"
-
 TESTS_ROOT_FOLDER = os.path.dirname(__file__)
 
 sys.path.insert(0, TESTS_ROOT_FOLDER)
 
-module_path = str(_td.__file__)
+# fmt: off
+ABSOLUTE_TEST_FOLDER_LOCATION = str(
+    Path(__file__).absolute()
+    .parent  # test_tabsdata/
+    .parent  # python/
+)
 
-ABSOLUTE_TEST_FOLDER_LOCATION = os.path.dirname(os.path.abspath(__file__))
-
-if TABSDATA_OS in module_path:
-    ABSOLUTE_TEST_FOLDER_LOCATION = ABSOLUTE_TEST_FOLDER_LOCATION.replace(
-        TABSDATA_EE, TABSDATA_OS
-    )
-elif TABSDATA_EE in module_path:
-    ABSOLUTE_TEST_FOLDER_LOCATION = ABSOLUTE_TEST_FOLDER_LOCATION.replace(
-        TABSDATA_OS, TABSDATA_EE
-    )
-
-ABSOLUTE_ROOT_FOLDER_LOCATION = os.path.dirname(
-    os.path.dirname(os.path.dirname(ABSOLUTE_TEST_FOLDER_LOCATION))
+ABSOLUTE_ROOT_FOLDER_LOCATION = str(
+    Path(ABSOLUTE_TEST_FOLDER_LOCATION)
+    .parent  # utest/
+    .parent  # src/
+    .parent  # td-sdk/
+    .parent  # client/
+    .parent  # tabsdata-*
 )
 logger.debug(f"ABSOLUTE_ROOT_FOLDER_LOCATION: {ABSOLUTE_ROOT_FOLDER_LOCATION}")
 
@@ -123,9 +119,15 @@ CORRECT_OUTPUT_ACTIONS = {}
 
 DEFAULT_LOGS_FILE = "fn.log"
 
-ROOT_PROJECT_DIR = os.path.dirname(
-    os.path.dirname(os.path.dirname(ABSOLUTE_TEST_FOLDER_LOCATION))
+ROOT_PROJECT_DIR = str(
+    Path(ABSOLUTE_TEST_FOLDER_LOCATION)
+    .parent  # utest/
+    .parent  # src/
+    .parent  # td-sdk/
+    .parent  # client/
+    .parent  # tabsdata-*
 )
+# fmt: on
 
 
 class TestInstance:
@@ -676,8 +678,7 @@ def testing_collection_with_table(worker_id, tabsserver_connection):
     random_id = _id()
     collection_name = f"testing_collection_with_table_{worker_id}_{random_id}"
     file_path = os.path.join(
-        ABSOLUTE_TEST_FOLDER_LOCATION,
-        "testing_resources",
+        TESTING_RESOURCES_FOLDER,
         "test_input_file_csv_string_format",
         "example.py",
     )

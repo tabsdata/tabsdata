@@ -657,10 +657,12 @@ with global_spinner("Building package 'tabsdata-databricks' (Databricks Connecto
         packages=find_packages(
             where=os.getcwd(),
             exclude=[
+                "test",
+                "test*",
                 "tests",
                 "tests*",
-                "tests_tabsdata_databricks",
-                "tests_tabsdata_databricks*",
+                "src.utest",
+                "src.utest*",
             ],
         ),
         package_dir={

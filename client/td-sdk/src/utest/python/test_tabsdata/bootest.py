@@ -28,10 +28,16 @@ TABSDATA_ROOT_FOLDER_NAME = ".root"
 TARGET_FOLDER_NAME = "target"
 TDLOCAL_FOLDER_NAME = "tdlocal"
 
-TESTING_RESOURCES_PATH = os.path.join(
-    os.path.dirname(__file__),
-    "testing_resources",
+# fmt: off
+TESTING_RESOURCES_PATH = str(
+    Path(__file__).absolute()
+    .parent  # test_tabsdata/
+    .parent  # python/
+    .parent  # utest/
+    / "resources"
+    / "test_tabsdata"
 )
+# fmt: on
 
 TRUE_VALUES = {"1", "true", "yes", "y", "on"}
 
@@ -191,6 +197,21 @@ def enrich_sys_path():
                 root,
                 "client",
                 "td-sdk",
+                "src",
+                "utest",
+                "python",
+            )
+        ),
+    )
+    sys.path.append(
+        os.path.abspath(
+            os.path.join(
+                root,
+                "client",
+                "td-sdk",
+                "src",
+                "utest",
+                "resources",
             )
         ),
     )
@@ -201,6 +222,22 @@ def enrich_sys_path():
                 "client",
                 "td-lib",
                 "ta_features",
+                "src",
+                "utest",
+                "python",
+            )
+        ),
+    )
+    sys.path.append(
+        os.path.abspath(
+            os.path.join(
+                root,
+                "client",
+                "td-lib",
+                "ta_features",
+                "src",
+                "utest",
+                "resources",
             )
         ),
     )
@@ -211,6 +248,22 @@ def enrich_sys_path():
                 "client",
                 "td-lib",
                 "ta_tableframe",
+                "src",
+                "utest",
+                "python",
+            )
+        ),
+    )
+    sys.path.append(
+        os.path.abspath(
+            os.path.join(
+                root,
+                "client",
+                "td-lib",
+                "ta_tableframe",
+                "src",
+                "utest",
+                "resources",
             )
         ),
     )
@@ -222,6 +275,23 @@ def enrich_sys_path():
                 "python",
                 "td-lib",
                 "te_examples",
+                "src",
+                "utest",
+                "python",
+            )
+        ),
+    )
+    sys.path.append(
+        os.path.abspath(
+            os.path.join(
+                root,
+                "extensions",
+                "python",
+                "td-lib",
+                "te_examples",
+                "src",
+                "utest",
+                "resources",
             )
         ),
     )
@@ -233,6 +303,23 @@ def enrich_sys_path():
                 "python",
                 "td-lib",
                 "te_tableframe",
+                "src",
+                "utest",
+                "python",
+            )
+        ),
+    )
+    sys.path.append(
+        os.path.abspath(
+            os.path.join(
+                root,
+                "extensions",
+                "python",
+                "td-lib",
+                "te_tableframe",
+                "src",
+                "utest",
+                "resources",
             )
         ),
     )
@@ -244,6 +331,23 @@ def enrich_sys_path():
                 "python",
                 "td-lib",
                 "te_variant",
+                "src",
+                "utest",
+                "python",
+            )
+        ),
+    )
+    sys.path.append(
+        os.path.abspath(
+            os.path.join(
+                root,
+                "extensions",
+                "python",
+                "td-lib",
+                "te_variant",
+                "src",
+                "utest",
+                "resources",
             )
         ),
     )
@@ -256,9 +360,28 @@ def enrich_sys_path():
                 "modules",
                 "ty-tableframe",
                 "python",
+                "src",
+                "utest",
+                "python",
             )
         ),
     )
+    sys.path.append(
+        os.path.abspath(
+            os.path.join(
+                root,
+                "expansions",
+                "polars",
+                "modules",
+                "ty-tableframe",
+                "python",
+                "src",
+                "utest",
+                "resources",
+            )
+        ),
+    )
+    ## ToDo: Unnecessary when using only hydrate in make...
     sys.path.append(
         os.path.abspath(
             os.path.join(
@@ -271,6 +394,7 @@ def enrich_sys_path():
     )
     connectors = gather_connectors()
     for connector in connectors:
+        # Add connector root folder (contains the actual package like tabsdata_kafka/)
         sys.path.append(
             os.path.abspath(
                 os.path.join(
@@ -278,6 +402,32 @@ def enrich_sys_path():
                     "connectors",
                     "python",
                     connector,
+                )
+            ),
+        )
+        sys.path.append(
+            os.path.abspath(
+                os.path.join(
+                    root,
+                    "connectors",
+                    "python",
+                    connector,
+                    "src",
+                    "utest",
+                    "python",
+                )
+            ),
+        )
+        sys.path.append(
+            os.path.abspath(
+                os.path.join(
+                    root,
+                    "connectors",
+                    "python",
+                    connector,
+                    "src",
+                    "utest",
+                    "resources",
                 )
             ),
         )
@@ -301,8 +451,30 @@ def check_assets():
     require_third_party = (
         os.getenv("REQUIRE_THIRD_PARTY", "False").lower() in TRUE_VALUES
     )
-    variant_assets_folder = os.path.join("..", "..", "variant", "assets")
-    client_assets_folder = os.path.join("tabsdata", "assets")
+    # fmt: off
+    variant_assets_folder = str(
+        Path(__file__).absolute()
+        .parent  # test_tabsdata/
+        .parent  # python/
+        .parent  # utest/
+        .parent  # src/
+        .parent  # td-sdk/
+        .parent  # client/
+        .parent  # tabsdata-*/
+        / "variant"
+        / "assets"
+    )
+    client_assets_folder = str(
+        Path(__file__).absolute()
+        .parent  # test_tabsdata/
+        .parent  # python/
+        .parent  # utest/
+        .parent  # src/
+        .parent  # td-sdk/
+        / "tabsdata"
+        / "assets"
+    )
+    # fmt: on
     if (
         not os.path.exists(
             os.path.join(variant_assets_folder, "manifest", "THIRD-PARTY")
@@ -313,8 +485,6 @@ def check_assets():
             f"The THIRD-PARTY file is missing in {client_assets_folder}."
         )
     require_pydoc_csv = os.getenv("REQUIRE_PYDOC_CSV", "False").lower() in TRUE_VALUES
-    variant_assets_folder = os.path.join("..", "..", "variant", "assets")
-    client_assets_folder = os.path.join("tabsdata", "assets")
     if (
         not os.path.exists(os.path.join(variant_assets_folder, "manifest", "PYDOC.csv"))
         and require_pydoc_csv

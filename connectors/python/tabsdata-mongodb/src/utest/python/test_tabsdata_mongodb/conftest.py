@@ -6,17 +6,17 @@ from __future__ import annotations
 
 import logging
 
-from src.utest.python.common import (
+from test_tabsdata.common.constants import (
     DOCKER_COMPOSE_CONTAINER_INFIX,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
 )
-from src.utest.python.common import remove_docker_containers
+from test_tabsdata.common.docker import remove_docker_containers
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-from tests_tabsdata.bootest import enrich_sys_path
-from tests_tabsdata_mongodb.bootest import TESTING_RESOURCES_PATH
+from test_tabsdata.bootest import enrich_sys_path
+from test_tabsdata_mongodb.bootest import TESTING_RESOURCES_PATH
 
 
 def _enrich_sys_path():
@@ -35,20 +35,22 @@ from filelock import FileLock
 from xdist.workermanage import WorkerController
 
 from tabsdata._utils.tdlogging import setup_tests_logging
-from src.utest.python.common import (
+from test_tabsdata.common.constants import (
     DB_HOST,
     DB_PASSWORD,
     DB_USER,
     DOCKER_REGULAR_CONTAINER_INFIX,
 )
-from tests_tabsdata.conftest import (
+from test_tabsdata.conftest import (
     MAXIMUM_RETRY_COUNT,
     clean_everything,
+    pytest_addoption,
+    pytest_generate_tests,
     setup_temp_folder,
     setup_temp_folder_node,
 )
 
-pytest_plugins = ["tests_tabsdata.fntest"]
+pytest_plugins = ["test_tabsdata.fntest"]
 
 
 def pytest_configure(config: pytest.Config):

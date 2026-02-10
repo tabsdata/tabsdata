@@ -247,10 +247,8 @@ def test_example_transformer():
             ],
             operators=[
                 dq.Summary(),
-                dq.Filter(to_table="users_recheck", criteria=dq.Criteria.any_failed()),
-                dq.Filter(
-                    to_table="users_asia", criteria=dq.Criteria.in_bins(["asia"])
-                ),
+                dq.Filter(to_table="users_recheck", criteria=dq.AnyFailed()),
+                dq.Filter(to_table="users_asia", criteria=dq.InBins(["asia"])),
                 dq.Fail(tags="fail", threshold=dq.RowCountThreshold(1)),
             ],
         )

@@ -7,12 +7,6 @@ from decimal import Decimal
 
 import polars as pl
 import pytest
-from test_tabsdata.test_tableframe.actions.dataquality.dq_helper import (
-    CLASSIFIERS,
-    DATASET_ROWS,
-    NaN,
-    boolean_dataset,
-)
 
 import tabsdata as td
 import tabsdata.tableframe.dtypes as td_dtypes
@@ -34,7 +28,13 @@ from tabsdata.tableframe._actions.dataquality.engine import (
     DataQualityEngine,
 )
 from tabsdata.tableframe.lazyframe.properties import TableFramePropertiesBuilder
-from tests_tabsdata.test_tabsdata.test_tableframe.common import (
+from test_tabsdata.test_tableframe.actions.dataquality.dq_helper import (
+    CLASSIFIERS,
+    DATASET_ROWS,
+    NaN,
+    boolean_dataset,
+)
+from test_tabsdata.test_tableframe.common import (
     pretty_pandas,
     pretty_polars,
 )

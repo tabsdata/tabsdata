@@ -7,9 +7,14 @@ source = tabsdata_bigquery
 omit =
     test*
     test*/**
+    */td-temp/*
+    uitest
+    uitest*
+    uitest/**
+    uitest*/**
 branch = True
 parallel = True
-disable_warnings = no-data-collected
+disable_warnings = no-data-collected, couldnt-parse
 
 [report]
 skip_empty = True

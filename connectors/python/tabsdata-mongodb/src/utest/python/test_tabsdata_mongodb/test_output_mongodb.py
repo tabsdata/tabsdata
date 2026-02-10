@@ -21,16 +21,16 @@ from tabsdata._tabsserver.function.response_utils import RESPONSE_FILE_NAME
 from tabsdata._tabsserver.invoker import REQUEST_FILE_NAME
 from tabsdata._tabsserver.invoker import invoke as tabsserver_main
 from tabsdata._utils.bundle_utils import create_bundle_archive
-from tests_tabsdata.bootest import ROOT_FOLDER, TDLOCAL_FOLDER
-from tests_tabsdata.common.constants import PYTEST_DEFAULT_ENVIRONMENT_PREFIX
-from tests_tabsdata.conftest import (
+from test_tabsdata.bootest import ROOT_FOLDER, TDLOCAL_FOLDER
+from test_tabsdata.common.constants import PYTEST_DEFAULT_ENVIRONMENT_PREFIX
+from test_tabsdata.conftest import (
     FUNCTION_DATA_FOLDER,
     LOCAL_PACKAGES_LIST,
     get_lf,
     read_json_and_clean,
     write_v2_function_yaml_file,
 )
-from tests_tabsdata_mongodb.conftest import (
+from test_tabsdata_mongodb.conftest import (
     DB_PASSWORD,
     DB_USER,
     MONGODB_URI_WITH_CREDENTIALS,
@@ -38,16 +38,16 @@ from tests_tabsdata_mongodb.conftest import (
     MONGODB_WITH_REPLICA_SET_URI,
     TESTING_RESOURCES_FOLDER,
 )
-from tests_tabsdata_mongodb.testing_resources.test_multiple_outputs_mongodb.example import (
+from test_tabsdata_mongodb.test_multiple_outputs_mongodb.example import (
     multiple_outputs_mongodb,
 )
-from tests_tabsdata_mongodb.testing_resources.test_output_mongodb.example import (
+from test_tabsdata_mongodb.test_output_mongodb_basic.example import (
     output_mongodb,
 )
-from tests_tabsdata_mongodb.testing_resources.test_output_mongodb_list_none.example import (
+from test_tabsdata_mongodb.test_output_mongodb_list_none.example import (
     output_mongodb_list_none,
 )
-from tests_tabsdata_mongodb.testing_resources.test_output_mongodb_none.example import (
+from test_tabsdata_mongodb.test_output_mongodb_none.example import (
     output_mongodb_none,
 )
 
@@ -642,7 +642,7 @@ def test_output_mongodb(tmp_path, testing_mongodb):
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     mock_parquet_table = os.path.join(
-        TESTING_RESOURCES_FOLDER, "test_output_mongodb", "mock_table.parquet"
+        TESTING_RESOURCES_FOLDER, "test_output_mongodb_basic", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_function_yaml_file(
@@ -668,7 +668,7 @@ def test_output_mongodb(tmp_path, testing_mongodb):
     collection = client[database_name][collection_name]
     expected_output_file = os.path.join(
         TESTING_RESOURCES_FOLDER,
-        "test_output_mongodb",
+        "test_output_mongodb_basic",
         "expected_result.json",
     )
     expected_output = read_json_and_clean(expected_output_file)

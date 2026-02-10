@@ -6,22 +6,20 @@ import inspect
 import json
 import logging
 import os
-import urllib.parse
 from io import StringIO
 from unittest import mock
 
 import polars as pl
 import pytest
-from polars.testing import assert_frame_equal
 
 import tabsdata.tableframe.dtypes as td_dtypes
 from tabsdata._tabsserver.function.response_utils import RESPONSE_FILE_NAME
 from tabsdata._tabsserver.invoker import REQUEST_FILE_NAME
 from tabsdata._tabsserver.invoker import invoke as tabsserver_main
 from tabsdata._utils.bundle_utils import create_bundle_archive
-from tests_tabsdata.bootest import TDLOCAL_FOLDER
-from tests_tabsdata.common.constants import PYTEST_DEFAULT_ENVIRONMENT_PREFIX
-from tests_tabsdata.conftest import (
+from test_tabsdata.bootest import TDLOCAL_FOLDER
+from test_tabsdata.common.constants import PYTEST_DEFAULT_ENVIRONMENT_PREFIX
+from test_tabsdata.conftest import (
     ABSOLUTE_TEST_FOLDER_LOCATION,
     FUNCTION_DATA_FOLDER,
     LOCAL_PACKAGES_LIST,
@@ -30,16 +28,16 @@ from tests_tabsdata.conftest import (
     read_json_and_clean,
     write_v2_function_yaml_file,
 )
-from tests_tabsdata.testing_resources.test_input_new_mysql.example import (
+from test_tabsdata.test_input_new_mysql.example import (
     testing_tabsdata_function as input_new_mysql_generator,
 )
-from tests_tabsdata.testing_resources.test_input_new_mysql_initial_values.example import (
+from test_tabsdata.test_input_new_mysql_initial_values.example import (
     testing_tabsdata_function as input_new_mysql_initial_values_generator,
 )
-from tests_tabsdata.testing_resources.test_input_new_mysql_modified_params.example import (
+from test_tabsdata.test_input_new_mysql_modified_params.example import (
     testing_tabsdata_function as input_new_mysql_modified_params_generator,
 )
-from tests_tabsdata.testing_resources.test_input_new_mysql_types_check.example import (
+from test_tabsdata.test_input_new_mysql_types_check.example import (
     testing_tabsdata_function as input_new_mysql_types_check_generator,
 )
 

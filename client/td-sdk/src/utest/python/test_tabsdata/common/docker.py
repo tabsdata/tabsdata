@@ -12,7 +12,7 @@ import docker
 from tabsdata._utils.constants import TRUE_VALUES
 
 # Import after container/system to avoid circular dependency
-from src.utest.python.common.backend import (
+from test_tabsdata.common.backend import (
     DEFAULT_PYTEST_HASHICORP_DOCKER_CONTAINER_NAME,
     DEFAULT_PYTEST_KAFKA_DOCKER_CONTAINER_NAME,
     DEFAULT_PYTEST_MARIADB_DOCKER_CONTAINER_NAME,
@@ -20,8 +20,8 @@ from src.utest.python.common.backend import (
     DEFAULT_PYTEST_ORACLE_DOCKER_CONTAINER_NAME,
     DEFAULT_PYTEST_POSTGRES_DOCKER_CONTAINER_NAME,
 )
-from src.utest.python.common.container import get_container_port_binding
-from src.utest.python.common.system import get_free_port
+from test_tabsdata.common.container import get_container_port_binding
+from test_tabsdata.common.system import get_free_port
 
 logger = logging.getLogger(__name__)
 

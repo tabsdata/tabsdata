@@ -13,7 +13,11 @@ from tabsdata._cli.cli import cli
 from tabsdata.api.status_utils.execution import EXECUTION_FINAL_STATUSES
 from tabsdata.api.status_utils.transaction import TRANSACTION_FINAL_STATUSES
 from tabsdata.api.tabsdata_server import Execution
-from tests_tabsdata.conftest import ABSOLUTE_TEST_FOLDER_LOCATION, LOCAL_PACKAGES_LIST
+from test_tabsdata.conftest import (
+    ABSOLUTE_TEST_FOLDER_LOCATION,
+    LOCAL_PACKAGES_LIST,
+    TESTING_RESOURCES_FOLDER,
+)
 
 # noinspection PyUnresolvedReferences
 from . import pytestmark  # noqa: F401
@@ -57,10 +61,8 @@ def test_cli_execution_cancel(login, tabsserver_connection):
         tabsserver_connection.register_function(
             collection_name="test_cli_execution_cancel_collection",
             description="test_cli_execution_cancel_description",
-            function_path=(
-                f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
-                                "test_input_plugin", "example.py")}::input_plugin"
-            ),
+            function_path=f"{os.path.join(TESTING_RESOURCES_FOLDER,
+                                "test_input_plugin", "example.py")}::input_plugin",
             local_packages=LOCAL_PACKAGES_LIST,
         )
         execution = tabsserver_connection.trigger_function(
@@ -96,10 +98,8 @@ def test_cli_execution_recover(login, tabsserver_connection):
         tabsserver_connection.register_function(
             collection_name="test_cli_execution_recover_collection",
             description="test_cli_execution_recover_description",
-            function_path=(
-                f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
-                                "test_input_plugin", "example.py")}::input_plugin"
-            ),
+            function_path=f"{os.path.join(TESTING_RESOURCES_FOLDER,
+                                "test_input_plugin", "example.py")}::input_plugin",
             local_packages=LOCAL_PACKAGES_LIST,
         )
         execution = tabsserver_connection.trigger_function(
@@ -134,10 +134,8 @@ def test_cli_transaction_cancel(login, tabsserver_connection):
         tabsserver_connection.register_function(
             collection_name="test_cli_transaction_cancel_collection",
             description="test_cli_transaction_cancel_description",
-            function_path=(
-                f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
-                                "test_input_plugin", "example.py")}::input_plugin"
-            ),
+            function_path=f"{os.path.join(TESTING_RESOURCES_FOLDER,
+                                "test_input_plugin", "example.py")}::input_plugin",
             local_packages=LOCAL_PACKAGES_LIST,
         )
         execution = tabsserver_connection.trigger_function(
@@ -174,10 +172,8 @@ def test_cli_transaction_recover(login, tabsserver_connection):
         tabsserver_connection.register_function(
             collection_name="test_cli_transaction_recover_collection",
             description="test_cli_transaction_recover_description",
-            function_path=(
-                f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
-                                "test_input_plugin", "example.py")}::input_plugin"
-            ),
+            function_path=f"{os.path.join(TESTING_RESOURCES_FOLDER,
+                                "test_input_plugin", "example.py")}::input_plugin",
             local_packages=LOCAL_PACKAGES_LIST,
         )
         execution = tabsserver_connection.trigger_function(

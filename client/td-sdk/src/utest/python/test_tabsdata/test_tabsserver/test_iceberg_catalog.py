@@ -23,9 +23,9 @@ from tabsdata._tabsserver.function.response_utils import RESPONSE_FILE_NAME
 from tabsdata._tabsserver.invoker import REQUEST_FILE_NAME
 from tabsdata._tabsserver.invoker import invoke as tabsserver_main
 from tabsdata._utils.bundle_utils import create_bundle_archive
-from tests_tabsdata.bootest import TDLOCAL_FOLDER
-from tests_tabsdata.common.constants import PYTEST_DEFAULT_ENVIRONMENT_PREFIX
-from tests_tabsdata.conftest import (
+from test_tabsdata.bootest import TDLOCAL_FOLDER
+from test_tabsdata.common.constants import PYTEST_DEFAULT_ENVIRONMENT_PREFIX
+from test_tabsdata.conftest import (
     ABSOLUTE_TEST_FOLDER_LOCATION,
     FUNCTION_DATA_FOLDER,
     LOCAL_PACKAGES_LIST,
@@ -34,22 +34,22 @@ from tests_tabsdata.conftest import (
     read_json_and_clean,
     write_v2_function_yaml_file,
 )
-from tests_tabsdata.testing_resources.test_output_s3_catalog.example import (
+from test_tabsdata.test_output_s3_catalog.example import (
     output_s3_catalog,
 )
-from tests_tabsdata.testing_resources.test_output_s3_catalog_append.example import (
+from test_tabsdata.test_output_s3_catalog_append.example import (
     output_s3_catalog_append,
 )
-from tests_tabsdata.testing_resources.test_output_s3_catalog_partition.example import (
+from test_tabsdata.test_output_s3_catalog_partition.example import (
     output_s3_catalog_partition,
 )
-from tests_tabsdata.testing_resources.test_output_s3_catalog_region_creds.example import (
+from test_tabsdata.test_output_s3_catalog_region_creds.example import (
     output_s3_catalog_region_creds,
 )
-from tests_tabsdata.testing_resources.test_output_s3_catalog_replace.example import (
+from test_tabsdata.test_output_s3_catalog_replace.example import (
     output_s3_catalog_replace,
 )
-from tests_tabsdata.testing_resources.test_output_s3_catalog_schema_strategy.example import (
+from test_tabsdata.test_output_s3_catalog_schema_strategy.example import (
     output_s3_catalog_schema_strategy,
 )
 
@@ -793,7 +793,7 @@ def test_output_s3_catalog_schema_strict(tmp_path, s3_client, s3_config):
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_s3_catalog_partition(tmp_path, s3_client, s3_config):
 
-    from tests_tabsdata.testing_resources.test_output_s3_catalog_partition.example import (
+    from test_tabsdata.test_output_s3_catalog_partition.example import (
         NUMBER_OF_PARTITIONS,
     )
 

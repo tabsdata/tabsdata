@@ -15,24 +15,24 @@ script = [
     on_ga = get_env TD_ON_GA
     on_ga_true = eq ${on_ga} "true"
     if ${on_ga_true}
-        debug "🚀 flake8 --select=E9,F63,F7,F82 --ignore=E203,W503 --show-source --statistics . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*"
-        exec --fail-on-error flake8 --select=E9,F63,F7,F82 --ignore=E203,W503 --show-source --statistics . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*
+        debug "🚀 flake8 --select=E9,F63,F7,F82 --ignore=E203,W503 --show-source --statistics . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*,utest"
+        exec --fail-on-error flake8 --select=E9,F63,F7,F82 --ignore=E203,W503 --show-source --statistics . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*,utest
     else
         project_root_folder = get_env PROJECT_ROOT_FOLDER
         project_root_folder_basename = basename ${project_root_folder}
         is_tabsdata_ee = eq ${project_root_folder_basename} "tabsdata-ee"
         if ${is_tabsdata_ee}
-            debug "🚀 flake8 --select=E9,F63,F7,F82 --ignore=E203,W503 --show-source --statistics . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*"
-            exec --fail-on-error flake8 --select=E9,F63,F7,F82 --ignore=E203,W503 --show-source --statistics . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*
+            debug "🚀 flake8 --select=E9,F63,F7,F82 --ignore=E203,W503 --show-source --statistics . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*,utest"
+            exec --fail-on-error flake8 --select=E9,F63,F7,F82 --ignore=E203,W503 --show-source --statistics . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*,utest
 
             info "🐡 Switching to tabsdata-os"
             cd "${PROJECT_TABSDATA_ROOT_FOLDER}/../tabsdata-os"
 
-            debug "🚀 flake8 --select=E9,F63,F7,F82 --ignore=E203,W503 --show-source --statistics . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*"
-            exec --fail-on-error flake8 --select=E9,F63,F7,F82 --ignore=E203,W503 --show-source --statistics . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*
+            debug "🚀 flake8 --select=E9,F63,F7,F82 --ignore=E203,W503 --show-source --statistics . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*,utest"
+            exec --fail-on-error flake8 --select=E9,F63,F7,F82 --ignore=E203,W503 --show-source --statistics . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*,utest
         else
-            debug "🚀 flake8 --select=E9,F63,F7,F82 --ignore=E203,W503 --show-source --statistics . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*"
-            exec --fail-on-error flake8 --select=E9,F63,F7,F82 --ignore=E203,W503 --show-source --statistics . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*
+            debug "🚀 flake8 --select=E9,F63,F7,F82 --ignore=E203,W503 --show-source --statistics . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*,utest"
+            exec --fail-on-error flake8 --select=E9,F63,F7,F82 --ignore=E203,W503 --show-source --statistics . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*,utest
         end
     end
     ''']
@@ -50,24 +50,24 @@ script = [
     on_ga = get_env TD_ON_GA
     on_ga_true = eq ${on_ga} "true"
     if ${on_ga_true}
-        debug "🚀 flake8 --max-complexity=10 --ignore=E203,W503 --max-line-length=88 --statistics  . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*"
-        exec --fail-on-error flake8 --max-complexity=10 --ignore=E203,W503 --max-line-length=88 --statistics  . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*
+        debug "🚀 flake8 --max-complexity=10 --ignore=E203,W503 --max-line-length=88 --statistics  . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*,utest"
+        exec --fail-on-error flake8 --max-complexity=10 --ignore=E203,W503 --max-line-length=88 --statistics  . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*,utest
     else
         project_root_folder = get_env PROJECT_ROOT_FOLDER
         project_root_folder_basename = basename ${project_root_folder}
         is_tabsdata_ee = eq ${project_root_folder_basename} "tabsdata-ee"
         if ${is_tabsdata_ee}
-            debug "🚀 flake8 --max-complexity=10 --ignore=E203,W503 --max-line-length=88 --statistics  . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*"
-            exec --fail-on-error flake8 --max-complexity=10 --ignore=E203,W503 --max-line-length=88 --statistics  . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*
+            debug "🚀 flake8 --max-complexity=10 --ignore=E203,W503 --max-line-length=88 --statistics  . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*,utest"
+            exec --fail-on-error flake8 --max-complexity=10 --ignore=E203,W503 --max-line-length=88 --statistics  . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*,utest
 
             info "🐡 Switching to tabsdata-os"
             cd "${PROJECT_TABSDATA_ROOT_FOLDER}/../tabsdata-os"
 
-            debug "🚀 flake8 --max-complexity=10 --ignore=E203,W503 --max-line-length=88 --statistics  . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*"
-            exec --fail-on-error flake8 --max-complexity=10 --ignore=E203,W503 --max-line-length=88 --statistics  . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*
+            debug "🚀 flake8 --max-complexity=10 --ignore=E203,W503 --max-line-length=88 --statistics  . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*,utest"
+            exec --fail-on-error flake8 --max-complexity=10 --ignore=E203,W503 --max-line-length=88 --statistics  . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*,utest
         else
-            debug "🚀 flake8 --max-complexity=10 --ignore=E203,W503 --max-line-length=88 --statistics  . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*"
-            exec --fail-on-error flake8 --max-complexity=10 --ignore=E203,W503 --max-line-length=88 --statistics  . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*
+            debug "🚀 flake8 --max-complexity=10 --ignore=E203,W503 --max-line-length=88 --statistics  . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*,utest"
+            exec --fail-on-error flake8 --max-complexity=10 --ignore=E203,W503 --max-line-length=88 --statistics  . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*,utest
         end
     end
     ''']
@@ -85,24 +85,24 @@ script = [
     on_ga = get_env TD_ON_GA
     on_ga_true = eq ${on_ga} "true"
     if ${on_ga_true}
-        debug "🚀 black --preview --enable-unstable-feature string_processing --check . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_* --force-exclude \\.pyi$"
-        exec --fail-on-error black --preview --enable-unstable-feature string_processing --check . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_* --force-exclude \\.pyi$
+        debug "🚀 black --preview --enable-unstable-feature string_processing --check . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*,utest --force-exclude \\.pyi$"
+        exec --fail-on-error black --preview --enable-unstable-feature string_processing --check . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*,utest --force-exclude \\.pyi$
     else
         project_root_folder = get_env PROJECT_ROOT_FOLDER
         project_root_folder_basename = basename ${project_root_folder}
         is_tabsdata_ee = eq ${project_root_folder_basename} "tabsdata-ee"
         if ${is_tabsdata_ee}
-            debug "🚀 black --preview --enable-unstable-feature string_processing --check . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_* --force-exclude \\.pyi$"
-            exec --fail-on-error black --preview --enable-unstable-feature string_processing --check . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_* --force-exclude \\.pyi$
+            debug "🚀 black --preview --enable-unstable-feature string_processing --check . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*,utest --force-exclude \\.pyi$"
+            exec --fail-on-error black --preview --enable-unstable-feature string_processing --check . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*,utest --force-exclude \\.pyi$
 
             info "🐡 Switching to tabsdata-os"
             cd "${PROJECT_TABSDATA_ROOT_FOLDER}/../tabsdata-os"
 
-            debug "🚀 black --preview --enable-unstable-feature string_processing --check . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_* --force-exclude \\.pyi$"
-            exec --fail-on-error black --preview --enable-unstable-feature string_processing --check . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_* --force-exclude \\.pyi$
+            debug "🚀 black --preview --enable-unstable-feature string_processing --check . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*,utest --force-exclude \\.pyi$"
+            exec --fail-on-error black --preview --enable-unstable-feature string_processing --check . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*,utest --force-exclude \\.pyi$
         else
-            debug "🚀 black --preview --enable-unstable-feature string_processing --check . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_* --force-exclude \\.pyi$"
-            exec --fail-on-error black --preview --enable-unstable-feature string_processing --check . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_* --force-exclude \\.pyi$
+            debug "🚀 black --preview --enable-unstable-feature string_processing --check . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*,utest --force-exclude \\.pyi$"
+            exec --fail-on-error black --preview --enable-unstable-feature string_processing --check . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,target,venv,test_*,tests_*,utest --force-exclude \\.pyi$
         end
     end
     ''']
@@ -120,24 +120,24 @@ script = [
     on_ga = get_env TD_ON_GA
     on_ga_true = eq ${on_ga} "true"
     if ${on_ga_true}
-        debug "🚀 isort --check . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_*"
-        exec --fail-on-error isort --check . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_*"
+        debug "🚀 isort --check . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_* --extend-skip-glob utest"
+        exec --fail-on-error isort --check . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_* --extend-skip-glob utest
     else
         project_root_folder = get_env PROJECT_ROOT_FOLDER
         project_root_folder_basename = basename ${project_root_folder}
         is_tabsdata_ee = eq ${project_root_folder_basename} "tabsdata-ee"
         if ${is_tabsdata_ee}
-            debug "🚀 isort --check . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_*"
-            exec --fail-on-error isort --check . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_*"
+            debug "🚀 isort --check . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_* --extend-skip-glob utest"
+            exec --fail-on-error isort --check . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_* --extend-skip-glob utest
 
             info "🐡 Switching to tabsdata-os"
             cd "${PROJECT_TABSDATA_ROOT_FOLDER}/../tabsdata-os"
 
-            debug "🚀 isort --check . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_*"
-            exec --fail-on-error isort --check . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_*"
+            debug "🚀 isort --check . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_* --extend-skip-glob utest"
+            exec --fail-on-error isort --check . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_* --extend-skip-glob utest
         else
-            debug "🚀 isort --check . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_*"
-            exec --fail-on-error isort --check . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_*"
+            debug "🚀 isort --check . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_* --extend-skip-glob utest"
+            exec --fail-on-error isort --check . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_* --extend-skip-glob utest
         end
     end
     ''']

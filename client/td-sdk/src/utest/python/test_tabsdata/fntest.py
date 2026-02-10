@@ -15,7 +15,6 @@ from unittest import mock
 import pandas as pd
 import polars as pl
 import pytest
-from test_tabsdata.test_tableframe.common import pretty_pandas, pretty_polars
 
 import tabsdata as td
 from tabsdata import (
@@ -55,12 +54,13 @@ from tabsdata.exceptions import StageTriggerExecutionError
 from tabsdata.expansions.foundation.symbols import EXCEPTION_FILE
 from tabsdata.tableframe._actions.dataquality.processor import DataQualityProcessor
 from tabsdata.tableframe.lazyframe.properties import TableFramePropertiesBuilder
-from tests_tabsdata.bootest import TDLOCAL_FOLDER
-from tests_tabsdata.conftest import (
+from test_tabsdata.bootest import TDLOCAL_FOLDER
+from test_tabsdata.conftest import (
     LOCAL_PACKAGES_LIST,
     MOCK_COLLECTION,
     write_v2_function_yaml_file,
 )
+from test_tabsdata.test_tableframe.common import pretty_pandas, pretty_polars
 
 HTTP_METHODS: TypeAlias = Literal["GET", "POST", "PUT"]
 

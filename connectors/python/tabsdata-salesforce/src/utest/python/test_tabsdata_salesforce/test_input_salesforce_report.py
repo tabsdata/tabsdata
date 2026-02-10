@@ -21,22 +21,22 @@ from tabsdata._tabsserver.invoker import REQUEST_FILE_NAME
 from tabsdata._tabsserver.invoker import invoke as tabsserver_main
 from tabsdata._utils.bundle_utils import create_bundle_archive
 from tabsdata.exceptions import SecretConfigurationError
-from tests_tabsdata.bootest import ROOT_FOLDER, TDLOCAL_FOLDER
-from tests_tabsdata.common.constants import PYTEST_DEFAULT_ENVIRONMENT_PREFIX
-from tests_tabsdata.conftest import (
+from test_tabsdata.bootest import ROOT_FOLDER, TDLOCAL_FOLDER
+from test_tabsdata.common.constants import PYTEST_DEFAULT_ENVIRONMENT_PREFIX
+from test_tabsdata.conftest import (
     FUNCTION_DATA_FOLDER,
     LOCAL_PACKAGES_LIST,
     clean_polars_df,
     write_v2_function_yaml_file,
 )
-from tests_tabsdata_salesforce.conftest import (
+from test_tabsdata_salesforce.conftest import (
     FAKE_CREDENTIALS,
     TESTING_RESOURCES_FOLDER,
 )
-from tests_tabsdata_salesforce.testing_resources.test_input_salesforce_report.example import (
+from test_tabsdata_salesforce.test_input_salesforce_report_basic.example import (
     input_salesforce_report,
 )
-from tests_tabsdata_salesforce.testing_resources.test_input_salesforce_report_initial_values.example import (
+from test_tabsdata_salesforce.test_input_salesforce_report_initial_values.example import (
     input_salesforce_report_initial_values,
 )
 
@@ -113,7 +113,7 @@ def test_input_salesforce_report_by_long_id(tmp_path, sf_config):
     output = clean_polars_df(output)
     expected_output_file = os.path.join(
         TESTING_RESOURCES_FOLDER,
-        "test_input_salesforce_report",
+        "test_input_salesforce_report_basic",
         "expected_result.parquet",
     )
     expected_output = pl.read_parquet(expected_output_file)
@@ -168,7 +168,7 @@ def test_input_salesforce_report_by_short_id(tmp_path, sf_config):
     output = clean_polars_df(output)
     expected_output_file = os.path.join(
         TESTING_RESOURCES_FOLDER,
-        "test_input_salesforce_report",
+        "test_input_salesforce_report_basic",
         "expected_result.parquet",
     )
     expected_output = pl.read_parquet(expected_output_file)
@@ -223,7 +223,7 @@ def test_input_salesforce_report_by_name(tmp_path, sf_config):
     output = clean_polars_df(output)
     expected_output_file = os.path.join(
         TESTING_RESOURCES_FOLDER,
-        "test_input_salesforce_report",
+        "test_input_salesforce_report_basic",
         "expected_result.parquet",
     )
     expected_output = pl.read_parquet(expected_output_file)

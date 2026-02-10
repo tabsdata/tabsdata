@@ -8,7 +8,6 @@ from typing import Any, Callable, Optional
 
 import polars as pl
 import pytest
-from fntest import tdfnrun
 from polars import DataFrame
 
 import tabsdata as td
@@ -26,6 +25,7 @@ from tabsdata.dataquality import (
 )
 from tabsdata.dataquality._operator import AllOk, AnyFailed
 from tabsdata.dataquality._typing import OnInvalidColumnSpec
+from test_tabsdata.fntest import tdfnrun
 
 
 def input_table() -> pl.DataFrame:

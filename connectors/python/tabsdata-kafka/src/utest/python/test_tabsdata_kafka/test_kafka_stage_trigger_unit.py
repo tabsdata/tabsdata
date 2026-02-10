@@ -38,7 +38,7 @@ from tabsdata_kafka.serdes.non_sr_serde import (
     ProtobufKafkaSerde,
 )
 from tabsdata_kafka.typing import Protobuf
-from tests_tabsdata_kafka.conftest import (
+from test_tabsdata_kafka.conftest import (
     aws_glue_sr_mock_protobuf_glue_client,
 )
 

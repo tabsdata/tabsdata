@@ -16,7 +16,11 @@ from tabsdata.api.tabsdata_server import (
     Transaction,
     Worker,
 )
-from tests_tabsdata.conftest import ABSOLUTE_TEST_FOLDER_LOCATION, LOCAL_PACKAGES_LIST
+from test_tabsdata.conftest import (
+    ABSOLUTE_TEST_FOLDER_LOCATION,
+    LOCAL_PACKAGES_LIST,
+    TESTING_RESOURCES_FOLDER,
+)
 
 # noinspection PyUnresolvedReferences
 from . import pytestmark  # noqa: F401
@@ -103,8 +107,7 @@ def test_transaction_class_cancel(tabsserver_connection):
             collection_name="test_transaction_class_cancel_collection",
             description="test_transaction_class_cancel_description",
             function_path=(
-                f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
-                                "test_input_plugin", "example.py")}::input_plugin"
+                f"{os.path.join(TESTING_RESOURCES_FOLDER, 'test_input_plugin', 'example.py')}::input_plugin"
             ),
             local_packages=LOCAL_PACKAGES_LIST,
         )
@@ -138,10 +141,8 @@ def test_transaction_class_recover(tabsserver_connection):
         tabsserver_connection.register_function(
             collection_name="test_transaction_class_recover_collection",
             description="test_transaction_class_recover_description",
-            function_path=(
-                f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
-                                "test_input_plugin", "example.py")}::input_plugin"
-            ),
+            function_path=f"{os.path.join(TESTING_RESOURCES_FOLDER,
+                                "test_input_plugin", "example.py")}::input_plugin",
             local_packages=LOCAL_PACKAGES_LIST,
         )
         execution = tabsserver_connection.trigger_function(

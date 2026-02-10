@@ -657,10 +657,12 @@ with global_spinner("Building package 'tabsdata-mongodb' (MongoDB Connector)..."
         packages=find_packages(
             where=os.getcwd(),
             exclude=[
+                "test",
+                "test*",
                 "tests",
                 "tests*",
-                "tests_tabsdata_mongodb",
-                "tests_tabsdata_mongodb*",
+                "src.utest",
+                "src.utest*",
             ],
         ),
         package_dir={

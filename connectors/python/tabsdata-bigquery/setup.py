@@ -657,10 +657,12 @@ with global_spinner("Building package 'tabsdata-bigquery' (BigQuery Connector)..
         packages=find_packages(
             where=os.getcwd(),
             exclude=[
+                "test",
+                "test*",
                 "tests",
                 "tests*",
-                "tests_tabsdata_bigquery",
-                "tests_tabsdata_bigquery*",
+                "src.utest",
+                "src.utest*",
             ],
         ),
         package_dir={

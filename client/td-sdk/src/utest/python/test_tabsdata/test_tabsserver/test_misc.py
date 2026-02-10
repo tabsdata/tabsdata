@@ -34,9 +34,9 @@ from tabsdata._utils.bundle_utils import (
     PYTHON_VERSION_KEY,
     create_bundle_archive,
 )
-from tests_tabsdata.bootest import TDLOCAL_FOLDER
-from tests_tabsdata.common.constants import PYTEST_DEFAULT_ENVIRONMENT_PREFIX
-from tests_tabsdata.conftest import (
+from test_tabsdata.bootest import TDLOCAL_FOLDER
+from test_tabsdata.common.constants import PYTEST_DEFAULT_ENVIRONMENT_PREFIX
+from test_tabsdata.conftest import (
     ABSOLUTE_TEST_FOLDER_LOCATION,
     DEFAULT_LOGS_FILE,
     FUNCTION_DATA_FOLDER,
@@ -46,37 +46,37 @@ from tests_tabsdata.conftest import (
     read_json_and_clean,
     write_v2_function_yaml_file,
 )
-from tests_tabsdata.testing_resources.test_custom_execution_exception.example import (
+from test_tabsdata.test_custom_execution_exception.example import (
     custom_execution_exception,
 )
-from tests_tabsdata.testing_resources.test_custom_requirements.example import (
+from test_tabsdata.test_custom_requirements.example import (
     custom_requirements,
 )
-from tests_tabsdata.testing_resources.test_failed_execution_returns_error_code.example import (
+from test_tabsdata.test_failed_execution_returns_error_code.example import (
     failed_execution_returns_error_code,
 )
-from tests_tabsdata.testing_resources.test_failing_file_in_folder.example import (
+from test_tabsdata.test_failing_file_in_folder.example import (
     failing_file_in_folder,
 )
-from tests_tabsdata.testing_resources.test_general_execution_exception.example import (
+from test_tabsdata.test_general_execution_exception.example import (
     general_execution_exception,
 )
-from tests_tabsdata.testing_resources.test_initial_values_freeze.example import (
+from test_tabsdata.test_initial_values_freeze.example import (
     testing_tabsdata_function as initial_values_freeze,
 )
-from tests_tabsdata.testing_resources.test_initial_values_wrong_key_type.example import (
+from test_tabsdata.test_initial_values_wrong_key_type.example import (
     testing_tabsdata_function as initial_values_wrong_key_type,
 )
-from tests_tabsdata.testing_resources.test_input_output_dataframe.example import (
+from test_tabsdata.test_input_output_dataframe.example import (
     input_output_dataframe,
 )
-from tests_tabsdata.testing_resources.test_multiple_inputs_multiple_outputs.example import (
+from test_tabsdata.test_multiple_inputs_multiple_outputs.example import (
     multiple_inputs_multiple_outputs,
 )
-from tests_tabsdata.testing_resources.test_path_to_code.folder1.example import (
+from test_tabsdata.test_path_to_code.folder1.example import (
     path_to_code,
 )
-from tests_tabsdata.testing_resources.test_relative_import.example import (
+from test_tabsdata.test_relative_import.example import (
     relative_import,
 )
 

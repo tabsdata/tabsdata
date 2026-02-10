@@ -18,7 +18,7 @@ from tabsdata.tableframe.udf.function import (
     UDFList,
     UDFUnpacked,
 )
-from tests_tabsdata.test_tabsdata.test_tableframe.common import (
+from test_tabsdata.test_tableframe.common import (
     load_normalized_complex_dataframe,
 )
 

@@ -657,10 +657,12 @@ with global_spinner("Building package 'tabsdata-kafka' (Kafka Connector)..."):
         packages=find_packages(
             where=os.getcwd(),
             exclude=[
+                "test",
+                "test*",
                 "tests",
                 "tests*",
-                "tests_tabsdata_kafka",
-                "tests_tabsdata_kafka*",
+                "src.utest",
+                "src.utest*",
             ],
         ),
         package_dir={

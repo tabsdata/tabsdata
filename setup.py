@@ -851,8 +851,12 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
                     "td-sdk",
                 ),
                 exclude=[
+                    "test",
+                    "test*",
                     "tests",
                     "tests*",
+                    "src.utest",
+                    "src.utest*",
                     "tabsdata.assets",
                     "tabsdata.assets*",
                     "tabsdata.resources",

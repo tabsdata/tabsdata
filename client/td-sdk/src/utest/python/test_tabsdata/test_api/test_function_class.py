@@ -15,7 +15,11 @@ from tabsdata.api.tabsdata_server import (
     Table,
     Worker,
 )
-from tests_tabsdata.conftest import ABSOLUTE_TEST_FOLDER_LOCATION, LOCAL_PACKAGES_LIST
+from test_tabsdata.conftest import (
+    ABSOLUTE_TEST_FOLDER_LOCATION,
+    LOCAL_PACKAGES_LIST,
+    TESTING_RESOURCES_FOLDER,
+)
 
 # noinspection PyUnresolvedReferences
 from . import pytestmark  # noqa: F401
@@ -103,10 +107,8 @@ def test_function_class_register(tabsserver_connection):
     try:
         function.register(
             description="test_function_register_description",
-            function_path=(
-                f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
-                                "test_input_plugin", "example.py")}::input_plugin"
-            ),
+            function_path=f"{os.path.join(TESTING_RESOURCES_FOLDER,
+                                "test_input_plugin", "example.py")}::input_plugin",
             local_packages=LOCAL_PACKAGES_LIST,
         )
         functions = tabsserver_connection.list_functions(
@@ -142,10 +144,8 @@ def test_function_class_register_disabled(tabsserver_connection):
     try:
         function.register(
             description="test_function_register_description",
-            function_path=(
-                f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
-                                "test_input_plugin", "example.py")}::input_plugin"
-            ),
+            function_path=f"{os.path.join(TESTING_RESOURCES_FOLDER,
+                                "test_input_plugin", "example.py")}::input_plugin",
             local_packages=LOCAL_PACKAGES_LIST,
             enabled=False,
         )
@@ -182,10 +182,8 @@ def test_function_class_delete(tabsserver_connection):
     try:
         function.register(
             description="test_function_register_description",
-            function_path=(
-                f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
-                                "test_input_plugin", "example.py")}::input_plugin"
-            ),
+            function_path=f"{os.path.join(TESTING_RESOURCES_FOLDER,
+                                "test_input_plugin", "example.py")}::input_plugin",
             local_packages=LOCAL_PACKAGES_LIST,
         )
         functions = tabsserver_connection.list_functions(
@@ -232,10 +230,8 @@ def test_function_class_update(tabsserver_connection):
         collection.create()
         collection.register_function(
             description="test_function_register_description",
-            function_path=(
-                f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
-                                "test_input_plugin", "example.py")}::input_plugin"
-            ),
+            function_path=f"{os.path.join(TESTING_RESOURCES_FOLDER,
+                                "test_input_plugin", "example.py")}::input_plugin",
             local_packages=LOCAL_PACKAGES_LIST,
         )
         functions = tabsserver_connection.list_functions(
@@ -247,7 +243,7 @@ def test_function_class_update(tabsserver_connection):
 
         new_description = "test_function_class_update_new_description"
         new_function_path = (
-            f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, 'testing_resources',
+            f"{os.path.join(TESTING_RESOURCES_FOLDER,
                             'test_input_file_csv_modified_format', 'example.py')}"
             "::input_file_csv_modified_format"
         )
@@ -281,10 +277,8 @@ def test_function_class_history(tabsserver_connection):
         collection.create()
         collection.register_function(
             description="test_function_register_description",
-            function_path=(
-                f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
-                                "test_input_plugin", "example.py")}::input_plugin"
-            ),
+            function_path=f"{os.path.join(TESTING_RESOURCES_FOLDER,
+                                "test_input_plugin", "example.py")}::input_plugin",
             local_packages=LOCAL_PACKAGES_LIST,
         )
         functions = tabsserver_connection.list_functions(
@@ -296,7 +290,7 @@ def test_function_class_history(tabsserver_connection):
 
         new_description = "test_function_class_history_new_description"
         new_function_path = (
-            f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, 'testing_resources',
+            f"{os.path.join(TESTING_RESOURCES_FOLDER,
                             'test_input_file_csv_modified_format', 'example.py')}"
             "::input_file_csv_modified_format"
         )
@@ -331,8 +325,7 @@ def test_function_class_read_run(tabsserver_connection):
         f"test_function_class_read_run_{uuid.uuid4().hex[:16]}"
     )
     file_path = os.path.join(
-        ABSOLUTE_TEST_FOLDER_LOCATION,
-        "testing_resources",
+        TESTING_RESOURCES_FOLDER,
         "test_input_file_csv_string_format",
         "example.py",
     )

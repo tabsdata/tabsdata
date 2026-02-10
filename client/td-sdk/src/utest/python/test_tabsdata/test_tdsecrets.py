@@ -18,7 +18,7 @@ from tabsdata._secret import (
     build_secret,
 )
 from tabsdata.exceptions import ErrorCode, SecretConfigurationError
-from tests_tabsdata.common.backend import (
+from test_tabsdata.common.backend import (
     HASHICORP_TESTING_SECRET_NAME,
     HASHICORP_TESTING_SECRET_PATH,
     HASHICORP_TESTING_SECRET_VALUE,

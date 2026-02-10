@@ -16,12 +16,12 @@ from filelock import FileLock
 
 from tabsdata._credentials import Credentials, UserPasswordCredentials
 from tabsdata._utils.constants import TRUE_VALUES
-from src.utest.python.common.constants import (
+from test_tabsdata.common.constants import (
     MAXIMUM_RETRY_COUNT,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
 )
-from src.utest.python.common.container import get_container_port_binding
-from src.utest.python.common.system import get_free_port
+from test_tabsdata.common.container import get_container_port_binding
+from test_tabsdata.common.system import get_free_port
 
 logger = logging.getLogger(__name__)
 

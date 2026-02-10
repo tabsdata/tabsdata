@@ -16,16 +16,16 @@ from tabsdata._tabsserver.function.response_utils import RESPONSE_FILE_NAME
 from tabsdata._tabsserver.invoker import REQUEST_FILE_NAME
 from tabsdata._tabsserver.invoker import invoke as tabsserver_main
 from tabsdata._utils.bundle_utils import create_bundle_archive
-from tests_tabsdata.bootest import TDLOCAL_FOLDER
-from tests_tabsdata.common.backend import MARIADB_PORT
-from tests_tabsdata.common.constants import (
+from test_tabsdata.bootest import TDLOCAL_FOLDER
+from test_tabsdata.common.backend import (
     DB_HOST,
     DB_NAME,
     DB_PASSWORD,
     DB_USER,
+    MARIADB_PORT,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
 )
-from tests_tabsdata.conftest import (
+from test_tabsdata.conftest import (
     ABSOLUTE_TEST_FOLDER_LOCATION,
     FUNCTION_DATA_FOLDER,
     LOCAL_PACKAGES_LIST,
@@ -34,10 +34,10 @@ from tests_tabsdata.conftest import (
     read_json_and_clean,
     write_v2_function_yaml_file,
 )
-from tests_tabsdata.testing_resources.test_input_mariadb.example import (
+from test_tabsdata.test_input_mariadb.example import (
     testing_tabsdata_function as input_mariadb,
 )
-from tests_tabsdata.testing_resources.test_input_mariadb_initial_values.example import (
+from test_tabsdata.test_input_mariadb_initial_values.example import (
     testing_tabsdata_function as input_mariadb_initial_values,
 )
 

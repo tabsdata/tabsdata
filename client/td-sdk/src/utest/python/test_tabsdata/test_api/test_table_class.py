@@ -10,9 +10,10 @@ import polars as pl
 import pytest
 
 from tabsdata.api.tabsdata_server import Collection, DataVersion, Table
-from tests_tabsdata.conftest import (
+from test_tabsdata.conftest import (
     ABSOLUTE_TEST_FOLDER_LOCATION,
     LOCAL_PACKAGES_LIST,
+    TESTING_RESOURCES_FOLDER,
 )
 
 # noinspection PyUnresolvedReferences
@@ -604,9 +605,8 @@ def test_table_class_table_delete(tabsserver_connection):
         function = tabsserver_connection.register_function(
             collection_name="test_table_class_table_delete_collection",
             description="test_table_delete_description",
-            function_path=f"""{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, 
-                                  "testing_resources", 
-                                  "test_input_plugin", 
+            function_path=f"""{os.path.join(TESTING_RESOURCES_FOLDER,
+                                  "test_input_plugin",
                                   "example.py")}::input_plugin""",
             local_packages=LOCAL_PACKAGES_LIST,
         )

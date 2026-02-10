@@ -31,7 +31,7 @@ from tabsdata._utils.bundle_utils import (
     PYTHON_VERSION_KEY,
     TABSDATA_MODULE_NAME,
 )
-from tests_tabsdata.common.constants import (
+from test_tabsdata.common.constants import (
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
 )
 

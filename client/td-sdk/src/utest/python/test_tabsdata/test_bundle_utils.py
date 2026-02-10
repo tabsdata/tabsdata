@@ -39,14 +39,14 @@ from tabsdata._utils.bundle_utils import (
     store_function_codebase,
 )
 from tabsdata.exceptions import ErrorCode, RegistrationError
-from tests_tabsdata.conftest import (
+from test_tabsdata.conftest import (
     ABSOLUTE_TEST_FOLDER_LOCATION,
     CORRECT_DESTINATION,
     CORRECT_INPUT_ACTIONS,
     CORRECT_OUTPUT_ACTIONS,
     CORRECT_SOURCE,
 )
-from tests_tabsdata.testing_resources.test_custom_requirements.example import (
+from test_tabsdata.test_custom_requirements.example import (
     custom_requirements,
 )
 

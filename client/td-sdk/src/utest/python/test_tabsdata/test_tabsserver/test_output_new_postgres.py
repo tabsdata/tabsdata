@@ -9,32 +9,32 @@ from unittest import mock
 
 import polars as pl
 import pytest
-from fntest import FnError, tdfnrun
 from psycopg2 import ProgrammingError
 
-from tests_tabsdata.bootest import TDLOCAL_FOLDER
-from tests_tabsdata.conftest import (
+from test_tabsdata.bootest import TDLOCAL_FOLDER
+from test_tabsdata.conftest import (
     ABSOLUTE_TEST_FOLDER_LOCATION,
     TESTING_RESOURCES_FOLDER,
     clean_polars_df,
     read_json_and_clean,
 )
-from tests_tabsdata.testing_resources.test_output_new_postgres_driver_provided.example import (
+from test_tabsdata.fntest import FnError, tdfnrun
+from test_tabsdata.test_output_new_postgres_driver_provided.example import (
     testing_tabsdata_function as output_new_postgres_driver_provided,
 )
-from tests_tabsdata.testing_resources.test_output_new_postgres_list.example import (
+from test_tabsdata.test_output_new_postgres_list.example import (
     testing_tabsdata_function as output_new_postgres_list,
 )
-from tests_tabsdata.testing_resources.test_output_new_postgres_schema.example import (
+from test_tabsdata.test_output_new_postgres_schema.example import (
     testing_tabsdata_function as output_new_postgres_schema,
 )
-from tests_tabsdata.testing_resources.test_output_new_postgres_table_replace.example import (
+from test_tabsdata.test_output_new_postgres_table_replace.example import (
     testing_tabsdata_function as output_new_postgres_table_replace,
 )
-from tests_tabsdata.testing_resources.test_output_new_postgres_transaction.example import (
+from test_tabsdata.test_output_new_postgres_transaction.example import (
     testing_tabsdata_function as output_new_postgres_transaction_generator,
 )
-from tests_tabsdata.testing_resources.test_output_new_postgres_types_check.example import (
+from test_tabsdata.test_output_new_postgres_types_check.example import (
     testing_tabsdata_function as output_new_postgres_types_check_generator,
 )
 

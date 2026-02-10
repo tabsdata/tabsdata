@@ -16,7 +16,11 @@ from tabsdata.api.tabsdata_server import (
     Table,
     _convert_timestamp_to_string,
 )
-from tests_tabsdata.conftest import ABSOLUTE_TEST_FOLDER_LOCATION, LOCAL_PACKAGES_LIST
+from test_tabsdata.conftest import (
+    ABSOLUTE_TEST_FOLDER_LOCATION,
+    LOCAL_PACKAGES_LIST,
+    TESTING_RESOURCES_FOLDER,
+)
 
 # noinspection PyUnresolvedReferences
 from . import pytestmark  # noqa: F401
@@ -95,10 +99,8 @@ def test_collection_functions_property(tabsserver_connection):
         tabsserver_connection.register_function(
             collection_name="test_collection_function_property_collection",
             description="test_collection_function_property_collection_description",
-            function_path=(
-                f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
-                                "test_input_plugin", "example.py")}::input_plugin"
-            ),
+            function_path=f"{os.path.join(TESTING_RESOURCES_FOLDER,
+                                "test_input_plugin", "example.py")}::input_plugin",
             local_packages=LOCAL_PACKAGES_LIST,
         )
         assert collection.functions
@@ -194,10 +196,8 @@ def test_collection_get_function(tabsserver_connection):
         tabsserver_connection.register_function(
             collection_name="test_collection_get_function_collection",
             description="test_collection_get_function_collection_description",
-            function_path=(
-                f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
-                                "test_input_plugin", "example.py")}::input_plugin"
-            ),
+            function_path=f"{os.path.join(TESTING_RESOURCES_FOLDER,
+                                "test_input_plugin", "example.py")}::input_plugin",
             local_packages=LOCAL_PACKAGES_LIST,
         )
         function = collection.get_function("test_input_plugin")
@@ -250,10 +250,8 @@ def test_collection_register_function(tabsserver_connection):
         collection.create()
         collection.register_function(
             description="test_function_register_description",
-            function_path=(
-                f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
-                                "test_input_plugin", "example.py")}::input_plugin"
-            ),
+            function_path=f"{os.path.join(TESTING_RESOURCES_FOLDER,
+                                "test_input_plugin", "example.py")}::input_plugin",
             local_packages=LOCAL_PACKAGES_LIST,
         )
         functions = tabsserver_connection.list_functions(
@@ -282,10 +280,8 @@ def test_collection_class_update_function(tabsserver_connection):
         collection.create()
         collection.register_function(
             description="test_function_register_description",
-            function_path=(
-                f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
-                                "test_input_plugin", "example.py")}::input_plugin"
-            ),
+            function_path=f"{os.path.join(TESTING_RESOURCES_FOLDER,
+                                "test_input_plugin", "example.py")}::input_plugin",
             local_packages=LOCAL_PACKAGES_LIST,
         )
         functions = tabsserver_connection.list_functions(
@@ -297,7 +293,7 @@ def test_collection_class_update_function(tabsserver_connection):
 
         new_description = "test_collection_class_update_function_new_description"
         new_function_path = (
-            f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, 'testing_resources',
+            f"{os.path.join(TESTING_RESOURCES_FOLDER,
                             'test_input_file_csv_modified_format', 'example.py')}"
             "::input_file_csv_modified_format"
         )
@@ -330,8 +326,7 @@ def test_collection_class_read_run(tabsserver_connection):
         f"test_collection_class_read_run_{uuid.uuid4().hex[:16]}"
     )
     file_path = os.path.join(
-        ABSOLUTE_TEST_FOLDER_LOCATION,
-        "testing_resources",
+        TESTING_RESOURCES_FOLDER,
         "test_input_file_csv_string_format",
         "example.py",
     )

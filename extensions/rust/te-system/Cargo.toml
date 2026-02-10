@@ -5,6 +5,7 @@
 [package]
 description = "Tabsdata System Extension Implementation - Open Source"
 name = "te-system"
+build = "build.rs"
 
 authors = { workspace = true }
 edition = { workspace = true }
@@ -26,7 +27,7 @@ td-test = ["dummy", "mock-env", "test-utils"]
 test-utils = []
 
 [package.metadata.cargo-machete]
-ignored = ["openssl"]
+ignored = ["openssl", "td-build"]
 
 [dependencies]
 
@@ -35,6 +36,11 @@ ignored = ["openssl"]
 ta-system = { workspace = true }
 
 # External dependencies
+
+[build-dependencies]
+td-build = {workspace = true}
+
+[dev-dependencies]
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }

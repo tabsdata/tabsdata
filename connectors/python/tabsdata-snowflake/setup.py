@@ -657,10 +657,12 @@ with global_spinner("Building package 'tabsdata-snowflake' (Snowflake Connector)
         packages=find_packages(
             where=os.getcwd(),
             exclude=[
+                "test",
+                "test*",
                 "tests",
                 "tests*",
-                "tests_tabsdata_snowflake",
-                "tests_tabsdata_snowflake*",
+                "src.utest",
+                "src.utest*",
             ],
         ),
         package_dir={

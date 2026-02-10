@@ -4,11 +4,10 @@
 
 import os
 
-from bootest import TDLOCAL_FOLDER
-from conftest import LOCAL_PACKAGES_LIST
-
 import tabsdata as td
 from tabsdata._utils.bundle_utils import create_bundle_archive
+from test_tabsdata.bootest import TDLOCAL_FOLDER
+from test_tabsdata.conftest import LOCAL_PACKAGES_LIST
 
 DEFAULT_SAVE_LOCATION = TDLOCAL_FOLDER
 

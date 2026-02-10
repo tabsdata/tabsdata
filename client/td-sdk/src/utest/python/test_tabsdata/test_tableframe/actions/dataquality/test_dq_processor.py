@@ -4,10 +4,6 @@
 
 import polars as pl
 import pytest
-from test_tabsdata.test_tableframe.actions.dataquality.dq_helper import (
-    CLASSIFIERS,
-    boolean_dataset,
-)
 
 import tabsdata as td
 import tabsdata.tableframe.dtypes as td_dtypes
@@ -16,7 +12,11 @@ from tabsdata.dataquality import DataQuality, Enrich, IsBetween, IsIn, Summary
 from tabsdata.exceptions import DataQualityProcessingError, ErrorCode
 from tabsdata.tableframe._actions.dataquality.processor import DataQualityProcessor
 from tabsdata.tableframe.lazyframe.properties import TableFramePropertiesBuilder
-from tests_tabsdata.test_tabsdata.test_tableframe.common import (
+from test_tabsdata.test_tableframe.actions.dataquality.dq_helper import (
+    CLASSIFIERS,
+    boolean_dataset,
+)
+from test_tabsdata.test_tableframe.common import (
     pretty_pandas,
     pretty_polars,
 )

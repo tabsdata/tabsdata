@@ -15,9 +15,9 @@ from tabsdata._tabsserver.function.response_utils import RESPONSE_FILE_NAME
 from tabsdata._tabsserver.invoker import REQUEST_FILE_NAME
 from tabsdata._tabsserver.invoker import invoke as tabsserver_main
 from tabsdata._utils.bundle_utils import create_bundle_archive
-from tests_tabsdata.bootest import TDLOCAL_FOLDER
-from tests_tabsdata.common.constants import PYTEST_DEFAULT_ENVIRONMENT_PREFIX
-from tests_tabsdata.conftest import (
+from test_tabsdata.bootest import TDLOCAL_FOLDER
+from test_tabsdata.common.constants import PYTEST_DEFAULT_ENVIRONMENT_PREFIX
+from test_tabsdata.conftest import (
     ABSOLUTE_TEST_FOLDER_LOCATION,
     FUNCTION_DATA_FOLDER,
     LOCAL_PACKAGES_LIST,
@@ -26,38 +26,38 @@ from tests_tabsdata.conftest import (
     read_json_and_clean,
     write_v2_function_yaml_file,
 )
-from tests_tabsdata.testing_resources.test_input_s3.example import input_s3
-from tests_tabsdata.testing_resources.test_input_s3_environment_secret.example import (
+from test_tabsdata.test_input_s3.example import input_s3
+from test_tabsdata.test_input_s3_environment_secret.example import (
     input_s3_environment_secret,
 )
-from tests_tabsdata.testing_resources.test_input_s3_eu_north_region.example import (
+from test_tabsdata.test_input_s3_eu_north_region.example import (
     input_s3_eu_north_region,
 )
-from tests_tabsdata.testing_resources.test_input_s3_explicit_format.example import (
+from test_tabsdata.test_input_s3_explicit_format.example import (
     input_s3_explicit_format,
 )
-from tests_tabsdata.testing_resources.test_input_s3_explicit_format_object.example import (
+from test_tabsdata.test_input_s3_explicit_format_object.example import (
     input_s3_explicit_format_object,
 )
-from tests_tabsdata.testing_resources.test_input_s3_hashicorp_secret.example import (
+from test_tabsdata.test_input_s3_hashicorp_secret.example import (
     input_s3_hashicorp_secret,
 )
-from tests_tabsdata.testing_resources.test_input_s3_hashicorp_secret_vault_name.example import (
+from test_tabsdata.test_input_s3_hashicorp_secret_vault_name.example import (
     input_s3_hashicorp_secret_vault_name,
 )
-from tests_tabsdata.testing_resources.test_input_s3_modified_uri.example import (
+from test_tabsdata.test_input_s3_modified_uri.example import (
     input_s3_modified_uri,
 )
-from tests_tabsdata.testing_resources.test_input_s3_select_datetime.example import (
+from test_tabsdata.test_input_s3_select_datetime.example import (
     input_s3_select_datetime,
 )
-from tests_tabsdata.testing_resources.test_input_s3_select_datetime_timezone.example import (
+from test_tabsdata.test_input_s3_select_datetime_timezone.example import (
     input_s3_select_datetime_timezone,
 )
-from tests_tabsdata.testing_resources.test_input_s3_uri_list.example import (
+from test_tabsdata.test_input_s3_uri_list.example import (
     input_s3_uri_list,
 )
-from tests_tabsdata.testing_resources.test_input_s3_wildcard.example import (
+from test_tabsdata.test_input_s3_wildcard.example import (
     input_s3_wildcard,
 )
 

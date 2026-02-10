@@ -17,7 +17,7 @@ from tabsdata.exceptions import (
     ErrorCode,
     FormatConfigurationError,
 )
-from tests_tabsdata.conftest import FORMAT_TYPE_TO_CONFIG
+from test_tabsdata.conftest import FORMAT_TYPE_TO_CONFIG
 
 # noinspection PyUnresolvedReferences
 from . import pytestmark  # noqa: F401

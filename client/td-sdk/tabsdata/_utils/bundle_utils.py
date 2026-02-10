@@ -65,9 +65,12 @@ IGNORED_FOLDERS = (
     "target",
     "__pycache__",
     "test",
-    "testing_resources",
+    "test_*",
     "tests",
     "tests_*",
+    "utest",
+    "utest",
+    "testing_resources",
     "venv",
 )
 BASE_BINARIES = [

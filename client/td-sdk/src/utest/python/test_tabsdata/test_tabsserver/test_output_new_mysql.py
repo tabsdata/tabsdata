@@ -9,34 +9,34 @@ from unittest import mock
 
 import polars as pl
 import pytest
-from fntest import FnError, tdfnrun
 from mysql.connector import InterfaceError
 from sqlalchemy.exc import NoSuchModuleError
 
-from tests_tabsdata.conftest import (
+from test_tabsdata.conftest import (
     TESTING_RESOURCES_FOLDER,
     clean_polars_df,
     read_json_and_clean,
 )
-from tests_tabsdata.testing_resources.test_output_new_sql_driver_provided.example import (
+from test_tabsdata.fntest import FnError, tdfnrun
+from test_tabsdata.test_output_new_sql_driver_provided.example import (
     testing_tabsdata_function as output_new_sql_driver_provided_generator,
 )
-from tests_tabsdata.testing_resources.test_output_new_sql_list.example import (
+from test_tabsdata.test_output_new_sql_list.example import (
     testing_tabsdata_function as output_sql_list_generator,
 )
-from tests_tabsdata.testing_resources.test_output_new_sql_list_none.example import (
+from test_tabsdata.test_output_new_sql_list_none.example import (
     testing_tabsdata_function as output_new_sql_list_none_generator,
 )
-from tests_tabsdata.testing_resources.test_output_new_sql_list_types_check.example import (
+from test_tabsdata.test_output_new_sql_list_types_check.example import (
     testing_tabsdata_function as output_new_sql_list_types_check_generator,
 )
-from tests_tabsdata.testing_resources.test_output_new_sql_none.example import (
+from test_tabsdata.test_output_new_sql_none.example import (
     testing_tabsdata_function as output_new_sql_none_generator,
 )
-from tests_tabsdata.testing_resources.test_output_new_sql_transaction.example import (
+from test_tabsdata.test_output_new_sql_transaction.example import (
     testing_tabsdata_function as output_new_sql_transaction_generator,
 )
-from tests_tabsdata.testing_resources.test_output_new_sql_wrong_driver_fails.example import (
+from test_tabsdata.test_output_new_sql_wrong_driver_fails.example import (
     testing_tabsdata_function as output_new_sql_wrong_driver_fails_generator,
 )
 

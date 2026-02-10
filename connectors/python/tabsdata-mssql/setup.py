@@ -657,10 +657,12 @@ with global_spinner("Building package 'tabsdata-mssql' (SQL Server Connector)...
         packages=find_packages(
             where=os.getcwd(),
             exclude=[
+                "test",
+                "test*",
                 "tests",
                 "tests*",
-                "tests_tabsdata_mssql",
-                "tests_tabsdata_mssql*",
+                "src.utest",
+                "src.utest*",
             ],
         ),
         package_dir={

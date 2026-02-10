@@ -12,7 +12,7 @@ from tabsdata._tabsserver.pyenv_creation import (
     delete_virtual_environment,
     read_testimony,
 )
-from src.utest.python.common.constants import PYTEST_DEFAULT_ENVIRONMENT_PREFIX
+from test_tabsdata.common.constants import PYTEST_DEFAULT_ENVIRONMENT_PREFIX
 
 logger = logging.getLogger(__name__)
 

@@ -11,8 +11,7 @@ from confluent_kafka import Consumer
 
 from tabsdata_kafka.consumer.consumer import KafkaConsumer, RolloverReason
 from tabsdata_kafka.consumer.messages_buffer import MessagesBuffer
-from tests_tabsdata.common.backend.kafka import kafka_config
-from tests_tabsdata_kafka.conftest import (
+from test_tabsdata_kafka.conftest import (
     get_avro_message,
     get_json_message,
     get_large_avro_message,
@@ -25,7 +24,7 @@ from tests_tabsdata_kafka.conftest import (
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-TIMEOUT_SECS = 10
+TIMEOUT_SECS = 32
 
 
 @pytest.mark.unit

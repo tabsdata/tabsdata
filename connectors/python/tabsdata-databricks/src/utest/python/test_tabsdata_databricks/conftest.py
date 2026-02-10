@@ -9,8 +9,8 @@ import logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-from tests_tabsdata.bootest import enrich_sys_path
-from tests_tabsdata_databricks.bootest import TESTING_RESOURCES_PATH
+from test_tabsdata.bootest import enrich_sys_path
+from test_tabsdata_databricks.bootest import TESTING_RESOURCES_PATH
 
 
 def _enrich_sys_path():
@@ -29,7 +29,7 @@ from xdist.workermanage import WorkerController
 from tabsdata._utils.tdlogging import setup_tests_logging
 
 # noinspection PyUnusedImports
-from tests_tabsdata.conftest import (
+from test_tabsdata.conftest import (
     clean_everything,
     clean_python_virtual_environments,
     pytest_addoption,
@@ -38,7 +38,7 @@ from tests_tabsdata.conftest import (
     setup_temp_folder_node,
 )
 
-pytest_plugins = ["tests_tabsdata.fntest"]
+pytest_plugins = ["test_tabsdata.fntest"]
 
 
 def pytest_configure(config: pytest.Config):
