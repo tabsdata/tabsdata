@@ -740,7 +740,7 @@ def inject_tabsdata_version(required_modules: list[str]) -> list[str]:  # noqa: 
     original_tabsdata_packages = {
         canonicalize_name(extract_package_name(module))
         for module in tabsdata_modules
-        if extract_package_name(module) in TABSDATA_PACKAGES
+        if canonicalize_name(extract_package_name(module)) in TABSDATA_PACKAGES
     }
 
     required_modules = [
