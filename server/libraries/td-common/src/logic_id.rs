@@ -22,10 +22,9 @@ const MAX_IDL_LEN: usize = DATE_LEN + MAX_KEY_LEN + ID_PADDING;
 pub enum IdLError {
     #[error("Invalid KeyId key, it must be 1 to 3 uppercase characters: {0}")]
     InvalidKey(String) = 0,
-    #[error("IdGenerator for '{0}' cannot be initialized with a Legacy Id: {1}")]
-    CannotInitializeGenerator(String, String) = 1,
+    /// The given string cannot be parsed into a logical ID.
     #[error("Invalid ID, not Legacy, not '{0}' logical: {1}")]
-    CannotParse(String, String) = 2,
+    CannotParse(String, String) = 1,
 }
 
 /// Key Identifying a logical ID.
@@ -104,7 +103,7 @@ impl<K: KeyId> IdL<K> {
         }
     }
 
-    fn parse(s: &str) -> Result<Self, IdLError> {
+    pub fn parse(s: &str) -> Result<Self, IdLError> {
         // Legacy IDs must be 26 chars, Logical Ids must be between 19 and 21 chars.
         if s.len() == id::ID_LENGTH && let Ok(_) = Id::try_from(s) {
             return Ok(IdL::Legacy(s.to_string(), PhantomData));
@@ -135,7 +134,7 @@ impl<K: KeyId> IdL<K> {
         Self::Legacy(id.to_string(), PhantomData)
     }
 
-    fn new_logic(date: NaiveDate, counter: usize) -> Self {
+    pub fn new_logic(date: NaiveDate, counter: usize) -> Self {
         let s = format!(
             "{}{}{:0width$}",
             date.format("%Y%m%d"),
@@ -280,14 +279,12 @@ impl<K: KeyId> IdLGenerator<K> {
 
         let (date, counter) = if let Some(latest) = latest {
             if latest.is_legacy() {
-                return Err(IdLError::CannotInitializeGenerator(
-                    K::key().to_string(),
-                    latest.to_string(),
-                ));
+                (None, 0)
+            } else {
+                let last_date = latest.date();
+                let counter = latest.counter().unwrap_or(0);
+                (last_date, counter)
             }
-            let last_date = latest.date();
-            let counter = latest.counter().unwrap_or(0);
-            (last_date, counter)
         } else {
             (None, 0)
         };
@@ -447,13 +444,13 @@ mod tests {
     }
 
     #[test]
-    fn test_generator_new_with_legacy_fails() {
+    fn test_generator_new_with_legacy() {
         let latest_id = TestId::Legacy(id::id().to_string(), PhantomData);
-        let result = IdLGenerator::<TestKey>::new(&Some(latest_id));
-        assert!(matches!(
-            result,
-            Err(IdLError::CannotInitializeGenerator(_, _))
-        ));
+        let generator = IdLGenerator::<TestKey>::new(&Some(latest_id)).unwrap();
+        let id = generator.generate();
+        assert!(id.is_logic());
+        assert!(id.date().is_some());
+        assert_eq!(id.counter(), Some(1));
     }
 
     #[test]

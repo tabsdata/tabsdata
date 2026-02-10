@@ -72,7 +72,7 @@ pub fn typed_basic(args: TokenStream, item: TokenStream) -> TokenStream {
         Typed::f64(t) => typed_float(&input, t.into()),
         Typed::bool(t) => typed_bool(&input, (*t).into()),
         Typed::Id(t) => typed_id(&input, t.into()),
-        Typed::IdL(t) => typed_idlogic(&input, t.into()),
+        Typed::IdL(t) => typed_idlogic(&input, t),
         Typed::Timestamp(t) => typed_timestamp(&input, t.into()),
         Typed::IdName(t) => typed_id_name(&input, t.into()),
         Typed::Composed(t) => typed_composed(&input, t),
@@ -905,18 +905,21 @@ pub fn typed_idlogic(input: &ItemStruct, typed: TypedIdL) -> proc_macro2::TokenS
         static #generator_name: std::sync::OnceLock<td_common::logic_id::IdLGenerator<#key>> = std::sync::OnceLock::new();
 
         impl #name {
-            pub fn init(latest: Option<td_common::logic_id::IdL<#key>>) {
+            pub fn init(latest: Option<#name>) {
+                let latest: Option<td_common::logic_id::IdL<#key>> = latest.map(|id| id.into());
                 #generator_name
                     .set(td_common::logic_id::IdLGenerator::<#key>::new(&latest).unwrap())
                     .unwrap();
             }
 
             pub fn new() -> Self {
-                #[cfg(feature = "td-test")]
-                #generator_name
-                    .get_or_init(|| td_common::logic_id::IdLGenerator::<#key>::new(&None).unwrap())
-                    .generate();
-                #generator_name.get().unwrap().generate().into()
+                if cfg!(feature = "td-test") {
+                    #generator_name
+                        .get_or_init(|| td_common::logic_id::IdLGenerator::<#key>::new(&None).unwrap())
+                        .generate().into()
+                } else {
+                    #generator_name.get().unwrap().generate().into()
+                }
             }
 
         }
@@ -969,6 +972,10 @@ pub fn typed_idlogic(input: &ItemStruct, typed: TypedIdL) -> proc_macro2::TokenS
             fn from(val: &td_common::logic_id::IdL<#key>) -> Self {
                 Self(val.clone())
             }
+        }
+
+        impl From<#name> for td_common::logic_id::IdL<#key> {
+            fn from(val: #name) -> Self { val.0 }
         }
 
         impl TryFrom<String> for #name {

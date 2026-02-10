@@ -19,5 +19,6 @@ pub mod tower_service;
 pub mod transaction;
 pub mod types;
 
+pub mod logic_id;
 #[cfg(feature = "test-utils")]
 pub mod test_utils;
