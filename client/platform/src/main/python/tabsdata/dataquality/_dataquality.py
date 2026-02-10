@@ -15,9 +15,9 @@ from typing_extensions import TypeAlias
 # noinspection PyProtectedMember
 from tabsdata._specs import TableName
 from tabsdata._table_actions.actions import OnTablesAction
+from tabsdata._utils.validation import _normalize_to_list, _td_validate_call
 from tabsdata.dataquality._classifier import Classifier
 from tabsdata.dataquality._operator import Operator
-from tabsdata._utils.validation import _normalize_to_list, _td_validate_call
 from tabsdata.exceptions import ErrorCode
 
 ClassifiersSpec: TypeAlias = Union[Classifier, list[Classifier]]

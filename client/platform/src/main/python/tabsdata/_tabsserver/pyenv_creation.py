@@ -1555,7 +1555,7 @@ def link_base_binaries(  # noqa: C901
         logger.warning(f"Failed to process binaries from setup.toml: {e}")
 
 
-def install_host_package(
+def install_host_package(  # noqa: C901
     source: HostPackageSource,
     package_location: str,
     package_provider: PackageProvider | None,
@@ -1615,7 +1615,9 @@ def install_host_package(
                 [UV_EXECUTABLE, "pip", "install", "--quiet"] + list(BUILD_DEPENDENCIES),
                 real_environment_name,
             )
-            logger.info(f"Installing build dependencies: {build_dependencies_install_command}")
+            logger.info(
+                f"Installing build dependencies: {build_dependencies_install_command}"
+            )
             subprocess.run(
                 build_dependencies_install_command,
                 shell=True,
@@ -1623,7 +1625,11 @@ def install_host_package(
                 text=True,
             )
             install_command.extend(
-                ["--config-settings", "editable_mode=compat", "--no-build-isolation",]
+                [
+                    "--config-settings",
+                    "editable_mode=compat",
+                    "--no-build-isolation",
+                ]
             )
         pip_install_requirements_command = add_python_target_and_join_commands(
             install_command,

@@ -13,6 +13,7 @@ from typing import AbstractSet
 
 # noinspection PyProtectedMember
 from tabsdata._specs import TableName
+from tabsdata._utils.validation import _normalize_to_list, _td_validate_call
 from tabsdata.dataquality._typing import (
     BinsCriteriaSpec,
     BinSpec,
@@ -23,7 +24,6 @@ from tabsdata.dataquality._typing import (
     TagSpec,
     TagsSpec,
 )
-from tabsdata._utils.validation import _normalize_to_list, _td_validate_call
 from tabsdata.exceptions import ErrorCode
 
 

@@ -39,14 +39,14 @@ PROJECT_RS_TO_FOUNDATION_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/exp
 PROJECT_RS_TY_EXPANSIONS_POLARS_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/expansions/polars/", normalize = true }
 PROJECT_RS_TY_TABLEFRAME_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/expansions/polars/modules/ty-tableframe/", normalize = true }
 
-PROJECT_PY_TA_FEATURES_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/client/td-lib/ta_features/", normalize = true }
-PROJECT_PY_TA_TABLEFRAME_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/client/td-lib/ta_tableframe/", normalize = true }
-PROJECT_PY_TE_EXAMPLES_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/extensions/python/td-lib/te_examples/", normalize = true }
-PROJECT_PY_TE_TABLEFRAME_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/extensions/python/td-lib/te_tableframe/", normalize = true }
-PROJECT_PY_TE_VARIANT_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/extensions/python/td-lib/te_variant/", normalize = true }
+PROJECT_PY_TA_FEATURES_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/client/libraries/ta_features/", normalize = true }
+PROJECT_PY_TA_TABLEFRAME_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/client/libraries/ta_tableframe/", normalize = true }
+PROJECT_PY_TE_EXAMPLES_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/extensions/python/libraries/te_examples/", normalize = true }
+PROJECT_PY_TE_TABLEFRAME_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/extensions/python/libraries/te_tableframe/", normalize = true }
+PROJECT_PY_TE_VARIANT_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/extensions/python/libraries/te_variant/", normalize = true }
 PROJECT_PY_TO_FOUNDATION_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/expansions/python/modules/to-foundation/python/", normalize = true }
 PROJECT_PY_TY_TABLEFRAME_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/expansions/polars/modules/ty-tableframe/python/", normalize = true }
-PROJECT_PY_TD_TABSDATA_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/client/td-sdk/", normalize = true }
+PROJECT_PY_TD_TABSDATA_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/client/platform/", normalize = true }
 
 OS_CONNECTORS_PY_ROOT_FOLDER = { value = "${PROJECT_TABSDATA_BASE_FOLDER}/connectors/python/", normalize = true }
 

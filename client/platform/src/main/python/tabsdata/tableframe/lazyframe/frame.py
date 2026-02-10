@@ -63,7 +63,6 @@ from tabsdata.exceptions import ErrorCode, TableFrameError
 
 # noinspection PyProtectedMember
 from tabsdata.expansions.tableframe.features.grok.api._handler import GrokParser
-
 from tabsdata.tableframe.lazyframe.properties import (
     TableFrameProperties,
     TableFramePropertiesBuilder,

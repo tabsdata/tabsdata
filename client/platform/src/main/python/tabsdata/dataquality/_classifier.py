@@ -16,6 +16,11 @@ import sys
 from abc import ABC
 from typing import AbstractSet, Collection, FrozenSet, Type, Union
 
+from tabsdata._utils.validation import (
+    _normalize_to_list,
+    _normalize_to_set,
+    _td_validate_call,
+)
 from tabsdata.dataquality._typing import (
     MAX_BINS,
     BinCountSpec,
@@ -33,11 +38,6 @@ from tabsdata.dataquality._typing import (
     ScalePowerSpec,
     TagSpec,
     TagsSpec,
-)
-from tabsdata._utils.validation import (
-    _normalize_to_list,
-    _normalize_to_set,
-    _td_validate_call,
 )
 from tabsdata.exceptions import (
     ErrorCode,

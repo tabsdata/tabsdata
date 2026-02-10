@@ -148,7 +148,7 @@ def get_python_tags():
         spec_path = os.path.join(
             base,
             "client",
-            "td-sdk",
+            "platform",
             "src",
             "main",
             "python",

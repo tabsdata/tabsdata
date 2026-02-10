@@ -2,6 +2,8 @@ import pytest
 
 from tabsdata._credentials import UserPasswordCredentials
 from tabsdata._io.plugin import SourcePlugin
+from tabsdata.connector.mssql.connection.mssql_connection import MSSQLConn
+from tabsdata.connector.mssql.input.mssql_input import MSSQLSrc
 from tabsdata.exceptions import (
     ConnectionConfigurationError,
     ErrorCode,
@@ -10,8 +12,6 @@ from tabsdata.exceptions import (
 )
 from tabsdata.tableframe.dtypes import Float64, Int64
 from tabsdata.tableframe.typing import DataType
-from tabsdata.connector.mssql.connection.mssql_connection import MSSQLConn
-from tabsdata.connector.mssql.input.mssql_input import MSSQLSrc
 
 
 @pytest.mark.mssql

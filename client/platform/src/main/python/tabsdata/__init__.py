@@ -88,6 +88,37 @@ from tabsdata._secret import EnvironmentSecret, HashiCorpSecret
 # noinspection PyProtectedMember
 from tabsdata._tabsserver.function.execution_exceptions import CustomException
 from tabsdata._tdfunction import TabsdataFunction
+
+# noinspection PyProtectedMember
+from tabsdata.connector.bigquery._connector import BigQueryConn, BigQueryDest
+
+# noinspection PyProtectedMember
+from tabsdata.connector.databricks._connector import DatabricksDestination
+from tabsdata.connector.kafka._connector import (
+    AwsGlueSchemaRegistry,
+    ConfluentSchemaRegistry,
+    KafkaConn,
+    KafkaTrigger,
+)
+from tabsdata.connector.kafka.typing import (
+    AwsGlueSchemaRegistryCredentialsSpec,
+    ConfluentSchemaRegistryCredentialsSpec,
+    KafkaCredentialsSpec,
+)
+
+# noinspection PyProtectedMember
+from tabsdata.connector.mongodb._connector import MongoDBDestination
+
+# noinspection PyProtectedMember
+from tabsdata.connector.mssql._connector import MSSQLDestination, MSSQLSource
+from tabsdata.connector.mssql.connection.mssql_connection import MSSQLConn
+from tabsdata.connector.mssql.input.mssql_input import MSSQLSrc
+from tabsdata.connector.salesforce._connector import (
+    SalesforceReportSource,
+    SalesforceSource,
+    SalesforceTokenCredentials,
+)
+from tabsdata.connector.snowflake._connector import SnowflakeDestination
 from tabsdata.tableframe.dtypes import (
     FLOAT_DTYPES,
     INTEGER_DTYPES,
@@ -128,37 +159,6 @@ from tabsdata.tableframe.functions.col import col as col
 from tabsdata.tableframe.functions.eager import concat
 from tabsdata.tableframe.functions.lit import lit
 from tabsdata.tableframe.lazyframe.frame import TableFrame
-
-# noinspection PyProtectedMember
-from tabsdata.connector.bigquery._connector import BigQueryConn, BigQueryDest
-
-# noinspection PyProtectedMember
-from tabsdata.connector.databricks._connector import DatabricksDestination
-from tabsdata.connector.kafka._connector import (
-    AwsGlueSchemaRegistry,
-    ConfluentSchemaRegistry,
-    KafkaConn,
-    KafkaTrigger,
-)
-from tabsdata.connector.kafka.typing import (
-    AwsGlueSchemaRegistryCredentialsSpec,
-    ConfluentSchemaRegistryCredentialsSpec,
-    KafkaCredentialsSpec,
-)
-
-# noinspection PyProtectedMember
-from tabsdata.connector.mongodb._connector import MongoDBDestination
-
-# noinspection PyProtectedMember
-from tabsdata.connector.mssql._connector import MSSQLDestination, MSSQLSource
-from tabsdata.connector.mssql.connection.mssql_connection import MSSQLConn
-from tabsdata.connector.mssql.input.mssql_input import MSSQLSrc
-from tabsdata.connector.salesforce._connector import (
-    SalesforceReportSource,
-    SalesforceSource,
-    SalesforceTokenCredentials,
-)
-from tabsdata.connector.snowflake._connector import SnowflakeDestination
 
 logging.basicConfig(
     level=logging.getLevelName(logging.WARNING),

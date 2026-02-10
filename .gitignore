@@ -145,6 +145,6 @@ var/
 venv.bak/
 venv/
 wheels/
-client/td-sdk/src/main/python/tabsdata/assets
+client/platform/src/main/python/tabsdata/assets
 src/main/python/tabsdata_agent/assets
 test-results

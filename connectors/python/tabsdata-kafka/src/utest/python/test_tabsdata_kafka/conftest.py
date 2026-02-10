@@ -8,7 +8,10 @@ import logging
 
 from tabsdata._credentials import UserPasswordCredentials
 from tabsdata._io.stage_trigger import LocalFileStageTriggerContext
-from tabsdata.connector.kafka._connector import AwsGlueSchemaRegistry, ConfluentSchemaRegistry
+from tabsdata.connector.kafka._connector import (
+    AwsGlueSchemaRegistry,
+    ConfluentSchemaRegistry,
+)
 from tabsdata.connector.kafka.serdes.serde import KafkaSerde
 from tabsdata.connector.kafka.typing import AwsGlueSchemaRegistryCredentialsSpec
 

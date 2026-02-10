@@ -10,10 +10,6 @@ from unittest.mock import patch
 import pytest
 
 from tabsdata._credentials import UserPasswordCredentials
-from tabsdata.exceptions import (
-    ErrorCode,
-    ParameterValidationError,
-)
 from tabsdata.connector.kafka import KafkaMessageFormatSpec
 from tabsdata.connector.kafka._connector import (
     AwsGlueSchemaRegistry,
@@ -38,6 +34,10 @@ from tabsdata.connector.kafka.serdes.non_sr_serde import (
     ProtobufKafkaSerde,
 )
 from tabsdata.connector.kafka.typing import Protobuf
+from tabsdata.exceptions import (
+    ErrorCode,
+    ParameterValidationError,
+)
 from test_tabsdata_kafka.conftest import (
     aws_glue_sr_mock_protobuf_glue_client,
 )

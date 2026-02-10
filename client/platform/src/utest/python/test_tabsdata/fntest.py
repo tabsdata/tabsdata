@@ -19,7 +19,6 @@ import polars as pl
 import pytest
 
 import tabsdata as td
-
 from tabsdata._io.stage_trigger import (
     CallConfig,
     LocalFileStageTriggerContext,

@@ -295,11 +295,7 @@ def lock_pyprojects(
         test_connector_modules = {
             f"test_{name.replace('-', '_')}" for name in connector_modules
         }
-        merged = (
-            known_first_party_entry_set
-            | {"tabsdata"}
-            | test_connector_modules
-        )
+        merged = known_first_party_entry_set | {"tabsdata"} | test_connector_modules
 
         tabsdata_packages = sorted(
             name for name in merged if name.startswith("tabsdata")
@@ -381,7 +377,7 @@ def lock_pytest_ini(root: str) -> None:
     tabsdata_pytest_ini_file = os.path.join(
         root,
         "client",
-        "td-sdk",
+        "platform",
         "src",
         "utest",
         "python",

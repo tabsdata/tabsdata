@@ -31,11 +31,6 @@ from tabsdata._utils.annotations import unstable, unstable_category
 
 # noinspection PyProtectedMember
 from tabsdata._utils.validation import _td_validate_call
-from tabsdata.exceptions import (
-    ErrorCode,
-    StageTriggerConfigurationError,
-    StageTriggerExecutionError,
-)
 from tabsdata.connector.kafka.constants import (
     _AVRO,
     _JSON,
@@ -66,7 +61,15 @@ from tabsdata.connector.kafka.typing import (
     KafkaServersSpec,
     Protobuf,
 )
-from tabsdata.connector.kafka.utils import handle_rollover, obtain_and_set_aws_glue_credentials
+from tabsdata.connector.kafka.utils import (
+    handle_rollover,
+    obtain_and_set_aws_glue_credentials,
+)
+from tabsdata.exceptions import (
+    ErrorCode,
+    StageTriggerConfigurationError,
+    StageTriggerExecutionError,
+)
 
 if TYPE_CHECKING:
     from confluent_kafka import Consumer, Producer

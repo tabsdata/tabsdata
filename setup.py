@@ -20,7 +20,7 @@ from uuid import uuid4
 
 import colorama
 import tqdm
-from setuptools import find_namespace_packages, find_packages, setup
+from setuptools import find_namespace_packages, setup
 from setuptools.command.bdist_egg import bdist_egg as _bdist_egg
 from setuptools.command.build import build as _build
 from setuptools.command.build_py import build_py as _build_py
@@ -63,11 +63,11 @@ warnings.filterwarnings(
 )
 
 EDITABLE_EXTRA_PATHS = [
-    "client/td-lib/ta_features/src/main/python",
-    "client/td-lib/ta_tableframe/src/main/python",
-    "extensions/python/td-lib/te_examples/src/main/python",
-    "extensions/python/td-lib/te_tableframe/src/main/python",
-    "extensions/python/td-lib/te_variant/src/main/python",
+    "client/libraries/ta_features/src/main/python",
+    "client/libraries/ta_tableframe/src/main/python",
+    "extensions/python/libraries/te_examples/src/main/python",
+    "extensions/python/libraries/te_tableframe/src/main/python",
+    "extensions/python/libraries/te_variant/src/main/python",
     "expansions/python/modules/to-foundation/python/src/main/python",
     "expansions/polars/modules/ty-tableframe/python/src/main/python",
 ]
@@ -93,7 +93,9 @@ def _create_editable_extra_pth_file():
 
     pth_lines = []
     for relative_editable_extra_path in EDITABLE_EXTRA_PATHS:
-        absolute_editable_extra_path = os.path.join(project_root, relative_editable_extra_path)
+        absolute_editable_extra_path = os.path.join(
+            project_root, relative_editable_extra_path
+        )
         if os.path.isdir(absolute_editable_extra_path):
             pth_lines.append(absolute_editable_extra_path)
 
@@ -203,7 +205,7 @@ def get_python_tags():
         spec_path = os.path.join(
             base,
             "client",
-            "td-sdk",
+            "platform",
             "src",
             "main",
             "python",
@@ -633,7 +635,7 @@ variant_manifest_folder = os.path.join(
 
 package_assets_folder = os.path.join(
     "client",
-    "td-sdk",
+    "platform",
     "src",
     "main",
     "python",
@@ -702,7 +704,7 @@ yaml_files = []
 yaml_root_folder = Path(
     os.path.join(
         "client",
-        "td-sdk",
+        "platform",
         "src",
         "main",
         "python",
@@ -919,7 +921,7 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
             *find_namespace_packages(
                 where=os.path.join(
                     "client",
-                    "td-sdk",
+                    "platform",
                     "src",
                     "main",
                     "python",
@@ -939,7 +941,7 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
             *find_namespace_packages(
                 where=os.path.join(
                     "client",
-                    "td-lib",
+                    "libraries",
                     "ta_features",
                     "src",
                     "main",
@@ -951,7 +953,7 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
             *find_namespace_packages(
                 where=os.path.join(
                     "client",
-                    "td-lib",
+                    "libraries",
                     "ta_tableframe",
                     "src",
                     "main",
@@ -964,7 +966,7 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
                 where=os.path.join(
                     "extensions",
                     "python",
-                    "td-lib",
+                    "libraries",
                     "te_examples",
                     "src",
                     "main",
@@ -977,7 +979,7 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
                 where=os.path.join(
                     "extensions",
                     "python",
-                    "td-lib",
+                    "libraries",
                     "te_tableframe",
                     "src",
                     "main",
@@ -990,7 +992,7 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
                 where=os.path.join(
                     "extensions",
                     "python",
-                    "td-lib",
+                    "libraries",
                     "te_variant",
                     "src",
                     "main",
@@ -1030,14 +1032,14 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
         package_dir={
             "": os.path.join(
                 "client",
-                "td-sdk",
+                "platform",
                 "src",
                 "main",
                 "python",
             ),
             "tabsdata": os.path.join(
                 "client",
-                "td-sdk",
+                "platform",
                 "src",
                 "main",
                 "python",
@@ -1083,7 +1085,7 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
             ),
             "tabsdata.extensions": os.path.join(
                 "client",
-                "td-lib",
+                "libraries",
                 "ta_features",
                 "src",
                 "main",
@@ -1094,7 +1096,7 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
             "tabsdata.extensions._examples": os.path.join(
                 "extensions",
                 "python",
-                "td-lib",
+                "libraries",
                 "te_examples",
                 "src",
                 "main",
@@ -1105,7 +1107,7 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
             ),
             "tabsdata.extensions._features": os.path.join(
                 "client",
-                "td-lib",
+                "libraries",
                 "ta_features",
                 "src",
                 "main",
@@ -1116,7 +1118,7 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
             ),
             "tabsdata.extensions._features.api": os.path.join(
                 "client",
-                "td-lib",
+                "libraries",
                 "ta_features",
                 "src",
                 "main",
@@ -1129,7 +1131,7 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
             "tabsdata.extensions._tableframe": os.path.join(
                 "extensions",
                 "python",
-                "td-lib",
+                "libraries",
                 "te_tableframe",
                 "src",
                 "main",
@@ -1140,7 +1142,7 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
             ),
             "tabsdata.extensions._tableframe.api": os.path.join(
                 "client",
-                "td-lib",
+                "libraries",
                 "ta_tableframe",
                 "src",
                 "main",
@@ -1153,7 +1155,7 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
             "tabsdata.extensions.variant": os.path.join(
                 "extensions",
                 "python",
-                "td-lib",
+                "libraries",
                 "te_variant",
                 "src",
                 "main",

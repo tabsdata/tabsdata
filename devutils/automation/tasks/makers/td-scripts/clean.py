@@ -14,7 +14,7 @@ from types import ModuleType
 EXAMPLES_GUIDES_BOOK_PATH = (
     "extensions/"
     "python/"
-    "td-lib/"
+    "libraries/"
     "te_examples/"
     "src/"
     "main/"
@@ -159,8 +159,8 @@ def clean_py(project_folder):
         "local_dev",
         "tdlocal",
         "local_development_artifacts",
-        "client/td-sdk/src/main/python/tabsdata/assets",
-        "client/td-sdk/src/main/python/tabsdata/resources",
+        "client/platform/src/main/python/tabsdata/assets",
+        "client/platform/src/main/python/tabsdata/resources",
         "tabsdata/service/agent/assets",
         "SOURCETRACK.yaml",
         "tabsdata.libs",

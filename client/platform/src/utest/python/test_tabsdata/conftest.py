@@ -106,7 +106,7 @@ ABSOLUTE_ROOT_FOLDER_LOCATION = str(
     Path(ABSOLUTE_TEST_FOLDER_LOCATION)
     .parent  # utest/
     .parent  # src/
-    .parent  # td-sdk/
+    .parent  # platform/
     .parent  # client/
     .parent  # tabsdata-*
 )
@@ -123,7 +123,7 @@ ROOT_PROJECT_DIR = str(
     Path(ABSOLUTE_TEST_FOLDER_LOCATION)
     .parent  # utest/
     .parent  # src/
-    .parent  # td-sdk/
+    .parent  # platform/
     .parent  # client/
     .parent  # tabsdata-*
 )

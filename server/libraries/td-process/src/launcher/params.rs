@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 /// Generic worker command line parameters.
 /// Arguments for each [crate::launcher::arg::ArgumentKey].
-/// Similar to `client/td-sdk/src/main/python/tabsdata/_tabsserver/invoker.py`.
+/// Similar to `client/platform/src/main/python/tabsdata/_tabsserver/invoker.py`.
 #[derive(Debug, Clone, Parser)]
 pub struct ArgumentParameters {
     #[clap(long)]

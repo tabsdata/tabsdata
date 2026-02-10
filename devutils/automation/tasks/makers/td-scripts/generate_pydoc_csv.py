@@ -131,7 +131,7 @@ def generate_pydoc_csv():
 
     tabsdata_target = join(project_tabsdata_root_folder, "target", "pydoc")
     os.makedirs(tabsdata_target, exist_ok=True)
-    tabsdata_code_root = join(project_tabsdata_root_folder, "client", "td-sdk")
+    tabsdata_code_root = join(project_tabsdata_root_folder, "client", "platform")
     tabsdata_code_root = os.path.normpath(tabsdata_code_root)
     tabsdata_output = join(tabsdata_target, "PYDOC.csv")
     find_pydoc_categories(tabsdata_code_root, tabsdata_output)

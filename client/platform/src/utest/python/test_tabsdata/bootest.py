@@ -196,7 +196,7 @@ def enrich_sys_path():
             os.path.join(
                 root,
                 "client",
-                "td-sdk",
+                "platform",
                 "src",
                 "utest",
                 "python",
@@ -208,7 +208,7 @@ def enrich_sys_path():
             os.path.join(
                 root,
                 "client",
-                "td-sdk",
+                "platform",
                 "src",
                 "utest",
                 "resources",
@@ -220,7 +220,7 @@ def enrich_sys_path():
             os.path.join(
                 root,
                 "client",
-                "td-lib",
+                "libraries",
                 "ta_features",
                 "src",
                 "utest",
@@ -233,7 +233,7 @@ def enrich_sys_path():
             os.path.join(
                 root,
                 "client",
-                "td-lib",
+                "libraries",
                 "ta_features",
                 "src",
                 "utest",
@@ -246,7 +246,7 @@ def enrich_sys_path():
             os.path.join(
                 root,
                 "client",
-                "td-lib",
+                "libraries",
                 "ta_tableframe",
                 "src",
                 "utest",
@@ -259,7 +259,7 @@ def enrich_sys_path():
             os.path.join(
                 root,
                 "client",
-                "td-lib",
+                "libraries",
                 "ta_tableframe",
                 "src",
                 "utest",
@@ -273,7 +273,7 @@ def enrich_sys_path():
                 root,
                 "extensions",
                 "python",
-                "td-lib",
+                "libraries",
                 "te_examples",
                 "src",
                 "utest",
@@ -287,7 +287,7 @@ def enrich_sys_path():
                 root,
                 "extensions",
                 "python",
-                "td-lib",
+                "libraries",
                 "te_examples",
                 "src",
                 "utest",
@@ -301,7 +301,7 @@ def enrich_sys_path():
                 root,
                 "extensions",
                 "python",
-                "td-lib",
+                "libraries",
                 "te_tableframe",
                 "src",
                 "utest",
@@ -315,7 +315,7 @@ def enrich_sys_path():
                 root,
                 "extensions",
                 "python",
-                "td-lib",
+                "libraries",
                 "te_tableframe",
                 "src",
                 "utest",
@@ -329,7 +329,7 @@ def enrich_sys_path():
                 root,
                 "extensions",
                 "python",
-                "td-lib",
+                "libraries",
                 "te_variant",
                 "src",
                 "utest",
@@ -343,7 +343,7 @@ def enrich_sys_path():
                 root,
                 "extensions",
                 "python",
-                "td-lib",
+                "libraries",
                 "te_variant",
                 "src",
                 "utest",
@@ -419,7 +419,7 @@ def enrich_sys_path():
     sys.path[:] = shiny_entries
 
     logger.debug("")
-    logger.debug("Using sys.path entries for td-sdk tests...:")
+    logger.debug("Using sys.path entries for platform tests...:")
     for path in sys.path:
         logger.debug(f"   - {path}")
     logger.debug("")
@@ -436,7 +436,7 @@ def check_assets():
         .parent  # python/
         .parent  # utest/
         .parent  # src/
-        .parent  # td-sdk/
+        .parent  # platform/
         .parent  # client/
         .parent  # tabsdata-*/
         / "variant"
@@ -448,7 +448,7 @@ def check_assets():
         .parent  # python/
         .parent  # utest/
         .parent  # src/
-        .parent  # td-sdk/
+        .parent  # platform/
         / "tabsdata"
         / "assets"
     )

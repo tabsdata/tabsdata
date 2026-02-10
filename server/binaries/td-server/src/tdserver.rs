@@ -21,7 +21,7 @@ const ACK: &str = ".ack";
 
 const COMPATIBILITY_PY: &str = include_str!(concat!(
     workspace_root!(),
-    "/client/td-sdk/src/main/python/tabsdata/_utils/compatibility.py"
+    "/client/platform/src/main/python/tabsdata/_utils/compatibility.py"
 ));
 
 fn check_banner() -> std::io::Result<()> {
