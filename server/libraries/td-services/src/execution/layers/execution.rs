@@ -194,7 +194,7 @@ pub async fn build_table_data_versions(
                 .name(t.name.clone())
                 .table_version_id(t.table_version_id)
                 .function_version_id(t.function_version_id)
-                .execution_id(transaction.execution_id)
+                .execution_id(&transaction.execution_id)
                 .transaction_id(transaction.id)
                 .function_run_id(function_runs_map[&f.function_version_id].id)
                 .function_param_pos(edge.output_pos().cloned().expect("must have output pos"))
@@ -299,7 +299,7 @@ pub async fn build_function_requirements(
         builder
             // current
             .collection_id(function.collection_id)
-            .execution_id(transaction.execution_id)
+            .execution_id(&transaction.execution_id)
             .transaction_id(transaction.id)
             .function_run_id(function_runs_map[&function.function_version_id].id)
             // condition
@@ -514,7 +514,7 @@ pub async fn build_response(
     // We could directly return execution_plan if we want, instead of building all these maps and sets
     // as it is serializable as is. But all these intermediate structures can be useful for other purposes as well.
     let response = ExecutionResponse {
-        id: execution.id,
+        id: execution.id.clone(),
         name: execution.name.clone(),
         triggered_on: execution.triggered_on,
         trigger_type: execution.trigger_type.clone(),

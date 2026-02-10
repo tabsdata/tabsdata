@@ -72,7 +72,7 @@ mod definitions {
         updater(try_from = ExecutionRequest, skip_all)
     )]
     pub struct ExecutionDB {
-        #[builder(default)]
+        #[builder(default = "ExecutionId::new()")]
         #[td_type(extractor)]
         pub id: ExecutionId,
         #[td_type(updater(try_from = ExecutionRequest, include))]

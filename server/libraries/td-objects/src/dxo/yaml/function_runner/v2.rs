@@ -251,7 +251,7 @@ mod tests {
         let table_data_version_id = TableDataVersionId::default();
         let triggered_on = TriggeredOn::default();
         let transaction_id = TransactionId::default();
-        let execution_id = ExecutionId::default();
+        let execution_id = ExecutionId::new();
         let scheduled_on = AtTime::default();
         let defined_on = AtTime::default();
 
@@ -273,7 +273,7 @@ mod tests {
                 },
                 triggered_on,
                 transaction_id,
-                execution_id,
+                execution_id: execution_id.clone(),
                 execution_name: None,
                 function_data: Location {
                     uri: Url::try_from("file:///foo").unwrap(),
@@ -460,7 +460,7 @@ output:
             .try_collection("cn")?
             .table_id(TableId::default())
             .table_version_id(TableVersionId::default())
-            .execution_id(ExecutionId::default())
+            .execution_id(ExecutionId::new())
             .transaction_id(TransactionId::default())
             .table_data_version_id(TableDataVersionId::default())
             .location(location.clone())
@@ -480,7 +480,7 @@ output:
             .try_collection("cn")?
             .table_id(TableId::default())
             .table_version_id(TableVersionId::default())
-            .execution_id(ExecutionId::default())
+            .execution_id(ExecutionId::new())
             .transaction_id(TransactionId::default())
             .function_run_id(FunctionRunId::default())
             .triggered_on(AtTime::default())
@@ -502,7 +502,7 @@ output:
             .try_collection("cn")?
             .table_id(TableId::default())
             .table_version_id(TableVersionId::default())
-            .execution_id(ExecutionId::default())
+            .execution_id(ExecutionId::new())
             .transaction_id(TransactionId::default())
             .function_run_id(FunctionRunId::default())
             .triggered_on(AtTime::default())
@@ -527,7 +527,7 @@ output:
             .try_collection("cn")?
             .table_id(TableId::default())
             .table_version_id(TableVersionId::default())
-            .execution_id(ExecutionId::default())
+            .execution_id(ExecutionId::new())
             .transaction_id(TransactionId::default())
             .function_run_id(FunctionRunId::default())
             .triggered_on(AtTime::default())
@@ -553,7 +553,7 @@ output:
             .try_collection("cn")?
             .table_id(TableId::default())
             .table_version_id(TableVersionId::default())
-            .execution_id(ExecutionId::default())
+            .execution_id(ExecutionId::new())
             .transaction_id(TransactionId::default())
             .function_run_id(FunctionRunId::default())
             .triggered_on(AtTime::default())
@@ -686,7 +686,7 @@ output:
             .try_collection("collection_1")?
             .table_id(TableId::default())
             .table_version_id(TableVersionId::default())
-            .execution_id(ExecutionId::default())
+            .execution_id(ExecutionId::new())
             .transaction_id(TransactionId::default())
             .table_data_version_id(TableDataVersionId::default())
             .location(locations[1].clone())
@@ -700,7 +700,7 @@ output:
             .try_collection("collection_1")?
             .table_id(TableId::default())
             .table_version_id(TableVersionId::default())
-            .execution_id(ExecutionId::default())
+            .execution_id(ExecutionId::new())
             .transaction_id(TransactionId::default())
             .function_run_id(FunctionRunId::default())
             .triggered_on(AtTime::default())
@@ -716,7 +716,7 @@ output:
             .try_collection("collection_1")?
             .table_id(TableId::default())
             .table_version_id(TableVersionId::default())
-            .execution_id(ExecutionId::default())
+            .execution_id(ExecutionId::new())
             .transaction_id(TransactionId::default())
             .function_run_id(FunctionRunId::default())
             .triggered_on(AtTime::default())
@@ -732,7 +732,7 @@ output:
             .try_collection("collection_1")?
             .table_id(TableId::default())
             .table_version_id(TableVersionId::default())
-            .execution_id(ExecutionId::default())
+            .execution_id(ExecutionId::new())
             .transaction_id(TransactionId::default())
             .function_run_id(FunctionRunId::default())
             .triggered_on(AtTime::default())
@@ -790,7 +790,7 @@ output:
             .function_stage(locations[0].clone())
             .triggered_on(TriggeredOn::default())
             .transaction_id(TransactionId::default())
-            .execution_id(ExecutionId::default())
+            .execution_id(ExecutionId::new())
             .execution_name(Some(ExecutionName::try_from("en")?))
             .function_data(locations[0].clone())
             .build()?;

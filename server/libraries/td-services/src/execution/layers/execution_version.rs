@@ -43,7 +43,7 @@ pub async fn skip_if_running(
             let conn = conn.get_mut_connection()?;
 
             let function_run: FunctionRunDB = queries
-                .select_by::<FunctionRunDB>(&(*function_version_id, latest_execution.id))?
+                .select_by::<FunctionRunDB>(&(*function_version_id, latest_execution.id.clone()))?
                 .build_query_as()
                 .fetch_one(conn)
                 .await
@@ -86,6 +86,6 @@ pub async fn executed_execute_internal_response(
 pub async fn already_running_execute_internal_response(
     Input(latest_execution): Input<ExecutionDB>,
 ) -> Result<ExecutionResponseInternal, TdError> {
-    let response = ExecutionResponseInternal::AlreadyRunning(latest_execution.id);
+    let response = ExecutionResponseInternal::AlreadyRunning(latest_execution.id.clone());
     Ok(response)
 }

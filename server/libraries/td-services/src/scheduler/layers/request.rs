@@ -151,7 +151,7 @@ pub async fn create_locked_function_runner_workers_start_request<T: WorkerMessag
                     .function_stage(stage_location)
                     .triggered_on(f.triggered_on)
                     .transaction_id(f.transaction_id)
-                    .execution_id(f.execution_id)
+                    .execution_id(&f.execution_id)
                     .execution_name(f.execution.clone())
                     .function_data(function_run_location)
                     .build()?;
@@ -231,7 +231,7 @@ pub async fn create_locked_function_runner_workers_start_request<T: WorkerMessag
                             .collection(req.collection.clone())
                             .table_id(req.requirement_table_id)
                             .table_version_id(req.requirement_table_version_id)
-                            .execution_id(found_data_version.as_ref().map(|v| v.execution_id))
+                            .execution_id(found_data_version.as_ref().map(|v| v.execution_id.clone()))
                             .transaction_id(found_data_version.as_ref().map(|v| v.transaction_id))
                             .function_run_id(found_data_version.as_ref().map(|v| v.function_run_id))
                             .triggered_on(
@@ -347,7 +347,7 @@ pub async fn create_locked_function_runner_workers_start_request<T: WorkerMessag
                 let message = WorkerDB {
                     id: worker_id,
                     collection_id: f.collection_id,
-                    execution_id: Some(f.execution_id),
+                    execution_id: Some(f.execution_id.clone()),
                     transaction_id: Some(f.transaction_id),
                     function_run_id: Some(f.id),
                     function_version_id: f.function_version_id,

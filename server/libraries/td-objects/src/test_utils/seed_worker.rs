@@ -57,7 +57,7 @@ pub async fn seed_function_runner_worker(
 ) -> WorkerDB {
     let worker_db = WorkerDB::builder()
         .collection_id(execution.collection_id)
-        .execution_id(execution.id)
+        .execution_id(Some(execution.id.clone()))
         .transaction_id(transaction.id)
         .function_run_id(function_run.id)
         .function_version_id(function_run.function_version_id)

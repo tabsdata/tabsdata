@@ -28,7 +28,7 @@ pub async fn seed_function_requirement(
 ) -> FunctionRequirementDB {
     let function_requirement_db = FunctionRequirementDB::builder()
         .collection_id(collection.id)
-        .execution_id(execution.id)
+        .execution_id(&execution.id)
         .transaction_id(transaction.id)
         .function_run_id(function_run.id)
         .requirement_table_id(requirement_table.table_id)

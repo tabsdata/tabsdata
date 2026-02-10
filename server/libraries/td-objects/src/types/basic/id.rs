@@ -54,7 +54,7 @@ impl EntityId {
     }
 }
 
-#[td_type::typed(id)]
+#[td_type::typed(idlogic(key = EP))]
 pub struct ExecutionId;
 
 #[td_type::typed(id, try_from = CollectionId)]

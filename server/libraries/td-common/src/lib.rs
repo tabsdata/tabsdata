@@ -12,6 +12,7 @@ pub mod execution_status;
 pub mod files;
 pub mod id;
 pub mod logging;
+pub mod logic_id;
 pub mod manifest;
 pub mod name;
 pub mod os;

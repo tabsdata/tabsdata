@@ -70,7 +70,7 @@ pub async fn _seed_table_data_version(
         .table_version_id(table.id)
         .function_version_id(table.function_version_id)
         .has_data(has_data.cloned())
-        .execution_id(execution.id)
+        .execution_id(&execution.id)
         .transaction_id(transaction.id)
         .function_run_id(function_run.id)
         .function_param_pos(TableFunctionParamPos::try_from(0).unwrap())

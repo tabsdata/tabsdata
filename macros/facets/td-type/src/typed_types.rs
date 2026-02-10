@@ -5,12 +5,12 @@
 use darling::FromMeta;
 use proc_macro::TokenStream;
 use proc_macro2::Ident;
-use quote::{ToTokens, format_ident, quote};
+use quote::{format_ident, quote, ToTokens};
 use std::any::type_name;
 use std::marker::PhantomData;
 use std::str::FromStr;
-use syn::{ItemEnum, ItemStruct, Type, parse_macro_input};
-use td_shared::meta_parser::{OptionWrapper, SynMetaOrLit, some_or_none};
+use syn::{parse_macro_input, ItemEnum, ItemStruct, Type};
+use td_shared::meta_parser::{some_or_none, OptionWrapper, SynMetaOrLit};
 use td_shared::{downcast_option, parse_meta};
 
 #[derive(Debug, FromMeta)]
@@ -43,6 +43,8 @@ enum Typed {
     // Complex types
     #[darling(rename = "id")]
     Id(OptionWrapper<TypedId>),
+    #[darling(rename = "idlogic")]
+    IdL(TypedIdL),
     #[darling(rename = "timestamp")]
     Timestamp(OptionWrapper<TypedTimestamp>),
     #[darling(rename = "id_name")]
@@ -70,6 +72,7 @@ pub fn typed_basic(args: TokenStream, item: TokenStream) -> TokenStream {
         Typed::f64(t) => typed_float(&input, t.into()),
         Typed::bool(t) => typed_bool(&input, (*t).into()),
         Typed::Id(t) => typed_id(&input, t.into()),
+        Typed::IdL(t) => typed_idlogic(&input, t.into()),
         Typed::Timestamp(t) => typed_timestamp(&input, t.into()),
         Typed::IdName(t) => typed_id_name(&input, t.into()),
         Typed::Composed(t) => typed_composed(&input, t),
@@ -854,6 +857,187 @@ pub fn typed_id(input: &ItemStruct, typed: Option<TypedId>) -> proc_macro2::Toke
             {
                 let val = td_common::id::Id::try_from(&s.to_string())?;
                 #name::parse(val)
+            }
+
+            fn as_display(&self) -> String {
+                self.to_string()
+            }
+
+            fn as_any(&self) -> &dyn std::any::Any {
+                self
+            }
+        }
+    };
+
+    expanded
+}
+
+#[derive(Debug, FromMeta)]
+pub struct TypedIdL {
+    key: SynMetaOrLit,
+}
+
+pub fn typed_idlogic(input: &ItemStruct, typed: TypedIdL) -> proc_macro2::TokenStream {
+    let attrs = &input.attrs;
+    let name = &input.ident;
+    let generator_name = format_ident!("{}_GENERATOR", name.to_string().to_uppercase());
+
+    let key = typed.key;
+    let key_struct = quote! {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+        pub struct #key;
+
+        impl td_common::logic_id::KeyId for #key {
+            fn key() -> &'static str {
+                stringify!(#key)
+            }
+        }
+    };
+
+    let expanded = quote! {
+        #key_struct
+
+        #(#attrs)*
+        #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, sqlx::Type)]
+        #[sqlx(transparent)]
+        pub struct #name(td_common::logic_id::IdL<#key>);
+
+        static #generator_name: std::sync::OnceLock<td_common::logic_id::IdLGenerator<#key>> = std::sync::OnceLock::new();
+
+        impl #name {
+            pub fn init(latest: Option<td_common::logic_id::IdL<#key>>) {
+                #generator_name
+                    .set(td_common::logic_id::IdLGenerator::<#key>::new(&latest).unwrap())
+                    .unwrap();
+            }
+
+            pub fn new() -> Self {
+                #[cfg(feature = "td-test")]
+                #generator_name
+                    .get_or_init(|| td_common::logic_id::IdLGenerator::<#key>::new(&None).unwrap())
+                    .generate();
+                #generator_name.get().unwrap().generate().into()
+            }
+
+        }
+
+        impl utoipa::__dev::ComposeSchema for #name {
+            fn compose(
+                mut generics: Vec<utoipa::openapi::RefOr<utoipa::openapi::schema::Schema>>,
+            ) -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+                utoipa::openapi::ObjectBuilder::new()
+                    .schema_type(utoipa::openapi::schema::SchemaType::new(
+                        utoipa::openapi::schema::Type::String,
+                    ))
+                    .into()
+            }
+        }
+        impl utoipa::ToSchema for #name {
+            fn name() -> std::borrow::Cow<'static, str> {
+                std::borrow::Cow::Borrowed(stringify!(#name))
+            }
+            fn schemas(
+                schemas: &mut Vec<(
+                    String,
+                    utoipa::openapi::RefOr<utoipa::openapi::schema::Schema>,
+                )>,
+            ) {
+                schemas.extend([]);
+            }
+        }
+
+        impl std::ops::Deref for #name {
+            type Target = td_common::logic_id::IdL<#key>;
+            fn deref(&self) -> &Self::Target {
+                &self.0
+            }
+        }
+
+        impl From<&#name> for #name {
+            fn from(val: &#name) -> Self {
+                val.clone()
+            }
+        }
+
+        impl From<td_common::logic_id::IdL<#key>> for #name {
+            fn from(val: td_common::logic_id::IdL<#key>) -> Self {
+                Self(val)
+            }
+        }
+
+        impl From<&td_common::logic_id::IdL<#key>> for #name {
+            fn from(val: &td_common::logic_id::IdL<#key>) -> Self {
+                Self(val.clone())
+            }
+        }
+
+        impl TryFrom<String> for #name {
+            type Error = td_error::TdError;
+            fn try_from(val: String) -> Result<Self, Self::Error> {
+                use crate::types::SqlEntity;
+                Self::from_display(val)
+            }
+        }
+
+        impl TryFrom<&String> for #name {
+            type Error = td_error::TdError;
+            fn try_from(val: &String) -> Result<Self, Self::Error> {
+                use crate::types::SqlEntity;
+                Self::from_display(val)
+            }
+        }
+
+        impl TryFrom<&str> for #name {
+            type Error = td_error::TdError;
+            fn try_from(val: &str) -> Result<Self, Self::Error> {
+                use crate::types::SqlEntity;
+                Self::from_display(val)
+            }
+        }
+
+        impl std::fmt::Display for #name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "{}", self.0)
+            }
+        }
+
+        impl<'de> serde::Deserialize<'de> for #name {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                let s = td_common::logic_id::IdL::<#key>::deserialize(deserializer)?;
+                Ok(Self(s))
+            }
+        }
+
+        impl serde::Serialize for #name {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                self.0.serialize(serializer)
+            }
+        }
+
+        impl crate::types::SqlEntity for #name {
+            fn push_bind<'a>(&'a self, builder: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>) {
+                builder.push_bind(self);
+            }
+
+            fn push_bind_unseparated<'a>(
+                &'a self,
+                builder: &mut sqlx::query_builder::Separated<'_, 'a, sqlx::Sqlite, &str>,
+            ) {
+                builder.push_bind_unseparated(self);
+            }
+
+            fn from_display(s: impl ToString) -> Result<Self, td_error::TdError>
+            where
+                Self: Sized,
+            {
+                let val = td_common::logic_id::IdL::try_from(&s.to_string())?;
+                Ok(#name(val))
             }
 
             fn as_display(&self) -> String {

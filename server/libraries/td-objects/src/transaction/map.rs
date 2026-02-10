@@ -61,7 +61,7 @@ impl<T: TransactionMapper> TransactionMap<T> {
             let value = TransactionValue {
                 id: TransactionId::default(),
                 collection_id: v.collection_id,
-                execution_id: e.id,
+                execution_id: e.id.clone(),
                 transaction_by: self.mapper.transaction_by()?,
                 transaction_key: key.clone(),
             };
@@ -87,11 +87,11 @@ mod tests {
     use crate::dxo::execution::ExecutionDB;
     use crate::test_utils::graph::{FUNCTION_NAMES, function_node};
     use crate::test_utils::transaction::TestTransactionBy;
-    use crate::types::basic::TriggerType;
+    use crate::types::basic::{ExecutionId, TriggerType};
 
     fn dummy_execution() -> ExecutionDB {
         ExecutionDB {
-            id: Default::default(),
+            id: ExecutionId::new(),
             name: None,
             collection_id: Default::default(),
             function_id: Default::default(),
