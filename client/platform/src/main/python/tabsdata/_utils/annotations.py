@@ -223,42 +223,5 @@ def unstable() -> Callable[[_T], _T]:
     return decorator
 
 
-PydocCategories: TypeAlias = Literal[
-    "aggregation",
-    "attributes",
-    "date",
-    "description",
-    "logic",
-    "numeric",
-    "filters",
-    "generation",
-    "join",
-    "manipulation",
-    "projection",
-    "string",
-    "tableframe",
-    "type_casting",
-    "union",
-]
-
-
-@dataclass
-class PydocMetadata:
-    categories: Union[str, List[str]]
-
-
-def pydoc(categories: Union[PydocCategories, List[PydocCategories]]) -> Callable:
-    def decorator(obj):
-        metadata = PydocMetadata(categories=categories)
-        if isinstance(obj, property):
-            obj = property(obj.fget)
-            obj.fget._pydoc_metadata = metadata
-        else:
-            obj._pydoc_metadata = metadata
-        return obj
-
-    return decorator
-
-
 warnings.filterwarnings("ignore", category=TabsdataDeprecatedWarning)
 warnings.filterwarnings("ignore", category=TabsdataUnstableWarning)

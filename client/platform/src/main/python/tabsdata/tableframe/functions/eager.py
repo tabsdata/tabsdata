@@ -15,16 +15,15 @@ import tabsdata.tableframe.expr.expr as td_expr
 import tabsdata.tableframe.lazyframe.frame as td_frame
 
 # noinspection PyProtectedMember
-from tabsdata._utils.annotations import pydoc
 from tabsdata.tableframe.typing import ConcatMethod
 
 
-@pydoc(categories="union")
 def concat(
     items: Iterable[td_frame.TdType],
     how: ConcatMethod = "vertical",
 ) -> td_frame.TdType:
     """
+    :categories: union
     Combine multiple TableFrames by stacking their rows.
 
     Args:

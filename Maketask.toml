@@ -1066,7 +1066,6 @@ category = "10 - Bundle"
 run_task = [
     { name = [
         "license",
-        "__os__generate_pydoc_csv",
         "__os__generate_assets",
         "__os__assembly_py_tabsdata",
         "__os__assembly_py_connectors",

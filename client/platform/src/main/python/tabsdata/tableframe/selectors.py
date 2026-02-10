@@ -14,7 +14,6 @@ import polars as pl
 from polars._typing import PythonDataType, TimeUnit
 
 import tabsdata.tableframe.expr.expr as td_expr
-from tabsdata._utils.annotations import pydoc
 
 # noinspection PyProtectedMember
 from tabsdata._utils.tableframe import _constants as td_constants
@@ -45,9 +44,9 @@ Selectors by position.
 
 
 # noinspection PyShadowingBuiltins
-@pydoc(categories="projection")
 def all() -> SelectorProxy:
     """
+    :categories: projection
     Select all columns in a TableFrame.
 
     Example:
@@ -95,9 +94,9 @@ def all() -> SelectorProxy:
     return SelectorProxy(pl.selectors.all() & _exclude_system_columns())
 
 
-@pydoc(categories="projection")
 def first() -> SelectorProxy:
     """
+    :categories: projection
     Select the first column in the TableFrame.
 
     Example:
@@ -146,9 +145,9 @@ def first() -> SelectorProxy:
     return SelectorProxy(pl.selectors.first() & _exclude_system_columns())
 
 
-@pydoc(categories="projection")
 def last() -> SelectorProxy:
     """
+    :categories: projection
     Select the last column in the TableFrame.
 
     Useful when working with dynamically generated schemas where the column
@@ -204,9 +203,9 @@ def last() -> SelectorProxy:
     )
 
 
-@pydoc(categories="projection")
 def by_index(*indices: int | range | Sequence[int | range]) -> SelectorProxy:
     """
+    :categories: projection
     Select columns by their position in the TableFrame.
 
     Parameters:
@@ -293,9 +292,9 @@ Selectors by name.
 """
 
 
-@pydoc(categories="projection")
 def by_name(*names: str | Collection[str], require_all: bool = True) -> SelectorProxy:
     """
+    :categories: projection
     Select all columns whose names match any given names.
 
     Parameters:
@@ -352,9 +351,9 @@ def by_name(*names: str | Collection[str], require_all: bool = True) -> Selector
     )
 
 
-@pydoc(categories="projection")
 def contains(*substring: str) -> SelectorProxy:
     """
+    :categories: projection
     Select all columns whose names contain one or more of the given substrings.
 
     Parameters:
@@ -403,9 +402,9 @@ def contains(*substring: str) -> SelectorProxy:
     return SelectorProxy(pl.selectors.contains(*substring) & _exclude_system_columns())
 
 
-@pydoc(categories="projection")
 def starts_with(*prefix: str) -> SelectorProxy:
     """
+    :categories: projection
     Select all columns whose names start with any of the given prefixes.
 
     Parameters:
@@ -458,9 +457,9 @@ def starts_with(*prefix: str) -> SelectorProxy:
     return SelectorProxy(pl.selectors.starts_with(*prefix) & _exclude_system_columns())
 
 
-@pydoc(categories="projection")
 def ends_with(*suffix: str) -> SelectorProxy:
     """
+    :categories: projection
     Select all columns whose names end with any of the given suffixes.
 
     Parameters:
@@ -513,9 +512,9 @@ def ends_with(*suffix: str) -> SelectorProxy:
     return SelectorProxy(pl.selectors.ends_with(*suffix) & _exclude_system_columns())
 
 
-@pydoc(categories="projection")
 def matches(pattern: str) -> SelectorProxy:
     """
+    :categories: projection
     Select all columns whose names match a regular expression pattern.
 
     Parameters:
@@ -570,9 +569,9 @@ def matches(pattern: str) -> SelectorProxy:
     )
 
 
-@pydoc(categories="projection")
 def alpha(ascii_only: bool = False, *, ignore_spaces: bool = False) -> SelectorProxy:
     """
+    :categories: projection
     Select all columns with names made up of only alphabetic characters.
 
     Parameters:
@@ -628,13 +627,13 @@ def alpha(ascii_only: bool = False, *, ignore_spaces: bool = False) -> SelectorP
     )
 
 
-@pydoc(categories="projection")
 def alphanumeric(
     ascii_only: bool = False,
     *,
     ignore_spaces: bool = False,
 ) -> SelectorProxy:
     """
+    :categories: projection
     Select all columns whose names contain only letters and digits.
 
     Parameters:
@@ -691,9 +690,9 @@ def alphanumeric(
     )
 
 
-@pydoc(categories="projection")
 def digit(ascii_only: bool = False) -> SelectorProxy:
     """
+    :categories: projection
     Select all columns whose names consist only of digit characters.
 
     Parameters:
@@ -754,7 +753,6 @@ Selectors by data type.
 """
 
 
-@pydoc(categories="projection")
 def by_dtype(
     *dtypes: (
         td_typing.DataType
@@ -764,6 +762,7 @@ def by_dtype(
     ),
 ) -> SelectorProxy:
     """
+    :categories: projection
     Select all columns of the specified data type.
 
     Example:
@@ -818,9 +817,9 @@ Selectors by abstract data types.
 """
 
 
-@pydoc(categories="projection")
 def integer() -> SelectorProxy:
     """
+    :categories: projection
     Select all columns with integer data types.
 
     Example:
@@ -870,9 +869,9 @@ def integer() -> SelectorProxy:
     return SelectorProxy(pl.selectors.integer() & _exclude_system_columns())
 
 
-@pydoc(categories="projection")
 def signed_integer() -> SelectorProxy:
     """
+    :categories: projection
     Select all columns of signed integer data types.
 
     Example:
@@ -922,9 +921,9 @@ def signed_integer() -> SelectorProxy:
     return SelectorProxy(pl.selectors.signed_integer() & _exclude_system_columns())
 
 
-@pydoc(categories="projection")
 def unsigned_integer() -> SelectorProxy:
     """
+    :categories: projection
     Select all columns of unsigned integer data types.
 
     Unsigned integers include types such as UInt8, UInt16, UInt32, and UInt64.
@@ -977,9 +976,9 @@ def unsigned_integer() -> SelectorProxy:
 
 
 # noinspection PyShadowingBuiltins
-@pydoc(categories="projection")
 def float() -> SelectorProxy:
     """
+    :categories: projection
     Select all columns of float data types.
 
     Example:
@@ -1028,9 +1027,9 @@ def float() -> SelectorProxy:
     return SelectorProxy(pl.selectors.float() & _exclude_system_columns())
 
 
-@pydoc(categories="projection")
 def numeric() -> SelectorProxy:
     """
+    :categories: projection
     Select all columns of numeric data types.
 
     This includes integer and float columns of any size or signedness.
@@ -1082,9 +1081,9 @@ def numeric() -> SelectorProxy:
     return SelectorProxy(pl.selectors.numeric() & _exclude_system_columns())
 
 
-@pydoc(categories="projection")
 def temporal() -> SelectorProxy:
     """
+    :categories: projection
     Select all columns of temporal data types.
 
     This includes `datetime`, `date`, `time`, and `timedelta`.
@@ -1179,9 +1178,9 @@ Selectors by concrete data type.
 """
 
 
-@pydoc(categories="projection")
 def binary() -> SelectorProxy:
     """
+    :categories: projection
     Select all columns of binary (bytes) data type.
 
     Example:
@@ -1229,9 +1228,9 @@ def binary() -> SelectorProxy:
     return SelectorProxy(pl.selectors.binary() & _exclude_system_columns())
 
 
-@pydoc(categories="projection")
 def boolean() -> SelectorProxy:
     """
+    :categories: projection
     Select all columns of boolean data type.
 
     Example:
@@ -1279,9 +1278,9 @@ def boolean() -> SelectorProxy:
     return SelectorProxy(pl.selectors.boolean() & _exclude_system_columns())
 
 
-@pydoc(categories="projection")
 def categorical() -> SelectorProxy:
     """
+    :categories: projection
     Select all columns with categorical data type.
 
     Example:
@@ -1332,9 +1331,9 @@ def categorical() -> SelectorProxy:
     return SelectorProxy(pl.selectors.categorical() & _exclude_system_columns())
 
 
-@pydoc(categories="projection")
 def date() -> SelectorProxy:
     """
+    :categories: projection
     Select all columns of date data type.
 
     This selector matches columns that store calendar dates without time information.
@@ -1400,7 +1399,6 @@ def date() -> SelectorProxy:
     return SelectorProxy(pl.selectors.date() & _exclude_system_columns())
 
 
-@pydoc(categories="projection")
 def datetime(
     time_unit: TimeUnit | Collection[TimeUnit] | None = None,
     time_zone: str | timezone | Collection[str | timezone | None] | None = (
@@ -1409,6 +1407,7 @@ def datetime(
     ),
 ) -> SelectorProxy:
     """
+    :categories: projection
     Select all columns of datetime data type.
 
     Parameters:
@@ -1491,9 +1490,9 @@ def datetime(
     )
 
 
-@pydoc(categories="projection")
 def decimal() -> SelectorProxy:
     """
+    :categories: projection
     Select all columns of decimal data type.
 
     Example:
@@ -1546,11 +1545,11 @@ def decimal() -> SelectorProxy:
     return SelectorProxy(pl.selectors.decimal() & _exclude_system_columns())
 
 
-@pydoc(categories="projection")
 def duration(
     time_unit: TimeUnit | Collection[TimeUnit] | None = None,
 ) -> SelectorProxy:
     """
+    :categories: projection
     Select all columns of duration data type.
 
     Parameters:
@@ -1616,9 +1615,9 @@ def duration(
 
 
 # noinspection PyShadowingBuiltins
-@pydoc(categories="projection")
 def object() -> SelectorProxy:
     """
+    :categories: projection
     Select all columns of object data type.
 
     Example:
@@ -1671,9 +1670,9 @@ def object() -> SelectorProxy:
     return SelectorProxy(pl.selectors.object() & _exclude_system_columns())
 
 
-@pydoc(categories="projection")
 def string(*, include_categorical: bool = False) -> SelectorProxy:
     """
+    :categories: projection
     Select all columns of string or categorical data type.
 
     Parameters:
@@ -1728,9 +1727,9 @@ def string(*, include_categorical: bool = False) -> SelectorProxy:
     )
 
 
-@pydoc(categories="projection")
 def time() -> SelectorProxy:
     """
+    :categories: projection
     Select columns of Python `time` values.
 
     Example:
@@ -1787,7 +1786,6 @@ Selectors of second order.
 """
 
 
-@pydoc(categories="projection")
 def exclude(
     columns: (
         str
@@ -1799,6 +1797,7 @@ def exclude(
     *more_columns: str | td_typing.DataType | td_expr.Expr,
 ) -> SelectorProxy:
     """
+    :categories: projection
     Exclude specific columns from selection by name, data type, expression, or selector.
 
     Parameters:

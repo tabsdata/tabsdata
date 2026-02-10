@@ -80,7 +80,6 @@ SPINNER_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/make/make-os/librari
 BUMP_VERSION_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/bump_version.py", normalize = true }
 CLEAN_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/clean.py", normalize = true }
 COPY_ASSETS_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/copy_assets.py", normalize = true }
-GENERATE_PYDOC_CSV_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/generate_pydoc_csv.py", normalize = true }
 LOCK_REQUIREMENTS_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/lock_requirements.py", normalize = true }
 PS_SUPERVISORS_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/ps_supervisors.py", normalize = true }
 REPORT_LICENSES_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/report_licenses.py", normalize = true }

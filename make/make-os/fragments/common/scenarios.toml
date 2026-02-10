@@ -58,9 +58,6 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    debug "🔷 _____ Generating pydoc csv..."
-    cm_run_task __os__generate_pydoc_csv
-
     debug "🔷 _____ Copying assets..."
     cm_run_task __os__generate_assets
 
@@ -135,7 +132,6 @@ script = [
 
     set_env REQUIRE_SERVER_BINARIES "true"
     set_env REQUIRE_THIRD_PARTY "true"
-    set_env REQUIRE_PYDOC_CSV "true"
     set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "false"
     set_env TD_SKIP_NON_EXISTING_ASSETS "false"
 
@@ -189,7 +185,6 @@ script = [
     array_push ${lines} "unset PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES"
     array_push ${lines} "unset REQUIRE_SERVER_BINARIES"
     array_push ${lines} "unset REQUIRE_THIRD_PARTY"
-    array_push ${lines} "unset REQUIRE_PYDOC_CSV"
     array_push ${lines} "unset TD_CLI_SHOW"
     array_push ${lines} "unset TD_IGNORE_CONNECTOR_REQUIREMENTS"
     array_push ${lines} "unset TD_INHERIT_TABSDATA_PACKAGES"
@@ -221,7 +216,6 @@ script = [
 
     set_env REQUIRE_SERVER_BINARIES "true"
     set_env REQUIRE_THIRD_PARTY "true"
-    set_env REQUIRE_PYDOC_CSV "true"
     set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "false"
     set_env TD_SKIP_NON_EXISTING_ASSETS "false"
 
@@ -270,7 +264,6 @@ script = [
     array_push ${lines} "export PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES=true"
     array_push ${lines} "export REQUIRE_SERVER_BINARIES=false"
     array_push ${lines} "export REQUIRE_THIRD_PARTY=false"
-    array_push ${lines} "export REQUIRE_PYDOC_CSV=false"
     array_push ${lines} "export TD_CLI_SHOW=true"
     array_push ${lines} "export TD_IGNORE_CONNECTOR_REQUIREMENTS=true"
     array_push ${lines} "export TD_INHERIT_TABSDATA_PACKAGES=true"

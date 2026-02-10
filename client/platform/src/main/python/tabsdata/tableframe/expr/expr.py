@@ -32,7 +32,7 @@ import tabsdata.tableframe.functions.datetime as td_datetime
 import tabsdata.tableframe.typing as td_typing
 
 # noinspection PyProtectedMember
-from tabsdata._utils.annotations import deprecated_category, pydoc
+from tabsdata._utils.annotations import deprecated_category
 from tabsdata.exceptions import ErrorCode, TableFrameError
 
 T = TypeVar("T")
@@ -184,16 +184,16 @@ class Expr:
 
     """ Object Operations """
 
-    @pydoc(categories="numeric")
     def abs(self) -> Expr:
         """
+        :categories: numeric
         Return the abso lute value of the expression.
         """
         return Expr(self._expr.abs())
 
-    @pydoc(categories="numeric")
     def add(self, other: Any) -> Expr:
         """
+        :categories: numeric
         Equivalent to the `+` operator.
 
         For numeric types adds the given input. For string types concatenates the
@@ -227,9 +227,9 @@ class Expr:
         # noinspection PyProtectedMember
         return Expr(self._expr.add(td_translator._unwrap_into_tdexpr(other)))
 
-    @pydoc(categories="manipulation")
     def alias(self, name: builtins.str) -> Expr:
         """
+        :categories: manipulation
         Set the name for a column or expression.
 
         Args:
@@ -258,13 +258,12 @@ class Expr:
         │ null ┆ null │
         └──────┴──────┘
         """
-        # TODO: check name matches the regex in pydoc
         td_common.check_column(name)
         return Expr(self._expr.alias(name))
 
-    @pydoc(categories="logic")
     def and_(self, *others: Any) -> Expr:
         """
+        :categories: logic
         Bitwise `and` operator with the given expressions.
         It can be used with integer and bool types.
 
@@ -296,9 +295,9 @@ class Expr:
         # noinspection PyProtectedMember
         return Expr(self._expr.and_(td_translator._unwrap_into_tdexpr(*others)))
 
-    @pydoc(categories="numeric")
     def arccos(self) -> Expr:
         """
+        :categories: numeric
         Calculate the inverse cosine of the element value.
 
         Example:
@@ -325,9 +324,9 @@ class Expr:
         """
         return Expr(self._expr.arccos())
 
-    @pydoc(categories="numeric")
     def arccosh(self) -> Expr:
         """
+        :categories: numeric
         Calculate the inverse hyperbolic cosine of the element value.
 
         Example:
@@ -354,9 +353,9 @@ class Expr:
         """
         return Expr(self._expr.arccosh())
 
-    @pydoc(categories="numeric")
     def arcsin(self) -> Expr:
         """
+        :categories: numeric
         Calculate the inverse sine of the element value.
 
         Example:
@@ -383,9 +382,9 @@ class Expr:
         """
         return Expr(self._expr.arcsin())
 
-    @pydoc(categories="numeric")
     def arcsinh(self) -> Expr:
         """
+        :categories: numeric
         Calculate the inverse hyperbolic sine of the element value.
 
         Example:
@@ -412,9 +411,9 @@ class Expr:
         """
         return Expr(self._expr.arcsinh())
 
-    @pydoc(categories="numeric")
     def arctan(self) -> Expr:
         """
+        :categories: numeric
         Calculate the inverse tangent of the element value.
 
         Example:
@@ -441,9 +440,9 @@ class Expr:
         """
         return Expr(self._expr.arctan())
 
-    @pydoc(categories="numeric")
     def arctanh(self) -> Expr:
         """
+        :categories: numeric
         Calculate the inverse hyperbolic tangent of the element value.
 
         Example:
@@ -470,7 +469,6 @@ class Expr:
         """
         return Expr(self._expr.arctanh())
 
-    @pydoc(categories="type_casting")
     def cast(
         self,
         dtype: td_typing.DataType | type[Any],
@@ -480,6 +478,7 @@ class Expr:
     ) -> Expr:
         # noinspection PyShadowingNames
         """
+        :categories: type_casting
         Cast a value to d different type.
 
         Args:
@@ -516,9 +515,9 @@ class Expr:
             self._expr.cast(dtype, strict=strict, wrap_numerical=wrap_numerical)
         )
 
-    @pydoc(categories="numeric")
     def cbrt(self) -> Expr:
         """
+        :categories: numeric
         Calculate the cub root of the element value.
 
         Example:
@@ -545,9 +544,9 @@ class Expr:
         """
         return Expr(self._expr.cbrt())
 
-    @pydoc(categories="numeric")
     def ceil(self) -> Expr:
         """
+        :categories: numeric
         Round up the expression to the next integer value.
 
         Example:
@@ -569,7 +568,6 @@ class Expr:
         """
         return Expr(self._expr.ceil())
 
-    @pydoc(categories="numeric")
     def clip(
         self,
         lower_bound: (
@@ -586,6 +584,7 @@ class Expr:
         ) = None,
     ) -> Expr:
         """
+        :categories: numeric
         For element values outside the lower and upper bounds, lower values are
         replaced with the lower bound
         and upper values with the upper bound. Values within the lower and upper
@@ -623,9 +622,9 @@ class Expr:
             )
         )
 
-    @pydoc(categories="numeric")
     def cos(self) -> Expr:
         """
+        :categories: numeric
         Calculate the cosine of the element value.
 
         Example:
@@ -652,9 +651,9 @@ class Expr:
         """
         return Expr(self._expr.cos())
 
-    @pydoc(categories="numeric")
     def cosh(self) -> Expr:
         """
+        :categories: numeric
         Calculate the hyperbolic cosine of the element value.
 
         Example:
@@ -681,9 +680,9 @@ class Expr:
         """
         return Expr(self._expr.cosh())
 
-    @pydoc(categories="numeric")
     def cot(self) -> Expr:
         """
+        :categories: numeric
         Calculate the cotangent of the element value.
 
         Example:
@@ -710,9 +709,9 @@ class Expr:
         """
         return Expr(self._expr.cot())
 
-    @pydoc(categories="numeric")
     def degrees(self) -> Expr:
         """
+        :categories: numeric
         Convert a radian value to degrees
 
         Example:
@@ -739,9 +738,9 @@ class Expr:
         """
         return Expr(self._expr.degrees())
 
-    @pydoc(categories="logic")
     def eq(self, other: Any) -> Expr:
         """
+        :categories: logic
         Compare if 2 expressions are equal, equivalent to `expr == other`. If one
         of the expressions is `null` (None) it returns `null`.
 
@@ -772,9 +771,9 @@ class Expr:
         # noinspection PyProtectedMember
         return Expr(self._expr.eq(td_translator._unwrap_into_tdexpr(other)))
 
-    @pydoc(categories="logic")
     def eq_missing(self, other: Any) -> Expr:
         """
+        :categories: logic
         Compare if 2 expressions are equal an, equivalent to `expr == other`. If one
         of the expressions is `null` (None) it returns `false`.
 
@@ -805,9 +804,9 @@ class Expr:
         # noinspection PyProtectedMember
         return Expr(self._expr.eq_missing(td_translator._unwrap_into_tdexpr(other)))
 
-    @pydoc(categories="numeric")
     def exp(self) -> Expr:
         """
+        :categories: numeric
         Calculate the exponential of the element value.
 
         Example:
@@ -832,9 +831,9 @@ class Expr:
         """
         return Expr(self._expr.exp())
 
-    @pydoc(categories="manipulation")
     def fill_nan(self, value: int | float | Expr | None) -> Expr:
         """
+        :categories: manipulation
         Replace `NaN` values with the given value.
 
         Args:
@@ -864,7 +863,6 @@ class Expr:
         # noinspection PyProtectedMember
         return Expr(self._expr.fill_nan(td_translator._unwrap_tdexpr(value)))
 
-    @pydoc(categories="manipulation")
     def fill_null(
         self,
         value: Any | Expr | None = None,
@@ -872,6 +870,7 @@ class Expr:
         limit: int | None = None,
     ) -> Expr:
         """
+        :categories: manipulation
         Replace `null` values with the given value.
 
         Args:
@@ -909,12 +908,12 @@ class Expr:
             )
         )
 
-    @pydoc(categories="filters")
     def filter(
         self,
         *predicates: td_typing.IntoExprColumn | Iterable[td_typing.IntoExprColumn],
     ) -> Expr:
         """
+        :categories: filters
         Apply a filter predicate to an expression.
 
         Elements for which the predicate does not evaluate to `true` are discarded,
@@ -963,9 +962,9 @@ class Expr:
             self._expr.filter(td_translator._unwrap_into_tdexpr_column(*predicates))
         )
 
-    @pydoc(categories="aggregation")
     def first(self) -> Expr:
         """
+        :categories: aggregation
         Get the first element.
 
         Example:
@@ -990,9 +989,9 @@ class Expr:
         """
         return Expr(self._expr.first())
 
-    @pydoc(categories="numeric")
     def floor(self) -> Expr:
         """
+        :categories: numeric
         Round down the expression to the previous integer value.
 
         Example:
@@ -1042,9 +1041,9 @@ class Expr:
         # noinspection PyProtectedMember
         return Expr(self._expr.floordiv(td_translator._unwrap_into_tdexpr(other)))
 
-    @pydoc(categories="logic")
     def ge(self, other: Any) -> Expr:
         """
+        :categories: logic
         Greater or equal operator.
 
         Args:
@@ -1070,9 +1069,9 @@ class Expr:
         # noinspection PyProtectedMember
         return Expr(self._expr.ge(td_translator._unwrap_into_tdexpr(other)))
 
-    @pydoc(categories="logic")
     def gt(self, other: Any) -> Expr:
         """
+        :categories: logic
         Greater than operator.
 
         Args:
@@ -1098,7 +1097,6 @@ class Expr:
         # noinspection PyProtectedMember
         return Expr(self._expr.gt(td_translator._unwrap_into_tdexpr(other)))
 
-    @pydoc(categories="numeric")
     def hash(
         self,
         seed: int = 0,
@@ -1107,6 +1105,7 @@ class Expr:
         seed_3: int | None = None,
     ) -> Expr:
         """
+        :categories: numeric
         Compute the hash of an element value.
 
         Args:
@@ -1134,7 +1133,6 @@ class Expr:
         """
         return Expr(self._expr.hash(seed, seed_1, seed_2, seed_3))
 
-    @pydoc(categories="logic")
     def is_between(
         self,
         lower_bound: td_typing.IntoExpr,
@@ -1142,6 +1140,7 @@ class Expr:
         closed: td_typing.ClosedInterval = "both",
     ) -> Expr:
         """
+        :categories: logic
         If an expression is between the given bounds.
 
         Args:
@@ -1179,9 +1178,9 @@ class Expr:
             )
         )
 
-    @pydoc(categories="logic")
     def is_finite(self) -> Expr:
         """
+        :categories: logic
         If an element value is finite.
 
         Example:
@@ -1205,9 +1204,9 @@ class Expr:
         """
         return Expr(self._expr.is_finite())
 
-    @pydoc(categories="logic")
     def is_in(self, other: Union[Expr | Collection[Any]]) -> Expr:
         """
+        :categories: logic
         If an element value is in the given collection.
 
         Args:
@@ -1235,9 +1234,9 @@ class Expr:
         # noinspection PyProtectedMember
         return Expr(self._expr.is_in(td_translator._unwrap_into_tdexpr(other)))
 
-    @pydoc(categories="logic")
     def is_infinite(self) -> Expr:
         """
+        :categories: logic
         If an element value is infinite.
 
         Example:
@@ -1261,9 +1260,9 @@ class Expr:
         """
         return Expr(self._expr.is_infinite())
 
-    @pydoc(categories="logic")
     def is_nan(self) -> Expr:
         """
+        :categories: logic
         If an element value is `NaN`.
 
         Example:
@@ -1287,9 +1286,9 @@ class Expr:
         """
         return Expr(self._expr.is_nan())
 
-    @pydoc(categories="logic")
     def is_not_nan(self) -> Expr:
         """
+        :categories: logic
         If an element value is not `NaN`.
 
         Example:
@@ -1314,9 +1313,9 @@ class Expr:
         """
         return Expr(self._expr.is_not_nan())
 
-    @pydoc(categories="logic")
     def is_not_null(self) -> Expr:
         """
+        :categories: logic
         If an element value is not `null` (None).
 
         Example:
@@ -1341,9 +1340,9 @@ class Expr:
         """
         return Expr(self._expr.is_not_null())
 
-    @pydoc(categories="logic")
     def is_null(self) -> Expr:
         """
+        :categories: logic
         If an element value is `null` (None).
 
         Example:
@@ -1368,9 +1367,9 @@ class Expr:
         """
         return Expr(self._expr.is_null())
 
-    @pydoc(categories="logic")
     def is_unique(self) -> Expr:
         """
+        :categories: logic
         If an element value is unique for all values in the column.
 
         Example:
@@ -1395,9 +1394,9 @@ class Expr:
         """
         return Expr(self._expr.is_unique())
 
-    @pydoc(categories="aggregation")
     def last(self) -> Expr:
         """
+        :categories: aggregation
         Get the last element.
 
         Example:
@@ -1422,9 +1421,9 @@ class Expr:
         """
         return Expr(self._expr.last())
 
-    @pydoc(categories="logic")
     def le(self, other: Any) -> Expr:
         """
+        :categories: logic
         Less or equal operator.
 
         Args:
@@ -1450,9 +1449,9 @@ class Expr:
         # noinspection PyProtectedMember
         return Expr(self._expr.le(td_translator._unwrap_into_tdexpr(other)))
 
-    @pydoc(categories="numeric")
     def log(self, base: float = math.e) -> Expr:
         """
+        :categories: numeric
         Calculate the logarithm to the given base.
 
         Args:
@@ -1482,9 +1481,9 @@ class Expr:
         """
         return Expr(self._expr.log(base))
 
-    @pydoc(categories="numeric")
     def log1p(self) -> Expr:
         """
+        :categories: numeric
         Calculate the natural logarithm plus one.
 
         Example:
@@ -1511,9 +1510,9 @@ class Expr:
         """
         return Expr(self._expr.log1p())
 
-    @pydoc(categories="numeric")
     def log10(self) -> Expr:
         """
+        :categories: numeric
         Calculate the logarithm base 10.
 
         Example:
@@ -1540,9 +1539,9 @@ class Expr:
         """
         return Expr(self._expr.log10())
 
-    @pydoc(categories="logic")
     def lt(self, other: Any) -> Expr:
         """
+        :categories: logic
         Less than operator.
 
         Args:
@@ -1568,9 +1567,9 @@ class Expr:
         # noinspection PyProtectedMember
         return Expr(self._expr.lt(td_translator._unwrap_into_tdexpr(other)))
 
-    @pydoc(categories="numeric")
     def mod(self, other: Any) -> Expr:
         """
+        :categories: numeric
         Modulus operator.
 
         Args:
@@ -1598,9 +1597,9 @@ class Expr:
         # noinspection PyProtectedMember
         return Expr(self._expr.mod(td_translator._unwrap_into_tdexpr(other)))
 
-    @pydoc(categories="numeric")
     def mul(self, other: Any) -> Expr:
         """
+        :categories: numeric
         Multiplication operator.
 
         Args:
@@ -1629,9 +1628,9 @@ class Expr:
         # noinspection PyProtectedMember
         return Expr(self._expr.mul(td_translator._unwrap_into_tdexpr(other)))
 
-    @pydoc(categories="logic")
     def ne(self, other: Any) -> Expr:
         """
+        :categories: logic
         Compare if 2 expressions are not equal, equivalent to `expr != other`. If one
         of the expressions is `null` (None) it returns `null`.
 
@@ -1662,9 +1661,9 @@ class Expr:
         # noinspection PyProtectedMember
         return Expr(self._expr.ne(td_translator._unwrap_into_tdexpr(other)))
 
-    @pydoc(categories="logic")
     def ne_missing(self, other: Any) -> Expr:
         """
+        :categories: logic
         Compare if 2 expressions are not equal an, equivalent to `expr != other`. If one
         of the expressions is `null` (None) it returns `false`.
 
@@ -1695,9 +1694,9 @@ class Expr:
         # noinspection PyProtectedMember
         return Expr(self._expr.ne_missing(td_translator._unwrap_into_tdexpr(other)))
 
-    @pydoc(categories="numeric")
     def neg(self) -> Expr:
         """
+        :categories: numeric
         Unary minus operator.
 
         Example:
@@ -1724,9 +1723,9 @@ class Expr:
         """
         return Expr(self._expr.neg())
 
-    @pydoc(categories="logic")
     def not_(self) -> Expr:
         """
+        :categories: logic
         Negate a boolean expression.
 
         Example:
@@ -1749,9 +1748,9 @@ class Expr:
         """
         return Expr(self._expr.not_())
 
-    @pydoc(categories="logic")
     def or_(self, *others: Any) -> Expr:
         """
+        :categories: logic
         Bitwise `or` operator with the given expressions.
         It can be used with integer and bool types.
 
@@ -1781,9 +1780,9 @@ class Expr:
         # noinspection PyProtectedMember
         return Expr(self._expr.or_(td_translator._unwrap_into_tdexpr(*others)))
 
-    @pydoc(categories="numeric")
     def pow(self, exponent: td_typing.IntoExprColumn | int | float) -> Expr:
         """
+        :categories: numeric
         Exponentiation operator.
 
         Args:
@@ -1812,9 +1811,9 @@ class Expr:
         # noinspection PyProtectedMember
         return Expr(self._expr.pow(td_translator._unwrap_into_tdexpr_column(exponent)))
 
-    @pydoc(categories="numeric")
     def radians(self) -> Expr:
         """
+        :categories: numeric
         Convert a degree value to radians
 
         Example:
@@ -1839,7 +1838,6 @@ class Expr:
         """
         return Expr(self._expr.radians())
 
-    @pydoc(categories="aggregation")
     def rank(
         self,
         method: td_typing.RankMethod = "average",
@@ -1848,6 +1846,7 @@ class Expr:
         seed: int | None = None,
     ) -> Expr:
         """
+        :categories: aggregation
         Compute the rank of the element values. Multiple rank types are available.
 
         Args:
@@ -1880,9 +1879,9 @@ class Expr:
         """
         return Expr(self._expr.rank(method=method, descending=descending, seed=seed))
 
-    @pydoc(categories="numeric")
     def diff(self, n: int = 1) -> Expr:
         """
+        :categories: numeric
         Compute the difference between an element value and the element value
         of the specified relative row.
 
@@ -1922,9 +1921,9 @@ class Expr:
         # system columns)
         return Expr(self._expr.diff(n))
 
-    @pydoc(categories="numeric")
     def reinterpret(self, *, signed: bool = True) -> Expr:
         """
+        :categories: numeric
         Reinterpret the 64bit element values (i64 or u64) as a signed/unsigned integers.
         Only valid for 64bit integers, for other types use cast.
 
@@ -1957,9 +1956,9 @@ class Expr:
         """
         return Expr(self._expr.reinterpret(signed=signed))
 
-    @pydoc(categories="numeric")
     def round(self, decimals: int = 0) -> Expr:
         """
+        :categories: numeric
         Round floating point element values.
 
         Args:
@@ -1989,9 +1988,9 @@ class Expr:
         """
         return Expr(self._expr.round(decimals))
 
-    @pydoc(categories="numeric")
     def round_sig_figs(self, digits: int) -> Expr:
         """
+        :categories: numeric
         Round floating point element values to the specified significant figures.
 
         Args:
@@ -2036,9 +2035,9 @@ class Expr:
             replacement="No direct replacement. Implementation is left as no-op.",
         ),
     )
-    @pydoc(categories="numeric")
     def shrink_dtype(self) -> Expr:
         """
+        :categories: numeric
         Cast down a column to the smallest type that can hold the element values.
 
         Example:
@@ -2062,9 +2061,9 @@ class Expr:
         """
         return Expr(self._expr.shrink_dtype())
 
-    @pydoc(categories="numeric")
     def sign(self) -> Expr:
         """
+        :categories: numeric
         Calculate the sign of element values.
 
         Example:
@@ -2094,9 +2093,9 @@ class Expr:
         """
         return Expr(self._expr.sign())
 
-    @pydoc(categories="numeric")
     def sin(self) -> Expr:
         """
+        :categories: numeric
         Calculate the sine of the element value.
 
         Example:
@@ -2121,9 +2120,9 @@ class Expr:
         """
         return Expr(self._expr.sin())
 
-    @pydoc(categories="numeric")
     def sinh(self) -> Expr:
         """
+        :categories: numeric
         Calculate the hyperbolic sine of the element value.
 
         Example:
@@ -2147,9 +2146,9 @@ class Expr:
         """
         return Expr(self._expr.sinh())
 
-    @pydoc(categories="aggregation")
     def count(self) -> Expr:
         """
+        :categories: aggregation
         Aggregation operation that counts the non `null` values of the given column in
         the group.
 
@@ -2188,9 +2187,9 @@ class Expr:
         """
         return Expr(self._expr.count())
 
-    @pydoc(categories="aggregation")
     def len(self) -> Expr:
         """
+        :categories: aggregation
         Aggregation operation that counts the rows in the group.
 
         Examples:
@@ -2228,9 +2227,9 @@ class Expr:
         """
         return Expr(self._expr.len())
 
-    @pydoc(categories="filters")
     def slice(self, offset: int | Expr, length: int | Expr | None = None) -> Expr:
         """
+        :categories: filters
         Compute a slice of the `TableFrame` for the specified columns.
 
         Args:
@@ -2275,9 +2274,9 @@ class Expr:
             )
         )
 
-    @pydoc(categories="numeric")
     def sqrt(self) -> Expr:
         """
+        :categories: numeric
         Calculate the square root of the element value.
 
         Example:
@@ -2303,9 +2302,9 @@ class Expr:
         """
         return Expr(self._expr.sqrt())
 
-    @pydoc(categories="numeric")
     def sub(self, other: Any) -> Expr:
         """
+        :categories: numeric
         Equivalent to the `-` operator.
 
         Args:
@@ -2336,9 +2335,9 @@ class Expr:
         # noinspection PyProtectedMember
         return Expr(self._expr.sub(td_translator._unwrap_into_tdexpr(other)))
 
-    @pydoc(categories="aggregation")
     def max(self) -> Expr:
         """
+        :categories: aggregation
         Aggregation operation that finds the maximum value in the group.
 
         Examples:
@@ -2382,9 +2381,9 @@ class Expr:
         """
         return Expr(self._expr.max())
 
-    @pydoc(categories="aggregation")
     def min(self) -> Expr:
         """
+        :categories: aggregation
         Aggregation operation that finds the minimum value in the group.
 
         Examples:
@@ -2428,9 +2427,9 @@ class Expr:
         """
         return Expr(self._expr.min())
 
-    @pydoc(categories="aggregation")
     def sum(self) -> Expr:
         """
+        :categories: aggregation
         Aggregation operation that sums the values in the group.
 
         Examples:
@@ -2474,9 +2473,9 @@ class Expr:
         """
         return Expr(self._expr.sum())
 
-    @pydoc(categories="aggregation")
     def mean(self) -> Expr:
         """
+        :categories: aggregation
         Aggregation operation that finds the mean of the values in the group.
 
         Examples:
@@ -2520,9 +2519,9 @@ class Expr:
         """
         return Expr(self._expr.mean())
 
-    @pydoc(categories="aggregation")
     def median(self) -> Expr:
         """
+        :categories: aggregation
         Aggregation operation that finds the median of the values in the group.
 
         Examples:
@@ -2566,9 +2565,9 @@ class Expr:
         """
         return Expr(self._expr.median())
 
-    @pydoc(categories="aggregation")
     def n_unique(self) -> Expr:
         """
+        :categories: aggregation
         Aggregation operation that counts the unique values of the given column
         in the group.
 
@@ -2613,9 +2612,9 @@ class Expr:
         """
         return Expr(self._expr.n_unique())
 
-    @pydoc(categories="numeric")
     def tan(self) -> Expr:
         """
+        :categories: numeric
         Calculate the tangent of the element value.
 
         Example:
@@ -2639,9 +2638,9 @@ class Expr:
         """
         return Expr(self._expr.tan())
 
-    @pydoc(categories="numeric")
     def tanh(self) -> Expr:
         """
+        :categories: numeric
         Calculate the hyperbolic tangent of the element value.
 
         Example:
@@ -2665,9 +2664,9 @@ class Expr:
         """
         return Expr(self._expr.tanh())
 
-    @pydoc(categories="numeric")
     def truediv(self, other: Any) -> Expr:
         """
+        :categories: numeric
         Equivalent to the float `/` operator.
 
         Args:
@@ -2701,9 +2700,9 @@ class Expr:
         # noinspection PyProtectedMember
         return Expr(self._expr.truediv(td_translator._unwrap_into_tdexpr(other)))
 
-    @pydoc(categories="logic")
     def xor(self, other: Any) -> Expr:
         """
+        :categories: logic
         Bitwise `xor` operator with the given expression.
         It can be used with integer and bool types.
 
@@ -2734,18 +2733,18 @@ class Expr:
 
     """ Object Properties - NameSpaces """
 
-    @pydoc(categories="type_casting")
     @property
     def dt(self) -> td_datetime.ExprDateTimeNameSpace:
         """
+        :categories: type_casting
         Return an object namespace with all date-time methods for a date-time value.
         """
         return td_datetime.ExprDateTimeNameSpace(self._expr.dt)
 
-    @pydoc(categories="type_casting")
     @property
     def str(self) -> td_string.ExprStringNameSpace:
         """
+        :categories: type_casting
         Return an object namespace with all string methods for a string value.
         """
         return td_string.ExprStringNameSpace(self._expr.str)

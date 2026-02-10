@@ -25,7 +25,6 @@ import tabsdata.tableframe.lazyframe.frame as td_frame
 import tabsdata.tableframe.typing as td_typing
 
 # noinspection PyProtectedMember
-from tabsdata._utils.annotations import pydoc
 from tabsdata.exceptions import ErrorCode, TableFrameError
 
 STATE = "_state"
@@ -218,9 +217,9 @@ class TableFrameGroupBy:
                 properties=None,
             )
 
-    @pydoc(categories="aggregation")
     def count(self) -> td_frame.TableFrame:
         """
+        :categories: aggregation
         Aggregation operation that counts the non-null rows in the group.
         All the columns of the original `TableFrame` are included in the result,
         with the count in each of thse columns.
@@ -281,9 +280,9 @@ class TableFrameGroupBy:
                 properties=None,
             )
 
-    @pydoc(categories="aggregation")
     def max(self) -> td_frame.TableFrame:
         """
+        :categories: aggregation
         Aggregation operation that computes the maximum value in the group for
         of all the non `group by` columns.
 
@@ -343,9 +342,9 @@ class TableFrameGroupBy:
                 properties=None,
             )
 
-    @pydoc(categories="aggregation")
     def mean(self) -> td_frame.TableFrame:
         """
+        :categories: aggregation
         Aggregation operation that computes the mean value in the group for
         of all the non `group by` columns.
 
@@ -407,9 +406,9 @@ class TableFrameGroupBy:
                 properties=None,
             )
 
-    @pydoc(categories="aggregation")
     def median(self) -> td_frame.TableFrame:
         """
+        :categories: aggregation
         Aggregation operation that computes the median value in the group for
         of all the non `group by` columns.
 
@@ -471,9 +470,9 @@ class TableFrameGroupBy:
                 properties=None,
             )
 
-    @pydoc(categories="aggregation")
     def min(self) -> td_frame.TableFrame:
         """
+        :categories: aggregation
         Aggregation operation that computes the minimum value in the group for
         of all the non `group by` columns.
 
@@ -533,9 +532,9 @@ class TableFrameGroupBy:
                 properties=None,
             )
 
-    @pydoc(categories="aggregation")
     def n_unique(self) -> td_frame.TableFrame:
         """
+        :categories: aggregation
         Aggregation operation that counts the unique values of the given column
         in the group for of all the non `group by` columns.
 
@@ -595,9 +594,9 @@ class TableFrameGroupBy:
                 properties=None,
             )
 
-    @pydoc(categories="aggregation")
     def sum(self) -> td_frame.TableFrame:
         """
+        :categories: aggregation
         Aggregation operation that computes the sum for all values in the group for
         of all the non `group by` columns.
 

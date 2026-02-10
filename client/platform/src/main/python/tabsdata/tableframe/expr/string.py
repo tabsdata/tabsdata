@@ -21,7 +21,6 @@ import tabsdata.tableframe.functions.col as td_col
 import tabsdata.tableframe.typing as td_typing
 
 # noinspection PyProtectedMember
-from tabsdata._utils.annotations import pydoc
 
 # noinspection PyProtectedMember
 from tabsdata.expansions.tableframe.features.grok.api._handler import GrokParser
@@ -37,7 +36,6 @@ class ExprStringNameSpace:
         # noinspection PyProtectedMember
         self._expr = expr
 
-    @pydoc(categories="type_casting")
     def to_date(
         self,
         fmt: str | None = None,
@@ -45,6 +43,7 @@ class ExprStringNameSpace:
         strict: bool = True,
     ) -> td_expr.Expr:
         """
+        :categories: type_casting
         Convert the string to a date.
 
         Args:
@@ -75,7 +74,6 @@ class ExprStringNameSpace:
         )
 
     # noinspection PyShadowingBuiltins
-    @pydoc(categories="type_casting")
     def to_datetime(
         self,
         format: str | None = None,
@@ -86,6 +84,7 @@ class ExprStringNameSpace:
         ambiguous: td_typing.Ambiguous | td_expr.Expr = "raise",
     ) -> td_expr.Expr:
         """
+        :categories: type_casting
         Convert the string to a datetime.
 
         Args:
@@ -131,11 +130,11 @@ class ExprStringNameSpace:
             )
         )
 
-    @pydoc(categories="type_casting")
     def to_time(
         self, fmt: str | None = None, *, strict: bool = True, cache: bool = True
     ) -> td_expr.Expr:
         """
+        :categories: type_casting
         Convert the string to a time.
 
         Args:
@@ -164,9 +163,9 @@ class ExprStringNameSpace:
         """
         return _to_tdexpr(self._expr.to_time(format=fmt, strict=strict, cache=cache))
 
-    @pydoc(categories="string")
     def len_bytes(self) -> td_expr.Expr:
         """
+        :categories: string
         Return number of bytes (not chars) of a string.
 
         Example:
@@ -189,9 +188,9 @@ class ExprStringNameSpace:
         """
         return _to_tdexpr(self._expr.len_bytes())
 
-    @pydoc(categories="string")
     def len_chars(self) -> td_expr.Expr:
         """
+        :categories: string
         Return number of chars (not bytes) of a string.
 
         Example:
@@ -214,9 +213,9 @@ class ExprStringNameSpace:
         """
         return _to_tdexpr(self._expr.len_chars())
 
-    @pydoc(categories="string")
     def to_uppercase(self) -> td_expr.Expr:
         """
+        :categories: string
         Return the uppercase of a string.
 
         Example:
@@ -238,9 +237,9 @@ class ExprStringNameSpace:
         """
         return _to_tdexpr(self._expr.to_uppercase())
 
-    @pydoc(categories="string")
     def to_lowercase(self) -> td_expr.Expr:
         """
+        :categories: string
         Return the lowercase of a string.
 
         Example:
@@ -262,9 +261,9 @@ class ExprStringNameSpace:
         """
         return _to_tdexpr(self._expr.to_lowercase())
 
-    @pydoc(categories="string")
     def to_titlecase(self) -> td_expr.Expr:
         """
+        :categories: string
         Uppercase the first character and lowercase all the others ones of a string.
 
         Example:
@@ -289,9 +288,9 @@ class ExprStringNameSpace:
         """
         return _to_tdexpr(self._expr.to_titlecase())
 
-    @pydoc(categories="string")
     def strip_chars(self, characters: td_typing.IntoExpr = None) -> td_expr.Expr:
         """
+        :categories: string
         Trim string values.
 
         Args:
@@ -325,9 +324,9 @@ class ExprStringNameSpace:
             )
         )
 
-    @pydoc(categories="string")
     def strip_chars_start(self, characters: td_typing.IntoExpr = None) -> td_expr.Expr:
         """
+        :categories: string
         Trim string values from the start of the string.
 
         Args:
@@ -361,9 +360,9 @@ class ExprStringNameSpace:
             )
         )
 
-    @pydoc(categories="string")
     def strip_chars_end(self, characters: td_typing.IntoExpr = None) -> td_expr.Expr:
         """
+        :categories: string
         Trim string values from the end of the string.
 
         Args:
@@ -397,9 +396,9 @@ class ExprStringNameSpace:
             )
         )
 
-    @pydoc(categories="string")
     def strip_prefix(self, prefix: td_typing.IntoExpr) -> td_expr.Expr:
         """
+        :categories: string
         Trim string values removing the given prefix
 
         Args:
@@ -426,9 +425,9 @@ class ExprStringNameSpace:
         """
         return _to_tdexpr(self._expr.strip_prefix(prefix=prefix))
 
-    @pydoc(categories="string")
     def strip_suffix(self, suffix: td_typing.IntoExpr) -> td_expr.Expr:
         """
+        :categories: string
         Trim string values removing the given suffix
 
         Args:
@@ -455,9 +454,9 @@ class ExprStringNameSpace:
         """
         return _to_tdexpr(self._expr.strip_suffix(suffix=suffix))
 
-    @pydoc(categories="string")
     def pad_start(self, length: int, fill_char: str = " ") -> td_expr.Expr:
         """
+        :categories: string
         Pad string values at the front to the given length using the given
         fill character.
 
@@ -485,9 +484,9 @@ class ExprStringNameSpace:
         """
         return _to_tdexpr(self._expr.pad_start(length=length, fill_char=fill_char))
 
-    @pydoc(categories="string")
     def pad_end(self, length: int, fill_char: str = " ") -> td_expr.Expr:
         """
+        :categories: string
         Pad string values at the end to the given length using the given
         fill character.
 
@@ -515,9 +514,9 @@ class ExprStringNameSpace:
         """
         return _to_tdexpr(self._expr.pad_end(length=length, fill_char=fill_char))
 
-    @pydoc(categories="string")
     def zfill(self, length: int | td_typing.IntoExprColumn) -> td_expr.Expr:
         """
+        :categories: string
         Pad numeric string values at the start to the given length using zeros.
 
         Args:
@@ -544,7 +543,6 @@ class ExprStringNameSpace:
         """
         return _to_tdexpr(self._expr.zfill(length=length))
 
-    @pydoc(categories="string")
     def contains(
         self,
         pattern: str | td_expr.Expr,
@@ -553,6 +551,7 @@ class ExprStringNameSpace:
         strict: bool = True,
     ) -> td_expr.Expr:
         """
+        :categories: string
         Evaluate if the string contains a pattern.
 
         Args:
@@ -588,7 +587,6 @@ class ExprStringNameSpace:
             )
         )
 
-    @pydoc(categories="string")
     def find(
         self,
         pattern: str | td_expr.Expr,
@@ -597,6 +595,7 @@ class ExprStringNameSpace:
         strict: bool = True,
     ) -> td_expr.Expr:
         """
+        :categories: string
         Find the position of the first occurrence of the given pattern.
 
         Args:
@@ -632,9 +631,9 @@ class ExprStringNameSpace:
             )
         )
 
-    @pydoc(categories="string")
     def ends_with(self, suffix: str | td_expr.Expr) -> td_expr.Expr:
         """
+        :categories: string
         Evaluate if the string ends with.
 
         Args:
@@ -664,9 +663,9 @@ class ExprStringNameSpace:
             self._expr.ends_with(suffix=td_expr.td_translator._unwrap_tdexpr(suffix))
         )
 
-    @pydoc(categories="string")
     def starts_with(self, prefix: str | td_expr.Expr) -> td_expr.Expr:
         """
+        :categories: string
         Evaluate if the string start with.
 
         Args:
@@ -697,11 +696,11 @@ class ExprStringNameSpace:
             self._expr.starts_with(prefix=td_expr.td_translator._unwrap_tdexpr(prefix))
         )
 
-    @pydoc(categories="string")
     def extract(
         self, pattern: td_typing.IntoExprColumn, group_index: int = 1
     ) -> td_expr.Expr:
         """
+        :categories: string
         Extract a pattern from the string.
 
         Args:
@@ -735,11 +734,11 @@ class ExprStringNameSpace:
             )
         )
 
-    @pydoc(categories="string")
     def count_matches(
         self, pattern: str | td_expr.Expr, *, literal: bool = False
     ) -> td_expr.Expr:
         """
+        :categories: string
         Counts the ocurrrences of the given pattern in the string.
 
         Args:
@@ -775,7 +774,6 @@ class ExprStringNameSpace:
             )
         )
 
-    @pydoc(categories="string")
     def replace(
         self,
         pattern: str | td_expr.Expr,
@@ -785,6 +783,7 @@ class ExprStringNameSpace:
         n: int = 1,
     ) -> td_expr.Expr:
         """
+        :categories: string
         Replace the first occurence of a pattern with the given string.
 
         Args:
@@ -823,7 +822,6 @@ class ExprStringNameSpace:
             )
         )
 
-    @pydoc(categories="string")
     def replace_all(
         self,
         pattern: str | td_expr.Expr,
@@ -832,6 +830,7 @@ class ExprStringNameSpace:
         literal: bool = False,
     ) -> td_expr.Expr:
         """
+        :categories: string
         Replace the all occurences of a pattern with the given string.
 
         Args:
@@ -869,9 +868,9 @@ class ExprStringNameSpace:
             )
         )
 
-    @pydoc(categories="string")
     def reverse(self) -> td_expr.Expr:
         """
+        :categories: string
         Reverse the string.
 
         Example:
@@ -894,13 +893,13 @@ class ExprStringNameSpace:
         """
         return _to_tdexpr(self._expr.reverse())
 
-    @pydoc(categories="string")
     def slice(
         self,
         offset: int | td_typing.IntoExprColumn,
         length: int | td_typing.IntoExprColumn | None = None,
     ) -> td_expr.Expr:
         """
+        :categories: string
         Extract the substring at the given offset for the given length.
 
         Args:
@@ -933,9 +932,9 @@ class ExprStringNameSpace:
             )
         )
 
-    @pydoc(categories="string")
     def head(self, n: int | td_typing.IntoExprColumn) -> td_expr.Expr:
         """
+        :categories: string
         Extract the start of the string up to the given length.
 
         Args:
@@ -964,9 +963,9 @@ class ExprStringNameSpace:
             self._expr.head(n=td_translator._unwrap_into_tdexpr_column(n))
         )
 
-    @pydoc(categories="string")
     def tail(self, n: int | td_typing.IntoExprColumn) -> td_expr.Expr:
         """
+        :categories: string
         Extract the end of the string up to the given length.
 
         Args:
@@ -995,11 +994,11 @@ class ExprStringNameSpace:
             self._expr.tail(n=td_translator._unwrap_into_tdexpr_column(n))
         )
 
-    @pydoc(categories="type_casting")
     def to_integer(
         self, *, base: int | td_typing.IntoExprColumn = 10, strict: bool = True
     ) -> td_expr.Expr:
         """
+        :categories: type_casting
         Covert a string to integer.
 
         Args:
@@ -1033,11 +1032,11 @@ class ExprStringNameSpace:
             )
         )
 
-    @pydoc(categories="string")
     def contains_any(
         self, patterns: td_typing.IntoExpr, *, ascii_case_insensitive: bool = False
     ) -> td_expr.Expr:
         """
+        :categories: string
         Evaluate if the string contains any of the given patterns.
 
         Args:
@@ -1072,7 +1071,6 @@ class ExprStringNameSpace:
             )
         )
 
-    @pydoc(categories="string")
     def replace_many(
         self,
         patterns: td_typing.IntoExpr | Mapping[str, str],
@@ -1081,6 +1079,7 @@ class ExprStringNameSpace:
         ascii_case_insensitive: bool = False,
     ) -> td_expr.Expr:
         """
+        :categories: string
         Replace the all occurences of any the given patterns with the given string.
 
         Args:
@@ -1118,9 +1117,9 @@ class ExprStringNameSpace:
             )
         )
 
-    @pydoc(categories="string")
     def grok(self, pattern: str, schema: dict[str, td_col.Column]) -> td_expr.Expr:
         """
+        :categories: string
         Parse log text into structured fields using a Grok pattern.
 
         Applies the given Grok pattern to the values in the current string expression.

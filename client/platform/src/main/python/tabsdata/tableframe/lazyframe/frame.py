@@ -58,7 +58,6 @@ import tabsdata.tableframe.typing as td_typing
 import tabsdata.tableframe.udf.function as td_udf
 
 # noinspection PyProtectedMember
-from tabsdata._utils.annotations import pydoc
 from tabsdata.exceptions import ErrorCode, TableFrameError
 
 # noinspection PyProtectedMember
@@ -152,9 +151,9 @@ class TableFrame:
     """> Initialization Functions """
 
     @classmethod
-    @pydoc(categories="tableframe")
     def empty(cls, schema: td_typing.SimpleSchema = None) -> TableFrame:
         """
+        :categories: tableframe
         Creates an empty (no column - no row) TableFrame.
         """
         return TableFrame.__build__(
@@ -167,12 +166,12 @@ class TableFrame:
 
     # noinspection PyUnreachableCode
     @classmethod
-    @pydoc(categories="tableframe")
     def from_polars(
         cls,
         data: pl.LazyFrame | pl.DataFrame | None = None,
     ) -> TableFrame:
         """
+        :categories: tableframe
         Creates tableframe from a polars dataframe or lazyframe, or None.
         `None` produces as an empty (no column - no row) tableframe.
 
@@ -197,12 +196,12 @@ class TableFrame:
         )
 
     @classmethod
-    @pydoc(categories="tableframe")
     def from_pandas(
         cls,
         data: Union[pd.DataFrame | None] = None,
     ) -> TableFrame:
         """
+        :categories: tableframe
         Creates tableframe from a pandas dataframe, or None.
         `None` produces as an empty (no column - no row) tableframe.
 
@@ -229,12 +228,12 @@ class TableFrame:
         )
 
     @classmethod
-    @pydoc(categories="tableframe")
     def from_dict(
         cls,
         data: td_typing.TableDictionary | None = None,
     ) -> TableFrame:
         """
+        :categories: tableframe
         Creates tableframe from a dictionary, or None.
         `None` produces as an empty (no column - no row) tableframe.
 
@@ -256,25 +255,25 @@ class TableFrame:
             properties=TableFramePropertiesBuilder.empty(),
         )
 
-    @pydoc(categories="tableframe")
     def to_polars_lf(self) -> pl.LazyFrame:
         """
+        :categories: tableframe
         Creates a polars lazyframe from this tableframe.
         """
         # noinspection PyProtectedMember
         return td_translator._unwrap_table_frame(self)
 
-    @pydoc(categories="tableframe")
     def to_polars_df(self) -> pl.DataFrame:
         """
+        :categories: tableframe
         Creates a polars dataframe from this tableframe.
         """
         # noinspection PyProtectedMember
         return td_translator._unwrap_table_frame(self).collect(no_optimization=True)
 
-    @pydoc(categories="tableframe")
     def to_pandas(self) -> pd.DataFrame:
         """
+        :categories: tableframe
         Creates a pandas dataframe from this tableframe.
         """
         # noinspection PyProtectedMember
@@ -284,9 +283,9 @@ class TableFrame:
             .to_pandas()
         )
 
-    @pydoc(categories="tableframe")
     def to_dict(self) -> dict[str, list[Any]]:
         """
+        :categories: tableframe
         Creates a dictionary from this tableframe.
         """
         # noinspection PyProtectedMember
@@ -447,7 +446,6 @@ class TableFrame:
         else:
             raise ValueError(f"Unknown column kind: {kind}")
 
-    @pydoc(categories="attributes")
     @property
     def dtypes(self) -> list[DataType]:
         return self._lf.collect_schema().dtypes()
@@ -460,7 +458,9 @@ class TableFrame:
     def width(self) -> int:
         return self.schema.len()
 
-    """> Special Functions """
+    """
+        :categories: attributes
+        > Special Functions """
 
     # ToDo: pending restricted access and system td columns handling.
     # status(Status.TODO)
@@ -571,7 +571,6 @@ class TableFrame:
     """> Description Functions """
 
     @private
-    @pydoc(categories="description")
     def explain(self) -> None:
         logger.info(
             self._lf.explain(
@@ -592,7 +591,6 @@ class TableFrame:
         )
 
     @private
-    @pydoc(categories="description")
     def show_graph(self) -> str | None:
         logger.info(
             self._lf.show_graph(
@@ -623,9 +621,11 @@ class TableFrame:
             properties=None,
         )
 
-    @pydoc(categories="tableframe")
     def has_same_schema(self, tf: TableFrame) -> bool:
         """
+        :categories: tableframe
+        :categories: description
+        :categories: description
         Verifies if the schema of the current TableFrame is same than the provided
         TableFrame.
 
@@ -687,9 +687,9 @@ class TableFrame:
         """
         return self.schema == tf.schema
 
-    @pydoc(categories="tableframe")
     def is_empty(self) -> bool:
         """
+        :categories: tableframe
         Checks if a TableFrame has no rows.
 
         Example:
@@ -725,11 +725,11 @@ class TableFrame:
         """
         return self._lf.limit(1).collect().height == 0
 
-    @pydoc(categories="tableframe")
     def has_cols(
         self, cols: str | list[str], exact: bool | None = False
     ) -> Tuple[bool, set[str], set[str]]:
         """
+        :categories: tableframe
         Verifies the presence of (non-system) columns in the TableFrame.
 
         If `exact` is True, the check ensures that the TableFrame contains exactly the
@@ -804,11 +804,11 @@ class TableFrame:
             in_tf_not_in_cols,
         )
 
-    @pydoc(categories="tableframe")
     def assert_has_cols(
         self, cols: str | list[str], exact: bool | None = False
     ) -> None:
         """
+        :categories: tableframe
         Ensures that the (non-system) columns in the TableFrame match the expected
         columns.
 
@@ -846,7 +846,6 @@ class TableFrame:
 
     # ToDo: proper expressions handling.
     # status(Status.TODO)
-    @pydoc(categories="tableframe")
     def sort(
         self,
         by: td_typing.IntoExpr | Iterable[td_typing.IntoExpr],
@@ -857,6 +856,7 @@ class TableFrame:
     ) -> TableFrame:
         # noinspection PyShadowingNames
         """
+        :categories: tableframe
         Sort the `TableFrame` by the given column(s) or expression(s).
 
         Args:
@@ -922,7 +922,6 @@ class TableFrame:
 
     # ToDo: disallow transformations in system td columns.
     # status(Status.TODO)
-    @pydoc(categories="manipulation")
     def cast(
         self,
         dtypes: (
@@ -936,6 +935,7 @@ class TableFrame:
     ) -> TableFrame:
         # noinspection PyShadowingNames
         """
+        :categories: manipulation
         Cast columns to a new data type.
 
         Args:
@@ -994,10 +994,10 @@ class TableFrame:
 
     # ToDo: should we allow only clear to 0 rows?
     # status(Status.TODO)
-    @pydoc(categories="tableframe")
     def clear(self, n: int = 0) -> TableFrame:
         # noinspection PyShadowingNames
         """
+        :categories: tableframe
         Clears all rows of the `TableFrame` preserving the schema.
 
         Example:
@@ -1043,7 +1043,6 @@ class TableFrame:
     # ToDo: check for undesired operations of system td columns.
     # ToDo: proper expressions handling.
     # status(Status.TODO)
-    @pydoc(categories="join")
     def join(
         self,
         other: TableFrame,
@@ -1058,6 +1057,7 @@ class TableFrame:
     ) -> TableFrame:
         # noinspection PyShadowingNames
         """
+        :categories: join
         Join the `TableFrame` with another `TableFrame`.
 
         Args:
@@ -1207,7 +1207,6 @@ class TableFrame:
     # ToDo: check for undesired operations of system td columns.
     # ToDo: proper expressions handling.
     # status(Status.TODO)
-    @pydoc(categories="projection")
     def with_columns(
         self,
         *exprs: td_typing.IntoExpr | Iterable[td_typing.IntoExpr],
@@ -1215,6 +1214,7 @@ class TableFrame:
     ) -> TableFrame:
         # noinspection PyShadowingNames
         """
+        :categories: projection
         Add columns to the `TableFrame`.
 
         Args:
@@ -1267,13 +1267,13 @@ class TableFrame:
         )
 
     # noinspection PyUnreachableCode
-    @pydoc(categories="projection")
     def udf(  # noqa: C901
         self,
         on: td_typing.IntoExpr | list[td_typing.IntoExpr],
         function: td_udf.UDF,
     ) -> TableFrame:
         """
+        :categories: projection
         Apply a user-defined function (UDF) to the columns resolved by `expr`.
 
         The selected columns are supplied to `function`, which can implement either
@@ -1471,10 +1471,10 @@ class TableFrame:
         )
 
     # noinspection PyUnreachableCode
-    @pydoc(categories="projection")
     def rename(self, mapping: dict[str, str]) -> TableFrame:
         # noinspection PyShadowingNames
         """
+        :categories: projection
         Rename columns from the `TableFrame`.
 
         Args:
@@ -1544,7 +1544,6 @@ class TableFrame:
     # ToDo: check for undesired operations of system td columns.
     # ToDo: proper expressions handling.
     # status(Status.TODO)
-    @pydoc(categories="projection")
     def drop(
         self,
         *columns: td_typing.ColumnNameOrSelector
@@ -1553,6 +1552,7 @@ class TableFrame:
     ) -> TableFrame:
         # noinspection PyShadowingNames
         """
+        :categories: projection
         Discard columns from the `TableFrame`.
 
         Args:
@@ -1605,7 +1605,6 @@ class TableFrame:
     # ToDo: dedicated algorithm for proper provenance handling.
     # ToDo: check for undesired operations of system td columns.
     # ToDo: proper expressions handling.
-    @pydoc(categories="projection")
     def unnest(
         self,
         columns: Union[
@@ -1614,6 +1613,7 @@ class TableFrame:
         *more_columns: td_typing.ColumnNameOrSelector,
     ) -> TableFrame:
         """
+        :categories: projection
         Expand one or more struct columns so that each field within the struct becomes
         a separate column in the `TableFrame`.
 
@@ -1674,13 +1674,13 @@ class TableFrame:
 
     # ToDo: ensure system td columns are left unchanged.
     # status(Status.TODO)
-    @pydoc(categories="manipulation")
     def fill_null(
         self,
         value: Any | td_expr.Expr | None = None,
     ) -> TableFrame:
         # noinspection PyShadowingNames
         """
+        :categories: manipulation
         Replace all `null` values in the `TableFrame` with the given value.
 
         Args:
@@ -1735,10 +1735,10 @@ class TableFrame:
 
     # ToDo: ensure system td columns are left unchanged.
     # status(Status.TODO)
-    @pydoc(categories="manipulation")
     def fill_nan(self, value: int | float | td_expr.Expr | None) -> TableFrame:
         # noinspection PyShadowingNames
         """
+        :categories: manipulation
         Replace all `NaN` values in the `TableFrame` with the given value.
 
         Args:
@@ -1790,7 +1790,6 @@ class TableFrame:
     # ToDo: proper expressions handling.
     # ToDo: ensure system td columns are left unchanged.
     # status(Status.TODO)
-    @pydoc(categories="filters")
     def unique(
         self,
         subset: (
@@ -1804,6 +1803,7 @@ class TableFrame:
     ) -> TableFrame:
         # noinspection PyShadowingNames
         """
+        :categories: filters
         Deduplicate rows from the `TableFrame`.
 
         Args:
@@ -1867,7 +1867,6 @@ class TableFrame:
     # ToDo: proper expressions handling.
     # ToDo: ensure system td columns are left unchanged.
     # status(Status.TODO)
-    @pydoc(categories="manipulation")
     def drop_nans(
         self,
         subset: (
@@ -1878,6 +1877,7 @@ class TableFrame:
     ) -> TableFrame:
         # noinspection PyShadowingNames
         """
+        :categories: manipulation
         Drop rows with `NaN` values.
 
         Args:
@@ -1938,7 +1938,6 @@ class TableFrame:
     # ToDo: proper expressions handling.
     # ToDo: ensure system td columns are left unchanged.
     # status(Status.TODO)
-    @pydoc(categories="manipulation")
     def drop_nulls(
         self,
         subset: (
@@ -1949,6 +1948,7 @@ class TableFrame:
     ) -> TableFrame:
         # noinspection PyShadowingNames
         """
+        :categories: manipulation
         Drop rows with null values.
 
         Args:
@@ -2011,7 +2011,6 @@ class TableFrame:
     # ToDo: allways attach system td columns.
     # ToDo: dedicated algorithm for proper provenance handling.
     # ToDo: check for undesired operations of system td columns.
-    @pydoc(categories="filters")
     def filter(
         self,
         *predicates: Union[
@@ -2024,6 +2023,7 @@ class TableFrame:
     ) -> TableFrame:
         # noinspection PyShadowingNames,PyTypeChecker
         """
+        :categories: filters
         Filter the `TableFrame` based on the given predicates.
 
         Example:
@@ -2078,7 +2078,6 @@ class TableFrame:
     # ToDo: check for undesired operations of system td columns.
     # ToDo: proper expressions handling.
     # status(Status.TODO)
-    @pydoc(categories="projection")
     def select(
         self,
         *exprs: td_typing.IntoExpr | Iterable[td_typing.IntoExpr],
@@ -2086,6 +2085,7 @@ class TableFrame:
     ) -> TableFrame:
         # noinspection PyShadowingNames
         """
+        :categories: projection
         Select column(s) from the `TableFrame`.
 
         Args:
@@ -2166,13 +2166,13 @@ class TableFrame:
     # ToDo: check for undesired operations of system td columns.
     # ToDo: proper expressions handling.
     # status(Status.TODO)
-    @pydoc(categories="aggregation")
     def group_by(
         self,
         *by: td_typing.IntoExpr | Iterable[td_typing.IntoExpr],
     ) -> td_group_by.TableFrameGroupBy:
         # noinspection PyShadowingNames
         """
+        :categories: aggregation
         Perform a group by on the `TableFrame`.
 
         Args:
@@ -2221,10 +2221,10 @@ class TableFrame:
         )
 
     # status(Status.DONE)
-    @pydoc(categories="filters")
     def slice(self, offset: int, length: int | None = None) -> TableFrame:
         # noinspection PyShadowingNames
         """
+        :categories: filters
         Return a `TableFrame` with a slice of the original `TableFrame`
 
         Args:
@@ -2268,10 +2268,10 @@ class TableFrame:
         )
 
     # status(Status.DONE)
-    @pydoc(categories="filters")
     def limit(self, n: int = 5) -> TableFrame:
         # noinspection PyShadowingNames
         """
+        :categories: filters
         Return a `TableFrame` with the first `n` rows.
         This is equivalent to `head`.
 
@@ -2315,10 +2315,10 @@ class TableFrame:
         )
 
     # status(Status.DONE)
-    @pydoc(categories="filters")
     def head(self, n: int = 5) -> TableFrame:
         # noinspection PyShadowingNames
         """
+        :categories: filters
         Return a `TableFrame` with the first `n` rows.
 
         Args:
@@ -2361,10 +2361,10 @@ class TableFrame:
         )
 
     # status(Status.DONE)
-    @pydoc(categories="filters")
     def tail(self, n: int = 5) -> TableFrame:
         # noinspection PyShadowingNames
         """
+        :categories: filters
         Return a `TableFrame` with the last `n` rows.
 
         Args:
@@ -2407,10 +2407,10 @@ class TableFrame:
         )
 
     # status(Status.DONE)
-    @pydoc(categories="filters")
     def last(self) -> TableFrame:
         # noinspection PyShadowingNames
         """
+        :categories: filters
         Return a `TableFrame` with the last row.
 
         Example:
@@ -2449,10 +2449,10 @@ class TableFrame:
         )
 
     # status(Status.DONE)
-    @pydoc(categories="filters")
     def first(self) -> TableFrame:
         # noinspection PyShadowingNames
         """
+        :categories: filters
         Return a `TableFrame` with the first row.
 
         Example:
@@ -2491,13 +2491,13 @@ class TableFrame:
         )
 
     # status(Status.DONE)
-    @pydoc(categories="filters")
     def last_row(
         self,
         named: bool = False,
     ) -> tuple[Any, ...] | dict[str, Any] | None:
         # noinspection PyShadowingNames
         """
+        :categories: filters
         Return a `tuple` or `dictionary` with the last row, or None if no row.
 
         Example:
@@ -2532,13 +2532,13 @@ class TableFrame:
         return df.row(0, named=named)
 
     # status(Status.DONE)
-    @pydoc(categories="filters")
     def first_row(
         self,
         named: bool = False,
     ) -> tuple[Any, ...] | dict[str, Any] | None:
         # noinspection PyShadowingNames
         """
+        :categories: filters
         Return a `tuple` or `dictionary` with the first row, or None if no row.
 
         Example:
@@ -2573,10 +2573,10 @@ class TableFrame:
 
     """> Functions Derived from DataFrame """
 
-    @pydoc(categories="projection")
     def item(self) -> Any:
         # noinspection PyShadowingNames
         """
+        :categories: projection
         Returns a scalar value if the TableFrame contains exactly one user column and
         one row.
 
@@ -2605,9 +2605,9 @@ class TableFrame:
         # noinspection PyProtectedMember
         return td_frame.DataFrame.item(td_translator._unwrap_table_frame(self))
 
-    @pydoc(categories="filters")
     def extract_as_rows(self, offset: int, length: int) -> list[dict[str, Any]]:
         """
+        :categories: filters
         Extract a slice of rows from the TableFrame as a list of dictionaries.
 
         Each dictionary represents one row, where keys are column names
@@ -2655,9 +2655,9 @@ class TableFrame:
             .to_dicts()
         )
 
-    @pydoc(categories="filters")
     def extract_as_columns(self, offset: int, length: int) -> dict[str, list[Any]]:
         """
+        :categories: filters
         Extract a slice of rows from the table as a column-oriented dictionary.
 
         The result is a mapping of column names to lists of values from the selected
@@ -2705,7 +2705,6 @@ class TableFrame:
 
     """> Expansion Functions """
 
-    @pydoc(categories="string")
     def grok(
         self,
         expr: td_typing.IntoExpr,
@@ -2713,6 +2712,7 @@ class TableFrame:
         schema: dict[str, td_col.Column],
     ) -> TableFrame:
         """
+        :categories: string
         Parse log text into structured fields using a Grok pattern.
 
         Applies a Grok pattern to the given column or expression and directly appends

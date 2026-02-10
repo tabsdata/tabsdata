@@ -36,13 +36,6 @@ def copy_assets():  # noqa: C901
         "y",
         "on",
     )
-    require_pydoc_csv = os.getenv("REQUIRE_PYDOC_CSV", "False").lower() in (
-        "1",
-        "true",
-        "yes",
-        "y",
-        "on",
-    )
     logger.debug(f"✅ Current path in copy assets is {Path.cwd()}")
     # noinspection DuplicatedCode
     project_tabsdata_root_folder = os.getenv("PROJECT_TABSDATA_ROOT_FOLDER")
@@ -143,109 +136,6 @@ def copy_assets():  # noqa: C901
             ignore=shutil.ignore_patterns(".gitignore"),
         )
 
-    tabsdata_pydoc_csv_source = Path(
-        os.path.join(
-            project_tabsdata_root_folder,
-            "target",
-            "pydoc",
-            "PYDOC.csv",
-        )
-    )
-    if not tabsdata_pydoc_csv_source.exists() and require_pydoc_csv:
-        raise FileNotFoundError(
-            f"The PYDOC.csv file is missing in {tabsdata_pydoc_csv_source}."
-        )
-    tabsdata_pydoc_csv_target = Path(
-        os.path.join(tabsdata_variant_assets_folder, "manifest")
-    )
-    logger.debug(
-        f"✏️ 3 Copying contents of {tabsdata_pydoc_csv_source} to"
-        f" {tabsdata_pydoc_csv_target}"
-    )
-    if tabsdata_pydoc_csv_source.exists():
-        tabsdata_pydoc_csv_target.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
-        shutil.copy(
-            tabsdata_pydoc_csv_source,
-            tabsdata_pydoc_csv_target,
-            follow_symlinks=True,
-        )
-    tabsdata_pydoc_csv_target = Path(
-        os.path.join(
-            tabsdata_assets_folder,
-            "manifest",
-        )
-    )
-    logger.debug(
-        f"✏️ 4 Copying contents of {tabsdata_pydoc_csv_source} to"
-        f" {tabsdata_pydoc_csv_target}"
-    )
-    if tabsdata_pydoc_csv_source.exists():
-        tabsdata_pydoc_csv_target.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
-        shutil.copy(
-            tabsdata_pydoc_csv_source,
-            tabsdata_pydoc_csv_target,
-            follow_symlinks=True,
-        )
-
-    if os.path.exists(tabsdata_agent_variant_assets_folder):
-        tabsdata_agent_pydoc_csv_source = Path(
-            os.path.join(
-                project_tabsdata_agent_root_folder,
-                "target",
-                "pydoc",
-                "PYDOC.csv",
-            )
-        )
-        if not tabsdata_agent_pydoc_csv_source.exists() and require_pydoc_csv:
-            raise FileNotFoundError(
-                f"The PYDOC.csv file is missing in {tabsdata_agent_pydoc_csv_source}."
-            )
-        tabsdata_agent_pydoc_csv_target = Path(
-            os.path.join(
-                tabsdata_agent_variant_assets_folder,
-                "manifest",
-            )
-        )
-        logger.debug(
-            f"✏️ 5 Copying contents of {tabsdata_agent_pydoc_csv_source} to"
-            f" {tabsdata_agent_pydoc_csv_target}"
-        )
-        if tabsdata_agent_pydoc_csv_source.exists():
-            tabsdata_agent_pydoc_csv_target.mkdir(
-                parents=True,
-                exist_ok=True,
-            )
-            shutil.copy(
-                tabsdata_agent_pydoc_csv_source,
-                tabsdata_agent_pydoc_csv_target,
-                follow_symlinks=True,
-            )
-        tabsdata_agent_pydoc_csv_target = Path(
-            os.path.join(
-                tabsdata_agent_assets_folder,
-                "manifest",
-            )
-        )
-        logger.debug(
-            f"✏️ 6 Copying contents of {tabsdata_agent_pydoc_csv_source} to"
-            f" {tabsdata_agent_pydoc_csv_target}"
-        )
-        if tabsdata_agent_pydoc_csv_source.exists():
-            tabsdata_agent_pydoc_csv_target.mkdir(
-                parents=True,
-                exist_ok=True,
-            )
-            shutil.copy(
-                tabsdata_agent_pydoc_csv_source,
-                tabsdata_agent_pydoc_csv_target,
-                follow_symlinks=True,
-            )
 
 
 copy_assets()

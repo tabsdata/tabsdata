@@ -12,14 +12,13 @@ import tabsdata.tableframe.expr.expr as td_expr
 
 # noinspection PyProtectedMember
 import tabsdata.tableframe.typing as td_typing
-from tabsdata._utils.annotations import pydoc
 
 
-@pydoc(categories="generation")
 def lit(
     value: Any, dtype: td_typing.DataType | None = None, *, allow_object: bool = False
 ) -> td_expr.Expr:
     """
+    :categories: generation
     Expression for the given literal value.
 
     Args:

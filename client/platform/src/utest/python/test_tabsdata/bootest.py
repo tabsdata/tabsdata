@@ -462,14 +462,6 @@ def check_assets():
         raise FileNotFoundError(
             f"The THIRD-PARTY file is missing in {client_assets_folder}."
         )
-    require_pydoc_csv = os.getenv("REQUIRE_PYDOC_CSV", "False").lower() in TRUE_VALUES
-    if (
-        not os.path.exists(os.path.join(variant_assets_folder, "manifest", "PYDOC.csv"))
-        and require_pydoc_csv
-    ):
-        raise FileNotFoundError(
-            f"The PYDOC.csv file is missing in {client_assets_folder}."
-        )
 
 
 # Meant to be used only to expose python packages to tdserver when running pytest tests.

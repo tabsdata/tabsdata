@@ -23,13 +23,11 @@ script = [
     if eq ${td_pypi_linked} "true"
         set_env REQUIRE_SERVER_BINARIES "true"
         set_env REQUIRE_THIRD_PARTY "true"
-        set_env REQUIRE_PYDOC_CSV "true"
         set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "false"
         set_env TD_SKIP_NON_EXISTING_ASSETS "false"
     else
         set_env REQUIRE_SERVER_BINARIES "false"
         set_env REQUIRE_THIRD_PARTY "false"
-        set_env REQUIRE_PYDOC_CSV "false"
         set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "true"
         set_env TD_SKIP_NON_EXISTING_ASSETS "true"
     end
@@ -78,13 +76,11 @@ script = [
             if eq ${td_pypi_linked} "true"
                 set_env REQUIRE_SERVER_BINARIES "true"
                 set_env REQUIRE_THIRD_PARTY "true"
-                set_env REQUIRE_PYDOC_CSV "true"
                 set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "false"
                 set_env TD_SKIP_NON_EXISTING_ASSETS "false"
             else
                 set_env REQUIRE_SERVER_BINARIES "false"
                 set_env REQUIRE_THIRD_PARTY "false"
-                set_env REQUIRE_PYDOC_CSV "false"
                 set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "true"
                 set_env TD_SKIP_NON_EXISTING_ASSETS "true"
             end
