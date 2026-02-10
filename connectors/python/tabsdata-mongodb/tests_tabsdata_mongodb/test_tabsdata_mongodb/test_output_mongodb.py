@@ -585,6 +585,8 @@ def test_update_existing_false(tmp_path, testing_mongodb):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 def test_docs_per_trx(tmp_path, testing_mongodb):
+    import glob
+
     size = 200
     lf = get_lf(size)
     database_name = "test_docs_per_trx_database"
@@ -599,9 +601,8 @@ def test_docs_per_trx(tmp_path, testing_mongodb):
 
     mongo_destination.stream(str(tmp_path), lf)
 
-    from tabsdata_mongodb._connector import _get_matching_files
-
-    assert len(_get_matching_files(str(tmp_path / "*.jsonl"))) == 2
+    # Files are now in intermediate_0/ subdirectory with pattern 00000000.jsonl
+    assert len(glob.glob(str(tmp_path / "intermediate_0" / "*.jsonl"))) == 2
 
     client = pymongo.MongoClient(MONGODB_URI_WITH_CREDENTIALS)
     collection = client[database_name][collection_name]
@@ -609,7 +610,7 @@ def test_docs_per_trx(tmp_path, testing_mongodb):
 
     mongo_destination.docs_per_trx = 50
     mongo_destination.stream(str(tmp_path), lf)
-    assert len(_get_matching_files(str(tmp_path / "*.jsonl"))) == 4
+    assert len(glob.glob(str(tmp_path / "intermediate_0" / "*.jsonl"))) == 4
 
     assert collection.count_documents({}) == 200
 

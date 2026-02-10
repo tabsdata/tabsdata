@@ -305,10 +305,10 @@ version = "0.8.0"
 version = "0.22.1"
 
 [workspace.dependencies.bytes]
-version = "1.11.0"
+version = "1.11.1"
 
 [workspace.dependencies.clap]
-version = "4.5.56"
+version = "4.5.57"
 features = ["derive"]
 
 [workspace.dependencies.clap_derive]
@@ -497,7 +497,7 @@ version = "0.9.2"
 version = "0.30.0"
 
 [workspace.dependencies.regex]
-version = "1.12.2"
+version = "1.12.3"
 
 [workspace.dependencies.reqwest]
 version = "0.13.1"

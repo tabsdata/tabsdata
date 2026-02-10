@@ -3,6 +3,7 @@
 #
 
 import datetime
+import glob
 import json
 import logging
 import os
@@ -12,12 +13,10 @@ from typing import List, Union
 from urllib.parse import quote_plus
 
 import polars as pl
-from polars import BasePartitionContext
 
 from tabsdata._credentials import UserPasswordCredentials
 from tabsdata._io.outputs.shared_enums import IfTableExistStrategySpec
 from tabsdata._io.plugin import DestinationPlugin
-from tabsdata._tabsserver.function.store_results_utils import _get_matching_files
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -320,29 +319,23 @@ class MongoDBDestination(DestinationPlugin):
                 logger.warning(f"Result in position '{index}' is None.")
                 list_of_files.append(None)
             else:
-                pattern = f"intermediate_{index}_{{part}}.jsonl"
-                intermediate_destination_file_pattern = os.path.join(
-                    working_dir, pattern
-                )
-                output_dir = Path(working_dir)
+                output_dir = Path(working_dir) / f"intermediate_{index}"
                 output_dir.mkdir(parents=True, exist_ok=True)
-                base_path = output_dir / f"intermediate_{index}"
 
-                def file_path_callback(ctx: BasePartitionContext) -> Path:
-                    return Path(f"{base_path}_{ctx.file_idx}.jsonl")
-
-                logger.debug(f"Sinking the data to {base_path}_{{partition}}.jsonl")
+                logger.debug(f"Sinking the data to {output_dir}")
 
                 result.sink_ndjson(
-                    pl.PartitionMaxSize(
-                        base_path=output_dir,
-                        file_path=file_path_callback,
-                        max_size=self.docs_per_trx,
+                    pl.PartitionBy(
+                        output_dir,
+                        max_rows_per_file=self.docs_per_trx,
                     ),
                     maintain_order=True,
                 )
-                files_generated = _get_matching_files(
-                    intermediate_destination_file_pattern.replace("{part}", "*")
+                # PartitionBy generates zero-padded files: 00000000.jsonl,
+                # 00000001.jsonl, etc.
+                # These sort correctly alphabetically, so we use sorted glob directly.
+                files_generated = sorted(
+                    glob.glob(os.path.join(str(output_dir), "*.jsonl"))
                 )
                 logger.debug(f"Files generated: {files_generated}")
                 list_of_files.append(files_generated)
