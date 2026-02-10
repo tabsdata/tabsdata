@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 from tests_tabsdata.bootest import enrich_sys_path
-from tests_tabsdata.common.backend import KafkaConfig
+from src.utest.python.common import KafkaConfig
 from tests_tabsdata_kafka.bootest import TESTING_RESOURCES_PATH
 
 TIMEOUT_SECS = 5

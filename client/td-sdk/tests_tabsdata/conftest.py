@@ -37,7 +37,7 @@ from tabsdata.api.tabsdata_server import TabsdataServer
 
 # Import fixtures from backend modules so pytest can discover them
 # These imports make the fixtures available to all tests
-from tests_tabsdata.common.backend import (  # noqa: F401
+from src.utest.python.common import (  # noqa: F401
     azure_client,
     azure_config,
     gcs_client,
@@ -51,9 +51,9 @@ from tests_tabsdata.common.backend import (  # noqa: F401
     s3_config,
     testing_hashicorp_vault,
 )
-from tests_tabsdata.common.constants import MAXIMUM_RETRY_COUNT
-from tests_tabsdata.common.docker import clean_docker_containers
-from tests_tabsdata.common.venv import clean_python_virtual_environments
+from src.utest.python.common import MAXIMUM_RETRY_COUNT
+from src.utest.python.common import clean_docker_containers
+from src.utest.python.common import clean_python_virtual_environments
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)

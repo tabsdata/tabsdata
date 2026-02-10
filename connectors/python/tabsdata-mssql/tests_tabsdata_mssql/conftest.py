@@ -9,7 +9,7 @@ import os
 import urllib
 from dataclasses import dataclass
 
-from tests_tabsdata.common.constants import (
+from src.utest.python.common import (
     DOCKER_REGULAR_CONTAINER_INFIX,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
 )
@@ -38,13 +38,13 @@ from filelock import FileLock
 from xdist.workermanage import WorkerController
 
 from tabsdata._utils.tdlogging import setup_tests_logging
-from tests_tabsdata.common.constants import (
+from src.utest.python.common import (
     DB_HOST,
     DB_NAME,
     DB_PASSWORD,
     MAXIMUM_RETRY_COUNT,
 )
-from tests_tabsdata.common.docker import (
+from src.utest.python.common import (
     remove_docker_containers,
 )
 from tests_tabsdata.conftest import (
