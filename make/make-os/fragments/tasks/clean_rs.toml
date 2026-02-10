@@ -55,11 +55,11 @@ script = [
     cd "${modules_path}"
     extensions = array .so .dll .dylib .pyd
     for extension in ${extensions}
-        debug "Cleaning extension: ${extension}"
+        info "🧹🧹 Cleaning extension: ${extension}"
         glob_files = glob_array ./**/*${extension}*
         for file in ${glob_files}
             file = join_path ${modules_path} ${file}
-            debug "🧹 Cleaning file: ${file}"
+            info "🧹 Cleaning file: ${file}"
             retries = set 36
             retry = set 0
             keep = set true
@@ -105,11 +105,11 @@ script = [
     cd "${modules_path}"
     extensions = array .so .dll .dylib .pyd
     for extension in ${extensions}
-        debug "🧹 Cleaning extension: ${extension}"
+        info "🧹🧹 Cleaning extension: ${extension}"
         glob_files = glob_array ./**/*${extension}*
         for file in ${glob_files}
             file = join_path ${modules_path} ${file}
-            info "Cleaning file: ${file}"
+            info "🧹 Cleaning file: ${file}"
             retries = set 36
             retry = set 0
             keep = set true
