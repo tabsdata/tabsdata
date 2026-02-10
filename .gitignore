@@ -56,7 +56,7 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 *.local
-!**/testing_resources/**/*.log
+!**/utest/resources/**/*.log
 CLAUDE.md
 MANIFEST
 !assets/manifest
@@ -145,6 +145,6 @@ var/
 venv.bak/
 venv/
 wheels/
-client/td-sdk/tabsdata/assets
-tabsdata_agent/assets
+client/td-sdk/src/main/python/tabsdata/assets
+src/main/python/tabsdata_agent/assets
 test-results

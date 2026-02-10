@@ -7,7 +7,7 @@ requires = [
     "archspec==0.2.5",
     "colorama==0.4.6",
     "maturin==1.11.5",
-    "polars==1.38.0",
+    "polars==1.38.1",
     "psutil==7.2.2",
     "py-cpuinfo==9.0.0",
     "PyYAML==6.0.3",
@@ -30,7 +30,7 @@ classifiers = [
 dynamic = ["version"]
 
 [tool.maturin]
-python-source = "python"
+python-source = "python/src/main/python"
 module-name = "tabsdata.expansions.foundation._foundation"
 compatibility = "musllinux_1_1"
 

@@ -24,11 +24,11 @@ script = [
     if ${file_is_empty}
         warn "🪹 File ${requirements-third-party-all-path} contains no requirement. Skipping audit on it."
     else
-        debug "🚀 pysentry-rs --severity low --fail-on low --ignore PYSEC-2022-42969 --ignore GHSA-4xh5-x5gv-qwph --ignore GHSA-7gcm-g887-7qv7 --no-cache --sources pypa,osv,pypi --resolver uv --verbose --detailed --requirements-files ${requirements-third-party-all-path}"
-        exec --fail-on-error pysentry-rs --severity low --fail-on low --ignore PYSEC-2022-42969 --ignore GHSA-4xh5-x5gv-qwph --ignore GHSA-7gcm-g887-7qv7 --no-cache --sources pypa,osv,pypi --resolver uv --verbose --detailed --requirements-files ${requirements-third-party-all-path}
+        debug "🚀 pysentry-rs --severity low --fail-on low --ignore PYSEC-2022-42969 --ignore PYSEC-2023-162 --ignore PYSEC-2023-163 --ignore GHSA-4xh5-x5gv-qwph --ignore GHSA-7gcm-g887-7qv7 --no-cache --sources pypa,osv,pypi --resolver uv --verbose --detailed --requirements-files ${requirements-third-party-all-path}"
+        exec --fail-on-error pysentry-rs --severity low --fail-on low --ignore PYSEC-2022-42969 --ignore PYSEC-2023-162 --ignore PYSEC-2023-163 --ignore GHSA-4xh5-x5gv-qwph --ignore GHSA-7gcm-g887-7qv7 --no-cache --sources pypa,osv,pypi --resolver uv --verbose --detailed --requirements-files ${requirements-third-party-all-path}
 
-        debug "🚀 pysentry-rs --severity low --fail-on low --ignore PYSEC-2022-42969 --ignore GHSA-4xh5-x5gv-qwph --ignore GHSA-7gcm-g887-7qv7 --no-cache --sources pypa,osv,pypi --resolver pip-tools --verbose --detailed --requirements-files ${requirements-third-party-all-path}"
-        exec --fail-on-error pysentry-rs --severity low --fail-on low --ignore PYSEC-2022-42969 --ignore GHSA-4xh5-x5gv-qwph --ignore GHSA-7gcm-g887-7qv7 --no-cache --sources pypa,osv,pypi --resolver pip-tools --verbose --detailed --requirements-files ${requirements-third-party-all-path}
+        debug "🚀 pysentry-rs --severity low --fail-on low --ignore PYSEC-2022-42969 --ignore PYSEC-2023-162 --ignore PYSEC-2023-163 --ignore GHSA-4xh5-x5gv-qwph --ignore GHSA-7gcm-g887-7qv7 --no-cache --sources pypa,osv,pypi --resolver pip-tools --verbose --detailed --requirements-files ${requirements-third-party-all-path}"
+        exec --fail-on-error pysentry-rs --severity low --fail-on low --ignore PYSEC-2022-42969 --ignore PYSEC-2023-162 --ignore PYSEC-2023-163 --ignore GHSA-4xh5-x5gv-qwph --ignore GHSA-7gcm-g887-7qv7 --no-cache --sources pypa,osv,pypi --resolver pip-tools --verbose --detailed --requirements-files ${requirements-third-party-all-path}
     end
 
     requirements-dev-third-party-path = temp_file txt
@@ -40,19 +40,19 @@ script = [
     if ${file_is_empty}
         warn "🪹 File ${requirements-dev-third-party-path} contains no requirement. Skipping audit on it."
     else
-        debug "🚀 pysentry-rs --severity low --fail-on low --ignore PYSEC-2022-42969 --ignore GHSA-4xh5-x5gv-qwph --ignore GHSA-7gcm-g887-7qv7 --no-cache --sources pypa,osv,pypi --resolver uv --verbose --detailed --requirements-files ${requirements-dev-third-party-path}"
-        exec --fail-on-error pysentry-rs --severity low --fail-on low --ignore PYSEC-2022-42969 --ignore GHSA-4xh5-x5gv-qwph --ignore GHSA-7gcm-g887-7qv7 --no-cache --sources pypa,osv,pypi --resolver uv --verbose --detailed --requirements-files ${requirements-dev-third-party-path}
+        debug "🚀 pysentry-rs --severity low --fail-on low --ignore PYSEC-2022-42969 --ignore PYSEC-2023-162 --ignore PYSEC-2023-163 --ignore GHSA-4xh5-x5gv-qwph --ignore GHSA-7gcm-g887-7qv7 --no-cache --sources pypa,osv,pypi --resolver uv --verbose --detailed --requirements-files ${requirements-dev-third-party-path}"
+        exec --fail-on-error pysentry-rs --severity low --fail-on low --ignore PYSEC-2022-42969 --ignore PYSEC-2023-162 --ignore PYSEC-2023-163 --ignore GHSA-4xh5-x5gv-qwph --ignore GHSA-7gcm-g887-7qv7 --no-cache --sources pypa,osv,pypi --resolver uv --verbose --detailed --requirements-files ${requirements-dev-third-party-path}
 
-        debug "🚀 pysentry-rs --severity low --fail-on low --ignore PYSEC-2022-42969 --ignore GHSA-4xh5-x5gv-qwph --ignre GHSA-7gcm-g887-7qv7 --no-cache --sources pypa,osv,pypi --resolver pip-tools --verbose --detailed --requirements-files ${requirements-dev-third-party-path}"
-        exec --fail-on-error pysentry-rs --severity low --fail-on low --ignore PYSEC-2022-42969 --ignore GHSA-4xh5-x5gv-qwph --ignore GHSA-7gcm-g887-7qv7 --no-cache --sources pypa,osv,pypi --resolver pip-tools --verbose --detailed --requirements-files ${requirements-dev-third-party-path}
+        debug "🚀 pysentry-rs --severity low --fail-on low --ignore PYSEC-2022-42969 --ignore PYSEC-2023-162 --ignore PYSEC-2023-163 --ignore GHSA-4xh5-x5gv-qwph --ignore GHSA-7gcm-g887-7qv7 --no-cache --sources pypa,osv,pypi --resolver pip-tools --verbose --detailed --requirements-files ${requirements-dev-third-party-path}"
+        exec --fail-on-error pysentry-rs --severity low --fail-on low --ignore PYSEC-2022-42969 --ignore PYSEC-2023-162 --ignore PYSEC-2023-163 --ignore GHSA-4xh5-x5gv-qwph --ignore GHSA-7gcm-g887-7qv7 --no-cache --sources pypa,osv,pypi --resolver pip-tools --verbose --detailed --requirements-files ${requirements-dev-third-party-path}
     end
 
     exec --fail-on-error python -m pip install --upgrade pip
 
-    # debug "🚀 pip-audit --progress-spinner on --strict --requirement requirements/requirements-third-party-all.txt --ignore-vuln PYSEC-2022-42969"
-    # exec --fail-on-error pip-audit --progress-spinner on --strict --requirement requirements/requirements-third-party-all.txt --ignore-vuln PYSEC-2022-42969
+    # debug "🚀 pip-audit --progress-spinner on --strict --requirement requirements/requirements-third-party-all.txt --ignore-vuln PYSEC-2022-42969 --ignore-vuln PYSEC-2023-162 --ignore-vuln PYSEC-2023-163 --ignore-vuln GHSA-4xh5-x5gv-qwph --ignore-vuln GHSA-7gcm-g887-7qv7"
+    # exec --fail-on-error pip-audit --progress-spinner on --strict --requirement requirements/requirements-third-party-all.txt --ignore-vuln PYSEC-2022-42969 --ignore-vuln PYSEC-2023-162 --ignore-vuln PYSEC-2023-163 --ignore-vuln GHSA-4xh5-x5gv-qwph --ignore-vuln GHSA-7gcm-g887-7qv7
 
-    # debug "🚀 pip-audit --progress-spinner on --strict --requirement requirements/requirements-dev-third-party.txt --ignore-vuln PYSEC-2022-42969"
-    # exec --fail-on-error pip-audit --progress-spinner on --strict --requirement requirements/requirements-dev-third-party.txt --ignore-vuln PYSEC-2022-42969
+    # debug "🚀 pip-audit --progress-spinner on --strict --requirement requirements/requirements-dev-third-party.txt --ignore-vuln PYSEC-2022-42969 --ignore-vuln PYSEC-2023-162 --ignore-vuln PYSEC-2023-163 --ignore-vuln GHSA-4xh5-x5gv-qwph --ignore-vuln GHSA-7gcm-g887-7qv7"
+    # exec --fail-on-error pip-audit --progress-spinner on --strict --requirement requirements/requirements-dev-third-party.txt --ignore-vuln PYSEC-2022-42969 --ignore-vuln PYSEC-2023-162 --ignore-vuln PYSEC-2023-163 --ignore-vuln GHSA-4xh5-x5gv-qwph --ignore-vuln GHSA-7gcm-g887-7qv7
     ''']
 

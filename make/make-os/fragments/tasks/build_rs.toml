@@ -573,17 +573,17 @@ script = [
                     if eq ${os} "mac"
                         if eq ${td_symlink_polars_libs_pytest} "true"
                             info "🍄 macOS + TD_SYMLINK_POLARS_LIBS=true → Using symbolic links to reduce space of local packages"
-                            debug "🚀 python ${SYMLINK_SO_SCRIPT} ../../target/wheels/wheel.to-foundation.tmp/tabsdata python/ true"
-                            exec --fail-on-error python ${SYMLINK_SO_SCRIPT} ../../target/wheels/wheel.to-foundation.tmp/tabsdata python/tabsdata true
+                            debug "🚀 python ${SYMLINK_SO_SCRIPT} ../../target/wheels/wheel.to-foundation.tmp/tabsdata python/src/main/python/tabsdata true"
+                            exec --fail-on-error python ${SYMLINK_SO_SCRIPT} ../../target/wheels/wheel.to-foundation.tmp/tabsdata python/src/main/python/tabsdata true
                         else
                             info "👀 macOS + TD_SYMLINK_POLARS_LIBS=false → Using regular copy"
-                            debug "🚀 python ${SYMLINK_SO_SCRIPT} ../../target/wheels/wheel.to-foundation.tmp/tabsdata python/ false"
-                            exec --fail-on-error python ${SYMLINK_SO_SCRIPT} ../../target/wheels/wheel.to-foundation.tmp/tabsdata python/tabsdata false
+                            debug "🚀 python ${SYMLINK_SO_SCRIPT} ../../target/wheels/wheel.to-foundation.tmp/tabsdata python/src/main/python/tabsdata false"
+                            exec --fail-on-error python ${SYMLINK_SO_SCRIPT} ../../target/wheels/wheel.to-foundation.tmp/tabsdata python/src/main/python/tabsdata false
                         end
                     else
                         info "🧩 Non macOS → Using regular copy"
-                        debug "🚀 python ${SYMLINK_SO_SCRIPT} ../../target/wheels/wheel.to-foundation.tmp/tabsdata python/ false"
-                        exec --fail-on-error python ${SYMLINK_SO_SCRIPT} ../../target/wheels/wheel.to-foundation.tmp/tabsdata python/tabsdata false
+                        debug "🚀 python ${SYMLINK_SO_SCRIPT} ../../target/wheels/wheel.to-foundation.tmp/tabsdata python/src/main/python/tabsdata false"
+                        exec --fail-on-error python ${SYMLINK_SO_SCRIPT} ../../target/wheels/wheel.to-foundation.tmp/tabsdata python/src/main/python/tabsdata false
                     end
                 else
                     error "⚠️ foundation module not found in wheel extraction: ${wheel}"
@@ -591,8 +591,8 @@ script = [
                 end
 
                 if is_directory "../../target/wheels/wheel.to-foundation.tmp/tabsdata.libs"
-                    trace "📁 Copying tabsdata.libs folder to python/"
-                    exec --fail-on-error cp -r ../../target/wheels/wheel.to-foundation.tmp/tabsdata.libs python/
+                    trace "📁 Copying tabsdata.libs folder to python/src/main/python/"
+                    exec --fail-on-error cp -r ../../target/wheels/wheel.to-foundation.tmp/tabsdata.libs python/src/main/python/
                 else
                     trace "📌 foundation.libs folder not found in wheel extraction: ${wheel}"
                 end
@@ -702,17 +702,17 @@ script = [
                     if eq ${os} "mac"
                         if eq ${td_symlink_polars_libs_pytest} "true"
                             info "🍄 macOS + TD_SYMLINK_POLARS_LIBS=true → Using symbolic links to reduce space of local packages"
-                            debug "🚀 python ${SYMLINK_SO_SCRIPT} ../../target/wheels/wheel.ty-tableframe.tmp/tabsdata python/ true"
-                            exec --fail-on-error python ${SYMLINK_SO_SCRIPT} ../../target/wheels/wheel.ty-tableframe.tmp/tabsdata python/tabsdata true
+                            debug "🚀 python ${SYMLINK_SO_SCRIPT} ../../target/wheels/wheel.ty-tableframe.tmp/tabsdata python/src/main/python/tabsdata true"
+                            exec --fail-on-error python ${SYMLINK_SO_SCRIPT} ../../target/wheels/wheel.ty-tableframe.tmp/tabsdata python/src/main/python/tabsdata true
                         else
                             info "👀 macOS + TD_SYMLINK_POLARS_LIBS=false → Using regular copy"
-                            debug "🚀 python ${SYMLINK_SO_SCRIPT} ../../target/wheels/wheel.ty-tableframe.tmp/tabsdata python/ false"
-                            exec --fail-on-error python ${SYMLINK_SO_SCRIPT} ../../target/wheels/wheel.ty-tableframe.tmp/tabsdata python/tabsdata false
+                            debug "🚀 python ${SYMLINK_SO_SCRIPT} ../../target/wheels/wheel.ty-tableframe.tmp/tabsdata python/src/main/python/tabsdata false"
+                            exec --fail-on-error python ${SYMLINK_SO_SCRIPT} ../../target/wheels/wheel.ty-tableframe.tmp/tabsdata python/src/main/python/tabsdata false
                         end
                     else
                         info "🧩 Non macOS → Using regular copy"
-                        debug "🚀 python ${SYMLINK_SO_SCRIPT} ../../target/wheels/wheel.ty-tableframe.tmp/tabsdata python/ false"
-                        exec --fail-on-error python ${SYMLINK_SO_SCRIPT} ../../target/wheels/wheel.ty-tableframe.tmp/tabsdata python/tabsdata false
+                        debug "🚀 python ${SYMLINK_SO_SCRIPT} ../../target/wheels/wheel.ty-tableframe.tmp/tabsdata python/src/main/python/tabsdata false"
+                        exec --fail-on-error python ${SYMLINK_SO_SCRIPT} ../../target/wheels/wheel.ty-tableframe.tmp/tabsdata python/src/main/python/tabsdata false
                     end
                 else
                     error "⚠️ tabsdata module not found in wheel extraction: ${wheel}"
@@ -720,8 +720,8 @@ script = [
                 end
 
                 if is_directory "../../target/wheels/wheel.ty-tableframe.tmp/tabsdata.libs"
-                    trace "📁 Copying tabsdata.libs folder to python/"
-                    exec --fail-on-error cp -r ../../target/wheels/wheel.ty-tableframe.tmp/tabsdata.libs python/
+                    trace "📁 Copying tabsdata.libs folder to python/src/main/python/"
+                    exec --fail-on-error cp -r ../../target/wheels/wheel.ty-tableframe.tmp/tabsdata.libs python/src/main/python/
                 else
                     trace "📌 tabsdata.libs folder not found in wheel extraction: ${wheel}"
                 end

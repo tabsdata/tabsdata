@@ -145,7 +145,16 @@ def get_python_tags():
     tags = {}
 
     def check_for_spec_py(base):
-        spec_path = os.path.join(base, "client", "td-sdk", "tabsdata", "__spec.py")
+        spec_path = os.path.join(
+            base,
+            "client",
+            "td-sdk",
+            "src",
+            "main",
+            "python",
+            "tabsdata",
+            "__spec.py",
+        )
         return spec_path if os.path.isfile(spec_path) else None
 
     spec_py = check_for_spec_py(ROOT)
@@ -468,6 +477,9 @@ variant_manifest_folder = os.path.join(
 )
 
 package_manifest_folder = os.path.join(
+    "src",
+    "main",
+    "python",
     "tabsdata_snowflake",
     "assets",
     "manifest",
@@ -616,6 +628,9 @@ with global_spinner("Building package 'tabsdata-snowflake' (Snowflake Connector)
         name="tabsdata-snowflake",
         version=read(
             os.path.join(
+                "src",
+                "main",
+                "python",
                 "tabsdata_snowflake",
                 "assets",
                 "manifest",
@@ -625,6 +640,9 @@ with global_spinner("Building package 'tabsdata-snowflake' (Snowflake Connector)
         description="Tabsdata plugin to access Snowflake data.",
         long_description=read(
             os.path.join(
+                "src",
+                "main",
+                "python",
                 "tabsdata_snowflake",
                 "assets",
                 "manifest",
@@ -634,6 +652,9 @@ with global_spinner("Building package 'tabsdata-snowflake' (Snowflake Connector)
         long_description_content_type="text/markdown",
         license_files=(
             os.path.join(
+                "src",
+                "main",
+                "python",
                 "tabsdata_snowflake",
                 "assets",
                 "manifest",
@@ -655,18 +676,24 @@ with global_spinner("Building package 'tabsdata-snowflake' (Snowflake Connector)
             "bdist_egg": CustomBDistEgg,
         },
         packages=find_packages(
-            where=os.getcwd(),
+            where=os.path.join(
+                "src",
+                "main",
+                "python",
+            ),
             exclude=[
                 "test",
                 "test*",
                 "tests",
                 "tests*",
-                "src.utest",
-                "src.utest*",
             ],
         ),
         package_dir={
-            "tabsdata_snowflake": "tabsdata_snowflake",
+            "": os.path.join(
+                "src",
+                "main",
+                "python",
+            ),
         },
         package_data={
             "tabsdata_snowflake": [

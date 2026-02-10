@@ -280,7 +280,7 @@ version = "0.5.3"
 features = ["std"]
 
 [workspace.dependencies.async-compression]
-version = "0.4.37"
+version = "0.4.39"
 features = ["tokio", "all-algorithms"]
 
 [workspace.dependencies.async-trait]
@@ -500,7 +500,7 @@ version = "0.30.0"
 version = "1.12.3"
 
 [workspace.dependencies.reqwest]
-version = "0.13.1"
+version = "0.13.2"
 features = ["json", "stream"]
 
 [workspace.dependencies.ring]
@@ -545,7 +545,7 @@ version = "3.0.2"
 version = "1.0.2"
 
 [workspace.dependencies.sysinfo]
-version = "0.38.0"
+version = "0.38.1"
 
 [workspace.dependencies.temp-env]
 version = "0.3.6"

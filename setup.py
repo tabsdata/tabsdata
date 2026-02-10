@@ -155,7 +155,16 @@ def get_python_tags():
     tags = {}
 
     def check_for_spec_py(base):
-        spec_path = os.path.join(base, "client", "td-sdk", "tabsdata", "__spec.py")
+        spec_path = os.path.join(
+            base,
+            "client",
+            "td-sdk",
+            "src",
+            "main",
+            "python",
+            "tabsdata",
+            "__spec.py",
+        )
         return spec_path if os.path.isfile(spec_path) else None
 
     spec_py = check_for_spec_py(ROOT)
@@ -212,6 +221,9 @@ class CustomBuild(_build):
             "modules",
             "to-foundation",
             "python",
+            "src",
+            "main",
+            "python",
             "tabsdata.libs",
         )
         if os.path.exists(tabsdata_libs_path):
@@ -227,6 +239,9 @@ class CustomBuild(_build):
             "modules",
             "ty-tableframe",
             "python",
+            "src",
+            "main",
+            "python",
             "tabsdata.libs",
         )
         if os.path.exists(tabsdata_libs_path):
@@ -238,7 +253,11 @@ class CustomBuild(_build):
 
 
 PACKAGE_RESOURCES = {
-    Path(ROOT) / "variant" / "resources": Path(".") / "tabsdata" / "resources",
+    Path(ROOT)
+    / "variant"
+    / "resources": (
+        Path("client") / "td-sdk" / "src" / "main" / "python" / "tabsdata" / "resources"
+    ),
 }
 
 
@@ -569,6 +588,9 @@ variant_manifest_folder = os.path.join(
 package_assets_folder = os.path.join(
     "client",
     "td-sdk",
+    "src",
+    "main",
+    "python",
     "tabsdata",
     "assets",
 )
@@ -635,6 +657,9 @@ yaml_root_folder = Path(
     os.path.join(
         "client",
         "td-sdk",
+        "src",
+        "main",
+        "python",
         "tabsdata",
     )
 )
@@ -849,14 +874,15 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
                 where=os.path.join(
                     "client",
                     "td-sdk",
+                    "src",
+                    "main",
+                    "python",
                 ),
                 exclude=[
                     "test",
                     "test*",
                     "tests",
                     "tests*",
-                    "src.utest",
-                    "src.utest*",
                     "tabsdata.assets",
                     "tabsdata.assets*",
                     "tabsdata.resources",
@@ -869,6 +895,9 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
                     "client",
                     "td-lib",
                     "ta_features",
+                    "src",
+                    "main",
+                    "python",
                 ),
                 include=["tabsdata.extensions*"],
             ),
@@ -878,6 +907,9 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
                     "client",
                     "td-lib",
                     "ta_tableframe",
+                    "src",
+                    "main",
+                    "python",
                 ),
                 include=["tabsdata.extensions*"],
             ),
@@ -888,6 +920,9 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
                     "python",
                     "td-lib",
                     "te_examples",
+                    "src",
+                    "main",
+                    "python",
                 ),
                 include=["tabsdata.extensions*"],
             ),
@@ -898,6 +933,9 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
                     "python",
                     "td-lib",
                     "te_tableframe",
+                    "src",
+                    "main",
+                    "python",
                 ),
                 include=["tabsdata.extensions*"],
             ),
@@ -908,6 +946,9 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
                     "python",
                     "td-lib",
                     "te_variant",
+                    "src",
+                    "main",
+                    "python",
                 ),
                 include=["tabsdata.extensions*"],
             ),
@@ -918,6 +959,9 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
                     "python",
                     "modules",
                     "to-foundation",
+                    "python",
+                    "src",
+                    "main",
                     "python",
                 ),
                 include=["tabsdata.expansions*"],
@@ -930,6 +974,9 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
                     "modules",
                     "ty-tableframe",
                     "python",
+                    "src",
+                    "main",
+                    "python",
                 ),
                 include=["tabsdata.expansions*"],
             ),
@@ -938,6 +985,9 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
             "tabsdata": os.path.join(
                 "client",
                 "td-sdk",
+                "src",
+                "main",
+                "python",
                 "tabsdata",
             ),
             "tabsdata.expansions": os.path.join(
@@ -945,6 +995,9 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
                 "python",
                 "modules",
                 "to-foundation",
+                "python",
+                "src",
+                "main",
                 "python",
                 "tabsdata",
                 "expansions",
@@ -954,6 +1007,9 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
                 "python",
                 "modules",
                 "to-foundation",
+                "python",
+                "src",
+                "main",
                 "python",
                 "tabsdata",
                 "expansions",
@@ -965,6 +1021,9 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
                 "modules",
                 "ty-tableframe",
                 "python",
+                "src",
+                "main",
+                "python",
                 "tabsdata",
                 "expansions",
                 "tableframe",
@@ -973,6 +1032,9 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
                 "client",
                 "td-lib",
                 "ta_features",
+                "src",
+                "main",
+                "python",
                 "tabsdata",
                 "extensions",
             ),
@@ -981,6 +1043,9 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
                 "python",
                 "td-lib",
                 "te_examples",
+                "src",
+                "main",
+                "python",
                 "tabsdata",
                 "extensions",
                 "_examples",
@@ -989,6 +1054,9 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
                 "client",
                 "td-lib",
                 "ta_features",
+                "src",
+                "main",
+                "python",
                 "tabsdata",
                 "extensions",
                 "_features",
@@ -997,6 +1065,9 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
                 "client",
                 "td-lib",
                 "ta_features",
+                "src",
+                "main",
+                "python",
                 "tabsdata",
                 "extensions",
                 "_features",
@@ -1007,6 +1078,9 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
                 "python",
                 "td-lib",
                 "te_tableframe",
+                "src",
+                "main",
+                "python",
                 "tabsdata",
                 "extensions",
                 "_tableframe",
@@ -1015,6 +1089,9 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
                 "client",
                 "td-lib",
                 "ta_tableframe",
+                "src",
+                "main",
+                "python",
                 "tabsdata",
                 "extensions",
                 "_tableframe",
@@ -1025,6 +1102,9 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
                 "python",
                 "td-lib",
                 "te_variant",
+                "src",
+                "main",
+                "python",
                 "tabsdata",
                 "extensions",
                 "variant",

@@ -12,7 +12,18 @@ import time
 from types import ModuleType
 
 EXAMPLES_GUIDES_BOOK_PATH = (
-    "extensions/python/td-lib/te_examples/tabsdata/extensions/_examples/guides/book"
+    "extensions/"
+    "python/"
+    "td-lib/"
+    "te_examples/"
+    "src/"
+    "main/"
+    "python/"
+    "tabsdata/"
+    "extensions/"
+    "_examples/"
+    "guides/"
+    "book"
 )
 
 
@@ -148,8 +159,8 @@ def clean_py(project_folder):
         "local_dev",
         "tdlocal",
         "local_development_artifacts",
-        "client/td-sdk/tabsdata/assets",
-        "client/td-sdk/tabsdata/resources",
+        "client/td-sdk/src/main/python/tabsdata/assets",
+        "client/td-sdk/src/main/python/tabsdata/resources",
         "tabsdata_agent/assets",
         "SOURCETRACK.yaml",
         "tabsdata.libs",
@@ -164,6 +175,9 @@ def clean_py(project_folder):
                 "connectors",
                 "python",
                 connector,
+                "src",
+                "main",
+                "python",
                 connector_module,
                 "assets",
                 "manifest",
@@ -175,6 +189,9 @@ def clean_py(project_folder):
                 "connectors",
                 "python",
                 connector,
+                "src",
+                "main",
+                "python",
                 connector_module,
                 "assets",
                 "manifest",
@@ -220,6 +237,7 @@ def clean_ts(project_folder):
         "src/tests/coverage",
         "src/e2e/test-results",
         "src/e2e/playwright-report",
+        "src/e2e/setup/storageState.json",
         "target",
         "test-results",
     ]

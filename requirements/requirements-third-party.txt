@@ -5,8 +5,8 @@
 accessify==0.3.1
 archspec==0.2.5
 base32hex==1.0.2
-boto3==1.42.43
-boto3-stubs[glue]==1.42.43
+boto3==1.42.44
+boto3-stubs[glue]==1.42.44
 click==8.3.1
 cloudpickle==3.1.2
 colorama==0.4.6
@@ -28,7 +28,7 @@ pandas==2.3.3
 pillow==12.1.0
 pip-tools==7.5.2
 platformdirs==4.5.1
-polars==1.38.0
+polars==1.38.1
 protobuf==6.33.5
 pycountries==1.2.1
 pyyaml==6.0.3

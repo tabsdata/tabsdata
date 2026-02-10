@@ -64,11 +64,17 @@ def copy_assets():  # noqa: C901
         project_tabsdata_root_folder,
         "client",
         "td-sdk",
+        "src",
+        "main",
+        "python",
         "tabsdata",
         "assets",
     )
     tabsdata_agent_assets_folder = os.path.join(
         project_tabsdata_agent_root_folder,
+        "src",
+        "main",
+        "python",
         "tabsdata_agent",
         "assets",
     )

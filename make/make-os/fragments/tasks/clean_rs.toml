@@ -64,8 +64,8 @@ script = [
             retry = set 0
             keep = set true
             while ${keep}
-                file_Exists = exec python -c "import os, sys; sys.exit(0 if os.path.lexists(sys.argv[1]) else 1)" "${file}"
-                if equals ${file_Exists.code} 0
+                file_exists = exec python -c "import os, sys; sys.exit(0 if os.path.lexists(sys.argv[1]) else 1)" "${file}"
+                if equals ${file_exists.code} 0
                     output = exec python -c "import os, sys; os.unlink(sys.argv[1])" "${file}"
                     if equals ${output.code} 0
                         info "✅ Successfully deleted file: ${file}"
@@ -114,8 +114,8 @@ script = [
             retry = set 0
             keep = set true
             while ${keep}
-                file_Exists = exec python -c "import os, sys; sys.exit(0 if os.path.lexists(sys.argv[1]) else 1)" "${file}"
-                if equals ${file_Exists.code} 0
+                file_exists = exec python -c "import os, sys; sys.exit(0 if os.path.lexists(sys.argv[1]) else 1)" "${file}"
+                if equals ${file_exists.code} 0
                     output = exec python -c "import os, sys; os.unlink(sys.argv[1])" "${file}"
                     if equals ${output.code} 0
                         info "✅ Successfully deleted file: ${file}"
