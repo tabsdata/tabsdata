@@ -253,11 +253,7 @@ class CustomBuild(_build):
 
 
 PACKAGE_RESOURCES = {
-    Path(ROOT)
-    / "variant"
-    / "resources": (
-        Path("client") / "td-sdk" / "src" / "main" / "python" / "tabsdata" / "resources"
-    ),
+    Path(ROOT) / "variant" / "resources": Path(".") / "tabsdata" / "resources",
 }
 
 
@@ -271,7 +267,12 @@ class CustomBuildPy(_build_py):
                 continue
             destination = package_root / target
             if source.is_dir():
-                shutil.copytree(source, destination, dirs_exist_ok=True)
+                shutil.copytree(
+                    source,
+                    destination,
+                    dirs_exist_ok=True,
+                    ignore=shutil.ignore_patterns(".gitkeep"),
+                )
             elif source.is_file():
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(source, destination)
@@ -1151,4 +1152,7 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
         data_files=datafiles,
         entry_points={"console_scripts": console_scripts},
         include_package_data=True,
+        exclude_package_data={
+            "": [".gitkeep"],
+        },
     )

@@ -93,11 +93,12 @@ script = [
 
             connector_name = basename ${connector}
             connector_package = replace ${connector_name} "_" "-"
+            connector_wheel_package_name = replace ${connector_name} "-" "_"
 
             # debug "🚀 pip uninstall ${connector_package} --yes"
             # exec --fail-on-error pip uninstall ${connector_package} --yes
 
-            wheels = glob_array ./target/python/dist/${connector_name}*.whl
+            wheels = glob_array ./target/python/dist/${connector_wheel_package_name}*.whl
             for wheel in ${wheels}
                 if not contains ${wheel} "musllinux"
                     debug "🚀 pip install ${wheel}"

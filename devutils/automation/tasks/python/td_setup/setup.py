@@ -25,4 +25,7 @@ setup(
             "python",
         ),
     },
+    exclude_package_data={
+        "": [".gitkeep"],
+    },
 )

@@ -707,4 +707,7 @@ with global_spinner("Building package 'tabsdata-kafka' (Kafka Connector)..."):
         data_files=datafiles,
         entry_points={},
         include_package_data=True,
+        exclude_package_data={
+            "": [".gitkeep"],
+        },
     )
