@@ -57,6 +57,7 @@ pnpm-debug.log*
 lerna-debug.log*
 *.local
 !**/testing_resources/**/*.log
+CLAUDE.md
 MANIFEST
 !assets/manifest
 !connectors/python/**/assets/manifest/
