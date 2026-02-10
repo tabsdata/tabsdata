@@ -201,6 +201,7 @@ class TableFrameGroupBy:
         │ null ┆ 1   │ 1   │
         └──────┴─────┴─────┘
         """
+        # noinspection PyArgumentList
         with self._transient_state(STATE, td_constants.RowOperation.GROUP_LEN):
             return td_frame.TableFrame.__build__(
                 df=self.agg(
@@ -263,6 +264,7 @@ class TableFrameGroupBy:
         │ null ┆ 0   ┆ 0   │
         └──────┴─────┴─────┘
         """
+        # noinspection PyArgumentList
         with self._transient_state(STATE, td_constants.RowOperation.GROUP_COUNT):
             return td_frame.TableFrame.__build__(
                 df=self.agg(
@@ -324,6 +326,7 @@ class TableFrameGroupBy:
         │ F    ┆ 9    ┆ NaN  │
         └──────┴──────┴──────┘
         """
+        # noinspection PyArgumentList
         with self._transient_state(STATE, td_constants.RowOperation.GROUP_MAX):
             return td_frame.TableFrame.__build__(
                 df=self.agg(
@@ -387,6 +390,7 @@ class TableFrameGroupBy:
         │ F    ┆ 9.0      ┆ NaN      │
         └──────┴──────────┴──────────┘
         """
+        # noinspection PyArgumentList
         with self._transient_state(STATE, td_constants.RowOperation.GROUP_MEEAN):
             return td_frame.TableFrame.__build__(
                 df=self.agg(
@@ -450,6 +454,7 @@ class TableFrameGroupBy:
         │ F    ┆ 9.0  ┆ NaN  │
         └──────┴──────┴──────┘
         """
+        # noinspection PyArgumentList
         with self._transient_state(STATE, td_constants.RowOperation.GROUP_MEDIAN):
             return td_frame.TableFrame.__build__(
                 df=self.agg(
@@ -511,6 +516,7 @@ class TableFrameGroupBy:
         │ F    ┆ 9    ┆ NaN  │
         └──────┴──────┴──────┘
         """
+        # noinspection PyArgumentList
         with self._transient_state(STATE, td_constants.RowOperation.GROUP_MIN):
             return td_frame.TableFrame.__build__(
                 df=self.agg(
@@ -572,6 +578,7 @@ class TableFrameGroupBy:
         │ F    ┆ 1   ┆ 1   │
         └──────┴─────┴─────┘
         """
+        # noinspection PyArgumentList
         with self._transient_state(STATE, td_constants.RowOperation.GROUP_UNIQUE):
             return td_frame.TableFrame.__build__(
                 df=self.agg(
@@ -635,6 +642,7 @@ class TableFrameGroupBy:
         │ F    ┆ 9   ┆ NaN  │
         └──────┴─────┴──────┘
         """
+        # noinspection PyArgumentList
         with self._transient_state(STATE, td_constants.RowOperation.GROUP_SUM):
             return td_frame.TableFrame.__build__(
                 df=self.agg(
