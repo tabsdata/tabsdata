@@ -21,9 +21,9 @@ import tabsdata.tableframe.functions.col as td_col
 import tabsdata.tableframe.typing as td_typing
 
 # noinspection PyProtectedMember
+from tabsdata.expansions.tableframe.features.grok.api._handler import GrokParser
 
 # noinspection PyProtectedMember
-from tabsdata.expansions.tableframe.features.grok.api._handler import GrokParser
 
 
 # ToDo: This requires some refactoring to unify transformer methods

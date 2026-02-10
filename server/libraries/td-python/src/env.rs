@@ -3,9 +3,9 @@
 //
 
 use crate::error::PythonError::WrongEnvPath;
+use rand::RngExt;
 use rand::distr::Alphanumeric;
 use rand::rng;
-use rand::RngExt;
 use std::env;
 use std::ffi::OsString;
 use std::path::MAIN_SEPARATOR;

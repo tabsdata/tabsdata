@@ -4,8 +4,8 @@
 
 use clap::Parser;
 use indicatif::{ProgressBar, ProgressStyle};
-use rand::prelude::{IndexedRandom, IteratorRandom};
 use rand::RngExt;
+use rand::prelude::{IndexedRandom, IteratorRandom};
 use std::collections::HashMap;
 use std::time::Instant;
 use strum::IntoEnumIterator;

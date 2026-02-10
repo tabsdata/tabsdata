@@ -5,12 +5,12 @@
 use darling::FromMeta;
 use proc_macro::TokenStream;
 use proc_macro2::Ident;
-use quote::{format_ident, quote, ToTokens};
+use quote::{ToTokens, format_ident, quote};
 use std::any::type_name;
 use std::marker::PhantomData;
 use std::str::FromStr;
-use syn::{parse_macro_input, ItemEnum, ItemStruct, Type};
-use td_shared::meta_parser::{some_or_none, OptionWrapper, SynMetaOrLit};
+use syn::{ItemEnum, ItemStruct, Type, parse_macro_input};
+use td_shared::meta_parser::{OptionWrapper, SynMetaOrLit, some_or_none};
 use td_shared::{downcast_option, parse_meta};
 
 #[derive(Debug, FromMeta)]

@@ -7,9 +7,8 @@ from __future__ import annotations
 import inspect
 import logging
 import warnings
-from dataclasses import dataclass
 from functools import wraps
-from typing import Any, Callable, List, Literal, TypeAlias, TypeVar, Union, cast
+from typing import Any, Callable, TypeVar, cast
 
 _T = TypeVar("_T")
 

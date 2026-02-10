@@ -137,5 +137,4 @@ def copy_assets():  # noqa: C901
         )
 
 
-
 copy_assets()
