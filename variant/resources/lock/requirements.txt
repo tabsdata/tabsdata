@@ -86,6 +86,7 @@ py-cpuinfo==9.0.0
 pyarrow==22.0.0
 pyasn1==0.6.1
 pyasn1-modules==0.4.2
+pybreaker==1.4.1
 pycountries==1.2.1
 pycparser==2.23
 pydantic==2.12.4
