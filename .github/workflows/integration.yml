@@ -113,18 +113,37 @@ jobs:
     steps:
       - name: Check label
         id: check-label
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          PR_LABEL_LIST='${{ toJson(github.event.pull_request.labels.*.name) }}'
-          echo "Pull rquest labels: ${PR_LABEL_LIST}"      
+          check_skip_ci_label() {
+            local PR_LABEL_LIST
+            PR_LABEL_LIST=$(gh pr view ${{ github.event.pull_request.number }} --json labels --jq '.labels[].name' 2>/dev/null || echo "")
+            echo "Pull request labels: ${PR_LABEL_LIST}"
+            if echo "${PR_LABEL_LIST}" | grep -q "^skip-ci$"; then
+              return 0
+            else
+              return 1
+            fi
+          }
 
-          if echo "${PR_LABEL_LIST}" | jq -e '.[] | select(. == "skip-ci")' > /dev/null; then
+          if check_skip_ci_label; then
             echo "⚠️ Not ready. ☹️ PR contains label 'skip-ci'. Skipping workflow."
-            echo "permit_workflow=false" >> $GITHUB_ENV          
+            echo "permit_workflow=false" >> $GITHUB_ENV
             echo "permit_workflow=false" >> $GITHUB_OUTPUT
           else
-            echo "✅ Ready. 🙂 PR does not contain label 'skip-ci'. Running workflow."
-            echo "permit_workflow=true" >> $GITHUB_ENV
-            echo "permit_workflow=true" >> $GITHUB_OUTPUT
+            echo "⏳ Label 'skip-ci' not found. Waiting 60 seconds before rechecking..."
+            sleep 60
+
+            if check_skip_ci_label; then
+              echo "⚠️ Not ready. ☹️ PR contains label 'skip-ci' (found on recheck). Skipping workflow."
+              echo "permit_workflow=false" >> $GITHUB_ENV
+              echo "permit_workflow=false" >> $GITHUB_OUTPUT
+            else
+              echo "✅ Ready. 🙂 PR does not contain label 'skip-ci'. Running workflow."
+              echo "permit_workflow=true" >> $GITHUB_ENV
+              echo "permit_workflow=true" >> $GITHUB_OUTPUT
+            fi
           fi
 
       - name: Mark pull request
