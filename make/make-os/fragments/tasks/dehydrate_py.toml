@@ -112,7 +112,7 @@ script = [
                 debug "🔅 Deleting symbolic link for '${binary_name}': ${source_binary} -> ${target_binary}"
                 rm ${target_binary}
             else
-                warn "🔥 Binary target not found: ${source_binary}"
+                warn "🔥 Binary target not found: ${target_binary}"
             end
         end
     else
