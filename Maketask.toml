@@ -2,6 +2,23 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
+#  The --tb option controls how Python tracebacks are displayed when tests fail:
+#  ┌─────────────┬─────────────────────────────────────────────────┐
+#  │   Option    │                   Description                   │
+#  ├─────────────┼─────────────────────────────────────────────────┤
+#  │ --tb=long   │ Full traceback with source code                 │
+#  ├─────────────┼─────────────────────────────────────────────────┤
+#  │ --tb=short  │ Shorter traceback                               │
+#  ├─────────────┼─────────────────────────────────────────────────┤
+#  │ --tb=line   │ One line per failure                            │
+#  ├─────────────┼─────────────────────────────────────────────────┤
+#  │ --tb=native │ Python standard library format                  │
+#  ├─────────────┼─────────────────────────────────────────────────┤
+#  │ --tb=no     │ No traceback at all                             │
+#  ├─────────────┼─────────────────────────────────────────────────┤
+#  │ --tb=auto   │ Long for first/last, short for others (default) │
+#  └─────────────┴─────────────────────────────────────────────────┘
+
 extend = [
     { path = "./make/make-os/fragments/shared/Maketask.toml", relative = "git" },
 
@@ -601,12 +618,25 @@ script = [
 
     pytest_tests_folders = array_join ${tests_folders} " "
 
+    td_tb = set ""
+    td_fail = set ""
+    arguments = split ${CARGO_MAKE_TASK_ARGS} ;
+    for argument in ${arguments}
+        is_tb = starts_with ${argument} "--tb="
+        if ${is_tb}
+            td_tb = set ${argument}
+            td_fail = set "--instafail"
+            info "🛟 Using fail option: ${td_tb}"
+            info "📝 Using traceback option: ${td_fail}"
+        end
+    end
+
     if eq ${verbose} "false"
-        debug "🚀 pytest --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -n 16 --dist=loadfile %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -n 16 --dist=loadfile %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m "${MARKERS}"
+        debug "🚀 pytest ${td_tb} ${td_fail} --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -n 16 --dist=loadfile %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest ${td_tb} ${td_fail} --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -n 16 --dist=loadfile %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m "${MARKERS}"
     else
-        debug "🚀 pytest --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m "${MARKERS}"
+        debug "🚀 pytest ${td_tb} ${td_fail} --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest ${td_tb} ${td_fail} --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m "${MARKERS}"
     end
     is_zero = eq ${exit_code} "0"
     is_five = eq ${exit_code} "5"
@@ -625,6 +655,8 @@ script = [
     end
 
     exec --fail-on-error python ${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/report_coverage.py ./.coverage/json/coverage.json .
+
+    info "📊 Report generated at: 👉 ${PROJECT_TABSDATA_ROOT_FOLDER}/target/reports/pytest/tabsdata/pytest.html\n"
     ''']
 
 [tasks.outdated]
