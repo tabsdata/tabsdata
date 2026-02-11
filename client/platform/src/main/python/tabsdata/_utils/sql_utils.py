@@ -35,8 +35,8 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-MAX_USER_LENGTH = 16
-MAX_PASSWORD_LENGTH = 16
+MAX_USER_LENGTH = 128
+MAX_PASSWORD_LENGTH = 1024
 
 
 class SQLDescriptor:
