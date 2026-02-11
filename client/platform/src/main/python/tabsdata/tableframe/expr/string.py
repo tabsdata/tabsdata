@@ -44,6 +44,7 @@ class ExprStringNameSpace:
     ) -> td_expr.Expr:
         """
         :categories: type_casting
+
         Convert the string to a date.
 
         Args:
@@ -85,6 +86,7 @@ class ExprStringNameSpace:
     ) -> td_expr.Expr:
         """
         :categories: type_casting
+
         Convert the string to a datetime.
 
         Args:
@@ -135,6 +137,7 @@ class ExprStringNameSpace:
     ) -> td_expr.Expr:
         """
         :categories: type_casting
+
         Convert the string to a time.
 
         Args:
@@ -166,6 +169,7 @@ class ExprStringNameSpace:
     def len_bytes(self) -> td_expr.Expr:
         """
         :categories: string
+
         Return number of bytes (not chars) of a string.
 
         Example:
@@ -191,6 +195,7 @@ class ExprStringNameSpace:
     def len_chars(self) -> td_expr.Expr:
         """
         :categories: string
+
         Return number of chars (not bytes) of a string.
 
         Example:
@@ -216,6 +221,7 @@ class ExprStringNameSpace:
     def to_uppercase(self) -> td_expr.Expr:
         """
         :categories: string
+
         Return the uppercase of a string.
 
         Example:
@@ -240,6 +246,7 @@ class ExprStringNameSpace:
     def to_lowercase(self) -> td_expr.Expr:
         """
         :categories: string
+
         Return the lowercase of a string.
 
         Example:
@@ -264,6 +271,7 @@ class ExprStringNameSpace:
     def to_titlecase(self) -> td_expr.Expr:
         """
         :categories: string
+
         Uppercase the first character and lowercase all the others ones of a string.
 
         Example:
@@ -291,6 +299,7 @@ class ExprStringNameSpace:
     def strip_chars(self, characters: td_typing.IntoExpr = None) -> td_expr.Expr:
         """
         :categories: string
+
         Trim string values.
 
         Args:
@@ -327,6 +336,7 @@ class ExprStringNameSpace:
     def strip_chars_start(self, characters: td_typing.IntoExpr = None) -> td_expr.Expr:
         """
         :categories: string
+
         Trim string values from the start of the string.
 
         Args:
@@ -363,6 +373,7 @@ class ExprStringNameSpace:
     def strip_chars_end(self, characters: td_typing.IntoExpr = None) -> td_expr.Expr:
         """
         :categories: string
+
         Trim string values from the end of the string.
 
         Args:
@@ -399,6 +410,7 @@ class ExprStringNameSpace:
     def strip_prefix(self, prefix: td_typing.IntoExpr) -> td_expr.Expr:
         """
         :categories: string
+
         Trim string values removing the given prefix
 
         Args:
@@ -428,6 +440,7 @@ class ExprStringNameSpace:
     def strip_suffix(self, suffix: td_typing.IntoExpr) -> td_expr.Expr:
         """
         :categories: string
+
         Trim string values removing the given suffix
 
         Args:
@@ -457,6 +470,7 @@ class ExprStringNameSpace:
     def pad_start(self, length: int, fill_char: str = " ") -> td_expr.Expr:
         """
         :categories: string
+
         Pad string values at the front to the given length using the given
         fill character.
 
@@ -487,6 +501,7 @@ class ExprStringNameSpace:
     def pad_end(self, length: int, fill_char: str = " ") -> td_expr.Expr:
         """
         :categories: string
+
         Pad string values at the end to the given length using the given
         fill character.
 
@@ -517,6 +532,7 @@ class ExprStringNameSpace:
     def zfill(self, length: int | td_typing.IntoExprColumn) -> td_expr.Expr:
         """
         :categories: string
+
         Pad numeric string values at the start to the given length using zeros.
 
         Args:
@@ -552,6 +568,7 @@ class ExprStringNameSpace:
     ) -> td_expr.Expr:
         """
         :categories: string
+
         Evaluate if the string contains a pattern.
 
         Args:
@@ -596,6 +613,7 @@ class ExprStringNameSpace:
     ) -> td_expr.Expr:
         """
         :categories: string
+
         Find the position of the first occurrence of the given pattern.
 
         Args:
@@ -634,6 +652,7 @@ class ExprStringNameSpace:
     def ends_with(self, suffix: str | td_expr.Expr) -> td_expr.Expr:
         """
         :categories: string
+
         Evaluate if the string ends with.
 
         Args:
@@ -666,6 +685,7 @@ class ExprStringNameSpace:
     def starts_with(self, prefix: str | td_expr.Expr) -> td_expr.Expr:
         """
         :categories: string
+
         Evaluate if the string start with.
 
         Args:
@@ -701,6 +721,7 @@ class ExprStringNameSpace:
     ) -> td_expr.Expr:
         """
         :categories: string
+
         Extract a pattern from the string.
 
         Args:
@@ -739,6 +760,7 @@ class ExprStringNameSpace:
     ) -> td_expr.Expr:
         """
         :categories: string
+
         Counts the ocurrrences of the given pattern in the string.
 
         Args:
@@ -784,6 +806,7 @@ class ExprStringNameSpace:
     ) -> td_expr.Expr:
         """
         :categories: string
+
         Replace the first occurence of a pattern with the given string.
 
         Args:
@@ -831,6 +854,7 @@ class ExprStringNameSpace:
     ) -> td_expr.Expr:
         """
         :categories: string
+
         Replace the all occurences of a pattern with the given string.
 
         Args:
@@ -871,6 +895,7 @@ class ExprStringNameSpace:
     def reverse(self) -> td_expr.Expr:
         """
         :categories: string
+
         Reverse the string.
 
         Example:
@@ -900,6 +925,7 @@ class ExprStringNameSpace:
     ) -> td_expr.Expr:
         """
         :categories: string
+
         Extract the substring at the given offset for the given length.
 
         Args:
@@ -935,6 +961,7 @@ class ExprStringNameSpace:
     def head(self, n: int | td_typing.IntoExprColumn) -> td_expr.Expr:
         """
         :categories: string
+
         Extract the start of the string up to the given length.
 
         Args:
@@ -966,6 +993,7 @@ class ExprStringNameSpace:
     def tail(self, n: int | td_typing.IntoExprColumn) -> td_expr.Expr:
         """
         :categories: string
+
         Extract the end of the string up to the given length.
 
         Args:
@@ -999,6 +1027,7 @@ class ExprStringNameSpace:
     ) -> td_expr.Expr:
         """
         :categories: type_casting
+
         Covert a string to integer.
 
         Args:
@@ -1037,6 +1066,7 @@ class ExprStringNameSpace:
     ) -> td_expr.Expr:
         """
         :categories: string
+
         Evaluate if the string contains any of the given patterns.
 
         Args:
@@ -1080,6 +1110,7 @@ class ExprStringNameSpace:
     ) -> td_expr.Expr:
         """
         :categories: string
+
         Replace the all occurences of any the given patterns with the given string.
 
         Args:
@@ -1120,6 +1151,7 @@ class ExprStringNameSpace:
     def grok(self, pattern: str, schema: dict[str, td_col.Column]) -> td_expr.Expr:
         """
         :categories: string
+
         Parse log text into structured fields using a Grok pattern.
 
         Applies the given Grok pattern to the values in the current string expression.

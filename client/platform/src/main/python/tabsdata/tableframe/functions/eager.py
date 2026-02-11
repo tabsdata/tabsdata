@@ -24,6 +24,7 @@ def concat(
 ) -> td_frame.TdType:
     """
     :categories: union
+
     Combine multiple TableFrames by stacking their rows.
 
     Args:

@@ -19,6 +19,7 @@ def lit(
 ) -> td_expr.Expr:
     """
     :categories: generation
+
     Expression for the given literal value.
 
     Args:

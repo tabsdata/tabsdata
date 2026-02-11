@@ -47,6 +47,7 @@ Selectors by position.
 def all() -> SelectorProxy:
     """
     :categories: projection
+
     Select all columns in a TableFrame.
 
     Example:
@@ -97,6 +98,7 @@ def all() -> SelectorProxy:
 def first() -> SelectorProxy:
     """
     :categories: projection
+
     Select the first column in the TableFrame.
 
     Example:
@@ -148,6 +150,7 @@ def first() -> SelectorProxy:
 def last() -> SelectorProxy:
     """
     :categories: projection
+
     Select the last column in the TableFrame.
 
     Useful when working with dynamically generated schemas where the column
@@ -206,6 +209,7 @@ def last() -> SelectorProxy:
 def by_index(*indices: int | range | Sequence[int | range]) -> SelectorProxy:
     """
     :categories: projection
+
     Select columns by their position in the TableFrame.
 
     Parameters:
@@ -295,6 +299,7 @@ Selectors by name.
 def by_name(*names: str | Collection[str], require_all: bool = True) -> SelectorProxy:
     """
     :categories: projection
+
     Select all columns whose names match any given names.
 
     Parameters:
@@ -354,6 +359,7 @@ def by_name(*names: str | Collection[str], require_all: bool = True) -> Selector
 def contains(*substring: str) -> SelectorProxy:
     """
     :categories: projection
+
     Select all columns whose names contain one or more of the given substrings.
 
     Parameters:
@@ -405,6 +411,7 @@ def contains(*substring: str) -> SelectorProxy:
 def starts_with(*prefix: str) -> SelectorProxy:
     """
     :categories: projection
+
     Select all columns whose names start with any of the given prefixes.
 
     Parameters:
@@ -460,6 +467,7 @@ def starts_with(*prefix: str) -> SelectorProxy:
 def ends_with(*suffix: str) -> SelectorProxy:
     """
     :categories: projection
+
     Select all columns whose names end with any of the given suffixes.
 
     Parameters:
@@ -515,6 +523,7 @@ def ends_with(*suffix: str) -> SelectorProxy:
 def matches(pattern: str) -> SelectorProxy:
     """
     :categories: projection
+
     Select all columns whose names match a regular expression pattern.
 
     Parameters:
@@ -572,6 +581,7 @@ def matches(pattern: str) -> SelectorProxy:
 def alpha(ascii_only: bool = False, *, ignore_spaces: bool = False) -> SelectorProxy:
     """
     :categories: projection
+
     Select all columns with names made up of only alphabetic characters.
 
     Parameters:
@@ -634,6 +644,7 @@ def alphanumeric(
 ) -> SelectorProxy:
     """
     :categories: projection
+
     Select all columns whose names contain only letters and digits.
 
     Parameters:
@@ -693,6 +704,7 @@ def alphanumeric(
 def digit(ascii_only: bool = False) -> SelectorProxy:
     """
     :categories: projection
+
     Select all columns whose names consist only of digit characters.
 
     Parameters:
@@ -763,6 +775,7 @@ def by_dtype(
 ) -> SelectorProxy:
     """
     :categories: projection
+
     Select all columns of the specified data type.
 
     Example:
@@ -820,6 +833,7 @@ Selectors by abstract data types.
 def integer() -> SelectorProxy:
     """
     :categories: projection
+
     Select all columns with integer data types.
 
     Example:
@@ -872,6 +886,7 @@ def integer() -> SelectorProxy:
 def signed_integer() -> SelectorProxy:
     """
     :categories: projection
+
     Select all columns of signed integer data types.
 
     Example:
@@ -924,6 +939,7 @@ def signed_integer() -> SelectorProxy:
 def unsigned_integer() -> SelectorProxy:
     """
     :categories: projection
+
     Select all columns of unsigned integer data types.
 
     Unsigned integers include types such as UInt8, UInt16, UInt32, and UInt64.
@@ -979,6 +995,7 @@ def unsigned_integer() -> SelectorProxy:
 def float() -> SelectorProxy:
     """
     :categories: projection
+
     Select all columns of float data types.
 
     Example:
@@ -1030,6 +1047,7 @@ def float() -> SelectorProxy:
 def numeric() -> SelectorProxy:
     """
     :categories: projection
+
     Select all columns of numeric data types.
 
     This includes integer and float columns of any size or signedness.
@@ -1084,6 +1102,7 @@ def numeric() -> SelectorProxy:
 def temporal() -> SelectorProxy:
     """
     :categories: projection
+
     Select all columns of temporal data types.
 
     This includes `datetime`, `date`, `time`, and `timedelta`.
@@ -1181,6 +1200,7 @@ Selectors by concrete data type.
 def binary() -> SelectorProxy:
     """
     :categories: projection
+
     Select all columns of binary (bytes) data type.
 
     Example:
@@ -1231,6 +1251,7 @@ def binary() -> SelectorProxy:
 def boolean() -> SelectorProxy:
     """
     :categories: projection
+
     Select all columns of boolean data type.
 
     Example:
@@ -1281,6 +1302,7 @@ def boolean() -> SelectorProxy:
 def categorical() -> SelectorProxy:
     """
     :categories: projection
+
     Select all columns with categorical data type.
 
     Example:
@@ -1334,6 +1356,7 @@ def categorical() -> SelectorProxy:
 def date() -> SelectorProxy:
     """
     :categories: projection
+
     Select all columns of date data type.
 
     This selector matches columns that store calendar dates without time information.
@@ -1408,6 +1431,7 @@ def datetime(
 ) -> SelectorProxy:
     """
     :categories: projection
+
     Select all columns of datetime data type.
 
     Parameters:
@@ -1493,6 +1517,7 @@ def datetime(
 def decimal() -> SelectorProxy:
     """
     :categories: projection
+
     Select all columns of decimal data type.
 
     Example:
@@ -1550,6 +1575,7 @@ def duration(
 ) -> SelectorProxy:
     """
     :categories: projection
+
     Select all columns of duration data type.
 
     Parameters:
@@ -1618,6 +1644,7 @@ def duration(
 def object() -> SelectorProxy:
     """
     :categories: projection
+
     Select all columns of object data type.
 
     Example:
@@ -1673,6 +1700,7 @@ def object() -> SelectorProxy:
 def string(*, include_categorical: bool = False) -> SelectorProxy:
     """
     :categories: projection
+
     Select all columns of string or categorical data type.
 
     Parameters:
@@ -1730,6 +1758,7 @@ def string(*, include_categorical: bool = False) -> SelectorProxy:
 def time() -> SelectorProxy:
     """
     :categories: projection
+
     Select columns of Python `time` values.
 
     Example:
@@ -1798,6 +1827,7 @@ def exclude(
 ) -> SelectorProxy:
     """
     :categories: projection
+
     Exclude specific columns from selection by name, data type, expression, or selector.
 
     Parameters:

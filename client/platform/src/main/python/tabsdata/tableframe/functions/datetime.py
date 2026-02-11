@@ -26,6 +26,7 @@ class ExprDateTimeNameSpace:
     ) -> td_expr.Expr:
         """
         :categories: date
+
         """
         # noinspection PyProtectedMember
         return td_expr.Expr(
@@ -40,6 +41,7 @@ class ExprDateTimeNameSpace:
     def truncate(self, every: str | dt.timedelta | td_expr.Expr) -> td_expr.Expr:
         """
         :categories: date
+
         """
         # noinspection PyProtectedMember
         return td_expr.Expr(
@@ -77,6 +79,7 @@ class ExprDateTimeNameSpace:
     ) -> td_expr.Expr:
         """
         :categories: date
+
         """
         # noinspection PyProtectedMember
         return td_expr.Expr(
@@ -88,162 +91,189 @@ class ExprDateTimeNameSpace:
     def to_string(self, fmt: str | None = None) -> td_expr.Expr:
         """
         :categories: type_casting
+
         """
         return td_expr.Expr(self._expr.to_string(format=fmt))
 
     def strftime(self, fmt: str) -> td_expr.Expr:
         """
         :categories: date
+
         """
         return td_expr.Expr(self._expr.strftime(format=fmt))
 
     def millennium(self) -> td_expr.Expr:
         """
         :categories: date
+
         """
         return td_expr.Expr(self._expr.millennium())
 
     def century(self) -> td_expr.Expr:
         """
         :categories: date
+
         """
         return td_expr.Expr(self._expr.century())
 
     def year(self) -> td_expr.Expr:
         """
         :categories: date
+
         """
         return td_expr.Expr(self._expr.year())
 
     def is_leap_year(self) -> td_expr.Expr:
         """
         :categories: date
+
         """
         return td_expr.Expr(self._expr.is_leap_year())
 
     def iso_year(self) -> td_expr.Expr:
         """
         :categories: date
+
         """
         return td_expr.Expr(self._expr.iso_year())
 
     def quarter(self) -> td_expr.Expr:
         """
         :categories: date
+
         """
         return td_expr.Expr(self._expr.quarter())
 
     def month(self) -> td_expr.Expr:
         """
         :categories: date
+
         """
         return td_expr.Expr(self._expr.month())
 
     def week(self) -> td_expr.Expr:
         """
         :categories: date
+
         """
         return td_expr.Expr(self._expr.week())
 
     def weekday(self) -> td_expr.Expr:
         """
         :categories: date
+
         """
         return td_expr.Expr(self._expr.weekday())
 
     def day(self) -> td_expr.Expr:
         """
         :categories: date
+
         """
         return td_expr.Expr(self._expr.day())
 
     def ordinal_day(self) -> td_expr.Expr:
         """
         :categories: date
+
         """
         return td_expr.Expr(self._expr.ordinal_day())
 
     def time(self) -> td_expr.Expr:
         """
         :categories: date
+
         """
         return td_expr.Expr(self._expr.time())
 
     def date(self) -> td_expr.Expr:
         """
         :categories: date
+
         """
         return td_expr.Expr(self._expr.date())
 
     def datetime(self) -> td_expr.Expr:
         """
         :categories: date
+
         """
         return td_expr.Expr(self._expr.datetime())
 
     def hour(self) -> td_expr.Expr:
         """
         :categories: date
+
         """
         return td_expr.Expr(self._expr.hour())
 
     def minute(self) -> td_expr.Expr:
         """
         :categories: date
+
         """
         return td_expr.Expr(self._expr.minute())
 
     def second(self, *, fractional: bool = False) -> td_expr.Expr:
         """
         :categories: date
+
         """
         return td_expr.Expr(self._expr.second(fractional=fractional))
 
     def millisecond(self) -> td_expr.Expr:
         """
         :categories: date
+
         """
         return td_expr.Expr(self._expr.millisecond())
 
     def microsecond(self) -> td_expr.Expr:
         """
         :categories: date
+
         """
         return td_expr.Expr(self._expr.microsecond())
 
     def nanosecond(self) -> td_expr.Expr:
         """
         :categories: date
+
         """
         return td_expr.Expr(self._expr.nanosecond())
 
     def epoch(self, time_unit: td_typing.EpochTimeUnit = "us") -> td_expr.Expr:
         """
         :categories: date
+
         """
         return td_expr.Expr(self._expr.epoch(time_unit=time_unit))
 
     def timestamp(self, time_unit: td_typing.TimeUnit = "us") -> td_expr.Expr:
         """
         :categories: date
+
         """
         return td_expr.Expr(self._expr.timestamp(time_unit=time_unit))
 
     def with_time_unit(self, time_unit: td_typing.TimeUnit) -> td_expr.Expr:
         """
         :categories: date
+
         """
         return td_expr.Expr(self._expr.with_time_unit(time_unit))
 
     def cast_time_unit(self, time_unit: td_typing.TimeUnit) -> td_expr.Expr:
         """
         :categories: date
+
         """
         return td_expr.Expr(self._expr.cast_time_unit(time_unit))
 
     def convert_time_zone(self, time_zone: str) -> td_expr.Expr:
         """
         :categories: date
+
         """
         return td_expr.Expr(self._expr.convert_time_zone(time_zone))
 
@@ -256,6 +286,7 @@ class ExprDateTimeNameSpace:
     ) -> td_expr.Expr:
         """
         :categories: date
+
         """
         # noinspection PyProtectedMember
         return td_expr.Expr(
@@ -269,48 +300,56 @@ class ExprDateTimeNameSpace:
     def total_days(self) -> td_expr.Expr:
         """
         :categories: date
+
         """
         return td_expr.Expr(self._expr.total_days())
 
     def total_hours(self) -> td_expr.Expr:
         """
         :categories: date
+
         """
         return td_expr.Expr(self._expr.total_hours())
 
     def total_minutes(self) -> td_expr.Expr:
         """
         :categories: date
+
         """
         return td_expr.Expr(self._expr.total_minutes())
 
     def total_seconds(self) -> td_expr.Expr:
         """
         :categories: date
+
         """
         return td_expr.Expr(self._expr.total_seconds())
 
     def total_milliseconds(self) -> td_expr.Expr:
         """
         :categories: date
+
         """
         return td_expr.Expr(self._expr.total_milliseconds())
 
     def total_microseconds(self) -> td_expr.Expr:
         """
         :categories: date
+
         """
         return td_expr.Expr(self._expr.total_microseconds())
 
     def total_nanoseconds(self) -> td_expr.Expr:
         """
         :categories: date
+
         """
         return td_expr.Expr(self._expr.total_nanoseconds())
 
     def offset_by(self, by: str | td_expr.Expr) -> td_expr.Expr:
         """
         :categories: date
+
         """
         # noinspection PyProtectedMember
         return td_expr.Expr(
@@ -320,23 +359,27 @@ class ExprDateTimeNameSpace:
     def month_start(self) -> td_expr.Expr:
         """
         :categories: date
+
         """
         return td_expr.Expr(self._expr.month_start())
 
     def month_end(self) -> td_expr.Expr:
         """
         :categories: date
+
         """
         return td_expr.Expr(self._expr.month_end())
 
     def base_utc_offset(self) -> td_expr.Expr:
         """
         :categories: date
+
         """
         return td_expr.Expr(self._expr.base_utc_offset())
 
     def dst_offset(self) -> td_expr.Expr:
         """
         :categories: date
+
         """
         return td_expr.Expr(self._expr.dst_offset())
