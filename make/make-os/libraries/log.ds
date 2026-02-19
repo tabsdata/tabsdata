@@ -76,6 +76,57 @@ fn trace
     log trace ${1}
 end
 
+fn is_level
+    level = trim ${1}
+
+    ok = map_contains_key ${severities} ${level}
+    if ${ok}
+        severity = map_get ${severities} ${level}
+    else
+        severity = map_get ${severities} "info"
+    end
+
+    _gt = greater_than ${log_severity} ${severity}
+    _eq = eq ${log_severity} ${severity}
+    _ok = set ${_gt} or ${_eq}
+    return ${_ok}
+end
+
+fn is_critical
+    result = is_level critical
+    return ${result}
+end
+
+fn is_fatal
+    result = is_level fatal
+    return ${result}
+end
+
+fn is_error
+    result = is_level error
+    return ${result}
+end
+
+fn is_warn
+    result = is_level warn
+    return ${result}
+end
+
+fn is_info
+    result = is_level info
+    return ${result}
+end
+
+fn is_debug
+    result = is_level debug
+    return ${result}
+end
+
+fn is_trace
+    result = is_level trace
+    return ${result}
+end
+
 log_level = set ${DUCKSCRIPT_LOG_LEVEL}
 ok = map_contains_key ${severities} ${log_level}
 if ${ok}

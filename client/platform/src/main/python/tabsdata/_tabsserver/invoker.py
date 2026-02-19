@@ -14,7 +14,7 @@ from pathlib import Path
 
 import tabsdata
 from tabsdata._tabsserver.engine import EngineProvider
-from tabsdata._tabsserver.function import execute_function_from_bundle_path
+from tabsdata._tabsserver.function import execute_function_bootstrap
 from tabsdata._tabsserver.function.global_utils import (
     DEFAULT_DEVELOPMENT_LOCKS_LOCATION,
     setup_logging,
@@ -43,12 +43,9 @@ logger = logging.getLogger(__name__)
 time_block = TimeBlock()
 
 REQUEST_FILE_NAME = REQUEST_FILE
-_ = execute_function_from_bundle_path
+_ = execute_function_bootstrap
 
 
-# We keep entries whose last path segment is 'egg' as they are development
-# eggs that are not installed in the site-packages folder.
-# ToDo...
 @contextmanager
 def clear_environment():
     original_sys_path = copy.deepcopy(sys.path)
@@ -161,7 +158,7 @@ def invoke(
     command_to_execute = [
         python_bin_file,
         "-m",
-        tabsdata._tabsserver.function.execute_function_from_bundle_path.__name__,
+        tabsdata._tabsserver.function.execute_function_bootstrap.__name__,
         "--work",
         work,
         "--bundle-path",

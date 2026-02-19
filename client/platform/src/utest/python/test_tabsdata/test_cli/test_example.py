@@ -16,7 +16,8 @@ from tabsdata._cli.cli import cli
 from tabsdata._tdfunction import TabsdataFunction
 from tabsdata._utils.temps import tabsdata_temp_folder
 from tabsdata.extensions._tableframe.extension_test import instance as checker
-from test_tabsdata.conftest import LOCAL_PACKAGES_LIST, MAXIMUM_RETRY_COUNT
+from test_tabsdata.common.constants import EXECUTION_MAXIMUM_RETRY_COUNT
+from test_tabsdata.conftest import LOCAL_PACKAGES_LIST
 
 # noinspection PyUnresolvedReferences
 from . import pytestmark  # noqa: F401
@@ -139,7 +140,7 @@ def test_examples(login, tabsserver_connection):
         logger.debug(transactions)
         assert transactions
         retry = 0
-        while retry < MAXIMUM_RETRY_COUNT:
+        while retry < EXECUTION_MAXIMUM_RETRY_COUNT:
             sleep(retry)
             result = runner.invoke(
                 cli,
@@ -207,7 +208,7 @@ def test_examples(login, tabsserver_connection):
         logger.debug(transactions)
         assert transactions
         retry = 0
-        while retry < MAXIMUM_RETRY_COUNT:
+        while retry < EXECUTION_MAXIMUM_RETRY_COUNT:
             sleep(retry)
             result = runner.invoke(
                 cli,
@@ -276,7 +277,7 @@ def test_examples(login, tabsserver_connection):
         logger.debug(transactions)
         assert transactions
         retry = 0
-        while retry < MAXIMUM_RETRY_COUNT:
+        while retry < EXECUTION_MAXIMUM_RETRY_COUNT:
             if os.path.exists(
                 os.path.join(output_folder, "spanish.jsonl")
             ) and os.path.exists(os.path.join(output_folder, "french.jsonl")):
@@ -322,7 +323,7 @@ def log_and_assert(result):
 
 def retry_check_test_examples(output_folder):
     retry = 0
-    while retry < MAXIMUM_RETRY_COUNT:
+    while retry < EXECUTION_MAXIMUM_RETRY_COUNT:
         sleep(retry)
         retry += 1
         try:

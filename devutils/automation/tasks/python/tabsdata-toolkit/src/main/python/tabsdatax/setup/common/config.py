@@ -46,6 +46,11 @@ def load_setup_configuration() -> SetupConfiguration:
 
 
 def get_build_profile() -> str:
+    logger.debug(
+        f"Profile build environment variables:\n"
+        f"profile='{os.getenv('profile', 'unset')}\n"
+        f"PROFILE='{os.getenv('PROFILE', 'unset')}'"
+    )
     profile = os.getenv("profile") or os.getenv("PROFILE", "debug")
     if profile in ("", "dev"):
         profile = "debug"
@@ -54,6 +59,11 @@ def get_build_profile() -> str:
 
 
 def get_td_target() -> str:
-    td_target = os.getenv("td-target", "")
+    logger.debug(
+        f"Target build environment variables:\n"
+        f"td-target='{os.getenv('td-target', 'unset')}'\n"
+        f"TD_TARGET='{os.getenv('TD_TARGET', 'unset')}'"
+    )
+    td_target = os.getenv("td-target") or os.getenv("TD_TARGET", "")
     logger.debug(f"Using tabsdata target: '{td_target}'")
     return td_target

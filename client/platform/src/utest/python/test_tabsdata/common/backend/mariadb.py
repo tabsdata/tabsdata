@@ -23,7 +23,7 @@ from test_tabsdata.common.constants import (
     DB_NAME,
     DB_PASSWORD,
     DB_USER,
-    MAXIMUM_RETRY_COUNT,
+    CONTAINER_MAXIMUM_RETRY_COUNT,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
 )
 from test_tabsdata.common.container import get_container_port_binding
@@ -187,8 +187,7 @@ def create_docker_mariadb_database(
                 break
             except mysql.connector.Error as err:
                 retry += 1
-                # Waiting for up to 10'' & 30'', as young Gauss already knew.
-                if retry == MAXIMUM_RETRY_COUNT:
+                if retry == CONTAINER_MAXIMUM_RETRY_COUNT:
                     logger.error(f"Error connecting to MariaDB: {err}")
                     raise err
                 else:

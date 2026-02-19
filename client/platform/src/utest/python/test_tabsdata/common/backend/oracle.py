@@ -22,7 +22,7 @@ from tabsdata._utils.constants import TRUE_VALUES
 from test_tabsdata.common.constants import (
     DB_HOST,
     DB_PASSWORD,
-    MAXIMUM_RETRY_COUNT,
+    CONTAINER_MAXIMUM_RETRY_COUNT,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
 )
 from test_tabsdata.common.container import get_container_port_binding
@@ -175,8 +175,7 @@ def create_docker_oracle_database(
                 break
             except (Exception, oracledb.DatabaseError) as err:
                 retry += 1
-                # Waiting for up to 10'' & 30'', as young Gauss already knew.
-                if retry == MAXIMUM_RETRY_COUNT:
+                if retry == CONTAINER_MAXIMUM_RETRY_COUNT:
                     logger.error(f"Error connecting to Oracle: {err}")
                     raise err
                 else:

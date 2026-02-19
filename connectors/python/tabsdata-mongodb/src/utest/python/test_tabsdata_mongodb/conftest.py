@@ -41,8 +41,8 @@ from test_tabsdata.common.constants import (
     DB_USER,
     DOCKER_REGULAR_CONTAINER_INFIX,
 )
+from test_tabsdata.common.constants import CONTAINER_MAXIMUM_RETRY_COUNT
 from test_tabsdata.conftest import (
-    MAXIMUM_RETRY_COUNT,
     clean_everything,
     pytest_addoption,
     pytest_generate_tests,
@@ -117,8 +117,7 @@ def create_docker_mongodb_database():
                 break
             except Exception as err:
                 retry += 1
-                # Waiting for up to 10' & 30'', as young Gauss already knew.
-                if retry == MAXIMUM_RETRY_COUNT:
+                if retry == CONTAINER_MAXIMUM_RETRY_COUNT:
                     logger.error(f"Error connecting to MongoDB: {err}")
                     raise err
                 else:
@@ -188,8 +187,7 @@ def create_docker_mongodb_database_with_replica_set():
                 break
             except Exception as err:
                 retry += 1
-                # Waiting for up to 10' & 30'', as young Gauss already knew.
-                if retry == MAXIMUM_RETRY_COUNT:
+                if retry == CONTAINER_MAXIMUM_RETRY_COUNT:
                     logger.error(f"Error connecting to MongoDB with replica set: {err}")
                     raise err
                 else:

@@ -17,7 +17,7 @@ from filelock import FileLock
 from tabsdata._credentials import Credentials, UserPasswordCredentials
 from tabsdata._utils.constants import TRUE_VALUES
 from test_tabsdata.common.constants import (
-    MAXIMUM_RETRY_COUNT,
+    CONTAINER_MAXIMUM_RETRY_COUNT,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
 )
 from test_tabsdata.common.container import get_container_port_binding
@@ -316,7 +316,7 @@ def create_docker_kafka_container(
                     break
 
                 retry += 1
-                if retry == MAXIMUM_RETRY_COUNT:
+                if retry == CONTAINER_MAXIMUM_RETRY_COUNT:
                     logger.error("Timeout waiting for Redpanda to start")
                     logger.error(f"Container logs:\n{logs}")
                     raise Exception("Timeout waiting for Redpanda to start")
@@ -328,7 +328,7 @@ def create_docker_kafka_container(
                     sleep(retry)
             except Exception as error:
                 retry += 1
-                if retry == MAXIMUM_RETRY_COUNT:
+                if retry == CONTAINER_MAXIMUM_RETRY_COUNT:
                     logger.error(f"Error waiting for Redpanda: {error}")
                     raise error
                 else:
@@ -354,15 +354,15 @@ def create_docker_kafka_container(
                         f"{health_check.output.decode('utf-8')}"
                     )
                     retry += 1
-                    if retry == MAXIMUM_RETRY_COUNT:
+                    if retry == CONTAINER_MAXIMUM_RETRY_COUNT:
                         raise Exception(
-                            f"Cluster health check failed after {MAXIMUM_RETRY_COUNT}"
+                            f"Cluster health check failed after {CONTAINER_MAXIMUM_RETRY_COUNT}"
                             " retries"
                         )
                     sleep(retry)
             except Exception as error:
                 retry += 1
-                if retry == MAXIMUM_RETRY_COUNT:
+                if retry == CONTAINER_MAXIMUM_RETRY_COUNT:
                     logger.error(f"Error running health check: {error}")
                     raise error
                 else:
@@ -389,15 +389,15 @@ def create_docker_kafka_container(
                         f"{response.text}"
                     )
                     retry += 1
-                    if retry == MAXIMUM_RETRY_COUNT:
+                    if retry == CONTAINER_MAXIMUM_RETRY_COUNT:
                         raise Exception(
-                            f"Schema Registry check failed after {MAXIMUM_RETRY_COUNT}"
+                            f"Schema Registry check failed after {CONTAINER_MAXIMUM_RETRY_COUNT}"
                             " retries"
                         )
                     sleep(retry)
             except Exception as error:
                 retry += 1
-                if retry == MAXIMUM_RETRY_COUNT:
+                if retry == CONTAINER_MAXIMUM_RETRY_COUNT:
                     logger.error(f"Error checking Schema Registry: {error}")
                     raise error
                 else:
@@ -425,7 +425,7 @@ def create_docker_kafka_container(
                 break
             except Exception as error:
                 retry += 1
-                if retry == MAXIMUM_RETRY_COUNT:
+                if retry == CONTAINER_MAXIMUM_RETRY_COUNT:
                     logger.error(f"Error checking Kafka SASL API: {error}")
                     raise error
                 else:

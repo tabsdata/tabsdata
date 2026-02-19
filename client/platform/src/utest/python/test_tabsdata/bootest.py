@@ -464,8 +464,77 @@ def check_assets():
         )
 
 
+# This code is intentionally duplicated in module
+# tabsdata._tabsserver.function.execute_function_bootstrap
+# as it is trying to fix a wrong sys path order on Windows that interferes with
+# correct import of namespace packages for editable installations.
+# Just importing the other implementation wouldn't work as sys path is broken.
+def order_sys_path():
+    src_main_python_fragment = os.path.join(
+        "src",
+        "main",
+        "python",
+    )
+    tabsdata_fragment = os.path.join(
+        "client",
+        "platform",
+        "src",
+        "main",
+        "python",
+    )
+    tabsdatax_fragment = os.path.join(
+        "devutils",
+        "automation",
+        "tasks",
+        "python",
+        "tabsdata-toolkit",
+        "src",
+        "main",
+        "python",
+    )
+
+    tabsdata_sys_paths = []
+    non_tabsdata_sys_paths = []
+
+    for path in sys.path:
+        if path.endswith(src_main_python_fragment):
+            tabsdata_sys_paths.append(path)
+        else:
+            non_tabsdata_sys_paths.append(path)
+
+    tabsdata_paths = None
+    other_paths = []
+
+    for path in tabsdata_sys_paths:
+        if path.endswith(tabsdatax_fragment):
+            tabsdata_paths = path
+        else:
+            pass
+
+    for path in tabsdata_sys_paths:
+        if path.endswith(tabsdata_fragment):
+            tabsdata_paths = path
+        else:
+            pass
+
+    for path in tabsdata_sys_paths:
+        if path.endswith(tabsdata_fragment) or path.endswith(tabsdatax_fragment):
+            pass
+        else:
+            other_paths.append(path)
+
+    other_paths.sort()
+
+    ordered_tabsdata_paths = []
+    if tabsdata_paths:
+        ordered_tabsdata_paths.append(tabsdata_paths)
+    ordered_tabsdata_paths.extend(other_paths)
+    sys.path[:] = non_tabsdata_sys_paths + ordered_tabsdata_paths
+
+
 # Meant to be used only to expose python packages to tdserver when running pytest tests.
 if __name__ == "__main__":
+    order_sys_path()
     enrich_sys_path()
     check_assets()
     sys_path = os.pathsep.join(f'"{p}"' if " " in p else p for p in sys.path)

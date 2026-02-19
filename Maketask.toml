@@ -444,14 +444,15 @@ run_task = [
         "__os__hydrate_py_to_foundation",
         "__os__hydrate_py_ty_tableframe",
         "__os__hydrate_py_tabsdata",
-        "__os__hydrate_py_connectors"
+        "__os__hydrate_py_connectors",
+        "__os__check_hydrate_py"
     ] }
 ]
 
 [tasks.dehydrate]
 plugin = "td-task-tracker"
 category = "11 - Development"
-description = "Unistall editable builds from source code"
+description = "Uninstall editable builds from source code"
 run_task = [
     { name = [
         "dehydrate_rs",
@@ -544,6 +545,7 @@ run_task = [
     { name = [
         "__os__setup_test_py",
         "__os__start_test_py",
+        "__os__check_hydrate_py",
         "test_parallel_py",
         "__os__stop_test_py",
         "__os__cleanup_test_py"
@@ -1166,6 +1168,41 @@ run_task = [
     ] }
 ]
 
+[tasks.crystallize]
+plugin = "td-task-tracker"
+category = "10 - Bundle"
+description = "Crystallize the distributable artifact into the current environment"
+dependencies = [ "uncrystallize", "__os__set_mode_install"]
+run_task = [
+    { name = [
+        "__os__preconditions_install",
+        "install_rs",
+        "install_py",
+        "__os__postconditions_install"
+    ] }
+]
+
+[tasks.crystallize_rs]
+plugin = "td-task-tracker"
+category = "10 - Bundle"
+description = "Task 'crystallize' for Rust projects"
+run_task = [
+    { name = [
+        "__os__install_rs"
+    ] }
+]
+
+[tasks.crystallize_py]
+plugin = "td-task-tracker"
+category = "10 - Bundle"
+description = "Task 'crystallize' for Python projects"
+run_task = [
+    { name = [
+        "__os__install_py_connectors",
+        "__os__install_py_tabsdata"
+    ] }
+]
+
 [tasks.uninstall]
 plugin = "td-task-tracker"
 category = "10 - Bundle"
@@ -1175,7 +1212,9 @@ run_task = [
         "uninstall_rs",
         "uninstall_py",
     ] }
+
 ]
+
 [tasks.uninstall_rs]
 plugin = "td-task-tracker"
 category = "10 - Bundle"
@@ -1187,6 +1226,38 @@ run_task = [
 ]
 
 [tasks.uninstall_py]
+plugin = "td-task-tracker"
+category = "10 - Bundle"
+run_task = [
+    { name = [
+        "__os__uninstall_py_tabsdata",
+        "__os__uninstall_py_connectors"
+    ] }
+]
+
+[tasks.uncrystallize]
+plugin = "td-task-tracker"
+category = "10 - Bundle"
+description = "Uncrystallize the distributable artifact from the current environment"
+run_task = [
+    { name = [
+        "uncrystallize_rs",
+        "uncrystallize_py",
+    ] }
+
+]
+
+[tasks.uncrystallize_rs]
+plugin = "td-task-tracker"
+category = "10 - Bundle"
+description = "Task 'uncrystallize' for Rust projects"
+run_task = [
+    { name = [
+        "__os__uninstall_rs"
+    ] }
+]
+
+[tasks.uncrystallize_py]
 plugin = "td-task-tracker"
 category = "10 - Bundle"
 run_task = [

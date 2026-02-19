@@ -99,6 +99,18 @@ BACK_SLASH = "\\"
 
 TD_BUILD_TIMESTAMP = "TD_BUILD_TIMESTAMP"
 
+PYTHONWARNINGS = "PYTHONWARNINGS"
+
+ENV_td_target = "td-target"
+ENV_TD_TARGET = "TD_TARGET"
+ENV_profile = "profile"
+ENV_PROFILE = "PROFILE"
+
+REQUIRE_SERVER_BINARIES = "REQUIRE_SERVER_BINARIES"
+REQUIRE_THIRD_PARTY = "REQUIRE_THIRD_PARTY"
+TD_IGNORE_CONNECTOR_REQUIREMENTS = "TD_IGNORE_CONNECTOR_REQUIREMENTS"
+TD_SKIP_NON_EXISTING_ASSETS = "TD_SKIP_NON_EXISTING_ASSETS"
+
 HostPackageSource: TypeAlias = Literal[
     "Development",
     "Local",
@@ -790,10 +802,10 @@ def inject_tabsdata_version(required_modules: list[str]) -> list[str]:  # noqa: 
         "Folder (Editable)",
         "Folder (Frozen)",
     ):
-        requirementts_dev_lock_map = load_requirements_lock(
+        requirements_dev_lock_map = load_requirements_lock(
             "resources/lock/requirements-dev.txt"
         )
-        requirements_lock_map.update(requirementts_dev_lock_map)
+        requirements_lock_map.update(requirements_dev_lock_map)
 
     required_modules_map = {}
     for required_module in required_modules:
@@ -1678,14 +1690,17 @@ def install_host_package(  # noqa: C901
             "--link-mode",
             "hardlink",
         ]
-        use_editable = False
+        as_editable = False
+        with_isolation = True
         if package_provider in [
             "Archive (Project)",
             "Archive (Folder)",
             "Folder (Editable)",
             "Folder (Frozen)",
         ]:
-            use_editable = True
+            if package_provider in ["Folder (Editable)"]:
+                as_editable = True
+            with_isolation = False
             link_base_binaries(package_location, real_environment_name)
         elif source == "Local":
             logger.info(f"Identified a local package: '{package_location}'")
@@ -1708,16 +1723,20 @@ def install_host_package(  # noqa: C901
                         "Identified a tabsdata local package: "
                         f"'{package_location}' - '{package_name}'"
                     )
-                    use_editable = True
+                    as_editable = False
+                    with_isolation = False
                     if package_name == TABSDATA_MODULE_NAME:
                         link_base_binaries(package_location, real_environment_name)
-        if use_editable:
+        if as_editable:
             install_command.append("-e")
         install_command.append(package_location)
-        if use_editable:
+        if as_editable:
             install_command.extend([
                 "--config-settings",
                 "editable_mode=compat",
+            ])
+        if not with_isolation:
+            install_command.extend([
                 "--no-build-isolation",
             ])
         pip_install_requirements_command = add_python_target_and_join_commands(
@@ -1731,11 +1750,27 @@ def install_host_package(  # noqa: C901
             f"for the virtual environment {logical_environment_name}"
         )
         logger.info(f"Running command: '{pip_install_requirements_command}'")
+        logger.info(
+            f"Build environment variables:\n"
+            f"td-target='{os.environ.get(ENV_td_target, 'unset')}'\n"
+            f"TD_TARGET='{os.environ.get(ENV_TD_TARGET, 'unset')}'\n"
+            f"profile='{os.environ.get(ENV_profile, 'unset')}\n"
+            f"PROFILE='{os.environ.get(ENV_PROFILE, 'unset')}'"
+        )
+        pip_environment = os.environ.copy()
+        if PYTHONWARNINGS in pip_environment:
+            del pip_environment[PYTHONWARNINGS]
+        if source == "Local":
+            pip_environment[REQUIRE_SERVER_BINARIES] = "false"
+            pip_environment[REQUIRE_THIRD_PARTY] = "false"
+            pip_environment[TD_IGNORE_CONNECTOR_REQUIREMENTS] = "true"
+            pip_environment[TD_SKIP_NON_EXISTING_ASSETS] = "true"
         result = subprocess.run(
             pip_install_requirements_command,
             shell=True,
             capture_output=True,
             text=True,
+            env=pip_environment,
         )
         if result.returncode != 0:
             logger.error(

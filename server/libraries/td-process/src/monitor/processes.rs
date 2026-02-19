@@ -27,7 +27,7 @@ pub type ProcessDistilled = (
 );
 
 const PYTHON_MODULE_ALIASES: &[(&str, &str)] = &[(
-    "tabsdata._tabsserver.function.execute_function_from_bundle_path",
+    "tabsdata._tabsserver.function.execute_function_bootstrap",
     "td_function",
 )];
 

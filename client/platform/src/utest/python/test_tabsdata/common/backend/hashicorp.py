@@ -14,7 +14,7 @@ from filelock import FileLock
 
 from tabsdata._secret import HashiCorpSecret
 from test_tabsdata.common.constants import (
-    MAXIMUM_RETRY_COUNT,
+    CONTAINER_MAXIMUM_RETRY_COUNT,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
 )
 
@@ -99,8 +99,7 @@ def create_docker_hashicorp_vault(s3_config: dict):
                 return
             except Exception as err:
                 retry += 1
-                # Waiting for up to 10'' & 30'', as young Gauss already knew.
-                if retry == MAXIMUM_RETRY_COUNT:
+                if retry == CONTAINER_MAXIMUM_RETRY_COUNT:
                     logger.error(f"Error connecting to HashiCorp vault: {err}")
                     raise err
                 else:

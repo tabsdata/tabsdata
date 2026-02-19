@@ -27,6 +27,7 @@ run_task = [
         "__os__hydrate_py_ty_tableframe",
         "__os__hydrate_py_tabsdata",
         "__os__hydrate_py_connectors",
+        "__os__check_hydrate_py"
     ] }
 ]
 
@@ -287,5 +288,83 @@ script = [
 
             cd ${PROJECT_TABSDATA_ROOT_FOLDER}
         end
+    end
+    ''']
+
+[tasks.__os__check_hydrate_py]
+plugin = "td-task-tracker"
+category = "11 - Development"
+private = true
+description = "Check if Python hydration was successful by importing key modules"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    set_env PYTHONWARNINGS ignore
+
+    debug "🔷 🔷 _____ Checking Python hydration by importing key modules..."
+
+    debug "🔸🔸🔸 Checking import: tabsdata"
+    result = exec python -c "import tabsdata"
+    if not eq ${result.code} 0
+        warn "❌ Failed to import: tabsdata"
+        warn "   Error: ${result.stderr}"
+    else
+        debug "✅ Successfully imported: tabsdata"
+    end
+
+    debug "🔸🔸🔸 Checking import: tabsdata.extensions"
+    result = exec python -c "import tabsdata.extensions"
+    if not eq ${result.code} 0
+        warn "❌ Failed to import: tabsdata.extensions"
+        warn "   Error: ${result.stderr}"
+    else
+        debug "✅ Successfully imported: tabsdata.extensions"
+    end
+
+    debug "🔸🔸🔸 Checking import: tabsdata.extensions._tableframe"
+    result = exec python -c "import tabsdata.extensions._tableframe"
+    if not eq ${result.code} 0
+        warn "❌ Failed to import: tabsdata.extensions._tableframe"
+        warn "   Error: ${result.stderr}"
+    else
+        debug "✅ Successfully imported: tabsdata.extensions._tableframe"
+    end
+
+    debug "🔸🔸🔸 Checking import: tabsdata.expansions"
+    result = exec python -c "import tabsdata.expansions"
+    if not eq ${result.code} 0
+        warn "❌ Failed to import: tabsdata.expansions"
+        warn "   Error: ${result.stderr}"
+    else
+        debug "✅ Successfully imported: tabsdata.expansions"
+    end
+
+    debug "🔸🔸🔸 Checking import: tabsdata.expansions.tableframe"
+    result = exec python -c "import tabsdata.expansions.tableframe"
+    if not eq ${result.code} 0
+        warn "❌ Failed to import: tabsdata.expansions.tableframe"
+        warn "   Error: ${result.stderr}"
+    else
+        debug "✅ Successfully imported: tabsdata.expansions.tableframe"
+    end
+
+    debug "🔸🔸🔸 Checking import: tabsdata.expansions.tableframe._tableframe"
+    result = exec python -c "import tabsdata.expansions.tableframe._tableframe"
+    if not eq ${result.code} 0
+        warn "❌ Failed to import: tabsdata.expansions.tableframe._tableframe"
+        warn "   Error: ${result.stderr}"
+    else
+        debug "✅ Successfully imported: tabsdata.expansions.tableframe._tableframe"
+    end
+
+    debug "🔸🔸🔸 Checking import: td.TableFrame"
+    result = exec python -c "import tabsdata as td; tf = td.TableFrame"
+    if not eq ${result.code} 0
+        warn "❌ Failed to import: td.TableFrame"
+        warn "   Error: ${result.stderr}"
+    else
+        debug "✅ Successfully imported: td.TableFrame"
     end
     ''']

@@ -85,6 +85,7 @@ def clean(project_folder, inclusion_patterns, exclusion_patterns):
                 first_component.startswith(".")
                 and first_component != ".pytest_cache"
                 and first_component != ".coverage"
+                and first_component != ".ruff_cache"
             ):
                 logger.debug(f"✏️    - Skipping root dot file/folder: {full_path}")
                 continue
@@ -140,6 +141,7 @@ def clean_py(project_folder):
         ".egg-info",
         ".mypy_cache",
         ".pytest_cache",
+        ".ruff_cache",
         ".tox",
         "*.egg-info",
         "*.log.*",

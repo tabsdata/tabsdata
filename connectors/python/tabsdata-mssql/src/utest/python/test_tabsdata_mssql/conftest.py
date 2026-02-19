@@ -42,7 +42,7 @@ from test_tabsdata.common.constants import (
     DB_HOST,
     DB_NAME,
     DB_PASSWORD,
-    MAXIMUM_RETRY_COUNT,
+    CONTAINER_MAXIMUM_RETRY_COUNT,
 )
 from test_tabsdata.common.docker import (
     remove_docker_containers,
@@ -317,8 +317,7 @@ def create_docker_mssql_database(name: str, port: int, version: int) -> tuple[st
                 break
             except Exception as err:
                 retry += 1
-                # Waiting for up to 10' & 30'', as young Gauss already knew.
-                if retry == MAXIMUM_RETRY_COUNT:
+                if retry == CONTAINER_MAXIMUM_RETRY_COUNT:
                     logger.error(f"Error connecting to Microsoft SQL Server: {err}")
                     raise err
                 else:

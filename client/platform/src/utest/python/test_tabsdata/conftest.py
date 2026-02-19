@@ -52,7 +52,7 @@ from test_tabsdata.common.backend import (  # noqa: F401
     s3_config,
     testing_hashicorp_vault,
 )
-from test_tabsdata.common.constants import MAXIMUM_RETRY_COUNT
+from test_tabsdata.common.constants import EXECUTION_MAXIMUM_RETRY_COUNT
 from test_tabsdata.common.docker import clean_docker_containers
 from test_tabsdata.common.venv import clean_python_virtual_environments
 
@@ -728,8 +728,7 @@ def testing_collection_with_table(worker_id, tabsserver_connection):
             logger.debug(f"Table '{random_id}' - '{file_path}' does not have data yet")
             logger.debug(f"Retrying '{random_id}' - '{file_path}' in {retry} seconds")
             retry += 1
-            # Waiting for up to 10'' & 30'', as young Gauss already knew.
-            if retry == MAXIMUM_RETRY_COUNT:
+            if retry == EXECUTION_MAXIMUM_RETRY_COUNT:
                 raise ValueError(
                     f"Failed to get data from the table after {retry} retries."
                 )

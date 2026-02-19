@@ -45,7 +45,7 @@ Documentation = "https://docs.tabsdata.com"
 Source = "https://github.com/tabsdata/tabsdata"
 
 [tool.pytest.ini_options]
-norecursedirs = ["./templates"]
+norecursedirs = ["templates"]
 
 [tool.coverage.html]
 directory = "coverage_html_report"

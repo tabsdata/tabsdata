@@ -85,6 +85,10 @@ script = [
     else
         debug "🔷 _____ Starting tabsdata server (pytest)..."
 
+        set_env TD_INHERIT_TABSDATA_PACKAGES "true"
+        set_env TD_OVERRIDE_BUILD_TIMESTAMP "false"
+        set_env TD_BUILD_TIMESTAMP "0"
+
         cm_run_task __os__stop_pytest_tabsdata_servers
         cm_run_task __os__drop_pytest_tabsdata_servers
         cm_run_task __os__start_pytest_tabsdata_servers

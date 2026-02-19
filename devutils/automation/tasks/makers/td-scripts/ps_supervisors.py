@@ -53,7 +53,7 @@ PROCESS_COLORS = [
 END_COLOR = Color.END
 
 PYTHON_MODULE_ALIASES = {
-    "tabsdata._tabsserver.function.execute_function_from_bundle_path": "td_function",
+    "tabsdata._tabsserver.function.execute_function_bootstrap": "td_function",
 }
 
 
