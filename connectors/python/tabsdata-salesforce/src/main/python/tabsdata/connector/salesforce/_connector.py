@@ -335,7 +335,6 @@ class SalesforceSource(SourcePlugin):
 
 
 def _maximum_date(date1: str, date2: str):
-
     from dateutil import parser
 
     dates = [parser.parse(date) for date in [date1, date2]]
@@ -1155,7 +1154,6 @@ def _obtain_report_id_and_verify_format(
 def _log_into_salesforce(
     plugin: SalesforceSource | SalesforceReportSource,
 ):
-
     from simple_salesforce import Salesforce
 
     credentials = plugin.credentials

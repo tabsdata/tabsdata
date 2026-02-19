@@ -426,7 +426,6 @@ class TabsdataFunction:
 
 
 def _convert_recursively_to_tableframe(arguments: Any):
-
     import pandas as pd
 
     if isinstance(arguments, dict):
@@ -471,7 +470,6 @@ def _clean_recursively_and_convert_to_datatype(
         | Type[pd.DataFrame]
     ),
 ) -> Any:
-
     import pandas as pd
 
     if isinstance(result, dict):
@@ -518,7 +516,6 @@ def _recursively_obtain_datatype(
     | Type[td_frame.TableFrame]
     | None
 ):
-
     import pandas as pd
 
     if isinstance(

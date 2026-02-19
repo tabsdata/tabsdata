@@ -87,16 +87,14 @@ def get_protobuf_class(
         with open(proto_file_path, "w") as file:
             file.write(protobuf_schema)
 
-        subprocess.check_call(
-            [
-                sys.executable,
-                "-m",
-                "grpc_tools.protoc",
-                f"-I{temp_dir}",
-                f"-o{str(descriptor_set_output)}",
-                str(proto_file_path),
-            ]
-        )
+        subprocess.check_call([
+            sys.executable,
+            "-m",
+            "grpc_tools.protoc",
+            f"-I{temp_dir}",
+            f"-o{str(descriptor_set_output)}",
+            str(proto_file_path),
+        ])
 
         with open(descriptor_set_output, "rb") as f:
             descriptor_set_data = f.read()

@@ -78,7 +78,6 @@ def get_arrow_schema(lazy_frame: pl.LazyFrame) -> pa.Schema:
 # (going sorted allows to find equivalent schemas with different field order)
 def arrow_schema_hash(schema: pa.Schema, sort_schema=True) -> str:
     if sort_schema:
-
         import pyarrow
 
         sorted_fields = sorted(schema, key=lambda field: field.name)

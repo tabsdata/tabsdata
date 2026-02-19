@@ -124,7 +124,6 @@ class StageTrigger(ABC):
 
 
 class CallConfig:
-
     def __init__(
         self,
         method: Literal["GET", "POST", "PUT"],
@@ -218,7 +217,6 @@ class StageTriggerContext(ABC):
 
 
 class LocalFileStageTriggerContext(StageTriggerContext):
-
     def __init__(
         self,
         staging_folder: str,
@@ -306,12 +304,10 @@ class LocalFileStageTriggerContext(StageTriggerContext):
 
     def trigger(self) -> bool:
         self.logger.debug("Requesting trigger of the function")
-        result = self.trigger_config.call(
-            {
-                "skip_if_running": False,
-                "trigger_type": "ST",
-            }
-        )
+        result = self.trigger_config.call({
+            "skip_if_running": False,
+            "trigger_type": "ST",
+        })
         self.logger.debug(f"Result of the request: {result}")
         result.raise_for_status()
         success = _check_success(result)

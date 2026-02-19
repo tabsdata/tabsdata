@@ -16,7 +16,6 @@ VALID_SINGLE_RESULT = Union[TableFrame | None | List[TableFrame | None]]
 
 
 class ResultsCollection:
-
     def __init__(self, results: Tuple[VALID_SINGLE_RESULT, ...] | VALID_SINGLE_RESULT):
         if isinstance(results, tuple):
             results_tuple = results

@@ -346,7 +346,6 @@ class MongoDBDestination(DestinationPlugin):
     def _store_and_control_errors_single_file(
         self, session, file, collection, id_field
     ):
-
         import pymongo
 
         if self.use_trxs:
@@ -394,7 +393,6 @@ class MongoDBDestination(DestinationPlugin):
                 raise e
 
     def _store_single_file_in_collection(self, file, collection, id_field, session):
-
         import pymongo
 
         operations = []

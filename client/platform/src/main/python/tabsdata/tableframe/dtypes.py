@@ -61,79 +61,63 @@ NumericType: TypeAlias = polars_datatypes_classes.NumericType
 # Struct
 # Unknown
 
-_BOOLEAN_DTYPES: FrozenSet[Type] = frozenset(
-    {
-        Boolean,
-    }
-)
+_BOOLEAN_DTYPES: FrozenSet[Type] = frozenset({
+    Boolean,
+})
 
-_TEMPORAL_DTYPES: FrozenSet[Type] = frozenset(
-    {
-        Date,
-        Datetime,
-        Time,
-        Duration,
-    }
-)
+_TEMPORAL_DTYPES: FrozenSet[Type] = frozenset({
+    Date,
+    Datetime,
+    Time,
+    Duration,
+})
 
-_SIGNED_NUMERIC_DTYPES: FrozenSet[Type] = frozenset(
-    {
-        Int8,
-        Int16,
-        Int32,
-        Int64,
-        Int128,
-        Float32,
-        Float64,
-        Decimal,
-    }
-)
+_SIGNED_NUMERIC_DTYPES: FrozenSet[Type] = frozenset({
+    Int8,
+    Int16,
+    Int32,
+    Int64,
+    Int128,
+    Float32,
+    Float64,
+    Decimal,
+})
 
-_UNSIGNED_NUMERIC_DTYPES: FrozenSet[Type] = frozenset(
-    {
-        UInt8,
-        UInt16,
-        UInt32,
-        UInt64,
-    }
-)
+_UNSIGNED_NUMERIC_DTYPES: FrozenSet[Type] = frozenset({
+    UInt8,
+    UInt16,
+    UInt32,
+    UInt64,
+})
 
 _NUMERIC_DTYPES: FrozenSet[Type] = _SIGNED_NUMERIC_DTYPES | _UNSIGNED_NUMERIC_DTYPES
 
-_SIGNED_INT_DTYPES: FrozenSet[Type] = frozenset(
-    {
-        Int8,
-        Int16,
-        Int32,
-        Int64,
-        Int128,
-    }
-)
+_SIGNED_INT_DTYPES: FrozenSet[Type] = frozenset({
+    Int8,
+    Int16,
+    Int32,
+    Int64,
+    Int128,
+})
 
-_UNSIGNED_INT_DTYPES: FrozenSet[Type] = frozenset(
-    {
-        UInt8,
-        UInt16,
-        UInt32,
-        UInt64,
-    }
-)
+_UNSIGNED_INT_DTYPES: FrozenSet[Type] = frozenset({
+    UInt8,
+    UInt16,
+    UInt32,
+    UInt64,
+})
 
 _INT_DTYPES: FrozenSet[Type] = _SIGNED_INT_DTYPES | _UNSIGNED_INT_DTYPES
 
-_FLOAT_DTYPES: FrozenSet[Type] = frozenset(
-    {
-        Float32,
-        Float64,
-    }
-)
+_FLOAT_DTYPES: FrozenSet[Type] = frozenset({
+    Float32,
+    Float64,
+})
 
-_STRING_DTYPES: FrozenSet[Type] = frozenset(
-    {
-        String,
-        Utf8,
-    }
-)
+_STRING_DTYPES: FrozenSet[Type] = frozenset({
+    String,
+    Utf8,
+})
 
 
 _ALL_DTYPES: FrozenSet[Type] = (

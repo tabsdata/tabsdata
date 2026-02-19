@@ -40,7 +40,15 @@ def build(setup_file: str) -> None:
 
     python_version, python_implementation, python_abi = get_python_tags(
         root,
-        os.path.join("client", "platform", "src", "main", "python", "tabsdata", "__spec.py",),
+        os.path.join(
+            "client",
+            "platform",
+            "src",
+            "main",
+            "python",
+            "tabsdata",
+            "__spec.py",
+        ),
         setup_file,
     )
     python_version_spec = f">={python_version}"
@@ -57,15 +65,32 @@ def build(setup_file: str) -> None:
     datafiles = create_empty_datafiles()
     ensure_egg_folder()
 
-    tabsdata_license = read_file(variant_manifest_folder, "LICENSE.setup", base_path=".",)
+    tabsdata_license = read_file(
+        variant_manifest_folder,
+        "LICENSE.setup",
+        base_path=".",
+    )
 
     with global_spinner(descriptor.spinner_message):
         setup(
-            version=read_file(descriptor.manifest_path, "VERSION", base_path=".",),
-            long_description=read_file(descriptor.manifest_path, "README-PyPi.md", base_path=".",),
+            version=read_file(
+                descriptor.manifest_path,
+                "VERSION",
+                base_path=".",
+            ),
+            long_description=read_file(
+                descriptor.manifest_path,
+                "README-PyPi.md",
+                base_path=".",
+            ),
             long_description_content_type="text/markdown",
             license=tabsdata_license,
-            license_files=(os.path.join(descriptor.manifest_path, "LICENSE",),),
+            license_files=(
+                os.path.join(
+                    descriptor.manifest_path,
+                    "LICENSE",
+                ),
+            ),
             python_requires=python_version_spec,
             install_requires=[],
             extras_require={"deps": read_requirements("requirements.txt")},
@@ -80,15 +105,37 @@ def build(setup_file: str) -> None:
                 "sdist": create_custom_sdist_class(skip_readme_check=True),
             },
             packages=find_namespace_packages(
-                where=os.path.join("src", "main", "python",),
+                where=os.path.join(
+                    "src",
+                    "main",
+                    "python",
+                ),
                 include=[f"{descriptor.namespace}*"],
             ),
-            package_dir={"": os.path.join("src", "main", "python",)},
+            package_dir={
+                "": os.path.join(
+                    "src",
+                    "main",
+                    "python",
+                )
+            },
             package_data={
-                descriptor.namespace: [os.path.join("assets", "manifest", "*",)],
+                descriptor.namespace: [
+                    os.path.join(
+                        "assets",
+                        "manifest",
+                        "*",
+                    )
+                ],
             },
             data_files=datafiles,
             entry_points={},
             include_package_data=True,
-            exclude_package_data={"": [".gitkeep", "*.pyc", "__pycache__/*",]},
+            exclude_package_data={
+                "": [
+                    ".gitkeep",
+                    "*.pyc",
+                    "__pycache__/*",
+                ]
+            },
         )

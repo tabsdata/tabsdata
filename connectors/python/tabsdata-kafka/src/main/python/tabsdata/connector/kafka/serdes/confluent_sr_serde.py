@@ -32,7 +32,6 @@ from tabsdata.connector.kafka.utils import get_protobuf_class
 
 
 class SrKafkaSerde(KafkaSerde, ABC):
-
     def extract_schema_id(self, data: bytes, _message: dict) -> SchemaIdSpec:
         if len(data) < 5:
             raise ValueError(

@@ -251,7 +251,6 @@ class NonIdentityScale(Scale, ABC):
 
 
 class LinearScale(NonIdentityScale):
-
     @_td_validate_call(ErrorCode.DQC110)
     def __init__(
         self,

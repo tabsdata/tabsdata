@@ -24,7 +24,6 @@ logger = logging.getLogger(__name__)
 
 
 def create_custom_bdist_egg_class() -> type[_bdist_egg]:
-
     class CustomBDistEgg(_bdist_egg):
         def __init__(self, dist: Distribution) -> None:
             super().__init__(dist)
@@ -32,8 +31,16 @@ def create_custom_bdist_egg_class() -> type[_bdist_egg]:
 
         def initialize_options(self) -> None:
             super().initialize_options()
-            self.dist_dir = os.path.join("target", "python", "dist",)
-            self.build_base = os.path.join("target", "python", "build",)
+            self.dist_dir = os.path.join(
+                "target",
+                "python",
+                "dist",
+            )
+            self.build_base = os.path.join(
+                "target",
+                "python",
+                "build",
+            )
             os.makedirs(self.build_base, exist_ok=True)
 
     return CustomBDistEgg
@@ -44,7 +51,6 @@ def create_custom_bdist_wheel_class(
     python_version_abi: str,
     get_platname_func: Callable[[], str],
 ) -> type[_bdist_wheel]:
-
     class CustomBDistWheel(_bdist_wheel):
         def __init__(self, dist: Distribution) -> None:
             super().__init__(dist)
@@ -53,7 +59,11 @@ def create_custom_bdist_wheel_class(
 
         def initialize_options(self) -> None:
             super().initialize_options()
-            self.dist_dir = os.path.join("target", "python", "dist",)
+            self.dist_dir = os.path.join(
+                "target",
+                "python",
+                "dist",
+            )
 
         def finalize_options(self) -> None:
             super().finalize_options()
@@ -64,19 +74,29 @@ def create_custom_bdist_wheel_class(
             return python_version_tag, python_version_abi, get_platname_func()
 
         def run(self) -> None:
-            build_dir = os.path.join("target", "python", "build",)
+            build_dir = os.path.join(
+                "target",
+                "python",
+                "build",
+            )
             if os.path.exists(build_dir):
                 shutil.rmtree(build_dir)
             super().run()
 
     return CustomBDistWheel
 
-def create_custom_build_class(run_hook: Callable[[_build], None] | None = None) -> type[_build]:
 
+def create_custom_build_class(
+    run_hook: Callable[[_build], None] | None = None,
+) -> type[_build]:
     class CustomBuild(_build):
         def initialize_options(self) -> None:
             super().initialize_options()
-            self.build_base = os.path.join("target", "python", "build",)
+            self.build_base = os.path.join(
+                "target",
+                "python",
+                "build",
+            )
             os.makedirs(self.build_base, exist_ok=True)
 
         def run(self) -> None:
@@ -88,7 +108,6 @@ def create_custom_build_class(run_hook: Callable[[_build], None] | None = None) 
 
 
 def create_custom_sdist_class(skip_readme_check: bool = False) -> type[_sdist]:
-
     class CustomSDist(_sdist):
         def __init__(self, dist: Distribution) -> None:
             super().__init__(dist)
@@ -97,8 +116,16 @@ def create_custom_sdist_class(skip_readme_check: bool = False) -> type[_sdist]:
 
         def initialize_options(self) -> None:
             super().initialize_options()
-            self.dist_dir = os.path.join("target", "python", "dist",)
-            self.temp_dir = os.path.join("target", "python", "sdist",)
+            self.dist_dir = os.path.join(
+                "target",
+                "python",
+                "dist",
+            )
+            self.temp_dir = os.path.join(
+                "target",
+                "python",
+                "sdist",
+            )
             os.makedirs(self.temp_dir, exist_ok=True)
 
         if skip_readme_check:

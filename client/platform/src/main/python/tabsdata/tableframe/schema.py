@@ -15,7 +15,6 @@ import tabsdata.tableframe.typing as td_typing
 
 
 class Schema(pl.Schema):
-
     def __init__(
         self,
         schema: Union[

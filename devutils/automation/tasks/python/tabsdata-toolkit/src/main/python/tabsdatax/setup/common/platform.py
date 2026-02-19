@@ -9,9 +9,15 @@ import os
 import platform
 from sysconfig import get_path, get_platform
 
-from tabsdatax.setup.common.config import get_build_profile, get_td_target, TD_USE_MUSLLINUX, TRUE_VALUES
+from tabsdatax.setup.common.config import (
+    TD_USE_MUSLLINUX,
+    TRUE_VALUES,
+    get_build_profile,
+    get_td_target,
+)
 
 logger = logging.getLogger(__name__)
+
 
 def check_cpython() -> None:
     if platform.python_implementation() != "CPython":
@@ -117,5 +123,3 @@ def get_target_release_folder() -> str:
         td_target = os.getenv("td-target", "")
 
     return os.path.join("target", td_target, profile)
-
-

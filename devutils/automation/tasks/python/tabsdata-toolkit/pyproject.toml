@@ -61,3 +61,4 @@ namespaces = true
 
 [tool.tabsdata]
 name = "tabsdata-toolkit"
+display = "Tabsdata Toolkit"

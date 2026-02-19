@@ -19,6 +19,7 @@ TD_USE_MUSLLINUX = "TD_USE_MUSLLINUX"
 
 TRUE_VALUES = {"1", "true", "yes", "y", "on"}
 
+
 @dataclass
 class SetupConfiguration:
     require_server_binaries: bool

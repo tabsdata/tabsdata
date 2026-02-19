@@ -65,9 +65,9 @@ FUNCTION_RUN_FINAL_STATUSES = (
     FUNCTION_RUN_FAILED_FINAL_STATUSES | FUNCTION_RUN_SUCCESSFUL_FINAL_STATUSES
 )
 
-FUNCTION_RUN_VALID_USER_PROVIDED_STATUSES = ", ".join(
-    [f"{long}/{short}" for short, long in FUNCTION_RUN_STATUS_MAPPING.items()]
-)
+FUNCTION_RUN_VALID_USER_PROVIDED_STATUSES = ", ".join([
+    f"{long}/{short}" for short, long in FUNCTION_RUN_STATUS_MAPPING.items()
+])
 
 
 def user_function_run_status_to_api(

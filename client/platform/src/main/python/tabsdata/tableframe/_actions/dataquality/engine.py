@@ -1258,14 +1258,12 @@ class DataQualityEngine:
             except DataQualityProcessingError:
                 raise
 
-            self._cols.update(
-                {
-                    dq_column: ColumnInfo(
-                        family=metadata.classifier_family,
-                        classifier=classifier,
-                    )
-                }
-            )
+            self._cols.update({
+                dq_column: ColumnInfo(
+                    family=metadata.classifier_family,
+                    classifier=classifier,
+                )
+            })
             vtags = tags if tags else [NO_TAG_COLUMNS_KEY]
             for tag in vtags:
                 if tag not in self._tags:

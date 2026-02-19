@@ -1633,7 +1633,6 @@ class FunctionRun:
 
 
 class InterCollectionPermission:
-
     granted_by = _LazyProperty("granted_by")
     granted_on = _LazyProperty("granted_on")
     granted_on_str = _LazyProperty("granted_on_str", subordinate_time_string=True)
@@ -1767,7 +1766,6 @@ class InterCollectionPermission:
 
 
 class Role:
-
     created_by = _LazyProperty("created_by")
     created_on = _LazyProperty("created_on")
     created_on_str = _LazyProperty("created_on_str", subordinate_time_string=True)
@@ -2113,7 +2111,6 @@ PERMISSION_TYPES_WITH_ENTITY = [
 
 
 class RolePermission:
-
     entity = _LazyProperty("entity")
     entity_id = _LazyProperty("entity_id")
     entity_type = _LazyProperty("entity_type")

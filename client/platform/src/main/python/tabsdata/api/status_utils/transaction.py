@@ -54,9 +54,9 @@ TRANSACTION_FINAL_STATUSES = (
     TRANSACTION_FAILED_FINAL_STATUSES | TRANSACTION_SUCCESSFUL_FINAL_STATUSES
 )
 
-TRANSACTION_VALID_USER_PROVIDED_STATUSES = ", ".join(
-    [f"{long}/{short}" for short, long in TRANSACTION_STATUS_MAPPING.items()]
-)
+TRANSACTION_VALID_USER_PROVIDED_STATUSES = ", ".join([
+    f"{long}/{short}" for short, long in TRANSACTION_STATUS_MAPPING.items()
+])
 
 
 def user_transaction_status_to_api(

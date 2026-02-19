@@ -512,9 +512,10 @@ def found_requirements_tabsdata(
                                 # Environment hash has already been computed. Therefore,
                                 # any changes in the inherited packages will not be
                                 # reflected in a new environment hash.
-                                development_packages.append(
-                                    (str(td_location), td_provider)
-                                )
+                                development_packages.append((
+                                    str(td_location),
+                                    td_provider,
+                                ))
                                 logger.info(
                                     f"Package {package} marked as: td-available"
                                 )
@@ -911,14 +912,12 @@ def create_virtual_environment(  # noqa: C901
         else None
     )
 
-    environment_hash = get_dict_hash(
-        {
-            PYTHON_VERSION_KEY: python_version,
-            PYTHON_PUBLIC_PACKAGES_KEY: required_modules,
-            PYTHON_INSTALL_DEPENDENCIES_KEY: install_dependencies,
-            PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES_KEY: check_module_availability,
-        }
-    )
+    environment_hash = get_dict_hash({
+        PYTHON_VERSION_KEY: python_version,
+        PYTHON_PUBLIC_PACKAGES_KEY: required_modules,
+        PYTHON_INSTALL_DEPENDENCIES_KEY: install_dependencies,
+        PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES_KEY: check_module_availability,
+    })
     if local_packages:
         logger.info(
             f"Local packages folder found: {local_packages}, hashing its contents"
@@ -1355,13 +1354,29 @@ def atomic_environment_creation(
                 non_tabsdata_toolkit_local_packages.append(package_folder)
 
     if development_packages:
-        tabsdata_toolkit_package_canonical_name = canonicalize_name(TABSDATA_TOOLKIT_MODULE_NAME)
-        for development_package_location, development_package_provider in development_packages:
-            development_package_name = os.path.basename(development_package_location.rstrip(os.sep))
-            if canonicalize_name(development_package_name) == tabsdata_toolkit_package_canonical_name:
-                tabsdata_toolkit_development_packages.append((development_package_location, development_package_provider,))
+        tabsdata_toolkit_package_canonical_name = canonicalize_name(
+            TABSDATA_TOOLKIT_MODULE_NAME
+        )
+        for (
+            development_package_location,
+            development_package_provider,
+        ) in development_packages:
+            development_package_name = os.path.basename(
+                development_package_location.rstrip(os.sep)
+            )
+            if (
+                canonicalize_name(development_package_name)
+                == tabsdata_toolkit_package_canonical_name
+            ):
+                tabsdata_toolkit_development_packages.append((
+                    development_package_location,
+                    development_package_provider,
+                ))
             else:
-                non_tabsdata_toolkit_development_packages.append((development_package_location, development_package_provider,))
+                non_tabsdata_toolkit_development_packages.append((
+                    development_package_location,
+                    development_package_provider,
+                ))
 
     if tabsdata_toolkit_local_packages:
         logger.info("Installing tabsdata-toolkit as a local package...")
@@ -1378,7 +1393,11 @@ def atomic_environment_creation(
 
     if tabsdata_toolkit_development_packages:
         logger.info("Installing tabsdata-toolkit as a development package...")
-        result = install_development_packages(tabsdata_toolkit_development_packages, logical_environment_name, real_environment_name,)
+        result = install_development_packages(
+            tabsdata_toolkit_development_packages,
+            logical_environment_name,
+            real_environment_name,
+        )
         if not result:
             return None
 
@@ -1395,7 +1414,11 @@ def atomic_environment_creation(
                 return None
 
     if non_tabsdata_toolkit_development_packages:
-        result = install_development_packages(non_tabsdata_toolkit_development_packages, logical_environment_name, real_environment_name,)
+        result = install_development_packages(
+            non_tabsdata_toolkit_development_packages,
+            logical_environment_name,
+            real_environment_name,
+        )
         if not result:
             return None
 
@@ -1668,13 +1691,11 @@ def install_host_package(  # noqa: C901
             install_command.append("-e")
         install_command.append(package_location)
         if use_editable:
-            install_command.extend(
-                [
-                    "--config-settings",
-                    "editable_mode=compat",
-                    "--no-build-isolation",
-                ]
-            )
+            install_command.extend([
+                "--config-settings",
+                "editable_mode=compat",
+                "--no-build-isolation",
+            ])
         pip_install_requirements_command = add_python_target_and_join_commands(
             install_command,
             real_environment_name,
@@ -1861,9 +1882,9 @@ def normalize_location(
 
 
 def inspect():
-    _packages = sorted(
-        [pkg.metadata["Name"] for pkg in importlib.metadata.distributions()]
-    )
+    _packages = sorted([
+        pkg.metadata["Name"] for pkg in importlib.metadata.distributions()
+    ])
     _modules = sorted([module.name for module in pkgutil.iter_modules()])
 
     logger.debug("📦 Installed Packages:")
@@ -1899,9 +1920,9 @@ def retrieve_tabsdata_connectors_packages() -> list[tuple[str, PackageProvider]]
 
 
 # noinspection DuplicatedCode
-def retrieve_tabsdata_package() -> (
-    Tuple[PackageProvider | None, str | None, list[tuple[str, PackageProvider]]]
-):
+def retrieve_tabsdata_package() -> Tuple[
+    PackageProvider | None, str | None, list[tuple[str, PackageProvider]]
+]:
     tabsdata_development_packages: list[tuple[str, PackageProvider]] = []
     provider, location = get_tabsdata_package_metadata(
         TABSDATA_MODULE_NAME,
@@ -1923,9 +1944,9 @@ def retrieve_tabsdata_package() -> (
 
 
 # noinspection DuplicatedCode
-def retrieve_tabsdata_toolkit_package() -> (
-    Tuple[PackageProvider | None, str | None, list[tuple[str, PackageProvider]]]
-):
+def retrieve_tabsdata_toolkit_package() -> Tuple[
+    PackageProvider | None, str | None, list[tuple[str, PackageProvider]]
+]:
     tabsdata_toolkit_development_packages: list[tuple[str, PackageProvider]] = []
     provider, location = get_tabsdata_package_metadata(
         TABSDATA_TOOLKIT_MODULE_NAME,
@@ -1948,9 +1969,9 @@ def retrieve_tabsdata_toolkit_package() -> (
 
 
 # noinspection DuplicatedCode
-def retrieve_tabsdata_agent_package() -> (
-    Tuple[PackageProvider | None, str | None, list[tuple[str, PackageProvider]]]
-):
+def retrieve_tabsdata_agent_package() -> Tuple[
+    PackageProvider | None, str | None, list[tuple[str, PackageProvider]]
+]:
     tabsdata_agent_development_packages: list[tuple[str, PackageProvider]] = []
     provider, location = get_tabsdata_package_metadata(
         TABSDATA_AGENT_MODULE_NAME,

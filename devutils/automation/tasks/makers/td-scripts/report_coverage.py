@@ -125,15 +125,13 @@ def coverage_report(coverage_json: Path, project_root: Path):  # noqa: C901
             if file_num_statements
             else None
         )
-        files_statistics.append(
-            (
-                path,
-                file_num_statements,
-                file_missing_lines,
-                file_covered_lines_percent,
-                file_covered_lines,
-            )
-        )
+        files_statistics.append((
+            path,
+            file_num_statements,
+            file_missing_lines,
+            file_covered_lines_percent,
+            file_covered_lines,
+        ))
 
     files_covered = sum(
         1

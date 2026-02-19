@@ -2838,13 +2838,11 @@ class TableFrame:
                 pl.col(parser.temp_column).list.to_struct(fields=fields).alias("grok")
             )
             .unnest("grok")
-            .with_columns(
-                *[
-                    pl.col(column).cast(dtype)
-                    for dtype, column in group_by_dtype(dtypes).items()
-                    if column
-                ]
-            )
+            .with_columns(*[
+                pl.col(column).cast(dtype)
+                for dtype, column in group_by_dtype(dtypes).items()
+                if column
+            ])
             .drop(parser.temp_column)
         )
 
@@ -2899,13 +2897,9 @@ def _split_columns(columns: list[str]) -> Tuple[list[str], list[str]]:
         for column in columns
         if not column.startswith(td_constants.TD_COLUMN_PREFIX)
     ]
-    system_columns = sorted(
-        [
-            column
-            for column in columns
-            if column.startswith(td_constants.TD_COLUMN_PREFIX)
-        ]
-    )
+    system_columns = sorted([
+        column for column in columns if column.startswith(td_constants.TD_COLUMN_PREFIX)
+    ])
     return user_columns, system_columns
 
 

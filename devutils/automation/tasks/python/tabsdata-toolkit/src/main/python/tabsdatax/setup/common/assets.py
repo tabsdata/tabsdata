@@ -46,6 +46,7 @@ def copy_variant_assets(
                 f" {skip_non_existing_assets}"
             )
 
+
 def copy_single_asset(
     source: str,
     target: str,

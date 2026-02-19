@@ -53,11 +53,17 @@ def create_editable_extra_pth_file(
         return
 
     project_root = os.path.dirname(os.path.abspath(setup_file))
-    pth_file = os.path.join(site_packages, "tabsdata_extra_paths.pth",)
+    pth_file = os.path.join(
+        site_packages,
+        "tabsdata_extra_paths.pth",
+    )
 
     pth_lines = []
     for relative_extra_path in extra_paths:
-        absolute_extra_path = os.path.join(project_root, relative_extra_path,)
+        absolute_extra_path = os.path.join(
+            project_root,
+            relative_extra_path,
+        )
         if os.path.isdir(absolute_extra_path):
             pth_lines.append(absolute_extra_path)
 

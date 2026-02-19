@@ -19,7 +19,7 @@ class PackageDescriptor:
     def module(self) -> str:
         prefix = "tabsdata-"
         if self.name.startswith(prefix):
-            return self.name[len(prefix):]
+            return self.name[len(prefix) :]
         return self.name
 
     @property
@@ -28,7 +28,16 @@ class PackageDescriptor:
 
     @property
     def manifest_path(self) -> str:
-        return os.path.join("src", "main", "python", "tabsdata", "connector", self.module, "assets", "manifest",)
+        return os.path.join(
+            "src",
+            "main",
+            "python",
+            "tabsdata",
+            "connector",
+            self.module,
+            "assets",
+            "manifest",
+        )
 
     @property
     def spinner_message(self) -> str:

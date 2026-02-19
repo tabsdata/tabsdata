@@ -30,7 +30,6 @@ FilterType = Literal[
 
 
 class TimeBlock:
-
     def __enter__(self):
         self.start = timer()
         return self

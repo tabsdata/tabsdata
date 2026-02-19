@@ -6,10 +6,9 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Sequence
 
 from tabsdatax.setup.common.platform import get_python_binaries_folder
-
-from collections.abc import Sequence
 
 logger = logging.getLogger(__name__)
 

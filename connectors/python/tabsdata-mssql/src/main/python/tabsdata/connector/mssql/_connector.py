@@ -549,7 +549,6 @@ class MSSQLDestination(DestinationPlugin):
     def _upload_single_file_to_table(
         self, session: sqlalchemy.orm.Session, file_path: str, table: str
     ):
-
         import pyarrow as pa
         import pyarrow.parquet as pq
 

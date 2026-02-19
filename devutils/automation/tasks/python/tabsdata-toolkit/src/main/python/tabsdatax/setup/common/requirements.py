@@ -6,10 +6,9 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Set
 from pathlib import Path
 from uuid import uuid4
-
-from collections.abc import Set
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +29,9 @@ def read_requirements(
 
     requirements_file = Path(requirements_file).resolve()
 
-    logger.debug(f" - 🥁 {token} · Visiting requirements path: {root} - {requirements_file}")
+    logger.debug(
+        f" - 🥁 {token} · Visiting requirements path: {root} - {requirements_file}"
+    )
 
     if requirements_file in visited:
         raise ValueError(f"Circular dependency detected: {requirements_file}")
@@ -61,7 +62,12 @@ def read_requirements(
             elif not requirement.startswith(("-", "git+")):
                 requirements.append(requirement)
             else:
-                logger.warning(f"📦 Discarding unsupported requirement entry: {requirements_file} - {requirement}")
+                logger.warning(
+                    f"📦 Discarding unsupported requirement entry: "
+                    f"{requirements_file}"
+                    f" - "
+                    f"{requirement}"
+                )
 
     if ignore_tabsdata_packages:
         requirements = [

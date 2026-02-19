@@ -22,9 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 def create_custom_clean_class(root: str, setup_toml_path: str) -> type:
-
     class CustomClean(Command):
-
         def initialize_options(self) -> None:
             self.all = None
 
@@ -34,14 +32,33 @@ def create_custom_clean_class(root: str, setup_toml_path: str) -> type:
         def run(self) -> None:
             directories_to_clean = [
                 "build",
-                os.path.join("target", "python", "build",),
-                os.path.join("target", "python", "dist",),
-                os.path.join("target", "python", "sdist",),
-                os.path.join("target", "python", "egg",),
+                os.path.join(
+                    "target",
+                    "python",
+                    "build",
+                ),
+                os.path.join(
+                    "target",
+                    "python",
+                    "dist",
+                ),
+                os.path.join(
+                    "target",
+                    "python",
+                    "sdist",
+                ),
+                os.path.join(
+                    "target",
+                    "python",
+                    "egg",
+                ),
             ]
 
             if self.all:
-                for pattern in ["*.egg-info", ".eggs",]:
+                for pattern in [
+                    "*.egg-info",
+                    ".eggs",
+                ]:
                     for path in Path(".").glob(pattern):
                         if path.is_dir():
                             directories_to_clean.append(str(path))
@@ -74,7 +91,9 @@ def create_custom_clean_class(root: str, setup_toml_path: str) -> type:
                 except OSError as e:
                     logger.warning(f"Failed to remove {pth_file}: {e}")
 
-            venv_bin_dir = site_packages.parent.parent.parent / get_python_binaries_folder()
+            venv_bin_dir = (
+                site_packages.parent.parent.parent / get_python_binaries_folder()
+            )
             if not venv_bin_dir.exists():
                 return
 

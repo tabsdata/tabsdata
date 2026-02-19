@@ -648,12 +648,10 @@ class PostgresDestination(DestinationPlugin):
         """
         self._uri = uri
         self._parsed_uri = urlparse(uri)
-        if not any(
-            [
-                self._parsed_uri.scheme.lower().startswith(scheme)
-                for scheme in POSTGRES_SCHEMES
-            ]
-        ):
+        if not any([
+            self._parsed_uri.scheme.lower().startswith(scheme)
+            for scheme in POSTGRES_SCHEMES
+        ]):
             raise DestinationConfigurationError(
                 ErrorCode.DECE2, self._parsed_uri.scheme, POSTGRES_SCHEMES, self.uri
             )
@@ -794,7 +792,6 @@ def _store_results_in_sql(
     ),
     intermediate_files: list[str | None],
 ):
-
     from sqlalchemy import create_engine
 
     logger.info(f"Storing results in SQL destination '{destination}'")
@@ -835,7 +832,6 @@ def _create_session_and_store(
     destination_table_configuration: str | List[str],
     destination_if_table_exists: str,
 ):
-
     from sqlalchemy.orm import sessionmaker
 
     Session = sessionmaker(bind=engine)
@@ -862,7 +858,6 @@ def _store_result_in_sql_table(
     if_table_exists: str,
     chunk_size: int = 10000,
 ):
-
     import pyarrow as pa
     import pyarrow.parquet as pq
 
@@ -913,7 +908,6 @@ def verify_output_sql_drivers(output: DestinationPlugin):
         output,
         (MySQLDestination, OracleDestination, PostgresDestination, MariaDBDestination),
     ):
-
         from sqlalchemy import create_engine
 
         uri = obtain_uri(output, log=False, add_credentials=False)

@@ -19,10 +19,21 @@ def build_extras_require(
     test_requirements_path: str = "requirements-test.txt",
 ) -> dict[str, list[str]]:
     if connectors_folders is None:
-        connectors_folders = [os.path.join(root, "connectors", "python",)]
+        connectors_folders = [
+            os.path.join(
+                root,
+                "connectors",
+                "python",
+            )
+        ]
 
     extras: dict[str, list[str]] = {
-        "test": read_requirements(os.path.join(root, test_requirements_path,)),
+        "test": read_requirements(
+            os.path.join(
+                root,
+                test_requirements_path,
+            )
+        ),
     }
 
     all_connectors_requirements: list[str] = []
@@ -58,6 +69,11 @@ def build_agent_extras_require(
     test_requirements_path: str = "requirements-test.txt",
 ) -> dict[str, list[str]]:
     return {
-        "test": read_requirements(os.path.join(root, test_requirements_path,)),
+        "test": read_requirements(
+            os.path.join(
+                root,
+                test_requirements_path,
+            )
+        ),
         "all": [],
     }

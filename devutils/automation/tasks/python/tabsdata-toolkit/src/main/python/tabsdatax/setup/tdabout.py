@@ -392,39 +392,33 @@ def _render_build(root_path):
             metadata[f"X-Git-{repository_prefix}-Dirty"] = git_metadata.get(
                 "dirty", "?"
             )
-        metadata.update(
-            {
-                "X-Rust-Semver": rust_metadata.get("rust_version", "?"),
-                "X-Rust-Channel": rust_metadata.get("rust_channel", "?"),
-                "X-Rust-Host-Triple": rust_metadata.get("rust_host_triple", "?"),
-                "X-Rust-Commit-Hash": rust_metadata.get("rust_commit_hash", "?"),
-                "X-Rust-Commit-Date": rust_metadata.get("rust_commit_date", "?"),
-                "X-Rust-LLVM-Version": rust_metadata.get("llvm_version", "?"),
-            }
-        )
-        metadata.update(
-            {
-                "X-Python-Version": python_metadata.get("python_version", "?"),
-                "X-Python-Implementation": python_metadata.get(
-                    "python_implementation", "?"
-                ),
-            }
-        )
+        metadata.update({
+            "X-Rust-Semver": rust_metadata.get("rust_version", "?"),
+            "X-Rust-Channel": rust_metadata.get("rust_channel", "?"),
+            "X-Rust-Host-Triple": rust_metadata.get("rust_host_triple", "?"),
+            "X-Rust-Commit-Hash": rust_metadata.get("rust_commit_hash", "?"),
+            "X-Rust-Commit-Date": rust_metadata.get("rust_commit_date", "?"),
+            "X-Rust-LLVM-Version": rust_metadata.get("llvm_version", "?"),
+        })
+        metadata.update({
+            "X-Python-Version": python_metadata.get("python_version", "?"),
+            "X-Python-Implementation": python_metadata.get(
+                "python_implementation", "?"
+            ),
+        })
         metadata["X-Node-Version"] = node_metadata.get("node_version", "?")
-        metadata.update(
-            {
-                "X-System-Hostname": system_metadata.get("hostname", "?"),
-                "X-System-User": system_metadata.get("user", "?"),
-                "X-System-OS-Name": system_metadata.get("os_name", "?"),
-                "X-System-OS-Version": system_metadata.get("os_version", "?"),
-                "X-System-CPU-Vendor": system_metadata.get("cpu_vendor", "?"),
-                "X-System-CPU-Brand": system_metadata.get("cpu_brand", "?"),
-                "X-System-CPU-Name": system_metadata.get("cpu_name", "?"),
-                "X-System-CPU-Core-Count": system_metadata.get("cpu_core_count", "?"),
-                "X-System-CPU-Frequency": system_metadata.get("cpu_frequency", "?"),
-                "X-System-Total-Memory": system_metadata.get("total_memory", "?"),
-            }
-        )
+        metadata.update({
+            "X-System-Hostname": system_metadata.get("hostname", "?"),
+            "X-System-User": system_metadata.get("user", "?"),
+            "X-System-OS-Name": system_metadata.get("os_name", "?"),
+            "X-System-OS-Version": system_metadata.get("os_version", "?"),
+            "X-System-CPU-Vendor": system_metadata.get("cpu_vendor", "?"),
+            "X-System-CPU-Brand": system_metadata.get("cpu_brand", "?"),
+            "X-System-CPU-Name": system_metadata.get("cpu_name", "?"),
+            "X-System-CPU-Core-Count": system_metadata.get("cpu_core_count", "?"),
+            "X-System-CPU-Frequency": system_metadata.get("cpu_frequency", "?"),
+            "X-System-Total-Memory": system_metadata.get("total_memory", "?"),
+        })
         return metadata
     except Exception as exception:
         raise RuntimeError(

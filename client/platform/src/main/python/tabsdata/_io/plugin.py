@@ -17,7 +17,6 @@ from tabsdata._tabsserver.function.store_results_utils import (
 from tabsdata.tableframe.lazyframe.frame import TableFrame
 
 if TYPE_CHECKING:
-
     import polars as pl
 
     from tabsdata._tabsserver.function.execution_context import ExecutionContext

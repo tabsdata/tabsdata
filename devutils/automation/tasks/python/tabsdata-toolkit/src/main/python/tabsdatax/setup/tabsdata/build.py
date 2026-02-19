@@ -11,12 +11,10 @@ from pathlib import Path
 
 from setuptools.command.build_py import build_py as _build_py
 
-
 logger = logging.getLogger(__name__)
 
 
 def create_main_custom_build_hook(root: str):
-
     def run_hook(build_cmd) -> None:
         foundation_libs_path = os.path.join(
             "expansions",
@@ -58,7 +56,7 @@ def create_main_custom_build_hook(root: str):
 
 
 def create_custom_build_py_class(
-    package_resources: dict[Path, Path] | None = None
+    package_resources: dict[Path, Path] | None = None,
 ) -> type:
     if package_resources is None:
         package_resources = {}

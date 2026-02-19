@@ -24,7 +24,6 @@ DerivedTableSpec: TypeAlias = SimpleTableSpec
 
 
 class DerivedTableFrame:
-
     def __init__(
         self,
         status: DerivedTableFrameStatus,

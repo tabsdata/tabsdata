@@ -65,9 +65,9 @@ DATA_VERSION_FINAL_STATUSES = (
     DATA_VERSION_FAILED_FINAL_STATUSES | DATA_VERSION_SUCCESSFUL_FINAL_STATUSES
 )
 
-DATA_VERSION_VALID_USER_PROVIDED_STATUSES = ", ".join(
-    [f"{long}/{short}" for short, long in DATA_VERSION_STATUS_MAPPING.items()]
-)
+DATA_VERSION_VALID_USER_PROVIDED_STATUSES = ", ".join([
+    f"{long}/{short}" for short, long in DATA_VERSION_STATUS_MAPPING.items()
+])
 
 
 def user_data_version_status_to_api(

@@ -202,7 +202,6 @@ class DataQualityProcessor:
         return [action for action in actions or [] if isinstance(action, DataQuality)]
 
     def table_names(self) -> tuple[list[TableInfo], list[TableInfo]]:
-
         overridden_input_actions_tables: Dict[str, int] = {}
         input_actions_tables: list[TableInfo] = []
         for action in self._input_actions:

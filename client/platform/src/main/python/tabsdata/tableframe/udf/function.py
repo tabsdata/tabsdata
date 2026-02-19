@@ -423,9 +423,9 @@ class UDF(ABC):
         width = len(self._schema.columns)
         names = self._names(width)
         dtypes = self._dtypes(width)
-        s_dtype = pl.Struct(
-            [pl.Field(c_name, c_dtype) for c_name, c_dtype in zip(names, dtypes)]
-        )
+        s_dtype = pl.Struct([
+            pl.Field(c_name, c_dtype) for c_name, c_dtype in zip(names, dtypes)
+        ])
         return s_dtype
 
     def __call__(  # noqa: C901

@@ -106,9 +106,9 @@ def _store_results_in_table(  # noqa: C901
     )
     dq = DataQualityProcessor.from_execution_context(execution_context)
     input_table_infos, output_table_infos = dq.table_names()
-    destination_tables.extend(
-        [table_info.table for table_info in input_table_infos + output_table_infos]
-    )
+    destination_tables.extend([
+        table_info.table for table_info in input_table_infos + output_table_infos
+    ])
 
     # Note: destination.table is a list of strings, it can't be a single string because
     # when we serialized it we stored it as such even if it was a single one.

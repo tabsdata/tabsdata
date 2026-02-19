@@ -14,7 +14,6 @@ from tabsdata.exceptions import ErrorCode, TableFrameError
 
 
 class DataFrame:
-
     @classmethod
     def item(cls, lf: pl.LazyFrame) -> Any:
         schema = lf.collect_schema()

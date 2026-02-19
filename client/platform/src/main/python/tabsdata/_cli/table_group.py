@@ -500,21 +500,19 @@ def versions(ctx: click.Context, coll: str, name: str, details: bool):
                 data_version.status,
             ]
             if details:
-                row_content.extend(
-                    [
-                        (
-                            str(data_version.row_count)
-                            if data_version.row_count is not None
-                            else "-"
-                        ),
-                        (
-                            str(data_version.column_count)
-                            if data_version.column_count is not None
-                            else "-"
-                        ),
-                        data_version.schema_hash,
-                    ]
-                )
+                row_content.extend([
+                    (
+                        str(data_version.row_count)
+                        if data_version.row_count is not None
+                        else "-"
+                    ),
+                    (
+                        str(data_version.column_count)
+                        if data_version.column_count is not None
+                        else "-"
+                    ),
+                    data_version.schema_hash,
+                ])
             table.add_row(*row_content)
 
         click.echo()

@@ -34,7 +34,6 @@ from tabsdata.connector.kafka.utils import get_protobuf_class
 
 
 class NonSrKafkaSerde(KafkaSerde, ABC):
-
     def extract_schema_id(self, _data: bytes, message: dict) -> SchemaIdSpec:
         keys = sorted(list(message.keys()))
         # noinspection PyTypeChecker

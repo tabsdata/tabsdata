@@ -18,7 +18,6 @@ END_TAG = "<message><f>"
 
 
 class ConfigResolver:
-
     def __init__(
         self,
         hashicorp_url: str | None = None,

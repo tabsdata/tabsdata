@@ -238,9 +238,9 @@ def obtain_list_fn_run_filters(
 
     request_filter = []
     if status:
-        request_filter.append(
-            [f"status:eq:{user_function_run_status_to_api(s)}" for s in status]
-        )
+        request_filter.append([
+            f"status:eq:{user_function_run_status_to_api(s)}" for s in status
+        ])
     if exe_name:
         request_filter.append(f"execution:lk:{exe_name}")
     if execution_id:
@@ -362,12 +362,10 @@ def list_plan(
                 build_table(), refresh_per_second=refresh_rate, console=Console()
             ) as live:
                 while True:
-                    if all(
-                        [
-                            aux_exe.status in EXECUTION_FINAL_STATUSES
-                            for aux_exe in list_of_executions
-                        ]
-                    ):
+                    if all([
+                        aux_exe.status in EXECUTION_FINAL_STATUSES
+                        for aux_exe in list_of_executions
+                    ]):
                         break
                     list_of_executions = obtain_execution_list(
                         server, request_filter, last
@@ -384,12 +382,10 @@ def list_plan(
             console = Console()
             console.print(table)
         click.echo()
-        if not all(
-            [
-                aux_exe.status in EXECUTION_SUCCESSFUL_FINAL_STATUSES
-                for aux_exe in list_of_executions
-            ]
-        ):
+        if not all([
+            aux_exe.status in EXECUTION_SUCCESSFUL_FINAL_STATUSES
+            for aux_exe in list_of_executions
+        ]):
             show_hint(
                 ctx,
                 "If you want to explore why a plan failed, you can "
@@ -423,9 +419,9 @@ def obtain_list_exec_filters(
     """
     request_filter = []
     if status:
-        request_filter.append(
-            [f"status:eq:{user_execution_status_to_api(s)}" for s in status]
-        )
+        request_filter.append([
+            f"status:eq:{user_execution_status_to_api(s)}" for s in status
+        ])
     if exe_name:
         request_filter.append(f"name:lk:{exe_name}")
     if fn:
@@ -559,12 +555,10 @@ def list_trx(
                 build_table(), refresh_per_second=refresh_rate, console=Console()
             ) as live:
                 while True:
-                    if all(
-                        [
-                            aux_trx.status in TRANSACTION_FINAL_STATUSES
-                            for aux_trx in list_of_transactions
-                        ]
-                    ):
+                    if all([
+                        aux_trx.status in TRANSACTION_FINAL_STATUSES
+                        for aux_trx in list_of_transactions
+                    ]):
                         break
                     list_of_transactions = obtain_transaction_list(
                         server, request_filter, last
@@ -583,12 +577,10 @@ def list_trx(
             console = Console()
             console.print(table)
         click.echo()
-        if not all(
-            [
-                trx.status in TRANSACTION_SUCCESSFUL_FINAL_STATUSES
-                for trx in list_of_transactions
-            ]
-        ):
+        if not all([
+            trx.status in TRANSACTION_SUCCESSFUL_FINAL_STATUSES
+            for trx in list_of_transactions
+        ]):
             show_hint(
                 ctx,
                 "If you want to explore why a transaction failed, you can "
@@ -621,9 +613,9 @@ def obtain_list_trx_filters(
     """
     request_filter = []
     if status:
-        request_filter.append(
-            [f"status:eq:{user_transaction_status_to_api(s)}" for s in status]
-        )
+        request_filter.append([
+            f"status:eq:{user_transaction_status_to_api(s)}" for s in status
+        ])
     if exe_name:
         request_filter.append(f"execution:lk:{exe_name}")
     if execution_id:
@@ -798,9 +790,9 @@ def obtain_list_worker_filters(
 
     request_filter = []
     if status:
-        request_filter.append(
-            [f"status:eq:{user_worker_status_to_api(s)}" for s in status]
-        )
+        request_filter.append([
+            f"status:eq:{user_worker_status_to_api(s)}" for s in status
+        ])
     if exe_name:
         request_filter.append(f"execution:lk:{exe_name}")
     if execution_id:

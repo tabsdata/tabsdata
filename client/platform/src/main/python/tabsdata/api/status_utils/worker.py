@@ -55,9 +55,9 @@ WORKER_SUCCESSFUL_FINAL_STATUSES = {
 
 WORKER_FINAL_STATUSES = WORKER_FAILED_FINAL_STATUSES | WORKER_SUCCESSFUL_FINAL_STATUSES
 
-WORKER_VALID_USER_PROVIDED_STATUSES = ", ".join(
-    [f"{long}/{short}" for short, long in WORKER_STATUS_MAPPING.items()]
-)
+WORKER_VALID_USER_PROVIDED_STATUSES = ", ".join([
+    f"{long}/{short}" for short, long in WORKER_STATUS_MAPPING.items()
+])
 
 
 def user_worker_status_to_api(

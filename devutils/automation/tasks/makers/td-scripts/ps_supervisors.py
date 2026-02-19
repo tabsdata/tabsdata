@@ -181,8 +181,8 @@ def ps():  # noqa: C901
             f"{indent}"
             f"{color}"
             f"{emoji} "
-            f'{process["pid"]:>6} '
-            f'{process["ppid"]:>6} '
+            f"{process['pid']:>6} "
+            f"{process['ppid']:>6} "
             f"{command}"
             f"{END_COLOR}"
         )

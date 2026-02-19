@@ -95,7 +95,6 @@ class Catalog:
 
 
 class AWSGlue(Catalog):
-
     IDENTIFIER = "aws-glue-catalog"
 
     ALLOW_INCOMPATIBLE_CHANGES_KEY = "allow_incompatible_changes"
@@ -601,7 +600,7 @@ class AzureDestination(DestinationPlugin):
         # We add logic here instead of implementing a write method because there
         # would be a missmatch in the expected signature of the write method and the
         # signature it would need, due to the special catalog logic.
-        obtain_and_set_azure_credentials(self.credentials),
+        (obtain_and_set_azure_credentials(self.credentials),)
         _write_results_in_final_files(
             results, intermediate_files, self, working_dir, self._ec.request
         )
@@ -802,7 +801,7 @@ class GCSDestination(DestinationPlugin):
             f" '{results}'"
         )
         intermediate_files = self.chunk(working_dir, *results)
-        obtain_and_set_gcp_credentials(self.credentials),
+        (obtain_and_set_gcp_credentials(self.credentials),)
         _write_results_in_final_files(
             results, intermediate_files, self, working_dir, self._ec.request
         )
@@ -1245,8 +1244,8 @@ class S3Destination(DestinationPlugin):
         # We add logic here instead of implementing a write method because there
         # would be a missmatch in the expected signature of the write method and the
         # signature it would need, due to the special catalog logic.
-        obtain_and_set_s3_credentials(self.credentials),
-        set_s3_region(self.region),
+        (obtain_and_set_s3_credentials(self.credentials),)
+        (set_s3_region(self.region),)
         _write_results_in_final_files(
             results, intermediate_files, self, working_dir, self._ec.request
         )
@@ -1597,7 +1596,6 @@ def _store_file_in_catalog(
     index: int,
     destination: S3Destination,
 ):
-
     import pyarrow as pa
     from pyiceberg.catalog import load_catalog
     from pyiceberg.exceptions import NoSuchTableError
@@ -1792,7 +1790,6 @@ def _store_polars_lf_in_file(
     result_file: str | os.PathLike,
     format: AvroFormat | FileFormat | CSVFormat | ParquetFormat | NDJSONFormat = None,
 ):
-
     file_ending = result_file.split(".")[-1]
     if file_ending in FORMAT_TO_POLARS_WRITE_FUNCTION:
         # polars does not create parent folders when writing a file.

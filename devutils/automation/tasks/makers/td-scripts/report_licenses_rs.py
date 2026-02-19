@@ -233,7 +233,7 @@ for cargo_toml in cargo_tomls:
         }
 
 licenses_csv_data = [
-    f"\"{pkg['name']}\",\"{pkg['version']}\",\"{pkg['license']}\""
+    f'"{pkg["name"]}","{pkg["version"]}","{pkg["license"]}"'
     for pkg in aggregated.values()
 ]
 csv_output = "\n".join(licenses_csv_data)

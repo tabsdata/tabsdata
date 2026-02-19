@@ -36,7 +36,6 @@ def select_root() -> Path:
 
 
 def start_server(folder: Path, port: int):
-
     class QuietHandler(http.server.SimpleHTTPRequestHandler):
         def log_message(self, _format, *args):
             pass

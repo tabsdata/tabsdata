@@ -505,7 +505,6 @@ class KafkaTrigger(StageTrigger):
                 )
             return SchemaRegistryClient(sr_configs)
         elif isinstance(sr, AwsGlueSchemaRegistry):
-
             boto_kwargs = {REGION_NAME_KEY: sr.region_name}
             if sr.configs:
                 boto_kwargs = boto_kwargs | sr.configs

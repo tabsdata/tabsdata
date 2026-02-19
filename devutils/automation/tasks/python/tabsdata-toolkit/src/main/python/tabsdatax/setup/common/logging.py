@@ -9,13 +9,12 @@ import sys
 import threading
 import time
 import warnings
+from collections.abc import Generator
 from contextlib import contextmanager
 from typing import Any, TextIO, cast
 
 import colorama
 import tqdm
-
-from collections.abc import Generator
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +38,9 @@ def init_logging() -> logging.Logger:
             from setuptools.command.build_py import _IncludePackageDataAbuse
 
             _IncludePackageDataAbuse._Warning._DETAILS = ""
-            warnings.filterwarnings("ignore",
-                                    category=_IncludePackageDataAbuse._Warning)
+            warnings.filterwarnings(
+                "ignore", category=_IncludePackageDataAbuse._Warning
+            )
         except Exception:
             pass
 

@@ -15,32 +15,32 @@ script = [
     on_ga = get_env TD_ON_GA
     on_ga_true = eq ${on_ga} "true"
     if ${on_ga_true}
-        debug "🚀 ruff check --fix ."
-        exec --fail-on-error ruff check --fix .
         debug "🚀 ruff format ."
         exec --fail-on-error ruff format .
+        debug "🚀 ruff check --fix ."
+        exec --fail-on-error ruff check --fix .
     else
         project_root_folder = get_env PROJECT_ROOT_FOLDER
         project_root_folder_basename = basename ${project_root_folder}
         is_tabsdata_ee = eq ${project_root_folder_basename} "tabsdata-ee"
         if ${is_tabsdata_ee}
-            debug "🚀 ruff check --fix ."
-            exec --fail-on-error ruff check --fix .
             debug "🚀 ruff format ."
             exec --fail-on-error ruff format .
+            debug "🚀 ruff check --fix ."
+            exec --fail-on-error ruff check --fix .
 
             info "🐡 Switching to tabsdata-os"
             cd "${PROJECT_TABSDATA_ROOT_FOLDER}/../tabsdata-os"
 
-            debug "🚀 ruff check --fix ."
-            exec --fail-on-error ruff check --fix .
             debug "🚀 ruff format ."
             exec --fail-on-error ruff format .
+            debug "🚀 ruff check --fix ."
+            exec --fail-on-error ruff check --fix .
         else
-            debug "🚀 ruff check --fix ."
-            exec --fail-on-error ruff check --fix .
             debug "🚀 ruff format ."
             exec --fail-on-error ruff format .
+            debug "🚀 ruff check --fix ."
+            exec --fail-on-error ruff check --fix .
         end
     end
     ''']

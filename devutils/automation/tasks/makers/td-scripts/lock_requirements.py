@@ -151,14 +151,12 @@ def lock_requirements_dev(root: str, connectors: list[tuple[str, str]], year: in
             f"-r {c_r}/python/{c_n}/requirements/requirements-dev-third-party.txt\n"
         )
 
-    dev_lines.extend(
-        [
-            "\n",
-            "# Third-party dependencies\n",
-            "\n",
-            "-r requirements/requirements-third-party.txt\n",
-        ]
-    )
+    dev_lines.extend([
+        "\n",
+        "# Third-party dependencies\n",
+        "\n",
+        "-r requirements/requirements-third-party.txt\n",
+    ])
 
     for c_r, c_n in sorted(connectors):
         dev_lines.append(
@@ -188,18 +186,16 @@ def lock_requirements_test(root: str, connectors: list[tuple[str, str]], year: i
     for c_r, c_n in sorted(connectors):
         test_lines.append(f"-r {c_r}/python/{c_n}/requirements.txt\n")
 
-    test_lines.extend(
-        [
-            "\n",
-            "# Third-party dependencies\n",
-            "\n",
-            "-r requirements/requirements-dev-third-party.txt\n",
-            "\n",
-            "# First-party dependencies\n",
-            "\n",
-            "-r requirements/requirements-dev-first-party.txt\n",
-        ]
-    )
+    test_lines.extend([
+        "\n",
+        "# Third-party dependencies\n",
+        "\n",
+        "-r requirements/requirements-dev-third-party.txt\n",
+        "\n",
+        "# First-party dependencies\n",
+        "\n",
+        "-r requirements/requirements-dev-first-party.txt\n",
+    ])
 
     with open(os.path.join(root, "requirements-test.txt"), "w") as f:
         f.write("".join(test_lines))

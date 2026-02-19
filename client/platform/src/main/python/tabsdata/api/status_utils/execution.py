@@ -70,9 +70,9 @@ EXECUTION_FINAL_STATUSES = (
     EXECUTION_FAILED_FINAL_STATUSES | EXECUTION_SUCCESSFUL_FINAL_STATUSES
 )
 
-EXECUTION_VALID_USER_PROVIDED_STATUSES = ", ".join(
-    [f"{long}/{short}" for short, long in EXECUTION_STATUS_MAPPING.items()]
-)
+EXECUTION_VALID_USER_PROVIDED_STATUSES = ", ".join([
+    f"{long}/{short}" for short, long in EXECUTION_STATUS_MAPPING.items()
+])
 
 
 def user_execution_status_to_api(

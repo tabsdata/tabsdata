@@ -29,7 +29,6 @@ logger = load("log").get_logger()
 
 
 def copy(source: Path, target: Path, link: bool) -> None:
-
     def ignore_so(_src: str, names: list[str]) -> set[str]:
         return {name for name in names if name.endswith(".so")}
 

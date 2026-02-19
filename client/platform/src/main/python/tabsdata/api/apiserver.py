@@ -130,7 +130,6 @@ def _obtain_certificate_file_path(url: str) -> str:
 
 
 class APIServerError(Exception):
-
     def __init__(self, dictionary: dict):
         self.code = dictionary.get("code")
         self.error = dictionary.get("error")
@@ -156,7 +155,6 @@ def process_url(url: str) -> str:
 
 
 class APIServer:
-
     def __init__(self, url: str, credentials_file: str = None):
         url = process_url(url)
         self.url = url
@@ -911,7 +909,6 @@ class APIServer:
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def role_user_add(self, role: str, user: str, raise_for_status: bool = True):
-
         endpoint = f"/roles/{role}/users"
 
         data = {"user": user}

@@ -90,12 +90,10 @@ def create_function_execution_response(
                     schema_hash=initial_values_meta_info["schema_hash"],
                 )
             )
-            modified_tables.append(
-                {
-                    "name": initial_values_table_name,
-                    "meta_info": initial_values_meta_info,
-                }
-            )
+            modified_tables.append({
+                "name": initial_values_table_name,
+                "meta_info": initial_values_meta_info,
+            })
         except KeyError as e:
             logger.error(
                 f"Offset table '{initial_values_table_name}' does not have the "

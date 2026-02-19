@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 TABSDATA_TO_ROOT = "."
 CONNECTOR_TO_ROOT = os.path.join("..", "..", "..")
 
+
 def root_folder(setup_file: str, fallback: str = TABSDATA_TO_ROOT) -> str:
     current_folder = Path(setup_file).parent.absolute()
     logger.debug(f"📁 Current setup folder is: {current_folder}")
@@ -49,8 +50,17 @@ def read_file(*paths: str, base_path: str | None = None, encoding: str = "utf8")
 
 
 def get_variant_manifest_folder(root: str) -> str:
-    return os.path.join(root, "variant", "assets", "manifest",)
+    return os.path.join(
+        root,
+        "variant",
+        "assets",
+        "manifest",
+    )
 
 
 def get_variant_assets_folder(root: str) -> str:
-    return os.path.join(root, "variant", "assets",)
+    return os.path.join(
+        root,
+        "variant",
+        "assets",
+    )

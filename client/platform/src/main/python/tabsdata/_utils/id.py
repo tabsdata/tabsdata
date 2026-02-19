@@ -24,7 +24,9 @@ def encode_id(debug: bool | None = False) -> tuple[UUID, str]:
     return id_uuid, id_code
 
 
-def decode_id(id_code: str, debug: bool | None = False) -> tuple[
+def decode_id(
+    id_code: str, debug: bool | None = False
+) -> tuple[
     UUID,
     int,
     datetime.datetime,

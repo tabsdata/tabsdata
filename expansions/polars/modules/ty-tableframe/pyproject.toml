@@ -28,83 +28,6 @@ Homepage = "https://tabsdata.com"
 Documentation = "https://docs.tabsdata.com"
 Source = "https://github.com/tabsdata/tabsdata"
 
-[tool.tabsdata]
-name = "ty-tableframe"
-
-[tool.maturin]
-python-source = "python/src/main/python"
-module-name = "tabsdata.expansions.tableframe._tableframe"
-compatibility = "musllinux_1_1"
-exclude = ["**/*.pyd", "**/*.so"]
-
-[tool.ruff]
-line-length = 88
-target-version = "py312"
-exclude = [
-    ".tabsdata",
-    ".venv",
-    "dist",
-    "build",
-    "target",
-    "venv",
-    "*.pyi",
-    "docker/",
-]
-extend-exclude = [
-    "**/src/utest/**",
-]
-
-[tool.ruff.format]
-preview = true
-quote-style = "double"
-indent-style = "space"
-skip-magic-trailing-comma = false
-line-ending = "auto"
-
-[tool.ruff.lint]
-select = [
-    "E",
-    "F",
-    "I",
-    "W",
-    "C90",
-]
-extend-select = [
-    "E9",
-    "F63",
-    "F7",
-    "F82"
-]
-ignore = []
-fixable = ["ALL"]
-
-[tool.ruff.lint.mccabe]
-max-complexity = 25
-
-[tool.ruff.lint.isort]
-known-first-party = [
-    "tabsdata",
-    "test_tabsdata",
-    "test_tabsdata_agent",
-    "test_tabsdata_bigquery",
-    "test_tabsdata_databricks",
-    "test_tabsdata_example",
-    "test_tabsdata_kafka",
-    "test_tabsdata_mongodb",
-    "test_tabsdata_mssql",
-    "test_tabsdata_salesforce",
-    "test_tabsdata_snowflake",
-    "test_tabsdata_toolkit",
-    "test_ta_features",
-    "test_ta_tableframe",
-    "test_te_examples",
-    "test_te_tableframe",
-    "test_te_variant",
-    "test_to_foundation",
-    "test_ty_tableframe",
-]
-combine-as-imports = true
-
 [tool.coverage.html]
 directory = "coverage_html_report"
 
@@ -115,3 +38,16 @@ exclude_also = [
 
 [tool.licensecheck]
 using = "requirements:requirements.txt"
+
+[tool.maturin]
+python-source = "python/src/main/python"
+module-name = "tabsdata.expansions.tableframe._tableframe"
+compatibility = "musllinux_1_1"
+exclude = ["**/*.pyd", "**/*.so"]
+
+[tool.ruff]
+extend = "../../../../pyproject.toml"
+
+[tool.tabsdata]
+name = "ty-tableframe"
+display = "Tabsdata Tableframe"

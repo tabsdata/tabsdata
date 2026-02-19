@@ -44,8 +44,16 @@ Homepage = "https://tabsdata.com"
 Documentation = "https://docs.tabsdata.com"
 Source = "https://github.com/tabsdata/tabsdata"
 
-[tool.tabsdata]
-name = "tabsdata"
+[tool.coverage.html]
+directory = "coverage_html_report"
+
+[tool.coverage.report]
+exclude_also = [
+    "@(abc\\.)?abstractmethod",
+]
+
+[tool.licensecheck]
+using = "requirements:requirements.txt"
 
 [tool.ruff]
 line-length = 88
@@ -89,12 +97,11 @@ extend-select = [
 ignore = []
 fixable = ["ALL"]
 
-[tool.ruff.lint.mccabe]
-max-complexity = 25
-
 [tool.ruff.lint.isort]
 known-first-party = [
     "tabsdata",
+    "test_ta_features",
+    "test_ta_tableframe",
     "test_tabsdata",
     "test_tabsdata_agent",
     "test_tabsdata_bigquery",
@@ -106,8 +113,6 @@ known-first-party = [
     "test_tabsdata_salesforce",
     "test_tabsdata_snowflake",
     "test_tabsdata_toolkit",
-    "test_ta_features",
-    "test_ta_tableframe",
     "test_te_examples",
     "test_te_tableframe",
     "test_te_variant",
@@ -116,13 +121,9 @@ known-first-party = [
 ]
 combine-as-imports = true
 
-[tool.coverage.html]
-directory = "coverage_html_report"
+[tool.ruff.lint.mccabe]
+max-complexity = 25
 
-[tool.coverage.report]
-exclude_also = [
-    "@(abc\\.)?abstractmethod",
-]
-
-[tool.licensecheck]
-using = "requirements:requirements.txt"
+[tool.tabsdata]
+name = "tabsdata"
+display = "Tabsdata"

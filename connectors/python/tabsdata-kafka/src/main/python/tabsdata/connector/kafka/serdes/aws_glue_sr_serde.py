@@ -33,7 +33,6 @@ from tabsdata.connector.kafka.utils import get_protobuf_class
 
 
 class GlueKafkaSerde(KafkaSerde, ABC):
-
     def extract_schema_id(self, data: bytes, _message: dict) -> SchemaIdSpec:
         if len(data) < 18:
             raise ValueError(
