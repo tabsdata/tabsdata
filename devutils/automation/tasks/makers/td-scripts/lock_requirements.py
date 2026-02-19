@@ -6,6 +6,7 @@ import argparse
 import importlib.util
 import io
 import os
+import re
 import shutil
 from datetime import datetime
 from os import getcwd
@@ -48,6 +49,15 @@ def load(module_name) -> ModuleType:
 
 
 logger = load("log").get_logger()
+
+
+def is_under_templates(path: Path, root: str) -> bool:
+    templates_folder = Path(root) / "templates"
+    try:
+        path.resolve().relative_to(templates_folder.resolve())
+        return True
+    except ValueError:
+        return False
 
 
 def gather_connectors(root: str) -> list[tuple[str, str]]:
@@ -379,6 +389,41 @@ def lock_pyprojects(
         lock_pyproject(polars_module_folder, connector_names)
 
 
+def lock_connectors_constants(root: str, connectors: list[tuple[str, str]]) -> None:
+    constants_py_file = os.path.join(
+        root,
+        "client",
+        "platform",
+        "src",
+        "main",
+        "python",
+        "tabsdata",
+        "_utils",
+        "constants.py",
+    )
+    constants_py_path = Path(constants_py_file)
+    if not constants_py_path.is_file():
+        logger.warning(f"⚠️ constants.py not found: {constants_py_path}")
+        return
+
+    content = constants_py_path.read_text(encoding="utf-8")
+
+    connector_names = sorted(name.replace("tabsdata-", "") for _, name in connectors)
+
+    names_list = ",\n".join(f'    "{name}"' for name in connector_names)
+    new_list = f"TABSDATA_CONNECTORS_NAMES = [\n{names_list},\n]"
+
+    pattern = r"TABSDATA_CONNECTORS_NAMES\s*=\s*\[[^\]]*\]"
+    new_content = re.sub(pattern, new_list, content)
+
+    if new_content != content:
+        constants_py_path.write_text(new_content, encoding="utf-8")
+        logger.info("🔐️ File constants.py TABSDATA_CONNECTORS_NAMES locked!")
+    else:
+        logger.debug("⚠️️ constants.py TABSDATA_CONNECTORS_NAMES already up to date")
+
+
+# noinspection DuplicatedCode
 def lock_pytest_ini(root: str) -> None:
     tabsdata_pytest_ini_file = os.path.join(
         root,
@@ -429,13 +474,23 @@ def lock_pytest_ini(root: str) -> None:
                 raise FileNotFoundError(
                     f"Base tabsdata pytest.ini not found: {tabsdata_pytest_ini_path}"
                 )
+
     pytest_ini_name = tabsdata_pytest_ini_path.name
+
     for path in Path(root).rglob(pytest_ini_name):
         if path.is_file() and path.resolve() != tabsdata_pytest_ini_path:
+            if is_under_templates(path, root):
+                logger.debug(f"⏭️ Skipping templates file: {path}")
+                continue
             logger.info(f"🔏 Locking pytest.ini file: {path}")
             shutil.copy2(tabsdata_pytest_ini_path, path)
-    for path in Path(os.path.join(root, "..", "tabsdata-ag")).rglob(pytest_ini_name):
+
+    tabsdata_ag_root = os.path.join(root, "..", "tabsdata-ag")
+    for path in Path(tabsdata_ag_root).rglob(pytest_ini_name):
         if path.is_file() and path.resolve() != tabsdata_pytest_ini_path:
+            if is_under_templates(path, tabsdata_ag_root):
+                logger.debug(f"⏭️ Skipping templates file: {path}")
+                continue
             logger.info(f"🔏 Locking pytest.ini file: {path}")
             shutil.copy2(tabsdata_pytest_ini_path, path)
 
@@ -451,6 +506,7 @@ def lock(root: str):
         lock_requirements_dev_first_party(root, connectors, year)
         lock_requirements_first_party(root, connectors, year)
         lock_requirements_third_party_all(root, connectors, year)
+        lock_connectors_constants(root, connectors)
     lock_pyprojects(Path(root), connectors, python_modules, polars_modules)
     lock_pytest_ini(root)
 

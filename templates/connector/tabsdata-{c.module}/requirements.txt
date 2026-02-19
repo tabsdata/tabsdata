@@ -1,0 +1,6 @@
+#
+# Copyright {c.year} Tabs Data Inc.
+#
+
+-r requirements/requirements-first-party.txt
+-r requirements/requirements-third-party.txt

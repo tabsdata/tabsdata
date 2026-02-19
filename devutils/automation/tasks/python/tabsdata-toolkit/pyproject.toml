@@ -34,6 +34,7 @@ classifiers = [
 dynamic = ["version"]
 
 [project.scripts]
+tdx_gconnector = "tabsdatax.generator.connector:main"
 tdx_pyoutdated = "tabsdatax.cmake.pyoutdated:main"
 
 [project.urls]
