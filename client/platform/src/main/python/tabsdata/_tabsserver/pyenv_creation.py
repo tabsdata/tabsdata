@@ -752,24 +752,48 @@ def inject_tabsdata_version(required_modules: list[str]) -> list[str]:  # noqa: 
         if not extract_package_name(module).startswith(TABSDATA_MODULE_NAME)
     ]
 
-    requirements_lock_map = {}
-    try:
-        requirements_lock = td_resource("resources/lock/requirements.txt")
-        with open(requirements_lock, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line or line.startswith("#"):
-                    continue
-                is_requirement = re.match(r"^\s*([A-Za-z0-9_.-]+)\s*==\s*(.+)", line)
-                if is_requirement:
-                    module = is_requirement.group(1)
-                    version = is_requirement.group(2)
-                    canonical_module = canonicalize_name(module)
-                    requirements_lock_map[canonical_module] = version
-                else:
-                    logger.warning(f"Unexpected requirement lock spec: {line}")
-    except Exception as e:
-        logger.warning(f"Requirements lock file does not exist or cannot be read: {e}")
+    (tabsdata_provider, _, _) = retrieve_tabsdata_package()
+
+    def load_requirements_lock(lock_path: str) -> dict[str, str]:
+        lock_map = {}
+        try:
+            requirements_lock = td_resource(lock_path)
+            with open(requirements_lock, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    is_requirement = re.match(
+                        r"^\s*([A-Za-z0-9_.-]+)\s*==\s*(.+)", line
+                    )
+                    if is_requirement:
+                        module = is_requirement.group(1)
+                        version = is_requirement.group(2)
+                        canonical_module = canonicalize_name(module)
+                        lock_map[canonical_module] = version
+                    else:
+                        logger.warning(
+                            f"Unexpected requirement lock spec: {lock_path} - {line}"
+                        )
+        except Exception as error:
+            logger.warning(
+                f"Requirements lock file does not exist or cannot be read: {error}"
+            )
+        return lock_map
+
+    requirements_lock_map = load_requirements_lock("resources/lock/requirements.txt")
+
+    if tabsdata_provider in (
+        "Archive (Project)",
+        "Archive (Folder)",
+        "Archive (Wheel)",
+        "Folder (Editable)",
+        "Folder (Frozen)",
+    ):
+        requirementts_dev_lock_map = load_requirements_lock(
+            "resources/lock/requirements-dev.txt"
+        )
+        requirements_lock_map.update(requirementts_dev_lock_map)
 
     required_modules_map = {}
     for required_module in required_modules:
