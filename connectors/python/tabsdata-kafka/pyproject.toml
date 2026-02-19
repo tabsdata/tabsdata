@@ -2,72 +2,62 @@
 # Copyright 2026 Tabs Data Inc.
 #
 
-[tool.tabsdata]
-name = "tabsdata-kafka"
-
 [build-system]
-requires = [
-    "archspec==0.2.5",
-    "colorama==0.4.6",
-    "psutil==7.2.2",
-    "py-cpuinfo==9.0.0",
-    "PyYAML==6.0.3",
-    "setuptools==78.1.1",
-    "tqdm==4.67.3",
-    "tzlocal==5.3.1"]
+requires = []
 build-backend = "setuptools.build_meta"
 
-[tool.flake8]
-exclude = ["*.pyi"]
+[project]
+name = "tabsdata-kafka"
+description = "Tabsdata plugin to access Kafka data."
+authors = [{name = "Tabs Data Inc."}]
+keywords = [
+    "tabsdata",
+    "data",
+    "tables",
+    "pub/sub",
+    "publish/subscribe",
+    "kafka",
+]
+classifiers = [
+    "Development Status :: Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "Programming Language :: JavaScript",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+    "Programming Language :: Rust",
+    "Operating System :: OS Independent",
+]
+dynamic = [
+    "version",
+    "license",
+    "readme",
+    "requires-python",
+    "dependencies",
+    "optional-dependencies",
+]
 
-[tool.black]
-line-length = 88
-preview = true
-extend-exclude = '\.pyi$'
-enable-unstable-feature = ["string_processing"]
+[project.urls]
+Homepage = "https://tabsdata.com"
+Documentation = "https://docs.tabsdata.com"
+Source = "https://github.com/tabsdata/tabsdata"
 
 [tool.coverage.html]
 directory = "coverage_html_report"
 
 [tool.coverage.report]
-# Regexes for lines to exclude from consideration
 exclude_also = [
-    # Don't complain about abstract methods, they aren't run:
     "@(abc\\.)?abstractmethod",
-    ]
-
-[tool.isort]
-profile = "black"
-skip_glob = ["*.pyi"]
-known_first_party = [
-    "tabsdata",
-    "ta_features",
-    "ta_tableframe",
-    "te_examples",
-    "te_tableframe",
-    "te_variant",
-    "to_foundation",
-    "ty_tableframe",
-    "test_tabsdata",
-    "test_tabsdata_agent",
-    "test_tabsdata_bigquery",
-    "test_tabsdata_databricks",
-    "test_tabsdata_example",
-    "test_tabsdata_kafka",
-    "test_tabsdata_mongodb",
-    "test_tabsdata_mssql",
-    "test_tabsdata_salesforce",
-    "test_tabsdata_snowflake",
-    "test_ta_features",
-    "test_ta_tableframe",
-    "test_te_examples",
-    "test_te_tableframe",
-    "test_te_variant",
-    "test_to_foundation",
-    "test_ty_tableframe",
 ]
-known_third_party = ["docker"]
-skip = ["docker/"]
 
 [tool.licensecheck]
 using = "requirements:requirements.txt"
+
+[tool.ruff]
+extend = "../../../pyproject.toml"
+
+[tool.tabsdata]
+name = "tabsdata-kafka"
+display = "Kafka Connector"

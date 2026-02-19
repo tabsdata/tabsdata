@@ -114,8 +114,8 @@ script = [
 
     for connector in ${connectors}
         is_connector = is_dir ${connector}
-            warn "⏳ Nothing to do: ${connector}."
         if ${is_connector}
+            warn "⏳ Nothing to do: ${connector}."
         end
     end
     ''']

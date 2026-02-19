@@ -1,0 +1,63 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[build-system]
+requires = []
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tabsdata-toolkit"
+description = "Tabsdata toolkit for developers."
+authors = [{name = "Tabs Data Inc."}]
+keywords = [
+    "tabsdata",
+    "data",
+    "tables",
+    "pub/sub",
+    "build",
+    "setup",
+    "utilities",
+]
+classifiers = [
+    "Development Status :: Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "Programming Language :: JavaScript",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+    "Programming Language :: Rust",
+    "Operating System :: OS Independent",
+]
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://tabsdata.com"
+Documentation = "https://docs.tabsdata.com"
+Source = "https://github.com/tabsdata/tabsdata"
+
+[tool.coverage.html]
+directory = "coverage_html_report"
+
+[tool.coverage.report]
+exclude_also = [
+    "@(abc\\.)?abstractmethod",
+]
+
+[tool.ruff]
+extend = "../../../../../pyproject.toml"
+
+[tool.ruff.lint.isort]
+known-first-party = ["tabsdatax"]
+
+[tool.setuptools.packages.find]
+where = ["src/main/python"]
+namespaces = true
+
+[tool.setuptools.package-data]
+"*" = ["!.gitkeep", "!*.pyc", "!__pycache__/*"]
+
+[tool.tabsdata]
+name = "tabsdata-toolkit"

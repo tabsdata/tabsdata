@@ -73,6 +73,13 @@ IGNORED_FOLDERS = (
     "testing_resources",
     "venv",
 )
+
+# Caution!!!
+# This list is replicated in project python file 'setup.py',
+# to ensure that when testing with pytest, the binaries are distributed and
+# available from tabsdata as a local package.
+# Please, make sure you update this list in both places.
+
 BASE_BINARIES = [
     "tdserver",
     "td_about",

@@ -276,8 +276,8 @@ script = [
 
             cd ${connector}
 
-            debug "🚀 uv pip install --quiet -e . --config-settings editable_mode=compat"
-            exec --fail-on-error uv pip install --quiet -e . --config-settings editable_mode=compat
+            debug "🚀 uv pip install --quiet -e . --config-settings editable_mode=compat --no-build-isolation"
+            exec --fail-on-error uv pip install --quiet -e . --config-settings editable_mode=compat --no-build-isolation
 
             pytthon_target_folder = set "${connector}/target/python"
             if ${pytthon_target_folder}

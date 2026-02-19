@@ -282,7 +282,7 @@ env_scripts = [
     if ${project_tabsdata_ag_root_folder_is_not_defined} or ${project_tabsdata_ag_root_folder_is_blank}
         noop
     else
-        debug "✅ Using tabsdata agent older: '${PROJECT_TABSDATA_AG_ROOT_FOLDER}'"
+        debug "✅ Using tabsdata agent folder: '${PROJECT_TABSDATA_AG_ROOT_FOLDER}'"
         new_path_item = concat ${project_tabsdata_ag_root_folder}/target/${build-folder} ${separator} ${project_tabsdata_ag_root_folder}/target/pytest/build
         new_path = concat ${new_path_item} ${separator} ${new_path}
     end

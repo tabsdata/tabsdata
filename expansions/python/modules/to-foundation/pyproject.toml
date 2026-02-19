@@ -3,66 +3,87 @@
 #
 
 [build-system]
-requires = [
-    "archspec==0.2.5",
-    "colorama==0.4.6",
-    "maturin==1.11.5",
-    "polars==1.38.1",
-    "psutil==7.2.2",
-    "py-cpuinfo==9.0.0",
-    "PyYAML==6.0.3",
-    "setuptools==78.1.1",
-    "tqdm==4.67.3",
-    "tzlocal==5.3.1"]
+requires = []
 build-backend = "maturin"
-
-[tool.flake8]
-exclude = ["*.pyi"]
 
 [project]
 name = "to-foundation"
 requires-python = ">=3.12"
 classifiers = [
-    "Programming Language :: Rust",
+    "Development Status :: Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "Programming Language :: JavaScript",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
+    "Programming Language :: Rust",
+    "Operating System :: OS Independent",
 ]
 dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://tabsdata.com"
+Documentation = "https://docs.tabsdata.com"
+Source = "https://github.com/tabsdata/tabsdata"
+
+[tool.tabsdata]
+name = "to-foundation"
 
 [tool.maturin]
 python-source = "python/src/main/python"
 module-name = "tabsdata.expansions.foundation._foundation"
 compatibility = "musllinux_1_1"
+exclude = ["**/*.pyd", "**/*.so"]
 
-[tool.black]
+[tool.ruff]
 line-length = 88
-preview = true
-extend-exclude = '\.pyi$'
-enable-unstable-feature = ["string_processing"]
-
-[tool.coverage.html]
-directory = "coverage_html_report"
-
-[tool.coverage.report]
-# Regexes for lines to exclude from consideration
-exclude_also = [
-    # Don't complain about abstract methods, they aren't run:
-    "@(abc\\.)?abstractmethod",
+target-version = "py312"
+exclude = [
+    ".tabsdata",
+    ".venv",
+    "dist",
+    "build",
+    "target",
+    "venv",
+    "*.pyi",
+    "docker/",
+]
+extend-exclude = [
+    "**/src/utest/**",
 ]
 
-[tool.isort]
-profile = "black"
-skip_glob = ["*.pyi"]
-known_first_party = [
+[tool.ruff.format]
+preview = true
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "I",
+    "W",
+    "C90",
+]
+extend-select = [
+    "E9",
+    "F63",
+    "F7",
+    "F82"
+]
+ignore = []
+fixable = ["ALL"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 25
+
+[tool.ruff.lint.isort]
+known-first-party = [
     "tabsdata",
-    "ta_features",
-    "ta_tableframe",
-    "te_examples",
-    "te_tableframe",
-    "te_variant",
-    "to_foundation",
-    "ty_tableframe",
-    "test_tabsdata",
     "test_tabsdata_agent",
     "test_tabsdata_bigquery",
     "test_tabsdata_databricks",
@@ -72,6 +93,7 @@ known_first_party = [
     "test_tabsdata_mssql",
     "test_tabsdata_salesforce",
     "test_tabsdata_snowflake",
+    "test_tabsdata_toolkit",
     "test_ta_features",
     "test_ta_tableframe",
     "test_te_examples",
@@ -80,8 +102,16 @@ known_first_party = [
     "test_to_foundation",
     "test_ty_tableframe",
 ]
-known_third_party = ["docker"]
-skip = ["docker/"]
+known-third-party = ["docker"]
+combine-as-imports = true
+
+[tool.coverage.html]
+directory = "coverage_html_report"
+
+[tool.coverage.report]
+exclude_also = [
+    "@(abc\\.)?abstractmethod",
+]
 
 [tool.licensecheck]
 using = "requirements:requirements.txt"

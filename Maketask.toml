@@ -959,10 +959,7 @@ category = "08 - Linter"
 description = "Task 'fmt' for Python projects"
 run_task = [
     { name = [
-        "__os__fmt_py_flake8_conventions",
-        "__os__fmt_py_flake8_complexity",
-        "__os__fmt_py_black",
-        "__os__fmt_py_isort"
+        "__os__fmt_py_ruff"
     ] }
 ]
 
@@ -995,8 +992,7 @@ category = "09 - Repair"
 description = "Task 'format' for Python projects"
 run_task = [
     { name = [
-        "__os__format_py_black",
-        "__os__format_py_isort"
+        "__os__format_py_ruff"
     ] }
 ]
 
@@ -1210,9 +1206,19 @@ run_task = [
     ] }
 ]
 
-[tasks.duck]
+[tasks.quack]
 plugin = "td-task-tracker"
 category = "70 - Debug"
+description = "Utility task for cargo make task common setup"
+run_task = [
+    { name = [
+        "__os__quack"
+    ] }
+]
+
+[tasks.duck]
+plugin = "td-task-tracker"
+category = "100 - Setup"
 description = "Utility task for DuckScript code explorations"
 run_task = [
     { name = [

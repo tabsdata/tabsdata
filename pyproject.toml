@@ -2,51 +2,99 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
+[build-system]
+requires = []
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tabsdata"
+description = "Tabsdata is a publish-subscribe (pub/sub) server for tables."
+authors = [{name = "Tabs Data Inc."}]
+keywords = [
+    "tabsdatta",
+    "data",
+    "tables",
+    "pub/sub",
+    "publish/subscribe",
+]
+classifiers = [
+    "Development Status :: Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "Programming Language :: JavaScript",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+    "Programming Language :: Rust",
+    "Operating System :: OS Independent",
+]
+dynamic = [
+    "version",
+    "license",
+    "readme",
+    "requires-python",
+    "dependencies",
+    "optional-dependencies",
+    "scripts",
+]
+
+[project.urls]
+Homepage = "https://tabsdata.com"
+Documentation = "https://docs.tabsdata.com"
+Source = "https://github.com/tabsdata/tabsdata"
+
 [tool.tabsdata]
 name = "tabsdata"
 
-[build-system]
-requires = [
-    "archspec==0.2.5",
-    "colorama==0.4.6",
-    "psutil==7.2.2",
-    "py-cpuinfo==9.0.0",
-    "PyYAML==6.0.3",
-    "setuptools==78.1.1",
-    "tqdm==4.67.3",
-    "tzlocal==5.3.1"]
-
-[tool.flake8]
-exclude = ["*.pyi"]
-
-[tool.black]
+[tool.ruff]
 line-length = 88
+target-version = "py312"
+exclude = [
+    ".tabsdata",
+    ".venv",
+    "dist",
+    "build",
+    "tabsdata-ui",
+    "target",
+    "venv",
+    "*.pyi",
+    "docker/",
+]
+extend-exclude = [
+    "**/src/utest/**",
+]
+
+[tool.ruff.format]
 preview = true
-extend-exclude = '\.pyi$'
-enable-unstable-feature = ["string_processing"]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
 
-[tool.coverage.html]
-directory = "coverage_html_report"
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "I",
+    "W",
+    "C90",
+]
+extend-select = [
+    "E9",
+    "F63",
+    "F7",
+    "F82"
+]
+ignore = []
+fixable = ["ALL"]
 
-[tool.coverage.report]
-# Regexes for lines to exclude from consideration
-exclude_also = [
-    # Don't complain about abstract methods, they aren't run:
-    "@(abc\\.)?abstractmethod",
-    ]
+[tool.ruff.lint.mccabe]
+max-complexity = 25
 
-[tool.isort]
-profile = "black"
-skip_glob = ["*.pyi"]
-known_first_party = [
+[tool.ruff.lint.isort]
+known-first-party = [
     "tabsdata",
-    "ta_features",
-    "ta_tableframe",
-    "te_examples",
-    "te_tableframe",
-    "te_variant",
-    "to_foundation",
-    "ty_tableframe",
     "test_tabsdata",
     "test_tabsdata_agent",
     "test_tabsdata_bigquery",
@@ -57,6 +105,7 @@ known_first_party = [
     "test_tabsdata_mssql",
     "test_tabsdata_salesforce",
     "test_tabsdata_snowflake",
+    "test_tabsdata_toolkit",
     "test_ta_features",
     "test_ta_tableframe",
     "test_te_examples",
@@ -65,8 +114,15 @@ known_first_party = [
     "test_to_foundation",
     "test_ty_tableframe",
 ]
-known_third_party = ["docker"]
-skip = ["docker/"]
+combine-as-imports = true
+
+[tool.coverage.html]
+directory = "coverage_html_report"
+
+[tool.coverage.report]
+exclude_also = [
+    "@(abc\\.)?abstractmethod",
+]
 
 [tool.licensecheck]
 using = "requirements:requirements.txt"

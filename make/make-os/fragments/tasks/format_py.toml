@@ -2,7 +2,7 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
-[tasks.__os__format_py_black]
+[tasks.__os__format_py_ruff]
 plugin = "td-task-tracker"
 category = "09 - Repair"
 private = true
@@ -15,71 +15,32 @@ script = [
     on_ga = get_env TD_ON_GA
     on_ga_true = eq ${on_ga} "true"
     if ${on_ga_true}
-        debug "🚀 black --preview --enable-unstable-feature string_processing . --force-exclude \\.pyi$"
-        exec --fail-on-error black --preview --enable-unstable-feature string_processing . --force-exclude \\.pyi$
+        debug "🚀 ruff check --fix ."
+        exec --fail-on-error ruff check --fix .
+        debug "🚀 ruff format ."
+        exec --fail-on-error ruff format .
     else
         project_root_folder = get_env PROJECT_ROOT_FOLDER
         project_root_folder_basename = basename ${project_root_folder}
         is_tabsdata_ee = eq ${project_root_folder_basename} "tabsdata-ee"
         if ${is_tabsdata_ee}
-            debug "🚀 black --preview --enable-unstable-feature string_processing . --force-exclude \\.pyi$"
-            exec --fail-on-error black --preview --enable-unstable-feature string_processing . --force-exclude \\.pyi$
+            debug "🚀 ruff check --fix ."
+            exec --fail-on-error ruff check --fix .
+            debug "🚀 ruff format ."
+            exec --fail-on-error ruff format .
 
             info "🐡 Switching to tabsdata-os"
             cd "${PROJECT_TABSDATA_ROOT_FOLDER}/../tabsdata-os"
 
-            debug "🚀 black --preview --enable-unstable-feature string_processing . --force-exclude \\.pyi$"
-            exec --fail-on-error black --preview --enable-unstable-feature string_processing . --force-exclude \\.pyi$
+            debug "🚀 ruff check --fix ."
+            exec --fail-on-error ruff check --fix .
+            debug "🚀 ruff format ."
+            exec --fail-on-error ruff format .
         else
-            debug "🚀 black --preview --enable-unstable-feature string_processing . --force-exclude \\.pyi$"
-            exec --fail-on-error black --preview --enable-unstable-feature string_processing . --force-exclude \\.pyi$
-        end
-    end
-    ''']
-
-[tasks.__os__format_py_isort]
-plugin = "td-task-tracker"
-category = "09 - Repair"
-private = true
-cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-script_runner = "@duckscript"
-script = [
-    '''
-    !include_files ./make/make-os/libraries/log.ds
-
-    on_ga = get_env TD_ON_GA
-    on_ga_true = eq ${on_ga} "true"
-    if ${on_ga_true}
-        debug "🚀 isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv"
-        exec --fail-on-error isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv
-
-        # debug "🚀 isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_* --extend-skip-glob utest"
-        # exec --fail-on-error isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_* --extend-skip-glob utest
-    else
-        project_root_folder = get_env PROJECT_ROOT_FOLDER
-        project_root_folder_basename = basename ${project_root_folder}
-        is_tabsdata_ee = eq ${project_root_folder_basename} "tabsdata-ee"
-        if ${is_tabsdata_ee}
-            debug "🚀 isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv"
-            exec --fail-on-error isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv
-
-            # debug "🚀 isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_* --extend-skip-glob utest"
-            # exec --fail-on-error isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_* --extend-skip-glob utest
-
-            info "🐡 Switching to tabsdata-os"
-            cd "${PROJECT_TABSDATA_ROOT_FOLDER}/../tabsdata-os"
-
-            debug "🚀 isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv"
-            exec --fail-on-error isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv
-
-            # debug "🚀 isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_* --extend-skip-glob utest"
-            # exec --fail-on-error isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_* --extend-skip-glob utest
-        else
-            debug "🚀 isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv"
-            exec --fail-on-error isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv
-
-            # debug "🚀 isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_* --extend-skip-glob utest"
-            # exec --fail-on-error isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip target --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_* --extend-skip-glob utest
+            debug "🚀 ruff check --fix ."
+            exec --fail-on-error ruff check --fix .
+            debug "🚀 ruff format ."
+            exec --fail-on-error ruff format .
         end
     end
     ''']

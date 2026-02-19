@@ -34,6 +34,9 @@ import yaml
 from filelock import FileLock, Timeout
 from packaging.requirements import InvalidRequirement, Requirement
 from packaging.utils import canonicalize_name
+
+# noinspection PyProtectedMember
+from tabsdatax.debug.debug import debug_enabled
 from yaml import MappingNode
 from yaml.constructor import ConstructorError
 
@@ -63,7 +66,6 @@ from tabsdata._utils.bundle_utils import (
 
 # noinspection PyProtectedMember
 from tabsdata._utils.constants import (
-    BUILD_DEPENDENCIES,
     PYTHON_EDITABLE_PACKAGE_PREFIX,
     PYTHON_EDITABLE_PACKAGE_SUFFIX,
     TABSDATA_AGENT_MODULE_NAME,
@@ -71,13 +73,12 @@ from tabsdata._utils.constants import (
     TABSDATA_CONNECTORS_NAMES,
     TABSDATA_MODULE_NAME,
     TABSDATA_PACKAGES,
+    TABSDATA_TOOLKIT_MODULE_NAME,
     TD_TABSDATA_AGENT_DEV_PKG,
     TD_TABSDATA_DEV_PKG,
+    TD_TABSDATA_TOOLKIT_DEV_PKG,
     TRUE_VALUES,
 )
-
-# noinspection PyProtectedMember
-from tabsdata._utils.debug import debug_enabled
 
 # noinspection PyProtectedMember
 from tabsdata._utils.id import encode_id
@@ -810,12 +811,16 @@ def inject_tabsdata_version(required_modules: list[str]) -> list[str]:  # noqa: 
 
     packages_to_inject.append(canonicalize_name(TABSDATA_MODULE_NAME))
 
+    if canonicalize_name(TABSDATA_TOOLKIT_MODULE_NAME) in original_tabsdata_packages:
+        packages_to_inject.append(canonicalize_name(TABSDATA_TOOLKIT_MODULE_NAME))
+
     if canonicalize_name(TABSDATA_AGENT_MODULE_NAME) in original_tabsdata_packages:
         packages_to_inject.append(canonicalize_name(TABSDATA_AGENT_MODULE_NAME))
 
     for package in TABSDATA_PACKAGES:
         if canonicalize_name(package) not in [
             canonicalize_name(TABSDATA_MODULE_NAME),
+            canonicalize_name(TABSDATA_TOOLKIT_MODULE_NAME),
             canonicalize_name(TABSDATA_AGENT_MODULE_NAME),
         ]:
             packages_to_inject.append(canonicalize_name(package))
@@ -1328,17 +1333,69 @@ def atomic_environment_creation(
     if not result:
         return None
 
+    tabsdata_toolkit_local_packages: list[str] = []
+    non_tabsdata_toolkit_local_packages: list[str] = []
+    tabsdata_toolkit_development_packages: list[tuple[str, PackageProvider]] = []
+    non_tabsdata_toolkit_development_packages: list[tuple[str, PackageProvider]] = []
+
     if local_packages:
-        result = install_local_packages(
-            local_packages, logical_environment_name, real_environment_name
-        )
+        for local_package in os.listdir(local_packages):
+            package_folder = os.path.join(local_packages, local_package)
+            pyproject_path = os.path.join(package_folder, "pyproject.toml")
+            is_toolkit = False
+            if os.path.exists(pyproject_path):
+                with open(pyproject_path, "rb") as f:
+                    data = tomllib.load(f)
+                package_name = data.get("tool", {}).get("tabsdata", {}).get("name")
+                if package_name == TABSDATA_TOOLKIT_MODULE_NAME:
+                    is_toolkit = True
+            if is_toolkit:
+                tabsdata_toolkit_local_packages.append(package_folder)
+            else:
+                non_tabsdata_toolkit_local_packages.append(package_folder)
+
+    if development_packages:
+        tabsdata_toolkit_package_canonical_name = canonicalize_name(TABSDATA_TOOLKIT_MODULE_NAME)
+        for development_package_location, development_package_provider in development_packages:
+            development_package_name = os.path.basename(development_package_location.rstrip(os.sep))
+            if canonicalize_name(development_package_name) == tabsdata_toolkit_package_canonical_name:
+                tabsdata_toolkit_development_packages.append((development_package_location, development_package_provider,))
+            else:
+                non_tabsdata_toolkit_development_packages.append((development_package_location, development_package_provider,))
+
+    if tabsdata_toolkit_local_packages:
+        logger.info("Installing tabsdata-toolkit as a local package...")
+        for package_folder in tabsdata_toolkit_local_packages:
+            result = install_host_package(
+                "Local",
+                package_folder,
+                None,
+                logical_environment_name,
+                real_environment_name,
+            )
+            if not result:
+                return None
+
+    if tabsdata_toolkit_development_packages:
+        logger.info("Installing tabsdata-toolkit as a development package...")
+        result = install_development_packages(tabsdata_toolkit_development_packages, logical_environment_name, real_environment_name,)
         if not result:
             return None
 
-    if development_packages:
-        result = install_development_packages(
-            development_packages, logical_environment_name, real_environment_name
-        )
+    if non_tabsdata_toolkit_local_packages:
+        for package_folder in non_tabsdata_toolkit_local_packages:
+            result = install_host_package(
+                "Local",
+                package_folder,
+                None,
+                logical_environment_name,
+                real_environment_name,
+            )
+            if not result:
+                return None
+
+    if non_tabsdata_toolkit_development_packages:
+        result = install_development_packages(non_tabsdata_toolkit_development_packages, logical_environment_name, real_environment_name,)
         if not result:
             return None
 
@@ -1611,19 +1668,6 @@ def install_host_package(  # noqa: C901
             install_command.append("-e")
         install_command.append(package_location)
         if use_editable:
-            build_dependencies_install_command = add_python_target_and_join_commands(
-                [UV_EXECUTABLE, "pip", "install", "--quiet"] + list(BUILD_DEPENDENCIES),
-                real_environment_name,
-            )
-            logger.info(
-                f"Installing build dependencies: {build_dependencies_install_command}"
-            )
-            subprocess.run(
-                build_dependencies_install_command,
-                shell=True,
-                capture_output=True,
-                text=True,
-            )
             install_command.extend(
                 [
                     "--config-settings",
@@ -1879,6 +1923,31 @@ def retrieve_tabsdata_package() -> (
 
 
 # noinspection DuplicatedCode
+def retrieve_tabsdata_toolkit_package() -> (
+    Tuple[PackageProvider | None, str | None, list[tuple[str, PackageProvider]]]
+):
+    tabsdata_toolkit_development_packages: list[tuple[str, PackageProvider]] = []
+    provider, location = get_tabsdata_package_metadata(
+        TABSDATA_TOOLKIT_MODULE_NAME,
+        TD_TABSDATA_TOOLKIT_DEV_PKG,
+    )
+    logger.info(
+        f"Package tabsdata-toolkit classified as: provider: {provider} - location:"
+        f" {location}"
+    )
+
+    if provider in (
+        "Archive (Project)",
+        "Archive (Folder)",
+        "Archive (Wheel)",
+        "Folder (Editable)",
+        "Folder (Frozen)",
+    ):
+        tabsdata_toolkit_development_packages.append((str(location), provider))
+    return provider, location, tabsdata_toolkit_development_packages
+
+
+# noinspection DuplicatedCode
 def retrieve_tabsdata_agent_package() -> (
     Tuple[PackageProvider | None, str | None, list[tuple[str, PackageProvider]]]
 ):
@@ -2093,6 +2162,12 @@ def main():  # noqa: C901
             tabsdata_development_packages,
         ) = retrieve_tabsdata_package()
         development_packages.extend(tabsdata_development_packages)
+        (
+            _tabsdata_toolkit_provider,
+            _tabsdata_toolkit_location,
+            tabsdata_toolkit_development_packages,
+        ) = retrieve_tabsdata_toolkit_package()
+        development_packages.extend(tabsdata_toolkit_development_packages)
         (
             _tabsdata_agent_provider,
             _tabsdata_agent_location,

@@ -2,6 +2,23 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
+
+[tasks.__os__quack]
+plugin = "td-task-tracker"
+category = "100 - Setup"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    info "🦆 Quack!"
+    afplay = which afplay
+    if ${afplay}
+        exec afplay ../tabsdata-os/make/make-os/resources/sounds/quack.mp3
+    fi
+    ''']
+
 [tasks.__os__setup_context_test_py]
 plugin = "td-task-tracker"
 category = "04 - Test"
@@ -68,9 +85,23 @@ script = [
         end
     end
 
+    debug "🔷 _____ Setting up tabsdata toolkit development package mode..."
+
+    set_env TD_TABSDATA_TOOLKIT_DEV_PKG ${PROJECT_TABSDATA_TOOLKIT_ROOT_FOLDER}
+    set_td_tabsdata_toolkit_dev_pkg = get_env TD_TABSDATA_TOOLKIT_DEV_PKG
+    debug "🔅 tabsdata toolkit development python package location set to: ${set_td_tabsdata_toolkit_dev_pkg}"
+
     debug "🔷 _____ Setting up tabsdata agent development package mode..."
 
-    set_env TD_TABSDATA_AGENT_DEV_PKG ${PROJECT_TABSDATA_AG_ROOT_FOLDER}
-    set_td_tabsdata_agent_dev_pkg = get_env TD_TABSDATA_AGENT_DEV_PKG
-    debug "🔅 tabsdata agent development python package location set to: ${set_td_tabsdata_agent_dev_pkg}"
+    project_tabsdata_ag_root_folder = get_env PROJECT_TABSDATA_AG_ROOT_FOLDER
+    project_tabsdata_ag_root_folder_is_defined = is_defined PROJECT_TABSDATA_AG_ROOT_FOLDER
+    project_tabsdata_ag_root_folder_is_not_defined = not {project_tabsdata_ag_root_folder_is_defined}
+    project_tabsdata_ag_root_folder_is_blank = is_empty ${project_tabsdata_ag_root_folder}
+    if ${project_tabsdata_ag_root_folder_is_not_defined} or ${project_tabsdata_ag_root_folder_is_blank}
+        debug "🔅 tabsdata agent development python package location not set as env PROJECT_TABSDATA_AG_ROOT_FOLDER is not set"
+    else
+        set_env TD_TABSDATA_AGENT_DEV_PKG ${PROJECT_TABSDATA_AG_ROOT_FOLDER}
+        set_td_tabsdata_agent_dev_pkg = get_env TD_TABSDATA_AGENT_DEV_PKG
+        debug "🔅 tabsdata agent development python package location set to: ${set_td_tabsdata_agent_dev_pkg}"
+    end
     ''']

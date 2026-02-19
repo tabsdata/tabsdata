@@ -68,6 +68,10 @@ script = [
             exec --fail-on-error uv pip install --quiet --requirement requirements-dev.txt
         end
     end
+
+    debug "🚀 uv pip install --quiet -e ./devutils/automation/tasks/python/tabsdata-toolkit --config-settings editable_mode=compat --no-build-isolation"
+    exec --fail-on-error uv pip install --quiet -e ./devutils/automation/tasks/python/tabsdata-toolkit --config-settings editable_mode=compat --no-build-isolation
+
     pyenv = which pyenv
     if not eq ${pyenv} ""
         warn "✅ Component pyenv is available. Considering rehash."
