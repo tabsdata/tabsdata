@@ -281,9 +281,19 @@ def lock_pyprojects(
             raise ValueError("⛔️ File pyproject.toml does not exist")
 
         document = parse(pyproject_file.read_text())
-        isort_entry = document.setdefault("tool", {}).setdefault("isort", table())
 
-        known_first_party_entry = isort_entry.get("known_first_party", [])
+        tool = document.get("tool", {})
+        ruff = tool.get("ruff", {})
+        lint = ruff.get("lint", {})
+        isort_entry = lint.get("isort", None)
+
+        if isort_entry is None:
+            logger.debug(
+                f"⏭️ Skipping {module_folder}: no [tool.ruff.lint.isort] section"
+            )
+            return
+
+        known_first_party_entry = isort_entry.get("known-first-party", [])
         known_first_party_entry_set = {
             entry for entry in known_first_party_entry if isinstance(entry, str)
         }
@@ -324,7 +334,7 @@ def lock_pyprojects(
         ):
             sorted_array.append(name)
 
-        isort_entry["known_first_party"] = sorted_array
+        isort_entry["known-first-party"] = sorted_array
         pyproject_file.write_text(dumps(document))
 
         logger.info(f"🔐️ File pyproject.toml @ {module_folder} locked!")
@@ -382,8 +392,40 @@ def lock_pytest_ini(root: str) -> None:
     )
     tabsdata_pytest_ini_path = Path(tabsdata_pytest_ini_file).resolve()
     if not tabsdata_pytest_ini_path.is_file():
-        raise FileNotFoundError(
-            f"Base tabsdata pytest.ini not found: {tabsdata_pytest_ini_path}"
+        logger.warning(
+            f"Base tabsdata pytest.ini not found: {tabsdata_pytest_ini_path}")
+        tabsdata_pytest_ini_file = os.path.join(
+            root,
+            "..",
+            "tabsdata-os",
+            "client",
+            "platform",
+            "src",
+            "utest",
+            "python",
+            "test_tabsdata",
+            "pytest.ini",
+        )
+        tabsdata_pytest_ini_path = Path(tabsdata_pytest_ini_file).resolve()
+        if not tabsdata_pytest_ini_path.is_file():
+            logger.warning(
+                f"Base tabsdata pytest.ini not found: {tabsdata_pytest_ini_path}")
+            tabsdata_pytest_ini_file = os.path.join(
+                root,
+                "..",
+                "tabsdata",
+                "client",
+                "platform",
+                "src",
+                "utest",
+                "python",
+                "test_tabsdata",
+                "pytest.ini",
+            )
+            tabsdata_pytest_ini_path = Path(tabsdata_pytest_ini_file).resolve()
+            if not tabsdata_pytest_ini_path.is_file():
+                raise FileNotFoundError(
+                    f"Base tabsdata pytest.ini not found: {tabsdata_pytest_ini_path}"
         )
     pytest_ini_name = tabsdata_pytest_ini_path.name
     for path in Path(root).rglob(pytest_ini_name):
@@ -403,9 +445,10 @@ def lock(root: str):
     polars_modules = gather_polars_modules(root)
     lock_requirements_dev(root, connectors, year)
     lock_requirements_test(root, connectors, year)
-    lock_requirements_dev_first_party(root, connectors, year)
-    lock_requirements_first_party(root, connectors, year)
-    lock_requirements_third_party_all(root, connectors, year)
+    if os.path.basename(os.path.normpath(root)) != "tabsdata-ag":
+        lock_requirements_dev_first_party(root, connectors, year)
+        lock_requirements_first_party(root, connectors, year)
+        lock_requirements_third_party_all(root, connectors, year)
     lock_pyprojects(Path(root), connectors, python_modules, polars_modules)
     lock_pytest_ini(root)
 
