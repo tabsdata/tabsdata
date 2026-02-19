@@ -241,12 +241,21 @@ APISERVER_URL = (
     TESTING_SUPERVISOR_INSTANCES.get("pytest").get("apiserver").get("address")
 )
 
-LOCAL_PACKAGES_LIST = [ROOT_PROJECT_DIR,
-                       os.path.join(ROOT_PROJECT_DIR, "devutils", "automation", "tasks", "python", TABSDATA_TOOLKIT_MODULE_NAME,)]
+LOCAL_PACKAGES_LIST = [
+    ROOT_PROJECT_DIR,
+    os.path.join(ROOT_PROJECT_DIR,
+    "devutils",
+    "automation",
+    "tasks",
+    "python",
+    TABSDATA_TOOLKIT_MODULE_NAME,)]
 
 for connector in gather_connectors():
     LOCAL_PACKAGES_LIST.append(
-        os.path.join(ROOT_PROJECT_DIR, "connectors", "python", connector)
+        os.path.join(ROOT_PROJECT_DIR,
+        "connectors",
+        "python",
+        connector,)
     )
 
 MOCK_COLLECTION = "td_collection"
@@ -318,7 +327,7 @@ def pytest_addoption(parser):
 
 def pytest_generate_tests(metafunc):
     if "size" in metafunc.fixturenames:
-        metafunc.parametrize("size", [metafunc.configuration.getoption("performance_size")])
+        metafunc.parametrize("size", [metafunc.config.getoption("performance_size")])
 
 
 def read_json_and_clean(path, sort=True):
@@ -363,7 +372,7 @@ def clean_everything():
 def pytest_sessionfinish(session, exitstatus):
     # Based on the following discussion:
     # https://github.com/pytest-dev/pytest-xdist/issues/271
-    if getattr(session.configuration, "workerinput", None) is not None:
+    if getattr(session.config, "workerinput", None) is not None:
         # No need to download, the master process has already done that.
         return
     clean_everything()

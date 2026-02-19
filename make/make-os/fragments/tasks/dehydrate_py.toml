@@ -58,7 +58,10 @@ script = [
     debug "🔸🔸🔸 Cleaning up tabsdata_extra_paths.pth..."
     exec python -c "import site, os; pth = os.path.join(site.getsitepackages()[0], 'tabsdata_extra_paths.pth'); os.remove(pth) if os.path.exists(pth) else None"
 
-    exec python setup.py --quiet clean --all
+    result = exec python setup.py --quiet clean --all
+    if not eq ${result.code} 0
+        error "Clean failed: ${result.stderr}"
+    end
 
     rm -r ${PROJECT_TABSDATA_ROOT_FOLDER}/target/python/
 
@@ -152,7 +155,10 @@ script = [
             debug "🚀 pip uninstall ${connector_package} --yes"
             exec --fail-on-error pip uninstall ${connector_package} --yes
 
-            exec python setup.py --quiet clean --all
+            result = exec python setup.py --quiet clean --all
+            if not eq ${result.code} 0
+                error "Clean failed for ${connector_name}: ${result.stderr}"
+            end
 
             pytthon_target_folder = set "${connector}/target/python"
             if ${pytthon_target_folder}

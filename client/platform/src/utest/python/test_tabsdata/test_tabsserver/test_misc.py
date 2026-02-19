@@ -257,7 +257,18 @@ def test_custom_requirements(tmp_path):
     correct_requirements = {
         PYTHON_LOCAL_PACKAGES_KEY: LOCAL_PACKAGES_LIST,
         PYTHON_VERSION_KEY: f"{sys.version_info.major}.{sys.version_info.minor}",
-        PYTHON_PUBLIC_PACKAGES_KEY: ["pandas==2.2.3", "simple-salesforce==1.12.6"],
+        PYTHON_PUBLIC_PACKAGES_KEY: [
+            "archspec==0.2.5",
+            "colorama==0.4.6",
+            "psutil==7.2.2",
+            "py-cpuinfo==9.0.0",
+            "PyYAML==6.0.3",
+            "setuptools==82.0.0",
+            "tqdm==4.67.3",
+            "tzlocal==5.3.1",
+            "wheel==0.46.3",
+            "pandas==2.2.3",
+            "simple-salesforce==1.12.6"],
         PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES_KEY: True,
     }
     correct_custom_requirements_path = os.path.join(
@@ -328,7 +339,18 @@ def test_custom_requirements_no_package_version(tmp_path):
     correct_requirements = {
         PYTHON_LOCAL_PACKAGES_KEY: LOCAL_PACKAGES_LIST,
         PYTHON_VERSION_KEY: f"{sys.version_info.major}.{sys.version_info.minor}",
-        PYTHON_PUBLIC_PACKAGES_KEY: ["pandas", "simple-salesforce==1.12.6"],
+        PYTHON_PUBLIC_PACKAGES_KEY: [
+            "archspec==0.2.5",
+            "colorama==0.4.6",
+            "psutil==7.2.2",
+            "py-cpuinfo==9.0.0",
+            "PyYAML==6.0.3",
+            "setuptools==82.0.0",
+            "tqdm==4.67.3",
+            "tzlocal==5.3.1",
+            "wheel==0.46.3",
+            "pandas",
+            "simple-salesforce==1.12.6"],
         PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES_KEY: True,
     }
     correct_custom_requirements_path = os.path.join(

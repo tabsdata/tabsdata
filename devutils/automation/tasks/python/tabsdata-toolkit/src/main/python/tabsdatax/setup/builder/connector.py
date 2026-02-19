@@ -65,11 +65,15 @@ def build(setup_file: str) -> None:
     datafiles = create_empty_datafiles()
     ensure_egg_folder()
 
-    tabsdata_license = read_file(
-        variant_manifest_folder,
-        "LICENSE.setup",
-        base_path=".",
-    )
+    # noinspection PyBroadException
+    try:
+        tabsdata_license = read_file(
+            variant_manifest_folder,
+            "LICENSE.setup",
+            base_path=".",
+        )
+    except Exception:
+        tabsdata_license = "Not Found"
 
     with global_spinner(descriptor.spinner_message):
         setup(

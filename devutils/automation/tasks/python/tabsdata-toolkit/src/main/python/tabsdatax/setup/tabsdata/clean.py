@@ -23,6 +23,15 @@ logger = logging.getLogger(__name__)
 
 def create_custom_clean_class(root: str, setup_toml_path: str) -> type:
     class CustomClean(Command):
+        description = "clean up build artifacts"
+        user_options = [
+            (
+                "all",
+                "a",
+                "remove all build output, not just temporary files",
+            ),
+        ]
+
         def initialize_options(self) -> None:
             self.all = None
 

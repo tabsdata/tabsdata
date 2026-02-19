@@ -15,7 +15,7 @@ from types import ModuleType
 from packaging.utils import canonicalize_name
 
 # noinspection PyPackageRequirements
-from tomlkit import array, dumps, parse, table
+from tomlkit import array, dumps, parse
 
 
 def read(*paths, **kwargs):
@@ -393,7 +393,8 @@ def lock_pytest_ini(root: str) -> None:
     tabsdata_pytest_ini_path = Path(tabsdata_pytest_ini_file).resolve()
     if not tabsdata_pytest_ini_path.is_file():
         logger.warning(
-            f"Base tabsdata pytest.ini not found: {tabsdata_pytest_ini_path}")
+            f"Base tabsdata pytest.ini not found: {tabsdata_pytest_ini_path}"
+        )
         tabsdata_pytest_ini_file = os.path.join(
             root,
             "..",
@@ -409,7 +410,8 @@ def lock_pytest_ini(root: str) -> None:
         tabsdata_pytest_ini_path = Path(tabsdata_pytest_ini_file).resolve()
         if not tabsdata_pytest_ini_path.is_file():
             logger.warning(
-                f"Base tabsdata pytest.ini not found: {tabsdata_pytest_ini_path}")
+                f"Base tabsdata pytest.ini not found: {tabsdata_pytest_ini_path}"
+            )
             tabsdata_pytest_ini_file = os.path.join(
                 root,
                 "..",
@@ -426,7 +428,7 @@ def lock_pytest_ini(root: str) -> None:
             if not tabsdata_pytest_ini_path.is_file():
                 raise FileNotFoundError(
                     f"Base tabsdata pytest.ini not found: {tabsdata_pytest_ini_path}"
-        )
+                )
     pytest_ini_name = tabsdata_pytest_ini_path.name
     for path in Path(root).rglob(pytest_ini_name):
         if path.is_file() and path.resolve() != tabsdata_pytest_ini_path:
