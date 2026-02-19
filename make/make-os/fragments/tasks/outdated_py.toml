@@ -23,6 +23,9 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    debug "🚀 pip-upgrade --dry-run requirements-dev.txt"
-    exec --fail-on-error --input "x" pip-upgrade --dry-run requirements-dev.txt
+    # debug "🚀 pip-upgrade --dry-run requirements-dev.txt"
+    # exec --fail-on-error --input "x" pip-upgrade --dry-run requirements-dev.txt
+
+    debug "🚀 tdx_pyoutdated requirements-dev.txt"
+    exec --fail-on-error tdx_pyoutdated requirements-dev.txt
     ''']

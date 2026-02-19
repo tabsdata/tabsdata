@@ -74,7 +74,7 @@ opentelemetry-semantic-conventions==0.60b1
 orjson==3.11.5
 packaging==26.0
 pandas==2.3.3
-pillow==12.1.0
+pillow==12.1.1
 pip==25.3
 pip-tools==7.5.2
 platformdirs==4.5.1

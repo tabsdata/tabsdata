@@ -33,6 +33,9 @@ classifiers = [
 ]
 dynamic = ["version"]
 
+[project.scripts]
+tdx_pyoutdated = "tabsdatax.cmake.pyoutdated:main"
+
 [project.urls]
 Homepage = "https://tabsdata.com"
 Documentation = "https://docs.tabsdata.com"
