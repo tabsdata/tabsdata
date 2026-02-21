@@ -116,6 +116,7 @@ normalized_licenses = {
     "MIT-0": "MIT No Attribution License",                                                                                                                                                     # noqa: E231,E241,E501
     "MIT-CMU": "MIT License (CMU Variant)",                                                                                                                                                    # noqa: E231,E241,E501
     "MIT;; MPL-2.0": "MIT License or Mozilla Public License Version 2.0",                                                                                                                      # noqa: E231,E241,E501
+    "MIT;; PSF-2.0": "MIT License or Python Software Foundation License Version 2.0",                                                                                                          # noqa: E231,E241,E501
     "MIT;; PYTHON-2.0": "MIT License or Python Software Foundation License Version 2.0",                                                                                                       # noqa: E231,E241,E501
     "MIT": "MIT License",                                                                                                                                                                      # noqa: E231,E241,E501
     "MOZILLA PUBLIC LICENSE 2.0 _MPL 2.0_": "Mozilla Public License Version 2.0",                                                                                                              # noqa: E231,E241,E501
