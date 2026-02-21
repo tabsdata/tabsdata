@@ -118,7 +118,7 @@ jobs:
         run: |
           check_skip_ci_label() {
             local PR_LABEL_LIST
-            PR_LABEL_LIST=$(gh pr view ${{ github.event.pull_request.number }} --json labels --jq '.labels[].name' 2>/dev/null || echo "")
+            PR_LABEL_LIST=$(gh pr view ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --json labels --jq '.labels[].name' 2>/dev/null || echo "")
             echo "Pull request labels: ${PR_LABEL_LIST}"
             if echo "${PR_LABEL_LIST}" | grep -q "^skip-ci$"; then
               return 0
