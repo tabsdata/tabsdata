@@ -35,7 +35,8 @@ private = true
 run_task = [
     { name = [
         "__os__clean_rs_expansions_python",
-        "__os__clean_rs_expansions_polars"
+        "__os__clean_rs_expansions_polars",
+        "__os__brush_rs_expansions"
     ] }
 ]
 
@@ -50,49 +51,6 @@ script = [
 
     debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} clean --locked --manifest-path ${PROJECT_RS_TO_EXPANSIONS_PYTHON_CARGO_TOML}"
     exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} clean --locked --manifest-path ${PROJECT_RS_TO_EXPANSIONS_PYTHON_CARGO_TOML}
-
-    components_folders = array modules extensions
-    for component_folder in ${components_folders}
-        component_path = join_path ${PROJECT_RS_TO_EXPANSIONS_PYTHON_FOLDER} ${component_folder}
-        is_dir = is_directory ${component_path}
-        if ${is_dir}
-            cd "${component_path}"
-            extensions = array .so .dll .dylib .pyd
-            for extension in ${extensions}
-                info "🧹🧹 Cleaning extension: ${extension}"
-                glob_files = glob_array ./**/*${extension}*
-                for file in ${glob_files}
-                    file = join_path ${component_path} ${file}
-                    info "🧹 Cleaning file: ${file}"
-                    retries = set 36
-                    retry = set 0
-                    keep = set true
-                    while ${keep}
-                        file_exists = exec python -c "import os, sys; sys.exit(0 if os.path.lexists(sys.argv[1]) else 1)" "${file}"
-                        if equals ${file_exists.code} 0
-                            output = exec python -c "import os, sys; os.unlink(sys.argv[1])" "${file}"
-                            if equals ${output.code} 0
-                                info "✅ Successfully deleted file: ${file}"
-                                keep = set false
-                            else
-                                retry = calc ${retry} + 1
-                                if greater_than ${retry} ${retries}
-                                    error "❌ Failed to delete file after 3 minutes: ${file}"
-                                    code = exit 1
-                                else
-                                    info "⏳ Failed to delete ${file}. Retrying in 5 seconds... (${retry}/${retries})"
-                                    sleep 5000
-                                end
-                            end
-                        else
-                            info "🚹 File no longer exists: ${file}. Break."
-                            keep = set false
-                        end
-                    end
-                end
-            end
-        end
-    end
     ''']
 
 [tasks.__os__clean_rs_expansions_polars]
@@ -106,49 +64,6 @@ script = [
 
     debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} clean --locked --manifest-path ${PROJECT_RS_TY_EXPANSIONS_POLARS_CARGO_TOML}"
     exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} clean --locked --manifest-path ${PROJECT_RS_TY_EXPANSIONS_POLARS_CARGO_TOML}
-
-    components_folders = array modules extensions
-    for component_folder in ${components_folders}
-        component_path = join_path ${PROJECT_RS_TY_EXPANSIONS_POLARS_FOLDER} ${component_folder}
-        is_dir = is_directory ${component_path}
-        if ${is_dir}
-            cd "${component_path}"
-            extensions = array .so .dll .dylib .pyd
-            for extension in ${extensions}
-                info "🧹🧹 Cleaning extension: ${extension}"
-                glob_files = glob_array ./**/*${extension}*
-                for file in ${glob_files}
-                    file = join_path ${component_path} ${file}
-                    info "🧹 Cleaning file: ${file}"
-                    retries = set 36
-                    retry = set 0
-                    keep = set true
-                    while ${keep}
-                        file_exists = exec python -c "import os, sys; sys.exit(0 if os.path.lexists(sys.argv[1]) else 1)" "${file}"
-                        if equals ${file_exists.code} 0
-                            output = exec python -c "import os, sys; os.unlink(sys.argv[1])" "${file}"
-                            if equals ${output.code} 0
-                                info "✅ Successfully deleted file: ${file}"
-                                keep = set false
-                            else
-                                retry = calc ${retry} + 1
-                                if greater_than ${retry} ${retries}
-                                    error "❌ Failed to delete file after 3 minutes: ${file}"
-                                    code = exit 1
-                                else
-                                    info "⏳ Failed to delete ${file}. Retrying in 5 seconds... (${retry}/${retries})"
-                                    sleep 5000
-                                end
-                            end
-                        else
-                            info "🚹 File no longer exists: ${file}. Break."
-                            keep = set false
-                        end
-                    end
-                end
-            end
-        end
-    end
     ''']
 
 [tasks.__os__clean_rs_all]
@@ -162,4 +77,137 @@ script = [
 
     debug "🚀 python ${CLEAN_SCRIPT} ${connector} py"
     exec --fail-on-error python ${CLEAN_SCRIPT} ${PROJECT_TABSDATA_ROOT_FOLDER} rs
+    ''']
+
+[tasks.__os__brush_rs_expansions]
+plugin = "td-task-tracker"
+category = "01 - Clean"
+private = true
+run_task = [
+    { name = [
+        "__os__brush_rs_expansions_python",
+        "__os__brush_rs_expansions_polars"
+    ] }
+]
+
+[tasks.__os__brush_rs_expansions_python]
+plugin = "td-task-tracker"
+category = "01 - Clean"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    components_folders = array modules extensions
+    for component_folder in ${components_folders}
+        component_path = join_path ${PROJECT_RS_TO_EXPANSIONS_PYTHON_FOLDER} ${component_folder}
+        is_dir = is_directory ${component_path}
+        if ${is_dir}
+            cd "${component_path}"
+            python_folders = glob_array ./*/python/src/main/python
+            for python_folder in ${python_folders}
+                python_folder = join_path ${component_path} ${python_folder}
+                is_python_folder = is_directory ${python_folder}
+                if ${is_python_folder}
+                    cd "${python_folder}"
+                    extensions = array .so .dll .dylib .pyd
+                    for extension in ${extensions}
+                        info "🧹🧹 Brushing extension: ${extension}"
+                        glob_files = glob_array ./**/*${extension}*
+                        for file in ${glob_files}
+                            file = join_path ${python_folder} ${file}
+                            info "🧹 Brushing file: ${file}"
+                            retries = set 36
+                            retry = set 0
+                            keep = set true
+                            while ${keep}
+                                file_exists = exec python -c "import os, sys; sys.exit(0 if os.path.lexists(sys.argv[1]) else 1)" "${file}"
+                                if equals ${file_exists.code} 0
+                                    output = exec python -c "import os, sys; os.unlink(sys.argv[1])" "${file}"
+                                    if equals ${output.code} 0
+                                        info "✅ Successfully deleted file: ${file}"
+                                        keep = set false
+                                    else
+                                        retry = calc ${retry} + 1
+                                        if greater_than ${retry} ${retries}
+                                            error "❌ Failed to delete file after 3 minutes: ${file}"
+                                            code = exit 1
+                                        else
+                                            info "⏳ Failed to delete ${file}. Retrying in 5 seconds... (${retry}/${retries})"
+                                            sleep 5000
+                                        end
+                                    end
+                                else
+                                    info "🚹 File no longer exists: ${file}. Break."
+                                    keep = set false
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    ''']
+
+[tasks.__os__brush_rs_expansions_polars]
+plugin = "td-task-tracker"
+category = "01 - Clean"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    components_folders = array modules extensions
+    for component_folder in ${components_folders}
+        component_path = join_path ${PROJECT_RS_TY_EXPANSIONS_POLARS_FOLDER} ${component_folder}
+        is_dir = is_directory ${component_path}
+        if ${is_dir}
+            cd "${component_path}"
+            python_folders = glob_array ./*/python/src/main/python
+            for python_folder in ${python_folders}
+                python_folder = join_path ${component_path} ${python_folder}
+                is_python_folder = is_directory ${python_folder}
+                if ${is_python_folder}
+                    cd "${python_folder}"
+                    extensions = array .so .dll .dylib .pyd
+                    for extension in ${extensions}
+                        info "🧹🧹 Brushing extension: ${extension}"
+                        glob_files = glob_array ./**/*${extension}*
+                        for file in ${glob_files}
+                            file = join_path ${python_folder} ${file}
+                            info "🧹 Brushing file: ${file}"
+                            retries = set 36
+                            retry = set 0
+                            keep = set true
+                            while ${keep}
+                                file_exists = exec python -c "import os, sys; sys.exit(0 if os.path.lexists(sys.argv[1]) else 1)" "${file}"
+                                if equals ${file_exists.code} 0
+                                    output = exec python -c "import os, sys; os.unlink(sys.argv[1])" "${file}"
+                                    if equals ${output.code} 0
+                                        info "✅ Successfully deleted file: ${file}"
+                                        keep = set false
+                                    else
+                                        retry = calc ${retry} + 1
+                                        if greater_than ${retry} ${retries}
+                                            error "❌ Failed to delete file after 3 minutes: ${file}"
+                                            code = exit 1
+                                        else
+                                            info "⏳ Failed to delete ${file}. Retrying in 5 seconds... (${retry}/${retries})"
+                                            sleep 5000
+                                        end
+                                    end
+                                else
+                                    info "🚹 File no longer exists: ${file}. Break."
+                                    keep = set false
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
     ''']
