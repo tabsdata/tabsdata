@@ -70,6 +70,7 @@ class FileFormatIdentifier(Enum):
 class AvroFormat(FileFormat):
     """
     :categories: file-format
+
     Avro file format.
     """
 
@@ -122,6 +123,7 @@ class AvroFormat(FileFormat):
 class CSVFormat(FileFormat):
     """
     :categories: file-format
+
     CSV file format.
 
     Attributes:
@@ -472,6 +474,7 @@ class CSVFormat(FileFormat):
 class NDJSONFormat(FileFormat):
     """
     :categories: file-format
+
     JSON file format.
     """
 
@@ -490,6 +493,7 @@ class NDJSONFormat(FileFormat):
 class LogFormat(FileFormat):
     """
     :categories: file-format
+
     Log file format.
     """
 
@@ -508,6 +512,7 @@ class LogFormat(FileFormat):
 class ParquetFormat(FileFormat):
     """
     :categories: file-format
+
     Parquet file format.
     """
 

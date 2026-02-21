@@ -51,6 +51,7 @@ class Secret(ABC):
 class HashiCorpSecret(Secret):
     """
     :categories: secret
+
     Secrets class representing a secret stored in Hashicorp Vault.
 
     Attributes:
@@ -174,6 +175,7 @@ class HashiCorpSecret(Secret):
 class DirectSecret(Secret):
     """
     :categories: secret
+
     Secrets class representing a secret stored in plain text.
 
     Attributes:
@@ -225,6 +227,7 @@ class DirectSecret(Secret):
 class EnvironmentSecret(Secret):
     """
     :categories: secret
+
     Secrets class representing a secret obtained from an environment variable in the
     server.
 

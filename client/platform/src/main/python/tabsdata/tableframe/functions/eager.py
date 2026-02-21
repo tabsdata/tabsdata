@@ -25,6 +25,7 @@ def concat(
     """
     :categories: union
 
+
     Combine multiple TableFrames by stacking their rows.
 
     Args:

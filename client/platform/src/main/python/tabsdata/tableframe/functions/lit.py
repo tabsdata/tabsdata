@@ -20,6 +20,7 @@ def lit(
     """
     :categories: generation
 
+
     Expression for the given literal value.
 
     Args:

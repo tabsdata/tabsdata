@@ -59,6 +59,7 @@ logging.getLogger("urllib3").setLevel(logging.ERROR)
 class MariaDBDestination(DestinationPlugin):
     """
     :categories: destination
+
     MariaDB-based data outputs.
     """
 
@@ -239,6 +240,7 @@ class MariaDBDestination(DestinationPlugin):
 class MySQLDestination(DestinationPlugin):
     """
     :categories: destination
+
     MySQL-based data outputs.
     """
 
@@ -401,6 +403,7 @@ class MySQLDestination(DestinationPlugin):
 class OracleDestination(DestinationPlugin):
     """
     :categories: destination
+
     Oracle-based data outputs.
     """
 
@@ -576,6 +579,7 @@ class OracleDestination(DestinationPlugin):
 class PostgresDestination(DestinationPlugin):
     """
     :categories: destination
+
     Postgres-based data outputs.
     """
 

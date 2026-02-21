@@ -39,6 +39,7 @@ class SalesforceCredentials(Credentials, ABC):
 class SalesforceTokenCredentials(SalesforceCredentials):
     """
     :categories: credentials
+
     Credentials class to store the credentials needed to access a Salesforce
     using a username, a password and a token.
 
@@ -158,6 +159,7 @@ class SalesforceTokenCredentials(SalesforceCredentials):
 class SalesforceSource(SourcePlugin):
     """
     :categories: source
+
     Salesforce (SOQL query) based data inputs (not Salesforce Reports).
     """
 
@@ -350,6 +352,7 @@ def _maximum_date(date1: str, date2: str):
 class SalesforceReportSource(SourcePlugin):
     """
     :categories: source
+
     Salesforce Reports based data inputs.
     """
 

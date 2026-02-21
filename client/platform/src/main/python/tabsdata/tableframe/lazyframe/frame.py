@@ -155,6 +155,7 @@ class TableFrame:
         """
         :categories: tableframe
 
+
         Creates an empty (no column - no row) TableFrame.
         """
         return TableFrame.__build__(
@@ -173,6 +174,7 @@ class TableFrame:
     ) -> TableFrame:
         """
         :categories: tableframe
+
 
         Creates tableframe from a polars dataframe or lazyframe, or None.
         `None` produces as an empty (no column - no row) tableframe.
@@ -204,6 +206,7 @@ class TableFrame:
     ) -> TableFrame:
         """
         :categories: tableframe
+
 
         Creates tableframe from a pandas dataframe, or None.
         `None` produces as an empty (no column - no row) tableframe.
@@ -238,6 +241,7 @@ class TableFrame:
         """
         :categories: tableframe
 
+
         Creates tableframe from a dictionary, or None.
         `None` produces as an empty (no column - no row) tableframe.
 
@@ -263,6 +267,7 @@ class TableFrame:
         """
         :categories: tableframe
 
+
         Creates a polars lazyframe from this tableframe.
         """
         # noinspection PyProtectedMember
@@ -272,6 +277,7 @@ class TableFrame:
         """
         :categories: tableframe
 
+
         Creates a polars dataframe from this tableframe.
         """
         # noinspection PyProtectedMember
@@ -280,6 +286,7 @@ class TableFrame:
     def to_pandas(self) -> pd.DataFrame:
         """
         :categories: tableframe
+
 
         Creates a pandas dataframe from this tableframe.
         """
@@ -293,6 +300,7 @@ class TableFrame:
     def to_dict(self) -> dict[str, list[Any]]:
         """
         :categories: tableframe
+
 
         Creates a dictionary from this tableframe.
         """
@@ -469,6 +477,7 @@ class TableFrame:
     """
         :categories: attributes
 
+
         > Special Functions """
 
     # ToDo: pending restricted access and system td columns handling.
@@ -634,9 +643,11 @@ class TableFrame:
         """
         :categories: tableframe
 
+
         :categories: description
 
         :categories: description
+
 
         Verifies if the schema of the current TableFrame is same than the provided
         TableFrame.
@@ -703,6 +714,7 @@ class TableFrame:
         """
         :categories: tableframe
 
+
         Checks if a TableFrame has no rows.
 
         Example:
@@ -743,6 +755,7 @@ class TableFrame:
     ) -> Tuple[bool, set[str], set[str]]:
         """
         :categories: tableframe
+
 
         Verifies the presence of (non-system) columns in the TableFrame.
 
@@ -824,6 +837,7 @@ class TableFrame:
         """
         :categories: tableframe
 
+
         Ensures that the (non-system) columns in the TableFrame match the expected
         columns.
 
@@ -872,6 +886,7 @@ class TableFrame:
         # noinspection PyShadowingNames
         """
         :categories: tableframe
+
 
         Sort the `TableFrame` by the given column(s) or expression(s).
 
@@ -953,6 +968,7 @@ class TableFrame:
         """
         :categories: manipulation
 
+
         Cast columns to a new data type.
 
         Args:
@@ -1016,6 +1032,7 @@ class TableFrame:
         """
         :categories: tableframe
 
+
         Clears all rows of the `TableFrame` preserving the schema.
 
         Example:
@@ -1076,6 +1093,7 @@ class TableFrame:
         # noinspection PyShadowingNames
         """
         :categories: join
+
 
         Join the `TableFrame` with another `TableFrame`.
 
@@ -1236,6 +1254,7 @@ class TableFrame:
         """
         :categories: projection
 
+
         Add columns to the `TableFrame`.
 
         Args:
@@ -1295,6 +1314,7 @@ class TableFrame:
     ) -> TableFrame:
         """
         :categories: projection
+
 
         Apply a user-defined function (UDF) to the columns resolved by `expr`.
 
@@ -1499,6 +1519,7 @@ class TableFrame:
         """
         :categories: projection
 
+
         Rename columns from the `TableFrame`.
 
         Args:
@@ -1578,6 +1599,7 @@ class TableFrame:
         """
         :categories: projection
 
+
         Discard columns from the `TableFrame`.
 
         Args:
@@ -1639,6 +1661,7 @@ class TableFrame:
     ) -> TableFrame:
         """
         :categories: projection
+
 
         Expand one or more struct columns so that each field within the struct becomes
         a separate column in the `TableFrame`.
@@ -1708,6 +1731,7 @@ class TableFrame:
         """
         :categories: manipulation
 
+
         Replace all `null` values in the `TableFrame` with the given value.
 
         Args:
@@ -1766,6 +1790,7 @@ class TableFrame:
         # noinspection PyShadowingNames
         """
         :categories: manipulation
+
 
         Replace all `NaN` values in the `TableFrame` with the given value.
 
@@ -1832,6 +1857,7 @@ class TableFrame:
         # noinspection PyShadowingNames
         """
         :categories: filters
+
 
         Deduplicate rows from the `TableFrame`.
 
@@ -1908,6 +1934,7 @@ class TableFrame:
         """
         :categories: manipulation
 
+
         Drop rows with `NaN` values.
 
         Args:
@@ -1979,6 +2006,7 @@ class TableFrame:
         # noinspection PyShadowingNames
         """
         :categories: manipulation
+
 
         Drop rows with null values.
 
@@ -2056,6 +2084,7 @@ class TableFrame:
         """
         :categories: filters
 
+
         Filter the `TableFrame` based on the given predicates.
 
         Example:
@@ -2118,6 +2147,7 @@ class TableFrame:
         # noinspection PyShadowingNames
         """
         :categories: projection
+
 
         Select column(s) from the `TableFrame`.
 
@@ -2207,6 +2237,7 @@ class TableFrame:
         """
         :categories: aggregation
 
+
         Perform a group by on the `TableFrame`.
 
         Args:
@@ -2260,6 +2291,7 @@ class TableFrame:
         """
         :categories: filters
 
+
         Return a `TableFrame` with a slice of the original `TableFrame`
 
         Args:
@@ -2307,6 +2339,7 @@ class TableFrame:
         # noinspection PyShadowingNames
         """
         :categories: filters
+
 
         Return a `TableFrame` with the first `n` rows.
         This is equivalent to `head`.
@@ -2356,6 +2389,7 @@ class TableFrame:
         """
         :categories: filters
 
+
         Return a `TableFrame` with the first `n` rows.
 
         Args:
@@ -2402,6 +2436,7 @@ class TableFrame:
         # noinspection PyShadowingNames
         """
         :categories: filters
+
 
         Return a `TableFrame` with the last `n` rows.
 
@@ -2450,6 +2485,7 @@ class TableFrame:
         """
         :categories: filters
 
+
         Return a `TableFrame` with the last row.
 
         Example:
@@ -2492,6 +2528,7 @@ class TableFrame:
         # noinspection PyShadowingNames
         """
         :categories: filters
+
 
         Return a `TableFrame` with the first row.
 
@@ -2539,6 +2576,7 @@ class TableFrame:
         """
         :categories: filters
 
+
         Return a `tuple` or `dictionary` with the last row, or None if no row.
 
         Example:
@@ -2581,6 +2619,7 @@ class TableFrame:
         """
         :categories: filters
 
+
         Return a `tuple` or `dictionary` with the first row, or None if no row.
 
         Example:
@@ -2620,6 +2659,7 @@ class TableFrame:
         """
         :categories: projection
 
+
         Returns a scalar value if the TableFrame contains exactly one user column and
         one row.
 
@@ -2651,6 +2691,7 @@ class TableFrame:
     def extract_as_rows(self, offset: int, length: int) -> list[dict[str, Any]]:
         """
         :categories: filters
+
 
         Extract a slice of rows from the TableFrame as a list of dictionaries.
 
@@ -2702,6 +2743,7 @@ class TableFrame:
     def extract_as_columns(self, offset: int, length: int) -> dict[str, list[Any]]:
         """
         :categories: filters
+
 
         Extract a slice of rows from the table as a column-oriented dictionary.
 
@@ -2758,6 +2800,7 @@ class TableFrame:
     ) -> TableFrame:
         """
         :categories: string
+
 
         Parse log text into structured fields using a Grok pattern.
 

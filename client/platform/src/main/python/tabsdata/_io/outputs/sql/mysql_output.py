@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 class MySQLDest(DestinationPlugin):
     """
     :categories: destination
+
     Destination plugin for writing data to MySQL.
     """
 

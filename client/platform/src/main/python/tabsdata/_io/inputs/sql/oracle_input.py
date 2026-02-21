@@ -40,6 +40,7 @@ logger.setLevel(logging.DEBUG)
 class OracleSrc(SourcePlugin):
     """
     :categories: source
+
     Source plugin for reading data from Oracle.
     """
 

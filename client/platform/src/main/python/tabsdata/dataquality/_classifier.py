@@ -167,6 +167,7 @@ class Scale(ABC):
 class IdentityScale(Scale):
     """
     :categories: dq-classifier
+
     An identity scale where each integer value corresponds to a bin.
     """
 
@@ -254,6 +255,7 @@ class NonIdentityScale(Scale, ABC):
 class LinearScale(NonIdentityScale):
     """
     :categories: dq-classifier
+
     A linear scale.
     """
 
@@ -280,6 +282,7 @@ class LinearScale(NonIdentityScale):
 class MonomialScale(NonIdentityScale):
     """
     :categories: dq-classifier
+
     A monomial (power-law) scale.
     """
 
@@ -326,6 +329,7 @@ class MonomialScale(NonIdentityScale):
 class LogarithmicScale(NonIdentityScale):
     """
     :categories: dq-classifier
+
     A logarithmic scale.
     """
 
@@ -372,6 +376,7 @@ class LogarithmicScale(NonIdentityScale):
 class ExponentialScale(NonIdentityScale):
     """
     :categories: dq-classifier
+
     An exponential scale.
     """
 
@@ -621,6 +626,7 @@ class Categorizer(Classifier, ABC):
 class ScaleCategorizer(Categorizer):
     """
     :categories: dq-classifier
+
     A classifier that bucketizes data into bins based on a given scale.
     """
 
@@ -695,6 +701,7 @@ def _validate_pattern(pattern: str, fn_name, error_code: ErrorCode) -> str:
 class IsTrue(BoolClassifier):
     """
     :categories: dq-classifier
+
     A boolean classifier that checks if a value is `True`.
     """
 
@@ -734,6 +741,7 @@ class IsTrue(BoolClassifier):
 class IsFalse(BoolClassifier):
     """
     :categories: dq-classifier
+
     A boolean classifier that checks if a value is `False`.
     """
 
@@ -772,6 +780,7 @@ class IsFalse(BoolClassifier):
 class IsNull(BoolClassifier):
     """
     :categories: dq-classifier
+
     A boolean classifier that checks if a value is `NULL`.
     """
 
@@ -808,6 +817,7 @@ class IsNull(BoolClassifier):
 class IsNotNull(BoolClassifier):
     """
     :categories: dq-classifier
+
     A boolean classifier that checks if a value is *not* `NULL`.
     """
 
@@ -844,6 +854,7 @@ class IsNotNull(BoolClassifier):
 class IsNan(BoolClassifier):
     """
     :categories: dq-classifier
+
     A boolean classifier that checks if a value is `NaN` (Not a Number).
     """
 
@@ -883,6 +894,7 @@ class IsNan(BoolClassifier):
 class IsNotNan(BoolClassifier):
     """
     :categories: dq-classifier
+
     A boolean classifier that checks if a value is *not* `NaN`.
     """
 
@@ -922,6 +934,7 @@ class IsNotNan(BoolClassifier):
 class IsNullOrNan(BoolClassifier):
     """
     :categories: dq-classifier
+
     A boolean classifier that checks if a value is either `NULL` or `NaN`.
     """
 
@@ -961,6 +974,7 @@ class IsNullOrNan(BoolClassifier):
 class IsNotNullNorNan(BoolClassifier):
     """
     :categories: dq-classifier
+
     A boolean classifier that checks if a value is neither `NULL` nor `NaN`.
     """
 
@@ -1001,6 +1015,7 @@ class IsNotNullNorNan(BoolClassifier):
 class IsZero(BoolClassifier):
     """
     :categories: dq-classifier
+
     A boolean classifier that checks if a numeric value is zero.
     """
 
@@ -1040,6 +1055,7 @@ class IsZero(BoolClassifier):
 class IsNotZero(BoolClassifier):
     """
     :categories: dq-classifier
+
     A boolean classifier that checks if a numeric value is not zero.
     """
 
@@ -1079,6 +1095,7 @@ class IsNotZero(BoolClassifier):
 class IsPositive(BoolClassifier):
     """
     :categories: dq-classifier
+
     A boolean classifier that checks if a numeric value is positive.
     """
 
@@ -1118,6 +1135,7 @@ class IsPositive(BoolClassifier):
 class IsPositiveOrZero(BoolClassifier):
     """
     :categories: dq-classifier
+
     A boolean classifier that checks if a numeric value is positive or zero.
     """
 
@@ -1157,6 +1175,7 @@ class IsPositiveOrZero(BoolClassifier):
 class IsNegative(BoolClassifier):
     """
     :categories: dq-classifier
+
     A boolean classifier that checks if a numeric value is negative.
     """
 
@@ -1196,6 +1215,7 @@ class IsNegative(BoolClassifier):
 class IsNegativeOrZero(BoolClassifier):
     """
     :categories: dq-classifier
+
     A boolean classifier that checks if a numeric value is negative or zero.
     """
 
@@ -1329,6 +1349,7 @@ class BetweenClassifier(BoolClassifier, ABC):
 class IsBetween(BetweenClassifier):
     """
     :categories: dq-classifier
+
     A boolean classifier that checks if a value is *inside* a specified range.
     """
 
@@ -1336,6 +1357,7 @@ class IsBetween(BetweenClassifier):
 class IsNotBetween(BetweenClassifier):
     """
     :categories: dq-classifier
+
     A boolean classifier that checks if a value is *outside* a specified range.
     """
 
@@ -1401,6 +1423,7 @@ class InClassifier(BoolClassifier, ABC):
 class IsIn(InClassifier):
     """
     :categories: dq-classifier
+
     A boolean classifier that checks if a value is in a specified set of values.
     """
 
@@ -1409,6 +1432,7 @@ class IsIn(InClassifier):
 class IsNotIn(InClassifier):
     """
     :categories: dq-classifier
+
     A boolean classifier that checks if a value is *not* in a specified set of values.
     """
 
@@ -1477,6 +1501,7 @@ class MatchClassifier(BoolClassifier, ABC):
 class Matches(MatchClassifier):
     """
     :categories: dq-classifier
+
     A boolean classifier that checks if a value matches a regex pattern.
     """
 
@@ -1485,6 +1510,7 @@ class Matches(MatchClassifier):
 class DoesNotMatch(MatchClassifier):
     """
     :categories: dq-classifier
+
     A boolean classifier that checks if a value does *not* match a regex pattern.
     """
 
@@ -1492,6 +1518,7 @@ class DoesNotMatch(MatchClassifier):
 class HasLength(BoolClassifier):
     """
     :categories: dq-classifier
+
     A boolean classifier that checks if the length of a value is within a given range.
     """
 

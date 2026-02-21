@@ -41,6 +41,7 @@ logger.setLevel(logging.DEBUG)
 class MariaDBSrc(SourcePlugin):
     """
     :categories: source
+
     Source plugin for reading data from MariaDB.
     """
 

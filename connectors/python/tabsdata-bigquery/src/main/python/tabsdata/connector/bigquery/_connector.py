@@ -198,6 +198,7 @@ class BigQueryConn(Conn):
 class BigQueryDest(DestinationPlugin):
     """
     :categories: destination
+
     BigQuery based data outputs.
     The data is first stored in parquet files in a GCS bucket, and then loaded into the
     BigQuery tables.

@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 class TableOutput(DestinationPlugin):
     """
     :categories: destination
+
     Table-based data outputs.
     """
 

@@ -50,6 +50,7 @@ def restore_snowflake_logger_levels():
 class SnowflakeDestination(DestinationPlugin):
     """
     :categories: destination
+
     Snowflake based data outputs.
     """
 

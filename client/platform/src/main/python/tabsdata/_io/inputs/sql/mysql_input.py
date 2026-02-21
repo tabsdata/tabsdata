@@ -41,6 +41,7 @@ logger.setLevel(logging.DEBUG)
 class MySQLSrc(SourcePlugin):
     """
     :categories: source
+
     Source plugin for reading data from MySQL.
     """
 

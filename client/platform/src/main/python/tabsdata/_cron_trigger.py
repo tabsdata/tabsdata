@@ -19,6 +19,7 @@ from tabsdata.exceptions import DecoratorConfigurationError, ErrorCode
 class CronTrigger:
     """
     :categories: trigger
+
     Represents a cron-based trigger for scheduling Tabsdata publishers,
     subscribers and transformers.
 

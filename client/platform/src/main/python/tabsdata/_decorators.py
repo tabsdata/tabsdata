@@ -59,6 +59,7 @@ def transformer(
 ) -> callable:
     """
     :categories: transformer
+
     Decorator to define a function to transform data present in Tabsdata.
 
     Args:
@@ -159,6 +160,7 @@ def publisher(
 ) -> callable:
     """
     :categories: publisher
+
     Decorator to define a function to publish data to Tabsdata.
 
     Args:
@@ -227,6 +229,7 @@ def subscriber(
 ) -> callable:
     """
     :categories: subscriber
+
     Decorator to define a function to subscribe to data present in Tabsdata.
 
     Args:

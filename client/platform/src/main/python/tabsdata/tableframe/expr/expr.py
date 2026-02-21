@@ -188,6 +188,7 @@ class Expr:
         """
         :categories: numeric
 
+
         Return the abso lute value of the expression.
         """
         return Expr(self._expr.abs())
@@ -195,6 +196,7 @@ class Expr:
     def add(self, other: Any) -> Expr:
         """
         :categories: numeric
+
 
         Equivalent to the `+` operator.
 
@@ -233,6 +235,7 @@ class Expr:
         """
         :categories: manipulation
 
+
         Set the name for a column or expression.
 
         Args:
@@ -267,6 +270,7 @@ class Expr:
     def and_(self, *others: Any) -> Expr:
         """
         :categories: logic
+
 
         Bitwise `and` operator with the given expressions.
         It can be used with integer and bool types.
@@ -303,6 +307,7 @@ class Expr:
         """
         :categories: numeric
 
+
         Calculate the inverse cosine of the element value.
 
         Example:
@@ -332,6 +337,7 @@ class Expr:
     def arccosh(self) -> Expr:
         """
         :categories: numeric
+
 
         Calculate the inverse hyperbolic cosine of the element value.
 
@@ -363,6 +369,7 @@ class Expr:
         """
         :categories: numeric
 
+
         Calculate the inverse sine of the element value.
 
         Example:
@@ -392,6 +399,7 @@ class Expr:
     def arcsinh(self) -> Expr:
         """
         :categories: numeric
+
 
         Calculate the inverse hyperbolic sine of the element value.
 
@@ -423,6 +431,7 @@ class Expr:
         """
         :categories: numeric
 
+
         Calculate the inverse tangent of the element value.
 
         Example:
@@ -452,6 +461,7 @@ class Expr:
     def arctanh(self) -> Expr:
         """
         :categories: numeric
+
 
         Calculate the inverse hyperbolic tangent of the element value.
 
@@ -489,6 +499,7 @@ class Expr:
         # noinspection PyShadowingNames
         """
         :categories: type_casting
+
 
         Cast a value to d different type.
 
@@ -530,6 +541,7 @@ class Expr:
         """
         :categories: numeric
 
+
         Calculate the cub root of the element value.
 
         Example:
@@ -559,6 +571,7 @@ class Expr:
     def ceil(self) -> Expr:
         """
         :categories: numeric
+
 
         Round up the expression to the next integer value.
 
@@ -598,6 +611,7 @@ class Expr:
     ) -> Expr:
         """
         :categories: numeric
+
 
         For element values outside the lower and upper bounds, lower values are
         replaced with the lower bound
@@ -640,6 +654,7 @@ class Expr:
         """
         :categories: numeric
 
+
         Calculate the cosine of the element value.
 
         Example:
@@ -669,6 +684,7 @@ class Expr:
     def cosh(self) -> Expr:
         """
         :categories: numeric
+
 
         Calculate the hyperbolic cosine of the element value.
 
@@ -700,6 +716,7 @@ class Expr:
         """
         :categories: numeric
 
+
         Calculate the cotangent of the element value.
 
         Example:
@@ -730,6 +747,7 @@ class Expr:
         """
         :categories: numeric
 
+
         Convert a radian value to degrees
 
         Example:
@@ -759,6 +777,7 @@ class Expr:
     def eq(self, other: Any) -> Expr:
         """
         :categories: logic
+
 
         Compare if 2 expressions are equal, equivalent to `expr == other`. If one
         of the expressions is `null` (None) it returns `null`.
@@ -794,6 +813,7 @@ class Expr:
         """
         :categories: logic
 
+
         Compare if 2 expressions are equal an, equivalent to `expr == other`. If one
         of the expressions is `null` (None) it returns `false`.
 
@@ -828,6 +848,7 @@ class Expr:
         """
         :categories: numeric
 
+
         Calculate the exponential of the element value.
 
         Example:
@@ -855,6 +876,7 @@ class Expr:
     def fill_nan(self, value: int | float | Expr | None) -> Expr:
         """
         :categories: manipulation
+
 
         Replace `NaN` values with the given value.
 
@@ -893,6 +915,7 @@ class Expr:
     ) -> Expr:
         """
         :categories: manipulation
+
 
         Replace `null` values with the given value.
 
@@ -937,6 +960,7 @@ class Expr:
     ) -> Expr:
         """
         :categories: filters
+
 
         Apply a filter predicate to an expression.
 
@@ -990,6 +1014,7 @@ class Expr:
         """
         :categories: aggregation
 
+
         Get the first element.
 
         Example:
@@ -1017,6 +1042,7 @@ class Expr:
     def floor(self) -> Expr:
         """
         :categories: numeric
+
 
         Round down the expression to the previous integer value.
 
@@ -1071,6 +1097,7 @@ class Expr:
         """
         :categories: logic
 
+
         Greater or equal operator.
 
         Args:
@@ -1099,6 +1126,7 @@ class Expr:
     def gt(self, other: Any) -> Expr:
         """
         :categories: logic
+
 
         Greater than operator.
 
@@ -1135,6 +1163,7 @@ class Expr:
         """
         :categories: numeric
 
+
         Compute the hash of an element value.
 
         Args:
@@ -1170,6 +1199,7 @@ class Expr:
     ) -> Expr:
         """
         :categories: logic
+
 
         If an expression is between the given bounds.
 
@@ -1212,6 +1242,7 @@ class Expr:
         """
         :categories: logic
 
+
         If an element value is finite.
 
         Example:
@@ -1238,6 +1269,7 @@ class Expr:
     def is_in(self, other: Union[Expr | Collection[Any]]) -> Expr:
         """
         :categories: logic
+
 
         If an element value is in the given collection.
 
@@ -1270,6 +1302,7 @@ class Expr:
         """
         :categories: logic
 
+
         If an element value is infinite.
 
         Example:
@@ -1297,6 +1330,7 @@ class Expr:
         """
         :categories: logic
 
+
         If an element value is `NaN`.
 
         Example:
@@ -1323,6 +1357,7 @@ class Expr:
     def is_not_nan(self) -> Expr:
         """
         :categories: logic
+
 
         If an element value is not `NaN`.
 
@@ -1352,6 +1387,7 @@ class Expr:
         """
         :categories: logic
 
+
         If an element value is not `null` (None).
 
         Example:
@@ -1379,6 +1415,7 @@ class Expr:
     def is_null(self) -> Expr:
         """
         :categories: logic
+
 
         If an element value is `null` (None).
 
@@ -1408,6 +1445,7 @@ class Expr:
         """
         :categories: logic
 
+
         If an element value is unique for all values in the column.
 
         Example:
@@ -1435,6 +1473,7 @@ class Expr:
     def last(self) -> Expr:
         """
         :categories: aggregation
+
 
         Get the last element.
 
@@ -1464,6 +1503,7 @@ class Expr:
         """
         :categories: logic
 
+
         Less or equal operator.
 
         Args:
@@ -1492,6 +1532,7 @@ class Expr:
     def log(self, base: float = math.e) -> Expr:
         """
         :categories: numeric
+
 
         Calculate the logarithm to the given base.
 
@@ -1526,6 +1567,7 @@ class Expr:
         """
         :categories: numeric
 
+
         Calculate the natural logarithm plus one.
 
         Example:
@@ -1555,6 +1597,7 @@ class Expr:
     def log10(self) -> Expr:
         """
         :categories: numeric
+
 
         Calculate the logarithm base 10.
 
@@ -1586,6 +1629,7 @@ class Expr:
         """
         :categories: logic
 
+
         Less than operator.
 
         Args:
@@ -1614,6 +1658,7 @@ class Expr:
     def mod(self, other: Any) -> Expr:
         """
         :categories: numeric
+
 
         Modulus operator.
 
@@ -1646,6 +1691,7 @@ class Expr:
         """
         :categories: numeric
 
+
         Multiplication operator.
 
         Args:
@@ -1677,6 +1723,7 @@ class Expr:
     def ne(self, other: Any) -> Expr:
         """
         :categories: logic
+
 
         Compare if 2 expressions are not equal, equivalent to `expr != other`. If one
         of the expressions is `null` (None) it returns `null`.
@@ -1712,6 +1759,7 @@ class Expr:
         """
         :categories: logic
 
+
         Compare if 2 expressions are not equal an, equivalent to `expr != other`. If one
         of the expressions is `null` (None) it returns `false`.
 
@@ -1746,6 +1794,7 @@ class Expr:
         """
         :categories: numeric
 
+
         Unary minus operator.
 
         Example:
@@ -1776,6 +1825,7 @@ class Expr:
         """
         :categories: logic
 
+
         Negate a boolean expression.
 
         Example:
@@ -1801,6 +1851,7 @@ class Expr:
     def or_(self, *others: Any) -> Expr:
         """
         :categories: logic
+
 
         Bitwise `or` operator with the given expressions.
         It can be used with integer and bool types.
@@ -1835,6 +1886,7 @@ class Expr:
         """
         :categories: numeric
 
+
         Exponentiation operator.
 
         Args:
@@ -1866,6 +1918,7 @@ class Expr:
     def radians(self) -> Expr:
         """
         :categories: numeric
+
 
         Convert a degree value to radians
 
@@ -1900,6 +1953,7 @@ class Expr:
     ) -> Expr:
         """
         :categories: aggregation
+
 
         Compute the rank of the element values. Multiple rank types are available.
 
@@ -1936,6 +1990,7 @@ class Expr:
     def diff(self, n: int = 1) -> Expr:
         """
         :categories: numeric
+
 
         Compute the difference between an element value and the element value
         of the specified relative row.
@@ -1980,6 +2035,7 @@ class Expr:
         """
         :categories: numeric
 
+
         Reinterpret the 64bit element values (i64 or u64) as a signed/unsigned integers.
         Only valid for 64bit integers, for other types use cast.
 
@@ -2016,6 +2072,7 @@ class Expr:
         """
         :categories: numeric
 
+
         Round floating point element values.
 
         Args:
@@ -2048,6 +2105,7 @@ class Expr:
     def round_sig_figs(self, digits: int) -> Expr:
         """
         :categories: numeric
+
 
         Round floating point element values to the specified significant figures.
 
@@ -2097,6 +2155,7 @@ class Expr:
         """
         :categories: numeric
 
+
         Cast down a column to the smallest type that can hold the element values.
 
         Example:
@@ -2123,6 +2182,7 @@ class Expr:
     def sign(self) -> Expr:
         """
         :categories: numeric
+
 
         Calculate the sign of element values.
 
@@ -2157,6 +2217,7 @@ class Expr:
         """
         :categories: numeric
 
+
         Calculate the sine of the element value.
 
         Example:
@@ -2185,6 +2246,7 @@ class Expr:
         """
         :categories: numeric
 
+
         Calculate the hyperbolic sine of the element value.
 
         Example:
@@ -2211,6 +2273,7 @@ class Expr:
     def count(self) -> Expr:
         """
         :categories: aggregation
+
 
         Aggregation operation that counts the non `null` values of the given column in
         the group.
@@ -2254,6 +2317,7 @@ class Expr:
         """
         :categories: aggregation
 
+
         Aggregation operation that counts the rows in the group.
 
         Examples:
@@ -2294,6 +2358,7 @@ class Expr:
     def slice(self, offset: int | Expr, length: int | Expr | None = None) -> Expr:
         """
         :categories: filters
+
 
         Compute a slice of the `TableFrame` for the specified columns.
 
@@ -2343,6 +2408,7 @@ class Expr:
         """
         :categories: numeric
 
+
         Calculate the square root of the element value.
 
         Example:
@@ -2371,6 +2437,7 @@ class Expr:
     def sub(self, other: Any) -> Expr:
         """
         :categories: numeric
+
 
         Equivalent to the `-` operator.
 
@@ -2405,6 +2472,7 @@ class Expr:
     def max(self) -> Expr:
         """
         :categories: aggregation
+
 
         Aggregation operation that finds the maximum value in the group.
 
@@ -2453,6 +2521,7 @@ class Expr:
         """
         :categories: aggregation
 
+
         Aggregation operation that finds the minimum value in the group.
 
         Examples:
@@ -2499,6 +2568,7 @@ class Expr:
     def sum(self) -> Expr:
         """
         :categories: aggregation
+
 
         Aggregation operation that sums the values in the group.
 
@@ -2547,6 +2617,7 @@ class Expr:
         """
         :categories: aggregation
 
+
         Aggregation operation that finds the mean of the values in the group.
 
         Examples:
@@ -2594,6 +2665,7 @@ class Expr:
         """
         :categories: aggregation
 
+
         Aggregation operation that finds the median of the values in the group.
 
         Examples:
@@ -2640,6 +2712,7 @@ class Expr:
     def n_unique(self) -> Expr:
         """
         :categories: aggregation
+
 
         Aggregation operation that counts the unique values of the given column
         in the group.
@@ -2689,6 +2762,7 @@ class Expr:
         """
         :categories: numeric
 
+
         Calculate the tangent of the element value.
 
         Example:
@@ -2716,6 +2790,7 @@ class Expr:
         """
         :categories: numeric
 
+
         Calculate the hyperbolic tangent of the element value.
 
         Example:
@@ -2742,6 +2817,7 @@ class Expr:
     def truediv(self, other: Any) -> Expr:
         """
         :categories: numeric
+
 
         Equivalent to the float `/` operator.
 
@@ -2780,6 +2856,7 @@ class Expr:
         """
         :categories: logic
 
+
         Bitwise `xor` operator with the given expression.
         It can be used with integer and bool types.
 
@@ -2815,6 +2892,7 @@ class Expr:
         """
         :categories: type_casting
 
+
         Return an object namespace with all date-time methods for a date-time value.
         """
         return td_datetime.ExprDateTimeNameSpace(self._expr.dt)
@@ -2823,6 +2901,7 @@ class Expr:
     def str(self) -> td_string.ExprStringNameSpace:
         """
         :categories: type_casting
+
 
         Return an object namespace with all string methods for a string value.
         """

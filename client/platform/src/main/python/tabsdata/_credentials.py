@@ -33,6 +33,7 @@ class Credentials(ABC):
 class AzureCredentials(Credentials, ABC):
     """
     :categories: credentials
+
     Credentials class to store the credentials needed to access Azure.
     """
 
@@ -40,6 +41,7 @@ class AzureCredentials(Credentials, ABC):
 class AzureAccountKeyCredentials(AzureCredentials):
     """
     :categories: credentials
+
     Credentials class to access Azure using account key credentials (account name and
     account key).
 
@@ -139,6 +141,7 @@ class GCPCredentials(Credentials, ABC):
 class GCPServiceAccountKeyCredentials(GCPCredentials):
     """
     :categories: credentials
+
     Credentials class to store the credentials needed to access GCS
     using account key credentials (service account key).
 
@@ -216,6 +219,7 @@ class S3Credentials(Credentials, ABC):
 class S3AccessKeyCredentials(S3Credentials):
     """
     :categories: credentials
+
     Credentials class to access an S3 bucket using access key credentials (access key
     id and secret access key).
 
@@ -308,6 +312,7 @@ class S3AccessKeyCredentials(S3Credentials):
 class UserPasswordCredentials(Credentials):
     """
     :categories: credentials
+
     Represents credentials consisting of a user and a password.
 
     This class is used to manage and securely handle user and password

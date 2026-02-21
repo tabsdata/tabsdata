@@ -350,6 +350,7 @@ class KafkaConn(Conn):
 class KafkaTrigger(StageTrigger):
     """
     :categories: trigger
+
     A `StageTrigger` that consumes messages from a Kafka topic and stages them.
 
     This trigger connects to a Kafka cluster, consumes messages from a specified

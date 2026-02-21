@@ -170,6 +170,7 @@ class CategoryCriteria(Criteria, ABC):
 class AllOk(BoolCriteria):
     """
     :categories: dq-operator
+
     A boolean criteria that selects records where all boolean classifiers
     pass (`True`).
     """
@@ -196,6 +197,7 @@ class AllOk(BoolCriteria):
 class AnyFailed(BoolCriteria):
     """
     :categories: dq-operator
+
     A boolean criteria that selects records where at least one boolean
     classifier fails (`False`).
     """
@@ -222,6 +224,7 @@ class AnyFailed(BoolCriteria):
 class InBins(CategoryCriteria):
     """
     :categories: dq-operator
+
     A category criteria that selects records where the value in the specified
     columns falls into one of the given bins.
     """
@@ -249,6 +252,7 @@ class InBins(CategoryCriteria):
 class NotInBins(CategoryCriteria):
     """
     :categories: dq-operator
+
     A category criteria that selects records where the value in the specified
     columns does not fall into any of the given bins.
     """
@@ -314,6 +318,7 @@ class RowCountThreshold(Threshold):
 class PercentThreshold(Threshold):
     """
     :categories: dq-operator
+
     A threshold based on a percentage of total rows.
     """
 
@@ -380,6 +385,7 @@ class TagOperator(Operator, ABC):
 class Enrich(TagOperator):
     """
     :categories: dq-operator
+
     An operator that adds the data quality classifier columns to the original
     table frame. It does not remove any row from the original table.
     """
@@ -456,6 +462,7 @@ class CriteriaOperator(Operator, ABC):
 class Fail(CriteriaOperator):
     """
     :categories: dq-operator
+
     An operator that fails the current transaction if a data quality threshold
     is met.
     """
@@ -495,6 +502,7 @@ class Fail(CriteriaOperator):
 class Filter(CriteriaOperator):
     """
     :categories: dq-operator
+
     An operator that filters rows from a table based on data quality criteria.
 
     The filtered rows are removed from the table being processed. They can
@@ -564,6 +572,7 @@ class Filter(CriteriaOperator):
 class Select(CriteriaOperator):
     """
     :categories: dq-operator
+
     An operator that selects rows based on data quality criteria and writes
     them to another table.
 
@@ -631,6 +640,7 @@ class Select(CriteriaOperator):
 class Summary(TagOperator):
     """
     :categories: dq-operator
+
     An operator that generates a data quality summary report for a table.
     """
 
