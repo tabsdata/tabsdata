@@ -299,9 +299,10 @@ class DestinationPlugin:
 
     Methods:
 
-        trigger_output(working_dir, *args, **kwargs): Trigger the exporting of the data.
-            This function will receive the resulting data from the dataset function and
-            must store it in the desired location.
+        trigger_output(working_dir, ``*args``, ``**kwargs``):
+            Trigger the exporting of the data. This function will
+            receive the resulting data from the dataset function
+            and must store it in the desired location.
     """
 
     IDENTIFIER = "destination-plugin"

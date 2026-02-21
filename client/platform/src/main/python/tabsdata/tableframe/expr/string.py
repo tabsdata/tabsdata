@@ -48,9 +48,8 @@ class ExprStringNameSpace:
         Convert the string to a date.
 
         Args:
-            fmt: The date format string (default %Y-%m-%d)
-                 [formats]
-                (https://docs.rs/chrono/0.4.19/chrono/format/strftime/index.html).
+            fmt: The date format string (default %Y-%m-%d).
+                See `formats <https://docs.rs/chrono/0.4.19/chrono/format/strftime/index.html>`_.
             strict: Whether to parse the date strictly.
         Example:
 
@@ -90,9 +89,8 @@ class ExprStringNameSpace:
         Convert the string to a datetime.
 
         Args:
-            format: The datetime format string (default %Y-%m-%d %H:%M:%S)
-                 [formats]
-                (https://docs.rs/chrono/0.4.19/chrono/format/strftime/index.html).
+            format: The datetime format string (default %Y-%m-%d %H:%M:%S).
+                See `formats <https://docs.rs/chrono/0.4.19/chrono/format/strftime/index.html>`_.
             time_unit: {None, ‘us’, ‘ns’, ‘ms’}
                 If None (default), it inferred from the format string
             time_zone: Time zone for the resulting value.
@@ -141,9 +139,8 @@ class ExprStringNameSpace:
         Convert the string to a time.
 
         Args:
-            fmt: The time format string (default %H:%M:%S)
-                 [formats]
-                (https://docs.rs/chrono/0.4.19/chrono/format/strftime/index.html).
+            fmt: The time format string (default %H:%M:%S).
+                See `formats <https://docs.rs/chrono/0.4.19/chrono/format/strftime/index.html>`_.
             strict: Whether to parse the date strictly.
             cache: Whether to cache the date.
         Example:

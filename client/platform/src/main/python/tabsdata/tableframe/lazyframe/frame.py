@@ -1085,15 +1085,16 @@ class TableFrame:
                 both `TableFrame's. Don't use this parameter if using `left_on`
                 and `right_on` parameters, or if `how="cross"`.
             how: Join strategy:
+
                 * `inner`: An inner join.
                 * `left`: A left join.
                 * `right`: A rigth join.
                 * `full`: A full join.
                 * `cross`: The cartesian product.
                 * `semi`: An inner join but only returning the columns from left
-                          `TableFrame`.
-                * *anti*: Rows from the left `TableFrame` that have no match
-                          in the right `TableFrame`.
+                  `TableFrame`.
+                * ``anti``: Rows from the left `TableFrame` that have no match
+                  in the right `TableFrame`.
             left_on: Name(s) of the columns to join on from the left `TableFrame`.
                 It must be used together wit the `right_on` parameter.
                 It cannot be used with the `on` parameter.
@@ -1322,13 +1323,14 @@ class TableFrame:
             4. Return a list of TabsData Series (for `on_batch`) or TabsData supported
                scalars (for `on_element`) with the same length as specified in the
                output schema.
-            4. If overriding the `on_batch` method, the return type must be a list of
+            5. If overriding the `on_batch` method, the return type must be a list of
                TabsData Series. If overriding the `on_element` method, the return type
                must be a list of supported TabsData scalar values. For both cases, the
                number of elements in the returned lists must match the number of
                elements in the output_columns list provided to the UDF constructor.
 
         Using UDFs:
+
             1. Instantiate a function created as above.
             2. Pass it to TableFrame method udf().
             3. Optionally use :meth:`UDF.output_columns` to override output column names

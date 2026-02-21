@@ -709,7 +709,7 @@ def digit(ascii_only: bool = False) -> SelectorProxy:
 
     Parameters:
         ascii_only: Restrict matching to ASCII digits ("0"–"9") only, instead of
-                    all Unicode digits (`\\d').
+                    all Unicode digits (``\\d``).
 
     Example:
         >>> import tabsdata.tableframe as td_tf
@@ -1439,12 +1439,13 @@ def datetime(
                    "ms", "us", or "ns".
                    If omitted, selects datetime columns with any time unit.
         time_zone: Specifies which time zone(s) to match:
+
                    * Pass one or more valid time zone strings (as defined by the
-                     `zoneinfo` module).
-                     To list all available zones, use:
-                        `import zoneinfo; zoneinfo.available_timezones()`.
-                   * Use `None` to select datetime columns with no time zone.
-                   * Use "*" to match any column with any time zone.
+                     ``zoneinfo`` module).
+                     To list all available zones, use
+                     ``import zoneinfo; zoneinfo.available_timezones()``.
+                   * Use ``None`` to select datetime columns with no time zone.
+                   * Use ``"*"`` to match any column with any time zone.
 
     Example:
         >>> import tabsdata.tableframe as td_tf

@@ -180,6 +180,7 @@ class UDF(ABC):
     def on_batch(self, *args) -> list[td_typing.Series]:
         """
         Creating UDFs:
+
             1. Subclass :class:`tabsdata.tableframe.udf.function.UDF`.
             2. Implement ``__init__`` to call ``super().__init__(output_columns)`` where
                ``output_columns`` is a tuple or list of tuples ``(name, data type)``
@@ -191,13 +192,14 @@ class UDF(ABC):
             4. Return a list of TabsData Series (for `on_batch`) or TabsData supported
                scalars (for `on_element`) with the same length as specified in the
                output schema.
-            4. If overriding the `on_batch` method, the return type must be a list of
+            5. If overriding the `on_batch` method, the return type must be a list of
                TabsData Series. If overriding the `on_element` method, the return type
                must be a list of supported TabsData scalar values. For both cases, the
                number of elements in the returned lists must match the number of
                elements in the output_columns list provided to the UDF constructor.
 
         Using UDFs:
+
             1. Instantiate a function created as above.
             2. Pass it to TableFrame method udf().
             3. Optionally use :meth:`UDF.output_columns` to override output column names
@@ -225,6 +227,7 @@ class UDF(ABC):
     def on_element(self, *args) -> list[Any]:
         """
         Creating UDFs:
+
             1. Subclass :class:`tabsdata.tableframe.udf.function.UDF`.
             2. Implement ``__init__`` to call ``super().__init__(output_columns)`` where
                ``output_columns`` is a tuple or list of tuples ``(name, data type)``
@@ -236,13 +239,14 @@ class UDF(ABC):
             4. Return a list of TabsData Series (for `on_batch`) or TabsData supported
                scalars (for `on_element`) with the same length as specified in the
                output schema.
-            4. If overriding the `on_batch` method, the return type must be a list of
+            5. If overriding the `on_batch` method, the return type must be a list of
                TabsData Series. If overriding the `on_element` method, the return type
                must be a list of supported TabsData scalar values. For both cases, the
                number of elements in the returned lists must match the number of
                elements in the output_columns list provided to the UDF constructor.
 
         Using UDFs:
+
             1. Instantiate a function created as above.
             2. Pass it to TableFrame method udf().
             3. Optionally use :meth:`UDF.output_columns` to override output column names
@@ -489,8 +493,9 @@ class UDFList(UDF, ABC):
 
     When subclassing UDFList, implement on_batch or on_element
     with list signature:
-        - on_batch(self, series: list[Series]) -> list[Series]
-        - on_element(self, values: list[Any]) -> list[Any]
+
+    - ``on_batch(self, series: list[Series]) -> list[Series]``
+    - ``on_element(self, values: list[Any]) -> list[Any]``
     """
 
     def __init__(self, output_columns):
@@ -511,8 +516,9 @@ class UDFUnpacked(UDF, ABC):
 
     When subclassing UDFUnpacked, implement on_batch or on_element
     with unpacked signature:
-        - on_batch(self, col1: Series, col2: Series, ...) -> list[Series]
-        - on_element(self, val1: Any, val2: Any, ...) -> list[Any]
+
+    - ``on_batch(self, col1: Series, col2: Series, ...) -> list[Series]``
+    - ``on_element(self, val1: Any, val2: Any, ...) -> list[Any]``
     """
 
     def __init__(self, output_columns):

@@ -30,6 +30,7 @@ def concat(
     Args:
         items: The TableFrames to concatenate.
         how: {'vertical', 'vertical_relaxed', 'diagonal', 'diagonal_relaxed'}
+
             * vertical: Appends the rows of each input below the previous one. All
               inputs must have exactly the same column names and types; otherwise the
               operation fails.

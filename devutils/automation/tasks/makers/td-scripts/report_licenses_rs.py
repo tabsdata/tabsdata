@@ -159,12 +159,18 @@ def ignored_dependency(dependency):
     }
 
     return (
-        dependency.startswith("ta-")
+        dependency == "tabsdata"
+        or "tabsdata" in dependency
+        or dependency.startswith("ta-")
+        or dependency.startswith("tc-")
         or dependency.startswith("td-")
         or dependency.startswith("te-")
+        or dependency.startswith("tk-")
         or dependency.startswith("tm-")
+        or dependency.startswith("to-")
+        or dependency.startswith("tp-")
         or dependency.startswith("ty-")
-        or dependency == "tabsdata"
+        or dependency.startswith("tz-")
         or dependency in build_dependencies
     )
 
