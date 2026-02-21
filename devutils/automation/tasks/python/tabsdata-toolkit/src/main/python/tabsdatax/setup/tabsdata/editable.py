@@ -25,6 +25,7 @@ EDITABLE_EXTRA_PATHS = [
     "extensions/python/libraries/te_variant/src/main/python",
     "expansions/python/modules/to-foundation/python/src/main/python",
     "expansions/polars/modules/ty-tableframe/python/src/main/python",
+    "expansions/polars/extensions/tz-tableframe/python/src/main/python",
 ]
 
 

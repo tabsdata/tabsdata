@@ -306,6 +306,17 @@ script = [
 plugin = "td-task-tracker"
 category = "03 - Build"
 private = true
+run_task = [
+    { name = [
+        "__os__compile_all_rs_expansions_polars_ty_tableframe",
+        "__os__compile_all_rs_expansions_polars_tz_tableframe"
+    ] }
+]
+
+[tasks.__os__compile_all_rs_expansions_polars_ty_tableframe]
+plugin = "td-task-tracker"
+category = "03 - Build"
+private = true
 cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
 script_runner = "@duckscript"
 script = [
@@ -319,6 +330,25 @@ script = [
 
     debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TY_TABLEFRAME_CARGO_TOML} --features without-polars-alloc,pyconfig-init --bin pystubs ${PROJECT_RS_TY_TABLEFRAME_FOLDER}"
     exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TY_TABLEFRAME_CARGO_TOML} --features without-polars-alloc,pyconfig-init --bin pystubs ${PROJECT_RS_TY_TABLEFRAME_FOLDER}
+    ''']
+
+[tasks.__os__compile_all_rs_expansions_polars_tz_tableframe]
+plugin = "td-task-tracker"
+category = "03 - Build"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_POLARS_CARGO_TOML} --lib --bins --examples"
+    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_POLARS_CARGO_TOML} --lib --bins --examples
+
+    cd ${PROJECT_RS_TZ_TABLEFRAME_FOLDER}
+
+    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TZ_TABLEFRAME_CARGO_TOML} --features without-polars-alloc,pyconfig-init --bin pystubs ${PROJECT_RS_TZ_TABLEFRAME_FOLDER}"
+    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TZ_TABLEFRAME_CARGO_TOML} --features without-polars-alloc,pyconfig-init --bin pystubs ${PROJECT_RS_TZ_TABLEFRAME_FOLDER}
     ''']
 
 [tasks.__os__compile_none_rs_expansions]
@@ -355,6 +385,17 @@ script = [
 plugin = "td-task-tracker"
 category = "03 - Build"
 private = true
+run_task = [
+    { name = [
+        "__os__compile_none_rs_expansions_polars_ty_tableframe",
+        "__os__compile_none_rs_expansions_polars_tz_tableframe"
+    ] }
+]
+
+[tasks.__os__compile_none_rs_expansions_polars_ty_tableframe]
+plugin = "td-task-tracker"
+category = "03 - Build"
+private = true
 cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
 script_runner = "@duckscript"
 script = [
@@ -368,6 +409,25 @@ script = [
 
     debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TY_TABLEFRAME_CARGO_TOML} --features without-polars-alloc,pyconfig-init --bin pystubs ${PROJECT_RS_TY_TABLEFRAME_FOLDER}"
     exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TY_TABLEFRAME_CARGO_TOML} --features without-polars-alloc,pyconfig-init --bin pystubs ${PROJECT_RS_TY_TABLEFRAME_FOLDER}
+    ''']
+
+[tasks.__os__compile_none_rs_expansions_polars_tz_tableframe]
+plugin = "td-task-tracker"
+category = "03 - Build"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_POLARS_CARGO_TOML} --lib --bins"
+    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_POLARS_CARGO_TOML} --lib --bins
+
+    cd ${PROJECT_RS_TZ_TABLEFRAME_FOLDER}
+
+    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TZ_TABLEFRAME_CARGO_TOML} --features without-polars-alloc,pyconfig-init --bin pystubs ${PROJECT_RS_TZ_TABLEFRAME_FOLDER}"
+    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TZ_TABLEFRAME_CARGO_TOML} --features without-polars-alloc,pyconfig-init --bin pystubs ${PROJECT_RS_TZ_TABLEFRAME_FOLDER}
     ''']
 
 [tasks.__os__link_all_rs]
@@ -407,7 +467,8 @@ category = "03 - Build"
 private = true
 run_task = [
     { name = [
-        "__os__link_all_ty-tableframe"
+        "__os__link_all_ty-tableframe",
+        "__os__link_all_tz-tableframe"
     ] }
 ]
 
@@ -428,6 +489,16 @@ private = true
 run_task = [
     { name = [
         "__os__link_ty-tableframe",
+    ] }
+]
+
+[tasks.__os__link_all_tz-tableframe]
+plugin = "td-task-tracker"
+category = "03 - Build"
+private = true
+run_task = [
+    { name = [
+        "__os__link_tz-tableframe",
     ] }
 ]
 
@@ -468,7 +539,8 @@ category = "03 - Build"
 private = true
 run_task = [
     { name = [
-        "__os__link_none_ty-tableframe"
+        "__os__link_none_ty-tableframe",
+        "__os__link_none_tz-tableframe"
     ] }
 ]
 
@@ -489,6 +561,16 @@ private = true
 run_task = [
     { name = [
         "__os__link_ty-tableframe",
+    ] }
+]
+
+[tasks.__os__link_none_tz-tableframe]
+plugin = "td-task-tracker"
+category = "03 - Build"
+private = true
+run_task = [
+    { name = [
+        "__os__link_tz-tableframe",
     ] }
 ]
 
@@ -742,6 +824,135 @@ script = [
             end
         else
             error "⚠️ More than one ty_tableframe maturin wheel found in ../../target/wheels/"
+            for wheel in ${wheels}
+                error "⚠️ 📦 Found wheel: ${wheel}"
+            end
+            exit 1
+        end
+    end
+    ''']
+
+[tasks.__os__link_tz-tableframe]
+plugin = "td-task-tracker"
+category = "03 - Build"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    cd "${PROJECT_RS_TZ_TABLEFRAME_FOLDER}"
+
+    td_target = get_env TD_TARGET
+    is_x86_64-unknown-linux-musl = eq ${td_target} "x86_64-unknown-linux-musl"
+    if ${is_x86_64-unknown-linux-musl}
+        debug "🚀 cd ${PROJECT_TABSDATA_ROOT_FOLDER}"
+        cd ${PROJECT_TABSDATA_ROOT_FOLDER}
+
+        td_profile = set ${td-profile}
+        td_rust_quiet = set ${td-rust-quiet}
+
+        debug "🚀 docker run --rm --mount=type=bind,src=${PROJECT_TABSDATA_ROOT_FOLDER},target=/tabsdata -w /tabsdata --env TD_PROFILE=${td_profile} quay.io/pypa/manylinux2014_x86_64 bash -lc ..."
+        td_script = set "yum -y install perl perl-IPC-Cmd perl-Time-Piece"
+        td_script = set "${td_script} && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.93.0"
+        td_script = set "${td_script} && . $HOME/.cargo/env"
+        td_script = set "${td_script} && python3.12 -m pip install --upgrade pip"
+        td_script = set "${td_script} && python3.12 -m pip install maturin[patchelf]==1.9.4 --root-user-action=ignore"
+        td_script = set "${td_script} && export OPENSSL_STATIC=1"
+        td_script = set "${td_script} && export PKG_CONFIG_ALL_STATIC=1"
+        td_script = set "${td_script} && export ZLIB_STATIC=1"
+        td_script = set "${td_script} && export RUSTFLAGS='-C link-arg=-static-libgcc -C link-arg=-static-libstdc++'"
+        td_script = set "${td_script} && python3.12 --version"
+        td_script = set "${td_script} && python3.12 -m pip --version"
+        td_script = set "${td_script} && rustc --version"
+        td_script = set "${td_script} && cargo --version"
+        td_script = set "${td_script} && python3.12 -m maturin --version"
+        td_script = set "${td_script} && patchelf --version"
+        td_script = set "${td_script} && python3.12 -m maturin build ${td_rust_quiet} --locked --compatibility manylinux2014 --profile ${td-profile} --manifest-path /tabsdata/expansions/polars/modules/tz-tableframe/Cargo.toml --features extension-module"
+        exec --fail-on-error docker run --platform linux/amd64 --rm --mount=type=bind,src=${PROJECT_TABSDATA_ROOT_FOLDER},target=/tabsdata -w /tabsdata --env TD_PROFILE=${td_profile} quay.io/pypa/manylinux2014_x86_64 bash -lc "${td_script}"
+
+        debug "🚀 sudo chown -R ${USER}:${USER} ${PROJECT_RS_TZ_EXPANSIONS_POLARS_FOLDER}/target"
+        exec --fail-on-error sudo chown -R ${USER}:${USER} ${PROJECT_RS_TZ_EXPANSIONS_POLARS_FOLDER}/target
+
+        debug "🚀 cd ${PROJECT_RS_TZ_TABLEFRAME_FOLDER}"
+        cd "${PROJECT_RS_TZ_TABLEFRAME_FOLDER}"
+    else
+        debug "🚀 maturin build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --features extension-module"
+        exec --fail-on-error maturin build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --features extension-module
+    end
+
+    info "⏳ Extracting maturin wheel to python source folder..."
+    wheels = glob_array ../../target/wheels/tz_tableframe*.whl
+    q_wheels = array_length ${wheels}
+    if eq ${q_wheels} 0
+        error "⚠️ No tz_tableframe maturin wheels found in ../../target/wheels/"
+        exit 1
+    else
+        if eq ${q_wheels} 1
+            for wheel in ${wheels}
+                info "📦 Found wheel: ${wheel}"
+                if is_directory ../../target/wheels/wheel.tz-tableframe.tmp
+                    trace "🧹 Removing existing ../../target/wheels/wheel.tz-tableframe.tmp directory..."
+                    rm -r ../../target/wheels/wheel.tz-tableframe.tmp
+                end
+                exec --fail-on-error python -m zipfile -e ${wheel} ../../target/wheels/wheel.tz-tableframe.tmp
+
+                trace "📂 Listing of wheel.tz-tableframe.tmp:"
+                wheel_items = glob_array ../../target/wheels/wheel.tz-tableframe.tmp/**/*
+                for wheel_item in ${wheel_items}
+                    trace "   - ${wheel_item}"
+                end
+                for wheel_item in ${wheel_items}
+                    if is_directory ${wheel_item}
+                        if ends_with ${wheel_item} ".dist-info"
+                            wheel_files = glob_array ${wheel_item}/**/*
+                            for wheel_file in ${wheel_files}
+                                if is_file ${wheel_file}
+                                    trace "📝 Contents of wheel.tz-tableframe.tmp .dist-info folder file ${wheel_file}..."
+                                    trace ">>>>> >>>>> >>>>> >>>>> >>>>>"
+                                    trace "<<<<< <<<<< <<<<< <<<<< <<<<<"
+                                end
+                            end
+                        end
+                    end
+                end
+
+                if is_directory "../../target/wheels/wheel.tz-tableframe.tmp/tabsdata"
+                    trace "📁 Copying tabsdata module to python/"
+                    td_symlink_polars_libs_pytest = get_env TD_SYMLINK_POLARS_LIBS_PYTEST
+                    os = os_family
+                    if eq ${os} "mac"
+                        if eq ${td_symlink_polars_libs_pytest} "true"
+                            info "🍄 macOS + TD_SYMLINK_POLARS_LIBS=true → Using symbolic links to reduce space of local packages"
+                            debug "🚀 python ${SYMLINK_SO_SCRIPT} ../../target/wheels/wheel.tz-tableframe.tmp/tabsdata python/src/main/python/tabsdata true"
+                            exec --fail-on-error python ${SYMLINK_SO_SCRIPT} ../../target/wheels/wheel.tz-tableframe.tmp/tabsdata python/src/main/python/tabsdata true
+                        else
+                            info "👀 macOS + TD_SYMLINK_POLARS_LIBS=false → Using regular copy"
+                            debug "🚀 python ${SYMLINK_SO_SCRIPT} ../../target/wheels/wheel.tz-tableframe.tmp/tabsdata python/src/main/python/tabsdata false"
+                            exec --fail-on-error python ${SYMLINK_SO_SCRIPT} ../../target/wheels/wheel.tz-tableframe.tmp/tabsdata python/src/main/python/tabsdata false
+                        end
+                    else
+                        info "🧩 Non macOS → Using regular copy"
+                        debug "🚀 python ${SYMLINK_SO_SCRIPT} ../../target/wheels/wheel.tz-tableframe.tmp/tabsdata python/src/main/python/tabsdata false"
+                        exec --fail-on-error python ${SYMLINK_SO_SCRIPT} ../../target/wheels/wheel.tz-tableframe.tmp/tabsdata python/src/main/python/tabsdata false
+                    end
+                else
+                    error "⚠️ tabsdata module not found in wheel extraction: ${wheel}"
+                    exit 1
+                end
+
+                if is_directory "../../target/wheels/wheel.tz-tableframe.tmp/tabsdata.libs"
+                    trace "📁 Copying tabsdata.libs folder to python/src/main/python/"
+                    exec --fail-on-error cp -r ../../target/wheels/wheel.tz-tableframe.tmp/tabsdata.libs python/src/main/python/
+                else
+                    trace "📌 tabsdata.libs folder not found in wheel extraction: ${wheel}"
+                end
+
+                trace "🐍 Successfully extracted wheel contents!"
+            end
+        else
+            error "⚠️ More than one tz_tableframe maturin wheel found in ../../target/wheels/"
             for wheel in ${wheels}
                 error "⚠️ 📦 Found wheel: ${wheel}"
             end

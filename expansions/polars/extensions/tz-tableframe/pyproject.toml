@@ -1,0 +1,52 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+[build-system]
+requires = []
+build-backend = "maturin"
+
+[project]
+name = "tz-tableframe"
+requires-python = ">=3.12"
+classifiers = [
+    "Development Status :: Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "Programming Language :: JavaScript",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+    "Programming Language :: Rust",
+    "Operating System :: OS Independent",
+]
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://tabsdata.com"
+Documentation = "https://docs.tabsdata.com"
+Source = "https://github.com/tabsdata/tabsdata"
+
+[tool.coverage.html]
+directory = "coverage_html_report"
+
+[tool.coverage.report]
+exclude_also = [
+    "@(abc\\.)?abstractmethod",
+]
+
+[tool.licensecheck]
+using = "requirements:requirements.txt"
+
+[tool.maturin]
+python-source = "python/src/main/python"
+module-name = "tabsdata.expansions.extensions.tableframe._tableframe"
+compatibility = "musllinux_1_1"
+
+[tool.ruff]
+extend = "../../../../pyproject.toml"
+
+[tool.tabsdata]
+name = "tz-tableframe"
+display = "Tabsdata Extension Tableframe"

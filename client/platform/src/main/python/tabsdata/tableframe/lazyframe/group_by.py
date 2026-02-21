@@ -107,6 +107,7 @@ class TableFrameGroupBy:
             unwrapped_named_aggs.append(result)
 
         system_agg = []
+        _expr: pl.Expr | None = None
         for column, metadata in td_helpers.REQUIRED_COLUMNS_METADATA.items():
             if metadata.aggregation is not None:
                 aggregation = metadata.aggregation
@@ -126,16 +127,31 @@ class TableFrameGroupBy:
                 #
                 # Eventually whe should move to map_batches, that gives direct
                 #     access to the agg_list flag.
-                expr = (
-                    pl.col(column)
-                    .implode()
-                    .map_batches(
-                        aggregation_instance.python,
-                        return_dtype=metadata.dtype,
-                        returns_scalar=True,
-                    )
-                    .alias(column)
-                )
+                match metadata.language:
+                    case td_constants.Language.PYTHON:
+                        _expr = (
+                            pl.col(column)
+                            .implode()
+                            .map_batches(
+                                aggregation_instance.python,
+                                return_dtype=metadata.dtype,
+                                returns_scalar=True,
+                            )
+                            .alias(column)
+                        )
+                    case td_constants.Language.RUST:
+                        _expr = (
+                            aggregation_instance.rust(pl.col(column))
+                            .first()
+                            .alias(column)
+                        )
+                    case _:
+                        _expr = None
+                        raise ValueError(
+                            "Unsupported function language to aggregate a new system"
+                            f" column: {metadata.language}"
+                        )
+                expr = _expr
             else:
                 # As TableFrame instantiation mode is 'tab', we do not need to enforce
                 # adding the non-aggregation system columns.

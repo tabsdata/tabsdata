@@ -589,7 +589,7 @@ pub fn show_box(text: &str, min: usize) -> Result<(), io::Error> {
             println!(
                 "{} {} {}",
                 "│".blue().bold(),
-                padded_line.truecolor(251, 175, 79).bold(),
+                padded_line.truecolor(194, 255, 38).bold(),
                 "│".blue().bold()
             );
         } else {

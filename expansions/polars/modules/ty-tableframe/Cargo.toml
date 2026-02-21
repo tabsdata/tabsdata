@@ -21,7 +21,7 @@ name = "pystubs"
 path = "src/pystubs.rs"
 
 [[bin]]
-name = "td_polars"
+name = "ty_polars"
 path = "src/polars.rs"
 
 [lib]

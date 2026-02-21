@@ -4,5 +4,6 @@
 
 recursive-include extensions/python/libraries/te_examples/src/main/python/tabsdata/extensions/_examples/guides/book *
 recursive-include extensions/python/libraries/te_examples/src/main/python/tabsdata/extensions/_examples/cases *
+recursive-include expansions/polars/extensions/tz-tableframe/python/tabsdata.libs *
 recursive-include expansions/polars/modules/ty-tableframe/python/tabsdata.libs *
 recursive-include expansions/python/modules/to-foundation/python/tabsdata.libs *

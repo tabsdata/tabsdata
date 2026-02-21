@@ -32,6 +32,7 @@ version = "1.7.0"
 [workspace]
 members = [
     "./modules/ty-tableframe",
+    "./extensions/tz-tableframe",
 ]
 
 [[bin]]

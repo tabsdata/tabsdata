@@ -541,7 +541,7 @@ pub fn show_build_metadata() {
 
             let content_display = if use_colors {
                 let caption_colored = caption_with_dots.bright_cyan().bold().to_string();
-                let value_colored = value.truecolor(251, 175, 79).to_string();
+                let value_colored = value.truecolor(194, 255, 38).to_string();
                 let colored_line = format!("{}: {}", caption_colored, value_colored);
                 format!(
                     "{}{}",

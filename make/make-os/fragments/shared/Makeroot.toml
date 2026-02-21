@@ -39,6 +39,7 @@ PROJECT_RS_TO_EXPANSIONS_PYTHON_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLD
 PROJECT_RS_TO_FOUNDATION_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/expansions/python/modules/to-foundation/", normalize = true }
 PROJECT_RS_TY_EXPANSIONS_POLARS_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/expansions/polars/", normalize = true }
 PROJECT_RS_TY_TABLEFRAME_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/expansions/polars/modules/ty-tableframe/", normalize = true }
+PROJECT_RS_TZ_TABLEFRAME_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/expansions/polars/extensions/tz-tableframe/", normalize = true }
 
 PROJECT_PY_TA_FEATURES_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/client/libraries/ta_features/", normalize = true }
 PROJECT_PY_TA_TABLEFRAME_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/client/libraries/ta_tableframe/", normalize = true }
@@ -47,6 +48,7 @@ PROJECT_PY_TE_TABLEFRAME_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/ext
 PROJECT_PY_TE_VARIANT_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/extensions/python/libraries/te_variant/", normalize = true }
 PROJECT_PY_TO_FOUNDATION_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/expansions/python/modules/to-foundation/python/", normalize = true }
 PROJECT_PY_TY_TABLEFRAME_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/expansions/polars/modules/ty-tableframe/python/", normalize = true }
+PROJECT_PY_TZ_TABLEFRAME_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/expansions/polars/extensions/tz-tableframe/python/", normalize = true }
 PROJECT_PY_TD_TABSDATA_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/client/platform/", normalize = true }
 
 OS_CONNECTORS_PY_ROOT_FOLDER = { value = "${PROJECT_TABSDATA_BASE_FOLDER}/connectors/python/", normalize = true }
@@ -57,6 +59,7 @@ PROJECT_RS_TO_EXPANSIONS_PYTHON_CARGO_TOML = { value = "${PROJECT_TABSDATA_ROOT_
 PROJECT_RS_TO_FOUNDATION_CARGO_TOML = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/expansions/python/modules/to-foundation/Cargo.toml", normalize = true }
 PROJECT_RS_TY_EXPANSIONS_POLARS_CARGO_TOML = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/expansions/polars/Cargo.toml", normalize = true }
 PROJECT_RS_TY_TABLEFRAME_CARGO_TOML = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/expansions/polars/modules/ty-tableframe/Cargo.toml", normalize = true }
+PROJECT_RS_TZ_TABLEFRAME_CARGO_TOML = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/expansions/polars/extensions/tz-tableframe/Cargo.toml", normalize = true }
 
 PROJECT_RS_TD_MACROS_CARGO_LOCK = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/macros/Cargo.lock", normalize = true }
 PROJECT_RS_TD_TABSDATA_CARGO_LOCK = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/Cargo.lock", normalize = true }
@@ -70,6 +73,7 @@ TESTS_PY_TE_TABLEFRAME_FOLDER = { value = "src/utest/python/test_te_tableframe/"
 TESTS_PY_TE_VARIANT_FOLDER = { value = "src/utest/python/test_te_variant/", normalize = true }
 TESTS_PY_TO_FOUNDATION_FOLDER = { value = "src/utest/python/test_to_foundation/", normalize = true }
 TESTS_PY_TY_TABLEFRAME_FOLDER = { value = "src/utest/python/test_ty_tableframe/", normalize = true }
+TESTS_PY_TZ_TABLEFRAME_FOLDER = { value = "src/utest/python/test_tz_tableframe/", normalize = true }
 TESTS_PY_TD_TABSDATA_FOLDER = { value = "src/utest/python/test_tabsdata/", normalize = true }
 
 BOOK_DEVELOPER_GUIDE_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/books/dguide", normalize = true }

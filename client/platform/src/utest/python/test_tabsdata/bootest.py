@@ -381,6 +381,36 @@ def enrich_sys_path():
             )
         ),
     )
+    sys.path.append(
+        os.path.abspath(
+            os.path.join(
+                root,
+                "expansions",
+                "polars",
+                "extensions",
+                "tz-tableframe",
+                "python",
+                "src",
+                "utest",
+                "python",
+            )
+        ),
+    )
+    sys.path.append(
+        os.path.abspath(
+            os.path.join(
+                root,
+                "expansions",
+                "polars",
+                "extensions",
+                "tz-tableframe",
+                "python",
+                "src",
+                "utest",
+                "resources",
+            )
+        ),
+    )
     connectors = gather_connectors()
     for connector in connectors:
         sys.path.append(

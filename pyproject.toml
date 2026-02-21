@@ -122,6 +122,7 @@ known-first-party = [
     "test_te_variant",
     "test_to_foundation",
     "test_ty_tableframe",
+    "test_tz_tableframe",
 ]
 combine-as-imports = true
 

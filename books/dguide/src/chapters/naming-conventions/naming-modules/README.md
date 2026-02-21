@@ -11,7 +11,9 @@ self-contained concerns:
 - **tc-**: Used as a prefix to name connectors (a built-in module enriching the core pub/sub components). 
 - **td-**: Used as a prefix to name a generic library component. 
 - **te-**: Used as a prefix to name an extension (a component having many implementations depending on the product's edition). 
+- **tk-**: Used as a prefix to name pyo3 extension expansion crates.
 - **tm-**: Used as a prefix to name a macro crate.
-- **to-**: Used as a prefix to name pyo3 crates. 
+- **to-**: Used as a prefix to name pyo3 expansion crates. 
 - **tp-**: Used as a prefix to name plugins (a third-party module enriching the core pub/sub components).
-- **ty-**: Used as a prefix to name polars extensions.
+- **ty-**: Used as a prefix to name polars expansion crates.
+- **tz-**: Used as a prefix to name polars extension expansion crates.
