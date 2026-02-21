@@ -10,7 +10,7 @@ use std::{
 };
 
 const TD_VCORE_PATH: &str = "TD_VCORE_PATH";
-const STUBS_SENTINEL: &str = ".ok.pystubs";
+const STUBS_SENTINEL: &str = ".ok.ty-pystubs";
 
 const SLASH: &str = "/";
 const BACKSLASH: &str = "\\";
@@ -24,13 +24,13 @@ fn main() -> Result<()> {
     if vcore_exists {
         if sentinel_exists {
             println!(
-                "🍎 Variable td_vcore_path exists & sentinel .ok.pystubs exists: skipping python stubs generation"
+                "🍎 Variable td_vcore_path exists & sentinel .ok.ty-pystubs exists: skipping python stubs generation"
             );
 
             Ok(())
         } else {
             println!(
-                "🍏 Variable td_vcore_path exists & sentinel .ok.pystubs does not exist: running python stubs generation"
+                "🍏 Variable td_vcore_path exists & sentinel .ok.ty-pystubs does not exist: running python stubs generation"
             );
 
             let stub = ty_tableframe::stub_info()?;

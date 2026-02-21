@@ -298,8 +298,8 @@ script = [
 
     cd ${PROJECT_RS_TO_FOUNDATION_FOLDER}
 
-    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TO_FOUNDATION_CARGO_TOML} --features without-polars-alloc,pyconfig-init --bin pystubs ${PROJECT_RS_TO_FOUNDATION_FOLDER}"
-    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TO_FOUNDATION_CARGO_TOML} --features without-polars-alloc,pyconfig-init --bin pystubs ${PROJECT_RS_TO_FOUNDATION_FOLDER}
+    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TO_FOUNDATION_CARGO_TOML} --features without-polars-alloc,pyconfig-init --bin to_pystubs ${PROJECT_RS_TO_FOUNDATION_FOLDER}"
+    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TO_FOUNDATION_CARGO_TOML} --features without-polars-alloc,pyconfig-init --bin to_pystubs ${PROJECT_RS_TO_FOUNDATION_FOLDER}
     ''']
 
 [tasks.__os__compile_all_rs_expansions_polars]
@@ -328,8 +328,8 @@ script = [
 
     cd ${PROJECT_RS_TY_TABLEFRAME_FOLDER}
 
-    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TY_TABLEFRAME_CARGO_TOML} --features without-polars-alloc,pyconfig-init --bin pystubs ${PROJECT_RS_TY_TABLEFRAME_FOLDER}"
-    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TY_TABLEFRAME_CARGO_TOML} --features without-polars-alloc,pyconfig-init --bin pystubs ${PROJECT_RS_TY_TABLEFRAME_FOLDER}
+    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TY_TABLEFRAME_CARGO_TOML} --features without-polars-alloc,pyconfig-init --bin ty_pystubs ${PROJECT_RS_TY_TABLEFRAME_FOLDER}"
+    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TY_TABLEFRAME_CARGO_TOML} --features without-polars-alloc,pyconfig-init --bin ty_pystubs ${PROJECT_RS_TY_TABLEFRAME_FOLDER}
     ''']
 
 [tasks.__os__compile_all_rs_expansions_polars_tz_tableframe]
@@ -347,8 +347,8 @@ script = [
 
     cd ${PROJECT_RS_TZ_TABLEFRAME_FOLDER}
 
-    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TZ_TABLEFRAME_CARGO_TOML} --features without-polars-alloc,pyconfig-init --bin pystubs ${PROJECT_RS_TZ_TABLEFRAME_FOLDER}"
-    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TZ_TABLEFRAME_CARGO_TOML} --features without-polars-alloc,pyconfig-init --bin pystubs ${PROJECT_RS_TZ_TABLEFRAME_FOLDER}
+    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TZ_TABLEFRAME_CARGO_TOML} --features without-polars-alloc,pyconfig-init --bin tz_pystubs ${PROJECT_RS_TZ_TABLEFRAME_FOLDER}"
+    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TZ_TABLEFRAME_CARGO_TOML} --features without-polars-alloc,pyconfig-init --bin tz_pystubs ${PROJECT_RS_TZ_TABLEFRAME_FOLDER}
     ''']
 
 [tasks.__os__compile_none_rs_expansions]
@@ -377,8 +377,8 @@ script = [
 
     cd ${PROJECT_RS_TO_FOUNDATION_FOLDER}
 
-    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TO_FOUNDATION_CARGO_TOML} --features without-polars-alloc,pyconfig-init --bin pystubs ${PROJECT_RS_TO_FOUNDATION_FOLDER}"
-    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TO_FOUNDATION_CARGO_TOML} --features without-polars-alloc,pyconfig-init --bin pystubs ${PROJECT_RS_TO_FOUNDATION_FOLDER}
+    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TO_FOUNDATION_CARGO_TOML} --features without-polars-alloc,pyconfig-init --bin to_pystubs ${PROJECT_RS_TO_FOUNDATION_FOLDER}"
+    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TO_FOUNDATION_CARGO_TOML} --features without-polars-alloc,pyconfig-init --bin to_pystubs ${PROJECT_RS_TO_FOUNDATION_FOLDER}
     ''']
 
 [tasks.__os__compile_none_rs_expansions_polars]
@@ -407,8 +407,8 @@ script = [
 
     cd ${PROJECT_RS_TY_TABLEFRAME_FOLDER}
 
-    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TY_TABLEFRAME_CARGO_TOML} --features without-polars-alloc,pyconfig-init --bin pystubs ${PROJECT_RS_TY_TABLEFRAME_FOLDER}"
-    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TY_TABLEFRAME_CARGO_TOML} --features without-polars-alloc,pyconfig-init --bin pystubs ${PROJECT_RS_TY_TABLEFRAME_FOLDER}
+    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TY_TABLEFRAME_CARGO_TOML} --features without-polars-alloc,pyconfig-init --bin ty_pystubs ${PROJECT_RS_TY_TABLEFRAME_FOLDER}"
+    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TY_TABLEFRAME_CARGO_TOML} --features without-polars-alloc,pyconfig-init --bin ty_pystubs ${PROJECT_RS_TY_TABLEFRAME_FOLDER}
     ''']
 
 [tasks.__os__compile_none_rs_expansions_polars_tz_tableframe]
@@ -426,8 +426,8 @@ script = [
 
     cd ${PROJECT_RS_TZ_TABLEFRAME_FOLDER}
 
-    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TZ_TABLEFRAME_CARGO_TOML} --features without-polars-alloc,pyconfig-init --bin pystubs ${PROJECT_RS_TZ_TABLEFRAME_FOLDER}"
-    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TZ_TABLEFRAME_CARGO_TOML} --features without-polars-alloc,pyconfig-init --bin pystubs ${PROJECT_RS_TZ_TABLEFRAME_FOLDER}
+    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TZ_TABLEFRAME_CARGO_TOML} --features without-polars-alloc,pyconfig-init --bin tz_pystubs ${PROJECT_RS_TZ_TABLEFRAME_FOLDER}"
+    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TZ_TABLEFRAME_CARGO_TOML} --features without-polars-alloc,pyconfig-init --bin tz_pystubs ${PROJECT_RS_TZ_TABLEFRAME_FOLDER}
     ''']
 
 [tasks.__os__link_all_rs]
@@ -869,11 +869,11 @@ script = [
         td_script = set "${td_script} && cargo --version"
         td_script = set "${td_script} && python3.12 -m maturin --version"
         td_script = set "${td_script} && patchelf --version"
-        td_script = set "${td_script} && python3.12 -m maturin build ${td_rust_quiet} --locked --compatibility manylinux2014 --profile ${td-profile} --manifest-path /tabsdata/expansions/polars/modules/tz-tableframe/Cargo.toml --features extension-module"
+        td_script = set "${td_script} && python3.12 -m maturin build ${td_rust_quiet} --locked --compatibility manylinux2014 --profile ${td-profile} --manifest-path /tabsdata/expansions/polars/extensions/tz-tableframe/Cargo.toml --features extension-module"
         exec --fail-on-error docker run --platform linux/amd64 --rm --mount=type=bind,src=${PROJECT_TABSDATA_ROOT_FOLDER},target=/tabsdata -w /tabsdata --env TD_PROFILE=${td_profile} quay.io/pypa/manylinux2014_x86_64 bash -lc "${td_script}"
 
-        debug "🚀 sudo chown -R ${USER}:${USER} ${PROJECT_RS_TZ_EXPANSIONS_POLARS_FOLDER}/target"
-        exec --fail-on-error sudo chown -R ${USER}:${USER} ${PROJECT_RS_TZ_EXPANSIONS_POLARS_FOLDER}/target
+        debug "🚀 sudo chown -R ${USER}:${USER} ${PROJECT_RS_TY_EXPANSIONS_POLARS_FOLDER}/target"
+        exec --fail-on-error sudo chown -R ${USER}:${USER} ${PROJECT_RS_TY_EXPANSIONS_POLARS_FOLDER}/target
 
         debug "🚀 cd ${PROJECT_RS_TZ_TABLEFRAME_FOLDER}"
         cd "${PROJECT_RS_TZ_TABLEFRAME_FOLDER}"

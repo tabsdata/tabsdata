@@ -17,7 +17,7 @@ rust-version = { workspace = true }
 version = { workspace = true }
 
 [[bin]]
-name = "pystubs"
+name = "ty_pystubs"
 path = "src/pystubs.rs"
 
 [[bin]]

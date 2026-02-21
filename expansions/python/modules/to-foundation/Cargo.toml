@@ -17,7 +17,7 @@ rust-version = { workspace = true }
 version = { workspace = true }
 
 [[bin]]
-name = "pystubs"
+name = "to_pystubs"
 path = "src/pystubs.rs"
 required-features = ["pyconfig-init"]
 
