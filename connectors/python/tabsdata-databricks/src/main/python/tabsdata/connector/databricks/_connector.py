@@ -60,6 +60,7 @@ def _table_fqn_4sql(table: str) -> str:
 
 class DatabricksDestination(DestinationPlugin):
     """
+    :categories: destination
     Databricks based data outputs.
     """
 

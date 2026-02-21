@@ -31,11 +31,16 @@ class Credentials(ABC):
 
 
 class AzureCredentials(Credentials, ABC):
-    """Credentials class to store the credentials needed to access Azure."""
+    """
+    :categories: credentials
+    Credentials class to store the credentials needed to access Azure.
+    """
 
 
 class AzureAccountKeyCredentials(AzureCredentials):
-    """Credentials class to access Azure using account key credentials (account name and
+    """
+    :categories: credentials
+    Credentials class to access Azure using account key credentials (account name and
     account key).
 
     Attributes:
@@ -126,11 +131,15 @@ class AzureAccountKeyCredentials(AzureCredentials):
 
 
 class GCPCredentials(Credentials, ABC):
-    """Credentials class to store the credentials needed to access GCS."""
+    """
+    Credentials class to store the credentials needed to access GCS.
+    """
 
 
 class GCPServiceAccountKeyCredentials(GCPCredentials):
-    """Credentials class to store the credentials needed to access GCS
+    """
+    :categories: credentials
+    Credentials class to store the credentials needed to access GCS
     using account key credentials (service account key).
 
     Attributes:
@@ -199,11 +208,15 @@ class GCPServiceAccountKeyCredentials(GCPCredentials):
 
 
 class S3Credentials(Credentials, ABC):
-    """Credentials class to store the credentials needed to access an S3 bucket."""
+    """
+    Credentials class to store the credentials needed to access an S3 bucket.
+    """
 
 
 class S3AccessKeyCredentials(S3Credentials):
-    """Credentials class to access an S3 bucket using access key credentials (access key
+    """
+    :categories: credentials
+    Credentials class to access an S3 bucket using access key credentials (access key
     id and secret access key).
 
     Attributes:
@@ -293,14 +306,14 @@ class S3AccessKeyCredentials(S3Credentials):
 
 
 class UserPasswordCredentials(Credentials):
-    """Credentials class to store a user and password pair.
+    """
+    :categories: credentials
+    Represents credentials consisting of a user and a password.
 
-    Attributes:
-        user (Secret): The user.
-        password (Secret): The password.
-
-    Methods:
-        to_dict() -> dict: Convert the UserPasswordCredentials object to a dictionary.
+    This class is used to manage and securely handle user and password
+    credentials. It includes functionalities to set user and password
+    details, convert them into a dictionary representation, and provide
+    a string representation for debugging purposes.
     """
 
     IDENTIFIER = CredentialIdentifier.USER_PASSWORD_CREDENTIALS.value

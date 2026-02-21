@@ -29,6 +29,7 @@ OperatorsSpec: TypeAlias = Union[Operator, list[Operator]]
 
 class DataQuality(OnTablesAction):
     """
+    :categories: dq-action
     Represents a data quality action to be performed on a table.
 
     This class encapsulates a set of data quality rules, defined by classifiers

@@ -31,11 +31,15 @@ SF_DATE_FORMAT = "%Y-%m-%dT%H:%M:%S.%f%z"
 
 
 class SalesforceCredentials(Credentials, ABC):
-    """Credentials class to store the credentials needed to access Salesforce."""
+    """
+    Credentials class to store the credentials needed to access Salesforce.
+    """
 
 
 class SalesforceTokenCredentials(SalesforceCredentials):
-    """Credentials class to store the credentials needed to access a Salesforce
+    """
+    :categories: credentials
+    Credentials class to store the credentials needed to access a Salesforce
     using a username, a password and a token.
 
     Attributes:
@@ -153,6 +157,7 @@ class SalesforceTokenCredentials(SalesforceCredentials):
 
 class SalesforceSource(SourcePlugin):
     """
+    :categories: source
     Salesforce (SOQL query) based data inputs (not Salesforce Reports).
     """
 
@@ -344,6 +349,7 @@ def _maximum_date(date1: str, date2: str):
 
 class SalesforceReportSource(SourcePlugin):
     """
+    :categories: source
     Salesforce Reports based data inputs.
     """
 

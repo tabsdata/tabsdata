@@ -27,6 +27,7 @@ MONGODB_ID_COLUMN = "_id"
 
 class MongoDBDestination(DestinationPlugin):
     """
+    :categories: destination
     MongoDB-based data outputs.
     """
 

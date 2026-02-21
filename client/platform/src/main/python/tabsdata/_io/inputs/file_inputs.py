@@ -85,6 +85,7 @@ logger = logging.getLogger(__name__)
 
 class AzureSource(SourcePlugin):
     """
+    :categories: source
     Azure-file-based data inputs.
     """
 
@@ -308,6 +309,7 @@ class AzureSource(SourcePlugin):
 
 class GCSSource(SourcePlugin):
     """
+    :categories: source
     GCS-file-based data inputs.
     """
 
@@ -530,6 +532,7 @@ class GCSSource(SourcePlugin):
 
 class LocalFileSource(SourcePlugin):
     """
+    :categories: source
     Local-file-based data inputs.
     """
 
@@ -736,6 +739,7 @@ class LocalFileSource(SourcePlugin):
 
 class S3Source(SourcePlugin):
     """
+    :categories: source
     S3-file-based data inputs.
     """
 

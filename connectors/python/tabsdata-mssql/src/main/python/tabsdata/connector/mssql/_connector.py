@@ -48,6 +48,7 @@ logger.setLevel(logging.DEBUG)
 )
 class MSSQLSource(SourcePlugin):
     """
+    :categories: source
     Microsoft SQL Server based data inputs.
     """
 
@@ -294,6 +295,7 @@ class MSSQLSource(SourcePlugin):
 
 class MSSQLDestination(DestinationPlugin):
     """
+    :categories: destination
     MSSQL-based data outputs.
     """
 

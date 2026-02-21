@@ -68,7 +68,10 @@ class FileFormatIdentifier(Enum):
 
 
 class AvroFormat(FileFormat):
-    """Avro file format."""
+    """
+    :categories: file-format
+    Avro file format.
+    """
 
     IDENTIFIER = FileFormatIdentifier.AVRO.value
 
@@ -117,7 +120,9 @@ class AvroFormat(FileFormat):
 
 
 class CSVFormat(FileFormat):
-    """CSV file format.
+    """
+    :categories: file-format
+    CSV file format.
 
     Attributes:
         separator (str | int): The separator of the CSV file.
@@ -465,7 +470,10 @@ class CSVFormat(FileFormat):
 
 
 class NDJSONFormat(FileFormat):
-    """JSON file format."""
+    """
+    :categories: file-format
+    JSON file format.
+    """
 
     IDENTIFIER = FileFormatIdentifier.NDJSON.value
 
@@ -480,7 +488,10 @@ class NDJSONFormat(FileFormat):
 
 
 class LogFormat(FileFormat):
-    """Log file format."""
+    """
+    :categories: file-format
+    Log file format.
+    """
 
     IDENTIFIER = FileFormatIdentifier.LOG.value
 
@@ -495,7 +506,10 @@ class LogFormat(FileFormat):
 
 
 class ParquetFormat(FileFormat):
-    """Parquet file format."""
+    """
+    :categories: file-format
+    Parquet file format.
+    """
 
     IDENTIFIER = FileFormatIdentifier.PARQUET.value
 

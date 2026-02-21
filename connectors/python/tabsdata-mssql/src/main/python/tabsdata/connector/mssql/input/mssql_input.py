@@ -37,6 +37,7 @@ logger.setLevel(logging.DEBUG)
 
 class MSSQLSrc(SourcePlugin):
     """
+    :categories: source
     Source Plugin for reading data from a Microsoft SQL Server (MSSQL) database.
     """
 

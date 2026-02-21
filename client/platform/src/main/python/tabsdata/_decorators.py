@@ -58,6 +58,7 @@ def transformer(
     on_output_tables: OnTablesSpec = None,
 ) -> callable:
     """
+    :categories: transformer
     Decorator to define a function to transform data present in Tabsdata.
 
     Args:
@@ -157,6 +158,7 @@ def publisher(
     on_tables: OnTablesSpec = None,
 ) -> callable:
     """
+    :categories: publisher
     Decorator to define a function to publish data to Tabsdata.
 
     Args:
@@ -224,6 +226,7 @@ def subscriber(
     # on_tables: OnTablesSpec = None, TODO: Uncomment this when reverting TD-1089
 ) -> callable:
     """
+    :categories: subscriber
     Decorator to define a function to subscribe to data present in Tabsdata.
 
     Args:

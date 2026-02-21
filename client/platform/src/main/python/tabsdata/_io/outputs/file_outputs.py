@@ -419,6 +419,7 @@ def build_catalog(catalog) -> AWSGlue:
 
 class AzureDestination(DestinationPlugin):
     """
+    :categories: destination
     Azure-file-based data outputs.
     """
 
@@ -624,6 +625,7 @@ class AzureDestination(DestinationPlugin):
 
 class GCSDestination(DestinationPlugin):
     """
+    :categories: destination
     GCS-file-based data outputs.
     """
 
@@ -825,6 +827,7 @@ class GCSDestination(DestinationPlugin):
 
 class LocalFileDestination(DestinationPlugin):
     """
+    :categories: destination
     LocalFile-based data outputs.
     """
 
@@ -998,6 +1001,7 @@ class LocalFileDestination(DestinationPlugin):
 
 class S3Destination(DestinationPlugin):
     """
+    :categories: destination
     S3-file-based data outputs.
     """
 

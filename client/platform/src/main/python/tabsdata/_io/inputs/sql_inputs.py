@@ -62,6 +62,7 @@ def _validate_initial_values_type(initial_values: dict):
 )
 class MariaDBSource(SourcePlugin):
     """
+    :categories: source
     MariaDB-based data inputs.
     """
 
@@ -231,6 +232,7 @@ class MariaDBSource(SourcePlugin):
 )
 class MySQLSource(SourcePlugin):
     """
+    :categories: source
     MySQL-based data inputs.
     """
 
@@ -399,6 +401,7 @@ class MySQLSource(SourcePlugin):
 )
 class OracleSource(SourcePlugin):
     """
+    :categories: source
     Oracle-based data inputs.
     """
 
@@ -565,6 +568,7 @@ class OracleSource(SourcePlugin):
 )
 class PostgresSource(SourcePlugin):
     """
+    :categories: source
     Postgres-based data inputs.
     """
 

@@ -38,6 +38,7 @@ def td_context(
 
 class SourcePlugin:
     """
+    :categories: plugin
     Parent class for publisher connectors.
 
     Methods:
@@ -295,6 +296,7 @@ class SourcePlugin:
 
 class DestinationPlugin:
     """
+    :categories: plugin
     Parent class for subscriber connectors.
 
     Methods:

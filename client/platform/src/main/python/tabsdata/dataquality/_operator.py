@@ -169,6 +169,7 @@ class CategoryCriteria(Criteria, ABC):
 
 class AllOk(BoolCriteria):
     """
+    :categories: dq-operator
     A boolean criteria that selects records where all boolean classifiers
     pass (`True`).
     """
@@ -194,6 +195,7 @@ class AllOk(BoolCriteria):
 
 class AnyFailed(BoolCriteria):
     """
+    :categories: dq-operator
     A boolean criteria that selects records where at least one boolean
     classifier fails (`False`).
     """
@@ -218,8 +220,11 @@ class AnyFailed(BoolCriteria):
 
 
 class InBins(CategoryCriteria):
-    """A category criteria that selects records where the value in the specified
-    columns falls into one of the given bins."""
+    """
+    :categories: dq-operator
+    A category criteria that selects records where the value in the specified
+    columns falls into one of the given bins.
+    """
 
     @_td_validate_call(ErrorCode.DQC12)
     def __init__(
@@ -242,8 +247,11 @@ class InBins(CategoryCriteria):
 
 
 class NotInBins(CategoryCriteria):
-    """A category criteria that selects records where the value in the specified
-    columns does not fall into any of the given bins."""
+    """
+    :categories: dq-operator
+    A category criteria that selects records where the value in the specified
+    columns does not fall into any of the given bins.
+    """
 
     @_td_validate_call(ErrorCode.DQC13)
     def __init__(
@@ -304,7 +312,10 @@ class RowCountThreshold(Threshold):
 
 
 class PercentThreshold(Threshold):
-    """A threshold based on a percentage of total rows."""
+    """
+    :categories: dq-operator
+    A threshold based on a percentage of total rows.
+    """
 
     @_td_validate_call(ErrorCode.DQC16)
     def __init__(self, percent: PercentSpec):
@@ -333,7 +344,8 @@ class PercentThreshold(Threshold):
 
 
 class TagOperator(Operator, ABC):
-    """An operator that adds the data quality classifier columns to the original
+    """
+    An operator that adds the data quality classifier columns to the original
     table frame. It does not remove any row from the original table.
     """
 
@@ -366,7 +378,9 @@ class TagOperator(Operator, ABC):
 
 
 class Enrich(TagOperator):
-    """An operator that adds the data quality classifier columns to the original
+    """
+    :categories: dq-operator
+    An operator that adds the data quality classifier columns to the original
     table frame. It does not remove any row from the original table.
     """
 
@@ -407,7 +421,9 @@ class Enrich(TagOperator):
 
 
 class CriteriaOperator(Operator, ABC):
-    """An operator that uses a criteria to select records."""
+    """
+    An operator that uses a criteria to select records.
+    """
 
     @_td_validate_call(ErrorCode.DQC20)
     def __init__(
@@ -439,6 +455,7 @@ class CriteriaOperator(Operator, ABC):
 
 class Fail(CriteriaOperator):
     """
+    :categories: dq-operator
     An operator that fails the current transaction if a data quality threshold
     is met.
     """
@@ -476,7 +493,9 @@ class Fail(CriteriaOperator):
 
 
 class Filter(CriteriaOperator):
-    """An operator that filters rows from a table based on data quality criteria.
+    """
+    :categories: dq-operator
+    An operator that filters rows from a table based on data quality criteria.
 
     The filtered rows are removed from the table being processed. They can
     either be discarded or redirected to another table.
@@ -544,6 +563,7 @@ class Filter(CriteriaOperator):
 
 class Select(CriteriaOperator):
     """
+    :categories: dq-operator
     An operator that selects rows based on data quality criteria and writes
     them to another table.
 
@@ -609,7 +629,10 @@ class Select(CriteriaOperator):
 
 
 class Summary(TagOperator):
-    """An operator that generates a data quality summary report for a table."""
+    """
+    :categories: dq-operator
+    An operator that generates a data quality summary report for a table.
+    """
 
     @_td_validate_call(ErrorCode.DQC31)
     def __init__(self, table: TableName | None = None, *, tags: TagsSpec | None = None):

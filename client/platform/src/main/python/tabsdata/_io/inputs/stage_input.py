@@ -35,6 +35,7 @@ logger = logging.getLogger(__name__)
 
 class Stage(SourcePlugin):
     """
+    :categories: source
     Inputs that have been placed in a stage, usually from a StageTrigger.
     """
 
