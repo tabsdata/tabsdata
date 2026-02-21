@@ -7,17 +7,22 @@
 import logging
 import os
 
+from tabsdata._utils.constants import TRUE_VALUES
 from tabsdata._tabsserver.pyenv_creation import (
     DEFAULT_ENVIRONMENT_TESTIMONY_FOLDER,
     delete_virtual_environment,
     read_testimony,
 )
-from test_tabsdata.common.constants import PYTEST_DEFAULT_ENVIRONMENT_PREFIX
+from test_tabsdata.common.constants import ON_GA, PYTEST_DEFAULT_ENVIRONMENT_PREFIX
 
 logger = logging.getLogger(__name__)
 
 
 def clean_python_virtual_environments():
+    if os.environ.get(ON_GA) in TRUE_VALUES:
+        logger.info("Skipping virtual environment cleanup on GA.")
+        return
+
     if not os.path.exists(DEFAULT_ENVIRONMENT_TESTIMONY_FOLDER):
         logger.info("No virtual environments to clean up.")
         return

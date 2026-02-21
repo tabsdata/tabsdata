@@ -6,6 +6,9 @@
 
 import os
 
+# Environment
+ON_GA = "ON_GA"
+
 # Docker configuration
 PYTEST_DEFAULT_ENVIRONMENT_PREFIX = "tdpytest_"
 DOCKER_REGULAR_CONTAINER_INFIX = "c_"
