@@ -26,7 +26,7 @@ on:
         description: "Minutes before job cancellation"
         required: true
         type: number
-        default: 240
+        default: 1440
       dump_server:
         description: "Dump all instances contents"
         required: false
