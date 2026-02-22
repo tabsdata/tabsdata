@@ -3,12 +3,13 @@
 #
 
 import argparse
-import copy
 import logging
 import os
+import platform
 import subprocess
 import sys
 import tempfile
+import time
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -48,15 +49,72 @@ _ = execute_function_bootstrap
 
 @contextmanager
 def clear_environment():
-    original_sys_path = copy.deepcopy(sys.path)
-    original_env = copy.deepcopy(os.environ)
+    original_sys_path = sys.path.copy()
+    original_environ = dict(os.environ)
     os.environ["PYTHONPATH"] = ""
     sys.path = []
     try:
         yield
     finally:
         sys.path = original_sys_path
-        os.environ = original_env
+        for key in list(os.environ.keys()):
+            if key not in original_environ:
+                del os.environ[key]
+        os.environ.update(original_environ)
+
+
+STDLIB_RETRY_INTERVAL_SECONDS = 5
+STDLIB_RETRY_TIMEOUT_SECONDS = 60
+
+
+# noinspection SpellCheckingInspection
+def validate_python_environment(python_bin_file: str) -> None:
+    if platform.system() != "Windows":
+        return
+    checks = [
+        ("pass", "interpreter boot"),
+        ("import pkgutil", "stdlib (pkgutil)"),
+    ]
+    try:
+        deadline = time.monotonic() + STDLIB_RETRY_TIMEOUT_SECONDS
+        while True:
+            failed_check = None
+            failed_stderr = None
+            for code, label in checks:
+                result = subprocess.run(
+                    [python_bin_file, "-c", code],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                )
+                if result.returncode != 0:
+                    failed_check = label
+                    failed_stderr = result.stderr.strip()
+                    break
+
+            if failed_check is None:
+                logger.info(f"Python {python_bin_file} is available and functional.")
+                return
+
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                logger.warning(
+                    f"Python environment {python_bin_file} check ({failed_check}) "
+                    f"failed after {STDLIB_RETRY_TIMEOUT_SECONDS}s: {failed_stderr}"
+                )
+                return
+
+            logger.info(
+                f"Python environment {python_bin_file} check ({failed_check}) "
+                f"failed; retrying in {STDLIB_RETRY_INTERVAL_SECONDS}s "
+                f"({remaining:.0f}s remaining): {failed_stderr}"
+            )
+            time.sleep(STDLIB_RETRY_INTERVAL_SECONDS)
+
+    except Exception as error:
+        logger.warning(
+            f"Could not validate Python environment: {python_bin_file} - {error}"
+        )
 
 
 # This is meant to be used when running pytest tests in development stages
@@ -151,6 +209,8 @@ def invoke(
     python_bin_file = get_path_to_environment_bin(python_environment)
     python_bin_folder = os.path.dirname(python_bin_file)
 
+    validate_python_environment(python_bin_file)
+
     invocation_type = (
         "function" if isinstance(request_content, FunctionYaml) else "listener"
     )
@@ -174,6 +234,14 @@ def invoke(
     ]
     env = os.environ.copy()
 
+    for env_var in [
+        "CONDA_PREFIX",
+        "PYENV_VERSION",
+        "PYTHONHOME",
+        "UV_VENV",
+    ]:
+        env.pop(env_var, None)
+
     # When running pytest tests, specially because tabsdata can be delivered as
     # a local package, we ensure the bin folder of the running virtual
     # environment is added to the PATH, so that the binaries coming from the
@@ -186,6 +254,7 @@ def invoke(
 
     if logs_folder:
         command_to_execute.extend(["--logs-folder", logs_folder])
+
     logger.info(
         "Executing the bundled function with command: " + " ".join(command_to_execute)
     )

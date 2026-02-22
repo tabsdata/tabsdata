@@ -92,6 +92,9 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 time_block = TimeBlock()
 
+STDLIB_RETRY_INTERVAL_SECONDS = 5
+STDLIB_RETRY_TIMEOUT_SECONDS = 60
+
 REMOTE_DEBUG = "TD_REMOTE_DEBUG"
 
 FILE_PROTOCOL = "file://"
@@ -1249,16 +1252,22 @@ def atomic_environment_creation(
         real_environment_name=real_environment_name,
         log_error_on_fail=False,
     )
-    # Install the required Python version
-    logger.info(
-        f"Installing Python version '{python_version}' for the environment"
-        f" '{logical_environment_name}'."
-    )
-    install_python_version(python_version)
-    logger.info(
-        f"Python version '{python_version}' installed for the environment"
-        f" '{logical_environment_name}'."
-    )
+    # Install the required Python version (only if not already available and working.)
+    if is_python_version_available(python_version):
+        logger.info(
+            f"Python version '{python_version}' is already installed and "
+            f"functional; skipping installation."
+        )
+    else:
+        logger.info(
+            f"Installing Python version '{python_version}' for the environment"
+            f" '{logical_environment_name}'."
+        )
+        install_python_version(python_version)
+        logger.info(
+            f"Python version '{python_version}' installed for the environment"
+            f" '{logical_environment_name}'."
+        )
     # Create the Python virtual environment
     logger.info(
         f"Creating Python virtual environment {logical_environment_name} with Python"
@@ -1806,6 +1815,85 @@ def install_host_package(  # noqa: C901
         else:
             logger.warning(f"{message} Discarding it.")
     return True
+
+
+def find_matching_python_versions(python_version: str) -> list[dict]:
+    result = subprocess.run(
+        [
+            UV_EXECUTABLE,
+            "python",
+            "list",
+            "--only-installed",
+            "--output-format",
+            "json",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    if result.returncode != 0:
+        return []
+    entries = json.loads(result.stdout)
+    python_version_parts = python_version.split(".")
+    return [
+        entry
+        for entry in entries
+        if all(
+            str(entry["version_parts"][k]) == v
+            for k, v in zip(["major", "minor", "patch"], python_version_parts)
+        )
+    ]
+
+
+def is_python_version_available(python_version: str) -> bool:
+    try:
+        python_matching_versions = find_matching_python_versions(python_version)
+        if not python_matching_versions:
+            return False
+
+        deadline = time.monotonic() + STDLIB_RETRY_TIMEOUT_SECONDS
+        check = False
+        while True:
+            for python_matching_version in python_matching_versions:
+                python_path = python_matching_version["path"]
+                if not os.path.isfile(python_path):
+                    continue
+                # noinspection SpellCheckingInspection
+                check = subprocess.run(
+                    [
+                        python_path,
+                        "-c",
+                        "import pkgutil",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                )
+                if check.returncode == 0:
+                    logger.info(
+                        f"Python {python_matching_version['version']} "
+                        f"at {python_path} is available and functional."
+                    )
+                    return True
+
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                logger.warning(
+                    f"Python {python_version} found but stdlib check failed "
+                    f"after {STDLIB_RETRY_TIMEOUT_SECONDS}s: "
+                    f"{check.stderr.strip()}"
+                )
+                return False
+
+            logger.info(
+                f"Python {python_version} stdlib not yet available; retrying "
+                f"in {STDLIB_RETRY_INTERVAL_SECONDS}s ({remaining:.0f}s "
+                f"remaining): {check.stderr.strip()}"
+            )
+            time.sleep(STDLIB_RETRY_INTERVAL_SECONDS)
+    except Exception as error:
+        logger.warning(f"Could not check Python version availability: {error}")
+        return False
 
 
 def install_python_version(python_version: str) -> None:
