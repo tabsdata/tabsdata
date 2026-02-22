@@ -36,7 +36,6 @@ from packaging.requirements import InvalidRequirement, Requirement
 from packaging.utils import canonicalize_name
 
 # noinspection PyProtectedMember
-from tabsdatax.debug.debug import debug_enabled
 from yaml import MappingNode
 from yaml.constructor import ConstructorError
 
@@ -66,6 +65,7 @@ from tabsdata._utils.bundle_utils import (
 
 # noinspection PyProtectedMember
 from tabsdata._utils.constants import (
+    FALSE_FALSE,
     PYTHON_EDITABLE_PACKAGE_PREFIX,
     PYTHON_EDITABLE_PACKAGE_SUFFIX,
     TABSDATA_AGENT_MODULE_NAME,
@@ -91,6 +91,8 @@ from tabsdata._utils.temps import tabsdata_temp_folder
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 time_block = TimeBlock()
+
+REMOTE_DEBUG = "TD_REMOTE_DEBUG"
 
 FILE_PROTOCOL = "file://"
 WINDOWS_OS_NAME = "nt"
@@ -119,6 +121,7 @@ HostPackageSource: TypeAlias = Literal[
 # Base environments are added the hash of this string to ensure that no function
 # environment accidentally resolves to a base environment.
 # !!! Do not change this string... never !!!
+# noinspection SpellCheckingInspection
 BASE_ENV_SALT = "RekvSLlYqSt0VXJghaYhbQ5UyaofKk4h"
 
 BASE_ENVIRONMENT_PREFIX = "."
@@ -775,14 +778,14 @@ def inject_tabsdata_version(required_modules: list[str]) -> list[str]:  # noqa: 
                     line = line.strip()
                     if not line or line.startswith("#"):
                         continue
-                    is_requirement = re.match(
+                    is_a_requirement = re.match(
                         r"^\s*([A-Za-z0-9_.-]+)\s*==\s*(.+)", line
                     )
-                    if is_requirement:
-                        module = is_requirement.group(1)
-                        version = is_requirement.group(2)
-                        canonical_module = canonicalize_name(module)
-                        lock_map[canonical_module] = version
+                    if is_a_requirement:
+                        module = is_a_requirement.group(1)
+                        requirement_version = is_a_requirement.group(2)
+                        requirement_canonical_module = canonicalize_name(module)
+                        lock_map[requirement_canonical_module] = requirement_version
                     else:
                         logger.warning(
                             f"Unexpected requirement lock spec: {lock_path} - {line}"
@@ -2169,6 +2172,9 @@ def extract_instance(instance: str) -> Tuple[str, Path]:
 
 
 def main():  # noqa: C901
+    def debug_enabled() -> bool:
+        return os.getenv(REMOTE_DEBUG, FALSE_FALSE).lower() in TRUE_VALUES
+
     parser = argparse.ArgumentParser(
         description=(
             "Create a virtual environment to be used by a workers of a tabsdata "
