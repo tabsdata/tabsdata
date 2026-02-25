@@ -11,14 +11,14 @@ name = "tabsdata"
 description = "Tabsdata is a publish-subscribe (pub/sub) server for tables."
 authors = [{name = "Tabs Data Inc."}]
 keywords = [
-    "tabsdatta",
+    "tabsdata",
     "data",
     "tables",
     "pub/sub",
     "publish/subscribe",
 ]
 classifiers = [
-    "Development Status :: Development Status :: 5 - Production/Stable",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "Intended Audience :: Information Technology",
     "Programming Language :: JavaScript",

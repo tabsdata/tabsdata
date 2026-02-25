@@ -19,7 +19,7 @@ keywords = [
     "kafka",
 ]
 classifiers = [
-    "Development Status :: Development Status :: 5 - Production/Stable",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "Intended Audience :: Information Technology",
     "Programming Language :: JavaScript",
