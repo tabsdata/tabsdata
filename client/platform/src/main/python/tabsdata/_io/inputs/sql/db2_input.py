@@ -8,6 +8,7 @@ import logging
 from typing import Any, Optional, get_args
 
 from pydantic import PositiveInt
+from typing_extensions import deprecated
 
 from tabsdata._io.connections.db2_connection import Db2Conn
 from tabsdata._io.constants import _LoaderSpec
@@ -21,6 +22,7 @@ from tabsdata._io.sql_io_helpers.sql_helper_factories import (
     get_sql_source_helper,
 )
 from tabsdata._tabsserver.function.offset_utils import OffsetReturn
+from tabsdata._utils.annotations import unstable, unstable_category
 from tabsdata._utils.sql_utils import (
     get_tableframes_from_sources,
     validate_schema_overrides_dict,
@@ -33,8 +35,6 @@ from tabsdata.exceptions import (
 )
 from tabsdata.tableframe import TableFrame
 from tabsdata.tableframe.typing import DataType
-from typing_extensions import deprecated
-from tabsdata._utils.annotations import unstable, unstable_category
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -42,7 +42,7 @@ logger.setLevel(logging.DEBUG)
 
 @unstable()
 @deprecated(
-    """Class 'Db2Src' is considered unstable and is subject to change in future 
+    """Class 'Db2Src' is considered unstable and is subject to change in future
     releases.""",  # noqa: E231,E241,E501
     category=unstable_category(
         reason=(

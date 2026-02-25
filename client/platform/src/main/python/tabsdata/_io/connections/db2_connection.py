@@ -5,21 +5,22 @@
 from typing import Optional
 from urllib.parse import urlparse
 
+from typing_extensions import deprecated
+
 from tabsdata._credentials import UserPasswordCredentials, build_credentials
 from tabsdata._io.connections.connections import Conn
 from tabsdata._io.constants import DB2_SCHEME
+from tabsdata._utils.annotations import unstable, unstable_category
 from tabsdata._utils.validation import _td_validate_call
 from tabsdata.exceptions import (
     ConnectionConfigurationError,
     ErrorCode,
 )
-from tabsdata._utils.annotations import unstable, unstable_category
-from typing_extensions import deprecated
 
 
 @unstable()
 @deprecated(
-    """Class 'Db2Conn' is considered unstable and is subject to change in future 
+    """Class 'Db2Conn' is considered unstable and is subject to change in future
     releases.""",  # noqa: E231,E241,E501
     category=unstable_category(
         reason=(

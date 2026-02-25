@@ -3,13 +3,13 @@
 #
 
 from tabsdata._io.inputs.sql.shared_types import (
+    Db2SrcLoaderSpec,
     MariaDBSrcLoaderSpec,
     MySQLSrcLoaderSpec,
     OracleLoaderSpec,
     PostgresSrcLoaderSpec,
     QueriesSpec,
     SchemaOverrideSpec,
-Db2SrcLoaderSpec,
 )
 from tabsdata._io.outputs.shared_enums import (
     IfTableExistStrategySpec,
