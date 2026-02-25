@@ -12,7 +12,11 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    cm_run_task banner
+    make_banners = get_env TD_MAKE_BANNERS
+    make_banners_true = eq ${make_banners} "true"
+    if ${make_banners_true}
+        cm_run_task banner
+    end
 
     project_tabsdata_root_folder = get_env PROJECT_TABSDATA_ROOT_FOLDER
     ko = starts_with ${project_tabsdata_root_folder} "\${"

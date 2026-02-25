@@ -13,14 +13,20 @@ script = [
     !include_files ./make/make-os/libraries/log.ds
 
     os_family = os_family
-    if eq ${os_family} "windows"
-        cm_run_task banner_windows
-    else
-        if eq ${os_family} "mac"
-            cm_run_task banner_mac
+
+    make_banners = get_env TD_MAKE_BANNERS
+    make_banners_true = eq ${make_banners} "true"
+
+    if ${make_banners_true}    
+        if eq ${os_family} "windows"
+            cm_run_task banner_windows
         else
-            if eq ${os_family} "linux"
-                cm_run_task banner_linux
+            if eq ${os_family} "mac"
+                cm_run_task banner_mac
+            else
+                if eq ${os_family} "linux"
+                    cm_run_task banner_linux
+                end
             end
         end
     end
