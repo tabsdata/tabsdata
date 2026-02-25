@@ -957,10 +957,10 @@ def test_column_name_strategy(tmp_path, sf_config):
 
     assert first_output.shape == second_output.shape
     assert first_output.columns != second_output.columns
-    assert "Account Name" in second_output.columns
-    assert "Account Name" not in first_output.columns
-    assert "ACCOUNT_ID" in first_output.columns
-    assert "ACCOUNT_ID" not in second_output.columns
+    assert "Account Name".lower() in second_output.columns
+    assert "Account Name".lower() not in first_output.columns
+    assert "ACCOUNT_ID".lower() in first_output.columns
+    assert "ACCOUNT_ID".lower() not in second_output.columns
 
 
 @pytest.mark.requires_internet

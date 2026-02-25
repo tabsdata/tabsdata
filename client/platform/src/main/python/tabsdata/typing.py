@@ -9,6 +9,7 @@ from tabsdata._io.inputs.sql.shared_types import (
     PostgresSrcLoaderSpec,
     QueriesSpec,
     SchemaOverrideSpec,
+Db2SrcLoaderSpec,
 )
 from tabsdata._io.outputs.shared_enums import (
     IfTableExistStrategySpec,
@@ -36,6 +37,7 @@ from tabsdata.connector.kafka.typing import (
 from tabsdata.connector.mssql.constants import MSSQLLoaderSpec
 
 __all__ = [
+    "Db2SrcLoaderSpec",
     "IfTableExistStrategySpec",
     "KafkaMessageFormatSpec",
     "KafkaServersSpec",

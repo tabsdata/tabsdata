@@ -5,6 +5,16 @@
 """Backend fixtures for database, vault, and cloud storage testing."""
 
 from test_tabsdata.common.backend.azure import azure_client, azure_config
+from test_tabsdata.common.backend.db2 import (
+    DEFAULT_PYTEST_DB2_DOCKER_CONTAINER_NAME,
+    DB2_DB_NAME,
+    DB2_DB_USER,
+    DB2_FORWARDED_PORT,
+    DB2_PORT,
+    VALID_DB2_PREFIXES,
+    DB2Config,
+    db2_config,
+)
 from test_tabsdata.common.backend.gcs import gcs_client, gcs_config
 from test_tabsdata.common.backend.hashicorp import (
     DEFAULT_PYTEST_HASHICORP_DOCKER_CONTAINER_NAME,
@@ -96,6 +106,15 @@ __all__ = [
     "KafkaConfig",
     "VALID_KAFKA_PREFIXES",
     "kafka_config",
+    # DB2
+    "DEFAULT_PYTEST_DB2_DOCKER_CONTAINER_NAME",
+    "DB2_DB_NAME",
+    "DB2_DB_USER",
+    "DB2_FORWARDED_PORT",
+    "DB2_PORT",
+    "VALID_DB2_PREFIXES",
+    "DB2Config",
+    "db2_config",
     # MariaDB
     "DEFAULT_PYTEST_MARIADB_DOCKER_CONTAINER_NAME",
     "MARIADB_FORWARDED_PORT",

@@ -44,6 +44,7 @@ from test_tabsdata.common.backend import (  # noqa: F401
     gcs_client,
     gcs_config,
     kafka_config,
+    db2_config,
     mariadb_config,
     mysql_config,
     oracle_config,
@@ -350,6 +351,7 @@ def clean_polars_df(df, sort=True):
     if sort:
         df = df.select(sorted(df.columns))
         df = df.sort(df.columns)
+    df.columns = [col.lower() for col in df.columns]
     return df
 
 

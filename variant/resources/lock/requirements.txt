@@ -51,6 +51,8 @@ httpcore==1.0.9
 httpx==0.28.1
 humanize==4.15.0
 hvac==2.4.0
+ibm-db==3.2.8
+ibm-db-sa==0.4.3
 idna==3.11
 ijson==3.5.0
 importlib-metadata==8.7.1

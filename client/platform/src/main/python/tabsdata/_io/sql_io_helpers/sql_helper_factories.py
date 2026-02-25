@@ -21,6 +21,7 @@ from tabsdata._io.sql_io_helpers.sqlalchemy_source_helper import SQLAlchemySourc
 # and does not actually execute at runtime. This avoids circular import errors while
 # still providing type hints and autocompletion.
 if TYPE_CHECKING:
+    from tabsdata._io.inputs.sql.db2_input import Db2Src
     from tabsdata._io.inputs.sql.mariadb_input import MariaDBSrc
     from tabsdata._io.inputs.sql.mysql_input import MySQLSrc
     from tabsdata._io.inputs.sql.oracle_input import OracleSrc
@@ -35,7 +36,7 @@ logger.setLevel(logging.DEBUG)
 
 
 def get_sql_source_helper(
-    source: Union[MySQLSrc, PostgresSrc, MariaDBSrc, OracleSrc, MSSQLSrc],
+    source: Union[Db2Src, MySQLSrc, PostgresSrc, MariaDBSrc, OracleSrc, MSSQLSrc],
 ) -> Union[SQLAlchemySourceHelper]:
     """
     Factory function to get the appropriate SQL source helper based on the source and
@@ -88,19 +89,36 @@ def get_sql_dest_helper(
 
 
 def _get_sql_source_config(
-    source: Union[MySQLSrc, PostgresSrc, MariaDBSrc, OracleSrc, MSSQLSrc],
+    source: Union[Db2Src, MySQLSrc, PostgresSrc, MariaDBSrc, OracleSrc, MSSQLSrc],
 ) -> SQLSourceConfig:
     # Runtime import for isinstance checks:
     # This second import inside the function is necessary for runtime type checking
     # (e.g., isinstance(source, MySQLSrc)), since the TYPE_CHECKING import at top of
     # file is not available at runtime.
+    from tabsdata._io.inputs.sql.db2_input import Db2Src as _DB2Src
     from tabsdata._io.inputs.sql.mariadb_input import MariaDBSrc as _MariaDBSrc
     from tabsdata._io.inputs.sql.mysql_input import MySQLSrc as _MySQLSrc
     from tabsdata._io.inputs.sql.oracle_input import OracleSrc as _OracleSrc
     from tabsdata._io.inputs.sql.postgres_input import PostgresSrc as _PostgresSrc
     from tabsdata.connector.mssql.input.mssql_input import MSSQLSrc as _MSSQLSrc
 
-    if isinstance(source, _MySQLSrc):
+    if isinstance(source, _DB2Src):
+        return SQLSourceConfig(
+            conn=SQLConnConfig(
+                uri=source.conn.uri,
+                credentials=source.conn.credentials,
+                enforce_connection_params=source.conn.enforce_connection_params,
+                cx_src_configs_sql=source.conn.cx_src_configs_db2,
+                cx_dst_configs_sql=source.conn.cx_dst_configs_db2,
+            ),
+            queries=source.queries,
+            initial_values=source.initial_values,
+            transactional=source.transactional,
+            chunk_size=source.chunk_size,
+            loader=source.loader,
+            schema_overrides=source.schema_overrides,
+        )
+    elif isinstance(source, _MySQLSrc):
         return SQLSourceConfig(
             conn=SQLConnConfig(
                 uri=source.conn.uri,

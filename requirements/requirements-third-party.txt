@@ -18,6 +18,8 @@ filelock==3.24.3
 grpcio-tools==1.78.1
 humanize==4.15.0
 hvac==2.4.0
+ibm_db==3.2.8
+ibm_db_sa==0.4.3
 ijson==3.5.0
 importlib-metadata==8.7.1
 isodate==0.7.2

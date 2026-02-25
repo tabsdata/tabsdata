@@ -5,6 +5,7 @@
 from enum import Enum, StrEnum
 
 AZURE_SCHEME = "az"
+DB2_SCHEME = "db2"
 FILE_SCHEME = "file"
 GCS_SCHEME = "gs"
 MARIADB_SCHEME = "mariadb"

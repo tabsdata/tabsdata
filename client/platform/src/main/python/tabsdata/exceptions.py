@@ -96,6 +96,14 @@ class ErrorCode(Enum):
             " ODBC connection string or a URI, got '{}' instead."
         ),
     }
+    CXCE9 = {
+        "code": "CXCE-009",
+        "message": (
+            "Scheme '{}' not supported. The supported scheme is {}."
+            " The scheme is inferred from the URI, which should be of the form"
+            " 'scheme://path'. The URI provided was '{}'."
+        ),
+    }
     DCE1 = {
         "code": "DCE-001",
         "message": (
@@ -1966,6 +1974,19 @@ class ErrorCode(Enum):
             " must also be a list of the same size ({}), got a '{}' instead."
         ),
     }
+    SOCE59 = {
+        "code": "SOCE-059",
+        "message": (
+            "The 'loader' parameter in a {} must be one of {}, got '{}' instead."
+        ),
+    }
+    SOCE60 = {
+        "code": "SOCE-060",
+        "message": (
+            "The 'schema_overrides' parameter in a {} must be either a 'dict', 'list',"
+            " or None, got '{}' instead."
+        ),
+    }
     TF1 = {
         "code": "TF-001",
         "message": "The input DataFrame is missing the required column(s) '{}'.",
@@ -2315,6 +2336,7 @@ class ErrorCode(Enum):
     DECE105 = object()
     DECE106 = object()
     DECE107 = object()
+    DECE108 = object()
 
     # source configuration errors
     SOCE100 = object()
@@ -2328,6 +2350,8 @@ class ErrorCode(Enum):
     SOCE108 = object()
     SOCE109 = object()
     SOCE110 = object()
+    SOCE111 = object()
+    SOCE112 = object()
 
     # stage trigger configuration errors
     STCE100 = object()

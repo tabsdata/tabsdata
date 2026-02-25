@@ -1,0 +1,20 @@
+{
+  "ID": "Int64",
+  "C_SMALLINT": "Int64",
+  "C_INT": "Int64",
+  "C_BIGINT": "Int64",
+  "C_DECIMAL": "Float64",
+  "C_REAL": "Float64",
+  "C_DOUBLE": "Float64",
+  "C_CHAR": "String",
+  "C_VARCHAR": "String",
+  "C_BINARY": "Binary",
+  "C_VARBINARY": "Binary",
+  "C_DATE": "Date",
+  "C_TIME": "Time",
+  "C_TIMESTAMP": "Datetime",
+  "C_CLOB": "String",
+  "C_BLOB": "Binary",
+  "C_DBCLOB": "String",
+  "C_XML": "String"
+}

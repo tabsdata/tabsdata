@@ -30,6 +30,7 @@ from tabsdata._format import (
     ParquetFormat,
 )
 from tabsdata._io.connections.connections import Conn
+from tabsdata._io.connections.db2_connection import Db2Conn
 from tabsdata._io.connections.mariadb_connection import MariaDBConn
 from tabsdata._io.connections.mysql_connection import MySQLConn
 from tabsdata._io.connections.oracle_connection import OracleConn
@@ -40,6 +41,7 @@ from tabsdata._io.inputs.file_inputs import (
     LocalFileSource,
     S3Source,
 )
+from tabsdata._io.inputs.sql.db2_input import Db2Src
 from tabsdata._io.inputs.sql.mariadb_input import MariaDBSrc
 from tabsdata._io.inputs.sql.mysql_input import (
     MySQLSrc,
@@ -181,6 +183,7 @@ __all__ = [
     "TableInput",
     # Sources
     "AzureSource",
+    "Db2Src",
     "GCSSource",
     "LocalFileSource",
     "MariaDBSource",
@@ -221,6 +224,7 @@ __all__ = [
     "KafkaTrigger",
     # Connections
     "BigQueryConn",
+    "Db2Conn",
     "KafkaConn",
     "MariaDBConn",
     "MSSQLConn",
