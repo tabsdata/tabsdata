@@ -5,12 +5,11 @@
 [tasks.book_dguide]
 plugin = "td-task-tracker"
 category = "50 - Documentation"
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
 description = "Read book 'Tabsdata Developer Guide'"
-script_runner = "@duckscript"
 script = [
     '''
-    !include_files ./make/make-os/libraries/log.ds
-
+    python ${RFCS_PY_SCRIPT}
     cd "${BOOK_DEVELOPER_GUIDE_FOLDER}"
-    exec --fail-on-error mdbook serve --open
+    mdbook serve --open
     ''']
