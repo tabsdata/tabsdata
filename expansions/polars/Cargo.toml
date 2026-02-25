@@ -99,7 +99,7 @@ path = "../../extensions/rust/te-tableframe"
 # External dependencies
 
 [workspace.dependencies.chrono]
-version = "0.4.43"
+version = "0.4.44"
 
 [workspace.dependencies.dashmap]
 version = "6.1.0"
@@ -154,7 +154,7 @@ version = "1.0.228"
 features = ["derive"]
 
 [workspace.dependencies.toml]
-version = "0.9.11"
+version = "1.0.3"
 
 [workspace.dependencies.tracing]
 version = "0.1.44"
@@ -163,11 +163,11 @@ version = "0.1.44"
 version = "0.3.22"
 
 [workspace.dependencies.uuid]
-version = "1.20.0"
+version = "1.21.0"
 features = ["v7"]
 
 [workspace.dependencies.uuid7]
-version = "1.4.0"
+version = "1.6.0"
 
 [build-dependencies]
 

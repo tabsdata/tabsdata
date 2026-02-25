@@ -124,11 +124,11 @@ features = ["derive"]
 version = "0.9.34"
 
 [workspace.dependencies.syn]
-version = "2.0.114"
+version = "2.0.117  "
 features = ["full"]
 
 [workspace.dependencies.toml]
-version = "0.9.11"
+version = "1.0.3"
 
 [workspace.dependencies.utoipa]
 version = "5.4.0"

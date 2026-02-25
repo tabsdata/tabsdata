@@ -227,20 +227,23 @@ def main():
     )
     arguments = parser.parse_args()
     complete_messages_folder = (
-        arguments.instance.joinpath("workspace")
+        arguments.instance
+        .joinpath("workspace")
         .joinpath("work")
         .joinpath("msg")
         .joinpath("complete")
     )
     stop_messages_folder = (
-        arguments.instance.joinpath("workspace")
+        arguments.instance
+        .joinpath("workspace")
         .joinpath("work")
         .joinpath("msg")
         .joinpath("ongoing")
         .joinpath("stop")
     )
     function_cast_folder = (
-        arguments.instance.joinpath("workspace")
+        arguments.instance
+        .joinpath("workspace")
         .joinpath("work")
         .joinpath("proc")
         .joinpath("ephemeral")
@@ -249,7 +252,8 @@ def main():
         .joinpath("cast")
     )
     crontrigger_cast_folder = (
-        arguments.instance.joinpath("workspace")
+        arguments.instance
+        .joinpath("workspace")
         .joinpath("work")
         .joinpath("proc")
         .joinpath("ephemeral")
@@ -258,7 +262,8 @@ def main():
         .joinpath("cast")
     )
     stagetrigger_cast_folder = (
-        arguments.instance.joinpath("workspace")
+        arguments.instance
+        .joinpath("workspace")
         .joinpath("work")
         .joinpath("proc")
         .joinpath("ephemeral")

@@ -26,10 +26,12 @@ class DataFrame:
                 )
             )
             lf = lf.with_columns(
-                pl.col(td_constants.StandardVolatileSystemColumns.TD_ITEM_COLUMN.value)
+                pl
+                .col(td_constants.StandardVolatileSystemColumns.TD_ITEM_COLUMN.value)
                 .min()
                 .alias(td_constants.StandardVolatileSystemColumns.TD_MIN_COLUMN.value),
-                pl.col(td_constants.StandardVolatileSystemColumns.TD_ITEM_COLUMN.value)
+                pl
+                .col(td_constants.StandardVolatileSystemColumns.TD_ITEM_COLUMN.value)
                 .max()
                 .alias(td_constants.StandardVolatileSystemColumns.TD_MAX_COLUMN.value),
             )

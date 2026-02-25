@@ -190,6 +190,7 @@ pub(crate) mod tests {
     use crate::transporter::compression::{CompressionAlgorithm, async_writer};
     use crate::transporter::error::TransporterError;
     use clap::Parser;
+    use object_store::ObjectStoreExt;
     use std::fs::File;
     use std::io::Write;
     use td_common::id::id;

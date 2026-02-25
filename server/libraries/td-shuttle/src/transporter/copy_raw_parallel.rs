@@ -9,7 +9,7 @@ use bytes::Bytes;
 use futures_util::StreamExt;
 use futures_util::stream::FuturesOrdered;
 use object_store::path::Path;
-use object_store::{ObjectMeta, ObjectStore, PutPayload};
+use object_store::{ObjectMeta, ObjectStore, ObjectStoreExt, PutPayload};
 use std::ops::Range;
 use std::sync::Arc;
 use td_common::time::UniqueUtc;
@@ -298,6 +298,7 @@ mod tests {
     use crate::transporter::common::create_store;
     use crate::transporter::copy_raw_parallel::{CopyTask, copy_lambda};
     use crate::transporter::error::TransporterError;
+    use object_store::ObjectStoreExt;
     use std::fs::File;
     use std::io::Write;
     use td_common::time::UniqueUtc;

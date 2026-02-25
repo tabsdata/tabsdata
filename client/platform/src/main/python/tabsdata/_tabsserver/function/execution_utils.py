@@ -480,7 +480,8 @@ def store_source_raw_data(
         raise ValueError("The uri for the function data is required for publishers")
 
     properties: TableFrameProperties = (
-        TableFrameProperties.builder()
+        TableFrameProperties
+        .builder()
         .with_execution(request.execution_id)
         .with_transaction(request.transaction_id)
         .with_version(EMPTY_VERSION)

@@ -37,7 +37,8 @@ def scan_tf_from_table(
         tf = None
     else:
         properties = (
-            TableFrameProperties.builder()
+            TableFrameProperties
+            .builder()
             .with_execution(table.execution_id)
             .with_transaction(table.transaction_id)
             .with_version(table.table_data_version_id)

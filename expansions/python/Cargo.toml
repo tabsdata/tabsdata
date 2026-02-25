@@ -123,7 +123,7 @@ version = "0.18.0"
 version = "0.18.0"
 
 [workspace.dependencies.toml]
-version = "0.9.11"
+version = "1.0.3"
 
 [workspace.dependencies.tracing]
 version = "0.1.44"

@@ -443,7 +443,8 @@ class Collection:
 
         temporary_directory = tempfile.TemporaryDirectory(dir=tabsdata_temp_folder())
         valid_python_versions = (
-            self.connection.runtime_info_get()
+            self.connection
+            .runtime_info_get()
             .json()
             .get("data", {})
             .get("python_versions")
@@ -561,7 +562,8 @@ class Collection:
         """
         temporary_directory = tempfile.TemporaryDirectory(dir=tabsdata_temp_folder())
         valid_python_versions = (
-            self.connection.runtime_info_get()
+            self.connection
+            .runtime_info_get()
             .json()
             .get("data", {})
             .get("python_versions")
@@ -931,9 +933,8 @@ class Execution:
     @property
     def function_runs(self) -> list[FunctionRun]:
         raw_function_runs = (
-            self.connection.function_list_runs(
-                request_filter=f"execution_id:eq:{self.id}"
-            )
+            self.connection
+            .function_list_runs(request_filter=f"execution_id:eq:{self.id}")
             .json()
             .get("data")
             .get("data")
@@ -981,7 +982,8 @@ class Execution:
     @property
     def workers(self) -> list[Worker]:
         raw_workers = (
-            self.connection.workers_list(request_filter=f"execution_id:eq:{self.id}")
+            self.connection
+            .workers_list(request_filter=f"execution_id:eq:{self.id}")
             .json()
             .get("data")
             .get("data")
@@ -1129,7 +1131,8 @@ class Function:
     def _data(self) -> dict:
         if self._data_dict is None:
             self._data = (
-                self.connection.function_get(self.collection.name, self.name)
+                self.connection
+                .function_get(self.collection.name, self.name)
                 .json()
                 .get("data")
             )
@@ -1173,7 +1176,8 @@ class Function:
     @property
     def runs(self):
         raw_runs = (
-            self.connection.function_list_runs(
+            self.connection
+            .function_list_runs(
                 request_filter=[
                     f"name:eq:{self.name}",
                     f"collection:eq:{self.collection.name}",
@@ -1226,7 +1230,8 @@ class Function:
     @property
     def workers(self):
         raw_workers = (
-            self.connection.workers_list(
+            self.connection
+            .workers_list(
                 request_filter=[
                     f"function:eq:{self.name}",
                     f"collection:eq:{self.collection.name}",
@@ -2294,7 +2299,8 @@ class Table:
         if self._data_dict is None:
             try:
                 self._data_dict = (
-                    self.connection.table_list(
+                    self.connection
+                    .table_list(
                         self.collection.name, request_filter=f"name:eq:{self.name}"
                     )
                     .json()
@@ -2516,7 +2522,8 @@ class Table:
                 )
             at = dataversion.created_at
         return (
-            self.connection.table_get_schema(
+            self.connection
+            .table_get_schema(
                 self.collection.name,
                 self.name,
                 at=at,
@@ -2704,9 +2711,8 @@ class Transaction:
     @property
     def function_runs(self) -> list[FunctionRun]:
         raw_function_runs = (
-            self.connection.function_list_runs(
-                request_filter=f"transaction_id:eq:{self.id}"
-            )
+            self.connection
+            .function_list_runs(request_filter=f"transaction_id:eq:{self.id}")
             .json()
             .get("data")
             .get("data")
@@ -2732,7 +2738,8 @@ class Transaction:
     @property
     def workers(self) -> list[Worker]:
         raw_workers = (
-            self.connection.workers_list(request_filter=f"transaction_id:eq:{self.id}")
+            self.connection
+            .workers_list(request_filter=f"transaction_id:eq:{self.id}")
             .json()
             .get("data")
             .get("data")
@@ -3274,7 +3281,8 @@ class TabsdataServer:
             List[str]: The list of valid Python versions.
         """
         return (
-            self.connection.runtime_info_get()
+            self.connection
+            .runtime_info_get()
             .json()
             .get("data", {})
             .get("python_versions")
@@ -4765,7 +4773,8 @@ def _complete_localized_datetime(incomplete_datetime: str | None) -> int | None:
         try:
             # Try to parse the incomplete datetime string
             dt = (
-                datetime.strptime(incomplete_datetime, fmt)
+                datetime
+                .strptime(incomplete_datetime, fmt)
                 .replace(tzinfo=None)
                 .astimezone()
             )

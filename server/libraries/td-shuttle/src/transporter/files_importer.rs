@@ -260,13 +260,14 @@ mod tests {
     use crate::transporter::files_importer::{FilesImporter, Importer};
     use chrono::Utc;
     use object_store::ObjectMeta;
+    use object_store::path::Path as ObjectStorePath;
     use polars::datatypes::{Float64Chunked, Int64Chunked, PlSmallStr, StringChunked};
     use polars::frame::DataFrame;
     use polars::prelude::{
         Column, IntoLazy, IntoSeries, LazyCsvReader, LazyFileListReader, LazyFrame, PlPath,
         ScanArgsParquet, SinkOptions, SinkTarget,
     };
-    use polars_io::cloud::{CloudOptions, ObjectStorePath};
+    use polars_io::cloud::CloudOptions;
     use polars_io::json::JsonWriterOptions;
     use polars_io::prelude::QuoteStyle::Never;
     use polars_io::prelude::{CsvWriterOptions, ParquetWriteOptions, SerializeOptions};

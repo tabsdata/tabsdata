@@ -270,7 +270,7 @@ path = "extensions/rust/te-execution"
 # External dependencies
 
 [workspace.dependencies.anyhow]
-version = "1.0.101"
+version = "1.0.102"
 
 [workspace.dependencies.aquamarine]
 version = "0.6.0"
@@ -280,7 +280,7 @@ version = "0.5.3"
 features = ["std"]
 
 [workspace.dependencies.async-compression]
-version = "0.4.39"
+version = "0.4.40"
 features = ["tokio", "all-algorithms"]
 
 [workspace.dependencies.async-trait]
@@ -308,14 +308,14 @@ version = "0.22.1"
 version = "1.11.1"
 
 [workspace.dependencies.clap]
-version = "4.5.57"
+version = "4.5.60"
 features = ["derive"]
 
 [workspace.dependencies.clap_derive]
 version = "4.5.55"
 
 [workspace.dependencies.chrono]
-version = "0.4.43"
+version = "0.4.44"
 
 [workspace.dependencies.colored]
 version = "3.1.1"
@@ -371,16 +371,16 @@ version = "1.0.5"
 version = "0.2.27"
 
 [workspace.dependencies.futures]
-version = "0.3.31"
+version = "0.3.32"
 
 [workspace.dependencies.futures-util]
-version = "0.3.31"
+version = "0.3.32"
 
 [workspace.dependencies.getset]
 version = "0.1.6"
 
 [workspace.dependencies.gix]
-version = "0.78.0"
+version = "0.80.0"
 
 [workspace.dependencies.glob]
 version = "0.3.3"
@@ -413,7 +413,7 @@ version = "0.7.4"
 version = "2.13.0"
 
 [workspace.dependencies.indicatif]
-version = "0.18.3"
+version = "0.18.4"
 features = ["default", "improved_unicode"]
 
 [workspace.dependencies.itertools]
@@ -447,7 +447,7 @@ features = ["serialize"]
 version = "0.4"
 
 [workspace.dependencies.object_store]
-version = "0.12.5"
+version = "0.13.1"
 features = ["aws", "azure", "gcp", "http"]
 
 [workspace.dependencies.once_cell]
@@ -536,7 +536,7 @@ version = "0.8.6"
 features = ["sqlite", "runtime-tokio", "macros", "chrono"]
 
 [workspace.dependencies.strum]
-version = "0.27.2"
+version = "0.28.0"
 
 [workspace.dependencies.supports-color]
 version = "3.0.2"
@@ -545,7 +545,7 @@ version = "3.0.2"
 version = "1.0.2"
 
 [workspace.dependencies.sysinfo]
-version = "0.38.1"
+version = "0.38.2"
 
 [workspace.dependencies.temp-env]
 version = "0.3.6"
@@ -576,7 +576,7 @@ version = "0.15.1"
 version = "0.7.18"
 
 [workspace.dependencies.toml]
-version = "0.9.11"
+version = "1.0.3"
 
 [workspace.dependencies.tower]
 version = "0.5.3"
@@ -624,7 +624,7 @@ version = "2.5.8"
 features = ["serde"]
 
 [workspace.dependencies.uuid]
-version = "1.20.0"
+version = "1.21.0"
 features = ["v7"]
 
 [workspace.dependencies.vergen-gix]

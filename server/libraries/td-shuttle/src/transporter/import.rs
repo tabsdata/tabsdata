@@ -12,7 +12,7 @@ use crate::transporter::files_importer::{FilesImporter, Importer};
 use async_trait::async_trait;
 use object_store::Error::NotFound;
 use object_store::path::Path;
-use object_store::{ObjectMeta, ObjectStore};
+use object_store::{ObjectMeta, ObjectStore, ObjectStoreExt};
 use url::Url;
 use wildmatch::WildMatch;
 

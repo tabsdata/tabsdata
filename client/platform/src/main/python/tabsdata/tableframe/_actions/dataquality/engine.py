@@ -224,7 +224,8 @@ class PolarsClassifierProvider:
         _: IsNull,
     ) -> pl.Expr:
         return (
-            pl.when(PolarsClassifierProvider._null(column))
+            pl
+            .when(PolarsClassifierProvider._null(column))
             .then(ByteSentinel.TRUE)
             .when(QExpressions.IS_NAN(column, dtype))
             .then(ByteSentinel.NAN)
@@ -239,7 +240,8 @@ class PolarsClassifierProvider:
         _: IsNotNull,
     ) -> pl.Expr:
         return (
-            pl.when(PolarsClassifierProvider._null(column))
+            pl
+            .when(PolarsClassifierProvider._null(column))
             .then(ByteSentinel.FALSE)
             .when(QExpressions.IS_NAN(column, dtype))
             .then(ByteSentinel.NAN)
@@ -260,7 +262,8 @@ class PolarsClassifierProvider:
         _: IsTrue,
     ) -> pl.Expr:
         return (
-            pl.when(column.is_null())
+            pl
+            .when(column.is_null())
             .then(ByteSentinel.NULL)
             .when(PolarsClassifierProvider._true(column))
             .then(ByteSentinel.TRUE)
@@ -281,7 +284,8 @@ class PolarsClassifierProvider:
         _: IsFalse,
     ) -> pl.Expr:
         return (
-            pl.when(column.is_null())
+            pl
+            .when(column.is_null())
             .then(ByteSentinel.NULL)
             .when(PolarsClassifierProvider._false(column))
             .then(ByteSentinel.TRUE)
@@ -303,7 +307,8 @@ class PolarsClassifierProvider:
         _: IsNan,
     ) -> pl.Expr:
         return (
-            pl.when(column.is_null())
+            pl
+            .when(column.is_null())
             .then(ByteSentinel.NULL)
             .when(PolarsClassifierProvider._nan(column, dtype))
             .then(ByteSentinel.TRUE)
@@ -318,7 +323,8 @@ class PolarsClassifierProvider:
         _: IsNotNan,
     ) -> pl.Expr:
         return (
-            pl.when(column.is_null())
+            pl
+            .when(column.is_null())
             .then(ByteSentinel.NULL)
             .when(PolarsClassifierProvider._nan(column, dtype))
             .then(ByteSentinel.FALSE)
@@ -340,7 +346,8 @@ class PolarsClassifierProvider:
         _: IsNullOrNan,
     ) -> pl.Expr:
         return (
-            pl.when(PolarsClassifierProvider._null_or_nan(column, dtype))
+            pl
+            .when(PolarsClassifierProvider._null_or_nan(column, dtype))
             .then(ByteSentinel.TRUE)
             .otherwise(ByteSentinel.FALSE)
             .cast(pl.UInt8)
@@ -353,7 +360,8 @@ class PolarsClassifierProvider:
         _: IsNotNullNorNan,
     ) -> pl.Expr:
         return (
-            pl.when(PolarsClassifierProvider._null_or_nan(column, dtype))
+            pl
+            .when(PolarsClassifierProvider._null_or_nan(column, dtype))
             .then(ByteSentinel.FALSE)
             .otherwise(ByteSentinel.TRUE)
             .cast(pl.UInt8)
@@ -372,7 +380,8 @@ class PolarsClassifierProvider:
         _: IsZero,
     ) -> pl.Expr:
         base_expression = (
-            pl.when(column.is_null())
+            pl
+            .when(column.is_null())
             .then(ByteSentinel.NULL)
             .when(QExpressions.IS_NAN(column, dtype))
             .then(ByteSentinel.NAN)
@@ -387,7 +396,8 @@ class PolarsClassifierProvider:
         _: IsNotZero,
     ) -> pl.Expr:
         base_expression = (
-            pl.when(column.is_null())
+            pl
+            .when(column.is_null())
             .then(ByteSentinel.NULL)
             .when(QExpressions.IS_NAN(column, dtype))
             .then(ByteSentinel.NAN)
@@ -408,7 +418,8 @@ class PolarsClassifierProvider:
         _: IsPositive,
     ) -> pl.Expr:
         base_expression = (
-            pl.when(column.is_null())
+            pl
+            .when(column.is_null())
             .then(ByteSentinel.NULL)
             .when(QExpressions.IS_NAN(column, dtype))
             .then(ByteSentinel.NAN)
@@ -429,7 +440,8 @@ class PolarsClassifierProvider:
         _: IsPositiveOrZero,
     ) -> pl.Expr:
         base_expression = (
-            pl.when(column.is_null())
+            pl
+            .when(column.is_null())
             .then(ByteSentinel.NULL)
             .when(QExpressions.IS_NAN(column, dtype))
             .then(ByteSentinel.NAN)
@@ -450,7 +462,8 @@ class PolarsClassifierProvider:
         _: IsNegative,
     ) -> pl.Expr:
         base_expression = (
-            pl.when(column.is_null())
+            pl
+            .when(column.is_null())
             .then(ByteSentinel.NULL)
             .when(QExpressions.IS_NAN(column, dtype))
             .then(ByteSentinel.NAN)
@@ -471,7 +484,8 @@ class PolarsClassifierProvider:
         _: IsNegativeOrZero,
     ) -> pl.Expr:
         base_expression = (
-            pl.when(column.is_null())
+            pl
+            .when(column.is_null())
             .then(ByteSentinel.NULL)
             .when(QExpressions.IS_NAN(column, dtype))
             .then(ByteSentinel.NAN)
@@ -540,7 +554,8 @@ class PolarsClassifierProvider:
         classifier: IsBetween,
     ) -> pl.Expr:
         base_expression = (
-            pl.when(column.is_null())
+            pl
+            .when(column.is_null())
             .then(ByteSentinel.NULL)
             .when(QExpressions.IS_NAN(column, dtype))
             .then(ByteSentinel.NAN)
@@ -555,7 +570,8 @@ class PolarsClassifierProvider:
         classifier: IsNotBetween,
     ) -> pl.Expr:
         base_expression = (
-            pl.when(column.is_null())
+            pl
+            .when(column.is_null())
             .then(ByteSentinel.NULL)
             .when(QExpressions.IS_NAN(column, dtype))
             .then(ByteSentinel.NAN)
@@ -586,28 +602,32 @@ class PolarsClassifierProvider:
         )
         if has_none and has_nan:
             base_expression = (
-                pl.when(column.is_null())
+                pl
+                .when(column.is_null())
                 .then(ByteSentinel.TRUE)
                 .when(QExpressions.IS_NAN(column, dtype))
                 .then(ByteSentinel.TRUE)
             )
         elif has_none:
             base_expression = (
-                pl.when(column.is_null())
+                pl
+                .when(column.is_null())
                 .then(ByteSentinel.TRUE)
                 .when(QExpressions.IS_NAN(column, dtype))
                 .then(ByteSentinel.NAN)
             )
         elif has_nan:
             base_expression = (
-                pl.when(column.is_null())
+                pl
+                .when(column.is_null())
                 .then(ByteSentinel.NULL)
                 .when(QExpressions.IS_NAN(column, dtype))
                 .then(ByteSentinel.TRUE)
             )
         else:
             base_expression = (
-                pl.when(column.is_null())
+                pl
+                .when(column.is_null())
                 .then(ByteSentinel.NULL)
                 .when(QExpressions.IS_NAN(column, dtype))
                 .then(ByteSentinel.NAN)
@@ -644,28 +664,32 @@ class PolarsClassifierProvider:
 
         if has_none and has_nan:
             base_expression = (
-                pl.when(column.is_null())
+                pl
+                .when(column.is_null())
                 .then(ByteSentinel.FALSE)
                 .when(QExpressions.IS_NAN(column, dtype))
                 .then(ByteSentinel.FALSE)
             )
         elif has_none:
             base_expression = (
-                pl.when(column.is_null())
+                pl
+                .when(column.is_null())
                 .then(ByteSentinel.FALSE)
                 .when(QExpressions.IS_NAN(column, dtype))
                 .then(ByteSentinel.NAN)
             )
         elif has_nan:
             base_expression = (
-                pl.when(column.is_null())
+                pl
+                .when(column.is_null())
                 .then(ByteSentinel.NULL)
                 .when(QExpressions.IS_NAN(column, dtype))
                 .then(ByteSentinel.FALSE)
             )
         else:
             base_expression = (
-                pl.when(column.is_null())
+                pl
+                .when(column.is_null())
                 .then(ByteSentinel.NULL)
                 .when(QExpressions.IS_NAN(column, dtype))
                 .then(ByteSentinel.NAN)
@@ -701,7 +725,8 @@ class PolarsClassifierProvider:
         classifier: Matches,
     ) -> pl.Expr:
         base_expression = (
-            pl.when(column.is_null())
+            pl
+            .when(column.is_null())
             .then(ByteSentinel.NULL)
             .when(QExpressions.IS_NAN(column, dtype))
             .then(ByteSentinel.NAN)
@@ -716,7 +741,8 @@ class PolarsClassifierProvider:
         classifier: DoesNotMatch,
     ) -> pl.Expr:
         base_expression = (
-            pl.when(column.is_null())
+            pl
+            .when(column.is_null())
             .then(ByteSentinel.NULL)
             .when(QExpressions.IS_NAN(column, dtype))
             .then(ByteSentinel.NAN)
@@ -731,7 +757,8 @@ class PolarsClassifierProvider:
         max_len: int,
     ) -> pl.Expr:
         return (
-            column.cast(pl.Utf8)
+            column
+            .cast(pl.Utf8)
             .str.len_chars()
             .is_between(pl.lit(min_len), pl.lit(max_len), closed="both")
         )
@@ -743,7 +770,8 @@ class PolarsClassifierProvider:
         classifier: HasLength,
     ) -> pl.Expr:
         base_expression = (
-            pl.when(column.is_null())
+            pl
+            .when(column.is_null())
             .then(ByteSentinel.NULL)
             .when(QExpressions.IS_NAN(column, dtype))
             .then(ByteSentinel.NAN)
@@ -844,7 +872,8 @@ class PolarsClassifierProvider:
                     else:
                         expression = expression.when(column <= cut).then(pl.lit(i))
                 return (
-                    pl.when(column.is_null())
+                    pl
+                    .when(column.is_null())
                     .then(ByteSentinel.NULL)
                     .when(QExpressions.IS_NAN(column, dtype))
                     .then(ByteSentinel.NAN)
@@ -1695,22 +1724,26 @@ class DataQualityEngine:
             match classifier_family:
                 case ClassifierFamily.BOOLEAN:
                     false_count = (
-                        lf.select((pl.col(column) == ByteSentinel.FALSE).sum())
+                        lf
+                        .select((pl.col(column) == ByteSentinel.FALSE).sum())
                         .collect()
                         .item()
                     )
                     true_count = (
-                        lf.select((pl.col(column) == ByteSentinel.TRUE).sum())
+                        lf
+                        .select((pl.col(column) == ByteSentinel.TRUE).sum())
                         .collect()
                         .item()
                     )
                     nan_count = (
-                        lf.select((pl.col(column) == ByteSentinel.NAN).sum())
+                        lf
+                        .select((pl.col(column) == ByteSentinel.NAN).sum())
                         .collect()
                         .item()
                     )
                     null_count = (
-                        lf.select((pl.col(column) == ByteSentinel.NULL).sum())
+                        lf
+                        .select((pl.col(column) == ByteSentinel.NULL).sum())
                         .collect()
                         .item()
                     )
@@ -1733,26 +1766,28 @@ class DataQualityEngine:
                         case ScaleCategorizer():
                             categorizer = column_info.classifier
                             underflow_count = (
-                                lf.select(
+                                lf
+                                .select(
                                     (pl.col(column) == ByteSentinel.UNDERFLOW).sum()
                                 )
                                 .collect()
                                 .item()
                             )
                             overflow_count = (
-                                lf.select(
-                                    (pl.col(column) == ByteSentinel.OVERFLOW).sum()
-                                )
+                                lf
+                                .select((pl.col(column) == ByteSentinel.OVERFLOW).sum())
                                 .collect()
                                 .item()
                             )
                             nan_count = (
-                                lf.select((pl.col(column) == ByteSentinel.NAN).sum())
+                                lf
+                                .select((pl.col(column) == ByteSentinel.NAN).sum())
                                 .collect()
                                 .item()
                             )
                             null_count = (
-                                lf.select((pl.col(column) == ByteSentinel.NULL).sum())
+                                lf
+                                .select((pl.col(column) == ByteSentinel.NULL).sum())
                                 .collect()
                                 .item()
                             )
@@ -1778,14 +1813,16 @@ class DataQualityEngine:
                                 summary_row[DQColumns.column(0)] = None
                             else:
                                 count = (
-                                    lf.select((pl.col(column) == 0).sum())
+                                    lf
+                                    .select((pl.col(column) == 0).sum())
                                     .collect()
                                     .item()
                                 )
                                 summary_row[DQColumns.column(0)] = count
                             for i in range(1, categorizer.scale._bins + 1):
                                 count = (
-                                    lf.select((pl.col(column) == i).sum())
+                                    lf
+                                    .select((pl.col(column) == i).sum())
                                     .collect()
                                     .item()
                                 )

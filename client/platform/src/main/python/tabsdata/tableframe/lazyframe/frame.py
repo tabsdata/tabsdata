@@ -292,7 +292,8 @@ class TableFrame:
         """
         # noinspection PyProtectedMember
         return (
-            td_translator._unwrap_table_frame(self)
+            td_translator
+            ._unwrap_table_frame(self)
             .collect(no_optimization=True)
             .to_pandas()
         )
@@ -306,7 +307,8 @@ class TableFrame:
         """
         # noinspection PyProtectedMember
         return (
-            td_translator._unwrap_table_frame(self)
+            td_translator
+            ._unwrap_table_frame(self)
             .collect(no_optimization=True)
             .to_dict(as_series=False)
         )
@@ -1490,7 +1492,8 @@ class TableFrame:
         pl_exprs = [td_translator._unwrap_into_tdexpr(item) for item in on]
         dtype = function._columns()
         lf = (
-            self._lf.with_columns(
+            self._lf
+            .with_columns(
                 pl.struct(*pl_exprs).alias(
                     td_constants.StandardVolatileSystemColumns.TD_UDF_IN.name
                 )
@@ -1499,7 +1502,8 @@ class TableFrame:
                 pl.all().exclude(
                     td_constants.StandardVolatileSystemColumns.TD_UDF_IN.name
                 ),
-                pl.col(td_constants.StandardVolatileSystemColumns.TD_UDF_IN.name)
+                pl
+                .col(td_constants.StandardVolatileSystemColumns.TD_UDF_IN.name)
                 .map_batches(function=apply, return_dtype=dtype, is_elementwise=False)
                 .alias(td_constants.StandardVolatileSystemColumns.TD_UDF_OUT.name),
             )
@@ -2194,7 +2198,8 @@ class TableFrame:
         source_columns = self._lf.collect_schema().names()
         # noinspection PyProtectedMember
         target_columns = (
-            self._lf.select(
+            self._lf
+            .select(
                 *[td_translator._unwrap_into_tdexpr(column) for column in exprs],
                 **named_exprs,
             )
@@ -2734,7 +2739,8 @@ class TableFrame:
         """
         # noinspection PyProtectedMember
         return (
-            td_translator._unwrap_table_frame(self)
+            td_translator
+            ._unwrap_table_frame(self)
             .slice(offset, length)
             .collect()
             .to_dicts()
@@ -2784,7 +2790,8 @@ class TableFrame:
         """
         # noinspection PyProtectedMember
         return (
-            td_translator._unwrap_table_frame(self)
+            td_translator
+            ._unwrap_table_frame(self)
             .slice(offset, length)
             .collect()
             .to_dict(as_series=False)
@@ -2879,7 +2886,8 @@ class TableFrame:
         }
 
         lf = (
-            lf.with_columns(
+            lf
+            .with_columns(
                 pl.col(parser.temp_column).list.to_struct(fields=fields).alias("grok")
             )
             .unnest("grok")

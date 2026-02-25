@@ -130,7 +130,8 @@ class TableFrameGroupBy:
                 match metadata.language:
                     case td_constants.Language.PYTHON:
                         _expr = (
-                            pl.col(column)
+                            pl
+                            .col(column)
                             .implode()
                             .map_batches(
                                 aggregation_instance.python,
@@ -141,7 +142,8 @@ class TableFrameGroupBy:
                         )
                     case td_constants.Language.RUST:
                         _expr = (
-                            aggregation_instance.rust(pl.col(column))
+                            aggregation_instance
+                            .rust(pl.col(column))
                             .first()
                             .alias(column)
                         )
@@ -220,7 +222,8 @@ class TableFrameGroupBy:
         with self._transient_state(STATE, td_constants.RowOperation.GROUP_LEN):
             return td_frame.TableFrame.__build__(
                 df=self.agg(
-                    functions.all()
+                    functions
+                    .all()
                     .exclude(
                         system_agg_columns(
                             operation=td_constants.RowOperation.GROUP_LEN
@@ -285,7 +288,8 @@ class TableFrameGroupBy:
         with self._transient_state(STATE, td_constants.RowOperation.GROUP_COUNT):
             return td_frame.TableFrame.__build__(
                 df=self.agg(
-                    functions.all()
+                    functions
+                    .all()
                     .exclude(
                         system_agg_columns(
                             operation=td_constants.RowOperation.GROUP_COUNT
@@ -349,7 +353,8 @@ class TableFrameGroupBy:
         with self._transient_state(STATE, td_constants.RowOperation.GROUP_MAX):
             return td_frame.TableFrame.__build__(
                 df=self.agg(
-                    functions.all()
+                    functions
+                    .all()
                     .exclude(
                         system_agg_columns(
                             operation=td_constants.RowOperation.GROUP_MAX
@@ -415,7 +420,8 @@ class TableFrameGroupBy:
         with self._transient_state(STATE, td_constants.RowOperation.GROUP_MEEAN):
             return td_frame.TableFrame.__build__(
                 df=self.agg(
-                    functions.all()
+                    functions
+                    .all()
                     .exclude(
                         system_agg_columns(
                             operation=td_constants.RowOperation.GROUP_MEEAN
@@ -481,7 +487,8 @@ class TableFrameGroupBy:
         with self._transient_state(STATE, td_constants.RowOperation.GROUP_MEDIAN):
             return td_frame.TableFrame.__build__(
                 df=self.agg(
-                    functions.all()
+                    functions
+                    .all()
                     .exclude(
                         system_agg_columns(
                             operation=td_constants.RowOperation.GROUP_MEDIAN
@@ -545,7 +552,8 @@ class TableFrameGroupBy:
         with self._transient_state(STATE, td_constants.RowOperation.GROUP_MIN):
             return td_frame.TableFrame.__build__(
                 df=self.agg(
-                    functions.all()
+                    functions
+                    .all()
                     .exclude(
                         system_agg_columns(
                             operation=td_constants.RowOperation.GROUP_MIN
@@ -609,7 +617,8 @@ class TableFrameGroupBy:
         with self._transient_state(STATE, td_constants.RowOperation.GROUP_UNIQUE):
             return td_frame.TableFrame.__build__(
                 df=self.agg(
-                    functions.all()
+                    functions
+                    .all()
                     .exclude(
                         system_agg_columns(
                             operation=td_constants.RowOperation.GROUP_UNIQUE
@@ -675,7 +684,8 @@ class TableFrameGroupBy:
         with self._transient_state(STATE, td_constants.RowOperation.GROUP_SUM):
             return td_frame.TableFrame.__build__(
                 df=self.agg(
-                    functions.all()
+                    functions
+                    .all()
                     .exclude(
                         system_agg_columns(
                             operation=td_constants.RowOperation.GROUP_SUM

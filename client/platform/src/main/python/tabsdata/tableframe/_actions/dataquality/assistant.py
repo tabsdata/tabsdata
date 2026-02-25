@@ -128,7 +128,8 @@ class TypeHandler:
             if isinstance(value, datetime):
                 if value.tzinfo is None and time_zone is not None:
                     return (
-                        pl.Series([value])
+                        pl
+                        .Series([value])
                         .cast(pl.Datetime(time_unit))
                         .dt.replace_time_zone(time_zone)
                         .item()
@@ -138,7 +139,8 @@ class TypeHandler:
                 dt = datetime.combine(value, time.min)
                 if time_zone is not None:
                     return (
-                        pl.Series([dt])
+                        pl
+                        .Series([dt])
                         .cast(pl.Datetime(time_unit))
                         .dt.replace_time_zone(time_zone)
                         .item()

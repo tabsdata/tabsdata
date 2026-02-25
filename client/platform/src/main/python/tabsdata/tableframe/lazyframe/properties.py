@@ -111,7 +111,8 @@ class TableFramePropertiesBuilder:
     @staticmethod
     def empty() -> TableFrameProperties:
         return (
-            TableFrameProperties.builder()
+            TableFrameProperties
+            .builder()
             .with_execution(EMPTY_EXECUTION)
             .with_transaction(EMPTY_TRANSACTION)
             .with_version(EMPTY_VERSION)

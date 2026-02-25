@@ -9,7 +9,9 @@ use crate::transporter::taskrunner::AsyncLambda;
 use bytes::{BufMut, BytesMut};
 use futures::{Future, stream::TryStreamExt};
 use object_store::path::Path;
-use object_store::{GetResult, MultipartUpload, ObjectStore, PutPayload, UploadPart};
+use object_store::{
+    GetResult, MultipartUpload, ObjectStore, ObjectStoreExt, PutPayload, UploadPart,
+};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use td_common::time::UniqueUtc;

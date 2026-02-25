@@ -8,7 +8,7 @@ use derive_builder::Builder;
 use futures_util::TryStreamExt;
 use futures_util::stream::BoxStream;
 use object_store::path::{Path, PathPart};
-use object_store::{ObjectStore, PutPayload};
+use object_store::{ObjectStore, ObjectStoreExt, PutPayload};
 #[cfg(target_os = "windows")]
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -416,6 +416,7 @@ mod tests {
     use crate::{MountDef, SPath, StorageError};
     use bytes::Bytes;
     use futures_util::StreamExt;
+    use object_store::ObjectStoreExt;
     use object_store::path::Path;
     use std::collections::HashMap;
     use td_common::absolute_path::AbsolutePath;

@@ -126,7 +126,8 @@ def add_system_columns(
             match metadata.language:
                 case td_constants.Language.PYTHON:
                     lf = lf.with_columns_seq(
-                        pl.col(column)
+                        pl
+                        .col(column)
                         .map_batches(
                             generator_instance.python,
                             return_dtype=metadata.dtype,

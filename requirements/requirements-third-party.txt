@@ -5,8 +5,8 @@
 accessify==0.3.1
 archspec==0.2.5
 base32hex==1.0.2
-boto3==1.42.44
-boto3-stubs[glue]==1.42.44
+boto3==1.42.55
+boto3-stubs[glue]==1.42.55
 click==8.3.1
 cloudpickle==3.1.2
 colorama==0.4.6
@@ -14,11 +14,11 @@ connectorx==0.4.5
 croniter==6.0.0
 fastavro==1.12.1
 fastparquet==2025.12.0
-filelock==3.20.3
-grpcio-tools==1.78.0
+filelock==3.24.3
+grpcio-tools==1.78.1
 humanize==4.15.0
 hvac==2.4.0
-ijson==3.4.0
+ijson==3.5.0
 importlib-metadata==8.7.1
 isodate==0.7.2
 jsonschema==4.26.0
@@ -26,32 +26,31 @@ numpy==2.4.2
 packaging==26.0
 pandas==2.3.3
 pillow==12.1.1
-pip-tools==7.5.2
-platformdirs==4.5.1
+pip-tools==7.5.3
+platformdirs==4.9.2
 polars==1.38.1
 protobuf==6.33.5
 pycountries==1.2.1
 pyyaml==6.0.3
-pyarrow==23.0.0
+pyarrow==23.0.1
 py-cpuinfo==9.0.0
 # Note: pinning pydantic and pyiceberg to specific versions due to a regression in
 # their code, upgrade to latest once solved.
 # See: https://github.com/apache/iceberg-python/issues/2590
-# pyiceberg[glue]==0.10.0
 pydantic==2.12.5
-pyiceberg[glue]==0.10.0
+pyiceberg[glue]==0.11.0
 pywin32==311; platform_system == "Windows"
 requests==2.32.5
 # Note: unpinning rich as part of the pydantic regression fix, reppin once it is
 # resolved.
 # rich==14.1.0
-rich<14.0.0
+rich<14.3.3
 rich-click==1.9.7
 ruamel-yaml==0.19.1
 sqlalchemy==2.0.46
-starlette==0.50.0
+starlette==0.52.1
 typing-extensions==4.15.0
 tzlocal==5.3.1
 uuid6==2025.0.1
 uuid-v7==1.0.0
-uv==0.10.0
+uv==0.10.5

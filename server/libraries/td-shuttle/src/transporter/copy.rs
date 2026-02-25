@@ -8,6 +8,7 @@ use crate::transporter::compression::CompressionAlgorithm;
 use crate::transporter::error::TransporterError;
 use crate::transporter::taskrunner::{AsyncLambda, run_tasks};
 use crate::transporter::{copy_compression, copy_raw_parallel};
+use object_store::ObjectStoreExt;
 use std::num::NonZeroUsize;
 use tracing::debug;
 
