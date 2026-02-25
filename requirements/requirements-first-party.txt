@@ -2,10 +2,10 @@
 # Copyright 2026 Tabs Data Inc.
 #
 
-tabsdata-bigquery==1.7.0
-tabsdata-databricks==1.7.0
-tabsdata-kafka==1.7.0
-tabsdata-mongodb==1.7.0
-tabsdata-mssql==1.7.0
-tabsdata-salesforce==1.7.0
-tabsdata-snowflake==1.7.0
+tabsdata-bigquery==1.7.1
+tabsdata-databricks==1.7.1
+tabsdata-kafka==1.7.1
+tabsdata-mongodb==1.7.1
+tabsdata-mssql==1.7.1
+tabsdata-salesforce==1.7.1
+tabsdata-snowflake==1.7.1

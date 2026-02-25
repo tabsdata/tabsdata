@@ -3,6 +3,7 @@
 #
 
 import argparse
+import fnmatch
 import importlib
 import importlib.util
 import os
@@ -83,12 +84,14 @@ def expand_single_level_wildcards(root_folder: str, pattern: str) -> set[str]:
                 if relative_base
                 else root_folder
             )
-            if part == "*":
+            if "*" in part:
                 try:
                     entries = os.listdir(absolute_base)
                 except FileNotFoundError:
                     continue
                 for entry in entries:
+                    if not fnmatch.fnmatch(entry, part):
+                        continue
                     entry_relative_path = (
                         f"{relative_base}/{entry}" if relative_base else entry
                     )
