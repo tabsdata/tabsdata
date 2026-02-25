@@ -37,7 +37,8 @@ Copyright 2025 Tabs Data Inc.
 
 ## Required Environment Variables
 
-* `PYTEST_MAXIMUM_RETRY_COUNT=10`
+* `CONTAINER_MAXIMUM_RETRY_COUNT=36`
+* `EXECUTION_MAXIMUM_RETRY_COUNT=18` 
 * `MARKERS=""`
 * To run Oracle connectors tests the following environment variables must be set/exported.
   If Oracle client is installed in `<ORACLE_CLIENT_PATH>`.
