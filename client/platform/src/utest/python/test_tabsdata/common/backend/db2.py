@@ -11,7 +11,6 @@ import urllib.parse
 from dataclasses import dataclass
 from datetime import date, datetime
 from time import sleep
-import ibm_db_dbi as db
 
 import pytest
 from filelock import FileLock
@@ -143,6 +142,7 @@ def create_docker_db2_database(
 ):
     # noinspection PyPackageRequirements
     import docker  # Lazy import
+    import ibm_db_dbi as db  # Lazy import
 
     logger.info("Starting DB2 container")
     client = docker.from_env()
