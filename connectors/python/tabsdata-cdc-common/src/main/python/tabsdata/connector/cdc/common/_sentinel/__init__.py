@@ -23,7 +23,6 @@ from tabsdata.connector.cdc.common.constants import (
     CDC_META_OP,
     CDC_META_SQ,
     CDC_META_TX,
-    COLUMN_BYTE_ESTIMATE,
     DOT,
 )
 from tabsdata.connector.cdc.common.typing import CdcFormatSpec
@@ -101,18 +100,3 @@ def row_to_record(
             raise ValueError(f"Unsupported values format: {cdc_format.values_format!r}")
 
     return record
-
-
-def estimate_column_bytes(value: Any) -> int:
-    if isinstance(value, str):
-        return len(value)
-    elif isinstance(value, bytes):
-        return len(value)
-    return COLUMN_BYTE_ESTIMATE
-
-
-def estimate_row_bytes(change: CdcDataChange) -> int:
-    size = sum(estimate_column_bytes(v) for v in change.new_values.values())
-    if change.old_values:
-        size += sum(estimate_column_bytes(v) for v in change.old_values.values())
-    return size

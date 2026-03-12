@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 import time
 from collections.abc import Iterable
 
@@ -14,7 +15,7 @@ from tabsdata.connector.cdc.common._model import (
     CdcDataChange,
     TrackedTable,
 )
-from tabsdata.connector.cdc.common._sentinel import CdcBuffer, estimate_row_bytes
+from tabsdata.connector.cdc.common._sentinel import CdcBuffer
 from tabsdata.connector.cdc.common._sentinel.disk import DiskSentinel
 
 logger = logging.getLogger(__name__)
@@ -73,7 +74,7 @@ class BufferSentinel:
         buffer.rows.append(change)
         self._total_rows += 1
         if self._max_bytes is not None:
-            row_bytes = estimate_row_bytes(change)
+            row_bytes = sys.getsizeof(change)
             buffer.bytes += row_bytes
             self._total_bytes += row_bytes
 

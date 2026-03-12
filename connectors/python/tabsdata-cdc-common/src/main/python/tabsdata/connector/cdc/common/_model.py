@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Union
@@ -34,6 +35,19 @@ class CdcDataChange:
     table: str
     new_values: dict
     old_values: dict | None
+
+    def __sizeof__(self) -> int:
+        size = object.__sizeof__(self)
+        size += sys.getsizeof(self.operation)
+        size += sys.getsizeof(self.transaction)
+        size += sys.getsizeof(self.sequence)
+        size += sys.getsizeof(self.table)
+        size += sys.getsizeof(self.new_values)
+        size += sum(sys.getsizeof(value) for value in self.new_values.values())
+        if self.old_values:
+            size += sys.getsizeof(self.old_values)
+            size += sum(sys.getsizeof(value) for value in self.old_values.values())
+        return size
 
 
 @dataclass
