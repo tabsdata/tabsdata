@@ -2390,6 +2390,16 @@ class ErrorCode(Enum):
         "code": "CDC-006",
         "message": "Unsupported start_from value '{}'",
     }
+    CDC7 = {
+        "code": "CDC-007",
+        "message": "Column count mismatch for table {}.{}: "
+        "catalog returned {} columns but inspector returned {}",
+    }
+    CDC8 = {
+        "code": "CDC-008",
+        "message": "Column name mismatch for table {}.{}: "
+        "catalog column '{}' does not match inspector column '{}'",
+    }
 
     # CDC MySQL errors
     CDCMYSQL1 = {
@@ -2409,6 +2419,10 @@ class ErrorCode(Enum):
     CDCPOSTGRES2 = {
         "code": "CDCPOSTGRES-002",
         "message": "Invalid PostgreSQL CDC trigger configuration: {}",
+    }
+    CDCPOSTGRES3 = {
+        "code": "CDCPOSTGRES-003",
+        "message": "Unsupported wal2json format version '{}'",
     }
 
     # CDC DB2 errors

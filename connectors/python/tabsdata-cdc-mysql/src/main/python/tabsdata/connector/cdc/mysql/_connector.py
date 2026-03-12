@@ -33,6 +33,7 @@ from tabsdata.connector.cdc.common.constants import (
 from tabsdata.connector.cdc.common.typing import CdcFormatSpec, QualifiedTablesSpec
 from tabsdata.connector.cdc.mysql._connection import MySQLCdcConn
 from tabsdata.connector.cdc.mysql._ingester.binlog import BinlogIngester
+from tabsdata.connector.cdc.mysql.constants import DEFAULT_SERVER_ID
 from tabsdata.connector.cdc.mysql.typing import MySQLCdcStartFromSpec
 from tabsdata.exceptions import ErrorCode
 
@@ -68,7 +69,7 @@ class MySQLCdcTrigger(CdcTrigger):
         trigger_max_seconds: float = DEFAULT_TRIGGER_MAX_SECONDS,
         poll_interval_seconds: float = DEFAULT_POLL_INTERVAL_SECONDS,
         blocking_timeout_seconds: float = DEFAULT_BLOCKING_TIMEOUT_SECONDS,
-        server_id: int = 100,
+        server_id: int = DEFAULT_SERVER_ID,
         start: datetime | None = None,
         end: datetime | None = None,
     ):

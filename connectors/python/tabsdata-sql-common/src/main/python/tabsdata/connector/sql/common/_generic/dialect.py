@@ -20,22 +20,19 @@ class Dialect(ABC):
     @abstractmethod
     def close_quote(self) -> str: ...
 
-    def server_timezone(self, engine: Any) -> tzinfo | None:
-        """Query the database server's timezone.
+    @abstractmethod
+    def default_case_fold(self, name: str) -> str: ...
 
-        Override in subclasses to provide database-specific timezone
-        detection.  Returns None if the timezone cannot be determined.
-        """
-        return None
+    @abstractmethod
+    def get_catalog_columns(
+        self,
+        connection: Any,
+        schema: str,
+        table: str,
+    ) -> list[str]: ...
 
-    def default_case_fold(self, name: str) -> str:
-        """Apply the database's default case fold for unquoted identifiers.
-
-        Override in subclasses for databases that fold unquoted identifiers
-        to a specific case (e.g., uppercase for DB2/Oracle, lowercase for
-        PostgreSQL/MySQL).
-        """
-        return name
+    @abstractmethod
+    def server_timezone(self, engine: Any) -> tzinfo | None: ...
 
     def parse_qualified_table(self, spec: str) -> tuple[quoted_name, quoted_name]:
         raw = spec

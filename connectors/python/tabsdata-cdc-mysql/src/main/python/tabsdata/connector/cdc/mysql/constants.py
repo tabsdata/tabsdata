@@ -5,11 +5,8 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    pass
-
+DEFAULT_SERVER_ID = 512
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

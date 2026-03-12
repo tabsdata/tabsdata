@@ -35,6 +35,7 @@ from test_tabsdata_cdc_common.common.docker import (
     obtain_environment,
     obtain_prefix,
 )
+from test_tabsdata_cdc_mysql.common.db import server_id
 
 logger = logging.getLogger(__name__)
 
@@ -287,7 +288,7 @@ def check_cdc_mysql_binlog_operation_stream(port: int, signal: str) -> None:
                 "user": MYSQL_CDC_ROOT_USER,
                 "passwd": MYSQL_CDC_ROOT_PASSWORD,
             },
-            server_id=100,
+            server_id=server_id(),
             only_events=[WriteRowsEvent],
             only_tables=[signal],
             only_schemas=[MYSQL_CDC_DATABASE],

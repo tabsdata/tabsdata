@@ -23,7 +23,7 @@ class MySQLDialect(Dialect):
         return "`"
 
     def default_case_fold(self, name: str) -> str:
-        return name.lower()
+        return name
 
     def server_timezone(self, engine: Any) -> tzinfo | None:
         with engine.connect() as connection:
@@ -42,3 +42,24 @@ class MySQLDialect(Dialect):
                 return None
             return parse_server_timezone(tz_value)
         return None
+
+    def get_catalog_columns(
+        self,
+        connection: Any,
+        schema: str,
+        table: str,
+    ) -> list[str]:
+        rows = connection.execute(
+            text(
+                "select column_name "
+                "from information_schema.columns "
+                "where table_schema = :schema "
+                "and table_name = :table "
+                "order by ordinal_position"
+            ),
+            {
+                "schema": schema,
+                "table": table,
+            },
+        ).fetchall()
+        return [row[0] for row in rows]

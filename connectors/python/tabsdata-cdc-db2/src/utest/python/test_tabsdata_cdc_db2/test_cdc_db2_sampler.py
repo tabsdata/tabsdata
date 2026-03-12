@@ -13,7 +13,6 @@ import pytest
 from tabsdata.connector.cdc.common._model import TableObject
 from tabsdata.connector.cdc.common.constants import CdcOperation
 from test_tabsdata.test_tableframe.common import pretty_polars, pretty_pandas
-from test_tabsdata_cdc_common.common.sql import COLUMNS
 from test_tabsdata_cdc_db2.common.sql import Db2CdcSampler
 
 
@@ -34,11 +33,9 @@ def test_sampler_insert_update_delete(db2_cdc_config):
     )
     try:
         cursor = connection.cursor()
-        sampler = Db2CdcSampler(cursor)
+        sampler = Db2CdcSampler(config.container, config.port, cursor)
 
         sampler.run(
-            container=db2_cdc_config.container,
-            port=db2_cdc_config.port,
             table=table,
             inserts=8,
             updates=4,
@@ -57,12 +54,10 @@ def test_sampler_insert_update_delete(db2_cdc_config):
         assert ops.count(CdcOperation.UPDATE) == 4
         assert ops.count(CdcOperation.DELETE) == 2
 
-        for column in COLUMNS:
+        for column in sampler.columns:
             assert column in data.columns, f"Missing column {column} in data"
 
         sampler.run(
-            container=db2_cdc_config.container,
-            port=db2_cdc_config.port,
             table=table,
             inserts=4,
             updates=2,
@@ -87,7 +82,7 @@ def test_sampler_insert_update_delete(db2_cdc_config):
         df_changes = sampler.t_changes(table)
         print(df_changes)
     finally:
-        cleanup = connection.cursor()
+        # cleanup = connection.cursor()
         # noinspection PyBroadException
         # try:
         #    cleanup.execute(f"drop table {table.qualified}")

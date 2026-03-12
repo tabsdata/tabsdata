@@ -38,3 +38,24 @@ class Db2Dialect(Dialect):
             if tz is not None:
                 return tz
         return None
+
+    def get_catalog_columns(
+        self,
+        connection: Any,
+        schema: str,
+        table: str,
+    ) -> list[str]:
+        rows = connection.execute(
+            text(
+                "select colname "
+                "from syscat.columns "
+                "where tabschema = :schema "
+                "and tabname = :table "
+                "order by colno"
+            ),
+            {
+                "schema": schema,
+                "table": table,
+            },
+        ).fetchall()
+        return [row[0].strip() for row in rows]

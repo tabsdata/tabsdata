@@ -9,14 +9,10 @@ import os
 import shutil
 import tomllib
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from setuptools import Command
 
 from tabsdatax.setup.common.platform import get_python_binaries_folder
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.getLogger(__name__)
 

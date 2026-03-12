@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Generator
 from typing import Any
 
@@ -23,7 +24,11 @@ from tabsdata.connector.cdc.common._model import (
     TrackedColumn,
     TrackedTable,
 )
-from tabsdata.connector.cdc.common.constants import DOT, CdcOperation
+from tabsdata.connector.cdc.common.constants import (
+    DEFAULT_BLOCKING_TIMEOUT_SECONDS,
+    DOT,
+    CdcOperation,
+)
 from tabsdata.connector.cdc.common.typing import (
     CdcFormatSpec,
     QualifiedTablesSpec,
@@ -56,15 +61,38 @@ OPERATION_MAP = {
 
 ASN_SCHEMA = "ASN"
 
-IBMSNAP_OPERATION = "IBMSNAP_OPERATION"
-IBMSNAP_COMMITSEQ = "IBMSNAP_COMMITSEQ"
-IBMSNAP_INTENTSEQ = "IBMSNAP_INTENTSEQ"
-IBMSNAP_LOGMARKER = "IBMSNAP_LOGMARKER"
-CD_NEW_SYNCHPOINT = "CD_NEW_SYNCHPOINT"
+
+class SystemColumn:
+    def __init__(self, db_name: str):
+        self.db_name = db_name
+        self.sa_name: str | None = None
+
+    @property
+    def quoted(self) -> str:
+        return f'"{self.db_name}"'
+
+    def normalize(self, sa_dialect: Any) -> None:
+        self.sa_name = sa_dialect.normalize_name(self.db_name)
+
+
+IBMSNAP_OPERATION = SystemColumn("IBMSNAP_OPERATION")
+IBMSNAP_COMMITSEQ = SystemColumn("IBMSNAP_COMMITSEQ")
+IBMSNAP_INTENTSEQ = SystemColumn("IBMSNAP_INTENTSEQ")
+IBMSNAP_LOGMARKER = SystemColumn("IBMSNAP_LOGMARKER")
+CD_NEW_SYNCHPOINT = SystemColumn("CD_NEW_SYNCHPOINT")
+
+SYSTEM_COLUMNS = [
+    IBMSNAP_OPERATION,
+    IBMSNAP_COMMITSEQ,
+    IBMSNAP_INTENTSEQ,
+    IBMSNAP_LOGMARKER,
+    CD_NEW_SYNCHPOINT,
+]
 
 COMMITSEQ_ORIGIN = b"\x00" * 16
 
 FETCH_SIZE = 10000
+POLL_INTERVAL_SECONDS = 1.0
 
 
 class Offset:
@@ -88,12 +116,14 @@ class SqlReplicationIngester(CdcIngester):
         conn: Db2CdcConn,
         tables: QualifiedTablesSpec,
         start_from: Db2CdcStartFromSpec,
+        blocking_timeout_seconds: float = DEFAULT_BLOCKING_TIMEOUT_SECONDS,
         offset: pl.DataFrame | None = None,
     ):
         super().__init__(tables)
         self._conn = conn
         self._start_from = start_from
         self._offset: Offset | None = Offset.load(offset)
+        self._blocking_timeout_seconds = blocking_timeout_seconds
         self._mark: Offset | None = self._offset.copy() if offset else None
 
     @property
@@ -103,6 +133,10 @@ class SqlReplicationIngester(CdcIngester):
     @property
     def start_from(self) -> Db2CdcStartFromSpec | None:
         return self._start_from
+
+    @property
+    def blocking_timeout_seconds(self) -> float | None:
+        return self._blocking_timeout_seconds
 
     @property
     def dialect(self) -> Db2Dialect:
@@ -140,9 +174,9 @@ class SqlReplicationIngester(CdcIngester):
                 with session.connect() as connection:
                     row = connection.execute(
                         text(
-                            f"select max({IBMSNAP_COMMITSEQ}) "
+                            f"select max({IBMSNAP_COMMITSEQ.quoted}) "
                             f"from {ASN_SCHEMA}.IBMSNAP_UOW "
-                            f"where {IBMSNAP_LOGMARKER} <= :ts"
+                            f"where {IBMSNAP_LOGMARKER.quoted} <= :ts"
                         ),
                         {"ts": ts},
                     ).fetchone()
@@ -168,6 +202,8 @@ class SqlReplicationIngester(CdcIngester):
 
         inspector: sa.engine.reflection.Inspector = sa.inspect(session)
         sa_dialect: sa.engine.interfaces.Dialect = inspector.bind.dialect
+        for column in SYSTEM_COLUMNS:
+            column.normalize(sa_dialect)
         result: dict[str, TrackedTable] = {}
 
         for table_spec in table_specs:
@@ -180,16 +216,8 @@ class SqlReplicationIngester(CdcIngester):
                     error,
                 ) from error
 
-            # If a quoted identifier matches the database's default case
-            # fold, strip the quote flag so normalize_name produces the
-            # same key as the unquoted equivalent.  For example, in DB2
-            # "DB2INST1" (quoted uppercase) and db2inst1 (unquoted) refer
-            # to the same object and should yield the same dict key.
-            cd_schema = self._canonicalize(cd_schema)
-            cd_table = self._canonicalize(cd_table)
-
-            normalized_cd_schema = sa_dialect.normalize_name(cd_schema)
-            normalized_cd_table = sa_dialect.normalize_name(cd_table)
+            real_cd_schema = self.resolve_identifier(cd_schema)
+            real_cd_table = self.resolve_identifier(cd_table)
 
             with session.connect() as connection:
                 registration = connection.execute(
@@ -203,16 +231,16 @@ class SqlReplicationIngester(CdcIngester):
                         f"and cd_table = :cd_table"
                     ),
                     {
-                        "cd_owner": normalized_cd_schema.upper(),
-                        "cd_table": normalized_cd_table.upper(),
+                        "cd_owner": real_cd_schema,
+                        "cd_table": real_cd_table,
                     },
                 ).fetchone()
 
             if registration is None:
                 raise CdcError(
                     ErrorCode.CDC4,
-                    normalized_cd_schema,
-                    normalized_cd_table,
+                    real_cd_schema,
+                    real_cd_table,
                     ASN_SCHEMA,
                 )
 
@@ -221,59 +249,101 @@ class SqlReplicationIngester(CdcIngester):
             before_img_prefix = registration[2].strip() if registration[2] else None
 
             normalized_source_schema = sa_dialect.normalize_name(
-                quoted_name(source_owner, quote=False)
+                quoted_name(
+                    value=source_owner,
+                    quote=False,
+                )
             )
             normalized_source_table = sa_dialect.normalize_name(
-                quoted_name(source_table, quote=False)
+                quoted_name(
+                    value=source_table,
+                    quote=False,
+                )
             )
 
             if not inspector.has_table(
-                normalized_source_table,
+                table_name=normalized_source_table,
                 schema=normalized_source_schema,
             ):
                 raise CdcError(
                     ErrorCode.CDC2,
-                    normalized_source_schema,
-                    normalized_source_table,
+                    source_owner,
+                    source_table,
                 )
 
             columns_info = inspector.get_columns(
-                normalized_source_table,
+                table_name=normalized_source_table,
                 schema=normalized_source_schema,
             )
             if not columns_info:
                 raise CdcError(
                     ErrorCode.CDC3,
-                    normalized_source_schema,
-                    normalized_source_table,
+                    source_owner,
+                    source_table,
+                )
+
+            with session.connect() as connection:
+                catalog_columns = self.dialect.get_catalog_columns(
+                    connection=connection,
+                    schema=source_owner,
+                    table=source_table,
+                )
+
+            if len(catalog_columns) != len(columns_info):
+                raise CdcError(
+                    ErrorCode.CDC7,
+                    source_owner,
+                    source_table,
+                    len(catalog_columns),
+                    len(columns_info),
+                )
+
+            # Verify catalog and inspector columns match (case-insensitive).
+            for catalog_name, col_info in zip(catalog_columns, columns_info):
+                if catalog_name.upper() != col_info["name"].upper():
+                    raise CdcError(
+                        ErrorCode.CDC8,
+                        source_owner,
+                        source_table,
+                        catalog_name,
+                        col_info["name"],
+                    )
+
+            columns = []
+            for catalog_name, col_info in zip(catalog_columns, columns_info):
+                iname = (
+                    f"{before_img_prefix}{catalog_name}" if before_img_prefix else None
+                )
+                columns.append(
+                    TrackedColumn(
+                        name=catalog_name,
+                        satype=col_info["type"],
+                        iname=iname,
+                        sa_name=sa_dialect.normalize_name(name=catalog_name),
+                        sa_iname=(
+                            sa_dialect.normalize_name(name=iname) if iname else None
+                        ),
+                    )
                 )
 
             pk_info = inspector.get_pk_constraint(
-                normalized_source_table,
+                table_name=normalized_source_table,
                 schema=normalized_source_schema,
             )
-            pk_columns = pk_info.get("constrained_columns", []) if pk_info else []
-
-            columns = [
-                TrackedColumn(
-                    name=column_info["name"],
-                    satype=column_info["type"],
-                    iname=(
-                        f"{before_img_prefix}{column_info['name']}"
-                        if before_img_prefix
-                        else None
-                    ),
-                )
-                for column_info in columns_info
-            ]
+            inspector_pk = pk_info.get("constrained_columns", []) if pk_info else []
+            inspector_to_catalog = {
+                col_info["name"]: catalog_name
+                for col_info, catalog_name in zip(columns_info, catalog_columns)
+            }
+            pk_columns = [inspector_to_catalog.get(pk, pk) for pk in inspector_pk]
 
             data_table = TableObject(
-                schema=normalized_source_schema,
-                table=normalized_source_table,
+                schema=source_owner,
+                table=source_table,
             )
             cdc_table = TableObject(
-                schema=normalized_cd_schema,
-                table=normalized_cd_table,
+                schema=real_cd_schema,
+                table=real_cd_table,
             )
             tracked_table = TrackedTable(
                 data_table=data_table,
@@ -297,24 +367,31 @@ class SqlReplicationIngester(CdcIngester):
         if isinstance(position, Offset):
             self._mark = position
 
-    @staticmethod
-    def query_table_watermark(
+    def query_table_watermarks(
+        self,
         connection: Any,
-        tracked: TrackedTable,
-    ) -> bytes | None:
-        row = connection.execute(
-            text(
-                f"select {CD_NEW_SYNCHPOINT} "
-                f"from {ASN_SCHEMA}.ibmsnap_register "
-                f"where cd_owner = :cd_owner "
-                f"and cd_table = :cd_table"
-            ),
-            {
-                "cd_owner": tracked.cdc_table.schema.upper(),
-                "cd_table": tracked.cdc_table.table.upper(),
-            },
-        ).fetchone()
-        return row[0] if row and row[0] else None
+    ) -> dict[str, bytes]:
+        watermarks: dict[str, bytes] = {}
+        if not self._tracked_tables:
+            return watermarks
+        blocks = []
+        index_to_qualified: dict[int, str] = {}
+        for i, table in enumerate(self._tracked_tables.values()):
+            cd_schema = table.cdc_table.schema
+            cd_table = table.cdc_table.table
+            blocks.append(
+                f"select {i} as idx, "
+                f"max({IBMSNAP_COMMITSEQ.quoted}) as mcs "
+                f'from "{cd_schema}"."{cd_table}"'
+            )
+            index_to_qualified[i] = table.cdc_table.qualified
+        query = text(" union all ".join(blocks))
+        rows = connection.execute(query).fetchall()
+        for row in rows:
+            table_index, table_commitseq = row[0], row[1]
+            if table_commitseq and table_commitseq > COMMITSEQ_ORIGIN:
+                watermarks[index_to_qualified[table_index]] = table_commitseq
+        return watermarks
 
     def query_table_changes(
         self,
@@ -323,21 +400,28 @@ class SqlReplicationIngester(CdcIngester):
         commitseq: bytes,
         watermark: bytes,
     ) -> Generator[CdcDataChange, None, None]:
-        column_names = [column.name for column in tracked.columns]
-        column_inames = [column.iname for column in tracked.columns if column.iname]
+        column_names = [f'"{column.name}"' for column in tracked.columns]
+        column_inames = [
+            f'"{column.iname}"' for column in tracked.columns if column.iname
+        ]
         select_columns = (
-            [IBMSNAP_OPERATION, IBMSNAP_COMMITSEQ, IBMSNAP_INTENTSEQ]
+            [
+                IBMSNAP_OPERATION.quoted,
+                IBMSNAP_COMMITSEQ.quoted,
+                IBMSNAP_INTENTSEQ.quoted,
+            ]
             + column_names
             + column_inames
         )
         select_clause = ", ".join(select_columns)
+        cd_qualified = f"{tracked.cdc_table.schema}{DOT}{tracked.cdc_table.table}"
         query = text(
             f"select {select_clause} "
-            f"from {tracked.cdc_table.schema}{DOT}{tracked.cdc_table.table} "
-            f"where {IBMSNAP_COMMITSEQ} > :commitseq "
-            f"and {IBMSNAP_COMMITSEQ} <= :watermark "
-            f"order by {IBMSNAP_COMMITSEQ}, "
-            f"{IBMSNAP_INTENTSEQ}"
+            f"from {cd_qualified} "
+            f"where {IBMSNAP_COMMITSEQ.quoted} > :commitseq "
+            f"and {IBMSNAP_COMMITSEQ.quoted} <= :watermark "
+            f"order by {IBMSNAP_COMMITSEQ.quoted}, "
+            f"{IBMSNAP_INTENTSEQ.quoted}"
         )
         rows = connection.execute(
             query,
@@ -349,7 +433,7 @@ class SqlReplicationIngester(CdcIngester):
         rows = rows.yield_per(FETCH_SIZE)
         for row in rows:
             row_map = row._mapping
-            db_op = str(row_map[IBMSNAP_OPERATION]).strip()
+            db_op = str(row_map[IBMSNAP_OPERATION.sa_name]).strip()
             op = OPERATION_MAP.get(db_op)
             if op is None:
                 raise CdcError(
@@ -358,15 +442,15 @@ class SqlReplicationIngester(CdcIngester):
                     "asn",
                     tracked.data_table.qualified,
                 )
-            commit_seq = row_map[IBMSNAP_COMMITSEQ]
-            intent_seq = row_map[IBMSNAP_INTENTSEQ]
-            new_values = {col.name: row_map.get(col.name) for col in tracked.columns}
+            commit_seq = row_map[IBMSNAP_COMMITSEQ.sa_name]
+            intent_seq = row_map[IBMSNAP_INTENTSEQ.sa_name]
+            new_values = {col.name: row_map.get(col.sa_name) for col in tracked.columns}
             self.localize_values(new_values)
             if op == CdcOperation.UPDATE:
                 old_values = {}
                 for column in tracked.columns:
-                    if column.iname and column.iname in row_map:
-                        old_values[column.name] = row_map[column.iname]
+                    if column.sa_iname and column.sa_iname in row_map:
+                        old_values[column.name] = row_map[column.sa_iname]
                     else:
                         old_values[column.name] = None
                 self.localize_values(old_values)
@@ -375,24 +459,47 @@ class SqlReplicationIngester(CdcIngester):
             yield CdcDataChange(
                 operation=op,
                 transaction=str(commit_seq),
-                sequence=int(intent_seq),
+                sequence=int.from_bytes(intent_seq, byteorder="big"),
                 table=tracked.data_table.qualified,
                 new_values=new_values,
                 old_values=old_values,
             )
 
     def poll_changes(self, session: Any) -> Generator[CdcChange, None, None]:
-        with session.connect() as connection:
-            for tracked in self._tracked_tables.values():
-                table = tracked.cdc_table.qualified
-                commit = self._mark.commits.get(table, COMMITSEQ_ORIGIN)
-                watermark = self.query_table_watermark(connection, tracked)
-                if watermark is None or watermark <= commit:
-                    continue
-                yield from self.query_table_changes(
-                    connection=connection,
-                    tracked=tracked,
-                    commitseq=commit,
-                    watermark=watermark,
-                )
-                self._mark.commits[table] = watermark
+        qualified: str | None = None
+        deadline = time.monotonic() + self._blocking_timeout_seconds
+        try:
+            with session.connect() as connection:
+                while True:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        return
+                    watermarks = self.query_table_watermarks(connection)
+                    for table in self._tracked_tables.values():
+                        qualified = table.cdc_table.qualified
+                        commit = self._mark.commits.get(qualified, COMMITSEQ_ORIGIN)
+                        watermark = watermarks.get(qualified)
+                        if watermark is None or watermark <= commit:
+                            continue
+                        yield from self.query_table_changes(
+                            connection=connection,
+                            tracked=table,
+                            commitseq=commit,
+                            watermark=watermark,
+                        )
+                        self._mark.commits[qualified] = watermark
+                    sleep = min(
+                        POLL_INTERVAL_SECONDS,
+                        max(deadline - time.monotonic(), 0),
+                    )
+                    if sleep <= 0:
+                        return
+                    time.sleep(sleep)
+        except Exception as error:
+            logger.error(
+                f"Error while polling changes: "
+                f"exception when polling table={qualified}: "
+                f"{type(error).__name__}: {error}",
+                exc_info=True,
+            )
+            raise

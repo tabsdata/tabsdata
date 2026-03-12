@@ -31,3 +31,30 @@ class PostgresDialect(Dialect):
         if row and row[0] is not None:
             return parse_server_timezone(str(row[0]))
         return None
+
+    def get_catalog_columns(
+        self,
+        connection: Any,
+        schema: str,
+        table: str,
+    ) -> list[str]:
+        rows = connection.execute(
+            text(
+                "select a.attname "
+                "from pg_catalog.pg_attribute a "
+                "join pg_catalog.pg_class c "
+                "on a.attrelid = c.oid "
+                "join pg_catalog.pg_namespace n "
+                "on c.relnamespace = n.oid "
+                "where n.nspname = :schema "
+                "and c.relname = :table "
+                "and a.attnum > 0 "
+                "and not a.attisdropped "
+                "order by a.attnum"
+            ),
+            {
+                "schema": schema,
+                "table": table,
+            },
+        ).fetchall()
+        return [row[0] for row in rows]

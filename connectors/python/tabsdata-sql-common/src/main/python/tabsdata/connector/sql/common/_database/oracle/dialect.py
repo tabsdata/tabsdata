@@ -31,3 +31,24 @@ class OracleDialect(Dialect):
         if row and row[0] is not None:
             return parse_server_timezone(row[0])
         return None
+
+    def get_catalog_columns(
+        self,
+        connection: Any,
+        schema: str,
+        table: str,
+    ) -> list[str]:
+        rows = connection.execute(
+            text(
+                "select column_name "
+                "from all_tab_columns "
+                "where owner = :schema "
+                "and table_name = :table "
+                "order by column_id"
+            ),
+            {
+                "schema": schema,
+                "table": table,
+            },
+        ).fetchall()
+        return [row[0] for row in rows]

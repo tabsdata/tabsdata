@@ -60,6 +60,8 @@ class TrackedColumn:
     satype: Any
     patype: Any = None
     iname: str | None = None
+    sa_name: str | None = None
+    sa_iname: str | None = None
 
 
 @dataclass
@@ -72,14 +74,14 @@ class TrackedTable:
     pa_schema: pa.Schema = field(init=False)
 
     def __post_init__(self):
-        self._build_pa_dtypes()
-        self.pa_schema = self._build_pa_schema()
+        self.build_pa_dtypes()
+        self.pa_schema = self.build_pa_schema()
 
-    def _build_pa_dtypes(self) -> None:
+    def build_pa_dtypes(self) -> None:
         for column in self.columns:
             column.patype = sqlalchemy_to_arrow(column.satype)
 
-    def _build_pa_schema(self) -> pa.Schema:
+    def build_pa_schema(self) -> pa.Schema:
         fields: list[pa.Field] = [
             pa.field(CDC_META_OP, pa.utf8()),
             pa.field(CDC_META_TX, pa.utf8()),

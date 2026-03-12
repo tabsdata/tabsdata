@@ -21,6 +21,7 @@ from tabsdata.connector.cdc.common._model import (
     TrackedTable,
 )
 from tabsdata.connector.cdc.common.constants import (
+    DEFAULT_BLOCKING_TIMEOUT_SECONDS,
     DEFAULT_BUFFER_MAX_BYTES,
     DEFAULT_BUFFER_MAX_ROWS,
     DEFAULT_BUFFER_MAX_SECONDS,
@@ -66,6 +67,7 @@ class Db2CdcTrigger(CdcTrigger):
         trigger_max_bytes: int | None = DEFAULT_TRIGGER_MAX_BYTES,
         trigger_max_seconds: float = DEFAULT_TRIGGER_MAX_SECONDS,
         poll_interval_seconds: float = DEFAULT_POLL_INTERVAL_SECONDS,
+        blocking_timeout_seconds: float = DEFAULT_BLOCKING_TIMEOUT_SECONDS,
         start: datetime | None = None,
         end: datetime | None = None,
     ):
@@ -84,15 +86,21 @@ class Db2CdcTrigger(CdcTrigger):
             end=end,
         )
         self._start_from = start_from
+        self._blocking_timeout_seconds = blocking_timeout_seconds
         self._ingester = SqlReplicationIngester(
             conn=conn,
             tables=tables,
             start_from=start_from,
+            blocking_timeout_seconds=blocking_timeout_seconds,
         )
 
     @property
     def start_from(self) -> Db2CdcStartFromSpec | None:
         return self._start_from
+
+    @property
+    def blocking_timeout_seconds(self) -> float:
+        return self._blocking_timeout_seconds
 
     def _open_session(self) -> Any:
         return self._ingester.open_session()

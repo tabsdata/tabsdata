@@ -13,7 +13,6 @@ import pytest
 from tabsdata.connector.cdc.common._model import TableObject
 from tabsdata.connector.cdc.common.constants import CdcOperation
 from test_tabsdata.test_tableframe.common import pretty_polars, pretty_pandas
-from test_tabsdata_cdc_common.common.sql import COLUMNS
 from test_tabsdata_cdc_postgres.common.sql import PostgresCdcSampler
 
 
@@ -35,11 +34,9 @@ def test_sampler_insert_update_delete(postgres_cdc_config):
     connection.autocommit = False
     try:
         cursor = connection.cursor()
-        sampler = PostgresCdcSampler(cursor)
+        sampler = PostgresCdcSampler(config.container, config.port, cursor)
 
         sampler.run(
-            container=postgres_cdc_config.container,
-            port=postgres_cdc_config.port,
             table=table,
             inserts=8,
             updates=4,
@@ -58,12 +55,10 @@ def test_sampler_insert_update_delete(postgres_cdc_config):
         assert ops.count(CdcOperation.UPDATE) == 4
         assert ops.count(CdcOperation.DELETE) == 2
 
-        for column in COLUMNS:
+        for column in sampler.columns:
             assert column in data.columns, f"Missing column {column} in data"
 
         sampler.run(
-            container=postgres_cdc_config.container,
-            port=postgres_cdc_config.port,
             table=table,
             inserts=4,
             updates=2,

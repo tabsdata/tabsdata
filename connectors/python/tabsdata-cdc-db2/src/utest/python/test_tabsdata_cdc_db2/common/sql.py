@@ -4,12 +4,9 @@
 
 from __future__ import annotations
 
-from docker.models.containers import Container
-
 from tabsdata.connector.cdc.common._model import TableObject
 from test_tabsdata_cdc_common.common.sql import (
     CdcSampler,
-    DATA_COLUMNS,
     sql_literal,
 )
 from test_tabsdata_cdc_db2.common.fixtures.docker import register_table_for_cdc
@@ -32,6 +29,9 @@ CREATE_TABLE_DDL = (
 
 class Db2CdcSampler(CdcSampler):
 
+    def fold(self, name: str) -> str:
+        return name.upper()
+
     def table_exists(self, table: TableObject) -> bool:
         self._cursor.execute(
             f"select count(*) "
@@ -41,27 +41,22 @@ class Db2CdcSampler(CdcSampler):
         )
         return self._cursor.fetchone()[0] > 0
 
-    def create_table(
-        self,
-        container: Container,
-        port: int,
-        table: TableObject
-    ) -> None:
+    def create_table(self, table: TableObject) -> None:
         register_table_for_cdc(
-            container=container,
-            port=port,
+            container=self._container,
+            port=self._port,
             schema=table.schema,
             table=table.table,
             ddl=CREATE_TABLE_DDL.format(qualified=table.qualified),
-            wait=False,
+            wait=True,
         )
         # self._cursor.execute(
         #     CREATE_TABLE_DDL.format(qualified=table.qualified)
         # )
 
     def insert_row(self, table: TableObject, values: dict) -> int:
-        i_columns = ", ".join(DATA_COLUMNS)
-        i_values = ", ".join(sql_literal(values[column]) for column in DATA_COLUMNS)
+        i_columns = ", ".join(self._manual_columns)
+        i_values = ", ".join(sql_literal(values[column]) for column in self._manual_columns)
         self._cursor.execute(
             f"insert into {table.qualified} "
             f"({i_columns}) "

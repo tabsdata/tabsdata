@@ -8,6 +8,7 @@ from sqlalchemy import text
 
 from tabsdata.connector.cdc.postgres._ingester.wal2json import Wal2JsonIngester
 from tabsdata.exceptions import CdcError, ErrorCode
+from test_tabsdata_cdc_postgres.common.db import replication_slot
 
 
 @pytest.mark.cdc_postgres
@@ -35,6 +36,9 @@ def test_collect_tables_success(postgres_collect_tables_setup):
     ingester = Wal2JsonIngester(
         conn=conn,
         tables=[f'"{schema}"."td_ct_simple"', f"{schema}.td_ct_extra"],
+        start_from="origin",
+        replication_slot=replication_slot(),
+        replication_slot_behavior="create",
     )
     result = ingester.collect_tables(session)
 
@@ -79,6 +83,9 @@ def test_collect_tables_not_found(postgres_collect_tables_setup):
     ingester = Wal2JsonIngester(
         conn=conn,
         tables=[f"{schema}.td_ct_simple", f"{schema}.td_ct_nonexistent"],
+        start_from="origin",
+        replication_slot=replication_slot(),
+        replication_slot_behavior="create",
     )
     with pytest.raises(CdcError) as exc_info:
         ingester.collect_tables(session)
@@ -90,7 +97,13 @@ def test_collect_tables_not_found(postgres_collect_tables_setup):
 def test_collect_tables_invalid_spec(postgres_collect_tables_setup):
     conn, session, config = postgres_collect_tables_setup
 
-    ingester = Wal2JsonIngester(conn=conn, tables=["no_dot_here"])
+    ingester = Wal2JsonIngester(
+        conn=conn,
+        tables=["no_dot_here"],
+        start_from="origin",
+        replication_slot=replication_slot(),
+        replication_slot_behavior="create",
+    )
     with pytest.raises(CdcError) as exception:
         ingester.collect_tables(session)
     assert exception.value.error_code == ErrorCode.CDC1
@@ -130,6 +143,9 @@ def test_collect_tables_type_conversion(postgres_collect_tables_setup):
     ingester = Wal2JsonIngester(
         conn=conn,
         tables=[f"{schema}.td_ct_types"],
+        start_from="origin",
+        replication_slot=replication_slot(),
+        replication_slot_behavior="create",
     )
     result = ingester.collect_tables(session)
 

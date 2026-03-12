@@ -8,6 +8,7 @@ from sqlalchemy import text
 
 from tabsdata.connector.cdc.mysql._ingester.binlog import BinlogIngester
 from tabsdata.exceptions import CdcError, ErrorCode
+from test_tabsdata_cdc_mysql.common.db import server_id
 
 
 @pytest.mark.cdc_mysql
@@ -35,6 +36,8 @@ def test_collect_tables_success(mysql_collect_tables_setup):
     ingester = BinlogIngester(
         conn=conn,
         tables=[f"`{schema}`.`td_ct_simple`", f"{schema}.td_ct_extra"],
+        start_from="origin",
+        server_id=server_id(),
     )
     result = ingester.collect_tables(session)
 
@@ -79,6 +82,8 @@ def test_collect_tables_not_found(mysql_collect_tables_setup):
     ingester = BinlogIngester(
         conn=conn,
         tables=[f"{schema}.td_ct_simple", f"{schema}.td_ct_nonexistent"],
+        start_from="origin",
+        server_id=server_id(),
     )
     with pytest.raises(CdcError) as exc_info:
         ingester.collect_tables(session)
@@ -90,7 +95,12 @@ def test_collect_tables_not_found(mysql_collect_tables_setup):
 def test_collect_tables_invalid_spec(mysql_collect_tables_setup):
     conn, session, config = mysql_collect_tables_setup
 
-    ingester = BinlogIngester(conn=conn, tables=["no_dot_here"])
+    ingester = BinlogIngester(
+        conn=conn,
+        tables=["no_dot_here"],
+        start_from="origin",
+        server_id=server_id(),
+    )
     with pytest.raises(CdcError) as exception:
         ingester.collect_tables(session)
     assert exception.value.error_code == ErrorCode.CDC1
@@ -124,7 +134,12 @@ def test_collect_tables_type_conversion(mysql_collect_tables_setup):
         ))
         c.commit()
 
-    ingester = BinlogIngester(conn=conn, tables=[f"{schema}.td_ct_types"])
+    ingester = BinlogIngester(
+        conn=conn,
+        tables=[f"{schema}.td_ct_types"],
+        start_from="origin",
+        server_id=server_id(),
+    )
     result = ingester.collect_tables(session)
 
     key = f"{schema}.td_ct_types"

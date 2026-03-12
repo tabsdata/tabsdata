@@ -32,7 +32,10 @@ from tabsdata.connector.cdc.common.constants import (
 )
 from tabsdata.connector.cdc.common.typing import CdcFormatSpec, QualifiedTablesSpec
 from tabsdata.connector.cdc.postgres._connection import PostgresCdcConn
-from tabsdata.connector.cdc.postgres._ingester.wal2json import Wal2JsonIngester
+from tabsdata.connector.cdc.postgres._ingester.wal2json import (
+    DEFAULT_WAL2JSON_FORMAT_VERSION,
+    Wal2JsonIngester,
+)
 from tabsdata.connector.cdc.postgres.typing import (
     PostgresCdcStartFromSpec,
     ReplicationSlotBehaviorSpec,
@@ -104,6 +107,7 @@ class PostgresCdcTrigger(CdcTrigger):
             replication_slot=replication_slot,
             publication_name=publication_name,
             replication_slot_behavior=slot_behavior,
+            wal2json_format_version=DEFAULT_WAL2JSON_FORMAT_VERSION,
         )
 
     @property

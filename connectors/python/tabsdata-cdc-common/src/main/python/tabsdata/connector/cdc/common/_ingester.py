@@ -63,10 +63,10 @@ class CdcIngester(ABC):
     @abstractmethod
     def dialect(self) -> SqlDialect: ...
 
-    def _canonicalize(self, name: quoted_name) -> quoted_name:
-        if name.quote and str(name) == self.dialect.default_case_fold(str(name)):
-            return quoted_name(str(name), quote=False)
-        return name
+    def resolve_identifier(self, name: quoted_name) -> str:
+        if name.quote:
+            return str(name)
+        return self.dialect.default_case_fold(str(name))
 
     # noinspection DuplicatedCode
     def collect_tables(
@@ -74,34 +74,33 @@ class CdcIngester(ABC):
         session: Any,
         cdc_format: CdcFormatSpec = CdcFormatSpec(),
     ) -> dict[str, TrackedTable]:
-        table_specs = self._tables
-        if isinstance(table_specs, str):
-            table_specs = [table_specs]
+        tablespecs = self._tables
+        if isinstance(tablespecs, str):
+            tablespecs = [tablespecs]
 
         inspector: sa.engine.reflection.Inspector = sa.inspect(session)
         sa_dialect: sa.engine.interfaces.Dialect = inspector.bind.dialect
         result: dict[str, TrackedTable] = {}
 
-        for table_spec in table_specs:
+        for tablespec in tablespecs:
             try:
-                schema, table = self.dialect.parse_qualified_table(table_spec)
+                schema, table = self.dialect.parse_qualified_table(tablespec)
             except ValueError as error:
                 raise CdcError(
                     ErrorCode.CDC1,
-                    table_spec,
+                    tablespec,
                     error,
                 ) from error
 
-            # If a quoted identifier matches the database's default case
-            # fold, strip the quote flag so normalize_name produces the
-            # same key as the unquoted equivalent.  For example, in DB2
-            # "DB2INST1" (quoted uppercase) and db2inst1 (unquoted) refer
-            # to the same object and should yield the same dict key.
-            schema = self._canonicalize(schema)
-            table = self._canonicalize(table)
+            db_schema = self.resolve_identifier(schema)
+            db_table = self.resolve_identifier(table)
 
-            normalized_schema = sa_dialect.normalize_name(schema)
-            normalized_table = sa_dialect.normalize_name(table)
+            normalized_schema = sa_dialect.normalize_name(
+                quoted_name(db_schema, quote=False)
+            )
+            normalized_table = sa_dialect.normalize_name(
+                quoted_name(db_table, quote=False)
+            )
 
             if not inspector.has_table(
                 normalized_table,
@@ -109,38 +108,70 @@ class CdcIngester(ABC):
             ):
                 raise CdcError(
                     ErrorCode.CDC2,
-                    normalized_schema,
-                    normalized_table,
+                    db_schema,
+                    db_table,
                 )
 
-            columns_info = inspector.get_columns(
+            sa_columns = inspector.get_columns(
                 normalized_table,
                 schema=normalized_schema,
             )
-            if not columns_info:
+            if not sa_columns:
                 raise CdcError(
                     ErrorCode.CDC3,
-                    normalized_schema,
-                    normalized_table,
+                    db_schema,
+                    db_table,
                 )
 
-            pk_info = inspector.get_pk_constraint(
-                normalized_table,
-                schema=normalized_schema,
-            )
-            pk_columns = pk_info.get("constrained_columns", []) if pk_info else []
+            with session.connect() as connection:
+                db_columns = self.dialect.get_catalog_columns(
+                    connection,
+                    db_schema,
+                    db_table,
+                )
+
+            if len(db_columns) != len(sa_columns):
+                raise CdcError(
+                    ErrorCode.CDC7,
+                    db_schema,
+                    db_table,
+                    len(db_columns),
+                    len(sa_columns),
+                )
+
+            for db_column, sa_column in zip(db_columns, sa_columns):
+                if db_column.upper() != sa_column["name"].upper():
+                    raise CdcError(
+                        ErrorCode.CDC8,
+                        db_schema,
+                        db_table,
+                        db_column,
+                        sa_column["name"],
+                    )
 
             columns = [
                 TrackedColumn(
-                    name=column_info["name"],
-                    satype=column_info["type"],
+                    name=db_column,
+                    satype=sa_column["type"],
+                    sa_name=sa_dialect.normalize_name(db_column),
                 )
-                for column_info in columns_info
+                for db_column, sa_column in zip(db_columns, sa_columns)
             ]
 
-            table_object = TableObject(
+            pk_info = inspector.get_pk_constraint(
+                table_name=normalized_table,
                 schema=normalized_schema,
-                table=normalized_table,
+            )
+            inspector_pk = pk_info.get("constrained_columns", []) if pk_info else []
+            inspector_to_catalog = {
+                sa_column["name"]: db_column
+                for sa_column, db_column in zip(sa_columns, db_columns)
+            }
+            pk_columns = [inspector_to_catalog.get(pk, pk) for pk in inspector_pk]
+
+            table_object = TableObject(
+                schema=db_schema,
+                table=db_table,
             )
             tracked_table = TrackedTable(
                 data_table=table_object,

@@ -10,6 +10,7 @@ from collections.abc import Generator
 from typing import Any
 
 import polars as pl
+import pymysql
 from pymysqlreplication import BinLogStreamReader
 from pymysqlreplication.event import GtidEvent, HeartbeatLogEvent
 from pymysqlreplication.row_event import (
@@ -176,21 +177,15 @@ class BinlogIngester(CdcIngester):
             case TimestampPositionSpec(ts=ts):
                 stream_kwargs["skip_to_timestamp"] = ts
             case "origin":
-                # pymysqlreplication treats auto_position="" as falsy,
-                # falling into the non-GTID branch which calls the
-                # deprecated SHOW MASTER STATUS. Work around by using
-                # binlog file/position instead.
-                stream_kwargs["log_file"] = self._first_binlog_file()
+                stream_kwargs["log_file"] = self.first_binlog_file()
                 stream_kwargs["log_pos"] = BINLOG_START_POSITION
             case _:
                 raise CdcError(ErrorCode.CDC6, start_from)
         self._stream = BinLogStreamReader(**stream_kwargs)
         logger.info("BinLogStreamReader initialized")
 
-    def _first_binlog_file(self) -> str:
+    def first_binlog_file(self) -> str:
         connection_settings = self.stream_connection_settings()
-        import pymysql
-
         conn = pymysql.connect(
             host=connection_settings["host"],
             port=connection_settings["port"],
@@ -200,7 +195,7 @@ class BinlogIngester(CdcIngester):
         )
         try:
             with conn.cursor() as cursor:
-                cursor.execute("SHOW BINARY LOGS")
+                cursor.execute("show binary logs")
                 row = cursor.fetchone()
                 if not row:
                     raise CdcError(ErrorCode.CDC6, "origin")
@@ -244,60 +239,56 @@ class BinlogIngester(CdcIngester):
             self._mark = position
 
     def as_qualified_table(self, schema: str, table: str) -> str | None:
-        qualified = f"{schema}.{table}"
+        qualified = f"{schema}{DOT}{table}"
         if qualified in self._tracked_tables:
             return qualified
         return None
 
     def poll_changes(self, session: Any) -> Generator[CdcChange, None, None]:
-        tx: list[CdcDataChange] = []
-        gtid: str | None = None
-        seq = 0
         deadline = time.monotonic() + self._blocking_timeout_seconds
-        for event in self._stream:
-            if isinstance(event, GtidEvent):
-                if len(tx) != 0:
-                    self._mark = Offset(gtid=gtid)
-                    yield from tx
-                    tx = []
-                if time.monotonic() > deadline:
-                    break
-                gtid = event.gtid
-                seq = 0
-            elif isinstance(event, HeartbeatLogEvent):
-                if time.monotonic() > deadline:
-                    if len(tx) != 0:
+        gtid: str | None = None
+        seq: int = 0
+        try:
+            for event in self._stream:
+                if isinstance(event, GtidEvent):
+                    if gtid is not None:
                         self._mark = Offset(gtid=gtid)
-                        yield from tx
-                    break
-            elif isinstance(event, (WriteRowsEvent, UpdateRowsEvent, DeleteRowsEvent)):
-                qualified = self.as_qualified_table(event.schema, event.table)
-                if qualified is None:
-                    continue
-                op = OPERATION_MAP[type(event)]
-                for row in event.rows:
-                    seq += 1
-                    match event:
-                        case WriteRowsEvent():
-                            new_values = row["values"]
-                            old_values = {column: None for column in new_values}
-                        case UpdateRowsEvent():
-                            new_values = row["after_values"]
-                            old_values = row["before_values"]
-                        case DeleteRowsEvent():
-                            new_values = row["values"]
-                            old_values = {column: None for column in new_values}
-                        case _:
-                            raise CdcError(
-                                ErrorCode.CDC5,
-                                type(event).__name__,
-                                "binlog",
-                                qualified,
-                            )
-                    self.localize_values(new_values)
-                    self.localize_values(old_values)
-                    tx.append(
-                        CdcDataChange(
+                    if time.monotonic() > deadline:
+                        break
+                    gtid = event.gtid
+                    seq = 0
+                elif isinstance(event, HeartbeatLogEvent):
+                    if time.monotonic() > deadline:
+                        break
+                elif isinstance(
+                    event, (WriteRowsEvent, UpdateRowsEvent, DeleteRowsEvent)
+                ):
+                    qualified = self.as_qualified_table(event.schema, event.table)
+                    if qualified is None:
+                        continue
+                    op = OPERATION_MAP[type(event)]
+                    for row in event.rows:
+                        seq += 1
+                        match event:
+                            case WriteRowsEvent():
+                                new_values = row["values"]
+                                old_values = {column: None for column in new_values}
+                            case UpdateRowsEvent():
+                                new_values = row["after_values"]
+                                old_values = row["before_values"]
+                            case DeleteRowsEvent():
+                                new_values = row["values"]
+                                old_values = {column: None for column in new_values}
+                            case _:
+                                raise CdcError(
+                                    ErrorCode.CDC5,
+                                    type(event).__name__,
+                                    "binlog",
+                                    qualified,
+                                )
+                        self.localize_values(new_values)
+                        self.localize_values(old_values)
+                        yield CdcDataChange(
                             operation=op,
                             transaction=gtid,
                             sequence=seq,
@@ -305,4 +296,11 @@ class BinlogIngester(CdcIngester):
                             new_values=new_values,
                             old_values=old_values,
                         )
-                    )
+        except Exception as error:
+            logger.error(
+                f"Error while polling changes: "
+                f"exception when polling gtid={gtid} @ seq={seq}: "
+                f"{type(error).__name__}: {error}",
+                exc_info=True,
+            )
+            raise

@@ -7,17 +7,21 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Generator
+from datetime import date, datetime, time as dt_time
+from decimal import Decimal
 from typing import Any
 
 import orjson
 import polars as pl
 import psycopg2
+import pyarrow as pa
 from psycopg2.extras import LogicalReplicationConnection
 
 from tabsdata.connector.cdc.common._ingester import CdcIngester
 from tabsdata.connector.cdc.common._model import (
     CdcChange,
     CdcDataChange,
+    TrackedTable,
 )
 from tabsdata.connector.cdc.common.constants import (
     COMMA,
@@ -39,20 +43,52 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-class IngesterOperations:
+class IngesterV1Operations:
     INSERT = "insert"
     UPDATE = "update"
     DELETE = "delete"
 
 
-OPERATION_MAP = {
-    IngesterOperations.INSERT: CdcOperation.INSERT,
-    IngesterOperations.UPDATE: CdcOperation.UPDATE,
-    IngesterOperations.DELETE: CdcOperation.DELETE,
+V1_OPERATION_MAP = {
+    IngesterV1Operations.INSERT: CdcOperation.INSERT,
+    IngesterV1Operations.UPDATE: CdcOperation.UPDATE,
+    IngesterV1Operations.DELETE: CdcOperation.DELETE,
 }
+
+
+class V2Actions:
+    BEGIN = "B"
+    COMMIT = "C"
+    TRUNCATE = "T"
+    INSERT = "I"
+    UPDATE = "U"
+    DELETE = "D"
+
+
+class IngesterV2Operations:
+    INSERT = "insert"
+    UPDATE = "update"
+    DELETE = "delete"
+
+
+V2_OPERATION_MAP = {
+    V2Actions.INSERT: CdcOperation.INSERT,
+    V2Actions.UPDATE: CdcOperation.UPDATE,
+    V2Actions.DELETE: CdcOperation.DELETE,
+}
+
 
 WAL2JSON_PLUGIN = "wal2json"
 DEFAULT_REPLICATION_SLOT_BEHAVIOR = "reuse"
+POLL_INTERVAL_SECONDS = 1.0
+
+
+class Wal2JsonFormatVersion:
+    WAL2JSON_FORMAT_V1: int = 1
+    WAL2JSON_FORMAT_V2: int = 2
+
+
+DEFAULT_WAL2JSON_FORMAT_VERSION: int = Wal2JsonFormatVersion.WAL2JSON_FORMAT_V2
 
 
 class Offset:
@@ -82,6 +118,7 @@ class Wal2JsonIngester(CdcIngester):
         blocking_timeout_seconds: float = DEFAULT_BLOCKING_TIMEOUT_SECONDS,
         publication_name: str | None = None,
         offset: Offset | None = None,
+        wal2json_format_version: int = DEFAULT_WAL2JSON_FORMAT_VERSION,
     ):
         super().__init__(tables)
         self._conn = conn
@@ -94,6 +131,7 @@ class Wal2JsonIngester(CdcIngester):
         self._mark: Offset | None = self._offset.copy() if offset else None
         self._replicator: Any | None = None
         self._cursor: Any | None = None
+        self._wal2json_format_version = wal2json_format_version
 
     @property
     def conn(self) -> PostgresCdcConn:
@@ -184,8 +222,9 @@ class Wal2JsonIngester(CdcIngester):
                 case _:
                     raise CdcError(ErrorCode.CDC6, self._start_from)
         options = {
-            "format-version": "2",
+            "format-version": str(self._wal2json_format_version),
             "include-transaction": "true",
+            "include-xids": "true",
             "include-timestamp": "true",
             "add-tables": self.schema_table_filter(),
         }
@@ -227,7 +266,7 @@ class Wal2JsonIngester(CdcIngester):
                 flush_lsn=self._mark.lsn,
                 reply=True,
             )
-            logger.debug("Confirmed LSN position: %s", self._mark.lsn)
+            logger.debug(f"Confirmed LSN position: {self._mark.lsn}")
 
     def retrieve_position(self) -> Offset | None:
         return self._mark
@@ -237,19 +276,199 @@ class Wal2JsonIngester(CdcIngester):
             self._mark = position
 
     def as_qualified_table(self, schema: str, table: str) -> str | None:
-        qualified = f"{schema}.{table}"
+        qualified = f"{schema}{DOT}{table}"
         if qualified in self._tracked_tables:
             return qualified
         return None
 
+    def poll_changes(self, session: Any) -> Generator[CdcChange, None, None]:
+        match self._wal2json_format_version:
+            case Wal2JsonFormatVersion.WAL2JSON_FORMAT_V1:
+                yield from self.poll_changes_v1(session)
+            case Wal2JsonFormatVersion.WAL2JSON_FORMAT_V2:
+                yield from self.poll_changes_v2(session)
+            case _:
+                raise CdcError(
+                    ErrorCode.CDCPOSTGRES3,
+                    self._wal2json_format_version,
+                )
+
+    def read_next_message(
+        self,
+        pending: bool,
+        deadline: float,
+    ) -> Any | None:
+        while True:
+            remaining = deadline - time.monotonic()
+            if not pending and remaining <= 0:
+                return None
+            message = self._cursor.read_message()
+            if message is not None:
+                return message
+            if pending:
+                pending = False
+            sleep = min(POLL_INTERVAL_SECONDS, max(remaining, 0))
+            if sleep <= 0:
+                return None
+            time.sleep(sleep)
+
+    def resolve_table(
+        self,
+        change: dict,
+    ) -> str | None:
+        schema = change.get("schema")
+        table = change.get("table")
+        if schema is None or table is None:
+            return None
+        qualified = self.as_qualified_table(schema, table)
+        if qualified is None:
+            logger.debug(f"Skipping untracked table {schema}{DOT}{table}")
+        return qualified
+
+    def build_change(
+        self,
+        qualified: str,
+        op: str,
+        xid: str,
+        sequence: int,
+        new_values: dict,
+        old_values: dict | None,
+    ) -> CdcDataChange:
+        tracked = self._tracked_tables.get(qualified)
+        if tracked is not None:
+            null_row = {column.name: None for column in tracked.columns}
+            if not new_values:
+                new_values = null_row.copy()
+            if not old_values:
+                old_values = null_row.copy()
+            self.coerce_values(new_values, tracked)
+            self.coerce_values(old_values, tracked)
+        self.localize_values(new_values)
+        self.localize_values(old_values)
+        return CdcDataChange(
+            operation=op,
+            transaction=xid,
+            sequence=sequence,
+            table=qualified,
+            new_values=new_values,
+            old_values=old_values,
+        )
+
     @staticmethod
-    def extract_new_values(change: dict) -> dict:
+    def coerce_values(values: dict | None, tracked: TrackedTable) -> None:
+        if values is None:
+            return
+        column_types = {column.name: column.patype for column in tracked.columns}
+        for column, value in values.items():
+            pa_type = column_types.get(column)
+            if pa_type is None:
+                continue
+            values[column] = Wal2JsonIngester.coerce_value(value, pa_type)
+
+    @staticmethod
+    def coerce_value(value: Any, pa_type: pa.DataType) -> Any:
+        if value is None:
+            return None
+        if isinstance(pa_type, pa.Decimal128Type):
+            if not isinstance(value, Decimal):
+                return Decimal(str(value))
+        elif pa.types.is_integer(pa_type):
+            if not isinstance(value, int) or isinstance(value, bool):
+                return int(value)
+        elif pa.types.is_floating(pa_type):
+            if not isinstance(value, float):
+                return float(value)
+        elif pa.types.is_boolean(pa_type):
+            if not isinstance(value, bool):
+                if isinstance(value, str):
+                    return value.lower() in ("t", "true", "1", "yes")
+                return bool(value)
+        elif pa.types.is_date(pa_type):
+            if isinstance(value, str):
+                return date.fromisoformat(value)
+        elif pa.types.is_timestamp(pa_type):
+            if isinstance(value, str):
+                return datetime.fromisoformat(value)
+        elif pa.types.is_time(pa_type):
+            if isinstance(value, str):
+                return dt_time.fromisoformat(value)
+        elif pa.types.is_binary(pa_type):
+            if isinstance(value, str):
+                return bytes.fromhex(value.removeprefix("\\x"))
+        return value
+
+    def poll_changes_v1(self, session: Any) -> Generator[CdcChange, None, None]:
+        deadline = time.monotonic() + self._blocking_timeout_seconds
+        xid: str | None = None
+        sequence: int = 0
+        try:
+            while True:
+                message = self.read_next_message(
+                    pending=False,
+                    deadline=deadline,
+                )
+                if message is None:
+                    break
+                payload = orjson.loads(message.payload)
+                xid = str(payload["xid"])
+                changes = payload["change"]
+                sequence = 0
+                for change in changes:
+                    sequence += 1
+                    data_change = self.process_change_v1(
+                        change=change,
+                        xid=xid,
+                        sequence=sequence,
+                    )
+                    if data_change is not None:
+                        yield data_change
+                self._mark = Offset(lsn=message.wal_end)
+        except Exception as error:
+            logger.error(
+                f"Error while polling changes: "
+                f"exception when polling xid={xid} @ seq={sequence}: "
+                f"{type(error).__name__}: {error}",
+                exc_info=True,
+            )
+            raise
+
+    def process_change_v1(
+        self,
+        change: dict,
+        xid: str,
+        sequence: int,
+    ) -> CdcDataChange | None:
+        qualified = self.resolve_table(change)
+        if qualified is None:
+            return None
+        kind = change.get("kind")
+        op = V1_OPERATION_MAP.get(kind)
+        if op is None:
+            raise CdcError(ErrorCode.CDC5, kind, "wal2json", qualified)
+        match op:
+            case CdcOperation.INSERT:
+                new_values = self.extract_new_values_v1(change)
+                old_values = {column: None for column in new_values}
+            case CdcOperation.UPDATE:
+                new_values = self.extract_new_values_v1(change)
+                old_values = self.extract_old_values_v1(change)
+            case CdcOperation.DELETE:
+                old_values_raw = self.extract_old_values_v1(change)
+                new_values_raw = self.extract_new_values_v1(change)
+                new_values = old_values_raw or new_values_raw or {}
+                old_values = {column: None for column in new_values}
+            case _:
+                raise CdcError(ErrorCode.CDC5, kind, "wal2json", qualified)
+        return self.build_change(qualified, op, xid, sequence, new_values, old_values)
+
+    @staticmethod
+    def extract_new_values_v1(change: dict) -> dict:
         columns = change.get("columnnames", [])
         values = change.get("columnvalues", [])
         return dict(zip(columns, values))
 
     @staticmethod
-    def extract_old_values(change: dict) -> dict | None:
+    def extract_old_values_v1(change: dict) -> dict | None:
         old_values = change.get("oldkeys", {})
         columns = old_values.get("keynames", [])
         values = old_values.get("keyvalues", [])
@@ -257,60 +476,87 @@ class Wal2JsonIngester(CdcIngester):
             return dict(zip(columns, values))
         return None
 
-    def poll_changes(self, session: Any) -> Generator[CdcChange, None, None]:
+    def poll_changes_v2(self, session: Any) -> Generator[CdcChange, None, None]:
         deadline = time.monotonic() + self._blocking_timeout_seconds
-        while True:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                break
-            tx = self._cursor.read_message(timeout=remaining)
-            if tx is None:
-                break
-            payload = orjson.loads(tx.payload)
-            xid = str(payload["xid"])
-            changes = payload["change"]
-            sequence = 0
-            for change in changes:
-                kind = change["kind"]
-                schema = change["schema"]
-                table = change["table"]
-                qualified = self.as_qualified_table(schema, table)
-                if qualified is None:
-                    continue
-                op = OPERATION_MAP.get(kind)
-                if op is None:
-                    raise CdcError(
-                        ErrorCode.CDC5,
-                        kind,
-                        "wal2json",
-                        qualified,
-                    )
-                sequence += 1
-                match kind:
-                    case IngesterOperations.INSERT:
-                        new_values = self.extract_new_values(change)
-                        old_values = {column: None for column in new_values}
-                    case IngesterOperations.UPDATE:
-                        new_values = self.extract_new_values(change)
-                        old_values = self.extract_old_values(change)
-                    case IngesterOperations.DELETE:
-                        new_values = self.extract_new_values(change)
-                        old_values = {column: None for column in new_values}
-                    case _:
-                        raise CdcError(
-                            ErrorCode.CDC5,
-                            kind,
-                            "wal2json",
-                            qualified,
-                        )
-                self.localize_values(new_values)
-                self.localize_values(old_values)
-                yield CdcDataChange(
-                    operation=op,
-                    transaction=xid,
-                    sequence=sequence,
-                    table=qualified,
-                    new_values=new_values,
-                    old_values=old_values,
+        xid: str | None = None
+        sequence: int = 0
+        try:
+            while True:
+                pending = xid is not None
+                message = self.read_next_message(
+                    pending=pending,
+                    deadline=deadline,
                 )
-            self._mark = Offset(lsn=tx.wal_end)
+                if message is None:
+                    break
+                payload = orjson.loads(message.payload)
+                action = payload.get("action")
+                if action == V2Actions.BEGIN:
+                    xid = str(payload["xid"])
+                    sequence = 0
+                    continue
+                if action == V2Actions.COMMIT:
+                    self._mark = Offset(lsn=message.wal_end)
+                    xid = None
+                    continue
+                if action == V2Actions.TRUNCATE:
+                    continue
+                sequence += 1
+                data_change = self.process_change_v2(
+                    payload=payload,
+                    xid=xid,
+                    sequence=sequence,
+                )
+                if data_change is not None:
+                    yield data_change
+        except Exception as error:
+            logger.error(
+                f"Error while polling changes: "
+                f"exception when polling xid={xid} @ seq={sequence}: "
+                f"{type(error).__name__}: {error}",
+                exc_info=True,
+            )
+            raise
+
+    def process_change_v2(
+        self,
+        payload: dict,
+        xid: str,
+        sequence: int,
+    ) -> CdcDataChange | None:
+        qualified = self.resolve_table(payload)
+        if qualified is None:
+            return None
+        action = payload.get("action")
+        op = V2_OPERATION_MAP.get(action)
+        if op is None:
+            raise CdcError(ErrorCode.CDC5, action, "wal2json", qualified)
+        match op:
+            case CdcOperation.INSERT:
+                new_values = self.extract_new_values_v2(payload)
+                old_values = {column: None for column in new_values}
+            case CdcOperation.UPDATE:
+                new_values = self.extract_new_values_v2(payload)
+                old_values = self.extract_old_values_v2(payload)
+            case CdcOperation.DELETE:
+                old_values_raw = self.extract_old_values_v2(payload)
+                new_values_raw = self.extract_new_values_v2(payload)
+                new_values = old_values_raw or new_values_raw or {}
+                old_values = {column: None for column in new_values}
+            case _:
+                raise CdcError(ErrorCode.CDC5, action, "wal2json", qualified)
+        return self.build_change(qualified, op, xid, sequence, new_values, old_values)
+
+    @staticmethod
+    def extract_new_values_v2(change: dict) -> dict:
+        columns = change.get("columns", [])
+        if columns is None:
+            return {}
+        return {column["name"]: column.get("value") for column in columns}
+
+    @staticmethod
+    def extract_old_values_v2(change: dict) -> dict | None:
+        identity = change.get("identity", [])
+        if not identity:
+            return None
+        return {column["name"]: column.get("value") for column in identity}
