@@ -23,6 +23,7 @@ from tabsdata._io.connections.connections import Conn
 
 # noinspection PyProtectedMember
 from tabsdata._io.stage_trigger import (
+    TRIGGER_RETURN_ON_END_ATTRIBUTE,
     StageTrigger,
     StageTriggerContext,
     StageTriggerStatus,
@@ -793,8 +794,7 @@ class KafkaTrigger(StageTrigger):
         consumer.close()
         logger.debug("Kafka consumer closed.")
 
-        # Check if return_on_end attribute exists and is True
-        if getattr(self, "return_on_end", False):
+        if getattr(self, TRIGGER_RETURN_ON_END_ATTRIBUTE, False):
             if stage_trigger_status == StageTriggerStatus.SUCCESS:
                 pass
             else:

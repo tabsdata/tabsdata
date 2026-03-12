@@ -16,7 +16,7 @@ from tabsdata._utils.annotations import unstable, unstable_category
 from tabsdata._utils.validation import _td_validate_call
 from tabsdata.connector.cdc.common._connector import CdcTrigger
 from tabsdata.connector.cdc.common._model import (
-    CdcEvent,
+    CdcChange,
     TrackedTable,
 )
 from tabsdata.connector.cdc.common.constants import (
@@ -131,11 +131,15 @@ class PostgresCdcTrigger(CdcTrigger):
     def _close_session(self, session: Any) -> None:
         self._ingester.close_session(session)
 
-    def collect_tables(self, session: Any) -> dict[str, TrackedTable]:
-        return self._ingester.collect_tables(session)
+    def collect_tables(
+        self,
+        session: Any,
+        cdc_format: CdcFormatSpec = CdcFormatSpec(),
+    ) -> dict[str, TrackedTable]:
+        return self._ingester.collect_tables(session, cdc_format)
 
-    def _poll_events(self, session: Any) -> list[CdcEvent]:
-        return self._ingester.poll_events(session)
+    def _poll_changes(self, session: Any) -> list[CdcChange]:
+        return self._ingester.poll_changes(session)
 
     def _get_position(self) -> Any:
         return self._ingester.retrieve_position()

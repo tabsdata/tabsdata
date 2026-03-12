@@ -9,7 +9,7 @@ from typing import Any
 
 from tabsdata.connector.cdc.common._ingester import CdcIngester
 from tabsdata.connector.cdc.common._model import (
-    CdcEvent,
+    CdcChange,
 )
 from tabsdata.connector.cdc.common.constants import DEFAULT_BLOCKING_TIMEOUT_SECONDS
 from tabsdata.connector.cdc.common.typing import QualifiedTablesSpec
@@ -77,7 +77,7 @@ class Wal2JsonIngester(CdcIngester):
     def close_session(self, session: Any) -> None:
         session.dispose()
 
-    def poll_events(self, session: Any) -> list[CdcEvent]:
+    def poll_changes(self, session: Any) -> list[CdcChange]:
         raise NotImplementedError
 
     def retrieve_position(self) -> Any:

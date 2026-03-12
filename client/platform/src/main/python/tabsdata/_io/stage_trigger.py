@@ -9,7 +9,7 @@ import shutil
 import uuid
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
-from enum import Enum
+from enum import IntEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, TypeAlias, Union
 
@@ -24,8 +24,10 @@ if TYPE_CHECKING:
 
 TRIGGER_FILE_PREFIX = "TD_INTERNAL_TRIGGER_FILE_"
 
+TRIGGER_RETURN_ON_END_ATTRIBUTE = "return_on_end"
 
-class StageTriggerStatus(Enum):
+
+class StageTriggerStatus(IntEnum):
     """
     Status returned by the `run()` method of `StageTrigger` implementations.
     """

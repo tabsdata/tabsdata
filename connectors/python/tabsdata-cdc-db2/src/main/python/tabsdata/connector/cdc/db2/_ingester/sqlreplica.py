@@ -15,12 +15,12 @@ from tabsdata.connector.cdc.common._ingester import (
     CdcIngester,
 )
 from tabsdata.connector.cdc.common._model import (
-    CdcEvent,
+    CdcChange,
     TableObject,
     TrackedColumn,
     TrackedTable,
 )
-from tabsdata.connector.cdc.common.typing import QualifiedTablesSpec
+from tabsdata.connector.cdc.common.typing import CdcFormatSpec, QualifiedTablesSpec
 from tabsdata.connector.cdc.db2._connector import Db2CdcConn
 from tabsdata.connector.cdc.db2.typing import Db2CdcStartFromSpec
 from tabsdata.connector.sql.common._database.db2.dialect import Db2Dialect
@@ -62,7 +62,11 @@ class SqlReplicationIngester(CdcIngester):
         session.dispose()
 
     # noinspection DuplicatedCode
-    def collect_tables(self, session: Any) -> dict[str, TrackedTable]:
+    def collect_tables(
+        self,
+        session: Any,
+        cdc_format: CdcFormatSpec = CdcFormatSpec(),
+    ) -> dict[str, TrackedTable]:
         table_specs = self._tables
         if isinstance(table_specs, str):
             table_specs = [table_specs]
@@ -181,12 +185,13 @@ class SqlReplicationIngester(CdcIngester):
                 cdc_table=cdc_table,
                 columns=columns,
                 pk=pk_columns,
+                cdc_format=cdc_format,
             )
             result[data_table.qualified] = tracked_table
 
         return result
 
-    def poll_events(self, session: Any) -> list[CdcEvent]:
+    def poll_changes(self, session: Any) -> list[CdcChange]:
         raise NotImplementedError
 
     def retrieve_position(self) -> Any:

@@ -12,12 +12,12 @@ import sqlalchemy as sa
 from sqlalchemy.sql.elements import quoted_name
 
 from tabsdata.connector.cdc.common._model import (
-    CdcEvent,
+    CdcChange,
     TableObject,
     TrackedColumn,
     TrackedTable,
 )
-from tabsdata.connector.cdc.common.typing import QualifiedTablesSpec
+from tabsdata.connector.cdc.common.typing import CdcFormatSpec, QualifiedTablesSpec
 from tabsdata.connector.sql.common._generic.dialect import Dialect as SqlDialect
 from tabsdata.exceptions import CdcError, ErrorCode
 
@@ -49,7 +49,11 @@ class CdcIngester(ABC):
         return name
 
     # noinspection DuplicatedCode
-    def collect_tables(self, session: Any) -> dict[str, TrackedTable]:
+    def collect_tables(
+        self,
+        session: Any,
+        cdc_format: CdcFormatSpec = CdcFormatSpec(),
+    ) -> dict[str, TrackedTable]:
         table_specs = self._tables
         if isinstance(table_specs, str):
             table_specs = [table_specs]
@@ -123,13 +127,14 @@ class CdcIngester(ABC):
                 cdc_table=table_object,
                 columns=columns,
                 pk=pk_columns,
+                cdc_format=cdc_format,
             )
             result[table_object.qualified] = tracked_table
 
         return result
 
     @abstractmethod
-    def poll_events(self, session: Any) -> list[CdcEvent]: ...
+    def poll_changes(self, session: Any) -> list[CdcChange]: ...
 
     @abstractmethod
     def retrieve_position(self) -> Any: ...
