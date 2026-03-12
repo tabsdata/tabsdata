@@ -684,13 +684,6 @@ script = [
                     exit 1
                 end
 
-                if is_directory "../../target/wheels/wheel.to-foundation.tmp/tabsdata.libs"
-                    trace "📁 Copying tabsdata.libs folder to python/src/main/python/"
-                    exec --fail-on-error cp -r ../../target/wheels/wheel.to-foundation.tmp/tabsdata.libs python/src/main/python/
-                else
-                    trace "📌 foundation.libs folder not found in wheel extraction: ${wheel}"
-                end
-
                 trace "🐍 Successfully extracted wheel contents!"
             end
         else
@@ -813,13 +806,6 @@ script = [
                     exit 1
                 end
 
-                if is_directory "../../target/wheels/wheel.ty-tableframe.tmp/tabsdata.libs"
-                    trace "📁 Copying tabsdata.libs folder to python/src/main/python/"
-                    exec --fail-on-error cp -r ../../target/wheels/wheel.ty-tableframe.tmp/tabsdata.libs python/src/main/python/
-                else
-                    trace "📌 tabsdata.libs folder not found in wheel extraction: ${wheel}"
-                end
-
                 trace "🐍 Successfully extracted wheel contents!"
             end
         else
@@ -940,13 +926,6 @@ script = [
                 else
                     error "⚠️ tabsdata module not found in wheel extraction: ${wheel}"
                     exit 1
-                end
-
-                if is_directory "../../target/wheels/wheel.tz-tableframe.tmp/tabsdata.libs"
-                    trace "📁 Copying tabsdata.libs folder to python/src/main/python/"
-                    exec --fail-on-error cp -r ../../target/wheels/wheel.tz-tableframe.tmp/tabsdata.libs python/src/main/python/
-                else
-                    trace "📌 tabsdata.libs folder not found in wheel extraction: ${wheel}"
                 end
 
                 trace "🐍 Successfully extracted wheel contents!"

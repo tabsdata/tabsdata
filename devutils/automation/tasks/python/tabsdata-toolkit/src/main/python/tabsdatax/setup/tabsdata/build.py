@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import shutil
 from pathlib import Path
 
@@ -14,61 +13,9 @@ from setuptools.command.build_py import build_py as _build_py
 logger = logging.getLogger(__name__)
 
 
-def create_main_custom_build_hook(root: str):
-    def run_hook(build_cmd) -> None:
-        to_foundation_libs_path = os.path.join(
-            "expansions",
-            "python",
-            "modules",
-            "to-foundation",
-            "python",
-            "src",
-            "main",
-            "python",
-            "tabsdata.libs",
-        )
-        if os.path.exists(to_foundation_libs_path):
-            tabsdata_libs_folder = os.path.join(build_cmd.build_lib, "tabsdata.libs")
-            logger.info(f"Copying {to_foundation_libs_path} to {tabsdata_libs_folder}")
-            if os.path.exists(tabsdata_libs_folder):
-                shutil.rmtree(tabsdata_libs_folder)
-            shutil.copytree(to_foundation_libs_path, tabsdata_libs_folder)
-
-        ty_tableframe_libs_path = os.path.join(
-            "expansions",
-            "polars",
-            "modules",
-            "ty-tableframe",
-            "python",
-            "src",
-            "main",
-            "python",
-            "tabsdata.libs",
-        )
-        if os.path.exists(ty_tableframe_libs_path):
-            tabsdata_libs_folder = os.path.join(build_cmd.build_lib, "tabsdata.libs")
-            logger.info(f"Copying {ty_tableframe_libs_path} to {tabsdata_libs_folder}")
-            if os.path.exists(tabsdata_libs_folder):
-                shutil.rmtree(tabsdata_libs_folder)
-            shutil.copytree(ty_tableframe_libs_path, tabsdata_libs_folder)
-
-        tz_tableframe_libs_path = os.path.join(
-            "expansions",
-            "polars",
-            "extensions",
-            "tz-tableframe",
-            "python",
-            "src",
-            "main",
-            "python",
-            "tabsdata.libs",
-        )
-        if os.path.exists(tz_tableframe_libs_path):
-            tabsdata_libs_folder = os.path.join(build_cmd.build_lib, "tabsdata.libs")
-            logger.info(f"Copying {tz_tableframe_libs_path} to {tabsdata_libs_folder}")
-            if os.path.exists(tabsdata_libs_folder):
-                shutil.rmtree(tabsdata_libs_folder)
-            shutil.copytree(tz_tableframe_libs_path, tabsdata_libs_folder)
+def create_main_custom_build_hook(_root: str):
+    def run_hook(_build_cmd) -> None:
+        pass
 
     return run_hook
 
