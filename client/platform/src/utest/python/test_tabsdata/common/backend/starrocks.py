@@ -6,11 +6,13 @@
 
 import logging
 import os
+import re
 from dataclasses import dataclass
-from time import sleep
 
 import pytest
 from filelock import FileLock
+
+from tenacity import retry, stop_after_attempt, wait_incrementing
 
 from tabsdata._credentials import UserPasswordCredentials
 from tabsdata._utils.constants import TRUE_VALUES
@@ -32,9 +34,11 @@ STARROCKS_MYSQL_FORWARDED_PORT = "9030/tcp"
 VALID_STARROCKS_PREFIXES = ["STARROCKS0"]
 STARROCKS_DB_USER = "root"
 STARROCKS_DB_NAME = "test"
-# Index of the 'Alive' column in SHOW BACKENDS output (0-based).
+# Column indices in SHOW BACKENDS output (0-based).
 # See: https://docs.starrocks.io/docs/sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_BACKENDS/
 ALIVE_BACKEND_INDEX = 8
+AVAIL_CAPACITY_BACKEND_INDEX = 13
+TOTAL_CAPACITY_BACKEND_INDEX = 14
 
 
 @dataclass
@@ -115,6 +119,7 @@ def starrocks_config(tmp_path_factory, worker_id, request) -> StarRocksTestConfi
             credentials=UserPasswordCredentials(user, password),
         )
     else:
+        port = -1
         name = os.environ.get(
             f"{prefix}__STARROCKS_DOCKER_CONTAINER_NAME",
             DEFAULT_PYTEST_STARROCKS_DOCKER_CONTAINER_NAME,
@@ -140,37 +145,135 @@ def starrocks_config(tmp_path_factory, worker_id, request) -> StarRocksTestConfi
         )
 
 
+def _wait_for_alive_backends(conn) -> None:
+    """Poll until all StarRocks BEs report as alive with available disk capacity."""
+
+    @retry(
+        stop=stop_after_attempt(CONTAINER_MAXIMUM_RETRY_COUNT),
+        wait=wait_incrementing(start=1, increment=1),
+        reraise=True,
+    )
+    def _poll():
+        with conn.cursor() as cursor:
+            cursor.execute("SHOW BACKENDS")
+            rows = cursor.fetchall()
+            if not rows:
+                raise Exception("No StarRocks backends registered")
+            not_alive = [
+                row for row in rows
+                if row[ALIVE_BACKEND_INDEX] is not True
+                and row[ALIVE_BACKEND_INDEX] != "true"
+            ]
+            if not_alive:
+                logger.warning(
+                    f"Waiting for all StarRocks backends to be alive, "
+                    f"{len(not_alive)} of {len(rows)} not ready"
+                )
+                raise Exception(
+                    f"{len(not_alive)} backend(s) not alive yet"
+                )
+            no_capacity = []
+            for row in rows:
+                avail = str(row[AVAIL_CAPACITY_BACKEND_INDEX] or "").strip()
+                total = str(row[TOTAL_CAPACITY_BACKEND_INDEX] or "").strip()
+                # Extract leading numbers (e.g. "81.617 GB" -> 81.617).
+                # During startup the BE may report placeholder values such
+                # as AvailCapacity=1.000 B / TotalCapacity=0.000 B before
+                # real disk stats are populated.
+                avail_num = re.match(r"([0-9.]+)", avail)
+                total_num = re.match(r"([0-9.]+)", total)
+                if (
+                    not total
+                    or not total_num
+                    or float(total_num.group(1)) == 0
+                    or not avail
+                    or not avail_num
+                    or float(avail_num.group(1)) == 0
+                ):
+                    no_capacity.append(row)
+            if no_capacity:
+                logger.warning(
+                    f"Waiting for StarRocks backends to report disk capacity; "
+                    f"{len(no_capacity)} of {len(rows)} have no capacity yet "
+                    f"(AvailCapacity: "
+                    f"{[backend[AVAIL_CAPACITY_BACKEND_INDEX] for backend in no_capacity]}, "
+                    f"TotalCapacity: "
+                    f"{[backend[TOTAL_CAPACITY_BACKEND_INDEX] for backend in no_capacity]})"
+                )
+                raise Exception(
+                    f"{len(no_capacity)} backend(s) have not reported "
+                    f"disk capacity yet"
+                )
+            logger.info(
+                f"All {len(rows)} StarRocks backend(s) alive with disk "
+                f"capacity available"
+            )
+
+    _poll()
+
+
+def _wait_for_fe(port: int):
+    """Poll until the StarRocks FE is connectable via MySQL protocol."""
+    import pymysql
+
+    @retry(
+        stop=stop_after_attempt(CONTAINER_MAXIMUM_RETRY_COUNT),
+        wait=wait_incrementing(start=1, increment=1),
+        reraise=True,
+    )
+    def _poll():
+        conn = pymysql.connect(
+            host=DB_HOST,
+            port=port,
+            user=STARROCKS_DB_USER,
+            password="",
+            autocommit=True,
+        )
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT 1")
+        logger.info("StarRocks FE is ready")
+        return conn
+
+    return _poll()
+
+
 def _wait_for_database(port: int) -> None:
     """Poll until the test database is connectable via pymysql."""
     import pymysql
 
-    retry = 0
-    while True:
-        try:
-            verify_conn = pymysql.connect(
-                host=DB_HOST,
-                port=port,
-                user=STARROCKS_DB_USER,
-                password="",
-                database=STARROCKS_DB_NAME,
-                autocommit=True,
-            )
-            with verify_conn.cursor() as cursor:
-                cursor.execute("SELECT 1")
-            verify_conn.close()
-            logger.info(f"Database '{STARROCKS_DB_NAME}' is ready")
-            return
-        except Exception:
-            retry += 1
-            if retry == CONTAINER_MAXIMUM_RETRY_COUNT:
-                raise Exception(
-                    f"Database '{STARROCKS_DB_NAME}' not accessible after creation"
-                )
-            logger.warning(
-                f"Database '{STARROCKS_DB_NAME}' not ready yet, "
-                f"retrying in {retry} second(s)"
-            )
-            sleep(retry)
+    @retry(
+        stop=stop_after_attempt(CONTAINER_MAXIMUM_RETRY_COUNT),
+        wait=wait_incrementing(start=1, increment=1),
+        reraise=True,
+    )
+    def _poll():
+        conn = pymysql.connect(
+            host=DB_HOST,
+            port=port,
+            user=STARROCKS_DB_USER,
+            password="",
+            database=STARROCKS_DB_NAME,
+            autocommit=True,
+        )
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT 1")
+        conn.close()
+        logger.info(f"Database '{STARROCKS_DB_NAME}' is ready")
+
+    _poll()
+
+
+def _prepare_docker_starrocks_database(port: int) -> None:
+    """Wait for FE/BE readiness, configure replication, and create the test database."""
+    conn = _wait_for_fe(port)
+    _wait_for_alive_backends(conn)
+    with conn.cursor() as cursor:
+        cursor.execute(
+            'admin set frontend config ("default_replication_num" = "1")'
+        )
+        cursor.execute(f"CREATE DATABASE IF NOT EXISTS `{STARROCKS_DB_NAME}`")
+    conn.close()
+    _wait_for_database(port)
 
 
 def create_docker_starrocks_database(
@@ -184,20 +287,7 @@ def create_docker_starrocks_database(
         logger.info("StarRocks container already exists")
         container = containers[0]
         port = get_container_port_binding(container, STARROCKS_MYSQL_FORWARDED_PORT)
-        # Ensure the test database exists even if container was already running
-        import pymysql
-
-        conn = pymysql.connect(
-            host=DB_HOST,
-            port=port,
-            user=STARROCKS_DB_USER,
-            password="",
-            autocommit=True,
-        )
-        with conn.cursor() as cursor:
-            cursor.execute(f"CREATE DATABASE IF NOT EXISTS `{STARROCKS_DB_NAME}`")
-        conn.close()
-        _wait_for_database(port)
+        _prepare_docker_starrocks_database(port)
         return port
 
     container = client.containers.run(
@@ -208,70 +298,6 @@ def create_docker_starrocks_database(
     )
     container.reload()
     port = get_container_port_binding(container, STARROCKS_MYSQL_FORWARDED_PORT)
-
-    # Wait for StarRocks FE to be ready (MySQL protocol)
-    import pymysql  # Lazy import
-
-    retry = 0
-    conn = None
-    while True:
-        try:
-            conn = pymysql.connect(
-                host=DB_HOST,
-                port=port,
-                user=STARROCKS_DB_USER,
-                password="",
-                autocommit=True,
-            )
-            with conn.cursor() as cursor:
-                cursor.execute("SELECT 1")
-            break
-        except Exception as err:
-            retry += 1
-            if retry == CONTAINER_MAXIMUM_RETRY_COUNT:
-                logger.error(f"Error connecting to StarRocks: {err}")
-                raise err
-            else:
-                logger.warning(
-                    f"Error connecting to StarRocks, retrying in {retry} second(s)"
-                )
-                sleep(retry)
-
-    # Wait for at least one BE (Backend) to be alive — required for bulk loads
-    retry = 0
-    while True:
-        try:
-            with conn.cursor() as cursor:
-                cursor.execute("SHOW BACKENDS")
-                rows = cursor.fetchall()
-                alive_backends = [
-                    row for row in rows
-                    if row[ALIVE_BACKEND_INDEX] is True
-                    or row[ALIVE_BACKEND_INDEX] == "true"
-                ]
-                if alive_backends:
-                    logger.info(
-                        f"StarRocks has {len(alive_backends)} alive backend(s)"
-                    )
-                    break
-        except Exception:
-            pass
-        retry += 1
-        if retry == CONTAINER_MAXIMUM_RETRY_COUNT:
-            raise Exception(
-                "StarRocks backend did not become alive within the timeout"
-            )
-        logger.warning(
-            f"Waiting for StarRocks backend to be alive, retrying in {retry} second(s)"
-        )
-        sleep(retry)
-
-    # Create test database and wait until it is connectable
-    with conn.cursor() as cursor:
-        cursor.execute(f"CREATE DATABASE IF NOT EXISTS `{STARROCKS_DB_NAME}`")
-    conn.close()
-
-    _wait_for_database(port)
-
+    _prepare_docker_starrocks_database(port)
     logger.info("StarRocks container created successfully")
     return port

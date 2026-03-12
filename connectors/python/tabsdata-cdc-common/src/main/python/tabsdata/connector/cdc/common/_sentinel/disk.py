@@ -111,9 +111,8 @@ class DiskSentinel:
             files = [file for files in self._files.values() for file in files]
             self._context.stage(files)
             self._context.trigger()
-
-        for files in self._files.values():
-            files.clear()
-        self._total_rows = 0
-        self._total_bytes = 0
-        self._last_flushed = time.time()
+            for files in self._files.values():
+                files.clear()
+            self._total_rows = 0
+            self._total_bytes = 0
+            self._last_flushed = time.time()

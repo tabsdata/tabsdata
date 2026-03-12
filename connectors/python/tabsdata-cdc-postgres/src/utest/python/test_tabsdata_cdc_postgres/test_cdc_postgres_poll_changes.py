@@ -63,9 +63,9 @@ def test_poll_changes_insert_update_delete(postgres_cdc_config):
         slot_behavior="reuse",
         blocking_timeout_seconds=3,
         buffer_max_rows=10_000,
-        buffer_max_seconds=60,
-        trigger_max_seconds=60,
-        end=datetime.now(timezone.utc) + timedelta(seconds=30),
+        buffer_max_seconds=10,
+        trigger_max_seconds=10,
+        end=datetime.now(timezone.utc) + timedelta(seconds=60),
     )
 
     run_poll_changes_test(

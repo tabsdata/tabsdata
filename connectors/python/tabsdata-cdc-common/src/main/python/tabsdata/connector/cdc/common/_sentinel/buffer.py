@@ -15,7 +15,7 @@ from tabsdata.connector.cdc.common._model import (
     TrackedTable,
 )
 from tabsdata.connector.cdc.common._sentinel import CdcBuffer, estimate_row_bytes
-from tabsdata.connector.cdc.common._sentinel._disk import DiskSentinel
+from tabsdata.connector.cdc.common._sentinel.disk import DiskSentinel
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

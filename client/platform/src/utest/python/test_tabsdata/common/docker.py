@@ -24,12 +24,14 @@ __all__ = [
     "get_container_port_binding",
     "clean_docker_containers",
     "remove_docker_containers",
+    "remove_docker_volumes",
 ]
 
 
 def clean_docker_containers():
     try:
         remove_docker_containers(f"^{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}")
+        remove_docker_volumes(PYTEST_DEFAULT_ENVIRONMENT_PREFIX)
         for prefix in ["CLICKHOUSE0",
                        "DB20",
                        "DB2CDC0",
@@ -77,3 +79,17 @@ def remove_docker_containers(name_pattern):
                 f"Failed to remove container {container}. "
                 f"Error: {error}"
             )
+
+
+def remove_docker_volumes(name_prefix):
+    client = docker.from_env()
+    for volume in client.volumes.list():
+        if volume.name.startswith(name_prefix):
+            try:
+                logger.info(f"Removing volume {volume.name}")
+                volume.remove(force=True)
+            except Exception as error:
+                logger.error(
+                    f"Failed to remove volume {volume.name}. "
+                    f"Error: {error}"
+                )

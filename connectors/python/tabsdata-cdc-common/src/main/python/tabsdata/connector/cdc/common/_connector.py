@@ -28,8 +28,8 @@ from tabsdata.connector.cdc.common._model import (
     CdcChange,
     TrackedTable,
 )
-from tabsdata.connector.cdc.common._sentinel._buffer import BufferSentinel
-from tabsdata.connector.cdc.common._sentinel._disk import DiskSentinel
+from tabsdata.connector.cdc.common._sentinel.buffer import BufferSentinel
+from tabsdata.connector.cdc.common._sentinel.disk import DiskSentinel
 from tabsdata.connector.cdc.common.constants import (
     DEFAULT_BUFFER_MAX_BYTES,
     DEFAULT_BUFFER_MAX_ROWS,

@@ -64,9 +64,9 @@ def test_poll_changes_insert_update_delete(db2_cdc_config):
         start_from="origin",
         blocking_timeout_seconds=6,
         buffer_max_rows=10_000,
-        buffer_max_seconds=60,
-        trigger_max_seconds=60,
-        end=datetime.now(timezone.utc) + timedelta(seconds=60),
+        buffer_max_seconds=10,
+        trigger_max_seconds=10,
+        end=datetime.now(timezone.utc) + timedelta(seconds=120),
     )
 
     run_poll_changes_test(
