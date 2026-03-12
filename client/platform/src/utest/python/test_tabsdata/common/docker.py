@@ -40,7 +40,7 @@ def clean_docker_containers():
                        "MYSQL0",
                        "MYSQLCDC0",
                        "POSTGRES0",
-                       "POSTGRESQLCDC0",
+                       "POSTGRESCDC0",
                        "ORACLE0",]:
             backend_type = prefix.rstrip("0")
             env_var = f"{prefix}__{backend_type}_DOCKER_CONTAINER_NAME"

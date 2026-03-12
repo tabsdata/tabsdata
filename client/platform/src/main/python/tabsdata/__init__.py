@@ -97,6 +97,12 @@ from tabsdata._tdfunction import TabsdataFunction
 
 # noinspection PyProtectedMember
 from tabsdata.connector.bigquery._connector import BigQueryConn, BigQueryDest
+from tabsdata.connector.cdc.db2._connection import Db2CdcConn
+from tabsdata.connector.cdc.db2._connector import Db2CdcTrigger
+from tabsdata.connector.cdc.mysql._connection import MySQLCdcConn
+from tabsdata.connector.cdc.mysql._connector import MySQLCdcTrigger
+from tabsdata.connector.cdc.postgres._connection import PostgresCdcConn
+from tabsdata.connector.cdc.postgres._connector import PostgresCdcTrigger
 
 # noinspection PyProtectedMember
 from tabsdata.connector.databricks._connector import DatabricksDestination
@@ -225,16 +231,22 @@ __all__ = [
     "SnowflakeDestination",
     # Triggers
     "CronTrigger",
+    "Db2CdcTrigger",
     "KafkaTrigger",
+    "MySQLCdcTrigger",
+    "PostgresCdcTrigger",
     # Connections
     "BigQueryConn",
     "Db2Conn",
+    "Db2CdcConn",
     "KafkaConn",
     "MariaDBConn",
     "MSSQLConn",
+    "MySQLCdcConn",
     "MySQLConn",
     "OracleConn",
     "PostgresConn",
+    "PostgresCdcConn",
     # Credentials
     "AwsGlueSchemaRegistryCredentialsSpec",
     "KafkaCredentialsSpec",

@@ -15,7 +15,7 @@ TABSDATA_CONNECTORS_NAMES = [
     "cdc-common",
     "cdc-db2",
     "cdc-mysql",
-    "cdc-postgresql",
+    "cdc-postgres",
     "databricks",
     "kafka",
     "mongodb",

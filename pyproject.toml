@@ -110,7 +110,7 @@ known-first-party = [
     "test_tabsdata_cdc_common",
     "test_tabsdata_cdc_db2",
     "test_tabsdata_cdc_mysql",
-    "test_tabsdata_cdc_postgresql",
+    "test_tabsdata_cdc_postgres",
     "test_tabsdata_databricks",
     "test_tabsdata_example",
     "test_tabsdata_kafka",

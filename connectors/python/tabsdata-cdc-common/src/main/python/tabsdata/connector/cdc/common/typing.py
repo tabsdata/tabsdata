@@ -4,12 +4,26 @@
 
 from __future__ import annotations
 
-import logging
-from typing import TYPE_CHECKING
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Literal, TypeAlias, Union
 
-if TYPE_CHECKING:
-    pass
+QualifiedTableSpec: TypeAlias = str
+
+QualifiedTablesSpec: TypeAlias = Union[QualifiedTableSpec, list[QualifiedTableSpec]]
+
+OriginPositionSpec: TypeAlias = Literal["origin"]
 
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+@dataclass(frozen=True)
+class TimestampPositionSpec:
+    ts: datetime
+
+
+CdcValuesFormatSpec: TypeAlias = Literal["columns", "struct", "map"]
+
+
+@dataclass(frozen=True)
+class CdcFormatSpec:
+    values_format: CdcValuesFormatSpec = "columns"
+    flat_new_values: bool = True

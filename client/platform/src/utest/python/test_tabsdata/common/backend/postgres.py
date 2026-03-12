@@ -123,7 +123,7 @@ def postgres_config(tmp_path_factory, worker_id, request) -> PostgresConfig:
             # get the temp directory shared by all workers
             root_tmp_dir = tmp_path_factory.getbasetemp().parent
 
-            fn = root_tmp_dir / "docker_postgresql_creation"
+            fn = root_tmp_dir / "docker_postgres_creation"
             with FileLock(str(fn) + ".lock"):
                 # only one worker will be able to create the database
                 port = create_docker_postgres_database(name)

@@ -94,6 +94,7 @@ keyring==25.7.0
 kiwisolver==1.4.9
 lazy==1.6
 leather==0.4.1
+librt==0.8.1
 liccheck==0.9.2
 license-expression==30.4.4
 licensecheck==2025.1.0
@@ -112,6 +113,8 @@ mkdocs==1.6.1
 mkdocs-get-deps==0.2.0
 more-itertools==10.8.0
 msgpack==1.1.2
+mypy==1.19.1
+mypy-extensions==1.1.0
 mysql-connector-python==9.6.0
 nh3==0.3.2
 numpy==2.4.2

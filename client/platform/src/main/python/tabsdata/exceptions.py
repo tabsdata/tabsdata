@@ -2358,6 +2358,11 @@ class ErrorCode(Enum):
     STCE101 = object()
     STCE102 = object()
     STCE103 = object()
+    STCE104 = object()
+    STCE105 = object()
+    STCE106 = object()
+    STCE107 = object()
+    STCE108 = object()
 
     def code(self) -> str:
         if type(self.value) is dict:

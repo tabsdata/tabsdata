@@ -6,7 +6,7 @@ tabsdata-bigquery==1.8.0
 tabsdata-cdc-common==1.8.0
 tabsdata-cdc-db2==1.8.0
 tabsdata-cdc-mysql==1.8.0
-tabsdata-cdc-postgresql==1.8.0
+tabsdata-cdc-postgres==1.8.0
 tabsdata-databricks==1.8.0
 tabsdata-kafka==1.8.0
 tabsdata-mongodb==1.8.0

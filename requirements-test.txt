@@ -9,7 +9,7 @@
 -r connectors/python/tabsdata-cdc-common/requirements.txt
 -r connectors/python/tabsdata-cdc-db2/requirements.txt
 -r connectors/python/tabsdata-cdc-mysql/requirements.txt
--r connectors/python/tabsdata-cdc-postgresql/requirements.txt
+-r connectors/python/tabsdata-cdc-postgres/requirements.txt
 -r connectors/python/tabsdata-databricks/requirements.txt
 -r connectors/python/tabsdata-kafka/requirements.txt
 -r connectors/python/tabsdata-mongodb/requirements.txt

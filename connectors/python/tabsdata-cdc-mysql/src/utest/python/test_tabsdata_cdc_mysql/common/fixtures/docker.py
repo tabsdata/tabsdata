@@ -67,7 +67,7 @@ MYSQL_CDC_SIGNAL_TABLE: str = "td_cdc_signal"
 
 
 @dataclass
-class MySQLCDCConfig:
+class MySQLCdcConfig:
     host: str
     port: int
     database: str
@@ -396,7 +396,7 @@ def mysql_cdc_config(
     tmp_path_factory: pytest.TempPathFactory,
     worker_id: str,
     request: pytest.FixtureRequest,
-) -> MySQLCDCConfig:
+) -> MySQLCdcConfig:
     prefix = obtain_prefix(
         request,
         MYSQL_CDC_MARKER,
@@ -409,7 +409,7 @@ def mysql_cdc_config(
             env_prefix, MYSQL_CDC_REQUIRED_ENVS,
             "mysql_cdc_config",
         )
-        return MySQLCDCConfig(
+        return MySQLCdcConfig(
             host=envs["HOST"],
             port=int(envs["PORT"]),
             database=envs["DATABASE"],
@@ -431,7 +431,7 @@ def mysql_cdc_config(
             lock_file = root_temp_dir / MYSQL_CDC_LOCK
             with FileLock(str(lock_file) + DOCKER_LOCK_SUFFIX):
                 port = create_cdc_mysql_database(name)
-        return MySQLCDCConfig(
+        return MySQLCdcConfig(
             host=DB_HOST,
             port=int(port),
             database=MYSQL_CDC_DATABASE,

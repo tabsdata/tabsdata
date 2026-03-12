@@ -4,12 +4,28 @@
 
 from __future__ import annotations
 
-import logging
-from typing import TYPE_CHECKING
+from dataclasses import dataclass
+from typing import TypeAlias, Union
 
-if TYPE_CHECKING:
-    pass
+from tabsdata.connector.cdc.common.typing import (
+    OriginPositionSpec,
+    TimestampPositionSpec,
+)
 
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+@dataclass(frozen=True)
+class CommitSeqPositionSpec:
+    seq: int
+
+
+@dataclass(frozen=True)
+class TableCommitSeqPositionSpec:
+    seqs: dict[str, int]
+
+
+Db2CdcStartFromSpec: TypeAlias = Union[
+    OriginPositionSpec,
+    CommitSeqPositionSpec,
+    TableCommitSeqPositionSpec,
+    TimestampPositionSpec,
+]

@@ -70,13 +70,14 @@ DB2_CDC_SIGNAL_TABLE: str = "td_cdc_signal"
 
 
 @dataclass
-class Db2CDCConfig:
+class Db2CdcConfig:
     host: str
     port: int
     database: str
     root_user: str
     root_password: str
-
+    cdc_user: str
+    cdc_password: str
 
 def db2_conn(port: int) -> ibm_db_dbi.Connection:
     return ibm_db_dbi.connect(
@@ -702,7 +703,7 @@ def db2_cdc_config(
     tmp_path_factory: pytest.TempPathFactory,
     worker_id: str,
     request: pytest.FixtureRequest,
-) -> Db2CDCConfig:
+) -> Db2CdcConfig:
     prefix = obtain_prefix(
         request,
         DB2_CDC_MARKER,
@@ -716,7 +717,7 @@ def db2_cdc_config(
             DB2_CDC_REQUIRED_ENVS,
             "db2_cdc_config",
         )
-        return Db2CDCConfig(
+        return Db2CdcConfig(
             host=envs["HOST"],
             port=int(envs["PORT"]),
             database=envs["DATABASE"],
@@ -736,10 +737,12 @@ def db2_cdc_config(
             lock_file = root_temp_dir / DB2_CDC_LOCK
             with FileLock(str(lock_file) + DOCKER_LOCK_SUFFIX):
                 port = create_cdc_db2_database(name)
-        return Db2CDCConfig(
+        return Db2CdcConfig(
             host=DB_HOST,
             port=int(port),
             database=DB2_CDC_DATABASE,
             root_user=DB2_CDC_ROOT_USER,
             root_password=DB2_CDC_ROOT_PASSWORD,
+            cdc_user=DB2_CDC_ROOT_USER,
+            cdc_password=DB2_CDC_ROOT_PASSWORD,
         )

@@ -7,7 +7,7 @@
 -r ../connectors/python/tabsdata-cdc-common/requirements/requirements-third-party.txt
 -r ../connectors/python/tabsdata-cdc-db2/requirements/requirements-third-party.txt
 -r ../connectors/python/tabsdata-cdc-mysql/requirements/requirements-third-party.txt
--r ../connectors/python/tabsdata-cdc-postgresql/requirements/requirements-third-party.txt
+-r ../connectors/python/tabsdata-cdc-postgres/requirements/requirements-third-party.txt
 -r ../connectors/python/tabsdata-databricks/requirements/requirements-third-party.txt
 -r ../connectors/python/tabsdata-kafka/requirements/requirements-third-party.txt
 -r ../connectors/python/tabsdata-mongodb/requirements/requirements-third-party.txt

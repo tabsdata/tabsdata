@@ -31,6 +31,7 @@ matplotlib==3.10.8
 maturin==1.12.4
 mimesis==19.1.0
 mkdocs==1.6.1
+mypy==1.19.1
 parquet-tools==0.2.16
 pdoc==16.0.0
 pip-audit==2.10.0
