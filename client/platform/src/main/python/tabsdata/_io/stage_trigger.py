@@ -162,6 +162,7 @@ class CallConfig:
 
 
 FilesToStageSpec: TypeAlias = Union[Path | list[Path]]
+StagedFilesSpec: TypeAlias = dict[str, str]
 
 
 class StageTriggerContext(ABC):
@@ -198,8 +199,18 @@ class StageTriggerContext(ABC):
         """
 
     @abstractmethod
-    def stage(self, parquet_files: FilesToStageSpec):
-        """Writes the given files to the Stage consumption folder"""
+    def stage(self, parquet_files: FilesToStageSpec) -> StagedFilesSpec:
+        """
+        Writes the given files to the Stage consumption folder.
+
+        Returns:
+            A dictionary mapping each source file path (str) to the
+            exact URI where it was staged.
+        """
+
+    @abstractmethod
+    def commit(self, manifest_file: Path) -> str:
+        """Writes the given manifest file to the Stage consumption folder"""
 
     @abstractmethod
     def trigger(self) -> bool:
@@ -298,7 +309,7 @@ class LocalFileStageTriggerContext(StageTriggerContext):
             )
             return False
 
-    def stage(self, parquet_files: FilesToStageSpec):
+    def stage(self, parquet_files: FilesToStageSpec) -> StagedFilesSpec:
         # Ensure the destination directory exists. If not, create it.
         self.logger.debug(f"Staging files: {parquet_files}")
         os.makedirs(self.staging_folder, exist_ok=True)
@@ -306,11 +317,14 @@ class LocalFileStageTriggerContext(StageTriggerContext):
         parquet_files = (
             parquet_files if isinstance(parquet_files, list) else [parquet_files]
         )
+        staged_files: StagedFilesSpec = {}
         for source_file in parquet_files:
             try:
                 # Use shutil.copy2 to copy the file and its metadata
-                shutil.copy2(source_file, self.staging_folder)
-                self.logger.debug(f"  - Copied '{source_file}'")
+                destination = shutil.copy2(source_file, self.staging_folder)
+                staged_uri = Path(destination).as_uri()
+                staged_files[str(source_file)] = staged_uri
+                self.logger.debug(f"  - Copied '{source_file}' -> '{staged_uri}'")
             except FileNotFoundError:
                 # TODO: This is one of the pieces that should be rethought once there
                 #  is a resiliency reimplementation
@@ -324,6 +338,25 @@ class LocalFileStageTriggerContext(StageTriggerContext):
                 self.logger.error(f"  - Error copying '{source_file}': {e}")
                 raise
         self.logger.debug("All files staged successfully")
+        return staged_files
+
+    def commit(self, manifest_file: Path) -> str:
+        self.logger.debug(f"Committing manifest file: {manifest_file}")
+        os.makedirs(self.staging_folder, exist_ok=True)
+        try:
+            destination = shutil.copy2(manifest_file, self.staging_folder)
+            committed_uri = Path(destination).as_uri()
+            self.logger.debug(f"  - Copied '{manifest_file}' -> '{committed_uri}'")
+        except FileNotFoundError:
+            self.logger.error(
+                f"  - Error: Manifest file not found at '{manifest_file}'"
+            )
+            raise
+        except Exception as e:
+            self.logger.error(f"  - Error copying manifest '{manifest_file}': {e}")
+            raise
+        self.logger.debug("Manifest file committed successfully")
+        return committed_uri
 
     def trigger(self) -> bool:
         self.logger.debug("Requesting trigger of the function")

@@ -5,8 +5,11 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import TYPE_CHECKING
+
+import yaml
 
 from tabsdata._io import constants as io_constants
 from tabsdata._io.inputs.file_inputs import (
@@ -16,6 +19,7 @@ from tabsdata._io.inputs.file_inputs import (
     S3Source,
 )
 from tabsdata._io.plugin import SourcePlugin
+from tabsdata._tabsserver.function.global_utils import convert_uri_to_path
 from tabsdata._tabsserver.function.lastmod_info_parsing import LastModInfo
 from tabsdata._tabsserver.function.offset_utils import (
     OFFSET_LAST_MODIFIED_VARIABLE_NAME,
@@ -31,6 +35,9 @@ if TYPE_CHECKING:
     from tabsdata.tableframe.lazyframe.frame import TableFrame
 
 logger = logging.getLogger(__name__)
+
+MANIFEST_FILE_PATTERN = "*.yaml"
+MANIFEST_OFFSET_KEY = "manifest_last_consumed"
 
 
 class Stage(SourcePlugin):
@@ -258,3 +265,300 @@ def _obtain_lastmod_info_datetime(execution_context: ExecutionContext):
         f"Found last offset '{lastmod_info_str_datetime}' for entry {current_entry}"
     )
     return lastmod_info_str_datetime
+
+
+def _read_manifest_file(manifest_path: str) -> list[list[str]]:
+    """
+    Reads the manifest file found in the staging folder, parses it, and returns a
+    list of lists of files. For example, parsing of:
+    0:
+        - path/to/file.parquet
+    1:
+        - second/path/to/file.parquet
+        - third/path/to/file.parquet
+    Would return:
+    [["path/to/file.parquet",],
+    ["second/path/to/file.parquet", "third/path/to/file.parquet"],
+    ]
+    """
+    logger.debug(f"Reading manifest file from '{manifest_path}'")
+    with open(manifest_path, "r") as f:
+        data = yaml.safe_load(f)
+    if data is None:
+        logger.debug("Manifest file is empty")
+        return []
+    result = []
+    for key in sorted(data.keys()):
+        files = data[key]
+        if isinstance(files, str):
+            files = [files]
+        result.append(files)
+    logger.debug(f"Manifest contains {len(result)} positional group(s)")
+    return result
+
+
+def _build_manifest_s3_source(file_paths: list[str], configs: dict):
+    raise NotImplementedError(
+        "ManifestStage with S3 staging is currently not supported. The only "
+        "supported staging storage is LocalFileSystem."
+    )
+
+
+def _build_manifest_azure_source(file_paths: list[str], configs: dict):
+    raise NotImplementedError(
+        "ManifestStage with Azure staging is currently not supported. The only "
+        "supported staging storage is LocalFileSystem."
+    )
+
+
+def _build_manifest_gcs_source(file_paths: list[str], configs: dict):
+    raise NotImplementedError(
+        "ManifestStage with GCS staging is currently not supported. The only "
+        "supported staging storage is LocalFileSystem."
+    )
+
+
+def _build_manifest_local_source(file_paths: list[str], configs: dict):
+    logger.debug(f"Building local source for {len(file_paths)} manifest file(s).")
+    return LocalFileSource(path=file_paths)
+
+
+def _parse_utc_datetime(dt_str: str) -> datetime:
+    """Parses a datetime string into a timezone-aware UTC datetime.
+
+    Handles both ``'Z'`` suffix (e.g. from ``_convert_timestamp_to_string``)
+    and ``'+00:00'`` suffix (e.g. from ``datetime.isoformat()``).
+    """
+    if dt_str.endswith("Z"):
+        dt_str = dt_str[:-1] + "+00:00"
+    return datetime.fromisoformat(dt_str)
+
+
+def _max_nullable_datetime(a: datetime | None, b: datetime | None) -> datetime | None:
+    """Returns the maximum of two datetimes, treating None as absent."""
+    if a is None:
+        return b
+    if b is None:
+        return a
+    return max(a, b)
+
+
+class ManifestStage(SourcePlugin):
+    """
+    :categories: source
+
+    A source plugin that consumes files listed in a manifest file placed in
+    the staging folder by a StageTrigger, rather than consuming all Parquet
+    files in the folder.
+
+    Each group of files corresponds to one input argument of the publisher
+    function.
+    """
+
+    @_td_validate_call(ErrorCode.SOCE110)
+    def __init__(
+        self,
+        use_existing_data: bool = True,
+    ):
+        """
+        Initializes the ManifestStage plugin.
+
+        Args:
+            use_existing_data: If and when the publisher is updated, whether to
+                consume the files that existed in the stage before the update.
+        """
+        self.use_existing_data = use_existing_data
+
+    @property
+    def use_existing_data(self) -> bool:
+        return self._use_existing_data
+
+    @use_existing_data.setter
+    @_td_validate_call(ErrorCode.SOCE110)
+    def use_existing_data(self, value: bool):
+        self._use_existing_data = value
+
+    @property
+    def _stream_require_ec(self) -> bool:
+        return True
+
+    def stream(
+        self, working_dir: str
+    ) -> list[TableFrame | None | list[TableFrame | None]]:
+        """
+        Reads the manifest file from the staging folder, resolves the listed
+        files, and returns them as TableFrames.
+
+        Unlike :class:`Stage` which globs for all ``*.parquet`` files in the
+        staging folder, ``ManifestStage`` only consumes the specific files
+        referenced in the manifest.
+
+        Args:
+            working_dir: The working directory for intermediate files.
+
+        Returns:
+            A list of TableFrames (or None) corresponding to each positional
+            group in the manifest.
+        """
+        logger.debug(f"Triggering {self}")
+        execution_context: ExecutionContext = self._ec
+        base_uri = execution_context.request.function_stage_uri
+        if not base_uri:
+            raise ValueError(
+                "Error while trying to obtain the staging URI from the "
+                f"request file. Obtained '{base_uri}' instead of a valid URI."
+            )
+        base_uri = base_uri if base_uri.endswith("/") else base_uri + "/"
+        configs = _obtain_configs(execution_context)
+
+        if not base_uri.find(io_constants.URI_INDICATOR):
+            raise ValueError(
+                f"Received URI value {base_uri}, which does not contain the "
+                f"uri indicator {io_constants.URI_INDICATOR} and is "
+                "therefore not a valid URI. This is most likely due to "
+                "an internal error of the Tabsdata server."
+            )
+        prefix = base_uri.split(io_constants.URI_INDICATOR)[0]
+
+        # Resolve the staging directory based on the storage scheme.
+        # Currently only local file staging is supported.
+        match prefix:
+            case io_constants.FILE_SCHEME:
+                staging_dir = convert_uri_to_path(base_uri.rstrip("/"))
+            case _:
+                raise NotImplementedError(
+                    "ManifestStage currently only supports local file staging. "
+                    f"Received URI scheme: {prefix}."
+                )
+
+        # Determine the effective offset for filtering manifest files.
+        current_offset = execution_context.status.offset.current_offset
+        last_consumed_time_str = current_offset.get(MANIFEST_OFFSET_KEY)
+        last_consumed_dt = (
+            _parse_utc_datetime(last_consumed_time_str)
+            if last_consumed_time_str
+            else None
+        )
+        logger.debug(f"Stored manifest offset: {last_consumed_dt}")
+
+        if self.use_existing_data:
+            # use_existing_data=True: use stored offset only, ignore
+            # registration time. On first run (None), all manifests
+            # will be consumed.
+            effective_offset = last_consumed_dt
+            logger.debug(
+                f"use_existing_data=True, effective offset: {effective_offset}"
+            )
+        else:
+            # use_existing_data=False: use the maximum of the stored
+            # offset and the registration time, so that manifests
+            # predating the publisher registration are skipped.
+            registration_time_str = _obtain_registration_time(execution_context)
+            registration_dt = (
+                _parse_utc_datetime(registration_time_str)
+                if registration_time_str
+                else None
+            )
+            effective_offset = _max_nullable_datetime(last_consumed_dt, registration_dt)
+            logger.debug(
+                f"use_existing_data=False, stored offset: "
+                f"{last_consumed_dt}, registration time: "
+                f"{registration_dt}, effective offset: "
+                f"{effective_offset}"
+            )
+
+        # Find manifest files in the staging folder, sorted by mtime.
+        staging_path = Path(staging_dir)
+        all_manifests = sorted(
+            staging_path.glob(MANIFEST_FILE_PATTERN),
+            key=lambda p: p.stat().st_mtime,
+        )
+        logger.debug(
+            f"Found {len(all_manifests)} manifest file(s) in staging folder: "
+            f"{all_manifests}"
+        )
+
+        # Filter: if we have an effective offset, only consume newer manifests.
+        if effective_offset is not None:
+            manifests = [
+                m
+                for m in all_manifests
+                if datetime.fromtimestamp(m.stat().st_mtime, tz=timezone.utc)
+                > effective_offset
+            ]
+        else:
+            manifests = all_manifests
+
+        if not manifests:
+            logger.debug("No new manifest files to process")
+            return []
+
+        logger.debug(f"Processing {len(manifests)} new manifest file(s): {manifests}")
+
+        # Aggregate file groups across all manifest files.
+        # Each manifest maps positional indices to lists of file URIs.
+        # We merge them so that all files for a given positional index
+        # are combined across manifests.
+        aggregated_groups: dict[int, list[str]] = {}
+        for manifest_file in manifests:
+            file_groups = _read_manifest_file(str(manifest_file))
+            for group_idx, group_files in enumerate(file_groups):
+                if group_idx not in aggregated_groups:
+                    aggregated_groups[group_idx] = []
+                aggregated_groups[group_idx].extend(group_files)
+
+        # Process each positional group.
+        results = []
+        for group_idx in sorted(aggregated_groups.keys()):
+            group_files = aggregated_groups[group_idx]
+            logger.debug(f"Group {group_idx}: {len(group_files)} file(s)")
+
+            # Build the appropriate source plugin based on URI scheme.
+            # The manifest already contains full URIs, so no path
+            # resolution is needed.
+            match prefix:
+                case io_constants.S3_SCHEME:
+                    auxiliary_plugin = _build_manifest_s3_source(group_files, configs)
+                case io_constants.AZURE_SCHEME:
+                    auxiliary_plugin = _build_manifest_azure_source(
+                        group_files, configs
+                    )
+                case io_constants.GCS_SCHEME:
+                    auxiliary_plugin = _build_manifest_gcs_source(group_files, configs)
+                case io_constants.FILE_SCHEME:
+                    auxiliary_plugin = _build_manifest_local_source(
+                        group_files, configs
+                    )
+                case _:
+                    raise ValueError(
+                        f"Unsupported URI scheme: {prefix}. "
+                        "Currently, the supported staging storage locations "
+                        "are Azure, GCS, LocalFileSystem and S3."
+                    )
+
+            logger.debug(
+                f"Running auxiliary plugin for group {group_idx}: {auxiliary_plugin}"
+            )
+            group_results = auxiliary_plugin._run(execution_context)
+
+            # Each positional argument is always a list of TableFrames,
+            # even for single-file groups (one-element list) or empty
+            # results (empty list).
+            if not group_results:
+                results.append([])
+            else:
+                results.append(group_results)
+
+        # Store the offset of the latest consumed manifest file as a
+        # UTC datetime to ensure no issues with timezones.
+        latest_mtime = datetime.fromtimestamp(
+            manifests[-1].stat().st_mtime, tz=timezone.utc
+        )
+        latest_mtime_str = latest_mtime.isoformat()
+        self.initial_values = {MANIFEST_OFFSET_KEY: latest_mtime_str}
+        logger.debug(f"Stored new manifest offset: {latest_mtime_str}")
+
+        return results
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(use_existing_data={self.use_existing_data})"

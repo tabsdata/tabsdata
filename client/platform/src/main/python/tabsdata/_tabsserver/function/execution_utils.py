@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 import polars as pl
 
 import tabsdata._utils.tableframe._generators as td_generators
+from tabsdata._io.inputs.stage_input import ManifestStage, Stage
 from tabsdata._io.stage_trigger import LocalFileStageTriggerContext, StageTrigger
 from tabsdata._table_actions.actions import OnTablesAction
 from tabsdata._tabsserver.function import environment_import_utils
@@ -37,6 +38,7 @@ from tabsdata._utils.tableframe._constants import EMPTY_VERSION
 
 # noinspection PyProtectedMember
 from tabsdata._utils.tableframe._context import TableFrameContext
+from tabsdata.connector.cdc.common._connector import CdcTrigger
 from tabsdata.dataquality import DataQuality
 from tabsdata.tableframe._actions.dataquality.processor import DataQualityProcessor
 from tabsdata.tableframe.lazyframe.frame import DataTable, TableFrame
@@ -349,8 +351,23 @@ def obtain_user_provided_function_parameters(
     execution_context.user_provided_function.input_actions = input_actions
     execution_context.user_provided_function.output_actions = output_actions
 
+    # TODO: this logic will most likely be removed as the final way to verify this
+    #  flow is discussed:
+    stage_trigger = execution_context.stage_trigger
+    source = execution_context.source
+    if isinstance(stage_trigger, CdcTrigger) and isinstance(source, Stage):
+        # The isinstance check is redundant, but it helps ensure everything is going
+        # as expected
+        logger.debug(
+            f"Using a CdcTrigger for this function ({stage_trigger}), "
+            f"so we will use a ManifestStage instead of the Stage {source}"
+        )
+        source = ManifestStage(use_existing_data=source.use_existing_data)
+        logger.debug(f"Using new ManifestStage {source}")
+        execution_context._source_plugin = source
+
     # noinspection PyProtectedMember
-    parameters = execution_context.source._run(execution_context)
+    parameters = source._run(execution_context)
     return parameters
 
 
