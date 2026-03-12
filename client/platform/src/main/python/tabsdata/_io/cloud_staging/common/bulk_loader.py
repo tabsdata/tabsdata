@@ -38,6 +38,7 @@ class CloudStagedBulkLoader:
         schema_evolution: SchemaEvolutionMode,
         upload_id: str,
         poll_interval: float = 5.0,
+        poll_timeout: float = 1800.0,
     ):
         self.cloud_storage = cloud_storage
         self.dialect = dialect
@@ -45,6 +46,7 @@ class CloudStagedBulkLoader:
         self.schema_evolution = schema_evolution
         self.upload_id = upload_id
         self.poll_interval = poll_interval
+        self.poll_timeout = poll_timeout
         self.load_mode = LoadMode(
             write_mode=write_mode,
             schema_evolution=schema_evolution,
@@ -191,14 +193,20 @@ class CloudStagedBulkLoader:
     ) -> list[BulkLoadResult]:
         """Poll all async bulk loads until they complete or any fails.
         Override to customize polling (e.g. exponential backoff)."""
+        deadline = time.monotonic() + self.poll_timeout
         while True:
             pending_indices = [
                 i for i, r in enumerate(results) if r.status == BulkLoadStatus.PENDING
             ]
             if not pending_indices:
                 break
-            time.sleep(self.poll_interval)
             pending_handles = [results[i].job_handle for i in pending_indices]
+            if time.monotonic() >= deadline:
+                raise BulkLoadError(
+                    f"Polling timed out after {self.poll_timeout}s. "
+                    f"Still pending: {pending_handles}"
+                )
+            time.sleep(self.poll_interval)
             polled = self.dialect.poll_bulk_load_all(self.load_mode, pending_handles)
             for idx, polled_result in zip(pending_indices, polled):
                 results[idx] = polled_result

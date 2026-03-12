@@ -1,0 +1,17 @@
+[
+  {
+    "value": 100,
+    "label": "alpha",
+    "$td.id": "<dummy>"
+  },
+  {
+    "value": 200,
+    "label": "beta",
+    "$td.id": "<dummy>"
+  },
+  {
+    "value": 300,
+    "label": "gamma",
+    "$td.id": "<dummy>"
+  }
+]

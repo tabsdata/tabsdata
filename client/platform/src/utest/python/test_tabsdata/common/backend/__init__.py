@@ -16,6 +16,16 @@ from test_tabsdata.common.backend.clickhouse import (
     clickhouse_config,
     clickhouse_client,
 )
+from test_tabsdata.common.backend.druid import (
+    DEFAULT_PYTEST_DRUID_DOCKER_CONTAINER_NAME,
+    DRUID_OVERLORD_FORWARDED_PORT,
+    DRUID_OVERLORD_PORT,
+    DRUID_ROUTER_FORWARDED_PORT,
+    DRUID_ROUTER_PORT,
+    VALID_DRUID_PREFIXES,
+    DruidConfig,
+    druid_config,
+)
 from test_tabsdata.common.backend.db2 import (
     DEFAULT_PYTEST_DB2_DOCKER_CONTAINER_NAME,
     DB2_DB_NAME,
@@ -138,6 +148,15 @@ __all__ = [
     "KafkaConfig",
     "VALID_KAFKA_PREFIXES",
     "kafka_config",
+    # Druid
+    "DEFAULT_PYTEST_DRUID_DOCKER_CONTAINER_NAME",
+    "DRUID_OVERLORD_FORWARDED_PORT",
+    "DRUID_OVERLORD_PORT",
+    "DRUID_ROUTER_FORWARDED_PORT",
+    "DRUID_ROUTER_PORT",
+    "VALID_DRUID_PREFIXES",
+    "DruidConfig",
+    "druid_config",
     # DB2
     "DEFAULT_PYTEST_DB2_DOCKER_CONTAINER_NAME",
     "DB2_DB_NAME",

@@ -33,6 +33,7 @@ def clean_docker_containers():
         for prefix in ["CLICKHOUSE0",
                        "DB20",
                        "DB2CDC0",
+                       "DRUID0",
                        "HASHICORP",
                        "H1",
                        "KAFKA0",

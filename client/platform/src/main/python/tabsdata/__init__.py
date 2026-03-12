@@ -42,6 +42,7 @@ from tabsdata._io.cloud_staging.common.storage_config import (
 from tabsdata._io.connections.clickhouse_connection import ClickHouseConn
 from tabsdata._io.connections.connections import Conn
 from tabsdata._io.connections.db2_connection import Db2Conn
+from tabsdata._io.connections.druid_connection import DruidConn
 from tabsdata._io.connections.mariadb_connection import MariaDBConn
 from tabsdata._io.connections.mysql_connection import MySQLConn
 from tabsdata._io.connections.oracle_connection import OracleConn
@@ -80,6 +81,7 @@ from tabsdata._io.outputs.file_outputs import (
     S3Destination,
 )
 from tabsdata._io.outputs.sql.clickhouse_output import ClickHouseDest
+from tabsdata._io.outputs.sql.druid_output import DruidDest
 from tabsdata._io.outputs.sql.mariadb_output import MariaDBDest
 from tabsdata._io.outputs.sql.mysql_output import MySQLDest
 from tabsdata._io.outputs.sql.postgres_output import PostgresDest
@@ -226,6 +228,7 @@ __all__ = [
     "AzureDestination",
     "BigQueryDest",
     "ClickHouseDest",
+    "DruidDest",
     "DatabricksDestination",
     "GCSDestination",
     "LocalFileDestination",
@@ -252,6 +255,7 @@ __all__ = [
     "ClickHouseConn",
     "Db2Conn",
     "Db2CdcConn",
+    "DruidConn",
     "KafkaConn",
     "MariaDBConn",
     "MSSQLConn",

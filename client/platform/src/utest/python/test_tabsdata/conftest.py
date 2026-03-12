@@ -43,6 +43,7 @@ from test_tabsdata.common.backend import (  # noqa: F401
     azure_config,
     clickhouse_config,
     clickhouse_client,
+    druid_config,
     gcs_client,
     gcs_config,
     kafka_config,

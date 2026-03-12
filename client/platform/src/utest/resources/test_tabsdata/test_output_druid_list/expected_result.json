@@ -1,0 +1,42 @@
+[
+  {
+    "Duration": 45,
+    "Pulse": 109,
+    "Maxpulse": 175,
+    "Calories": 282.4,
+    "Category": "cardio",
+    "$td.id": "<dummy>"
+  },
+  {
+    "Duration": 30,
+    "Pulse": 100,
+    "Maxpulse": 120,
+    "Calories": 300.0,
+    "Category": "strength",
+    "$td.id": "<dummy>"
+  },
+  {
+    "Duration": 45,
+    "Pulse": 117,
+    "Maxpulse": 148,
+    "Calories": 406.0,
+    "Category": "cardio",
+    "$td.id": "<dummy>"
+  },
+  {
+    "Duration": 60,
+    "Pulse": 110,
+    "Maxpulse": 130,
+    "Calories": 409.1,
+    "Category": "cardio",
+    "$td.id": "<dummy>"
+  },
+  {
+    "Duration": 60,
+    "Pulse": 117,
+    "Maxpulse": 145,
+    "Calories": 479.0,
+    "Category": "strength",
+    "$td.id": "<dummy>"
+  }
+]
