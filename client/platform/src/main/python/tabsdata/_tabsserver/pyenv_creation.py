@@ -1683,6 +1683,27 @@ def link_base_binaries(  # noqa: C901
         logger.warning(f"Failed to process binaries from setup.toml: {e}")
 
 
+def extract_tabsdata_package_name(package_location: str) -> str | None:
+    if not os.path.isdir(package_location):
+        return None
+    pyproject_file = os.path.join(package_location, "pyproject.toml")
+    if not os.path.exists(pyproject_file):
+        return None
+    # noinspection PyBroadException
+    try:
+        with open(pyproject_file, "rb") as f:
+            pyproject_toml = tomllib.load(f)
+        package_name = pyproject_toml.get("tool", {}).get("tabsdata", {}).get("name")
+        if package_name and canonicalize_name(package_name) in TABSDATA_PACKAGES:
+            return package_name
+    except Exception:
+        logger.warning(
+            "Error extracting tabsdata package name from pyproject.toml: "
+            "{package_location} - {error}"
+        )
+    return None
+
+
 def install_host_package(  # noqa: C901
     source: HostPackageSource,
     package_location: str,
@@ -1731,14 +1752,21 @@ def install_host_package(  # noqa: C901
                         f"'{package_location}' - '{package_name}'"
                     )
                 if package_name and package_name in TABSDATA_PACKAGES:
-                    logger.info(
-                        "Identified a tabsdata local package: "
-                        f"'{package_location}' - '{package_name}'"
-                    )
-                    as_editable = False
-                    with_isolation = False
-                    if package_name == TABSDATA_MODULE_NAME:
-                        link_base_binaries(package_location, real_environment_name)
+                    if package_name == TABSDATA_TOOLKIT_MODULE_NAME:
+                        logger.info(
+                            f"Identified tabsdata toolkit local package: "
+                            f"'{package_location}' - '{package_name}'. "
+                            f"Installing as non-editable local package."
+                        )
+                        as_editable = False
+                        with_isolation = False
+                    else:
+                        logger.info(
+                            f"Skipping local tabsdata package: "
+                            f"'{package_location}' - '{package_name}'. "
+                            f"It will be installed as a development package."
+                        )
+                        return True
         if as_editable:
             install_command.append("-e")
         install_command.append(package_location)
@@ -1751,6 +1779,19 @@ def install_host_package(  # noqa: C901
             install_command.extend([
                 "--no-build-isolation",
             ])
+        tabsdata_pkg_name = extract_tabsdata_package_name(package_location)
+        if as_editable and tabsdata_pkg_name:
+            install_command.extend([
+                "--reinstall",
+                "--no-cache",
+                "--refresh-package",
+                tabsdata_pkg_name,
+            ])
+            logger.info(
+                f"Forcing full rebuild for editable tabsdata package "
+                f"'{tabsdata_pkg_name}' in venv '{real_environment_name}' "
+                f"(--reinstall --no-cache --refresh-package {tabsdata_pkg_name})"
+            )
         pip_install_requirements_command = add_python_target_and_join_commands(
             install_command,
             real_environment_name,
