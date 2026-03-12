@@ -36,7 +36,7 @@ logger.setLevel(logging.DEBUG)
     ),
 )
 class MySQLCdcConn(CdcConn, MySQLConn):
-    @_td_validate_call(ErrorCode.STCE104)
+    @_td_validate_call(ErrorCode.CDCMYSQL1)
     def __init__(
         self,
         uri: str,

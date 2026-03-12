@@ -36,7 +36,7 @@ logger.setLevel(logging.DEBUG)
     ),
 )
 class PostgresCdcConn(CdcConn, PostgresConn):
-    @_td_validate_call(ErrorCode.STCE106)
+    @_td_validate_call(ErrorCode.CDCPOSTGRES1)
     def __init__(
         self,
         uri: str,

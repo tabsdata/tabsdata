@@ -58,7 +58,7 @@ class TaskRunner:
     def execute(self):
         self.setup_signal_handlers()
         logger.info("Starting foreground task")
-        if not self.stop_event.is_set():
+        if self.stop_event.is_set():
             logger.info("Stop signal received before start. Leaving.")
         else:
             try:

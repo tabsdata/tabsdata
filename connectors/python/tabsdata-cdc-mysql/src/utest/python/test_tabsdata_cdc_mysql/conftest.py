@@ -39,6 +39,7 @@ from test_tabsdata.conftest import (
 )
 
 # noinspection PyUnusedImports
+from test_tabsdata_cdc_mysql.common.fixtures.schema import mysql_collect_tables_setup  # noqa: F401
 from test_tabsdata_cdc_mysql.common.fixtures.docker import mysql_cdc_config  # noqa: F401
 
 pytest_plugins = ["test_tabsdata.fntest"]

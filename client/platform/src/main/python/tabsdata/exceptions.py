@@ -2360,11 +2360,49 @@ class ErrorCode(Enum):
     STCE101 = object()
     STCE102 = object()
     STCE103 = object()
-    STCE104 = object()
-    STCE105 = object()
-    STCE106 = object()
-    STCE107 = object()
-    STCE108 = object()
+    # CDC common errors
+    CDC1 = {
+        "code": "CDC-001",
+        "message": "Invalid table specification '{}': {}",
+    }
+    CDC2 = {
+        "code": "CDC-002",
+        "message": "Table {}.{} not found in database",
+    }
+    CDC3 = {
+        "code": "CDC-003",
+        "message": "Table {}.{} has no columns",
+    }
+
+    # CDC MySQL errors
+    CDCMYSQL1 = {
+        "code": "CDCMYSQL-001",
+        "message": "Invalid MySQL CDC connection configuration: {}",
+    }
+    CDCMYSQL2 = {
+        "code": "CDCMYSQL-002",
+        "message": "Invalid MySQL CDC trigger configuration: {}",
+    }
+
+    # CDC PostgreSQL errors
+    CDCPOSTGRES1 = {
+        "code": "CDCPOSTGRES-001",
+        "message": "Invalid PostgreSQL CDC connection configuration: {}",
+    }
+    CDCPOSTGRES2 = {
+        "code": "CDCPOSTGRES-002",
+        "message": "Invalid PostgreSQL CDC trigger configuration: {}",
+    }
+
+    # CDC DB2 errors
+    CDCDB21 = {
+        "code": "CDCDB2-001",
+        "message": "Invalid DB2 CDC connection configuration: {}",
+    }
+    CDCDB22 = {
+        "code": "CDCDB2-002",
+        "message": "Invalid DB2 CDC trigger configuration: {}",
+    }
 
     def code(self) -> str:
         if type(self.value) is dict:
@@ -2548,6 +2586,38 @@ class StageTriggerExecutionError(TabsDataException):
     """
 
     CODE_PREFIX = "STR"
+
+
+class CdcError(TabsDataException):
+    """
+    Exception raised for generic CDC errors.
+    """
+
+    CODE_PREFIX = "CDC"
+
+
+class Db2CdcError(CdcError):
+    """
+    Exception raised for DB2 CDC errors.
+    """
+
+    CODE_PREFIX = "CDCDB2"
+
+
+class MySQLCdcError(CdcError):
+    """
+    Exception raised for MySQL CDC errors.
+    """
+
+    CODE_PREFIX = "CDCMYSQL"
+
+
+class PostgresCdcError(CdcError):
+    """
+    Exception raised for PostgreSQL CDC errors.
+    """
+
+    CODE_PREFIX = "CDCPOSTGRES"
 
 
 class ConstructorError(TabsDataException):

@@ -44,7 +44,7 @@ def ensure_container(
     privileged: bool = False,
     remove: bool = False,
     message: str | None = None,
-) -> tuple[Container, int]:
+) -> tuple[Container, int, bool]:
     client = docker.from_env()
     forwarded_port_key = next(iter(forwarded_ports))
 
@@ -52,7 +52,7 @@ def ensure_container(
         logger.info(f"CDC container '{name}' already exists; reusing it.")
         container = containers[0]
         host_port = get_container_port_binding(container, forwarded_port_key)
-        return container, host_port
+        return container, host_port, False
 
     logger.info(f"Creating CDC container '{name}' from image '{image}'")
     run_kwargs: dict[str, Any] = {
@@ -74,7 +74,7 @@ def ensure_container(
     if message is not None:
         ensure_readiness(container, message)
     host_port = get_container_port_binding(container, forwarded_port_key)
-    return container, host_port
+    return container, host_port, True
 
 
 def ensure_connection(

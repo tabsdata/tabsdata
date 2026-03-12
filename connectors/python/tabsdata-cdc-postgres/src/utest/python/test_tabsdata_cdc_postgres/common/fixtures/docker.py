@@ -153,6 +153,11 @@ def setup_cdc_postgres_user(port: int) -> None:
             f"select on tables "
             f"to {POSTGRES_CDC_USER}"
         )
+
+        cursor.execute(
+            f"create schema if not exists {POSTGRES_CDC_USER} "
+            f"authorization {POSTGRES_CDC_USER}"
+        )
     finally:
         if cursor is not None:
             cursor.close()
@@ -345,8 +350,8 @@ def check_cdc_postgres_replica_operation_stream(port: int, signal: str) -> None:
 
 def create_cdc_postgres_container(
     name: str = DEFAULT_PYTEST_POSTGRES_CDC_DOCKER_CONTAINER_NAME,
-) -> tuple[Container, int]:
-    container, port = ensure_container(
+) -> tuple[Container, int, bool]:
+    container, port, created = ensure_container(
         name=name,
         image=POSTGRES_CDC_IMAGE,
         environment=[
@@ -369,7 +374,7 @@ def create_cdc_postgres_container(
             "max_logical_replication_workers=4",
         ],
     )
-    return container, port
+    return container, port, created
 
 
 def await_cdc_postgres_container(port: int) -> None:
@@ -407,10 +412,11 @@ def check_cdc_postgres_container(port: int, signal: str) -> None:
 def create_cdc_postgres_database(
     name: str = DEFAULT_PYTEST_POSTGRES_CDC_DOCKER_CONTAINER_NAME,
 ) -> int:
-    container, port = create_cdc_postgres_container(name)
+    container, port, created = create_cdc_postgres_container(name)
     await_cdc_postgres_container(port)
-    signal = setup_cdc_postgres_container(container, port)
-    check_cdc_postgres_container(port, signal)
+    if created:
+        signal = setup_cdc_postgres_container(container, port)
+        check_cdc_postgres_container(port, signal)
 
     return port
 

@@ -6,8 +6,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any, Callable, Union
+from typing import Any, Union
 
+from tabsdata.connector.cdc.common._dtype import sqlalchemy_to_arrow
 from tabsdata.connector.cdc.common.constants import DOT
 
 
@@ -42,7 +43,7 @@ class TableObject:
 @dataclass
 class TrackedColumn:
     name: str
-    dbtype: str
+    satype: Any
     patype: Any = None
 
 
@@ -53,25 +54,13 @@ class TrackedTable:
     columns: list[TrackedColumn]
     pk: list[str]
 
+    def __post_init__(self):
+        for column in self.columns:
+            column.patype = sqlalchemy_to_arrow(column.satype)
+
     @property
     def qualified(self) -> str:
         return self.data_table.qualified
-
-    def solve(self, converter: Callable[[str], Any]) -> TrackedTable:
-        solved_columns = [
-            TrackedColumn(
-                name=column.name,
-                dbtype=column.dbtype,
-                patype=converter(column.dbtype),
-            )
-            for column in self.columns
-        ]
-        return TrackedTable(
-            data_table=self.data_table,
-            cdc_table=self.cdc_table,
-            columns=solved_columns,
-            pk=self.pk,
-        )
 
 
 class CdcArchitecture(StrEnum):

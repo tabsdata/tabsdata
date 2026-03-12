@@ -8,8 +8,9 @@ import json
 import logging
 import signal
 import sys
+import threading
 import time
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -58,29 +59,6 @@ from tabsdata.exceptions import ErrorCode
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-
-
-class CdcIngester(ABC):
-    def __init__(self):
-        pass
-
-    @abstractmethod
-    def open_session(self) -> Any: ...
-
-    @abstractmethod
-    def close_session(self, session: Any) -> None: ...
-
-    @abstractmethod
-    def fetch_schemas(self, session: Any) -> dict[str, TrackedTable]: ...
-
-    @abstractmethod
-    def poll_events(self, session: Any) -> list[CdcEvent]: ...
-
-    @abstractmethod
-    def retrieve_position(self) -> Any: ...
-
-    @abstractmethod
-    def save_position(self, position: Any) -> None: ...
 
 
 @dataclass
@@ -324,7 +302,7 @@ class CdcTrigger(StageTrigger):
     def _close_session(self, session: Any) -> None: ...
 
     @abstractmethod
-    def _fetch_tracked_tables(self, session: Any) -> dict[str, TrackedTable]: ...
+    def collect_tables(self, session: Any) -> dict[str, TrackedTable]: ...
 
     @abstractmethod
     def _poll_events(self, session: Any) -> list[CdcEvent]: ...
@@ -336,19 +314,36 @@ class CdcTrigger(StageTrigger):
     def _save_position(self, position: Any) -> None: ...
 
     @staticmethod
-    def _setup_sigterm_handler():
-        def _sigterm_handler(_signum, _frame):
-            raise KeyboardInterrupt
+    def _setup_signal_handlers() -> threading.Event:
+        stop_event = threading.Event()
 
-        signal.signal(signal.SIGTERM, _sigterm_handler)
+        def handle_signal(signum, _frame):
+            logger.info(f"Received termination signal ({signum}). Shutting down...")
+            stop_event.set()
+
+        signal.signal(signal.SIGINT, handle_signal)
+        signal.signal(signal.SIGTERM, handle_signal)
+
+        if sys.platform == "win32":
+            signal.signal(signal.SIGBREAK, handle_signal)
+            try:
+                # noinspection PyPackageRequirements,PyUnresolvedReferences
+                import win32api
+
+                win32api.SetConsoleCtrlHandler(handle_signal, True)
+            except ImportError:
+                pass
+
+        return stop_event
 
     def run(self, context: StageTriggerContext):
-        self._setup_sigterm_handler()
+        stop = self._setup_signal_handlers()
         session = self._open_session()
-        stage_trigger_status = StageTriggerStatus.SUCCESS
+        status = StageTriggerStatus.SUCCESS
 
         try:
-            tracked_tables = self._fetch_tracked_tables(session)
+            tracked_tables = self.collect_tables(session)
+
             pa_schemas: dict[str, pa.Schema] = {
                 name: _build_parquet_schema(ts, self._cdc_format)
                 for name, ts in tracked_tables.items()
@@ -363,7 +358,7 @@ class CdcTrigger(StageTrigger):
 
             working_dir = Path(context.working_dir)
 
-            while True:
+            while not stop.is_set():
                 if self._end is not None and datetime.now(timezone.utc) > self._end:
                     logger.info("CdcTrigger end time reached, exiting loop.")
                     break
@@ -386,11 +381,15 @@ class CdcTrigger(StageTrigger):
                     context, l1, l2, tracked_tables, pa_schemas, file_seq, working_dir
                 )
 
-        except KeyboardInterrupt:
-            stage_trigger_status = StageTriggerStatus.STOPPED
-            logger.info("CdcTrigger interrupted, exiting loop.")
+                # Wait for poll interval or until stop signal
+                stop.wait(timeout=self._poll_interval_seconds)
+
+            if stop.is_set():
+                status = StageTriggerStatus.STOPPED
+                logger.info("CdcTrigger interrupted, exiting loop.")
+
         except Exception as e:
-            stage_trigger_status = StageTriggerStatus.ERROR
+            status = StageTriggerStatus.ERROR
             logger.error(f"Error in CdcTrigger run loop: {e}")
             raise
         finally:
@@ -399,16 +398,15 @@ class CdcTrigger(StageTrigger):
             )
             self._close_session(session)
             if getattr(self, "return_on_end", False):
-                if stage_trigger_status != StageTriggerStatus.SUCCESS:
+                if status != StageTriggerStatus.SUCCESS:
                     from tabsdata.exceptions import StageTriggerExecutionError
 
                     raise StageTriggerExecutionError(
                         ErrorCode.STR1,
-                        f"CdcTrigger execution failed with status:"
-                        f" {stage_trigger_status.name}",
+                        f"CdcTrigger execution failed with status: {status.name}",
                     )
             else:
-                sys.exit(stage_trigger_status.value)
+                sys.exit(status.value)
 
     @staticmethod
     def _append_to_l1(
@@ -504,7 +502,7 @@ class CdcTrigger(StageTrigger):
         bytes_hit = (
             self._trigger_max_bytes is not None and l2.bytes >= self._trigger_max_bytes
         )
-        time_hit = (time.time() - l2.last_fired) >= self._fire_max_seconds
+        time_hit = (time.time() - l2.last_fired) >= self._trigger_max_seconds
 
         if not (rows_hit or bytes_hit or time_hit):
             return

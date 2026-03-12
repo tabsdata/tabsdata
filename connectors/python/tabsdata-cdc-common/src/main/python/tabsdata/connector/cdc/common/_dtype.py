@@ -31,6 +31,9 @@ def sqlalchemy_to_arrow(sa_type: Any) -> pa.DataType:
             return pa.float32()
         return pa.float64()
 
+    if getattr(sa_type, "__visit_name__", None) == "DOUBLE":
+        return pa.float64()
+
     if isinstance(gt, sa.types.Numeric):
         p = getattr(sa_type, "precision", None)
         s = getattr(sa_type, "scale", None)

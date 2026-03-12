@@ -55,7 +55,7 @@ logger.setLevel(logging.DEBUG)
     ),
 )
 class PostgresCdcTrigger(CdcTrigger):
-    @_td_validate_call(ErrorCode.STCE107)
+    @_td_validate_call(ErrorCode.CDCPOSTGRES2)
     def __init__(
         self,
         conn: PostgresCdcConn,
@@ -131,8 +131,8 @@ class PostgresCdcTrigger(CdcTrigger):
     def _close_session(self, session: Any) -> None:
         self._ingester.close_session(session)
 
-    def _fetch_tracked_tables(self, session: Any) -> dict[str, TrackedTable]:
-        return self._ingester.fetch_schemas(session)
+    def collect_tables(self, session: Any) -> dict[str, TrackedTable]:
+        return self._ingester.collect_tables(session)
 
     def _poll_events(self, session: Any) -> list[CdcEvent]:
         return self._ingester.poll_events(session)

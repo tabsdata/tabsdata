@@ -323,8 +323,8 @@ def check_cdc_mysql_binlog_operation_stream(port: int, signal: str) -> None:
 
 def create_cdc_mysql_container(
     name: str = DEFAULT_PYTEST_MYSQL_CDC_DOCKER_CONTAINER_NAME,
-) -> tuple[Container, int]:
-    container, port = ensure_container(
+) -> tuple[Container, int, bool]:
+    container, port, created = ensure_container(
         name=name,
         image=MYSQL_CDC_IMAGE,
         environment=[
@@ -345,7 +345,7 @@ def create_cdc_mysql_container(
             "--binlog_expire_logs_seconds=604800",
         ],
     )
-    return container, port
+    return container, port, created
 
 
 def await_cdc_mysql_container(port: int) -> None:
@@ -383,10 +383,11 @@ def check_cdc_mysql_container(port: int, signal: str) -> None:
 def create_cdc_mysql_database(
     name: str = DEFAULT_PYTEST_MYSQL_CDC_DOCKER_CONTAINER_NAME,
 ) -> int:
-    container, port = create_cdc_mysql_container(name)
+    container, port, created = create_cdc_mysql_container(name)
     await_cdc_mysql_container(port)
-    signal = setup_cdc_mysql_container(port)
-    check_cdc_mysql_container(port, signal)
+    if created:
+        signal = setup_cdc_mysql_container(port)
+        check_cdc_mysql_container(port, signal)
 
     return port
 

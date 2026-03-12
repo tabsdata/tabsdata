@@ -51,7 +51,7 @@ logger.setLevel(logging.DEBUG)
     ),
 )
 class Db2CdcTrigger(CdcTrigger):
-    @_td_validate_call(ErrorCode.STCE108)
+    @_td_validate_call(ErrorCode.CDCDB22)
     def __init__(
         self,
         conn: Db2CdcConn,
@@ -99,8 +99,8 @@ class Db2CdcTrigger(CdcTrigger):
     def _close_session(self, session: Any) -> None:
         self._ingester.close_session(session)
 
-    def _fetch_tracked_tables(self, session: Any) -> dict[str, TrackedTable]:
-        return self._ingester.fetch_schemas(session)
+    def collect_tables(self, session: Any) -> dict[str, TrackedTable]:
+        return self._ingester.collect_tables(session)
 
     def _poll_events(self, session: Any) -> list[CdcEvent]:
         return self._ingester.poll_events(session)

@@ -635,8 +635,8 @@ def check_cdc_db2_asn_operation(port: int, signal: str) -> None:
 
 def create_cdc_db2_container(
     name: str = DEFAULT_PYTEST_DB2_CDC_DOCKER_CONTAINER_NAME,
-) -> tuple[Container, int]:
-    container, port = ensure_container(
+) -> tuple[Container, int, bool]:
+    container, port, created = ensure_container(
         name=name,
         image=DB2_CDC_IMAGE,
         environment=[
@@ -649,7 +649,7 @@ def create_cdc_db2_container(
         platform="linux/amd64",
         message=DB2_CDC_DOCKER_DONE_MESSAGE,
     )
-    return container, port
+    return container, port, created
 
 
 def await_cdc_db2_container(port: int) -> None:
@@ -690,10 +690,11 @@ def check_cdc_db2_container(port: int, signal: str) -> None:
 def create_cdc_db2_database(
     name: str = DEFAULT_PYTEST_DB2_CDC_DOCKER_CONTAINER_NAME,
 ) -> int:
-    container, port = create_cdc_db2_container(name)
+    container, port, created = create_cdc_db2_container(name)
     await_cdc_db2_container(port)
-    signal = setup_cdc_db2_container(container, port)
-    check_cdc_db2_container(port, signal)
+    if created:
+        signal = setup_cdc_db2_container(container, port)
+        check_cdc_db2_container(port, signal)
 
     return port
 

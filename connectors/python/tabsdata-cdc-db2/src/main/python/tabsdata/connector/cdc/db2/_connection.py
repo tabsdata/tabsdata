@@ -36,7 +36,7 @@ logger.setLevel(logging.DEBUG)
     ),
 )
 class Db2CdcConn(CdcConn, Db2Conn):
-    @_td_validate_call(ErrorCode.STCE108)
+    @_td_validate_call(ErrorCode.CDCDB21)
     def __init__(
         self,
         uri: str,
