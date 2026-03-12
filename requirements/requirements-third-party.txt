@@ -36,21 +36,16 @@ pycountries==1.2.1
 pyyaml==6.0.3
 pyarrow==23.0.1
 py-cpuinfo==9.0.0
-# Note: pinning pydantic and pyiceberg to specific versions due to a regression in
-# their code, upgrade to latest once solved.
-# See: https://github.com/apache/iceberg-python/issues/2590
 pydantic==2.12.5
 pyiceberg[glue]==0.11.0
 pywin32==311; platform_system == "Windows"
 requests==2.32.5
-# Note: unpinning rich as part of the pydantic regression fix, reppin once it is
-# resolved.
-# rich==14.1.0
-rich<14.3.3
+rich==14.3.3
 rich-click==1.9.7
 ruamel-yaml==0.19.1
 sqlalchemy==2.0.46
 starlette==0.52.1
+tenacity==9.1.4
 typing-extensions==4.15.0
 tzlocal==5.3.1
 uuid6==2025.0.1

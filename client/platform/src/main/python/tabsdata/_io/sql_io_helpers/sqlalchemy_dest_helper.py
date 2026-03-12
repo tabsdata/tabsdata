@@ -9,6 +9,12 @@ import polars as pl
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Session, sessionmaker
+from tenacity import (
+    before_sleep_log,
+    retry,
+    stop_after_delay,
+    wait_fixed,
+)
 
 from tabsdata._io.outputs.sql_outputs import (
     _chunk_to_intermediate_files,
@@ -19,6 +25,9 @@ from tabsdata._io.sql_io_helpers.sql_helper_configs import SQLDestConfig
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
+CONNECTION_RETRY_TIMEOUT = 60 * 5
+CONNECTION_RETRY_DELAY = 5
 
 
 class SQLAlchemyDestHelper:
@@ -63,21 +72,34 @@ class SQLAlchemyDestHelper:
             working_dir: The working directory to use for intermediate files.
             results: The results to store in the SQL destination.
         """
-        conn_url = obtain_sqlalchemy_url(self.dest.conn)
-        transactional = self.dest.transactional
-
-        engine = create_engine(conn_url, connect_args=self.dest.conn.cx_dst_configs_sql)
-
         intermediate_files = _chunk_to_intermediate_files(
             destination_table_configuration=self.dest.destination_tables,
             results=results,
             working_dir=working_dir,
         )
+        self._connect_and_store(intermediate_files)
 
+    @retry(
+        stop=stop_after_delay(CONNECTION_RETRY_TIMEOUT),
+        wait=wait_fixed(CONNECTION_RETRY_DELAY),
+        before_sleep=before_sleep_log(
+            logger,  # type: ignore[arg-type]
+            logging.WARNING,
+        ),
+        reraise=True,
+    )
+    def _connect_and_store(self, intermediate_files: list[str]):
+        conn_url = obtain_sqlalchemy_url(self.dest.conn)
+        transactional = self.dest.transactional
+
+        engine = create_engine(
+            conn_url,
+            connect_args=self.dest.conn.cx_dst_configs_sql,
+        )
         try:
             if transactional:
-                Session = sessionmaker(bind=engine)
-                session = Session()
+                _Session = sessionmaker(bind=engine)
+                session = _Session()
                 with session.begin():
                     logger.debug("Transaction started for SQL destination")
                     self._store_results(session, intermediate_files)
@@ -85,9 +107,6 @@ class SQLAlchemyDestHelper:
                 with engine.connect() as connection:
                     logger.debug("No transaction started for SQL destination")
                     self._store_results(connection, intermediate_files)
-        except Exception as e:
-            logger.warning(f"Error writing data to SQL destination: {e}")
-            raise e
         finally:
             engine.dispose()
 

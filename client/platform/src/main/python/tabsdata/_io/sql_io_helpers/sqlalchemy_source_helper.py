@@ -11,6 +11,12 @@ import polars as pl
 from sqlalchemy import TextClause, create_engine, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Session
+from tenacity import (
+    before_sleep_log,
+    retry,
+    stop_after_delay,
+    wait_fixed,
+)
 
 from tabsdata._io.constants import (
     _LoaderSpec,
@@ -25,6 +31,9 @@ from tabsdata.tableframe.typing import DataType
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
+CONNECTION_RETRY_TIMEOUT = 60 * 5
+CONNECTION_RETRY_DELAY = 5
 
 
 class SQLAlchemySourceHelper:
@@ -61,6 +70,15 @@ class SQLAlchemySourceHelper:
             )
         self._source = source
 
+    @retry(
+        stop=stop_after_delay(CONNECTION_RETRY_TIMEOUT),
+        wait=wait_fixed(CONNECTION_RETRY_DELAY),
+        before_sleep=before_sleep_log(
+            logger,  # type: ignore[arg-type]
+            logging.WARNING,
+        ),
+        reraise=True,
+    )
     def _chunk(self, working_dir: str) -> list[list[str]]:
         """
         Execute the SQL queries and return the list of resulting Parquet file names.
@@ -77,14 +95,13 @@ class SQLAlchemySourceHelper:
         transactional = self.source.transactional
 
         engine = create_engine(
-            conn_url, connect_args=self.source.conn.cx_src_configs_sql
+            conn_url,
+            connect_args=self.source.conn.cx_src_configs_sql,
         )
-
-        results = []
         try:
             if transactional:
                 with Session(engine) as session, session.begin():
-                    results = self._run_queries(
+                    return self._run_queries(
                         queries,
                         session.connection(),
                         working_dir,
@@ -92,18 +109,14 @@ class SQLAlchemySourceHelper:
                     )
             else:
                 with engine.connect() as connection:
-                    results = self._run_queries(
+                    return self._run_queries(
                         queries,
                         connection,
                         working_dir,
                         schema_overrides_list,
                     )
-        except Exception as e:
-            logger.warning(f"Error reading data from SQL source: {e}")
-            raise e
         finally:
             engine.dispose()
-        return results
 
     def _run_queries(
         self,
@@ -236,7 +249,7 @@ class SQLAlchemySourceHelper:
             chunksize=self.source.chunk_size,
             dtype=(
                 {
-                    # Get the corresponding NumPy dtype for each Polars dtype for
+                    # Get the corresponding NumPy dtype for each Polars' dtype for
                     # pandas schema overrides
                     key: get_numpy_dtype_from_polars(value)
                     for key, value in schema_overrides.items()
