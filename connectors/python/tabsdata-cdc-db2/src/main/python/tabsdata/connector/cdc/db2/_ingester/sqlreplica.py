@@ -209,9 +209,9 @@ class SqlReplicationIngester(CdcIngester):
         session: Any,
         cdc_format: CdcFormatSpec = CdcFormatSpec(),
     ) -> dict[str, TrackedTable]:
-        table_specs = self._tables
-        if isinstance(table_specs, str):
-            table_specs = [table_specs]
+        qualified_tables = self._tables
+        if isinstance(qualified_tables, str):
+            qualified_tables = [qualified_tables]
 
         inspector: sa.engine.reflection.Inspector = sa.inspect(session)
         sa_dialect: sa.engine.interfaces.Dialect = inspector.bind.dialect
@@ -219,13 +219,15 @@ class SqlReplicationIngester(CdcIngester):
             column.normalize(sa_dialect)
         result: dict[str, TrackedTable] = {}
 
-        for table_spec in table_specs:
+        for qualified_table in qualified_tables:
             try:
-                cd_schema, cd_table = self.dialect.parse_qualified_table(table_spec)
+                cd_schema, cd_table = self.dialect.parse_qualified_table(
+                    qualified_table
+                )
             except ValueError as error:
                 raise CdcError(
                     ErrorCode.CDC1,
-                    table_spec,
+                    qualified_table,
                     error,
                 ) from error
 
