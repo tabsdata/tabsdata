@@ -20,6 +20,7 @@ x-druid-env: &druid-env
 services:
   zookeeper:
     image: zookeeper:3.5.10
+    container_name: tdpytest_c_druid-zookeeper
     environment:
       ZOO_MY_ID: 1
     healthcheck:
@@ -30,6 +31,7 @@ services:
 
   coordinator:
     image: apache/druid:31.0.0
+    container_name: tdpytest_c_druid-coordinator
     command: ["coordinator"]
     ports:
       - "8081/tcp"
@@ -43,6 +45,7 @@ services:
 
   broker:
     image: apache/druid:31.0.0
+    container_name: tdpytest_c_druid-broker
     command: ["broker"]
     ports:
       - "8082/tcp"
@@ -58,6 +61,7 @@ services:
 
   historical:
     image: apache/druid:31.0.0
+    container_name: tdpytest_c_druid-historical
     command: ["historical"]
     ports:
       - "8083/tcp"
@@ -73,6 +77,7 @@ services:
 
   middlemanager:
     image: apache/druid:31.0.0
+    container_name: tdpytest_c_druid-middlemanager
     command: ["middleManager"]
     ports:
       - "8091/tcp"
@@ -88,6 +93,7 @@ services:
 
   router:
     image: apache/druid:31.0.0
+    container_name: tdpytest_c_druid-router
     command: ["router"]
     ports:
       - "8888/tcp"

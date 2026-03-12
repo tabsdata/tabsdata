@@ -26,14 +26,15 @@ from tabsdata._utils.constants import TRUE_VALUES
 from test_tabsdata.common.constants import (
     CONTAINER_MAXIMUM_RETRY_COUNT,
     DB_HOST,
-    PYTEST_DEFAULT_ENVIRONMENT_PREFIX, DOCKER_REGULAR_CONTAINER_INFIX,
+    DOCKER_COMPOSE_CONTAINER_INFIX,
+    PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
 )
 from test_tabsdata.common.container import get_container_port_binding
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_PYTEST_DRUID_DOCKER_CONTAINER_NAME = (
-    f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}{DOCKER_REGULAR_CONTAINER_INFIX}druid"
+    f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}{DOCKER_COMPOSE_CONTAINER_INFIX}druid"
 )
 
 # The coordinator service acts as the Overlord in single-node mode.
