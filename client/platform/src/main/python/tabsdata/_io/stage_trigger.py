@@ -11,13 +11,16 @@ from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, Literal, TypeAlias, Union
+from typing import TYPE_CHECKING, Any, Literal, TypeAlias, Union
 
 import requests
 from typing_extensions import deprecated
 
 from tabsdata._utils.annotations import unstable, unstable_category
 from tabsdata.exceptions import ErrorCode, StageTriggerConfigurationError
+
+if TYPE_CHECKING:
+    from tabsdata._tabsserver.function.checkpoint_store import CheckpointStore
 
 TRIGGER_FILE_PREFIX = "TD_INTERNAL_TRIGGER_FILE_"
 
@@ -215,6 +218,14 @@ class StageTriggerContext(ABC):
         Additional calls to trigger() have no effect.
         """
 
+    @property
+    @abstractmethod
+    def checkpoint(self) -> CheckpointStore:
+        """
+        CheckpointStore object to manage persistent information between executions
+            of the StageTrigger
+        """
+
 
 class LocalFileStageTriggerContext(StageTriggerContext):
     def __init__(
@@ -224,12 +235,22 @@ class LocalFileStageTriggerContext(StageTriggerContext):
         logger,
         working_dir: str,
         end: datetime,
+        checkpoint: CheckpointStore,
     ):
         self.staging_folder = staging_folder
         self.trigger_config = trigger_config
         self.logger = logger
         self._working_dir = Path(working_dir)
         self.end = end
+        self.checkpoint = checkpoint
+
+    @property
+    def checkpoint(self) -> CheckpointStore:
+        return self._checkpoint
+
+    @checkpoint.setter
+    def checkpoint(self, checkpoint):
+        self._checkpoint = checkpoint
 
     @property
     def working_dir(self) -> Path:

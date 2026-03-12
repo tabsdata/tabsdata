@@ -27,6 +27,11 @@ from tabsdata._io.stage_trigger import (
     StageTriggerStatus,
 )
 from tabsdata._tabsserver import invoker
+from tabsdata._tabsserver.function.checkpoint_store import CheckpointStore
+from tabsdata._tabsserver.function.execution_context import (
+    ExecutionPaths,
+    ExecutionContext
+)
 from tabsdata._tabsserver.function.global_utils import (
     DEFAULT_DEVELOPMENT_LOCKS_LOCATION,
 )
@@ -34,6 +39,7 @@ from tabsdata._tabsserver.function.response_utils import RESPONSE_FILE_NAME
 from tabsdata._tabsserver.function.yaml_parsing import (
     ExceptionYaml,
     FunctionYaml,
+    Location,
     ResponseYaml,
     StageTriggerYaml,
     parse_exception_yaml,
@@ -52,6 +58,7 @@ from test_tabsdata.bootest import TDLOCAL_FOLDER
 from test_tabsdata.conftest import (
     LOCAL_PACKAGES_LIST,
     MOCK_COLLECTION,
+    write_v1_listener_yaml_file,
     write_v2_function_yaml_file,
 )
 from test_tabsdata.test_tableframe.common import pretty_pandas, pretty_polars
@@ -135,16 +142,21 @@ def tdfnjob_fixture(request):
 
 
 class FunctionConstants(Enum):
+    URI_KEY = "uri"
+    TRIGGER_FOLDER = "tg"
+    FUNCTION_FOLDER = "fn"
     ENVIRONMENT_PREFIX = "tdtest"
     INSTANCE = "tdfntest"
     WORK = "0"
     COLLECTION = MOCK_COLLECTION
     BUNDLE_FOLDER_NAME = "bundle"
+    BUNDLE_CONTEXT_SUFFIX = "_context"
     REQUEST_FOLDER_NAME = "request"
     REQUEST_FILE_NAME = REQUEST_FILE_NAME
     RESPONSE_FOLDER_NAME = "response"
     RESPONSE_FILE_NAME = RESPONSE_FILE_NAME
     STAGING_FOLDER_NAME = "staging"
+    CHECKPOINT_FOLDER_NAME = "checkpoint"
     WORKING_FOLDER_NAME = "working"
     EXCEPTION_FOLDER_NAME = "response"
     EXCEPTION_FILE_NAME = EXCEPTION_FILE_NAME
@@ -154,7 +166,7 @@ class FunctionConstants(Enum):
     INPUT_OFFSET_FILE_NAME = "offset.i.parquet"
     OUTPUT_OFFSET_FILE_NAME = "offset.o.parquet"
     DATA_FOLDER_NAME = "data"
-    BIN_FOLDER_NAME = "bin"
+    BIN_FUNCTION_FOLDER_NAME = "bin"
     LOG_FOLDER_NAME = "log"
     LOCK_FOLDER = DEFAULT_DEVELOPMENT_LOCKS_LOCATION
     TABSDATA_PACKAGES = LOCAL_PACKAGES_LIST
@@ -664,18 +676,64 @@ def name_files(
 
 
 def _trigger(
-    fn_root: Path,
+    tg_root: Path,
+    function: td.TabsdataFunction | Callable[..., Any],
     trigger: StageTrigger,
 ) -> FnTrigger:
     logger = logging.getLogger(__name__)
     logger.debug("Performing trigger...")
 
-    staging = fn_root / FunctionConstants.STAGING_FOLDER_NAME.value
+    use_current_venv = os.getenv(TD_USE_CURRENT_VENV, "").lower() in TRUE_VALUES
+    bundle_folder = tg_root / FunctionConstants.BUNDLE_FOLDER_NAME.value
+    os.makedirs(bundle_folder, exist_ok=True)
+
+    bundle_file = create_bundle_archive(
+        function=function,
+        local_packages=(
+            None if use_current_venv else FunctionConstants.TABSDATA_PACKAGES.value
+        ),
+        save_location=bundle_folder,
+    )
+
+    request_folder = tg_root / FunctionConstants.REQUEST_FOLDER_NAME.value
+    os.makedirs(request_folder, exist_ok=True)
+    response_folder = tg_root / FunctionConstants.RESPONSE_FOLDER_NAME.value
+    os.makedirs(response_folder, exist_ok=True)
+
+    request_file = request_folder / FunctionConstants.REQUEST_FILE_NAME.value
+
+    output_folder = tg_root / FunctionConstants.OUTPUT_FOLDER_NAME.value
+    os.makedirs(output_folder, exist_ok=True)
+
+    staging = tg_root / FunctionConstants.STAGING_FOLDER_NAME.value
     os.makedirs(staging, exist_ok=True)
 
-    working_folder = fn_root / FunctionConstants.WORKING_FOLDER_NAME.value
+    checkpoint = tg_root / FunctionConstants.CHECKPOINT_FOLDER_NAME.value
+    os.makedirs(checkpoint, exist_ok=True)
+
+    working_folder = tg_root / FunctionConstants.WORKING_FOLDER_NAME.value
     os.makedirs(working_folder, exist_ok=True)
 
+    bin_folder = bundle_folder / f"{function.original_function.__name__}{FunctionConstants.BUNDLE_CONTEXT_SUFFIX.value}"
+
+    write_v1_listener_yaml_file(
+        filename=str(request_file),
+        bundle_archive_location=str(bin_folder),
+    )
+
+    execution_paths = ExecutionPaths(
+        bundle_folder=str(bin_folder),
+        request_file=str(request_file),
+        response_folder=str(response_folder),
+        output_folder=str(output_folder),
+    )
+    execution_context = ExecutionContext(
+        paths=execution_paths,
+        work=str(working_folder),
+        mount_options_dict={},
+    )
+
+    checkpoint_location = Location({FunctionConstants.URI_KEY.value: str(checkpoint)})
     context = LocalFileStageTriggerContext(
         staging_folder=str(staging),
         trigger_config=CallConfig(
@@ -688,8 +746,12 @@ def _trigger(
             body=None,
         ),
         logger=logger,
-        working_dir=str(fn_root),
+        working_dir=str(tg_root),
         end=trigger.end,
+        checkpoint=CheckpointStore(
+            location=checkpoint_location,
+            execution_context=execution_context,
+        )
     )
     context.trigger = lambda: True
     context.trigger_monitor = lambda: True
@@ -712,6 +774,7 @@ def _trigger(
 def _run(
     fntrigger: FnTrigger | None,
     function: td.TabsdataFunction | Callable[..., Any],
+    tg_root: Path | None,
     fn_root: Path,
     td_root: Path,
     input_tables: MockTableFrameSpec,
@@ -743,7 +806,7 @@ def _run(
     )
 
     if staging_folder is None:
-        staging_folder = fn_root / FunctionConstants.STAGING_FOLDER_NAME.value
+        staging_folder = (tg_root if tg_root is not None else fn_root) / FunctionConstants.STAGING_FOLDER_NAME.value
         os.makedirs(staging_folder, exist_ok=True)
         save_tables(staging_files, staging_folder)
         staging_uri = staging_folder.as_uri()
@@ -782,7 +845,7 @@ def _run(
     if input_initial_values is not None:
         save_offset(input_initial_values, input_offset_file)
 
-    bin_folder = fn_root / FunctionConstants.BIN_FOLDER_NAME.value
+    bin_folder = fn_root / FunctionConstants.BIN_FUNCTION_FOLDER_NAME.value
     os.makedirs(bin_folder, exist_ok=True)
 
     log_folder = td_root / FunctionConstants.LOG_FOLDER_NAME.value
@@ -836,6 +899,7 @@ def _run(
 
 
 def tdfntrigger(
+    function: td.TabsdataFunction | Callable[..., Any],
     trigger: StageTrigger,
 ) -> FnTrigger:
     tdtest = Path(tempfile.gettempdir()) / FunctionConstants.TEMP_ROOT.value
@@ -855,7 +919,8 @@ def tdfntrigger(
         fn_root = Path(root)
 
         fn_trigger = _trigger(
-            fn_root=fn_root,
+            tg_root=fn_root,
+            function=function,
             trigger=trigger,
         )
 
@@ -909,6 +974,7 @@ def tdfnrun(
         return _run(
             fntrigger=None,
             function=function,
+            tg_root=None,
             fn_root=fn_root,
             td_root=td_root,
             input_tables=input_tables,
@@ -917,6 +983,7 @@ def tdfnrun(
             staging_files=staging_files,
             function_defined_on=function_defined_on,
             require_output=require_output,
+            staging_uri=None,
         )
 
 
@@ -963,16 +1030,20 @@ def tdfnjob(
             fn = None
         fn = fn if fn else "unknown.f"
         td_root = Path(TDLOCAL_FOLDER) / file / test / fn
-        fn_root = Path(root)
+
+        tg_root = Path(root) / FunctionConstants.TRIGGER_FOLDER.value
+        fn_root = Path(root) / FunctionConstants.FUNCTION_FOLDER.value
 
         fn_trigger = _trigger(
-            fn_root=fn_root,
+            tg_root=tg_root,
+            function=function,
             trigger=trigger,
         )
 
         fn_run = _run(
             fntrigger=fn_trigger,
             function=function,
+            tg_root=tg_root,
             fn_root=fn_root,
             td_root=td_root,
             input_tables=input_tables,

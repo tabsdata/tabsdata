@@ -18,6 +18,7 @@ import tabsdata._utils.tableframe._generators as td_generators
 from tabsdata._io.stage_trigger import LocalFileStageTriggerContext, StageTrigger
 from tabsdata._table_actions.actions import OnTablesAction
 from tabsdata._tabsserver.function import environment_import_utils
+from tabsdata._tabsserver.function.checkpoint_store import CheckpointStore
 from tabsdata._tabsserver.function.global_utils import convert_uri_to_path
 from tabsdata._tabsserver.function.logging_utils import pad_string
 from tabsdata._tabsserver.function.native_tables_utils import (
@@ -120,12 +121,14 @@ def execute_stage_trigger(
                 f"Target datetime '{start_time}' is in the past or present "
                 f"(current time '{time_now}'). No sleep needed."
             )
+    checkpoint = CheckpointStore(request.function_checkpoint, execution_context)
     stage_context = LocalFileStageTriggerContext(
         staging_folder,
         fn_trigger,
         execution_context.logger,
         working_dir=execution_context.paths.output_folder,
         end=stage_trigger.end,
+        checkpoint=checkpoint,
     )
     logger.debug(f"Stage trigger context: {stage_context}")
     logger.info(

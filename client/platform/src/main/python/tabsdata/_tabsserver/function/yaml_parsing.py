@@ -26,6 +26,10 @@ class Location:
     def uri(self):
         return self.data.get("uri") if self.data else None
 
+    @uri.setter
+    def uri(self, value):
+        self.data["uri"] = value
+
     @property
     def env_prefix(self):
         return self.data.get("env_prefix") if self.data else None
@@ -476,6 +480,11 @@ class StageTriggerYaml(ABC):
 
     @property
     @abstractmethod
+    def function_checkpoint(self) -> Location:
+        """Return the function checkpoint folder."""
+
+    @property
+    @abstractmethod
     def function_stage(self) -> Location:
         """Return the function staging information."""
 
@@ -533,6 +542,18 @@ class StageTriggerV1(StageTriggerYaml):
     @property
     def function_bundle_uri(self) -> str:
         return self.function_bundle.uri if self.function_bundle else None
+
+    @property
+    def function_checkpoint(self) -> Location:
+        return Location(self.info.get("function_checkpoint")) if self.info else None
+
+    @property
+    def function_checkpoint_env_prefix(self) -> str:
+        return self.function_checkpoint.env_prefix if self.function_checkpoint else None
+
+    @property
+    def function_checkpoint_uri(self) -> str:
+        return self.function_checkpoint.uri if self.function_checkpoint else None
 
     @property
     def function_stage(self) -> Location:

@@ -101,6 +101,23 @@ def convert_path_to_uri(path: str) -> str:
     return uri
 
 
+def uri_join(folder_uri: str, filename: str) -> str:
+    """Return a URI pointing to *filename* inside *folder_uri*.
+
+    Works for any URI scheme (``file://``, ``s3://``, ``gs://``, ``az://``,
+    ``https://``, …) as well as plain local filesystem paths.  The folder URI
+    may or may not end with a separator character.
+
+    Args:
+        folder_uri: A URI or local path that identifies a folder.
+        filename: The bare filename to append (no path separators).
+
+    Returns:
+        A new URI/path with *filename* joined to *folder_uri*.
+    """
+    return folder_uri.rstrip("/") + "/" + filename
+
+
 def _get_root_folder() -> str:
     current_folder = os.path.dirname(__file__)
     trace(f"Current conftest folder is: {current_folder}")
