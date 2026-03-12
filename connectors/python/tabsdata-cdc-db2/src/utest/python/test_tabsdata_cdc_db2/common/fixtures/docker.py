@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 import ibm_db_dbi
 import pytest
+import docker
 from docker.models.containers import Container
 from filelock import FileLock
 from tenacity import retry, stop_after_attempt, wait_incrementing
@@ -71,6 +72,7 @@ DB2_CDC_SIGNAL_TABLE: str = "td_cdc_signal"
 
 @dataclass
 class Db2CdcConfig:
+    container: Container
     host: str
     port: int
     database: str
@@ -691,14 +693,14 @@ def check_cdc_db2_container(port: int, signal: str) -> None:
 
 def create_cdc_db2_database(
     name: str = DEFAULT_PYTEST_DB2_CDC_DOCKER_CONTAINER_NAME,
-) -> int:
+) -> tuple[Container, int]:
     container, port, created = create_cdc_db2_container(name)
     await_cdc_db2_container(port)
     if created:
         signal = setup_cdc_db2_container(container, port)
         check_cdc_db2_container(port, signal)
 
-    return port
+    return container, port
 
 
 @pytest.fixture(scope="function")
@@ -720,9 +722,25 @@ def db2_cdc_config(
             DB2_CDC_REQUIRED_ENVS,
             "db2_cdc_config",
         )
+        port = int(envs["PORT"])
+        container = None
+        client = docker.from_env()
+        for c in client.containers.list():
+            bindings = (
+                c.attrs.get("NetworkSettings", {})
+                .get("Ports", {})
+                .get(DB2_CDC_FORWARDED_PORT, [])
+            ) or []
+            for binding in bindings:
+                if int(binding.get("HostPort", 0)) == port:
+                    container = c
+                    break
+            if container is not None:
+                break
         return Db2CdcConfig(
+            container=container,
             host=envs["HOST"],
-            port=int(envs["PORT"]),
+            port=port,
             database=envs["DATABASE"],
             root_user=envs["ROOT_USER"],
             root_password=envs["ROOT_PASSWORD"],
@@ -732,15 +750,17 @@ def db2_cdc_config(
             f"{env_prefix}_DOCKER_CONTAINER_NAME",
             DEFAULT_PYTEST_DB2_CDC_DOCKER_CONTAINER_NAME,
         )
+        container = None
         port = -1
         if worker_id == PYTEST_XDIST_MASTER:
-            port = create_cdc_db2_database(name)
+            container, port = create_cdc_db2_database(name)
         else:
             root_temp_dir = tmp_path_factory.getbasetemp().parent
             lock_file = root_temp_dir / DB2_CDC_LOCK
             with FileLock(str(lock_file) + DOCKER_LOCK_SUFFIX):
-                port = create_cdc_db2_database(name)
+                container, port = create_cdc_db2_database(name)
         return Db2CdcConfig(
+            container=container,
             host=DB_HOST,
             port=int(port),
             database=DB2_CDC_DATABASE,

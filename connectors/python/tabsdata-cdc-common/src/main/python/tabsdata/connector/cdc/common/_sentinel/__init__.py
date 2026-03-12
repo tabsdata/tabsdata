@@ -16,7 +16,6 @@ from tabsdata.connector.cdc.common._model import (
 from tabsdata.connector.cdc.common.constants import (
     CDC_DATA_COL_NEW_PREFIX,
     CDC_DATA_COL_OLD_PREFIX,
-    CDC_DATA_COL_PREFIX,
     CDC_DATA_MAP_NEW,
     CDC_DATA_MAP_OLD,
     CDC_DATA_ROW_NEW,
@@ -52,9 +51,13 @@ def row_to_record(
 
     if cdc_format.flat_new_values:
         for column in tracked_table.columns:
-            record[f"{CDC_DATA_COL_PREFIX}{DOT}{column.name}"] = change.new_values.get(
-                column.name
-            )
+            # ToDo...
+            # Not still clear if adding a suffix to completely isolate system generated
+            # columns is preferred.
+            # record[f"{CDC_DATA_COL_PREFIX}{DOT}{column.name}"] = (
+            #     change.new_values.get(column.name)
+            # )
+            record[column.name] = change.new_values.get(column.name)
     else:
         match cdc_format.values_format:
             case "columns":

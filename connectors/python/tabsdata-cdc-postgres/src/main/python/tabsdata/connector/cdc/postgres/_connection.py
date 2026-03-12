@@ -54,5 +54,11 @@ class PostgresCdcConn(CdcConn, PostgresConn):
     def _cx_configs(self) -> dict:
         return self.cx_src_configs_postgres
 
+    def _default_port(self) -> int:
+        return 5432
+
+    def _default_dbname(self) -> str:
+        return "postgres"
+
     def _connect(self):
         return self._engine(self)

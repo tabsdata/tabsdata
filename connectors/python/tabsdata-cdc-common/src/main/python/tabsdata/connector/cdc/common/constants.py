@@ -36,6 +36,7 @@ TD_CDC_TX_INFIX = "tx"
 TD_CDC_SQ_INFIX = "sq"
 
 DOT = "."
+COMMA = ","
 
 CDC_META_PREFIX = DOT.join([
     TD_METADATA_COLUMN_PREFIX,

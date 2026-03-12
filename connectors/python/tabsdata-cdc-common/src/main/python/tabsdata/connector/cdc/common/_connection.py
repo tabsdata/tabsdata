@@ -5,9 +5,14 @@
 from __future__ import annotations
 
 import logging
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Union
+from urllib.parse import urlparse
 
 from sqlalchemy import Engine, create_engine
+
+from tabsdata._credentials import UserPasswordCredentials
 
 # noinspection PyProtectedMember
 from tabsdata._io.connections.connections import Conn
@@ -26,7 +31,19 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-class CdcConn(Conn):
+@dataclass
+class ConnectionSettings:
+    host: str
+    port: int
+    dbname: str
+    user: str
+    password: str
+
+
+class CdcConn(Conn, ABC):
+    uri: str
+    credentials: UserPasswordCredentials | None
+
     @staticmethod
     def _engine(conn: CdcConnType) -> Engine:
         config = SQLConnConfig(
@@ -36,3 +53,29 @@ class CdcConn(Conn):
         )
         url = obtain_sqlalchemy_url(config)
         return create_engine(url, connect_args=config.cx_src_configs_sql or {})
+
+    @staticmethod
+    def _default_host() -> str:
+        return "localhost"
+
+    @abstractmethod
+    def _default_port(self) -> int: ...
+
+    @abstractmethod
+    def _default_dbname(self) -> str: ...
+
+    def _settings(self) -> ConnectionSettings:
+        parsed = urlparse(self.uri)
+        if self.credentials:
+            user = self.credentials.user.secret_value
+            password = self.credentials.password.secret_value
+        else:
+            user = parsed.username
+            password = parsed.password
+        return ConnectionSettings(
+            host=parsed.hostname or self._default_host(),
+            port=parsed.port or self._default_port(),
+            dbname=parsed.path.strip("/") if parsed.path else self._default_dbname(),
+            user=user,
+            password=password,
+        )

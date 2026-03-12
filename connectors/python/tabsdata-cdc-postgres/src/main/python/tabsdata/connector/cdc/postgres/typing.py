@@ -21,7 +21,7 @@ PostgresCdcStartFromSpec: TypeAlias = Union[
 ]
 
 
-SlotBehaviorSpec = Literal[
+ReplicationSlotBehaviorSpec = Literal[
     "create",
     "reuse",
 ]

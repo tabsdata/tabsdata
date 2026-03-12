@@ -100,7 +100,7 @@ class DiskSentinel:
         self,
         force: bool = False,
     ) -> None:
-        rows_hit = self._total_rows >= self._max_rows
+        rows_hit = self._max_rows is not None and self._total_rows >= self._max_rows
         bytes_hit = self._max_bytes is not None and self._total_bytes >= self._max_bytes
         time_hit = (time.time() - self._last_flushed) >= self._max_seconds
         if self.has_data and (force or rows_hit or bytes_hit or time_hit):

@@ -4,7 +4,13 @@
 
 from __future__ import annotations
 
+from datetime import tzinfo
+from typing import Any
+
+from sqlalchemy import text
+
 from tabsdata.connector.sql.common._generic.dialect import Dialect
+from tabsdata.connector.sql.common._utils import parse_server_timezone
 
 
 class OracleDialect(Dialect):
@@ -18,3 +24,10 @@ class OracleDialect(Dialect):
 
     def default_case_fold(self, name: str) -> str:
         return name.upper()
+
+    def server_timezone(self, engine: Any) -> tzinfo | None:
+        with engine.connect() as connection:
+            row = connection.execute(text("select dbtimezone from dual")).fetchone()
+        if row and row[0] is not None:
+            return parse_server_timezone(row[0])
+        return None

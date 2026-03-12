@@ -15,12 +15,12 @@ from tabsdata.connector.cdc.common.typing import (
 
 @dataclass(frozen=True)
 class CommitSeqPositionSpec:
-    seq: int
+    seq: str
 
 
 @dataclass(frozen=True)
 class TableCommitSeqPositionSpec:
-    seqs: dict[str, int]
+    seqs: dict[str, str]
 
 
 Db2CdcStartFromSpec: TypeAlias = Union[

@@ -9,6 +9,7 @@ import signal
 import sys
 import threading
 from abc import abstractmethod
+from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -72,8 +73,6 @@ class CdcTrigger(StageTrigger):
         self._trigger_max_bytes = trigger_max_bytes
         self._trigger_max_seconds = trigger_max_seconds
         self._poll_interval_seconds = poll_interval_seconds
-        self._start = start
-        self._end = end
 
     @property
     def conn(self) -> Conn:
@@ -112,16 +111,8 @@ class CdcTrigger(StageTrigger):
         return self._trigger_max_seconds
 
     @property
-    def start(self) -> datetime | None:
-        return self._start
-
-    @property
     def poll_interval_seconds(self) -> float:
         return self._poll_interval_seconds
-
-    @property
-    def end(self) -> datetime | None:
-        return self._end
 
     @abstractmethod
     def _open_session(self) -> Any: ...
@@ -137,7 +128,10 @@ class CdcTrigger(StageTrigger):
     ) -> dict[str, TrackedTable]: ...
 
     @abstractmethod
-    def _poll_changes(self, session: Any) -> list[CdcChange]: ...
+    def _poll_changes(self, session: Any) -> Iterable[CdcChange]: ...
+
+    @abstractmethod
+    def _confirm_position(self) -> None: ...
 
     @abstractmethod
     def _get_position(self) -> Any: ...

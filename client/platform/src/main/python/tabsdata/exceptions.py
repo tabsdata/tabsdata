@@ -2380,6 +2380,14 @@ class ErrorCode(Enum):
         "configuring Db2 table replication using ASN, or contact your system "
         "administrator to configure it.",
     }
+    CDC5 = {
+        "code": "CDC-005",
+        "message": "Unknown CDC operation type '{}' from {} in table {}",
+    }
+    CDC6 = {
+        "code": "CDC-006",
+        "message": "Unsupported start_from value '{}'",
+    }
 
     # CDC MySQL errors
     CDCMYSQL1 = {

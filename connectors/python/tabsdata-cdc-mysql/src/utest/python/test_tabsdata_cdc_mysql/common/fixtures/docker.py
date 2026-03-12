@@ -13,6 +13,7 @@ from typing import Union
 
 import mysql.connector
 import pytest
+import docker
 from docker.models.containers import Container
 from filelock import FileLock
 from mysql.connector.abstracts import MySQLConnectionAbstract
@@ -68,6 +69,7 @@ MYSQL_CDC_SIGNAL_TABLE: str = "td_cdc_signal"
 
 @dataclass
 class MySQLCdcConfig:
+    container: Container
     host: str
     port: int
     database: str
@@ -382,14 +384,14 @@ def check_cdc_mysql_container(port: int, signal: str) -> None:
 
 def create_cdc_mysql_database(
     name: str = DEFAULT_PYTEST_MYSQL_CDC_DOCKER_CONTAINER_NAME,
-) -> int:
+) -> tuple[Container, int]:
     container, port, created = create_cdc_mysql_container(name)
     await_cdc_mysql_container(port)
     if created:
         signal = setup_cdc_mysql_container(port)
         check_cdc_mysql_container(port, signal)
 
-    return port
+    return container, port
 
 
 @pytest.fixture(scope="function")
@@ -410,9 +412,25 @@ def mysql_cdc_config(
             env_prefix, MYSQL_CDC_REQUIRED_ENVS,
             "mysql_cdc_config",
         )
+        port = int(envs["PORT"])
+        container = None
+        client = docker.from_env()
+        for c in client.containers.list():
+            bindings = (
+                c.attrs.get("NetworkSettings", {})
+                .get("Ports", {})
+                .get(MYSQL_CDC_FORWARDED_PORT, [])
+            ) or []
+            for binding in bindings:
+                if int(binding.get("HostPort", 0)) == port:
+                    container = c
+                    break
+            if container is not None:
+                break
         return MySQLCdcConfig(
+            container=container,
             host=envs["HOST"],
-            port=int(envs["PORT"]),
+            port=port,
             database=envs["DATABASE"],
             root_user=envs["ROOT_USER"],
             root_password=envs["ROOT_PASSWORD"],
@@ -424,15 +442,17 @@ def mysql_cdc_config(
             f"{env_prefix}_DOCKER_CONTAINER_NAME",
             DEFAULT_PYTEST_MYSQL_CDC_DOCKER_CONTAINER_NAME,
         )
+        container = None
         port = -1
         if worker_id == PYTEST_XDIST_MASTER:
-            port = create_cdc_mysql_database(name)
+            container, port = create_cdc_mysql_database(name)
         else:
             root_temp_dir = tmp_path_factory.getbasetemp().parent
             lock_file = root_temp_dir / MYSQL_CDC_LOCK
             with FileLock(str(lock_file) + DOCKER_LOCK_SUFFIX):
-                port = create_cdc_mysql_database(name)
+                container, port = create_cdc_mysql_database(name)
         return MySQLCdcConfig(
+            container=container,
             host=DB_HOST,
             port=int(port),
             database=MYSQL_CDC_DATABASE,

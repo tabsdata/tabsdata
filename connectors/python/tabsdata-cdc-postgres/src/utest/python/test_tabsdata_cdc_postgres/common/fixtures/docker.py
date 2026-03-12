@@ -14,6 +14,7 @@ import orjson
 import psycopg2
 import psycopg2.extensions
 import pytest
+import docker
 from docker.models.containers import Container
 from filelock import FileLock
 
@@ -69,6 +70,7 @@ POSTGRES_CDC_SIGNAL_TABLE: str = "td_cdc_signal"
 
 @dataclass
 class PostgresCdcConfig:
+    container: Container
     host: str
     port: int
     database: str
@@ -411,14 +413,14 @@ def check_cdc_postgres_container(port: int, signal: str) -> None:
 
 def create_cdc_postgres_database(
     name: str = DEFAULT_PYTEST_POSTGRES_CDC_DOCKER_CONTAINER_NAME,
-) -> int:
+) -> tuple[Container, int]:
     container, port, created = create_cdc_postgres_container(name)
     await_cdc_postgres_container(port)
     if created:
         signal = setup_cdc_postgres_container(container, port)
         check_cdc_postgres_container(port, signal)
 
-    return port
+    return container, port
 
 
 @pytest.fixture(scope="function")
@@ -440,9 +442,25 @@ def postgres_cdc_config(
             POSTGRES_CDC_REQUIRED_ENVS,
             "postgres_cdc_config",
         )
+        port = int(envs["PORT"])
+        container = None
+        client = docker.from_env()
+        for c in client.containers.list():
+            bindings = (
+                c.attrs.get("NetworkSettings", {})
+                .get("Ports", {})
+                .get(POSTGRES_CDC_FORWARDED_PORT, [])
+            ) or []
+            for binding in bindings:
+                if int(binding.get("HostPort", 0)) == port:
+                    container = c
+                    break
+            if container is not None:
+                break
         return PostgresCdcConfig(
+            container=container,
             host=envs["HOST"],
-            port=int(envs["PORT"]),
+            port=port,
             database=envs["DATABASE"],
             slot=envs["SLOT"],
             root_user=envs["ROOT_USER"],
@@ -455,15 +473,17 @@ def postgres_cdc_config(
             f"{env_prefix}_DOCKER_CONTAINER_NAME",
             DEFAULT_PYTEST_POSTGRES_CDC_DOCKER_CONTAINER_NAME,
         )
+        container = None
         port = -1
         if worker_id == PYTEST_XDIST_MASTER:
-            port = create_cdc_postgres_database(name)
+            container, port = create_cdc_postgres_database(name)
         else:
             root_temp_dir = tmp_path_factory.getbasetemp().parent
             lock_file = root_temp_dir / POSTGRES_CDC_LOCK
             with FileLock(str(lock_file) + DOCKER_LOCK_SUFFIX):
-                port = create_cdc_postgres_database(name)
+                container, port = create_cdc_postgres_database(name)
         return PostgresCdcConfig(
+            container=container,
             host=DB_HOST,
             port=int(port),
             database=POSTGRES_CDC_DATABASE,

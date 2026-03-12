@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable
 from datetime import datetime
 from typing import Any
 
@@ -34,7 +35,7 @@ from tabsdata.connector.cdc.postgres._connection import PostgresCdcConn
 from tabsdata.connector.cdc.postgres._ingester.wal2json import Wal2JsonIngester
 from tabsdata.connector.cdc.postgres.typing import (
     PostgresCdcStartFromSpec,
-    SlotBehaviorSpec,
+    ReplicationSlotBehaviorSpec,
 )
 from tabsdata.exceptions import ErrorCode
 
@@ -60,8 +61,8 @@ class PostgresCdcTrigger(CdcTrigger):
         self,
         conn: PostgresCdcConn,
         tables: QualifiedTablesSpec,
+        start_from: PostgresCdcStartFromSpec,
         cdc_format: CdcFormatSpec = CdcFormatSpec(),
-        start_from: PostgresCdcStartFromSpec | None = None,
         buffer_max_rows: int = DEFAULT_BUFFER_MAX_ROWS,
         buffer_max_bytes: int | None = DEFAULT_BUFFER_MAX_BYTES,
         buffer_max_seconds: float = DEFAULT_BUFFER_MAX_SECONDS,
@@ -72,7 +73,7 @@ class PostgresCdcTrigger(CdcTrigger):
         blocking_timeout_seconds: float = DEFAULT_BLOCKING_TIMEOUT_SECONDS,
         replication_slot: str | None = None,
         publication_name: str | None = None,
-        slot_behavior: SlotBehaviorSpec = "reuse",
+        slot_behavior: ReplicationSlotBehaviorSpec = "reuse",
         start: datetime | None = None,
         end: datetime | None = None,
     ):
@@ -102,7 +103,7 @@ class PostgresCdcTrigger(CdcTrigger):
             blocking_timeout_seconds=blocking_timeout_seconds,
             replication_slot=replication_slot,
             publication_name=publication_name,
-            slot_behavior=slot_behavior,
+            replication_slot_behavior=slot_behavior,
         )
 
     @property
@@ -122,7 +123,7 @@ class PostgresCdcTrigger(CdcTrigger):
         return self._publication_name
 
     @property
-    def slot_behavior(self) -> SlotBehaviorSpec:
+    def slot_behavior(self) -> ReplicationSlotBehaviorSpec:
         return self._slot_behavior
 
     def _open_session(self) -> Any:
@@ -138,8 +139,11 @@ class PostgresCdcTrigger(CdcTrigger):
     ) -> dict[str, TrackedTable]:
         return self._ingester.collect_tables(session, cdc_format)
 
-    def _poll_changes(self, session: Any) -> list[CdcChange]:
+    def _poll_changes(self, session: Any) -> Iterable[CdcChange]:
         return self._ingester.poll_changes(session)
+
+    def _confirm_position(self) -> None:
+        self._ingester.confirm_position()
 
     def _get_position(self) -> Any:
         return self._ingester.retrieve_position()

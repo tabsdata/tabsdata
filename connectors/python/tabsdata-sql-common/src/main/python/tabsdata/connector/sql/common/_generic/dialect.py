@@ -5,6 +5,8 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from datetime import tzinfo
+from typing import Any
 
 from sqlalchemy.sql.elements import quoted_name
 
@@ -17,6 +19,14 @@ class Dialect(ABC):
     @property
     @abstractmethod
     def close_quote(self) -> str: ...
+
+    def server_timezone(self, engine: Any) -> tzinfo | None:
+        """Query the database server's timezone.
+
+        Override in subclasses to provide database-specific timezone
+        detection.  Returns None if the timezone cannot be determined.
+        """
+        return None
 
     def default_case_fold(self, name: str) -> str:
         """Apply the database's default case fold for unquoted identifiers.

@@ -54,5 +54,11 @@ class Db2CdcConn(CdcConn, Db2Conn):
     def _cx_configs(self) -> dict:
         return self.cx_src_configs_db2
 
+    def _default_port(self) -> int:
+        return 50000
+
+    def _default_dbname(self) -> str:
+        return "sample"
+
     def _connect(self):
         return self._engine(self)

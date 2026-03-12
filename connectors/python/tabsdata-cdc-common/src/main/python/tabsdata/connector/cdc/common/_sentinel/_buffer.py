@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Iterable
 
 from tabsdata._tabsserver.function.global_utils import TRACE
 from tabsdata.connector.cdc.common._model import (
@@ -49,7 +50,7 @@ class BufferSentinel:
     def reset_timer(self) -> None:
         self._last_flushed = time.time()
 
-    def process_changes(self, changes: list[CdcChange]) -> None:
+    def process_changes(self, changes: Iterable[CdcChange]) -> None:
         for change in changes:
             match change:
                 case CdcDataChange():
@@ -76,7 +77,7 @@ class BufferSentinel:
             buffer.bytes += row_bytes
             self._total_bytes += row_bytes
 
-        rows_hit = self._total_rows >= self._max_rows
+        rows_hit = self._max_rows is not None and self._total_rows >= self._max_rows
         bytes_hit = self._max_bytes is not None and self._total_bytes >= self._max_bytes
         time_hit = (time.time() - self._last_flushed) >= self._max_seconds
         if self.has_data and (rows_hit or bytes_hit or time_hit):

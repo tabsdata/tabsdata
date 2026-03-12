@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
+from datetime import datetime, tzinfo
 from typing import Any
 
 import sqlalchemy as sa
@@ -28,10 +30,28 @@ logger.setLevel(logging.DEBUG)
 class CdcIngester(ABC):
     def __init__(self, tables: QualifiedTablesSpec):
         self._tables = tables
+        self._tracked_tables: dict[str, TrackedTable] = {}
+        self._server_tz: tzinfo | None = None
 
     @property
     def tables(self) -> QualifiedTablesSpec:
         return self._tables
+
+    @property
+    def tracked_tables(self) -> dict[str, TrackedTable]:
+        return self._tracked_tables
+
+    @property
+    def server_tz(self) -> tzinfo | None:
+        return self._server_tz
+
+    def localize_values(self, values: dict | None) -> dict | None:
+        if values is None or self._server_tz is None:
+            return values
+        for key, value in values.items():
+            if isinstance(value, datetime) and value.tzinfo is None:
+                values[key] = value.replace(tzinfo=self._server_tz)
+        return values
 
     @abstractmethod
     def open_session(self) -> Any: ...
@@ -131,10 +151,14 @@ class CdcIngester(ABC):
             )
             result[table_object.qualified] = tracked_table
 
+        self._tracked_tables = result
         return result
 
     @abstractmethod
-    def poll_changes(self, session: Any) -> list[CdcChange]: ...
+    def poll_changes(self, session: Any) -> Iterable[CdcChange]: ...
+
+    @abstractmethod
+    def confirm_position(self) -> None: ...
 
     @abstractmethod
     def retrieve_position(self) -> Any: ...

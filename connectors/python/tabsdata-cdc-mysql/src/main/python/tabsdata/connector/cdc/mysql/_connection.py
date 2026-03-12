@@ -54,5 +54,11 @@ class MySQLCdcConn(CdcConn, MySQLConn):
     def _cx_configs(self) -> dict:
         return self.cx_src_configs_mysql
 
+    def _default_port(self) -> int:
+        return 3306
+
+    def _default_dbname(self) -> str:
+        return "mysql"
+
     def _connect(self):
         return self._engine(self)
