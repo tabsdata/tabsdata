@@ -274,11 +274,11 @@ mod tests {
     use polars_io::utils::sync_on_close::SyncOnCloseType;
     use std::collections::HashMap;
     use td_common::id::id;
+
     use td_test::reqs::{
         AzureStorageWithAccountKeyReqs, GcpStorageWithServiceAccountKeyReqs,
         S3WithAccessKeySecretKeyReqs,
     };
-    use testdir::testdir;
     use url::Url;
 
     //noinspection DuplicatedCode
@@ -302,7 +302,7 @@ mod tests {
         .unwrap();
         let lf = df_out.clone().lazy();
 
-        let folder = testdir!();
+        let folder = td_common::tdtestdir!();
         let id = id();
         let file_r = format!("{id}.parquet");
         let path_r = folder.join(file_r.clone());
@@ -439,7 +439,7 @@ mod tests {
         .unwrap();
         let lf = df_out.clone().lazy();
 
-        let folder = testdir!();
+        let folder = td_common::tdtestdir!();
         let id = id();
         let file_r = format!("{id}.parquet");
         let path_r = folder.join(file_r.clone());
@@ -577,7 +577,7 @@ mod tests {
         .unwrap();
         let lf = df_out.clone().lazy();
 
-        let folder = testdir!();
+        let folder = td_common::tdtestdir!();
         let id = id();
         let file_r = format!("{id}.parquet");
         let path_r = folder.join(file_r.clone());
@@ -712,7 +712,7 @@ mod tests {
         .unwrap();
         let lf = df_out.clone().lazy();
 
-        let folder = testdir!();
+        let folder = td_common::tdtestdir!();
         let id_r = id();
         let file_r = format!("{id_r}.parquet");
         let path_r = folder.clone().join(file_r.clone());
@@ -1009,7 +1009,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_import_local_csv() {
-        let test_dir = testdir!();
+        let test_dir = td_common::tdtestdir!();
         let base_url = Url::from_directory_path(&test_dir).unwrap();
         test_import(
             &Location::LocalFile {
@@ -1025,7 +1025,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_import_local_json() {
-        let test_dir = testdir!();
+        let test_dir = td_common::tdtestdir!();
         let base_url = Url::from_directory_path(&test_dir).unwrap();
         test_import(
             &Location::LocalFile {
@@ -1041,7 +1041,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_import_local_log() {
-        let test_dir = testdir!();
+        let test_dir = td_common::tdtestdir!();
         let base_url = Url::from_directory_path(&test_dir).unwrap();
         test_import(
             &Location::LocalFile {
@@ -1057,7 +1057,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_import_local_parquet() {
-        let test_dir = testdir!();
+        let test_dir = td_common::tdtestdir!();
         let base_url = Url::from_directory_path(&test_dir).unwrap();
         test_import(
             &Location::LocalFile {
@@ -1073,7 +1073,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_import_local_binary() {
-        let test_dir = testdir!();
+        let test_dir = td_common::tdtestdir!();
         let base_url = Url::from_directory_path(&test_dir).unwrap();
         test_import(
             &Location::LocalFile {
@@ -1101,7 +1101,7 @@ mod tests {
             },
         };
 
-        let test_dir = testdir!();
+        let test_dir = td_common::tdtestdir!();
         let base_url = Url::from_directory_path(&test_dir).unwrap();
         test_import(
             &from_base,
@@ -1125,7 +1125,7 @@ mod tests {
             },
         };
 
-        let test_dir = testdir!();
+        let test_dir = td_common::tdtestdir!();
         let base_url = Url::from_directory_path(&test_dir).unwrap();
         test_import(
             &from_base,
@@ -1148,7 +1148,7 @@ mod tests {
             },
         };
 
-        let test_dir = testdir!();
+        let test_dir = td_common::tdtestdir!();
         let base_url = Url::from_directory_path(&test_dir).unwrap();
         test_import(
             &from_base,

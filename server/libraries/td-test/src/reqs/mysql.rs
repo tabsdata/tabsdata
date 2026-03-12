@@ -40,7 +40,6 @@ mod tests {
 
     use crate::reqs::{MySqlReqs, TestRequirementsInEnv};
     use std::collections::HashMap;
-    use testdir::testdir;
 
     #[crate::test(when(reqs = MySqlReqs, env_prefix= "mysql_test_not_defined", do_not_fail_reqs= true))]
     #[tokio::test]
@@ -53,7 +52,7 @@ mod tests {
         let vars: HashMap<String, String> = HashMap::from([
             (
                 "TEST_DIR".to_string(),
-                testdir!().to_str().unwrap().to_string(),
+                td_common::tdtestdir!().to_str().unwrap().to_string(),
             ),
             (
                 "TESTS_TIMESTAMP".to_string(),
@@ -65,7 +64,7 @@ mod tests {
         ]);
         let reqs = TestRequirementsInEnv::resolve_test_run_variables::<MySqlReqs>(
             "test_mysql_reqs",
-            &testdir!(),
+            &td_common::tdtestdir!(),
             "MySqlReqs",
             "ns",
             &vars,

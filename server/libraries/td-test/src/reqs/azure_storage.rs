@@ -40,7 +40,6 @@ mod tests {
 
     use crate::reqs::{AzureStorageWithAccountKeyReqs, TestRequirementsInEnv};
     use std::collections::HashMap;
-    use testdir::testdir;
 
     #[crate::test(when(reqs = AzureStorageWithAccountKeyReqs, env_prefix= "az_test_not_defined", do_not_fail_reqs= true))]
     #[tokio::test]
@@ -60,7 +59,7 @@ mod tests {
         let reqs =
             TestRequirementsInEnv::resolve_test_run_variables::<AzureStorageWithAccountKeyReqs>(
                 "test_azure_storage_with_account_key_reqs",
-                &testdir!(),
+                &td_common::tdtestdir!(),
                 "AzureStorageWithAccountKeyReqs",
                 "ns",
                 &vars,

@@ -593,13 +593,16 @@ mod tests {
     use crate::sql;
     use crate::sql::{Db, DbError, DbPool, remove_leading_file_protocol, remove_leading_slash};
     use std::time::Duration;
+
     use te_system::edition::{Edition, TabsdataEdition};
-    use testdir::testdir;
     use url::Url;
 
     #[test]
     fn test_db_location_path_ok() {
-        let db_path = testdir!().join("dir1").join("dir2").join("test.db");
+        let db_path = td_common::tdtestdir!()
+            .join("dir1")
+            .join("dir2")
+            .join("test.db");
 
         let config = sql::SqliteConfigBuilder::default()
             .url(Url::from_file_path(&db_path).unwrap().as_str().to_string())
@@ -637,7 +640,7 @@ mod tests {
     #[tokio::test]
     async fn creates_database_and_schema() {
         // testing db_schema macro
-        let db_file = testdir!().join("test.db");
+        let db_file = td_common::tdtestdir!().join("test.db");
         let config = sql::SqliteConfigBuilder::default()
             .url(db_file.to_str().map(str::to_string))
             .build()
@@ -654,7 +657,7 @@ mod tests {
     async fn open_existing_database() {
         let schema = td_schema::test_schema();
 
-        let db_file = testdir!().join("test.db");
+        let db_file = td_common::tdtestdir!().join("test.db");
         let config = sql::SqliteConfigBuilder::default()
             .url(db_file.to_str().map(str::to_string))
             .build()
@@ -721,7 +724,7 @@ mod tests {
     #[tokio::test]
     async fn test_tabsdata_database_schema_does_not_exist() {
         let schema = td_schema::test_schema();
-        let db_file = testdir!().join("test.db");
+        let db_file = td_common::tdtestdir!().join("test.db");
         let config = sql::SqliteConfigBuilder::default()
             .url(db_file.to_str().map(str::to_string))
             .build()
@@ -737,7 +740,7 @@ mod tests {
     #[tokio::test]
     async fn test_tabsdata_database_schema_ok() {
         let schema = td_schema::schema();
-        let db_file = testdir!().join("test.db");
+        let db_file = td_common::tdtestdir!().join("test.db");
         let config = sql::SqliteConfigBuilder::default()
             .url(db_file.to_str().map(str::to_string))
             .build()
@@ -750,7 +753,7 @@ mod tests {
     #[tokio::test]
     async fn test_tabsdata_database_schema_missing_db_version() {
         let schema = td_schema::schema();
-        let db_file = testdir!().join("test.db");
+        let db_file = td_common::tdtestdir!().join("test.db");
         let config = sql::SqliteConfigBuilder::default()
             .url(db_file.to_str().map(str::to_string))
             .build()
@@ -770,7 +773,7 @@ mod tests {
     #[tokio::test]
     async fn test_tabsdata_database_schema_invalid_db_version() {
         let schema = td_schema::schema();
-        let db_file = testdir!().join("test.db");
+        let db_file = td_common::tdtestdir!().join("test.db");
         let config = sql::SqliteConfigBuilder::default()
             .url(db_file.to_str().map(str::to_string))
             .build()
@@ -790,7 +793,7 @@ mod tests {
     #[tokio::test]
     async fn test_tabsdata_database_schema_db_needs_upgrade() {
         let schema = td_schema::schema();
-        let db_file = testdir!().join("test.db");
+        let db_file = td_common::tdtestdir!().join("test.db");
         let config = sql::SqliteConfigBuilder::default()
             .url(db_file.to_str().map(str::to_string))
             .build()
@@ -810,7 +813,7 @@ mod tests {
     #[tokio::test]
     async fn test_tabsdata_database_schema_app_needs_upgrade() {
         let schema = td_schema::schema();
-        let db_file = testdir!().join("test.db");
+        let db_file = td_common::tdtestdir!().join("test.db");
         let config = sql::SqliteConfigBuilder::default()
             .url(db_file.to_str().map(str::to_string))
             .build()
@@ -830,7 +833,7 @@ mod tests {
     #[tokio::test]
     async fn test_tabsdata_database_edition_upgrade() {
         let schema = td_schema::schema();
-        let db_file = testdir!().join("test.db");
+        let db_file = td_common::tdtestdir!().join("test.db");
         let config = sql::SqliteConfigBuilder::default()
             .url(db_file.to_str().map(str::to_string))
             .build()
@@ -845,7 +848,7 @@ mod tests {
     #[tokio::test]
     async fn test_tabsdata_database_schema_invalid_edition() {
         let schema = td_schema::schema();
-        let db_file = testdir!().join("test.db");
+        let db_file = td_common::tdtestdir!().join("test.db");
         let config = sql::SqliteConfigBuilder::default()
             .url(db_file.to_str().map(str::to_string))
             .build()

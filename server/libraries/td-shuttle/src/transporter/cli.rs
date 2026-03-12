@@ -194,11 +194,11 @@ pub(crate) mod tests {
     use std::fs::File;
     use std::io::Write;
     use td_common::id::id;
+
     use td_test::reqs::{
         AzureStorageWithAccountKeyReqs, GcpStorageWithServiceAccountKeyReqs,
         S3WithAccessKeySecretKeyReqs,
     };
-    use testdir::testdir;
     use tokio::io::AsyncWriteExt;
     use url::Url;
 
@@ -230,7 +230,7 @@ pub(crate) mod tests {
         decompression: Option<CompressionAlgorithmSpec>,
         compression: Option<CompressionAlgorithmSpec>,
     ) {
-        let test_dir = testdir!();
+        let test_dir = td_common::tdtestdir!();
         let request_file = test_dir.join("request.yaml");
         let report_file = test_dir.join("report.yaml");
         let source_file = test_dir.join("source.txt");
@@ -300,7 +300,7 @@ pub(crate) mod tests {
     async fn test_run_impl_copy(target: Location<Url>) {
         let str = "Hello, World!".repeat(1024 * 1024);
         let data = str.as_bytes();
-        let test_dir = testdir!();
+        let test_dir = td_common::tdtestdir!();
         let source_file = test_dir.join("source.txt");
         File::create(&source_file).unwrap().write_all(data).unwrap();
         let source = Location::LocalFile {
@@ -341,7 +341,7 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn test_copy_local_to_local() {
         let target = Location::LocalFile {
-            url: Url::from_file_path(testdir!().join("target.txt")).unwrap(),
+            url: Url::from_file_path(td_common::tdtestdir!().join("target.txt")).unwrap(),
         };
         test_run_impl_copy(target).await;
     }

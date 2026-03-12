@@ -82,12 +82,12 @@ mod tests {
     use super::*;
     use std::fs;
     use std::time::Duration;
-    use testdir::testdir;
+
     use tokio::time::sleep;
 
     #[tokio::test]
     async fn test_touch_file_task() {
-        let testdir = testdir!();
+        let testdir = td_common::tdtestdir!();
         let file_path = testdir.join("heartbeat.txt");
         let task = TouchFileTask::new(&file_path);
         let (_shutdown_tx, shutdown_rx) = watch::channel(());

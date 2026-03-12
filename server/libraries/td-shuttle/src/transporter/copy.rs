@@ -90,12 +90,12 @@ mod tests {
     use crate::transporter::api::{CompressionAlgorithmSpec, CopyRequest, CopyType, Location};
     use std::fs::File;
     use std::io::{Read, Write};
-    use testdir::testdir;
+
     use url::Url;
 
     #[tokio::test]
     async fn test_copy_tasks_generator_raw() {
-        let dir = testdir!();
+        let dir = td_common::tdtestdir!();
         let source_file = dir.join("source.txt");
         File::create(&source_file)
             .unwrap()
@@ -128,7 +128,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_copy_tasks_generator_compression() {
-        let dir = testdir!();
+        let dir = td_common::tdtestdir!();
         let source_file = dir.join("source.txt");
         File::create(&source_file)
             .unwrap()
@@ -168,7 +168,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_copy_tasks_generator_decompression() {
-        let dir = testdir!();
+        let dir = td_common::tdtestdir!();
         let source_file = dir.join("source.txt.gz");
 
         // Create a compressed source file
@@ -213,7 +213,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_copy_tasks_generator_decompress_compress() {
-        let dir = testdir!();
+        let dir = td_common::tdtestdir!();
         let source_file = dir.join("source.txt.gz");
 
         // Create a compressed source file

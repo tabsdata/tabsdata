@@ -62,6 +62,7 @@ mod tests {
     use std::sync::Arc;
     use ta_services::service::TdService;
     use td_common::absolute_path::AbsolutePath;
+
     use td_database::sql::DbPool;
     use td_error::TdError;
     use td_objects::dxo::crudl::RequestContext;
@@ -85,7 +86,6 @@ mod tests {
     use td_storage::location::StorageLocation;
     use td_storage::{MountDef, Storage};
     use td_tower::ctx_service::RawOneshot;
-    use testdir::testdir;
     use url::Url;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -142,7 +142,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_schema() -> Result<(), TdError> {
         let db = td_database::test_utils::db().await?;
-        let test_dir = testdir!();
+        let test_dir = td_common::tdtestdir!();
         let url = Url::from_directory_path(test_dir).unwrap();
         let storage = Storage::from(vec![
             MountDef::builder().id("id").uri(url).path("/").build()?,

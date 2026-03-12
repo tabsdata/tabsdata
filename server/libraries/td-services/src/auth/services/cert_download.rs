@@ -26,9 +26,9 @@ mod tests {
     use std::sync::Arc;
     use ta_services::service::TdService;
     use td_common::server::SSL_CERT_PEM_FILE;
+
     use td_error::TdError;
     use td_tower::ctx_service::RawOneshot;
-    use testdir::testdir;
     use tokio::fs;
     use tokio::io::AsyncWriteExt;
 
@@ -45,7 +45,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_cert_download_ok() -> Result<(), TdError> {
-        let tls_path = testdir!();
+        let tls_path = td_common::tdtestdir!();
         fs::create_dir_all(&tls_path).await.unwrap();
 
         let key_path = tls_path.join(SSL_CERT_PEM_FILE);
@@ -68,7 +68,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_cert_download_err() -> Result<(), TdError> {
-        let tls_path = testdir!();
+        let tls_path = td_common::tdtestdir!();
         let service = CertDownloadService::new(Arc::new(tls_path)).service().await;
         let response = service.raw_oneshot(()).await;
         assert!(response.is_err());

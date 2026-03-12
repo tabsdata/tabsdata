@@ -184,9 +184,9 @@ mod tests {
     use super::*;
     use crate::worker::layers::tests::{create_log_files, worker_path};
     use strum::IntoEnumIterator;
+
     use td_objects::types::basic::FunctionVersionId;
     use td_objects::types::basic::{Enabled, WorkerMessageStatus, WorkerStatus};
-    use testdir::testdir;
 
     #[test]
     fn test_sort_logs_by_filename_and_rotation() {
@@ -211,7 +211,7 @@ mod tests {
 
     #[test]
     fn test_sort_logs_by_parent_modified_time() {
-        let temp = testdir!();
+        let temp = td_common::tdtestdir!();
 
         let dir1 = temp.join("dir1");
         let dir2 = temp.join("dir2");
@@ -253,7 +253,7 @@ mod tests {
 
     #[test]
     fn test_sort_logs_complex_scenario() {
-        let temp = testdir!();
+        let temp = td_common::tdtestdir!();
 
         let old_dir = temp.join("old");
         let new_dir = temp.join("new");
@@ -300,7 +300,7 @@ mod tests {
         iterations: usize,                   // number of casts created (per worker)
         rotations: usize,                    // number of logs created (per cast)
     ) -> Result<(Vec<PathBuf>, String), TdError> {
-        let test_dir = testdir!();
+        let test_dir = td_common::tdtestdir!();
         let worker_db = WorkerDB {
             id: Default::default(),
             collection_id: Default::default(),

@@ -78,7 +78,6 @@ strum = { workspace = true }
 [dev-dependencies]
 td-common = { workspace = true, features = ["td-test"] }
 wiremock = { workspace = true }
-testdir = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }

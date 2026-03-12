@@ -212,8 +212,8 @@ mod tests {
     use td_apiforge::router_ext;
     use td_common::constants::TD_CROSS_BUILD;
     use td_common::env::check_flag_env;
+
     use td_objects::types::addresses::NonEmptyAddresses;
-    use testdir::testdir;
     use tokio::fs;
     use tokio::io::AsyncWriteExt;
 
@@ -270,7 +270,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_tls_config_missing_files() {
-        let tls_path = testdir!();
+        let tls_path = td_common::tdtestdir!();
         let builder = ServerBuilder::new(
             NonEmptyAddresses::new(nonempty![SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 0)]),
             Router::new(),
@@ -282,7 +282,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_tls_config_success() {
-        let tls_path = testdir!();
+        let tls_path = td_common::tdtestdir!();
 
         // Write dummy PEM files (obviously, completely invalid for real use)
         let key_path = tls_path.join(SSL_KEY_PEM_FILE);

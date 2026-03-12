@@ -27,33 +27,36 @@ ignore = [
 
 [bans]
 
-deny = [{ crate = "log", reason = "We use 'tracing' crate instead, which has equivalent macros to the ones in 'log' crate", wrappers = [
-    "bindgen",
-    "globset",
-    "iana-time-zone",
-    "ignore",
-    "jni",
-    "jsonpath_lib_polars_vendor",
-    "mio",
-    "native-tls",
-    "netlink-sys",
-    "opentelemetry-appender-log",
-    "prodash",
-    "pyo3-log",
-    "pyo3-stub-gen",
-    "reqwest",
-    "rustpython-parser",
-    "rustls",
-    "rustls-platform-verifier",
-    "sqlparser",
-    "sqlx-core",
-    "sqlx-sqlite",
-    "tracing",
-    "tracing-log",
-    "unicode_names2_generator",
-    "wasm-bindgen-backend",
-    "wiremock",
-    "zopfli"] }]
+deny = [
+    { crate = "log", reason = "We use 'tracing' crate instead, which has equivalent macros to the ones in 'log' crate", wrappers = [
+        "bindgen",
+        "globset",
+        "iana-time-zone",
+        "ignore",
+        "jni",
+        "jsonpath_lib_polars_vendor",
+        "mio",
+        "native-tls",
+        "netlink-sys",
+        "opentelemetry-appender-log",
+        "prodash",
+        "pyo3-log",
+        "pyo3-stub-gen",
+        "reqwest",
+        "rustpython-parser",
+        "rustls",
+        "rustls-platform-verifier",
+        "sqlparser",
+        "sqlx-core",
+        "sqlx-sqlite",
+        "tracing",
+        "tracing-log",
+        "unicode_names2_generator",
+        "wasm-bindgen-backend",
+        "wiremock",
+        "zopfli"] },
+    { crate = "testdir", reason = "Use 'td_common::testdir::tdtestdir!()' macro instead — testdir's global numbered-dir cleanup races under nextest, deleting dirs still in use" },
+]
 
 [licenses]
 

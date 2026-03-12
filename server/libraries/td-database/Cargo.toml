@@ -64,7 +64,6 @@ regex = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 sqlx = { workspace = true }
 strum = { workspace = true, features = ["derive"] }
-testdir = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 tracing = { workspace = true }

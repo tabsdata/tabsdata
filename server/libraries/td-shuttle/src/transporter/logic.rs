@@ -469,7 +469,7 @@ mod tests {
     use std::sync::Arc;
     use std::thread::sleep;
     use td_common::id::Id;
-    use testdir::testdir;
+
     use url::Url;
 
     fn a1b_file() -> String {
@@ -497,7 +497,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_object_store() -> Result<(), Box<dyn std::error::Error>> {
-        let test_dir = testdir!();
+        let test_dir = td_common::tdtestdir!();
         File::create(test_dir.join("test_file"))
             .unwrap()
             .write_all(b"test")
@@ -518,7 +518,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_files_from_object_store() -> Result<(), Box<dyn std::error::Error>> {
-        let test_dir = testdir!();
+        let test_dir = td_common::tdtestdir!();
         File::create(test_dir.join("test_file"))
             .unwrap()
             .write_all(b"test")

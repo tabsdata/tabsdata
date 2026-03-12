@@ -116,11 +116,9 @@ mod tests {
     use crate::{MountDef, SPath};
     use futures_util::StreamExt;
     use std::fs;
-    use testdir::testdir;
-
     #[tokio::test]
     async fn test_store_dup_ids() {
-        let test_dir = testdir!();
+        let test_dir = td_common::tdtestdir!();
         let mount1_dir = test_dir.join("mount1");
         fs::create_dir(&mount1_dir).unwrap();
         let mount2_dir = test_dir.join("mount2");
@@ -157,7 +155,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_store() {
-        let test_dir = testdir!();
+        let test_dir = td_common::tdtestdir!();
         let mount1_dir = test_dir.join("mount1");
         fs::create_dir(&mount1_dir).unwrap();
         let mount2_dir = test_dir.join("mount2");

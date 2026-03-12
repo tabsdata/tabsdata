@@ -260,7 +260,7 @@ impl Storage {
 #[cfg(feature = "test-utils")]
 impl Default for Storage {
     fn default() -> Self {
-        let test_dir = testdir::testdir!();
+        let test_dir = td_common::tdtestdir!();
         let mount_def = MountDef::builder()
             .id("id")
             .path("/")
@@ -277,8 +277,6 @@ mod tests {
     use object_store::path::Path;
     use std::fs;
     use std::ops::Deref;
-    use testdir::testdir;
-
     #[test]
     fn test_spath_assert_path_element_name() {
         assert!(SPath::assert_path_element_name("1").is_ok());
@@ -327,7 +325,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_storage_api() {
-        let test_dir = testdir!();
+        let test_dir = td_common::tdtestdir!();
         let mount1_dir = test_dir.join("mount1");
         fs::create_dir(&mount1_dir).unwrap();
         let mount2_dir = test_dir.join("mount2");

@@ -23,4 +23,5 @@ pub mod settings;
 pub mod signal;
 pub mod status;
 pub mod str;
+pub mod testdir;
 pub mod time;

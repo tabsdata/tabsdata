@@ -11,6 +11,7 @@ use std::time::Instant;
 use strum::IntoEnumIterator;
 use td_common::logging;
 use td_common::logging::CONSOLE_PROFILE;
+
 use td_database::sql::SqliteConfig;
 use td_execution::TransactionBy;
 use td_objects::dxo::function::{FunctionDB, FunctionRegister};
@@ -30,7 +31,6 @@ use td_objects::types::basic::{
 };
 use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
 use td_objects::types::graph::FunctionNode;
-use testdir::testdir;
 use tracing::Level;
 use tracing::{debug, info};
 
@@ -103,9 +103,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     info!("Starting load test with config: {:?}", args);
 
-    let db_url = args
-        .db_url
-        .unwrap_or_else(|| testdir!().join("tabsdata.db").to_str().unwrap().to_string());
+    let db_url = args.db_url.unwrap_or_else(|| {
+        td_common::tdtestdir!()
+            .join("tabsdata.db")
+            .to_str()
+            .unwrap()
+            .to_string()
+    });
     let database_config = SqliteConfig {
         url: Some(db_url),
         ..Default::default()

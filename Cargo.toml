@@ -553,9 +553,6 @@ version = "0.3.6"
 [workspace.dependencies.tempfile]
 version = "3.24.0"
 
-[workspace.dependencies.testdir]
-version = "0.9.3"
-
 [workspace.dependencies.textwrap]
 version = "0.16.2"
 

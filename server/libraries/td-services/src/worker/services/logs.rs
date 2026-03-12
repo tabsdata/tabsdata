@@ -55,6 +55,7 @@ mod tests {
     use futures_util::TryStreamExt;
     use ta_services::service::TdService;
     use td_common::server::WORKSPACE_URI_ENV;
+
     use td_database::sql::DbPool;
     use td_error::TdError;
     use td_objects::dxo::crudl::RequestContext;
@@ -70,7 +71,6 @@ mod tests {
         TransactionKey, UserId, WorkerMessageStatus,
     };
     use td_tower::ctx_service::RawOneshot;
-    use testdir::testdir;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
@@ -163,7 +163,7 @@ mod tests {
             .await,
         ];
 
-        let test_dir = testdir!();
+        let test_dir = td_common::tdtestdir!();
         let response =
             temp_env::async_with_vars([(WORKSPACE_URI_ENV, Some(test_dir.to_str().unwrap()))], {
                 async move {

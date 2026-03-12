@@ -620,7 +620,7 @@ impl FileWorkerMessageQueue {
 #[cfg(feature = "test-utils")]
 impl Default for FileWorkerMessageQueue {
     fn default() -> Self {
-        let test_dir = testdir::testdir!();
+        let test_dir = crate::tdtestdir!();
         Self::with_location(test_dir).unwrap()
     }
 }
@@ -1101,11 +1101,10 @@ impl EtcStore for FileEtcStore {
 mod tests_etc {
     use crate::server::{EtcContent, EtcStore, FileEtcStore};
     use std::path::Path;
-    use testdir::testdir;
 
     #[tokio::test]
     async fn test_io_read() {
-        let location = testdir!();
+        let location = crate::tdtestdir!();
         let path = Path::new(&location).join(EtcContent::ServerBuildManifest_yaml.file());
         let content = "In a hole in the ground there lived a Hobbit.";
         std::fs::write(&path, content).expect("Failed to write the test file.");

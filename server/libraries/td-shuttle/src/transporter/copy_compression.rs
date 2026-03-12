@@ -355,7 +355,7 @@ mod tests {
     use object_store::local::LocalFileSystem;
     use std::fs;
     use std::io::Cursor;
-    use testdir::testdir;
+
     use tokio::io::AsyncReadExt;
 
     async fn test_copy(
@@ -364,7 +364,7 @@ mod tests {
         dest_compression: Option<CompressionAlgorithm>,
         dest_ext: &str,
     ) {
-        let path = testdir!();
+        let path = td_common::tdtestdir!();
         let source_store = LocalFileSystem::new();
         let dest_store = LocalFileSystem::new();
         let source_file = format!("source.{}", source_ext);
@@ -674,7 +674,7 @@ mod tests {
         let dest_compression = Some(CompressionAlgorithm::Brotli);
         let dest_ext = "br";
 
-        let path = testdir!();
+        let path = td_common::tdtestdir!();
         let source_store = Box::new(LocalFileSystem::new());
         let dest_store = Box::new(LocalFileSystem::new());
         let source_file = format!("source.{}", source_ext);
@@ -743,7 +743,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_copy_lambda_source_not_found() {
-        let path = testdir!();
+        let path = td_common::tdtestdir!();
         let source_store = Box::new(LocalFileSystem::new());
         let dest_store = Box::new(LocalFileSystem::new());
         let source_path = path.join("non_existent_source.txt");

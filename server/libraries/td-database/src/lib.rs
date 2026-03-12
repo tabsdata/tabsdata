@@ -24,6 +24,7 @@ pub async fn db_with_schema(
 #[cfg(test)]
 mod tests {
     use crate::sql::SqliteConfigBuilder;
+
     use td_security::{
         ENCODED_ID_CA_ALL_SEC_ADMIN, ENCODED_ID_CA_ALL_SYS_ADMIN, ENCODED_ID_CD_ALL_SYS_ADMIN,
         ENCODED_ID_CD_ALL_USER, ENCODED_ID_CR_ALL_SYS_ADMIN, ENCODED_ID_CR_ALL_USER,
@@ -33,11 +34,13 @@ mod tests {
         ENCODED_ID_USER_ROLE_ADMIN_SEC_ADMIN, ENCODED_ID_USER_ROLE_ADMIN_SYS_ADMIN,
         ENCODED_ID_USER_ROLE_ADMIN_USER,
     };
-    use testdir::testdir;
 
     #[tokio::test]
     async fn test_tabsdata_db_schema_creation() {
-        let db_file = testdir!().join("test.db").to_str().map(str::to_string);
+        let db_file = td_common::tdtestdir!()
+            .join("test.db")
+            .to_str()
+            .map(str::to_string);
         let config = SqliteConfigBuilder::default().url(db_file).build().unwrap();
         let db = crate::db(&config).await.unwrap();
         assert!(db.upgrade().await.is_ok());

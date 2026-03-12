@@ -42,7 +42,6 @@ mod tests {
 
     use crate::reqs::{S3WithAccessKeySecretKeyReqs, TestRequirementsInEnv};
     use std::collections::HashMap;
-    use testdir::testdir;
 
     #[crate::test(when(reqs = S3WithAccessKeySecretKeyReqs, env_prefix= "s3_test_not_defined", do_not_fail_reqs=true))]
     #[tokio::test]
@@ -55,7 +54,7 @@ mod tests {
         let vars: HashMap<String, String> = HashMap::from([
             (
                 "TEST_DIR".to_string(),
-                testdir!().to_str().unwrap().to_string(),
+                td_common::tdtestdir!().to_str().unwrap().to_string(),
             ),
             (
                 "TESTS_TIMESTAMP".to_string(),
@@ -68,7 +67,7 @@ mod tests {
         ]);
         let reqs = TestRequirementsInEnv::resolve_test_run_variables::<S3WithAccessKeySecretKeyReqs>(
             "test_s3_with_access_key_secret_key_reqs",
-            &testdir!(),
+            &td_common::tdtestdir!(),
             "S3WithAccessKeySecretKeyReqs",
             "ns",
             &vars,

@@ -114,7 +114,7 @@ pub fn get_current_dir() -> PathBuf {
 
 #[cfg(any(test, feature = "mock-env"))]
 pub fn get_current_dir() -> PathBuf {
-    let dir = testdir::testdir!().join("current_dir");
+    let dir = crate::tdtestdir!().join("current_dir");
     fs::create_dir_all(&dir).expect("Failed to create config test current dir");
     dir
 }
@@ -135,7 +135,7 @@ pub fn get_home_dir() -> PathBuf {
 
 #[cfg(any(test, feature = "mock-env"))]
 pub fn get_home_dir() -> PathBuf {
-    let dir = testdir::testdir!().join("home");
+    let dir = crate::tdtestdir!().join("home");
     fs::create_dir_all(&dir).expect("Failed to create config test home dir");
     dir
 }

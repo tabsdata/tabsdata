@@ -301,12 +301,12 @@ mod tests {
     use object_store::ObjectStoreExt;
     use std::fs::File;
     use std::io::Write;
+
     use td_common::time::UniqueUtc;
-    use testdir::testdir;
     use url::Url;
 
     async fn test_copy_task(input: &str) {
-        let dir = testdir!();
+        let dir = td_common::tdtestdir!();
         let source_file = dir.join("source.txt");
         File::create(&source_file)
             .unwrap()
@@ -370,7 +370,7 @@ mod tests {
     }
 
     async fn test_copy_lambda(input: &str) {
-        let dir = testdir!();
+        let dir = td_common::tdtestdir!();
         let source_file = dir.join("source.txt");
         File::create(&source_file)
             .unwrap()

@@ -48,6 +48,7 @@ tm-test = { workspace = true }
 
 ## Libraries
 
+td-common = { workspace = true }
 td-database = { workspace = true }
 td-schema = { workspace = true }
 
@@ -59,7 +60,6 @@ hex = { workspace = true }
 path-slash = { workspace = true }
 sha2 = { workspace = true }
 sqlx = { workspace = true, features = ["runtime-tokio", "macros"] }
-testdir = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 whoami = { workspace = true }
 

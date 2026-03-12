@@ -123,12 +123,12 @@ mod tests {
     use std::fs::File;
     use std::io::Write;
     use std::path::{Path, PathBuf};
+
     use td_error::TdError;
     use td_objects::rest_urls::FileFormat;
     use td_objects::types::basic::{SampleLen, SampleOffset, Sql, TableName};
     use td_storage::SPath;
     use td_tower::extractors::{Input, SrvCtx};
-    use testdir::testdir;
 
     // Parquet file with (id, name) columns, 10 rows, id = 0..9
     fn create_table_file(path: &Path) {
@@ -153,7 +153,7 @@ mod tests {
         format: FileFormat,
         sql: Option<Sql>,
     ) -> Result<PathBuf, TdError> {
-        let test_dir = testdir!();
+        let test_dir = td_common::tdtestdir!();
         let mount_def = td_storage::MountDef::builder()
             .id("root")
             .path("/")
@@ -383,7 +383,7 @@ mod tests {
         format: FileFormat,
         sql: Option<Sql>,
     ) -> Result<PathBuf, TdError> {
-        let test_dir = testdir!();
+        let test_dir = td_common::tdtestdir!();
         let mount_def = td_storage::MountDef::builder()
             .id("root")
             .path("/")

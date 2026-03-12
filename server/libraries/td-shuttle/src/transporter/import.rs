@@ -315,8 +315,8 @@ mod tests {
     use std::fs::File;
     use std::io::Write;
     use std::time::Duration;
+
     use td_common::time::UniqueUtc;
-    use testdir::testdir;
     use tokio::time::sleep;
     use url::Url;
     use uuid::Uuid;
@@ -347,7 +347,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_single_file_finder_not_found() {
-        let dir = testdir!();
+        let dir = td_common::tdtestdir!();
         let file = dir.join("file.csv");
         let url = Url::from_file_path(&file).unwrap();
 
@@ -356,7 +356,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_single_file_finder_found() {
-        let dir = testdir!();
+        let dir = td_common::tdtestdir!();
         let file = dir.join("file.csv");
         let url = Url::from_file_path(&file).unwrap();
         create_file(&file);
@@ -385,7 +385,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_pattern_file_finder_not_found() {
-        let dir = testdir!();
+        let dir = td_common::tdtestdir!();
         let file = dir.join("file*.csv");
         let url = Url::from_file_path(&file).unwrap();
 
@@ -394,7 +394,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_pattern_file_finder_found() {
-        let dir = testdir!();
+        let dir = td_common::tdtestdir!();
         let file1 = dir.join("file1.csv");
         let file2 = dir.join("file2.csv");
 
@@ -412,7 +412,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_pattern_file_finder_found_order_by_timestamp() {
-        let dir = testdir!();
+        let dir = td_common::tdtestdir!();
         let files = (0..5)
             .map(|_| dir.join(format!("{}.csv", Uuid::now_v7())))
             .collect::<Vec<_>>();
@@ -457,7 +457,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_single_file_last_mod_finder_no_file() {
-        let dir = testdir!();
+        let dir = td_common::tdtestdir!();
         let file = dir.join("file.csv");
         let url = Url::from_file_path(&file).unwrap();
         let last_mod = UniqueUtc::now_millis();
@@ -468,7 +468,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_single_file_last_mod_finder_file_older() {
-        let dir = testdir!();
+        let dir = td_common::tdtestdir!();
         let file = dir.join("file.csv");
         let url = Url::from_file_path(&file).unwrap();
         create_file(&file);
@@ -481,7 +481,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_single_file_last_mod_finder_file_newer() {
-        let dir = testdir!();
+        let dir = td_common::tdtestdir!();
         let file = dir.join("file.csv");
 
         let last_mod = UniqueUtc::now_millis();
@@ -523,7 +523,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_pattern_file_last_mod_finder_no_file() {
-        let dir = testdir!();
+        let dir = td_common::tdtestdir!();
         let file1 = dir.join("file1.csv");
         let file2 = dir.join("file2.csv");
 
@@ -541,7 +541,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_pattern_file_last_mod_finder_file_older() {
-        let dir = testdir!();
+        let dir = td_common::tdtestdir!();
         let file1 = dir.join("file1.csv");
         let file2 = dir.join("file2.csv");
 
@@ -559,7 +559,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_pattern_file_last_mod_finder_file_newer() {
-        let dir = testdir!();
+        let dir = td_common::tdtestdir!();
         let file1 = dir.join("file1.csv");
         let file2 = dir.join("file2.csv");
 
@@ -594,7 +594,7 @@ mod tests {
             }
         }
 
-        let dir = testdir!();
+        let dir = td_common::tdtestdir!();
         let file = dir.join("file*.csv");
         let url = Url::from_file_path(&file).unwrap();
 

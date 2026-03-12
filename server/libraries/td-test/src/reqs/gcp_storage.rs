@@ -38,7 +38,6 @@ mod tests {
 
     use crate::reqs::{GcpStorageWithServiceAccountKeyReqs, TestRequirementsInEnv};
     use std::collections::HashMap;
-    use testdir::testdir;
 
     #[crate::test(when(reqs = GcpStorageWithServiceAccountKeyReqs, env_prefix= "gcp_test_not_defined", do_not_fail_reqs= true))]
     #[tokio::test]
@@ -58,7 +57,7 @@ mod tests {
             GcpStorageWithServiceAccountKeyReqs,
         >(
             "test_gcp_storage_with_service_account_key_reqs",
-            &testdir!(),
+            &td_common::tdtestdir!(),
             "GcpStorageWithServiceAccountKeyReqs",
             "ns",
             &vars,

@@ -11,8 +11,6 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
-use testdir::testdir;
-
 pub mod aws_s3;
 pub mod azure_storage;
 
@@ -104,7 +102,7 @@ where
     async fn setup(&self) -> TestSetupExecution<R> {
         match TestRequirementsInEnv::get::<R>(
             self.test_name,
-            &testdir!(),
+            &td_common::tdtestdir!(),
             type_name::<R>(),
             self.env_prefix,
             self.do_not_fail,
@@ -280,7 +278,6 @@ mod tests {
     use sha2::Digest;
     use std::collections::HashMap;
     use std::path::PathBuf;
-    use testdir::testdir;
 
     #[test]
     fn test_namespace_key() {
@@ -339,7 +336,7 @@ mod tests {
         let env_vars: HashMap<String, String> = HashMap::from([
             (
                 TEST_DIR_KEY.to_string(),
-                testdir!().to_str().unwrap().to_string(),
+                td_common::tdtestdir!().to_str().unwrap().to_string(),
             ),
             ("NS__KEY".to_string(), "value".to_string()),
         ]);
@@ -384,7 +381,7 @@ mod tests {
         assert!(
             TestRequirementsInEnv::resolve_test_run_variables::<MyReqs>(
                 "test_get",
-                &testdir!(),
+                &td_common::tdtestdir!(),
                 "MyReqs",
                 "NS",
                 &vars,
@@ -406,7 +403,7 @@ mod tests {
             HashMap::from([("NS__KEYX".to_string(), "value".to_string())]);
         let _ = TestRequirementsInEnv::resolve_test_run_variables::<MyReqs>(
             "test_get",
-            &testdir!(),
+            &td_common::tdtestdir!(),
             "MyReqs",
             "NS",
             &vars,

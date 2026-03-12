@@ -424,7 +424,6 @@ mod tests {
         AzureStorageWithAccountKeyReqs, GcpStorageWithServiceAccountKeyReqs,
         S3WithAccessKeySecretKeyReqs, TestRequirements,
     };
-    use testdir::testdir;
     use url::Url;
 
     fn bar_file() -> String {
@@ -683,7 +682,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_file_root_mount() {
-        let test_dir = testdir!();
+        let test_dir = td_common::tdtestdir!();
 
         #[cfg(target_os = "windows")]
         let uri = format!("file:///{}", test_dir.to_string_lossy());
@@ -703,7 +702,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_file_non_root_mount() {
-        let test_dir = testdir!();
+        let test_dir = td_common::tdtestdir!();
 
         #[cfg(target_os = "windows")]
         let uri = format!("file:///{}", test_dir.to_string_lossy());

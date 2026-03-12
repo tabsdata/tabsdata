@@ -204,7 +204,7 @@ mod tests {
     //TODO do test the crap
     #[tokio::test]
     async fn test_find_and_copy() {
-        let dir = testdir!();
+        let dir = td_common::tdtestdir!();
         let source_dir = dir.join("source");
         std::fs::create_dir_all(&source_dir).unwrap();
         let target_dir = dir.join("target");
@@ -247,7 +247,7 @@ mod tests {
     };
     use std::fs;
     use std::io::Cursor;
-    use testdir::testdir;
+
     use tokio::io::{AsyncReadExt, BufReader};
 
     async fn run_codec<E>(
@@ -271,7 +271,7 @@ mod tests {
         source_ext: &str,
         dest_compression_spec: Option<CompressionAlgorithmSpec>,
     ) {
-        let dir = testdir!();
+        let dir = td_common::tdtestdir!();
         let source_dir = dir.join("source");
         fs::create_dir_all(&source_dir).unwrap();
         let target_dir = dir.join("target/");

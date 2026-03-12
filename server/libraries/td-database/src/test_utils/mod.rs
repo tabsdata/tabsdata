@@ -20,7 +20,7 @@ pub async fn test_db() -> Result<DbPool, sql::DbError> {
 }
 
 pub fn test_config() -> SqliteConfig {
-    let db_file = testdir::testdir!()
+    let db_file = td_common::tdtestdir!()
         .join(format!("{}.db", td_common::id::id()))
         .to_str()
         .unwrap()

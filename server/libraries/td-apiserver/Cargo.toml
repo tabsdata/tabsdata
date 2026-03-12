@@ -103,7 +103,6 @@ td-objects = { workspace = true, features = ["td-test"] }
 td-services = { workspace = true, features = ["td-test"] }
 td-storage = { workspace = true, features = ["td-test"] }
 td-test = { workspace = true, features = ["td-test"] }
-testdir = { workspace = true }
 tracing-subscriber = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
