@@ -63,7 +63,7 @@ def test_collect_tables_success(db2_collect_tables_setup):
             f"{ASN_SCHEMA}.{CD_PREFIX}{simple}",
             f"{ASN_SCHEMA}.{CD_PREFIX}{extra}",
         ],
-        start_from="origin",
+        start_from="head",
     )
     result = ingester.collect_tables(session)
 
@@ -101,7 +101,7 @@ def test_collect_tables_cd_not_registered(db2_collect_tables_setup):
     ingester = SqlReplicationIngester(
         conn=conn,
         tables=[f"{ASN_SCHEMA}.{CD_PREFIX}TD_CT_NONEXISTENT_{suffix}"],
-        start_from="origin",
+        start_from="head",
     )
     with pytest.raises(CdcError) as exception:
         ingester.collect_tables(session)
@@ -116,7 +116,7 @@ def test_collect_tables_invalid_spec(db2_collect_tables_setup):
     ingester = SqlReplicationIngester(
         conn=conn,
         tables=["no_dot_here"],
-        start_from="origin",
+        start_from="head",
     )
     with pytest.raises(CdcError) as exc_info:
         ingester.collect_tables(session)
@@ -158,7 +158,7 @@ def test_collect_tables_type_conversion(db2_collect_tables_setup):
     ingester = SqlReplicationIngester(
         conn=conn,
         tables=[f"{ASN_SCHEMA}.{CD_PREFIX}{types_table}"],
-        start_from="origin",
+        start_from="head",
     )
     result = ingester.collect_tables(session)
 

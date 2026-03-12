@@ -36,7 +36,7 @@ def test_collect_tables_success(postgres_collect_tables_setup):
     ingester = Wal2JsonIngester(
         conn=conn,
         tables=[f'"{schema}"."td_ct_simple"', f"{schema}.td_ct_extra"],
-        start_from="origin",
+        start_from="head",
         replication_slot=replication_slot(),
         replication_slot_behavior="create",
     )
@@ -83,7 +83,7 @@ def test_collect_tables_not_found(postgres_collect_tables_setup):
     ingester = Wal2JsonIngester(
         conn=conn,
         tables=[f"{schema}.td_ct_simple", f"{schema}.td_ct_nonexistent"],
-        start_from="origin",
+        start_from="head",
         replication_slot=replication_slot(),
         replication_slot_behavior="create",
     )
@@ -100,7 +100,7 @@ def test_collect_tables_invalid_spec(postgres_collect_tables_setup):
     ingester = Wal2JsonIngester(
         conn=conn,
         tables=["no_dot_here"],
-        start_from="origin",
+        start_from="head",
         replication_slot=replication_slot(),
         replication_slot_behavior="create",
     )
@@ -143,7 +143,7 @@ def test_collect_tables_type_conversion(postgres_collect_tables_setup):
     ingester = Wal2JsonIngester(
         conn=conn,
         tables=[f"{schema}.td_ct_types"],
-        start_from="origin",
+        start_from="head",
         replication_slot=replication_slot(),
         replication_slot_behavior="create",
     )

@@ -12,7 +12,7 @@ QualifiedTableSpec: TypeAlias = str
 
 QualifiedTablesSpec: TypeAlias = Union[QualifiedTableSpec, list[QualifiedTableSpec]]
 
-OriginPositionSpec: TypeAlias = Literal["origin"]
+RelativePositionSpec: TypeAlias = Literal["head", "tail"]
 
 
 @dataclass(frozen=True)

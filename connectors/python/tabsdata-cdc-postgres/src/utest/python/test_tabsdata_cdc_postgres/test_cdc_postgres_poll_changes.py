@@ -58,7 +58,7 @@ def test_poll_changes_insert_update_delete(postgres_cdc_config):
     trigger = PostgresCdcTrigger(
         conn=conn,
         tables=[table.qualified],
-        start_from="origin",
+        start_from="head",
         replication_slot=config.slot,
         slot_behavior="reuse",
         blocking_timeout_seconds=3,

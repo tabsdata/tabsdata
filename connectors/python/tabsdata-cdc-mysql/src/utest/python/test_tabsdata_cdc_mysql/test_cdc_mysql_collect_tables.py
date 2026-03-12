@@ -36,7 +36,7 @@ def test_collect_tables_success(mysql_collect_tables_setup):
     ingester = BinlogIngester(
         conn=conn,
         tables=[f"`{schema}`.`td_ct_simple`", f"{schema}.td_ct_extra"],
-        start_from="origin",
+        start_from="head",
         server_id=server_id(),
     )
     result = ingester.collect_tables(session)
@@ -82,7 +82,7 @@ def test_collect_tables_not_found(mysql_collect_tables_setup):
     ingester = BinlogIngester(
         conn=conn,
         tables=[f"{schema}.td_ct_simple", f"{schema}.td_ct_nonexistent"],
-        start_from="origin",
+        start_from="head",
         server_id=server_id(),
     )
     with pytest.raises(CdcError) as exc_info:
@@ -98,7 +98,7 @@ def test_collect_tables_invalid_spec(mysql_collect_tables_setup):
     ingester = BinlogIngester(
         conn=conn,
         tables=["no_dot_here"],
-        start_from="origin",
+        start_from="head",
         server_id=server_id(),
     )
     with pytest.raises(CdcError) as exception:
@@ -137,7 +137,7 @@ def test_collect_tables_type_conversion(mysql_collect_tables_setup):
     ingester = BinlogIngester(
         conn=conn,
         tables=[f"{schema}.td_ct_types"],
-        start_from="origin",
+        start_from="head",
         server_id=server_id(),
     )
     result = ingester.collect_tables(session)

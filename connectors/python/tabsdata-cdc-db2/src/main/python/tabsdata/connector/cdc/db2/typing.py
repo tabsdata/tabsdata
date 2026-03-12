@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import TypeAlias, Union
 
 from tabsdata.connector.cdc.common.typing import (
-    OriginPositionSpec,
+    RelativePositionSpec,
     TimestampPositionSpec,
 )
 
@@ -24,7 +24,7 @@ class TableCommitSeqPositionSpec:
 
 
 Db2CdcStartFromSpec: TypeAlias = Union[
-    OriginPositionSpec,
+    RelativePositionSpec,
     CommitSeqPositionSpec,
     TableCommitSeqPositionSpec,
     TimestampPositionSpec,

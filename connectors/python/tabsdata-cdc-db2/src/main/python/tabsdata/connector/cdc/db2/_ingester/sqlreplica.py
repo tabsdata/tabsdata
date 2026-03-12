@@ -183,9 +183,22 @@ class SqlReplicationIngester(CdcIngester):
                 seq = row[0] if row and row[0] else COMMITSEQ_ORIGIN
                 for table in self._tracked_tables.values():
                     commits[table.cdc_table.qualified] = seq
-            case "origin":
+            case "head":
                 for table in self._tracked_tables.values():
                     commits[table.cdc_table.qualified] = COMMITSEQ_ORIGIN
+            case "tail":
+                with session.connect() as connection:
+                    watermarks = self.query_table_watermarks(connection)
+                    row = connection.execute(
+                        text(
+                            f"select max({IBMSNAP_COMMITSEQ.quoted}) "
+                            f"from {ASN_SCHEMA}.IBMSNAP_UOW"
+                        )
+                    ).fetchone()
+                globalseq = row[0] if row and row[0] else COMMITSEQ_ORIGIN
+                for table in self._tracked_tables.values():
+                    qualified = table.cdc_table.qualified
+                    commits[qualified] = watermarks.get(qualified, globalseq)
             case _:
                 raise CdcError(ErrorCode.CDC6, self._start_from)
         self._mark = Offset(commits=commits)

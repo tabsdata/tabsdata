@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import TypeAlias, Union
 
 from tabsdata.connector.cdc.common.typing import (
-    OriginPositionSpec,
+    RelativePositionSpec,
     TimestampPositionSpec,
 )
 
@@ -25,7 +25,7 @@ class BinlogPositionSpec:
 
 
 MySQLCdcStartFromSpec: TypeAlias = Union[
-    OriginPositionSpec,
+    RelativePositionSpec,
     GtidPositionSpec,
     BinlogPositionSpec,
     TimestampPositionSpec,

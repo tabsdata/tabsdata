@@ -2414,6 +2414,10 @@ class ErrorCode(Enum):
         "code": "CDCMYSQL-002",
         "message": "Invalid MySQL CDC trigger configuration: {}",
     }
+    CDCMYSQL3 = {
+        "code": "CDCMYSQL-003",
+        "message": "Unable to determine MySQL binlog position for '{}' start",
+    }
 
     # CDC PostgreSQL errors
     CDCPOSTGRES1 = {
@@ -2427,6 +2431,10 @@ class ErrorCode(Enum):
     CDCPOSTGRES3 = {
         "code": "CDCPOSTGRES-003",
         "message": "Unsupported wal2json format version '{}'",
+    }
+    CDCPOSTGRES4 = {
+        "code": "CDCPOSTGRES-004",
+        "message": "Unable to determine PostgreSQL WAL LSN for '{}' start",
     }
 
     # CDC DB2 errors

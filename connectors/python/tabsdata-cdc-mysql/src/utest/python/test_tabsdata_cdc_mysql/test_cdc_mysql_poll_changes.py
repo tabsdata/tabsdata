@@ -60,7 +60,7 @@ def test_poll_changes_insert_update_delete(mysql_cdc_config):
     trigger = MySQLCdcTrigger(
         conn=conn,
         tables=[table.qualified],
-        start_from="origin",
+        start_from="head",
         server_id=server_id(),
         blocking_timeout_seconds=3,
         buffer_max_rows=10_000,

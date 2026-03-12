@@ -176,9 +176,13 @@ class BinlogIngester(CdcIngester):
                 stream_kwargs["log_pos"] = pos
             case TimestampPositionSpec(ts=ts):
                 stream_kwargs["skip_to_timestamp"] = ts
-            case "origin":
+            case "head":
                 stream_kwargs["log_file"] = self.first_binlog_file()
                 stream_kwargs["log_pos"] = BINLOG_START_POSITION
+            case "tail":
+                file, pos = self.last_binlog_position()
+                stream_kwargs["log_file"] = file
+                stream_kwargs["log_pos"] = pos
             case _:
                 raise CdcError(ErrorCode.CDC6, start_from)
         self._stream = BinLogStreamReader(**stream_kwargs)
@@ -198,10 +202,38 @@ class BinlogIngester(CdcIngester):
                 cursor.execute("show binary logs")
                 row = cursor.fetchone()
                 if not row:
-                    raise CdcError(ErrorCode.CDC6, "origin")
+                    raise CdcError(ErrorCode.CDCMYSQL3, "head")
                 return row[0]
         finally:
             conn.close()
+
+    def last_binlog_position(self) -> tuple[str, int]:
+        connection_settings = self.stream_connection_settings()
+        conn = pymysql.connect(
+            host=connection_settings["host"],
+            port=connection_settings["port"],
+            user=connection_settings.get("user"),
+            passwd=connection_settings.get("passwd"),
+            db=connection_settings.get("db"),
+        )
+        try:
+            with conn.cursor() as cursor:
+                row = self.query_binlog_status(cursor)
+                if not row:
+                    raise CdcError(ErrorCode.CDCMYSQL3, "tail")
+                return row[0], row[1]
+        finally:
+            if conn is not None:
+                conn.close()
+
+    @staticmethod
+    def query_binlog_status(cursor: Any) -> Any:
+        try:
+            cursor.execute("show binary log status")
+            return cursor.fetchone()
+        except pymysql.err.ProgrammingError:
+            cursor.execute("show master status")
+            return cursor.fetchone()
 
     def stream_connection_settings(self) -> dict:
         connection_settings = self._conn._settings()

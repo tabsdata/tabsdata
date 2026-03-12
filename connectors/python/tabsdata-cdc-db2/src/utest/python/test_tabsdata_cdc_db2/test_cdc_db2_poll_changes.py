@@ -61,7 +61,7 @@ def test_poll_changes_insert_update_delete(db2_cdc_config):
     trigger = Db2CdcTrigger(
         conn=conn,
         tables=[cd_table.qualified],
-        start_from="origin",
+        start_from="head",
         blocking_timeout_seconds=6,
         buffer_max_rows=10_000,
         buffer_max_seconds=10,

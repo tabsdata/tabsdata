@@ -217,8 +217,10 @@ class Wal2JsonIngester(CdcIngester):
             match self._start_from:
                 case LsnPositionSpec(lsn=lsn):
                     self._mark = Offset(lsn=lsn)
-                case "origin":
+                case "head":
                     self._mark = Offset(lsn=0)
+                case "tail":
+                    self._mark = Offset(lsn=self.current_wal_lsn())
                 case _:
                     raise CdcError(ErrorCode.CDC6, self._start_from)
         options = {
@@ -237,6 +239,19 @@ class Wal2JsonIngester(CdcIngester):
             options=options,
         )
         logger.info("Replication slot Replicator and Cursor initialized")
+
+    def current_wal_lsn(self) -> int:
+        connection_settings = self.replication_connection_settings()
+        conn = psycopg2.connect(**connection_settings)
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("select pg_current_wal_lsn() - '0/0'::pg_lsn")
+                row = cursor.fetchone()
+                if not row or row[0] is None:
+                    raise CdcError(ErrorCode.CDCPOSTGRES4, "tail")
+                return int(row[0])
+        finally:
+            conn.close()
 
     def replication_connection_settings(self) -> dict:
         connection_settings = self._conn._settings()
@@ -397,7 +412,7 @@ class Wal2JsonIngester(CdcIngester):
                 return bytes.fromhex(value.removeprefix("\\x"))
         return value
 
-    def poll_changes_v1(self, session: Any) -> Generator[CdcChange, None, None]:
+    def poll_changes_v1(self, _session: Any) -> Generator[CdcChange, None, None]:
         deadline = time.monotonic() + self._blocking_timeout_seconds
         xid: str | None = None
         sequence: int = 0
@@ -476,7 +491,7 @@ class Wal2JsonIngester(CdcIngester):
             return dict(zip(columns, values))
         return None
 
-    def poll_changes_v2(self, session: Any) -> Generator[CdcChange, None, None]:
+    def poll_changes_v2(self, _session: Any) -> Generator[CdcChange, None, None]:
         deadline = time.monotonic() + self._blocking_timeout_seconds
         xid: str | None = None
         sequence: int = 0

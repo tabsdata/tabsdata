@@ -7,7 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, TypeAlias, Union
 
-from tabsdata.connector.cdc.common.typing import OriginPositionSpec
+from tabsdata.connector.cdc.common.typing import RelativePositionSpec
 
 
 @dataclass(frozen=True)
@@ -16,7 +16,7 @@ class LsnPositionSpec:
 
 
 PostgresCdcStartFromSpec: TypeAlias = Union[
-    OriginPositionSpec,
+    RelativePositionSpec,
     LsnPositionSpec,
 ]
 

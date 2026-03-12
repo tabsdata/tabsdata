@@ -9,9 +9,9 @@ from tabsdata.connector.cdc.common._connector import CdcTrigger
 from tabsdata.connector.cdc.common.typing import (
     CdcFormatSpec,
     CdcValuesFormatSpec,
-    OriginPositionSpec,
     QualifiedTableSpec,
     QualifiedTablesSpec,
+    RelativePositionSpec,
     TimestampPositionSpec,
 )
 
@@ -22,7 +22,7 @@ __all__ = [
     # Specs
     "QualifiedTableSpec",
     "QualifiedTablesSpec",
-    "OriginPositionSpec",
+    "RelativePositionSpec",
     "TimestampPositionSpec",
     "CdcFormatSpec",
     "CdcValuesFormatSpec",
