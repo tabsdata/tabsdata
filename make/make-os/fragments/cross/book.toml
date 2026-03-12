@@ -9,7 +9,7 @@ cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
 description = "Read book 'Tabsdata Developer Guide'"
 script = [
     '''
-    python ${RFCS_PY_SCRIPT}
+    python ${TEDS_PY_SCRIPT}
     cd "${BOOK_DEVELOPER_GUIDE_FOLDER}"
     mdbook serve --open
     ''']

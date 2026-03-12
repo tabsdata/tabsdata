@@ -4,6 +4,7 @@
 
 :root {
   --tabs-orange: #FD9A00;
+  --tabs-green:  #C2FF26;
   --tabs-gray:   #A6A09B;
   --tabs-white:  #F5F5F4;
   --tabs-black:  #201D1B;
@@ -33,7 +34,7 @@
 
 .content h1,
 .content h1 a.header {
-    color: var(--tabs-orange) !important;
+    color: var(--tabs-green) !important;
 }
 
 .content h2,
