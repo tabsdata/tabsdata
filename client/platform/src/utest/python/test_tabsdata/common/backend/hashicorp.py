@@ -21,7 +21,7 @@ from test_tabsdata.common.constants import (
 logger = logging.getLogger(__name__)
 
 DEFAULT_PYTEST_HASHICORP_DOCKER_CONTAINER_NAME = (
-    f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}c_hashicorp"
+    f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}_hashicorp"
 )
 
 HASHICORP_PORT = 8200

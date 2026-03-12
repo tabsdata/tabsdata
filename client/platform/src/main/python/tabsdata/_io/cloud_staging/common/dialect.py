@@ -6,8 +6,8 @@ from abc import ABC, abstractmethod
 
 from pyarrow import schema
 
-from tabsdata._io.cloud_staging.modes import LoadMode
-from tabsdata._io.cloud_staging.results import BulkLoadResult
+from tabsdata._io.cloud_staging.common.modes import LoadMode
+from tabsdata._io.cloud_staging.common.results import BulkLoadResult
 
 
 class Dialect(ABC):

@@ -8,6 +8,7 @@ base32hex==1.0.2
 boto3==1.42.55
 boto3-stubs[glue]==1.42.55
 click==8.3.1
+clickhouse-connect==0.13.0
 cloudpickle==3.1.2
 colorama==0.4.6
 connectorx==0.4.5
@@ -15,6 +16,8 @@ croniter==6.0.0
 fastavro==1.12.1
 fastparquet==2025.12.0
 filelock==3.24.3
+google-cloud-storage==3.9.0
+google-cloud-storage-control==1.10.0
 grpcio-tools==1.78.0
 humanize==4.15.0
 hvac==2.4.0

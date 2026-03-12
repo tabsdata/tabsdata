@@ -4,10 +4,10 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import Enum, auto
 
 
 class BulkLoadStatus(Enum):
-    COMPLETED = "completed"
-    FAILED = "failed"
-    PENDING = "pending"
+    COMPLETED = auto()
+    FAILED = auto()
+    PENDING = auto()

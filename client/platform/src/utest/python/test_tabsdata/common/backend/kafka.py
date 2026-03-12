@@ -26,7 +26,7 @@ from test_tabsdata.common.system import get_free_port
 logger = logging.getLogger(__name__)
 
 DEFAULT_PYTEST_KAFKA_DOCKER_CONTAINER_NAME = (
-    f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}c_kafka"
+    f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}_kafka"
 )
 
 KAFKA_INTERNAL_LISTENER_PORT = 9092

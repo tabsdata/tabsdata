@@ -30,7 +30,7 @@ from test_tabsdata.common.container import get_container_port_binding
 logger = logging.getLogger(__name__)
 
 DEFAULT_PYTEST_ORACLE_DOCKER_CONTAINER_NAME = (
-    f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}c_oracle"
+    f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}_oracle"
 )
 ORACLE_PORT = 1521
 ORACLE_FORWARDED_PORT = "1521/tcp"

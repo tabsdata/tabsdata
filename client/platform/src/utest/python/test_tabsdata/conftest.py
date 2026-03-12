@@ -41,6 +41,8 @@ from tabsdata.api.tabsdata_server import TabsdataServer
 from test_tabsdata.common.backend import (  # noqa: F401
     azure_client,
     azure_config,
+    clickhouse_config,
+    clickhouse_client,
     gcs_client,
     gcs_config,
     kafka_config,

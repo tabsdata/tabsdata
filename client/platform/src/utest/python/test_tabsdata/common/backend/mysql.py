@@ -30,7 +30,7 @@ from test_tabsdata.common.container import get_container_port_binding
 logger = logging.getLogger(__name__)
 
 DEFAULT_PYTEST_MYSQL_DOCKER_CONTAINER_NAME = (
-    f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}c_mysql"
+    f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}_mysql"
 )
 MYSQL_FORWARDED_PORT = "3306/tcp"
 

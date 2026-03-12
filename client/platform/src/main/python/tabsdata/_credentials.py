@@ -12,6 +12,7 @@ from tabsdata.exceptions import CredentialsConfigurationError, ErrorCode
 class CredentialIdentifier(Enum):
     AZURE_ACCOUNT_KEY_CREDENTIALS = "account_key-credentials"
     GCP_SERVICE_ACCOUNT_KEY_CREDENTIALS = "gcs_service_account_key-credentials"
+    HMAC_CREDENTIALS = "hmac-credentials"
     S3_ACCESS_KEY_CREDENTIALS = "s3_access_key-credentials"
     USER_PASSWORD_CREDENTIALS = "user_password-credentials"
 
@@ -206,6 +207,102 @@ class GCPServiceAccountKeyCredentials(GCPCredentials):
 
         Returns:
             str: A string representation of the GCPServiceAccountKeyCredentials.
+        """
+        return f"{self.__class__.__name__}({self._to_dict()[self.IDENTIFIER]})"
+
+
+class HMACCredentials(Credentials):
+    """
+    :categories: credentials
+
+    Generic HMAC credentials consisting of an access key and a secret key.
+
+    These credentials follow the same shape as AWS S3 access keys and are
+    compatible with any service that uses HMAC-based authentication over the
+    S3-compatible API, such as GCS HMAC keys or MinIO credentials.
+
+    Attributes:
+        access_key (Secret): The HMAC access key id.
+        secret_key (Secret): The HMAC secret key.
+
+    Methods:
+        to_dict() -> dict: Convert the HMACCredentials object to a dictionary.
+    """
+
+    IDENTIFIER = CredentialIdentifier.HMAC_CREDENTIALS.value
+
+    ACCESS_KEY_KEY = "access_key"
+    SECRET_KEY_KEY = "secret_key"
+
+    def __init__(
+        self,
+        access_key: str | Secret,
+        secret_key: str | Secret,
+    ):
+        """
+        Initialize the HMACCredentials object.
+
+        Args:
+            access_key (str | Secret): The HMAC access key id.
+            secret_key (str | Secret): The HMAC secret key.
+        """
+        self.access_key = access_key
+        self.secret_key = secret_key
+
+    def _to_dict(self) -> dict:
+        """
+        Convert the HMACCredentials object to a dictionary.
+
+        Returns:
+            dict: A dictionary representation of the HMACCredentials object.
+        """
+        return {
+            self.IDENTIFIER: {
+                self.ACCESS_KEY_KEY: self.access_key._to_dict(),
+                self.SECRET_KEY_KEY: self.secret_key._to_dict(),
+            }
+        }
+
+    @property
+    def access_key(self) -> Secret:
+        """
+        Secret: The HMAC access key id.
+        """
+        return self._access_key
+
+    @access_key.setter
+    def access_key(self, access_key: str | Secret):
+        """
+        Set the HMAC access key id.
+
+        Args:
+            access_key (str | Secret): The HMAC access key id.
+        """
+        self._access_key = build_secret(access_key)
+
+    @property
+    def secret_key(self) -> Secret:
+        """
+        Secret: The HMAC secret key.
+        """
+        return self._secret_key
+
+    @secret_key.setter
+    def secret_key(self, secret_key: str | Secret):
+        """
+        Set the HMAC secret key.
+
+        Args:
+            secret_key (str | Secret): The HMAC secret key.
+        """
+        self._secret_key = build_secret(secret_key)
+
+    def __repr__(self) -> str:
+        """
+        Returns a string representation of the HMACCredentials.
+
+        Returns:
+            str: A string representation of the HMACCredentials.
         """
         return f"{self.__class__.__name__}({self._to_dict()[self.IDENTIFIER]})"
 
@@ -424,7 +521,9 @@ def build_credentials(configuration: dict | Credentials) -> Credentials:
             raise CredentialsConfigurationError(
                 ErrorCode.CCE2, identifier, type(credentials_configuration)
             )
-        if identifier == CredentialIdentifier.S3_ACCESS_KEY_CREDENTIALS.value:
+        if identifier == CredentialIdentifier.HMAC_CREDENTIALS.value:
+            return HMACCredentials(**credentials_configuration)
+        elif identifier == CredentialIdentifier.S3_ACCESS_KEY_CREDENTIALS.value:
             return S3AccessKeyCredentials(**credentials_configuration)
         elif identifier == CredentialIdentifier.USER_PASSWORD_CREDENTIALS.value:
             return UserPasswordCredentials(**credentials_configuration)

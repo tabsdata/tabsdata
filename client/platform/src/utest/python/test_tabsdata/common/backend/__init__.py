@@ -5,6 +5,17 @@
 """Backend fixtures for database, vault, and cloud storage testing."""
 
 from test_tabsdata.common.backend.azure import azure_client, azure_config
+from test_tabsdata.common.backend.clickhouse import (
+    CLICKHOUSE_FORWARDED_PORT,
+    CLICKHOUSE_PORT,
+    CLICKHOUSE_DB_USER,
+    CLICKHOUSE_DB_NAME,
+    DEFAULT_PYTEST_CLICKHOUSE_DOCKER_CONTAINER_NAME,
+    VALID_CLICKHOUSE_PREFIXES,
+    ClickHouseTestConfig,
+    clickhouse_config,
+    clickhouse_client,
+)
 from test_tabsdata.common.backend.db2 import (
     DEFAULT_PYTEST_DB2_DOCKER_CONTAINER_NAME,
     DB2_DB_NAME,
@@ -90,6 +101,16 @@ __all__ = [
     "CONTAINER_MAXIMUM_RETRY_COUNT",
     "EXECUTION_MAXIMUM_RETRY_COUNT",
     "PYTEST_DEFAULT_ENVIRONMENT_PREFIX",
+    # ClickHouse
+    "DEFAULT_PYTEST_CLICKHOUSE_DOCKER_CONTAINER_NAME",
+    "CLICKHOUSE_DB_USER",
+    "CLICKHOUSE_DB_NAME",
+    "CLICKHOUSE_FORWARDED_PORT",
+    "CLICKHOUSE_PORT",
+    "VALID_CLICKHOUSE_PREFIXES",
+    "ClickHouseTestConfig",
+    "clickhouse_config",
+    "clickhouse_client",
     # HashiCorp
     "DEFAULT_PYTEST_HASHICORP_DOCKER_CONTAINER_NAME",
     "HASHICORP_PORT",

@@ -8,18 +8,22 @@ from pathlib import Path
 
 import pyarrow.parquet as pq
 
-from tabsdata._io.cloud_staging.cloud_storage import CloudStorage
-from tabsdata._io.cloud_staging.dialect import Dialect
-from tabsdata._io.cloud_staging.errors import BulkLoadError, SchemaError
-from tabsdata._io.cloud_staging.modes import LoadMode, SchemaEvolutionMode, WriteMode
-from tabsdata._io.cloud_staging.results import BulkLoadResult
-from tabsdata._io.cloud_staging.statuses import BulkLoadStatus
+from tabsdata._io.cloud_staging.common.cloud_storage import CloudStorage
+from tabsdata._io.cloud_staging.common.dialect import Dialect
+from tabsdata._io.cloud_staging.common.errors import BulkLoadError, SchemaError
+from tabsdata._io.cloud_staging.common.modes import (
+    LoadMode,
+    SchemaEvolutionMode,
+    WriteMode,
+)
+from tabsdata._io.cloud_staging.common.results import BulkLoadResult
+from tabsdata._io.cloud_staging.common.statuses import BulkLoadStatus
 
 logger = logging.getLogger(__name__)
 
 
 class CloudStagedBulkLoader:
-    """Implements the TED5 cloud-staged bulk loading pattern.
+    """Implements the cloud-staged bulk loading pattern.
 
     Each phase is a separate method that can be overridden by subclasses to customize
         behavior.

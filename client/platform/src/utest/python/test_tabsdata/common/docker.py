@@ -30,7 +30,8 @@ __all__ = [
 def clean_docker_containers():
     try:
         remove_docker_containers(f"^{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}")
-        for prefix in ["DB20",
+        for prefix in ["CLICKHOUSE0",
+                       "DB20",
                        "DB2CDC0",
                        "HASHICORP",
                        "H1",

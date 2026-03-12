@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from tabsdata._io.cloud_staging.statuses import BulkLoadStatus
+from tabsdata._io.cloud_staging.common.statuses import BulkLoadStatus
 
 
 @dataclass(frozen=True)

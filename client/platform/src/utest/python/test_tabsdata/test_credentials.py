@@ -7,6 +7,7 @@ import pytest
 from tabsdata import (
     AzureAccountKeyCredentials,
     GCPServiceAccountKeyCredentials,
+    HMACCredentials,
     HashiCorpSecret,
     S3AccessKeyCredentials,
     UserPasswordCredentials,
@@ -321,6 +322,68 @@ def test_gcs_account_key_credentials_object_and_dict_not_equal():
     credentials_dict = {
         GCPServiceAccountKeyCredentials.IDENTIFIER: {
             GCPServiceAccountKeyCredentials.SERVICE_ACCOUNT_KEY_KEY: "test_password",
+        }
+    }
+    assert credentials != credentials_dict
+
+
+def test_hmac_credentials_initialization():
+    credentials = HMACCredentials(
+        access_key="test_access_key",
+        secret_key="test_secret_key",
+    )
+    assert credentials.access_key == DirectSecret("test_access_key")
+    assert credentials.secret_key == DirectSecret("test_secret_key")
+    assert credentials._to_dict() == {
+        HMACCredentials.IDENTIFIER: {
+            HMACCredentials.ACCESS_KEY_KEY: DirectSecret("test_access_key")._to_dict(),
+            HMACCredentials.SECRET_KEY_KEY: DirectSecret("test_secret_key")._to_dict(),
+        }
+    }
+    assert build_credentials(credentials) == credentials
+    assert build_credentials(credentials._to_dict()) == credentials
+    assert credentials.__repr__()
+
+
+def test_hmac_credentials_update():
+    credentials = HMACCredentials(
+        access_key="test_access_key",
+        secret_key="test_secret_key",
+    )
+    assert credentials.access_key == DirectSecret("test_access_key")
+    assert credentials.secret_key == DirectSecret("test_secret_key")
+    credentials.access_key = "new_access_key"
+    credentials.secret_key = "new_secret_key"
+    assert credentials.access_key == DirectSecret("new_access_key")
+    assert credentials.secret_key == DirectSecret("new_secret_key")
+    credentials.access_key = HashiCorpSecret("secret_path", "new_access_key")
+    credentials.secret_key = HashiCorpSecret("secret_path", "new_secret_key")
+    assert credentials.access_key == HashiCorpSecret("secret_path", "new_access_key")
+    assert credentials.secret_key == HashiCorpSecret("secret_path", "new_secret_key")
+
+
+def test_hmac_credentials_from_dictionary():
+    credentials = {
+        HMACCredentials.IDENTIFIER: {
+            HMACCredentials.ACCESS_KEY_KEY: "test_access_key",
+            HMACCredentials.SECRET_KEY_KEY: "test_secret_key",
+        }
+    }
+    built_credentials = build_credentials(credentials)
+    assert isinstance(built_credentials, HMACCredentials)
+    assert built_credentials.access_key == DirectSecret("test_access_key")
+    assert built_credentials.secret_key == DirectSecret("test_secret_key")
+
+
+def test_hmac_credentials_object_and_dict_not_equal():
+    credentials = HMACCredentials(
+        access_key="test_access_key",
+        secret_key="test_secret_key",
+    )
+    credentials_dict = {
+        HMACCredentials.IDENTIFIER: {
+            HMACCredentials.ACCESS_KEY_KEY: "test_access_key",
+            HMACCredentials.SECRET_KEY_KEY: "test_secret_key",
         }
     }
     assert credentials != credentials_dict

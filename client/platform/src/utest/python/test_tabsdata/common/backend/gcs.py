@@ -15,10 +15,11 @@ from google.cloud import storage
 def gcs_config():
     # Note: this is currently very simple, but if needed it can be extended. This
     # dictionary will provide all the pieces necessary for testing against GCP
-
     config = {
         "ENV": "GCP0__GCP_SERVICE_ACCOUNT_KEY",
         "URI_ENV": "GCP0__GCP_STORAGE_URI",
+        "ACCESS_KEY_ENV": "GCP0__GCP_STORAGE_ACCESS_KEY",
+        "SECRET_KEY_ENV": "GCP0__GCP_STORAGE_SECRET_KEY",
     }
     uri = os.environ.get(config["URI_ENV"])
     if not uri:
@@ -26,6 +27,21 @@ def gcs_config():
             f"The environment variable {config['URI_ENV']} is not set. Unable to run "
             "tests using the 'gcp_config' fixture."
         )
+    config["URI"] = uri
+    access_key = os.environ.get(config["ACCESS_KEY_ENV"])
+    if not access_key:
+        raise Exception(
+            f"The environment variable {config['ACCESS_KEY_ENV']} is not set. Unable to run "
+            "tests using the 'gcp_config' fixture."
+        )
+    config["ACCESS_KEY"] = access_key
+    secret_key = os.environ.get(config["SECRET_KEY_ENV"])
+    if not secret_key:
+        raise Exception(
+            f"The environment variable {config['SECRET_KEY_ENV']} is not set. Unable to run "
+            "tests using the 'gcp_config' fixture."
+        )
+    config["SECRET_KEY"] = secret_key
     bucket_name = uri.replace("gs://", "").split("/", 1)[0]
     config["BUCKET"] = bucket_name
     yield config

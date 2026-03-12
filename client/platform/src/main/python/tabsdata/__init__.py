@@ -21,6 +21,7 @@ from tabsdata import typing
 from tabsdata._credentials import (
     AzureAccountKeyCredentials,
     GCPServiceAccountKeyCredentials,
+    HMACCredentials,
     S3AccessKeyCredentials,
     UserPasswordCredentials,
 )
@@ -33,6 +34,12 @@ from tabsdata._format import (
     NDJSONFormat,
     ParquetFormat,
 )
+from tabsdata._io.cloud_staging.common.storage_config import (
+    AzureConfig,
+    GCSConfig,
+    S3Config,
+)
+from tabsdata._io.connections.clickhouse_connection import ClickHouseConn
 from tabsdata._io.connections.connections import Conn
 from tabsdata._io.connections.db2_connection import Db2Conn
 from tabsdata._io.connections.mariadb_connection import MariaDBConn
@@ -71,6 +78,7 @@ from tabsdata._io.outputs.file_outputs import (
     LocalFileDestination,
     S3Destination,
 )
+from tabsdata._io.outputs.sql.clickhouse_output import ClickHouseDest
 from tabsdata._io.outputs.sql.mariadb_output import MariaDBDest
 from tabsdata._io.outputs.sql.mysql_output import MySQLDest
 from tabsdata._io.outputs.sql.postgres_output import PostgresDest
@@ -215,6 +223,7 @@ __all__ = [
     "AWSGlue",
     "AzureDestination",
     "BigQueryDest",
+    "ClickHouseDest",
     "DatabricksDestination",
     "GCSDestination",
     "LocalFileDestination",
@@ -237,6 +246,7 @@ __all__ = [
     "PostgresCdcTrigger",
     # Connections
     "BigQueryConn",
+    "ClickHouseConn",
     "Db2Conn",
     "Db2CdcConn",
     "KafkaConn",
@@ -247,12 +257,17 @@ __all__ = [
     "OracleConn",
     "PostgresConn",
     "PostgresCdcConn",
+    # Cloud staging configs
+    "AzureConfig",
+    "GCSConfig",
+    "S3Config",
     # Credentials
     "AwsGlueSchemaRegistryCredentialsSpec",
     "KafkaCredentialsSpec",
     "ConfluentSchemaRegistryCredentialsSpec",
     "AzureAccountKeyCredentials",
     "GCPServiceAccountKeyCredentials",
+    "HMACCredentials",
     "S3AccessKeyCredentials",
     "SalesforceTokenCredentials",
     "UserPasswordCredentials",
