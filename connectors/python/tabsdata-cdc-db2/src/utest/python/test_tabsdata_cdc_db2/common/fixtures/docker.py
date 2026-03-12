@@ -315,71 +315,78 @@ def register_table_for_cdc(
 
     # reinit_cdc_db2_asncap(container)
 
-    try:
-        connection = db2_conn(port)
-        cursor = connection.cursor()
-        cursor.execute(
-            f"select coalesce(max(cast(map_id as int)), 0) + 1 "
-            f"from {DB2_CDC_ASN_SCHEMA}.ibmsnap_pruncntl"
-        )
-        map_id = str(cursor.fetchone()[0])
-        cursor.execute(
-            f"insert into {DB2_CDC_ASN_SCHEMA}.ibmsnap_pruncntl "
-            f"("
-            f"target_server, "
-            f"target_owner, "
-            f"target_table, "
-            f"source_owner, "
-            f"source_table, "
-            f"source_view_qual, "
-            f"apply_qual, "
-            f"set_name, "
-            f"cntl_server, "
-            f"target_structure, "
-            f"phys_change_owner, "
-            f"phys_change_table, "
-            f"map_id"
-            f") "
-            f"values ("
-            f"'{DB2_CDC_DATABASE}', "
-            f"'{DB2_CDC_ASN_SCHEMA}', "
-            f"'{staging_table}', "
-            f"?, "
-            f"?, "
-            f"0, "
-            f"'TDQUAL', "
-            f"'TDSET', "
-            f"'{DB2_CDC_DATABASE}', "
-            f"1, "
-            f"'{DB2_CDC_ASN_SCHEMA}', "
-            f"'{staging_table}', "
-            f"?"
-            f")",
-            (schema.upper(), table.upper(), map_id),
-        )
-        cursor.execute(
-            f"insert into {DB2_CDC_ASN_SCHEMA}.ibmsnap_signal "
-            f"("
-            f"signal_type, "
-            f"signal_subtype, "
-            f"signal_input_in, "
-            f"signal_state"
-            f") "
-            f"values "
-            f"("
-            f"'CMD', "
-            f"'CAPSTART', "
-            f"?, "
-            f"'P'"
-            f")",
-            (map_id,),
-        )
-        connection.commit()
-    finally:
-        if cursor is not None:
-            cursor.close()
-        if connection is not None:
-            connection.close()
+    @retry(stop=stop_after_attempt(8), wait=wait_incrementing(start=0, increment=0))
+    def insert_pruncntl_and_signal():
+        i_cursor = None
+        i_connection = None
+        i_map_id = str(random.randint(1, 2**31 - 1))
+        try:
+            i_connection = db2_conn(port)
+            i_cursor = i_connection.cursor()
+            i_cursor.execute(
+                f"insert into {DB2_CDC_ASN_SCHEMA}.ibmsnap_pruncntl "
+                f"("
+                f"target_server, "
+                f"target_owner, "
+                f"target_table, "
+                f"source_owner, "
+                f"source_table, "
+                f"source_view_qual, "
+                f"apply_qual, "
+                f"set_name, "
+                f"cntl_server, "
+                f"target_structure, "
+                f"phys_change_owner, "
+                f"phys_change_table, "
+                f"map_id"
+                f") "
+                f"values ("
+                f"'{DB2_CDC_DATABASE}', "
+                f"'{DB2_CDC_ASN_SCHEMA}', "
+                f"'{staging_table}', "
+                f"?, "
+                f"?, "
+                f"0, "
+                f"'TDQUAL', "
+                f"'TDSET', "
+                f"'{DB2_CDC_DATABASE}', "
+                f"1, "
+                f"'{DB2_CDC_ASN_SCHEMA}', "
+                f"'{staging_table}', "
+                f"?"
+                f")",
+                (schema.upper(), table.upper(), i_map_id),
+            )
+            i_cursor.execute(
+                f"insert into {DB2_CDC_ASN_SCHEMA}.ibmsnap_signal "
+                f"("
+                f"signal_type, "
+                f"signal_subtype, "
+                f"signal_input_in, "
+                f"signal_state"
+                f") "
+                f"values "
+                f"("
+                f"'CMD', "
+                f"'CAPSTART', "
+                f"?, "
+                f"'P'"
+                f")",
+                (i_map_id,),
+            )
+            i_connection.commit()
+        except Exception:
+            if i_connection is not None:
+                i_connection.rollback()
+            raise
+        finally:
+            if i_cursor is not None:
+                i_cursor.close()
+            if i_connection is not None:
+                i_connection.close()
+        return i_map_id
+
+    map_id = insert_pruncntl_and_signal()
     logger.info(f"CAPSTART signal inserted for {source_table} (map_id={map_id})")
 
     @retry(
@@ -744,6 +751,8 @@ def db2_cdc_config(
             database=envs["DATABASE"],
             root_user=envs["ROOT_USER"],
             root_password=envs["ROOT_PASSWORD"],
+            cdc_user=envs["CDC_USER"],
+            cdc_password=envs["CDC_PASSWORD"],
         )
     else:
         name = os.environ.get(
