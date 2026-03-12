@@ -4,7 +4,18 @@
 
 import importlib.metadata
 
-__all__ = []
+from tabsdata.connector.cdc.postgres._connection import PostgresCdcConn
+from tabsdata.connector.cdc.postgres._connector import PostgresCdcTrigger
+from tabsdata.connector.cdc.postgres.typing import PostgresCdcStartFromSpec
+
+__all__ = [
+    # Connections
+    "PostgresCdcConn",
+    "PostgresCdcTrigger",
+    # Specs
+    "PostgresCdcStartFromSpec",
+]
+
 
 # noinspection PyBroadException
 try:

@@ -4,7 +4,18 @@
 
 import importlib.metadata
 
-__all__ = []
+from tabsdata.connector.cdc.db2._connection import Db2CdcConn
+from tabsdata.connector.cdc.db2._connector import Db2CdcTrigger
+from tabsdata.connector.cdc.db2.typing import Db2CdcStartFromSpec
+
+__all__ = [
+    # Connections
+    "Db2CdcConn",
+    "Db2CdcTrigger",
+    # Specs
+    "Db2CdcStartFromSpec",
+]
+
 
 # noinspection PyBroadException
 try:

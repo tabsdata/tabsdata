@@ -4,7 +4,29 @@
 
 import importlib.metadata
 
-__all__ = []
+from tabsdata.connector.cdc.common._connection import CdcConn
+from tabsdata.connector.cdc.common._connector import CdcTrigger
+from tabsdata.connector.cdc.common.typing import (
+    CdcFormatSpec,
+    CdcValuesFormatSpec,
+    OriginPositionSpec,
+    QualifiedTableSpec,
+    QualifiedTablesSpec,
+    TimestampPositionSpec,
+)
+
+__all__ = [
+    # Connections
+    "CdcConn",
+    "CdcTrigger",
+    # Specs
+    "QualifiedTableSpec",
+    "QualifiedTablesSpec",
+    "OriginPositionSpec",
+    "TimestampPositionSpec",
+    "CdcFormatSpec",
+    "CdcValuesFormatSpec",
+]
 
 # noinspection PyBroadException
 try:

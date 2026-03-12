@@ -32,7 +32,7 @@ logger.setLevel(logging.DEBUG)
 
 
 @dataclass
-class ConnectionSettings:
+class CdcConnectionSettings:
     host: str
     port: int
     dbname: str
@@ -64,7 +64,7 @@ class CdcConn(Conn, ABC):
     @abstractmethod
     def _default_dbname(self) -> str: ...
 
-    def _settings(self) -> ConnectionSettings:
+    def _settings(self) -> CdcConnectionSettings:
         parsed = urlparse(self.uri)
         if self.credentials:
             user = self.credentials.user.secret_value
@@ -72,7 +72,7 @@ class CdcConn(Conn, ABC):
         else:
             user = parsed.username
             password = parsed.password
-        return ConnectionSettings(
+        return CdcConnectionSettings(
             host=parsed.hostname or self._default_host(),
             port=parsed.port or self._default_port(),
             dbname=parsed.path.strip("/") if parsed.path else self._default_dbname(),

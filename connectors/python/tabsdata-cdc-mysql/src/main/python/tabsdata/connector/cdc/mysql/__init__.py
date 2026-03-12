@@ -4,7 +4,18 @@
 
 import importlib.metadata
 
-__all__ = []
+from tabsdata.connector.cdc.mysql._connection import MySQLCdcConn
+from tabsdata.connector.cdc.mysql._connector import MySQLCdcTrigger
+from tabsdata.connector.cdc.mysql.typing import MySQLCdcStartFromSpec
+
+__all__ = [
+    # Connections
+    "MySQLCdcConn",
+    "MySQLCdcTrigger",
+    # Specs
+    "MySQLCdcStartFromSpec",
+]
+
 
 # noinspection PyBroadException
 try:

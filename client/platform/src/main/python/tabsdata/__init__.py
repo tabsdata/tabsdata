@@ -109,6 +109,7 @@ from tabsdata._tdfunction import TabsdataFunction
 
 # noinspection PyProtectedMember
 from tabsdata.connector.bigquery._connector import BigQueryConn, BigQueryDest
+from tabsdata.connector.cdc.common import CdcConn, CdcTrigger
 from tabsdata.connector.cdc.db2._connection import Db2CdcConn
 from tabsdata.connector.cdc.db2._connector import Db2CdcTrigger
 from tabsdata.connector.cdc.mysql._connection import MySQLCdcConn
@@ -195,7 +196,9 @@ __all__ = [
     "DestinationPlugin",
     "Stage",
     "Conn",
+    "CdcConn",
     "StageTrigger",
+    "CdcTrigger",
     # Decorators
     "publisher",
     "transformer",
