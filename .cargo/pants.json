@@ -23,6 +23,10 @@
     {
       "id": "CVE-2026-21895",
       "reason": "Improper check or handling of exceptional conditions in RSA implementation in crate rsa."
+    },
+    {
+      "id": "CVE-2026-27887",
+      "reason": "Spin may in some cases attempt to buffer the entire response before delivering it to the guest, which can lead to the host process running out of memory, panicking, and crashing."
     }
   ]
 }
