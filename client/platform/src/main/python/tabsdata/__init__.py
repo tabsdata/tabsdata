@@ -46,6 +46,7 @@ from tabsdata._io.connections.mariadb_connection import MariaDBConn
 from tabsdata._io.connections.mysql_connection import MySQLConn
 from tabsdata._io.connections.oracle_connection import OracleConn
 from tabsdata._io.connections.postgres_connection import PostgresConn
+from tabsdata._io.connections.starrocks_connection import StarRocksConn
 from tabsdata._io.inputs.file_inputs import (
     AzureSource,
     GCSSource,
@@ -82,6 +83,7 @@ from tabsdata._io.outputs.sql.clickhouse_output import ClickHouseDest
 from tabsdata._io.outputs.sql.mariadb_output import MariaDBDest
 from tabsdata._io.outputs.sql.mysql_output import MySQLDest
 from tabsdata._io.outputs.sql.postgres_output import PostgresDest
+from tabsdata._io.outputs.sql.starrocks_output import StarRocksDest
 
 # noinspection PyProtectedMember
 from tabsdata._io.outputs.sql_outputs import (
@@ -238,6 +240,7 @@ __all__ = [
     "PostgresDestination",
     "S3Destination",
     "SnowflakeDestination",
+    "StarRocksDest",
     # Triggers
     "CronTrigger",
     "Db2CdcTrigger",
@@ -257,6 +260,7 @@ __all__ = [
     "OracleConn",
     "PostgresConn",
     "PostgresCdcConn",
+    "StarRocksConn",
     # Cloud staging configs
     "AzureConfig",
     "GCSConfig",

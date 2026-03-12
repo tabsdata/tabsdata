@@ -40,9 +40,10 @@ def clean_docker_containers():
                        "MSSSQL0",
                        "MYSQL0",
                        "MYSQLCDC0",
+                       "ORACLE0",
                        "POSTGRES0",
                        "POSTGRESCDC0",
-                       "ORACLE0",]:
+                       "STARROCKS0",]:
             backend_type = prefix.rstrip("0")
             env_var = f"{prefix}__{backend_type}_DOCKER_CONTAINER_NAME"
             if (

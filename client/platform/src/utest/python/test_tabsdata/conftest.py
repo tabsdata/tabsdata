@@ -53,6 +53,8 @@ from test_tabsdata.common.backend import (  # noqa: F401
     postgres_config,
     s3_client,
     s3_config,
+    starrocks_config,
+    starrocks_client,
     testing_hashicorp_vault,
 )
 from test_tabsdata.common.constants import EXECUTION_MAXIMUM_RETRY_COUNT

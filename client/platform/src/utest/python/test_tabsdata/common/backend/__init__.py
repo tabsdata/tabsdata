@@ -79,6 +79,17 @@ from test_tabsdata.common.backend.postgres import (
     postgres_config,
 )
 from test_tabsdata.common.backend.s3 import s3_client, s3_config
+from test_tabsdata.common.backend.starrocks import (
+    DEFAULT_PYTEST_STARROCKS_DOCKER_CONTAINER_NAME,
+    STARROCKS_DB_NAME,
+    STARROCKS_DB_USER,
+    STARROCKS_MYSQL_FORWARDED_PORT,
+    STARROCKS_MYSQL_PORT,
+    VALID_STARROCKS_PREFIXES,
+    StarRocksTestConfig,
+    starrocks_config,
+    starrocks_client,
+)
 from test_tabsdata.common.constants import (
     DB_HOST,
     DB_NAME,
@@ -165,6 +176,16 @@ __all__ = [
     "PostgresConfig",
     "VALID_POSTGRES_PREFIXES",
     "postgres_config",
+    # StarRocks
+    "DEFAULT_PYTEST_STARROCKS_DOCKER_CONTAINER_NAME",
+    "STARROCKS_DB_NAME",
+    "STARROCKS_DB_USER",
+    "STARROCKS_MYSQL_FORWARDED_PORT",
+    "STARROCKS_MYSQL_PORT",
+    "VALID_STARROCKS_PREFIXES",
+    "StarRocksTestConfig",
+    "starrocks_config",
+    "starrocks_client",
     # Cloud Storage
     "azure_client",
     "azure_config",

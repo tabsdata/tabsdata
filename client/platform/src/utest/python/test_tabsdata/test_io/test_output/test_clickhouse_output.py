@@ -110,7 +110,7 @@ def test_if_table_exists_invalid_raises(s3_conn):
 # ── destination_tables normalisation ─────────────────────────────────────────────────
 
 
-def test_str_table_normalised_to_list(s3_conn):
+def test_str_table_normalized_to_list(s3_conn):
     dest = ClickHouseDest(s3_conn, "events")
     assert dest.destination_tables == ["events"]
 
