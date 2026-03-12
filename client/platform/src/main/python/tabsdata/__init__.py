@@ -10,6 +10,10 @@ __path__ = pkgutil.extend_path(__path__, __name__)
 # Copyright 2025 Tabs Data Inc.
 #
 
+# This must be done early, as other imports might be importing packages that require
+# having some system libraries already loaded.
+import tabsdata._utils.internal._libraries  # noqa: F401, E402  # isort: skip
+
 import importlib.metadata
 import logging
 
