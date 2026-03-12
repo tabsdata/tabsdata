@@ -42,7 +42,7 @@ using = "requirements:requirements.txt"
 [tool.maturin]
 python-source = "python/src/main/python"
 module-name = "tabsdata.expansions.extensions.tableframe._tableframe"
-compatibility = "musllinux_1_1"
+compatibility = "linux"
 
 [tool.ruff]
 extend = "../../../../pyproject.toml"
