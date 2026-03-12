@@ -630,6 +630,18 @@ pub async fn create_locked_stage_trigger_workers_start_request<T: WorkerMessageQ
                     .env_prefix(env_prefix)
                     .build()?;
 
+                let (path, _) = storage_location
+                    .builder(&f.data_location)
+                    .collection(&f.collection_id)
+                    .checkpoint(&f.function_id)
+                    .build();
+                let (external_path, mount_def) = storage.to_external_uri(&path)?;
+                let env_prefix = EnvPrefix::try_from(&mount_def.id)?;
+                let function_checkpoint = Location::builder()
+                    .uri(external_path)
+                    .env_prefix(env_prefix)
+                    .build()?;
+
                 // Build info
                 // TODO Urls are wrong as of now
                 let info = stage_trigger::v1::Info {
@@ -641,6 +653,7 @@ pub async fn create_locked_stage_trigger_workers_start_request<T: WorkerMessageQ
                     function_defined_on: f.defined_on,
                     function_bundle,
                     function_stage,
+                    function_checkpoint,
                     scheduled_on: AtTime::now(),
                     fn_trigger,
                     fn_state,

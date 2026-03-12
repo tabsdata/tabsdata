@@ -31,6 +31,7 @@ pub struct Info {
     pub function: FunctionName,
     pub function_bundle: Location,
     pub function_stage: Location,
+    pub function_checkpoint: Location,
     pub scheduled_on: AtTime,    // when the request yaml was created
     pub fn_trigger: HttpRequest, // trigger of the function
     pub fn_state: HttpRequest,   // state of the function
@@ -81,6 +82,10 @@ mod tests {
                 },
                 function_stage: Location {
                     uri: Url::try_from("file:///stage").unwrap(),
+                    env_prefix: None,
+                },
+                function_checkpoint: Location {
+                    uri: Url::try_from("file:///checkpoint").unwrap(),
                     env_prefix: None,
                 },
                 scheduled_on,
@@ -135,6 +140,9 @@ info:
     env_prefix: null
   function_stage:
     uri: file:///stage
+    env_prefix: null
+  function_checkpoint:
+    uri: file:///checkpoint
     env_prefix: null
   scheduled_on: {scheduled_on}
   fn_trigger:

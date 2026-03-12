@@ -89,6 +89,7 @@ struct LocationBuilderInfo {
     collection: Option<String>,
     bundle: Option<String>,
     stage: Option<String>,
+    checkpoint: Option<String>,
     data_version: Option<String>,
     transaction: Option<String>,
     function_version: Option<String>,
@@ -250,6 +251,33 @@ impl StageBuilder {
     }
 }
 
+#[derive(Debug)]
+pub struct CheckpointBuilder {
+    info: LocationBuilderInfo,
+    version_builder: Box<dyn VersionLocationBuilder>,
+}
+
+impl CheckpointBuilder {
+    /// Set the function.
+    pub fn function(&mut self, function: &FunctionId) -> &mut Self {
+        self.info.stage = Some(function.to_string());
+        self
+    }
+
+    /// Build the checkpoint location.
+    pub fn build(&self) -> (SPath, StorageLocation) {
+        self.version_builder.build(&self.info, None)
+    }
+
+    /// Build the meta checkpoint location.
+    pub fn build_meta(&self, meta_name: impl Into<String>) -> (SPath, StorageLocation) {
+        self.version_builder.build(
+            &self.info,
+            Some(format!("{}.meta", meta_name.into()).as_str()),
+        )
+    }
+}
+
 /// Builder for the collection location.
 #[derive(Debug)]
 pub struct CollectionBuilder {
@@ -276,6 +304,16 @@ impl CollectionBuilder {
 
     /// Return a [`StageBuilder`] based on the [`CollectionBuilder`]
     pub fn stage(self, function: &FunctionId) -> StageBuilder {
+        let mut builder = StageBuilder {
+            info: self.info,
+            version_builder: self.version_builder,
+        };
+        builder.function(function);
+        builder
+    }
+
+    /// Return a [`CheckpointBuilder`] based on the [`CollectionBuilder`]
+    pub fn checkpoint(self, function: &FunctionId) -> StageBuilder {
         let mut builder = StageBuilder {
             info: self.info,
             version_builder: self.version_builder,
@@ -476,7 +514,16 @@ impl VersionLocationBuilder for V2LocationBuilder {
                     .unwrap()
                     .child(collection)
                     .unwrap();
-
+                path = path.child("f").unwrap().child(stage).unwrap();
+            } else if let Some(stage) = &info.checkpoint {
+                // Checkpoints are stored at /checkpoints/c/COLLECTION/f
+                path = SPath::default()
+                    .child("checkpoints")
+                    .unwrap()
+                    .child("c")
+                    .unwrap()
+                    .child(collection)
+                    .unwrap();
                 path = path.child("f").unwrap().child(stage).unwrap();
             } else if let Some(data_version) = &info.data_version {
                 // function always is present if data is present
