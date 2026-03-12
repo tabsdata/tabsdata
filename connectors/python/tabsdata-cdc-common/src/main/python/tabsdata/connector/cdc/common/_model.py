@@ -70,12 +70,33 @@ class TableObject:
 
 @dataclass
 class TrackedColumn:
+    """
+    Name of the column as returned by the database catalog.
+    """
+
     name: str
+    """
+    Column type as parsed by SQLAlchemy.
+    """
     satype: Any
+    """
+    Column type as represented in PyArrow.
+    """
     patype: Any = None
-    iname: str | None = None
+    """
+    Column name containing the old value when the CDC ingester reads from tables
+    that store both old and new values.
+    Used by IBM SQL Replication."
+    """
+    oname: str | None = None
+    """
+    Attribute name after applying SQLAlchemy identifier normalization.
+    """
     sa_name: str | None = None
-    sa_iname: str | None = None
+    """
+    Attribute oname after applying SQLAlchemy identifier normalization.
+    """
+    sa_oname: str | None = None
 
 
 @dataclass

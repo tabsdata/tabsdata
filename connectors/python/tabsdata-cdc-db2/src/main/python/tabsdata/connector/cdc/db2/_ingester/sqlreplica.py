@@ -333,9 +333,9 @@ class SqlReplicationIngester(CdcIngester):
                     TrackedColumn(
                         name=catalog_name,
                         satype=col_info["type"],
-                        iname=iname,
+                        oname=iname,
                         sa_name=sa_dialect.normalize_name(name=catalog_name),
-                        sa_iname=(
+                        sa_oname=(
                             sa_dialect.normalize_name(name=iname) if iname else None
                         ),
                     )
@@ -417,7 +417,7 @@ class SqlReplicationIngester(CdcIngester):
     ) -> Generator[CdcDataChange, None, None]:
         column_names = [f'"{column.name}"' for column in tracked.columns]
         column_inames = [
-            f'"{column.iname}"' for column in tracked.columns if column.iname
+            f'"{column.oname}"' for column in tracked.columns if column.oname
         ]
         select_columns = (
             [
@@ -464,8 +464,8 @@ class SqlReplicationIngester(CdcIngester):
             if op == CdcOperation.UPDATE:
                 old_values = {}
                 for column in tracked.columns:
-                    if column.sa_iname and column.sa_iname in row_map:
-                        old_values[column.name] = row_map[column.sa_iname]
+                    if column.sa_oname and column.sa_oname in row_map:
+                        old_values[column.name] = row_map[column.sa_oname]
                     else:
                         old_values[column.name] = None
                 self.localize_values(old_values)

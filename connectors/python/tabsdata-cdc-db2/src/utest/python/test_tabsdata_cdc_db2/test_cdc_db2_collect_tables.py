@@ -80,7 +80,7 @@ def test_collect_tables_success(db2_collect_tables_setup):
     col_names = {c.name for c in simple_t.columns}
     assert col_names == {"ID", "NAME"}
     for col in simple_t.columns:
-        assert col.iname == f"{OLD_VALUES_PREFIX}{col.name}"
+        assert col.oname == f"{OLD_VALUES_PREFIX}{col.name}"
     assert "ID" in simple_t.pk
 
     extra_t = result[key_extra]
@@ -89,7 +89,7 @@ def test_collect_tables_success(db2_collect_tables_setup):
     col_names = {c.name for c in extra_t.columns}
     assert col_names == {"ID", "VALUE"}
     for col in extra_t.columns:
-        assert col.iname == f"{OLD_VALUES_PREFIX}{col.name}"
+        assert col.oname == f"{OLD_VALUES_PREFIX}{col.name}"
     assert "ID" in extra_t.pk
 
 
@@ -180,6 +180,6 @@ def test_collect_tables_type_conversion(db2_collect_tables_setup):
     assert cols["COL_TIME"].patype == pa.time64("us")
 
     for col in table.columns:
-        assert col.iname == f"{OLD_VALUES_PREFIX}{col.name}"
+        assert col.oname == f"{OLD_VALUES_PREFIX}{col.name}"
 
     assert "COL_INT" in table.pk
