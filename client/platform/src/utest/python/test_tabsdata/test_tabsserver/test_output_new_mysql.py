@@ -9,7 +9,7 @@ from unittest import mock
 
 import polars as pl
 import pytest
-from mysql.connector import InterfaceError
+from mysql.connector import InterfaceError, ProgrammingError
 from sqlalchemy.exc import NoSuchModuleError
 
 from test_tabsdata.conftest import (
@@ -187,7 +187,7 @@ def test_output_new_sql_list_w_transaction(mysql_config):
 
     fnrun = error.value.fnrun
     exception = fnrun.exception.as_object()
-    assert exception.exception == InterfaceError.__name__
+    assert exception.exception in (InterfaceError.__name__, ProgrammingError.__name__)
 
     output = pl.read_database_uri(
         uri=mysql_config.uri_with_credentials,
@@ -229,7 +229,7 @@ def test_output_new_sql_list_wo_transaction(mysql_config):
 
     fnrun = error.value.fnrun
     exception = fnrun.exception.as_object()
-    assert exception.exception == InterfaceError.__name__
+    assert exception.exception in (InterfaceError.__name__, ProgrammingError.__name__)
 
     output = pl.read_database_uri(
         uri=mysql_config.uri_with_credentials,

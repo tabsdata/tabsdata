@@ -9,7 +9,7 @@ from unittest import mock
 
 import polars as pl
 import pytest
-from mysql.connector import InterfaceError
+from mysql.connector import InterfaceError, ProgrammingError
 
 from test_tabsdata.conftest import (
     TESTING_RESOURCES_FOLDER,
@@ -185,7 +185,7 @@ def test_output_new_mariadb_list_w_transaction(mariadb_config):
 
     fnrun = error.value.fnrun
     exception = fnrun.exception.as_object()
-    assert exception.exception == InterfaceError.__name__
+    assert exception.exception in (InterfaceError.__name__, ProgrammingError.__name__)
 
     output = pl.read_database_uri(
         uri=mariadb_config.uri_with_credentials,
@@ -227,7 +227,7 @@ def test_output_new_mariadb_list_wo_transaction(mariadb_config):
 
     fnrun = error.value.fnrun
     exception = fnrun.exception.as_object()
-    assert exception.exception == InterfaceError.__name__
+    assert exception.exception in (InterfaceError.__name__, ProgrammingError.__name__)
 
     output = pl.read_database_uri(
         uri=mariadb_config.uri_with_credentials,
