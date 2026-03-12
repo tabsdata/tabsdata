@@ -12,9 +12,9 @@ from tabsdata._tabsserver.server.upgrader.upgrader import upgrade
 
 
 # noinspection PyPep8Naming
-class Upgrade_0_9_0_to_0_9_1(Upgrade):
-    source_version = Version("0.9.0")
-    target_version = Version("0.9.1")
+class Upgrade_0_9_to_1_0(Upgrade):
+    source_version = Version("0.9")
+    target_version = Version("1.0")
 
     def upgrade(
         self,
@@ -25,9 +25,9 @@ class Upgrade_0_9_0_to_0_9_1(Upgrade):
 
 
 # noinspection PyPep8Naming
-class Upgrade_0_9_1_to_0_9_2(Upgrade):
-    source_version = Version("0.9.1")
-    target_version = Version("0.9.2")
+class Upgrade_1_0_to_1_1(Upgrade):
+    source_version = Version("1.0")
+    target_version = Version("1.1")
 
     def upgrade(
         self,
@@ -38,9 +38,9 @@ class Upgrade_0_9_1_to_0_9_2(Upgrade):
 
 
 # noinspection PyPep8Naming
-class Upgrade_0_9_2_to_0_9_3(Upgrade):
-    source_version = Version("0.9.2")
-    target_version = Version("0.9.3")
+class Upgrade_1_1_to_1_2(Upgrade):
+    source_version = Version("1.1")
+    target_version = Version("1.2")
 
     def upgrade(
         self,
@@ -55,14 +55,26 @@ class TestUpgradeFunction(unittest.TestCase):
     def setUp(self):
         self.instance = Path("/fake/path")
         self.upgrade_plan = {
-            Version("0.9.0"): Upgrade_0_9_0_to_0_9_1,
-            Version("0.9.1"): Upgrade_0_9_1_to_0_9_2,
-            Version("0.9.2"): Upgrade_0_9_2_to_0_9_3,
+            Version("0.9"): Upgrade_0_9_to_1_0,
+            Version("1.0"): Upgrade_1_0_to_1_1,
+            Version("1.1"): Upgrade_1_1_to_1_2,
         }
 
     def test_upgrade_no_upgrade_needed(self):
-        source_version = Version("0.9.3")
-        target_version = Version("0.9.3")
+        source_version = Version("1.2.0")
+        target_version = Version("1.2.0")
+        actions = upgrade(
+            self.instance,
+            source_version,
+            target_version,
+            self.upgrade_plan,
+            True,
+        )
+        self.assertEqual(actions, {})
+
+    def test_upgrade_patch_only_no_upgrade(self):
+        source_version = Version("1.0.0")
+        target_version = Version("1.0.5")
         actions = upgrade(
             self.instance,
             source_version,
@@ -74,7 +86,7 @@ class TestUpgradeFunction(unittest.TestCase):
 
     def test_upgrade_successful(self):
         source_version = Version("0.9.0")
-        target_version = Version("0.9.3")
+        target_version = Version("1.2.0")
         actions = upgrade(
             self.instance,
             source_version,
@@ -83,17 +95,50 @@ class TestUpgradeFunction(unittest.TestCase):
             True,
         )
         expected_actions = {
-            Version("0.9.1"): ["action1"],
-            Version("0.9.2"): ["action2"],
-            Version("0.9.3"): ["action3"],
+            Version("1.0"): ["action1"],
+            Version("1.1"): ["action2"],
+            Version("1.2"): ["action3"],
+        }
+        self.assertEqual(actions, expected_actions)
+
+    def test_upgrade_with_patch_versions(self):
+        source_version = Version("0.9.3")
+        target_version = Version("1.2.7")
+        actions = upgrade(
+            self.instance,
+            source_version,
+            target_version,
+            self.upgrade_plan,
+            True,
+        )
+        expected_actions = {
+            Version("1.0"): ["action1"],
+            Version("1.1"): ["action2"],
+            Version("1.2"): ["action3"],
+        }
+        self.assertEqual(actions, expected_actions)
+
+    def test_upgrade_partial_chain(self):
+        source_version = Version("1.0.2")
+        target_version = Version("1.2.0")
+        actions = upgrade(
+            self.instance,
+            source_version,
+            target_version,
+            self.upgrade_plan,
+            True,
+        )
+        expected_actions = {
+            Version("1.1"): ["action2"],
+            Version("1.2"): ["action3"],
         }
         self.assertEqual(actions, expected_actions)
 
     def test_upgrade_no_upgrade_class_found(self):
         source_version = Version("0.9.0")
-        target_version = Version("0.9.3")
+        target_version = Version("1.2.0")
         incomplete_upgrade_plan = {
-            Version("0.9.0"): Upgrade_0_9_0_to_0_9_1,
+            Version("0.9"): Upgrade_0_9_to_1_0,
         }
         with self.assertRaises(RuntimeError) as context:
             upgrade(
@@ -107,9 +152,9 @@ class TestUpgradeFunction(unittest.TestCase):
 
     def test_upgrade_loop_detected(self):
         # noinspection PyPep8Naming
-        class Upgrade_0_9_2_to_0_9_1(Upgrade):
-            source_version = Version("0.9.2")
-            target_version = Version("0.9.1")
+        class Upgrade_1_1_to_1_0(Upgrade):
+            source_version = Version("1.1")
+            target_version = Version("1.0")
 
             def upgrade(
                 self,
@@ -119,11 +164,11 @@ class TestUpgradeFunction(unittest.TestCase):
                 return ["action_loop"]
 
         source_version = Version("0.9.0")
-        target_version = Version("0.9.3")
+        target_version = Version("1.2.0")
         loop_upgrade_plan = {
-            Version("0.9.0"): Upgrade_0_9_0_to_0_9_1,
-            Version("0.9.1"): Upgrade_0_9_1_to_0_9_2,
-            Version("0.9.2"): Upgrade_0_9_2_to_0_9_1,
+            Version("0.9"): Upgrade_0_9_to_1_0,
+            Version("1.0"): Upgrade_1_0_to_1_1,
+            Version("1.1"): Upgrade_1_1_to_1_0,
         }
         with self.assertRaises(RuntimeError) as context:
             upgrade(
@@ -137,10 +182,10 @@ class TestUpgradeFunction(unittest.TestCase):
 
     def test_upgrade_missed_versions(self):
         source_version = Version("0.9.0")
-        target_version = Version("0.9.3")
+        target_version = Version("1.2.0")
         missed_upgrade_plan = {
-            Version("0.9.0"): Upgrade_0_9_0_to_0_9_1,
-            Version("0.9.2"): Upgrade_0_9_2_to_0_9_3,
+            Version("0.9"): Upgrade_0_9_to_1_0,
+            Version("1.1"): Upgrade_1_1_to_1_2,
         }
         with self.assertRaises(RuntimeError) as context:
             upgrade(

@@ -1,5 +1,5 @@
 #
-# Copyright 2026 Tabs Data Inc.
+# Copyright 2025 Tabs Data Inc.
 #
 
 import logging
@@ -14,9 +14,9 @@ logger.setLevel(logging.INFO)
 
 
 # noinspection PyPep8Naming
-class Upgrade_1_7_1_to_1_8_0(Upgrade):
-    source_version = Version("1.7.1")
-    target_version = Version("1.8.0")
+class Upgrade_1_2_to_1_3(Upgrade):
+    source_version = Version("1.2")
+    target_version = Version("1.3")
 
     def upgrade(
         self,
@@ -24,3 +24,12 @@ class Upgrade_1_7_1_to_1_8_0(Upgrade):
         dry_run: bool,
     ) -> list[str]:
         return []
+
+
+if __name__ == "__main__":
+    print(
+        Upgrade_1_2_to_1_3().upgrade(
+            Path("~/.tabsdata/instances/tabsdata").expanduser(),
+            dry_run=True,
+        )
+    )

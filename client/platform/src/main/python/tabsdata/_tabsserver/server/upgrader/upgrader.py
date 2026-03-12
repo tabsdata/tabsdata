@@ -2,9 +2,6 @@
 #  Copyright 2025 Tabs Data Inc.
 #
 
-#
-#
-
 import argparse
 import logging
 import os.path
@@ -20,56 +17,32 @@ from tabsdata._tabsserver.server.instance import (
     get_version,
 )
 from tabsdata._tabsserver.server.upgrader.entity import Upgrade
-from tabsdata._tabsserver.server.upgrader.upgraders.v0.v0_9.v0_9_1.upgrade import (
-    Upgrade_0_9_0_to_0_9_1,
+from tabsdata._tabsserver.server.upgrader.upgraders.v1.v1_0.upgrade import (
+    Upgrade_0_9_to_1_0,
 )
-from tabsdata._tabsserver.server.upgrader.upgraders.v0.v0_9.v0_9_2.upgrade import (
-    Upgrade_0_9_1_to_0_9_2,
+from tabsdata._tabsserver.server.upgrader.upgraders.v1.v1_1.upgrade import (
+    Upgrade_1_0_to_1_1,
 )
-from tabsdata._tabsserver.server.upgrader.upgraders.v0.v0_9.v0_9_3.upgrade import (
-    Upgrade_0_9_2_to_0_9_3,
+from tabsdata._tabsserver.server.upgrader.upgraders.v1.v1_2.upgrade import (
+    Upgrade_1_1_to_1_2,
 )
-from tabsdata._tabsserver.server.upgrader.upgraders.v0.v0_9.v0_9_4.upgrade import (
-    Upgrade_0_9_3_to_0_9_4,
+from tabsdata._tabsserver.server.upgrader.upgraders.v1.v1_3.upgrade import (
+    Upgrade_1_2_to_1_3,
 )
-from tabsdata._tabsserver.server.upgrader.upgraders.v0.v0_9.v0_9_5.upgrade import (
-    Upgrade_0_9_4_to_0_9_5,
+from tabsdata._tabsserver.server.upgrader.upgraders.v1.v1_4.upgrade import (
+    Upgrade_1_3_to_1_4,
 )
-from tabsdata._tabsserver.server.upgrader.upgraders.v0.v0_9.v0_9_6.upgrade import (
-    Upgrade_0_9_5_to_0_9_6,
+from tabsdata._tabsserver.server.upgrader.upgraders.v1.v1_5.upgrade import (
+    Upgrade_1_4_to_1_5,
 )
-from tabsdata._tabsserver.server.upgrader.upgraders.v1.v1_0.v1_0_0.upgrade import (
-    Upgrade_0_9_6_to_1_0_0,
+from tabsdata._tabsserver.server.upgrader.upgraders.v1.v1_6.upgrade import (
+    Upgrade_1_5_to_1_6,
 )
-from tabsdata._tabsserver.server.upgrader.upgraders.v1.v1_1.v1_1_0.upgrade import (
-    Upgrade_1_0_0_to_1_1_0,
+from tabsdata._tabsserver.server.upgrader.upgraders.v1.v1_7.upgrade import (
+    Upgrade_1_6_to_1_7,
 )
-from tabsdata._tabsserver.server.upgrader.upgraders.v1.v1_2.v1_2_0.upgrade import (
-    Upgrade_1_1_0_to_1_2_0,
-)
-from tabsdata._tabsserver.server.upgrader.upgraders.v1.v1_3.v1_3_0.upgrade import (
-    Upgrade_1_2_0_to_1_3_0,
-)
-from tabsdata._tabsserver.server.upgrader.upgraders.v1.v1_4.v1_4_0.upgrade import (
-    Upgrade_1_3_0_to_1_4_0,
-)
-from tabsdata._tabsserver.server.upgrader.upgraders.v1.v1_5.v1_5_0.upgrade import (
-    Upgrade_1_4_0_to_1_5_0,
-)
-from tabsdata._tabsserver.server.upgrader.upgraders.v1.v1_5.v1_5_1.upgrade import (
-    Upgrade_1_5_0_to_1_5_1,
-)
-from tabsdata._tabsserver.server.upgrader.upgraders.v1.v1_6.v1_6_0.upgrade import (
-    Upgrade_1_5_1_to_1_6_0,
-)
-from tabsdata._tabsserver.server.upgrader.upgraders.v1.v1_7.v1_7_0.upgrade import (
-    Upgrade_1_6_0_to_1_7_0,
-)
-from tabsdata._tabsserver.server.upgrader.upgraders.v1.v1_7.v1_7_1.upgrade import (
-    Upgrade_1_7_0_to_1_7_1,
-)
-from tabsdata._tabsserver.server.upgrader.upgraders.v1.v1_8.v1_8_0.upgrade import (
-    Upgrade_1_7_1_to_1_8_0,
+from tabsdata._tabsserver.server.upgrader.upgraders.v1.v1_8.upgrade import (
+    Upgrade_1_7_to_1_8,
 )
 from tabsdata._tabsserver.utils import TimeBlock
 
@@ -77,26 +50,23 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-SEED_VERSION = Version("0.9.0")
+SEED_VERSION = Version("0.9")
+
+
+def major_minor(version: Version) -> Version:
+    return Version(f"{version.major}.{version.minor}")
+
 
 UPGRADE_PLAN: Dict[Version, Type[Upgrade]] = {
-    Upgrade_0_9_0_to_0_9_1.source_version: Upgrade_0_9_0_to_0_9_1,
-    Upgrade_0_9_1_to_0_9_2.source_version: Upgrade_0_9_1_to_0_9_2,
-    Upgrade_0_9_2_to_0_9_3.source_version: Upgrade_0_9_2_to_0_9_3,
-    Upgrade_0_9_3_to_0_9_4.source_version: Upgrade_0_9_3_to_0_9_4,
-    Upgrade_0_9_4_to_0_9_5.source_version: Upgrade_0_9_4_to_0_9_5,
-    Upgrade_0_9_5_to_0_9_6.source_version: Upgrade_0_9_5_to_0_9_6,
-    Upgrade_0_9_6_to_1_0_0.source_version: Upgrade_0_9_6_to_1_0_0,
-    Upgrade_1_0_0_to_1_1_0.source_version: Upgrade_1_0_0_to_1_1_0,
-    Upgrade_1_1_0_to_1_2_0.source_version: Upgrade_1_1_0_to_1_2_0,
-    Upgrade_1_2_0_to_1_3_0.source_version: Upgrade_1_2_0_to_1_3_0,
-    Upgrade_1_3_0_to_1_4_0.source_version: Upgrade_1_3_0_to_1_4_0,
-    Upgrade_1_4_0_to_1_5_0.source_version: Upgrade_1_4_0_to_1_5_0,
-    Upgrade_1_5_0_to_1_5_1.source_version: Upgrade_1_5_0_to_1_5_1,
-    Upgrade_1_5_1_to_1_6_0.source_version: Upgrade_1_5_1_to_1_6_0,
-    Upgrade_1_6_0_to_1_7_0.source_version: Upgrade_1_6_0_to_1_7_0,
-    Upgrade_1_7_0_to_1_7_1.source_version: Upgrade_1_7_0_to_1_7_1,
-    Upgrade_1_7_1_to_1_8_0.source_version: Upgrade_1_7_1_to_1_8_0,
+    Upgrade_0_9_to_1_0.source_version: Upgrade_0_9_to_1_0,
+    Upgrade_1_0_to_1_1.source_version: Upgrade_1_0_to_1_1,
+    Upgrade_1_1_to_1_2.source_version: Upgrade_1_1_to_1_2,
+    Upgrade_1_2_to_1_3.source_version: Upgrade_1_2_to_1_3,
+    Upgrade_1_3_to_1_4.source_version: Upgrade_1_3_to_1_4,
+    Upgrade_1_4_to_1_5.source_version: Upgrade_1_4_to_1_5,
+    Upgrade_1_5_to_1_6.source_version: Upgrade_1_5_to_1_6,
+    Upgrade_1_6_to_1_7.source_version: Upgrade_1_6_to_1_7,
+    Upgrade_1_7_to_1_8.source_version: Upgrade_1_7_to_1_8,
 }
 
 
@@ -155,7 +125,9 @@ def upgrade(
 ) -> Dict[Version, list[str]]:
     check(upgrade_plan)
     actions: Dict[Version, list[str]] = {}
-    if source_version >= target_version:
+    source_major_minor = major_minor(source_version)
+    target_major_minor = major_minor(target_version)
+    if source_major_minor >= target_major_minor:
         return actions
     if dry_run:
         logger.info(
@@ -169,10 +141,10 @@ def upgrade(
             f"from version {source_version} "
             f"to version {target_version}"
         )
-    current_version = source_version
-    while current_version < target_version:
+    current_version = source_major_minor
+    while current_version < target_major_minor:
         if current_version not in upgrade_plan:
-            raise RuntimeError(f"No upgrade class found for {source_version}")
+            raise RuntimeError(f"No upgrade class found for {current_version}")
         upgrade_class = upgrade_plan[current_version]
         upgrade_object = upgrade_class()
         timer = TimeBlock()

@@ -18,9 +18,9 @@ logger.setLevel(logging.INFO)
 
 
 # noinspection PyPep8Naming
-class Upgrade_1_5_1_to_1_6_0(Upgrade):
-    source_version = Version("1.5.1")
-    target_version = Version("1.6.0")
+class Upgrade_1_5_to_1_6(Upgrade):
+    source_version = Version("1.5")
+    target_version = Version("1.6")
 
     # noinspection DuplicatedCode
     def upgrade(
@@ -259,7 +259,7 @@ class Upgrade_1_5_1_to_1_6_0(Upgrade):
 
 if __name__ == "__main__":
     print(
-        Upgrade_1_5_1_to_1_6_0().upgrade(
+        Upgrade_1_5_to_1_6().upgrade(
             Path("~/.tabsdata/instances/tabsdata").expanduser(),
             dry_run=True,
         )

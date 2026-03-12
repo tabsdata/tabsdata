@@ -14,9 +14,9 @@ logger.setLevel(logging.INFO)
 
 
 # noinspection PyPep8Naming
-class Upgrade_0_9_0_to_0_9_1(Upgrade):
-    source_version = Version("0.9.0")
-    target_version = Version("0.9.1")
+class Upgrade_0_9_to_1_0(Upgrade):
+    source_version = Version("0.9")
+    target_version = Version("1.0")
 
     def upgrade(
         self,
@@ -24,3 +24,12 @@ class Upgrade_0_9_0_to_0_9_1(Upgrade):
         dry_run: bool,
     ) -> list[str]:
         return []
+
+
+if __name__ == "__main__":
+    print(
+        Upgrade_0_9_to_1_0().upgrade(
+            Path("~/.tabsdata/instances/tabsdata").expanduser(),
+            dry_run=True,
+        )
+    )
