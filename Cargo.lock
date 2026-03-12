@@ -1388,9 +1388,9 @@ checksum = "7eed2c4702fa172d1ce21078faa7c5203e69f5394d48cc436d25928394a867a2"
 
 [[package]]
 name = "deflate64"
-version = "0.1.10"
+version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "26bf8fc351c5ed29b5c2f0cbbac1b209b74f60ecd62e675a998df72c49af5204"
+checksum = "807800ff3288b621186fe0a8f3392c4652068257302709c24efd918c3dffcdc2"
 
 [[package]]
 name = "der"
@@ -7728,7 +7728,7 @@ dependencies = [
 
 [[package]]
 name = "ta-apiserver"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "axum",
  "derive_builder",
@@ -7751,7 +7751,7 @@ dependencies = [
 
 [[package]]
 name = "ta-services"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "async-trait",
  "openssl",
@@ -7761,7 +7761,7 @@ dependencies = [
 
 [[package]]
 name = "ta-system"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "openssl",
  "td-build",
@@ -7769,7 +7769,7 @@ dependencies = [
 
 [[package]]
 name = "ta-tableframe"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "openssl",
  "td-build",
@@ -7803,7 +7803,7 @@ dependencies = [
 
 [[package]]
 name = "tabsdata"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "openssl",
  "td-build",
@@ -7813,7 +7813,7 @@ dependencies = [
 
 [[package]]
 name = "td-apiforge"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "darling 0.23.0",
  "openssl",
@@ -7825,7 +7825,7 @@ dependencies = [
 
 [[package]]
 name = "td-apiserver"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "async-trait",
  "axum",
@@ -7877,7 +7877,7 @@ dependencies = [
 
 [[package]]
 name = "td-attach"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "darling 0.23.0",
  "openssl",
@@ -7889,7 +7889,7 @@ dependencies = [
 
 [[package]]
 name = "td-authz"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "async-trait",
  "itertools 0.14.0",
@@ -7907,7 +7907,7 @@ dependencies = [
 
 [[package]]
 name = "td-build"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -7926,7 +7926,7 @@ dependencies = [
 
 [[package]]
 name = "td-common"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -7979,7 +7979,7 @@ dependencies = [
 
 [[package]]
 name = "td-crontrigger"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -8006,7 +8006,7 @@ dependencies = [
 
 [[package]]
 name = "td-database"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "derive_builder",
  "futures-util",
@@ -8032,7 +8032,7 @@ dependencies = [
 
 [[package]]
 name = "td-error"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "anyhow",
  "derive_builder",
@@ -8048,7 +8048,7 @@ dependencies = [
 
 [[package]]
 name = "td-execution"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "derive_builder",
  "itertools 0.14.0",
@@ -8068,7 +8068,7 @@ dependencies = [
 
 [[package]]
 name = "td-objects"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "aquamarine",
  "async-trait",
@@ -8113,7 +8113,7 @@ dependencies = [
 
 [[package]]
 name = "td-process"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "clap",
  "clap_derive",
@@ -8142,7 +8142,7 @@ dependencies = [
 
 [[package]]
 name = "td-python"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "openssl",
  "rand 0.10.0",
@@ -8159,7 +8159,7 @@ dependencies = [
 
 [[package]]
 name = "td-schema"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "openssl",
  "sqlx",
@@ -8169,7 +8169,7 @@ dependencies = [
 
 [[package]]
 name = "td-security"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "argon2",
  "derive_builder",
@@ -8180,7 +8180,7 @@ dependencies = [
 
 [[package]]
 name = "td-server"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "clap",
  "openssl",
@@ -8201,7 +8201,7 @@ dependencies = [
 
 [[package]]
 name = "td-services"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "argon2",
  "async-trait",
@@ -8250,7 +8250,7 @@ dependencies = [
 
 [[package]]
 name = "td-shared"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "darling 0.23.0",
  "duct",
@@ -8262,7 +8262,7 @@ dependencies = [
 
 [[package]]
 name = "td-shuttle"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "async-compression",
  "async-trait",
@@ -8308,7 +8308,7 @@ dependencies = [
 
 [[package]]
 name = "td-storage"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "bytes",
  "derive_builder",
@@ -8333,7 +8333,7 @@ dependencies = [
 
 [[package]]
 name = "td-supervisor"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "async-trait",
  "atomic_enum",
@@ -8390,7 +8390,7 @@ dependencies = [
 
 [[package]]
 name = "td-tableframe"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "openssl",
  "polars",
@@ -8404,7 +8404,7 @@ dependencies = [
 
 [[package]]
 name = "td-test"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -8423,7 +8423,7 @@ dependencies = [
 
 [[package]]
 name = "td-tower"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "async-trait",
  "derive_builder",
@@ -8447,7 +8447,7 @@ dependencies = [
 
 [[package]]
 name = "td-type"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "darling 0.23.0",
  "openssl",
@@ -8459,7 +8459,7 @@ dependencies = [
 
 [[package]]
 name = "td-xtask"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "clap",
  "clap_derive",
@@ -8468,7 +8468,7 @@ dependencies = [
 
 [[package]]
 name = "te-apiserver"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "clap",
  "getset",
@@ -8483,7 +8483,7 @@ dependencies = [
 
 [[package]]
 name = "te-execution"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "openssl",
  "serde",
@@ -8494,7 +8494,7 @@ dependencies = [
 
 [[package]]
 name = "te-services"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "axum",
  "openssl",
@@ -8504,7 +8504,7 @@ dependencies = [
 
 [[package]]
 name = "te-system"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "openssl",
  "ta-system",
@@ -8513,7 +8513,7 @@ dependencies = [
 
 [[package]]
 name = "te-tableframe"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "openssl",
  "ta-tableframe",
@@ -8705,7 +8705,7 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tm-error"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "openssl",
  "quote",
@@ -8714,7 +8714,7 @@ dependencies = [
 
 [[package]]
 name = "tm-services"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "openssl",
  "quote",
@@ -8723,7 +8723,7 @@ dependencies = [
 
 [[package]]
 name = "tm-sql"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "openssl",
  "proc-macro2",
@@ -8733,7 +8733,7 @@ dependencies = [
 
 [[package]]
 name = "tm-test"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "darling 0.23.0",
  "openssl",
@@ -8745,7 +8745,7 @@ dependencies = [
 
 [[package]]
 name = "tm-tower"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "openssl",
  "quote",
@@ -8754,7 +8754,7 @@ dependencies = [
 
 [[package]]
 name = "tm-workspace"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "openssl",
  "quote",
@@ -10409,18 +10409,18 @@ dependencies = [
 
 [[package]]
 name = "zerocopy"
-version = "0.8.39"
+version = "0.8.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db6d35d663eadb6c932438e763b262fe1a70987f9ae936e60158176d710cae4a"
+checksum = "a789c6e490b576db9f7e6b6d661bcc9799f7c0ac8352f56ea20193b2681532e5"
 dependencies = [
  "zerocopy-derive",
 ]
 
 [[package]]
 name = "zerocopy-derive"
-version = "0.8.39"
+version = "0.8.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4122cd3169e94605190e77839c9a40d40ed048d305bfdc146e7df40ab0f3e517"
+checksum = "f65c489a7071a749c849713807783f70672b28094011623e200cb86dcb835953"
 dependencies = [
  "proc-macro2",
  "quote",

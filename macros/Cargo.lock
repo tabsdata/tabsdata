@@ -3281,7 +3281,7 @@ dependencies = [
 
 [[package]]
 name = "td-apiforge"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "darling 0.23.0",
  "openssl",
@@ -3293,7 +3293,7 @@ dependencies = [
 
 [[package]]
 name = "td-attach"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "darling 0.23.0",
  "openssl",
@@ -3305,7 +3305,7 @@ dependencies = [
 
 [[package]]
 name = "td-build"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3324,7 +3324,7 @@ dependencies = [
 
 [[package]]
 name = "td-macros"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "openssl",
  "td-build",
@@ -3332,7 +3332,7 @@ dependencies = [
 
 [[package]]
 name = "td-shared"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "darling 0.23.0",
  "duct",
@@ -3344,7 +3344,7 @@ dependencies = [
 
 [[package]]
 name = "td-type"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "darling 0.23.0",
  "openssl",
@@ -3447,7 +3447,7 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tm-error"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "openssl",
  "quote",
@@ -3456,7 +3456,7 @@ dependencies = [
 
 [[package]]
 name = "tm-pyo3"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "openssl",
  "quote",
@@ -3465,7 +3465,7 @@ dependencies = [
 
 [[package]]
 name = "tm-services"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "openssl",
  "quote",
@@ -3474,7 +3474,7 @@ dependencies = [
 
 [[package]]
 name = "tm-sql"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "openssl",
  "proc-macro2",
@@ -3484,7 +3484,7 @@ dependencies = [
 
 [[package]]
 name = "tm-test"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "darling 0.23.0",
  "openssl",
@@ -3496,7 +3496,7 @@ dependencies = [
 
 [[package]]
 name = "tm-tower"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "openssl",
  "quote",
@@ -3505,7 +3505,7 @@ dependencies = [
 
 [[package]]
 name = "tm-workspace"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "openssl",
  "quote",
@@ -4314,18 +4314,18 @@ dependencies = [
 
 [[package]]
 name = "zerocopy"
-version = "0.8.39"
+version = "0.8.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db6d35d663eadb6c932438e763b262fe1a70987f9ae936e60158176d710cae4a"
+checksum = "a789c6e490b576db9f7e6b6d661bcc9799f7c0ac8352f56ea20193b2681532e5"
 dependencies = [
  "zerocopy-derive",
 ]
 
 [[package]]
 name = "zerocopy-derive"
-version = "0.8.39"
+version = "0.8.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4122cd3169e94605190e77839c9a40d40ed048d305bfdc146e7df40ab0f3e517"
+checksum = "f65c489a7071a749c849713807783f70672b28094011623e200cb86dcb835953"
 dependencies = [
  "proc-macro2",
  "quote",
