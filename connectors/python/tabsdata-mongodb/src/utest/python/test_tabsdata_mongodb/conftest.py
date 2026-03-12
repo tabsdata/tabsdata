@@ -92,7 +92,7 @@ def create_docker_mongodb_database():
     logger.info("Starting MongoDB container")
     client = docker.from_env()
     if client.containers.list(
-        filters={"name": DEFAULT_PYTEST_MONGODB_DOCKER_CONTAINER_NAME}
+        filters={"name": f"^{DEFAULT_PYTEST_MONGODB_DOCKER_CONTAINER_NAME}$"}
     ):
         logger.info("MongoDB container already exists")
         return
@@ -160,7 +160,7 @@ def create_docker_mongodb_database_with_replica_set():
     logger.info("Starting MongoDB container with replica set")
     client = docker.from_env()
     if client.containers.list(
-        filters={"name": DEFAULT_PYTEST_MONGODB_WITH_REPLICA_SET_DOCKER_CONTAINER_NAME}
+        filters={"name": f"^{DEFAULT_PYTEST_MONGODB_WITH_REPLICA_SET_DOCKER_CONTAINER_NAME}$"}
     ):
         logger.info("MongoDB container with replica set already exists")
         return

@@ -276,7 +276,7 @@ def create_docker_mssql_database(name: str, port: int, version: int) -> tuple[st
     logger.info(f"Using port: {port}")
     logger.info(f"Using version: {version}")
     client = docker.from_env()
-    if containers := client.containers.list(filters={"name": name}):
+    if containers := client.containers.list(filters={"name": f"^{name}$"}):
         logger.info("Microsoft SQL Server container already exists")
         container = containers[0]
         port = get_container_port_binding(container, MSSQL_FORWARDED_PORT)

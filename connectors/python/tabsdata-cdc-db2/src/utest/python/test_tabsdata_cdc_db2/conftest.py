@@ -38,6 +38,9 @@ from test_tabsdata.conftest import (
     setup_temp_folder_node,
 )
 
+# noinspection PyUnusedImports
+from test_tabsdata_cdc_db2.common.fixtures.docker import db2_cdc_config  # noqa: F401
+
 pytest_plugins = ["test_tabsdata.fntest"]
 
 

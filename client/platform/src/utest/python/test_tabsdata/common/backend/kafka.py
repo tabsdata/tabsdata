@@ -169,7 +169,7 @@ def create_docker_kafka_container(
     logger.info("Starting Kafka/Redpanda container")
     client = docker.from_env()
 
-    if containers := client.containers.list(filters={"name": name}):
+    if containers := client.containers.list(filters={"name": f"^{name}$"}):
         logger.info("Kafka/Redpanda container already exists")
         container = containers[0]
         # Extract ports from container labels

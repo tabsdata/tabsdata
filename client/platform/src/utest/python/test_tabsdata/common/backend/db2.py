@@ -17,6 +17,7 @@ from filelock import FileLock
 
 from tabsdata._credentials import Credentials, UserPasswordCredentials
 from tabsdata._utils.constants import TRUE_VALUES
+from tenacity import retry, stop_after_attempt, wait_incrementing
 from test_tabsdata.common.constants import (
     DB_HOST,
     DB_PASSWORD,
@@ -28,12 +29,13 @@ from test_tabsdata.common.container import get_container_port_binding
 logger = logging.getLogger(__name__)
 
 DEFAULT_PYTEST_DB2_DOCKER_CONTAINER_NAME = (
-    f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}db2"
+    f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}c_db2"
 )
 DB2_PORT = 50000
 DB2_FORWARDED_PORT = "50000/tcp"
 DB2_DB_NAME = "testdb"
 DB2_DB_USER = "db2inst1"
+DB2_DOCKER_DONE_MESSAGE = "Setup has completed."
 
 VALID_DB2_PREFIXES = ["DB20"]
 
@@ -138,6 +140,32 @@ def db2_config(tmp_path_factory, worker_id, request) -> DB2Config:
         return config
 
 
+def wait_for_db2_setup_complete(container):
+    @retry(
+        stop=stop_after_attempt(CONTAINER_MAXIMUM_RETRY_COUNT),
+        wait=wait_incrementing(start=1, increment=1),
+        reraise=True,
+    )
+    def try_read():
+        logger.info(f"Checking for message '{DB2_DOCKER_DONE_MESSAGE}' "
+                     f"in container '{container.name}' logs...")
+        logs = container.logs().decode("utf-8", errors="replace")
+        if DB2_DOCKER_DONE_MESSAGE not in logs:
+            raise RuntimeError(f"The message '{DB2_DOCKER_DONE_MESSAGE}' "
+                               f"is not yet in container '{container.name}' logs")
+        logger.info(f"Found message '{DB2_DOCKER_DONE_MESSAGE}' "
+                     f"in container '{container.name}' logs")
+
+    try:
+        try_read()
+    except Exception as exception:
+        logger.error(f"Failed to find message '{DB2_DOCKER_DONE_MESSAGE}' "
+                     f"in container '{container.name}' "
+                     f"logs after {CONTAINER_MAXIMUM_RETRY_COUNT} attempts: "
+                     f"{exception}")
+        raise
+
+
 def wait_for_db2_ready(port):
     import ibm_db_dbi as db
 
@@ -178,7 +206,7 @@ def create_docker_db2_database(
 
     logger.info("Starting DB2 container")
     client = docker.from_env()
-    if containers := client.containers.list(filters={"name": name}):
+    if containers := client.containers.list(filters={"name": f"^{name}$"}):
         logger.info("DB2 container already exists")
         container = containers[0]
         port = get_container_port_binding(container, DB2_FORWARDED_PORT)
@@ -200,6 +228,7 @@ def create_docker_db2_database(
             privileged=True,
         )
         container.reload()
+        wait_for_db2_setup_complete(container)
         port = get_container_port_binding(container, DB2_FORWARDED_PORT)
         wait_for_db2_ready(port)
         mydb = db.connect(

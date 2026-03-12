@@ -25,6 +25,7 @@ importlib-metadata==8.7.1
 isodate==0.7.2
 jsonschema==4.26.0
 numpy==2.4.2
+orjson==3.11.7
 packaging==26.0
 pandas==2.3.3
 pillow==12.1.1

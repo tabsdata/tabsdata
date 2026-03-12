@@ -54,6 +54,7 @@ normalized_licenses = {
     "0BSD;; BSD-3-CLAUSE;; CC0-1.0;; MIT;; ZLIB": "BSD Zero-Clause License or BSD Revised License (BSD-3-Clause) or Creative Commons Zero Version 1.0 Universal or MIT License",               # noqa: E231,E241,E501
     "0BSD": "BSD Zero-Clause License",                                                                                                                                                         # noqa: E231,E241,E501
     "3-CLAUSE BSD LICENSE": "BSD Revised License (BSD-3-Clause)",                                                                                                                              # noqa: E231,E241,E501
+    "APACHE 2": "Apache License Version 2.0",                                                                                                                                                  # noqa: E231,E241,E501
     "APACHE 2.0": "Apache License Version 2.0",                                                                                                                                                # noqa: E231,E241,E501
     "APACHE LICENSE 2.0": "Apache License Version 2.0",                                                                                                                                        # noqa: E231,E241,E501
     "APACHE LICENSE_ VERSION 2.0": "Apache License Version 2.0",                                                                                                                               # noqa: E231,E241,E501

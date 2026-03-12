@@ -156,7 +156,7 @@ def create_docker_mysql_database(
 
     logger.info("Starting MySQL container")
     client = docker.from_env()
-    if containers := client.containers.list(filters={"name": name}):
+    if containers := client.containers.list(filters={"name": f"^{name}$"}):
         logger.info("MySQL container already exists")
         container = containers[0]
         return get_container_port_binding(container, MYSQL_FORWARDED_PORT)

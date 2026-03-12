@@ -26,7 +26,9 @@ TABSDATA_CONNECTORS_NAMES = [
 ]
 
 TABSDATA_CONNECTORS = {
-    f"tabsdata-{name}": {"is_dev_env": f"TD_TABSDATA_{name.upper()}_DEV_PKG"}
+    f"tabsdata-{name}": {
+        "is_dev_env": f"TD_TABSDATA_{name.upper().replace('-', '_')}_DEV_PKG"
+    }
     for name in TABSDATA_CONNECTORS_NAMES
 }
 

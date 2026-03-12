@@ -39,7 +39,7 @@ def create_docker_hashicorp_vault(s3_config: dict):
     logger.info("Starting HashiCorp vault container")
     client = docker.from_env()
     if client.containers.list(
-        filters={"name": DEFAULT_PYTEST_HASHICORP_DOCKER_CONTAINER_NAME}
+        filters={"name": f"^{DEFAULT_PYTEST_HASHICORP_DOCKER_CONTAINER_NAME}$"}
     ):
         logger.info("HashiCorp vault container already exists")
         return

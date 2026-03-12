@@ -11,20 +11,13 @@ import docker
 
 from tabsdata._utils.constants import TRUE_VALUES
 
-# Import after container/system to avoid circular dependency
-from test_tabsdata.common.backend import (
-    DEFAULT_PYTEST_DB2_DOCKER_CONTAINER_NAME,
-    DEFAULT_PYTEST_HASHICORP_DOCKER_CONTAINER_NAME,
-    DEFAULT_PYTEST_KAFKA_DOCKER_CONTAINER_NAME,
-    DEFAULT_PYTEST_MARIADB_DOCKER_CONTAINER_NAME,
-    DEFAULT_PYTEST_MYSQL_DOCKER_CONTAINER_NAME,
-    DEFAULT_PYTEST_ORACLE_DOCKER_CONTAINER_NAME,
-    DEFAULT_PYTEST_POSTGRES_DOCKER_CONTAINER_NAME,
-)
+from test_tabsdata.common.constants import PYTEST_DEFAULT_ENVIRONMENT_PREFIX
 from test_tabsdata.common.container import get_container_port_binding
 from test_tabsdata.common.system import get_free_port
 
 logger = logging.getLogger(__name__)
+
+TD_DOCKER_DONT_KILL = "TD_DOCKER_DONT_KILL"
 
 __all__ = [
     "get_free_port",
@@ -36,16 +29,19 @@ __all__ = [
 
 def clean_docker_containers():
     try:
-        docker_containers_to_clean = [
-            DEFAULT_PYTEST_DB2_DOCKER_CONTAINER_NAME,
-            DEFAULT_PYTEST_HASHICORP_DOCKER_CONTAINER_NAME,
-            DEFAULT_PYTEST_KAFKA_DOCKER_CONTAINER_NAME,
-            DEFAULT_PYTEST_MARIADB_DOCKER_CONTAINER_NAME,
-            DEFAULT_PYTEST_ORACLE_DOCKER_CONTAINER_NAME,
-            DEFAULT_PYTEST_POSTGRES_DOCKER_CONTAINER_NAME,
-        ]
-        for prefix in ["DB20", "MYSQL0", "MARIADB0", "POSTGRES0", "ORACLE0", "KAFKA0"]:
-            # Check for {prefix}__<BACKEND>_DOCKER_CONTAINER_NAME environment variables
+        remove_docker_containers(f"^{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}")
+        for prefix in ["DB20",
+                       "DB2CDC0",
+                       "HASHICORP",
+                       "H1",
+                       "KAFKA0",
+                       "MARIADB0",
+                       "MSSSQL0",
+                       "MYSQL0",
+                       "MYSQLCDC0",
+                       "POSTGRES0",
+                       "POSTGRESQLCDC0",
+                       "ORACLE0",]:
             backend_type = prefix.rstrip("0")
             env_var = f"{prefix}__{backend_type}_DOCKER_CONTAINER_NAME"
             if (
@@ -54,27 +50,27 @@ def clean_docker_containers():
             ):
                 container_name = os.environ.get(env_var)
                 if container_name:
-                    docker_containers_to_clean.append(container_name)
-                elif "MYSQL" in backend_type:
-                    docker_containers_to_clean.append(
-                        DEFAULT_PYTEST_MYSQL_DOCKER_CONTAINER_NAME
-                    )
-        name_pattern = "^(" + "|".join(docker_containers_to_clean) + ")$"
-        remove_docker_containers(name_pattern)
-    except Exception as e:
+                    remove_docker_containers(f"^{container_name}$")
+    except Exception as error:
         logger.warning(
-            "Error removing Docker containers. You can safely ignore it if running"
-            f" tests on a Docker-less machine: {e}"
+            f"Error removing Docker containers. "
+            f"You can safely ignore it "
+            f"if running tests on a Docker-less machine: {error}"
         )
 
 
 def remove_docker_containers(name_pattern):
-    # noinspection PyPackageRequirements
+    if os.environ.get(TD_DOCKER_DONT_KILL) in TRUE_VALUES:
+        logger.warning("fSkipping removal of test Docker container '{name_pattern}'.")
+        return
 
     client = docker.from_env()
     for container in client.containers.list(all=True, filters={"name": name_pattern}):
         try:
             logger.info(f"Removing container {container}")
             container.remove(v=True, force=True)
-        except Exception as e:
-            logger.error(f"Failed to remove container {container}. Error: {e}")
+        except Exception as error:
+            logger.error(
+                f"Failed to remove container {container}. "
+                f"Error: {error}"
+            )

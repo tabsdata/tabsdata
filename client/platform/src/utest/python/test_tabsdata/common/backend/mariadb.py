@@ -153,7 +153,7 @@ def create_docker_mariadb_database(
 
     logger.info("Starting MariaDB container")
     client = docker.from_env()
-    if containers := client.containers.list(filters={"name": name}):
+    if containers := client.containers.list(filters={"name": f"^{name}$"}):
         logger.info("MariaDB container already exists")
         container = containers[0]
         return get_container_port_binding(container, MARIADB_FORWARDED_PORT)

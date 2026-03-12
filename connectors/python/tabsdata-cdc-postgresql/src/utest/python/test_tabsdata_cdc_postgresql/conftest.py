@@ -38,6 +38,9 @@ from test_tabsdata.conftest import (
     setup_temp_folder_node,
 )
 
+# noinspection PyUnusedImports
+from test_tabsdata_cdc_postgresql.common.fixtures.docker import postgresql_cdc_config  # noqa: F401
+
 pytest_plugins = ["test_tabsdata.fntest"]
 
 
