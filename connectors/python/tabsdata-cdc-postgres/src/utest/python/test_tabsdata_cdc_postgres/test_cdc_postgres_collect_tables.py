@@ -91,9 +91,9 @@ def test_collect_tables_invalid_spec(postgres_collect_tables_setup):
     conn, session, config = postgres_collect_tables_setup
 
     ingester = Wal2JsonIngester(conn=conn, tables=["no_dot_here"])
-    with pytest.raises(CdcError) as exc_info:
+    with pytest.raises(CdcError) as exception:
         ingester.collect_tables(session)
-    assert exc_info.value.error_code == ErrorCode.CDC1
+    assert exception.value.error_code == ErrorCode.CDC1
 
 
 @pytest.mark.cdc_postgres

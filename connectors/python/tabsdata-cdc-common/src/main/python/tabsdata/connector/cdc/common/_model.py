@@ -45,6 +45,7 @@ class TrackedColumn:
     name: str
     satype: Any
     patype: Any = None
+    iname: str | None = None
 
 
 @dataclass

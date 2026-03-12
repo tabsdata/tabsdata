@@ -266,6 +266,7 @@ def register_table_for_cdc(
     schema: str,
     table: str,
     ddl: str,
+    wait: bool = True,
 ) -> None:
     source_table = f"{schema.upper()}.{table.upper()}"
     staging_table = f"{DB2_CDC_STAGING_TABLE_PREFIX}{table.upper()}"
@@ -413,8 +414,9 @@ def register_table_for_cdc(
             if w_connection is not None:
                 w_connection.close()
 
-    wait_for_capstart()
-    logger.info(f"CAPSTART signal for {source_table} processed by asncap")
+    if wait:
+        wait_for_capstart()
+        logger.info(f"CAPSTART signal for {source_table} processed by asncap")
 
     logger.info(
         f"Registration of {source_table} for data capture completed successfully"

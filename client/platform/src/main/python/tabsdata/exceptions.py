@@ -2373,6 +2373,13 @@ class ErrorCode(Enum):
         "code": "CDC-003",
         "message": "Table {}.{} has no columns",
     }
+    CDC4 = {
+        "code": "CDC-004",
+        "message": "CD table {}.{} not found in ASN registration table "
+        "{}.ibmsnap_register. Refer to the documentation for instructions on "
+        "configuring Db2 table replication using ASN, or contact your system "
+        "administrator to configure it.",
+    }
 
     # CDC MySQL errors
     CDCMYSQL1 = {

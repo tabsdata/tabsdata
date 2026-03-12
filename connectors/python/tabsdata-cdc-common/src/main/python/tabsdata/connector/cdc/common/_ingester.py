@@ -48,6 +48,7 @@ class CdcIngester(ABC):
             return quoted_name(str(name), quote=False)
         return name
 
+    # noinspection DuplicatedCode
     def collect_tables(self, session: Any) -> dict[str, TrackedTable]:
         table_specs = self._tables
         if isinstance(table_specs, str):
@@ -100,7 +101,8 @@ class CdcIngester(ABC):
                 )
 
             pk_info = inspector.get_pk_constraint(
-                normalized_table, schema=normalized_schema
+                normalized_table,
+                schema=normalized_schema,
             )
             pk_columns = pk_info.get("constrained_columns", []) if pk_info else []
 
