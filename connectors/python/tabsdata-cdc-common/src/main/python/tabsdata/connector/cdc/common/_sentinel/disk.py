@@ -11,7 +11,14 @@ from pathlib import Path
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from tabsdata._io.stage_trigger import StageTriggerContext
+from tabsdata._io.inputs.stage_input import (
+    STAGE_MANIFEST_FILE_EXTENSION,
+    StageManifest,
+    StageManifestEntry,
+    _serialize_manifest,
+    _write_manifest_file,
+)
+from tabsdata._io.stage_trigger import StagedFilesSpec, StageTriggerContext
 from tabsdata._utils.id import encode_id
 from tabsdata.connector.cdc.common._model import (
     CdcDataChange,
@@ -19,6 +26,7 @@ from tabsdata.connector.cdc.common._model import (
 )
 from tabsdata.connector.cdc.common._sentinel import CdcBuffer, row_to_record
 from tabsdata.connector.cdc.common._utils import sanitize_file_name
+from tabsdata.exceptions import CdcError, ErrorCode
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -96,6 +104,50 @@ class DiskSentinel:
             f"({file_rows} rows & {file_bytes} bytes)"
         )
 
+    def stage_data(self) -> StagedFilesSpec:
+        files = [file for files in self._files.values() for file in files]
+        staged_files = self._context.stage(files)
+        self.stage_meta(staged_files)
+        self._context.trigger()
+        for files in self._files.values():
+            files.clear()
+        self._total_rows = 0
+        self._total_bytes = 0
+        self._last_flushed = time.time()
+        return staged_files
+
+    def stage_meta(self, staged_files: StagedFilesSpec) -> None:
+        _, name = encode_id()
+        manifest_name = f"{name}{STAGE_MANIFEST_FILE_EXTENSION}"
+        manifest_path = self._landing / manifest_name
+
+        entries: list[StageManifestEntry] = []
+        for table_key, tracked_table in self._tables.items():
+            table_file_paths = self._files.get(table_key, [])
+            staged_uris = []
+            for file_path in table_file_paths:
+                file_key = str(file_path)
+                if file_key not in staged_files:
+                    raise CdcError(
+                        ErrorCode.CDC9,
+                        file_key,
+                        tracked_table.data_table.qualified,
+                    )
+                staged_uris.append(staged_files[file_key])
+            entries.append(
+                StageManifestEntry(
+                    table=tracked_table.data_table.qualified,
+                    files=staged_uris,
+                )
+            )
+
+        manifest = StageManifest(entries=entries)
+        content = _serialize_manifest(manifest)
+        _write_manifest_file(str(manifest_path), content)
+
+        self._context.commit(manifest_path)
+        logger.debug(f"Manifest committed: {manifest_name}")
+
     def flush(
         self,
         force: bool = False,
@@ -108,11 +160,4 @@ class DiskSentinel:
                 f"Disk flush: staging {self._files} "
                 f"({self._total_rows} rows & {self._total_bytes} bytes)"
             )
-            files = [file for files in self._files.values() for file in files]
-            self._context.stage(files)
-            self._context.trigger()
-            for files in self._files.values():
-                files.clear()
-            self._total_rows = 0
-            self._total_bytes = 0
-            self._last_flushed = time.time()
+            self.stage_data()

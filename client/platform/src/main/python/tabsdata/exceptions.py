@@ -2400,6 +2400,10 @@ class ErrorCode(Enum):
         "message": "Column name mismatch for table {}.{}: "
         "catalog column '{}' does not match inspector column '{}'",
     }
+    CDC9 = {
+        "code": "CDC-009",
+        "message": "Staged file not found for '{}' in table '{}'",
+    }
 
     # CDC MySQL errors
     CDCMYSQL1 = {

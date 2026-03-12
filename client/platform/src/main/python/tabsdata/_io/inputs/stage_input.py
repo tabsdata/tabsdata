@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -36,8 +37,28 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-MANIFEST_FILE_PATTERN = "*.yaml"
-MANIFEST_OFFSET_KEY = "manifest_last_consumed"
+STAGE_MANIFEST_FILE_EXTENSION = ".manifest.yaml"
+STAGE_MANIFEST_FILE_PATTERN = f"*{STAGE_MANIFEST_FILE_EXTENSION}"
+STAGE_MANIFEST_OFFSET_KEY = "stage_manifest_last_consumed"
+
+STAGE_MANIFEST_VERSION_1 = 1
+STAGE_MANIFEST_LATEST_VERSION = STAGE_MANIFEST_VERSION_1
+
+STAGE_MANIFEST_KEY_VERSION = "version"
+STAGE_MANIFEST_KEY_TABLE = "table"
+STAGE_MANIFEST_KEY_FILES = "files"
+
+
+@dataclass
+class StageManifestEntry:
+    table: str
+    files: list[str] = field(default_factory=list)
+
+
+@dataclass
+class StageManifest:
+    version: int = STAGE_MANIFEST_LATEST_VERSION
+    entries: list[StageManifestEntry] = field(default_factory=list)
 
 
 class Stage(SourcePlugin):
@@ -267,34 +288,91 @@ def _obtain_lastmod_info_datetime(execution_context: ExecutionContext):
     return lastmod_info_str_datetime
 
 
-def _read_manifest_file(manifest_path: str) -> list[list[str]]:
-    """
-    Reads the manifest file found in the staging folder, parses it, and returns a
-    list of lists of files. For example, parsing of:
-    0:
-        - path/to/file.parquet
-    1:
-        - second/path/to/file.parquet
-        - third/path/to/file.parquet
-    Would return:
-    [["path/to/file.parquet",],
-    ["second/path/to/file.parquet", "third/path/to/file.parquet"],
-    ]
-    """
+def _read_manifest_file(manifest_path: str) -> str:
+    """Reads a manifest YAML file and returns its contents as a string."""
     logger.debug(f"Reading manifest file from '{manifest_path}'")
     with open(manifest_path, "r") as f:
-        data = yaml.safe_load(f)
+        return f.read()
+
+
+def _write_manifest_file(manifest_path: str, content: str) -> None:
+    """Writes a YAML string to a manifest file."""
+    logger.debug(f"Writing manifest file to '{manifest_path}'")
+    with open(manifest_path, "w") as f:
+        f.write(content)
+
+
+def _serialize_manifest(manifest: StageManifest) -> str:
+    """
+    Serializes a :class:`StageManifest` to a YAML string.
+
+    Always writes using the latest version format.
+    """
+    return _serialize_manifest_v1(manifest)
+
+
+def _deserialize_manifest(content: str) -> StageManifest:
+    """
+    Deserializes a YAML string into a :class:`StageManifest`.
+
+    Dispatches to the appropriate version-specific deserializer based on
+    the ``version`` key in the YAML. Content without a ``version`` key is
+    treated as :data:`STAGE_MANIFEST_LATEST_VERSION`.
+    """
+    data = yaml.safe_load(content)
     if data is None:
-        logger.debug("Manifest file is empty")
-        return []
-    result = []
+        logger.debug("Manifest content is empty")
+        return StageManifest()
+    version = data.pop(
+        STAGE_MANIFEST_KEY_VERSION,
+        STAGE_MANIFEST_LATEST_VERSION,
+    )
+    match version:
+        case 1:
+            return _deserialize_manifest_v1(data)
+        case _:
+            raise ValueError(f"Unsupported manifest version: {version}")
+
+
+def _serialize_manifest_v1(manifest: StageManifest) -> str:
+    """Serializes a :class:`StageManifest` in version ``_MANIFEST_VERSION_1``
+    format."""
+    data: dict = {STAGE_MANIFEST_KEY_VERSION: STAGE_MANIFEST_VERSION_1}
+    for counter, entry in enumerate(manifest.entries):
+        data[counter] = {
+            STAGE_MANIFEST_KEY_TABLE: entry.table,
+            STAGE_MANIFEST_KEY_FILES: entry.files,
+        }
+    return yaml.dump(data, default_flow_style=False)
+
+
+def _deserialize_manifest_v1(data: dict) -> StageManifest:
+    """
+    Deserializes version ``_MANIFEST_VERSION_1`` format::
+
+        version: <_MANIFEST_VERSION_1>
+        0:
+            table: schema.table_name
+            files:
+                - path/to/file.parquet
+        1:
+            table: schema.other_table
+            files:
+                - second/path/to/file.parquet
+                - third/path/to/file.parquet
+    """
+    entries: list[StageManifestEntry] = []
     for key in sorted(data.keys()):
-        files = data[key]
+        entry = data[key]
+        table = entry.get(STAGE_MANIFEST_KEY_TABLE, "")
+        files = entry.get(STAGE_MANIFEST_KEY_FILES, [])
         if isinstance(files, str):
             files = [files]
-        result.append(files)
-    logger.debug(f"Manifest contains {len(result)} positional group(s)")
-    return result
+        entries.append(StageManifestEntry(table=table, files=files))
+    logger.debug(
+        f"Manifest v{STAGE_MANIFEST_VERSION_1} contains {len(entries)} entry/entries"
+    )
+    return StageManifest(version=STAGE_MANIFEST_VERSION_1, entries=entries)
 
 
 def _build_manifest_s3_source(file_paths: list[str], configs: dict):
@@ -433,7 +511,7 @@ class ManifestStage(SourcePlugin):
 
         # Determine the effective offset for filtering manifest files.
         current_offset = execution_context.status.offset.current_offset
-        last_consumed_time_str = current_offset.get(MANIFEST_OFFSET_KEY)
+        last_consumed_time_str = current_offset.get(STAGE_MANIFEST_OFFSET_KEY)
         last_consumed_dt = (
             _parse_utc_datetime(last_consumed_time_str)
             if last_consumed_time_str
@@ -470,7 +548,7 @@ class ManifestStage(SourcePlugin):
         # Find manifest files in the staging folder, sorted by mtime.
         staging_path = Path(staging_dir)
         all_manifests = sorted(
-            staging_path.glob(MANIFEST_FILE_PATTERN),
+            staging_path.glob(STAGE_MANIFEST_FILE_PATTERN),
             key=lambda p: p.stat().st_mtime,
         )
         logger.debug(
@@ -501,11 +579,12 @@ class ManifestStage(SourcePlugin):
         # are combined across manifests.
         aggregated_groups: dict[int, list[str]] = {}
         for manifest_file in manifests:
-            file_groups = _read_manifest_file(str(manifest_file))
-            for group_idx, group_files in enumerate(file_groups):
+            content = _read_manifest_file(str(manifest_file))
+            manifest = _deserialize_manifest(content)
+            for group_idx, entry in enumerate(manifest.entries):
                 if group_idx not in aggregated_groups:
                     aggregated_groups[group_idx] = []
-                aggregated_groups[group_idx].extend(group_files)
+                aggregated_groups[group_idx].extend(entry.files)
 
         # Process each positional group.
         results = []
@@ -555,7 +634,7 @@ class ManifestStage(SourcePlugin):
             manifests[-1].stat().st_mtime, tz=timezone.utc
         )
         latest_mtime_str = latest_mtime.isoformat()
-        self.initial_values = {MANIFEST_OFFSET_KEY: latest_mtime_str}
+        self.initial_values = {STAGE_MANIFEST_OFFSET_KEY: latest_mtime_str}
         logger.debug(f"Stored new manifest offset: {latest_mtime_str}")
 
         return results

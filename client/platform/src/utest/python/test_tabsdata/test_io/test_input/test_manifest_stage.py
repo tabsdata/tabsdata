@@ -9,14 +9,21 @@ import pytest
 import yaml
 
 from tabsdata._io.inputs.stage_input import (
+    STAGE_MANIFEST_FILE_EXTENSION,
+    STAGE_MANIFEST_LATEST_VERSION,
+    StageManifest,
+    StageManifestEntry,
     ManifestStage,
     _build_manifest_azure_source,
     _build_manifest_gcs_source,
     _build_manifest_local_source,
     _build_manifest_s3_source,
+    _deserialize_manifest,
     _max_nullable_datetime,
     _parse_utc_datetime,
     _read_manifest_file,
+    _serialize_manifest,
+    _write_manifest_file,
 )
 from tabsdata._io.plugin import SourcePlugin
 
@@ -27,11 +34,10 @@ from . import pytestmark  # noqa: F401
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-def _write_manifest(path: Path, groups: dict):
-    """Write a manifest YAML file at *path* with the given groups dict."""
+def _write_manifest(path: Path, manifest: StageManifest):
+    """Write a manifest YAML file at *path* from a Manifest dataclass."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w") as f:
-        yaml.dump(groups, f)
+    _write_manifest_file(str(path), _serialize_manifest(manifest))
 
 
 # ===================================================================
@@ -93,57 +99,89 @@ class TestMaxNullableDatetime:
 
 
 # ===================================================================
-# Tests for _read_manifest_file
+# Tests for _read_manifest_file / _write_manifest_file
 # ===================================================================
 
 
-class TestReadManifestFile:
+class TestManifestFileIO:
 
-    def test_two_groups(self, tmp_path):
-        manifest = tmp_path / "manifest.yaml"
-        _write_manifest(manifest, {
-            0: ["path/to/file.parquet"],
-            1: ["second/file.parquet", "third/file.parquet"],
-        })
-        result = _read_manifest_file(str(manifest))
-        assert result == [
-            ["path/to/file.parquet"],
-            ["second/file.parquet", "third/file.parquet"],
-        ]
+    def test_read_returns_string(self, tmp_path):
+        path = tmp_path / f"test{STAGE_MANIFEST_FILE_EXTENSION}"
+        path.write_text("version: 1\n")
+        result = _read_manifest_file(str(path))
+        assert isinstance(result, str)
+        assert "version: 1" in result
 
-    def test_single_string_value(self, tmp_path):
-        manifest = tmp_path / "manifest.yaml"
-        _write_manifest(manifest, {0: "single_file.parquet"})
-        result = _read_manifest_file(str(manifest))
-        assert result == [["single_file.parquet"]]
+    def test_write_creates_file(self, tmp_path):
+        path = tmp_path / f"test{STAGE_MANIFEST_FILE_EXTENSION}"
+        _write_manifest_file(str(path), "version: 1\n")
+        assert path.read_text() == "version: 1\n"
 
-    def test_empty_file(self, tmp_path):
-        manifest = tmp_path / "manifest.yaml"
-        manifest.write_text("")
-        result = _read_manifest_file(str(manifest))
-        assert result == []
-
-    def test_keys_sorted_numerically(self, tmp_path):
-        manifest = tmp_path / "manifest.yaml"
-        _write_manifest(manifest, {
-            2: ["c.parquet"],
-            0: ["a.parquet"],
-            1: ["b.parquet"],
-        })
-        result = _read_manifest_file(str(manifest))
-        assert result == [["a.parquet"], ["b.parquet"], ["c.parquet"]]
-
-    def test_single_group_multiple_files(self, tmp_path):
-        manifest = tmp_path / "manifest.yaml"
-        _write_manifest(manifest, {
-            0: ["a.parquet", "b.parquet", "c.parquet"],
-        })
-        result = _read_manifest_file(str(manifest))
-        assert result == [["a.parquet", "b.parquet", "c.parquet"]]
-
-    def test_file_not_found_raises(self):
+    def test_read_file_not_found_raises(self):
         with pytest.raises(FileNotFoundError):
-            _read_manifest_file("/nonexistent/path/manifest.yaml")
+            _read_manifest_file(f"/nonexistent/path/test{STAGE_MANIFEST_FILE_EXTENSION}")
+
+
+# ===================================================================
+# Tests for _serialize_manifest / _deserialize_manifest
+# ===================================================================
+
+
+class TestManifestSerialization:
+
+    def test_roundtrip(self):
+        original = StageManifest(entries=[
+            StageManifestEntry(table="schema.table_a", files=["a1.parquet", "a2.parquet"]),
+            StageManifestEntry(table="schema.table_b", files=["b1.parquet"]),
+        ])
+        content = _serialize_manifest(original)
+        loaded = _deserialize_manifest(content)
+        assert loaded.version == STAGE_MANIFEST_LATEST_VERSION
+        assert len(loaded.entries) == len(original.entries)
+        for orig, read in zip(original.entries, loaded.entries):
+            assert read.table == orig.table
+            assert read.files == orig.files
+
+    def test_deserialize_two_groups(self, tmp_path):
+        path = tmp_path / f"test{STAGE_MANIFEST_FILE_EXTENSION}"
+        _write_manifest(path, StageManifest(entries=[
+            StageManifestEntry(table="s.t1", files=["path/to/file.parquet"]),
+            StageManifestEntry(table="s.t2", files=["second/file.parquet", "third/file.parquet"]),
+        ]))
+        content = _read_manifest_file(str(path))
+        result = _deserialize_manifest(content)
+        assert result.version == STAGE_MANIFEST_LATEST_VERSION
+        assert len(result.entries) == 2
+        assert result.entries[0].table == "s.t1"
+        assert result.entries[0].files == ["path/to/file.parquet"]
+        assert result.entries[1].table == "s.t2"
+        assert result.entries[1].files == ["second/file.parquet", "third/file.parquet"]
+
+    def test_deserialize_empty_content(self):
+        result = _deserialize_manifest("")
+        assert result.entries == []
+
+    def test_deserialize_single_group_multiple_files(self):
+        original = StageManifest(entries=[
+            StageManifestEntry(table="s.t1", files=["a.parquet", "b.parquet", "c.parquet"]),
+        ])
+        content = _serialize_manifest(original)
+        result = _deserialize_manifest(content)
+        assert len(result.entries) == 1
+        assert result.entries[0].files == ["a.parquet", "b.parquet", "c.parquet"]
+
+    def test_serialize_empty_manifest(self):
+        content = _serialize_manifest(StageManifest())
+        data = yaml.safe_load(content)
+        assert data == {"version": STAGE_MANIFEST_LATEST_VERSION}
+
+    def test_serialize_includes_version(self):
+        content = _serialize_manifest(StageManifest(entries=[
+            StageManifestEntry(table="s.t", files=["f.parquet"]),
+        ]))
+        data = yaml.safe_load(content)
+        assert data["version"] == STAGE_MANIFEST_LATEST_VERSION
+        assert 0 in data
 
 
 # ===================================================================

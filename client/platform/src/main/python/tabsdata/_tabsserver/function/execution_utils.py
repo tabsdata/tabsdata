@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING
 import polars as pl
 
 import tabsdata._utils.tableframe._generators as td_generators
-from tabsdata._io.inputs.stage_input import ManifestStage, Stage
 from tabsdata._io.stage_trigger import LocalFileStageTriggerContext, StageTrigger
 from tabsdata._table_actions.actions import OnTablesAction
 from tabsdata._tabsserver.function import environment_import_utils
@@ -38,7 +37,6 @@ from tabsdata._utils.tableframe._constants import EMPTY_VERSION
 
 # noinspection PyProtectedMember
 from tabsdata._utils.tableframe._context import TableFrameContext
-from tabsdata.connector.cdc.common._connector import CdcTrigger
 from tabsdata.dataquality import DataQuality
 from tabsdata.tableframe._actions.dataquality.processor import DataQualityProcessor
 from tabsdata.tableframe.lazyframe.frame import DataTable, TableFrame
@@ -353,6 +351,9 @@ def obtain_user_provided_function_parameters(
 
     # TODO: this logic will most likely be removed as the final way to verify this
     #  flow is discussed:
+    from tabsdata._io.inputs.stage_input import ManifestStage, Stage
+    from tabsdata.connector.cdc.common._connector import CdcTrigger
+
     stage_trigger = execution_context.stage_trigger
     source = execution_context.source
     if isinstance(stage_trigger, CdcTrigger) and isinstance(source, Stage):
