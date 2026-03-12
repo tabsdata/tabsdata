@@ -9,6 +9,8 @@ import re
 import shutil
 import subprocess
 import sys
+from collections.abc import Callable
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 
@@ -18,13 +20,16 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-PLACEHOLDER_MODULE = "{c.module}"
+PLACEHOLDER_PACKAGE = "{c.package}"
 PLACEHOLDER_BACKEND = "{c.backend}"
+PLACEHOLDER_MODULE = "{c.module}"
+PLACEHOLDER_ALIAS = "{c.alias}"
+PLACEHOLDER_VERSION = "{c.version}"
 PLACEHOLDER_YEAR = "{c.year}"
 
 VALID_PROJECT_NAMES = {"tabsdata", "tabsdata-os"}
 
-TEMPLATE_FOLDER = "templates/connector/tabsdata-{c.module}"
+TEMPLATE_FOLDER = "templates/connector/tabsdata-{c.package}"
 
 CONNECTORS_FOLDER = "connectors/python"
 
@@ -42,6 +47,73 @@ STYLE_HIGHLIGHT = "bold cyan"
 STYLE_DIM = "dim"
 
 
+@dataclass(frozen=True)
+class Placeholder:
+    key: str
+    caption: str
+    value: str = ""
+    path_value: str = ""
+    compute: Callable[[Placeholders], str] | None = None
+    path_compute: Callable[[Placeholders], str] | None = None
+
+
+Placeholders = dict[str, Placeholder]
+
+
+def build_placeholders(package: str, backend: str, root: Path) -> Placeholders:
+    version_file = root / "assets" / "manifest" / "VERSION"
+    version = version_file.read_text(encoding="utf-8").strip()
+    year = str(datetime.now().year)
+
+    specs = [
+        Placeholder(
+            key=PLACEHOLDER_PACKAGE,
+            caption="Package",
+            value=package,
+        ),
+        Placeholder(
+            key=PLACEHOLDER_BACKEND,
+            caption="Backend",
+            value=backend,
+        ),
+        Placeholder(
+            key=PLACEHOLDER_MODULE,
+            caption="Module",
+            compute=lambda ps: ps[PLACEHOLDER_PACKAGE].value.replace("-", "."),
+            path_compute=lambda ps: os.sep.join(
+                ps[PLACEHOLDER_PACKAGE].value.split("-")
+            ),
+        ),
+        Placeholder(
+            key=PLACEHOLDER_ALIAS,
+            caption="Alias",
+            compute=lambda ps: ps[PLACEHOLDER_PACKAGE].value.replace("-", "_"),
+        ),
+        Placeholder(
+            key=PLACEHOLDER_VERSION,
+            caption="Version",
+            value=version,
+        ),
+        Placeholder(
+            key=PLACEHOLDER_YEAR,
+            caption="Year",
+            value=year,
+        ),
+    ]
+
+    placeholders: Placeholders = {}
+    for spec in specs:
+        placeholder = spec
+        if placeholder.compute is not None:
+            placeholder = replace(placeholder, value=placeholder.compute(placeholders))
+        if placeholder.path_compute is not None:
+            placeholder = replace(
+                placeholder, path_value=placeholder.path_compute(placeholders)
+            )
+        placeholders[placeholder.key] = placeholder
+    return placeholders
+
+
 def show_header() -> None:
     header = Text()
     header.append("Tabsdata ", style="bold cyan")
@@ -50,21 +122,28 @@ def show_header() -> None:
     console.print()
 
 
-def show_settings(module: str, backend: str, root: Path | None) -> None:
+def show_settings(placeholders: Placeholders, root: Path) -> None:
     settings = Table(show_header=False, box=None, padding=(0, 2))
     settings.add_column("Key", style=STYLE_DIM)
     settings.add_column("Value", style=STYLE_HIGHLIGHT)
-    settings.add_row("Module", module)
-    settings.add_row("Backend", backend)
-    settings.add_row("Root", str(root or Path.cwd()))
+    for placeholder in placeholders.values():
+        settings.add_row(placeholder.caption, placeholder.value)
+    settings.add_row("Root", str(root))
     console.print(settings)
     console.print()
 
 
-def show_report(success: bool, module: str, result: str, root: Path) -> None:
+def show_report(
+    success: bool,
+    placeholders: Placeholders,
+    result: str,
+    root: Path,
+) -> None:
     console.print()
     if success:
-        show_success(f"Generated connector [bold]tabsdata-{module}[/bold]")
+        package = placeholders[PLACEHOLDER_PACKAGE].value
+        alias = placeholders[PLACEHOLDER_ALIAS].value
+        show_success(f"Generated connector [bold]tabsdata-{package}[/bold]")
         console.print()
 
         summary = Table(
@@ -76,11 +155,13 @@ def show_report(success: bool, module: str, result: str, root: Path) -> None:
         summary.add_column("Item", style=STYLE_DIM)
         summary.add_column("Path/Value", style=STYLE_INFO)
         summary.add_row("Connector", result)
+        for placeholder in placeholders.values():
+            summary.add_row(placeholder.caption, placeholder.value)
         summary.add_row(
             "pyproject.toml",
-            f"Added test_tabsdata_{module} to known-first-party",
+            f"Added test_tabsdata_{alias} to known-first-party",
         )
-        summary.add_row("pytest.ini", f"Added {module} marker")
+        summary.add_row("pytest.ini", f"Added {alias} marker")
         console.print(summary)
         console.print()
 
@@ -189,88 +270,56 @@ def validate_module_name(module: str) -> tuple[bool, str]:
     if not module:
         return False, "Module name cannot be empty"
 
-    if not re.match(r"^[a-z][a-z0-9_]*$", module):
+    if not re.match(r"^[a-z][a-z0-9-]*$", module):
         return (
             False,
             f"Invalid module name [bold]{module}[/bold]. "
             "Must start with lowercase letter and contain only "
-            "lowercase letters, digits, and underscores.",
+            "lowercase letters, digits, and hyphens.",
         )
 
     return True, ""
 
 
-def replace_placeholders_in_content(
-    text: str,
-    module: str,
-    backend: str,
-    year: str,
-) -> str:
+def replace_placeholders(text: str, placeholders: Placeholders) -> str:
     result = text
-    result = result.replace(PLACEHOLDER_MODULE, module)
-    result = result.replace(PLACEHOLDER_BACKEND, backend)
-    result = result.replace(PLACEHOLDER_YEAR, year)
+    for placeholder in placeholders.values():
+        result = result.replace(placeholder.key, placeholder.value)
     return result
 
 
-def replace_placeholders_in_name(
-    name: str,
-    module: str,
-    backend: str,
-    year: str,
-) -> str:
-    return replace_placeholders_in_content(name, module, backend, year)
+def replace_placeholders_in_path(name: str, placeholders: Placeholders) -> str:
+    result = name
+    for placeholder in placeholders.values():
+        result = result.replace(
+            placeholder.key,
+            placeholder.path_value if placeholder.path_value else placeholder.value,
+        )
+    return result
+
+
+def add_namespace_inits(parent: Path, new_path: Path) -> None:
+    relative = new_path.relative_to(parent)
+    intermediate_parts = relative.parts[:-1]
+    if not intermediate_parts:
+        return
+    init_source = parent / "__init__.py"
+    if not init_source.exists():
+        return
+    current = parent
+    for part in intermediate_parts:
+        current = current / part
+        init_file = current / "__init__.py"
+        if not init_file.exists():
+            shutil.copy2(init_source, init_file)
 
 
 def process_template(
     template_path: Path,
     target_path: Path,
-    module: str,
-    backend: str,
-    year: str,
+    placeholders: Placeholders,
 ) -> None:
     shutil.copytree(template_path, target_path)
-
-    paths_to_rename: list[Path] = []
-
-    for root, folders, files in os.walk(target_path):
-        top = Path(root)
-
-        for folder in folders:
-            if any(
-                placeholder in folder
-                for placeholder in [
-                    PLACEHOLDER_MODULE,
-                    PLACEHOLDER_BACKEND,
-                    PLACEHOLDER_YEAR,
-                ]
-            ):
-                paths_to_rename.append(top / folder)
-
-        for file in files:
-            if any(
-                placeholder in file
-                for placeholder in [
-                    PLACEHOLDER_MODULE,
-                    PLACEHOLDER_BACKEND,
-                    PLACEHOLDER_YEAR,
-                ]
-            ):
-                paths_to_rename.append(top / file)
-
-    paths_to_rename.sort(key=lambda parts: len(parts.parts), reverse=True)
-
-    for old_path in paths_to_rename:
-        if old_path.exists():
-            new_name = replace_placeholders_in_name(
-                old_path.name,
-                module,
-                backend,
-                year,
-            )
-            new_path = old_path.parent / new_name
-            if old_path != new_path:
-                old_path.rename(new_path)
 
     for root, _, files in os.walk(target_path):
         top = Path(root)
@@ -282,16 +331,38 @@ def process_template(
 
             try:
                 content = file_path.read_text(encoding="utf-8")
-                new_content = replace_placeholders_in_content(
-                    content,
-                    module,
-                    backend,
-                    year,
-                )
+                new_content = replace_placeholders(content, placeholders)
                 if content != new_content:
                     file_path.write_text(new_content, encoding="utf-8")
             except UnicodeDecodeError:
                 continue
+
+    placeholder_keys = set(placeholders.keys())
+    paths_to_rename: list[Path] = []
+
+    for root, folders, files in os.walk(target_path):
+        top = Path(root)
+
+        for folder in folders:
+            if any(key in folder for key in placeholder_keys):
+                paths_to_rename.append(top / folder)
+
+        for file in files:
+            if any(key in file for key in placeholder_keys):
+                paths_to_rename.append(top / file)
+
+    paths_to_rename.sort(key=lambda parts: len(parts.parts), reverse=True)
+
+    for old_path in paths_to_rename:
+        if old_path.exists():
+            is_dir = old_path.is_dir()
+            new_name = replace_placeholders_in_path(old_path.name, placeholders)
+            new_path = old_path.parent / new_name
+            if old_path != new_path:
+                new_path.parent.mkdir(parents=True, exist_ok=True)
+                old_path.rename(new_path)
+                if is_dir and f"{os.sep}src{os.sep}main{os.sep}" in str(old_path):
+                    add_namespace_inits(old_path.parent, new_path)
 
 
 def is_binary_file(file: Path) -> bool:
@@ -304,14 +375,17 @@ def is_binary_file(file: Path) -> bool:
         return True
 
 
-def update_main_pyproject_toml(root: Path, module: str) -> tuple[bool, str]:
+def update_main_pyproject_toml(
+    root: Path, placeholders: Placeholders
+) -> tuple[bool, str]:
+    alias = placeholders[PLACEHOLDER_ALIAS].value
     pyproject_toml_path = root / ROOT_PYPROJECT
     if not pyproject_toml_path.exists():
         return False, f"pyproject.toml not found at {pyproject_toml_path}"
 
     try:
         content = pyproject_toml_path.read_text(encoding="utf-8")
-        new_entry = f"test_tabsdata_{module}"
+        new_entry = f"test_tabsdata_{alias}"
 
         if f'"{new_entry}"' in content:
             return True, f"Entry '{new_entry}' already exists in pyproject.toml"
@@ -354,18 +428,20 @@ def update_main_pyproject_toml(root: Path, module: str) -> tuple[bool, str]:
         return False, f"Failed to update pyproject.toml: {e}"
 
 
-def update_main_pytest_ini(root: Path, module: str) -> tuple[bool, str]:
+def update_main_pytest_ini(root: Path, placeholders: Placeholders) -> tuple[bool, str]:
+    package = placeholders[PLACEHOLDER_PACKAGE].value
+    alias = placeholders[PLACEHOLDER_ALIAS].value
     pytest_ini_path = root / PLATFORM_PYTEST_INI
     if not pytest_ini_path.exists():
         return False, f"pytest.ini not found at {pytest_ini_path}"
 
     try:
         content = pytest_ini_path.read_text(encoding="utf-8")
-        new_marker = f"{module}: mark tests that require the tabsdata-{module} package."
+        new_marker = f"{alias}: mark tests that require the tabsdata-{package} package."
 
-        marker_pattern = rf"^\s*{re.escape(module)}:"
+        marker_pattern = rf"^\s*{re.escape(alias)}:"
         if re.search(marker_pattern, content, re.MULTILINE):
-            return True, f"Marker '{module}' already exists in pytest.ini"
+            return True, f"Marker '{alias}' already exists in pytest.ini"
 
         lines = content.split("\n")
         markers_start = None
@@ -406,7 +482,7 @@ def update_main_pytest_ini(root: Path, module: str) -> tuple[bool, str]:
 
         insert_after_index = markers_start
         for marker_name, line_index in marker_lines:
-            if marker_name < module:
+            if marker_name < alias:
                 insert_after_index = line_index
 
         new_marker_line = f"    {new_marker}"
@@ -414,43 +490,39 @@ def update_main_pytest_ini(root: Path, module: str) -> tuple[bool, str]:
 
         new_content = "\n".join(lines)
         pytest_ini_path.write_text(new_content, encoding="utf-8")
-        return True, f"Added marker '{module}' to pytest.ini"
+        return True, f"Added marker '{alias}' to pytest.ini"
 
     except Exception as e:
         return False, f"Failed to update pytest.ini: {e}"
 
 
 def generate_connector(
-    module: str,
-    backend: str,
-    root: Path | None = None,
+    placeholders: Placeholders,
+    root: Path,
     verbose: bool = False,
 ) -> tuple[bool, str]:
-    if root is None:
-        top = Path.cwd()
-    else:
-        top = Path(root).resolve()
-
     total_steps = 5
 
     if verbose:
         show_step(1, total_steps, "Validating project root...")
-    valid_root, error_message = validate_project_root(top)
+    valid_root, error_message = validate_project_root(root)
     if not valid_root:
         return False, error_message
 
+    package = placeholders[PLACEHOLDER_PACKAGE].value
+
     if verbose:
         show_step(2, total_steps, "Validating module name...")
-    valid_module, error_message = validate_module_name(module)
+    valid_module, error_message = validate_module_name(package)
     if not valid_module:
         return False, error_message
 
-    template_folder = top / TEMPLATE_FOLDER
+    template_folder = root / TEMPLATE_FOLDER
     if not template_folder.is_dir():
         return False, f"Template folder not found: [cyan]{template_folder}[/cyan]"
 
-    connector_name = f"tabsdata-{module}"
-    target_folder = top / CONNECTORS_FOLDER / connector_name
+    connector_name = f"tabsdata-{package}"
+    target_folder = root / CONNECTORS_FOLDER / connector_name
     if target_folder.exists():
         return (
             False,
@@ -458,16 +530,14 @@ def generate_connector(
             f"[cyan]{target_folder}[/cyan]",
         )
 
-    connectors_folder = top / CONNECTORS_FOLDER
+    connectors_folder = root / CONNECTORS_FOLDER
     if not connectors_folder.exists():
         return False, f"Connectors folder not found: [cyan]{connectors_folder}[/cyan]"
-
-    year = str(datetime.now().year)
 
     if verbose:
         show_step(3, total_steps, "Copying and processing template...")
     try:
-        process_template(template_folder, target_folder, module, backend, year)
+        process_template(template_folder, target_folder, placeholders)
     except Exception as exception:
         if target_folder.exists():
             shutil.rmtree(target_folder)
@@ -475,13 +545,13 @@ def generate_connector(
 
     if verbose:
         show_step(4, total_steps, "Updating pyproject.toml...")
-    success, message = update_main_pyproject_toml(top, module)
+    success, message = update_main_pyproject_toml(root, placeholders)
     if not success:
         return False, message
 
     if verbose:
         show_step(5, total_steps, "Updating pytest.ini...")
-    success, message = update_main_pytest_ini(top, module)
+    success, message = update_main_pytest_ini(root, placeholders)
     if not success:
         return False, message
 
@@ -490,10 +560,10 @@ def generate_connector(
 
 @click.command(context_settings=CONTEXT_SETTINGS)
 @click.option(
-    "-m",
-    "--module",
+    "-p",
+    "--package",
     required=True,
-    help="Module name (lowercase, e.g., 'mysql', 'postgres')",
+    help="Package name (lowercase, e.g., 'mysql', 'postgres')",
 )
 @click.option(
     "-b",
@@ -513,7 +583,7 @@ def generate_connector(
     is_flag=True,
     help="Show detailed progress messages",
 )
-def main(module: str, backend: str, root: Path | None, verbose: bool) -> None:
+def main(package: str, backend: str, root: Path | None, verbose: bool) -> None:
     """
     Generate a new connector package from template.
 
@@ -523,20 +593,20 @@ def main(module: str, backend: str, root: Path | None, verbose: bool) -> None:
 
     \b
     Examples:
-        tdx_gconnector -m mysql -b MySQL
-        tdx_gconnector --module postgres --backend PostgreSQL
-        tdx_gconnector -m oracle -b Oracle --verbose
+        tdx_gconnector -p mysql -b MySQL
+        tdx_gconnector --package postgres --backend PostgreSQL
+        tdx_gconnector -p oracle -b Oracle --verbose
     """
     current = Path(root).resolve() if root else Path.cwd()
+    placeholders = build_placeholders(package, backend, current)
     show_header()
-    show_settings(module, backend, current)
+    show_settings(placeholders, current)
     success, location = generate_connector(
-        module=module,
-        backend=backend,
+        placeholders=placeholders,
         root=current,
         verbose=verbose,
     )
-    show_report(success, module, location, current)
+    show_report(success, placeholders, location, current)
 
 
 if __name__ == "__main__":

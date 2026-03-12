@@ -170,6 +170,7 @@ def clean_py(project_folder):
     connectors = gather_connectors()
     for connector in connectors:
         connector_submodule_name = connector.split("-", 1)[1]
+        connector_submodule_parts = connector_submodule_name.split("-")
         inclusion_patterns.append(
             os.path.join(
                 "connectors",
@@ -180,7 +181,7 @@ def clean_py(project_folder):
                 "python",
                 "tabsdata",
                 "connector",
-                connector_submodule_name,
+                *connector_submodule_parts,
                 "assets",
                 "manifest",
                 "BANNER",
@@ -196,7 +197,7 @@ def clean_py(project_folder):
                 "python",
                 "tabsdata",
                 "connector",
-                connector_submodule_name,
+                *connector_submodule_parts,
                 "assets",
                 "manifest",
                 "LICENSE",

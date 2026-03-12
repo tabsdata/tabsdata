@@ -96,7 +96,7 @@ def ps():  # noqa: C901
     supervisors = {}
     for pid, process in processes.items():
         if process["name"].lower() in ("td_supervisor", "td_supervisor.exe"):
-            cmdline = process.get("cmdline", [])
+            cmdline = process.get("cmdline") or []
             instance = "unknown"
             if "--instance" in cmdline:
                 try:
@@ -125,7 +125,7 @@ def ps():  # noqa: C901
     def get_process_name(process):
         p_name = process["name"]
         p_binary = os.path.basename(p_name)
-        p_cmdline = process.get("cmdline", [])
+        p_cmdline = process.get("cmdline") or []
 
         if p_binary.startswith("python"):
             if "-m" in p_cmdline:

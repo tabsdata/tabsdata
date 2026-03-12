@@ -16,15 +16,19 @@ class PackageDescriptor:
     display: str
 
     @property
-    def module(self) -> str:
+    def package(self) -> str:
         prefix = "tabsdata-"
         if self.name.startswith(prefix):
             return self.name[len(prefix) :]
         return self.name
 
     @property
+    def module(self) -> tuple[str, ...]:
+        return tuple(self.package.split("-"))
+
+    @property
     def namespace(self) -> str:
-        return f"tabsdata.connector.{self.module}"
+        return ".".join(("tabsdata", "connector", *self.module))
 
     @property
     def manifest_path(self) -> str:
@@ -34,7 +38,7 @@ class PackageDescriptor:
             "python",
             "tabsdata",
             "connector",
-            self.module,
+            *self.module,
             "assets",
             "manifest",
         )

@@ -6,12 +6,17 @@
 
 -r requirements.txt
 -r connectors/python/tabsdata-bigquery/requirements.txt
+-r connectors/python/tabsdata-cdc-common/requirements.txt
+-r connectors/python/tabsdata-cdc-db2/requirements.txt
+-r connectors/python/tabsdata-cdc-mysql/requirements.txt
+-r connectors/python/tabsdata-cdc-postgresql/requirements.txt
 -r connectors/python/tabsdata-databricks/requirements.txt
 -r connectors/python/tabsdata-kafka/requirements.txt
 -r connectors/python/tabsdata-mongodb/requirements.txt
 -r connectors/python/tabsdata-mssql/requirements.txt
 -r connectors/python/tabsdata-salesforce/requirements.txt
 -r connectors/python/tabsdata-snowflake/requirements.txt
+-r connectors/python/tabsdata-sql-common/requirements.txt
 
 # Third-party dependencies
 

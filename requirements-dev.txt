@@ -8,20 +8,30 @@
 
 -r requirements/requirements-dev-third-party.txt
 -r connectors/python/tabsdata-bigquery/requirements/requirements-dev-third-party.txt
+-r connectors/python/tabsdata-cdc-common/requirements/requirements-dev-third-party.txt
+-r connectors/python/tabsdata-cdc-db2/requirements/requirements-dev-third-party.txt
+-r connectors/python/tabsdata-cdc-mysql/requirements/requirements-dev-third-party.txt
+-r connectors/python/tabsdata-cdc-postgresql/requirements/requirements-dev-third-party.txt
 -r connectors/python/tabsdata-databricks/requirements/requirements-dev-third-party.txt
 -r connectors/python/tabsdata-kafka/requirements/requirements-dev-third-party.txt
 -r connectors/python/tabsdata-mongodb/requirements/requirements-dev-third-party.txt
 -r connectors/python/tabsdata-mssql/requirements/requirements-dev-third-party.txt
 -r connectors/python/tabsdata-salesforce/requirements/requirements-dev-third-party.txt
 -r connectors/python/tabsdata-snowflake/requirements/requirements-dev-third-party.txt
+-r connectors/python/tabsdata-sql-common/requirements/requirements-dev-third-party.txt
 
 # Third-party dependencies
 
 -r requirements/requirements-third-party.txt
 -r connectors/python/tabsdata-bigquery/requirements/requirements-third-party.txt
+-r connectors/python/tabsdata-cdc-common/requirements/requirements-third-party.txt
+-r connectors/python/tabsdata-cdc-db2/requirements/requirements-third-party.txt
+-r connectors/python/tabsdata-cdc-mysql/requirements/requirements-third-party.txt
+-r connectors/python/tabsdata-cdc-postgresql/requirements/requirements-third-party.txt
 -r connectors/python/tabsdata-databricks/requirements/requirements-third-party.txt
 -r connectors/python/tabsdata-kafka/requirements/requirements-third-party.txt
 -r connectors/python/tabsdata-mongodb/requirements/requirements-third-party.txt
 -r connectors/python/tabsdata-mssql/requirements/requirements-third-party.txt
 -r connectors/python/tabsdata-salesforce/requirements/requirements-third-party.txt
 -r connectors/python/tabsdata-snowflake/requirements/requirements-third-party.txt
+-r connectors/python/tabsdata-sql-common/requirements/requirements-third-party.txt

@@ -1,0 +1,63 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+[build-system]
+requires = []
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tabsdata-sql-common"
+description = "Tabsdata plugin of common components to process sql data."
+authors = [{name = "Tabs Data Inc."}]
+keywords = [
+    "tabsdata",
+    "data",
+    "tables",
+    "pub/sub",
+    "publish/subscribe",
+    "sql-common",
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "Programming Language :: JavaScript",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+    "Programming Language :: Rust",
+    "Operating System :: OS Independent",
+]
+dynamic = [
+    "version",
+    "license",
+    "readme",
+    "requires-python",
+    "dependencies",
+    "optional-dependencies",
+]
+
+[project.urls]
+Homepage = "https://tabsdata.com"
+Documentation = "https://docs.tabsdata.com"
+Source = "https://github.com/tabsdata/tabsdata"
+
+[tool.coverage.html]
+directory = "coverage_html_report"
+
+[tool.coverage.report]
+exclude_also = [
+    "@(abc\\.)?abstractmethod",
+]
+
+[tool.licensecheck]
+using = "requirements:requirements.txt"
+
+[tool.ruff]
+extend = "../../../pyproject.toml"
+
+[tool.tabsdata]
+name = "tabsdata-sql-common"
+display = "SQL Commons"

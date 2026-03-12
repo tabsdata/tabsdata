@@ -40,7 +40,7 @@ script = [
         cm_run_task uncrystallize
         cm_run_task crystallize
     else
-        info "🔷 💧 ::::: Using 'hydrate' as pacakges deployment model..."
+        info "🔷 💧 ::::: Using 'hydrate' as packages deployment model..."
         cm_run_task uncrystallize
         cm_run_task dehydrate
         cm_run_task hydrate

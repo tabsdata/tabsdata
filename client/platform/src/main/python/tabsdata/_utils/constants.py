@@ -12,12 +12,17 @@ PYTHON_EDITABLE_PACKAGE_SUFFIX = "_finder"
 
 TABSDATA_CONNECTORS_NAMES = [
     "bigquery",
+    "cdc-common",
+    "cdc-db2",
+    "cdc-mysql",
+    "cdc-postgresql",
     "databricks",
     "kafka",
     "mongodb",
     "mssql",
     "salesforce",
     "snowflake",
+    "sql-common",
 ]
 
 TABSDATA_CONNECTORS = {
