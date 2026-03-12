@@ -46,21 +46,21 @@ logger.setLevel(logging.DEBUG)
 _STAGING_BASE_PATH = "tabsdata-testing/druid-output"
 
 
-def _s3_staging(s3_config) -> td.S3Config:
+def _s3_staging(s3_config, uid: str) -> td.S3Config:
     """Build an S3 staging config from the ``s3_config`` fixture."""
     return td.S3Config(
         bucket=s3_config["BUCKET_NAME"],
         region=s3_config["REGION"],
-        base_path=_STAGING_BASE_PATH,
+        base_path=f"{_STAGING_BASE_PATH}-{uid}",
         credentials=s3_config["CREDENTIALS"],
     )
 
 
-def _gcs_staging(gcs_config) -> td.GCSConfig:
+def _gcs_staging(gcs_config, uid: str) -> td.GCSConfig:
     """Build a GCS staging config from the ``gcs_config`` fixture."""
     return td.GCSConfig(
         bucket=gcs_config["BUCKET"],
-        base_path=_STAGING_BASE_PATH,
+        base_path=f"{_STAGING_BASE_PATH}-{uid}",
         upload_credentials=td.GCPServiceAccountKeyCredentials(
             td.EnvironmentSecret(gcs_config["ENV"])
         ),
@@ -71,11 +71,11 @@ def _gcs_staging(gcs_config) -> td.GCSConfig:
     )
 
 
-def _azure_staging(azure_config) -> td.AzureConfig:
+def _azure_staging(azure_config, uid: str) -> td.AzureConfig:
     """Build an Azure staging config from the ``azure_config`` fixture."""
     return td.AzureConfig(
         container=azure_config["CONTAINER_NAME"],
-        base_path=_STAGING_BASE_PATH,
+        base_path=f"{_STAGING_BASE_PATH}-{uid}",
         credentials=azure_config["CREDENTIALS"],
     )
 
@@ -238,7 +238,7 @@ def test_output_druid_staging(
     datasource = f"druid_output_{label}_{uid}"
     request.addfinalizer(lambda: _delete_datasource(druid_config, datasource))
 
-    conn = _build_conn(druid_config, staging_factory(cloud_config))
+    conn = _build_conn(druid_config, staging_factory(cloud_config, uid))
     fn = output_druid_append_generator(conn=conn, destination_table=datasource)
     mock_parquet_table = os.path.join(
         TESTING_RESOURCES_FOLDER,
@@ -277,7 +277,7 @@ def test_output_druid_list(druid_config, s3_config, request):
     for t in [table1, table2]:
         request.addfinalizer(lambda ds=t: _delete_datasource(druid_config, ds))
 
-    conn = _build_conn(druid_config, _s3_staging(s3_config))
+    conn = _build_conn(druid_config, _s3_staging(s3_config, uid))
     testing_function = output_druid_list_generator(
         conn=conn,
         destination_table=[table1, table2],
@@ -315,7 +315,7 @@ def test_output_druid_replace(druid_config, s3_config, request):
     for t in [table1, table2]:
         request.addfinalizer(lambda ds=t: _delete_datasource(druid_config, ds))
 
-    conn = _build_conn(druid_config, _s3_staging(s3_config))
+    conn = _build_conn(druid_config, _s3_staging(s3_config, uid))
     mock_parquet_table = os.path.join(
         TESTING_RESOURCES_FOLDER,
         "test_output_druid_list",
@@ -387,7 +387,7 @@ def test_output_druid_list_none(druid_config, s3_config):
     table1 = f"druid_output_list_none_{uid}"
     table2 = f"second_druid_output_list_none_{uid}"
 
-    conn = _build_conn(druid_config, _s3_staging(s3_config))
+    conn = _build_conn(druid_config, _s3_staging(s3_config, uid))
     testing_function = output_druid_list_none_generator(
         conn=conn,
         destination_table=[table1, table2],
@@ -417,7 +417,7 @@ def test_output_druid_none(druid_config, s3_config):
     uid = uuid.uuid4().hex[:12]
     datasource = f"druid_output_none_{uid}"
 
-    conn = _build_conn(druid_config, _s3_staging(s3_config))
+    conn = _build_conn(druid_config, _s3_staging(s3_config, uid))
     testing_function = output_druid_none_generator(
         conn=conn,
         destination_table=datasource,
@@ -451,7 +451,7 @@ def test_output_druid_parallel_subtasks(druid_config, s3_config, request):
     for t in [table1, table2]:
         request.addfinalizer(lambda ds=t: _delete_datasource(druid_config, ds))
 
-    conn = _build_conn(druid_config, _s3_staging(s3_config), max_concurrent_subtasks=2)
+    conn = _build_conn(druid_config, _s3_staging(s3_config, uid), max_concurrent_subtasks=2)
     testing_function = output_druid_list_generator(
         conn=conn,
         destination_table=[table1, table2],
@@ -487,7 +487,7 @@ def test_output_druid_append(druid_config, s3_config, request):
     datasource = f"druid_output_append_{uid}"
     request.addfinalizer(lambda: _delete_datasource(druid_config, datasource))
 
-    conn = _build_conn(druid_config, _s3_staging(s3_config))
+    conn = _build_conn(druid_config, _s3_staging(s3_config, uid))
     mock_parquet_table = os.path.join(
         TESTING_RESOURCES_FOLDER,
         "test_output_druid_list",
@@ -544,7 +544,7 @@ def test_output_druid_time(druid_config, s3_config, request):
     datasource = f"druid_output_time_{uid}"
     request.addfinalizer(lambda: _delete_datasource(druid_config, datasource))
 
-    conn = _build_conn(druid_config, _s3_staging(s3_config), time_column="event_time")
+    conn = _build_conn(druid_config, _s3_staging(s3_config, uid), time_column="event_time")
     testing_function = output_druid_time_generator(
         conn=conn,
         destination_table=datasource,

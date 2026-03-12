@@ -37,12 +37,12 @@ logger.setLevel(logging.DEBUG)
 # ── Helpers ──────────────────────────────────────────────────────────────────────────
 
 
-def _build_conn(starrocks_config, s3_config) -> td.StarRocksConn:
+def _build_conn(starrocks_config, s3_config, uid: str) -> td.StarRocksConn:
     """Build a StarRocksConn using the S3 staging area."""
     staging = td.S3Config(
         bucket=s3_config["BUCKET_NAME"],
         region=s3_config["REGION"],
-        base_path="tabsdata-testing/starrocks-output",
+        base_path=f"tabsdata-testing/starrocks-output-{uid}",
         credentials=s3_config["CREDENTIALS"],
     )
     return td.StarRocksConn(
@@ -112,7 +112,7 @@ def test_output_starrocks_list(starrocks_config, starrocks_client, s3_config):
     table1 = f"sr_output_list_{uid}"
     table2 = f"second_sr_output_list_{uid}"
 
-    conn = _build_conn(starrocks_config, s3_config)
+    conn = _build_conn(starrocks_config, s3_config, uid)
     testing_function = output_starrocks_list_generator(
         conn=conn,
         destination_table=[table1, table2],
@@ -140,7 +140,7 @@ def test_output_starrocks_list_none(starrocks_config, starrocks_client, s3_confi
     table1 = f"sr_output_list_none_{uid}"
     table2 = f"second_sr_output_list_none_{uid}"
 
-    conn = _build_conn(starrocks_config, s3_config)
+    conn = _build_conn(starrocks_config, s3_config, uid)
     testing_function = output_starrocks_list_none_generator(
         conn=conn,
         destination_table=[table1, table2],
@@ -169,7 +169,7 @@ def test_output_starrocks_none(starrocks_config, starrocks_client, s3_config):
     uid = uuid.uuid4().hex[:12]
     table_name = f"sr_output_none_{uid}"
 
-    conn = _build_conn(starrocks_config, s3_config)
+    conn = _build_conn(starrocks_config, s3_config, uid)
     testing_function = output_starrocks_none_generator(
         conn=conn,
         destination_table=table_name,
@@ -199,7 +199,7 @@ def test_output_starrocks_append(starrocks_config, starrocks_client, s3_config):
     table1 = f"sr_output_append_{uid}"
     table2 = f"second_sr_output_append_{uid}"
 
-    conn = _build_conn(starrocks_config, s3_config)
+    conn = _build_conn(starrocks_config, s3_config, uid)
     mock_parquet_table = os.path.join(
         TESTING_RESOURCES_FOLDER,
         "test_output_starrocks_list",
@@ -257,7 +257,7 @@ def test_output_starrocks_replace(starrocks_config, starrocks_client, s3_config)
     table1 = f"sr_output_replace_{uid}"
     table2 = f"second_sr_output_replace_{uid}"
 
-    conn = _build_conn(starrocks_config, s3_config)
+    conn = _build_conn(starrocks_config, s3_config, uid)
     mock_parquet_table = os.path.join(
         TESTING_RESOURCES_FOLDER,
         "test_output_starrocks_list",

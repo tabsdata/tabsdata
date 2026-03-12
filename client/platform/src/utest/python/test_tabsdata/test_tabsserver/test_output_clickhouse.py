@@ -36,12 +36,12 @@ logger.setLevel(logging.DEBUG)
 # ── Helpers ───────────────────────────────────────────────────────────────────────────
 
 
-def _build_conn(clickhouse_config, s3_config) -> td.ClickHouseConn:
+def _build_conn(clickhouse_config, s3_config, uid: str) -> td.ClickHouseConn:
     """Build a ClickHouseConn using the S3 staging area."""
     staging = td.S3Config(
         bucket=s3_config["BUCKET_NAME"],
         region=s3_config["REGION"],
-        base_path="tabsdata-testing/clickhouse-output",
+        base_path=f"tabsdata-testing/clickhouse-output-{uid}",
         credentials=s3_config["CREDENTIALS"],
     )
     return td.ClickHouseConn(
@@ -72,7 +72,7 @@ def test_output_clickhouse_list(clickhouse_config, clickhouse_client, s3_config)
     table1 = f"ch_output_list_{uid}"
     table2 = f"second_ch_output_list_{uid}"
 
-    conn = _build_conn(clickhouse_config, s3_config)
+    conn = _build_conn(clickhouse_config, s3_config, uid)
     testing_function = output_clickhouse_list_generator(
         conn=conn,
         destination_table=[table1, table2],
@@ -110,7 +110,7 @@ def test_output_clickhouse_list_none(
     table1 = f"ch_output_list_none_{uid}"
     table2 = f"second_ch_output_list_none_{uid}"
 
-    conn = _build_conn(clickhouse_config, s3_config)
+    conn = _build_conn(clickhouse_config, s3_config, uid)
     testing_function = output_clickhouse_list_none_generator(
         conn=conn,
         destination_table=[table1, table2],
@@ -144,7 +144,7 @@ def test_output_clickhouse_none(clickhouse_config, clickhouse_client, s3_config)
     uid = uuid.uuid4().hex[:12]
     table_name = f"ch_output_none_{uid}"
 
-    conn = _build_conn(clickhouse_config, s3_config)
+    conn = _build_conn(clickhouse_config, s3_config, uid)
     testing_function = output_clickhouse_none_generator(
         conn=conn,
         destination_table=table_name,
@@ -179,7 +179,7 @@ def test_output_clickhouse_replace(clickhouse_config, clickhouse_client, s3_conf
     table1 = f"ch_output_replace_{uid}"
     table2 = f"second_ch_output_replace_{uid}"
 
-    conn = _build_conn(clickhouse_config, s3_config)
+    conn = _build_conn(clickhouse_config, s3_config, uid)
     mock_parquet_table = os.path.join(
         TESTING_RESOURCES_FOLDER,
         "test_output_clickhouse_list",
