@@ -23,14 +23,14 @@ from test_tabsdata.common.constants import (
     DB_PASSWORD,
     DB_USER,
     CONTAINER_MAXIMUM_RETRY_COUNT,
-    PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+    PYTEST_DEFAULT_ENVIRONMENT_PREFIX, DOCKER_REGULAR_CONTAINER_INFIX,
 )
 from test_tabsdata.common.container import get_container_port_binding
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_PYTEST_POSTGRES_DOCKER_CONTAINER_NAME = (
-    f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}_postgres"
+    f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}{DOCKER_REGULAR_CONTAINER_INFIX}postgres"
 )
 POSTGRES_PORT = 5432
 POSTGRES_FORWARDED_PORT = "5432/tcp"

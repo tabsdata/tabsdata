@@ -22,14 +22,14 @@ from test_tabsdata.common.constants import (
     DB_HOST,
     DB_PASSWORD,
     CONTAINER_MAXIMUM_RETRY_COUNT,
-    PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+    PYTEST_DEFAULT_ENVIRONMENT_PREFIX, DOCKER_REGULAR_CONTAINER_INFIX,
 )
 from test_tabsdata.common.container import get_container_port_binding
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_PYTEST_DB2_DOCKER_CONTAINER_NAME = (
-    f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}c_db2"
+    f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}{DOCKER_REGULAR_CONTAINER_INFIX}db2"
 )
 DB2_PORT = 50000
 DB2_FORWARDED_PORT = "50000/tcp"

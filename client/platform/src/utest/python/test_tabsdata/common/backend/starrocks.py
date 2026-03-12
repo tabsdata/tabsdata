@@ -17,14 +17,14 @@ from tabsdata._utils.constants import TRUE_VALUES
 from test_tabsdata.common.constants import (
     CONTAINER_MAXIMUM_RETRY_COUNT,
     DB_HOST,
-    PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+    PYTEST_DEFAULT_ENVIRONMENT_PREFIX, DOCKER_REGULAR_CONTAINER_INFIX,
 )
 from test_tabsdata.common.container import get_container_port_binding
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_PYTEST_STARROCKS_DOCKER_CONTAINER_NAME = (
-    f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}_starrocks"
+    f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}{DOCKER_REGULAR_CONTAINER_INFIX}starrocks"
 )
 STARROCKS_MYSQL_PORT = 9030
 STARROCKS_MYSQL_FORWARDED_PORT = "9030/tcp"

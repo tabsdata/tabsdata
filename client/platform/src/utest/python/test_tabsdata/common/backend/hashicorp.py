@@ -15,13 +15,13 @@ from filelock import FileLock
 from tabsdata._secret import HashiCorpSecret
 from test_tabsdata.common.constants import (
     CONTAINER_MAXIMUM_RETRY_COUNT,
-    PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+    PYTEST_DEFAULT_ENVIRONMENT_PREFIX, DOCKER_REGULAR_CONTAINER_INFIX,
 )
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_PYTEST_HASHICORP_DOCKER_CONTAINER_NAME = (
-    f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}_hashicorp"
+    f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}{DOCKER_REGULAR_CONTAINER_INFIX}hashicorp"
 )
 
 HASHICORP_PORT = 8200

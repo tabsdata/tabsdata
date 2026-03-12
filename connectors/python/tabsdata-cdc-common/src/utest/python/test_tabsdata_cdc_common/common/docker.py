@@ -15,7 +15,7 @@ from tenacity import retry, stop_after_attempt, wait_incrementing
 
 from test_tabsdata.common.constants import (
     CONTAINER_MAXIMUM_RETRY_COUNT,
-    PYTEST_DEFAULT_ENVIRONMENT_PREFIX, DB_PASSWORD,
+    PYTEST_DEFAULT_ENVIRONMENT_PREFIX, DB_PASSWORD, DOCKER_REGULAR_CONTAINER_INFIX,
 )
 from test_tabsdata.common.container import get_container_port_binding
 
@@ -27,7 +27,7 @@ DOCKER_LOCK_SUFFIX: str = ".lock"
 
 ENVIRONMENT_PREFIX: str = "env_prefix"
 
-CDC_CONTAINER_PREFIX: str = f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}c_"
+CDC_CONTAINER_PREFIX: str = f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}{DOCKER_REGULAR_CONTAINER_INFIX}"
 
 CDC_DATABASE: str = "tdcdcdb"
 CDC_USER: str = "tdcdcuser"

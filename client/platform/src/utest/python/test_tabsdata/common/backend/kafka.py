@@ -18,7 +18,7 @@ from tabsdata._credentials import Credentials, UserPasswordCredentials
 from tabsdata._utils.constants import TRUE_VALUES
 from test_tabsdata.common.constants import (
     CONTAINER_MAXIMUM_RETRY_COUNT,
-    PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+    PYTEST_DEFAULT_ENVIRONMENT_PREFIX, DOCKER_REGULAR_CONTAINER_INFIX,
 )
 from test_tabsdata.common.container import get_container_port_binding
 from test_tabsdata.common.system import get_free_port
@@ -26,7 +26,7 @@ from test_tabsdata.common.system import get_free_port
 logger = logging.getLogger(__name__)
 
 DEFAULT_PYTEST_KAFKA_DOCKER_CONTAINER_NAME = (
-    f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}_kafka"
+    f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}{DOCKER_REGULAR_CONTAINER_INFIX}kafka"
 )
 
 KAFKA_INTERNAL_LISTENER_PORT = 9092
