@@ -7,12 +7,19 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, TypeAlias, Union
 
+# noinspection PyProtectedMember
+from tabsdata._utils.validation import _td_validate_call
 from tabsdata.connector.cdc.common.typing import RelativePositionSpec
+from tabsdata.exceptions import ErrorCode
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class LsnPositionSpec:
     lsn: int
+
+    @_td_validate_call(ErrorCode.CDCPOSTGRES7)
+    def __init__(self, lsn: int):
+        object.__setattr__(self, "lsn", lsn)
 
 
 PostgresCdcStartFromSpec: TypeAlias = Union[

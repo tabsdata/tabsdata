@@ -2417,6 +2417,14 @@ class ErrorCode(Enum):
         "code": "CDC-012",
         "message": "Expected offset type '{}' but received '{}'",
     }
+    CDC13 = {
+        "code": "CDC-013",
+        "message": "Invalid CDC timestamp position specification: {}",
+    }
+    CDC14 = {
+        "code": "CDC-014",
+        "message": "Invalid CDC format specification: {}",
+    }
 
     # CDC MySQL errors
     CDCMYSQL1 = {
@@ -2430,6 +2438,14 @@ class ErrorCode(Enum):
     CDCMYSQL3 = {
         "code": "CDCMYSQL-003",
         "message": "Unable to determine MySQL binlog position for '{}' start",
+    }
+    CDCMYSQL4 = {
+        "code": "CDCMYSQL-004",
+        "message": "Invalid MySQL CDC GTID position specification: {}",
+    }
+    CDCMYSQL5 = {
+        "code": "CDCMYSQL-005",
+        "message": "Invalid MySQL CDC binlog position specification: {}",
     }
 
     # CDC PostgreSQL errors
@@ -2457,6 +2473,10 @@ class ErrorCode(Enum):
         "code": "CDCPOSTGRES-006",
         "message": "Timed out waiting for remaining messages of transaction '{}'",
     }
+    CDCPOSTGRES7 = {
+        "code": "CDCPOSTGRES-007",
+        "message": "Invalid PostgreSQL CDC LSN position specification: {}",
+    }
 
     # CDC DB2 errors
     CDCDB21 = {
@@ -2466,6 +2486,28 @@ class ErrorCode(Enum):
     CDCDB22 = {
         "code": "CDCDB2-002",
         "message": "Invalid DB2 CDC trigger configuration: {}",
+    }
+    CDCDB23 = {
+        "code": "CDCDB2-003",
+        "message": "Invalid DB2 CDC commit sequence position specification: {}",
+    }
+    CDCDB24 = {
+        "code": "CDCDB2-004",
+        "message": "Invalid DB2 CDC table commit sequence position specification: {}",
+    }
+
+    # Cloud staging configuration errors
+    CSC1 = {
+        "code": "CSC-001",
+        "message": "Invalid S3 staging configuration: {}",
+    }
+    CSC2 = {
+        "code": "CSC-002",
+        "message": "Invalid Azure staging configuration: {}",
+    }
+    CSC3 = {
+        "code": "CSC-003",
+        "message": "Invalid GCS staging configuration: {}",
     }
 
     def code(self) -> str:

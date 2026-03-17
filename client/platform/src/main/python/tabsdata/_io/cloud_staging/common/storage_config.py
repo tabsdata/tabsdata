@@ -14,6 +14,10 @@ from tabsdata._credentials import (
     S3AccessKeyCredentials,
 )
 
+# noinspection PyProtectedMember
+from tabsdata._utils.validation import _td_validate_call
+from tabsdata.exceptions import ErrorCode
+
 
 class CloudProvider(Enum):
     S3 = "s3"
@@ -21,7 +25,7 @@ class CloudProvider(Enum):
     GCS = "gcs"
 
 
-@dataclass
+@dataclass(init=False)
 class S3Config:
     """Configuration for staging files in Amazon S3.
 
@@ -39,8 +43,21 @@ class S3Config:
     base_path: str
     credentials: S3AccessKeyCredentials
 
+    @_td_validate_call(ErrorCode.CSC1)
+    def __init__(
+        self,
+        bucket: str,
+        region: str,
+        base_path: str,
+        credentials: S3AccessKeyCredentials,
+    ):
+        self.bucket = bucket
+        self.region = region
+        self.base_path = base_path
+        self.credentials = credentials
 
-@dataclass
+
+@dataclass(init=False)
 class AzureConfig:
     """Configuration for staging files in Azure Blob Storage.
 
@@ -56,8 +73,19 @@ class AzureConfig:
     base_path: str
     credentials: AzureAccountKeyCredentials
 
+    @_td_validate_call(ErrorCode.CSC2)
+    def __init__(
+        self,
+        container: str,
+        base_path: str,
+        credentials: AzureAccountKeyCredentials,
+    ):
+        self.container = container
+        self.base_path = base_path
+        self.credentials = credentials
 
-@dataclass
+
+@dataclass(init=False)
 class GCSConfig:
     """Configuration for staging files in Google Cloud Storage.
 
@@ -78,3 +106,16 @@ class GCSConfig:
     base_path: str
     upload_credentials: GCPServiceAccountKeyCredentials | None = None
     hmac_credentials: HMACCredentials | None = None
+
+    @_td_validate_call(ErrorCode.CSC3)
+    def __init__(
+        self,
+        bucket: str,
+        base_path: str,
+        upload_credentials: GCPServiceAccountKeyCredentials | None = None,
+        hmac_credentials: HMACCredentials | None = None,
+    ):
+        self.bucket = bucket
+        self.base_path = base_path
+        self.upload_credentials = upload_credentials
+        self.hmac_credentials = hmac_credentials
