@@ -4687,7 +4687,10 @@ def _create_archive(
 
     source_or_destination = None
     if function_type == "P":
-        source_or_destination = function.input.__class__.__name__
+        if isinstance(function.trigger_by, StageTrigger):
+            source_or_destination = f"Stage.{function.trigger_by.__class__.__name__}"
+        else:
+            source_or_destination = function.input.__class__.__name__
     elif function_type == "S":
         source_or_destination = function.output.__class__.__name__
 
