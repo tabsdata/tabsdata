@@ -26,7 +26,7 @@ from tabsdata.connector.cdc.common.constants import (
     CDC_META_TX,
     DOT,
 )
-from tabsdata.connector.cdc.common.typing import CdcFormatSpec
+from tabsdata.connector.cdc.common.typing import CdcFormat
 
 
 class CdcOffset(ABC):
@@ -127,7 +127,7 @@ class TrackedTable:
     cdc_table: TableObject
     columns: list[TrackedColumn]
     pk: list[str]
-    cdc_format: CdcFormatSpec
+    cdc_format: CdcFormat
     pa_schema: pa.Schema = field(init=False)
 
     def __post_init__(self):

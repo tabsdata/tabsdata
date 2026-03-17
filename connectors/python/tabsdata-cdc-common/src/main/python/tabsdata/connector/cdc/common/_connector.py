@@ -40,7 +40,7 @@ from tabsdata.connector.cdc.common.constants import (
     DEFAULT_TRIGGER_MAX_ROWS,
     DEFAULT_TRIGGER_MAX_SECS,
 )
-from tabsdata.connector.cdc.common.typing import CdcFormatSpec, QualifiedTablesSpec
+from tabsdata.connector.cdc.common.typing import CdcFormat, QualifiedTablesSpec
 from tabsdata.exceptions import ErrorCode, StageTriggerExecutionError
 
 logger = logging.getLogger(__name__)
@@ -60,7 +60,7 @@ class CdcTrigger(StageTrigger):
         self,
         conn: Conn,
         tables: QualifiedTablesSpec,
-        cdc_format: CdcFormatSpec = CdcFormatSpec(),
+        cdc_format: CdcFormat = CdcFormat(),
         buffer_max_rows: int = DEFAULT_BUFFER_MAX_ROWS,
         buffer_max_bytes: int | None = DEFAULT_BUFFER_MAX_BYTES,
         buffer_max_secs: int = DEFAULT_BUFFER_MAX_SECS,
@@ -131,7 +131,7 @@ class CdcTrigger(StageTrigger):
         return {idx: table for idx, table in enumerate(self._tables)}
 
     @property
-    def cdc_format(self) -> CdcFormatSpec:
+    def cdc_format(self) -> CdcFormat:
         """
         Output format specification for CDC data.
         """
@@ -202,7 +202,7 @@ class CdcTrigger(StageTrigger):
     def collect_tables(
         self,
         session: Any,
-        cdc_format: CdcFormatSpec = CdcFormatSpec(),
+        cdc_format: CdcFormat = CdcFormat(),
     ) -> dict[str, TrackedTable]: ...
 
     @abstractmethod

@@ -32,7 +32,7 @@ from tabsdata.connector.cdc.common.constants import (
     CDC_META_TX,
     CdcOperation,
 )
-from tabsdata.connector.cdc.common.typing import CdcFormatSpec
+from tabsdata.connector.cdc.common.typing import CdcFormat
 from tabsdata._io.inputs.stage_input import (
     STAGE_MANIFEST_FILE_PATTERN,
     _deserialize_manifest,
@@ -83,27 +83,27 @@ continuous_dml_params = pytest.mark.parametrize(
 
 CDC_FORMAT_PARAMS = [
     pytest.param(
-        CdcFormatSpec(values_format="columns", flatten_values=True),
+        CdcFormat(values_format="columns", flatten_values=True),
         id="columns-flat",
     ),
     pytest.param(
-        CdcFormatSpec(values_format="columns", flatten_values=False),
+        CdcFormat(values_format="columns", flatten_values=False),
         id="columns-prefixed",
     ),
     pytest.param(
-        CdcFormatSpec(values_format="struct", flatten_values=True),
+        CdcFormat(values_format="struct", flatten_values=True),
         id="struct-flat",
     ),
     pytest.param(
-        CdcFormatSpec(values_format="struct", flatten_values=False),
+        CdcFormat(values_format="struct", flatten_values=False),
         id="struct-nested",
     ),
     pytest.param(
-        CdcFormatSpec(values_format="map", flatten_values=True),
+        CdcFormat(values_format="map", flatten_values=True),
         id="map-flat",
     ),
     pytest.param(
-        CdcFormatSpec(values_format="map", flatten_values=False),
+        CdcFormat(values_format="map", flatten_values=False),
         id="map-nested",
     ),
 ]
@@ -387,7 +387,7 @@ def run_end_to_end_test(
 def _normalize_to_canonical(
     df: pl.DataFrame,
     sampler: CdcSampler,
-    cdc_format: CdcFormatSpec,
+    cdc_format: CdcFormat,
 ) -> pl.DataFrame:
     exprs: list[Any] = [
         pl.col(CDC_META_OP),
@@ -426,7 +426,7 @@ def _validate_cdc_map_output(
     df: pl.DataFrame,
     expected: pl.DataFrame,
     sampler: CdcSampler,
-    cdc_format: CdcFormatSpec,
+    cdc_format: CdcFormat,
 ) -> None:
     logger.debug("--- Actual Output ---")
     logger.debug(f"\n{df}")
@@ -568,7 +568,7 @@ def _validate_cdc_format_output(
     df: pl.DataFrame,
     expected: pl.DataFrame,
     sampler: CdcSampler,
-    cdc_format: CdcFormatSpec,
+    cdc_format: CdcFormat,
 ) -> None:
     if cdc_format.values_format in ("columns", "struct"):
         normalized = _normalize_to_canonical(df, sampler, cdc_format)
@@ -666,7 +666,7 @@ def run_end_to_end_format_test(
     connection: Any,
     table: TableObject,
     trigger: CdcTrigger,
-    cdc_format: CdcFormatSpec,
+    cdc_format: CdcFormat,
 ) -> None:
     expected = _run_dml_operations(sampler, connection, table)
     process = _build_publisher(trigger)

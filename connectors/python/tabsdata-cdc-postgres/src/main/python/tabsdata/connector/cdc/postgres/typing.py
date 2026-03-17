@@ -14,7 +14,7 @@ from tabsdata.exceptions import ErrorCode
 
 
 @dataclass(frozen=True, init=False)
-class LsnPositionSpec:
+class LsnPosition:
     """
     Specifies a PostgreSQL CDC start position based on a Log Sequence Number (LSN).
 
@@ -31,7 +31,7 @@ class LsnPositionSpec:
 
 PostgresCdcStartFromSpec: TypeAlias = Union[
     RelativePositionSpec,
-    LsnPositionSpec,
+    LsnPosition,
 ]
 
 

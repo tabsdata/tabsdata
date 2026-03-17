@@ -31,7 +31,7 @@ from tabsdata.connector.cdc.common.constants import (
     DEFAULT_TRIGGER_MAX_ROWS,
     DEFAULT_TRIGGER_MAX_SECS,
 )
-from tabsdata.connector.cdc.common.typing import CdcFormatSpec, QualifiedTablesSpec
+from tabsdata.connector.cdc.common.typing import CdcFormat, QualifiedTablesSpec
 from tabsdata.connector.cdc.db2._connection import Db2CdcConn
 from tabsdata.connector.cdc.db2._ingester.sqlreplica import SqlReplicationIngester
 from tabsdata.connector.cdc.db2.typing import Db2CdcStartFromSpec
@@ -69,7 +69,7 @@ class Db2CdcTrigger(CdcTrigger):
         conn: Db2CdcConn,
         tables: QualifiedTablesSpec,
         start_from: Db2CdcStartFromSpec,
-        cdc_format: CdcFormatSpec = CdcFormatSpec(),
+        cdc_format: CdcFormat = CdcFormat(),
         buffer_max_rows: int = DEFAULT_BUFFER_MAX_ROWS,
         buffer_max_bytes: int | None = DEFAULT_BUFFER_MAX_BYTES,
         buffer_max_secs: int = DEFAULT_BUFFER_MAX_SECS,
@@ -154,7 +154,7 @@ class Db2CdcTrigger(CdcTrigger):
     def collect_tables(
         self,
         session: Any,
-        cdc_format: CdcFormatSpec = CdcFormatSpec(),
+        cdc_format: CdcFormat = CdcFormat(),
     ) -> dict[str, TrackedTable]:
         return self._ingester.collect_tables(session, cdc_format)
 

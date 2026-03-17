@@ -35,10 +35,10 @@ from tabsdata.connector.cdc.common.constants import (
 from tabsdata.connector.cdc.common.typing import QualifiedTablesSpec
 from tabsdata.connector.cdc.mysql._connection import MySQLCdcConn
 from tabsdata.connector.cdc.mysql.typing import (
-    BinlogPositionSpec,
-    GtidPositionSpec,
+    BinlogPosition,
+    GtidPosition,
     MySQLCdcStartFromSpec,
-    TimestampPositionSpec,
+    TimestampPosition,
 )
 from tabsdata.connector.sql.common._database.mysql.dialect import MySQLDialect
 from tabsdata.exceptions import CdcError, ErrorCode
@@ -188,19 +188,19 @@ class BinlogIngester(CdcIngester):
 
         start_from = self._start_from
         if self._mark is not None:
-            start_from = GtidPositionSpec(gtid=self._mark.gtid)
+            start_from = GtidPosition(gtid=self._mark.gtid)
 
         match start_from:
-            case GtidPositionSpec(gtid=gtid):
+            case GtidPosition(gtid=gtid):
                 stream_kwargs["auto_position"] = self.as_gtid_set(gtid)
                 if self._mark is None:
                     self._mark = GtidOffset(gtid=gtid)
-            case BinlogPositionSpec(file=file, pos=pos):
+            case BinlogPosition(file=file, pos=pos):
                 stream_kwargs["log_file"] = file
                 stream_kwargs["log_pos"] = pos
                 if self._mark is None:
                     self._mark = GtidOffset(gtid="")
-            case TimestampPositionSpec(ts=ts):
+            case TimestampPosition(ts=ts):
                 stream_kwargs["skip_to_timestamp"] = ts
                 if self._mark is None:
                     self._mark = GtidOffset(gtid="")

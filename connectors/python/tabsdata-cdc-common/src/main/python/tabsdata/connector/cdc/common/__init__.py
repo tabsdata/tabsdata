@@ -7,12 +7,12 @@ import importlib.metadata
 from tabsdata.connector.cdc.common._connection import CdcConn
 from tabsdata.connector.cdc.common._connector import CdcTrigger
 from tabsdata.connector.cdc.common.typing import (
-    CdcFormatSpec,
+    CdcFormat,
     CdcValuesFormatSpec,
     QualifiedTableSpec,
     QualifiedTablesSpec,
     RelativePositionSpec,
-    TimestampPositionSpec,
+    TimestampPosition,
 )
 
 __all__ = [
@@ -23,8 +23,8 @@ __all__ = [
     "QualifiedTableSpec",
     "QualifiedTablesSpec",
     "RelativePositionSpec",
-    "TimestampPositionSpec",
-    "CdcFormatSpec",
+    "TimestampPosition",
+    "CdcFormat",
     "CdcValuesFormatSpec",
 ]
 

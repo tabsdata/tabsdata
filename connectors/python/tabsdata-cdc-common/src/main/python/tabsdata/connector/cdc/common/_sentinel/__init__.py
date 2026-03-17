@@ -27,7 +27,7 @@ from tabsdata.connector.cdc.common.constants import (
     CDC_META_TX,
     DOT,
 )
-from tabsdata.connector.cdc.common.typing import CdcFormatSpec
+from tabsdata.connector.cdc.common.typing import CdcFormat
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -48,7 +48,7 @@ class CdcBuffer:
 def row_to_record(
     change: CdcDataChange,
     tracked_table: TrackedTable,
-    cdc_format: CdcFormatSpec,
+    cdc_format: CdcFormat,
 ) -> dict[str, Any]:
     record: dict[str, Any] = {
         CDC_META_OP: change.operation,

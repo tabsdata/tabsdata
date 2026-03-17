@@ -15,7 +15,7 @@ from tabsdata._credentials import UserPasswordCredentials
 from tabsdata.connector.cdc.common._model import TableObject
 from tabsdata.connector.cdc.db2._connection import Db2CdcConn
 from tabsdata.connector.cdc.db2._connector import Db2CdcTrigger
-from tabsdata.connector.cdc.db2.typing import TableCommitSeqPositionSpec
+from tabsdata.connector.cdc.db2.typing import TableCommitSeqPosition
 from test_tabsdata_cdc_common.common.basic import TRIGGER_END_MINUTES, run_offset_resume_test
 from test_tabsdata_cdc_db2.common.fixtures.docker import DB2_CDC_STAGING_TABLE_PREFIX
 from test_tabsdata_cdc_db2.common.sql import Db2CdcSampler
@@ -71,7 +71,7 @@ def test_offset_resume(db2_cdc_config):
         else:
             row = checkpoint_df.row(0, named=True)
             seqs = {col: row[col].hex() for col in checkpoint_df.columns}
-            start_from = TableCommitSeqPositionSpec(seqs=seqs)
+            start_from = TableCommitSeqPosition(seqs=seqs)
         return Db2CdcTrigger(
             conn=conn,
             tables=[cd_table.qualified],

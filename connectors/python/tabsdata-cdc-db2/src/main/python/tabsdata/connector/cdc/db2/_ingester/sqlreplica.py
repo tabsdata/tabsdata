@@ -31,15 +31,15 @@ from tabsdata.connector.cdc.common.constants import (
     CdcOperation,
 )
 from tabsdata.connector.cdc.common.typing import (
-    CdcFormatSpec,
+    CdcFormat,
     QualifiedTablesSpec,
-    TimestampPositionSpec,
+    TimestampPosition,
 )
 from tabsdata.connector.cdc.db2._connector import Db2CdcConn
 from tabsdata.connector.cdc.db2.typing import (
-    CommitSeqPositionSpec,
+    CommitSeqPosition,
     Db2CdcStartFromSpec,
-    TableCommitSeqPositionSpec,
+    TableCommitSeqPosition,
 )
 from tabsdata.connector.sql.common._database.db2.dialect import Db2Dialect
 from tabsdata.exceptions import CdcError, ErrorCode
@@ -193,13 +193,13 @@ class SqlReplicationIngester(CdcIngester):
             return
         commits: dict[str, bytes] = {}
         match self._start_from:
-            case CommitSeqPositionSpec(seq=seq):
+            case CommitSeqPosition(seq=seq):
                 for table in self._tracked_tables.values():
                     commits[table.cdc_table.qualified] = bytes.fromhex(seq)
-            case TableCommitSeqPositionSpec(seqs=seqs):
+            case TableCommitSeqPosition(seqs=seqs):
                 for table, seq in seqs.items():
                     commits[table] = bytes.fromhex(seq)
-            case TimestampPositionSpec(ts=ts):
+            case TimestampPosition(ts=ts):
                 with session.connect() as connection:
                     row = connection.execute(
                         text(
@@ -237,7 +237,7 @@ class SqlReplicationIngester(CdcIngester):
     def collect_tables(
         self,
         session: Any,
-        cdc_format: CdcFormatSpec = CdcFormatSpec(),
+        cdc_format: CdcFormat = CdcFormat(),
     ) -> dict[str, TrackedTable]:
         qualified_tables = self._tables
         if isinstance(qualified_tables, str):

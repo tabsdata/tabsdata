@@ -20,7 +20,7 @@ RelativePositionSpec: TypeAlias = Literal["head", "tail"]
 
 
 @dataclass(frozen=True, init=False)
-class TimestampPositionSpec:
+class TimestampPosition:
     """
     Specifies a CDC start position based on a timestamp.
 
@@ -39,7 +39,7 @@ CdcValuesFormatSpec: TypeAlias = Literal["columns", "struct", "map"]
 
 
 @dataclass(frozen=True, init=False)
-class CdcFormatSpec:
+class CdcFormat:
     """
     Specifies the output format for CDC change data.
 

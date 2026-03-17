@@ -31,7 +31,7 @@ from tabsdata.connector.cdc.common.constants import (
     DEFAULT_TRIGGER_MAX_ROWS,
     DEFAULT_TRIGGER_MAX_SECS,
 )
-from tabsdata.connector.cdc.common.typing import CdcFormatSpec, QualifiedTablesSpec
+from tabsdata.connector.cdc.common.typing import CdcFormat, QualifiedTablesSpec
 from tabsdata.connector.cdc.mysql._connection import MySQLCdcConn
 from tabsdata.connector.cdc.mysql._ingester.binlog import BinlogIngester
 from tabsdata.connector.cdc.mysql.constants import DEFAULT_SERVER_ID
@@ -70,7 +70,7 @@ class MySQLCdcTrigger(CdcTrigger):
         conn: MySQLCdcConn,
         tables: QualifiedTablesSpec,
         start_from: MySQLCdcStartFromSpec,
-        cdc_format: CdcFormatSpec = CdcFormatSpec(),
+        cdc_format: CdcFormat = CdcFormat(),
         buffer_max_rows: int = DEFAULT_BUFFER_MAX_ROWS,
         buffer_max_bytes: int | None = DEFAULT_BUFFER_MAX_BYTES,
         buffer_max_secs: int = DEFAULT_BUFFER_MAX_SECS,
@@ -166,7 +166,7 @@ class MySQLCdcTrigger(CdcTrigger):
     def collect_tables(
         self,
         session: Any,
-        cdc_format: CdcFormatSpec = CdcFormatSpec(),
+        cdc_format: CdcFormat = CdcFormat(),
     ) -> dict[str, TrackedTable]:
         return self._ingester.collect_tables(session, cdc_format)
 

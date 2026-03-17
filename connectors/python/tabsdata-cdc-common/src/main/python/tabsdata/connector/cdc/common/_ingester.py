@@ -20,7 +20,7 @@ from tabsdata.connector.cdc.common._model import (
     TrackedColumn,
     TrackedTable,
 )
-from tabsdata.connector.cdc.common.typing import CdcFormatSpec, QualifiedTablesSpec
+from tabsdata.connector.cdc.common.typing import CdcFormat, QualifiedTablesSpec
 from tabsdata.connector.sql.common._generic.dialect import Dialect as SqlDialect
 from tabsdata.exceptions import CdcError, ErrorCode
 
@@ -86,7 +86,7 @@ class CdcIngester(ABC):
     def collect_tables(
         self,
         session: Any,
-        cdc_format: CdcFormatSpec = CdcFormatSpec(),
+        cdc_format: CdcFormat = CdcFormat(),
     ) -> dict[str, TrackedTable]:
         tablespecs = self._tables
         if isinstance(tablespecs, str):

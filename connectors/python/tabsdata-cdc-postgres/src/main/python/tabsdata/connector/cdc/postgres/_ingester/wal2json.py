@@ -33,7 +33,7 @@ from tabsdata.connector.cdc.common.constants import (
 from tabsdata.connector.cdc.common.typing import QualifiedTablesSpec
 from tabsdata.connector.cdc.postgres._connection import PostgresCdcConn
 from tabsdata.connector.cdc.postgres.typing import (
-    LsnPositionSpec,
+    LsnPosition,
     PostgresCdcStartFromSpec,
     ReplicationSlotBehaviorSpec,
 )
@@ -238,7 +238,7 @@ class Wal2JsonIngester(CdcIngester):
             logger.info(f"Reusing replication slot: '{self._replication_slot}'")
         if self._mark is None:
             match self._start_from:
-                case LsnPositionSpec(lsn=lsn):
+                case LsnPosition(lsn=lsn):
                     self._mark = LsnOffset(lsn=lsn)
                 case "head":
                     self._mark = LsnOffset(lsn=0)

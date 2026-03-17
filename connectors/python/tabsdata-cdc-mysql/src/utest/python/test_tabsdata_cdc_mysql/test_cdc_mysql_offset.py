@@ -15,7 +15,7 @@ from tabsdata._credentials import UserPasswordCredentials
 from tabsdata.connector.cdc.common._model import TableObject
 from tabsdata.connector.cdc.mysql._connection import MySQLCdcConn
 from tabsdata.connector.cdc.mysql._connector import MySQLCdcTrigger
-from tabsdata.connector.cdc.mysql.typing import GtidPositionSpec
+from tabsdata.connector.cdc.mysql.typing import GtidPosition
 from test_tabsdata_cdc_common.common.basic import TRIGGER_END_MINUTES, run_offset_resume_test
 from test_tabsdata_cdc_mysql.common.db import server_id
 from test_tabsdata_cdc_mysql.common.sql import MySQLCdcSampler
@@ -69,7 +69,7 @@ def test_offset_resume(mysql_cdc_config):
             start_from = "head"
         else:
             gtid = checkpoint_df["gtid"][0]
-            start_from = GtidPositionSpec(gtid=gtid)
+            start_from = GtidPosition(gtid=gtid)
         return MySQLCdcTrigger(
             conn=conn,
             tables=[table.qualified],

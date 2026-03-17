@@ -11,13 +11,13 @@ from typing import TypeAlias, Union
 from tabsdata._utils.validation import _td_validate_call
 from tabsdata.connector.cdc.common.typing import (
     RelativePositionSpec,
-    TimestampPositionSpec,
+    TimestampPosition,
 )
 from tabsdata.exceptions import ErrorCode
 
 
 @dataclass(frozen=True, init=False)
-class GtidPositionSpec:
+class GtidPosition:
     """
     Specifies a MySQL CDC start position based on a Global Transaction ID (GTID).
 
@@ -33,7 +33,7 @@ class GtidPositionSpec:
 
 
 @dataclass(frozen=True, init=False)
-class BinlogPositionSpec:
+class BinlogPosition:
     """
     Specifies a MySQL CDC start position based on a binlog file and position.
 
@@ -53,7 +53,7 @@ class BinlogPositionSpec:
 
 MySQLCdcStartFromSpec: TypeAlias = Union[
     RelativePositionSpec,
-    GtidPositionSpec,
-    BinlogPositionSpec,
-    TimestampPositionSpec,
+    GtidPosition,
+    BinlogPosition,
+    TimestampPosition,
 ]

@@ -16,7 +16,7 @@ from tabsdata._credentials import UserPasswordCredentials
 from tabsdata.connector.cdc.common._model import TableObject
 from tabsdata.connector.cdc.postgres._connection import PostgresCdcConn
 from tabsdata.connector.cdc.postgres._connector import PostgresCdcTrigger
-from tabsdata.connector.cdc.postgres.typing import LsnPositionSpec
+from tabsdata.connector.cdc.postgres.typing import LsnPosition
 from test_tabsdata_cdc_common.common.basic import TRIGGER_END_MINUTES, run_offset_resume_test
 from test_tabsdata_cdc_postgres.common.db import replication_slot
 from test_tabsdata_cdc_postgres.common.sql import PostgresCdcSampler
@@ -97,7 +97,7 @@ def test_offset_resume(postgres_cdc_config):
             start_from = "head"
         else:
             lsn = int(checkpoint_df["lsn"][0])
-            start_from = LsnPositionSpec(lsn=lsn)
+            start_from = LsnPosition(lsn=lsn)
         return PostgresCdcTrigger(
             conn=conn,
             tables=[table.qualified],
