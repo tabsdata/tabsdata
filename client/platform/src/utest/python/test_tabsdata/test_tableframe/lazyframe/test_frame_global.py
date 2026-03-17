@@ -509,6 +509,32 @@ class TestTableFrame(unittest.TestCase):
         with self.assertRaises(Exception):
             td.concat([tf1, tf2], how="vertical_relaxed")
 
+    def test_concat_none_input(self):
+        result = td.concat(None)
+        assert result is None
+
+    def test_concat_empty_list(self):
+        result = td.concat([])
+        assert result is None
+
+    def test_concat_all_none_entries(self):
+        # noinspection PyTypeChecker
+        result = td.concat([None, None, None])
+        assert result is None
+
+    def test_concat_mixed_none_entries(self):
+        _, _, tf = load_simple_dataframe()
+        result = td.concat([None, tf, None])
+        assert result is not None
+        assert len(result.to_polars_lf().collect().rows()) == 3
+
+    def test_concat_multiple_frames_with_nones(self):
+        _, _, tf_top = load_simple_dataframe(token="top-")
+        _, _, tf_bottom = load_simple_dataframe(token="bottom-")
+        result = td.concat([None, tf_top, None, tf_bottom, None])
+        assert result is not None
+        assert len(result.to_polars_lf().collect().rows()) == 6
+
     def test_lit(self):
         lf = pl.LazyFrame(
             {

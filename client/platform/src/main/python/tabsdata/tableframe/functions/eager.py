@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import Iterable, get_args
+from typing import Iterable, Optional, get_args
 
 import polars as pl
 
@@ -19,9 +19,9 @@ from tabsdata.tableframe.typing import ConcatMethod
 
 
 def concat(
-    items: Iterable[td_frame.TdType],
+    items: Optional[Iterable[td_frame.TdType]],
     how: ConcatMethod = "vertical",
-) -> td_frame.TdType:
+) -> Optional[td_frame.TdType]:
     """
     :categories: union
 
@@ -29,7 +29,9 @@ def concat(
     Combine multiple TableFrames by stacking their rows.
 
     Args:
-        items: The TableFrames to concatenate.
+        items: The TableFrames to concatenate. If None or empty, returns None.
+            None entries within the iterable are ignored. If all entries are None,
+            returns None.
         how: {'vertical', 'vertical_relaxed', 'diagonal', 'diagonal_relaxed'}
 
             * vertical: Appends the rows of each input below the previous one. All
@@ -84,13 +86,19 @@ def concat(
     │ y    ┆ 20   │
     └──────┴──────┘
     """
+    if items is None:
+        return None
+
     valid_methods = get_args(ConcatMethod)
     if how not in valid_methods:
         raise ValueError(
             f"Invalid concatenation method: {how!r}. Expected one of {valid_methods}"
         )
 
-    unwrapped_items = [_unwrap_td_type(item) for item in items]
+    unwrapped_items = [_unwrap_td_type(item) for item in items if item is not None]
+
+    if not unwrapped_items:
+        return None
 
     # First, perform a no-op concatenation of empty LazyFrames built from the
     # schemas of the original frames. This ensures that all schemas are compatible.
