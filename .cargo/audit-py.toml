@@ -1,0 +1,18 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[advisories]
+
+ignore = [
+    "PYSEC-2022-42969",
+    "PYSEC-2023-162",
+    "PYSEC-2023-163",
+    "GHSA-4xh5-x5gv-qwph",
+    "GHSA-5pwr-322w-8jr4",
+    "GHSA-7gcm-g887-7qv7",
+    "GHSA-g48c-2wqr-h844",
+    "GHSA-vp96-hxj8-p424"
+]
+
+

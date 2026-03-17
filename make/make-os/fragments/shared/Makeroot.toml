@@ -96,6 +96,7 @@ SYMLINK_SO_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automati
 WHEELS_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/wheels.py", normalize = true }
 
 AUDIT_TOML = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/.cargo/audit.toml", normalize = true }
+AUDIT_PY_TOML = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/.cargo/audit-py.toml", normalize = true }
 CLIPPY_CONF_DIR = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/.cargo", normalize = true }
 DENY_TOML = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/.cargo/deny.toml", normalize = true }
 PANTS_JSON = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/.cargo/pants.json", normalize = true }
