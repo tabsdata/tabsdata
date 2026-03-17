@@ -178,7 +178,7 @@ def test_default_http_timeout(s3_config):
     conn = DruidConn(
         overlord_url="http://druid-overlord:8090", staging=s3_config
     )
-    assert conn.http_timeout == 300
+    assert conn.http_timeout_sec == 300
 
 
 def test_default_credentials_none(s3_config):
@@ -240,9 +240,9 @@ def test_custom_http_timeout(s3_config):
     conn = DruidConn(
         overlord_url="http://druid-overlord:8090",
         staging=s3_config,
-        http_timeout=600,
+        http_timeout_sec=600,
     )
-    assert conn.http_timeout == 600
+    assert conn.http_timeout_sec == 600
 
 
 def test_credentials_provided(s3_config, druid_credentials):
@@ -263,7 +263,7 @@ def test_all_params_s3(s3_config, druid_credentials):
         max_concurrent_subtasks=4,
         max_rows_per_segment=3_000_000,
         max_rows_in_memory=750_000,
-        http_timeout=600,
+        http_timeout_sec=600,
         credentials=druid_credentials,
     )
     assert conn.overlord_url == "http://druid-overlord:8090"
@@ -273,7 +273,7 @@ def test_all_params_s3(s3_config, druid_credentials):
     assert conn.max_concurrent_subtasks == 4
     assert conn.max_rows_per_segment == 3_000_000
     assert conn.max_rows_in_memory == 750_000
-    assert conn.http_timeout == 600
+    assert conn.http_timeout_sec == 600
     assert conn.credentials is not None
 
 
@@ -446,12 +446,12 @@ def test_eq_different_http_timeout(s3_config):
     conn1 = DruidConn(
         overlord_url="http://druid-overlord:8090",
         staging=s3_config,
-        http_timeout=300,
+        http_timeout_sec=300,
     )
     conn2 = DruidConn(
         overlord_url="http://druid-overlord:8090",
         staging=s3_config,
-        http_timeout=600,
+        http_timeout_sec=600,
     )
     assert conn1 != conn2
 
@@ -513,7 +513,7 @@ def test_repr_contains_http_timeout(s3_config):
     conn = DruidConn(
         overlord_url="http://druid-overlord:8090",
         staging=s3_config,
-        http_timeout=600,
+        http_timeout_sec=600,
     )
     assert "600" in repr(conn)
 
