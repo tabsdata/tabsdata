@@ -10,6 +10,7 @@ import math
 import threading
 import time
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -17,6 +18,7 @@ from typing import Any, Callable
 import polars as pl
 
 import tabsdata as td
+from tabsdata.connector.cdc.common import CdcTrigger
 from tabsdata.connector.cdc.common._model import TableObject
 from tabsdata.connector.cdc.common.constants import (
     CDC_DATA_COL_NEW_PREFIX,
@@ -46,6 +48,38 @@ from test_tabsdata_cdc_db2.common.sql import Db2CdcSampler
 import pytest
 
 logger = logging.getLogger(__name__)
+
+Q_POLL_INSERTS = 8
+Q_POLL_UPDATES = 8
+Q_POLL_DELETES = 8
+
+TRIGGER_END_MINUTES = 30
+TRIGGER_STOP_END_OFFSET_SECONDS = 60
+
+TRIGGER_INIT_TIMEOUT_SECONDS = 60
+TRIGGER_INIT_POLL_SECONDS = 0.5
+TRIGGER_STOP_JOIN_TIMEOUT_SECONDS = 60
+
+Q_TRANSACTIONS = 64
+Q_CONTINUOUS_INSERTS = 16
+Q_CONTINUOUS_UPDATES = 8
+Q_CONTINUOUS_DELETES = 4
+MINIMUM_TRANSACTION_TIME = 1.0
+
+POLL_TIMEOUT_SECONDS = 120
+POLL_INTERVAL_SECONDS = 2
+
+continuous_dml_params = pytest.mark.parametrize(
+    ("q_tables", "q_threads"),
+    [
+        pytest.param(
+            q_tables,
+            q_threads,
+            id=f"tables={q_tables}-threads={q_threads}",)
+        for q_tables in [1, 2,4]
+        for q_threads in [1, 2, 4]
+    ],
+)
 
 CDC_FORMAT_PARAMS = [
     pytest.param(
@@ -95,21 +129,33 @@ def _run_dml_operations(
     connection: Any,
     table: TableObject,
 ) -> pl.DataFrame:
-    sampler.run(table=table, inserts=8, updates=0, deletes=0)
+    sampler.run(
+        table=table,
+        inserts=Q_POLL_INSERTS,
+        updates=0,
+        deletes=0,)
     connection.commit()
 
-    sampler.run(table=table, inserts=0, updates=8, deletes=0)
+    sampler.run(
+        table=table,
+        inserts=0,
+        updates=Q_POLL_UPDATES,
+        deletes=0,)
     connection.commit()
 
-    sampler.run(table=table, inserts=0, updates=0, deletes=8)
+    sampler.run(
+        table=table,
+        inserts=0,
+        updates=0,
+        deletes=Q_POLL_DELETES,)
     connection.commit()
 
     expected = sampler.t_changes(table)
     pretty_polars()
     pretty_pandas()
 
-    print("\n--- Expected Changes ---")
-    print(expected)
+    logger.debug("--- Expected Changes ---")
+    logger.debug(f"\n{expected}")
 
     return expected
 
@@ -134,11 +180,11 @@ def _validate_cdc_output(
     expected: pl.DataFrame,
     sampler: CdcSampler,
 ) -> None:
-    print("\n--- Actual Output ---")
-    print(df)
+    logger.debug("--- Actual Output ---")
+    logger.debug(f"\n{df}")
 
-    print("\n--- Actual Schema ---")
-    print(df.schema)
+    logger.debug("--- Actual Schema ---")
+    logger.debug(f"\n{df.schema}")
 
     assert df.height == expected.height, (
         f"Expected {expected.height} rows, got {df.height}"
@@ -215,10 +261,10 @@ def _validate_cdc_output(
         pl.col(CDC_META_OP) == CdcOperation.DELETE
     )[CDC_META_TX].unique()
 
-    print(f"\n--- Transactions ---")
-    print(f"Insert Transactions: {insert_txs.to_list()}")
-    print(f"Update Transactions: {update_txs.to_list()}")
-    print(f"Delete Transactions: {delete_txs.to_list()}")
+    logger.debug("--- Transactions ---")
+    logger.debug(f"Insert Transactions: {insert_txs.to_list()}")
+    logger.debug(f"Update Transactions: {update_txs.to_list()}")
+    logger.debug(f"Delete Transactions: {delete_txs.to_list()}")
 
     assert len(insert_txs) == 1, "All inserts should share one transaction"
     assert len(update_txs) == 1, "All updates should share one transaction"
@@ -256,22 +302,25 @@ def run_poll_changes_test(
     sampler: CdcSampler,
     connection: Any,
     table: TableObject,
-    trigger: td.StageTrigger,
+    trigger: CdcTrigger,
 ) -> None:
     expected = _run_dml_operations(sampler, connection, table)
     process = _build_publisher(trigger)
 
-    fn_trigger = tdfntrigger(
-        trigger=trigger,
-        function=process,
-    )
+    def job():
+        return tdfntrigger(trigger=trigger, function=process)
 
+    fork = _fork_trigger(trigger, job)
+    staging = Path(fork.context.staging_folder)
+
+    _poll_until_captured(staging, trigger, expected.height)
+    _stop_trigger(trigger, fork)
+
+    fn_trigger = fork.result
     fn_trigger.check()
     fn_trigger.integrity()
 
-    staging = fn_trigger.staging
     workdir = staging.parent
-
     parquet_files = sorted(staging.glob("*.parquet")) if staging.exists() else []
     if not parquet_files:
         parquet_files = sorted(workdir.glob("*.parquet"))
@@ -288,22 +337,24 @@ def run_end_to_end_test(
     sampler: CdcSampler,
     connection: Any,
     table: TableObject,
-    trigger: td.StageTrigger,
+    trigger: CdcTrigger,
 ) -> None:
     expected = _run_dml_operations(sampler, connection, table)
     process = _build_publisher(trigger)
 
-    fn_trigger, fn_run = tdfnjob(
-        trigger=trigger,
-        function=process,
-        function_defined_on=0,
-    )
+    def job():
+        return tdfnjob(trigger=trigger, function=process, function_defined_on=0)
 
+    fork = _fork_trigger(trigger, job)
+    staging = Path(fork.context.staging_folder)
+
+    _poll_until_captured(staging, trigger, expected.height)
+    _stop_trigger(trigger, fork)
+
+    fn_trigger, fn_run = fork.result
     fn_trigger.check()
 
-    staging = fn_trigger.staging
     workdir = staging.parent
-
     parquet_files = sorted(staging.glob("*.parquet")) if staging.exists() else []
     if not parquet_files:
         parquet_files = sorted(workdir.glob("*.parquet"))
@@ -374,11 +425,11 @@ def _validate_cdc_map_output(
     sampler: CdcSampler,
     cdc_format: CdcFormatSpec,
 ) -> None:
-    print("\n--- Actual Output ---")
-    print(df)
+    logger.debug("--- Actual Output ---")
+    logger.debug(f"\n{df}")
 
-    print("\n--- Actual Schema ---")
-    print(df.schema)
+    logger.debug("--- Actual Schema ---")
+    logger.debug(f"\n{df.schema}")
 
     assert df.height == expected.height, (
         f"Expected {expected.height} rows, got {df.height}"
@@ -524,7 +575,7 @@ def run_offset_resume_test(
     sampler: CdcSampler,
     connection: Any,
     table: TableObject,
-    trigger_factory: Callable[[int, pl.DataFrame | None], td.StageTrigger],
+    trigger_factory: Callable[[int, pl.DataFrame | None], CdcTrigger],
     iterations: int = 4,
     inserts_per_iteration: int = 32,
 ) -> None:
@@ -542,24 +593,27 @@ def run_offset_resume_test(
         pretty_polars()
         pretty_pandas()
 
-        print(f"\n--- Iteration {i + 1}/{iterations} ---")
-        print(f"\n--- Expected Changes (iteration {i + 1}) ---")
-        print(expected)
+        logger.debug(f"--- Iteration {i + 1}/{iterations} ---")
+        logger.debug(f"--- Expected Changes (iteration {i + 1}) ---")
+        logger.debug(f"\n{expected}")
 
         trigger = trigger_factory(i, checkpoint_df)
         process = _build_publisher(trigger)
 
-        fn_trigger = tdfntrigger(
-            trigger=trigger,
-            function=process,
-        )
+        def job():
+            return tdfntrigger(trigger=trigger, function=process)
 
+        fork = _fork_trigger(trigger, job)
+        staging = Path(fork.context.staging_folder)
+
+        _poll_until_captured(staging, trigger, inserts_per_iteration)
+        _stop_trigger(trigger, fork)
+
+        fn_trigger = fork.result
         fn_trigger.check()
         fn_trigger.integrity()
 
-        staging = fn_trigger.staging
         workdir = staging.parent
-
         parquet_files = sorted(staging.glob("*.parquet")) if staging.exists() else []
         if not parquet_files:
             parquet_files = sorted(workdir.glob("*.parquet"))
@@ -571,8 +625,8 @@ def run_offset_resume_test(
 
         df = pl.concat([pl.read_parquet(f) for f in parquet_files])
 
-        print(f"\n--- Actual Output (iteration {i + 1}) ---")
-        print(df)
+        logger.debug(f"--- Actual Output (iteration {i + 1}) ---")
+        logger.debug(f"\n{df}")
 
         assert df.height == expected.height, (
             f"Iteration {i + 1}: expected {expected.height} rows, got {df.height}"
@@ -596,32 +650,34 @@ def run_offset_resume_test(
 
         checkpoint_df = fn_trigger.context.checkpoint.read()
 
-        print(f"\n--- Checkpoint (iteration {i + 1}) ---")
-        print(checkpoint_df)
-        print(f"\n--- Iteration {i + 1}/{iterations} PASSED ---")
+        logger.debug(f"--- Checkpoint (iteration {i + 1}) ---")
+        logger.debug(f"\n{checkpoint_df}")
+        logger.debug(f"--- Iteration {i + 1}/{iterations} PASSED ---")
 
 
 def run_end_to_end_format_test(
     sampler: CdcSampler,
     connection: Any,
     table: TableObject,
-    trigger: td.StageTrigger,
+    trigger: CdcTrigger,
     cdc_format: CdcFormatSpec,
 ) -> None:
     expected = _run_dml_operations(sampler, connection, table)
     process = _build_publisher(trigger)
 
-    fn_trigger, fn_run = tdfnjob(
-        trigger=trigger,
-        function=process,
-        function_defined_on=0,
-    )
+    def job():
+        return tdfnjob(trigger=trigger, function=process, function_defined_on=0)
 
+    fork = _fork_trigger(trigger, job)
+    staging = Path(fork.context.staging_folder)
+
+    _poll_until_captured(staging, trigger, expected.height)
+    _stop_trigger(trigger, fork)
+
+    fn_trigger, fn_run = fork.result
     fn_trigger.check()
 
-    staging = fn_trigger.staging
     workdir = staging.parent
-
     parquet_files = sorted(staging.glob("*.parquet")) if staging.exists() else []
     if not parquet_files:
         parquet_files = sorted(workdir.glob("*.parquet"))
@@ -660,6 +716,109 @@ def _count_staged_rows(staging: Path) -> int:
     return total
 
 
+@dataclass
+class TriggerFork:
+    context: Any = None
+    thread: threading.Thread = None
+    result: Any = None
+    error: Exception = None
+
+
+def _fork_trigger(
+    trigger: td.StageTrigger,
+    job: Callable[..., Any],
+) -> TriggerFork:
+    captured: dict[str, Any] = {}
+    trigger_run = trigger.run
+
+    def trigger_run_wrapper(context):
+        captured['context'] = context
+        return trigger_run(context)
+
+    trigger.run = trigger_run_wrapper
+
+    fork = TriggerFork()
+
+    def worker():
+        try:
+            fork.result = job()
+        except Exception as error:
+            fork.error = error
+
+    fork.thread = threading.Thread(target=worker, daemon=True)
+    fork.thread.start()
+
+    deadline = time.monotonic() + TRIGGER_INIT_TIMEOUT_SECONDS
+    while 'context' not in captured and time.monotonic() < deadline:
+        if fork.error is not None:
+            raise fork.error
+        time.sleep(TRIGGER_INIT_POLL_SECONDS)
+    if fork.error is not None:
+        raise fork.error
+    assert 'context' in captured, (
+        f"Trigger did not initialize within {TRIGGER_INIT_TIMEOUT_SECONDS}s"
+    )
+
+    fork.context = captured['context']
+    return fork
+
+
+def _poll_until_captured(
+    staging: Path,
+    trigger: CdcTrigger,
+    expected_rows: int,
+    poll_timeout_seconds: int = POLL_TIMEOUT_SECONDS,
+    poll_interval_seconds: float = POLL_INTERVAL_SECONDS,
+) -> int:
+    logger.debug(f"--- Waiting for CDC capture (timeout {poll_timeout_seconds}s) ---")
+    poll_deadline = time.monotonic() + poll_timeout_seconds
+    total_actual = 0
+    while time.monotonic() < poll_deadline:
+        # noinspection PyBroadException
+        try:
+            staged = _count_staged_rows(staging)
+            buffered = trigger._buffered_rows
+            total_actual = staged + buffered
+        except Exception:
+            staged = buffered = 0
+            total_actual = 0
+        logger.debug(
+            f"Captured rows: {total_actual}/{expected_rows} "
+            f"(staged={staged}, buffered={buffered})"
+        )
+        if total_actual >= expected_rows:
+            logger.debug("All rows captured.")
+            break
+        time.sleep(poll_interval_seconds)
+    else:
+        logger.debug(f"Poll timeout reached at {total_actual}/{expected_rows} rows.")
+    return total_actual
+
+
+def _stop_trigger(
+    trigger: CdcTrigger,
+    fork: TriggerFork,
+) -> None:
+    fork.context.end = datetime.now(timezone.utc) - timedelta(seconds=TRIGGER_STOP_END_OFFSET_SECONDS)
+    logger.debug("--- Trigger stop signal sent ---")
+
+    fork.thread.join(timeout=TRIGGER_STOP_JOIN_TIMEOUT_SECONDS)
+    assert not fork.thread.is_alive(), f"Trigger thread did not stop within {TRIGGER_STOP_JOIN_TIMEOUT_SECONDS}s"
+
+    staging = Path(fork.context.staging_folder)
+    final_staged = _count_staged_rows(staging)
+    final_buffered = trigger._buffered_rows
+    logger.debug(
+        f"After stop: staged={final_staged}, buffered={final_buffered}, "
+        f"total={final_staged + final_buffered}"
+    )
+
+    assert final_buffered == 0, f"Buffer not fully flushed: {final_buffered} rows remaining"
+
+    if fork.error is not None:
+        raise fork.error
+
+
 def _validate_continuous_output(
     staging: Path,
     tables: list[TableObject],
@@ -688,9 +847,9 @@ def _validate_continuous_output(
         df = pl.concat([pl.read_parquet(f) for f in parquet_files])
         expected = sampler.t_changes(table)
 
-        print(f"\n--- Table {table} (index {i}) ---")
-        print(f"  Actual rows: {df.height}")
-        print(f"  Expected rows: {expected.height}")
+        logger.debug(f"--- Table {table} (index {i}) ---")
+        logger.debug(f"Actual rows: {df.height}")
+        logger.debug(f"Expected rows: {expected.height}")
 
         assert df.height == expected.height, (
             f"Table {table}: expected {expected.height} rows, got {df.height}"
@@ -711,9 +870,7 @@ def _validate_continuous_output(
                 df.filter(pl.col(CDC_META_OP) == op_type)[pk_col].to_list()
             )
             expected_pks = sorted(
-                expected.filter(
-                    pl.col("op") == op_type
-                )[f"new.{pk_col}"].to_list()
+                expected.filter(pl.col("op") == op_type)[f"new.{pk_col}"].to_list()
             )
             assert actual_pks == expected_pks, (
                 f"Table {table}: PK mismatch for {op_type}: "
@@ -721,33 +878,47 @@ def _validate_continuous_output(
             )
 
         for op_type in [CdcOperation.INSERT, CdcOperation.UPDATE, CdcOperation.DELETE]:
-            actual_rows = df.filter(
-                pl.col(CDC_META_OP) == op_type
-            ).sort(pk_col)
-            expected_rows = expected.filter(
-                pl.col("op") == op_type
-            ).sort(f"new.{pk_col}")
+            actual_rows = df.filter(pl.col(CDC_META_OP) == op_type).sort(sampler.columns)
+            expected_rows = expected.filter(pl.col("op") == op_type).sort([f"new.{c}" for c in sampler.columns])
             for column in sampler.columns:
                 actual_values = actual_rows[column].to_list()
                 expected_values = expected_rows[f"new.{column}"].to_list()
-                assert fuzzy_eq(
-                    actual_values, expected_values, column, sampler.float_columns
-                ), (
+                assert fuzzy_eq(actual_values, expected_values, column, sampler.float_columns), (
                     f"Table {table}: value mismatch for {column} in {op_type}:\n"
                     f"  actual:   {actual_values}\n"
                     f"  expected: {expected_values}"
                 )
 
-    print("\n--- Continuous validation PASSED ---")
+    logger.debug("--- Continuous validation PASSED ---")
+
+
+def _run_dml_transactions(
+    sampler: CdcSampler,
+    connection: Any,
+    tables: list[TableObject],
+) -> None:
+    for transaction in range(Q_TRANSACTIONS):
+        transaction_start = time.monotonic()
+        for table in tables:
+            sampler.run(
+                table=table,
+                inserts=Q_CONTINUOUS_INSERTS,
+                updates=Q_CONTINUOUS_UPDATES,
+                deletes=Q_CONTINUOUS_DELETES,
+            )
+        connection.commit()
+        remaining = MINIMUM_TRANSACTION_TIME - (time.monotonic() - transaction_start)
+        if remaining > 0:
+            time.sleep(remaining)
 
 
 def run_continuous_dml_test(
     sampler: CdcSampler,
     connection: Any,
     tables: list[TableObject],
-    trigger: td.StageTrigger,
-    dml_duration_seconds: int = 60,
-    safety_wait_seconds: int = 16,
+    trigger: CdcTrigger,
+    dml_worker_threads: int = 1,
+    dml_worker_factory: Callable[[], tuple[Any, CdcSampler]] | None = None,
 ) -> None:
     output_names = [f"output_{i}" for i in range(len(tables))]
 
@@ -760,108 +931,74 @@ def run_continuous_dml_test(
     def process(*tfs: list[td.TableFrame],) -> tuple[td.TableFrame, ...]:
         return tuple(td.concat(tf_list) for tf_list in tfs)
 
-    captured: dict[str, Any] = {}
-    original_run = trigger.run
+    def job():
+        return tdfntrigger(trigger=trigger, function=process)
 
-    def capturing_run(ctx):
-        captured['context'] = ctx
-        return original_run(ctx)
-
-    trigger.run = capturing_run
-
-    trigger_result: dict[str, Any] = {}
-
-    def trigger_worker():
-        try:
-            trigger_result['fn_trigger'] = tdfntrigger(
-                trigger=trigger, function=process,
-            )
-        except Exception as error:
-            trigger_result['error'] = error
-
-    thread = threading.Thread(target=trigger_worker, daemon=True)
-    thread.start()
-
-    deadline = time.monotonic() + 30
-    while 'context' not in captured and time.monotonic() < deadline:
-        time.sleep(0.5)
-    assert 'context' in captured, "Trigger did not initialize within 30s"
-    context = captured['context']
+    fork = _fork_trigger(trigger, job)
 
     pretty_polars()
     pretty_pandas()
 
-    for batch in range(3):
-        batch_start = time.monotonic()
-        for table in tables:
-            sampler.run(table=table, inserts=10, updates=0, deletes=0)
-        connection.commit()
-        remaining = 1.0 - (time.monotonic() - batch_start)
-        if remaining > 0:
-            time.sleep(remaining)
+    if dml_worker_threads <= 1:
+        _run_dml_transactions(sampler, connection, tables)
+    else:
+        if dml_worker_factory is None:
+            raise ValueError(
+                "dml_worker_factory is required when dml_threads > 1"
+            )
 
-    mixed_batches = dml_duration_seconds - 3
-    for batch in range(mixed_batches):
-        batch_start = time.monotonic()
-        for table in tables:
-            sampler.run(table=table, inserts=6, updates=3, deletes=2)
-        connection.commit()
-        remaining = 1.0 - (time.monotonic() - batch_start)
-        if remaining > 0:
-            time.sleep(remaining)
+        workers: list[tuple[Any, CdcSampler]] = []
+        for _ in range(dml_worker_threads):
+            workers.append(dml_worker_factory())
 
-    total_expected = sum(sampler.t_changes(t).height for t in tables)
-    print(f"\n--- DML complete. Total expected: {total_expected} rows ---")
+        dml_errors: list[Exception] = []
+        dml_threads: list[threading.Thread] = []
+
+        def dml_target(worker_sampler: CdcSampler,worker_conn: Any) -> None:
+            try:
+                _run_dml_transactions(worker_sampler, worker_conn, tables)
+            except Exception as e:
+                dml_errors.append(e)
+
+        for w_conn, w_sampler in workers:
+            thread = threading.Thread(
+                target=dml_target,
+                args=(w_sampler, w_conn),
+                daemon=True,
+            )
+            dml_threads.append(thread)
+            thread.start()
+
+        for thread in dml_threads:
+            thread.join()
+
+        if dml_errors:
+            raise dml_errors[0]
+
+        for _, w_sampler in workers:
+            for table, changes_df in w_sampler.changes.items():
+                existing = sampler.changes.get(table)
+                if existing is not None and existing.height > 0:
+                    sampler._changes[table] = pl.concat([existing, changes_df], how="diagonal")
+                else:
+                    sampler._changes[table] = changes_df
+
+        for w_conn, _ in workers:
+            # noinspection PyBroadException
+            try:
+                w_conn.close()
+            except Exception:
+                pass
+
+    total_expected = sum(sampler.t_changes(table).height for table in tables)
+    logger.debug(f"--- DML complete. Total expected: {total_expected} rows ---")
     for table in tables:
         expected = sampler.t_changes(table)
-        print(f"  {table}: {expected.height} rows")
+        logger.debug(f"{table}: {expected.height} rows")
 
-    staging = Path(context.staging_folder)
-    poll_timeout_seconds = 120
-    stable_threshold = 8
-    print(f"\n--- Waiting for CDC capture (timeout {poll_timeout_seconds}s) ---")
-    poll_deadline = time.monotonic() + poll_timeout_seconds
-    prev_actual = -1
-    stable_count = 0
-    total_actual = 0
-    while time.monotonic() < poll_deadline:
-        # noinspection PyBroadException
-        try:
-            total_actual = _count_staged_rows(staging)
-        except Exception:
-            total_actual = 0
-        print(f"  Staged rows: {total_actual}/{total_expected}")
-        if total_actual >= total_expected:
-            print("  All rows staged.")
-            break
-        if total_actual == prev_actual:
-            stable_count += 1
-        else:
-            stable_count = 0
-        prev_actual = total_actual
-        if stable_count >= stable_threshold and total_actual > 0:
-            print(
-                f"  Staged rows stabilized at {total_actual}/{total_expected}"
-                f" (remaining {total_expected - total_actual} in buffer)."
-            )
-            break
-        time.sleep(2)
-    else:
-        print(
-            f"  Poll timeout reached at {total_actual}/{total_expected} rows."
-        )
-
-    print(f"\n--- Safety wait ({safety_wait_seconds}s) ---")
-    time.sleep(safety_wait_seconds)
-
-    context.end = datetime.now(timezone.utc) - timedelta(seconds=60)
-    print("\n--- Trigger stop signal sent ---")
-
-    thread.join(timeout=30)
-    assert not thread.is_alive(), "Trigger thread did not stop within 30s"
-
-    if 'error' in trigger_result:
-        raise trigger_result['error']
+    staging = Path(fork.context.staging_folder)
+    _poll_until_captured(staging, trigger, total_expected)
+    _stop_trigger(trigger, fork)
 
     _validate_continuous_output(staging, tables, sampler)
 
@@ -902,4 +1039,4 @@ def run_continuous_dml_test(
             f"is not equivalent to staged data"
         )
 
-    print("\n--- Function execution PASSED ---")
+    logger.debug("--- Function execution PASSED ---")

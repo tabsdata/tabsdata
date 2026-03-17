@@ -17,7 +17,7 @@ from tabsdata.connector.cdc.common._model import TableObject
 from tabsdata.connector.cdc.postgres._connection import PostgresCdcConn
 from tabsdata.connector.cdc.postgres._connector import PostgresCdcTrigger
 from tabsdata.connector.cdc.postgres.typing import LsnPositionSpec
-from test_tabsdata_cdc_common.common.basic import run_offset_resume_test
+from test_tabsdata_cdc_common.common.basic import TRIGGER_END_MINUTES, run_offset_resume_test
 from test_tabsdata_cdc_postgres.common.db import replication_slot
 from test_tabsdata_cdc_postgres.common.sql import PostgresCdcSampler
 
@@ -111,7 +111,7 @@ def test_offset_resume(postgres_cdc_config):
             trigger_max_rows=7,
             trigger_max_bytes=None,
             trigger_max_seconds=10,
-            end=datetime.now(timezone.utc) + timedelta(seconds=60),
+            end=datetime.now(timezone.utc) + timedelta(minutes=TRIGGER_END_MINUTES),
         )
 
     run_offset_resume_test(

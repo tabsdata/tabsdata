@@ -74,6 +74,7 @@ class CdcTrigger(StageTrigger):
         self._trigger_max_bytes = trigger_max_bytes
         self._trigger_max_seconds = trigger_max_seconds
         self._poll_interval_seconds = poll_interval_seconds
+        self._buffer_sentinel: BufferSentinel | None = None
 
     @property
     def conn(self) -> Conn:
@@ -120,6 +121,12 @@ class CdcTrigger(StageTrigger):
     @property
     def poll_interval_seconds(self) -> float:
         return self._poll_interval_seconds
+
+    @property
+    def _buffered_rows(self) -> int:
+        if self._buffer_sentinel is None:
+            return 0
+        return self._buffer_sentinel._total_rows
 
     @abstractmethod
     def _open_session(self) -> Any: ...
@@ -205,6 +212,7 @@ class CdcTrigger(StageTrigger):
                 tables=tracked_tables,
                 offset=self._base_offset(),
             )
+            self._buffer_sentinel = buffer_sentinel
 
             self._await_start(
                 stop_signal=stop_signal,
@@ -218,6 +226,7 @@ class CdcTrigger(StageTrigger):
                 buffer_sentinel.process_changes(
                     changes=self._poll_changes(database_connection),
                 )
+                buffer_sentinel.expire()
                 if disk_sentinel.flush(force=False):
                     self._commit_offset(buffer_sentinel.offset)
                     context.checkpoint.write(buffer_sentinel.offset.upload())

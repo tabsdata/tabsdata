@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import TYPE_CHECKING, Any, Callable
+from typing import Any, Callable
 import pytest
 import docker
 from docker.models.containers import Container

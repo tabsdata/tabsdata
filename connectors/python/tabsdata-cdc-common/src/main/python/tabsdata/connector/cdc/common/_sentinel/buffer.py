@@ -98,6 +98,10 @@ class BufferSentinel:
         if self.has_data and (rows_hit or bytes_hit or time_hit):
             self.flush()
 
+    def expire(self) -> None:
+        if self.has_data and (time.time() - self._last_flushed) >= self._max_seconds:
+            self.flush()
+
     def flush(self) -> None:
         self._disk_sentinel.process_buffers(self._buffers)
         for buffer in self._buffers.values():

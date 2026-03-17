@@ -16,6 +16,7 @@ from tabsdata.connector.cdc.postgres._connection import PostgresCdcConn
 from tabsdata.connector.cdc.postgres._connector import PostgresCdcTrigger
 from test_tabsdata_cdc_common.common.basic import (
     CDC_FORMAT_PARAMS,
+    TRIGGER_END_MINUTES,
     run_end_to_end_format_test,
     run_end_to_end_test,
     run_poll_changes_test,
@@ -71,7 +72,7 @@ def test_poll_changes_insert_update_delete(postgres_cdc_config):
         buffer_max_rows=10_000,
         buffer_max_seconds=10,
         trigger_max_seconds=10,
-        end=datetime.now(timezone.utc) + timedelta(seconds=60),
+        end=datetime.now(timezone.utc) + timedelta(minutes=TRIGGER_END_MINUTES),
     )
 
     run_poll_changes_test(
@@ -126,7 +127,7 @@ def test_end_to_end_insert_update_delete(postgres_cdc_config):
         buffer_max_rows=10_000,
         buffer_max_seconds=10,
         trigger_max_seconds=10,
-        end=datetime.now(timezone.utc) + timedelta(seconds=60),
+        end=datetime.now(timezone.utc) + timedelta(minutes=TRIGGER_END_MINUTES),
     )
 
     run_end_to_end_test(
@@ -183,7 +184,7 @@ def test_end_to_end_format(postgres_cdc_config, cdc_format):
         buffer_max_rows=10_000,
         buffer_max_seconds=10,
         trigger_max_seconds=10,
-        end=datetime.now(timezone.utc) + timedelta(seconds=60),
+        end=datetime.now(timezone.utc) + timedelta(minutes=TRIGGER_END_MINUTES),
     )
 
     run_end_to_end_format_test(

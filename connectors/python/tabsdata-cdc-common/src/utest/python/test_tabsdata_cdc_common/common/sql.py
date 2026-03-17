@@ -4,11 +4,14 @@
 
 from __future__ import annotations
 
+import logging
 import random
 import string
 from abc import ABC, abstractmethod
 from datetime import date, datetime, timedelta
 from typing import Any, Callable
+
+logger = logging.getLogger(__name__)
 
 import polars as pl
 from docker.models.containers import Container
@@ -138,6 +141,7 @@ class CdcSampler(ABC):
         self._cursor = cursor
         self._data: dict[TableObject, pl.DataFrame] = {}
         self._changes: dict[TableObject, pl.DataFrame] = {}
+        self._inserted_pks: dict[TableObject, set[int]] = {}
         self._columns = [self.fold(column) for column in COLUMNS]
         self._auto_columns = [
             self.fold(column) for column in AUTO_COLUMNS
@@ -222,7 +226,7 @@ class CdcSampler(ABC):
             for row in rows
         ]
 
-    def update_row(self, table: TableObject, pk: int, values: dict) -> None:
+    def update_row(self, table: TableObject, pk: int, values: dict) -> int:
         clause = ", ".join(
             f"{column} = {sql_literal(values[column])}"
             for column in self._manual_columns
@@ -233,13 +237,15 @@ class CdcSampler(ABC):
             f"set {clause} "
             f"where {pk_column} = {pk}"
         )
+        return self._cursor.rowcount
 
-    def delete_row(self, table: TableObject, pk: int) -> None:
+    def delete_row(self, table: TableObject, pk: int) -> int:
         pk_column = self.fold("pk")
         self._cursor.execute(
             f"delete from {table.qualified} "
             f"where {pk_column} = {pk}"
         )
+        return self._cursor.rowcount
 
     def run(
         self,
@@ -254,9 +260,12 @@ class CdcSampler(ABC):
         pk_column = self.fold("pk")
         changes: list[dict] = []
 
+        own_pks = self._inserted_pks.setdefault(table, set())
+
         for seq in range(1, inserts + 1):
             insert_values = values_for_insert(self.fold, seq)
             pk = self.insert_row(table, insert_values)
+            own_pks.add(pk)
             all_values = {pk_column: pk, **insert_values}
             changes.append(
                 change_record(
@@ -266,6 +275,10 @@ class CdcSampler(ABC):
 
         if updates > 0:
             all_rows = self.fetch_all_rows(table)
+            all_rows = [
+                row for row in all_rows
+                if row[pk_column] in own_pks
+            ]
             if updates > len(all_rows):
                 raise ValueError(
                     f"updates ({updates}) exceeds existing row count "
@@ -276,13 +289,23 @@ class CdcSampler(ABC):
                 pk = old_values[pk_column]
                 update_values = values_for_update(self.fold, seq)
                 all_values = {pk_column: pk, **update_values}
-                self.update_row(table, pk, update_values)
-                changes.append(
-                    change_record(CdcOperation.UPDATE, all_values, old_values)
-                )
+                affected = self.update_row(table, pk, update_values)
+                if affected > 0:
+                    changes.append(
+                        change_record(CdcOperation.UPDATE, all_values, old_values)
+                    )
+                else:
+                    logger.debug(
+                        f"[NOOP] UPDATE {table.qualified} pk={pk} "
+                        f"affected 0 rows"
+                    )
 
         if deletes > 0:
             all_rows = self.fetch_all_rows(table)
+            all_rows = [
+                row for row in all_rows
+                if row[pk_column] in own_pks
+            ]
             if deletes > len(all_rows):
                 raise ValueError(
                     f"deletes ({deletes}) exceeds existing row count "
@@ -291,12 +314,19 @@ class CdcSampler(ABC):
             delete_rows = random.sample(all_rows, deletes)
             for old_values in delete_rows:
                 pk = old_values[pk_column]
-                self.delete_row(table, pk)
-                changes.append(
-                    change_record(
-                        CdcOperation.DELETE, old_values, null_row(self._columns),
+                affected = self.delete_row(table, pk)
+                if affected > 0:
+                    own_pks.discard(pk)
+                    changes.append(
+                        change_record(
+                            CdcOperation.DELETE, old_values, null_row(self._columns),
+                        )
                     )
-                )
+                else:
+                    logger.debug(
+                        f"[NOOP] DELETE {table.qualified} pk={pk} "
+                        f"affected 0 rows"
+                    )
 
         remaining = self.fetch_all_rows(table)
         self._data[table] = pl.DataFrame(
