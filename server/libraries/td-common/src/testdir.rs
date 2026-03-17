@@ -35,6 +35,50 @@ macro_rules! tdtestdir {
     };
 }
 
+fn find_root() -> PathBuf {
+    let start = std::env::current_exe().unwrap();
+
+    let mut path = start.clone();
+    loop {
+        if path.join(".root").is_file() {
+            return path;
+        }
+        if !path.pop() {
+            break;
+        }
+    }
+
+    let mut path = start.clone();
+    loop {
+        if path.join("Cargo.toml").is_file() && path.join("target").is_dir() {
+            return path;
+        }
+        if !path.pop() {
+            break;
+        }
+    }
+
+    let mut path = start.clone();
+    loop {
+        if path.join("Cargo.toml").is_file() {
+            return path;
+        }
+        if !path.pop() {
+            break;
+        }
+    }
+
+    let mut path = start;
+    loop {
+        if path.join("target").is_dir() {
+            return path;
+        }
+        if !path.pop() {
+            panic!("Could not find .root, Cargo.toml, or target in any parent directory");
+        }
+    }
+}
+
 pub fn _tdtestdir(module_path: &str) -> PathBuf {
     thread_local! {
         static DIR: RefCell<Option<PathBuf>> = const { RefCell::new(None) };
@@ -46,15 +90,7 @@ pub fn _tdtestdir(module_path: &str) -> PathBuf {
         }
         drop(existing);
 
-        let mut root = std::env::current_exe().unwrap();
-        loop {
-            if root.join(".root").is_file() {
-                break;
-            }
-            if !root.pop() {
-                panic!("Could not find .root file in any parent directory");
-            }
-        }
+        let root = find_root();
 
         // module_path!() gives the crate + module, e.g. "td_shuttle::transporter::cli::tests"
         // thread name gives the test path within the crate, e.g. "transporter::cli::tests::test_copy"
