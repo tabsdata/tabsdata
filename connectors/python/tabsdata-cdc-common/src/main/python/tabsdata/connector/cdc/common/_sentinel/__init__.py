@@ -4,10 +4,12 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import Any
+
+import orjson
 
 from tabsdata.connector.cdc.common._model import (
     CdcDataChange,
@@ -29,6 +31,12 @@ from tabsdata.connector.cdc.common.typing import CdcFormatSpec
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
+
+def _orjson_default(obj: Any) -> Any:
+    if isinstance(obj, Decimal):
+        return float(obj)
+    raise TypeError(f"Type is not JSON serializable: {type(obj)}")
 
 
 @dataclass
@@ -70,10 +78,13 @@ def row_to_record(
                     for column in tracked_table.columns
                 }
             case "map":
-                record[CDC_DATA_MAP_NEW] = json.dumps({
-                    column.name: change.new_values.get(column.name)
-                    for column in tracked_table.columns
-                })
+                record[CDC_DATA_MAP_NEW] = orjson.dumps(
+                    {
+                        column.name: change.new_values.get(column.name)
+                        for column in tracked_table.columns
+                    },
+                    default=_orjson_default,
+                ).decode()
             case _:
                 raise ValueError(
                     f"Unsupported values format: {cdc_format.values_format!r}"
@@ -92,10 +103,13 @@ def row_to_record(
                 for column in tracked_table.columns
             }
         case "map":
-            record[CDC_DATA_MAP_OLD] = json.dumps({
-                column.name: change.old_values.get(column.name)
-                for column in tracked_table.columns
-            })
+            record[CDC_DATA_MAP_OLD] = orjson.dumps(
+                {
+                    column.name: change.old_values.get(column.name)
+                    for column in tracked_table.columns
+                },
+                default=_orjson_default,
+            ).decode()
         case _:
             raise ValueError(f"Unsupported values format: {cdc_format.values_format!r}")
 
