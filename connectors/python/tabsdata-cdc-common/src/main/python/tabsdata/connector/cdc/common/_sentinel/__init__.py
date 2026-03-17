@@ -22,6 +22,8 @@ from tabsdata.connector.cdc.common.constants import (
     CDC_DATA_MAP_OLD,
     CDC_DATA_ROW_NEW,
     CDC_DATA_ROW_OLD,
+    CDC_META_FLAT,
+    CDC_META_FMT,
     CDC_META_OP,
     CDC_META_SQ,
     CDC_META_TX,
@@ -54,6 +56,8 @@ def row_to_record(
         CDC_META_OP: change.operation,
         CDC_META_TX: change.transaction,
         CDC_META_SQ: change.sequence,
+        CDC_META_FMT: cdc_format.values_format,
+        CDC_META_FLAT: cdc_format.flatten_values,
     }
 
     if cdc_format.flatten_values:

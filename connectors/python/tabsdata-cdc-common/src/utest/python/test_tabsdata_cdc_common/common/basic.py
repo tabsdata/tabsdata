@@ -27,6 +27,8 @@ from tabsdata.connector.cdc.common.constants import (
     CDC_DATA_MAP_OLD,
     CDC_DATA_ROW_NEW,
     CDC_DATA_ROW_OLD,
+    CDC_META_FLAT,
+    CDC_META_FMT,
     CDC_META_OP,
     CDC_META_SQ,
     CDC_META_TX,
@@ -173,6 +175,23 @@ def _build_publisher(
         return td.concat(tfs)
 
     return process
+
+
+def _validate_cdc_meta_format(
+    df: pl.DataFrame,
+    cdc_format: CdcFormat,
+) -> None:
+    fmt_values = df[CDC_META_FMT].to_list()
+    assert all(value == cdc_format.values_format for value in fmt_values), (
+        f"Expected all {CDC_META_FMT} to be {cdc_format.values_format!r}; "
+        f"got {set(fmt_values)}"
+    )
+
+    flat_values = df[CDC_META_FLAT].to_list()
+    assert all(value == cdc_format.flatten_values for value in flat_values), (
+        f"Expected all {CDC_META_FLAT} to be {cdc_format.flatten_values!r}; "
+        f"got {set(flat_values)}"
+    )
 
 
 def _validate_cdc_output(
@@ -333,6 +352,7 @@ def run_poll_changes_test(
     )
 
     df = pl.concat([pl.read_parquet(f) for f in parquet_files])
+    _validate_cdc_meta_format(df, CdcFormat())
     _validate_cdc_output(df, expected, sampler)
 
 
@@ -367,6 +387,7 @@ def run_end_to_end_test(
     )
 
     df = pl.concat([pl.read_parquet(f) for f in parquet_files])
+    _validate_cdc_meta_format(df, CdcFormat())
     _validate_cdc_output(df, expected, sampler)
 
     output_tables = fn_run.output.as_pl_df()
@@ -393,6 +414,8 @@ def _normalize_to_canonical(
         pl.col(CDC_META_OP),
         pl.col(CDC_META_TX),
         pl.col(CDC_META_SQ),
+        pl.col(CDC_META_FMT),
+        pl.col(CDC_META_FLAT),
     ]
 
     for column in sampler.columns:
@@ -570,7 +593,10 @@ def _validate_cdc_format_output(
     sampler: CdcSampler,
     cdc_format: CdcFormat,
 ) -> None:
+    _validate_cdc_meta_format(df, cdc_format)
     if cdc_format.values_format in ("columns", "struct"):
+        logger.debug("--- Original Output ---")
+        logger.debug(f"\n{df}")
         normalized = _normalize_to_canonical(df, sampler, cdc_format)
         _validate_cdc_output(normalized, expected, sampler)
     else:
@@ -633,6 +659,8 @@ def run_offset_resume_test(
 
         logger.debug(f"--- Actual Output (iteration {i + 1}) ---")
         logger.debug(f"\n{df}")
+
+        _validate_cdc_meta_format(df, CdcFormat())
 
         assert df.height == expected.height, (
             f"Iteration {i + 1}: expected {expected.height} rows, got {df.height}"
@@ -856,6 +884,8 @@ def _validate_continuous_output(
         logger.debug(f"--- Table {table} (index {i}) ---")
         logger.debug(f"Actual rows: {df.height}")
         logger.debug(f"Expected rows: {expected.height}")
+
+        _validate_cdc_meta_format(df, CdcFormat())
 
         assert df.height == expected.height, (
             f"Table {table}: expected {expected.height} rows, got {df.height}"

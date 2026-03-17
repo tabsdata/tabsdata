@@ -34,6 +34,8 @@ TD_CDC_NEW_INFIX = "new"
 TD_CDC_OP_INFIX = "op"
 TD_CDC_TX_INFIX = "tx"
 TD_CDC_SQ_INFIX = "sq"
+TD_CDC_FMT_INFIX = "fmt"
+TD_CDC_FLAT_INFIX = "flat"
 
 DOT = "."
 COMMA = ","
@@ -57,6 +59,16 @@ CDC_META_TX = DOT.join([
 CDC_META_SQ = DOT.join([
     CDC_META_PREFIX,
     TD_CDC_SQ_INFIX,
+])
+
+CDC_META_FMT = DOT.join([
+    CDC_META_PREFIX,
+    TD_CDC_FMT_INFIX,
+])
+
+CDC_META_FLAT = DOT.join([
+    CDC_META_PREFIX,
+    TD_CDC_FLAT_INFIX,
 ])
 
 CDC_DATA_COL_PREFIX = DOT.join([

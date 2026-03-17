@@ -21,6 +21,8 @@ from tabsdata.connector.cdc.common.constants import (
     CDC_DATA_MAP_OLD,
     CDC_DATA_ROW_NEW,
     CDC_DATA_ROW_OLD,
+    CDC_META_FLAT,
+    CDC_META_FMT,
     CDC_META_OP,
     CDC_META_SQ,
     CDC_META_TX,
@@ -143,6 +145,8 @@ class TrackedTable:
             pa.field(CDC_META_OP, pa.utf8()),
             pa.field(CDC_META_TX, pa.utf8()),
             pa.field(CDC_META_SQ, pa.int64()),
+            pa.field(CDC_META_FMT, pa.utf8()),
+            pa.field(CDC_META_FLAT, pa.bool_()),
         ]
 
         if self.cdc_format.flatten_values:
