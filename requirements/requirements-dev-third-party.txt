@@ -41,6 +41,7 @@ pipdeptree==2.31.0
 prompt-toolkit==3.0.52
 psutil==7.2.2
 py-cpuinfo==9.0.0
+py-spy==0.4.1
 pydevd_pycharm==261.21525.48
 pygame==2.6.1
 pysentry-rs==0.4.2

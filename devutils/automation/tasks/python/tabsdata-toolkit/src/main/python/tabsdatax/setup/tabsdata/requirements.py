@@ -55,7 +55,8 @@ def build_extras_require(
                         f"{connector}: {entry.name}"
                     )
                     connector_requirement = requirement_template.format(
-                        connector=connector, version=version
+                        connector=connector,
+                        version=version,
                     )
                     extras[connector] = [connector_requirement]
                     all_connectors_requirements.append(connector_requirement)

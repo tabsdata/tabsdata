@@ -1,3 +1,6 @@
 #
 # Copyright 2026 Tabs Data Inc.
 #
+
+tabsdata-cdc-common==1.8.0
+tabsdata-sql-common==1.8.0
