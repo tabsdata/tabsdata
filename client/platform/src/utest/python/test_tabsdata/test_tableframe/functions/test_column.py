@@ -86,11 +86,13 @@ def test_column_schema_unsigned_integer_types():
 
 def test_column_schema_float_types():
     columns = [
+        Column("float16_col", td.Float16),
         Column("float32_col", td.Float32),
         Column("float64_col", td.Float64),
     ]
     schema = tdf.Schema(columns)
     data = [
+        {"float16_col": 3.14159, "float64_col": 2.718281828459045},
         {"float32_col": 3.14159, "float64_col": 2.718281828459045},
         {"float32_col": -1.23456, "float64_col": -9.876543210987654},
     ]

@@ -22,6 +22,7 @@ class TestDataTypes:
             td_dtypes.Decimal,
             td_dtypes.Duration,
             td_dtypes.Enum,
+            td_dtypes.Float16,
             td_dtypes.Float32,
             td_dtypes.Float64,
             td_dtypes.Int8,

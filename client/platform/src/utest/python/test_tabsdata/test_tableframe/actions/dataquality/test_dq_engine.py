@@ -349,7 +349,7 @@ def test_categorizer_with_negative_values(scale, dtype):
 
     data = {"id": list(range(len(values))), "value": values}
     df = pl.DataFrame(data, schema=schema, strict=False)
-    if dtype in [td_dtypes.Float32, td_dtypes.Float64]:
+    if dtype in [td_dtypes.Float16, td_dtypes.Float32, td_dtypes.Float64]:
         nan_data = {"id": [len(values)], "value": [float("nan")]}
         nan_df = pl.DataFrame(nan_data, schema=schema, strict=False)
         df = df.vstack(nan_df)
@@ -367,7 +367,7 @@ def test_categorizer_with_negative_values(scale, dtype):
     assert df.schema["value_category"] == pl.UInt8
 
     expected_count = len(values) + (
-        1 if dtype in [td_dtypes.Float32, td_dtypes.Float64] else 0
+        1 if dtype in [td_dtypes.Float16, td_dtypes.Float32, td_dtypes.Float64] else 0
     )
     assert len(df) == expected_count
 
@@ -375,19 +375,19 @@ def test_categorizer_with_negative_values(scale, dtype):
     null_categories = df.filter(null_mask)["value_category"]
     assert null_categories.to_list() == [ByteSentinel.NULL]
 
-    if dtype in [td_dtypes.Float32, td_dtypes.Float64]:
+    if dtype in [td_dtypes.Float16, td_dtypes.Float32, td_dtypes.Float64]:
         nan_mask = df["value"].is_nan()
         nan_categories = df.filter(nan_mask)["value_category"]
         assert nan_categories.to_list() == [ByteSentinel.NAN]
 
     underflow_mask = (df["value"].is_not_null()) & (df["value"] < minimum)
-    if dtype in [td_dtypes.Float32, td_dtypes.Float64]:
+    if dtype in [td_dtypes.Float16, td_dtypes.Float32, td_dtypes.Float64]:
         underflow_mask = underflow_mask & df["value"].is_not_nan()
     underflow_categories = df.filter(underflow_mask)["value_category"]
     assert all(c == ByteSentinel.UNDERFLOW for c in underflow_categories.to_list())
 
     overflow_mask = (df["value"].is_not_null()) & (df["value"] > maximum)
-    if dtype in [td_dtypes.Float32, td_dtypes.Float64]:
+    if dtype in [td_dtypes.Float16, td_dtypes.Float32, td_dtypes.Float64]:
         overflow_mask = overflow_mask & df["value"].is_not_nan()
     overflow_categories = df.filter(overflow_mask)["value_category"]
     assert all(c == ByteSentinel.OVERFLOW for c in overflow_categories.to_list())
@@ -395,7 +395,7 @@ def test_categorizer_with_negative_values(scale, dtype):
     valid_mask = (
         df["value"].is_not_null() & (df["value"] >= minimum) & (df["value"] <= maximum)
     )
-    if dtype in [td_dtypes.Float32, td_dtypes.Float64]:
+    if dtype in [td_dtypes.Float16, td_dtypes.Float32, td_dtypes.Float64]:
         valid_mask = valid_mask & df["value"].is_not_nan()
 
     valid_categories = df.filter(valid_mask)["value_category"]

@@ -225,6 +225,37 @@ class TestTypeHandler:
     def test_integer_types_null(self, method):
         to_int_method = getattr(TypeHandler, method)
         assert to_int_method(None, allow_null=True) is None
+    @pytest.mark.parametrize(
+        "value",
+        [
+            123,
+            "123",
+            123.0,
+            float("inf"),
+            float("-inf"),
+        ],
+    )
+    def test_to_float16_valid(self, value):
+        assert TypeHandler.to_float16(value) == float(value)
+
+    def test_to_float16_nan(self):
+        assert TypeHandler.to_float16(float("nan"), allow_nan=True) is not None
+        with pytest.raises(DataQualityProcessingError):
+            TypeHandler.to_float16(float("nan"))
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "invalid-float",
+            None,
+        ],
+    )
+    def test_to_float16_invalid(self, value):
+        with pytest.raises(DataQualityProcessingError):
+            TypeHandler.to_float16(value)
+
+    def test_to_float16_null(self):
+        assert TypeHandler.to_float16(None, allow_null=True) is None
 
     @pytest.mark.parametrize(
         "value",
@@ -386,7 +417,7 @@ class TestTypeHandler:
     )
     def test_convert_set(self, values, dtype, expected):
         converted = TypeHandler.convert_set(values, dtype)
-        if isinstance(dtype, (pl.Float32, pl.Float64)):
+        if isinstance(dtype, (pl.Float16, pl.Float32, pl.Float64)):
             assert len(converted) == len(expected)
             for exp in expected:
                 if isinstance(exp, float) and math.isnan(exp):

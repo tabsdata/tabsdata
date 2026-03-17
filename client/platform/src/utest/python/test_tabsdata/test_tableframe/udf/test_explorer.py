@@ -88,7 +88,7 @@ def compare_values(actual: Any, expected: Any, dtype: PolarsDataType) -> None:
     if expected is None:
         assert actual is None
         return
-    if isinstance(dtype, (pl.Float32, pl.Float64)):
+    if isinstance(dtype, (pl.Float16, pl.Float32, pl.Float64)):
         assert actual == pytest.approx(expected)
     elif isinstance(
         dtype,

@@ -18,6 +18,7 @@ POLARS_TO_NUMPY_DTYPE_MAP = {
     td_dtypes.UInt32: np.uint32,
     td_dtypes.UInt64: np.uint64,
     # Floats
+    td_dtypes.Float16: np.float16,
     td_dtypes.Float32: np.float32,
     td_dtypes.Float64: np.float64,
     td_dtypes.Decimal: np.longdouble,

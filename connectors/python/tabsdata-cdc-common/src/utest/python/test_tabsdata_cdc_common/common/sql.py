@@ -52,7 +52,7 @@ COLUMN_TYPES: dict[str, pl.DataType] = {
 
 FLOAT_COLUMNS = {
     name for name, dtype in COLUMN_TYPES.items()
-    if dtype in (pl.Float32, pl.Float64)
+    if dtype in (pl.Float16, pl.Float32, pl.Float64)
 }
 
 EPOCH = date(2020, 1, 1)

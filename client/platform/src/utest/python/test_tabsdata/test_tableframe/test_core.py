@@ -13,6 +13,7 @@ def test_import_data_types():
     _ = td.Date()
     _ = td.Datetime()
     _ = td.Duration()
+    _ = td.Float16()
     _ = td.Float32()
     _ = td.Float64()
     _ = td.Int8()

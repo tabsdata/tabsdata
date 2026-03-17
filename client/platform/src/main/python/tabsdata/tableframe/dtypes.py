@@ -26,6 +26,7 @@ UInt8: TypeAlias = pl.UInt8
 UInt16: TypeAlias = pl.UInt16
 UInt32: TypeAlias = pl.UInt32
 UInt64: TypeAlias = pl.UInt64
+Float16: TypeAlias = pl.Float16
 Float32: TypeAlias = pl.Float32
 Float64: TypeAlias = pl.Float64
 Decimal: TypeAlias = pl.Decimal
@@ -78,6 +79,7 @@ _SIGNED_NUMERIC_DTYPES: FrozenSet[Type] = frozenset({
     Int32,
     Int64,
     Int128,
+    Float16,
     Float32,
     Float64,
     Decimal,
@@ -110,6 +112,7 @@ _UNSIGNED_INT_DTYPES: FrozenSet[Type] = frozenset({
 _INT_DTYPES: FrozenSet[Type] = _SIGNED_INT_DTYPES | _UNSIGNED_INT_DTYPES
 
 _FLOAT_DTYPES: FrozenSet[Type] = frozenset({
+    Float16,
     Float32,
     Float64,
 })

@@ -182,7 +182,9 @@ class QCallableEnum(Enum):
 
 class QExpressions(QCallableEnum):
     IS_NAN = lambda column, dtype: (  # noqa: E731
-        column.is_nan() if dtype in [pl.Float32, pl.Float64] else pl.lit(False)
+        column.is_nan()
+        if dtype in [pl.Float16, pl.Float32, pl.Float64]
+        else pl.lit(False)
     )
 
 

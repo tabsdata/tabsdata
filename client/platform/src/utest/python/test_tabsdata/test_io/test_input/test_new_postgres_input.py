@@ -15,7 +15,6 @@ from tabsdata.exceptions import (
     SourceConfigurationError,
 )
 from tabsdata.tableframe.dtypes import Float64, Int64
-from tabsdata.tableframe.typing import DataType
 
 
 def test_all_correct_query_list():

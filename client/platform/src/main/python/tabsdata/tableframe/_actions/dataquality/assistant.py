@@ -507,6 +507,44 @@ class TypeHandler:
             )
 
     @staticmethod
+    def to_float16(  # noqa: C901
+        value: Any, allow_null: bool = False, allow_nan: bool = False
+    ) -> float | None:
+        try:
+            if value is None:
+                if allow_null:
+                    return None
+                raise ValueError("Cannot convert None to Float16")
+            if not isinstance(value, (int, float, str)):
+                raise TypeError(f"Cannot convert {type(value).__name__} to Float16")
+            if isinstance(value, float):
+                if math.isnan(value):
+                    if allow_nan:
+                        return value
+                    raise ValueError("Cannot convert NaN to Float16")
+                canonical = value
+            else:
+                canonical = float(value)
+                if math.isnan(canonical):
+                    if allow_nan:
+                        return canonical
+                    raise ValueError("Cannot convert NaN to Float16")
+            try:
+                converted = pl.Series([canonical], dtype=pl.Float16).item()
+            except Exception as error:
+                raise ValueError(
+                    f"Value {canonical} out of range for Float16"
+                ) from error
+            if not math.isinf(canonical) and math.isinf(converted):
+                raise ValueError(f"Value {canonical} out of range for Float16")
+            return converted
+        except Exception as error:
+            raise DataQualityProcessingError(
+                ErrorCode.DQPE13,
+                f"Failed to convert value '{value}' to Float16: {str(error)}",
+            )
+
+    @staticmethod
     def to_float32(  # noqa: C901
         value: Any, allow_null: bool = False, allow_nan: bool = False
     ) -> float | None:
@@ -673,6 +711,8 @@ class TypeHandler:
                 return cls.to_uint32(value, allow_null)
             case td_dtypes.UInt64:
                 return cls.to_uint64(value, allow_null)
+            case td_dtypes.Float16:
+                return cls.to_float16(value, allow_null, allow_nan)
             case td_dtypes.Float32:
                 return cls.to_float32(value, allow_null, allow_nan)
             case td_dtypes.Float64:
@@ -693,7 +733,11 @@ class TypeHandler:
     def convert_set(
         cls, values: AbstractSet[Any], target_dtype: pl.DataType
     ) -> AbstractSet[type[pl.DataType] | None]:
-        supports_nan = type(target_dtype) in {td_dtypes.Float32, td_dtypes.Float64}
+        supports_nan = type(target_dtype) in {
+            td_dtypes.Float16,
+            td_dtypes.Float32,
+            td_dtypes.Float64,
+        }
         canonicals = []
         for value in values:
             if isinstance(value, float) and math.isnan(value) and not supports_nan:

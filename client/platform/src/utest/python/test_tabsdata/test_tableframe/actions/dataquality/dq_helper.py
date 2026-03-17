@@ -178,7 +178,7 @@ def _is_null_checker(df: pl.DataFrame, tags: dict, _qrows: int = None):
     ), f"Expected UInt8 dtype for DQ result column; got {df.schema['value_is_null']}"
 
     dtype = df.schema["value"]
-    is_float = dtype in [pl.Float32, pl.Float64]
+    is_float = dtype in [pl.Float16, pl.Float32, pl.Float64]
 
     true_count = df.filter(pl.col("value").is_null()).height
     if is_float:
@@ -221,7 +221,7 @@ def _is_not_null_checker(df: pl.DataFrame, tags: dict, _qrows: int = None):
     )
 
     dtype = df.schema["value"]
-    is_float = dtype in [pl.Float32, pl.Float64]
+    is_float = dtype in [pl.Float16, pl.Float32, pl.Float64]
 
     false_count = df.filter(pl.col("value").is_null()).height
     if is_float:
@@ -339,7 +339,7 @@ def _is_nan_checker(df: pl.DataFrame, tags: dict, _qrows: int = None):
     ), f"Expected UInt8 dtype for DQ result column; got {df.schema['value_is_nan']}"
 
     dtype = df.schema["value"]
-    is_float = dtype in [pl.Float32, pl.Float64]
+    is_float = dtype in [pl.Float16, pl.Float32, pl.Float64]
     assert (
         is_float
     ), f"is_nan checker should only be called for Float types; got {dtype}"
@@ -380,7 +380,7 @@ def _is_not_nan_checker(df: pl.DataFrame, tags: dict, _qrows: int = None):
     ), f"Expected UInt8 dtype for DQ result column; got {df.schema['value_is_not_nan']}"
 
     dtype = df.schema["value"]
-    is_float = dtype in [pl.Float32, pl.Float64]
+    is_float = dtype in [pl.Float16, pl.Float32, pl.Float64]
     assert (
         is_float
     ), f"is_not_nan checker should only be called for Float types; got {dtype}"
@@ -422,7 +422,7 @@ def _is_null_or_nan_checker(df: pl.DataFrame, tags: dict, _qrows: int = None):
     )
 
     dtype = df.schema["value"]
-    is_float = dtype in [pl.Float32, pl.Float64]
+    is_float = dtype in [pl.Float16, pl.Float32, pl.Float64]
     assert (
         is_float
     ), f"is_null_or_nan checker should only be called for Float types; got {dtype}"
@@ -470,7 +470,7 @@ def _is_not_null_nor_nan_checker(df: pl.DataFrame, tags: dict, _qrows: int = Non
     )
 
     dtype = df.schema["value"]
-    is_float = dtype in [pl.Float32, pl.Float64]
+    is_float = dtype in [pl.Float16, pl.Float32, pl.Float64]
     assert (
         is_float
     ), f"is_not_null_nor_nan checker should only be called for Float types; got {dtype}"
@@ -519,7 +519,7 @@ def _is_zero_checker(df: pl.DataFrame, tags: dict, _qrows: int = None):
     ), f"Expected UInt8 dtype for DQ result column; got {df.schema['value_is_zero']}"
 
     dtype = df.schema["value"]
-    is_float = dtype in [pl.Float32, pl.Float64]
+    is_float = dtype in [pl.Float16, pl.Float32, pl.Float64]
 
     if is_float:
         false_count = df.filter(
@@ -565,7 +565,7 @@ def _is_not_zero_checker(df: pl.DataFrame, tags: dict, _qrows: int = None):
     )
 
     dtype = df.schema["value"]
-    is_float = dtype in [pl.Float32, pl.Float64]
+    is_float = dtype in [pl.Float16, pl.Float32, pl.Float64]
 
     if is_float:
         false_count = df.filter(
@@ -611,7 +611,7 @@ def _is_positive_checker(df: pl.DataFrame, tags: dict, _qrows: int = None):
     )
 
     dtype = df.schema["value"]
-    is_float = dtype in [pl.Float32, pl.Float64]
+    is_float = dtype in [pl.Float16, pl.Float32, pl.Float64]
 
     if is_float:
         false_count = df.filter(
@@ -657,7 +657,7 @@ def _is_positive_or_zero_checker(df: pl.DataFrame, tags: dict, _qrows: int = Non
     )
 
     dtype = df.schema["value"]
-    is_float = dtype in [pl.Float32, pl.Float64]
+    is_float = dtype in [pl.Float16, pl.Float32, pl.Float64]
 
     if is_float:
         false_count = df.filter(
@@ -711,7 +711,7 @@ def _is_negative_checker(df: pl.DataFrame, tags: dict, _qrows: int = None):
     )
 
     dtype = df.schema["value"]
-    is_float = dtype in [pl.Float32, pl.Float64]
+    is_float = dtype in [pl.Float16, pl.Float32, pl.Float64]
 
     if is_float:
         false_count = df.filter(
@@ -757,7 +757,7 @@ def _is_negative_or_zero_checker(df: pl.DataFrame, tags: dict, _qrows: int = Non
     )
 
     dtype = df.schema["value"]
-    is_float = dtype in [pl.Float32, pl.Float64]
+    is_float = dtype in [pl.Float16, pl.Float32, pl.Float64]
 
     if is_float:
         false_count = df.filter(
@@ -814,7 +814,7 @@ def _make_is_between_checker(
         )
 
         pl_dtype = df.schema["value"]
-        is_float = pl_dtype in [pl.Float32, pl.Float64]
+        is_float = pl_dtype in [pl.Float16, pl.Float32, pl.Float64]
 
         dtype_class = type(pl_dtype)
         converter = (
@@ -956,7 +956,7 @@ def _make_is_not_between_checker(
         )
 
         pl_dtype = df.schema["value"]
-        is_float = pl_dtype in [pl.Float32, pl.Float64]
+        is_float = pl_dtype in [pl.Float16, pl.Float32, pl.Float64]
 
         dtype_class = type(pl_dtype)
         converter = (
@@ -1103,7 +1103,7 @@ def _make_is_in_checker(values_set: set):
         ), f"Expected UInt8 dtype for DQ result column; got {df.schema['value_is_in']}"
 
         pl_dtype = df.schema["value"]
-        is_float = pl_dtype in [pl.Float32, pl.Float64]
+        is_float = pl_dtype in [pl.Float16, pl.Float32, pl.Float64]
 
         dtype_class = type(pl_dtype)
         converter = (
@@ -1229,7 +1229,7 @@ def _make_is_not_in_checker(values_set: set):
         )
 
         pl_dtype = df.schema["value"]
-        is_float = pl_dtype in [pl.Float32, pl.Float64]
+        is_float = pl_dtype in [pl.Float16, pl.Float32, pl.Float64]
 
         dtype_class = type(pl_dtype)
         converter = (
@@ -1357,7 +1357,7 @@ def _make_matches_checker(pattern: str):
         )
 
         dtype = df.schema["value"]
-        is_float = dtype in [pl.Float32, pl.Float64]
+        is_float = dtype in [pl.Float16, pl.Float32, pl.Float64]
 
         if is_float:
             false_count = df.filter(
@@ -1416,7 +1416,7 @@ def _make_does_not_match_checker(pattern: str):
         )
 
         dtype = df.schema["value"]
-        is_float = dtype in [pl.Float32, pl.Float64]
+        is_float = dtype in [pl.Float16, pl.Float32, pl.Float64]
 
         if is_float:
             false_count = df.filter(
@@ -1483,7 +1483,7 @@ def _make_has_length_checker(min_length: int, max_length: int):
         )
 
         dtype = df.schema["value"]
-        is_float = dtype in [pl.Float32, pl.Float64]
+        is_float = dtype in [pl.Float16, pl.Float32, pl.Float64]
 
         if is_float:
             false_count = df.filter(
@@ -1641,7 +1641,7 @@ def _make_categorizer_checker(scale):
 
         def get_expected_bin(row_value):
             if row_value is None or (
-                dtype in [pl.Float32, pl.Float64] and math.isnan(row_value)
+                dtype in [pl.Float16, pl.Float32, pl.Float64] and math.isnan(row_value)
             ):
                 return None
             if row_value < minimum:
@@ -1665,7 +1665,7 @@ def _make_categorizer_checker(scale):
             dq_null_count == null_count
         ), f"NULL: dq={dq_null_count}, expected={null_count}"
 
-        if dtype in [pl.Float32, pl.Float64]:
+        if dtype in [pl.Float16, pl.Float32, pl.Float64]:
             nan_mask = pl.col("value").is_nan()
             nan_count = df.filter(nan_mask).height
             dq_nan_count = df.filter(
@@ -1676,7 +1676,7 @@ def _make_categorizer_checker(scale):
             ), f"NAN: dq={dq_nan_count}, expected={nan_count}"
 
         underflow_mask = pl.col("value").is_not_null() & (pl.col("value") < minimum)
-        if dtype in [pl.Float32, pl.Float64]:
+        if dtype in [pl.Float16, pl.Float32, pl.Float64]:
             underflow_mask = underflow_mask & pl.col("value").is_not_nan()
         underflow_count = df.filter(underflow_mask).height
         dq_underflow_count = df.filter(
@@ -1687,7 +1687,7 @@ def _make_categorizer_checker(scale):
         ), f"UNDERFLOW: dq={dq_underflow_count}, expected={underflow_count}"
 
         overflow_mask = pl.col("value").is_not_null() & (pl.col("value") > maximum)
-        if dtype in [pl.Float32, pl.Float64]:
+        if dtype in [pl.Float16, pl.Float32, pl.Float64]:
             overflow_mask = overflow_mask & pl.col("value").is_not_nan()
         overflow_count = df.filter(overflow_mask).height
         dq_overflow_count = df.filter(
@@ -1702,7 +1702,7 @@ def _make_categorizer_checker(scale):
             & (pl.col("value") >= minimum)
             & (pl.col("value") <= maximum)
         )
-        if dtype in [pl.Float32, pl.Float64]:
+        if dtype in [pl.Float16, pl.Float32, pl.Float64]:
             valid_mask = valid_mask & pl.col("value").is_not_nan()
 
         valid_df = df.filter(valid_mask)
@@ -2275,6 +2275,14 @@ DATASET_ROWS: dict[type, DataShape] = {
         Q_NULL,
         0,
         DataShape.to_duration,
+    ),
+    td.Float16: DataShape(
+        Q_ZERO,
+        Q_POSITIVE,
+        Q_NEGATIVE,
+        Q_NULL,
+        Q_NaN,
+        DataShape.to_float,
     ),
     td.Float32: DataShape(
         Q_ZERO,
@@ -4695,7 +4703,7 @@ def categorical_dataset(
     values.append(None)
 
     pl_dtype = getattr(pl, dtype.__name__)
-    if pl_dtype in [pl.Float32, pl.Float64]:
+    if pl_dtype in [pl.Float16, pl.Float32, pl.Float64]:
         values.append(float("nan"))
 
     regular_values = [
