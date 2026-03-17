@@ -116,10 +116,12 @@ class StageTrigger(ABC):
             "end": self.end.isoformat() if self.end else None,
         }
 
+    @property
     def out(self) -> dict[int, str] | None:
         """
         Returns a mapping of positional index to table name for the outputs
-        produced by this trigger, or None when the output is a single table.
+        produced by this trigger, or None when the StageTrigger implementation only
+        supports generating a single table.
         """
         return None
 

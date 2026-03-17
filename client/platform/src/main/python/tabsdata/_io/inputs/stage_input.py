@@ -576,7 +576,15 @@ class ManifestStage(SourcePlugin):
 
         if not manifests:
             logger.debug("No new manifest files to process")
-            return []
+            stage_trigger = execution_context.stage_trigger
+            expected_params = (
+                len(stage_trigger.out) if stage_trigger.out is not None else 1
+            )
+            logger.debug(
+                f"Stage trigger {stage_trigger} generates {expected_params} "
+                f"params for the function, so returning that amount."
+            )
+            return [[] for _ in range(expected_params)]
 
         logger.debug(f"Processing {len(manifests)} new manifest file(s): {manifests}")
 

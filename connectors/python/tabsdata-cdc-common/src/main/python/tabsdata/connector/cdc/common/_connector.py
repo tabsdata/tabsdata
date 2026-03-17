@@ -83,6 +83,7 @@ class CdcTrigger(StageTrigger):
     def tables(self) -> list[str] | None:
         return self._tables
 
+    @property
     def out(self) -> dict[int, str] | None:
         if self._tables is None:
             return None
