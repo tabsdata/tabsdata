@@ -173,7 +173,7 @@ class TestManifestSerialization:
     def test_serialize_empty_manifest(self):
         content = _serialize_manifest(StageManifest())
         data = yaml.safe_load(content)
-        assert data == {"version": STAGE_MANIFEST_LATEST_VERSION}
+        assert data == {"version": STAGE_MANIFEST_LATEST_VERSION, "data": {}}
 
     def test_serialize_includes_version(self):
         content = _serialize_manifest(StageManifest(entries=[
@@ -181,7 +181,8 @@ class TestManifestSerialization:
         ]))
         data = yaml.safe_load(content)
         assert data["version"] == STAGE_MANIFEST_LATEST_VERSION
-        assert 0 in data
+        assert "data" in data
+        assert 0 in data["data"]
 
 
 # ===================================================================

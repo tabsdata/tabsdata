@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import filecmp
 import inspect
 import logging
 import os
@@ -19,6 +20,11 @@ import polars as pl
 import pytest
 
 import tabsdata as td
+from tabsdata._io.inputs.stage_input import (
+    STAGE_MANIFEST_FILE_PATTERN,
+    _deserialize_manifest,
+    _read_manifest_file,
+)
 from tabsdata._io.stage_trigger import (
     CallConfig,
     LocalFileStageTriggerContext,
@@ -34,6 +40,7 @@ from tabsdata._tabsserver.function.execution_context import (
 )
 from tabsdata._tabsserver.function.global_utils import (
     DEFAULT_DEVELOPMENT_LOCKS_LOCATION,
+    convert_uri_to_path,
 )
 from tabsdata._tabsserver.function.response_utils import RESPONSE_FILE_NAME
 from tabsdata._tabsserver.function.yaml_parsing import (
@@ -409,6 +416,8 @@ class FnTrigger:
                 fnrun=None,
             )
 
+        self.integrity()
+
     @property
     def staging(self) -> Path:
         return self._staging
@@ -424,6 +433,54 @@ class FnTrigger:
     @property
     def status(self) -> StageTriggerStatus:
         return self._status
+
+    def integrity(self) -> None:
+        working = self._staging.parent
+        manifest_files = sorted(self._staging.glob(STAGE_MANIFEST_FILE_PATTERN))
+        stage_uris: list[str] = []
+        for manifest_file in manifest_files:
+            content = _read_manifest_file(str(manifest_file))
+            manifest = _deserialize_manifest(content)
+            for entry in manifest.entries:
+                stage_uris.extend(entry.files)
+        for stage_uri in stage_uris:
+            stage_path = Path(convert_uri_to_path(stage_uri))
+            if not stage_path.exists():
+                raise FnError(
+                    message=f"Staged file does not exist: '{stage_path}'",
+                    fntrigger=self,
+                    fnrun=None,
+                )
+            working_path = working / stage_path.name
+            if not working_path.exists():
+                raise FnError(
+                    message=f"Working dir file does not exist: '{working_path}'",
+                    fntrigger=self,
+                    fnrun=None,
+                )
+            if not filecmp.cmp(str(working_path), str(stage_path), shallow=False):
+                raise FnError(
+                    message=(
+                        f"Contents differ between working folder and staging "
+                        f"folder for {stage_path.name}"
+                    ),
+                    fntrigger=self,
+                    fnrun=None,
+                )
+        working_parquets = {file.name for file in working.glob("*.parquet")}
+        stage_names = {
+            Path(convert_uri_to_path(uri)).name for uri in stage_uris
+        }
+        unaccounted = working_parquets - stage_names
+        if unaccounted:
+            raise FnError(
+                message=(
+                    f"Working dir parquet files not in any manifest: "
+                    f"{unaccounted}"
+                ),
+                fntrigger=self,
+                fnrun=None,
+            )
 
     @property
     def output(self) -> FnOut:

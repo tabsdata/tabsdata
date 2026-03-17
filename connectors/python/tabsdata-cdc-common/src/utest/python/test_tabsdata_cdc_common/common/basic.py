@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import math
 import uuid
-from typing import Any
+from typing import Any, Callable
 
 import polars as pl
 
@@ -19,7 +19,8 @@ from tabsdata.connector.cdc.common.constants import (
     CDC_META_TX,
     CdcOperation,
 )
-from test_tabsdata.fntest import tdfntrigger
+from tabsdata._utils.tableframe._common import drop_system_columns
+from test_tabsdata.fntest import tdfnjob, tdfntrigger
 from test_tabsdata.test_tableframe.common import pretty_pandas, pretty_polars
 from test_tabsdata_cdc_common.common.sql import CdcSampler
 from test_tabsdata_cdc_db2.common.sql import Db2CdcSampler
@@ -40,12 +41,11 @@ def fuzzy_eq(actual: list, expected: list, column: str, float_columns: list[str]
     return True
 
 
-def run_poll_changes_test(
+def _run_dml_operations(
     sampler: CdcSampler,
     connection: Any,
     table: TableObject,
-    trigger: td.StageTrigger,
-) -> None:
+) -> pl.DataFrame:
     sampler.run(table=table, inserts=8, updates=0, deletes=0)
     connection.commit()
 
@@ -62,6 +62,12 @@ def run_poll_changes_test(
     print("\n--- Expected Changes ---")
     print(expected)
 
+    return expected
+
+
+def _build_publisher(
+    trigger: td.StageTrigger,
+) -> td.TabsdataFunction | Callable[..., Any]:
     @td.publisher(
         source=td.Stage(use_existing_data=True),
         tables="output",
@@ -71,24 +77,14 @@ def run_poll_changes_test(
     def process(tfs: list[td.TableFrame]) -> td.TableFrame:
         return td.concat(tfs)
 
-    fn_trigger = tdfntrigger(
-        trigger=trigger,
-        function=process,
-    )
+    return process
 
-    staging = fn_trigger.staging
-    workdir = staging.parent
 
-    parquet_files = sorted(staging.glob("*.parquet")) if staging.exists() else []
-    if not parquet_files:
-        parquet_files = sorted(workdir.glob("*.parquet"))
-
-    assert len(parquet_files) > 0, (
-        f"No parquet files found in staging ({staging}) or work dir ({workdir})"
-    )
-
-    df = pl.concat([pl.read_parquet(f) for f in parquet_files])
-
+def _validate_cdc_output(
+    df: pl.DataFrame,
+    expected: pl.DataFrame,
+    sampler: CdcSampler,
+) -> None:
     print("\n--- Actual Output ---")
     print(df)
 
@@ -204,4 +200,82 @@ def run_poll_changes_test(
     delete_tx = delete_txs.to_list()[0]
     assert insert_tx < update_tx < delete_tx, (
         f"Transaction IDs should be ordered: {insert_tx} < {update_tx} < {delete_tx}"
+    )
+
+
+def run_poll_changes_test(
+    sampler: CdcSampler,
+    connection: Any,
+    table: TableObject,
+    trigger: td.StageTrigger,
+) -> None:
+    expected = _run_dml_operations(sampler, connection, table)
+    process = _build_publisher(trigger)
+
+    fn_trigger = tdfntrigger(
+        trigger=trigger,
+        function=process,
+    )
+
+    fn_trigger.check()
+    fn_trigger.integrity()
+
+    staging = fn_trigger.staging
+    workdir = staging.parent
+
+    parquet_files = sorted(staging.glob("*.parquet")) if staging.exists() else []
+    if not parquet_files:
+        parquet_files = sorted(workdir.glob("*.parquet"))
+
+    assert len(parquet_files) > 0, (
+        f"No parquet files found in staging ({staging}) or work dir ({workdir})"
+    )
+
+    df = pl.concat([pl.read_parquet(f) for f in parquet_files])
+    _validate_cdc_output(df, expected, sampler)
+
+
+def run_end_to_end_test(
+    sampler: CdcSampler,
+    connection: Any,
+    table: TableObject,
+    trigger: td.StageTrigger,
+) -> None:
+    expected = _run_dml_operations(sampler, connection, table)
+    process = _build_publisher(trigger)
+
+    fn_trigger, fn_run = tdfnjob(
+        trigger=trigger,
+        function=process,
+        function_defined_on=0,
+    )
+
+    fn_trigger.check()
+
+    staging = fn_trigger.staging
+    workdir = staging.parent
+
+    parquet_files = sorted(staging.glob("*.parquet")) if staging.exists() else []
+    if not parquet_files:
+        parquet_files = sorted(workdir.glob("*.parquet"))
+
+    assert len(parquet_files) > 0, (
+        f"No parquet files found in staging ({staging}) or work dir ({workdir})"
+    )
+
+    df = pl.concat([pl.read_parquet(f) for f in parquet_files])
+    _validate_cdc_output(df, expected, sampler)
+
+    output_tables = fn_run.output.as_pl_df()
+    assert len(output_tables) == 1, (
+        f"Expected 1 output table, got {len(output_tables)}"
+    )
+
+    output_df = drop_system_columns(output_tables[0].lazy()).collect()
+    staged_df = drop_system_columns(df.lazy()).collect()
+    columns = sorted(staged_df.columns)
+    staged_sorted = staged_df.select(columns).sort(columns)
+    output_sorted = output_df.select(columns).sort(columns)
+    assert staged_sorted.equals(output_sorted), (
+        "Function output is not equivalent to staged data"
     )

@@ -45,6 +45,7 @@ STAGE_MANIFEST_VERSION_1 = 1
 STAGE_MANIFEST_LATEST_VERSION = STAGE_MANIFEST_VERSION_1
 
 STAGE_MANIFEST_KEY_VERSION = "version"
+STAGE_MANIFEST_KEY_DATA = "data"
 STAGE_MANIFEST_KEY_TABLE = "table"
 STAGE_MANIFEST_KEY_FILES = "files"
 
@@ -337,13 +338,17 @@ def _deserialize_manifest(content: str) -> StageManifest:
 def _serialize_manifest_v1(manifest: StageManifest) -> str:
     """Serializes a :class:`StageManifest` in version ``_MANIFEST_VERSION_1``
     format."""
-    data: dict = {STAGE_MANIFEST_KEY_VERSION: STAGE_MANIFEST_VERSION_1}
+    entries: dict = {}
     for counter, entry in enumerate(manifest.entries):
-        data[counter] = {
+        entries[counter] = {
             STAGE_MANIFEST_KEY_TABLE: entry.table,
             STAGE_MANIFEST_KEY_FILES: entry.files,
         }
-    return yaml.dump(data, default_flow_style=False)
+    data: dict = {
+        STAGE_MANIFEST_KEY_VERSION: STAGE_MANIFEST_VERSION_1,
+        STAGE_MANIFEST_KEY_DATA: entries,
+    }
+    return yaml.dump(data, default_flow_style=False, sort_keys=False)
 
 
 def _deserialize_manifest_v1(data: dict) -> StageManifest:
@@ -351,19 +356,21 @@ def _deserialize_manifest_v1(data: dict) -> StageManifest:
     Deserializes version ``_MANIFEST_VERSION_1`` format::
 
         version: <_MANIFEST_VERSION_1>
-        0:
-            table: schema.table_name
-            files:
-                - path/to/file.parquet
-        1:
-            table: schema.other_table
-            files:
-                - second/path/to/file.parquet
-                - third/path/to/file.parquet
+        data:
+            0:
+                table: schema.table_name
+                files:
+                    - path/to/file.parquet
+            1:
+                table: schema.other_table
+                files:
+                    - second/path/to/file.parquet
+                    - third/path/to/file.parquet
     """
+    numbered_entries = data.get(STAGE_MANIFEST_KEY_DATA, {})
     entries: list[StageManifestEntry] = []
-    for key in sorted(data.keys()):
-        entry = data[key]
+    for key in sorted(numbered_entries.keys()):
+        entry = numbered_entries[key]
         table = entry.get(STAGE_MANIFEST_KEY_TABLE, "")
         files = entry.get(STAGE_MANIFEST_KEY_FILES, [])
         if isinstance(files, str):
