@@ -55,6 +55,15 @@ logger.setLevel(logging.DEBUG)
     ),
 )
 class MySQLCdcTrigger(CdcTrigger):
+    """
+    :categories: trigger
+
+    A `CdcTrigger` that captures changes from a MySQL database using binlog replication.
+
+    This trigger connects to a MySQL server, reads the binary log for change data
+    capture events (inserts, updates, deletes) on specified tables, and stages them.
+    """
+
     @_td_validate_call(ErrorCode.CDCMYSQL2)
     def __init__(
         self,
@@ -74,6 +83,34 @@ class MySQLCdcTrigger(CdcTrigger):
         start: datetime | None = None,
         end: datetime | None = None,
     ):
+        """
+        Initialize a MySQLCdcTrigger instance.
+
+        Args:
+            conn: The MySQL CDC connection configuration.
+            tables: Qualified table names to track for changes.
+            start_from: The position to start reading changes from (GTID, binlog
+                position, timestamp, or relative position).
+            cdc_format: The output format specification for CDC data.
+            buffer_max_rows: Maximum rows in memory before flushing to the working
+                directory.
+            buffer_max_bytes: Maximum bytes in memory before flushing to the working
+                directory.
+            buffer_max_seconds: Maximum seconds before flushing memory data to the
+                working directory.
+            trigger_max_rows: Maximum total rows before staging from working directory
+                to the stage location.
+            trigger_max_bytes: Maximum total bytes before staging from working directory
+                to the stage location.
+            trigger_max_seconds: Maximum seconds before staging from working directory
+                to the stage location.
+            poll_interval_seconds: Interval in seconds between polling for new changes.
+            blocking_timeout_seconds: Timeout in seconds for blocking reads from the
+                binlog stream.
+            server_id: The MySQL server ID for binlog replication. Defaults to 512.
+            start: Optional datetime for the trigger to start working.
+            end: Optional datetime for the trigger to stop working.
+        """
         super().__init__(
             conn=conn,
             tables=tables,
@@ -101,14 +138,23 @@ class MySQLCdcTrigger(CdcTrigger):
 
     @property
     def start_from(self) -> MySQLCdcStartFromSpec | None:
+        """
+        Position to start reading changes from.
+        """
         return self._start_from
 
     @property
     def blocking_timeout_seconds(self) -> float:
+        """
+        Timeout in seconds for blocking reads from the binlog stream.
+        """
         return self._blocking_timeout_seconds
 
     @property
     def server_id(self) -> int:
+        """
+        MySQL server ID for binlog replication.
+        """
         return self._server_id
 
     def _open_session(self) -> Any:

@@ -36,6 +36,10 @@ logger.setLevel(logging.DEBUG)
     ),
 )
 class Db2CdcConn(CdcConn, Db2Conn):
+    """
+    Db2 CDC connection configuration.
+    """
+
     @_td_validate_call(ErrorCode.CDCDB21)
     def __init__(
         self,
@@ -43,6 +47,15 @@ class Db2CdcConn(CdcConn, Db2Conn):
         credentials: UserPasswordCredentials | None = None,
         cx_src_configs_db2: dict | None = None,
     ):
+        """
+        Initialize a Db2CdcConn instance.
+
+        Args:
+            uri: The Db2 connection URI.
+            credentials: Optional user/password credentials for authentication.
+            cx_src_configs_db2: Optional Db2-specific connection configuration
+                parameters.
+        """
         Db2Conn.__init__(
             self,
             uri=uri,

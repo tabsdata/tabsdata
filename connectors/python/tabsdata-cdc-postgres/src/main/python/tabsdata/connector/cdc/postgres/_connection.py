@@ -36,6 +36,10 @@ logger.setLevel(logging.DEBUG)
     ),
 )
 class PostgresCdcConn(CdcConn, PostgresConn):
+    """
+    PostgreSQL CDC connection configuration.
+    """
+
     @_td_validate_call(ErrorCode.CDCPOSTGRES1)
     def __init__(
         self,
@@ -43,6 +47,15 @@ class PostgresCdcConn(CdcConn, PostgresConn):
         credentials: UserPasswordCredentials | None = None,
         cx_src_configs_postgres: dict | None = None,
     ):
+        """
+        Initialize a PostgresCdcConn instance.
+
+        Args:
+            uri: The PostgreSQL connection URI.
+            credentials: Optional user/password credentials for authentication.
+            cx_src_configs_postgres: Optional PostgreSQL-specific connection
+                configuration parameters.
+        """
         PostgresConn.__init__(
             self,
             uri=uri,

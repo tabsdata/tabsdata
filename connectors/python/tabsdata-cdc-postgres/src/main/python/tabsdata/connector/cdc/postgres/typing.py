@@ -15,6 +15,13 @@ from tabsdata.exceptions import ErrorCode
 
 @dataclass(frozen=True, init=False)
 class LsnPositionSpec:
+    """
+    Specifies a PostgreSQL CDC start position based on a Log Sequence Number (LSN).
+
+    Attributes:
+        lsn: The LSN from which to start reading changes.
+    """
+
     lsn: int
 
     @_td_validate_call(ErrorCode.CDCPOSTGRES7)

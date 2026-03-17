@@ -41,6 +41,10 @@ class CdcConnectionSettings:
 
 
 class CdcConn(Conn, ABC):
+    """
+    Base connection configuration for Change Data Capture (CDC) connectors.
+    """
+
     uri: str
     credentials: UserPasswordCredentials | None
 

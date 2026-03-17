@@ -48,6 +48,14 @@ logger.setLevel(logging.DEBUG)
 
 
 class CdcTrigger(StageTrigger):
+    """
+    Base `StageTrigger` for Change Data Capture (CDC) connectors.
+
+    This abstract trigger provides the common polling loop, buffering, and staging
+    logic for all CDC connectors. Database-specific subclasses implement the
+    ingestion details for their respective replication protocols.
+    """
+
     def __init__(
         self,
         conn: Conn,
@@ -63,6 +71,29 @@ class CdcTrigger(StageTrigger):
         start: datetime | None = None,
         end: datetime | None = None,
     ):
+        """
+        Initialize a CdcTrigger instance.
+
+        Args:
+            conn: The CDC connection configuration.
+            tables: Qualified table names to track for changes.
+            cdc_format: The output format specification for CDC data.
+            buffer_max_rows: Maximum rows in memory before flushing to the working
+                directory.
+            buffer_max_bytes: Maximum bytes in memory before flushing to the working
+                directory.
+            buffer_max_seconds: Maximum seconds before flushing memory data to the
+                working directory.
+            trigger_max_rows: Maximum total rows before staging from working directory
+                to the stage location.
+            trigger_max_bytes: Maximum total bytes before staging from working directory
+                to the stage location.
+            trigger_max_seconds: Maximum seconds before staging from working directory
+                to the stage location.
+            poll_interval_seconds: Interval in seconds between polling for new changes.
+            start: Optional datetime for the trigger to start working.
+            end: Optional datetime for the trigger to stop working.
+        """
         super().__init__(start=start, end=end)
         self._conn = conn
         self._tables = tables
@@ -78,48 +109,81 @@ class CdcTrigger(StageTrigger):
 
     @property
     def conn(self) -> Conn:
+        """
+        CDC connection configuration.
+        """
         return self._conn
 
     @property
     def tables(self) -> list[str] | None:
+        """
+        Qualified table names being tracked for changes.
+        """
         return self._tables
 
     @property
     def out(self) -> dict[int, str] | None:
+        """
+        Mapping of table indices to qualified table names.
+        """
         if self._tables is None:
             return None
         return {idx: table for idx, table in enumerate(self._tables)}
 
     @property
     def cdc_format(self) -> CdcFormatSpec:
+        """
+        Output format specification for CDC data.
+        """
         return self._cdc_format
 
     @property
     def buffer_max_rows(self) -> int:
+        """
+        Maximum rows in memory before flushing to the working directory.
+        """
         return self._buffer_max_rows
 
     @property
     def buffer_max_bytes(self) -> int | None:
+        """
+        Maximum bytes in memory before flushing to the working directory.
+        """
         return self._buffer_max_bytes
 
     @property
     def buffer_max_seconds(self) -> float:
+        """
+        Maximum seconds before flushing memory data to the working directory.
+        """
         return self._buffer_max_seconds
 
     @property
     def trigger_max_rows(self) -> int | None:
+        """
+        Maximum total rows before staging from working directory to the stage location.
+        """
         return self._trigger_max_rows
 
     @property
     def trigger_max_bytes(self) -> int | None:
+        """
+        Maximum total bytes before staging from working directory to the stage location.
+        """
         return self._trigger_max_bytes
 
     @property
     def trigger_max_seconds(self) -> float:
+        """
+        Maximum seconds before staging from working directory to the stage location.
+        """
         return self._trigger_max_seconds
 
     @property
     def poll_interval_seconds(self) -> float:
+        """
+        Interval in seconds between polling for new changes.
+        """
         return self._poll_interval_seconds
 
     @property

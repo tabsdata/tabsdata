@@ -21,6 +21,13 @@ RelativePositionSpec: TypeAlias = Literal["head", "tail"]
 
 @dataclass(frozen=True, init=False)
 class TimestampPositionSpec:
+    """
+    Specifies a CDC start position based on a timestamp.
+
+    Attributes:
+        ts: The timestamp from which to start reading changes.
+    """
+
     ts: datetime
 
     @_td_validate_call(ErrorCode.CDC13)
@@ -33,6 +40,14 @@ CdcValuesFormatSpec: TypeAlias = Literal["columns", "struct", "map"]
 
 @dataclass(frozen=True, init=False)
 class CdcFormatSpec:
+    """
+    Specifies the output format for CDC change data.
+
+    Attributes:
+        values_format: The layout for change values ("columns", "struct", or "map").
+        flat_new_values: Whether to flatten new values into top-level columns.
+    """
+
     values_format: CdcValuesFormatSpec = "columns"
     flat_new_values: bool = True
 

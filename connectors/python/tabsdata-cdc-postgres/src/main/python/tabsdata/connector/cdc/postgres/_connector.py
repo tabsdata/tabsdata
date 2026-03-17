@@ -60,6 +60,17 @@ logger.setLevel(logging.DEBUG)
     ),
 )
 class PostgresCdcTrigger(CdcTrigger):
+    """
+    :categories: trigger
+
+    A `CdcTrigger` that captures changes from a PostgreSQL database using WAL
+    logical replication.
+
+    This trigger connects to a PostgreSQL server, reads the write-ahead log via
+    the wal2json output plugin for change data capture events (inserts, updates,
+    deletes) on specified tables, and stages them.
+    """
+
     @_td_validate_call(ErrorCode.CDCPOSTGRES2)
     def __init__(
         self,
@@ -81,6 +92,38 @@ class PostgresCdcTrigger(CdcTrigger):
         start: datetime | None = None,
         end: datetime | None = None,
     ):
+        """
+        Initialize a PostgresCdcTrigger instance.
+
+        Args:
+            conn: The PostgreSQL CDC connection configuration.
+            tables: Qualified table names to track for changes.
+            start_from: The position to start reading changes from (LSN or relative
+                position).
+            cdc_format: The output format specification for CDC data.
+            buffer_max_rows: Maximum rows in memory before flushing to the working
+                directory.
+            buffer_max_bytes: Maximum bytes in memory before flushing to the working
+                directory.
+            buffer_max_seconds: Maximum seconds before flushing memory data to the
+                working directory.
+            trigger_max_rows: Maximum total rows before staging from working directory
+                to the stage location.
+            trigger_max_bytes: Maximum total bytes before staging from working directory
+                to the stage location.
+            trigger_max_seconds: Maximum seconds before staging from working directory
+                to the stage location.
+            poll_interval_seconds: Interval in seconds between polling for new changes.
+            blocking_timeout_seconds: Timeout in seconds for blocking reads from the
+                replication stream.
+            replication_slot: Optional name of the logical replication slot to use.
+            publication_name: Optional name of the PostgreSQL publication to subscribe
+                to.
+            slot_behavior: Whether to create a new replication slot or reuse an existing
+                one. Defaults to "reuse".
+            start: Optional datetime for the trigger to start working.
+            end: Optional datetime for the trigger to stop working.
+        """
         super().__init__(
             conn=conn,
             tables=tables,
@@ -113,22 +156,37 @@ class PostgresCdcTrigger(CdcTrigger):
 
     @property
     def start_from(self) -> PostgresCdcStartFromSpec | None:
+        """
+        Position to start reading changes from.
+        """
         return self._start_from
 
     @property
     def blocking_timeout_seconds(self) -> float:
+        """
+        Timeout in seconds for blocking reads from the replication stream.
+        """
         return self._blocking_timeout_seconds
 
     @property
     def replication_slot(self) -> str | None:
+        """
+        Name of the logical replication slot.
+        """
         return self._replication_slot
 
     @property
     def publication_name(self) -> str | None:
+        """
+        Name of the PostgreSQL publication to subscribe to.
+        """
         return self._publication_name
 
     @property
     def slot_behavior(self) -> ReplicationSlotBehaviorSpec:
+        """
+        Whether to create a new replication slot or reuse an existing one.
+        """
         return self._slot_behavior
 
     def _open_session(self) -> Any:

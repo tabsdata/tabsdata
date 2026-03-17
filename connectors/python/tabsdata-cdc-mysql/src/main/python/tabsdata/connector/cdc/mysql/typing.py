@@ -18,6 +18,13 @@ from tabsdata.exceptions import ErrorCode
 
 @dataclass(frozen=True, init=False)
 class GtidPositionSpec:
+    """
+    Specifies a MySQL CDC start position based on a Global Transaction ID (GTID).
+
+    Attributes:
+        gtid: The GTID string from which to start reading changes.
+    """
+
     gtid: str
 
     @_td_validate_call(ErrorCode.CDCMYSQL4)
@@ -27,6 +34,14 @@ class GtidPositionSpec:
 
 @dataclass(frozen=True, init=False)
 class BinlogPositionSpec:
+    """
+    Specifies a MySQL CDC start position based on a binlog file and position.
+
+    Attributes:
+        file: The binlog file name.
+        pos: The byte position within the binlog file.
+    """
+
     file: str
     pos: int
 

@@ -18,6 +18,13 @@ from tabsdata.exceptions import ErrorCode
 
 @dataclass(frozen=True, init=False)
 class CommitSeqPositionSpec:
+    """
+    Specifies a Db2 CDC start position based on a commit sequence number.
+
+    Attributes:
+        seq: The commit sequence string from which to start reading changes.
+    """
+
     seq: str
 
     @_td_validate_call(ErrorCode.CDCDB23)
@@ -27,6 +34,13 @@ class CommitSeqPositionSpec:
 
 @dataclass(frozen=True, init=False)
 class TableCommitSeqPositionSpec:
+    """
+    Specifies a Db2 CDC start position with per-table commit sequence numbers.
+
+    Attributes:
+        seqs: A mapping of qualified table names to their commit sequence strings.
+    """
+
     seqs: dict[str, str]
 
     @_td_validate_call(ErrorCode.CDCDB24)

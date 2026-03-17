@@ -54,6 +54,15 @@ logger.setLevel(logging.DEBUG)
     ),
 )
 class Db2CdcTrigger(CdcTrigger):
+    """
+    :categories: trigger
+
+    A `CdcTrigger` that captures changes from a Db2 database using SQL Replication.
+
+    This trigger connects to a Db2 server, reads change data capture events (inserts,
+    updates, deletes) on specified tables via SQL Replication, and stages them.
+    """
+
     @_td_validate_call(ErrorCode.CDCDB22)
     def __init__(
         self,
@@ -72,6 +81,33 @@ class Db2CdcTrigger(CdcTrigger):
         start: datetime | None = None,
         end: datetime | None = None,
     ):
+        """
+        Initialize a Db2CdcTrigger instance.
+
+        Args:
+            conn: The Db2 CDC connection configuration.
+            tables: Qualified table names to track for changes.
+            start_from: The position to start reading changes from (commit sequence,
+                per-table commit sequences, timestamp, or relative position).
+            cdc_format: The output format specification for CDC data.
+            buffer_max_rows: Maximum rows in memory before flushing to the working
+                directory.
+            buffer_max_bytes: Maximum bytes in memory before flushing to the working
+                directory.
+            buffer_max_seconds: Maximum seconds before flushing memory data to the
+                working directory.
+            trigger_max_rows: Maximum total rows before staging from working directory
+                to the stage location.
+            trigger_max_bytes: Maximum total bytes before staging from working directory
+                to the stage location.
+            trigger_max_seconds: Maximum seconds before staging from working directory
+                to the stage location.
+            poll_interval_seconds: Interval in seconds between polling for new changes.
+            blocking_timeout_seconds: Timeout in seconds for blocking reads from the
+                replication stream.
+            start: Optional datetime for the trigger to start working.
+            end: Optional datetime for the trigger to stop working.
+        """
         super().__init__(
             conn=conn,
             tables=tables,
@@ -97,10 +133,16 @@ class Db2CdcTrigger(CdcTrigger):
 
     @property
     def start_from(self) -> Db2CdcStartFromSpec | None:
+        """
+        Position to start reading changes from.
+        """
         return self._start_from
 
     @property
     def blocking_timeout_seconds(self) -> float:
+        """
+        Timeout in seconds for blocking reads from the replication stream.
+        """
         return self._blocking_timeout_seconds
 
     def _open_session(self) -> Any:

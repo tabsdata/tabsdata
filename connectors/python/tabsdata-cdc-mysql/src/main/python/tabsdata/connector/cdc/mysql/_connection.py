@@ -36,6 +36,10 @@ logger.setLevel(logging.DEBUG)
     ),
 )
 class MySQLCdcConn(CdcConn, MySQLConn):
+    """
+    MySQL CDC connection configuration.
+    """
+
     @_td_validate_call(ErrorCode.CDCMYSQL1)
     def __init__(
         self,
@@ -43,6 +47,15 @@ class MySQLCdcConn(CdcConn, MySQLConn):
         credentials: UserPasswordCredentials | None = None,
         cx_src_configs_mysql: dict | None = None,
     ):
+        """
+        Initialize a MySQLCdcConn instance.
+
+        Args:
+            uri: The MySQL connection URI.
+            credentials: Optional user/password credentials for authentication.
+            cx_src_configs_mysql: Optional MySQL-specific connection configuration
+                parameters.
+        """
         MySQLConn.__init__(
             self,
             uri=uri,
