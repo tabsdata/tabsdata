@@ -39,14 +39,14 @@ class DiskSentinel:
         landing: Path,
         max_rows: int,
         max_bytes: int | None,
-        max_seconds: float,
+        max_secs: int,
         tables: dict[str, TrackedTable],
     ):
         self._context = context
         self._landing = landing
         self._max_rows = max_rows
         self._max_bytes = max_bytes
-        self._max_seconds = max_seconds
+        self._max_secs = max_secs
         self._tables = tables
         self._files: dict[str, list[Path]] = {table: [] for table in tables}
         self._total_rows: int = 0
@@ -162,7 +162,7 @@ class DiskSentinel:
     ) -> bool:
         rows_hit = self._max_rows is not None and self._total_rows >= self._max_rows
         bytes_hit = self._max_bytes is not None and self._total_bytes >= self._max_bytes
-        time_hit = (time.time() - self._last_flushed) >= self._max_seconds
+        time_hit = (time.time() - self._last_flushed) >= self._max_secs
         if self.has_data and (force or rows_hit or bytes_hit or time_hit):
             logger.debug(
                 f"Disk flush: staging {self._files} "

@@ -70,8 +70,8 @@ def test_poll_changes_insert_update_delete(postgres_cdc_config):
         slot_behavior="reuse",
         blocking_timeout_seconds=3,
         buffer_max_rows=10_000,
-        buffer_max_seconds=10,
-        trigger_max_seconds=10,
+        buffer_max_secs=10,
+        trigger_max_secs=10,
         end=datetime.now(timezone.utc) + timedelta(minutes=TRIGGER_END_MINUTES),
     )
 
@@ -125,8 +125,8 @@ def test_end_to_end_insert_update_delete(postgres_cdc_config):
         slot_behavior="reuse",
         blocking_timeout_seconds=3,
         buffer_max_rows=10_000,
-        buffer_max_seconds=10,
-        trigger_max_seconds=10,
+        buffer_max_secs=10,
+        trigger_max_secs=10,
         end=datetime.now(timezone.utc) + timedelta(minutes=TRIGGER_END_MINUTES),
     )
 
@@ -182,8 +182,8 @@ def test_end_to_end_format(postgres_cdc_config, cdc_format):
         cdc_format=cdc_format,
         blocking_timeout_seconds=3,
         buffer_max_rows=10_000,
-        buffer_max_seconds=10,
-        trigger_max_seconds=10,
+        buffer_max_secs=10,
+        trigger_max_secs=10,
         end=datetime.now(timezone.utc) + timedelta(minutes=TRIGGER_END_MINUTES),
     )
 

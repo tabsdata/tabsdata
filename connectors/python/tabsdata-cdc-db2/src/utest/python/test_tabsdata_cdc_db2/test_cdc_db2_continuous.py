@@ -83,9 +83,9 @@ def test_continuous_dml(db2_cdc_config, q_tables, q_threads):
         start_from="head",
         blocking_timeout_seconds=4,
         buffer_max_rows=64,
-        buffer_max_seconds=4,
+        buffer_max_secs=4,
         trigger_max_rows=128,
-        trigger_max_seconds=4,
+        trigger_max_secs=4,
         end=datetime.now(timezone.utc) + timedelta(minutes=TRIGGER_END_MINUTES),
     )
 

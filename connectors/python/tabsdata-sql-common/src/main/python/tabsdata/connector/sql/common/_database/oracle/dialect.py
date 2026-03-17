@@ -8,9 +8,17 @@ from datetime import tzinfo
 from typing import Any
 
 from sqlalchemy import text
+from sqlalchemy.dialects.oracle import BFILE, LONG, NCLOB, RAW
 
-from tabsdata.connector.sql.common._generic.dialect import Dialect
+from tabsdata.connector.sql.common._generic.dialect import LARGE_COLUMN_TYPES, Dialect
 from tabsdata.connector.sql.common._utils import parse_server_timezone
+
+ORACLE_LARGE_COLUMN_TYPES = LARGE_COLUMN_TYPES + (
+    BFILE,
+    LONG,
+    NCLOB,
+    RAW,
+)
 
 
 class OracleDialect(Dialect):
@@ -31,6 +39,9 @@ class OracleDialect(Dialect):
         if row and row[0] is not None:
             return parse_server_timezone(row[0])
         return None
+
+    def is_large_column(self, satype: Any) -> bool:
+        return isinstance(satype, ORACLE_LARGE_COLUMN_TYPES)
 
     def get_catalog_columns(
         self,

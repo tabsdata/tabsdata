@@ -83,27 +83,27 @@ continuous_dml_params = pytest.mark.parametrize(
 
 CDC_FORMAT_PARAMS = [
     pytest.param(
-        CdcFormatSpec(values_format="columns", flat_new_values=True),
+        CdcFormatSpec(values_format="columns", flatten_values=True),
         id="columns-flat",
     ),
     pytest.param(
-        CdcFormatSpec(values_format="columns", flat_new_values=False),
+        CdcFormatSpec(values_format="columns", flatten_values=False),
         id="columns-prefixed",
     ),
     pytest.param(
-        CdcFormatSpec(values_format="struct", flat_new_values=True),
+        CdcFormatSpec(values_format="struct", flatten_values=True),
         id="struct-flat",
     ),
     pytest.param(
-        CdcFormatSpec(values_format="struct", flat_new_values=False),
+        CdcFormatSpec(values_format="struct", flatten_values=False),
         id="struct-nested",
     ),
     pytest.param(
-        CdcFormatSpec(values_format="map", flat_new_values=True),
+        CdcFormatSpec(values_format="map", flatten_values=True),
         id="map-flat",
     ),
     pytest.param(
-        CdcFormatSpec(values_format="map", flat_new_values=False),
+        CdcFormatSpec(values_format="map", flatten_values=False),
         id="map-nested",
     ),
 ]
@@ -396,7 +396,7 @@ def _normalize_to_canonical(
     ]
 
     for column in sampler.columns:
-        if cdc_format.flat_new_values:
+        if cdc_format.flatten_values:
             exprs.append(pl.col(column))
         else:
             match cdc_format.values_format:
@@ -448,7 +448,7 @@ def _validate_cdc_map_output(
         )
 
     df_columns = set(df.columns)
-    if cdc_format.flat_new_values:
+    if cdc_format.flatten_values:
         for column in sampler.columns:
             assert column in df_columns, (
                 f"Expected flat new column {column!r} not in schema"
@@ -461,7 +461,7 @@ def _validate_cdc_map_output(
         f"Expected map old column {CDC_DATA_MAP_OLD!r} not in schema"
     )
 
-    if not cdc_format.flat_new_values:
+    if not cdc_format.flatten_values:
         for v in df[CDC_DATA_MAP_NEW].to_list():
             parsed = json.loads(v)
             assert isinstance(parsed, dict)
@@ -481,7 +481,7 @@ def _validate_cdc_map_output(
     pk_col = sampler.fold("pk")
     for op_type in [CdcOperation.INSERT, CdcOperation.UPDATE, CdcOperation.DELETE]:
         filtered = df.filter(pl.col(CDC_META_OP) == op_type)
-        if cdc_format.flat_new_values:
+        if cdc_format.flatten_values:
             actual_pks = sorted(filtered[pk_col].to_list())
         else:
             actual_pks = sorted(
@@ -774,7 +774,7 @@ def _poll_until_captured(
     trigger: CdcTrigger,
     expected_rows: int,
     poll_timeout_seconds: int = POLL_TIMEOUT_SECONDS,
-    poll_interval_seconds: float = POLL_INTERVAL_SECONDS,
+    poll_interval_seconds: int = POLL_INTERVAL_SECONDS,
 ) -> int:
     logger.debug(f"--- Waiting for CDC capture (timeout {poll_timeout_seconds}s) ---")
     poll_deadline = time.monotonic() + poll_timeout_seconds

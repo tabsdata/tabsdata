@@ -25,11 +25,11 @@ from tabsdata.connector.cdc.common.constants import (
     DEFAULT_BLOCKING_TIMEOUT_SECONDS,
     DEFAULT_BUFFER_MAX_BYTES,
     DEFAULT_BUFFER_MAX_ROWS,
-    DEFAULT_BUFFER_MAX_SECONDS,
+    DEFAULT_BUFFER_MAX_SECS,
     DEFAULT_POLL_INTERVAL_SECONDS,
     DEFAULT_TRIGGER_MAX_BYTES,
     DEFAULT_TRIGGER_MAX_ROWS,
-    DEFAULT_TRIGGER_MAX_SECONDS,
+    DEFAULT_TRIGGER_MAX_SECS,
 )
 from tabsdata.connector.cdc.common.typing import CdcFormatSpec, QualifiedTablesSpec
 from tabsdata.connector.cdc.mysql._connection import MySQLCdcConn
@@ -73,12 +73,12 @@ class MySQLCdcTrigger(CdcTrigger):
         cdc_format: CdcFormatSpec = CdcFormatSpec(),
         buffer_max_rows: int = DEFAULT_BUFFER_MAX_ROWS,
         buffer_max_bytes: int | None = DEFAULT_BUFFER_MAX_BYTES,
-        buffer_max_seconds: float = DEFAULT_BUFFER_MAX_SECONDS,
+        buffer_max_secs: int = DEFAULT_BUFFER_MAX_SECS,
         trigger_max_rows: int | None = DEFAULT_TRIGGER_MAX_ROWS,
         trigger_max_bytes: int | None = DEFAULT_TRIGGER_MAX_BYTES,
-        trigger_max_seconds: float = DEFAULT_TRIGGER_MAX_SECONDS,
-        poll_interval_seconds: float = DEFAULT_POLL_INTERVAL_SECONDS,
-        blocking_timeout_seconds: float = DEFAULT_BLOCKING_TIMEOUT_SECONDS,
+        trigger_max_secs: int = DEFAULT_TRIGGER_MAX_SECS,
+        poll_interval_seconds: int = DEFAULT_POLL_INTERVAL_SECONDS,
+        blocking_timeout_seconds: int = DEFAULT_BLOCKING_TIMEOUT_SECONDS,
         server_id: int = DEFAULT_SERVER_ID,
         start: datetime | None = None,
         end: datetime | None = None,
@@ -96,13 +96,13 @@ class MySQLCdcTrigger(CdcTrigger):
                 directory.
             buffer_max_bytes: Maximum bytes in memory before flushing to the working
                 directory.
-            buffer_max_seconds: Maximum seconds before flushing memory data to the
+            buffer_max_secs: Maximum seconds before flushing memory data to the
                 working directory.
             trigger_max_rows: Maximum total rows before staging from working directory
                 to the stage location.
             trigger_max_bytes: Maximum total bytes before staging from working directory
                 to the stage location.
-            trigger_max_seconds: Maximum seconds before staging from working directory
+            trigger_max_secs: Maximum seconds before staging from working directory
                 to the stage location.
             poll_interval_seconds: Interval in seconds between polling for new changes.
             blocking_timeout_seconds: Timeout in seconds for blocking reads from the
@@ -117,10 +117,10 @@ class MySQLCdcTrigger(CdcTrigger):
             cdc_format=cdc_format,
             buffer_max_rows=buffer_max_rows,
             buffer_max_bytes=buffer_max_bytes,
-            buffer_max_seconds=buffer_max_seconds,
+            buffer_max_secs=buffer_max_secs,
             trigger_max_rows=trigger_max_rows,
             trigger_max_bytes=trigger_max_bytes,
-            trigger_max_seconds=trigger_max_seconds,
+            trigger_max_secs=trigger_max_secs,
             poll_interval_seconds=poll_interval_seconds,
             start=start,
             end=end,
@@ -144,7 +144,7 @@ class MySQLCdcTrigger(CdcTrigger):
         return self._start_from
 
     @property
-    def blocking_timeout_seconds(self) -> float:
+    def blocking_timeout_seconds(self) -> int:
         """
         Timeout in seconds for blocking reads from the binlog stream.
         """

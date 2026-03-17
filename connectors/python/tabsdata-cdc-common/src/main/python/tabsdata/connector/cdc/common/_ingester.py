@@ -54,6 +54,19 @@ class CdcIngester(ABC):
                 values[key] = value.replace(tzinfo=self._server_tz)
         return values
 
+    def filter_values(self, qualified: str, values: dict | None) -> dict | None:
+        if values is None:
+            return None
+        table = self._tracked_tables.get(qualified)
+        if table is None:
+            return values
+        columns = {column.name for column in table.columns}
+        return {
+            column_name: column_value
+            for column_name, column_value in values.items()
+            if column_name in columns
+        }
+
     @abstractmethod
     def open_session(self) -> Any: ...
 
@@ -150,14 +163,22 @@ class CdcIngester(ABC):
                         sa_column["name"],
                     )
 
-            columns = [
-                TrackedColumn(
-                    name=db_column,
-                    satype=sa_column["type"],
-                    sa_name=sa_dialect.normalize_name(db_column),
+            columns = []
+            for db_column, sa_column in zip(db_columns, sa_columns):
+                if self.dialect.is_large_column(sa_column["type"]):
+                    logger.info(
+                        f"Excluding large column '{db_column}' "
+                        f"({type(sa_column['type']).__name__}) "
+                        f"from {db_schema}.{db_table}"
+                    )
+                    continue
+                columns.append(
+                    TrackedColumn(
+                        name=db_column,
+                        satype=sa_column["type"],
+                        sa_name=sa_dialect.normalize_name(db_column),
+                    )
                 )
-                for db_column, sa_column in zip(db_columns, sa_columns)
-            ]
 
             pk_info = inspector.get_pk_constraint(
                 table_name=normalized_table,

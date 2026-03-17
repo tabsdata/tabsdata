@@ -78,10 +78,10 @@ def test_offset_resume(mysql_cdc_config):
             blocking_timeout_seconds=3,
             buffer_max_rows=5,
             buffer_max_bytes=None,
-            buffer_max_seconds=10,
+            buffer_max_secs=10,
             trigger_max_rows=7,
             trigger_max_bytes=None,
-            trigger_max_seconds=10,
+            trigger_max_secs=10,
             end=datetime.now(timezone.utc) + timedelta(minutes=TRIGGER_END_MINUTES),
         )
 

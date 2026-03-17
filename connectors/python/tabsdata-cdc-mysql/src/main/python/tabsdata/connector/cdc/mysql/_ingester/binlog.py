@@ -54,7 +54,7 @@ class IngesterOperations:
 
 
 BINLOG_START_POSITION = 4
-HEARTBEAT_INTERVAL_SECONDS = 1.0
+HEARTBEAT_INTERVAL_SECONDS = 1
 
 OPERATION_MAP = {
     IngesterOperations.INSERT: CdcOperation.INSERT,
@@ -103,7 +103,7 @@ class BinlogIngester(CdcIngester):
         tables: QualifiedTablesSpec,
         start_from: MySQLCdcStartFromSpec,
         server_id: int,
-        blocking_timeout_seconds: float = DEFAULT_BLOCKING_TIMEOUT_SECONDS,
+        blocking_timeout_seconds: int = DEFAULT_BLOCKING_TIMEOUT_SECONDS,
         offset: GtidOffset | None = None,
     ):
         super().__init__(tables)
@@ -129,7 +129,7 @@ class BinlogIngester(CdcIngester):
         return self._server_id
 
     @property
-    def blocking_timeout_seconds(self) -> float | None:
+    def blocking_timeout_seconds(self) -> int | None:
         return self._blocking_timeout_seconds
 
     @property
@@ -365,6 +365,8 @@ class BinlogIngester(CdcIngester):
                                     "binlog",
                                     qualified,
                                 )
+                        new_values = self.filter_values(qualified, new_values)
+                        old_values = self.filter_values(qualified, old_values)
                         self.localize_values(new_values)
                         self.localize_values(old_values)
                         yield CdcDataChange(

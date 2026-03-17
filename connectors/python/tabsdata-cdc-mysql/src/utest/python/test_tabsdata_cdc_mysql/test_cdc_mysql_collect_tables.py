@@ -124,11 +124,9 @@ def test_collect_tables_type_conversion(mysql_collect_tables_setup):
             "col_decimal decimal(10,2), "
             "col_bool boolean, "
             "col_varchar varchar(255), "
-            "col_text text, "
             "col_date date, "
             "col_datetime datetime, "
             "col_time time, "
-            "col_blob blob, "
             "col_json json"
             ")"
         ))
@@ -156,11 +154,9 @@ def test_collect_tables_type_conversion(mysql_collect_tables_setup):
     assert cols["col_decimal"].patype == pa.decimal128(10, 2)
     assert cols["col_bool"].patype == pa.int32()
     assert cols["col_varchar"].patype == pa.utf8()
-    assert cols["col_text"].patype == pa.utf8()
     assert cols["col_date"].patype == pa.date32()
     assert cols["col_datetime"].patype == pa.timestamp("us")
     assert cols["col_time"].patype == pa.time64("us")
-    assert cols["col_blob"].patype == pa.binary()
     assert cols["col_json"].patype == pa.utf8()
 
     assert "col_int" in table.pk

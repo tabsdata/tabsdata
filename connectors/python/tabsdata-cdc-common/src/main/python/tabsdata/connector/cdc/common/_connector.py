@@ -34,11 +34,11 @@ from tabsdata.connector.cdc.common._sentinel.disk import DiskSentinel
 from tabsdata.connector.cdc.common.constants import (
     DEFAULT_BUFFER_MAX_BYTES,
     DEFAULT_BUFFER_MAX_ROWS,
-    DEFAULT_BUFFER_MAX_SECONDS,
+    DEFAULT_BUFFER_MAX_SECS,
     DEFAULT_POLL_INTERVAL_SECONDS,
     DEFAULT_TRIGGER_MAX_BYTES,
     DEFAULT_TRIGGER_MAX_ROWS,
-    DEFAULT_TRIGGER_MAX_SECONDS,
+    DEFAULT_TRIGGER_MAX_SECS,
 )
 from tabsdata.connector.cdc.common.typing import CdcFormatSpec, QualifiedTablesSpec
 from tabsdata.exceptions import ErrorCode, StageTriggerExecutionError
@@ -63,11 +63,11 @@ class CdcTrigger(StageTrigger):
         cdc_format: CdcFormatSpec = CdcFormatSpec(),
         buffer_max_rows: int = DEFAULT_BUFFER_MAX_ROWS,
         buffer_max_bytes: int | None = DEFAULT_BUFFER_MAX_BYTES,
-        buffer_max_seconds: float = DEFAULT_BUFFER_MAX_SECONDS,
+        buffer_max_secs: int = DEFAULT_BUFFER_MAX_SECS,
         trigger_max_rows: int | None = DEFAULT_TRIGGER_MAX_ROWS,
         trigger_max_bytes: int | None = DEFAULT_TRIGGER_MAX_BYTES,
-        trigger_max_seconds: float = DEFAULT_TRIGGER_MAX_SECONDS,
-        poll_interval_seconds: float = DEFAULT_POLL_INTERVAL_SECONDS,
+        trigger_max_secs: int = DEFAULT_TRIGGER_MAX_SECS,
+        poll_interval_seconds: int = DEFAULT_POLL_INTERVAL_SECONDS,
         start: datetime | None = None,
         end: datetime | None = None,
     ):
@@ -82,13 +82,13 @@ class CdcTrigger(StageTrigger):
                 directory.
             buffer_max_bytes: Maximum bytes in memory before flushing to the working
                 directory.
-            buffer_max_seconds: Maximum seconds before flushing memory data to the
+            buffer_max_secs: Maximum seconds before flushing memory data to the
                 working directory.
             trigger_max_rows: Maximum total rows before staging from working directory
                 to the stage location.
             trigger_max_bytes: Maximum total bytes before staging from working directory
                 to the stage location.
-            trigger_max_seconds: Maximum seconds before staging from working directory
+            trigger_max_secs: Maximum seconds before staging from working directory
                 to the stage location.
             poll_interval_seconds: Interval in seconds between polling for new changes.
             start: Optional datetime for the trigger to start working.
@@ -100,10 +100,10 @@ class CdcTrigger(StageTrigger):
         self._cdc_format = cdc_format
         self._buffer_max_rows = buffer_max_rows
         self._buffer_max_bytes = buffer_max_bytes
-        self._buffer_max_seconds = buffer_max_seconds
+        self._buffer_max_secs = buffer_max_secs
         self._trigger_max_rows = trigger_max_rows
         self._trigger_max_bytes = trigger_max_bytes
-        self._trigger_max_seconds = trigger_max_seconds
+        self._trigger_max_secs = trigger_max_secs
         self._poll_interval_seconds = poll_interval_seconds
         self._buffer_sentinel: BufferSentinel | None = None
 
@@ -152,11 +152,11 @@ class CdcTrigger(StageTrigger):
         return self._buffer_max_bytes
 
     @property
-    def buffer_max_seconds(self) -> float:
+    def buffer_max_secs(self) -> int:
         """
         Maximum seconds before flushing memory data to the working directory.
         """
-        return self._buffer_max_seconds
+        return self._buffer_max_secs
 
     @property
     def trigger_max_rows(self) -> int | None:
@@ -173,14 +173,14 @@ class CdcTrigger(StageTrigger):
         return self._trigger_max_bytes
 
     @property
-    def trigger_max_seconds(self) -> float:
+    def trigger_max_secs(self) -> int:
         """
         Maximum seconds before staging from working directory to the stage location.
         """
-        return self._trigger_max_seconds
+        return self._trigger_max_secs
 
     @property
-    def poll_interval_seconds(self) -> float:
+    def poll_interval_seconds(self) -> int:
         """
         Interval in seconds between polling for new changes.
         """
@@ -265,14 +265,14 @@ class CdcTrigger(StageTrigger):
                 landing=Path(context.working_dir),
                 max_rows=self._trigger_max_rows,
                 max_bytes=self._trigger_max_bytes,
-                max_seconds=self._trigger_max_seconds,
+                max_secs=self._trigger_max_secs,
                 tables=tracked_tables,
             )
             buffer_sentinel = BufferSentinel(
                 disk_sentinel=disk_sentinel,
                 max_rows=self._buffer_max_rows,
                 max_bytes=self._buffer_max_bytes,
-                max_seconds=self._buffer_max_seconds,
+                max_secs=self._buffer_max_secs,
                 tables=tracked_tables,
                 offset=self._base_offset(),
             )

@@ -127,12 +127,10 @@ def test_collect_tables_type_conversion(postgres_collect_tables_setup):
             "col_numeric numeric(10,2), "
             "col_bool boolean, "
             "col_varchar varchar(255), "
-            "col_text text, "
             "col_date date, "
             "col_timestamp timestamp, "
             "col_timestamptz timestamptz, "
             "col_time time, "
-            "col_bytea bytea, "
             "col_json json, "
             "col_jsonb jsonb, "
             "col_uuid uuid"
@@ -163,12 +161,10 @@ def test_collect_tables_type_conversion(postgres_collect_tables_setup):
     assert cols["col_numeric"].patype == pa.decimal128(10, 2)
     assert cols["col_bool"].patype == pa.bool_()
     assert cols["col_varchar"].patype == pa.utf8()
-    assert cols["col_text"].patype == pa.utf8()
     assert cols["col_date"].patype == pa.date32()
     assert cols["col_timestamp"].patype == pa.timestamp("us")
     assert cols["col_timestamptz"].patype == pa.timestamp("us", tz="UTC")
     assert cols["col_time"].patype == pa.time64("us")
-    assert cols["col_bytea"].patype == pa.binary()
     assert cols["col_json"].patype == pa.utf8()
     assert cols["col_jsonb"].patype == pa.utf8()
     assert cols["col_uuid"].patype == pa.utf8()

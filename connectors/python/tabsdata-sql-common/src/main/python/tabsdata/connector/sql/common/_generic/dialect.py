@@ -9,6 +9,13 @@ from datetime import tzinfo
 from typing import Any
 
 from sqlalchemy.sql.elements import quoted_name
+from sqlalchemy.types import BLOB, CLOB, LargeBinary
+
+LARGE_COLUMN_TYPES = (
+    BLOB,
+    CLOB,
+    LargeBinary,
+)
 
 
 class Dialect(ABC):
@@ -30,6 +37,9 @@ class Dialect(ABC):
         schema: str,
         table: str,
     ) -> list[str]: ...
+
+    @abstractmethod
+    def is_large_column(self, satype: Any) -> bool: ...
 
     @abstractmethod
     def server_timezone(self, engine: Any) -> tzinfo | None: ...

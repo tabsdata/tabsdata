@@ -145,7 +145,7 @@ class TrackedTable:
             pa.field(CDC_META_SQ, pa.int64()),
         ]
 
-        if self.cdc_format.flat_new_values:
+        if self.cdc_format.flatten_values:
             for column in self.columns:
                 fields.append(pa.field(column.name, column.patype))
         else:

@@ -56,14 +56,8 @@ def row_to_record(
         CDC_META_SQ: change.sequence,
     }
 
-    if cdc_format.flat_new_values:
+    if cdc_format.flatten_values:
         for column in tracked_table.columns:
-            # ToDo...
-            # Not still clear if adding a suffix to completely isolate system generated
-            # columns is preferred.
-            # record[f"{CDC_DATA_COL_PREFIX}{DOT}{column.name}"] = (
-            #     change.new_values.get(column.name)
-            # )
             record[column.name] = change.new_values.get(column.name)
     else:
         match cdc_format.values_format:

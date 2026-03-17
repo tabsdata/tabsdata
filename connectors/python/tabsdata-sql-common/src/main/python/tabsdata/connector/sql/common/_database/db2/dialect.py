@@ -8,10 +8,16 @@ import logging
 from datetime import tzinfo
 from typing import Any
 
+from ibm_db_sa import BLOB, CLOB
 from sqlalchemy import text
 
-from tabsdata.connector.sql.common._generic.dialect import Dialect
+from tabsdata.connector.sql.common._generic.dialect import LARGE_COLUMN_TYPES, Dialect
 from tabsdata.connector.sql.common._utils import parse_server_timezone
+
+DB2_LARGE_COLUMN_TYPES = LARGE_COLUMN_TYPES + (
+    BLOB,
+    CLOB,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +44,9 @@ class Db2Dialect(Dialect):
             if tz is not None:
                 return tz
         return None
+
+    def is_large_column(self, satype: Any) -> bool:
+        return isinstance(satype, DB2_LARGE_COLUMN_TYPES)
 
     def get_catalog_columns(
         self,

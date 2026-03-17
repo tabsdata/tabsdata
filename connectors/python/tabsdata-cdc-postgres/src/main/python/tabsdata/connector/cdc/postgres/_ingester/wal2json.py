@@ -136,7 +136,7 @@ class Wal2JsonIngester(CdcIngester):
         replication_slot_behavior: ReplicationSlotBehaviorSpec = (
             DEFAULT_REPLICATION_SLOT_BEHAVIOR
         ),
-        blocking_timeout_seconds: float = DEFAULT_BLOCKING_TIMEOUT_SECONDS,
+        blocking_timeout_seconds: int = DEFAULT_BLOCKING_TIMEOUT_SECONDS,
         publication_name: str | None = None,
         offset: LsnOffset | None = None,
         wal2json_format_version: int = DEFAULT_WAL2JSON_FORMAT_VERSION,
@@ -172,7 +172,7 @@ class Wal2JsonIngester(CdcIngester):
         return self._replication_slot_behavior
 
     @property
-    def blocking_timeout_seconds(self) -> float | None:
+    def blocking_timeout_seconds(self) -> int | None:
         return self._blocking_timeout_seconds
 
     @property
@@ -351,7 +351,7 @@ class Wal2JsonIngester(CdcIngester):
             message = self._cursor.read_message()
             if message is not None:
                 return message
-            sleep = min(POLL_INTERVAL_SECONDS, max(remaining, 0))
+            sleep = min(POLL_INTERVAL_SECONDS, max(remaining, 0.0))
             if sleep <= 0:
                 return None
             time.sleep(sleep)
@@ -379,6 +379,8 @@ class Wal2JsonIngester(CdcIngester):
         old_values: dict | None,
         offset: LsnOffset | None = None,
     ) -> CdcDataChange:
+        new_values = self.filter_values(qualified, new_values)
+        old_values = self.filter_values(qualified, old_values)
         tracked = self._tracked_tables.get(qualified)
         if tracked is not None:
             null_row = {column.name: None for column in tracked.columns}

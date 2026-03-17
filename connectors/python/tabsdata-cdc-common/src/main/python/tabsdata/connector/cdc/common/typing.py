@@ -45,17 +45,17 @@ class CdcFormatSpec:
 
     Attributes:
         values_format: The layout for change values ("columns", "struct", or "map").
-        flat_new_values: Whether to flatten new values into top-level columns.
+        flatten_values: Whether to flatten new values into top-level columns.
     """
 
     values_format: CdcValuesFormatSpec = "columns"
-    flat_new_values: bool = True
+    flatten_values: bool = True
 
     @_td_validate_call(ErrorCode.CDC14)
     def __init__(
         self,
         values_format: CdcValuesFormatSpec = "columns",
-        flat_new_values: bool = True,
+        flatten_values: bool = True,
     ):
         object.__setattr__(self, "values_format", values_format)
-        object.__setattr__(self, "flat_new_values", flat_new_values)
+        object.__setattr__(self, "flatten_values", flatten_values)

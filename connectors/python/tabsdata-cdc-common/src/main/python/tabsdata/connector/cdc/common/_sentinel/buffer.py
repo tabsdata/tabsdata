@@ -30,14 +30,14 @@ class BufferSentinel:
         disk_sentinel: DiskSentinel,
         max_rows: int,
         max_bytes: int | None,
-        max_seconds: float,
+        max_secs: int,
         tables: dict[str, TrackedTable],
         offset: CdcOffset,
     ):
         self._disk_sentinel = disk_sentinel
         self._max_rows = max_rows
         self._max_bytes = max_bytes
-        self._max_seconds = max_seconds
+        self._max_secs = max_secs
         self._buffers: dict[str, CdcBuffer] = {table: CdcBuffer() for table in tables}
         self._total_rows: int = 0
         self._total_bytes: int = 0
@@ -94,12 +94,12 @@ class BufferSentinel:
 
         rows_hit = self._max_rows is not None and self._total_rows >= self._max_rows
         bytes_hit = self._max_bytes is not None and self._total_bytes >= self._max_bytes
-        time_hit = (time.time() - self._last_flushed) >= self._max_seconds
+        time_hit = (time.time() - self._last_flushed) >= self._max_secs
         if self.has_data and (rows_hit or bytes_hit or time_hit):
             self.flush()
 
     def expire(self) -> None:
-        if self.has_data and (time.time() - self._last_flushed) >= self._max_seconds:
+        if self.has_data and (time.time() - self._last_flushed) >= self._max_secs:
             self.flush()
 
     def flush(self) -> None:

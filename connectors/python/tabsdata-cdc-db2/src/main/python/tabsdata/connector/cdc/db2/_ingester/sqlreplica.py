@@ -142,7 +142,7 @@ class SqlReplicationIngester(CdcIngester):
         conn: Db2CdcConn,
         tables: QualifiedTablesSpec,
         start_from: Db2CdcStartFromSpec,
-        blocking_timeout_seconds: float = DEFAULT_BLOCKING_TIMEOUT_SECONDS,
+        blocking_timeout_seconds: int = DEFAULT_BLOCKING_TIMEOUT_SECONDS,
         offset: pl.DataFrame | None = None,
     ):
         super().__init__(tables)
@@ -162,7 +162,7 @@ class SqlReplicationIngester(CdcIngester):
         return self._start_from
 
     @property
-    def blocking_timeout_seconds(self) -> float | None:
+    def blocking_timeout_seconds(self) -> int | None:
         return self._blocking_timeout_seconds
 
     @property
@@ -344,25 +344,32 @@ class SqlReplicationIngester(CdcIngester):
                 )
 
             # Verify catalog and inspector columns match (case-insensitive).
-            for catalog_name, col_info in zip(catalog_columns, columns_info):
-                if catalog_name.upper() != col_info["name"].upper():
+            for catalog_name, column_info in zip(catalog_columns, columns_info):
+                if catalog_name.upper() != column_info["name"].upper():
                     raise CdcError(
                         ErrorCode.CDC8,
                         source_owner,
                         source_table,
                         catalog_name,
-                        col_info["name"],
+                        column_info["name"],
                     )
 
             columns = []
-            for catalog_name, col_info in zip(catalog_columns, columns_info):
+            for catalog_name, column_info in zip(catalog_columns, columns_info):
+                if self.dialect.is_large_column(column_info["type"]):
+                    logger.info(
+                        f"Excluding large column '{catalog_name}' "
+                        f"({type(column_info['type']).__name__}) "
+                        f"from {source_owner}.{source_table}"
+                    )
+                    continue
                 iname = (
                     f"{before_img_prefix}{catalog_name}" if before_img_prefix else None
                 )
                 columns.append(
                     TrackedColumn(
                         name=catalog_name,
-                        satype=col_info["type"],
+                        satype=column_info["type"],
                         oname=iname,
                         sa_name=sa_dialect.normalize_name(name=catalog_name),
                         sa_oname=(
@@ -539,7 +546,7 @@ class SqlReplicationIngester(CdcIngester):
                         self._mark.commits[qualified] = watermark
                     sleep = min(
                         POLL_INTERVAL_SECONDS,
-                        max(deadline - time.monotonic(), 0),
+                        max(deadline - time.monotonic(), 0.0),
                     )
                     if sleep <= 0:
                         return
