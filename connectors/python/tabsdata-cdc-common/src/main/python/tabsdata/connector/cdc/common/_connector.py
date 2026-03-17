@@ -147,6 +147,9 @@ class CdcTrigger(StageTrigger):
     def _setup_signal_handlers() -> threading.Event:
         stop_event = threading.Event()
 
+        if threading.current_thread() is not threading.main_thread():
+            return stop_event
+
         def handle_signal(signum, _frame):
             logger.info(f"Received termination signal ({signum}). Shutting down...")
             stop_event.set()

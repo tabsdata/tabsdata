@@ -5,8 +5,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
+import threading
+import time
 import uuid
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, Callable
 
 import polars as pl
@@ -26,13 +31,21 @@ from tabsdata.connector.cdc.common.constants import (
     CdcOperation,
 )
 from tabsdata.connector.cdc.common.typing import CdcFormatSpec
+from tabsdata._io.inputs.stage_input import (
+    STAGE_MANIFEST_FILE_PATTERN,
+    _deserialize_manifest,
+    _read_manifest_file, Stage,
+)
+from tabsdata._tabsserver.function.global_utils import convert_uri_to_path
 from tabsdata._utils.tableframe._common import drop_system_columns
-from test_tabsdata.fntest import tdfnjob, tdfntrigger
+from test_tabsdata.fntest import tdfnjob, tdfnrun, tdfntrigger
 from test_tabsdata.test_tableframe.common import pretty_pandas, pretty_polars
 from test_tabsdata_cdc_common.common.sql import CdcSampler
 from test_tabsdata_cdc_db2.common.sql import Db2CdcSampler
 
 import pytest
+
+logger = logging.getLogger(__name__)
 
 CDC_FORMAT_PARAMS = [
     pytest.param(
@@ -567,7 +580,7 @@ def run_offset_resume_test(
 
         ops = df[CDC_META_OP].to_list()
         assert all(op == CdcOperation.INSERT for op in ops), (
-            f"Iteration {i + 1}: expected all INSERTs, "
+            f"Iteration {i + 1}: expected all INSERT's, "
             f"got {[op for op in ops if op != CdcOperation.INSERT]}"
         )
 
@@ -633,3 +646,260 @@ def run_end_to_end_format_test(
     assert staged_sorted.equals(output_sorted), (
         "Function output is not equivalent to staged data"
     )
+
+
+def _count_staged_rows(staging: Path) -> int:
+    working = staging.parent
+    total = 0
+    for pf in working.glob("*.parquet"):
+        # noinspection PyBroadException
+        try:
+            total += pl.read_parquet(pf).height
+        except Exception:
+            pass
+    return total
+
+
+def _validate_continuous_output(
+    staging: Path,
+    tables: list[TableObject],
+    sampler: CdcSampler,
+) -> None:
+    manifest_files = sorted(staging.glob(STAGE_MANIFEST_FILE_PATTERN))
+    assert len(manifest_files) > 0, f"No manifest files found in {staging}"
+
+    files_by_index: dict[int, list[Path]] = {}
+    for mf in manifest_files:
+        content = _read_manifest_file(str(mf))
+        manifest = _deserialize_manifest(content)
+        for idx, entry in manifest.entries.items():
+            files_by_index.setdefault(idx, []).extend(
+                Path(convert_uri_to_path(uri)) for uri in entry.files
+            )
+
+    pk_col = sampler.fold("pk")
+
+    for i, table in enumerate(tables):
+        parquet_files = files_by_index.get(i, [])
+        assert len(parquet_files) > 0, (
+            f"No parquet files for table {table} (index {i})"
+        )
+
+        df = pl.concat([pl.read_parquet(f) for f in parquet_files])
+        expected = sampler.t_changes(table)
+
+        print(f"\n--- Table {table} (index {i}) ---")
+        print(f"  Actual rows: {df.height}")
+        print(f"  Expected rows: {expected.height}")
+
+        assert df.height == expected.height, (
+            f"Table {table}: expected {expected.height} rows, got {df.height}"
+        )
+
+        ops = df[CDC_META_OP].to_list()
+        expected_ops = expected["op"].to_list()
+        for op_type in [CdcOperation.INSERT, CdcOperation.UPDATE, CdcOperation.DELETE]:
+            actual_count = ops.count(op_type)
+            expected_count = expected_ops.count(op_type)
+            assert actual_count == expected_count, (
+                f"Table {table}: expected {expected_count} {op_type}, "
+                f"got {actual_count}"
+            )
+
+        for op_type in [CdcOperation.INSERT, CdcOperation.UPDATE, CdcOperation.DELETE]:
+            actual_pks = sorted(
+                df.filter(pl.col(CDC_META_OP) == op_type)[pk_col].to_list()
+            )
+            expected_pks = sorted(
+                expected.filter(
+                    pl.col("op") == op_type
+                )[f"new.{pk_col}"].to_list()
+            )
+            assert actual_pks == expected_pks, (
+                f"Table {table}: PK mismatch for {op_type}: "
+                f"{actual_pks} != {expected_pks}"
+            )
+
+        for op_type in [CdcOperation.INSERT, CdcOperation.UPDATE, CdcOperation.DELETE]:
+            actual_rows = df.filter(
+                pl.col(CDC_META_OP) == op_type
+            ).sort(pk_col)
+            expected_rows = expected.filter(
+                pl.col("op") == op_type
+            ).sort(f"new.{pk_col}")
+            for column in sampler.columns:
+                actual_values = actual_rows[column].to_list()
+                expected_values = expected_rows[f"new.{column}"].to_list()
+                assert fuzzy_eq(
+                    actual_values, expected_values, column, sampler.float_columns
+                ), (
+                    f"Table {table}: value mismatch for {column} in {op_type}:\n"
+                    f"  actual:   {actual_values}\n"
+                    f"  expected: {expected_values}"
+                )
+
+    print("\n--- Continuous validation PASSED ---")
+
+
+def run_continuous_dml_test(
+    sampler: CdcSampler,
+    connection: Any,
+    tables: list[TableObject],
+    trigger: td.StageTrigger,
+    dml_duration_seconds: int = 60,
+    safety_wait_seconds: int = 16,
+) -> None:
+    output_names = [f"output_{i}" for i in range(len(tables))]
+
+    @td.publisher(
+        source=Stage(use_existing_data=True),
+        tables=output_names,
+        name=str(uuid.uuid4()),
+        trigger_by=trigger,
+    )
+    def process(*tfs: list[td.TableFrame],) -> tuple[td.TableFrame, ...]:
+        return tuple(td.concat(tf_list) for tf_list in tfs)
+
+    captured: dict[str, Any] = {}
+    original_run = trigger.run
+
+    def capturing_run(ctx):
+        captured['context'] = ctx
+        return original_run(ctx)
+
+    trigger.run = capturing_run
+
+    trigger_result: dict[str, Any] = {}
+
+    def trigger_worker():
+        try:
+            trigger_result['fn_trigger'] = tdfntrigger(
+                trigger=trigger, function=process,
+            )
+        except Exception as error:
+            trigger_result['error'] = error
+
+    thread = threading.Thread(target=trigger_worker, daemon=True)
+    thread.start()
+
+    deadline = time.monotonic() + 30
+    while 'context' not in captured and time.monotonic() < deadline:
+        time.sleep(0.5)
+    assert 'context' in captured, "Trigger did not initialize within 30s"
+    context = captured['context']
+
+    pretty_polars()
+    pretty_pandas()
+
+    for batch in range(3):
+        batch_start = time.monotonic()
+        for table in tables:
+            sampler.run(table=table, inserts=10, updates=0, deletes=0)
+        connection.commit()
+        remaining = 1.0 - (time.monotonic() - batch_start)
+        if remaining > 0:
+            time.sleep(remaining)
+
+    mixed_batches = dml_duration_seconds - 3
+    for batch in range(mixed_batches):
+        batch_start = time.monotonic()
+        for table in tables:
+            sampler.run(table=table, inserts=6, updates=3, deletes=2)
+        connection.commit()
+        remaining = 1.0 - (time.monotonic() - batch_start)
+        if remaining > 0:
+            time.sleep(remaining)
+
+    total_expected = sum(sampler.t_changes(t).height for t in tables)
+    print(f"\n--- DML complete. Total expected: {total_expected} rows ---")
+    for table in tables:
+        expected = sampler.t_changes(table)
+        print(f"  {table}: {expected.height} rows")
+
+    staging = Path(context.staging_folder)
+    poll_timeout_seconds = 120
+    stable_threshold = 8
+    print(f"\n--- Waiting for CDC capture (timeout {poll_timeout_seconds}s) ---")
+    poll_deadline = time.monotonic() + poll_timeout_seconds
+    prev_actual = -1
+    stable_count = 0
+    total_actual = 0
+    while time.monotonic() < poll_deadline:
+        # noinspection PyBroadException
+        try:
+            total_actual = _count_staged_rows(staging)
+        except Exception:
+            total_actual = 0
+        print(f"  Staged rows: {total_actual}/{total_expected}")
+        if total_actual >= total_expected:
+            print("  All rows staged.")
+            break
+        if total_actual == prev_actual:
+            stable_count += 1
+        else:
+            stable_count = 0
+        prev_actual = total_actual
+        if stable_count >= stable_threshold and total_actual > 0:
+            print(
+                f"  Staged rows stabilized at {total_actual}/{total_expected}"
+                f" (remaining {total_expected - total_actual} in buffer)."
+            )
+            break
+        time.sleep(2)
+    else:
+        print(
+            f"  Poll timeout reached at {total_actual}/{total_expected} rows."
+        )
+
+    print(f"\n--- Safety wait ({safety_wait_seconds}s) ---")
+    time.sleep(safety_wait_seconds)
+
+    context.end = datetime.now(timezone.utc) - timedelta(seconds=60)
+    print("\n--- Trigger stop signal sent ---")
+
+    thread.join(timeout=30)
+    assert not thread.is_alive(), "Trigger thread did not stop within 30s"
+
+    if 'error' in trigger_result:
+        raise trigger_result['error']
+
+    _validate_continuous_output(staging, tables, sampler)
+
+    fn_run = tdfnrun(
+        function=process,
+        function_defined_on=0,
+        staging_folder=staging,
+    )
+
+    output_tables = fn_run.output.as_pl_df()
+    n_tables = len(tables)
+    assert len(output_tables) == n_tables, (
+        f"Expected {n_tables} output tables, got {len(output_tables)}"
+    )
+
+    manifest_files = sorted(staging.glob(STAGE_MANIFEST_FILE_PATTERN))
+    files_by_index: dict[int, list[Path]] = {}
+    for mf in manifest_files:
+        content = _read_manifest_file(str(mf))
+        manifest = _deserialize_manifest(content)
+        for idx, entry in manifest.entries.items():
+            files_by_index.setdefault(idx, []).extend(
+                Path(convert_uri_to_path(uri)) for uri in entry.files
+            )
+
+    for i in range(n_tables):
+        output_df = drop_system_columns(output_tables[i].lazy()).collect()
+        staged_df = drop_system_columns(
+            pl.concat([
+                pl.read_parquet(f) for f in files_by_index[i]
+            ]).lazy()
+        ).collect()
+        columns = sorted(staged_df.columns)
+        staged_sorted = staged_df.select(columns).sort(columns)
+        output_sorted = output_df.select(columns).sort(columns)
+        assert staged_sorted.equals(output_sorted), (
+            f"Function output for table {tables[i]} (index {i}) "
+            f"is not equivalent to staged data"
+        )
+
+    print("\n--- Function execution PASSED ---")

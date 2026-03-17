@@ -185,7 +185,7 @@ class SourcePlugin:
             f"Imported files to '{working_dir}'. Resulting files: '{resulting_files}'"
         )
 
-        idx = td_generators.IdxGenerator()
+        idx = getattr(self, "_shared_idx", None) or td_generators.IdxGenerator()
         if isinstance(resulting_files, str) or resulting_files is None:
             # Leaving this logic so that if users implement a plugin that
             # returns the wrong type, they will get a clear error message.

@@ -73,6 +73,7 @@ check_assets()
 
 pytest_plugins = ["test_tabsdata.fntest"]
 
+os.environ["POLARS_VERBOSE"] = "0"
 
 def pytest_configure(config: pytest.Config):
     setup_tests_logging()

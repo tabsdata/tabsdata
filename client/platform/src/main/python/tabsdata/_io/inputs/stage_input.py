@@ -602,6 +602,17 @@ class ManifestStage(SourcePlugin):
                 aggregated_groups[group_idx].extend(entry.files)
 
         # Process each positional group.
+        # A single shared IdxGenerator is required across all groups because
+        # each auxiliary plugin's stream() would otherwise create its own
+        # IdxGenerator starting at 0. Since store_source_raw_data() derives
+        # the .t file path from the idx (e.g. r/0.t, r/1.t, ...), independent
+        # generators cause group N to overwrite group 0's .t files. The
+        # earlier groups' TableFrames hold lazy references to those paths, so
+        # reading the overwritten files produces parquet corruption errors.
+        from tabsdata._utils.tableframe import _generators as td_generators
+
+        shared_idx = td_generators.IdxGenerator()
+
         results = []
         for group_idx in sorted(aggregated_groups.keys()):
             group_files = aggregated_groups[group_idx]
@@ -630,6 +641,7 @@ class ManifestStage(SourcePlugin):
                         "are Azure, GCS, LocalFileSystem and S3."
                     )
 
+            auxiliary_plugin._shared_idx = shared_idx
             logger.debug(
                 f"Running auxiliary plugin for group {group_idx}: {auxiliary_plugin}"
             )

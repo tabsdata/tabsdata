@@ -90,7 +90,7 @@ def concat(
             f"Invalid concatenation method: {how!r}. Expected one of {valid_methods}"
         )
 
-    unwrapped_items = [_unwrap_td_ype(item) for item in items]
+    unwrapped_items = [_unwrap_td_type(item) for item in items]
 
     # First, perform a no-op concatenation of empty LazyFrames built from the
     # schemas of the original frames. This ensures that all schemas are compatible.
@@ -136,7 +136,7 @@ def _wrap_polars_type(
 
 
 # noinspection PyTypeChecker
-def _unwrap_td_ype(
+def _unwrap_td_type(
     obj: td_frame.TdType,
 ) -> pl_typing.PolarsType:
     if isinstance(obj, td_frame.TableFrame):

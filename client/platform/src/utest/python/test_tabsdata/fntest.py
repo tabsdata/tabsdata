@@ -992,6 +992,7 @@ def tdfnrun(
     staging_files: MockTableFrameSpec = None,
     function_defined_on: float = None,
     require_output: bool = True,
+    staging_folder: Path = None,
 ) -> FnRun:
     tdtest = Path(tempfile.gettempdir()) / FunctionConstants.TEMP_ROOT.value
     os.makedirs(tdtest, exist_ok=True)
@@ -1040,6 +1041,7 @@ def tdfnrun(
             staging_files=staging_files,
             function_defined_on=function_defined_on,
             require_output=require_output,
+            staging_folder=staging_folder,
             staging_uri=None,
         )
 
