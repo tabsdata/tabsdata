@@ -4,7 +4,9 @@
 
 from __future__ import annotations
 
-from typing import Optional, Union
+from typing import Union
+
+from typing_extensions import deprecated
 
 from tabsdata._credentials import UserPasswordCredentials, build_credentials
 from tabsdata._io.cloud_staging.common.storage_config import (
@@ -13,6 +15,7 @@ from tabsdata._io.cloud_staging.common.storage_config import (
     S3Config,
 )
 from tabsdata._io.connections.connections import Conn
+from tabsdata._utils.annotations import unstable, unstable_category
 from tabsdata._utils.validation import _td_validate_call
 from tabsdata.exceptions import ErrorCode
 
@@ -20,6 +23,19 @@ from tabsdata.exceptions import ErrorCode
 StagingConfig = Union[S3Config, AzureConfig, GCSConfig]
 
 
+@unstable()
+@deprecated(
+    """Class 'StarRocksConn' is considered unstable and is subject to change
+     in future releases.""",  # noqa: E231,E241,E501
+    category=unstable_category(
+        reason=(
+            "Class 'StarRocksConn' may undergo API and feature changes as it evolves"
+            " toward full capability and stability."
+        ),
+        since="1.8.0",
+        replacement="There is no current stable replacement for this class.",
+    ),
+)
 class StarRocksConn(Conn):
     """
     Represents a connection configuration for StarRocks with cloud-staged bulk
@@ -29,34 +45,6 @@ class StarRocksConn(Conn):
     first uploaded to the configured staging area and then loaded into StarRocks
     using the ``FILES()`` table function in an ``INSERT INTO … SELECT * FROM
     FILES(...)`` statement.
-
-    Args:
-        host: StarRocks FE hostname or IP address.
-        staging: Cloud storage staging configuration.  Provide one of:
-
-            * :class:`~tabsdata._io.cloud_staging.common.storage_config.S3Config`
-              — stage files in Amazon S3 and read with StarRocks' ``FILES()``
-              table function using ``s3://`` paths.
-            * :class:`~tabsdata._io.cloud_staging.common.storage_config.AzureConfig`
-              — stage files in Azure Blob Storage and read with ``FILES()``
-              using ``wasbs://`` paths.
-            * :class:`~tabsdata._io.cloud_staging.common.storage_config.GCSConfig`
-              — stage files in Google Cloud Storage and read with ``FILES()``
-              using ``s3a://`` paths via the GCS S3-compatible HMAC API.
-
-        port: MySQL protocol port of the StarRocks FE server.  Defaults to
-            ``9030``.
-        database: Target database name.  Defaults to ``"default"``.
-        credentials: Optional :class:`~tabsdata.UserPasswordCredentials` for
-            StarRocks authentication.  When ``None`` the StarRocks ``root``
-            user with no password is used.
-        enforce_connection_params: Whether to enforce connection parameters for
-            the StarRocks connection.  Applicable only for connections to a
-            StarRocks destination.  Defaults to ``True``.
-        cx_src_configs_starrocks: Source-specific configuration parameters for
-            the StarRocks connection.  Defaults to ``None``.
-        cx_dst_configs_starrocks: Destination-specific configuration parameters
-            for the StarRocks connection.  Defaults to ``None``.
     """
 
     @_td_validate_call(ErrorCode.DECE110)
@@ -66,11 +54,48 @@ class StarRocksConn(Conn):
         staging: StagingConfig,
         port: int = 9030,
         database: str = "default",
-        credentials: Optional[UserPasswordCredentials] = None,
+        credentials: UserPasswordCredentials | None = None,
         enforce_connection_params: bool = True,
-        cx_src_configs_starrocks: Optional[dict] = None,
-        cx_dst_configs_starrocks: Optional[dict] = None,
+        cx_src_configs_starrocks: dict | None = None,
+        cx_dst_configs_starrocks: dict | None = None,
     ):
+        """
+        Represents a connection configuration for StarRocks with cloud-staged bulk
+        loading.
+
+        StarRocks ingests data via cloud storage (S3, Azure Blob, or GCS): files are
+        first uploaded to the configured staging area and then loaded into StarRocks
+        using the ``FILES()`` table function in an ``INSERT INTO … SELECT * FROM
+        FILES(...)`` statement.
+
+        Args:
+            host: StarRocks FE hostname or IP address.
+            staging: Cloud storage staging configuration.  Provide one of:
+
+                * :class:`~tabsdata._io.cloud_staging.common.storage_config.S3Config`
+                  — stage files in Amazon S3 and read with StarRocks' ``FILES()``
+                  table function using ``s3://`` paths.
+                * :class:`~tabsdata._io.cloud_staging.common.storage_config.AzureConfig`
+                  — stage files in Azure Blob Storage and read with ``FILES()``
+                  using ``wasbs://`` paths.
+                * :class:`~tabsdata._io.cloud_staging.common.storage_config.GCSConfig`
+                  — stage files in Google Cloud Storage and read with ``FILES()``
+                  using ``s3a://`` paths via the GCS S3-compatible HMAC API.
+
+            port: MySQL protocol port of the StarRocks FE server.  Defaults to
+                ``9030``.
+            database: Target database name.  Defaults to ``"default"``.
+            credentials: :class:`~tabsdata.UserPasswordCredentials` for
+                StarRocks authentication.  When ``None`` the StarRocks ``root``
+                user with no password is used.
+            enforce_connection_params: Whether to enforce connection parameters for
+                the StarRocks connection.  Applicable only for connections to a
+                StarRocks destination.  Defaults to ``True``.
+            cx_src_configs_starrocks: Source-specific configuration parameters for
+                the StarRocks connection.  Defaults to ``None``.
+            cx_dst_configs_starrocks: Destination-specific configuration parameters
+                for the StarRocks connection.  Defaults to ``None``.
+        """
         self._host = host
         self._port = port
         self._database = database
@@ -104,7 +129,7 @@ class StarRocksConn(Conn):
         return self._database
 
     @property
-    def credentials(self) -> Optional[UserPasswordCredentials]:
+    def credentials(self) -> UserPasswordCredentials | None:
         """
         The credentials used to authenticate with StarRocks.  ``None`` if no
         credentials were provided (StarRocks ``root`` user, no password).
@@ -147,8 +172,8 @@ class StarRocksConn(Conn):
     # ── Internal helpers ──────────────────────────────────────────────────────────────
 
     def _build_credentials(
-        self, credentials: Optional[UserPasswordCredentials]
-    ) -> Optional[UserPasswordCredentials]:
+        self, credentials: UserPasswordCredentials | None
+    ) -> UserPasswordCredentials | None:
         if credentials:
             credentials = build_credentials(credentials)
         return credentials

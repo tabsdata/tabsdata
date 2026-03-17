@@ -4,7 +4,9 @@
 
 from __future__ import annotations
 
-from typing import Optional, Union
+from typing import Union
+
+from typing_extensions import deprecated
 
 from tabsdata._credentials import UserPasswordCredentials, build_credentials
 from tabsdata._io.cloud_staging.common.storage_config import (
@@ -13,6 +15,7 @@ from tabsdata._io.cloud_staging.common.storage_config import (
     S3Config,
 )
 from tabsdata._io.connections.connections import Conn
+from tabsdata._utils.annotations import unstable, unstable_category
 from tabsdata._utils.validation import _td_validate_call
 from tabsdata.exceptions import ErrorCode
 
@@ -20,6 +23,19 @@ from tabsdata.exceptions import ErrorCode
 StagingConfig = Union[S3Config, AzureConfig, GCSConfig]
 
 
+@unstable()
+@deprecated(
+    """Class 'ClickHouseConn' is considered unstable and is subject to change
+     in future releases.""",  # noqa: E231,E241,E501
+    category=unstable_category(
+        reason=(
+            "Class 'ClickHouseConn' may undergo API and feature changes as it evolves"
+            " toward full capability and stability."
+        ),
+        since="1.8.0",
+        replacement="There is no current stable replacement for this class.",
+    ),
+)
 class ClickHouseConn(Conn):
     """
     Represents a connection configuration for ClickHouse with cloud-staged bulk
@@ -29,36 +45,6 @@ class ClickHouseConn(Conn):
     first uploaded to the configured staging area and then loaded into ClickHouse
     using the matching table function (``s3()``, ``azureBlobStorage()``, or
     ``s3()`` pointed at GCS).
-
-    Args:
-        host: ClickHouse server hostname or IP address.
-        staging: Cloud storage staging configuration.  Provide one of:
-
-            * :class:`~tabsdata._io.cloud_staging.common.storage_config.S3Config`
-              — stage files in Amazon S3 and read with ClickHouse's ``s3()``
-              table function.
-            * :class:`~tabsdata._io.cloud_staging.common.storage_config.AzureConfig`
-              — stage files in Azure Blob Storage and read with
-              ``azureBlobStorage()``.
-            * :class:`~tabsdata._io.cloud_staging.common.storage_config.GCSConfig`
-              — stage files in Google Cloud Storage and read with ClickHouse's
-              ``s3()`` table function via the GCS S3-compatible HMAC API.
-
-        port: HTTP(S) port of the ClickHouse server.  Use ``8123`` for plain
-            HTTP (default) and ``8443`` for HTTPS/TLS.
-        database: Target database name.  Defaults to ``"default"``.
-        credentials: Optional :class:`~tabsdata.UserPasswordCredentials` for
-            ClickHouse authentication.  When ``None`` the ClickHouse
-            ``default`` user with no password is used.
-        secure: If ``True``, connect to ClickHouse over HTTPS/TLS.  Defaults
-            to ``False``.
-        enforce_connection_params: Whether to enforce connection parameters for
-            the ClickHouse connection.  Applicable only for connections to a
-            ClickHouse destination.  Defaults to ``True``.
-        cx_src_configs_clickhouse: Source-specific configuration parameters for
-            the ClickHouse connection.  Defaults to ``None``.
-        cx_dst_configs_clickhouse: Destination-specific configuration parameters
-            for the ClickHouse connection.  Defaults to ``None``.
     """
 
     @_td_validate_call(ErrorCode.DECE109)
@@ -68,12 +54,51 @@ class ClickHouseConn(Conn):
         staging: StagingConfig,
         port: int = 8123,
         database: str = "default",
-        credentials: Optional[UserPasswordCredentials] = None,
+        credentials: UserPasswordCredentials | None = None,
         secure: bool = False,
         enforce_connection_params: bool = True,
-        cx_src_configs_clickhouse: Optional[dict] = None,
-        cx_dst_configs_clickhouse: Optional[dict] = None,
+        cx_src_configs_clickhouse: dict | None = None,
+        cx_dst_configs_clickhouse: dict | None = None,
     ):
+        """
+        Represents a connection configuration for ClickHouse with cloud-staged bulk
+        loading.
+
+        ClickHouse ingests data via cloud storage (S3, Azure Blob, or GCS): files are
+        first uploaded to the configured staging area and then loaded into ClickHouse
+        using the matching table function (``s3()``, ``azureBlobStorage()``, or
+        ``s3()`` pointed at GCS).
+
+        Args:
+            host: ClickHouse server hostname or IP address.
+            staging: Cloud storage staging configuration.  Provide one of:
+
+                * :class:`~tabsdata._io.cloud_staging.common.storage_config.S3Config`
+                  — stage files in Amazon S3 and read with ClickHouse's ``s3()``
+                  table function.
+                * :class:`~tabsdata._io.cloud_staging.common.storage_config.AzureConfig`
+                  — stage files in Azure Blob Storage and read with
+                  ``azureBlobStorage()``.
+                * :class:`~tabsdata._io.cloud_staging.common.storage_config.GCSConfig`
+                  — stage files in Google Cloud Storage and read with ClickHouse's
+                  ``s3()`` table function via the GCS S3-compatible HMAC API.
+
+            port: HTTP(S) port of the ClickHouse server.  Use ``8123`` for plain
+                HTTP (default) and ``8443`` for HTTPS/TLS.
+            database: Target database name.  Defaults to ``"default"``.
+            credentials: :class:`~tabsdata.UserPasswordCredentials` for
+                ClickHouse authentication.  When ``None`` the ClickHouse
+                ``default`` user with no password is used.
+            secure: If ``True``, connect to ClickHouse over HTTPS/TLS.  Defaults
+                to ``False``.
+            enforce_connection_params: Whether to enforce connection parameters for
+                the ClickHouse connection.  Applicable only for connections to a
+                ClickHouse destination.  Defaults to ``True``.
+            cx_src_configs_clickhouse: Source-specific configuration parameters for
+                the ClickHouse connection.  Defaults to ``None``.
+            cx_dst_configs_clickhouse: Destination-specific configuration parameters
+                for the ClickHouse connection.  Defaults to ``None``.
+        """
         self._host = host
         self._port = port
         self._database = database
@@ -108,7 +133,7 @@ class ClickHouseConn(Conn):
         return self._database
 
     @property
-    def credentials(self) -> Optional[UserPasswordCredentials]:
+    def credentials(self) -> UserPasswordCredentials | None:
         """
         The credentials used to authenticate with ClickHouse.  ``None`` if no
         credentials were provided (ClickHouse ``default`` user, no password).
@@ -158,8 +183,8 @@ class ClickHouseConn(Conn):
     # ── Internal helpers ──────────────────────────────────────────────────────────────
 
     def _build_credentials(
-        self, credentials: Optional[UserPasswordCredentials]
-    ) -> Optional[UserPasswordCredentials]:
+        self, credentials: UserPasswordCredentials | None
+    ) -> UserPasswordCredentials | None:
         if credentials:
             credentials = build_credentials(credentials)
         return credentials

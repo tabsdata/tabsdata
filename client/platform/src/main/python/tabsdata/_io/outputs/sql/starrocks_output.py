@@ -6,9 +6,9 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Optional
 
 import polars as pl
+from typing_extensions import deprecated
 
 from tabsdata._io.cloud_staging.common.bulk_loader import CloudStagedBulkLoader
 from tabsdata._io.cloud_staging.common.modes import SchemaEvolutionMode, WriteMode
@@ -27,6 +27,7 @@ from tabsdata._io.cloud_staging.starrocks.dialect import StarRocksDialect
 from tabsdata._io.connections.starrocks_connection import StarRocksConn
 from tabsdata._io.outputs.shared_enums import IfTableExistStrategySpec
 from tabsdata._io.plugin import DestinationPlugin
+from tabsdata._utils.annotations import unstable, unstable_category
 from tabsdata._utils.id import encode_id
 from tabsdata._utils.validation import _td_validate_call
 from tabsdata.exceptions import DestinationConfigurationError, ErrorCode
@@ -34,6 +35,19 @@ from tabsdata.exceptions import DestinationConfigurationError, ErrorCode
 logger = logging.getLogger(__name__)
 
 
+@unstable()
+@deprecated(
+    """Class 'StarRocksConn' is considered unstable and is subject to change
+     in future releases.""",  # noqa: E231,E241,E501
+    category=unstable_category(
+        reason=(
+            "Class 'StarRocksConn' may undergo API and feature changes as it evolves"
+            " toward full capability and stability."
+        ),
+        since="1.8.0",
+        replacement="There is no current stable replacement for this class.",
+    ),
+)
 class StarRocksDest(DestinationPlugin):
     """
     :categories: destination
@@ -134,7 +148,7 @@ class StarRocksDest(DestinationPlugin):
 
     # ── Stream ────────────────────────────────────────────────────────────────────────
 
-    def stream(self, working_dir: str, *results: list[Optional[pl.LazyFrame]]):
+    def stream(self, working_dir: str, *results: list[pl.LazyFrame | None]):
         """
         Write each result as a Parquet file and bulk load it into StarRocks via
         the cloud staging area.
