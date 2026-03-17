@@ -293,7 +293,10 @@ def _validate_cdc_output(
     insert_tx = insert_txs.to_list()[0]
     update_tx = update_txs.to_list()[0]
     delete_tx = delete_txs.to_list()[0]
-    assert insert_tx < update_tx < delete_tx, (
+    insert_key = sampler.tx_sort_key(insert_tx)
+    update_key = sampler.tx_sort_key(update_tx)
+    delete_key = sampler.tx_sort_key(delete_tx)
+    assert insert_key < update_key < delete_key, (
         f"Transaction IDs should be ordered: {insert_tx} < {update_tx} < {delete_tx}"
     )
 
@@ -553,7 +556,10 @@ def _validate_cdc_map_output(
     insert_tx = insert_txs.to_list()[0]
     update_tx = update_txs.to_list()[0]
     delete_tx = delete_txs.to_list()[0]
-    assert insert_tx < update_tx < delete_tx, (
+    insert_key = sampler.tx_sort_key(insert_tx)
+    update_key = sampler.tx_sort_key(update_tx)
+    delete_key = sampler.tx_sort_key(delete_tx)
+    assert insert_key < update_key < delete_key, (
         f"Transaction IDs should be ordered: {insert_tx} < {update_tx} < {delete_tx}"
     )
 

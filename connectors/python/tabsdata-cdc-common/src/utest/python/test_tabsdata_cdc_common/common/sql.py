@@ -160,6 +160,9 @@ class CdcSampler(ABC):
     @abstractmethod
     def fold(self, name: str) -> str: ...
 
+    @abstractmethod
+    def tx_sort_key(self, tx: str) -> Any: ...
+
     @property
     def columns(self) -> list[str]:
         return self._columns

@@ -32,6 +32,9 @@ class Db2CdcSampler(CdcSampler):
     def fold(self, name: str) -> str:
         return name.upper()
 
+    def tx_sort_key(self, tx: str) -> bytes:
+        return bytes.fromhex(tx)
+
     def table_exists(self, table: TableObject) -> bool:
         self._cursor.execute(
             f"select count(*) "

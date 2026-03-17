@@ -32,6 +32,9 @@ class PostgresCdcSampler(CdcSampler):
     def fold(self, name: str) -> str:
         return name
 
+    def tx_sort_key(self, tx: str) -> int:
+        return int(tx)
+
     def table_exists(self, table: TableObject) -> bool:
         self._cursor.execute(
             f"select count(*) "

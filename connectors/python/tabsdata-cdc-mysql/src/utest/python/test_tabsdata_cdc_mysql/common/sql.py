@@ -32,6 +32,10 @@ class MySQLCdcSampler(CdcSampler):
     def fold(self, name: str) -> str:
         return name
 
+    def tx_sort_key(self, tx: str) -> tuple[str, int]:
+        uuid, seq = tx.rsplit(":", 1)
+        return (uuid, int(seq))
+
     def table_exists(self, table: TableObject) -> bool:
         self._cursor.execute(
             f"select count(*) "
