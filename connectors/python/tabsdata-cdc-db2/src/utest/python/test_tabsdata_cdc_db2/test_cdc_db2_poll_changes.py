@@ -1,6 +1,7 @@
 #
 # Copyright 2026 Tabs Data Inc.
 #
+
 import logging
 import random
 import string
@@ -71,7 +72,7 @@ def test_poll_changes_insert_update_delete(db2_cdc_config):
         buffer_max_rows=10_000,
         buffer_max_seconds=10,
         trigger_max_seconds=10,
-        end=datetime.now(timezone.utc) + timedelta(seconds=120),
+        end=datetime.now(timezone.utc) + timedelta(seconds=60),
     )
 
     run_poll_changes_test(
@@ -126,7 +127,7 @@ def test_end_to_end_insert_update_delete(db2_cdc_config):
         buffer_max_rows=10_000,
         buffer_max_seconds=10,
         trigger_max_seconds=10,
-        end=datetime.now(timezone.utc) + timedelta(seconds=120),
+        end=datetime.now(timezone.utc) + timedelta(seconds=60),
     )
 
     run_end_to_end_test(
@@ -183,7 +184,7 @@ def test_end_to_end_format(db2_cdc_config, cdc_format):
         buffer_max_rows=10_000,
         buffer_max_seconds=10,
         trigger_max_seconds=10,
-        end=datetime.now(timezone.utc) + timedelta(seconds=120),
+        end=datetime.now(timezone.utc) + timedelta(seconds=60),
     )
 
     run_end_to_end_format_test(

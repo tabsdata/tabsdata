@@ -441,7 +441,7 @@ class FnTrigger:
         for manifest_file in manifest_files:
             content = _read_manifest_file(str(manifest_file))
             manifest = _deserialize_manifest(content)
-            for entry in manifest.entries:
+            for entry in manifest.entries.values():
                 stage_uris.extend(entry.files)
         for stage_uri in stage_uris:
             stage_path = Path(convert_uri_to_path(stage_uri))

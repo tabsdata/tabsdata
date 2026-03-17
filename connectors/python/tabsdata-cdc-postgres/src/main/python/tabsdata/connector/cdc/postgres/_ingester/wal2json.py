@@ -311,6 +311,8 @@ class Wal2JsonIngester(CdcIngester):
             )
         if self._cursor is None:
             raise CdcError(ErrorCode.CDCPOSTGRES5)
+        if self._mark is not None:
+            offset.lsn = self._mark.lsn
         self._cursor.send_feedback(
             flush_lsn=offset.lsn,
             reply=True,

@@ -1,6 +1,7 @@
 #
 # Copyright 2026 Tabs Data Inc.
 #
+
 from dataclasses import dataclass
 from typing import Callable, Literal, TypeAlias, Union
 

@@ -192,7 +192,7 @@ class BinlogIngester(CdcIngester):
 
         match start_from:
             case GtidPositionSpec(gtid=gtid):
-                stream_kwargs["auto_position"] = gtid
+                stream_kwargs["auto_position"] = self.as_gtid_set(gtid)
                 if self._mark is None:
                     self._mark = GtidOffset(gtid=gtid)
             case BinlogPositionSpec(file=file, pos=pos):
@@ -218,6 +218,21 @@ class BinlogIngester(CdcIngester):
         self._base_offset = self._mark.copy()
         self._stream = BinLogStreamReader(**stream_kwargs)
         logger.info("BinLogStreamReader initialized")
+
+    @staticmethod
+    def as_gtid_set(gtid: str) -> str:
+        """Convert a single GTID 'uuid:N' to a GTID set range 'uuid:1-N'.
+
+        MySQL auto_position interprets 'uuid:N' as a set containing only
+        transaction N. To express 'all transactions up to N', we need the
+        range format 'uuid:1-N'.
+        """
+        if not gtid:
+            return gtid
+        uuid, seq = gtid.rsplit(":", 1)
+        if "-" in seq:
+            return gtid
+        return f"{uuid}:1-{seq}"
 
     def first_binlog_file(self) -> str:
         connection_settings = self.stream_connection_settings()

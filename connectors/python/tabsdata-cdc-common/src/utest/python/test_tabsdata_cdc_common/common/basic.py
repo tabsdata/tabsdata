@@ -507,6 +507,87 @@ def _validate_cdc_format_output(
         _validate_cdc_map_output(df, expected, sampler, cdc_format)
 
 
+def run_offset_resume_test(
+    sampler: CdcSampler,
+    connection: Any,
+    table: TableObject,
+    trigger_factory: Callable[[int, pl.DataFrame | None], td.StageTrigger],
+    iterations: int = 4,
+    inserts_per_iteration: int = 32,
+) -> None:
+    checkpoint_df: pl.DataFrame | None = None
+
+    for i in range(iterations):
+        sampler._changes.pop(table, None)
+
+        sampler.run(table=table, inserts=inserts_per_iteration, updates=0, deletes=0)
+        connection.commit()
+
+        expected = sampler.t_changes(table)
+        pk_col = sampler.fold("pk")
+
+        pretty_polars()
+        pretty_pandas()
+
+        print(f"\n--- Iteration {i + 1}/{iterations} ---")
+        print(f"\n--- Expected Changes (iteration {i + 1}) ---")
+        print(expected)
+
+        trigger = trigger_factory(i, checkpoint_df)
+        process = _build_publisher(trigger)
+
+        fn_trigger = tdfntrigger(
+            trigger=trigger,
+            function=process,
+        )
+
+        fn_trigger.check()
+        fn_trigger.integrity()
+
+        staging = fn_trigger.staging
+        workdir = staging.parent
+
+        parquet_files = sorted(staging.glob("*.parquet")) if staging.exists() else []
+        if not parquet_files:
+            parquet_files = sorted(workdir.glob("*.parquet"))
+
+        assert len(parquet_files) > 0, (
+            f"Iteration {i + 1}: no parquet files found in staging ({staging}) "
+            f"or work dir ({workdir})"
+        )
+
+        df = pl.concat([pl.read_parquet(f) for f in parquet_files])
+
+        print(f"\n--- Actual Output (iteration {i + 1}) ---")
+        print(df)
+
+        assert df.height == expected.height, (
+            f"Iteration {i + 1}: expected {expected.height} rows, got {df.height}"
+        )
+
+        ops = df[CDC_META_OP].to_list()
+        assert all(op == CdcOperation.INSERT for op in ops), (
+            f"Iteration {i + 1}: expected all INSERTs, "
+            f"got {[op for op in ops if op != CdcOperation.INSERT]}"
+        )
+
+        actual_pks = sorted(df[pk_col].to_list())
+        expected_pks = sorted(
+            expected.filter(
+                pl.col("op") == CdcOperation.INSERT
+            )[f"new.{pk_col}"].to_list()
+        )
+        assert actual_pks == expected_pks, (
+            f"Iteration {i + 1}: PK mismatch: {actual_pks} != {expected_pks}"
+        )
+
+        checkpoint_df = fn_trigger.context.checkpoint.read()
+
+        print(f"\n--- Checkpoint (iteration {i + 1}) ---")
+        print(checkpoint_df)
+        print(f"\n--- Iteration {i + 1}/{iterations} PASSED ---")
+
+
 def run_end_to_end_format_test(
     sampler: CdcSampler,
     connection: Any,
