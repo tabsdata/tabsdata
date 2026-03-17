@@ -50,9 +50,6 @@ class Db2CdcSampler(CdcSampler):
             ddl=CREATE_TABLE_DDL.format(qualified=table.qualified),
             wait=True,
         )
-        # self._cursor.execute(
-        #     CREATE_TABLE_DDL.format(qualified=table.qualified)
-        # )
 
     def insert_row(self, table: TableObject, values: dict) -> int:
         i_columns = ", ".join(self._manual_columns)

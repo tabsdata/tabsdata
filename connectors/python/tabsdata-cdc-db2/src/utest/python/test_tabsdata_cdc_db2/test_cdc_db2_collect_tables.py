@@ -31,8 +31,8 @@ def test_collect_tables_success(db2_collect_tables_setup):
     tables.extend([simple, extra])
 
     register_table_for_cdc(
-        container,
-        config.port,
+        container=container,
+        port=config.port,
         schema=schema,
         table=simple,
         ddl=(
@@ -41,11 +41,11 @@ def test_collect_tables_success(db2_collect_tables_setup):
             "name varchar(100)"
             ")"
         ),
-        wait=False,
+        wait=True,
     )
     register_table_for_cdc(
-        container,
-        config.port,
+        container=container,
+        port=config.port,
         schema=schema,
         table=extra,
         ddl=(
@@ -54,7 +54,7 @@ def test_collect_tables_success(db2_collect_tables_setup):
             "value double"
             ")"
         ),
-        wait=False,
+        wait=True,
     )
 
     ingester = SqlReplicationIngester(
@@ -134,8 +134,8 @@ def test_collect_tables_type_conversion(db2_collect_tables_setup):
     tables.append(types_table)
 
     register_table_for_cdc(
-        container,
-        config.port,
+        container=container,
+        port=config.port,
         schema=schema,
         table=types_table,
         ddl=(
@@ -152,7 +152,7 @@ def test_collect_tables_type_conversion(db2_collect_tables_setup):
             "col_time time"
             ")"
         ),
-        wait=False,
+        wait=True,
     )
 
     ingester = SqlReplicationIngester(

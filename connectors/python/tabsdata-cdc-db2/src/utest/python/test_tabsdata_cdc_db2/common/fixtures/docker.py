@@ -391,10 +391,10 @@ def register_table_for_cdc(
 
     @retry(
         stop=stop_after_attempt(CONTAINER_MAXIMUM_RETRY_COUNT),
-        wait=wait_incrementing(start=1, increment=1),
+        wait=wait_incrementing(start=3, increment=1),
         reraise=True,
     )
-    def wait_for_capstart() -> None:
+    def wait_for_signal_consumed() -> None:
         w_connection = None
         w_cursor = None
         try:
@@ -403,7 +403,8 @@ def register_table_for_cdc(
             w_cursor.execute(
                 f"select signal_state "
                 f"from {DB2_CDC_ASN_SCHEMA}.ibmsnap_signal "
-                f"where signal_subtype = 'CAPSTART' "
+                f"where signal_type = 'CMD' "
+                f"and signal_subtype = 'CAPSTART' "
                 f"and signal_input_in = ? "
                 f"order by signal_time desc "
                 f"fetch first 1 row only",
@@ -411,11 +412,48 @@ def register_table_for_cdc(
             )
             row = w_cursor.fetchone()
             if not row:
-                raise RuntimeError("CAPSTART signal not found")
+                return
             state = row[0].strip()
-            if state != "C":
+            if state == "C":
+                return
+            raise RuntimeError(
+                f"CAPSTART signal not yet processed (state='{state}')"
+            )
+        finally:
+            if w_cursor is not None:
+                w_cursor.close()
+            if w_connection is not None:
+                w_connection.close()
+
+    @retry(
+        stop=stop_after_attempt(CONTAINER_MAXIMUM_RETRY_COUNT),
+        wait=wait_incrementing(start=1, increment=1),
+        reraise=True,
+    )
+    def wait_for_registration_active() -> None:
+        w_connection = None
+        w_cursor = None
+        try:
+            w_connection = db2_conn(port)
+            w_cursor = w_connection.cursor()
+            w_cursor.execute(
+                f"select state "
+                f"from {DB2_CDC_ASN_SCHEMA}.ibmsnap_register "
+                f"where source_owner = ? "
+                f"and source_table = ?",
+                (schema.upper(), table.upper()),
+            )
+            row = w_cursor.fetchone()
+            if not row:
                 raise RuntimeError(
-                    f"CAPSTART signal not yet processed (state='{state}')"
+                    f"Registration for {source_table} not found in "
+                    f"{DB2_CDC_ASN_SCHEMA}.ibmsnap_register"
+                )
+            state = row[0].strip()
+            if state.upper() != "A":
+                raise RuntimeError(
+                    f"Registration for {source_table} is not active "
+                    f"(state='{state}')"
                 )
         finally:
             if w_cursor is not None:
@@ -424,8 +462,14 @@ def register_table_for_cdc(
                 w_connection.close()
 
     if wait:
-        wait_for_capstart()
-        logger.info(f"CAPSTART signal for {source_table} processed by asncap")
+        wait_for_signal_consumed()
+        logger.info(
+            f"CAPSTART signal for {source_table} consumed by asncap "
+            f"(map_id={map_id})"
+        )
+
+        wait_for_registration_active()
+        logger.info(f"Registration for {source_table} is active")
 
     logger.info(
         f"Registration of {source_table} for data capture completed successfully"
@@ -437,8 +481,8 @@ def setup_cdc_db2_signal(container: Container, port: int) -> str:
     table_name = f"{DB2_CDC_SIGNAL_TABLE}_{table_suffix}"
 
     register_table_for_cdc(
-        container,
-        port,
+        container=container,
+        port=port,
         schema=DB2_CDC_ROOT_USER,
         table=table_name,
         ddl=(
@@ -449,6 +493,7 @@ def setup_cdc_db2_signal(container: Container, port: int) -> str:
             f"code int"
             f")"
         ),
+        wait=True,
     )
     logger.info(f"Creation of signal table '{table_name}' completed")
 
@@ -521,14 +566,13 @@ def check_cdc_db2_asn_registration(port: int, signal: str) -> None:
             if not row:
                 raise RuntimeError(
                     f"Db2 CDC check failed: "
-                    f"{signal} not registered in"
-                    f" {DB2_CDC_ASN_SCHEMA}.ibmsnap_register"
+                    f"{signal} not registered in {DB2_CDC_ASN_SCHEMA}.ibmsnap_register"
                 )
             registration_state = row[4].strip()
             if registration_state.upper() != "A":
                 raise RuntimeError(
-                    f"Db2 CDC check failed: registration for "
-                    f"table '{signal}' is not active "
+                    f"Db2 CDC check failed: "
+                    f"registration for table '{signal}' is not active "
                     f"(state='{registration_state}')"
                 )
         finally:

@@ -504,7 +504,7 @@ class SqlReplicationIngester(CdcIngester):
                 old_values = {column.name: None for column in tracked.columns}
             yield CdcDataChange(
                 operation=op,
-                transaction=str(commit_seq),
+                transaction=commit_seq.hex(),
                 sequence=int.from_bytes(intent_seq, byteorder="big"),
                 table=tracked.data_table.qualified,
                 new_values=new_values,
