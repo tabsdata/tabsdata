@@ -59,7 +59,7 @@ class StageManifestEntry:
 @dataclass
 class StageManifest:
     version: int = STAGE_MANIFEST_LATEST_VERSION
-    entries: list[StageManifestEntry] = field(default_factory=list)
+    entries: dict[int, StageManifestEntry] = field(default_factory=dict)
 
 
 class Stage(SourcePlugin):
@@ -339,8 +339,8 @@ def _serialize_manifest_v1(manifest: StageManifest) -> str:
     """Serializes a :class:`StageManifest` in version ``_MANIFEST_VERSION_1``
     format."""
     entries: dict = {}
-    for counter, entry in enumerate(manifest.entries):
-        entries[counter] = {
+    for key, entry in manifest.entries.items():
+        entries[key] = {
             STAGE_MANIFEST_KEY_TABLE: entry.table,
             STAGE_MANIFEST_KEY_FILES: entry.files,
         }
@@ -367,15 +367,15 @@ def _deserialize_manifest_v1(data: dict) -> StageManifest:
                     - second/path/to/file.parquet
                     - third/path/to/file.parquet
     """
-    numbered_entries = data.get(STAGE_MANIFEST_KEY_DATA, {})
-    entries: list[StageManifestEntry] = []
-    for key in sorted(numbered_entries.keys()):
-        entry = numbered_entries[key]
+    raw_entries = data.get(STAGE_MANIFEST_KEY_DATA, {})
+    entries: dict[int, StageManifestEntry] = {}
+    for key in sorted(raw_entries.keys()):
+        entry = raw_entries[key]
         table = entry.get(STAGE_MANIFEST_KEY_TABLE, "")
         files = entry.get(STAGE_MANIFEST_KEY_FILES, [])
         if isinstance(files, str):
             files = [files]
-        entries.append(StageManifestEntry(table=table, files=files))
+        entries[key] = StageManifestEntry(table=table, files=files)
     logger.debug(
         f"Manifest v{STAGE_MANIFEST_VERSION_1} contains {len(entries)} entry/entries"
     )
@@ -588,7 +588,7 @@ class ManifestStage(SourcePlugin):
         for manifest_file in manifests:
             content = _read_manifest_file(str(manifest_file))
             manifest = _deserialize_manifest(content)
-            for group_idx, entry in enumerate(manifest.entries):
+            for group_idx, entry in manifest.entries.items():
                 if group_idx not in aggregated_groups:
                     aggregated_groups[group_idx] = []
                 aggregated_groups[group_idx].extend(entry.files)

@@ -131,8 +131,8 @@ class DiskSentinel:
         manifest_name = f"{name}{STAGE_MANIFEST_FILE_EXTENSION}"
         manifest_path = self._landing / manifest_name
 
-        entries: list[StageManifestEntry] = []
-        for table_key, tracked_table in self._tables.items():
+        entries: dict[int, StageManifestEntry] = {}
+        for idx, (table_key, tracked_table) in enumerate(self._tables.items()):
             table_file_paths = self._files.get(table_key, [])
             staged_uris = []
             for file_path in table_file_paths:
@@ -144,11 +144,9 @@ class DiskSentinel:
                         tracked_table.data_table.qualified,
                     )
                 staged_uris.append(staged_files[file_key])
-            entries.append(
-                StageManifestEntry(
-                    table=tracked_table.data_table.qualified,
-                    files=staged_uris,
-                )
+            entries[idx] = StageManifestEntry(
+                table=tracked_table.data_table.qualified,
+                files=staged_uris,
             )
 
         manifest = StageManifest(entries=entries)

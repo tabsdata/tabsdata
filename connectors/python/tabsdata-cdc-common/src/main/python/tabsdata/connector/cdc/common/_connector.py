@@ -83,6 +83,11 @@ class CdcTrigger(StageTrigger):
     def tables(self) -> list[str] | None:
         return self._tables
 
+    def out(self) -> dict[int, str] | None:
+        if self._tables is None:
+            return None
+        return {idx: table for idx, table in enumerate(self._tables)}
+
     @property
     def cdc_format(self) -> CdcFormatSpec:
         return self._cdc_format

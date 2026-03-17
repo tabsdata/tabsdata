@@ -130,24 +130,24 @@ class TestManifestFileIO:
 class TestManifestSerialization:
 
     def test_roundtrip(self):
-        original = StageManifest(entries=[
-            StageManifestEntry(table="schema.table_a", files=["a1.parquet", "a2.parquet"]),
-            StageManifestEntry(table="schema.table_b", files=["b1.parquet"]),
-        ])
+        original = StageManifest(entries={
+            0: StageManifestEntry(table="schema.table_a", files=["a1.parquet", "a2.parquet"]),
+            1: StageManifestEntry(table="schema.table_b", files=["b1.parquet"]),
+        })
         content = _serialize_manifest(original)
         loaded = _deserialize_manifest(content)
         assert loaded.version == STAGE_MANIFEST_LATEST_VERSION
         assert len(loaded.entries) == len(original.entries)
-        for orig, read in zip(original.entries, loaded.entries):
-            assert read.table == orig.table
-            assert read.files == orig.files
+        for key in original.entries:
+            assert loaded.entries[key].table == original.entries[key].table
+            assert loaded.entries[key].files == original.entries[key].files
 
     def test_deserialize_two_groups(self, tmp_path):
         path = tmp_path / f"test{STAGE_MANIFEST_FILE_EXTENSION}"
-        _write_manifest(path, StageManifest(entries=[
-            StageManifestEntry(table="s.t1", files=["path/to/file.parquet"]),
-            StageManifestEntry(table="s.t2", files=["second/file.parquet", "third/file.parquet"]),
-        ]))
+        _write_manifest(path, StageManifest(entries={
+            0: StageManifestEntry(table="s.t1", files=["path/to/file.parquet"]),
+            1: StageManifestEntry(table="s.t2", files=["second/file.parquet", "third/file.parquet"]),
+        }))
         content = _read_manifest_file(str(path))
         result = _deserialize_manifest(content)
         assert result.version == STAGE_MANIFEST_LATEST_VERSION
@@ -159,12 +159,12 @@ class TestManifestSerialization:
 
     def test_deserialize_empty_content(self):
         result = _deserialize_manifest("")
-        assert result.entries == []
+        assert result.entries == {}
 
     def test_deserialize_single_group_multiple_files(self):
-        original = StageManifest(entries=[
-            StageManifestEntry(table="s.t1", files=["a.parquet", "b.parquet", "c.parquet"]),
-        ])
+        original = StageManifest(entries={
+            0: StageManifestEntry(table="s.t1", files=["a.parquet", "b.parquet", "c.parquet"]),
+        })
         content = _serialize_manifest(original)
         result = _deserialize_manifest(content)
         assert len(result.entries) == 1
@@ -176,9 +176,9 @@ class TestManifestSerialization:
         assert data == {"version": STAGE_MANIFEST_LATEST_VERSION, "data": {}}
 
     def test_serialize_includes_version(self):
-        content = _serialize_manifest(StageManifest(entries=[
-            StageManifestEntry(table="s.t", files=["f.parquet"]),
-        ]))
+        content = _serialize_manifest(StageManifest(entries={
+            0: StageManifestEntry(table="s.t", files=["f.parquet"]),
+        }))
         data = yaml.safe_load(content)
         assert data["version"] == STAGE_MANIFEST_LATEST_VERSION
         assert "data" in data
