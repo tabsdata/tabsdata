@@ -26,6 +26,7 @@ from tabsdata._io.stage_trigger import (
 )
 from tabsdata.connector.cdc.common._model import (
     CdcChange,
+    CdcOffset,
     TrackedTable,
 )
 from tabsdata.connector.cdc.common._sentinel.buffer import BufferSentinel
@@ -128,16 +129,13 @@ class CdcTrigger(StageTrigger):
     ) -> dict[str, TrackedTable]: ...
 
     @abstractmethod
+    def _base_offset(self) -> CdcOffset: ...
+
+    @abstractmethod
+    def _commit_offset(self, offset: CdcOffset) -> None: ...
+
+    @abstractmethod
     def _poll_changes(self, session: Any) -> Iterable[CdcChange]: ...
-
-    @abstractmethod
-    def _confirm_position(self) -> None: ...
-
-    @abstractmethod
-    def _get_position(self) -> Any: ...
-
-    @abstractmethod
-    def _save_position(self, position: Any) -> None: ...
 
     @staticmethod
     def _setup_signal_handlers() -> threading.Event:
@@ -173,6 +171,7 @@ class CdcTrigger(StageTrigger):
         job_status = StageTriggerStatus.SUCCESS
         buffer_sentinel = None
         disk_sentinel = None
+        stop_signal = None
         database_connection = None
         try:
             stop_signal = self._setup_signal_handlers()
@@ -195,6 +194,7 @@ class CdcTrigger(StageTrigger):
                 max_bytes=self._buffer_max_bytes,
                 max_seconds=self._buffer_max_seconds,
                 tables=tracked_tables,
+                offset=self._base_offset(),
             )
 
             self._await_start(
@@ -205,11 +205,13 @@ class CdcTrigger(StageTrigger):
             disk_sentinel.reset_timer()
 
             while not stop_signal.is_set() and context.is_active():
-                context.trigger_monitor()
+                disk_sentinel.retry_trigger()
                 buffer_sentinel.process_changes(
                     changes=self._poll_changes(database_connection),
                 )
-                disk_sentinel.flush(force=False)
+                if disk_sentinel.flush(force=False):
+                    self._commit_offset(buffer_sentinel.offset)
+                    context.checkpoint.write(buffer_sentinel.offset.upload())
                 stop_signal.wait(
                     timeout=self._poll_interval_seconds,
                 )
@@ -221,10 +223,14 @@ class CdcTrigger(StageTrigger):
             logger.error(f"Error in CdcTrigger run loop: {exception}")
             raise
         finally:
-            if buffer_sentinel is not None:
-                buffer_sentinel.flush()
-            if disk_sentinel is not None:
-                disk_sentinel.flush(force=True)
+            if stop_signal is not None and not stop_signal.is_set():
+                if job_status == StageTriggerStatus.SUCCESS:
+                    if buffer_sentinel is not None:
+                        buffer_sentinel.flush()
+                    if disk_sentinel is not None:
+                        if disk_sentinel.flush(force=True):
+                            self._commit_offset(buffer_sentinel.offset)
+                            context.checkpoint.write(buffer_sentinel.offset.upload())
             if database_connection is not None:
                 self._close_session(database_connection)
             if getattr(self, TRIGGER_RETURN_ON_END_ATTRIBUTE, False):

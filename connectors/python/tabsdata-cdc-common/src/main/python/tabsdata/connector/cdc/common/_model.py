@@ -5,10 +5,12 @@
 from __future__ import annotations
 
 import sys
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Union
 
+import polars as pl
 import pyarrow as pa
 
 from tabsdata.connector.cdc.common._dtype import sqlalchemy_to_arrow
@@ -27,6 +29,25 @@ from tabsdata.connector.cdc.common.constants import (
 from tabsdata.connector.cdc.common.typing import CdcFormatSpec
 
 
+class CdcOffset(ABC):
+    @abstractmethod
+    def update(self, other: CdcOffset) -> None: ...
+
+    @abstractmethod
+    def upload(self) -> pl.DataFrame: ...
+
+    @classmethod
+    @abstractmethod
+    def download(cls, df: pl.DataFrame | None) -> CdcOffset | None: ...
+
+    @abstractmethod
+    def write(self) -> dict: ...
+
+    @classmethod
+    @abstractmethod
+    def read(cls, data: dict) -> CdcOffset: ...
+
+
 @dataclass
 class CdcDataChange:
     operation: str
@@ -35,6 +56,7 @@ class CdcDataChange:
     table: str
     new_values: dict
     old_values: dict | None
+    offset: CdcOffset | None = None
 
     def __sizeof__(self) -> int:
         size = object.__sizeof__(self)

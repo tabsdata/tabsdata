@@ -21,6 +21,7 @@ from tabsdata.connector.cdc.common._ingester import CdcIngester
 from tabsdata.connector.cdc.common._model import (
     CdcChange,
     CdcDataChange,
+    CdcOffset,
     TrackedTable,
 )
 from tabsdata.connector.cdc.common.constants import (
@@ -81,6 +82,7 @@ V2_OPERATION_MAP = {
 WAL2JSON_PLUGIN = "wal2json"
 DEFAULT_REPLICATION_SLOT_BEHAVIOR = "reuse"
 POLL_INTERVAL_SECONDS = 1.0
+PENDING_TIMEOUT_MULTIPLIER = 16
 
 
 class Wal2JsonFormatVersion:
@@ -91,15 +93,34 @@ class Wal2JsonFormatVersion:
 DEFAULT_WAL2JSON_FORMAT_VERSION: int = Wal2JsonFormatVersion.WAL2JSON_FORMAT_V2
 
 
-class Offset:
+class LsnOffset(CdcOffset):
     def __init__(self, lsn: int):
         self.lsn = lsn
 
-    def copy(self) -> Offset:
-        return Offset(lsn=self.lsn)
+    def update(self, other: CdcOffset) -> None:
+        if not isinstance(other, LsnOffset):
+            raise CdcError(
+                ErrorCode.CDC12,
+                LsnOffset.__name__,
+                type(other).__name__,
+            )
+        self.lsn = other.lsn
+
+    def write(self) -> dict:
+        return {"lsn": self.lsn}
 
     @classmethod
-    def load(cls, df: pl.DataFrame | None) -> Offset | None:
+    def read(cls, data: dict) -> LsnOffset:
+        return cls(lsn=data["lsn"])
+
+    def copy(self) -> LsnOffset:
+        return LsnOffset(lsn=self.lsn)
+
+    def upload(self) -> pl.DataFrame:
+        return pl.DataFrame({"lsn": [self.lsn]})
+
+    @classmethod
+    def download(cls, df: pl.DataFrame | None) -> LsnOffset | None:
         if df is None or df.height != 1:
             return None
         return cls(lsn=df["lsn"][0])
@@ -117,7 +138,7 @@ class Wal2JsonIngester(CdcIngester):
         ),
         blocking_timeout_seconds: float = DEFAULT_BLOCKING_TIMEOUT_SECONDS,
         publication_name: str | None = None,
-        offset: Offset | None = None,
+        offset: LsnOffset | None = None,
         wal2json_format_version: int = DEFAULT_WAL2JSON_FORMAT_VERSION,
     ):
         super().__init__(tables)
@@ -127,11 +148,12 @@ class Wal2JsonIngester(CdcIngester):
         self._replication_slot_behavior = replication_slot_behavior
         self._blocking_timeout_seconds = blocking_timeout_seconds
         self._publication_name = publication_name
-        self._offset: Offset | None = Offset.load(offset)
-        self._mark: Offset | None = self._offset.copy() if offset else None
+        self._offset: LsnOffset | None = LsnOffset.download(offset)
+        self._mark: LsnOffset | None = self._offset.copy() if offset else None
+        self._base_offset: LsnOffset | None = None
+        self._wal2json_format_version = wal2json_format_version
         self._replicator: Any | None = None
         self._cursor: Any | None = None
-        self._wal2json_format_version = wal2json_format_version
 
     @property
     def conn(self) -> PostgresCdcConn:
@@ -190,6 +212,7 @@ class Wal2JsonIngester(CdcIngester):
         if session is not None:
             try:
                 session.dispose()
+                session = None
             except Exception as exception:
                 logger.warning(
                     f"Failed to dispose session: {session}, exception: {exception}"
@@ -216,11 +239,11 @@ class Wal2JsonIngester(CdcIngester):
         if self._mark is None:
             match self._start_from:
                 case LsnPositionSpec(lsn=lsn):
-                    self._mark = Offset(lsn=lsn)
+                    self._mark = LsnOffset(lsn=lsn)
                 case "head":
-                    self._mark = Offset(lsn=0)
+                    self._mark = LsnOffset(lsn=0)
                 case "tail":
-                    self._mark = Offset(lsn=self.current_wal_lsn())
+                    self._mark = LsnOffset(lsn=self.current_wal_lsn())
                 case _:
                     raise CdcError(ErrorCode.CDC6, self._start_from)
         options = {
@@ -232,6 +255,7 @@ class Wal2JsonIngester(CdcIngester):
         }
         if self._publication_name:
             options["publication_names"] = self._publication_name
+        self._base_offset = self._mark.copy()
         self._cursor.start_replication(
             slot_name=self._replication_slot,
             decode=True,
@@ -275,20 +299,23 @@ class Wal2JsonIngester(CdcIngester):
             tables.append(f"{table.data_table.schema}{DOT}{table.data_table.table}")
         return COMMA.join(tables)
 
-    def confirm_position(self) -> None:
-        if self._cursor is not None and self._mark is not None:
-            self._cursor.send_feedback(
-                flush_lsn=self._mark.lsn,
-                reply=True,
+    def base_offset(self) -> LsnOffset:
+        return self._base_offset
+
+    def commit_offset(self, offset: CdcOffset) -> None:
+        if not isinstance(offset, LsnOffset):
+            raise CdcError(
+                ErrorCode.CDC12,
+                LsnOffset.__name__,
+                type(offset).__name__,
             )
-            logger.debug(f"Confirmed LSN position: {self._mark.lsn}")
-
-    def retrieve_position(self) -> Offset | None:
-        return self._mark
-
-    def save_position(self, position: Any) -> None:
-        if isinstance(position, Offset):
-            self._mark = position
+        if self._cursor is None:
+            raise CdcError(ErrorCode.CDCPOSTGRES5)
+        self._cursor.send_feedback(
+            flush_lsn=offset.lsn,
+            reply=True,
+        )
+        logger.debug(f"Confirmed LSN position: {offset.lsn}")
 
     def as_qualified_table(self, schema: str, table: str) -> str | None:
         qualified = f"{schema}{DOT}{table}"
@@ -311,17 +338,17 @@ class Wal2JsonIngester(CdcIngester):
     def read_next_message(
         self,
         pending: bool,
+        timeout: float,
         deadline: float,
     ) -> Any | None:
+        effective_deadline = timeout if pending else deadline
         while True:
-            remaining = deadline - time.monotonic()
-            if not pending and remaining <= 0:
+            remaining = effective_deadline - time.monotonic()
+            if remaining <= 0:
                 return None
             message = self._cursor.read_message()
             if message is not None:
                 return message
-            if pending:
-                pending = False
             sleep = min(POLL_INTERVAL_SECONDS, max(remaining, 0))
             if sleep <= 0:
                 return None
@@ -348,6 +375,7 @@ class Wal2JsonIngester(CdcIngester):
         sequence: int,
         new_values: dict,
         old_values: dict | None,
+        offset: LsnOffset | None = None,
     ) -> CdcDataChange:
         tracked = self._tracked_tables.get(qualified)
         if tracked is not None:
@@ -367,6 +395,7 @@ class Wal2JsonIngester(CdcIngester):
             table=qualified,
             new_values=new_values,
             old_values=old_values,
+            offset=offset,
         )
 
     @staticmethod
@@ -420,6 +449,7 @@ class Wal2JsonIngester(CdcIngester):
             while True:
                 message = self.read_next_message(
                     pending=False,
+                    timeout=deadline,
                     deadline=deadline,
                 )
                 if message is None:
@@ -427,6 +457,7 @@ class Wal2JsonIngester(CdcIngester):
                 payload = orjson.loads(message.payload)
                 xid = str(payload["xid"])
                 changes = payload["change"]
+                lsn_offset = LsnOffset(lsn=message.data_start)
                 sequence = 0
                 for change in changes:
                     sequence += 1
@@ -434,10 +465,11 @@ class Wal2JsonIngester(CdcIngester):
                         change=change,
                         xid=xid,
                         sequence=sequence,
+                        offset=lsn_offset,
                     )
                     if data_change is not None:
                         yield data_change
-                self._mark = Offset(lsn=message.wal_end)
+                self._mark = lsn_offset.copy()
         except Exception as error:
             logger.error(
                 f"Error while polling changes: "
@@ -452,6 +484,7 @@ class Wal2JsonIngester(CdcIngester):
         change: dict,
         xid: str,
         sequence: int,
+        offset: LsnOffset | None = None,
     ) -> CdcDataChange | None:
         qualified = self.resolve_table(change)
         if qualified is None:
@@ -474,7 +507,9 @@ class Wal2JsonIngester(CdcIngester):
                 old_values = {column: None for column in new_values}
             case _:
                 raise CdcError(ErrorCode.CDC5, kind, "wal2json", qualified)
-        return self.build_change(qualified, op, xid, sequence, new_values, old_values)
+        return self.build_change(
+            qualified, op, xid, sequence, new_values, old_values, offset
+        )
 
     @staticmethod
     def extract_new_values_v1(change: dict) -> dict:
@@ -493,6 +528,9 @@ class Wal2JsonIngester(CdcIngester):
 
     def poll_changes_v2(self, _session: Any) -> Generator[CdcChange, None, None]:
         deadline = time.monotonic() + self._blocking_timeout_seconds
+        timeout = time.monotonic() + (
+            self._blocking_timeout_seconds * PENDING_TIMEOUT_MULTIPLIER
+        )
         xid: str | None = None
         sequence: int = 0
         try:
@@ -500,9 +538,12 @@ class Wal2JsonIngester(CdcIngester):
                 pending = xid is not None
                 message = self.read_next_message(
                     pending=pending,
+                    timeout=timeout,
                     deadline=deadline,
                 )
                 if message is None:
+                    if pending:
+                        raise CdcError(ErrorCode.CDCPOSTGRES6, xid)
                     break
                 payload = orjson.loads(message.payload)
                 action = payload.get("action")
@@ -511,16 +552,18 @@ class Wal2JsonIngester(CdcIngester):
                     sequence = 0
                     continue
                 if action == V2Actions.COMMIT:
-                    self._mark = Offset(lsn=message.wal_end)
+                    self._mark = LsnOffset(lsn=message.wal_end)
                     xid = None
                     continue
                 if action == V2Actions.TRUNCATE:
                     continue
+                lsn_offset = LsnOffset(lsn=message.data_start)
                 sequence += 1
                 data_change = self.process_change_v2(
                     payload=payload,
                     xid=xid,
                     sequence=sequence,
+                    offset=lsn_offset,
                 )
                 if data_change is not None:
                     yield data_change
@@ -538,6 +581,7 @@ class Wal2JsonIngester(CdcIngester):
         payload: dict,
         xid: str,
         sequence: int,
+        offset: LsnOffset | None = None,
     ) -> CdcDataChange | None:
         qualified = self.resolve_table(payload)
         if qualified is None:
@@ -560,7 +604,9 @@ class Wal2JsonIngester(CdcIngester):
                 old_values = {column: None for column in new_values}
             case _:
                 raise CdcError(ErrorCode.CDC5, action, "wal2json", qualified)
-        return self.build_change(qualified, op, xid, sequence, new_values, old_values)
+        return self.build_change(
+            qualified, op, xid, sequence, new_values, old_values, offset
+        )
 
     @staticmethod
     def extract_new_values_v2(change: dict) -> dict:

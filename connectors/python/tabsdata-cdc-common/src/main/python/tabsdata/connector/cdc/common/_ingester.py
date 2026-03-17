@@ -15,6 +15,7 @@ from sqlalchemy.sql.elements import quoted_name
 
 from tabsdata.connector.cdc.common._model import (
     CdcChange,
+    CdcOffset,
     TableObject,
     TrackedColumn,
     TrackedTable,
@@ -186,13 +187,10 @@ class CdcIngester(ABC):
         return result
 
     @abstractmethod
+    def base_offset(self) -> CdcOffset: ...
+
+    @abstractmethod
+    def commit_offset(self, offset: CdcOffset) -> None: ...
+
+    @abstractmethod
     def poll_changes(self, session: Any) -> Iterable[CdcChange]: ...
-
-    @abstractmethod
-    def confirm_position(self) -> None: ...
-
-    @abstractmethod
-    def retrieve_position(self) -> Any: ...
-
-    @abstractmethod
-    def save_position(self, position: Any) -> None: ...

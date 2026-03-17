@@ -52,6 +52,7 @@ class DiskSentinel:
         self._total_rows: int = 0
         self._total_bytes: int = 0
         self._last_flushed: float = time.time()
+        self._trigger_pending: bool = False
 
     @property
     def is_empty(self) -> bool:
@@ -61,8 +62,17 @@ class DiskSentinel:
     def has_data(self) -> bool:
         return self._total_rows > 0
 
+    @property
+    def trigger_pending(self) -> bool:
+        return self._trigger_pending
+
     def reset_timer(self) -> None:
         self._last_flushed = time.time()
+
+    def retry_trigger(self) -> None:
+        if self._trigger_pending:
+            if self._context.trigger_monitor():
+                self._trigger_pending = False
 
     def process_buffers(self, buffers: dict[str, CdcBuffer]) -> None:
         for table, buffer in buffers.items():
@@ -108,7 +118,7 @@ class DiskSentinel:
         files = [file for files in self._files.values() for file in files]
         staged_files = self._context.stage(files)
         self.stage_meta(staged_files)
-        self._context.trigger()
+        self._trigger_pending = not self._context.trigger()
         for files in self._files.values():
             files.clear()
         self._total_rows = 0
@@ -151,7 +161,7 @@ class DiskSentinel:
     def flush(
         self,
         force: bool = False,
-    ) -> None:
+    ) -> bool:
         rows_hit = self._max_rows is not None and self._total_rows >= self._max_rows
         bytes_hit = self._max_bytes is not None and self._total_bytes >= self._max_bytes
         time_hit = (time.time() - self._last_flushed) >= self._max_seconds
@@ -161,3 +171,5 @@ class DiskSentinel:
                 f"({self._total_rows} rows & {self._total_bytes} bytes)"
             )
             self.stage_data()
+            return True
+        return False

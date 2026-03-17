@@ -18,6 +18,7 @@ from tabsdata._utils.validation import _td_validate_call
 from tabsdata.connector.cdc.common._connector import CdcTrigger
 from tabsdata.connector.cdc.common._model import (
     CdcChange,
+    CdcOffset,
     TrackedTable,
 )
 from tabsdata.connector.cdc.common.constants import (
@@ -143,14 +144,11 @@ class PostgresCdcTrigger(CdcTrigger):
     ) -> dict[str, TrackedTable]:
         return self._ingester.collect_tables(session, cdc_format)
 
+    def _base_offset(self) -> CdcOffset:
+        return self._ingester.base_offset()
+
+    def _commit_offset(self, offset: CdcOffset) -> None:
+        self._ingester.commit_offset(offset)
+
     def _poll_changes(self, session: Any) -> Iterable[CdcChange]:
         return self._ingester.poll_changes(session)
-
-    def _confirm_position(self) -> None:
-        self._ingester.confirm_position()
-
-    def _get_position(self) -> Any:
-        return self._ingester.retrieve_position()
-
-    def _save_position(self, position: Any) -> None:
-        self._ingester.save_position(position)

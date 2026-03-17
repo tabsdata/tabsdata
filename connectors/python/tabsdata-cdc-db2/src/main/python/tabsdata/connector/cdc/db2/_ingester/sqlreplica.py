@@ -20,6 +20,7 @@ from tabsdata.connector.cdc.common._ingester import (
 from tabsdata.connector.cdc.common._model import (
     CdcChange,
     CdcDataChange,
+    CdcOffset,
     TableObject,
     TrackedColumn,
     TrackedTable,
@@ -95,15 +96,40 @@ FETCH_SIZE = 10000
 POLL_INTERVAL_SECONDS = 1.0
 
 
-class Offset:
+class CommitSeqOffset(CdcOffset):
     def __init__(self, commits: dict[str, bytes] | None = None):
         self.commits: dict[str, bytes] = dict(commits) if commits else {}
 
-    def copy(self) -> Offset:
-        return Offset(commits=self.commits)
+    def update(self, other: CdcOffset) -> None:
+        if not isinstance(other, CommitSeqOffset):
+            raise CdcError(
+                ErrorCode.CDC12,
+                CommitSeqOffset.__name__,
+                type(other).__name__,
+            )
+        self.commits.update(other.commits)
+
+    def write(self) -> dict:
+        return {table: commitseq.hex() for table, commitseq in self.commits.items()}
 
     @classmethod
-    def load(cls, df: pl.DataFrame | None) -> Offset | None:
+    def read(cls, data: dict) -> CommitSeqOffset:
+        return cls(
+            commits={
+                table: bytes.fromhex(commitseq) for table, commitseq in data.items()
+            }
+        )
+
+    def copy(self) -> CommitSeqOffset:
+        return CommitSeqOffset(commits=self.commits)
+
+    def upload(self) -> pl.DataFrame:
+        return pl.DataFrame({
+            table: [commitseq] for table, commitseq in self.commits.items()
+        })
+
+    @classmethod
+    def download(cls, df: pl.DataFrame | None) -> CommitSeqOffset | None:
         if df is None or df.height != 1:
             return None
         row = df.row(0, named=True)
@@ -122,9 +148,10 @@ class SqlReplicationIngester(CdcIngester):
         super().__init__(tables)
         self._conn = conn
         self._start_from = start_from
-        self._offset: Offset | None = Offset.load(offset)
         self._blocking_timeout_seconds = blocking_timeout_seconds
-        self._mark: Offset | None = self._offset.copy() if offset else None
+        self._offset: CommitSeqOffset | None = CommitSeqOffset.download(offset)
+        self._mark: CommitSeqOffset | None = self._offset.copy() if offset else None
+        self._base_offset: CommitSeqOffset | None = None
 
     @property
     def conn(self) -> Db2CdcConn:
@@ -154,6 +181,7 @@ class SqlReplicationIngester(CdcIngester):
         if session is not None:
             try:
                 session.dispose()
+                session = None
             except Exception as exception:
                 logger.warning(
                     f"Failed to dispose session: {session} - exception: {exception}"
@@ -161,6 +189,7 @@ class SqlReplicationIngester(CdcIngester):
 
     def init_reader(self, session: Any) -> None:
         if self._mark is not None:
+            self._base_offset = self._mark.copy()
             return
         commits: dict[str, bytes] = {}
         match self._start_from:
@@ -201,7 +230,8 @@ class SqlReplicationIngester(CdcIngester):
                     commits[qualified] = watermarks.get(qualified, globalseq)
             case _:
                 raise CdcError(ErrorCode.CDC6, self._start_from)
-        self._mark = Offset(commits=commits)
+        self._mark = CommitSeqOffset(commits=commits)
+        self._base_offset = self._mark.copy()
 
     # noinspection DuplicatedCode
     def collect_tables(
@@ -372,15 +402,16 @@ class SqlReplicationIngester(CdcIngester):
         self._tracked_tables = result
         return result
 
-    def confirm_position(self) -> None:
-        pass
+    def base_offset(self) -> CommitSeqOffset:
+        return self._base_offset
 
-    def retrieve_position(self) -> Offset | None:
-        return self._mark
-
-    def save_position(self, position: Any) -> None:
-        if isinstance(position, Offset):
-            self._mark = position
+    def commit_offset(self, offset: CdcOffset) -> None:
+        if not isinstance(offset, CommitSeqOffset):
+            raise CdcError(
+                ErrorCode.CDC12,
+                CommitSeqOffset.__name__,
+                type(offset).__name__,
+            )
 
     def query_table_watermarks(
         self,
@@ -478,6 +509,9 @@ class SqlReplicationIngester(CdcIngester):
                 table=tracked.data_table.qualified,
                 new_values=new_values,
                 old_values=old_values,
+                offset=CommitSeqOffset(
+                    commits={tracked.cdc_table.qualified: commit_seq}
+                ),
             )
 
     def poll_changes(self, session: Any) -> Generator[CdcChange, None, None]:

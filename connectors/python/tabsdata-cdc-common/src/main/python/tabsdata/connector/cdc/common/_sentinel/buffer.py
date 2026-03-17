@@ -13,10 +13,12 @@ from tabsdata._tabsserver.function.global_utils import TRACE
 from tabsdata.connector.cdc.common._model import (
     CdcChange,
     CdcDataChange,
+    CdcOffset,
     TrackedTable,
 )
 from tabsdata.connector.cdc.common._sentinel import CdcBuffer
 from tabsdata.connector.cdc.common._sentinel.disk import DiskSentinel
+from tabsdata.exceptions import CdcError, ErrorCode
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -30,6 +32,7 @@ class BufferSentinel:
         max_bytes: int | None,
         max_seconds: float,
         tables: dict[str, TrackedTable],
+        offset: CdcOffset,
     ):
         self._disk_sentinel = disk_sentinel
         self._max_rows = max_rows
@@ -39,6 +42,7 @@ class BufferSentinel:
         self._total_rows: int = 0
         self._total_bytes: int = 0
         self._last_flushed: float = time.time()
+        self._offset: CdcOffset = offset
 
     @property
     def is_empty(self) -> bool:
@@ -61,6 +65,10 @@ class BufferSentinel:
                         f"Event type {type(change).__name__} is not supported yet"
                     )
 
+    @property
+    def offset(self) -> CdcOffset:
+        return self._offset
+
     def process_data_change(self, change: CdcDataChange) -> None:
         table = change.table
 
@@ -77,6 +85,12 @@ class BufferSentinel:
             row_bytes = sys.getsizeof(change)
             buffer.bytes += row_bytes
             self._total_bytes += row_bytes
+
+        if self._offset is None:
+            raise CdcError(ErrorCode.CDC10)
+        if change.offset is None:
+            raise CdcError(ErrorCode.CDC11, change.table)
+        self._offset.update(change.offset)
 
         rows_hit = self._max_rows is not None and self._total_rows >= self._max_rows
         bytes_hit = self._max_bytes is not None and self._total_bytes >= self._max_bytes

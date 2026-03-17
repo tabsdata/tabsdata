@@ -2404,6 +2404,19 @@ class ErrorCode(Enum):
         "code": "CDC-009",
         "message": "Staged file not found for '{}' in table '{}'",
     }
+    CDC10 = {
+        "code": "CDC-010",
+        "message": "Buffer sentinel has no base offset; ingester must provide a "
+        "base offset at initialization",
+    }
+    CDC11 = {
+        "code": "CDC-011",
+        "message": "Received change with no offset for table '{}'",
+    }
+    CDC12 = {
+        "code": "CDC-012",
+        "message": "Expected offset type '{}' but received '{}'",
+    }
 
     # CDC MySQL errors
     CDCMYSQL1 = {
@@ -2435,6 +2448,14 @@ class ErrorCode(Enum):
     CDCPOSTGRES4 = {
         "code": "CDCPOSTGRES-004",
         "message": "Unable to determine PostgreSQL WAL LSN for '{}' start",
+    }
+    CDCPOSTGRES5 = {
+        "code": "CDCPOSTGRES-005",
+        "message": "Cannot commit offset; replication cursor is not initialized",
+    }
+    CDCPOSTGRES6 = {
+        "code": "CDCPOSTGRES-006",
+        "message": "Timed out waiting for remaining messages of transaction '{}'",
     }
 
     # CDC DB2 errors

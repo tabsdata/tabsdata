@@ -25,6 +25,7 @@ from tabsdata.connector.cdc.common._ingester import (
 from tabsdata.connector.cdc.common._model import (
     CdcChange,
     CdcDataChange,
+    CdcOffset,
 )
 from tabsdata.connector.cdc.common.constants import (
     DEFAULT_BLOCKING_TIMEOUT_SECONDS,
@@ -62,15 +63,34 @@ OPERATION_MAP = {
 }
 
 
-class Offset:
+class GtidOffset(CdcOffset):
     def __init__(self, gtid: str):
         self.gtid = gtid
 
-    def copy(self) -> Offset:
-        return Offset(gtid=self.gtid)
+    def update(self, other: CdcOffset) -> None:
+        if not isinstance(other, GtidOffset):
+            raise CdcError(
+                ErrorCode.CDC12,
+                GtidOffset.__name__,
+                type(other).__name__,
+            )
+        self.gtid = other.gtid
+
+    def write(self) -> dict:
+        return {"gtid": self.gtid}
 
     @classmethod
-    def load(cls, df: pl.DataFrame | None) -> Offset | None:
+    def read(cls, data: dict) -> GtidOffset:
+        return cls(gtid=data["gtid"])
+
+    def copy(self) -> GtidOffset:
+        return GtidOffset(gtid=self.gtid)
+
+    def upload(self) -> pl.DataFrame:
+        return pl.DataFrame({"gtid": [self.gtid]})
+
+    @classmethod
+    def download(cls, df: pl.DataFrame | None) -> GtidOffset | None:
         if df is None or df.height != 1:
             return None
         return cls(gtid=df["gtid"][0])
@@ -84,15 +104,16 @@ class BinlogIngester(CdcIngester):
         start_from: MySQLCdcStartFromSpec,
         server_id: int,
         blocking_timeout_seconds: float = DEFAULT_BLOCKING_TIMEOUT_SECONDS,
-        offset: Offset | None = None,
+        offset: GtidOffset | None = None,
     ):
         super().__init__(tables)
         self._conn = conn
         self._start_from = start_from
         self._server_id = server_id
         self._blocking_timeout_seconds = blocking_timeout_seconds
-        self._offset: Offset | None = Offset.load(offset)
-        self._mark: Offset | None = self._offset.copy() if offset else None
+        self._offset: GtidOffset | None = GtidOffset.download(offset)
+        self._mark: GtidOffset | None = self._offset.copy() if offset else None
+        self._base_offset: GtidOffset | None = None
         self._stream: BinLogStreamReader | None = None
 
     @property
@@ -135,6 +156,7 @@ class BinlogIngester(CdcIngester):
         if session is not None:
             try:
                 session.dispose()
+                session = None
             except Exception as exception:
                 logger.warning(
                     f"Failed to dispose session: {session} - exception: {exception}"
@@ -171,20 +193,29 @@ class BinlogIngester(CdcIngester):
         match start_from:
             case GtidPositionSpec(gtid=gtid):
                 stream_kwargs["auto_position"] = gtid
+                if self._mark is None:
+                    self._mark = GtidOffset(gtid=gtid)
             case BinlogPositionSpec(file=file, pos=pos):
                 stream_kwargs["log_file"] = file
                 stream_kwargs["log_pos"] = pos
+                if self._mark is None:
+                    self._mark = GtidOffset(gtid="")
             case TimestampPositionSpec(ts=ts):
                 stream_kwargs["skip_to_timestamp"] = ts
+                if self._mark is None:
+                    self._mark = GtidOffset(gtid="")
             case "head":
                 stream_kwargs["log_file"] = self.first_binlog_file()
                 stream_kwargs["log_pos"] = BINLOG_START_POSITION
+                self._mark = GtidOffset(gtid="")
             case "tail":
                 file, pos = self.last_binlog_position()
                 stream_kwargs["log_file"] = file
                 stream_kwargs["log_pos"] = pos
+                self._mark = GtidOffset(gtid="")
             case _:
                 raise CdcError(ErrorCode.CDC6, start_from)
+        self._base_offset = self._mark.copy()
         self._stream = BinLogStreamReader(**stream_kwargs)
         logger.info("BinLogStreamReader initialized")
 
@@ -260,15 +291,16 @@ class BinlogIngester(CdcIngester):
             tables.add(f"{table.data_table.schema}{DOT}{table.data_table.table}")
         return list(schemas), list(tables)
 
-    def confirm_position(self) -> None:
-        pass
+    def base_offset(self) -> GtidOffset:
+        return self._base_offset
 
-    def retrieve_position(self) -> Offset | None:
-        return self._mark
-
-    def save_position(self, position: Any) -> None:
-        if isinstance(position, Offset):
-            self._mark = position
+    def commit_offset(self, offset: CdcOffset) -> None:
+        if not isinstance(offset, GtidOffset):
+            raise CdcError(
+                ErrorCode.CDC12,
+                GtidOffset.__name__,
+                type(offset).__name__,
+            )
 
     def as_qualified_table(self, schema: str, table: str) -> str | None:
         qualified = f"{schema}{DOT}{table}"
@@ -284,7 +316,7 @@ class BinlogIngester(CdcIngester):
             for event in self._stream:
                 if isinstance(event, GtidEvent):
                     if gtid is not None:
-                        self._mark = Offset(gtid=gtid)
+                        self._mark = GtidOffset(gtid=gtid)
                     if time.monotonic() > deadline:
                         break
                     gtid = event.gtid
@@ -327,6 +359,7 @@ class BinlogIngester(CdcIngester):
                             table=qualified,
                             new_values=new_values,
                             old_values=old_values,
+                            offset=GtidOffset(gtid=gtid),
                         )
         except Exception as error:
             logger.error(
