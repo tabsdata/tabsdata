@@ -13,9 +13,7 @@ from typing import Any
 
 import orjson
 import polars as pl
-import psycopg2
 import pyarrow as pa
-from psycopg2.extras import LogicalReplicationConnection
 
 from tabsdata.connector.cdc.common._ingester import CdcIngester
 from tabsdata.connector.cdc.common._model import (
@@ -219,6 +217,8 @@ class Wal2JsonIngester(CdcIngester):
                 )
 
     def init_replication(self) -> None:
+        import psycopg2
+
         replication_connection_settings = self.replication_connection_settings()
         self._replicator = psycopg2.connect(**replication_connection_settings)
         self._cursor = self._replicator.cursor()
@@ -265,6 +265,8 @@ class Wal2JsonIngester(CdcIngester):
         logger.info("Replication slot Replicator and Cursor initialized")
 
     def current_wal_lsn(self) -> int:
+        import psycopg2
+
         connection_settings = self.replication_connection_settings()
         conn = psycopg2.connect(**connection_settings)
         try:
@@ -278,6 +280,8 @@ class Wal2JsonIngester(CdcIngester):
             conn.close()
 
     def replication_connection_settings(self) -> dict:
+        from psycopg2.extras import LogicalReplicationConnection
+
         connection_settings = self._conn._settings()
         settings: dict[str, Any] = {
             "host": connection_settings.host,
