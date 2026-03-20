@@ -51,7 +51,7 @@ class Upgrade_1_5_to_1_6(Upgrade):
             return messages
 
         instance_config_upgrade_spec_path = td_resource(
-            "resources/upgrade/v1/v1_6/v1_6_0/upgrade.yaml"
+            "resources/upgrade/v1/v1_6/upgrade.yaml"
         )
 
         instance_config_upgrade_spec_yaml = YAML()
@@ -219,7 +219,7 @@ class Upgrade_1_5_to_1_6(Upgrade):
             return messages
 
         apiserver_config_spec_path = td_resource(
-            "resources/upgrade/v1/v1_6/v1_6_0/upgrade.yaml"
+            "resources/upgrade/v1/v1_6/upgrade.yaml"
         )
 
         apiserver_config_upgrade_spec_yaml = YAML()

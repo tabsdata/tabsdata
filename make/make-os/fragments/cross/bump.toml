@@ -11,68 +11,82 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
+    parts = split ${CARGO_MAKE_TASK_ARGS} ";"
+    q_parts = array_length ${parts}
+    if not eq ${q_parts} 2
+        error "❌ Usage: cargo make bump <old_version> <new_version>"
+        exit 1
+    end
+    old_version = array_get ${parts} 0
+    new_version = array_get ${parts} 1
+    info "🔖 Bumping version from ${old_version} to ${new_version}"
+
     project = set ${PROJECT_TABSDATA_BASE_FOLDER}/../tabsdata-ee
     project_exists = is_path_exists ${project}
     if ${project_exists}
         cd ${project}/macros/
-        info "🚀 cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force \"*\""
-        exec --fail-on-error cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force "*"
+        info "🚀 cargo workspaces -v version custom ${new_version} --all --no-git-commit --yes --force \"*\""
+        exec --fail-on-error cargo workspaces -v version custom ${new_version} --all --no-git-commit --yes --force "*"
 
         cd ${project}/
-        info "🚀 cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force \"*\""
-        exec --fail-on-error cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force "*"
+        info "🚀 cargo workspaces -v version custom ${new_version} --all --no-git-commit --yes --force \"*\""
+        exec --fail-on-error cargo workspaces -v version custom ${new_version} --all --no-git-commit --yes --force "*"
 
         cd ${project}/expansions/python/
-        info "🚀 cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force \"*\""
-        exec --fail-on-error cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force "*"
+        info "🚀 cargo workspaces -v version custom ${new_version} --all --no-git-commit --yes --force \"*\""
+        exec --fail-on-error cargo workspaces -v version custom ${new_version} --all --no-git-commit --yes --force "*"
 
         cd ${project}/expansions/polars/
-        info "🚀 cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force \"*\""
-        exec --fail-on-error cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force "*"
+        info "🚀 cargo workspaces -v version custom ${new_version} --all --no-git-commit --yes --force \"*\""
+        exec --fail-on-error cargo workspaces -v version custom ${new_version} --all --no-git-commit --yes --force "*"
 
         cd ${project}/
-        info "🚀 python ${BUMP_VERSION_SCRIPT} ${project} ${CARGO_MAKE_TASK_ARGS}"
-        exec --fail-on-error python ${BUMP_VERSION_SCRIPT} ${project} ${CARGO_MAKE_TASK_ARGS}
+        info "🚀 python ${BUMP_VERSION_SCRIPT} ${project} ${new_version}"
+        exec --fail-on-error python ${BUMP_VERSION_SCRIPT} ${project} ${new_version}
     end
 
     project = set ${PROJECT_TABSDATA_BASE_FOLDER}/../tabsdata-ag
     project_exists = is_path_exists ${project}
     if ${project_exists}
         cd ${project}/
-        info "🚀 python ${BUMP_VERSION_SCRIPT} ${project} ${CARGO_MAKE_TASK_ARGS}"
-        exec --fail-on-error python ${BUMP_VERSION_SCRIPT} ${project} ${CARGO_MAKE_TASK_ARGS}
+        info "🚀 python ${BUMP_VERSION_SCRIPT} ${project} ${new_version}"
+        exec --fail-on-error python ${BUMP_VERSION_SCRIPT} ${project} ${new_version}
     end
 
     project = set ${PROJECT_TABSDATA_BASE_FOLDER}/../tabsdata-ui
     project_exists = is_path_exists ${project}
     if ${project_exists}
         cd ${project}/
-        info "🚀 python ${BUMP_VERSION_SCRIPT} ${project} ${CARGO_MAKE_TASK_ARGS}"
-        exec --fail-on-error python ${BUMP_VERSION_SCRIPT} ${project} ${CARGO_MAKE_TASK_ARGS}
+        info "🚀 python ${BUMP_VERSION_SCRIPT} ${project} ${new_version}"
+        exec --fail-on-error python ${BUMP_VERSION_SCRIPT} ${project} ${new_version}
     end
 
     project = set ${PROJECT_TABSDATA_BASE_FOLDER}/../tabsdata-os
     project_exists = is_path_exists ${project}
     if ${project_exists}
         cd ${project}/macros/
-        info "🚀 cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force \"*\""
-        exec --fail-on-error cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force "*"
+        info "🚀 cargo workspaces -v version custom ${new_version} --all --no-git-commit --yes --force \"*\""
+        exec --fail-on-error cargo workspaces -v version custom ${new_version} --all --no-git-commit --yes --force "*"
 
         cd ${project}/
-        info "🚀 cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force \"*\""
-        exec --fail-on-error cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force "*"
+        info "🚀 cargo workspaces -v version custom ${new_version} --all --no-git-commit --yes --force \"*\""
+        exec --fail-on-error cargo workspaces -v version custom ${new_version} --all --no-git-commit --yes --force "*"
 
         cd ${project}/expansions/python/
-        info "🚀 cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force \"*\""
-        exec --fail-on-error cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force "*"
+        info "🚀 cargo workspaces -v version custom ${new_version} --all --no-git-commit --yes --force \"*\""
+        exec --fail-on-error cargo workspaces -v version custom ${new_version} --all --no-git-commit --yes --force "*"
 
         cd ${project}/expansions/polars/
-        info "🚀 cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force \"*\""
-        exec --fail-on-error cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force "*"
+        info "🚀 cargo workspaces -v version custom ${new_version} --all --no-git-commit --yes --force \"*\""
+        exec --fail-on-error cargo workspaces -v version custom ${new_version} --all --no-git-commit --yes --force "*"
 
         cd ${project}/
-        info "🚀 python ${BUMP_VERSION_SCRIPT} ${project} ${CARGO_MAKE_TASK_ARGS}"
-        exec --fail-on-error python ${BUMP_VERSION_SCRIPT} ${project} ${CARGO_MAKE_TASK_ARGS}
+        info "🚀 python ${BUMP_VERSION_SCRIPT} ${project} ${new_version}"
+        exec --fail-on-error python ${BUMP_VERSION_SCRIPT} ${project} ${new_version}
     end
+
+    base_folder = set ${PROJECT_TABSDATA_BASE_FOLDER}/..
+    info "🔍 python ${SCAN_VERSION_SCRIPT} ${base_folder} ${old_version} ${new_version}"
+    exec --fail-on-error python ${SCAN_VERSION_SCRIPT} ${base_folder} ${old_version} ${new_version}
 
     ''']

@@ -51,7 +51,7 @@ impl Config for Configuration {}
 #[derive(Debug, Clone, clap_derive::Parser)]
 #[command(
     name = "Tabsdata Boot Loader",
-    version = "1.8.1",
+    version = "1.9.0",
     about = "Tabsdata Boot Loader",
     long_about = "Tabsdata's bootloader prepares the execution instance resources."
 )]
