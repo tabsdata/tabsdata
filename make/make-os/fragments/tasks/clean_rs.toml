@@ -99,6 +99,12 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
+    wheels_folder = join_path ${PROJECT_RS_TO_EXPANSIONS_PYTHON_FOLDER} target wheels
+    if is_directory ${wheels_folder}
+        info "🧹 Brushing wheels folder: ${wheels_folder}"
+        rm -r ${wheels_folder}
+    end
+
     components_folders = array modules extensions
     for component_folder in ${components_folders}
         component_path = join_path ${PROJECT_RS_TO_EXPANSIONS_PYTHON_FOLDER} ${component_folder}
@@ -159,6 +165,12 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
+
+    wheels_folder = join_path ${PROJECT_RS_TY_EXPANSIONS_POLARS_FOLDER} target wheels
+    if is_directory ${wheels_folder}
+        info "🧹 Brushing wheels folder: ${wheels_folder}"
+        rm -r ${wheels_folder}
+    end
 
     components_folders = array modules extensions
     for component_folder in ${components_folders}
