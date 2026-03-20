@@ -53,12 +53,6 @@ run_task = [
         "__os__compile_all_rs_expansions",
         "__os__pyo3_help_stop",
         "__os__link_all_rs_expansions"
-    ], condition = { env = { "TD_ON_GA" = "true" } } },
-    { name = [
-        "__os__pyo3_help_start",
-        "__os__compile_all_rs_expansions",
-        "__os__pyo3_help_stop",
-        "__os__link_all_rs_expansions"
     ] }
 ]
 
@@ -109,12 +103,6 @@ private = true
 run_task = [
     { name = [
         "__os__brush_rs_expansions",
-        "__os__pyo3_help_start",
-        "__os__compile_none_rs_expansions",
-        "__os__pyo3_help_stop",
-        "__os__link_none_rs_expansions"
-    ], condition = { env = { "TD_ON_GA" = "true" } } },
-    { name = [
         "__os__pyo3_help_start",
         "__os__compile_none_rs_expansions",
         "__os__pyo3_help_stop",
