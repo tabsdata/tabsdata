@@ -3039,9 +3039,9 @@ checksum = "0cc23270f6e1808e30a928bdc84dea0b9b4136a8bc82338574f23baf47bbd280"
 
 [[package]]
 name = "grok"
-version = "2.4.0"
+version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2e2d7bd791814b06a609b74361ac35b448eb4718548937c6de718554a4348577"
+checksum = "6ddab6a9c8bb998cb2fc3101fde8ef561b7c4970db3957be7a8eee1e168f666b"
 dependencies = [
  "glob",
  "onig",
@@ -3571,9 +3571,9 @@ dependencies = [
 
 [[package]]
 name = "itoa"
-version = "1.0.17"
+version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "92ecc6618181def0457392ccd0ee51198e065e016d1d527a7ac1b6dc7c1f09d2"
+checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
 name = "jiff"
@@ -6658,7 +6658,7 @@ dependencies = [
 
 [[package]]
 name = "ta-tableframe"
-version = "1.8.1"
+version = "1.9.0"
 dependencies = [
  "openssl",
  "td-build",
@@ -6674,7 +6674,7 @@ checksum = "adb6935a6f5c20170eeceb1a3835a49e12e19d792f6dd344ccc76a985ca5a6ca"
 
 [[package]]
 name = "td-attach"
-version = "1.8.1"
+version = "1.9.0"
 dependencies = [
  "darling 0.23.0",
  "openssl",
@@ -6686,7 +6686,7 @@ dependencies = [
 
 [[package]]
 name = "td-build"
-version = "1.8.1"
+version = "1.9.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -6705,7 +6705,7 @@ dependencies = [
 
 [[package]]
 name = "td-common"
-version = "1.8.1"
+version = "1.9.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -6756,7 +6756,7 @@ dependencies = [
 
 [[package]]
 name = "td-error"
-version = "1.8.1"
+version = "1.9.0"
 dependencies = [
  "anyhow",
  "derive_builder",
@@ -6772,7 +6772,7 @@ dependencies = [
 
 [[package]]
 name = "td-security"
-version = "1.8.1"
+version = "1.9.0"
 dependencies = [
  "argon2",
  "derive_builder",
@@ -6783,7 +6783,7 @@ dependencies = [
 
 [[package]]
 name = "te-tableframe"
-version = "1.8.1"
+version = "1.9.0"
 dependencies = [
  "openssl",
  "ta-tableframe",
@@ -6920,7 +6920,7 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tm-error"
-version = "1.8.1"
+version = "1.9.0"
 dependencies = [
  "openssl",
  "quote",
@@ -6929,7 +6929,7 @@ dependencies = [
 
 [[package]]
 name = "tm-workspace"
-version = "1.8.1"
+version = "1.9.0"
 dependencies = [
  "openssl",
  "quote",
@@ -7191,7 +7191,7 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "ty-expansions"
-version = "1.8.1"
+version = "1.9.0"
 dependencies = [
  "openssl",
  "ta-tableframe",
@@ -7202,7 +7202,7 @@ dependencies = [
 
 [[package]]
 name = "ty-tableframe"
-version = "1.8.1"
+version = "1.9.0"
 dependencies = [
  "chrono",
  "dashmap",
@@ -7243,7 +7243,7 @@ checksum = "562d481066bde0658276a35467c4af00bdc6ee726305698a55b86e61d7ad82bb"
 
 [[package]]
 name = "tz-tableframe"
-version = "1.8.1"
+version = "1.9.0"
 dependencies = [
  "openssl",
  "polars",
@@ -8471,18 +8471,18 @@ dependencies = [
 
 [[package]]
 name = "zerocopy"
-version = "0.8.46"
+version = "0.8.47"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c5030500cb2d66bdfbb4ebc9563be6ce7005a4b5d0f26be0c523870fe372ca6"
+checksum = "efbb2a062be311f2ba113ce66f697a4dc589f85e78a4aea276200804cea0ed87"
 dependencies = [
  "zerocopy-derive",
 ]
 
 [[package]]
 name = "zerocopy-derive"
-version = "0.8.46"
+version = "0.8.47"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5f86989a046a79640b9d8867c823349a139367bda96549794fcc3313ce91f4e"
+checksum = "0e8bc7269b54418e7aeeef514aa68f8690b8c0489a06b0136e5f57c4c5ccab89"
 dependencies = [
  "proc-macro2",
  "quote",

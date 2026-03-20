@@ -6,7 +6,7 @@
 description = "Tabsdata Rust PyO3 Expansions"
 name = "to-expansions"
 edition = "2024"
-version = "1.8.1"
+version = "1.9.0"
 license = "Apache 2.0"
 build = "build.rs"
 
@@ -27,7 +27,7 @@ publish = false
 readme = "../../README.md"
 repository = "https://github.com/tabsdata/tabsdata"
 rust-version = "1.93.0"
-version = "1.8.1"
+version = "1.9.0"
 
 [workspace]
 members = [

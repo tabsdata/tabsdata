@@ -2,15 +2,15 @@
 # Copyright 2026 Tabs Data Inc.
 #
 
-tabsdata-bigquery==1.8.1
-tabsdata-cdc-common==1.8.1
-tabsdata-cdc-db2==1.8.1
-tabsdata-cdc-mysql==1.8.1
-tabsdata-cdc-postgres==1.8.1
-tabsdata-databricks==1.8.1
-tabsdata-kafka==1.8.1
-tabsdata-mongodb==1.8.1
-tabsdata-mssql==1.8.1
-tabsdata-salesforce==1.8.1
-tabsdata-snowflake==1.8.1
-tabsdata-sql-common==1.8.1
+tabsdata-bigquery==1.9.0
+tabsdata-cdc-common==1.9.0
+tabsdata-cdc-db2==1.9.0
+tabsdata-cdc-mysql==1.9.0
+tabsdata-cdc-postgres==1.9.0
+tabsdata-databricks==1.9.0
+tabsdata-kafka==1.9.0
+tabsdata-mongodb==1.9.0
+tabsdata-mssql==1.9.0
+tabsdata-salesforce==1.9.0
+tabsdata-snowflake==1.9.0
+tabsdata-sql-common==1.9.0
