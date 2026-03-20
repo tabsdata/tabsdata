@@ -113,11 +113,11 @@ script = [
     debug "🚀 python ${LOCK_REQUIREMENTS_SCRIPT} ${PROJECT_TABSDATA_ROOT_FOLDER}"
     exec --fail-on-error python ${LOCK_REQUIREMENTS_SCRIPT} ${PROJECT_TABSDATA_ROOT_FOLDER}
 
-    debug "🚀 uv pip compile --no-header --no-annotate --format requirements.txt --quiet --output-file ./variant/resources/lock/requirements.txt ./requirements/requirements-third-party-all.txt"
-    exec --fail-on-error uv pip compile --no-header --no-annotate --format requirements.txt --quiet --output-file ./variant/resources/lock/requirements.txt ./requirements/requirements-third-party-all.txt
+    debug "🚀 uv pip compile --upgrade --no-header --no-annotate --format requirements.txt --quiet --output-file ./variant/resources/lock/requirements.txt ./requirements/requirements-third-party-all.txt"
+    exec --fail-on-error uv pip compile --upgrade --no-header --no-annotate --format requirements.txt --quiet --output-file ./variant/resources/lock/requirements.txt ./requirements/requirements-third-party-all.txt
 
-    debug "🚀 uv pip compile --no-header --no-annotate --format requirements.txt --quiet --output-file ./variant/resources/lock/requirements-dev.txt ./requirements/requirements-dev-third-party-all.txt"
-    exec --fail-on-error uv pip compile --no-header --no-annotate --format requirements.txt --quiet --output-file ./variant/resources/lock/requirements-dev.txt ./requirements/requirements-dev-third-party.txt
+    debug "🚀 uv pip compile --upgrade --no-header --no-annotate --format requirements.txt --quiet --output-file ./variant/resources/lock/requirements-dev.txt ./requirements/requirements-dev-third-party-all.txt"
+    exec --fail-on-error uv pip compile --upgrade --no-header --no-annotate --format requirements.txt --quiet --output-file ./variant/resources/lock/requirements-dev.txt ./requirements/requirements-dev-third-party.txt
 
     current_year = exec python -c "import datetime; print(datetime.datetime.now().year)"
     current_year = trim ${current_year.stdout}
