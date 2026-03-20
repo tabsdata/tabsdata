@@ -495,6 +495,25 @@ def lock_pytest_ini(root: str) -> None:
             shutil.copy2(tabsdata_pytest_ini_path, path)
 
 
+def lock_requirements_first_party_versions(root: str):
+    for requirements_file in Path(root).rglob("requirements*.txt"):
+        if not requirements_file.is_file():
+            continue
+
+        content = requirements_file.read_text(encoding="utf-8")
+
+        updated_content = re.sub(
+            r"^(tabsdata[\w-]*)==.+$",
+            rf"\1=={TABSDATA_VERSION}",
+            content,
+            flags=re.MULTILINE,
+        )
+
+        if updated_content != content:
+            requirements_file.write_text(updated_content, encoding="utf-8")
+            logger.info(f"🔐️ File {requirements_file} locked!")
+
+
 def lock(root: str):
     year = datetime.now().year
     connectors = gather_connectors(root)
@@ -507,6 +526,7 @@ def lock(root: str):
         lock_requirements_first_party(root, connectors, year)
         lock_requirements_third_party_all(root, connectors, year)
         lock_connectors_constants(root, connectors)
+    lock_requirements_first_party_versions(root)
     lock_pyprojects(Path(root), connectors, python_modules, polars_modules)
     lock_pytest_ini(root)
 
