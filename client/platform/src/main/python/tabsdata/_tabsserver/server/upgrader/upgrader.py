@@ -44,8 +44,9 @@ from tabsdata._tabsserver.server.upgrader.upgraders.v1.v1_7.upgrade import (
 from tabsdata._tabsserver.server.upgrader.upgraders.v1.v1_8.upgrade import (
     Upgrade_1_7_to_1_8,
 )
-from tabsdata._tabsserver.server.upgrader.upgraders.v1.v1_9.upgrade import \
-    Upgrade_1_8_to_1_9
+from tabsdata._tabsserver.server.upgrader.upgraders.v1.v1_9.upgrade import (
+    Upgrade_1_8_to_1_9,
+)
 from tabsdata._tabsserver.utils import TimeBlock
 
 logger = logging.getLogger(__name__)

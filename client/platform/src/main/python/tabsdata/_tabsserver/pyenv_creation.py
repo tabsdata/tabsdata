@@ -401,16 +401,38 @@ def found_requirements(
         in TRUE_VALUES
     )
 
-    # Split requirements into tabsdata and non-tabsdata packages.
+    # Build a set of canonical names of tabsdata packages that will be
+    # installed from local development sources. These must be excluded from
+    # PyPI resolution to avoid dependency conflicts between the lock file
+    # and the published package metadata on PyPI.
+    development_package_names: set[str] = set()
+    for dev_location, _dev_provider in development_packages:
+        dev_pkg_name = extract_tabsdata_package_name(dev_location)
+        if dev_pkg_name:
+            development_package_names.add(canonicalize_name(dev_pkg_name))
+
+    # Split requirements into tabsdata, tabsdata skipped & and non-tabsdata packages.
     tabsdata_packages = []
+    tabsdata_skipped_packages = []
     non_tabsdata_packages = []
 
     for package in requirements:
         module = extract_package_name(package)
         if module.startswith(TABSDATA_MODULE_NAME):
-            tabsdata_packages.append(package)
+            if canonicalize_name(module) in development_package_names:
+                tabsdata_skipped_packages.append(package)
+            else:
+                tabsdata_packages.append(package)
         else:
             non_tabsdata_packages.append(package)
+
+    if tabsdata_skipped_packages:
+        logger.info(
+            f"Excluding {len(tabsdata_skipped_packages)} "
+            f"tabsdata packages from PyPI resolution "
+            f"(they will be installed from local development sources): "
+            f"{tabsdata_skipped_packages}"
+        )
 
     logger.info(
         "Split requirements into "
@@ -444,8 +466,9 @@ def found_requirements(
         )
 
     logger.info(f"Available packages: {available_packages}")
-    if set(available_packages) != set(requirements):
-        missing_packages = set(requirements) - set(available_packages)
+    expected_packages = set(requirements) - set(tabsdata_skipped_packages)
+    if set(available_packages) != expected_packages:
+        missing_packages = expected_packages - set(available_packages)
         logger.warning(f"Missing packages: {missing_packages}")
     return available_packages
 
