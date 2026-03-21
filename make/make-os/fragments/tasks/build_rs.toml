@@ -585,7 +585,7 @@ script = [
 
         debug "🚀 docker run --rm --mount=type=bind,src=${PROJECT_TABSDATA_ROOT_FOLDER},target=/tabsdata -w /tabsdata --env TD_PROFILE=${td_profile} quay.io/pypa/manylinux2014_x86_64 bash -lc ..."
         td_script = set "yum -y install perl perl-IPC-Cmd perl-Time-Piece"
-        td_script = set "${td_script} && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.93.0"
+        td_script = set "${td_script} && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.94.0"
         td_script = set "${td_script} && . $HOME/.cargo/env"
         td_script = set "${td_script} && python3.12 -m pip install --upgrade pip"
         td_script = set "${td_script} && python3.12 -m pip install maturin[patchelf]==1.9.4 --root-user-action=ignore"
@@ -707,7 +707,7 @@ script = [
 
         debug "🚀 docker run --rm --mount=type=bind,src=${PROJECT_TABSDATA_ROOT_FOLDER},target=/tabsdata -w /tabsdata --env TD_PROFILE=${td_profile} quay.io/pypa/manylinux2014_x86_64 bash -lc ..."
         td_script = set "yum -y install perl perl-IPC-Cmd perl-Time-Piece"
-        td_script = set "${td_script} && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.93.0"
+        td_script = set "${td_script} && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.94.0"
         td_script = set "${td_script} && . $HOME/.cargo/env"
         td_script = set "${td_script} && python3.12 -m pip install --upgrade pip"
         td_script = set "${td_script} && python3.12 -m pip install maturin[patchelf]==1.9.4 --root-user-action=ignore"
@@ -829,7 +829,7 @@ script = [
 
         debug "🚀 docker run --rm --mount=type=bind,src=${PROJECT_TABSDATA_ROOT_FOLDER},target=/tabsdata -w /tabsdata --env TD_PROFILE=${td_profile} quay.io/pypa/manylinux2014_x86_64 bash -lc ..."
         td_script = set "yum -y install perl perl-IPC-Cmd perl-Time-Piece"
-        td_script = set "${td_script} && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.93.0"
+        td_script = set "${td_script} && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.94.0"
         td_script = set "${td_script} && . $HOME/.cargo/env"
         td_script = set "${td_script} && python3.12 -m pip install --upgrade pip"
         td_script = set "${td_script} && python3.12 -m pip install maturin[patchelf]==1.9.4 --root-user-action=ignore"

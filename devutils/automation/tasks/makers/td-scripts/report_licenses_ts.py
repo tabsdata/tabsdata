@@ -40,6 +40,12 @@ TARGET_FILE = os.path.join(TARGET_DIR, "licenses_ts.txt")
 # noinspection DuplicatedCode
 normalized_licenses = {
     "": "Unspecified License",                                                                                                                                                                 # noqa: E231,E241,E501
+    "(Apache-2.0 OR ISC OR MIT) AND (Apache-2.0 OR ISC OR MIT-0) AND (Apache-2.0 OR ISC) AND Apache-2.0 AND BSD-3-Clause AND ISC AND MIT":                                                     # noqa: E231,E241,E501
+        "Apache License Version 2.0 or Internet Systems Consortium License or MIT License, and "                                                                                               # noqa: E231,E241,E501
+        "Apache License Version 2.0 or Internet Systems Consortium License or MIT No Attribution License, and "                                                                                # noqa: E231,E241,E501
+        "Apache License Version 2.0 or Internet Systems Consortium License, and "                                                                                                              # noqa: E231,E241,E501
+        "Apache License Version 2.0, and BSD Revised License (BSD-3-Clause), and "                                                                                                             # noqa: E231,E241,E501
+        "Internet Systems Consortium License, and MIT License",                                                                                                                                # noqa: E231,E241,E501
     "(Apache-2.0 OR ISC) AND ISC AND OpenSSL": "Apache License Version 2.0 or Internet Systems Consortium License, and Internet Systems Consortium License, and OpenSSL License",              # noqa: E231,E241,E501
     "(Apache-2.0 OR ISC) AND ISC": "Apache License Version 2.0 or Internet Systems Consortium License, and Internet Systems Consortium License",                                               # noqa: E231,E241,E501
     "(Apache-2.0 OR MIT) AND BSD-3-Clause": "Apache License Version 2.0 or MIT License, and BSD Revised License (BSD-3-Clause)",                                                               # noqa: E231,E241,E501
