@@ -15,7 +15,7 @@ Copyright 2025 Tabs Data Inc.
 ## Requirements
 
 * Python (3.12)
-* Rust (1.93.0)
+* Rust (1.94.0)
     * Cargo
     * Cargo packages:
     * cargo-audit
