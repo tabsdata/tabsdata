@@ -52,54 +52,72 @@ MACOS_SYSTEM_PREFIXES = (
 
 # macOS relative reference prefixes - these are acceptable internal references
 MACOS_RELATIVE_PREFIXES = (
-    "@rpath",
-    "@loader_path",
     "@executable_path",
+    "@loader_path",
+    "@rpath",
 )
 
 # Linux system shared libraries - these are always present on any Linux system
 LINUX_SYSTEM_LIBS = {
-    "libc.so",
-    "libm.so",
-    "libdl.so",
-    "librt.so",
-    "libpthread.so",
-    "libgcc_s.so",
     "ld-linux",
-    "linux-vdso",
-    "linux-gate",
-    "libstdc++.so",
-    "libresolv.so",
-    "libnsl.so",
-    "libutil.so",
+    "libc.so",
     "libcrypt.so",
+    "libdl.so",
+    "libgcc_s.so",
+    "libm.so",
+    "libnsl.so",
+    "libpthread.so",
+    "libresolv.so",
+    "librt.so",
+    "libstdc++.so",
+    "libutil.so",
+    "linux-gate",
+    "linux-vdso",
+}
+
+# manylinux2014 (PEP 599) guaranteed libraries for x86_64.
+# Only these dynamic dependencies are acceptable in cross-compiled.
+# See: https://peps.python.org/pep-0599/#the-manylinux2014-policy
+MANYLINUX2014_ALLOWED_LIBS = {
+    "ld-linux-x86-64.so.2",
+    "libc.so.6",
+    "libcrypt.so.1",
+    "libdl.so.2",
+    "libgcc_s.so.1",
+    "libm.so.6",
+    "libnsl.so.1",
+    "libpthread.so.0",
+    "libresolv.so.2",
+    "librt.so.1",
+    "libstdc++.so.6",
+    "libutil.so.1",
 }
 
 # Windows system DLLs (case-insensitive matching)
 WINDOWS_SYSTEM_DLLS = {
-    "kernel32.dll",
-    "ntdll.dll",
     "advapi32.dll",
-    "ws2_32.dll",
-    "crypt32.dll",
     "bcrypt.dll",
     "bcryptprimitives.dll",
-    "shell32.dll",
-    "ole32.dll",
-    "oleaut32.dll",
-    "userenv.dll",
-    "psapi.dll",
-    "pdh.dll",
-    "powrprof.dll",
+    "crypt32.dll",
     "dbghelp.dll",
     "iphlpapi.dll",
-    "secur32.dll",
+    "kernel32.dll",
     "mswsock.dll",
     "ncrypt.dll",
-    "setupapi.dll",
-    "vcruntime140.dll",
-    "vcruntime140_1.dll",
+    "ntdll.dll",
+    "ole32.dll",
+    "oleaut32.dll",
+    "pdh.dll",
+    "powrprof.dll",
+    "psapi.dll",
     "python3.dll",
+    "secur32.dll",
+    "setupapi.dll",
+    "shell32.dll",
+    "userenv.dll",
+    "vcruntime140_1.dll",
+    "vcruntime140.dll",
+    "ws2_32.dll",
 }
 
 # Windows system DLL prefixes (case-insensitive)
@@ -118,7 +136,7 @@ class LibInfo:
     @property
     def is_ok(self) -> bool:
         if TD_CROSS:
-            return self.is_static
+            return self.is_static or self.name in MANYLINUX2014_ALLOWED_LIBS
         return self.is_static or self.is_system
 
 
