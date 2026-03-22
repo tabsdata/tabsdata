@@ -2,5 +2,5 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
-databricks-sdk==0.92.0
+databricks-sdk==0.102.0
 databricks-sql-connector==4.2.5

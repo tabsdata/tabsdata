@@ -280,7 +280,7 @@ version = "0.5.3"
 features = ["std"]
 
 [workspace.dependencies.async-compression]
-version = "0.4.40"
+version = "0.4.41"
 features = ["tokio", "all-algorithms"]
 
 [workspace.dependencies.async-trait]
@@ -308,11 +308,11 @@ version = "0.22.1"
 version = "1.11.1"
 
 [workspace.dependencies.clap]
-version = "4.5.60"
+version = "4.6.0"
 features = ["derive"]
 
 [workspace.dependencies.clap_derive]
-version = "4.5.55"
+version = "4.6.0"
 
 [workspace.dependencies.chrono]
 version = "0.4.44"
@@ -321,11 +321,11 @@ version = "0.4.44"
 version = "3.1.1"
 
 [workspace.dependencies.config]
-version = "0.15.19"
+version = "0.15.22"
 features = ["yaml"]
 
 [workspace.dependencies.console]
-version = "0.16.2"
+version = "0.16.3"
 features = ["std"]
 
 [workspace.dependencies.croner]
@@ -419,6 +419,10 @@ features = ["default", "improved_unicode"]
 [workspace.dependencies.itertools]
 version = "0.14.0"
 
+[workspace.dependencies.liblzma-sys]
+version = "0.4.5"
+features = ["static"]
+
 [workspace.dependencies.jsonwebtoken]
 version = "10.3.0"
 features = ["aws_lc_rs"]
@@ -427,7 +431,7 @@ features = ["aws_lc_rs"]
 version = "0.3.0"
 
 [workspace.dependencies.libc]
-version = "0.2.180"
+version = "0.2.183"
 
 [workspace.dependencies.libflate]
 version = "2.2.1"
@@ -436,7 +440,7 @@ version = "2.2.1"
 version = "0.11.2"
 
 [workspace.dependencies.nix]
-version = "0.31.1"
+version = "0.31.2"
 features = ["process"]
 
 [workspace.dependencies.nonempty]
@@ -451,10 +455,10 @@ version = "0.13.1"
 features = ["aws", "azure", "gcp", "http"]
 
 [workspace.dependencies.once_cell]
-version = "1.21.3"
+version = "1.21.4"
 
 [workspace.dependencies.openssl]
-version = "0.10.75"
+version = "0.10.76"
 features = ["vendored"]
 
 [workspace.dependencies.opentelemetry_sdk]
@@ -477,7 +481,7 @@ features = ["serde", "serde_derive"]
 version = "0.5.0"
 
 [workspace.dependencies.pin-project-lite]
-version = "0.2.16"
+version = "0.2.17"
 
 [workspace.dependencies.polars]
 version = "0.52.0"
@@ -507,7 +511,7 @@ features = ["json", "stream"]
 version = "0.17.14"
 
 [workspace.dependencies.rustls]
-version = "0.23.36"
+version = "0.23.37"
 
 [workspace.dependencies.rust-embed]
 version = "8.11.0"
@@ -545,13 +549,13 @@ version = "3.0.2"
 version = "1.0.2"
 
 [workspace.dependencies.sysinfo]
-version = "0.38.2"
+version = "0.38.4"
 
 [workspace.dependencies.temp-env]
 version = "0.3.6"
 
 [workspace.dependencies.tempfile]
-version = "3.24.0"
+version = "3.27.0"
 
 [workspace.dependencies.textwrap]
 version = "0.16.2"
@@ -563,7 +567,7 @@ version = "0.4.3"
 version = "2.0.18"
 
 [workspace.dependencies.tokio]
-version = "1.49.0"
+version = "1.50.0"
 features = ["full"]
 
 [workspace.dependencies.tokio-cron-scheduler]
@@ -573,7 +577,7 @@ version = "0.15.1"
 version = "0.7.18"
 
 [workspace.dependencies.toml]
-version = "1.0.3"
+version = "1.0.7"
 
 [workspace.dependencies.tower]
 version = "0.5.3"
@@ -602,7 +606,7 @@ version = "0.2.5"
 version = "0.1.2"
 
 [workspace.dependencies.tracing-subscriber]
-version = "0.3.22"
+version = "0.3.23"
 features = ["env-filter"]
 
 [workspace.dependencies.utoipa]
@@ -621,18 +625,18 @@ version = "2.5.8"
 features = ["serde"]
 
 [workspace.dependencies.uuid]
-version = "1.21.0"
+version = "1.22.0"
 features = ["v7"]
 
 [workspace.dependencies.vergen-gix]
-version = "1.0.9"
+version = "9.1.0"
 features = ["build", "cargo", "emit_and_set", "rustc", "si"]
 
 [workspace.dependencies.walkdir]
 version = "2.5.0"
 
 [workspace.dependencies.whoami]
-version = "2.1.0"
+version = "2.1.1"
 
 [workspace.dependencies.wildmatch]
 version = "2.6.1"

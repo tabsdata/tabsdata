@@ -19,15 +19,6 @@ script = [
 
     debug "🚀 cargo update --verbose -p planus --precise 1.1.1"
     exit_code = exec --get-exit-code cargo update --verbose -p planus --precise 1.1.1
-
-    debug "🚀 cargo update --verbose -p vergen --precise 9.0.6"
-    exit_code = exec --get-exit-code cargo update --verbose -p vergen --precise 9.0.6
-
-    debug "🚀 cargo update --verbose -p vergen-gix --precise 1.0.9"
-    exit_code = exec --get-exit-code cargo update --verbose -p vergen-gix --precise 1.0.9
-
-    debug "🚀 cargo update --verbose -p vergen-lib --precise 0.1.6"
-    exit_code = exec --get-exit-code cargo update --verbose -p vergen-lib --precise 0.1.6
     ''']
 
 
@@ -48,15 +39,6 @@ script = [
 
     debug "🚀 cargo update --verbose -p planus --precise 1.1.1"
     exit_code = exec --get-exit-code cargo update --verbose -p planus --precise 1.1.1
-
-    debug "🚀 cargo update --verbose -p vergen --precise 9.0.6"
-    exit_code = exec --get-exit-code cargo update --verbose -p vergen --precise 9.0.6
-
-    debug "🚀 cargo update --verbose -p vergen-gix --precise 1.0.9"
-    exit_code = exec --get-exit-code cargo update --verbose -p vergen-gix --precise 1.0.9
-
-    debug "🚀 cargo update --verbose -p vergen-lib --precise 0.1.6"
-    exit_code = exec --get-exit-code cargo update --verbose -p vergen-lib --precise 0.1.6
     ''']
 
 [tasks.__os__lock_rs_expansions]
@@ -87,15 +69,6 @@ script = [
 
     debug "🚀 cargo update --verbose -p planus --precise 1.1.1"
     exit_code = exec --get-exit-code cargo update --verbose -p planus --precise 1.1.1
-
-    debug "🚀 cargo update --verbose -p vergen --precise 9.0.6"
-    exit_code = exec --get-exit-code cargo update --verbose -p vergen --precise 9.0.6
-
-    debug "🚀 cargo update --verbose -p vergen-gix --precise 1.0.9"
-    exit_code = exec --get-exit-code cargo update --verbose -p vergen-gix --precise 1.0.9
-
-    debug "🚀 cargo update --verbose -p vergen-lib --precise 0.1.6"
-    exit_code = exec --get-exit-code cargo update --verbose -p vergen-lib --precise 0.1.6
     ''']
 
 [tasks.__os__lock_rs_expansions_polars]
@@ -115,13 +88,4 @@ script = [
 
     debug "🚀 cargo update --verbose -p planus --precise 1.1.1"
     exit_code = exec --get-exit-code cargo update --verbose -p planus --precise 1.1.1
-
-    debug "🚀 cargo update --verbose -p vergen --precise 9.0.6"
-    exit_code = exec --get-exit-code cargo update --verbose -p vergen --precise 9.0.6
-
-    debug "🚀 cargo update --verbose -p vergen-gix --precise 1.0.9"
-    exit_code = exec --get-exit-code cargo update --verbose -p vergen-gix --precise 1.0.9
-
-    debug "🚀 cargo update --verbose -p vergen-lib --precise 0.1.6"
-    exit_code = exec --get-exit-code cargo update --verbose -p vergen-lib --precise 0.1.6
     ''']

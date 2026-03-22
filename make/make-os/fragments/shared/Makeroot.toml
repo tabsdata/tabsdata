@@ -83,6 +83,7 @@ MAKE_LIBRARIES_PATH = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/make/make-os/li
 SPINNER_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/make/make-os/libraries/spin.py", normalize = true }
 
 BUMP_VERSION_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/bump_version.py", normalize = true }
+CHECK_NATIVE_LIBS_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/check_native_libs.py", normalize = true }
 SCAN_VERSION_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/scan_version.py", normalize = true }
 CLEAN_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/clean.py", normalize = true }
 COPY_ASSETS_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/copy_assets.py", normalize = true }

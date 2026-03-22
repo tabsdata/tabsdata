@@ -81,7 +81,7 @@ serde = { workspace = true, features = ["derive"] }
 tracing = { workspace = true }
 uuid = { workspace = true, features = ["v4"] }
 uuid7 = { workspace = true }
-once_cell = "1.21.3"
+once_cell = { workspace = true }
 
 
 [target.'cfg(target_os = "linux")'.dependencies]
