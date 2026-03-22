@@ -102,11 +102,14 @@ path = "../../server/libraries/td-error"
 
 # External dependencies
 
+[workspace.dependencies.chrono]
+version = "0.4.44"
+
 [workspace.dependencies.libc]
-version = "0.2.180"
+version = "0.2.183"
 
 [workspace.dependencies.openssl]
-version = "0.10.75"
+version = "0.10.76"
 features = ["vendored"]
 
 [workspace.dependencies.pyo3]
@@ -114,22 +117,22 @@ version = "0.26.0"
 features = ["abi3-py312", "anyhow", "macros", "multiple-pymethods", "num-bigint", "num-complex", "num-rational", "rust_decimal", "serde", "smallvec"]
 
 [workspace.dependencies.pyo3-log]
-version = "0.13.2"
+version = "0.13.3"
 
 [workspace.dependencies.pyo3-stub-gen]
-version = "0.18.0"
+version = "0.19.0"
 
 [workspace.dependencies.pyo3-stub-gen-derive]
-version = "0.18.0"
+version = "0.19.0"
 
 [workspace.dependencies.toml]
-version = "1.0.3"
+version = "1.0.7"
 
 [workspace.dependencies.tracing]
 version = "0.1.44"
 
 [workspace.dependencies.tracing-subscriber]
-version = "0.3.22"
+version = "0.3.23"
 
 [build-dependencies]
 

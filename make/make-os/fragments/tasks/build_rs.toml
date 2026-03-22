@@ -26,6 +26,19 @@ script = [
 
     debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --all-features --lib --bins --examples"
     exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --all-features --lib --bins --examples
+
+    td_check_build_folder = set ${td-profile}
+    is_dev = eq ${td_check_build_folder} "dev"
+    if ${is_dev}
+        td_check_build_folder = set "debug"
+    end
+    td_target_value = get_env TD_TARGET
+    td_target_empty = is_empty ${td_target_value}
+    if not ${td_target_empty}
+        td_check_build_folder = concat ${td_target_value} "/" ${td_check_build_folder}
+    end
+    td_check_target_folder = concat ${PROJECT_RS_TD_MACROS_FOLDER} "target/" ${td_check_build_folder}
+    exec --fail-on-error python ${CHECK_NATIVE_LIBS_SCRIPT} cargo ${PROJECT_RS_TD_MACROS_CARGO_TOML} ${td_check_target_folder}
     ''']
 
 [tasks.__os__build_all_rs_modules]
@@ -40,6 +53,19 @@ script = [
 
     debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --all-features --lib --bins --examples"
     exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --all-features --lib --bins --examples
+
+    td_check_build_folder = set ${td-profile}
+    is_dev = eq ${td_check_build_folder} "dev"
+    if ${is_dev}
+        td_check_build_folder = set "debug"
+    end
+    td_target_value = get_env TD_TARGET
+    td_target_empty = is_empty ${td_target_value}
+    if not ${td_target_empty}
+        td_check_build_folder = concat ${td_target_value} "/" ${td_check_build_folder}
+    end
+    td_check_target_folder = concat ${PROJECT_RS_TD_TABSDATA_FOLDER} "target/" ${td_check_build_folder}
+    exec --fail-on-error python ${CHECK_NATIVE_LIBS_SCRIPT} cargo ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} ${td_check_target_folder}
     ''']
 
 [tasks.__os__build_all_rs_expansions]
@@ -80,6 +106,19 @@ script = [
 
     debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --lib --bins"
     exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --lib --bins
+
+    td_check_build_folder = set ${td-profile}
+    is_dev = eq ${td_check_build_folder} "dev"
+    if ${is_dev}
+        td_check_build_folder = set "debug"
+    end
+    td_target_value = get_env TD_TARGET
+    td_target_empty = is_empty ${td_target_value}
+    if not ${td_target_empty}
+        td_check_build_folder = concat ${td_target_value} "/" ${td_check_build_folder}
+    end
+    td_check_target_folder = concat ${PROJECT_RS_TD_MACROS_FOLDER} "target/" ${td_check_build_folder}
+    exec --fail-on-error python ${CHECK_NATIVE_LIBS_SCRIPT} cargo ${PROJECT_RS_TD_MACROS_CARGO_TOML} ${td_check_target_folder}
     ''']
 
 [tasks.__os__build_none_rs_modules]
@@ -94,6 +133,19 @@ script = [
 
     debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --lib --bins"
     exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --lib --bins
+
+    td_check_build_folder = set ${td-profile}
+    is_dev = eq ${td_check_build_folder} "dev"
+    if ${is_dev}
+        td_check_build_folder = set "debug"
+    end
+    td_target_value = get_env TD_TARGET
+    td_target_empty = is_empty ${td_target_value}
+    if not ${td_target_empty}
+        td_check_build_folder = concat ${td_target_value} "/" ${td_check_build_folder}
+    end
+    td_check_target_folder = concat ${PROJECT_RS_TD_TABSDATA_FOLDER} "target/" ${td_check_build_folder}
+    exec --fail-on-error python ${CHECK_NATIVE_LIBS_SCRIPT} cargo ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} ${td_check_target_folder}
     ''']
 
 [tasks.__os__build_none_rs_expansions]
@@ -672,6 +724,24 @@ script = [
                     exit 1
                 end
 
+                # Check native libraries of the copied expansion
+                native_files = glob_array python/src/main/python/tabsdata/expansions/foundation/*.so
+                native_pyd = glob_array python/src/main/python/tabsdata/expansions/foundation/*.pyd
+                for pyd in ${native_pyd}
+                    array_push ${native_files} ${pyd}
+                end
+                native_list = set ""
+                for nf in ${native_files}
+                    if is_empty ${native_list}
+                        native_list = set "${nf}"
+                    else
+                        native_list = concat ${native_list} " " ${nf}
+                    end
+                end
+                if not is_empty ${native_list}
+                    exec --fail-on-error python ${CHECK_NATIVE_LIBS_SCRIPT} files ${native_list}
+                end
+
                 trace "🐍 Successfully extracted wheel contents!"
             end
         else
@@ -794,6 +864,24 @@ script = [
                     exit 1
                 end
 
+                # Check native libraries of the copied expansion
+                native_files = glob_array python/src/main/python/tabsdata/expansions/tableframe/*.so
+                native_pyd = glob_array python/src/main/python/tabsdata/expansions/tableframe/*.pyd
+                for pyd in ${native_pyd}
+                    array_push ${native_files} ${pyd}
+                end
+                native_list = set ""
+                for nf in ${native_files}
+                    if is_empty ${native_list}
+                        native_list = set "${nf}"
+                    else
+                        native_list = concat ${native_list} " " ${nf}
+                    end
+                end
+                if not is_empty ${native_list}
+                    exec --fail-on-error python ${CHECK_NATIVE_LIBS_SCRIPT} files ${native_list}
+                end
+
                 trace "🐍 Successfully extracted wheel contents!"
             end
         else
@@ -914,6 +1002,24 @@ script = [
                 else
                     error "⚠️ tabsdata module not found in wheel extraction: ${wheel}"
                     exit 1
+                end
+
+                # Check native libraries of the copied expansion
+                native_files = glob_array python/src/main/python/tabsdata/expansions/extensions/tableframe/*.so
+                native_pyd = glob_array python/src/main/python/tabsdata/expansions/extensions/tableframe/*.pyd
+                for pyd in ${native_pyd}
+                    array_push ${native_files} ${pyd}
+                end
+                native_list = set ""
+                for nf in ${native_files}
+                    if is_empty ${native_list}
+                        native_list = set "${nf}"
+                    else
+                        native_list = concat ${native_list} " " ${nf}
+                    end
+                end
+                if not is_empty ${native_list}
+                    exec --fail-on-error python ${CHECK_NATIVE_LIBS_SCRIPT} files ${native_list}
                 end
 
                 trace "🐍 Successfully extracted wheel contents!"
