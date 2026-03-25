@@ -14,6 +14,7 @@ import orjson
 import psycopg2
 import psycopg2.extensions
 import pytest
+from psycopg2.extras import LogicalReplicationConnection
 import docker
 from docker.models.containers import Container
 from filelock import FileLock
@@ -493,3 +494,23 @@ def postgres_cdc_config(
             cdc_user=POSTGRES_CDC_USER,
             cdc_password=POSTGRES_CDC_PASSWORD,
         )
+
+
+@pytest.fixture(scope="function")
+def postgres_cdc_slot(postgres_cdc_config):
+    config = postgres_cdc_config
+    suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=32))
+    slot_name = f"td_slot_{suffix}"
+    rconn = psycopg2.connect(
+        host=config.host,
+        port=str(config.port),
+        dbname=config.database,
+        user=config.cdc_user,
+        password=config.cdc_password,
+        connection_factory=LogicalReplicationConnection,
+    )
+    rcursor = rconn.cursor()
+    rcursor.create_replication_slot(slot_name, output_plugin="wal2json")
+    rcursor.close()
+    rconn.close()
+    return slot_name

@@ -476,6 +476,272 @@ def register_table_for_cdc(
     )
 
 
+def deregister_table_from_cdc(
+    container: Container,
+    port: int,
+    schema: str,
+    table: str,
+) -> None:
+    source_table = f"{schema.upper()}.{table.upper()}"
+    staging_table = f"{DB2_CDC_STAGING_TABLE_PREFIX}{table.upper()}"
+    connection = None
+    cursor = None
+    try:
+        connection = db2_conn(port)
+        cursor = connection.cursor()
+        cursor.execute(
+            f"alter table {schema}.{table} data capture none"
+        )
+        connection.commit()
+        cursor.execute(
+            f"delete from {DB2_CDC_ASN_SCHEMA}.ibmsnap_pruncntl "
+            f"where source_owner = ? "
+            f"and source_table = ?",
+            (schema.upper(), table.upper()),
+        )
+        cursor.execute(
+            f"delete from {DB2_CDC_ASN_SCHEMA}.ibmsnap_register "
+            f"where source_owner = ? "
+            f"and source_table = ?",
+            (schema.upper(), table.upper()),
+        )
+        connection.commit()
+        # noinspection PyBroadException
+        try:
+            cursor.execute(
+                f"drop table {DB2_CDC_ASN_SCHEMA}.{staging_table}"
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if connection is not None:
+            connection.close()
+
+    reinit_cdc_db2_asncap(container)
+
+    logger.info(
+        f"Deregistration of {source_table} from data capture completed"
+    )
+
+
+def reregister_table_for_cdc(
+    container: Container,
+    port: int,
+    schema: str,
+    table: str,
+    wait: bool = True,
+) -> None:
+    source_table = f"{schema.upper()}.{table.upper()}"
+    staging_table = f"{DB2_CDC_STAGING_TABLE_PREFIX}{table.upper()}"
+    register_script = f"{DB2_CDC_REGISTER_SCRIPT}_{table.lower()}_rereg"
+
+    connection = None
+    cursor = None
+    try:
+        connection = db2_conn(port)
+        cursor = connection.cursor()
+        cursor.execute(
+            f"alter table {schema}.{table} data capture changes"
+        )
+        connection.commit()
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if connection is not None:
+            connection.close()
+
+    logger.info(f"Re-enabled data capture for {source_table}")
+
+    db2_exec(
+        container,
+        f'cd "$HOME" && '
+        f"rm -f {register_script.upper()} && "
+        f"printf "
+        f"'"
+        f"set output capture script {register_script}\\n"
+        f"set server capture to db {DB2_CDC_DATABASE}\\n"
+        f"set capture schema source {DB2_CDC_ASN_SCHEMA}\\n"
+        f"create registration ({source_table}) "
+        f"differential refresh "
+        f"stage {DB2_CDC_ASN_SCHEMA}.{staging_table} "
+        f"cols all "
+        f"image both "
+        f"prefix {DB2_CDC_OLD_VALUES_PREFIX} "
+        f"options "
+        f"capture all\\n"
+        f"quit\\n"
+        f"' "
+        f"| asnclp && "
+        f"db2 connect to {DB2_CDC_DATABASE} && "
+        f"db2 -tvf {register_script.upper()} && "
+        f"db2 terminate",
+    )
+    logger.info(f"Re-registration of {source_table} for data capture finished")
+
+    @retry(stop=stop_after_attempt(8), wait=wait_incrementing(start=0, increment=0))
+    def insert_pruncntl_and_signal():
+        i_cursor = None
+        i_connection = None
+        i_map_id = str(random.randint(1, 2**31 - 1))
+        try:
+            i_connection = db2_conn(port)
+            i_cursor = i_connection.cursor()
+            i_cursor.execute(
+                f"insert into {DB2_CDC_ASN_SCHEMA}.ibmsnap_pruncntl "
+                f"("
+                f"target_server, "
+                f"target_owner, "
+                f"target_table, "
+                f"source_owner, "
+                f"source_table, "
+                f"source_view_qual, "
+                f"apply_qual, "
+                f"set_name, "
+                f"cntl_server, "
+                f"target_structure, "
+                f"phys_change_owner, "
+                f"phys_change_table, "
+                f"map_id"
+                f") "
+                f"values ("
+                f"'{DB2_CDC_DATABASE}', "
+                f"'{DB2_CDC_ASN_SCHEMA}', "
+                f"'{staging_table}', "
+                f"?, "
+                f"?, "
+                f"0, "
+                f"'TDQUAL', "
+                f"'TDSET', "
+                f"'{DB2_CDC_DATABASE}', "
+                f"1, "
+                f"'{DB2_CDC_ASN_SCHEMA}', "
+                f"'{staging_table}', "
+                f"?"
+                f")",
+                (schema.upper(), table.upper(), i_map_id),
+            )
+            i_cursor.execute(
+                f"insert into {DB2_CDC_ASN_SCHEMA}.ibmsnap_signal "
+                f"("
+                f"signal_type, "
+                f"signal_subtype, "
+                f"signal_input_in, "
+                f"signal_state"
+                f") "
+                f"values "
+                f"("
+                f"'CMD', "
+                f"'CAPSTART', "
+                f"?, "
+                f"'P'"
+                f")",
+                (i_map_id,),
+            )
+            i_connection.commit()
+        except Exception:
+            if i_connection is not None:
+                i_connection.rollback()
+            raise
+        finally:
+            if i_cursor is not None:
+                i_cursor.close()
+            if i_connection is not None:
+                i_connection.close()
+        return i_map_id
+
+    map_id = insert_pruncntl_and_signal()
+    logger.info(f"CAPSTART signal inserted for {source_table} (map_id={map_id})")
+
+    @retry(
+        stop=stop_after_attempt(CONTAINER_MAXIMUM_RETRY_COUNT),
+        wait=wait_incrementing(start=3, increment=1),
+        reraise=True,
+    )
+    def wait_for_signal_consumed() -> None:
+        w_connection = None
+        w_cursor = None
+        try:
+            w_connection = db2_conn(port)
+            w_cursor = w_connection.cursor()
+            w_cursor.execute(
+                f"select signal_state "
+                f"from {DB2_CDC_ASN_SCHEMA}.ibmsnap_signal "
+                f"where signal_type = 'CMD' "
+                f"and signal_subtype = 'CAPSTART' "
+                f"and signal_input_in = ? "
+                f"order by signal_time desc "
+                f"fetch first 1 row only",
+                (map_id,),
+            )
+            row = w_cursor.fetchone()
+            if not row:
+                return
+            state = row[0].strip()
+            if state == "C":
+                return
+            raise RuntimeError(
+                f"CAPSTART signal not yet processed (state='{state}')"
+            )
+        finally:
+            if w_cursor is not None:
+                w_cursor.close()
+            if w_connection is not None:
+                w_connection.close()
+
+    @retry(
+        stop=stop_after_attempt(CONTAINER_MAXIMUM_RETRY_COUNT),
+        wait=wait_incrementing(start=1, increment=1),
+        reraise=True,
+    )
+    def wait_for_registration_active() -> None:
+        w_connection = None
+        w_cursor = None
+        try:
+            w_connection = db2_conn(port)
+            w_cursor = w_connection.cursor()
+            w_cursor.execute(
+                f"select state "
+                f"from {DB2_CDC_ASN_SCHEMA}.ibmsnap_register "
+                f"where source_owner = ? "
+                f"and source_table = ?",
+                (schema.upper(), table.upper()),
+            )
+            row = w_cursor.fetchone()
+            if not row:
+                raise RuntimeError(
+                    f"Registration for {source_table} not found in "
+                    f"{DB2_CDC_ASN_SCHEMA}.ibmsnap_register"
+                )
+            state = row[0].strip()
+            if state.upper() != "A":
+                raise RuntimeError(
+                    f"Registration for {source_table} is not active "
+                    f"(state='{state}')"
+                )
+        finally:
+            if w_cursor is not None:
+                w_cursor.close()
+            if w_connection is not None:
+                w_connection.close()
+
+    if wait:
+        wait_for_signal_consumed()
+        logger.info(
+            f"CAPSTART signal for {source_table} consumed by asncap "
+            f"(map_id={map_id})"
+        )
+
+        wait_for_registration_active()
+        logger.info(f"Re-registration for {source_table} is active")
+
+    logger.info(
+        f"Re-registration of {source_table} for data capture completed successfully"
+    )
+
+
 def setup_cdc_db2_signal(container: Container, port: int) -> str:
     table_suffix = "".join(random.choices(string.ascii_uppercase + string.digits, k=16))
     table_name = f"{DB2_CDC_SIGNAL_TABLE}_{table_suffix}"

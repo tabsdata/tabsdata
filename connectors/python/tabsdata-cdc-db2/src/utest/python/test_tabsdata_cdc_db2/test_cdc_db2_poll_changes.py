@@ -14,12 +14,14 @@ from tabsdata._credentials import UserPasswordCredentials
 from tabsdata.connector.cdc.common._model import TableObject
 from tabsdata.connector.cdc.db2._connection import Db2CdcConn
 from tabsdata.connector.cdc.db2._connector import Db2CdcTrigger
-from test_tabsdata_cdc_common.common.basic import (
-    CDC_FORMAT_PARAMS,
+from test_tabsdata_cdc_common.common.shared import (
     TRIGGER_END_MINUTES,
-    run_end_to_end_format_test,
     run_end_to_end_test,
     run_poll_changes_test,
+)
+from test_tabsdata_cdc_common.common.format import (
+    CDC_FORMAT_PARAMS,
+    run_end_to_end_format_test,
 )
 from test_tabsdata_cdc_db2.common.fixtures.docker import DB2_CDC_STAGING_TABLE_PREFIX
 from test_tabsdata_cdc_db2.common.sql import Db2CdcSampler

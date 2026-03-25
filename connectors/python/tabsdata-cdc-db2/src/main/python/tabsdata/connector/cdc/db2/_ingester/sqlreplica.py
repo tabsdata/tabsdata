@@ -14,6 +14,7 @@ import sqlalchemy as sa
 from sqlalchemy import text
 from sqlalchemy.sql.elements import quoted_name
 
+from tabsdata.connector.cdc.common._column import TrackedColumn
 from tabsdata.connector.cdc.common._ingester import (
     CdcIngester,
 )
@@ -22,7 +23,6 @@ from tabsdata.connector.cdc.common._model import (
     CdcDataChange,
     CdcOffset,
     TableObject,
-    TrackedColumn,
     TrackedTable,
 )
 from tabsdata.connector.cdc.common.constants import (
@@ -31,11 +31,11 @@ from tabsdata.connector.cdc.common.constants import (
     CdcOperation,
 )
 from tabsdata.connector.cdc.common.typing import (
-    CdcFormat,
     QualifiedTablesSpec,
     TimestampPosition,
 )
 from tabsdata.connector.cdc.db2._connector import Db2CdcConn
+from tabsdata.connector.cdc.db2._matching import match_cd_columns
 from tabsdata.connector.cdc.db2.typing import (
     CommitSeqPosition,
     Db2CdcStartFromSpec,
@@ -80,14 +80,12 @@ IBMSNAP_OPERATION = SystemColumn("IBMSNAP_OPERATION")
 IBMSNAP_COMMITSEQ = SystemColumn("IBMSNAP_COMMITSEQ")
 IBMSNAP_INTENTSEQ = SystemColumn("IBMSNAP_INTENTSEQ")
 IBMSNAP_LOGMARKER = SystemColumn("IBMSNAP_LOGMARKER")
-CD_NEW_SYNCHPOINT = SystemColumn("CD_NEW_SYNCHPOINT")
 
 SYSTEM_COLUMNS = [
     IBMSNAP_OPERATION,
     IBMSNAP_COMMITSEQ,
     IBMSNAP_INTENTSEQ,
     IBMSNAP_LOGMARKER,
-    CD_NEW_SYNCHPOINT,
 ]
 
 COMMITSEQ_ORIGIN = b"\x00" * 16
@@ -152,6 +150,11 @@ class SqlReplicationIngester(CdcIngester):
         self._offset: CommitSeqOffset | None = CommitSeqOffset.download(offset)
         self._mark: CommitSeqOffset | None = self._offset.copy() if offset else None
         self._base_offset: CommitSeqOffset | None = None
+        self._before_img_prefixes: dict[str, str | None] = {}
+
+    @property
+    def ingester_type(self) -> str:
+        return "sqlreplica"
 
     @property
     def conn(self) -> Db2CdcConn:
@@ -233,181 +236,179 @@ class SqlReplicationIngester(CdcIngester):
         self._mark = CommitSeqOffset(commits=commits)
         self._base_offset = self._mark.copy()
 
-    # noinspection DuplicatedCode
-    def collect_tables(
+    def gather_table_identity(
         self,
-        session: Any,
-        cdc_format: CdcFormat = CdcFormat(),
-    ) -> dict[str, TrackedTable]:
-        qualified_tables = self._tables
-        if isinstance(qualified_tables, str):
-            qualified_tables = [qualified_tables]
+        tablespec: str,
+        inspector: sa.engine.reflection.Inspector,
+    ) -> TrackedTable:
+        sa_dialect = inspector.bind.dialect
 
-        inspector: sa.engine.reflection.Inspector = sa.inspect(session)
-        sa_dialect: sa.engine.interfaces.Dialect = inspector.bind.dialect
+        try:
+            cd_schema, cd_table = self.dialect.parse_qualified_table(tablespec)
+        except ValueError as error:
+            raise CdcError(
+                ErrorCode.CDC1,
+                tablespec,
+                error,
+            ) from error
+
+        real_cd_schema = self.resolve_identifier(cd_schema)
+        real_cd_table = self.resolve_identifier(cd_table)
+
+        with inspector.bind.connect() as connection:
+            registration = connection.execute(
+                text(
+                    f"select "
+                    f"source_owner, "
+                    f"source_table, "
+                    f"before_img_prefix "
+                    f"from {ASN_SCHEMA}.ibmsnap_register "
+                    f"where cd_owner = :cd_owner "
+                    f"and cd_table = :cd_table"
+                ),
+                {
+                    "cd_owner": real_cd_schema,
+                    "cd_table": real_cd_table,
+                },
+            ).fetchone()
+
+        if registration is None:
+            raise CdcError(
+                ErrorCode.CDC4,
+                real_cd_schema,
+                real_cd_table,
+                ASN_SCHEMA,
+            )
+
+        source_owner = registration[0].strip()
+        source_table = registration[1].strip()
+        before_img_prefix = registration[2].strip() if registration[2] else None
+
+        normalized_source_schema = sa_dialect.normalize_name(
+            quoted_name(value=source_owner, quote=False)
+        )
+        normalized_source_table = sa_dialect.normalize_name(
+            quoted_name(value=source_table, quote=False)
+        )
+
+        if not inspector.has_table(
+            table_name=normalized_source_table,
+            schema=normalized_source_schema,
+        ):
+            raise CdcError(
+                ErrorCode.CDC2,
+                source_owner,
+                source_table,
+            )
+
+        data_table = TableObject(
+            schema=source_owner,
+            table=source_table,
+        )
+        cdc_table = TableObject(
+            schema=real_cd_schema,
+            table=real_cd_table,
+        )
+        tracked_table = TrackedTable(
+            data_table=data_table,
+            cdc_table=cdc_table,
+        )
+        self._before_img_prefixes[data_table.qualified] = before_img_prefix
+        return tracked_table
+
+    def gather_table_structure(
+        self,
+        tracked_table: TrackedTable,
+        inspector: sa.engine.reflection.Inspector,
+        before_img_prefix: str | None = None,
+    ) -> None:
+        prefix = (
+            before_img_prefix
+            or self._before_img_prefixes[tracked_table.data_table.qualified]
+        )
+        super().gather_table_structure(tracked_table, inspector, prefix)
+
+    def prepare_inspector(self, inspector: sa.engine.reflection.Inspector) -> None:
+        sa_dialect = inspector.bind.dialect
         for column in SYSTEM_COLUMNS:
             column.normalize(sa_dialect)
-        result: dict[str, TrackedTable] = {}
 
-        for qualified_table in qualified_tables:
-            try:
-                cd_schema, cd_table = self.dialect.parse_qualified_table(
-                    qualified_table
-                )
-            except ValueError as error:
-                raise CdcError(
-                    ErrorCode.CDC1,
-                    qualified_table,
-                    error,
-                ) from error
-
-            real_cd_schema = self.resolve_identifier(cd_schema)
-            real_cd_table = self.resolve_identifier(cd_table)
-
-            with session.connect() as connection:
-                registration = connection.execute(
-                    text(
-                        f"select "
-                        f"source_owner, "
-                        f"source_table, "
-                        f"before_img_prefix "
-                        f"from {ASN_SCHEMA}.ibmsnap_register "
-                        f"where cd_owner = :cd_owner "
-                        f"and cd_table = :cd_table"
-                    ),
-                    {
-                        "cd_owner": real_cd_schema,
-                        "cd_table": real_cd_table,
-                    },
-                ).fetchone()
-
-            if registration is None:
-                raise CdcError(
-                    ErrorCode.CDC4,
-                    real_cd_schema,
-                    real_cd_table,
-                    ASN_SCHEMA,
-                )
-
-            source_owner = registration[0].strip()
-            source_table = registration[1].strip()
-            before_img_prefix = registration[2].strip() if registration[2] else None
-
-            normalized_source_schema = sa_dialect.normalize_name(
-                quoted_name(
-                    value=source_owner,
-                    quote=False,
-                )
+    def extract_raw_schema(
+        self,
+        session: Any,
+        tracked: TrackedTable,
+        before_img_prefix: str | None,
+    ) -> tuple[tuple[str, str, Any], ...]:
+        inspector = sa.inspect(session)
+        sa_dialect = inspector.bind.dialect
+        normalized_schema = sa_dialect.normalize_name(
+            quoted_name(
+                tracked.cdc_table.schema,
+                quote=False,
             )
-            normalized_source_table = sa_dialect.normalize_name(
-                quoted_name(
-                    value=source_table,
-                    quote=False,
-                )
+        )
+        normalized_table = sa_dialect.normalize_name(
+            quoted_name(
+                tracked.cdc_table.table,
+                quote=False,
+            )
+        )
+        sa_columns = inspector.get_columns(
+            normalized_table,
+            schema=normalized_schema,
+        )
+
+        with inspector.bind.connect() as connection:
+            db_columns = self.dialect.get_catalog_columns(
+                connection,
+                tracked.cdc_table.schema,
+                tracked.cdc_table.table,
             )
 
-            if not inspector.has_table(
-                table_name=normalized_source_table,
-                schema=normalized_source_schema,
-            ):
-                raise CdcError(
-                    ErrorCode.CDC2,
-                    source_owner,
-                    source_table,
-                )
-
-            columns_info = inspector.get_columns(
-                table_name=normalized_source_table,
-                schema=normalized_source_schema,
+        if len(db_columns) != len(sa_columns):
+            raise CdcError(
+                ErrorCode.CDC7,
+                tracked.cdc_table.schema,
+                tracked.cdc_table.table,
+                len(db_columns),
+                len(sa_columns),
             )
-            if not columns_info:
-                raise CdcError(
-                    ErrorCode.CDC3,
-                    source_owner,
-                    source_table,
-                )
 
-            with session.connect() as connection:
-                catalog_columns = self.dialect.get_catalog_columns(
-                    connection=connection,
-                    schema=source_owner,
-                    table=source_table,
-                )
-
-            if len(catalog_columns) != len(columns_info):
-                raise CdcError(
-                    ErrorCode.CDC7,
-                    source_owner,
-                    source_table,
-                    len(catalog_columns),
-                    len(columns_info),
-                )
-
-            # Verify catalog and inspector columns match (case-insensitive).
-            for catalog_name, column_info in zip(catalog_columns, columns_info):
-                if catalog_name.upper() != column_info["name"].upper():
-                    raise CdcError(
-                        ErrorCode.CDC8,
-                        source_owner,
-                        source_table,
-                        catalog_name,
-                        column_info["name"],
-                    )
-
-            columns = []
-            for catalog_name, column_info in zip(catalog_columns, columns_info):
-                if self.dialect.is_large_column(column_info["type"]):
-                    logger.info(
-                        f"Excluding large column '{catalog_name}' "
-                        f"({type(column_info['type']).__name__}) "
-                        f"from {source_owner}.{source_table}"
-                    )
-                    continue
-                iname = (
-                    f"{before_img_prefix}{catalog_name}" if before_img_prefix else None
-                )
-                columns.append(
-                    TrackedColumn(
-                        name=catalog_name,
-                        satype=column_info["type"],
-                        oname=iname,
-                        sa_name=sa_dialect.normalize_name(name=catalog_name),
-                        sa_oname=(
-                            sa_dialect.normalize_name(name=iname) if iname else None
-                        ),
-                    )
-                )
-
-            pk_info = inspector.get_pk_constraint(
-                table_name=normalized_source_table,
-                schema=normalized_source_schema,
+        cd_columns = [
+            (
+                db_column.strip(),
+                sa_column["type"],
             )
-            inspector_pk = pk_info.get("constrained_columns", []) if pk_info else []
-            inspector_to_catalog = {
-                col_info["name"]: catalog_name
-                for col_info, catalog_name in zip(columns_info, catalog_columns)
-            }
-            pk_columns = [inspector_to_catalog.get(pk, pk) for pk in inspector_pk]
+            for db_column, sa_column in zip(db_columns, sa_columns)
+        ]
+        matched = match_cd_columns(cd_columns, before_img_prefix)
 
-            data_table = TableObject(
-                schema=source_owner,
-                table=source_table,
+        columns = []
+        for name, sa_type in matched.after_columns_list:
+            oname = matched.before_columns_map.get(name)
+            columns.append(
+                TrackedColumn(
+                    name=name,
+                    satype=sa_type,
+                    oname=oname,
+                    sa_name=sa_dialect.normalize_name(name),
+                    sa_oname=(sa_dialect.normalize_name(oname) if oname else None),
+                )
             )
-            cdc_table = TableObject(
-                schema=real_cd_schema,
-                table=real_cd_table,
-            )
-            tracked_table = TrackedTable(
-                data_table=data_table,
-                cdc_table=cdc_table,
-                columns=columns,
-                pk=pk_columns,
-                cdc_format=cdc_format,
-            )
-            result[data_table.qualified] = tracked_table
+        tracked.columns = columns
+        tracked.build_pa_dtypes()
+        tracked.pk = self.gather_table_pk(
+            inspector,
+            normalized_table,
+            normalized_schema,
+            sa_columns,
+            db_columns,
+        )
 
-        self._tracked_tables = result
-        return result
+        return tuple(
+            (name, repr(sa_type), sa_type)
+            for name, sa_type in matched.after_columns_list
+        )
 
     def base_offset(self) -> CommitSeqOffset:
         return self._base_offset
@@ -452,6 +453,7 @@ class SqlReplicationIngester(CdcIngester):
         tracked: TrackedTable,
         commitseq: bytes,
         watermark: bytes,
+        schema_version: Any = None,
     ) -> Generator[CdcDataChange, None, None]:
         column_names = [f'"{column.name}"' for column in tracked.columns]
         column_inames = [
@@ -519,6 +521,7 @@ class SqlReplicationIngester(CdcIngester):
                 offset=CommitSeqOffset(
                     commits={tracked.cdc_table.qualified: commit_seq}
                 ),
+                schema=schema_version,
             )
 
     def poll_changes(self, session: Any) -> Generator[CdcChange, None, None]:
@@ -537,11 +540,23 @@ class SqlReplicationIngester(CdcIngester):
                         watermark = watermarks.get(qualified)
                         if watermark is None or watermark <= commit:
                             continue
+
+                        before_prefix = self._before_img_prefixes[
+                            table.data_table.qualified
+                        ]
+                        raw_schema = self.extract_raw_schema(
+                            session, table, before_prefix
+                        )
+                        schema_version = self._schema_registry.register_from_log(
+                            table.data_table.qualified, raw_schema
+                        )
+
                         yield from self.query_table_changes(
                             connection=connection,
                             tracked=table,
                             commitseq=commit,
                             watermark=watermark,
+                            schema_version=schema_version,
                         )
                         self._mark.commits[qualified] = watermark
                     sleep = min(

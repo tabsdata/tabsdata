@@ -16,7 +16,7 @@ from tabsdata.connector.cdc.common._model import TableObject
 from tabsdata.connector.cdc.mysql._connection import MySQLCdcConn
 from tabsdata.connector.cdc.mysql._connector import MySQLCdcTrigger
 from tabsdata.connector.cdc.mysql.typing import GtidPosition
-from test_tabsdata_cdc_common.common.basic import TRIGGER_END_MINUTES, run_offset_resume_test
+from test_tabsdata_cdc_common.common.shared import TRIGGER_END_MINUTES, run_offset_resume_test
 from test_tabsdata_cdc_mysql.common.db import server_id
 from test_tabsdata_cdc_mysql.common.sql import MySQLCdcSampler
 

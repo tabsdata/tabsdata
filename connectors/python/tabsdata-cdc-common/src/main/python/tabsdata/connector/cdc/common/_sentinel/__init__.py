@@ -11,10 +11,7 @@ from typing import Any
 
 import orjson
 
-from tabsdata.connector.cdc.common._model import (
-    CdcDataChange,
-    TrackedTable,
-)
+from tabsdata.connector.cdc.common._model import CdcDataChange
 from tabsdata.connector.cdc.common.constants import (
     CDC_DATA_COL_NEW_PREFIX,
     CDC_DATA_COL_OLD_PREFIX,
@@ -25,6 +22,7 @@ from tabsdata.connector.cdc.common.constants import (
     CDC_META_FLAT,
     CDC_META_FMT,
     CDC_META_OP,
+    CDC_META_SCH,
     CDC_META_SQ,
     CDC_META_TX,
     DOT,
@@ -49,7 +47,6 @@ class CdcBuffer:
 
 def row_to_record(
     change: CdcDataChange,
-    tracked_table: TrackedTable,
     cdc_format: CdcFormat,
 ) -> dict[str, Any]:
     record: dict[str, Any] = {
@@ -58,28 +55,31 @@ def row_to_record(
         CDC_META_SQ: change.sequence,
         CDC_META_FMT: cdc_format.values_format,
         CDC_META_FLAT: cdc_format.flatten_values,
+        CDC_META_SCH: change.schema.hash,
     }
 
+    columns = change.schema.columns
+
     if cdc_format.flatten_values:
-        for column in tracked_table.columns:
+        for column in columns:
             record[column.name] = change.new_values.get(column.name)
     else:
         match cdc_format.values_format:
             case "columns":
-                for column in tracked_table.columns:
+                for column in columns:
                     record[f"{CDC_DATA_COL_NEW_PREFIX}{DOT}{column.name}"] = (
                         change.new_values.get(column.name)
                     )
             case "struct":
                 record[CDC_DATA_ROW_NEW] = {
                     column.name: change.new_values.get(column.name)
-                    for column in tracked_table.columns
+                    for column in columns
                 }
             case "map":
                 record[CDC_DATA_MAP_NEW] = orjson.dumps(
                     {
                         column.name: change.new_values.get(column.name)
-                        for column in tracked_table.columns
+                        for column in columns
                     },
                     default=_orjson_default,
                 ).decode()
@@ -91,21 +91,17 @@ def row_to_record(
     match cdc_format.values_format:
         case "columns":
             prefix = CDC_DATA_COL_OLD_PREFIX
-            for column in tracked_table.columns:
+            for column in columns:
                 record[f"{prefix}{DOT}{column.name}"] = change.old_values.get(
                     column.name
                 )
         case "struct":
             record[CDC_DATA_ROW_OLD] = {
-                column.name: change.old_values.get(column.name)
-                for column in tracked_table.columns
+                column.name: change.old_values.get(column.name) for column in columns
             }
         case "map":
             record[CDC_DATA_MAP_OLD] = orjson.dumps(
-                {
-                    column.name: change.old_values.get(column.name)
-                    for column in tracked_table.columns
-                },
+                {column.name: change.old_values.get(column.name) for column in columns},
                 default=_orjson_default,
             ).decode()
         case _:

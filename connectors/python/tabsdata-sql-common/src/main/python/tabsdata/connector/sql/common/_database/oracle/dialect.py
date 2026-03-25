@@ -23,6 +23,10 @@ ORACLE_LARGE_COLUMN_TYPES = LARGE_COLUMN_TYPES + (
 
 class OracleDialect(Dialect):
     @property
+    def sqlglot_dialect(self) -> str | None:
+        return "oracle"
+
+    @property
     def open_quote(self) -> str:
         return '"'
 

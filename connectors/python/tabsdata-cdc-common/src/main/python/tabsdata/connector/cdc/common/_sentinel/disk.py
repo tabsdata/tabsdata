@@ -20,12 +20,10 @@ from tabsdata._io.inputs.stage_input import (
 )
 from tabsdata._io.stage_trigger import StagedFilesSpec, StageTriggerContext
 from tabsdata._utils.id import encode_id
-from tabsdata.connector.cdc.common._model import (
-    CdcDataChange,
-    TrackedTable,
-)
+from tabsdata.connector.cdc.common._model import CdcDataChange, TrackedTable
 from tabsdata.connector.cdc.common._sentinel import CdcBuffer, row_to_record
 from tabsdata.connector.cdc.common._utils import sanitize_file_name
+from tabsdata.connector.cdc.common.typing import CdcFormat
 from tabsdata.exceptions import CdcError, ErrorCode
 
 logger = logging.getLogger(__name__)
@@ -41,6 +39,7 @@ class DiskSentinel:
         max_bytes: int | None,
         max_secs: int,
         tables: dict[str, TrackedTable],
+        cdc_format: CdcFormat,
     ):
         self._context = context
         self._landing = landing
@@ -48,6 +47,7 @@ class DiskSentinel:
         self._max_bytes = max_bytes
         self._max_secs = max_secs
         self._tables = tables
+        self._cdc_format = cdc_format
         self._files: dict[str, list[Path]] = {table: [] for table in tables}
         self._total_rows: int = 0
         self._total_bytes: int = 0
@@ -74,26 +74,49 @@ class DiskSentinel:
             if self._context.trigger_monitor():
                 self._trigger_pending = False
 
-    def process_buffers(self, buffers: dict[str, CdcBuffer]) -> None:
+    def process_buffers(
+        self,
+        buffers: dict[str, CdcBuffer],
+    ) -> None:
         for table, buffer in buffers.items():
             if len(buffer.rows) == 0:
                 continue
             self.process_buffer(table, buffer.rows)
 
-    def process_buffer(self, table: str, rows: list[CdcDataChange]) -> None:
-        tracked_table = self._tables[table]
+    def process_buffer(
+        self,
+        table: str,
+        rows: list[CdcDataChange],
+    ) -> None:
+        start = 0
+        current_hash = rows[0].schema.hash
+        for i in range(1, len(rows)):
+            row_hash = rows[i].schema.hash
+            if row_hash != current_hash:
+                self.process_section(table, rows, start, i)
+                start = i
+                current_hash = row_hash
+        self.process_section(table, rows, start, len(rows))
+
+    def process_section(
+        self,
+        table: str,
+        rows: list[CdcDataChange],
+        start: int,
+        stop: int,
+    ) -> None:
+        pa_schema = rows[start].schema.pa_schema
         records = [
             row_to_record(
-                row,
-                tracked_table,
-                tracked_table.cdc_format,
+                rows[i],
+                self._cdc_format,
             )
-            for row in rows
+            for i in range(start, stop)
         ]
         # noinspection PyArgumentList
         pa_table = pa.Table.from_pylist(
             mapping=records,
-            schema=tracked_table.pa_schema,
+            schema=pa_schema,
         )
 
         _, file_suffix = encode_id()
@@ -103,7 +126,7 @@ class DiskSentinel:
         pq.write_table(pa_table, file_path)
 
         file_bytes = file_path.stat().st_size
-        file_rows = len(rows)
+        file_rows = stop - start
 
         self._files[table].append(file_path)
         self._total_rows += file_rows

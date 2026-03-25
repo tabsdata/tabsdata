@@ -143,16 +143,25 @@ class PostgresCdcTrigger(CdcTrigger):
         self._replication_slot = replication_slot
         self._publication_name = publication_name
         self._slot_behavior = slot_behavior
+        self._setup()
+
+    def _setup(self):
+        super()._setup()
         self._ingester = Wal2JsonIngester(
-            conn=conn,
-            tables=tables,
-            start_from=start_from,
-            blocking_timeout_seconds=blocking_timeout_seconds,
-            replication_slot=replication_slot,
-            publication_name=publication_name,
-            replication_slot_behavior=slot_behavior,
+            conn=self._conn,
+            tables=self._tables,
+            start_from=self._start_from,
+            blocking_timeout_seconds=self._blocking_timeout_seconds,
+            replication_slot=self._replication_slot,
+            publication_name=self._publication_name,
+            replication_slot_behavior=self._slot_behavior,
             wal2json_format_version=DEFAULT_WAL2JSON_FORMAT_VERSION,
         )
+
+    def __getstate__(self):
+        state = super().__getstate__()
+        state.pop("_ingester", None)
+        return state
 
     @property
     def start_from(self) -> PostgresCdcStartFromSpec | None:
@@ -201,6 +210,13 @@ class PostgresCdcTrigger(CdcTrigger):
         cdc_format: CdcFormat = CdcFormat(),
     ) -> dict[str, TrackedTable]:
         return self._ingester.collect_tables(session, cdc_format)
+
+    def harvest_tables(
+        self,
+        session: Any,
+        cdc_format: CdcFormat = CdcFormat(),
+    ) -> dict[str, TrackedTable]:
+        return self._ingester.harvest_tables(session, cdc_format)
 
     def _base_offset(self) -> CdcOffset:
         return self._ingester.base_offset()

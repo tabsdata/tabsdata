@@ -23,6 +23,10 @@ MSSQL_LARGE_COLUMN_TYPES = LARGE_COLUMN_TYPES + (
 
 class MSSQLDialect(Dialect):
     @property
+    def sqlglot_dialect(self) -> str | None:
+        return "tsql"
+
+    @property
     def open_quote(self) -> str:
         return "["
 

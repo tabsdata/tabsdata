@@ -105,7 +105,18 @@ class CdcTrigger(StageTrigger):
         self._trigger_max_bytes = trigger_max_bytes
         self._trigger_max_secs = trigger_max_secs
         self._poll_interval_seconds = poll_interval_seconds
+
+    def _setup(self):
         self._buffer_sentinel: BufferSentinel | None = None
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state.pop("_buffer_sentinel", None)
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self._setup()
 
     @property
     def conn(self) -> Conn:
@@ -206,6 +217,13 @@ class CdcTrigger(StageTrigger):
     ) -> dict[str, TrackedTable]: ...
 
     @abstractmethod
+    def harvest_tables(
+        self,
+        session: Any,
+        cdc_format: CdcFormat = CdcFormat(),
+    ) -> dict[str, TrackedTable]: ...
+
+    @abstractmethod
     def _base_offset(self) -> CdcOffset: ...
 
     @abstractmethod
@@ -256,7 +274,7 @@ class CdcTrigger(StageTrigger):
         try:
             stop_signal = self._setup_signal_handlers()
             database_connection = self._open_session()
-            tracked_tables = self.collect_tables(
+            tracked_tables = self.harvest_tables(
                 session=database_connection,
                 cdc_format=self._cdc_format,
             )
@@ -267,6 +285,7 @@ class CdcTrigger(StageTrigger):
                 max_bytes=self._trigger_max_bytes,
                 max_secs=self._trigger_max_secs,
                 tables=tracked_tables,
+                cdc_format=self._cdc_format,
             )
             buffer_sentinel = BufferSentinel(
                 disk_sentinel=disk_sentinel,

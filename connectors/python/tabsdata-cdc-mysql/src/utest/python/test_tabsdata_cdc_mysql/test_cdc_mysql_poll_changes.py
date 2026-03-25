@@ -14,12 +14,14 @@ from tabsdata._credentials import UserPasswordCredentials
 from tabsdata.connector.cdc.common._model import TableObject
 from tabsdata.connector.cdc.mysql._connection import MySQLCdcConn
 from tabsdata.connector.cdc.mysql._connector import MySQLCdcTrigger
-from test_tabsdata_cdc_common.common.basic import (
-    CDC_FORMAT_PARAMS,
+from test_tabsdata_cdc_common.common.shared import (
     TRIGGER_END_MINUTES,
-    run_end_to_end_format_test,
     run_end_to_end_test,
     run_poll_changes_test,
+)
+from test_tabsdata_cdc_common.common.format import (
+    CDC_FORMAT_PARAMS,
+    run_end_to_end_format_test,
 )
 from test_tabsdata_cdc_mysql.common.db import server_id
 from test_tabsdata_cdc_mysql.common.sql import MySQLCdcSampler

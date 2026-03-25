@@ -14,10 +14,10 @@ from tabsdata._credentials import UserPasswordCredentials
 from tabsdata.connector.cdc.common._model import TableObject
 from tabsdata.connector.cdc.mysql._connection import MySQLCdcConn
 from tabsdata.connector.cdc.mysql._connector import MySQLCdcTrigger
-from test_tabsdata_cdc_common.common.basic import (
-    TRIGGER_END_MINUTES,
+from test_tabsdata_cdc_common.common.shared import TRIGGER_END_MINUTES
+from test_tabsdata_cdc_common.common.continuous import (
     continuous_dml_params,
-    run_continuous_dml_test
+    run_continuous_dml_test,
 )
 from test_tabsdata_cdc_mysql.common.db import server_id
 from test_tabsdata_cdc_mysql.common.sql import MySQLCdcSampler
