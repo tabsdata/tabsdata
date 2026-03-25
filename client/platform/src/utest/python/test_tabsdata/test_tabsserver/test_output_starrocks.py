@@ -7,7 +7,6 @@ import os
 import uuid
 
 import polars as pl
-import pymysql
 import pytest
 
 import tabsdata as td
@@ -56,12 +55,25 @@ def _build_conn(starrocks_config, s3_config, uid: str) -> td.StarRocksConn:
 
 def _query_table(starrocks_client, table_name: str) -> pl.DataFrame:
     """Query a StarRocks table and return a polars DataFrame."""
-    with starrocks_client.cursor(pymysql.cursors.DictCursor) as cursor:
+    with starrocks_client.cursor() as cursor:
         cursor.execute(f"SELECT * FROM `{table_name}`")
         rows = cursor.fetchall()
+        col_names = [desc[0] for desc in cursor.description]
     if not rows:
         return pl.DataFrame()
-    return pl.from_dicts(rows)
+    # mysql-connector-python may return mixed int/float for DOUBLE columns
+    # (whole numbers as int, fractional as float). Convert all values to
+    # float where any value in the column is a float, to avoid Polars
+    # mixed-type errors.
+    columns: dict[str, list] = {name: [] for name in col_names}
+    for row in rows:
+        for name, val in zip(col_names, row):
+            columns[name].append(val)
+    for name, vals in columns.items():
+        has_float = any(isinstance(v, float) for v in vals if v is not None)
+        if has_float:
+            columns[name] = [float(v) if v is not None else None for v in vals]
+    return pl.DataFrame(columns)
 
 
 def _table_exists(starrocks_client, database: str, table_name: str) -> bool:

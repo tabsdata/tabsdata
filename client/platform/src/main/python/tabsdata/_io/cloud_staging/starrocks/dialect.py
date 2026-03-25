@@ -279,7 +279,8 @@ def _normalize_column_type(col_type: str) -> str:
 class StarRocksDialect(Dialect):
     """Dialect implementation for StarRocks.
 
-    Uses ``pymysql`` (MySQL protocol) for DDL/DML and delegates bulk reads to
+    Uses ``mysql-connector-python`` (MySQL protocol) for DDL/DML and delegates bulk
+    reads to
     StarRocks' ``FILES()`` table function via
     :class:`StarRocksCloudStorage.starrocks_files_function`.
 
@@ -310,11 +311,11 @@ class StarRocksDialect(Dialect):
         cloud_storage: StarRocksCloudStorage,
     ) -> None:
         try:
-            import pymysql  # noqa: F401
+            import mysql.connector  # noqa: F401
         except ImportError as e:
             raise ImportError(
-                "pymysql is required for the StarRocks dialect. "
-                "Install it with: pip install pymysql"
+                "mysql-connector-python is required for the StarRocks dialect. "
+                "Install it with: pip install mysql-connector-python"
             ) from e
 
         self._config = config
@@ -325,9 +326,9 @@ class StarRocksDialect(Dialect):
     # ── Connection management ────────────────────────────────────────────────────────
 
     def _get_connection(self):
-        import pymysql
+        import mysql.connector
 
-        if self._conn is None or not self._conn.open:
+        if self._conn is None or not self._conn.is_connected():
             username = (
                 self._config.credentials.user.secret_value
                 if self._config.credentials is not None
@@ -338,7 +339,7 @@ class StarRocksDialect(Dialect):
                 if self._config.credentials is not None
                 else ""
             )
-            self._conn = pymysql.connect(
+            self._conn = mysql.connector.connect(
                 host=self._config.host,
                 port=self._config.port,
                 database=self._config.database,
@@ -358,7 +359,7 @@ class StarRocksDialect(Dialect):
     def _command(self, sql: str, params=None):
         """Execute a statement that does not return rows."""
         conn = self._get_connection()
-        with conn.cursor() as cursor:
+        with conn.cursor(buffered=True) as cursor:
             cursor.execute(sql, params)
 
     # ── Capability flags ──────────────────────────────────────────────────────────────
