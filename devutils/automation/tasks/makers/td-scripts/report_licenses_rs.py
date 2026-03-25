@@ -275,4 +275,4 @@ content += tabulate(data, headers=headers, tablefmt="fancy_grid")
 with open(TARGET_FILE, "w", encoding="utf-8") as f:
     f.write(content + "\n")
 
-logger.debug(content)
+# logger.debug(content)
