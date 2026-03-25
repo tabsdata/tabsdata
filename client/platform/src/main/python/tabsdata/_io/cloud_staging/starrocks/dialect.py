@@ -82,16 +82,28 @@ def _arrow_type_to_starrocks(arrow_type: pa.DataType) -> str:
 
 def schema_to_starrocks_columns(
     arrow_schema: pa.Schema,
+    column_nulls: dict[str, bool | None] | None = None,
 ) -> list[tuple[str, str, bool]]:
     """Convert a PyArrow schema to ``(column_name, starrocks_type, nullable)`` triples.
 
     StarRocks expresses nullability via ``NULL``/``NOT NULL`` in DDL — there is
     no ``Nullable()`` wrapper like ClickHouse.
+
+    Args:
+        arrow_schema: The PyArrow schema to convert.
+        column_nulls: Per-column nullability from Parquet file statistics.
+            When provided, overrides Arrow's schema-level nullable flag.
+            ``True`` or ``None`` (stats missing) → nullable,
+            ``False`` → NOT NULL.
     """
     columns = []
     for field in arrow_schema:
         sr_type = _arrow_type_to_starrocks(field.type)
-        columns.append((field.name, sr_type, field.nullable))
+        if column_nulls is not None and field.name in column_nulls:
+            nullable = column_nulls[field.name] is not False
+        else:
+            nullable = field.nullable
+        columns.append((field.name, sr_type, nullable))
     return columns
 
 
@@ -352,7 +364,7 @@ class StarRocksDialect(Dialect):
     # ── Capability flags ──────────────────────────────────────────────────────────────
 
     def supports_tabsdata_schema_evolution(self) -> bool:
-        return False
+        return True
 
     def supports_native_schema_evolution(self) -> bool:
         return False
@@ -406,7 +418,7 @@ class StarRocksDialect(Dialect):
         arrow_schema: schema,
         column_nulls: dict[str, bool | None] | None = None,
     ) -> None:
-        sr_columns = schema_to_starrocks_columns(arrow_schema)
+        sr_columns = schema_to_starrocks_columns(arrow_schema, column_nulls)
         col_defs = ",\n    ".join(
             f"`{name}` {typ}{' NULL' if nullable else ' NOT NULL'}"
             for name, typ, nullable in sr_columns
@@ -447,13 +459,107 @@ class StarRocksDialect(Dialect):
 
     def get_type_widening_map(self) -> dict[str, set[str]]:
         """Return the type-widening map for StarRocks integer and float types."""
-        return {
-            "SMALLINT": {"TINYINT"},
-            "INT": {"TINYINT", "SMALLINT"},
-            "BIGINT": {"TINYINT", "SMALLINT", "INT"},
-            "LARGEINT": {"TINYINT", "SMALLINT", "INT", "BIGINT"},
-            "DOUBLE": {"FLOAT"},
-        }
+        from tabsdata.connector.schema.evolution.renderers.starrocks import (
+            STARROCKS_TYPE_WIDENING_MAP,
+        )
+
+        return STARROCKS_TYPE_WIDENING_MAP
+
+    def get_evolution_table_schema(self, table_name: str):
+        """Return the current table schema as a TableSchema.
+
+        Queries information_schema.COLUMNS for column names, types,
+        nullability, and defaults.
+        """
+        from tabsdata.connector.schema.evolution.renderers.starrocks import (
+            table_schema_from_information_schema,
+        )
+
+        rows = self._execute(
+            "SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT "
+            "FROM information_schema.COLUMNS "
+            "WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s "
+            "ORDER BY ORDINAL_POSITION",
+            (self._db, table_name),
+        )
+        fq_name = f"`{self._db}`.`{table_name}`"
+        return table_schema_from_information_schema(fq_name, rows)
+
+    def compute_evolution_delta(
+        self,
+        load_mode: LoadMode,
+        table_name: str,
+        new_arrow_schema,
+        column_nulls: dict[str, bool | None] | None = None,
+    ):
+        """Compute a SchemaDelta between the current StarRocks table and a new
+        Arrow schema."""
+        from tabsdata.connector.schema.evolution.core import (
+            compute_delta,
+            validate_delta,
+        )
+        from tabsdata.connector.schema.evolution.models import ColumnDef
+        from tabsdata.connector.schema.evolution.renderers.starrocks import (
+            STARROCKS_TYPE_WIDENING_MAP,
+            table_schema_from_arrow,
+        )
+
+        current = self.get_evolution_table_schema(table_name)
+        desired = table_schema_from_arrow(
+            current.table_name, new_arrow_schema, column_nulls
+        )
+
+        # Reconcile nullability (same logic as ClickHouse):
+        # 1. Existing nullable columns stay nullable (never tighten)
+        # 2. New columns are always nullable (existing rows need NULL)
+        current_cols = {c.name: c for c in current.columns}
+        desired_columns = []
+        for col in desired.columns:
+            if col.name in current_cols:
+                existing = current_cols[col.name]
+                if existing.nullable and not col.nullable:
+                    col = ColumnDef(
+                        name=col.name,
+                        type=col.type,
+                        nullable=True,
+                        default=col.default,
+                    )
+            else:
+                if not col.nullable:
+                    col = ColumnDef(
+                        name=col.name,
+                        type=col.type,
+                        nullable=True,
+                        default=col.default,
+                    )
+            desired_columns.append(col)
+        desired = type(desired)(table_name=desired.table_name, columns=desired_columns)
+
+        delta = compute_delta(current, desired, STARROCKS_TYPE_WIDENING_MAP)
+        validate_delta(delta, strict=True)
+        return delta
+
+    def apply_schema_delta(self, load_mode: LoadMode, table_name: str, delta) -> None:
+        """Apply a SchemaDelta by rendering and executing StarRocks ALTER statements.
+
+        After each ALTER, polls SHOW ALTER TABLE COLUMN for completion since
+        StarRocks schema changes are asynchronous.
+        """
+        from tabsdata.connector.schema.evolution.renderers.starrocks import (
+            render_starrocks_sql,
+        )
+
+        stmts = render_starrocks_sql(delta)
+        for stmt in stmts:
+            logger.info("Schema evolution on '%s': %s", table_name, stmt)
+            self._command(stmt)
+            # Give StarRocks a moment to register the ALTER before polling,
+            # since fast_schema_evolution may complete some ALTERs inline
+            # without them appearing in SHOW ALTER TABLE COLUMN.
+            import time
+
+            time.sleep(self.ALTER_POLL_INTERVAL)
+            self._wait_for_alter(table_name)
 
     def _wait_for_alter(self, table_name: str) -> None:
         """Poll ``SHOW ALTER TABLE COLUMN`` until the latest operation completes.
