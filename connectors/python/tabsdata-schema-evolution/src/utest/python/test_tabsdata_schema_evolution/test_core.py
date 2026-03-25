@@ -6,8 +6,8 @@ from __future__ import annotations
 
 import pytest
 
-from tabsdata.connector.schema.evolution.core import compute_delta, validate_delta
-from tabsdata.connector.schema.evolution.models import (
+from tabsdata.connector.schema.evolution.iceberg.core import compute_delta, validate_delta
+from tabsdata.connector.schema.evolution.iceberg.models import (
     Action,
     ColumnDef,
     SchemaDelta,

@@ -1013,9 +1013,9 @@ def test_schema_evolution_add_nullable_column(
     starrocks_config, starrocks_client, s3_config
 ):
     """Add a nullable column to an existing table."""
-    from tabsdata.connector.schema.evolution.core import compute_delta
-    from tabsdata.connector.schema.evolution.models import ColumnDef, TableSchema
-    from tabsdata.connector.schema.evolution.renderers.starrocks import (
+    from tabsdata.connector.schema.evolution.iceberg.core import compute_delta
+    from tabsdata.connector.schema.evolution.iceberg.models import ColumnDef, TableSchema
+    from tabsdata.connector.schema.evolution.iceberg.renderers.starrocks import (
         STARROCKS_TYPE_WIDENING_MAP,
     )
 
@@ -1062,9 +1062,9 @@ def test_schema_evolution_drop_column(
     starrocks_config, starrocks_client, s3_config
 ):
     """Drop a column from an existing table."""
-    from tabsdata.connector.schema.evolution.core import compute_delta
-    from tabsdata.connector.schema.evolution.models import ColumnDef, TableSchema
-    from tabsdata.connector.schema.evolution.renderers.starrocks import (
+    from tabsdata.connector.schema.evolution.iceberg.core import compute_delta
+    from tabsdata.connector.schema.evolution.iceberg.models import ColumnDef, TableSchema
+    from tabsdata.connector.schema.evolution.iceberg.renderers.starrocks import (
         STARROCKS_TYPE_WIDENING_MAP,
     )
 
@@ -1107,9 +1107,9 @@ def test_schema_evolution_widen_type(
     starrocks_config, starrocks_client, s3_config
 ):
     """Widen INT -> BIGINT and FLOAT -> DOUBLE."""
-    from tabsdata.connector.schema.evolution.core import compute_delta, validate_delta
-    from tabsdata.connector.schema.evolution.models import ColumnDef, TableSchema
-    from tabsdata.connector.schema.evolution.renderers.starrocks import (
+    from tabsdata.connector.schema.evolution.iceberg.core import compute_delta, validate_delta
+    from tabsdata.connector.schema.evolution.iceberg.models import ColumnDef, TableSchema
+    from tabsdata.connector.schema.evolution.iceberg.renderers.starrocks import (
         STARROCKS_TYPE_WIDENING_MAP,
     )
 
@@ -1158,9 +1158,9 @@ def test_schema_evolution_set_nullable(
     starrocks_config, starrocks_client, s3_config
 ):
     """Make a NOT NULL column nullable."""
-    from tabsdata.connector.schema.evolution.core import compute_delta
-    from tabsdata.connector.schema.evolution.models import ColumnDef, TableSchema
-    from tabsdata.connector.schema.evolution.renderers.starrocks import (
+    from tabsdata.connector.schema.evolution.iceberg.core import compute_delta
+    from tabsdata.connector.schema.evolution.iceberg.models import ColumnDef, TableSchema
+    from tabsdata.connector.schema.evolution.iceberg.renderers.starrocks import (
         STARROCKS_TYPE_WIDENING_MAP,
     )
 
@@ -1206,9 +1206,9 @@ def test_schema_evolution_combined(
     starrocks_config, starrocks_client, s3_config
 ):
     """Combined evolution: add column, drop column, widen type, set nullable."""
-    from tabsdata.connector.schema.evolution.core import compute_delta, validate_delta
-    from tabsdata.connector.schema.evolution.models import ColumnDef, TableSchema
-    from tabsdata.connector.schema.evolution.renderers.starrocks import (
+    from tabsdata.connector.schema.evolution.iceberg.core import compute_delta, validate_delta
+    from tabsdata.connector.schema.evolution.iceberg.models import ColumnDef, TableSchema
+    from tabsdata.connector.schema.evolution.iceberg.renderers.starrocks import (
         STARROCKS_TYPE_WIDENING_MAP,
     )
 
@@ -1265,8 +1265,8 @@ def test_schema_evolution_no_changes(
     starrocks_config, starrocks_client, s3_config
 ):
     """When schemas match, no ALTER statements should be executed."""
-    from tabsdata.connector.schema.evolution.core import compute_delta
-    from tabsdata.connector.schema.evolution.renderers.starrocks import (
+    from tabsdata.connector.schema.evolution.iceberg.core import compute_delta
+    from tabsdata.connector.schema.evolution.iceberg.renderers.starrocks import (
         STARROCKS_TYPE_WIDENING_MAP,
     )
 

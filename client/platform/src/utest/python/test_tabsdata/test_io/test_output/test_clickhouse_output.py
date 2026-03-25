@@ -296,15 +296,15 @@ class TestSchemaEvolutionSafe:
 
     @staticmethod
     def _evolve(current_cols, desired_cols, table="`db`.`t`"):
-        from tabsdata.connector.schema.evolution.core import (
+        from tabsdata.connector.schema.evolution.iceberg.core import (
             compute_delta,
             validate_delta,
         )
-        from tabsdata.connector.schema.evolution.models import (
+        from tabsdata.connector.schema.evolution.iceberg.models import (
             ColumnDef,
             TableSchema,
         )
-        from tabsdata.connector.schema.evolution.renderers.clickhouse import (
+        from tabsdata.connector.schema.evolution.iceberg.renderers.clickhouse import (
             CLICKHOUSE_TYPE_WIDENING_MAP,
             render_clickhouse_sql,
         )
@@ -441,12 +441,12 @@ class TestSchemaEvolutionSafe:
         assert delta.changes == []
 
     def test_create_table_from_scratch(self):
-        from tabsdata.connector.schema.evolution.core import compute_delta
-        from tabsdata.connector.schema.evolution.models import (
+        from tabsdata.connector.schema.evolution.iceberg.core import compute_delta
+        from tabsdata.connector.schema.evolution.iceberg.models import (
             ColumnDef,
             TableSchema,
         )
-        from tabsdata.connector.schema.evolution.renderers.clickhouse import (
+        from tabsdata.connector.schema.evolution.iceberg.renderers.clickhouse import (
             CLICKHOUSE_TYPE_WIDENING_MAP,
             render_clickhouse_sql,
         )
@@ -497,15 +497,15 @@ class TestSchemaEvolutionUnsafe:
 
     @staticmethod
     def _evolve(current_cols, desired_cols, table="`db`.`t`"):
-        from tabsdata.connector.schema.evolution.core import (
+        from tabsdata.connector.schema.evolution.iceberg.core import (
             compute_delta,
             validate_delta,
         )
-        from tabsdata.connector.schema.evolution.models import (
+        from tabsdata.connector.schema.evolution.iceberg.models import (
             ColumnDef,
             TableSchema,
         )
-        from tabsdata.connector.schema.evolution.renderers.clickhouse import (
+        from tabsdata.connector.schema.evolution.iceberg.renderers.clickhouse import (
             CLICKHOUSE_TYPE_WIDENING_MAP,
             render_clickhouse_sql,
         )
@@ -575,16 +575,16 @@ class TestSchemaEvolutionUnsafe:
 
     def test_strict_validation_raises(self):
         """strict=True raises UnsafeSchemaChangeError on any unsafe change."""
-        from tabsdata.connector.schema.evolution.core import (
+        from tabsdata.connector.schema.evolution.iceberg.core import (
             compute_delta,
             validate_delta,
         )
-        from tabsdata.connector.schema.evolution.models import (
+        from tabsdata.connector.schema.evolution.iceberg.models import (
             ColumnDef,
             TableSchema,
             UnsafeSchemaChangeError,
         )
-        from tabsdata.connector.schema.evolution.renderers.clickhouse import (
+        from tabsdata.connector.schema.evolution.iceberg.renderers.clickhouse import (
             CLICKHOUSE_TYPE_WIDENING_MAP,
         )
 

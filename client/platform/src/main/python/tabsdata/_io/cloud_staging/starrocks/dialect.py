@@ -460,7 +460,7 @@ class StarRocksDialect(Dialect):
 
     def get_type_widening_map(self) -> dict[str, set[str]]:
         """Return the type-widening map for StarRocks integer and float types."""
-        from tabsdata.connector.schema.evolution.renderers.starrocks import (
+        from tabsdata.connector.schema.evolution.iceberg.renderers.starrocks import (
             STARROCKS_TYPE_WIDENING_MAP,
         )
 
@@ -472,7 +472,7 @@ class StarRocksDialect(Dialect):
         Queries information_schema.COLUMNS for column names, types,
         nullability, and defaults.
         """
-        from tabsdata.connector.schema.evolution.renderers.starrocks import (
+        from tabsdata.connector.schema.evolution.iceberg.renderers.starrocks import (
             table_schema_from_information_schema,
         )
 
@@ -495,12 +495,12 @@ class StarRocksDialect(Dialect):
     ):
         """Compute a SchemaDelta between the current StarRocks table and a new
         Arrow schema."""
-        from tabsdata.connector.schema.evolution.core import (
+        from tabsdata.connector.schema.evolution.iceberg.core import (
             compute_delta,
             validate_delta,
         )
-        from tabsdata.connector.schema.evolution.models import ColumnDef
-        from tabsdata.connector.schema.evolution.renderers.starrocks import (
+        from tabsdata.connector.schema.evolution.iceberg.models import ColumnDef
+        from tabsdata.connector.schema.evolution.iceberg.renderers.starrocks import (
             STARROCKS_TYPE_WIDENING_MAP,
             table_schema_from_arrow,
         )
@@ -546,7 +546,7 @@ class StarRocksDialect(Dialect):
         After each ALTER, polls SHOW ALTER TABLE COLUMN for completion since
         StarRocks schema changes are asynchronous.
         """
-        from tabsdata.connector.schema.evolution.renderers.starrocks import (
+        from tabsdata.connector.schema.evolution.iceberg.renderers.starrocks import (
             render_starrocks_sql,
         )
 

@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from tabsdata.connector.schema.evolution.models import (
+from tabsdata.connector.schema.evolution.iceberg.models import (
     Action,
     SchemaChange,
     SchemaDelta,

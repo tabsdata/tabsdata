@@ -4,15 +4,15 @@
 
 from __future__ import annotations
 
-from tabsdata.connector.schema.evolution.renderers.starrocks import (
+from tabsdata.connector.schema.evolution.iceberg.renderers.starrocks import (
     STARROCKS_TYPE_WIDENING_MAP,
     parse_starrocks_type,
     render_starrocks_sql,
     table_schema_from_arrow,
     table_schema_from_information_schema,
 )
-from tabsdata.connector.schema.evolution.core import compute_delta, validate_delta
-from tabsdata.connector.schema.evolution.models import (
+from tabsdata.connector.schema.evolution.iceberg.core import compute_delta, validate_delta
+from tabsdata.connector.schema.evolution.iceberg.models import (
     ColumnDef,
     RenderOptions,
     ReorderPolicy,

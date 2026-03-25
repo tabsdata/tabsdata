@@ -20,7 +20,7 @@ import pytest
 
 import tabsdata as td
 from tabsdata._io.cloud_staging.common.errors import SchemaError
-from tabsdata.connector.schema.evolution.models import UnsafeSchemaChangeError
+from tabsdata.connector.schema.evolution.iceberg.models import UnsafeSchemaChangeError
 
 # noinspection PyUnresolvedReferences
 from . import pytestmark  # noqa: F401

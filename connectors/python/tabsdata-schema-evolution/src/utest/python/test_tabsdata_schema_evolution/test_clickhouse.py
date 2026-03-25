@@ -4,14 +4,14 @@
 
 from __future__ import annotations
 
-from tabsdata.connector.schema.evolution.renderers.clickhouse import (
+from tabsdata.connector.schema.evolution.iceberg.renderers.clickhouse import (
     CLICKHOUSE_TYPE_WIDENING_MAP,
     parse_clickhouse_type,
     render_clickhouse_sql,
     table_schema_from_system_columns,
 )
-from tabsdata.connector.schema.evolution.core import compute_delta, validate_delta
-from tabsdata.connector.schema.evolution.models import (
+from tabsdata.connector.schema.evolution.iceberg.core import compute_delta, validate_delta
+from tabsdata.connector.schema.evolution.iceberg.models import (
     ColumnDef,
     RenderOptions,
     ReorderPolicy,
@@ -493,7 +493,7 @@ class TestTableSchemaFromArrowColumnNulls:
 
     def test_no_column_nulls_uses_arrow_flag(self):
         """Without column_nulls, Arrow's nullable flag is used (Polars: always True)."""
-        from tabsdata.connector.schema.evolution.renderers.clickhouse import (
+        from tabsdata.connector.schema.evolution.iceberg.renderers.clickhouse import (
             table_schema_from_arrow,
         )
         import pyarrow as pa
@@ -508,7 +508,7 @@ class TestTableSchemaFromArrowColumnNulls:
 
     def test_column_nulls_false_overrides_arrow_nullable(self):
         """Parquet stats say no nulls → column is NOT nullable despite Arrow flag."""
-        from tabsdata.connector.schema.evolution.renderers.clickhouse import (
+        from tabsdata.connector.schema.evolution.iceberg.renderers.clickhouse import (
             table_schema_from_arrow,
         )
         import pyarrow as pa
@@ -524,7 +524,7 @@ class TestTableSchemaFromArrowColumnNulls:
 
     def test_column_nulls_true_keeps_nullable(self):
         """Parquet stats say has nulls → column IS nullable."""
-        from tabsdata.connector.schema.evolution.renderers.clickhouse import (
+        from tabsdata.connector.schema.evolution.iceberg.renderers.clickhouse import (
             table_schema_from_arrow,
         )
         import pyarrow as pa
@@ -540,7 +540,7 @@ class TestTableSchemaFromArrowColumnNulls:
 
     def test_column_nulls_none_treated_as_nullable(self):
         """Missing stats (None) → conservatively treated as nullable."""
-        from tabsdata.connector.schema.evolution.renderers.clickhouse import (
+        from tabsdata.connector.schema.evolution.iceberg.renderers.clickhouse import (
             table_schema_from_arrow,
         )
         import pyarrow as pa
@@ -554,7 +554,7 @@ class TestTableSchemaFromArrowColumnNulls:
 
     def test_column_nulls_mixed(self):
         """Mix of True, False, None across columns."""
-        from tabsdata.connector.schema.evolution.renderers.clickhouse import (
+        from tabsdata.connector.schema.evolution.iceberg.renderers.clickhouse import (
             table_schema_from_arrow,
         )
         import pyarrow as pa
@@ -572,7 +572,7 @@ class TestTableSchemaFromArrowColumnNulls:
 
     def test_container_types_never_nullable(self):
         """Array/Map/Struct columns are never nullable in ClickHouse."""
-        from tabsdata.connector.schema.evolution.renderers.clickhouse import (
+        from tabsdata.connector.schema.evolution.iceberg.renderers.clickhouse import (
             table_schema_from_arrow,
         )
         import pyarrow as pa
@@ -588,7 +588,7 @@ class TestTableSchemaFromArrowColumnNulls:
 
     def test_column_not_in_nulls_uses_arrow_flag(self):
         """Column missing from column_nulls falls back to Arrow flag."""
-        from tabsdata.connector.schema.evolution.renderers.clickhouse import (
+        from tabsdata.connector.schema.evolution.iceberg.renderers.clickhouse import (
             table_schema_from_arrow,
         )
         import pyarrow as pa
