@@ -6,9 +6,13 @@ from tabsdata.connector.schema.evolution.renderers.base import DialectRenderer
 from tabsdata.connector.schema.evolution.renderers.clickhouse import (
     ClickHouseRenderer,
 )
+from tabsdata.connector.schema.evolution.renderers.starrocks import (
+    StarRocksRenderer,
+)
 
 DIALECT_RENDERERS: dict[str, DialectRenderer] = {
     "clickhouse": ClickHouseRenderer(),
+    "starrocks": StarRocksRenderer(),
 }
 
 

@@ -138,8 +138,8 @@ def test_constructor_raises_if_pymysql_missing(cloud_storage):
 
 
 @pytest.mark.starrocks
-def test_does_not_support_tabsdata_schema_evolution(dialect):
-    assert dialect.supports_tabsdata_schema_evolution() is False
+def test_supports_tabsdata_schema_evolution(dialect):
+    assert dialect.supports_tabsdata_schema_evolution() is True
 
 
 @pytest.mark.starrocks
@@ -938,6 +938,418 @@ def _assert_starrocks_data_matches(
             # ── Integer / String / fallback ──────────────────────────────
             else:
                 assert actual == expected, f"{msg}: {actual!r} != {expected!r}"
+
+
+# ── Schema evolution integration tests ────────────────────────────────────────────────
+
+
+def _make_s3_sr_dialect(starrocks_config, s3_config, run_id):
+    """Build a StarRocksDialect backed by S3 cloud storage."""
+    from tabsdata._io.cloud_staging.common.storage_config import S3Config
+    from tabsdata._io.cloud_staging.starrocks.cloud_storage import S3StarRocksStorage
+    from tabsdata._io.cloud_staging.starrocks.config import StarRocksConfig
+
+    bucket = s3_config["BUCKET_NAME"]
+    region = s3_config["REGION"]
+    base_path = f"staging/starrocks/schema_evo_{run_id}"
+    s3_config_obj = S3Config(
+        bucket=bucket,
+        region=region,
+        base_path=base_path,
+        credentials=td.S3AccessKeyCredentials(
+            s3_config["ACCESS_KEY"], s3_config["SECRET_KEY"]
+        ),
+    )
+    cloud_storage = S3StarRocksStorage(s3_config_obj)
+    sr_config = StarRocksConfig(
+        host=starrocks_config.host,
+        port=starrocks_config.port,
+        database=starrocks_config.database,
+        credentials=UserPasswordCredentials(
+            starrocks_config.user, starrocks_config.password
+        ),
+    )
+    return StarRocksDialect(config=sr_config, cloud_storage=cloud_storage)
+
+
+def _sr_create_table(starrocks_client, db, table, col_defs_sql):
+    with starrocks_client.cursor() as cur:
+        cur.execute(
+            f"CREATE TABLE `{db}`.`{table}` ({col_defs_sql}) "
+            f"DUPLICATE KEY(`{col_defs_sql.split('`')[1]}`) "
+            f"DISTRIBUTED BY HASH(`{col_defs_sql.split('`')[1]}`) "
+            f'PROPERTIES ("fast_schema_evolution" = "true")'
+        )
+
+
+def _sr_insert(starrocks_client, db, table, values_sql):
+    with starrocks_client.cursor() as cur:
+        cur.execute(f"INSERT INTO `{db}`.`{table}` VALUES {values_sql}")
+
+
+def _sr_get_columns(starrocks_client, db, table):
+    with starrocks_client.cursor() as cur:
+        cur.execute(
+            "SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE "
+            "FROM information_schema.COLUMNS "
+            "WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s "
+            "ORDER BY ORDINAL_POSITION",
+            (db, table),
+        )
+        return cur.fetchall()
+
+
+def _sr_row_count(starrocks_client, db, table):
+    with starrocks_client.cursor() as cur:
+        cur.execute(f"SELECT count(*) FROM `{db}`.`{table}`")
+        return cur.fetchone()[0]
+
+
+@pytest.mark.starrocks
+@pytest.mark.s3
+def test_schema_evolution_add_nullable_column(
+    starrocks_config, starrocks_client, s3_config
+):
+    """Add a nullable column to an existing table."""
+    from tabsdata.connector.schema.evolution.core import compute_delta
+    from tabsdata.connector.schema.evolution.models import ColumnDef, TableSchema
+    from tabsdata.connector.schema.evolution.renderers.starrocks import (
+        STARROCKS_TYPE_WIDENING_MAP,
+    )
+
+    _, run_id = encode_id()
+    table = f"test_sr_evo_add_col_{run_id}"
+    db = starrocks_config.database
+
+    _sr_create_table(
+        starrocks_client, db, table,
+        "`id` BIGINT NOT NULL, `name` STRING NOT NULL",
+    )
+    _sr_insert(starrocks_client, db, table, "(1, 'alice'), (2, 'bob')")
+
+    dialect = _make_s3_sr_dialect(starrocks_config, s3_config, run_id)
+    current = dialect.get_evolution_table_schema(table)
+    desired = TableSchema(
+        table_name=current.table_name,
+        columns=[
+            ColumnDef(name="id", type="BIGINT", nullable=False),
+            ColumnDef(name="name", type="STRING", nullable=False),
+            ColumnDef(name="email", type="STRING", nullable=True),
+        ],
+    )
+    delta = compute_delta(current, desired, STARROCKS_TYPE_WIDENING_MAP)
+    load_mode = LoadMode(
+        write_mode=WriteMode.APPEND,
+        schema_evolution=SchemaEvolutionMode.ICEBERG,
+        upload_id=run_id,
+    )
+    dialect.apply_schema_delta(load_mode, table, delta)
+
+    cols = _sr_get_columns(starrocks_client, db, table)
+    col_names = [c[0] for c in cols]
+    assert "email" in col_names
+    email_nullable = next(c[2] for c in cols if c[0] == "email")
+    assert email_nullable == "YES"
+
+    assert _sr_row_count(starrocks_client, db, table) == 2
+
+
+@pytest.mark.starrocks
+@pytest.mark.s3
+def test_schema_evolution_drop_column(
+    starrocks_config, starrocks_client, s3_config
+):
+    """Drop a column from an existing table."""
+    from tabsdata.connector.schema.evolution.core import compute_delta
+    from tabsdata.connector.schema.evolution.models import ColumnDef, TableSchema
+    from tabsdata.connector.schema.evolution.renderers.starrocks import (
+        STARROCKS_TYPE_WIDENING_MAP,
+    )
+
+    _, run_id = encode_id()
+    table = f"test_sr_evo_drop_col_{run_id}"
+    db = starrocks_config.database
+
+    _sr_create_table(
+        starrocks_client, db, table,
+        "`id` BIGINT NOT NULL, `name` STRING NOT NULL, `old_col` STRING NULL",
+    )
+    _sr_insert(starrocks_client, db, table, "(1, 'alice', 'legacy')")
+
+    dialect = _make_s3_sr_dialect(starrocks_config, s3_config, run_id)
+    current = dialect.get_evolution_table_schema(table)
+    desired = TableSchema(
+        table_name=current.table_name,
+        columns=[
+            ColumnDef(name="id", type="BIGINT", nullable=False),
+            ColumnDef(name="name", type="STRING", nullable=False),
+        ],
+    )
+    delta = compute_delta(current, desired, STARROCKS_TYPE_WIDENING_MAP)
+    load_mode = LoadMode(
+        write_mode=WriteMode.APPEND,
+        schema_evolution=SchemaEvolutionMode.ICEBERG,
+        upload_id=run_id,
+    )
+    dialect.apply_schema_delta(load_mode, table, delta)
+
+    cols = _sr_get_columns(starrocks_client, db, table)
+    col_names = [c[0] for c in cols]
+    assert "old_col" not in col_names
+    assert _sr_row_count(starrocks_client, db, table) == 1
+
+
+@pytest.mark.starrocks
+@pytest.mark.s3
+def test_schema_evolution_widen_type(
+    starrocks_config, starrocks_client, s3_config
+):
+    """Widen INT -> BIGINT and FLOAT -> DOUBLE."""
+    from tabsdata.connector.schema.evolution.core import compute_delta, validate_delta
+    from tabsdata.connector.schema.evolution.models import ColumnDef, TableSchema
+    from tabsdata.connector.schema.evolution.renderers.starrocks import (
+        STARROCKS_TYPE_WIDENING_MAP,
+    )
+
+    _, run_id = encode_id()
+    table = f"test_sr_evo_widen_{run_id}"
+    db = starrocks_config.database
+
+    _sr_create_table(
+        starrocks_client, db, table,
+        "`key_col` BIGINT NOT NULL, `id` INT NOT NULL, `value` FLOAT NOT NULL",
+    )
+    _sr_insert(starrocks_client, db, table, "(1, 42, 3.14)")
+
+    dialect = _make_s3_sr_dialect(starrocks_config, s3_config, run_id)
+    current = dialect.get_evolution_table_schema(table)
+    desired = TableSchema(
+        table_name=current.table_name,
+        columns=[
+            ColumnDef(name="key_col", type="BIGINT", nullable=False),
+            ColumnDef(name="id", type="BIGINT", nullable=False),
+            ColumnDef(name="value", type="DOUBLE", nullable=False),
+        ],
+    )
+    delta = compute_delta(current, desired, STARROCKS_TYPE_WIDENING_MAP)
+    assert validate_delta(delta, strict=True) is True
+
+    load_mode = LoadMode(
+        write_mode=WriteMode.APPEND,
+        schema_evolution=SchemaEvolutionMode.ICEBERG,
+        upload_id=run_id,
+    )
+    dialect.apply_schema_delta(load_mode, table, delta)
+
+    cols = _sr_get_columns(starrocks_client, db, table)
+    from tabsdata._io.cloud_staging.starrocks.dialect import _normalize_column_type
+
+    id_type = _normalize_column_type(next(c[1] for c in cols if c[0] == "id"))
+    value_type = _normalize_column_type(next(c[1] for c in cols if c[0] == "value"))
+    assert id_type == "BIGINT"
+    assert value_type == "DOUBLE"
+
+
+@pytest.mark.starrocks
+@pytest.mark.s3
+def test_schema_evolution_set_nullable(
+    starrocks_config, starrocks_client, s3_config
+):
+    """Make a NOT NULL column nullable."""
+    from tabsdata.connector.schema.evolution.core import compute_delta
+    from tabsdata.connector.schema.evolution.models import ColumnDef, TableSchema
+    from tabsdata.connector.schema.evolution.renderers.starrocks import (
+        STARROCKS_TYPE_WIDENING_MAP,
+    )
+
+    _, run_id = encode_id()
+    table = f"test_sr_evo_set_nullable_{run_id}"
+    db = starrocks_config.database
+
+    _sr_create_table(
+        starrocks_client, db, table,
+        "`id` BIGINT NOT NULL, `name` STRING NOT NULL",
+    )
+    _sr_insert(starrocks_client, db, table, "(1, 'alice')")
+
+    dialect = _make_s3_sr_dialect(starrocks_config, s3_config, run_id)
+    current = dialect.get_evolution_table_schema(table)
+    desired = TableSchema(
+        table_name=current.table_name,
+        columns=[
+            ColumnDef(name="id", type="BIGINT", nullable=False),
+            ColumnDef(name="name", type="STRING", nullable=True),
+        ],
+    )
+    delta = compute_delta(current, desired, STARROCKS_TYPE_WIDENING_MAP)
+    load_mode = LoadMode(
+        write_mode=WriteMode.APPEND,
+        schema_evolution=SchemaEvolutionMode.ICEBERG,
+        upload_id=run_id,
+    )
+    dialect.apply_schema_delta(load_mode, table, delta)
+
+    cols = _sr_get_columns(starrocks_client, db, table)
+    name_nullable = next(c[2] for c in cols if c[0] == "name")
+    assert name_nullable == "YES"
+
+    # Can now insert NULLs
+    _sr_insert(starrocks_client, db, table, "(2, NULL)")
+    assert _sr_row_count(starrocks_client, db, table) == 2
+
+
+@pytest.mark.starrocks
+@pytest.mark.s3
+def test_schema_evolution_combined(
+    starrocks_config, starrocks_client, s3_config
+):
+    """Combined evolution: add column, drop column, widen type, set nullable."""
+    from tabsdata.connector.schema.evolution.core import compute_delta, validate_delta
+    from tabsdata.connector.schema.evolution.models import ColumnDef, TableSchema
+    from tabsdata.connector.schema.evolution.renderers.starrocks import (
+        STARROCKS_TYPE_WIDENING_MAP,
+    )
+
+    _, run_id = encode_id()
+    table = f"test_sr_evo_combined_{run_id}"
+    db = starrocks_config.database
+
+    _sr_create_table(
+        starrocks_client, db, table,
+        "`key_col` BIGINT NOT NULL, `id` INT NOT NULL, `name` STRING NOT NULL, `value` FLOAT NOT NULL, `old_col` STRING NULL",
+    )
+    _sr_insert(starrocks_client, db, table, "(1, 1, 'alice', 1.5, 'legacy')")
+
+    dialect = _make_s3_sr_dialect(starrocks_config, s3_config, run_id)
+    current = dialect.get_evolution_table_schema(table)
+    desired = TableSchema(
+        table_name=current.table_name,
+        columns=[
+            ColumnDef(name="key_col", type="BIGINT", nullable=False),
+            ColumnDef(name="id", type="BIGINT", nullable=False),
+            ColumnDef(name="name", type="STRING", nullable=True),
+            ColumnDef(name="value", type="DOUBLE", nullable=False),
+            ColumnDef(name="category", type="STRING", nullable=True),
+        ],
+    )
+    delta = compute_delta(current, desired, STARROCKS_TYPE_WIDENING_MAP)
+    assert validate_delta(delta, strict=True) is True
+
+    load_mode = LoadMode(
+        write_mode=WriteMode.APPEND,
+        schema_evolution=SchemaEvolutionMode.ICEBERG,
+        upload_id=run_id,
+    )
+    dialect.apply_schema_delta(load_mode, table, delta)
+
+    cols = _sr_get_columns(starrocks_client, db, table)
+    col_names = [c[0] for c in cols]
+    assert "old_col" not in col_names
+    assert "category" in col_names
+
+    from tabsdata._io.cloud_staging.starrocks.dialect import _normalize_column_type
+
+    id_type = _normalize_column_type(next(c[1] for c in cols if c[0] == "id"))
+    value_type = _normalize_column_type(next(c[1] for c in cols if c[0] == "value"))
+    name_nullable = next(c[2] for c in cols if c[0] == "name")
+    assert id_type == "BIGINT"
+    assert value_type == "DOUBLE"
+    assert name_nullable == "YES"
+
+
+@pytest.mark.starrocks
+@pytest.mark.s3
+def test_schema_evolution_no_changes(
+    starrocks_config, starrocks_client, s3_config
+):
+    """When schemas match, no ALTER statements should be executed."""
+    from tabsdata.connector.schema.evolution.core import compute_delta
+    from tabsdata.connector.schema.evolution.renderers.starrocks import (
+        STARROCKS_TYPE_WIDENING_MAP,
+    )
+
+    _, run_id = encode_id()
+    table = f"test_sr_evo_noop_{run_id}"
+    db = starrocks_config.database
+
+    _sr_create_table(
+        starrocks_client, db, table,
+        "`id` BIGINT NOT NULL, `name` STRING NULL",
+    )
+    _sr_insert(starrocks_client, db, table, "(1, 'alice')")
+
+    dialect = _make_s3_sr_dialect(starrocks_config, s3_config, run_id)
+    current = dialect.get_evolution_table_schema(table)
+    delta = compute_delta(current, current, STARROCKS_TYPE_WIDENING_MAP)
+    assert delta.changes == []
+
+    load_mode = LoadMode(
+        write_mode=WriteMode.APPEND,
+        schema_evolution=SchemaEvolutionMode.ICEBERG,
+        upload_id=run_id,
+    )
+    dialect.apply_schema_delta(load_mode, table, delta)
+
+    assert _sr_row_count(starrocks_client, db, table) == 1
+
+
+# ── _detect_nullability tests ────────────────────────────────────────────────────────
+
+
+@pytest.mark.starrocks
+def test_detect_nullability_no_nulls(tmp_path):
+    """All columns have zero nulls in parquet stats."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    table = pa.table({
+        "id": pa.array([1, 2, 3], type=pa.int64()),
+        "name": pa.array(["a", "b", "c"], type=pa.string()),
+    })
+    path = tmp_path / "no_nulls.parquet"
+    pq.write_table(table, path)
+
+    result = CloudStagedBulkLoader._detect_nullability([path])
+    assert result["id"] is False
+    assert result["name"] is False
+
+
+@pytest.mark.starrocks
+def test_detect_nullability_with_nulls(tmp_path):
+    """Some columns have nulls."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    table = pa.table({
+        "id": pa.array([1, 2, 3], type=pa.int64()),
+        "name": pa.array(["a", None, "c"], type=pa.string()),
+    })
+    path = tmp_path / "has_nulls.parquet"
+    pq.write_table(table, path)
+
+    result = CloudStagedBulkLoader._detect_nullability([path])
+    assert result["id"] is False
+    assert result["name"] is True
+
+
+@pytest.mark.starrocks
+def test_detect_nullability_multiple_files(tmp_path):
+    """Null counts aggregated across multiple parquet files."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    # File 1: no nulls
+    t1 = pa.table({"val": pa.array([1, 2], type=pa.int64())})
+    p1 = tmp_path / "f1.parquet"
+    pq.write_table(t1, p1)
+
+    # File 2: has nulls
+    t2 = pa.table({"val": pa.array([3, None], type=pa.int64())})
+    p2 = tmp_path / "f2.parquet"
+    pq.write_table(t2, p2)
+
+    result = CloudStagedBulkLoader._detect_nullability([p1, p2])
+    assert result["val"] is True  # file2 has nulls
 
 
 # ── S3 Integration Tests ─────────────────────────────────────────────────────────────
