@@ -19,7 +19,10 @@ from tabsdata.connector.cdc.db2.typing import TableCommitSeqPosition
 from test_tabsdata_cdc_common.common.shared import TRIGGER_END_MINUTES
 from test_tabsdata_cdc_common.common.schema import run_schema_evolution_offset_test
 from test_tabsdata_cdc_common.common.evolution import SCHEMA_CHANGE_PARAMS
-from test_tabsdata_cdc_db2.common.fixtures.docker import DB2_CDC_STAGING_TABLE_PREFIX
+from test_tabsdata_cdc_db2.common.fixtures.docker import (
+    DB2_CDC_STAGING_TABLE_PREFIX,
+    CdcMode
+)
 from test_tabsdata_cdc_db2.common.sql import Db2CdcSampler
 
 
@@ -27,21 +30,26 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
+@pytest.mark.skip(reason="There is no support for pure hot schema evolution with sql replica; used only for development.")
 @pytest.mark.cdc_db2
 @pytest.mark.slow
 @pytest.mark.tdfntrigger(venv=False)
 @pytest.mark.parametrize("change_kinds", SCHEMA_CHANGE_PARAMS)
 def test_schema_evolution_offset(db2_cdc_config, change_kinds):
+    mode: CdcMode = CdcMode.HARD
+
     config = db2_cdc_config
     schema = config.cdc_user
 
     suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=12))
     name = f"td_sco_{suffix}"
     table = TableObject(schema=schema, table=name)
+
     cd_table = TableObject(schema="asn", table=f"{DB2_CDC_STAGING_TABLE_PREFIX}{name}")
 
     logger.debug(f"Tracking table: {table}")
     logger.debug(f"Tracking cd table: {cd_table}")
+    logger.debug(f"Tracking cd table: {cd_table.qualified}")
 
     connection = ibm_db_dbi.connect(
         host=config.host,
@@ -54,6 +62,7 @@ def test_schema_evolution_offset(db2_cdc_config, change_kinds):
 
     cursor = connection.cursor()
     sampler = Db2CdcSampler(config.container, config.port, cursor)
+    sampler._cd_qualified_table = cd_table.qualified
 
     uri = f"db2://{config.host}:{config.port}/{config.database}"
     credentials = UserPasswordCredentials(
@@ -77,7 +86,7 @@ def test_schema_evolution_offset(db2_cdc_config, change_kinds):
             start_from = TableCommitSeqPosition(seqs=seqs)
         return Db2CdcTrigger(
             conn=conn,
-            tables=[cd_table.qualified],
+            tables=[cd_table.qualified if mode is CdcMode.HARD else sampler._cd_qualified_table],
             start_from=start_from,
             blocking_timeout_seconds=6,
             buffer_max_rows=5,

@@ -41,6 +41,7 @@ from test_tabsdata.conftest import (
 # noinspection PyUnusedImports
 from test_tabsdata_cdc_db2.common.fixtures.schema import db2_collect_tables_setup  # noqa: F401
 from test_tabsdata_cdc_db2.common.fixtures.docker import db2_cdc_config  # noqa: F401
+from test_tabsdata_cdc_db2.common.fixtures.docker import AsncapWatchdog
 
 pytest_plugins = ["test_tabsdata.fntest"]
 
@@ -58,6 +59,8 @@ def pytest_configure_node(node: WorkerController):
 
 # noinspection PyUnusedLocal
 def pytest_sessionfinish(session, exitstatus):
+    AsncapWatchdog.shutdown()
+
     # Based on the following discussion:
     # https://github.com/pytest-dev/pytest-xdist/issues/271
     if getattr(session.config, "workerinput", None) is not None:
