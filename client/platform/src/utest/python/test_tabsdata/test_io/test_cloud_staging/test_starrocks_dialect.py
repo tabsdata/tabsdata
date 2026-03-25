@@ -51,12 +51,14 @@ import tabsdata as td
 
 @pytest.fixture
 def mock_pymysql():
-    """Patch pymysql so the dialect constructor works without the package."""
+    """Patch mysql.connector so the dialect constructor works without the package."""
     mock_module = MagicMock()
     mock_conn = MagicMock()
-    mock_conn.open = True
+    mock_conn.is_connected.return_value = True
     mock_module.connect.return_value = mock_conn
-    with patch.dict(sys.modules, {"pymysql": mock_module}):
+    mock_mysql_parent = MagicMock()
+    mock_mysql_parent.connector = mock_module
+    with patch.dict(sys.modules, {"mysql": mock_mysql_parent, "mysql.connector": mock_module}):
         yield mock_module, mock_conn
 
 
@@ -127,10 +129,10 @@ def test_constructor_uses_credentials_when_provided(mock_pymysql, cloud_storage)
 
 
 @pytest.mark.starrocks
-def test_constructor_raises_if_pymysql_missing(cloud_storage):
+def test_constructor_raises_if_mysql_connector_missing(cloud_storage):
     config = StarRocksConfig(host="localhost")
-    with patch.dict(sys.modules, {"pymysql": None}):
-        with pytest.raises(ImportError, match="pymysql"):
+    with patch.dict(sys.modules, {"mysql": None, "mysql.connector": None}):
+        with pytest.raises(ImportError, match="mysql-connector-python"):
             StarRocksDialect(config=config, cloud_storage=cloud_storage)
 
 

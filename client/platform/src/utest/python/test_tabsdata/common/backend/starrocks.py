@@ -53,9 +53,9 @@ class StarRocksTestConfig:
 
 @pytest.fixture(scope="function")
 def starrocks_client(starrocks_config):
-    import pymysql
+    import mysql.connector
 
-    conn = pymysql.connect(
+    conn = mysql.connector.connect(
         host=starrocks_config.host,
         port=starrocks_config.port,
         database=starrocks_config.database,
@@ -65,6 +65,7 @@ def starrocks_client(starrocks_config):
     )
     with conn.cursor() as cursor:
         cursor.execute("SELECT 1")
+        cursor.fetchall()
 
     yield conn
 
@@ -214,7 +215,7 @@ def _wait_for_alive_backends(conn) -> None:
 
 def _wait_for_fe(port: int):
     """Poll until the StarRocks FE is connectable via MySQL protocol."""
-    import pymysql
+    import mysql.connector
 
     @retry(
         stop=stop_after_attempt(CONTAINER_MAXIMUM_RETRY_COUNT),
@@ -222,7 +223,7 @@ def _wait_for_fe(port: int):
         reraise=True,
     )
     def _poll():
-        conn = pymysql.connect(
+        conn = mysql.connector.connect(
             host=DB_HOST,
             port=port,
             user=STARROCKS_DB_USER,
@@ -231,6 +232,7 @@ def _wait_for_fe(port: int):
         )
         with conn.cursor() as cursor:
             cursor.execute("SELECT 1")
+            cursor.fetchall()
         logger.info("StarRocks FE is ready")
         return conn
 
@@ -238,8 +240,8 @@ def _wait_for_fe(port: int):
 
 
 def _wait_for_database(port: int) -> None:
-    """Poll until the test database is connectable via pymysql."""
-    import pymysql
+    """Poll until the test database is connectable via MySQL protocol."""
+    import mysql.connector
 
     @retry(
         stop=stop_after_attempt(CONTAINER_MAXIMUM_RETRY_COUNT),
@@ -247,7 +249,7 @@ def _wait_for_database(port: int) -> None:
         reraise=True,
     )
     def _poll():
-        conn = pymysql.connect(
+        conn = mysql.connector.connect(
             host=DB_HOST,
             port=port,
             user=STARROCKS_DB_USER,
@@ -257,6 +259,7 @@ def _wait_for_database(port: int) -> None:
         )
         with conn.cursor() as cursor:
             cursor.execute("SELECT 1")
+            cursor.fetchall()
         conn.close()
         logger.info(f"Database '{STARROCKS_DB_NAME}' is ready")
 
