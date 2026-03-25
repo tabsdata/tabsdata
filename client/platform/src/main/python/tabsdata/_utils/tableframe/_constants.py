@@ -77,6 +77,7 @@ UNSUPPORTED_METHODS = [
     "show",
     "sink_batches",
     "sink_delta",
+    "sink_iceberg",
     "top_k",
     "unnest",
     "unpivot",
