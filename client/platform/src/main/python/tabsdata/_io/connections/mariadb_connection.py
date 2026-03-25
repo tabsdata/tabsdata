@@ -1,6 +1,7 @@
 #
 # Copyright 2025 Tabs Data Inc.
 #
+
 from typing import Optional
 from urllib.parse import urlparse
 

@@ -127,8 +127,8 @@ def test_constructor_raises_if_clickhouse_connect_missing(cloud_storage):
 # ── Capability flags ──────────────────────────────────────────────────────────────────
 
 @pytest.mark.clickhouse
-def test_does_not_support_tabsdata_schema_evolution(dialect):
-    assert dialect.supports_tabsdata_schema_evolution() is False
+def test_supports_tabsdata_schema_evolution(dialect):
+    assert dialect.supports_tabsdata_schema_evolution() is True
 
 @pytest.mark.clickhouse
 def test_does_not_support_native_schema_evolution(dialect):
@@ -454,6 +454,108 @@ def test_create_table_decimal_column(dialect, client, load_mode):
     dialect.create_table(load_mode, "payments", arrow_schema)
     ddl = client.command.call_args[0][0]
     assert "`amount` Decimal(18, 4)" in ddl
+
+
+# ── create_table with column_nulls ────────────────────────────────────────────────────
+
+
+@pytest.mark.clickhouse
+def test_create_table_with_column_nulls_no_nulls(dialect, client, load_mode):
+    """Parquet stats say no nulls → columns are NOT NULL in DDL."""
+    arrow_schema = pa.schema(
+        [
+            pa.field("id", pa.int64(), nullable=True),   # Arrow says nullable
+            pa.field("name", pa.string(), nullable=True),  # Arrow says nullable
+        ]
+    )
+    column_nulls = {"id": False, "name": False}
+    dialect.create_table(load_mode, "t", arrow_schema, column_nulls)
+    ddl = client.command.call_args[0][0]
+    assert "`id` Int64" in ddl
+    assert "`name` String" in ddl
+    assert "Nullable" not in ddl
+
+
+@pytest.mark.clickhouse
+def test_create_table_with_column_nulls_has_nulls(dialect, client, load_mode):
+    """Parquet stats say has nulls → columns are Nullable in DDL."""
+    arrow_schema = pa.schema(
+        [
+            pa.field("id", pa.int64(), nullable=True),
+            pa.field("name", pa.string(), nullable=True),
+        ]
+    )
+    column_nulls = {"id": False, "name": True}
+    dialect.create_table(load_mode, "t", arrow_schema, column_nulls)
+    ddl = client.command.call_args[0][0]
+    assert "`id` Int64" in ddl
+    assert "`name` Nullable(String)" in ddl
+
+
+@pytest.mark.clickhouse
+def test_create_table_with_column_nulls_none_is_nullable(dialect, client, load_mode):
+    """Missing stats (None) → treated as nullable (safe default)."""
+    arrow_schema = pa.schema(
+        [pa.field("id", pa.int64(), nullable=True)]
+    )
+    column_nulls = {"id": None}
+    dialect.create_table(load_mode, "t", arrow_schema, column_nulls)
+    ddl = client.command.call_args[0][0]
+    assert "`id` Nullable(Int64)" in ddl
+
+
+@pytest.mark.clickhouse
+def test_create_table_with_column_nulls_containers_never_nullable(
+    dialect, client, load_mode
+):
+    """Container types never get Nullable even if parquet stats say has nulls."""
+    arrow_schema = pa.schema(
+        [
+            pa.field("tags", pa.list_(pa.string()), nullable=True),
+            pa.field("id", pa.int64(), nullable=True),
+        ]
+    )
+    column_nulls = {"tags": True, "id": False}
+    dialect.create_table(load_mode, "t", arrow_schema, column_nulls)
+    ddl = client.command.call_args[0][0]
+    assert "`tags` Array(String)" in ddl
+    assert "Nullable(Array" not in ddl
+    assert "`id` Int64" in ddl
+
+
+@pytest.mark.clickhouse
+def test_create_table_with_column_nulls_mixed(dialect, client, load_mode):
+    """Mixed nullability: some null, some not, some missing stats."""
+    arrow_schema = pa.schema(
+        [
+            pa.field("a", pa.int64(), nullable=True),
+            pa.field("b", pa.string(), nullable=True),
+            pa.field("c", pa.float64(), nullable=True),
+        ]
+    )
+    column_nulls = {"a": False, "b": True, "c": None}
+    dialect.create_table(load_mode, "t", arrow_schema, column_nulls)
+    ddl = client.command.call_args[0][0]
+    assert "`a` Int64" in ddl
+    assert "`b` Nullable(String)" in ddl
+    assert "`c` Nullable(Float64)" in ddl
+
+
+@pytest.mark.clickhouse
+def test_create_table_without_column_nulls_uses_arrow_flag(
+    dialect, client, load_mode
+):
+    """Without column_nulls, Arrow's nullable flag is used (backward compat)."""
+    arrow_schema = pa.schema(
+        [
+            pa.field("id", pa.int64(), nullable=False),
+            pa.field("name", pa.string(), nullable=True),
+        ]
+    )
+    dialect.create_table(load_mode, "t", arrow_schema)
+    ddl = client.command.call_args[0][0]
+    assert "`id` Int64" in ddl
+    assert "`name` Nullable(String)" in ddl
 
 
 # ── verify_schema ─────────────────────────────────────────────────────────────────────
@@ -916,6 +1018,603 @@ def test_upload_with_s3_replace(clickhouse_config, s3_config, clickhouse_client,
             f"Expected staging path '{base_path}' to be empty, "
             f"but found {response.get('KeyCount')} object(s)"
         )
+
+
+# ── Schema evolution integration tests ────────────────────────────────────────────────
+
+
+def _make_s3_dialect(clickhouse_config, s3_config, run_id):
+    """Build a ClickHouseDialect backed by S3 cloud storage."""
+    bucket = s3_config["BUCKET_NAME"]
+    region = s3_config["REGION"]
+    base_path = f"staging/clickhouse/schema_evo_{run_id}"
+    s3_clickhouse_config = S3Config(
+        bucket=bucket,
+        region=region,
+        base_path=base_path,
+        credentials=td.S3AccessKeyCredentials(
+            s3_config["ACCESS_KEY"], s3_config["SECRET_KEY"]
+        ),
+    )
+    cloud_storage = S3ClickHouseStorage(s3_clickhouse_config)
+    ch_config = ClickHouseConfig(
+        host=clickhouse_config.host,
+        port=clickhouse_config.port,
+        database=clickhouse_config.database,
+        credentials=UserPasswordCredentials(
+            clickhouse_config.user, clickhouse_config.password
+        ),
+    )
+    return ClickHouseDialect(config=ch_config, cloud_storage=cloud_storage)
+
+
+def _create_table_direct(clickhouse_client, db, table, col_defs_sql):
+    """Create a ClickHouse table using raw DDL."""
+    clickhouse_client.command(
+        f"CREATE TABLE `{db}`.`{table}` ({col_defs_sql}) "
+        f"ENGINE = MergeTree() ORDER BY tuple()"
+    )
+
+
+def _get_column_info(clickhouse_client, db, table):
+    """Return [(name, type, default_kind, default_expression)] from system.columns."""
+    result = clickhouse_client.query(
+        "SELECT name, type, default_kind, default_expression "
+        "FROM system.columns "
+        "WHERE database = {db:String} AND table = {tbl:String} "
+        "ORDER BY position",
+        parameters={"db": db, "tbl": table},
+    )
+    return result.result_rows
+
+
+@pytest.mark.clickhouse
+@pytest.mark.s3
+def test_schema_evolution_add_nullable_column(
+    clickhouse_config, clickhouse_client, s3_config
+):
+    """Add a nullable column to an existing table."""
+    from tabsdata._utils.id import encode_id as _encode_id
+    from tabsdata.connector.schema.evolution.core import compute_delta
+    from tabsdata.connector.schema.evolution.models import ColumnDef, TableSchema
+    from tabsdata.connector.schema.evolution.renderers.clickhouse import (
+        CLICKHOUSE_TYPE_WIDENING_MAP,
+    )
+
+    _, run_id = _encode_id()
+    table = f"test_evo_add_col_{run_id}"
+    db = clickhouse_config.database
+
+    _create_table_direct(
+        clickhouse_client, db, table,
+        "`id` Int64, `name` String",
+    )
+    clickhouse_client.command(
+        f"INSERT INTO `{db}`.`{table}` VALUES (1, 'alice'), (2, 'bob')"
+    )
+
+    dialect = _make_s3_dialect(clickhouse_config, s3_config, run_id)
+    current = dialect.get_evolution_table_schema(table)
+    desired = TableSchema(
+        table_name=current.table_name,
+        columns=[
+            ColumnDef(name="id", type="Int64", nullable=False),
+            ColumnDef(name="name", type="String", nullable=False),
+            ColumnDef(name="email", type="String", nullable=True),
+        ],
+    )
+    delta = compute_delta(current, desired, CLICKHOUSE_TYPE_WIDENING_MAP)
+    load_mode = LoadMode(
+        write_mode=WriteMode.APPEND,
+        schema_evolution=SchemaEvolutionMode.ICEBERG,
+        upload_id=run_id,
+    )
+    dialect.apply_schema_delta(load_mode, table, delta)
+
+    cols = _get_column_info(clickhouse_client, db, table)
+    col_names = [c[0] for c in cols]
+    assert "email" in col_names
+    email_type = next(c[1] for c in cols if c[0] == "email")
+    assert "Nullable" in email_type
+
+    # Old data still accessible, new column is NULL
+    result = clickhouse_client.query(f"SELECT id, name, email FROM `{db}`.`{table}` ORDER BY id")
+    rows = result.result_rows
+    assert len(rows) == 2
+    assert rows[0] == (1, "alice", None)
+    assert rows[1] == (2, "bob", None)
+
+
+@pytest.mark.clickhouse
+@pytest.mark.s3
+def test_schema_evolution_add_column_with_default(
+    clickhouse_config, clickhouse_client, s3_config
+):
+    """Add a non-nullable column with a default value."""
+    from tabsdata._utils.id import encode_id as _encode_id
+    from tabsdata.connector.schema.evolution.core import compute_delta
+    from tabsdata.connector.schema.evolution.models import ColumnDef, TableSchema
+    from tabsdata.connector.schema.evolution.renderers.clickhouse import (
+        CLICKHOUSE_TYPE_WIDENING_MAP,
+    )
+
+    _, run_id = _encode_id()
+    table = f"test_evo_add_default_{run_id}"
+    db = clickhouse_config.database
+
+    _create_table_direct(
+        clickhouse_client, db, table,
+        "`id` Int64, `name` String",
+    )
+    clickhouse_client.command(
+        f"INSERT INTO `{db}`.`{table}` VALUES (1, 'alice')"
+    )
+
+    dialect = _make_s3_dialect(clickhouse_config, s3_config, run_id)
+    current = dialect.get_evolution_table_schema(table)
+    desired = TableSchema(
+        table_name=current.table_name,
+        columns=[
+            ColumnDef(name="id", type="Int64", nullable=False),
+            ColumnDef(name="name", type="String", nullable=False),
+            ColumnDef(
+                name="status", type="String", nullable=False, default="'active'"
+            ),
+        ],
+    )
+    delta = compute_delta(current, desired, CLICKHOUSE_TYPE_WIDENING_MAP)
+    load_mode = LoadMode(
+        write_mode=WriteMode.APPEND,
+        schema_evolution=SchemaEvolutionMode.ICEBERG,
+        upload_id=run_id,
+    )
+    dialect.apply_schema_delta(load_mode, table, delta)
+
+    result = clickhouse_client.query(
+        f"SELECT id, name, status FROM `{db}`.`{table}` ORDER BY id"
+    )
+    rows = result.result_rows
+    assert len(rows) == 1
+    assert rows[0] == (1, "alice", "active")
+
+
+@pytest.mark.clickhouse
+@pytest.mark.s3
+def test_schema_evolution_drop_column(
+    clickhouse_config, clickhouse_client, s3_config
+):
+    """Drop a column from an existing table."""
+    from tabsdata._utils.id import encode_id as _encode_id
+    from tabsdata.connector.schema.evolution.core import compute_delta
+    from tabsdata.connector.schema.evolution.models import ColumnDef, TableSchema
+    from tabsdata.connector.schema.evolution.renderers.clickhouse import (
+        CLICKHOUSE_TYPE_WIDENING_MAP,
+    )
+
+    _, run_id = _encode_id()
+    table = f"test_evo_drop_col_{run_id}"
+    db = clickhouse_config.database
+
+    _create_table_direct(
+        clickhouse_client, db, table,
+        "`id` Int64, `name` String, `old_col` Nullable(String)",
+    )
+    clickhouse_client.command(
+        f"INSERT INTO `{db}`.`{table}` VALUES (1, 'alice', 'legacy')"
+    )
+
+    dialect = _make_s3_dialect(clickhouse_config, s3_config, run_id)
+    current = dialect.get_evolution_table_schema(table)
+    desired = TableSchema(
+        table_name=current.table_name,
+        columns=[
+            ColumnDef(name="id", type="Int64", nullable=False),
+            ColumnDef(name="name", type="String", nullable=False),
+        ],
+    )
+    delta = compute_delta(current, desired, CLICKHOUSE_TYPE_WIDENING_MAP)
+    load_mode = LoadMode(
+        write_mode=WriteMode.APPEND,
+        schema_evolution=SchemaEvolutionMode.ICEBERG,
+        upload_id=run_id,
+    )
+    dialect.apply_schema_delta(load_mode, table, delta)
+
+    cols = _get_column_info(clickhouse_client, db, table)
+    col_names = [c[0] for c in cols]
+    assert "old_col" not in col_names
+
+    result = clickhouse_client.query(f"SELECT * FROM `{db}`.`{table}`")
+    rows = result.result_rows
+    assert rows == [(1, "alice")]
+
+
+@pytest.mark.clickhouse
+@pytest.mark.s3
+def test_schema_evolution_widen_type(
+    clickhouse_config, clickhouse_client, s3_config
+):
+    """Widen Int32 → Int64 and Float32 → Float64."""
+    from tabsdata._utils.id import encode_id as _encode_id
+    from tabsdata.connector.schema.evolution.core import compute_delta, validate_delta
+    from tabsdata.connector.schema.evolution.models import ColumnDef, TableSchema
+    from tabsdata.connector.schema.evolution.renderers.clickhouse import (
+        CLICKHOUSE_TYPE_WIDENING_MAP,
+    )
+
+    _, run_id = _encode_id()
+    table = f"test_evo_widen_{run_id}"
+    db = clickhouse_config.database
+
+    _create_table_direct(
+        clickhouse_client, db, table,
+        "`id` Int32, `value` Float32",
+    )
+    clickhouse_client.command(
+        f"INSERT INTO `{db}`.`{table}` VALUES (42, 3.14)"
+    )
+
+    dialect = _make_s3_dialect(clickhouse_config, s3_config, run_id)
+    current = dialect.get_evolution_table_schema(table)
+    desired = TableSchema(
+        table_name=current.table_name,
+        columns=[
+            ColumnDef(name="id", type="Int64", nullable=False),
+            ColumnDef(name="value", type="Float64", nullable=False),
+        ],
+    )
+    delta = compute_delta(current, desired, CLICKHOUSE_TYPE_WIDENING_MAP)
+    assert validate_delta(delta, strict=True) is True
+
+    load_mode = LoadMode(
+        write_mode=WriteMode.APPEND,
+        schema_evolution=SchemaEvolutionMode.ICEBERG,
+        upload_id=run_id,
+    )
+    dialect.apply_schema_delta(load_mode, table, delta)
+
+    cols = _get_column_info(clickhouse_client, db, table)
+    id_type = next(c[1] for c in cols if c[0] == "id")
+    value_type = next(c[1] for c in cols if c[0] == "value")
+    assert id_type == "Int64"
+    assert value_type == "Float64"
+
+    result = clickhouse_client.query(f"SELECT id, value FROM `{db}`.`{table}` ORDER BY id")
+    rows = result.result_rows
+    assert len(rows) == 1
+    assert rows[0][0] == 42
+    assert abs(rows[0][1] - 3.14) < 0.01
+
+
+@pytest.mark.clickhouse
+@pytest.mark.s3
+def test_schema_evolution_set_nullable(
+    clickhouse_config, clickhouse_client, s3_config
+):
+    """Make a NOT NULL column nullable."""
+    from tabsdata._utils.id import encode_id as _encode_id
+    from tabsdata.connector.schema.evolution.core import compute_delta
+    from tabsdata.connector.schema.evolution.models import ColumnDef, TableSchema
+    from tabsdata.connector.schema.evolution.renderers.clickhouse import (
+        CLICKHOUSE_TYPE_WIDENING_MAP,
+    )
+
+    _, run_id = _encode_id()
+    table = f"test_evo_set_nullable_{run_id}"
+    db = clickhouse_config.database
+
+    _create_table_direct(
+        clickhouse_client, db, table,
+        "`id` Int64, `name` String",
+    )
+    clickhouse_client.command(
+        f"INSERT INTO `{db}`.`{table}` VALUES (1, 'alice')"
+    )
+
+    dialect = _make_s3_dialect(clickhouse_config, s3_config, run_id)
+    current = dialect.get_evolution_table_schema(table)
+    desired = TableSchema(
+        table_name=current.table_name,
+        columns=[
+            ColumnDef(name="id", type="Int64", nullable=False),
+            ColumnDef(name="name", type="String", nullable=True),
+        ],
+    )
+    delta = compute_delta(current, desired, CLICKHOUSE_TYPE_WIDENING_MAP)
+    load_mode = LoadMode(
+        write_mode=WriteMode.APPEND,
+        schema_evolution=SchemaEvolutionMode.ICEBERG,
+        upload_id=run_id,
+    )
+    dialect.apply_schema_delta(load_mode, table, delta)
+
+    cols = _get_column_info(clickhouse_client, db, table)
+    name_type = next(c[1] for c in cols if c[0] == "name")
+    assert name_type == "Nullable(String)"
+
+    # Old data preserved, can now insert NULLs
+    clickhouse_client.command(
+        f"INSERT INTO `{db}`.`{table}` VALUES (2, NULL)"
+    )
+    result = clickhouse_client.query(
+        f"SELECT id, name FROM `{db}`.`{table}` ORDER BY id"
+    )
+    rows = result.result_rows
+    assert rows == [(1, "alice"), (2, None)]
+
+
+@pytest.mark.clickhouse
+@pytest.mark.s3
+def test_schema_evolution_set_and_drop_default(
+    clickhouse_config, clickhouse_client, s3_config
+):
+    """Set a default on a column, then drop it."""
+    from tabsdata._utils.id import encode_id as _encode_id
+    from tabsdata.connector.schema.evolution.core import compute_delta
+    from tabsdata.connector.schema.evolution.models import ColumnDef, TableSchema
+    from tabsdata.connector.schema.evolution.renderers.clickhouse import (
+        CLICKHOUSE_TYPE_WIDENING_MAP,
+    )
+
+    _, run_id = _encode_id()
+    table = f"test_evo_default_{run_id}"
+    db = clickhouse_config.database
+
+    _create_table_direct(
+        clickhouse_client, db, table,
+        "`id` Int64, `status` String",
+    )
+
+    dialect = _make_s3_dialect(clickhouse_config, s3_config, run_id)
+    load_mode = LoadMode(
+        write_mode=WriteMode.APPEND,
+        schema_evolution=SchemaEvolutionMode.ICEBERG,
+        upload_id=run_id,
+    )
+
+    # Step 1: Set a default
+    current = dialect.get_evolution_table_schema(table)
+    with_default = TableSchema(
+        table_name=current.table_name,
+        columns=[
+            ColumnDef(name="id", type="Int64", nullable=False),
+            ColumnDef(
+                name="status", type="String", nullable=False, default="'pending'"
+            ),
+        ],
+    )
+    delta = compute_delta(current, with_default, CLICKHOUSE_TYPE_WIDENING_MAP)
+    dialect.apply_schema_delta(load_mode, table, delta)
+
+    # Insert without specifying status — should get the default
+    clickhouse_client.command(
+        f"INSERT INTO `{db}`.`{table}` (`id`) VALUES (1)"
+    )
+    result = clickhouse_client.query(
+        f"SELECT id, status FROM `{db}`.`{table}` ORDER BY id"
+    )
+    assert result.result_rows == [(1, "pending")]
+
+    # Step 2: Drop the default
+    current2 = dialect.get_evolution_table_schema(table)
+    without_default = TableSchema(
+        table_name=current2.table_name,
+        columns=[
+            ColumnDef(name="id", type="Int64", nullable=False),
+            ColumnDef(name="status", type="String", nullable=False),
+        ],
+    )
+    delta2 = compute_delta(current2, without_default, CLICKHOUSE_TYPE_WIDENING_MAP)
+    dialect.apply_schema_delta(load_mode, table, delta2)
+
+    cols = _get_column_info(clickhouse_client, db, table)
+    status_default = next(c[2] for c in cols if c[0] == "status")
+    assert status_default == ""  # no default
+
+
+@pytest.mark.clickhouse
+@pytest.mark.s3
+def test_schema_evolution_combined(
+    clickhouse_config, clickhouse_client, s3_config
+):
+    """Combined evolution: add column, drop column, widen type, set nullable."""
+    from tabsdata._utils.id import encode_id as _encode_id
+    from tabsdata.connector.schema.evolution.core import compute_delta, validate_delta
+    from tabsdata.connector.schema.evolution.models import ColumnDef, TableSchema
+    from tabsdata.connector.schema.evolution.renderers.clickhouse import (
+        CLICKHOUSE_TYPE_WIDENING_MAP,
+    )
+
+    _, run_id = _encode_id()
+    table = f"test_evo_combined_{run_id}"
+    db = clickhouse_config.database
+
+    _create_table_direct(
+        clickhouse_client, db, table,
+        "`id` Int32, `name` String, `value` Float32, `old_col` Nullable(String)",
+    )
+    clickhouse_client.command(
+        f"INSERT INTO `{db}`.`{table}` VALUES (1, 'alice', 1.5, 'legacy')"
+    )
+
+    dialect = _make_s3_dialect(clickhouse_config, s3_config, run_id)
+    current = dialect.get_evolution_table_schema(table)
+    desired = TableSchema(
+        table_name=current.table_name,
+        columns=[
+            ColumnDef(name="id", type="Int64", nullable=False),
+            ColumnDef(name="name", type="String", nullable=True),
+            ColumnDef(name="value", type="Float64", nullable=False),
+            ColumnDef(
+                name="category", type="String", nullable=True, default="'general'"
+            ),
+        ],
+    )
+    delta = compute_delta(current, desired, CLICKHOUSE_TYPE_WIDENING_MAP)
+    assert validate_delta(delta, strict=True) is True
+
+    load_mode = LoadMode(
+        write_mode=WriteMode.APPEND,
+        schema_evolution=SchemaEvolutionMode.ICEBERG,
+        upload_id=run_id,
+    )
+    dialect.apply_schema_delta(load_mode, table, delta)
+
+    # Verify schema
+    cols = _get_column_info(clickhouse_client, db, table)
+    col_names = [c[0] for c in cols]
+    assert col_names == ["id", "name", "value", "category"]
+    assert "old_col" not in col_names
+
+    id_type = next(c[1] for c in cols if c[0] == "id")
+    name_type = next(c[1] for c in cols if c[0] == "name")
+    value_type = next(c[1] for c in cols if c[0] == "value")
+    category_type = next(c[1] for c in cols if c[0] == "category")
+
+    assert id_type == "Int64"
+    assert name_type == "Nullable(String)"
+    assert value_type == "Float64"
+    assert "Nullable" in category_type
+
+    # Verify data preserved with new schema
+    result = clickhouse_client.query(
+        f"SELECT id, name, value, category FROM `{db}`.`{table}` ORDER BY id"
+    )
+    rows = result.result_rows
+    assert len(rows) == 1
+    assert rows[0][0] == 1
+    assert rows[0][1] == "alice"
+    assert abs(rows[0][2] - 1.5) < 0.01
+    assert rows[0][3] == "general"  # default applied to existing row
+
+    # Insert a row with the new schema
+    clickhouse_client.command(
+        f"INSERT INTO `{db}`.`{table}` VALUES (2, NULL, 2.5, 'sports')"
+    )
+    result = clickhouse_client.query(
+        f"SELECT id, name, value, category FROM `{db}`.`{table}` ORDER BY id"
+    )
+    rows = result.result_rows
+    assert len(rows) == 2
+    assert rows[1] == (2, None, 2.5, "sports")
+
+
+@pytest.mark.clickhouse
+@pytest.mark.s3
+def test_schema_evolution_no_changes(
+    clickhouse_config, clickhouse_client, s3_config
+):
+    """When schemas match, no ALTER statements should be executed."""
+    from tabsdata._utils.id import encode_id as _encode_id
+    from tabsdata.connector.schema.evolution.core import compute_delta
+    from tabsdata.connector.schema.evolution.renderers.clickhouse import (
+        CLICKHOUSE_TYPE_WIDENING_MAP,
+    )
+
+    _, run_id = _encode_id()
+    table = f"test_evo_noop_{run_id}"
+    db = clickhouse_config.database
+
+    _create_table_direct(
+        clickhouse_client, db, table,
+        "`id` Int64, `name` Nullable(String)",
+    )
+    clickhouse_client.command(
+        f"INSERT INTO `{db}`.`{table}` VALUES (1, 'alice')"
+    )
+
+    dialect = _make_s3_dialect(clickhouse_config, s3_config, run_id)
+    current = dialect.get_evolution_table_schema(table)
+    delta = compute_delta(current, current, CLICKHOUSE_TYPE_WIDENING_MAP)
+    assert delta.changes == []
+
+    load_mode = LoadMode(
+        write_mode=WriteMode.APPEND,
+        schema_evolution=SchemaEvolutionMode.ICEBERG,
+        upload_id=run_id,
+    )
+    dialect.apply_schema_delta(load_mode, table, delta)
+
+    # Data untouched
+    result = clickhouse_client.query(f"SELECT id, name FROM `{db}`.`{table}`")
+    assert result.result_rows == [(1, "alice")]
+
+
+# ── _detect_nullability tests ────────────────────────────────────────────────────────
+
+
+@pytest.mark.clickhouse
+def test_detect_nullability_no_nulls(tmp_path):
+    """All columns have zero nulls in parquet stats."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    table = pa.table({
+        "id": pa.array([1, 2, 3], type=pa.int64()),
+        "name": pa.array(["a", "b", "c"], type=pa.string()),
+    })
+    path = tmp_path / "no_nulls.parquet"
+    pq.write_table(table, path)
+
+    result = CloudStagedBulkLoader._detect_nullability([path])
+    assert result["id"] is False
+    assert result["name"] is False
+
+
+@pytest.mark.clickhouse
+def test_detect_nullability_with_nulls(tmp_path):
+    """Some columns have nulls."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    table = pa.table({
+        "id": pa.array([1, 2, 3], type=pa.int64()),
+        "name": pa.array(["a", None, "c"], type=pa.string()),
+    })
+    path = tmp_path / "has_nulls.parquet"
+    pq.write_table(table, path)
+
+    result = CloudStagedBulkLoader._detect_nullability([path])
+    assert result["id"] is False
+    assert result["name"] is True
+
+
+@pytest.mark.clickhouse
+def test_detect_nullability_multiple_files(tmp_path):
+    """Null counts aggregated across multiple parquet files."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    # File 1: no nulls
+    t1 = pa.table({"val": pa.array([1, 2], type=pa.int64())})
+    p1 = tmp_path / "f1.parquet"
+    pq.write_table(t1, p1)
+
+    # File 2: has nulls
+    t2 = pa.table({"val": pa.array([3, None], type=pa.int64())})
+    p2 = tmp_path / "f2.parquet"
+    pq.write_table(t2, p2)
+
+    result = CloudStagedBulkLoader._detect_nullability([p1, p2])
+    assert result["val"] is True  # file2 has nulls
+
+
+@pytest.mark.clickhouse
+def test_detect_nullability_multiple_files_no_nulls(tmp_path):
+    """Multiple files, all with zero nulls."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    t1 = pa.table({"val": pa.array([1, 2], type=pa.int64())})
+    p1 = tmp_path / "f1.parquet"
+    pq.write_table(t1, p1)
+
+    t2 = pa.table({"val": pa.array([3, 4], type=pa.int64())})
+    p2 = tmp_path / "f2.parquet"
+    pq.write_table(t2, p2)
+
+    result = CloudStagedBulkLoader._detect_nullability([p1, p2])
+    assert result["val"] is False
 
 
 # ── GCS integration tests ─────────────────────────────────────────────────────────────

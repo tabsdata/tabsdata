@@ -34,7 +34,7 @@ script = [
         exists = is_path_exists ${marker}
         info "🍐 The marker temp file is ${marker}"
         if ${exists}
-            info "🍅 Marker for make exsits. Skipping setup."
+            info "🍅 Marker for make exists. Skipping setup."
             ok = rm ${marker}
             exit 0
         end
@@ -53,7 +53,7 @@ script = [
         debug "🍋 The ppid temp file is ${ppid_marker}"
         exists = is_path_exists ${pid_marker}
         if ${exists}
-            info "🍅 Marker for pid exsits. Skipping setup."
+            info "🍅 Marker for pid exists. Skipping setup."
             ok = rm ${marker}
             exit 0
         end

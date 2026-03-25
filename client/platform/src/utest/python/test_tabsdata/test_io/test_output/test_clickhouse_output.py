@@ -69,6 +69,7 @@ def test_str_table_defaults(s3_conn):
     assert dest.conn == s3_conn
     assert dest.destination_tables == ["events"]
     assert dest.if_table_exists == "append"
+    assert dest.schema_evolution == "none"
     assert isinstance(dest, DestinationPlugin)
 
 
@@ -83,9 +84,11 @@ def test_all_params_explicit(s3_conn):
         conn=s3_conn,
         destination_tables=["events", "users"],
         if_table_exists="replace",
+        schema_evolution="iceberg",
     )
     assert dest.destination_tables == ["events", "users"]
     assert dest.if_table_exists == "replace"
+    assert dest.schema_evolution == "iceberg"
 
 
 # ── if_table_exists ───────────────────────────────────────────────────────────────────
@@ -105,6 +108,38 @@ def test_if_table_exists_invalid_raises(s3_conn):
     with pytest.raises(ParameterValidationError) as exc:
         ClickHouseDest(s3_conn, "events", if_table_exists="upsert")
     assert exc.value.error_code == ErrorCode.DECE110
+
+
+# ── schema_evolution ─────────────────────────────────────────────────────────────────
+
+
+def test_schema_evolution_default_is_none(s3_conn):
+    dest = ClickHouseDest(s3_conn, "events")
+    assert dest.schema_evolution == "none"
+
+
+def test_schema_evolution_none(s3_conn):
+    dest = ClickHouseDest(s3_conn, "events", schema_evolution="none")
+    assert dest.schema_evolution == "none"
+
+
+def test_schema_evolution_iceberg(s3_conn):
+    dest = ClickHouseDest(s3_conn, "events", schema_evolution="iceberg")
+    assert dest.schema_evolution == "iceberg"
+
+
+def test_schema_evolution_invalid_raises(s3_conn):
+    with pytest.raises(ParameterValidationError) as exc:
+        ClickHouseDest(s3_conn, "events", schema_evolution="auto")
+    assert exc.value.error_code == ErrorCode.DECE110
+
+
+def test_schema_evolution_combined_with_replace(s3_conn):
+    dest = ClickHouseDest(
+        s3_conn, "events", if_table_exists="replace", schema_evolution="iceberg"
+    )
+    assert dest.if_table_exists == "replace"
+    assert dest.schema_evolution == "iceberg"
 
 
 # ── destination_tables normalisation ─────────────────────────────────────────────────
@@ -242,7 +277,359 @@ def test_repr_contains_if_table_exists(s3_conn):
     assert "replace" in repr(dest)
 
 
+def test_repr_contains_schema_evolution(s3_conn):
+    dest = ClickHouseDest(s3_conn, "events", schema_evolution="iceberg")
+    assert "iceberg" in repr(dest)
+
+
 def test_repr_is_nonempty_string(s3_conn):
     dest = ClickHouseDest(s3_conn, "events")
     assert isinstance(repr(dest), str)
     assert repr(dest)
+
+
+# ── Schema evolution: safe scenarios ─────────────────────────────────────────────────
+
+
+class TestSchemaEvolutionSafe:
+    """Scenarios where Iceberg-style schema evolution succeeds."""
+
+    @staticmethod
+    def _evolve(current_cols, desired_cols, table="`db`.`t`"):
+        from tabsdata.connector.schema.evolution.core import (
+            compute_delta,
+            validate_delta,
+        )
+        from tabsdata.connector.schema.evolution.models import (
+            ColumnDef,
+            TableSchema,
+        )
+        from tabsdata.connector.schema.evolution.renderers.clickhouse import (
+            CLICKHOUSE_TYPE_WIDENING_MAP,
+            render_clickhouse_sql,
+        )
+
+        current = TableSchema(
+            table_name=table,
+            columns=[ColumnDef(**c) for c in current_cols],
+        )
+        desired = TableSchema(
+            table_name=table,
+            columns=[ColumnDef(**c) for c in desired_cols],
+        )
+        delta = compute_delta(current, desired, CLICKHOUSE_TYPE_WIDENING_MAP)
+        is_safe = validate_delta(delta)
+        stmts = render_clickhouse_sql(delta)
+        return delta, is_safe, stmts
+
+    def test_add_nullable_column(self):
+        delta, is_safe, stmts = self._evolve(
+            [{"name": "id", "type": "Int64", "nullable": False}],
+            [
+                {"name": "id", "type": "Int64", "nullable": False},
+                {"name": "email", "type": "String", "nullable": True},
+            ],
+        )
+        assert is_safe is True
+        assert len(stmts) == 1
+        assert "ADD COLUMN `email` Nullable(String)" in stmts[0]
+
+    def test_add_column_with_default(self):
+        delta, is_safe, stmts = self._evolve(
+            [{"name": "id", "type": "Int64", "nullable": False}],
+            [
+                {"name": "id", "type": "Int64", "nullable": False},
+                {
+                    "name": "status",
+                    "type": "String",
+                    "nullable": False,
+                    "default": "'active'",
+                },
+            ],
+        )
+        assert is_safe is True
+        assert len(stmts) == 1
+        assert "ADD COLUMN `status` String DEFAULT 'active'" in stmts[0]
+
+    def test_drop_column(self):
+        delta, is_safe, stmts = self._evolve(
+            [
+                {"name": "id", "type": "Int64", "nullable": False},
+                {"name": "old", "type": "String", "nullable": True},
+            ],
+            [{"name": "id", "type": "Int64", "nullable": False}],
+        )
+        assert is_safe is True
+        assert len(stmts) == 1
+        assert "DROP COLUMN `old`" in stmts[0]
+
+    def test_widen_int32_to_int64(self):
+        delta, is_safe, stmts = self._evolve(
+            [{"name": "id", "type": "Int32", "nullable": False}],
+            [{"name": "id", "type": "Int64", "nullable": False}],
+        )
+        assert is_safe is True
+        assert len(stmts) == 1
+        assert "MODIFY COLUMN `id` Int64" in stmts[0]
+
+    def test_widen_float32_to_float64(self):
+        delta, is_safe, stmts = self._evolve(
+            [{"name": "v", "type": "Float32", "nullable": False}],
+            [{"name": "v", "type": "Float64", "nullable": False}],
+        )
+        assert is_safe is True
+        assert "MODIFY COLUMN `v` Float64" in stmts[0]
+
+    def test_widen_uint8_to_uint64(self):
+        delta, is_safe, stmts = self._evolve(
+            [{"name": "n", "type": "UInt8", "nullable": False}],
+            [{"name": "n", "type": "UInt64", "nullable": False}],
+        )
+        assert is_safe is True
+
+    def test_set_nullable(self):
+        delta, is_safe, stmts = self._evolve(
+            [{"name": "name", "type": "String", "nullable": False}],
+            [{"name": "name", "type": "String", "nullable": True}],
+        )
+        assert is_safe is True
+        assert "MODIFY COLUMN `name` Nullable(String)" in stmts[0]
+
+    def test_set_default(self):
+        delta, is_safe, stmts = self._evolve(
+            [{"name": "s", "type": "String", "nullable": False}],
+            [
+                {
+                    "name": "s",
+                    "type": "String",
+                    "nullable": False,
+                    "default": "'x'",
+                },
+            ],
+        )
+        assert is_safe is True
+        assert "DEFAULT 'x'" in stmts[0]
+
+    def test_drop_default(self):
+        delta, is_safe, stmts = self._evolve(
+            [
+                {
+                    "name": "s",
+                    "type": "String",
+                    "nullable": False,
+                    "default": "'x'",
+                },
+            ],
+            [{"name": "s", "type": "String", "nullable": False}],
+        )
+        assert is_safe is True
+        assert "MODIFY COLUMN `s` REMOVE DEFAULT" in stmts[0]
+
+    def test_no_changes_empty_delta(self):
+        delta, is_safe, stmts = self._evolve(
+            [
+                {"name": "id", "type": "Int64", "nullable": False},
+                {"name": "name", "type": "String", "nullable": True},
+            ],
+            [
+                {"name": "id", "type": "Int64", "nullable": False},
+                {"name": "name", "type": "String", "nullable": True},
+            ],
+        )
+        assert is_safe is True
+        assert stmts == []
+        assert delta.changes == []
+
+    def test_create_table_from_scratch(self):
+        from tabsdata.connector.schema.evolution.core import compute_delta
+        from tabsdata.connector.schema.evolution.models import (
+            ColumnDef,
+            TableSchema,
+        )
+        from tabsdata.connector.schema.evolution.renderers.clickhouse import (
+            CLICKHOUSE_TYPE_WIDENING_MAP,
+            render_clickhouse_sql,
+        )
+
+        desired = TableSchema(
+            table_name="`db`.`events`",
+            columns=[
+                ColumnDef(name="id", type="Int64", nullable=False),
+                ColumnDef(name="name", type="String", nullable=True),
+                ColumnDef(
+                    name="value",
+                    type="Float64",
+                    nullable=True,
+                    default="0.0",
+                ),
+            ],
+        )
+        delta = compute_delta(None, desired, CLICKHOUSE_TYPE_WIDENING_MAP)
+        assert delta.is_create is True
+        stmts = render_clickhouse_sql(delta)
+        assert len(stmts) == 1
+        assert "CREATE TABLE" in stmts[0]
+        assert "ENGINE = MergeTree()" in stmts[0]
+
+    def test_combined_safe_evolution(self):
+        """Add + drop + widen + set nullable in a single delta."""
+        delta, is_safe, stmts = self._evolve(
+            [
+                {"name": "id", "type": "Int32", "nullable": False},
+                {"name": "name", "type": "String", "nullable": False},
+                {"name": "old", "type": "String", "nullable": True},
+            ],
+            [
+                {"name": "id", "type": "Int64", "nullable": False},
+                {"name": "name", "type": "String", "nullable": True},
+                {"name": "tag", "type": "String", "nullable": True},
+            ],
+        )
+        assert is_safe is True
+        assert len(stmts) == 4  # drop old, add tag, widen id, set_nullable name
+
+
+# ── Schema evolution: unsafe / impossible scenarios ──────────────────────────────────
+
+
+class TestSchemaEvolutionUnsafe:
+    """Scenarios where evolution is unsafe or impossible."""
+
+    @staticmethod
+    def _evolve(current_cols, desired_cols, table="`db`.`t`"):
+        from tabsdata.connector.schema.evolution.core import (
+            compute_delta,
+            validate_delta,
+        )
+        from tabsdata.connector.schema.evolution.models import (
+            ColumnDef,
+            TableSchema,
+        )
+        from tabsdata.connector.schema.evolution.renderers.clickhouse import (
+            CLICKHOUSE_TYPE_WIDENING_MAP,
+            render_clickhouse_sql,
+        )
+
+        current = TableSchema(
+            table_name=table,
+            columns=[ColumnDef(**c) for c in current_cols],
+        )
+        desired = TableSchema(
+            table_name=table,
+            columns=[ColumnDef(**c) for c in desired_cols],
+        )
+        delta = compute_delta(current, desired, CLICKHOUSE_TYPE_WIDENING_MAP)
+        is_safe = validate_delta(delta)
+        stmts = render_clickhouse_sql(delta)
+        return delta, is_safe, stmts
+
+    def test_add_non_nullable_without_default(self):
+        """Iceberg rule: adding a required column without a default is unsafe."""
+        delta, is_safe, stmts = self._evolve(
+            [{"name": "id", "type": "Int64", "nullable": False}],
+            [
+                {"name": "id", "type": "Int64", "nullable": False},
+                {"name": "required_col", "type": "String", "nullable": False},
+            ],
+        )
+        assert is_safe is False
+
+    def test_narrow_int64_to_int32(self):
+        """Narrowing a type is never safe."""
+        delta, is_safe, stmts = self._evolve(
+            [{"name": "id", "type": "Int64", "nullable": False}],
+            [{"name": "id", "type": "Int32", "nullable": False}],
+        )
+        assert is_safe is False
+
+    def test_narrow_float64_to_float32(self):
+        delta, is_safe, stmts = self._evolve(
+            [{"name": "v", "type": "Float64", "nullable": False}],
+            [{"name": "v", "type": "Float32", "nullable": False}],
+        )
+        assert is_safe is False
+
+    def test_incompatible_type_change(self):
+        """Changing between unrelated types (e.g. Int64 → String) is unsafe."""
+        delta, is_safe, stmts = self._evolve(
+            [{"name": "id", "type": "Int64", "nullable": False}],
+            [{"name": "id", "type": "String", "nullable": False}],
+        )
+        assert is_safe is False
+
+    def test_drop_nullable_is_unsafe(self):
+        """Making an optional column required is unsafe."""
+        delta, is_safe, stmts = self._evolve(
+            [{"name": "name", "type": "String", "nullable": True}],
+            [{"name": "name", "type": "String", "nullable": False}],
+        )
+        assert is_safe is False
+
+    def test_drop_nullable_not_rendered_by_clickhouse(self):
+        """ClickHouse does not support DROP_NULLABLE — renderer skips it."""
+        delta, is_safe, stmts = self._evolve(
+            [{"name": "name", "type": "String", "nullable": True}],
+            [{"name": "name", "type": "String", "nullable": False}],
+        )
+        assert stmts == []
+
+    def test_strict_validation_raises(self):
+        """strict=True raises UnsafeSchemaChangeError on any unsafe change."""
+        from tabsdata.connector.schema.evolution.core import (
+            compute_delta,
+            validate_delta,
+        )
+        from tabsdata.connector.schema.evolution.models import (
+            ColumnDef,
+            TableSchema,
+            UnsafeSchemaChangeError,
+        )
+        from tabsdata.connector.schema.evolution.renderers.clickhouse import (
+            CLICKHOUSE_TYPE_WIDENING_MAP,
+        )
+
+        current = TableSchema(
+            table_name="`db`.`t`",
+            columns=[ColumnDef(name="id", type="Int64", nullable=False)],
+        )
+        desired = TableSchema(
+            table_name="`db`.`t`",
+            columns=[ColumnDef(name="id", type="Int32", nullable=False)],
+        )
+        delta = compute_delta(current, desired, CLICKHOUSE_TYPE_WIDENING_MAP)
+        with pytest.raises(UnsafeSchemaChangeError):
+            validate_delta(delta, strict=True)
+
+    def test_cross_family_widening_not_supported(self):
+        """Widening across type families (e.g. Int32 → Float64) is not safe."""
+        delta, is_safe, stmts = self._evolve(
+            [{"name": "n", "type": "Int32", "nullable": False}],
+            [{"name": "n", "type": "Float64", "nullable": False}],
+        )
+        assert is_safe is False
+
+    def test_unsigned_to_signed_not_supported(self):
+        """UInt32 → Int64 is not in the widening map (different families)."""
+        delta, is_safe, stmts = self._evolve(
+            [{"name": "n", "type": "UInt32", "nullable": False}],
+            [{"name": "n", "type": "Int64", "nullable": False}],
+        )
+        assert is_safe is False
+
+    def test_mixed_safe_and_unsafe_changes(self):
+        """If any change is unsafe, the whole delta is unsafe."""
+        delta, is_safe, stmts = self._evolve(
+            [
+                {"name": "id", "type": "Int64", "nullable": False},
+                {"name": "name", "type": "String", "nullable": True},
+            ],
+            [
+                {"name": "id", "type": "Int32", "nullable": False},  # unsafe
+                {"name": "name", "type": "String", "nullable": True},
+                {"name": "tag", "type": "String", "nullable": True},  # safe
+            ],
+        )
+        assert is_safe is False
+        # The safe ADD still renders, the unsafe ALTER_TYPE also renders
+        # (rendering is independent of safety — validation gates execution)
+        assert len(stmts) >= 1

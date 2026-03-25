@@ -117,6 +117,7 @@ known-first-party = [
     "test_tabsdata_mongodb",
     "test_tabsdata_mssql",
     "test_tabsdata_salesforce",
+    "test_tabsdata_schema_evolution",
     "test_tabsdata_snowflake",
     "test_tabsdata_sql_common",
     "test_tabsdata_toolkit",

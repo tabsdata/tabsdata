@@ -25,7 +25,10 @@ from tabsdata._io.cloud_staging.common.storage_config import (
     S3Config,
 )
 from tabsdata._io.connections.clickhouse_connection import ClickHouseConn
-from tabsdata._io.outputs.shared_enums import IfTableExistStrategySpec
+from tabsdata._io.outputs.shared_enums import (
+    IfTableExistStrategySpec,
+    SchemaEvolutionSpec,
+)
 from tabsdata._io.plugin import DestinationPlugin
 from tabsdata._utils.annotations import unstable, unstable_category
 from tabsdata._utils.id import encode_id
@@ -65,6 +68,7 @@ class ClickHouseDest(DestinationPlugin):
         conn: ClickHouseConn,
         destination_tables: str | list[str],
         if_table_exists: IfTableExistStrategySpec = "append",
+        schema_evolution: SchemaEvolutionSpec = "none",
     ):
         """
         Initialize a ClickHouseDest instance for writing data to ClickHouse.
@@ -79,12 +83,20 @@ class ClickHouseDest(DestinationPlugin):
 
                 * ``'append'`` — insert new rows into the existing table.
                 * ``'replace'`` — truncate the table before loading new rows.
+            schema_evolution: The schema evolution strategy to use when the incoming
+                data schema differs from the existing table schema.
+                Defaults to ``'none'``.
+
+                * ``'none'`` — raise an error if the schema does not match.
+                * ``'iceberg'`` — apply Iceberg-style schema evolution (add columns,
+                  drop columns, widen types, make columns nullable).
         """
         self._conn = conn
         self._destination_tables = self._normalize_destination_tables(
             destination_tables
         )
         self._if_table_exists = if_table_exists
+        self._schema_evolution = schema_evolution
 
     # ── Properties ────────────────────────────────────────────────────────────────────
 
@@ -108,6 +120,13 @@ class ClickHouseDest(DestinationPlugin):
         The strategy to follow when the table already exists.
         """
         return self._if_table_exists
+
+    @property
+    def schema_evolution(self) -> SchemaEvolutionSpec:
+        """
+        The schema evolution strategy.
+        """
+        return self._schema_evolution
 
     # ── Internal helpers ──────────────────────────────────────────────────────────────
 
@@ -192,6 +211,11 @@ class ClickHouseDest(DestinationPlugin):
             if self._if_table_exists == "replace"
             else WriteMode.APPEND
         )
+        schema_evo = (
+            SchemaEvolutionMode.ICEBERG
+            if self._schema_evolution == "iceberg"
+            else SchemaEvolutionMode.NONE
+        )
 
         cloud_storage = self._build_cloud_storage()
         ch_config = self._build_clickhouse_config()
@@ -200,7 +224,7 @@ class ClickHouseDest(DestinationPlugin):
             cloud_storage=cloud_storage,
             dialect=dialect,
             write_mode=write_mode,
-            schema_evolution=SchemaEvolutionMode.NONE,
+            schema_evolution=schema_evo,
             upload_id=upload_id,
         )
         loader.load(tables)
@@ -213,5 +237,6 @@ class ClickHouseDest(DestinationPlugin):
             f"{self.__class__.__name__}("
             f"conn={self.conn}, "
             f"destination_tables={self.destination_tables}, "
-            f"if_table_exists='{self.if_table_exists}')"
+            f"if_table_exists='{self.if_table_exists}', "
+            f"schema_evolution='{self.schema_evolution}')"
         )
