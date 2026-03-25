@@ -853,6 +853,7 @@ def _run(
     require_output: bool,
     staging_folder: Path = None,
     staging_uri: str = None,
+    require_success: bool = True,
 ) -> FnRun:
     logger = logging.getLogger(__name__)
     logger.debug("Performing run...")
@@ -962,7 +963,8 @@ def _run(
         output_initial_values=output_initial_values,
     )
 
-    fnrun.check(require_output=require_output)
+    if require_success:
+        fnrun.check(require_output=require_output)
     return fnrun
 
 
@@ -1004,6 +1006,7 @@ def tdfnrun(
     function_defined_on: float = None,
     require_output: bool = True,
     staging_folder: Path = None,
+    require_success: bool = True,
 ) -> FnRun:
     tdtest = Path(tempfile.gettempdir()) / FunctionConstants.TEMP_ROOT.value
     os.makedirs(tdtest, exist_ok=True)
@@ -1043,6 +1046,7 @@ def tdfnrun(
             require_output=require_output,
             staging_folder=staging_folder,
             staging_uri=None,
+            require_success=require_success,
         )
 
 

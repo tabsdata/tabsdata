@@ -91,18 +91,34 @@ def _arrow_type_to_clickhouse(arrow_type: pa.DataType) -> str:
     raise TypeError(f"Unsupported PyArrow type for ClickHouse: {arrow_type}")
 
 
-def schema_to_clickhouse_columns(arrow_schema: pa.Schema) -> list[tuple[str, str]]:
+def schema_to_clickhouse_columns(
+    arrow_schema: pa.Schema,
+    column_nulls: dict[str, bool | None] | None = None,
+) -> list[tuple[str, str]]:
     """Convert a PyArrow schema to a list of ``(column_name, clickhouse_type)`` pairs.
 
     Non-container nullable fields are wrapped with ``Nullable()``.
     Container types (``Array``, ``Map``, ``Tuple``) are never wrapped because
     ClickHouse does not support top-level ``Nullable`` on those types.
+
+    Args:
+        arrow_schema: The PyArrow schema to convert.
+        column_nulls: Per-column nullability from Parquet file statistics.
+            When provided, overrides Arrow's schema-level nullable flag.
+            ``True`` or ``None`` (stats missing) → ``Nullable()``,
+            ``False`` → bare type (NOT NULL).
     """
     columns = []
     for field in arrow_schema:
         ch_type = _arrow_type_to_clickhouse(field.type)
         is_container = any(check(field.type) for check in _CONTAINER_TYPE_CHECKS)
-        if field.nullable and not is_container:
+        if is_container:
+            nullable = False
+        elif column_nulls is not None and field.name in column_nulls:
+            nullable = column_nulls[field.name] is not False
+        else:
+            nullable = field.nullable
+        if nullable:
             ch_type = f"Nullable({ch_type})"
         columns.append((field.name, ch_type))
     return columns
@@ -255,7 +271,7 @@ class ClickHouseDialect(Dialect):
     # ── Capability flags ──────────────────────────────────────────────────────────────
 
     def supports_tabsdata_schema_evolution(self) -> bool:
-        return False
+        return True
 
     def supports_native_schema_evolution(self) -> bool:
         return False
@@ -299,9 +315,13 @@ class ClickHouseDialect(Dialect):
         return pa.schema(fields)
 
     def create_table(
-        self, load_mode: LoadMode, table_name: str, arrow_schema: schema
+        self,
+        load_mode: LoadMode,
+        table_name: str,
+        arrow_schema: schema,
+        column_nulls: dict[str, bool | None] | None = None,
     ) -> None:
-        col_defs = schema_to_clickhouse_columns(arrow_schema)
+        col_defs = schema_to_clickhouse_columns(arrow_schema, column_nulls)
         columns = ",\n    ".join(f"`{name}` {typ}" for name, typ in col_defs)
         ddl = (
             f"CREATE TABLE `{self._db}`.`{table_name}` (\n"
@@ -334,16 +354,124 @@ class ClickHouseDialect(Dialect):
     # ── Schema evolution ──────────────────────────────────────────────────────────────
 
     def get_type_widening_map(self) -> dict[str, set[str]]:
-        """Return the TED4 type-widening map for ClickHouse integer and float types."""
-        return {
-            "Int16": {"Int8"},
-            "Int32": {"Int8", "Int16"},
-            "Int64": {"Int8", "Int16", "Int32"},
-            "UInt16": {"UInt8"},
-            "UInt32": {"UInt8", "UInt16"},
-            "UInt64": {"UInt8", "UInt16", "UInt32"},
-            "Float64": {"Float32"},
-        }
+        """Return the type-widening map for ClickHouse integer and float types."""
+        from tabsdata.connector.schema.evolution.renderers.clickhouse import (
+            CLICKHOUSE_TYPE_WIDENING_MAP,
+        )
+
+        return CLICKHOUSE_TYPE_WIDENING_MAP
+
+    def get_evolution_table_schema(self, table_name: str):
+        """Return the current table schema as a TableSchema.
+
+        Queries ``system.columns`` for column names, types (with Nullable
+        unwrapping), default kind, and default expression.
+        """
+        from tabsdata.connector.schema.evolution.renderers.clickhouse import (
+            table_schema_from_system_columns,
+        )
+
+        result = self._client.query(
+            "SELECT name, type, default_kind, default_expression "
+            "FROM system.columns "
+            "WHERE database = {db:String} AND table = {tbl:String} "
+            "ORDER BY position",
+            parameters={"db": self._db, "tbl": table_name},
+        )
+        fq_name = f"`{self._db}`.`{table_name}`"
+        return table_schema_from_system_columns(
+            fq_name,
+            result.result_rows,
+        )
+
+    def compute_evolution_delta(
+        self,
+        load_mode: LoadMode,
+        table_name: str,
+        new_arrow_schema,
+        column_nulls: dict[str, bool | None] | None = None,
+    ):
+        """Compute a SchemaDelta between the current ClickHouse table and a new
+        Arrow schema.
+
+        Converts both schemas to ClickHouse native types, then computes the delta
+        using the ClickHouse type-widening map.
+
+        Args:
+            load_mode: Current load mode context.
+            table_name: Name of the target table.
+            new_arrow_schema: The desired schema as a PyArrow schema.
+            column_nulls: Per-column nullability from Parquet stats. When
+                provided, overrides Arrow's schema-level nullable flag
+                (which is always True for Polars-produced files).
+        """
+        from tabsdata.connector.schema.evolution.core import (
+            compute_delta,
+            validate_delta,
+        )
+        from tabsdata.connector.schema.evolution.models import ColumnDef
+        from tabsdata.connector.schema.evolution.renderers.clickhouse import (
+            CLICKHOUSE_TYPE_WIDENING_MAP,
+            table_schema_from_arrow,
+        )
+
+        current = self.get_evolution_table_schema(table_name)
+        desired = table_schema_from_arrow(
+            current.table_name, new_arrow_schema, column_nulls
+        )
+
+        # Reconcile nullability between the current table and the incoming
+        # data.  The parquet stats tell us whether the *incoming batch*
+        # contains nulls, but two adjustments are needed:
+        #
+        # 1. Existing columns that are already nullable must stay nullable
+        #    even if this batch has no nulls — we never tighten constraints
+        #    (DROP_NULLABLE is unsafe in Iceberg semantics).
+        #
+        # 2. New columns (not in the current table) must be nullable
+        #    regardless of the incoming data — existing rows have no value
+        #    for them and need NULL.
+        current_cols = {c.name: c for c in current.columns}
+        desired_columns = []
+        for col in desired.columns:
+            if col.name in current_cols:
+                # Existing column: keep nullable if already nullable
+                existing = current_cols[col.name]
+                if existing.nullable and not col.nullable:
+                    col = ColumnDef(
+                        name=col.name,
+                        type=col.type,
+                        nullable=True,
+                        default=col.default,
+                    )
+            else:
+                # New column: must be nullable for existing rows
+                if not col.nullable:
+                    col = ColumnDef(
+                        name=col.name,
+                        type=col.type,
+                        nullable=True,
+                        default=col.default,
+                    )
+            desired_columns.append(col)
+        desired = type(desired)(table_name=desired.table_name, columns=desired_columns)
+
+        delta = compute_delta(current, desired, CLICKHOUSE_TYPE_WIDENING_MAP)
+        validate_delta(delta, strict=True)
+        return delta
+
+    def apply_schema_delta(self, load_mode: LoadMode, table_name: str, delta) -> None:
+        """
+        Apply a SchemaDelta by rendering and executing ClickHouse ALTER statements.
+        """
+        from tabsdata.connector.schema.evolution.renderers.clickhouse import (
+            render_clickhouse_sql,
+        )
+
+        stmts = render_clickhouse_sql(delta)
+        for stmt in stmts:
+            logger.info("Schema evolution on '%s': %s", table_name, stmt)
+            self._client.command(stmt)
 
     # ── Data operations ───────────────────────────────────────────────────────────────
 

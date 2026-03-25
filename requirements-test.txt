@@ -15,6 +15,7 @@
 -r connectors/python/tabsdata-mongodb/requirements.txt
 -r connectors/python/tabsdata-mssql/requirements.txt
 -r connectors/python/tabsdata-salesforce/requirements.txt
+-r connectors/python/tabsdata-schema-evolution/requirements.txt
 -r connectors/python/tabsdata-snowflake/requirements.txt
 -r connectors/python/tabsdata-sql-common/requirements.txt
 

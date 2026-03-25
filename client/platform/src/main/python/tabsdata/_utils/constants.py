@@ -21,6 +21,7 @@ TABSDATA_CONNECTORS_NAMES = [
     "mongodb",
     "mssql",
     "salesforce",
+    "schema-evolution",
     "snowflake",
     "sql-common",
 ]

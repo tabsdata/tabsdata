@@ -12,5 +12,6 @@ tabsdata-kafka==1.9.0
 tabsdata-mongodb==1.9.0
 tabsdata-mssql==1.9.0
 tabsdata-salesforce==1.9.0
+tabsdata-schema-evolution==1.9.0
 tabsdata-snowflake==1.9.0
 tabsdata-sql-common==1.9.0

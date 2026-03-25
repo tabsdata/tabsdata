@@ -253,7 +253,11 @@ class DruidDialect(Dialect):
         return pa.schema([])
 
     def create_table(
-        self, load_mode: LoadMode, table_name: str, arrow_schema: schema
+        self,
+        load_mode: LoadMode,
+        table_name: str,
+        arrow_schema: schema,
+        column_nulls: dict[str, bool | None] | None = None,
     ) -> None:
         """No-op — Druid datasources are created implicitly by the first
         ingestion task with ``useSchemaDiscovery: true``."""

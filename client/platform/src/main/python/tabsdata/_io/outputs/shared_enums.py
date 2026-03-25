@@ -6,6 +6,7 @@ from enum import Enum
 from typing import Literal, TypeAlias
 
 IfTableExistStrategySpec: TypeAlias = Literal["append", "replace"]
+SchemaEvolutionSpec: TypeAlias = Literal["none", "iceberg"]
 SchemaStrategySpec: TypeAlias = Literal["update", "strict"]
 
 # Not including 'pandas' in the loader spec since pl.write_database uses pandas.to_sql

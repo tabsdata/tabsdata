@@ -400,7 +400,11 @@ class StarRocksDialect(Dialect):
         return pa.schema(fields)
 
     def create_table(
-        self, load_mode: LoadMode, table_name: str, arrow_schema: schema
+        self,
+        load_mode: LoadMode,
+        table_name: str,
+        arrow_schema: schema,
+        column_nulls: dict[str, bool | None] | None = None,
     ) -> None:
         sr_columns = schema_to_starrocks_columns(arrow_schema)
         col_defs = ",\n    ".join(
@@ -442,7 +446,7 @@ class StarRocksDialect(Dialect):
     # ── Schema evolution ──────────────────────────────────────────────────────────────
 
     def get_type_widening_map(self) -> dict[str, set[str]]:
-        """Return the TED4 type-widening map for StarRocks integer and float types."""
+        """Return the type-widening map for StarRocks integer and float types."""
         return {
             "SMALLINT": {"TINYINT"},
             "INT": {"TINYINT", "SMALLINT"},
@@ -454,7 +458,7 @@ class StarRocksDialect(Dialect):
     def _wait_for_alter(self, table_name: str) -> None:
         """Poll ``SHOW ALTER TABLE COLUMN`` until the latest operation completes.
 
-        Used by :meth:`apply_schema_delta` (TED4/Iceberg-style evolution) if
+        Used by :meth:`apply_schema_delta` (Iceberg-style evolution) if
         schema evolution is enabled in the future.
         """
         start = time.time()

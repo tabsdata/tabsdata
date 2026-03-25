@@ -24,7 +24,7 @@ class Dialect(ABC):
 
     @abstractmethod
     def supports_tabsdata_schema_evolution(self) -> bool:
-        """Return True if TED4/Iceberg-style schema evolution is supported."""
+        """Return True if Iceberg-style schema evolution is supported."""
 
     @abstractmethod
     def supports_native_schema_evolution(self) -> bool:
@@ -54,9 +54,22 @@ class Dialect(ABC):
 
     @abstractmethod
     def create_table(
-        self, load_mode: LoadMode, table_name: str, arrow_schema: schema
+        self,
+        load_mode: LoadMode,
+        table_name: str,
+        arrow_schema: schema,
+        column_nulls: dict[str, bool | None] | None = None,
     ) -> None:
-        """Create a table from a PyArrow schema."""
+        """Create a table from a PyArrow schema.
+
+        Args:
+            load_mode: Current load mode context.
+            table_name: Name of the table to create.
+            arrow_schema: The schema as a PyArrow schema.
+            column_nulls: Per-column nullability derived from Parquet file
+                statistics.  When provided, overrides Arrow's schema-level
+                nullable flag for accurate NOT NULL constraints.
+        """
 
     @abstractmethod
     def verify_schema(
@@ -107,11 +120,38 @@ class Dialect(ABC):
         pass  # no-op by default
 
     def get_type_widening_map(self) -> dict[str, set[str]]:
-        """Return the TED4 TypeWideningMap for this dialect. Used by ICEBERG mode."""
+        """Return the TypeWideningMap for this dialect. Used by ICEBERG mode."""
         return {}
 
+    def compute_evolution_delta(
+        self,
+        load_mode: LoadMode,
+        table_name: str,
+        new_arrow_schema: schema,
+        column_nulls: dict[str, bool | None] | None = None,
+    ):
+        """Compute a SchemaDelta between the current table and a new Arrow schema.
+
+        Each dialect converts the PyArrow schema to its own type system, retrieves
+        the current table schema in native types, and computes the delta using its
+        type-widening map.
+
+        Args:
+            load_mode: Current load mode context.
+            table_name: Name of the target table.
+            new_arrow_schema: The desired schema as a PyArrow schema.
+            column_nulls: Per-column nullability derived from Parquet file
+                statistics. Maps column names to ``True`` (has nulls),
+                ``False`` (no nulls), or ``None`` (stats unavailable).
+                When provided, this overrides the Arrow schema-level nullable
+                flag, which is unreliable for Polars-produced files.
+
+        Override in dialects that support Iceberg-style schema evolution.
+        """
+        raise NotImplementedError("Dialect does not implement compute_evolution_delta")
+
     def apply_schema_delta(self, load_mode: LoadMode, table_name: str, delta) -> None:
-        """Apply a TED4 SchemaDelta as dialect-specific DDL.
+        """Apply a SchemaDelta as dialect-specific DDL.
         Override in dialects to render ALTER statements."""
         raise NotImplementedError("Dialect does not implement apply_schema_delta")
 
@@ -130,7 +170,7 @@ class Dialect(ABC):
     def apply_schema_deltas(
         self, load_mode: LoadMode, items: list[tuple[str, object]]
     ) -> None:
-        """Apply TED4 SchemaDelta to multiple tables. Default: sequential loop.
+        """Apply SchemaDelta to multiple tables. Default: sequential loop.
         items is a list of (table_name, delta) tuples."""
         for table_name, delta in items:
             self.apply_schema_delta(load_mode, table_name, delta)

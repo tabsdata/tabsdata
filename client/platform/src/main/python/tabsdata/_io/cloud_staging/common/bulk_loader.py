@@ -97,13 +97,29 @@ class CloudStagedBulkLoader:
         # schema)
         arrow_schema = pq.read_schema(parquet_paths[0])
 
+        # Detect per-column nullability from parquet stats only when schema
+        # evolution is enabled.  For NONE mode we preserve the legacy behavior
+        # (Arrow's always-nullable flag) so that verify_schema — which also
+        # uses the Arrow flag — stays consistent.
+        if self.schema_evolution != SchemaEvolutionMode.NONE:
+            column_nulls = self._detect_nullability(parquet_paths)
+        else:
+            column_nulls = None
+
         if not self.dialect.table_exists(self.load_mode, table_name):
             logger.debug("Creating table: %s", table_name)
-            self.dialect.create_table(self.load_mode, table_name, arrow_schema)
+            self.dialect.create_table(
+                self.load_mode, table_name, arrow_schema, column_nulls
+            )
         else:
-            self.ensure_schema_compatible(table_name, arrow_schema)
+            self.ensure_schema_compatible(table_name, arrow_schema, column_nulls)
 
-    def ensure_schema_compatible(self, table_name: str, arrow_schema) -> None:
+    def ensure_schema_compatible(
+        self,
+        table_name: str,
+        arrow_schema,
+        column_nulls: dict[str, bool | None] | None = None,
+    ) -> None:
         """Check schema compatibility and apply evolution if configured.
         Override to customize schema comparison logic."""
         try:
@@ -130,17 +146,58 @@ class CloudStagedBulkLoader:
                         f"Schema mismatch for '{table_name}' and dialect does not "
                         f"support Tabsdata (Iceberg-style) schema evolution."
                     )
-                old_schema = self.dialect.get_table_schema(self.load_mode, table_name)
-                delta = self.compute_iceberg_delta(old_schema, arrow_schema)
+                delta = self.dialect.compute_evolution_delta(
+                    self.load_mode, table_name, arrow_schema, column_nulls
+                )
                 self.dialect.apply_schema_delta(self.load_mode, table_name, delta)
                 logger.debug(
                     f"Applied Iceberg schema evolution to table '{table_name}'"
                 )
 
-    def compute_iceberg_delta(self, old_schema, new_schema):
-        """Compute a TED4 SchemaDelta between old and new schemas.
-        Override to customize delta computation (e.g. custom widen map merging)."""
-        # TODO: Add implementation for iceberg delta computation
+    @staticmethod
+    def _detect_nullability(parquet_paths: list[Path]) -> dict[str, bool | None]:
+        """Detect per-column nullability from Parquet file statistics.
+
+        Reads row-group-level statistics from all provided Parquet files to
+        determine whether each column actually contains null values, rather
+        than relying on Arrow's schema-level nullable flag (which is always
+        ``True`` for Polars-produced files).
+
+        Returns:
+            A dict mapping column names to:
+              - ``True``  — at least one null found across all row groups
+              - ``False`` — zero nulls across all row groups
+              - ``None``  — stats missing or unreliable for this column
+        """
+        null_counts: dict[str, int] = {}
+        stats_missing: set[str] = set()
+        all_columns: dict[str, None] = {}  # insertion-ordered set
+
+        for path in parquet_paths:
+            meta = pq.read_metadata(path)
+            schema = pq.read_schema(path)
+
+            for i in range(len(schema)):
+                all_columns[schema.field(i).name] = None
+
+            for rg_idx in range(meta.num_row_groups):
+                rg = meta.row_group(rg_idx)
+                for col_idx in range(rg.num_columns):
+                    col = rg.column(col_idx)
+                    name = col.path_in_schema
+                    stats = col.statistics
+                    if stats is None or not stats.has_null_count:
+                        stats_missing.add(name)
+                    else:
+                        null_counts[name] = null_counts.get(name, 0) + stats.null_count
+
+        result: dict[str, bool | None] = {}
+        for name in all_columns:
+            if name in stats_missing:
+                result[name] = None
+            else:
+                result[name] = null_counts.get(name, 0) > 0
+        return result
 
     # ── Phase 2: Upload to Storage ────────────────────────────────────────────────────
 
