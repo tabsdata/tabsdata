@@ -1075,9 +1075,9 @@ def test_schema_evolution_add_nullable_column(
 ):
     """Add a nullable column to an existing table."""
     from tabsdata._utils.id import encode_id as _encode_id
-    from tabsdata.connector.schema.evolution.core import compute_delta
-    from tabsdata.connector.schema.evolution.models import ColumnDef, TableSchema
-    from tabsdata.connector.schema.evolution.renderers.clickhouse import (
+    from tabsdata.connector.schema.evolution.iceberg.core import compute_delta
+    from tabsdata.connector.schema.evolution.iceberg.models import ColumnDef, TableSchema
+    from tabsdata.connector.schema.evolution.iceberg.renderers.clickhouse import (
         CLICKHOUSE_TYPE_WIDENING_MAP,
     )
 
@@ -1132,9 +1132,9 @@ def test_schema_evolution_add_column_with_default(
 ):
     """Add a non-nullable column with a default value."""
     from tabsdata._utils.id import encode_id as _encode_id
-    from tabsdata.connector.schema.evolution.core import compute_delta
-    from tabsdata.connector.schema.evolution.models import ColumnDef, TableSchema
-    from tabsdata.connector.schema.evolution.renderers.clickhouse import (
+    from tabsdata.connector.schema.evolution.iceberg.core import compute_delta
+    from tabsdata.connector.schema.evolution.iceberg.models import ColumnDef, TableSchema
+    from tabsdata.connector.schema.evolution.iceberg.renderers.clickhouse import (
         CLICKHOUSE_TYPE_WIDENING_MAP,
     )
 
@@ -1185,9 +1185,9 @@ def test_schema_evolution_drop_column(
 ):
     """Drop a column from an existing table."""
     from tabsdata._utils.id import encode_id as _encode_id
-    from tabsdata.connector.schema.evolution.core import compute_delta
-    from tabsdata.connector.schema.evolution.models import ColumnDef, TableSchema
-    from tabsdata.connector.schema.evolution.renderers.clickhouse import (
+    from tabsdata.connector.schema.evolution.iceberg.core import compute_delta
+    from tabsdata.connector.schema.evolution.iceberg.models import ColumnDef, TableSchema
+    from tabsdata.connector.schema.evolution.iceberg.renderers.clickhouse import (
         CLICKHOUSE_TYPE_WIDENING_MAP,
     )
 
@@ -1236,9 +1236,9 @@ def test_schema_evolution_widen_type(
 ):
     """Widen Int32 → Int64 and Float32 → Float64."""
     from tabsdata._utils.id import encode_id as _encode_id
-    from tabsdata.connector.schema.evolution.core import compute_delta, validate_delta
-    from tabsdata.connector.schema.evolution.models import ColumnDef, TableSchema
-    from tabsdata.connector.schema.evolution.renderers.clickhouse import (
+    from tabsdata.connector.schema.evolution.iceberg.core import compute_delta, validate_delta
+    from tabsdata.connector.schema.evolution.iceberg.models import ColumnDef, TableSchema
+    from tabsdata.connector.schema.evolution.iceberg.renderers.clickhouse import (
         CLICKHOUSE_TYPE_WIDENING_MAP,
     )
 
@@ -1293,9 +1293,9 @@ def test_schema_evolution_set_nullable(
 ):
     """Make a NOT NULL column nullable."""
     from tabsdata._utils.id import encode_id as _encode_id
-    from tabsdata.connector.schema.evolution.core import compute_delta
-    from tabsdata.connector.schema.evolution.models import ColumnDef, TableSchema
-    from tabsdata.connector.schema.evolution.renderers.clickhouse import (
+    from tabsdata.connector.schema.evolution.iceberg.core import compute_delta
+    from tabsdata.connector.schema.evolution.iceberg.models import ColumnDef, TableSchema
+    from tabsdata.connector.schema.evolution.iceberg.renderers.clickhouse import (
         CLICKHOUSE_TYPE_WIDENING_MAP,
     )
 
@@ -1350,9 +1350,9 @@ def test_schema_evolution_set_and_drop_default(
 ):
     """Set a default on a column, then drop it."""
     from tabsdata._utils.id import encode_id as _encode_id
-    from tabsdata.connector.schema.evolution.core import compute_delta
-    from tabsdata.connector.schema.evolution.models import ColumnDef, TableSchema
-    from tabsdata.connector.schema.evolution.renderers.clickhouse import (
+    from tabsdata.connector.schema.evolution.iceberg.core import compute_delta
+    from tabsdata.connector.schema.evolution.iceberg.models import ColumnDef, TableSchema
+    from tabsdata.connector.schema.evolution.iceberg.renderers.clickhouse import (
         CLICKHOUSE_TYPE_WIDENING_MAP,
     )
 
@@ -1419,9 +1419,9 @@ def test_schema_evolution_combined(
 ):
     """Combined evolution: add column, drop column, widen type, set nullable."""
     from tabsdata._utils.id import encode_id as _encode_id
-    from tabsdata.connector.schema.evolution.core import compute_delta, validate_delta
-    from tabsdata.connector.schema.evolution.models import ColumnDef, TableSchema
-    from tabsdata.connector.schema.evolution.renderers.clickhouse import (
+    from tabsdata.connector.schema.evolution.iceberg.core import compute_delta, validate_delta
+    from tabsdata.connector.schema.evolution.iceberg.models import ColumnDef, TableSchema
+    from tabsdata.connector.schema.evolution.iceberg.renderers.clickhouse import (
         CLICKHOUSE_TYPE_WIDENING_MAP,
     )
 
@@ -1506,8 +1506,8 @@ def test_schema_evolution_no_changes(
 ):
     """When schemas match, no ALTER statements should be executed."""
     from tabsdata._utils.id import encode_id as _encode_id
-    from tabsdata.connector.schema.evolution.core import compute_delta
-    from tabsdata.connector.schema.evolution.renderers.clickhouse import (
+    from tabsdata.connector.schema.evolution.iceberg.core import compute_delta
+    from tabsdata.connector.schema.evolution.iceberg.renderers.clickhouse import (
         CLICKHOUSE_TYPE_WIDENING_MAP,
     )
 

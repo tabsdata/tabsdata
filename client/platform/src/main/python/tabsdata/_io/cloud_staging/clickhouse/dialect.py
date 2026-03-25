@@ -355,7 +355,7 @@ class ClickHouseDialect(Dialect):
 
     def get_type_widening_map(self) -> dict[str, set[str]]:
         """Return the type-widening map for ClickHouse integer and float types."""
-        from tabsdata.connector.schema.evolution.renderers.clickhouse import (
+        from tabsdata.connector.schema.evolution.iceberg.renderers.clickhouse import (
             CLICKHOUSE_TYPE_WIDENING_MAP,
         )
 
@@ -367,7 +367,7 @@ class ClickHouseDialect(Dialect):
         Queries ``system.columns`` for column names, types (with Nullable
         unwrapping), default kind, and default expression.
         """
-        from tabsdata.connector.schema.evolution.renderers.clickhouse import (
+        from tabsdata.connector.schema.evolution.iceberg.renderers.clickhouse import (
             table_schema_from_system_columns,
         )
 
@@ -405,12 +405,12 @@ class ClickHouseDialect(Dialect):
                 provided, overrides Arrow's schema-level nullable flag
                 (which is always True for Polars-produced files).
         """
-        from tabsdata.connector.schema.evolution.core import (
+        from tabsdata.connector.schema.evolution.iceberg.core import (
             compute_delta,
             validate_delta,
         )
-        from tabsdata.connector.schema.evolution.models import ColumnDef
-        from tabsdata.connector.schema.evolution.renderers.clickhouse import (
+        from tabsdata.connector.schema.evolution.iceberg.models import ColumnDef
+        from tabsdata.connector.schema.evolution.iceberg.renderers.clickhouse import (
             CLICKHOUSE_TYPE_WIDENING_MAP,
             table_schema_from_arrow,
         )
@@ -464,7 +464,7 @@ class ClickHouseDialect(Dialect):
         """
         Apply a SchemaDelta by rendering and executing ClickHouse ALTER statements.
         """
-        from tabsdata.connector.schema.evolution.renderers.clickhouse import (
+        from tabsdata.connector.schema.evolution.iceberg.renderers.clickhouse import (
             render_clickhouse_sql,
         )
 

@@ -2,11 +2,11 @@
 # Copyright 2026 Tabs Data Inc.
 #
 
-from tabsdata.connector.schema.evolution.renderers.base import DialectRenderer
-from tabsdata.connector.schema.evolution.renderers.clickhouse import (
+from tabsdata.connector.schema.evolution.iceberg.renderers.base import DialectRenderer
+from tabsdata.connector.schema.evolution.iceberg.renderers.clickhouse import (
     ClickHouseRenderer,
 )
-from tabsdata.connector.schema.evolution.renderers.starrocks import (
+from tabsdata.connector.schema.evolution.iceberg.renderers.starrocks import (
     StarRocksRenderer,
 )
 

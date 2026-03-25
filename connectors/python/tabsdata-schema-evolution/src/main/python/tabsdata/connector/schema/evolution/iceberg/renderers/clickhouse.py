@@ -15,7 +15,7 @@ This module provides:
 
 from __future__ import annotations
 
-from tabsdata.connector.schema.evolution.models import (
+from tabsdata.connector.schema.evolution.iceberg.models import (
     Action,
     ColumnDef,
     RenderOptions,
@@ -24,7 +24,7 @@ from tabsdata.connector.schema.evolution.models import (
     TableSchema,
     TypeWideningMap,
 )
-from tabsdata.connector.schema.evolution.renderers.base import DialectRenderer
+from tabsdata.connector.schema.evolution.iceberg.renderers.base import DialectRenderer
 
 # ── Renderer ──────────────────────────────────────────────────────────────────────────
 
@@ -308,6 +308,6 @@ def render_clickhouse_sql(
 
     Convenience wrapper around ``render_sql(delta, "clickhouse", options)``.
     """
-    from tabsdata.connector.schema.evolution.renderers import render_sql
+    from tabsdata.connector.schema.evolution.iceberg.renderers import render_sql
 
     return render_sql(delta, "clickhouse", options)
