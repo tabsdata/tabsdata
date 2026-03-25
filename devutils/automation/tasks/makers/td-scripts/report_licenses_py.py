@@ -221,4 +221,4 @@ with open(TARGET_FILE_CSV, "w", encoding="utf-8", newline="") as f:
     writer = csv.writer(f)
     writer.writerows(table_data)
 
-logger.debug(content)
+# logger.debug(content)
