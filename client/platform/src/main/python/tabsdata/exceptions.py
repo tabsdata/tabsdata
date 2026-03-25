@@ -2447,6 +2447,10 @@ class ErrorCode(Enum):
         "code": "CDCMYSQL-005",
         "message": "Invalid MySQL CDC binlog position specification: {}",
     }
+    CDCMYSQL6 = {
+        "code": "CDCMYSQL-006",
+        "message": "MySQL binlog event column has no name: {}",
+    }
 
     # CDC PostgreSQL errors
     CDCPOSTGRES1 = {
@@ -2477,6 +2481,14 @@ class ErrorCode(Enum):
         "code": "CDCPOSTGRES-007",
         "message": "Invalid PostgreSQL CDC LSN position specification: {}",
     }
+    CDCPOSTGRES8 = {
+        "code": "CDCPOSTGRES-008",
+        "message": "WAL2JSON value column '{}' has no matching type in schema",
+    }
+    CDCPOSTGRES9 = {
+        "code": "CDCPOSTGRES-009",
+        "message": "WAL2JSON v2 payload contains no columns: {}",
+    }
 
     # CDC DB2 errors
     CDCDB21 = {
@@ -2494,6 +2506,21 @@ class ErrorCode(Enum):
     CDCDB24 = {
         "code": "CDCDB2-004",
         "message": "Invalid DB2 CDC table commit sequence position specification: {}",
+    }
+    CDCDB25 = {
+        "code": "CDCDB2-005",
+        "message": "CD table contains prefixed columns that cannot be matched "
+        "to any source column: {} | {} | {} (prefix: {!r})",
+    }
+    CDCDB26 = {
+        "code": "CDCDB2-006",
+        "message": "CD table is not configured with a before-image prefix; "
+        "cannot match old-value columns",
+    }
+    CDCDB27 = {
+        "code": "CDCDB2-007",
+        "message": "CD table contains non-prefixed columns that cannot be matched "
+        "to any before-image column: {} | {} | {} (prefix: {!r})",
     }
 
     # Cloud staging configuration errors

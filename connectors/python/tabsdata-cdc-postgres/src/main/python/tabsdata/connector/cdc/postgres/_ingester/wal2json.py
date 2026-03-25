@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Generator
+from collections.abc import Generator, Iterable
 from datetime import date, datetime, time as dt_time
 from decimal import Decimal
 from typing import Any
@@ -15,12 +15,12 @@ import orjson
 import polars as pl
 import pyarrow as pa
 
+from tabsdata.connector.cdc.common._dictionary import SchemaVersion
 from tabsdata.connector.cdc.common._ingester import CdcIngester
 from tabsdata.connector.cdc.common._model import (
     CdcChange,
     CdcDataChange,
     CdcOffset,
-    TrackedTable,
 )
 from tabsdata.connector.cdc.common.constants import (
     COMMA,
@@ -152,6 +152,10 @@ class Wal2JsonIngester(CdcIngester):
         self._wal2json_format_version = wal2json_format_version
         self._replicator: Any | None = None
         self._cursor: Any | None = None
+
+    @property
+    def ingester_type(self) -> str:
+        return "wal2json"
 
     @property
     def conn(self) -> PostgresCdcConn:
@@ -379,21 +383,23 @@ class Wal2JsonIngester(CdcIngester):
         op: str,
         xid: str,
         sequence: int,
+        schema_version: SchemaVersion,
         new_values: dict,
-        old_values: dict | None,
+        old_values: dict,
         offset: LsnOffset | None = None,
     ) -> CdcDataChange:
-        new_values = self.filter_values(qualified, new_values)
-        old_values = self.filter_values(qualified, old_values)
-        tracked = self._tracked_tables.get(qualified)
-        if tracked is not None:
-            null_row = {column.name: None for column in tracked.columns}
-            if not new_values:
-                new_values = null_row.copy()
-            if not old_values:
-                old_values = null_row.copy()
-            self.coerce_values(new_values, tracked)
-            self.coerce_values(old_values, tracked)
+        if new_values:
+            new_values = {column: value for column, value in new_values.items()}
+        if old_values:
+            old_values = {column: value for column, value in old_values.items()}
+        columns = schema_version.columns
+        null_row = {column.name: None for column in columns}
+        if not new_values:
+            new_values = null_row.copy()
+        if not old_values:
+            old_values = null_row.copy()
+        self.coerce_values(new_values, columns)
+        self.coerce_values(old_values, columns)
         self.localize_values(new_values)
         self.localize_values(old_values)
         return CdcDataChange(
@@ -404,17 +410,37 @@ class Wal2JsonIngester(CdcIngester):
             new_values=new_values,
             old_values=old_values,
             offset=offset,
+            schema=schema_version,
         )
 
     @staticmethod
-    def coerce_values(values: dict | None, tracked: TrackedTable) -> None:
-        if values is None:
-            return
-        column_types = {column.name: column.patype for column in tracked.columns}
+    def extract_raw_schema_v1(change: dict) -> tuple[tuple[str, str, str], ...]:
+        names = change.get("columnnames")
+        types = change.get("columntypes")
+        if not names or not types:
+            old_keys = change.get("oldkeys", {})
+            names = old_keys.get("keynames")
+            types = old_keys.get("keytypes")
+        if not names or not types:
+            raise CdcError(ErrorCode.CDCPOSTGRES9, change)
+        return tuple((name, dtype, dtype) for name, dtype in zip(names, types))
+
+    @staticmethod
+    def extract_raw_schema_v2(payload: dict) -> tuple[tuple[str, str, str], ...]:
+        columns = payload.get("columns") or payload.get("identity")
+        if not columns:
+            raise CdcError(ErrorCode.CDCPOSTGRES9, payload)
+        return tuple(
+            (column["name"], column["type"], column["type"]) for column in columns
+        )
+
+    @staticmethod
+    def coerce_values(values: dict, columns: Iterable) -> None:
+        column_types = {column.name: column.patype for column in columns}
         for column, value in values.items():
             pa_type = column_types.get(column)
             if pa_type is None:
-                continue
+                raise CdcError(ErrorCode.CDCPOSTGRES8, column)
             values[column] = Wal2JsonIngester.coerce_value(value, pa_type)
 
     @staticmethod
@@ -497,6 +523,8 @@ class Wal2JsonIngester(CdcIngester):
         qualified = self.resolve_table(change)
         if qualified is None:
             return None
+        raw_schema = self.extract_raw_schema_v1(change)
+        schema_version = self._schema_registry.register_from_log(qualified, raw_schema)
         kind = change.get("kind")
         op = V1_OPERATION_MAP.get(kind)
         if op is None:
@@ -516,23 +544,34 @@ class Wal2JsonIngester(CdcIngester):
             case _:
                 raise CdcError(ErrorCode.CDC5, kind, "wal2json", qualified)
         return self.build_change(
-            qualified, op, xid, sequence, new_values, old_values, offset
+            qualified=qualified,
+            op=op,
+            xid=xid,
+            sequence=sequence,
+            schema_version=schema_version,
+            new_values=new_values,
+            old_values=old_values,
+            offset=offset,
         )
 
     @staticmethod
     def extract_new_values_v1(change: dict) -> dict:
-        columns = change.get("columnnames", [])
-        values = change.get("columnvalues", [])
-        return dict(zip(columns, values))
-
-    @staticmethod
-    def extract_old_values_v1(change: dict) -> dict | None:
-        old_values = change.get("oldkeys", {})
-        columns = old_values.get("keynames", [])
-        values = old_values.get("keyvalues", [])
+        columns = change.get("columnnames")
+        values = change.get("columnvalues")
         if columns and values:
             return dict(zip(columns, values))
-        return None
+        return {}
+
+    @staticmethod
+    def extract_old_values_v1(change: dict) -> dict:
+        old_values = change.get("oldkeys")
+        if not old_values:
+            return {}
+        columns = old_values.get("keynames")
+        values = old_values.get("keyvalues")
+        if columns and values:
+            return dict(zip(columns, values))
+        return {}
 
     def poll_changes_v2(self, _session: Any) -> Generator[CdcChange, None, None]:
         deadline = time.monotonic() + self._blocking_timeout_seconds
@@ -594,6 +633,8 @@ class Wal2JsonIngester(CdcIngester):
         qualified = self.resolve_table(payload)
         if qualified is None:
             return None
+        raw_schema = self.extract_raw_schema_v2(payload)
+        schema_version = self._schema_registry.register_from_log(qualified, raw_schema)
         action = payload.get("action")
         op = V2_OPERATION_MAP.get(action)
         if op is None:
@@ -613,19 +654,26 @@ class Wal2JsonIngester(CdcIngester):
             case _:
                 raise CdcError(ErrorCode.CDC5, action, "wal2json", qualified)
         return self.build_change(
-            qualified, op, xid, sequence, new_values, old_values, offset
+            qualified=qualified,
+            op=op,
+            xid=xid,
+            sequence=sequence,
+            schema_version=schema_version,
+            new_values=new_values,
+            old_values=old_values,
+            offset=offset,
         )
 
     @staticmethod
     def extract_new_values_v2(change: dict) -> dict:
-        columns = change.get("columns", [])
-        if columns is None:
+        columns = change.get("columns")
+        if not columns:
             return {}
-        return {column["name"]: column.get("value") for column in columns}
+        return {column["name"]: column["value"] for column in columns}
 
     @staticmethod
-    def extract_old_values_v2(change: dict) -> dict | None:
-        identity = change.get("identity", [])
+    def extract_old_values_v2(change: dict) -> dict:
+        identity = change.get("identity")
         if not identity:
-            return None
-        return {column["name"]: column.get("value") for column in identity}
+            return {}
+        return {column["name"]: column["value"] for column in identity}

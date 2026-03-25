@@ -7,6 +7,7 @@ from __future__ import annotations
 from datetime import tzinfo
 from typing import Any
 
+import sqlalchemy.types as sa_types
 from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import BYTEA
 
@@ -17,6 +18,10 @@ POSTGRES_LARGE_COLUMN_TYPES = LARGE_COLUMN_TYPES + (BYTEA,)
 
 
 class PostgresDialect(Dialect):
+    @property
+    def sqlglot_dialect(self) -> str | None:
+        return "postgres"
+
     @property
     def open_quote(self) -> str:
         return '"'
@@ -64,3 +69,16 @@ class PostgresDialect(Dialect):
             },
         ).fetchall()
         return [row[0] for row in rows]
+
+    def cdc_to_sa(self, ingester_type: str, cdc_dtype: Any) -> sa_types.TypeEngine:
+        match ingester_type:
+            case "wal2json":
+                return self.cdc_to_sa_wal2json(cdc_dtype)
+            case _:
+                raise NotImplementedError(
+                    f"{type(self).__name__}.cdc_to_sa is not implemented "
+                    f"for ingester type {ingester_type!r}"
+                )
+
+    def cdc_to_sa_wal2json(self, cdc_dtype: str) -> sa_types.TypeEngine:
+        return self.ddl_to_sa(cdc_dtype)

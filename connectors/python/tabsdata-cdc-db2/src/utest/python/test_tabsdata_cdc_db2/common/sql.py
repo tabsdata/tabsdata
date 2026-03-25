@@ -4,12 +4,28 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from tabsdata.connector.cdc.common._model import TableObject
+import polars as pl
+
+from test_tabsdata_cdc_common.common.evolution import (
+    ADD_COLUMN_TARGETS,
+    CHANGE_TYPE_TARGETS,
+    DROP_COLUMN_TARGETS,
+    RENAME_COLUMN_TARGETS,
+    SchemaChange,
+    SchemaChangeKind,
+)
 from test_tabsdata_cdc_common.common.sql import (
     CdcSampler,
     sql_literal,
 )
-from test_tabsdata_cdc_db2.common.fixtures.docker import register_table_for_cdc
+from test_tabsdata_cdc_db2.common.fixtures.docker import (
+    deregister_table_from_cdc,
+    register_table_for_cdc,
+    reregister_table_for_cdc,
+)
 
 CREATE_TABLE_DDL = (
     "create table {qualified} ("
@@ -64,3 +80,84 @@ class Db2CdcSampler(CdcSampler):
         )
         self._cursor.execute("values identity_val_local()")
         return int(self._cursor.fetchone()[0])
+
+    def build_schema_changes(
+        self,
+        table: TableObject,
+        kinds: list[SchemaChangeKind],
+        iteration: int,
+    ) -> list[SchemaChange]:
+        changes = []
+        qtable = table.qualified
+        for kind in kinds:
+            if kind == SchemaChangeKind.ADD_COLUMN:
+                column_name, column_type = ADD_COLUMN_TARGETS[iteration]
+                changes.append(SchemaChange(
+                    kind=kind,
+                    alter_sql=f"alter table {qtable} add column {column_name.upper()} {column_type.upper()}",
+                    new_column=column_name,
+                ))
+            elif kind == SchemaChangeKind.DROP_COLUMN:
+                column_name = DROP_COLUMN_TARGETS[iteration]
+                changes.append(SchemaChange(
+                    kind=kind,
+                    alter_sql=f"alter table {qtable} drop column {column_name.upper()}",
+                    old_column=column_name,
+                ))
+            elif kind == SchemaChangeKind.RENAME_COLUMN:
+                old_name, new_name = RENAME_COLUMN_TARGETS[iteration]
+                changes.append(SchemaChange(
+                    kind=kind,
+                    alter_sql=f"alter table {qtable} rename column {old_name.upper()} to {new_name.upper()}",
+                    old_column=old_name,
+                    new_column=new_name,
+                ))
+            elif kind == SchemaChangeKind.CHANGE_TYPE:
+                column_name, new_pl_type = CHANGE_TYPE_TARGETS[iteration]
+                type_sql = db2_type_sql(new_pl_type)
+                changes.append(SchemaChange(
+                    kind=kind,
+                    alter_sql=f"alter table {qtable} alter column {column_name.upper()} set data type {type_sql}",
+                    old_column=column_name,
+                    new_type_name=type_sql,
+                    new_polars_type=new_pl_type,
+                ))
+        return changes
+
+    def alter_table(
+        self,
+        connection: Any,
+        table: TableObject,
+        changes: list[SchemaChange],
+    ) -> None:
+        deregister_table_from_cdc(
+            container=self._container,
+            port=self._port,
+            schema=table.schema,
+            table=table.table,
+        )
+        for change in changes:
+            self._cursor.execute(change.alter_sql)
+        connection.commit()
+        self._cursor.execute(
+            f"call sysproc.admin_cmd('reorg table {table.qualified}')"
+        )
+        connection.commit()
+        reregister_table_for_cdc(
+            container=self._container,
+            port=self._port,
+            schema=table.schema,
+            table=table.table,
+            wait=True,
+        )
+        self.apply_schema_changes(changes)
+
+
+def db2_type_sql(pl_type) -> str:
+    if pl_type == pl.Int64:
+        return "bigint"
+    if pl_type == pl.Float64:
+        return "double"
+    if isinstance(pl_type, pl.Decimal):
+        return f"decimal({pl_type.precision},{pl_type.scale})"
+    raise ValueError(f"Unsupported DB2 type mapping for {pl_type}")

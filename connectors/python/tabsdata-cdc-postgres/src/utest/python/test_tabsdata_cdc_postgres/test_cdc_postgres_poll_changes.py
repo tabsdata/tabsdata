@@ -14,12 +14,14 @@ from tabsdata._credentials import UserPasswordCredentials
 from tabsdata.connector.cdc.common._model import TableObject
 from tabsdata.connector.cdc.postgres._connection import PostgresCdcConn
 from tabsdata.connector.cdc.postgres._connector import PostgresCdcTrigger
-from test_tabsdata_cdc_common.common.basic import (
-    CDC_FORMAT_PARAMS,
+from test_tabsdata_cdc_common.common.shared import (
     TRIGGER_END_MINUTES,
-    run_end_to_end_format_test,
     run_end_to_end_test,
     run_poll_changes_test,
+)
+from test_tabsdata_cdc_common.common.format import (
+    CDC_FORMAT_PARAMS,
+    run_end_to_end_format_test,
 )
 from test_tabsdata_cdc_postgres.common.sql import PostgresCdcSampler
 
@@ -31,7 +33,7 @@ logger.setLevel(logging.DEBUG)
 @pytest.mark.cdc_postgres
 @pytest.mark.slow
 @pytest.mark.tdfntrigger(venv=False)
-def test_poll_changes_insert_update_delete(postgres_cdc_config):
+def test_poll_changes_insert_update_delete(postgres_cdc_config, postgres_cdc_slot):
     config = postgres_cdc_config
     schema = config.cdc_user
 
@@ -66,7 +68,7 @@ def test_poll_changes_insert_update_delete(postgres_cdc_config):
         conn=conn,
         tables=[table.qualified],
         start_from="head",
-        replication_slot=config.slot,
+        replication_slot=postgres_cdc_slot,
         slot_behavior="reuse",
         blocking_timeout_seconds=3,
         buffer_max_rows=10_000,
@@ -86,7 +88,7 @@ def test_poll_changes_insert_update_delete(postgres_cdc_config):
 @pytest.mark.cdc_postgres
 @pytest.mark.slow
 @pytest.mark.tdfnjob(venv=False)
-def test_end_to_end_insert_update_delete(postgres_cdc_config):
+def test_end_to_end_insert_update_delete(postgres_cdc_config, postgres_cdc_slot):
     config = postgres_cdc_config
     schema = config.cdc_user
 
@@ -121,7 +123,7 @@ def test_end_to_end_insert_update_delete(postgres_cdc_config):
         conn=conn,
         tables=[table.qualified],
         start_from="head",
-        replication_slot=config.slot,
+        replication_slot=postgres_cdc_slot,
         slot_behavior="reuse",
         blocking_timeout_seconds=3,
         buffer_max_rows=10_000,
@@ -142,7 +144,7 @@ def test_end_to_end_insert_update_delete(postgres_cdc_config):
 @pytest.mark.slow
 @pytest.mark.tdfnjob(venv=False)
 @pytest.mark.parametrize("cdc_format", CDC_FORMAT_PARAMS)
-def test_end_to_end_format(postgres_cdc_config, cdc_format):
+def test_end_to_end_format(postgres_cdc_config, postgres_cdc_slot, cdc_format):
     config = postgres_cdc_config
     schema = config.cdc_user
 
@@ -177,7 +179,7 @@ def test_end_to_end_format(postgres_cdc_config, cdc_format):
         conn=conn,
         tables=[table.qualified],
         start_from="head",
-        replication_slot=config.slot,
+        replication_slot=postgres_cdc_slot,
         slot_behavior="reuse",
         cdc_format=cdc_format,
         blocking_timeout_seconds=3,

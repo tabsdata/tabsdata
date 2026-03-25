@@ -10,15 +10,13 @@ from datetime import datetime, timedelta, timezone
 import polars as pl
 import psycopg2
 import pytest
-from psycopg2.extras import LogicalReplicationConnection
 
 from tabsdata._credentials import UserPasswordCredentials
 from tabsdata.connector.cdc.common._model import TableObject
 from tabsdata.connector.cdc.postgres._connection import PostgresCdcConn
 from tabsdata.connector.cdc.postgres._connector import PostgresCdcTrigger
 from tabsdata.connector.cdc.postgres.typing import LsnPosition
-from test_tabsdata_cdc_common.common.basic import TRIGGER_END_MINUTES, run_offset_resume_test
-from test_tabsdata_cdc_postgres.common.db import replication_slot
+from test_tabsdata_cdc_common.common.shared import TRIGGER_END_MINUTES, run_offset_resume_test
 from test_tabsdata_cdc_postgres.common.sql import PostgresCdcSampler
 
 
@@ -29,14 +27,14 @@ logger.setLevel(logging.DEBUG)
 @pytest.mark.cdc_postgres
 @pytest.mark.slow
 @pytest.mark.tdfntrigger(venv=False)
-def test_offset_resume(postgres_cdc_config):
+def test_offset_resume(postgres_cdc_config, postgres_cdc_slot):
     config = postgres_cdc_config
     schema = config.cdc_user
 
     suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=12))
     name = f"td_off_{suffix}"
     table = TableObject(schema=schema, table=f"{name}")
-    slot_name = replication_slot()
+    slot_name = postgres_cdc_slot
 
     logger.debug(f"Tracking table: {table}")
     logger.debug(f"Replication slot: {slot_name}")
@@ -62,19 +60,6 @@ def test_offset_resume(postgres_cdc_config):
         uri=uri,
         credentials=credentials,
     )
-
-    rconn = psycopg2.connect(
-        host=config.host,
-        port=str(config.port),
-        dbname=config.database,
-        user=config.cdc_user,
-        password=config.cdc_password,
-        connection_factory=LogicalReplicationConnection,
-    )
-    rcursor = rconn.cursor()
-    rcursor.create_replication_slot(slot_name, output_plugin="wal2json")
-    rcursor.close()
-    rconn.close()
 
     def query_slot_lsn() -> int:
         cursor.execute(

@@ -128,13 +128,22 @@ class MySQLCdcTrigger(CdcTrigger):
         self._start_from = start_from
         self._blocking_timeout_seconds = blocking_timeout_seconds
         self._server_id = server_id
+        self._setup()
+
+    def _setup(self):
+        super()._setup()
         self._ingester = BinlogIngester(
-            conn=conn,
-            tables=tables,
-            start_from=start_from,
-            blocking_timeout_seconds=blocking_timeout_seconds,
-            server_id=server_id,
+            conn=self._conn,
+            tables=self._tables,
+            start_from=self._start_from,
+            blocking_timeout_seconds=self._blocking_timeout_seconds,
+            server_id=self._server_id,
         )
+
+    def __getstate__(self):
+        state = super().__getstate__()
+        state.pop("_ingester", None)
+        return state
 
     @property
     def start_from(self) -> MySQLCdcStartFromSpec | None:
@@ -169,6 +178,13 @@ class MySQLCdcTrigger(CdcTrigger):
         cdc_format: CdcFormat = CdcFormat(),
     ) -> dict[str, TrackedTable]:
         return self._ingester.collect_tables(session, cdc_format)
+
+    def harvest_tables(
+        self,
+        session: Any,
+        cdc_format: CdcFormat = CdcFormat(),
+    ) -> dict[str, TrackedTable]:
+        return self._ingester.harvest_tables(session, cdc_format)
 
     def _base_offset(self) -> CdcOffset:
         return self._ingester.base_offset()

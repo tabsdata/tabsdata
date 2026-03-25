@@ -36,6 +36,7 @@ TD_CDC_TX_INFIX = "tx"
 TD_CDC_SQ_INFIX = "sq"
 TD_CDC_FMT_INFIX = "fmt"
 TD_CDC_FLAT_INFIX = "flat"
+TD_CDC_SCH_INFIX = "sch"
 
 DOT = "."
 COMMA = ","
@@ -69,6 +70,11 @@ CDC_META_FMT = DOT.join([
 CDC_META_FLAT = DOT.join([
     CDC_META_PREFIX,
     TD_CDC_FLAT_INFIX,
+])
+
+CDC_META_SCH = DOT.join([
+    CDC_META_PREFIX,
+    TD_CDC_SCH_INFIX,
 ])
 
 CDC_DATA_COL_PREFIX = DOT.join([

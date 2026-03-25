@@ -10,6 +10,7 @@ from typing import Any
 
 from ibm_db_sa import BLOB, CLOB
 from sqlalchemy import text
+from sqlalchemy.types import TypeEngine
 
 from tabsdata.connector.sql.common._generic.dialect import LARGE_COLUMN_TYPES, Dialect
 from tabsdata.connector.sql.common._utils import parse_server_timezone
@@ -23,6 +24,10 @@ logger = logging.getLogger(__name__)
 
 
 class Db2Dialect(Dialect):
+    @property
+    def sqlglot_dialect(self) -> str | None:
+        return None
+
     @property
     def open_quote(self) -> str:
         return '"'
@@ -47,6 +52,16 @@ class Db2Dialect(Dialect):
 
     def is_large_column(self, satype: Any) -> bool:
         return isinstance(satype, DB2_LARGE_COLUMN_TYPES)
+
+    def cdc_to_sa(self, ingester_type: str, cdc_dtype: Any) -> TypeEngine:
+        match ingester_type:
+            case "sqlreplica":
+                return cdc_dtype
+            case _:
+                raise NotImplementedError(
+                    f"{type(self).__name__}.cdc_to_sa is not implemented "
+                    f"for ingester type {ingester_type!r}"
+                )
 
     def get_catalog_columns(
         self,

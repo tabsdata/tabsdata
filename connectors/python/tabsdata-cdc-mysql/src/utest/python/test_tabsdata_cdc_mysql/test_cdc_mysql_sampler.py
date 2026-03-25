@@ -83,7 +83,10 @@ def test_sampler_insert_update_delete(mysql_cdc_config):
         print(df_changes)
     finally:
         # cleanup = connection.cursor()
-        # cleanup.execute(f"drop table if exists {table.qualified}")
+        # try:
+        #    cleanup.execute(f"drop table if exists {table.qualified}")
+        # except Exception:
+        #    pass
         # connection.commit()
         # cleanup.close()
         connection.close()

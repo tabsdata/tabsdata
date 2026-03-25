@@ -117,6 +117,10 @@ class BinlogIngester(CdcIngester):
         self._stream: BinLogStreamReader | None = None
 
     @property
+    def ingester_type(self) -> str:
+        return "binlog"
+
+    @property
     def conn(self) -> MySQLCdcConn:
         return self._conn
 
@@ -323,6 +327,27 @@ class BinlogIngester(CdcIngester):
             return qualified
         return None
 
+    @staticmethod
+    def extract_raw_schema(event) -> tuple[tuple[str, str, Any], ...]:
+        schema = []
+        for column in event.columns:
+            name = column.name
+            if not name:
+                raise CdcError(ErrorCode.CDCMYSQL6, event)
+            type_parts = [str(column.type)]
+            if getattr(column, "unsigned", False):
+                type_parts.append("unsigned")
+            if getattr(column, "max_length", None) is not None:
+                type_parts.append(f"len={column.max_length}")
+            if getattr(column, "precision", None) is not None:
+                type_parts.append(f"prec={column.precision}")
+            if getattr(column, "decimals", None) is not None:
+                type_parts.append(f"dec={column.decimals}")
+            if getattr(column, "fsp", None) is not None:
+                type_parts.append(f"fsp={column.fsp}")
+            schema.append((name, ":".join(type_parts), column))
+        return tuple(schema)
+
     def poll_changes(self, session: Any) -> Generator[CdcChange, None, None]:
         deadline = time.monotonic() + self._blocking_timeout_seconds
         gtid: str | None = None
@@ -346,6 +371,11 @@ class BinlogIngester(CdcIngester):
                     if qualified is None:
                         continue
                     op = OPERATION_MAP[type(event)]
+                    raw_schema = self.extract_raw_schema(event)
+                    schema_version = self._schema_registry.register_from_log(
+                        qualified,
+                        raw_schema,
+                    )
                     for row in event.rows:
                         seq += 1
                         match event:
@@ -365,8 +395,6 @@ class BinlogIngester(CdcIngester):
                                     "binlog",
                                     qualified,
                                 )
-                        new_values = self.filter_values(qualified, new_values)
-                        old_values = self.filter_values(qualified, old_values)
                         self.localize_values(new_values)
                         self.localize_values(old_values)
                         yield CdcDataChange(
@@ -377,6 +405,7 @@ class BinlogIngester(CdcIngester):
                             new_values=new_values,
                             old_values=old_values,
                             offset=GtidOffset(gtid=gtid),
+                            schema=schema_version,
                         )
         except Exception as error:
             logger.error(
