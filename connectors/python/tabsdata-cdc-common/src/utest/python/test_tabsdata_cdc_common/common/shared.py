@@ -48,7 +48,7 @@ TRIGGER_INIT_TIMEOUT_SECONDS = 60
 TRIGGER_INIT_POLL_SECONDS = 0.5
 TRIGGER_STOP_JOIN_TIMEOUT_SECONDS = 60
 
-POLL_TIMEOUT_SECONDS = 120
+POLL_TIMEOUT_SECONDS = TRIGGER_END_MINUTES * 60
 POLL_INTERVAL_SECONDS = 2
 
 
@@ -102,7 +102,12 @@ def fork_trigger(
 
     fork = TriggerFork()
 
+    from test_tabsdata.fntest import find_test_name, test_name_local
+    test_file, test_name = find_test_name()
+
     def worker():
+        test_name_local.file = test_file
+        test_name_local.name = test_name
         try:
             fork.result = job()
         except Exception as error:

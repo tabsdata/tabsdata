@@ -18,6 +18,7 @@ from unittest import mock
 import pandas as pd
 import polars as pl
 import pytest
+import threading
 
 import tabsdata as td
 from tabsdata._io.inputs.stage_input import (
@@ -146,6 +147,16 @@ def tdfnrun_fixture(request):
 def tdfnjob_fixture(request):
     with setup(request.node.get_closest_marker("tdfnjob")):
         yield
+
+test_name_local = threading.local()
+
+def find_test_name() -> tuple[str, str]:
+    for frame in inspect.stack():
+        if frame.function.startswith("test_"):
+            return Path(frame.filename).stem, frame.function
+    file = getattr(test_name_local, "file", "unknown.p")
+    name = getattr(test_name_local, "name", "unknown.t")
+    return file, name
 
 
 class FunctionConstants(Enum):
@@ -1008,18 +1019,7 @@ def tdfnrun(
         logger = logging.getLogger(__name__)
         logger.debug(f"Running test: {inspect.stack()[1].function} @ folder {root}")
 
-        # noinspection PyBroadException
-        try:
-            file = function._func_original_file
-        except Exception:
-            file = None
-        file = Path(file).stem if file else "unknown.p"
-        # noinspection PyBroadException
-        try:
-            test = inspect.stack()[1].function
-        except Exception:
-            test = None
-        test = test if test else "unknown.t"
+        file, test = find_test_name()
         # noinspection PyBroadException
         try:
             fn = function._func.__name__
@@ -1070,18 +1070,7 @@ def tdfnjob(
         logger = logging.getLogger(__name__)
         logger.debug(f"Running test: {inspect.stack()[1].function} @ folder {root}")
 
-        # noinspection PyBroadException
-        try:
-            file = function._func_original_file
-        except Exception:
-            file = None
-        file = Path(file).stem if file else "unknown.p"
-        # noinspection PyBroadException
-        try:
-            test = inspect.stack()[1].function
-        except Exception:
-            test = None
-        test = test if test else "unknown.t"
+        file, test = find_test_name()
         # noinspection PyBroadException
         try:
             fn = function._func.__name__

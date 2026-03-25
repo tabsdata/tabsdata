@@ -22,6 +22,7 @@ from test_tabsdata_cdc_common.common.sql import (
     sql_literal,
 )
 from test_tabsdata_cdc_db2.common.fixtures.docker import (
+    CdcMode,
     deregister_table_from_cdc,
     register_table_for_cdc,
     reregister_table_for_cdc,
@@ -44,6 +45,11 @@ CREATE_TABLE_DDL = (
 
 
 class Db2CdcSampler(CdcSampler):
+
+    def __init__(self, container, port, cursor):
+        super().__init__(container, port, cursor)
+        self._cd_table_version = 0
+        self._cd_qualified_table: str | None = None
 
     def fold(self, name: str) -> str:
         return name.upper()
@@ -129,12 +135,14 @@ class Db2CdcSampler(CdcSampler):
         connection: Any,
         table: TableObject,
         changes: list[SchemaChange],
-    ) -> None:
+    ) -> str:
+        self._cd_table_version += 1
         deregister_table_from_cdc(
             container=self._container,
             port=self._port,
             schema=table.schema,
             table=table.table,
+            mode=CdcMode.HARD,
         )
         for change in changes:
             self._cursor.execute(change.alter_sql)
@@ -143,14 +151,18 @@ class Db2CdcSampler(CdcSampler):
             f"call sysproc.admin_cmd('reorg table {table.qualified}')"
         )
         connection.commit()
-        reregister_table_for_cdc(
+        new_cd_table = reregister_table_for_cdc(
             container=self._container,
             port=self._port,
             schema=table.schema,
             table=table.table,
             wait=True,
+            mode=CdcMode.HARD,
+            version=self._cd_table_version,
         )
         self.apply_schema_changes(changes)
+        self._cd_qualified_table = new_cd_table
+        return new_cd_table
 
 
 def db2_type_sql(pl_type) -> str:
