@@ -118,7 +118,10 @@ from tabsdata.connector.cdc.postgres._connection import PostgresCdcConn
 from tabsdata.connector.cdc.postgres._connector import PostgresCdcTrigger
 
 # noinspection PyProtectedMember
-from tabsdata.connector.databricks._connector import DatabricksDestination
+from tabsdata.connector.databricks._connector import (
+    DatabricksDestination,
+    DatabricksSource,
+)
 from tabsdata.connector.kafka._connector import (
     AwsGlueSchemaRegistry,
     ConfluentSchemaRegistry,
@@ -209,6 +212,7 @@ __all__ = [
     "TableInput",
     # Sources
     "AzureSource",
+    "DatabricksSource",
     "Db2Src",
     "GCSSource",
     "LocalFileSource",

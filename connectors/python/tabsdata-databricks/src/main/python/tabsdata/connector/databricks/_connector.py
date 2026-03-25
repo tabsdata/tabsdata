@@ -4,21 +4,32 @@
 
 from __future__ import annotations
 
+import io
 import logging
 import os
+import time
 import uuid
-from typing import TYPE_CHECKING, List
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any, List, Union
 
 import polars as pl
+from tenacity import retry, stop_after_attempt, wait_fixed
 
+from tabsdata._io.inputs.sql_inputs import (
+    _replace_initial_values,
+    _validate_initial_values_type,
+)
 from tabsdata._io.outputs.shared_enums import (
     IfTableExistsStrategy,
     IfTableExistStrategySpec,
     SchemaStrategy,
     SchemaStrategySpec,
 )
-from tabsdata._io.plugin import DestinationPlugin
+from tabsdata._io.plugin import DestinationPlugin, SourcePlugin
 from tabsdata._secret import DirectSecret, Secret
+from tabsdata._tabsserver.function.offset_utils import OffsetReturn
+from tabsdata.exceptions import ErrorCode, SourceConfigurationError
 
 if TYPE_CHECKING:
     import databricks.sdk as dbsdk
@@ -26,6 +37,15 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
+DEFAULT_POLL_INTERVAL_SECONDS = 2
+DEFAULT_DOWNLOAD_THREADS = 4
+DOWNLOAD_CONNECT_TIMEOUT_SECONDS = 10
+DOWNLOAD_READ_TIMEOUT_SECONDS = 300
+DOWNLOAD_RETRY_ATTEMPTS = 12
+DOWNLOAD_RETRY_WAIT_SECONDS = 5
+PARQUET_COMPRESSION = "snappy"
+ASYNC_EXECUTION_WAIT_TIMEOUT = "0s"
 
 
 def _table_fqn_4sdk(table: str) -> str:
@@ -55,6 +75,413 @@ def _table_fqn_4sql(table: str) -> str:
             "The table name must be fully qualified in the form "
             "'catalog.schema.table_name'. Tried to fully qualify the table, "
             f"but got '{table}' instead"
+        )
+
+
+class DatabricksSource(SourcePlugin):
+    """
+    :categories: source
+
+    Databricks based data inputs.
+    """
+
+    def __init__(
+        self,
+        host_url: str,
+        token: str | Secret,
+        queries: list[str] | str,
+        initial_values: dict | None = None,
+        warehouse: str | None = None,
+        warehouse_id: str | None = None,
+        **kwargs,
+    ):
+        """
+        Initializes the DatabricksSource with the configuration desired to read
+        the data.
+
+        Args:
+            host_url: Databricks URL
+
+            token: Databricks Personal Account Token (PAT). The user owning the PAT
+                requires 'USE CATALOG', 'USE SCHEMA' & 'SELECT' privileges.
+
+            queries: SQL query or queries to execute. Each query will produce one
+                output. Queries can contain placeholders in the form ':param_name'
+                that will be replaced with the values from 'initial_values'.
+
+            initial_values: Initial values for query parameters. Placeholders in
+                queries of the form ':param_name' will be replaced with the
+                corresponding value. These values are updated between runs to support
+                incremental ingestion. Defaults to None.
+
+            warehouse: Warehouse name (use either this or warehouse_id) that will be
+                used for executing queries. The user has to have privileges to use the
+                warehouse.
+
+            warehouse_id: Warehouse Id. Use `null` if warehouse name is provided.
+        """
+        try:
+            # noinspection PyShadowingNames
+            import databricks.sdk as dbsdk  # noqa: F401
+            from databricks.sdk.core import Config, pat_auth  # noqa: F401
+        except ImportError:
+            raise ImportError(
+                "The 'tabsdata-databricks' package is missing some dependencies. You"
+                "can get them by installing 'tabsdata['databricks']'"
+            )
+        self.host_url = host_url
+        self.token = token
+        self.queries = queries
+        self.initial_values = initial_values
+        self.warehouse = warehouse
+        self.warehouse_id = warehouse_id
+        if warehouse and warehouse_id:
+            raise ValueError(
+                "You cannot provide both 'warehouse' and 'warehouse_id'. "
+                "Please provide exactly one of them."
+            )
+        elif not warehouse and not warehouse_id:
+            raise ValueError(
+                "You must provide either 'warehouse' or 'warehouse_id'. "
+                "Please provide exactly one of them."
+            )
+
+        self.kwargs = kwargs
+        self._support_databricks_logging_level = self.kwargs.get(
+            "support_databricks_logging_level",
+            logging.ERROR,
+        )
+        self._support_poll_interval_seconds = self.kwargs.get(
+            "support_poll_interval_seconds",
+            DEFAULT_POLL_INTERVAL_SECONDS,
+        )
+        self._download_threads = self.kwargs.get(
+            "download_threads",
+            DEFAULT_DOWNLOAD_THREADS,
+        )
+
+    @property
+    def token(self) -> Secret:
+        return self._token
+
+    @token.setter
+    def token(self, token: str | Secret):
+        if isinstance(token, Secret):
+            self._token = token
+        elif isinstance(token, str):
+            self._token = DirectSecret(token)
+        else:
+            raise TypeError(
+                f"The token must be a string or a Secret;got {type(token)} instead."
+            )
+
+    @property
+    def host_url(self) -> str:
+        return self._host
+
+    @host_url.setter
+    def host_url(self, host: str):
+        if not isinstance(host, str):
+            raise TypeError(f"The host must be a string; got {type(host)} instead.")
+        self._host = host
+
+    @property
+    def queries(self) -> List[str]:
+        return self._queries
+
+    @queries.setter
+    def queries(self, value: str | list[str]):
+        if isinstance(value, str):
+            self._queries = [value]
+        elif isinstance(value, list) and all(isinstance(q, str) for q in value):
+            self._queries = value
+        else:
+            raise TypeError(
+                "The 'queries' parameter must be a string or a list of "
+                f"strings; "
+                f"got a parameter of type '{type(value)}' instead."
+            )
+
+    @property
+    def initial_values(self) -> dict:
+        """
+        The initial values for the parameters in the SQL queries.
+        """
+        return self._initial_values
+
+    @initial_values.setter
+    def initial_values(self, initial_values: dict | None):
+        """
+        Sets the initial values for the parameters in the SQL queries.
+
+        Args:
+            initial_values: The initial values for the parameters in the SQL
+                queries.
+        """
+        if not initial_values:
+            self._initial_values = {}
+        elif not isinstance(initial_values, dict):
+            raise SourceConfigurationError(ErrorCode.SOCE34, type(initial_values))
+        else:
+            _validate_initial_values_type(initial_values)
+            self._initial_values = initial_values
+
+    @property
+    def _offset_return(self) -> str:
+        """
+        Indicates whether the offset is returned by modifying the
+        'initial_values' attribute of the plugin, or if it is part
+        of the function return"""
+        return OffsetReturn.FUNCTION.value
+
+    def _get_workspace_client(self) -> dbsdk.WorkspaceClient:
+        # noinspection PyShadowingNames
+        import databricks.sdk as dbsdk
+
+        # noinspection DuplicatedCode
+        ws_client = dbsdk.WorkspaceClient(
+            host=self.host_url,
+            token=self.token.secret_value,
+        )
+        logger.debug(f"Workspace client created: {ws_client}")
+        if self.warehouse_id is None:
+            for warehouse in ws_client.warehouses.list():
+                if warehouse.name == self.warehouse:
+                    self.warehouse_id = warehouse.id
+                    break
+        return ws_client
+
+    def chunk(self, working_dir: str) -> Union[str, List[str]]:
+        logging.getLogger("databricks").setLevel(self._support_databricks_logging_level)
+        ws_client = self._get_workspace_client()
+        resulting_files = []
+        for index, statement in enumerate(self._queries):
+            if self.initial_values:
+                statement = _replace_initial_values(statement, self.initial_values)
+            logger.info(f"Executing query {index}: '{statement}'")
+            result_file = self._execute_single_query(
+                ws_client, statement, working_dir, index
+            )
+            resulting_files.append(result_file)
+        logger.info(
+            f"All queries executed successfully; results saved to '{resulting_files}'"
+        )
+        return resulting_files
+
+    @staticmethod
+    def _chunk_links_iterator(ws_client, response):
+        import threading
+
+        @dataclass
+        class ChunkIteratorState:
+            statement_id: str
+            payload: Any | None
+            links: list = field(default_factory=list)
+            position: int = 0
+            chunk: int = 0
+            exhausted: bool = False
+
+        lock = threading.Lock()
+        state = ChunkIteratorState(
+            statement_id=response.statement_id,
+            payload=response.result,
+        )
+
+        def next_link():
+            with lock:
+                while True:
+                    if state.position < len(state.links):
+                        link = state.links[state.position]
+                        chunk = state.chunk
+                        state.position += 1
+                        state.chunk += 1
+                        return chunk, link
+                    if state.exhausted:
+                        return None
+                    payload = state.payload
+                    if payload is not None and payload.external_links:
+                        state.links = list(payload.external_links)
+                        state.position = 0
+                        last_link = state.links[-1]
+                        next_chunk_index = last_link.next_chunk_index
+                        if next_chunk_index is not None:
+                            state.payload = ws_client.statement_execution.get_statement_result_chunk_n(  # noqa: E501
+                                state.statement_id,
+                                next_chunk_index,
+                            )
+                        else:
+                            state.payload = None
+                    else:
+                        state.exhausted = True
+                        return None
+
+        return next_link
+
+    @staticmethod
+    @retry(
+        stop=stop_after_attempt(DOWNLOAD_RETRY_ATTEMPTS),
+        wait=wait_fixed(DOWNLOAD_RETRY_WAIT_SECONDS),
+        reraise=True,
+    )
+    def _download_chunk(link):
+        import pyarrow.ipc as ipc
+        import requests
+
+        with requests.get(
+            link.external_link,
+            stream=True,
+            timeout=(
+                DOWNLOAD_CONNECT_TIMEOUT_SECONDS,
+                DOWNLOAD_READ_TIMEOUT_SECONDS,
+            ),
+        ) as response:
+            response.raise_for_status()
+            return ipc.open_stream(io.BytesIO(response.content)).read_all()
+
+    @staticmethod
+    def _process_chunks(next_link, chunk_writer):
+        while True:
+            item = next_link()
+            if item is None:
+                return
+            chunk, link = item
+            worker_start_time = time.time()
+            table = DatabricksSource._download_chunk(link)
+            worker_end_time = time.time()
+            logger.debug(
+                f"Chunk {chunk + 1} -> "
+                f"download time: {worker_end_time - worker_start_time:.3f}s"
+            )
+            chunk_writer.submit(chunk, table)
+
+    def _execute_single_query(
+        self,
+        ws_client: dbsdk.WorkspaceClient,
+        statement: str,
+        working_dir: str,
+        index: int,
+    ) -> str:
+        import threading
+
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+
+        from databricks.sdk.service.sql import Disposition, Format, StatementState
+
+        uuid_string = uuid.uuid4().hex[:16]
+        intermediate_file_name = f"intermediate_{index}_{uuid_string}.parquet"
+        intermediate_file = os.path.join(working_dir, intermediate_file_name)
+
+        logger.debug(f"Submitting statement to warehouse '{self.warehouse_id}'")
+        query_start_time = time.time()
+        response = ws_client.statement_execution.execute_statement(
+            warehouse_id=self.warehouse_id,
+            statement=statement,
+            disposition=Disposition.EXTERNAL_LINKS,
+            format=Format.ARROW_STREAM,
+            wait_timeout=ASYNC_EXECUTION_WAIT_TIMEOUT,
+        )
+
+        poll_interval = self._support_poll_interval_seconds
+        while response.status.state in (StatementState.PENDING, StatementState.RUNNING):
+            logger.debug(
+                f"Query still running (state={response.status.state}); "
+                f"polling again in {poll_interval}s..."
+            )
+            time.sleep(poll_interval)
+            response = ws_client.statement_execution.get_statement(
+                response.statement_id
+            )
+        query_end_time = time.time()
+        logger.info(
+            f"Query {index} execution took {query_end_time - query_start_time:.3f}s"
+        )
+
+        if response.status.state != StatementState.SUCCEEDED:
+            raise RuntimeError(
+                f"Databricks query failed with state "
+                f"'{response.status.state}': {response.status.error}"
+            )
+
+        logger.debug(f"Query succeeded; downloading results to '{intermediate_file}'")
+
+        next_link = self._chunk_links_iterator(ws_client, response)
+
+        class ChunkWriter:
+            def __init__(self, path: str):
+                self._path = path
+                self._lock = threading.Lock()
+                self._pending: dict[int, pa.Table] = {}
+                self._next = 0
+                self._writer: pq.ParquetWriter | None = None
+                self.written = 0
+
+            def submit(self, chunk: int, table: pa.Table) -> None:
+                with self._lock:
+                    self._pending[chunk] = table
+                    self.drain()
+
+            def drain(self):
+                while self._next in self._pending:
+                    logger.info(f"Draining pending chunk {self._next}")
+                    table = self._pending.pop(self._next)
+                    if self._writer is None:
+                        self._writer = pq.ParquetWriter(
+                            self._path,
+                            table.schema,
+                            compression=PARQUET_COMPRESSION,
+                        )
+                    self._writer.write_table(table)
+                    self._next += 1
+                    self.written += 1
+
+            def close(self):
+                with self._lock:
+                    self.drain()
+                    if self._writer:
+                        self._writer.close()
+                        self._writer = None
+
+        chunk_writer = ChunkWriter(intermediate_file)
+
+        download_start_time = time.time()
+        try:
+            if self._download_threads <= 1:
+                self._process_chunks(next_link, chunk_writer)
+            else:
+                with ThreadPoolExecutor(
+                    max_process_chunkss=self._download_threads
+                ) as executor:
+                    futures = [
+                        executor.submit(self._process_chunks, next_link, chunk_writer)
+                        for _ in range(self._download_threads)
+                    ]
+                    for future in futures:
+                        future.result()
+        finally:
+            chunk_writer.close()
+        download_end_time = time.time()
+        total_tables = chunk_writer.written
+        logger.info(
+            f"Query {index}: downloaded and wrote {total_tables} chunks with "
+            f"{self._download_threads} threads "
+            f"in {download_end_time - download_start_time:.3f}s"
+        )
+
+        logger.info(
+            f"Query {index}: {total_tables} chunks - "
+            f"total elapsed {download_end_time - query_start_time:.3f}s"
+        )
+        logger.info(f"Query result saved to '{intermediate_file_name}'")
+        return intermediate_file
+
+    def __repr__(self):
+        return (
+            f"{self.__class__.__name__}"
+            f"("
+            f"host_url='{self._host}', "
+            f"queries={self.queries}"
+            f")"
         )
 
 
@@ -126,7 +553,10 @@ class DatabricksDestination(DestinationPlugin):
 
         """
         try:
+            # noinspection PyShadowingNames
             import databricks.sdk as dbsdk  # noqa: F401
+
+            # noinspection PyShadowingNames
             import databricks.sql as dbsql  # noqa: F401
             from databricks.sdk.core import Config, pat_auth  # noqa: F401
         except ImportError:
@@ -531,6 +961,7 @@ class DatabricksDestination(DestinationPlugin):
         finally:
             # Delete file from volume
             logger.debug(f"Deleting file '{file_path_in_volume}' from volume.")
+            # noinspection PyBroadException
             try:
                 ws_client.files.delete(file_path_in_volume)
                 logger.debug(f"File '{file_path_in_volume}' deleted successfully.")
@@ -586,15 +1017,25 @@ class DatabricksDestination(DestinationPlugin):
                     f"No catalog or schema provided, returning table '{table}'."
                 )
                 return table
+        else:
+            raise ValueError(
+                f"Invalid table name '{table}': "
+                f"expected at most 2 dots (catalog.schema.table_name);"
+                f" got {dots}."
+            )
 
     def _get_connections(self) -> tuple[dbsdk.WorkspaceClient, dbsql.Connection]:
         # Note: we do the imports here instead of at the top to speed up the import
         # of the tabsdata package, and therefore the td CLI response time.
 
+        # noinspection PyShadowingNames
         import databricks.sdk as dbsdk
+
+        # noinspection PyShadowingNames
         import databricks.sql as dbsql
         from databricks.sdk.core import Config, pat_auth
 
+        # noinspection DuplicatedCode
         ws_client = dbsdk.WorkspaceClient(
             host=self.host_url,
             token=self.token.secret_value,
