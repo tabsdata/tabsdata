@@ -75,6 +75,10 @@ pub struct Params {
     #[clap(long, default_value = None)]
     /// File to output the import report. If not specified it uses STDOUT, if `-` is specified it means STDOUT.
     out: Option<String>,
+
+    #[clap(long, default_value = None, value_enum)]
+    /// Add origin file info columns: 'name' for filename only, 'uri' for full URI.
+    file_info: Option<FileInfo>,
 }
 
 #[cfg(test)]
@@ -127,6 +131,7 @@ impl Default for Params {
             to_format_configs: None,
             parallel: None,
             out: None,
+            file_info: None,
         }
     }
 }
@@ -471,6 +476,7 @@ impl Params {
             to_format: self.to_format()?,
             parallel: self.parallel.unwrap_or(4),
             out: self.out().clone(),
+            file_info: self.file_info.clone(),
         })
     }
 }
@@ -512,6 +518,17 @@ impl Format {
     }
 }
 
+/// Specifies what file origin information to include in imported data.
+#[derive(Debug, Clone, PartialEq, Eq, ValueEnum, Serialize, Deserialize)]
+pub enum FileInfo {
+    /// Include only the file name.
+    #[serde(rename = "name")]
+    Name,
+    /// Include the full file URI.
+    #[serde(rename = "uri")]
+    Uri,
+}
+
 /// Importer options capturing all the necessary information to import data
 #[derive(Debug, Clone, Builder, Getters)]
 #[builder(setter(into))]
@@ -528,6 +545,8 @@ pub struct ImporterOptions {
     to_format: ToFormat,
     parallel: usize,
     out: Option<String>,
+    #[builder(default)]
+    file_info: Option<FileInfo>,
 }
 
 #[cfg(test)]
@@ -790,6 +809,7 @@ mod tests {
             to_format_configs: None,
             parallel: None,
             out: None,
+            file_info: None,
         };
 
         assert_eq!(params.base_url().as_str(), root_folder());
@@ -919,6 +939,7 @@ mod tests {
             to_format_configs: Some(to_format.to_string()),
             parallel: None,
             out: Some("out".to_string()),
+            file_info: None,
         };
 
         assert_eq!(params.base_url().as_str(), root_folder());
@@ -952,6 +973,7 @@ mod tests {
             to_format_configs: None,
             parallel: None,
             out: None,
+            file_info: None,
         };
 
         let config = HashMap::from([("x".to_string(), "X".to_string())]);
@@ -980,6 +1002,7 @@ mod tests {
             to_format_configs: None,
             parallel: None,
             out: None,
+            file_info: None,
         };
 
         let config = HashMap::from([("x".to_string(), "X".to_string())]);
@@ -1009,6 +1032,7 @@ mod tests {
             to_format_configs: None,
             parallel: None,
             out: None,
+            file_info: None,
         };
 
         match params.format() {
@@ -1137,6 +1161,7 @@ mod tests {
             to_format_configs: Some(to_format.to_string()),
             parallel: Some(4),
             out: None,
+            file_info: None,
         };
 
         let importer_options = params.importer_options().await?;

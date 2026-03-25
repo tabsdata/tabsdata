@@ -34,6 +34,7 @@ from tabsdata._format import (
     NDJSONFormat,
     ParquetFormat,
 )
+from tabsdata._info import FileInfo
 from tabsdata._io.cloud_staging.common.storage_config import (
     AzureConfig,
     GCSConfig,
@@ -299,6 +300,8 @@ __all__ = [
     # Support
     "AwsGlueSchemaRegistry",
     "ConfluentSchemaRegistry",
+    # Literals
+    "FileInfo",
     # Keywords
     "ALL_DEPS",
     # TableFrame

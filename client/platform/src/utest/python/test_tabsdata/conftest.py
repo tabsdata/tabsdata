@@ -11,14 +11,13 @@ import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from time import sleep
+
+from tenacity import retry, stop_after_delay, wait_fixed
 from typing import Any
 
 import pytest
 import yaml
 from xdist.workermanage import WorkerController
-
-import tabsdata as _td
 
 # noinspection PyProtectedMember
 import tabsdata._utils.tableframe._constants as td_constants
@@ -58,7 +57,7 @@ from test_tabsdata.common.backend import (  # noqa: F401
     starrocks_client,
     testing_hashicorp_vault,
 )
-from test_tabsdata.common.constants import EXECUTION_MAXIMUM_RETRY_COUNT
+from test_tabsdata.common.constants import EXECUTION_MAXIMUM_TIMEOUT_SECONDS
 from test_tabsdata.common.docker import clean_docker_containers
 from test_tabsdata.common.venv import clean_python_virtual_environments
 
@@ -710,8 +709,13 @@ def testing_collection_with_table(worker_id, tabsserver_connection):
         collection_name, "input_file_csv_string_format"
     )
     table = tabsserver_connection.get_collection(collection_name).get_table("output")
-    retry = 0
-    while True:
+
+    @retry(
+        stop=stop_after_delay(EXECUTION_MAXIMUM_TIMEOUT_SECONDS),
+        wait=wait_fixed(2),
+        reraise=True,
+    )
+    def wait_for_committed():
         dataversion = table.dataversions[0] if table.dataversions else None
         if dataversion and dataversion.status == data_version_status_to_mapping(
             DataVersionStatus.COMMITTED.value
@@ -721,40 +725,36 @@ def testing_collection_with_table(worker_id, tabsserver_connection):
                 f"{dataversion.status}, indicating that the data is ready "
                 "to be consumed."
             )
-            break
+            return
+        if dataversion:
+            logger.debug(
+                f"Dataversion '{dataversion}' is in status '"
+                f"{dataversion.status}, indicating that the data is NOT "
+                "ready to be consumed yet."
+            )
         else:
-            if dataversion:
-                logger.debug(
-                    f"Dataversion '{dataversion}' is in status '"
-                    f"{dataversion.status}, indicating that the data is NOT "
-                    "ready to be consumed yet."
-                )
-            else:
-                logger.debug(
-                    f"No dataversions found for table yet: '{table.dataversions}'"
-                )
-            logger.debug(f"Table '{random_id}' - '{file_path}' does not have data yet")
-            logger.debug(f"Retrying '{random_id}' - '{file_path}' in {retry} seconds")
-            retry += 1
-            if retry == EXECUTION_MAXIMUM_RETRY_COUNT:
-                raise ValueError(
-                    f"Failed to get data from the table after {retry} retries."
-                )
-            else:
-                sleep(retry)
+            logger.debug(
+                f"No dataversions found for table yet: '{table.dataversions}'"
+            )
+        logger.debug(f"Table '{random_id}' - '{file_path}' does not have data yet")
+        raise ValueError(
+            f"Data from the table is not yet available for"
+            f" '{random_id}' - '{file_path}'."
+        )
+
+    wait_for_committed()
     try:
         yield collection_name
     finally:
-        # ToDo: Deleting collections is not yet supported
-        #       In any case, as log as identifiers are unique, there seems to be no
-        #       strong
-        #       need to delete the collections after a test.
         pass
-    #     try:
-    #         logger.debug(f"Deleting collection {collection_name}")
-    #         tabsserver_connection.collection_delete(collection_name)
-    #     except APIServerError as e:
-    #         logger.error(f"Failed to delete collection: {e}")
+        # ToDo: Deleting collections is not yet supported. In any case,
+        #       as log as identifiers are unique, there seems to be no
+        #       strong need to delete the collections after a test.
+        # try:
+        #     logger.debug(f"Deleting collection {collection_name}")
+        #     tabsserver_connection.collection_delete(collection_name)
+        # except APIServerError as error:
+        #     logger.error(f"Failed to delete collection: {error}")
 
 
 def get_lf(size: int, chunk_size=1000):

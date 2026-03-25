@@ -6,7 +6,6 @@ import itertools
 import logging
 import random
 import re
-import sys
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from typing import Callable, TypeAlias, Union
@@ -22,7 +21,7 @@ from tabsdata._utils.tableframe._translator import (
     _unwrap_table_frame,
     _wrap_polars_frame,
 )
-from tabsdata.extensions._tableframe.extension import SystemColumns
+from tabsdata.extensions._tableframe.extension import RequiredColumns
 from tabsdata.tableframe import selectors as td_selectors
 
 # noinspection PyUnresolvedReferences
@@ -801,7 +800,7 @@ def api_tester(
     fn: Callable[[pk, ft], ft],
     polars_frame: pl.LazyFrame = POLARS_LAZY_FRAME,
     check: bool = True,
-) -> (pl.LazyFrame, td.TableFrame):
+) -> tuple[pl.LazyFrame, td.TableFrame]:
     t = _wrap_polars_frame(polars_frame)
 
     pf = fn(pl_selectors, polars_frame)
@@ -828,8 +827,7 @@ def apply_selector(library: pk, frame: ft, selector_fn, exclude: bool = False):
         if library == pl_selectors:
             return frame.select(library.exclude(selector))
         else:
-            # noinspection PyProtectedMember
-            return frame.select(library.exclude(selector._expr))
+            return frame.select(library.exclude(selector))
     else:
         return frame.select(selector)
 
@@ -1333,8 +1331,8 @@ def test_scan_select_by_index(run_id):
     tableframe = _wrap_polars_frame(generate())
     tableframe = tableframe.select(td_selectors.by_index(run_id))
     if run_id < len(SCHEMA):
-        assert len(tableframe._lf.collect_schema().names()) == len(SystemColumns) + 1
+        assert len(tableframe._lf.collect_schema().names()) == len(RequiredColumns) + 1
     else:
-        assert len(tableframe._lf.collect_schema().names()) == len(SystemColumns)
+        assert len(tableframe._lf.collect_schema().names()) == len(RequiredColumns)
     lazyframe = _unwrap_table_frame(tableframe)
     assert set(lazyframe.collect_schema().names()) == set(tableframe.columns())

@@ -2,7 +2,7 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use crate::transporter::args::ImporterCsvReadOptions;
+use crate::transporter::args::{FileInfo, ImporterCsvReadOptions};
 use crate::transporter::error::TransporterError;
 use base64::Engine;
 use base64::prelude::BASE64_STANDARD_NO_PAD;
@@ -42,6 +42,9 @@ pub struct ImportRequest {
     format: ImportFormat,
     target: ImportTarget,
     parallelism: Option<usize>,
+    #[serde(default)]
+    #[builder(default)]
+    file_info: Option<FileInfo>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -1189,6 +1192,7 @@ impl TransporterRequest {
                 },
             },
             parallelism: Some(1),
+            file_info: None,
         })
     }
 
@@ -1218,6 +1222,7 @@ impl TransporterRequest {
                 },
             },
             parallelism: None,
+            file_info: None,
         })
     }
 
@@ -1248,6 +1253,7 @@ impl TransporterRequest {
                 },
             },
             parallelism: None,
+            file_info: None,
         })
     }
 
@@ -1277,6 +1283,7 @@ impl TransporterRequest {
                 },
             },
             parallelism: None,
+            file_info: None,
         })
     }
 

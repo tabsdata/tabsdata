@@ -2196,6 +2196,14 @@ class TableFrame:
         └─────┴─────┘
         """
         source_columns = self._lf.collect_schema().names()
+        from tabsdata.tableframe.selectors import DeferredSelectorProxy
+
+        exprs = tuple(
+            expr._resolve(source_columns)
+            if isinstance(expr, DeferredSelectorProxy)
+            else expr
+            for expr in exprs
+        )
         # noinspection PyProtectedMember
         target_columns = (
             self._lf

@@ -2,7 +2,7 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use crate::transporter::args::{Format, ImporterOptions, ToFormat};
+use crate::transporter::args::{FileInfo, Format, ImporterOptions, ToFormat};
 use crate::transporter::cloud::create_sink_target;
 use chrono::{DateTime, Duration, Utc};
 use derive_builder::Builder;
@@ -19,7 +19,12 @@ use polars_io::utils::sync_on_close::SyncOnCloseType;
 use serde::{Deserialize, Serialize};
 use std::string::ToString;
 use std::sync::{Arc, Mutex};
+use td_common::constants::PYTEST_CONTEXT_ACTIVE;
 use td_common::id;
+use td_tableframe::constants::{
+    TD_OPT_TST_FN, TD_OPT_TST_SRV, TD_OPT_TST_TS, TD_OPT_TST_USR, TD_ORIGIN_FILE_LINE,
+    TD_ORIGIN_FILE_PATH,
+};
 use tracing::{debug, info};
 use url::Url;
 use wildmatch::WildMatch;
@@ -361,6 +366,50 @@ fn importer_lazy_frame(
         }
         Format::Binary => unimplemented!("This choice should not be used for imports using polars"),
     };
+
+    // Add origin file info columns if requested
+    let lazy_frame = match importer_options.file_info() {
+        Some(file_info) => {
+            let file_value = match file_info {
+                FileInfo::Name => url
+                    .path_segments()
+                    .and_then(|mut s| s.next_back())
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| format!("<n/a>{url}")),
+                FileInfo::Uri => url.to_string(),
+            };
+            lazy_frame
+                .with_row_index(TD_ORIGIN_FILE_LINE, Some(1))
+                .with_columns([lit(file_value).alias(TD_ORIGIN_FILE_PATH)])
+        }
+        None => lazy_frame,
+    };
+
+    // Add optional test columns when running under pytest
+    let lazy_frame = if let Ok(pytest_test) = std::env::var(PYTEST_CONTEXT_ACTIVE) {
+        let hostname = whoami::hostname().unwrap_or_else(|_| "unknown".to_string());
+        let username = td_common::env::get_user_name();
+        let test_fn = if pytest_test.is_empty() {
+            "unknown".to_string()
+        } else {
+            pytest_test
+        };
+        let now = Utc::now();
+        lazy_frame.with_columns([
+            lit(hostname).alias(TD_OPT_TST_SRV),
+            lit(username).alias(TD_OPT_TST_USR),
+            lit(now.timestamp_micros())
+                .cast(polars::prelude::DataType::Datetime(
+                    polars::prelude::TimeUnit::Microseconds,
+                    Some(polars::prelude::TimeZone::UTC),
+                ))
+                .alias(TD_OPT_TST_TS),
+            lit(test_fn).alias(TD_OPT_TST_FN),
+        ])
+    } else {
+        lazy_frame
+    };
+
     Ok(lazy_frame)
 }
 

@@ -552,6 +552,7 @@ mod tests {
         ));
     }
 
+    #[allow(deprecated)]
     async fn test_mount(
         uri: &Url,
         mount_path: &str,

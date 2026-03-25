@@ -26,6 +26,7 @@ from tabsdata._format import (
     build_file_format,
     get_implicit_format_from_list,
 )
+from tabsdata._info import FileInfo, validate_file_info
 from tabsdata._io.constants import (
     AZURE_SCHEME,
     FILE_SCHEME,
@@ -83,6 +84,7 @@ from tabsdata.exceptions import (
 logger = logging.getLogger(__name__)
 
 
+# noinspection PyShadowingBuiltins,DuplicatedCode
 class AzureSource(SourcePlugin):
     """
     :categories: source
@@ -107,6 +109,7 @@ class AzureSource(SourcePlugin):
         credentials: AzureCredentials,
         format: str | FileFormat = None,
         initial_last_modified: str | datetime = None,
+        file_info: str | FileInfo | None = None,
     ):
         """
         Initializes the AzureSource with the given URI and the credentials required to
@@ -128,6 +131,8 @@ class AzureSource(SourcePlugin):
                 and time will be considered. The date and time can be provided as a
                 string in [ISO 8601 format](https://en.wikipedia.org/wiki/ISO_8601) or
                 as a datetime object. If no timezone is provided, UTC will be assumed.
+            file_info: If provided, adds origin file information as system columns.
+                'name' adds the file name, 'uri' adds the full URI. Default is None.
 
         Raises:
             InputConfigurationError
@@ -137,6 +142,7 @@ class AzureSource(SourcePlugin):
         self.format = format
         self.initial_last_modified = initial_last_modified
         self.credentials = credentials
+        self.file_info = file_info
 
     @property
     def uri(self) -> str | list[str]:
@@ -290,6 +296,25 @@ class AzureSource(SourcePlugin):
             raise SourceConfigurationError(ErrorCode.SOCE30, type(credentials))
         self._credentials = credentials
 
+    @property
+    def file_info(self) -> FileInfo | None:
+        """
+        FileInfo | None: The file information to add as system columns.
+        """
+        return self._file_info
+
+    @file_info.setter
+    def file_info(self, file_info: str | FileInfo | None):
+        """
+        Sets the file information to add as system columns.
+
+        Args:
+            file_info: If provided, adds origin file information as system
+                columns. 'name' adds the file name, 'uri' adds the full URI.
+                Default is None.
+        """
+        self._file_info = validate_file_info(file_info)
+
     def chunk(self, working_dir: str) -> list[str | None | list[str | None]]:
         logger.debug(f"Triggering {self}")
         obtain_and_set_azure_credentials(self.credentials)
@@ -308,6 +333,7 @@ class AzureSource(SourcePlugin):
         return f"{self.__class__.__name__}({self.uri})"
 
 
+# noinspection PyShadowingBuiltins,DuplicatedCode
 class GCSSource(SourcePlugin):
     """
     :categories: source
@@ -332,6 +358,7 @@ class GCSSource(SourcePlugin):
         credentials: GCPCredentials,
         format: str | FileFormat = None,
         initial_last_modified: str | datetime = None,
+        file_info: str | FileInfo | None = None,
     ):
         """
         Initializes the GCSSource with the given URI and the credentials required to
@@ -353,6 +380,8 @@ class GCSSource(SourcePlugin):
                 The date and time can be provided as a string in
                 [ISO 8601 format](https://en.wikipedia.org/wiki/ISO_8601) or as
                 a datetime object. If no timezone is provided, UTC will be assumed.
+            file_info: If provided, adds origin file information as system columns.
+                'name' adds the file name, 'uri' adds the full URI. Default is None.
 
         Raises:
             InputConfigurationError
@@ -362,6 +391,7 @@ class GCSSource(SourcePlugin):
         self.format = format
         self.initial_last_modified = initial_last_modified
         self.credentials = credentials
+        self.file_info = file_info
 
     @property
     def uri(self) -> str | list[str]:
@@ -514,6 +544,25 @@ class GCSSource(SourcePlugin):
             raise SourceConfigurationError(ErrorCode.SOCE45, type(credentials))
         self._credentials = credentials
 
+    @property
+    def file_info(self) -> FileInfo | None:
+        """
+        FileInfo | None: The file information to add as system columns.
+        """
+        return self._file_info
+
+    @file_info.setter
+    def file_info(self, file_info: str | FileInfo | None):
+        """
+        Sets the file information to add as system columns.
+
+        Args:
+            file_info: If provided, adds origin file information as system
+                columns. 'name' adds the file name, 'uri' adds the full URI.
+                Default is None.
+        """
+        self._file_info = validate_file_info(file_info)
+
     def chunk(self, working_dir: str) -> list[str | None | list[str | None]]:
         logger.debug(f"Triggering {self}")
         obtain_and_set_gcp_credentials(self.credentials)
@@ -532,6 +581,7 @@ class GCSSource(SourcePlugin):
         return f"{self.__class__.__name__}({self.uri})"
 
 
+# noinspection PyShadowingBuiltins,DuplicatedCode
 class LocalFileSource(SourcePlugin):
     """
     :categories: source
@@ -555,6 +605,7 @@ class LocalFileSource(SourcePlugin):
         path: str | list[str],
         format: str | FileFormat = None,
         initial_last_modified: str | datetime = None,
+        file_info: str | FileInfo | None = None,
     ):
         """
         Initializes the LocalFileSource with the given path, and optionally a format and
@@ -573,6 +624,8 @@ class LocalFileSource(SourcePlugin):
                 The date and time can be provided as a string in
                 [ISO 8601 format](https://en.wikipedia.org/wiki/ISO_8601) or as
                 a datetime object. If no timezone is provided, UTC will be assumed.
+            file_info: If provided, adds origin file information as system columns.
+                'name' adds the file name, 'uri' adds the full URI. Default is None.
 
         Raises:
             InputConfigurationError
@@ -581,6 +634,7 @@ class LocalFileSource(SourcePlugin):
         self.path = path
         self.format = format
         self.initial_last_modified = initial_last_modified
+        self.file_info = file_info
 
     @property
     def path(self) -> str | list[str]:
@@ -723,6 +777,25 @@ class LocalFileSource(SourcePlugin):
         self._initial_values = new_values
         logger.info(f"Initial values updated to '{new_values}' successfully.")
 
+    @property
+    def file_info(self) -> FileInfo | None:
+        """
+        FileInfo | None: The file information to add as system columns.
+        """
+        return self._file_info
+
+    @file_info.setter
+    def file_info(self, file_info: str | FileInfo | None):
+        """
+        Sets the file information to add as system columns.
+
+        Args:
+            file_info: If provided, adds origin file information as system
+                columns. 'name' adds the file name, 'uri' adds the full URI.
+                Default is None.
+        """
+        self._file_info = validate_file_info(file_info)
+
     def chunk(self, working_dir: str) -> list[str | None | list[str | None]]:
         logger.debug(f"Triggering {self}")
         local_sources = _execute_file_importer(self, working_dir)
@@ -740,6 +813,7 @@ class LocalFileSource(SourcePlugin):
         return f"{self.__class__.__name__}({self.path})"
 
 
+# noinspection PyShadowingBuiltins,DuplicatedCode
 class S3Source(SourcePlugin):
     """
     :categories: source
@@ -765,6 +839,7 @@ class S3Source(SourcePlugin):
         format: str | FileFormat = None,
         initial_last_modified: str | datetime = None,
         region: str = None,
+        file_info: str | FileInfo | None = None,
     ):
         """
         Initializes the S3Source with the given URI and the credentials required to
@@ -788,6 +863,8 @@ class S3Source(SourcePlugin):
                 a datetime object. If no timezone is provided, UTC will be assumed.
             region: The region where the S3 bucket is located. If not
                 provided, the default AWS region will be used.
+            file_info: If provided, adds origin file information as system columns.
+                'name' adds the file name, 'uri' adds the full URI. Default is None.
 
         Raises:
             InputConfigurationError
@@ -798,6 +875,7 @@ class S3Source(SourcePlugin):
         self.initial_last_modified = initial_last_modified
         self.credentials = credentials
         self.region = region
+        self.file_info = file_info
 
     @property
     def uri(self) -> str | list[str]:
@@ -985,6 +1063,25 @@ class S3Source(SourcePlugin):
             raise SourceConfigurationError(ErrorCode.SOCE20, type(credentials))
         self._credentials = credentials
 
+    @property
+    def file_info(self) -> FileInfo | None:
+        """
+        FileInfo | None: The file information to add as system columns.
+        """
+        return self._file_info
+
+    @file_info.setter
+    def file_info(self, file_info: str | FileInfo | None):
+        """
+        Sets the file information to add as system columns.
+
+        Args:
+            file_info: If provided, adds origin file information as system
+                columns. 'name' adds the file name, 'uri' adds the full URI.
+                Default is None.
+        """
+        self._file_info = validate_file_info(file_info)
+
     def chunk(self, working_dir: str) -> list[str | None | list[str | None]]:
         logger.debug(f"Triggering {self}")
         obtain_and_set_s3_credentials(self.credentials)
@@ -1093,7 +1190,7 @@ def _execute_single_file_import(
     initial_last_modified: str | None,
     user_source: AzureSource | GCSSource | LocalFileSource | S3Source,
     lastmod_info: str = None,
-) -> (list[str] | str, str | None):
+) -> tuple[list[str] | str, str | None]:
     """
     Import a file from a location to a destination with a specific format. The file is
         imported using a binary, and the result returned is always a list of parquet
@@ -1108,6 +1205,7 @@ def _execute_single_file_import(
         initial_last_modified,
         user_source,
         lastmod_info,
+        file_info=getattr(user_source, "file_info", None),
     )
 
     yaml_request_file = os.path.join(destination_folder, f"request_{uuid.uuid4()}.yaml")
@@ -1264,6 +1362,7 @@ def _obtain_transporter_import(
     initial_last_modified: str | None,
     user_source: AzureSource | GCSSource | LocalFileSource | S3Source,
     lastmod_info: str = None,
+    file_info: FileInfo | None = None,
 ):
     # Create the transporter source object
     transporter_source = _obtain_source_object(user_source, origin_location_uri)
@@ -1303,6 +1402,7 @@ def _obtain_transporter_import(
         format=transporter_format,
         initial_lastmod=initial_last_modified,
         lastmod_info=lastmod_info,
+        file_info=file_info.value if file_info is not None else None,
     )
 
     logger.debug(f"Transporter import config: {transporter_import}")

@@ -12,7 +12,7 @@ import tabsdata.tableframe as tdf
 from tabsdata._utils.tableframe import _constants, _helpers
 
 # noinspection PyProtectedMember
-from tabsdata._utils.tableframe._helpers import SYSTEM_COLUMNS
+from tabsdata._utils.tableframe._helpers import OPTIONAL_SYSTEM_COLUMNS, SYSTEM_COLUMNS
 
 # noinspection PyUnresolvedReferences
 from .. import pytestmark  # noqa: F401
@@ -38,8 +38,10 @@ class TestTableFrame(unittest.TestCase):
         columns = self.table_frame.columns(kind="all")
         self.assertIn("intColumn", columns)
         self.assertIn("stringColumn", columns)
+        system_optional = set(OPTIONAL_SYSTEM_COLUMNS)
         for column in SYSTEM_COLUMNS:
-            self.assertIn(column, columns)
+            if column not in system_optional:
+                self.assertIn(column, columns)
 
     def test_columns_user(self):
         user_columns = self.table_frame.columns(kind="user")
@@ -52,8 +54,10 @@ class TestTableFrame(unittest.TestCase):
         system_columns = self.table_frame.columns(kind="system")
         self.assertNotIn("intColumn", system_columns)
         self.assertNotIn("stringColumn", system_columns)
+        system_optional = set(OPTIONAL_SYSTEM_COLUMNS)
         for column in SYSTEM_COLUMNS:
-            self.assertIn(column, system_columns)
+            if column not in system_optional:
+                self.assertIn(column, system_columns)
 
     def test_columns(self):
         columns = self.table_frame.columns("all")
@@ -61,9 +65,11 @@ class TestTableFrame(unittest.TestCase):
         self.assertTrue("stringColumn" in columns)
 
     def test_dtypes(self):
+        system_optional = set(OPTIONAL_SYSTEM_COLUMNS)
         expected_dtypes = [pl.Int64, pl.Utf8]
         for column, metadata in _helpers.SYSTEM_COLUMNS_METADATA.items():
-            expected_dtypes.append(metadata.dtype)
+            if column not in system_optional:
+                expected_dtypes.append(metadata.dtype)
         dtypes = self.table_frame.dtypes
         self.assertCountEqual(dtypes, expected_dtypes)
 
@@ -73,8 +79,10 @@ class TestTableFrame(unittest.TestCase):
         self.assertTrue("stringColumn" in schema)
 
     def test_width(self):
+        system_optional = set(OPTIONAL_SYSTEM_COLUMNS)
+        required_system = [c for c in SYSTEM_COLUMNS if c not in system_optional]
         width = self.table_frame.width
-        self.assertEqual(width, 2 + len(SYSTEM_COLUMNS))
+        self.assertEqual(width, 2 + len(required_system))
 
     def test_bool(self):
         self.table_frame.__bool__()

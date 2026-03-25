@@ -6,5 +6,7 @@ pub const TD_CROSS_BUILD: &str = "TD_CROSS_BUILD";
 
 pub const COPYRIGHT_HEADER: &str = "#\n# Copyright {} Tabs Data Inc.\n#\n\n";
 
+pub const PYTEST_CONTEXT_ACTIVE: &str = "PYTEST_CURRENT_TEST";
+
 pub const INTERNAL_ERROR_MESSAGE: &str =
     "Internal error: {}. Contact Tabsdata for help and to report it.";

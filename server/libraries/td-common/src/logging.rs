@@ -2,6 +2,7 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
+use crate::constants::PYTEST_CONTEXT_ACTIVE;
 use crate::env::{get_current_dir, to_absolute};
 use crate::manifest::{Inf, WORKER_INF_FILE};
 use crate::settings::{LOG_WITH_ANSI, MANAGER, TRUE};
@@ -57,7 +58,6 @@ pub const LOG_EXTENSION: &str = "log";
 pub const DEFAULT_LOG_LEVEL: Level = Level::DEBUG;
 
 pub const WORK_ENV: &str = "TD_URI_WORK";
-pub const PYTEST_VERSION: &str = "PYTEST_VERSION";
 
 static BOOTSTRAP_NOTICE_ENABLED: OnceCell<bool> = OnceCell::new();
 
@@ -685,7 +685,7 @@ fn obtain_log_location_from_environment(path: PathBuf) -> Option<PathBuf> {
 }
 
 fn obtain_log_location_from_pytest(_: PathBuf) -> Option<PathBuf> {
-    if env::var(PYTEST_VERSION).is_ok() {
+    if env::var(PYTEST_CONTEXT_ACTIVE).is_ok() {
         Some(get_current_dir().join(TARGET_FOLDER).join(TDUDF_FOLDER))
     } else {
         None

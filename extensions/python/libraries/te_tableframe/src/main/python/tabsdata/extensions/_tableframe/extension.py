@@ -36,6 +36,10 @@ class SystemColumns(Enum):
     TD_VER_TRANSACTION = td_constants.StandardSystemColumns.TD_VER_TRANSACTION.value
     TD_VER_VERSION = td_constants.StandardSystemColumns.TD_VER_VERSION.value
     TD_VER_TIMESTAMP = td_constants.StandardSystemColumns.TD_VER_TIMESTAMP.value
+    TD_OPT_TST_SRV = td_constants.OptionalSystemColumns.TD_OPT_TST_SRV.value
+    TD_OPT_TST_USR = td_constants.OptionalSystemColumns.TD_OPT_TST_USR.value
+    TD_OPT_TST_TS = td_constants.OptionalSystemColumns.TD_OPT_TST_TS.value
+    TD_OPT_TST_FN = td_constants.OptionalSystemColumns.TD_OPT_TST_FN.value
 
 
 class RequiredColumns(Enum):
@@ -61,12 +65,32 @@ _s_ver_timestamp_metadata = (
     td_constants.StandardSystemColumnsMetadata.TD_VER_TIMESTAMP.value
 )
 
+_s_opt_tst_srv_metadata = (
+    td_constants.OptionalSystemColumnsMetadata.TD_OPT_TST_SRV.value
+)
+_s_opt_tst_usr_metadata = (
+    td_constants.OptionalSystemColumnsMetadata.TD_OPT_TST_USR.value
+)
+_s_opt_tst_ts_metadata = td_constants.OptionalSystemColumnsMetadata.TD_OPT_TST_TS.value
+_s_opt_tst_fn_metadata = td_constants.OptionalSystemColumnsMetadata.TD_OPT_TST_FN.value
+
 SYSTEM_COLUMNS_METADATA = {
     SystemColumns.TD_IDENTIFIER.value: _s_id_metadata,
     SystemColumns.TD_VER_EXECUTION.value: _s_ver_execution_metadata,
     SystemColumns.TD_VER_TRANSACTION.value: _s_ver_transaction_metadata,
     SystemColumns.TD_VER_VERSION.value: _s_ver_version_metadata,
     SystemColumns.TD_VER_TIMESTAMP.value: _s_ver_timestamp_metadata,
+    SystemColumns.TD_OPT_TST_SRV.value: _s_opt_tst_srv_metadata,
+    SystemColumns.TD_OPT_TST_USR.value: _s_opt_tst_usr_metadata,
+    SystemColumns.TD_OPT_TST_TS.value: _s_opt_tst_ts_metadata,
+    SystemColumns.TD_OPT_TST_FN.value: _s_opt_tst_fn_metadata,
+}
+
+OPTIONAL_SYSTEM_COLUMNS_METADATA = {
+    SystemColumns.TD_OPT_TST_SRV.value: _s_opt_tst_srv_metadata,
+    SystemColumns.TD_OPT_TST_USR.value: _s_opt_tst_usr_metadata,
+    SystemColumns.TD_OPT_TST_TS.value: _s_opt_tst_ts_metadata,
+    SystemColumns.TD_OPT_TST_FN.value: _s_opt_tst_fn_metadata,
 }
 
 # noinspection DuplicatedCode

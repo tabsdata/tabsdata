@@ -16,7 +16,11 @@ from tabsdata._tdfunction import (
     _recursively_obtain_datatype,
 )
 from tabsdata._utils.tableframe._common import add_system_columns
-from tabsdata._utils.tableframe._helpers import SYSTEM_COLUMNS
+from tabsdata._utils.tableframe._helpers import OPTIONAL_SYSTEM_COLUMNS, SYSTEM_COLUMNS
+
+REQUIRED_SYSTEM_COLUMNS = [
+    column for column in SYSTEM_COLUMNS if column not in set(OPTIONAL_SYSTEM_COLUMNS)
+]
 from tabsdata.tableframe.lazyframe.properties import (
     TableFrameProperties,
     TableFramePropertiesBuilder,
@@ -51,7 +55,7 @@ def test_has_required_columns_polars_dataframe():
     df = add_system_columns(
         lf=df.lazy(), mode="raw", idx=None, properties=properties
     ).collect()
-    assert all(col in df.columns for col in SYSTEM_COLUMNS)
+    assert all(col in df.columns for col in REQUIRED_SYSTEM_COLUMNS)
 
 
 def test_has_required_columns_empty_polars_dataframe():
@@ -67,7 +71,7 @@ def test_has_required_columns_empty_polars_dataframe():
     df = add_system_columns(
         lf=df.lazy(), mode="raw", idx=None, properties=properties
     ).collect()
-    assert all(col in df.columns for col in SYSTEM_COLUMNS)
+    assert all(col in df.columns for col in REQUIRED_SYSTEM_COLUMNS)
 
 
 def test_has_required_columns_polars_lazyframe():
@@ -81,7 +85,7 @@ def test_has_required_columns_polars_lazyframe():
         .build()
     )
     df = add_system_columns(lf=df, mode="raw", idx=None, properties=properties)
-    assert all(col in df.collect_schema().names() for col in SYSTEM_COLUMNS)
+    assert all(col in df.collect_schema().names() for col in REQUIRED_SYSTEM_COLUMNS)
 
 
 def test_has_required_columns_empty_polars_lazyframe():
@@ -95,7 +99,7 @@ def test_has_required_columns_empty_polars_lazyframe():
         .build()
     )
     df = add_system_columns(lf=df, mode="raw", idx=None, properties=properties)
-    assert all(col in df.collect_schema().names() for col in SYSTEM_COLUMNS)
+    assert all(col in df.collect_schema().names() for col in REQUIRED_SYSTEM_COLUMNS)
 
 
 def test_recursively_obtain_datatype_single_object():

@@ -29,11 +29,32 @@ class SelectorProxy(td_expr.Expr):
         super().__init__(expr)
 
 
+class DeferredSelectorProxy(SelectorProxy):
+    def __init__(self, indices: list[int], invert: bool = False):
+        self._indices = indices
+        self._invert = invert
+        super().__init__(pl.lit(None))
+
+    def _resolve(self, columns: list[str]) -> SelectorProxy:
+        user_columns = [
+            column
+            for column in columns
+            if not column.startswith(td_constants.TD_COLUMN_PREFIX)
+        ]
+        selected_columns = [user_columns[i] for i in self._indices]
+        selector = pl.selectors.by_name(*selected_columns)
+        if self._invert:
+            selector = _exclude_system_columns() & ~selector
+        else:
+            selector = selector & _exclude_system_columns()
+        return SelectorProxy(selector)
+
+
 def _exclude_system_columns() -> pl.Expr:
     selector = pl.selectors.exclude(
         pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX)
     )
-    for prefix in td_constants.TD_NAMESPACED_VIRTUAL_COLUMN_PREFIXES:
+    for prefix in td_constants.TD_NAMESPACED_COLUMN_PREFIXES:
         selector = selector | pl.selectors.starts_with(prefix)
     return selector
 
@@ -202,11 +223,7 @@ def last() -> SelectorProxy:
         │ 87.5  │
         └───────┘
     """
-    from tabsdata.extensions._tableframe.extension import SystemColumns
-
-    return SelectorProxy(
-        pl.selectors.by_index(-(len(SystemColumns) + 1)) & _exclude_system_columns()
-    )
+    return DeferredSelectorProxy([-1])
 
 
 def by_index(*indices: int | range | Sequence[int | range]) -> SelectorProxy:
@@ -266,33 +283,24 @@ def by_index(*indices: int | range | Sequence[int | range]) -> SelectorProxy:
         │ "H"  ┆ 89.5  │
         └──────┴───────┘
     """
-    from tabsdata.extensions._tableframe.extension import SystemColumns
-
-    system_columns_length = len(SystemColumns)
-
-    def fix(i: int) -> int:
-        return i - system_columns_length if i < 0 else i
-
     normalized_indices = []
     for index in indices:
         if isinstance(index, int):
-            normalized_indices.append(fix(index))
+            normalized_indices.append(index)
         elif isinstance(index, range):
-            normalized_indices.extend(fix(i) for i in index)
+            normalized_indices.extend(index)
         elif isinstance(index, Iterable):
             for sub_index in index:
                 if isinstance(sub_index, int):
-                    normalized_indices.append(fix(sub_index))
+                    normalized_indices.append(sub_index)
                 elif isinstance(sub_index, range):
-                    normalized_indices.extend(fix(i) for i in sub_index)
+                    normalized_indices.extend(sub_index)
                 else:
                     raise TypeError(f"Unsupported nested type: {type(sub_index)}")
         else:
             raise TypeError(f"Unsupported index type: {type(index)}")
 
-    return SelectorProxy(
-        pl.selectors.by_index(*normalized_indices) & _exclude_system_columns()
-    )
+    return DeferredSelectorProxy(normalized_indices)
 
 
 """
@@ -1916,6 +1924,11 @@ def exclude(
         │ 8   ┆ "H"  │
         └───═─┴──────┘
     """
+    if isinstance(columns, DeferredSelectorProxy) and not more_columns:
+        return DeferredSelectorProxy(columns._indices, invert=True)
+    if isinstance(columns, td_expr.Expr):
+        # noinspection PyProtectedMember
+        columns = columns._expr
     return SelectorProxy(
         pl.selectors.exclude(columns=columns, *more_columns) & _exclude_system_columns()
     )
