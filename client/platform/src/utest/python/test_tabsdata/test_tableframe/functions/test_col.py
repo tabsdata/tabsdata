@@ -36,7 +36,7 @@ def test_reserved_column():
     for name in system_columns():
         is_namespaced_virtual = any(
             name.startswith(prefix)
-            for prefix in td_constants.TD_NAMESPACED_VIRTUAL_COLUMN_PREFIXES
+            for prefix in td_constants.TD_NAMESPACED_COLUMN_PREFIXES
         )
         if is_namespaced_virtual:
             td.col(name)

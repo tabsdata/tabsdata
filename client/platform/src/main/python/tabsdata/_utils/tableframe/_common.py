@@ -50,7 +50,7 @@ def check_column(name: str):
     ):
         raise TableFrameError(ErrorCode.TF3, name)
     if name in td_helpers.SYSTEM_COLUMNS:
-        for namespaced_prefix in td_constants.TD_NAMESPACED_VIRTUAL_COLUMN_PREFIXES:
+        for namespaced_prefix in td_constants.TD_NAMESPACED_COLUMN_PREFIXES:
             if name.startswith(namespaced_prefix):
                 return
         raise TableFrameError(ErrorCode.TF4, name)
@@ -98,8 +98,12 @@ def add_system_columns(
     if len(current_columns) == 0 and lf.limit(1).collect().height == 0:
         is_void = True
 
+    optional_system_columns = set(td_helpers.OPTIONAL_SYSTEM_COLUMNS)
+
     for column, metadata in td_helpers.SYSTEM_COLUMNS_METADATA.items():
         if column in current_columns:
+            continue
+        if column in optional_system_columns:
             continue
 
         if isinstance(metadata.generator, str):
@@ -151,11 +155,31 @@ def drop_system_columns(
     lf: pl.LazyFrame,
     ignore_missing: bool = True,
 ) -> pl.LazyFrame:
-    columns_to_remove = list(td_helpers.SYSTEM_COLUMNS)
+    optional_system_columns = set(td_helpers.OPTIONAL_SYSTEM_COLUMNS)
+    columns_to_remove = [
+        columns
+        for columns in td_helpers.SYSTEM_COLUMNS
+        if columns not in optional_system_columns
+    ]
     if ignore_missing:
         existing_columns = set(lf.collect_schema().names())
         columns_to_remove = [
-            col for col in columns_to_remove if col in existing_columns
+            column for column in columns_to_remove if column in existing_columns
+        ]
+    for column in columns_to_remove:
+        lf = lf.drop(column)
+    return lf
+
+
+def drop_all_system_columns(
+    lf: pl.LazyFrame,
+    ignore_missing: bool = True,
+) -> pl.LazyFrame:
+    columns_to_remove = td_helpers.SYSTEM_COLUMNS
+    if ignore_missing:
+        existing_columns = set(lf.collect_schema().names())
+        columns_to_remove = [
+            column for column in columns_to_remove if column in existing_columns
         ]
     for column in columns_to_remove:
         lf = lf.drop(column)

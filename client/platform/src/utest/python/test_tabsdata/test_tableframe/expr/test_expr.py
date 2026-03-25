@@ -242,11 +242,11 @@ def test__setstate__():
 
 def test_alias():
     for name in SYSTEM_COLUMNS:
-        is_namespaced_virtual = any(
+        is_namespaced = any(
             name.startswith(prefix)
-            for prefix in td_constants.TD_NAMESPACED_VIRTUAL_COLUMN_PREFIXES
+            for prefix in td_constants.TD_NAMESPACED_COLUMN_PREFIXES
         )
-        if is_namespaced_virtual:
+        if is_namespaced:
             td.col("dame").alias(name)
         else:
             with pytest.raises(TabsDataException) as error:

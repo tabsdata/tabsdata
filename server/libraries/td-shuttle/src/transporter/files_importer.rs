@@ -6,6 +6,8 @@ use crate::transporter::api::{
     CopyReport, CopyRequest, FileImportReport, FileImportReportBuilder, ImportFormat,
     ImportRequest, WildcardSource,
 };
+#[allow(unused_imports)]
+use crate::transporter::args::FileInfo;
 use crate::transporter::args::{
     Format, ImporterLogReadOptions, ImporterNdJsonReadOptions, ImporterOptions,
     ImporterOptionsBuilder, ImporterParquetReadOptions, ToFormat,
@@ -119,6 +121,7 @@ impl TryFrom<&ImportRequest> for ImporterOptions {
             }))
             .parallel(req.parallelism().unwrap_or(4)) // not used, for ref only
             .out(None) // not used, for ref only
+            .file_info(req.file_info().clone())
             .build()
             .map_err(|e| TransporterError::CouldNotBuildImporterOptions(e.to_string()))
     }
@@ -1158,5 +1161,256 @@ mod tests {
             &ImportFormat::Binary,
         )
         .await;
+    }
+
+    //noinspection DuplicatedCode
+    async fn test_import_with_file_info(format: &ImportFormat, file_info: Option<FileInfo>) {
+        use td_tableframe::constants::{TD_ORIGIN_FILE_LINE, TD_ORIGIN_FILE_PATH};
+
+        let sink_options = SinkOptions {
+            sync_on_close: SyncOnCloseType::All,
+            maintain_order: true,
+            mkdir: true,
+        };
+
+        let test_dir = td_common::tdtestdir!();
+        let base_url = Url::from_directory_path(&test_dir).unwrap();
+        let from_base = Location::LocalFile {
+            url: base_url.clone(),
+        };
+        let to_base = Location::LocalFile {
+            url: BaseUrl(base_url.clone()),
+        };
+
+        let from_file = from_base.set_file(&id().to_string()).unwrap();
+
+        let col_int = Int64Chunked::from_iter((0i64..10i64).map(Some))
+            .into_series()
+            .with_name(PlSmallStr::from("col_int"));
+        let col_string = StringChunked::from_iter((0..10).map(|i| Some(format!("str_{}", i))))
+            .into_series()
+            .with_name(PlSmallStr::from("col_string"));
+        let df = DataFrame::new(vec![Column::from(col_int), Column::from(col_string)]).unwrap();
+        let lf = df.clone().lazy();
+        let num_rows = df.shape().0;
+
+        match format {
+            ImportFormat::Csv(_) => {
+                lf.sink_csv(
+                    create_sink_target(&from_file.url(), &from_file.cloud_configs()).unwrap(),
+                    CsvWriterOptions::default(),
+                    None,
+                    sink_options.clone(),
+                )
+                .unwrap()
+                .collect()
+                .unwrap();
+            }
+            ImportFormat::Json => {
+                lf.sink_json(
+                    create_sink_target(&from_file.url(), &from_file.cloud_configs()).unwrap(),
+                    JsonWriterOptions::default(),
+                    None,
+                    sink_options.clone(),
+                )
+                .unwrap()
+                .collect()
+                .unwrap();
+            }
+            ImportFormat::Log => {
+                lf.sink_csv(
+                    create_sink_target(&from_file.url(), &from_file.cloud_configs()).unwrap(),
+                    CsvWriterOptions {
+                        serialize_options: SerializeOptions {
+                            quote_style: Never,
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    },
+                    None,
+                    sink_options.clone(),
+                )
+                .unwrap()
+                .collect()
+                .unwrap();
+            }
+            ImportFormat::Parquet => {
+                lf.sink_parquet(
+                    create_sink_target(&from_file.url(), &from_file.cloud_configs()).unwrap(),
+                    ParquetWriteOptions::default(),
+                    None,
+                    sink_options.clone(),
+                )
+                .unwrap()
+                .collect()
+                .unwrap();
+            }
+            ImportFormat::Binary => {
+                panic!("Binary format not supported for file_info tests");
+            }
+        };
+
+        let request = ImportRequestBuilder::default()
+            .source(
+                WildcardSourceBuilder::default()
+                    .location(&from_file)
+                    .initial_lastmod(None)
+                    .lastmod_info(None)
+                    .build()
+                    .unwrap(),
+            )
+            .format(format.clone())
+            .target(
+                ImportTargetBuilder::default()
+                    .location(to_base.clone())
+                    .build()
+                    .unwrap(),
+            )
+            .parallelism(None)
+            .file_info(file_info.clone())
+            .build()
+            .unwrap();
+
+        let meta = ObjectMeta {
+            location: ObjectStorePath::from(from_file.url().path()),
+            last_modified: Utc::now(),
+            size: 1024,
+            e_tag: Some("e_tag".to_string()),
+            version: Some("v1".to_string()),
+        };
+        let files: Vec<(Url, ObjectMeta)> = vec![(from_file.url().clone(), meta)];
+
+        let response = FilesImporter::import(&request, files).await.unwrap();
+        assert_eq!(response.len(), 1);
+
+        let url_to = response.first().unwrap().to.clone();
+        let lf = LazyFrame::scan_parquet(PlPath::new(url_to.as_str()), ScanArgsParquet::default())
+            .unwrap();
+
+        let df_out = tokio::task::spawn_blocking(move || lf.collect())
+            .await
+            .unwrap()
+            .unwrap();
+
+        let columns = df_out.get_column_names();
+
+        if file_info.is_some() {
+            assert!(
+                columns.contains(&&PlSmallStr::from(TD_ORIGIN_FILE_PATH)),
+                "Missing column: {TD_ORIGIN_FILE_PATH}"
+            );
+            assert!(
+                columns.contains(&&PlSmallStr::from(TD_ORIGIN_FILE_LINE)),
+                "Missing column: {TD_ORIGIN_FILE_LINE}"
+            );
+
+            let line_col = df_out.column(TD_ORIGIN_FILE_LINE).unwrap();
+            let first_line = line_col.get(0).unwrap();
+            assert_eq!(first_line.to_string(), "1");
+
+            let path_col = df_out.column(TD_ORIGIN_FILE_PATH).unwrap();
+            let path_val = path_col.get(0).unwrap().to_string();
+            let path_val = path_val.trim_matches('"');
+
+            match &file_info {
+                Some(FileInfo::Name) => {
+                    assert!(
+                        !path_val.contains('/'),
+                        "Expected filename only, got: {path_val}"
+                    );
+                }
+                Some(FileInfo::Uri) => {
+                    assert!(
+                        path_val.starts_with("file://"),
+                        "Expected full URI, got: {path_val}"
+                    );
+                }
+                _ => {}
+            }
+        } else {
+            assert!(
+                !columns.contains(&&PlSmallStr::from(TD_ORIGIN_FILE_PATH)),
+                "Column {TD_ORIGIN_FILE_PATH} should not exist when file_info is None"
+            );
+            assert!(
+                !columns.contains(&&PlSmallStr::from(TD_ORIGIN_FILE_LINE)),
+                "Column {TD_ORIGIN_FILE_LINE} should not exist when file_info is None"
+            );
+        }
+
+        if !matches!(format, ImportFormat::Log) && file_info.is_some() {
+            let line_col = df_out.column(TD_ORIGIN_FILE_LINE).unwrap();
+            let last_line = line_col.get(line_col.len() - 1).unwrap();
+            assert_eq!(
+                last_line.to_string(),
+                num_rows.to_string(),
+                "Last line number should equal number of rows"
+            );
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_import_file_info_none_csv() {
+        test_import_with_file_info(&ImportFormat::Csv(ImportCsvOptions::default()), None).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_import_file_info_none_parquet() {
+        test_import_with_file_info(&ImportFormat::Parquet, None).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_import_file_info_none_json() {
+        test_import_with_file_info(&ImportFormat::Json, None).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_import_file_info_none_log() {
+        test_import_with_file_info(&ImportFormat::Log, None).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_import_file_info_name_csv() {
+        test_import_with_file_info(
+            &ImportFormat::Csv(ImportCsvOptions::default()),
+            Some(FileInfo::Name),
+        )
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_import_file_info_name_parquet() {
+        test_import_with_file_info(&ImportFormat::Parquet, Some(FileInfo::Name)).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_import_file_info_name_json() {
+        test_import_with_file_info(&ImportFormat::Json, Some(FileInfo::Name)).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_import_file_info_name_log() {
+        test_import_with_file_info(&ImportFormat::Log, Some(FileInfo::Name)).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_import_file_info_uri_csv() {
+        test_import_with_file_info(&ImportFormat::Csv(ImportCsvOptions::default()), Some(FileInfo::Uri))
+            .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_import_file_info_uri_parquet() {
+        test_import_with_file_info(&ImportFormat::Parquet, Some(FileInfo::Uri)).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_import_file_info_uri_json() {
+        test_import_with_file_info(&ImportFormat::Json, Some(FileInfo::Uri)).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_import_file_info_uri_log() {
+        test_import_with_file_info(&ImportFormat::Log, Some(FileInfo::Uri)).await;
     }
 }

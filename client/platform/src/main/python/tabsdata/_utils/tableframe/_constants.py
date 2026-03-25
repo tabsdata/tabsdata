@@ -13,7 +13,7 @@ import polars as pl
 
 import tabsdata._utils.tableframe._generators as td_generators
 
-PYTEST_CONTEXT_ACTIVE = "PYTEST_VERSION"
+PYTEST_CONTEXT_ACTIVE = "PYTEST_CURRENT_TEST"
 
 TD_SYMLINK_POLARS_LIBS_PYTEST = "TD_SYMLINK_POLARS_LIBS_PYTEST"
 
@@ -114,10 +114,20 @@ TD_COLUMN_PREFIX = "$td."
 TD_COLUMN_PREFIX_REGEXP = "^\\$td\\..*$"
 
 TD_VER_COLUMN_PREFIX = "$td.ver."
+TD_OPT_COLUMN_PREFIX = "$td.opt."
+
+TD_NAMESPACED_COLUMN_PREFIXES = [TD_VER_COLUMN_PREFIX, TD_OPT_COLUMN_PREFIX]
 
 TD_NAMESPACED_VIRTUAL_COLUMN_PREFIXES = [TD_VER_COLUMN_PREFIX]
 
-TD_METADATA_COLUMN_PREFIX = "@td"
+
+class SystemColumnNamespace(Enum):
+    VER = TD_VER_COLUMN_PREFIX
+    OPT = TD_OPT_COLUMN_PREFIX
+
+
+TD_CONNECTOR_COLUMN_PREFIX = "@td."
+TD_ORIGIN_COLUMN_PREFIX = "@td.origin."
 
 EMPTY_UUID_V7 = "00000000000000000000000000"
 EMPTY_EXECUTION = EMPTY_UUID_V7
@@ -163,12 +173,26 @@ class StandardSystemColumns(Enum):
     TD_VER_TIMESTAMP = "$td.ver.timestamp"
 
 
+class OptionalSystemColumns(Enum):
+    TD_OPT_TST_SRV = "$td.opt.tst.srv"
+    TD_OPT_TST_USR = "$td.opt.tst.usr"
+    TD_OPT_TST_TS = "$td.opt.tst.ts"
+    TD_OPT_TST_FN = "$td.opt.tst.fn"
+
+
+class ConnectorColumns(Enum):
+    TD_ORIGIN_FILE_PATH = "@td.origin.file.path"
+    TD_ORIGIN_FILE_LINE = "@td.origin.file.line"
+
+
 # User facing enum for a subset standard system columns.
 class SysCol(StrEnum):
     VER_EXECUTION = StandardSystemColumns.TD_VER_EXECUTION.value
     VER_TRANSACTION = StandardSystemColumns.TD_VER_TRANSACTION.value
     VER_VERSION = StandardSystemColumns.TD_VER_VERSION.value
     VER_TIMESTAMP = StandardSystemColumns.TD_VER_TIMESTAMP.value
+    ORIGIN_FILE_PATH = ConnectorColumns.TD_ORIGIN_FILE_PATH.value
+    ORIGIN_FILE_LINE = ConnectorColumns.TD_ORIGIN_FILE_LINE.value
 
 
 class StandardVolatileSystemColumns(Enum):
@@ -220,6 +244,41 @@ class StandardSystemColumnsMetadata(Enum):
         default=EMPTY_TIMESTAMP,
         language=Language.PYTHON,
         generator=StandardSystemColumns.TD_VER_TIMESTAMP.value,
+        inception=Inception.PROPAGATE,
+        aggregation=None,
+    )
+
+
+class OptionalSystemColumnsMetadata(Enum):
+    TD_OPT_TST_SRV = SystemColumn(
+        dtype=pl.String,
+        default=None,
+        language=Language.PYTHON,
+        generator=OptionalSystemColumns.TD_OPT_TST_SRV.value,
+        inception=Inception.PROPAGATE,
+        aggregation=None,
+    )
+    TD_OPT_TST_USR = SystemColumn(
+        dtype=pl.String,
+        default=None,
+        language=Language.PYTHON,
+        generator=OptionalSystemColumns.TD_OPT_TST_USR.value,
+        inception=Inception.PROPAGATE,
+        aggregation=None,
+    )
+    TD_OPT_TST_TS = SystemColumn(
+        dtype=pl.Datetime(time_unit="us", time_zone=timezone.utc),
+        default=None,
+        language=Language.PYTHON,
+        generator=OptionalSystemColumns.TD_OPT_TST_TS.value,
+        inception=Inception.PROPAGATE,
+        aggregation=None,
+    )
+    TD_OPT_TST_FN = SystemColumn(
+        dtype=pl.String,
+        default=None,
+        language=Language.PYTHON,
+        generator=OptionalSystemColumns.TD_OPT_TST_FN.value,
         inception=Inception.PROPAGATE,
         aggregation=None,
     )

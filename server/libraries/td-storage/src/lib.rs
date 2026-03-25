@@ -141,6 +141,7 @@ impl SPath {
     }
 
     /// Create a child path with given name as last path element.
+    #[allow(deprecated)]
     pub fn child(&self, name: &str) -> Result<SPath> {
         Self::assert_path_element_name(name)?;
         Ok(SPath(self.0.child(name)))

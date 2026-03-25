@@ -8,7 +8,7 @@ from collections import Counter
 import pytest_check as check
 
 # noinspection PyProtectedMemberº
-from tabsdata._utils.tableframe._helpers import SYSTEM_COLUMNS
+from tabsdata._utils.tableframe._helpers import OPTIONAL_SYSTEM_COLUMNS, SYSTEM_COLUMNS
 
 # noinspection PyUnresolvedReferences
 from .. import pytestmark  # noqa: F401
@@ -24,4 +24,6 @@ class TestTableFrame(unittest.TestCase):
         expected_columns = self.data_frame.collect_schema().names()
         tf = self.table_frame.select("*")
         columns = tf.columns("all")
-        check.equal(Counter(columns), Counter(expected_columns + SYSTEM_COLUMNS))
+        system_optional = set(OPTIONAL_SYSTEM_COLUMNS)
+        required_sys = [column for column in SYSTEM_COLUMNS if column not in system_optional]
+        check.equal(Counter(columns), Counter(expected_columns + required_sys))

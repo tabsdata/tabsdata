@@ -7,7 +7,7 @@ import datetime
 
 import pytest
 
-from tabsdata import CSVFormat, NDJSONFormat, ParquetFormat
+from tabsdata import CSVFormat, FileInfo, NDJSONFormat, ParquetFormat
 from tabsdata._io.inputs.file_inputs import LocalFileSource
 from tabsdata._io.plugin import SourcePlugin
 from tabsdata.exceptions import (
@@ -363,3 +363,43 @@ def test_update_format():
     assert input.format == format
     input.format = CSVFormat(separator=";")
     assert input.format == CSVFormat(separator=";")
+
+
+def test_file_info_none_default():
+    path = "/path/to/data/data.csv"
+    input = LocalFileSource(path)
+    assert input._file_info is None
+
+
+def test_file_info_name_string():
+    path = "/path/to/data/data.csv"
+    input = LocalFileSource(path, file_info="name")
+    assert input._file_info == FileInfo.NAME
+
+
+def test_file_info_uri_string():
+    path = "/path/to/data/data.csv"
+    input = LocalFileSource(path, file_info="uri")
+    assert input._file_info == FileInfo.URI
+
+
+def test_file_info_enum():
+    path = "/path/to/data/data.csv"
+    input = LocalFileSource(path, file_info=FileInfo.NAME)
+    assert input._file_info == FileInfo.NAME
+    input = LocalFileSource(path, file_info=FileInfo.URI)
+    assert input._file_info == FileInfo.URI
+
+
+def test_file_info_case_insensitive():
+    path = "/path/to/data/data.csv"
+    input = LocalFileSource(path, file_info="NAME")
+    assert input._file_info == FileInfo.NAME
+    input = LocalFileSource(path, file_info="Uri")
+    assert input._file_info == FileInfo.URI
+
+
+def test_file_info_invalid():
+    path = "/path/to/data/data.csv"
+    with pytest.raises(FormatConfigurationError):
+        LocalFileSource(path, file_info="invalid")

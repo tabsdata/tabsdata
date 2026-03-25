@@ -891,6 +891,7 @@ class V1ImportFormat(ImportYaml):
         ),
         initial_lastmod=None,
         lastmod_info=None,
+        file_info=None,
     ):
         self.content = {
             "source": {
@@ -902,6 +903,8 @@ class V1ImportFormat(ImportYaml):
             "target": {"location": target},
             "parallelism": 1,
         }
+        if file_info is not None:
+            self.content["file_info"] = file_info
 
     def __repr__(self):
         return f"{self.__class__.__name__}(content={self.content})"

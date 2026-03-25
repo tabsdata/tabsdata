@@ -4,7 +4,7 @@
 
 accessify==0.3.1
 annotated-types==0.7.0
-anyio==4.12.1
+anyio==4.13.0
 archspec==0.2.5
 asn1crypto==1.5.1
 attrs==26.1.0
@@ -13,9 +13,9 @@ avro==1.12.1
 base32hex==1.0.2
 boto3==1.42.73
 boto3-stubs==1.42.73
-botocore==1.42.73
+botocore==1.42.75
 botocore-stubs==1.42.41
-build==1.4.0
+build==1.4.2
 cachetools==6.2.6
 certifi==2026.2.25
 cffi==2.0.0
