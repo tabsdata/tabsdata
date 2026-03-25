@@ -4,9 +4,15 @@
 
 import importlib.metadata
 
-from tabsdata.connector.databricks._connector import DatabricksDestination
+from tabsdata.connector.databricks._connector import (
+    DatabricksDestination,
+    DatabricksSource,
+)
 
-__all__ = ["DatabricksDestination"]
+__all__ = [
+    "DatabricksDestination",
+    "DatabricksSource",
+]
 
 # noinspection PyBroadException
 try:
