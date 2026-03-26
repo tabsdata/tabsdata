@@ -8,8 +8,7 @@ use axum::extract::FromRef;
 use std::sync::Arc;
 use ta_services::factory::{FieldAccessors, ServiceFactory};
 use td_common::server::FileWorkerMessageQueue;
-use td_database::sql::DbPool;
-use td_objects::sql::DaoQueries;
+use td_database::pool::TdPool;
 use td_objects::types::addresses::InternalServerAddresses;
 use td_storage::Storage;
 
@@ -24,8 +23,7 @@ pub struct FunctionSchedulerServices {
 
 #[derive(FieldAccessors, FromRef, Clone)]
 pub struct SchedulerContext {
-    pub db: DbPool,
-    pub queries: Arc<DaoQueries>,
+    pub db: TdPool,
     pub storage: Arc<Storage>,
     pub worker_queue: Arc<FileWorkerMessageQueue>,
     pub internal_addresses: Arc<InternalServerAddresses>,
@@ -33,10 +31,9 @@ pub struct SchedulerContext {
 
 #[cfg(feature = "test-utils")]
 impl SchedulerContext {
-    pub fn with_defaults(db: DbPool) -> Self {
+    pub fn with_defaults(db: TdPool) -> Self {
         Self {
             db,
-            queries: Arc::new(DaoQueries::default()),
             storage: Arc::new(Storage::default()),
             worker_queue: Arc::new(FileWorkerMessageQueue::default()),
             internal_addresses: Arc::new(InternalServerAddresses::default()),

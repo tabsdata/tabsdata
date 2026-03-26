@@ -9,12 +9,9 @@ use td_objects::dxo::worker::{
     CallbackRequest, UpdateWorkerDB, UpdateWorkerDBBuilder, UpdateWorkerExecution, WorkerDB,
 };
 use td_objects::rest_urls::internal::WorkerIdParam;
-use td_objects::sql::DaoQueries;
-use td_objects::tower_service::from::{
-    BuildService, ExtractDataService, ExtractNameService, ExtractService, TryIntoService, With,
-};
-use td_objects::tower_service::sql::{By, SqlAssertExistsService};
+use td_objects::tower_service::with::With;
 use td_objects::types::basic::WorkerId;
+use td_queries::By;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -24,7 +21,6 @@ use td_tower::layers;
     request = UpdateRequest<WorkerIdParam, CallbackRequest>,
     response = (),
     connection = TransactionProvider,
-    context = DaoQueries,
 )]
 fn service() {
     layers!(
@@ -43,7 +39,7 @@ fn service() {
         from_fn(By::<WorkerId>::assert_exists::<WorkerDB>),
         // Update worker status.
         from_fn(With::<UpdateWorkerExecution>::try_convert_to::<UpdateWorkerDBBuilder, _>),
-        from_fn(With::<UpdateWorkerDBBuilder>::build::<UpdateWorkerDB, _>),
+        from_fn(With::<UpdateWorkerDBBuilder>::build::<UpdateWorkerDB>),
         from_fn(update_worker_status),
     )
 }
@@ -57,25 +53,24 @@ mod tests {
         MessageAction, ResponseMessagePayloadBuilder, WorkerClass, WorkerName,
     };
     use td_common::status::ExitStatus;
-    use td_database::sql::DbPool;
+    use td_database::pool::TdPool;
     use td_error::TdError;
-    use td_objects::dxo::crudl::{RequestContext, handle_sql_err};
+    use td_objects::Buildable;
+    use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::worker::WorkerDBWithNames;
-    use td_objects::sql::SelectBy;
-    use td_objects::test_utils::seed_collection::seed_collection;
-    use td_objects::test_utils::seed_function::seed_function;
-    use td_objects::test_utils::seed_worker::seed_worker;
     use td_objects::types::basic::{
         AccessTokenId, AtTime, BundleId, CollectionName, Decorator, FunctionRuntimeValues, RoleId,
         UserId, WorkerMessageStatus, WorkerStatus, WorkerType,
     };
+    use td_queries::BasicQueries;
+    use td_queries::test_utils::SeedQueries;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_tower_metadata_callback(db: DbPool) {
+    async fn test_tower_metadata_callback(db: TdPool) {
         use td_tower::metadata::type_of_val;
 
         WorkerCallbackService::with_defaults(db)
@@ -103,20 +98,17 @@ mod tests {
                 type_of_val(
                     &With::<UpdateWorkerExecution>::try_convert_to::<UpdateWorkerDBBuilder, _>,
                 ),
-                type_of_val(&With::<UpdateWorkerDBBuilder>::build::<UpdateWorkerDB, _>),
+                type_of_val(&With::<UpdateWorkerDBBuilder>::build::<UpdateWorkerDB>),
                 type_of_val(&update_worker_status),
             ]);
     }
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_worker_callback(db: DbPool) -> Result<(), TdError> {
-        let collection = seed_collection(
-            &db,
-            &CollectionName::try_from("collection")?,
-            &UserId::admin(),
-        )
-        .await;
+    async fn test_worker_callback(db: TdPool) -> Result<(), TdError> {
+        let collection = db
+            .seed_collection(&CollectionName::try_from("collection")?, &UserId::admin())
+            .await?;
         let create = FunctionRegister::builder()
             .try_name("joaquin_workout")?
             .try_description("function_foo description")?
@@ -129,16 +121,16 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .reuse_frozen_tables(false)
             .build()?;
-        let function = seed_function(&db, &collection, &create).await;
-        let worker = seed_worker(
-            &db,
-            &collection,
-            &function,
-            &WorkerType::CronTrigger,
-            &WorkerStatus::RunRequested,
-            &WorkerMessageStatus::Unlocked,
-        )
-        .await;
+        let function = db.seed_function(&collection, &create).await?;
+        let worker = db
+            .seed_worker(
+                &collection,
+                &function,
+                &WorkerType::CronTrigger,
+                &WorkerStatus::RunRequested,
+                &WorkerMessageStatus::Unlocked,
+            )
+            .await?;
 
         let started_on = AtTime::now();
         let response = ResponseMessagePayloadBuilder::default()
@@ -146,7 +138,7 @@ mod tests {
             .class(WorkerClass::Ephemeral)
             .worker(WorkerName::CronTrigger.as_ref().to_string())
             .action(MessageAction::Notify)
-            .start(started_on.as_str_millis().parse().unwrap())
+            .start(started_on.timestamp_millis())
             .end(None)
             .status(WorkerCallbackStatus::Running)
             .execution(0)
@@ -168,17 +160,10 @@ mod tests {
                 response,
             );
 
-        let service = WorkerCallbackService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = WorkerCallbackService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;
 
-        let worker: WorkerDBWithNames = DaoQueries::default()
-            .select_by::<WorkerDBWithNames>(&worker.id)?
-            .build_query_as()
-            .fetch_one(&db)
-            .await
-            .map_err(handle_sql_err)?;
+        let worker: WorkerDBWithNames = db.fetch_one::<WorkerDBWithNames>(&worker.id).await?;
         assert_eq!(worker.worker_type, WorkerType::CronTrigger);
         assert_eq!(worker.status, WorkerStatus::Running);
         assert_eq!(worker.started_on, Some(started_on));
@@ -190,8 +175,8 @@ mod tests {
             .class(WorkerClass::Ephemeral)
             .worker(WorkerName::CronTrigger.as_ref().to_string())
             .action(MessageAction::Notify)
-            .start(AtTime::now().as_str_millis().parse().unwrap()) // it wont get updated anyway
-            .end(Some(ended_on.as_str_millis().parse().unwrap()))
+            .start(AtTime::now().timestamp_millis()) // it wont get updated anyway
+            .end(Some(ended_on.timestamp_millis()))
             .status(WorkerCallbackStatus::Done)
             .execution(0)
             .limit(None)
@@ -212,17 +197,10 @@ mod tests {
                 response,
             );
 
-        let service = WorkerCallbackService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = WorkerCallbackService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;
 
-        let worker: WorkerDBWithNames = DaoQueries::default()
-            .select_by::<WorkerDBWithNames>(&worker.id)?
-            .build_query_as()
-            .fetch_one(&db)
-            .await
-            .map_err(handle_sql_err)?;
+        let worker: WorkerDBWithNames = db.fetch_one::<WorkerDBWithNames>(&worker.id).await?;
         assert_eq!(worker.worker_type, WorkerType::CronTrigger);
         assert_eq!(worker.status, WorkerStatus::Done);
         assert_eq!(worker.started_on, Some(started_on));

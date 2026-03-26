@@ -5,7 +5,6 @@
 use crate::scheduler::layers::dispatch::unlock_workers_request;
 use ta_services::factory::service_factory;
 use td_common::server::{FileWorkerMessageQueue, WorkerMessageQueue};
-use td_objects::sql::DaoQueries;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::{layer, layers};
@@ -15,7 +14,6 @@ use td_tower::{layer, layers};
     request = (),
     response = (),
     connection = TransactionProvider,
-    context = DaoQueries,
     context = FileWorkerMessageQueue,
 )]
 fn service() {
@@ -24,7 +22,6 @@ fn service() {
 
 // Requires:
 // - Transaction connection
-// - DaoQueries
 // - T(MessageQueue)
 #[layer]
 pub fn commit<T>()
@@ -40,32 +37,34 @@ mod tests {
     use crate::execution::services::execute::ExecuteFunctionService;
     use crate::scheduler::services::SchedulerContext;
     use crate::scheduler::services::request::RequestService;
+    use std::str::FromStr;
     use ta_services::factory::ServiceFactory;
     use ta_services::service::TdService;
     use td_common::files::{YAML_EXTENSION, get_files_in_folder_sorted_by_name};
     use td_common::server::{PayloadType, SupervisorMessage};
-    use td_database::sql::DbPool;
+    use td_database::pool::TdPool;
     use td_error::TdError;
-    use td_objects::dxo::crudl::{RequestContext, handle_sql_err};
+    use td_objects::Buildable;
+    use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::execution::ExecutionRequest;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::worker::WorkerDB;
     use td_objects::rest_urls::FunctionParam;
-    use td_objects::sql::SelectBy;
-    use td_objects::test_utils::seed_collection::seed_collection;
-    use td_objects::test_utils::seed_function::seed_function;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, Decorator, ExecutionName, FunctionRuntimeValues,
-        RoleId, TableNameDto, UserId, WorkerId, WorkerMessageStatus,
+        AccessTokenId, BundleId, CollectionIdName, CollectionName, Decorator, ExecutionName,
+        FunctionIdName, FunctionRuntimeValues, RoleId, TableNameDto, UserId, WorkerId,
+        WorkerMessageStatus,
     };
     use td_objects::types::composed::TableDependencyDto;
+    use td_queries::BasicQueries;
+    use td_queries::test_utils::SeedQueries;
     use td_tower::ctx_service::RawOneshot;
     use tower::ServiceExt;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_tower_metadata_schedule_commit(db: DbPool) -> Result<(), TdError> {
+    async fn test_tower_metadata_schedule_commit(db: TdPool) -> Result<(), TdError> {
         use td_tower::metadata::type_of_val;
 
         DispatchService::with_defaults(db)
@@ -79,9 +78,11 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_schedule_commit(db: DbPool) -> Result<(), TdError> {
+    async fn test_schedule_commit(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
-        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
+        let collection = db
+            .seed_collection(&collection_name, &UserId::admin())
+            .await?;
 
         // Setup
         let create = FunctionRegister::builder()
@@ -100,28 +101,25 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let _ = seed_function(&db, &collection, &create).await;
+        let _ = db.seed_function(&collection, &create).await?;
 
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
                 FunctionParam::builder()
-                    .try_collection(format!("{}", collection.name))?
-                    .try_function("function_1")?
+                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
+                    .function(FunctionIdName::from_str("function_1")?)
                     .build()?,
                 ExecutionRequest::builder()
                     .name(Some(ExecutionName::try_from("test_execution")?))
                     .build()?,
             );
 
-        let service = ExecuteFunctionService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = ExecuteFunctionService::with_defaults(db.clone()).service();
         let _ = service.raw_oneshot(request).await?;
 
         let context = SchedulerContext::with_defaults(db.clone());
         RequestService::build(&context)
             .service()
-            .await
             .oneshot(())
             .await?;
 
@@ -135,7 +133,6 @@ mod tests {
         // Actual test
         DispatchService::build(&context)
             .service()
-            .await
             .oneshot(())
             .await?;
 
@@ -162,12 +159,9 @@ mod tests {
         assert_eq!(created_message.payload, unlocked_message.payload);
 
         // And assert db
-        let message: WorkerDB = DaoQueries::default()
-            .select_by::<WorkerDB>(&WorkerId::try_from(created_message.id.as_str())?)?
-            .build_query_as()
-            .fetch_one(&db)
-            .await
-            .map_err(handle_sql_err)?;
+        let message: WorkerDB = db
+            .fetch_one::<WorkerDB>(&WorkerId::try_from(created_message.id.as_str())?)
+            .await?;
         assert_eq!(message.message_status, WorkerMessageStatus::Unlocked);
 
         Ok(())
