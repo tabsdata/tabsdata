@@ -3,18 +3,16 @@
 //
 
 use ta_services::factory::service_factory;
+use td_authz::tower::{AuthzOn, SecAdmin, System};
 use td_authz::{Authz, AuthzContext};
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
 use td_objects::dxo::role::{
     Role, RoleBuilder, RoleCreate, RoleDB, RoleDBBuilder, RoleDBWithNames,
 };
-use td_objects::sql::DaoQueries;
-use td_objects::tower_service::authz::{AuthzOn, SecAdmin, System};
-use td_objects::tower_service::from::{
-    BuildService, ExtractDataService, ExtractService, TryIntoService, UpdateService, With,
-};
-use td_objects::tower_service::sql::{By, SqlSelectService, insert};
+use td_objects::tower_service::with::With;
 use td_objects::types::basic::RoleId;
+use td_queries::By;
+use td_queries::insert;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -24,7 +22,6 @@ use td_tower::layers;
     request = CreateRequest<(), RoleCreate>,
     response = Role,
     connection = TransactionProvider,
-    context = DaoQueries,
     context = AuthzContext,
 )]
 fn service() {
@@ -35,31 +32,32 @@ fn service() {
         from_fn(With::<CreateRequest<(), RoleCreate>>::extract_data::<RoleCreate>),
         from_fn(With::<RoleCreate>::try_convert_to::<RoleDBBuilder, _>),
         from_fn(With::<RequestContext>::update::<RoleDBBuilder, _>),
-        from_fn(With::<RoleDBBuilder>::build::<RoleDB, _>),
+        from_fn(With::<RoleDBBuilder>::build::<RoleDB>),
         from_fn(insert::<RoleDB>),
         from_fn(With::<RoleDB>::extract::<RoleId>),
-        from_fn(By::<RoleId>::select::<RoleDBWithNames>),
+        from_fn(By::<RoleId>::fetch_one::<RoleDBWithNames>),
         from_fn(With::<RoleDBWithNames>::try_convert_to::<RoleBuilder, _>),
-        from_fn(With::<RoleBuilder>::build::<Role, _>),
+        from_fn(With::<RoleBuilder>::build::<Role>),
     )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use td_objects::Buildable;
     use ta_services::service::TdService;
-    use td_database::sql::DbPool;
+    use td_database::pool::TdPool;
     use td_error::TdError;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::test_utils::seed_role::get_role;
     use td_objects::types::basic::{AccessTokenId, RoleName, UserId};
+    use td_queries::BasicQueries;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_tower_metadata_create_role(db: DbPool) {
-        use td_objects::tower_service::authz::{AuthzOn, SecAdmin, System};
+    async fn test_tower_metadata_create_role(db: TdPool) {
+        use td_authz::tower::{AuthzOn, SecAdmin, System};
         use td_tower::metadata::type_of_val;
 
         CreateRoleService::with_defaults(db)
@@ -72,18 +70,18 @@ mod tests {
                 type_of_val(&With::<CreateRequest<(), RoleCreate>>::extract_data::<RoleCreate>),
                 type_of_val(&With::<RoleCreate>::try_convert_to::<RoleDBBuilder, _>),
                 type_of_val(&With::<RequestContext>::update::<RoleDBBuilder, _>),
-                type_of_val(&With::<RoleDBBuilder>::build::<RoleDB, _>),
+                type_of_val(&With::<RoleDBBuilder>::build::<RoleDB>),
                 type_of_val(&insert::<RoleDB>),
                 type_of_val(&With::<RoleDB>::extract::<RoleId>),
-                type_of_val(&By::<RoleId>::select::<RoleDBWithNames>),
+                type_of_val(&By::<RoleId>::fetch_one::<RoleDBWithNames>),
                 type_of_val(&With::<RoleDBWithNames>::try_convert_to::<RoleBuilder, _>),
-                type_of_val(&With::<RoleBuilder>::build::<Role, _>),
+                type_of_val(&With::<RoleBuilder>::build::<Role>),
             ]);
     }
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_create_role(db: DbPool) -> Result<(), TdError> {
+    async fn test_create_role(db: TdPool) -> Result<(), TdError> {
         let create = RoleCreate::builder()
             .try_name("test")?
             .try_description("test desc")?
@@ -96,11 +94,11 @@ mod tests {
         )
         .create((), create);
 
-        let service = CreateRoleService::with_defaults(db.clone()).service().await;
+        let service = CreateRoleService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
-        let found = get_role(&db, &RoleName::try_from("test")?).await?;
+        let found = db.fetch_one::<RoleDB>(&RoleName::try_from("test")?).await?;
         assert_eq!(response.id, found.id);
         assert_eq!(response.name, found.name);
         assert_eq!(response.description, found.description);

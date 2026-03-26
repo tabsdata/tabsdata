@@ -4,6 +4,7 @@
 
 use crate::permission::layers::{PermissionBuildService, is_permission_on_a_single_collection};
 use ta_services::factory::service_factory;
+use td_authz::tower::{AuthzOn, CollAdmin, SecAdmin, System};
 use td_authz::{Authz, AuthzContext, refresh_authz_context};
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
 use td_objects::dxo::permission::{
@@ -12,14 +13,10 @@ use td_objects::dxo::permission::{
 };
 use td_objects::dxo::role::RoleDB;
 use td_objects::rest_urls::RoleParam;
-use td_objects::sql::DaoQueries;
-use td_objects::tower_service::authz::{AuthzOn, CollAdmin, SecAdmin, System};
-use td_objects::tower_service::from::{
-    BuildService, ExtractDataService, ExtractNameService, ExtractService, TryIntoService,
-    UpdateService, With,
-};
-use td_objects::tower_service::sql::{By, SqlSelectService, insert};
+use td_objects::tower_service::with::With;
 use td_objects::types::basic::{CollectionId, EntityId, PermissionId, RoleIdName};
+use td_queries::By;
+use td_queries::insert;
 use td_tower::default_services::{Do, Else, If, TransactionProvider, conditional};
 use td_tower::from_fn::from_fn;
 use td_tower::{layers, service};
@@ -29,7 +26,6 @@ use td_tower::{layers, service};
     request = CreateRequest<RoleParam, PermissionCreate>,
     response = Permission,
     connection = TransactionProvider,
-    context = DaoQueries,
     context = AuthzContext,
 )]
 fn service() {
@@ -44,7 +40,7 @@ fn service() {
         from_fn(With::<PermissionCreate>::try_convert_to::<PermissionDBBuilder, _>),
         from_fn(With::<RequestContext>::update::<PermissionDBBuilder, _>),
         from_fn(With::<RoleParam>::extract::<RoleIdName>),
-        from_fn(By::<RoleIdName>::select::<RoleDB>),
+        from_fn(By::<RoleIdName>::fetch_one::<RoleDB>),
         from_fn(With::<RoleDB>::update::<PermissionDBBuilder, _>),
         from_fn(With::<PermissionDBBuilder>::build_permission_db),
         conditional(
@@ -66,9 +62,9 @@ fn service() {
         ),
         from_fn(insert::<PermissionDB>),
         from_fn(With::<PermissionDB>::extract::<PermissionId>),
-        from_fn(By::<PermissionId>::select::<PermissionDBWithNames>),
+        from_fn(By::<PermissionId>::fetch_one::<PermissionDBWithNames>),
         from_fn(With::<PermissionDBWithNames>::try_convert_to::<PermissionBuilder, _>),
-        from_fn(With::<PermissionBuilder>::build::<Permission, _>),
+        from_fn(With::<PermissionBuilder>::build::<Permission>),
         // refresh the permissions authz cache
         from_fn(refresh_authz_context),
     )
@@ -77,24 +73,25 @@ fn service() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::str::FromStr;
     use ta_services::service::TdService;
-    use td_database::sql::DbPool;
+    use td_authz::tower::AuthzError;
+    use td_database::pool::TdPool;
     use td_error::{TdError, assert_service_error};
+    use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::test_utils::seed_collection::seed_collection;
-    use td_objects::test_utils::seed_permission::{get_permission, seed_permission};
-    use td_objects::test_utils::seed_role::seed_role;
-    use td_objects::tower_service::authz::AuthzError;
     use td_objects::types::basic::{
         AccessTokenId, CollectionName, Description, EntityName, PermissionType, RoleId, RoleName,
         UserId,
     };
+    use td_queries::BasicQueries;
+    use td_queries::test_utils::SeedQueries;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_tower_metadata_create_permission(db: DbPool) {
+    async fn test_tower_metadata_create_permission(db: TdPool) {
         use td_tower::metadata::type_of_val;
 
         CreatePermissionService::with_defaults(db)
@@ -117,7 +114,7 @@ mod tests {
                 type_of_val(&With::<PermissionCreate>::try_convert_to::<PermissionDBBuilder, _>),
                 type_of_val(&With::<RequestContext>::update::<PermissionDBBuilder, _>),
                 type_of_val(&With::<RoleParam>::extract::<RoleIdName>),
-                type_of_val(&By::<RoleIdName>::select::<RoleDB>),
+                type_of_val(&By::<RoleIdName>::fetch_one::<RoleDB>),
                 type_of_val(&With::<RoleDB>::update::<PermissionDBBuilder, _>),
                 type_of_val(&With::<PermissionDBBuilder>::build_permission_db),
                 type_of_val(&is_permission_on_a_single_collection),
@@ -129,16 +126,16 @@ mod tests {
                 type_of_val(&Authz::<SecAdmin>::check),
                 type_of_val(&insert::<PermissionDB>),
                 type_of_val(&With::<PermissionDB>::extract::<PermissionId>),
-                type_of_val(&By::<PermissionId>::select::<PermissionDBWithNames>),
+                type_of_val(&By::<PermissionId>::fetch_one::<PermissionDBWithNames>),
                 type_of_val(&With::<PermissionDBWithNames>::try_convert_to::<PermissionBuilder, _>),
-                type_of_val(&With::<PermissionBuilder>::build::<Permission, _>),
+                type_of_val(&With::<PermissionBuilder>::build::<Permission>),
                 type_of_val(&refresh_authz_context),
             ]);
     }
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_create_permission(db: DbPool) -> Result<(), TdError> {
+    async fn test_create_permission(db: TdPool) -> Result<(), TdError> {
         let create = PermissionCreate::builder()
             .permission_type(PermissionType::SecAdmin)
             .try_entity_name(None)
@@ -152,18 +149,16 @@ mod tests {
         )
         .create(
             RoleParam::builder()
-                .role(RoleIdName::try_from(RoleName::user().to_string())?)
+                .role(RoleIdName::from_str(&RoleName::user().to_string())?)
                 .build()?,
             create,
         );
 
-        let service = CreatePermissionService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = CreatePermissionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
-        let found = get_permission(&db, &response.id).await?;
+        let found = db.fetch_one::<PermissionDB>(&response.id).await?;
         assert_eq!(response.id, found.id);
         assert_eq!(response.role_id, found.role_id);
         assert_eq!(response.permission_type, found.permission_type);
@@ -181,19 +176,22 @@ mod tests {
     #[td_test::test(sqlx)]
     #[tokio::test]
     async fn test_create_permission_on_collection_by_coll_admin_ok(
-        db: DbPool,
+        db: TdPool,
     ) -> Result<(), TdError> {
-        let coll0 = seed_collection(&db, &CollectionName::try_from("c0")?, &UserId::admin()).await;
-        let role = seed_role(&db, RoleName::try_from("r0")?, Description::try_from("d")?).await;
+        let coll0 = db
+            .seed_collection(&CollectionName::try_from("c0")?, &UserId::admin())
+            .await?;
+        let role = db
+            .seed_role(RoleName::try_from("r0")?, Description::try_from("d")?)
+            .await?;
         let entity_id: EntityId = coll0.id.try_into()?;
-        seed_permission(
-            &db,
+        db.seed_permission(
             PermissionType::CollectionAdmin,
             Some(EntityName::try_from("c0")?),
             Some(entity_id),
             &role,
         )
-        .await;
+        .await?;
 
         let create = PermissionCreate::builder()
             .permission_type(PermissionType::CollectionRead)
@@ -204,18 +202,16 @@ mod tests {
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin(), role.id)
             .create(
                 RoleParam::builder()
-                    .role(RoleIdName::try_from("r0")?)
+                    .role(RoleIdName::from_str("r0")?)
                     .build()?,
                 create,
             );
 
-        let service = CreatePermissionService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = CreatePermissionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
-        let found = get_permission(&db, &response.id).await?;
+        let found = db.fetch_one::<PermissionDB>(&response.id).await?;
         assert_eq!(response.id, found.id);
         assert_eq!(response.role_id, found.role_id);
         assert_eq!(response.permission_type, found.permission_type);
@@ -233,20 +229,25 @@ mod tests {
     #[td_test::test(sqlx)]
     #[tokio::test]
     async fn test_create_permission_on_collection_by_coll_admin_unauthz(
-        db: DbPool,
+        db: TdPool,
     ) -> Result<(), TdError> {
-        let coll0 = seed_collection(&db, &CollectionName::try_from("c0")?, &UserId::admin()).await;
-        let _ = seed_collection(&db, &CollectionName::try_from("c1")?, &UserId::admin()).await;
-        let role = seed_role(&db, RoleName::try_from("r0")?, Description::try_from("d")?).await;
+        let coll0 = db
+            .seed_collection(&CollectionName::try_from("c0")?, &UserId::admin())
+            .await?;
+        let _ = db
+            .seed_collection(&CollectionName::try_from("c1")?, &UserId::admin())
+            .await?;
+        let role = db
+            .seed_role(RoleName::try_from("r0")?, Description::try_from("d")?)
+            .await?;
         let entity_id: EntityId = coll0.id.try_into()?;
-        seed_permission(
-            &db,
+        db.seed_permission(
             PermissionType::CollectionAdmin,
             Some(EntityName::try_from("c0")?),
             Some(entity_id),
             &role,
         )
-        .await;
+        .await?;
 
         let create = PermissionCreate::builder()
             .permission_type(PermissionType::CollectionRead)
@@ -257,14 +258,12 @@ mod tests {
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin(), role.id)
             .create(
                 RoleParam::builder()
-                    .role(RoleIdName::try_from("r0")?)
+                    .role(RoleIdName::from_str("r0")?)
                     .build()?,
                 create,
             );
 
-        let service = CreatePermissionService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = CreatePermissionService::with_defaults(db.clone()).service();
 
         assert_service_error(service, request, |err| match err {
             AuthzError::Forbidden(_) => {}

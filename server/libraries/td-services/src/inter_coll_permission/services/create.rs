@@ -4,6 +4,7 @@
 
 use crate::inter_coll_permission::layers::assert_collection_and_to_collection_are_different;
 use ta_services::factory::service_factory;
+use td_authz::tower::{AuthzOn, CollAdmin, SecAdmin, System};
 use td_authz::{Authz, AuthzContext, refresh_authz_context};
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
@@ -13,17 +14,13 @@ use td_objects::dxo::inter_collection_permission::{
     InterCollectionPermissionDBWithNames,
 };
 use td_objects::rest_urls::CollectionParam;
-use td_objects::sql::DaoQueries;
-use td_objects::tower_service::authz::{AuthzOn, CollAdmin, SecAdmin, System};
-use td_objects::tower_service::from::{
-    BuildService, ExtractDataService, ExtractNameService, ExtractService, SetService,
-    TryIntoService, UpdateService, With, builder,
-};
-use td_objects::tower_service::sql::{By, SqlSelectService, insert};
+use td_objects::tower_service::with::{With, builder};
 use td_objects::types::basic::{
     CollectionId, CollectionIdName, CollectionName, FromCollectionId, InterCollectionPermissionId,
     ToCollectionId, ToCollectionName,
 };
+use td_queries::By;
+use td_queries::insert;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -33,7 +30,6 @@ use td_tower::layers;
     request = CreateRequest<CollectionParam, InterCollectionPermissionCreate>,
     response = InterCollectionPermission,
     connection = TransactionProvider,
-    context = DaoQueries,
     context = AuthzContext,
 )]
 fn service() {
@@ -58,7 +54,7 @@ fn service() {
         from_fn(Authz::<SecAdmin, CollAdmin>::check),
         // find collection ID for the FROM collection
         from_fn(With::<CollectionParam>::extract::<CollectionIdName>),
-        from_fn(By::<CollectionIdName>::select::<CollectionDB>),
+        from_fn(By::<CollectionIdName>::fetch_one::<CollectionDB>),
         from_fn(With::<CollectionDB>::extract::<CollectionId>),
         from_fn(With::<CollectionId>::try_convert_to::<FromCollectionId, _>), //stashing the collection ID we are adding the permission
         // check request is sec_admin or coll_admin for the FROM collection
@@ -67,32 +63,32 @@ fn service() {
         // find collection ID for the TO collection
         from_fn(With::<InterCollectionPermissionCreate>::extract::<ToCollectionName>),
         from_fn(With::<ToCollectionName>::try_convert_to::<CollectionName, _>),
-        from_fn(By::<CollectionName>::select::<CollectionDB>),
+        from_fn(By::<CollectionName>::fetch_one::<CollectionDB>),
         from_fn(With::<CollectionDB>::extract::<CollectionId>),
         from_fn(With::<CollectionId>::try_convert_to::<ToCollectionId, _>),
         // restore CollectionId from request name as we dropped it get the ToCollectionId
         from_fn(With::<FromCollectionId>::try_convert_to::<CollectionId, _>),
         from_fn(assert_collection_and_to_collection_are_different),
         // create permission DAO
-        from_fn(builder::<InterCollectionPermissionDBBuilder>),
+        from_fn(builder::<InterCollectionPermissionDB>),
         from_fn(With::<RequestContext>::update::<InterCollectionPermissionDBBuilder, _>),
         from_fn(With::<CollectionId>::set::<InterCollectionPermissionDBBuilder>),
         from_fn(With::<ToCollectionId>::set::<InterCollectionPermissionDBBuilder>),
-        from_fn(
-            With::<InterCollectionPermissionDBBuilder>::build::<InterCollectionPermissionDB, _>
-        ),
+        from_fn(With::<InterCollectionPermissionDBBuilder>::build::<InterCollectionPermissionDB>),
         // insert DAO in DB
         from_fn(insert::<InterCollectionPermissionDB>),
         // Fetch DAO with Names and create DTO response
         from_fn(With::<InterCollectionPermissionDB>::extract::<InterCollectionPermissionId>),
-        from_fn(By::<InterCollectionPermissionId>::select::<InterCollectionPermissionDBWithNames>),
+        from_fn(
+            By::<InterCollectionPermissionId>::fetch_one::<InterCollectionPermissionDBWithNames>
+        ),
         from_fn(
             With::<InterCollectionPermissionDBWithNames>::try_convert_to::<
                 InterCollectionPermissionBuilder,
                 _,
             >
         ),
-        from_fn(With::<InterCollectionPermissionBuilder>::build::<InterCollectionPermission, _>),
+        from_fn(With::<InterCollectionPermissionBuilder>::build::<InterCollectionPermission>),
         // refresh the inter collections authz cache
         from_fn(refresh_authz_context),
     )
@@ -102,21 +98,23 @@ fn service() {
 mod tests {
     use super::*;
     use crate::inter_coll_permission::InterCollectionPermissionError;
+    use std::str::FromStr;
     use ta_services::service::TdService;
-    use td_database::sql::DbPool;
+    use td_authz::tower::AuthzError;
+    use td_database::pool::TdPool;
     use td_error::{TdError, assert_service_error};
+    use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::rest_urls::CollectionParam;
-    use td_objects::test_utils::seed_collection::seed_collection;
-    use td_objects::test_utils::seed_inter_collection_permission::get_inter_collection_permissions;
-    use td_objects::tower_service::authz::AuthzError;
     use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
+    use td_queries::BasicQueries;
+    use td_queries::test_utils::SeedQueries;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_tower_metadata_create_inter_collection_permission_service(db: DbPool) {
+    async fn test_tower_metadata_create_inter_collection_permission(db: TdPool) {
         use td_tower::metadata::type_of_val;
 
         CreateInterCollectionPermissionService::with_defaults(db)
@@ -133,7 +131,7 @@ mod tests {
 
                 // find collection ID for the FROM collection
                 type_of_val(&With::<CollectionParam>::extract::<CollectionIdName>),
-                type_of_val(&By::<CollectionIdName>::select::<CollectionDB>),
+                type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDB>),
                 type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
                 type_of_val(&With::<CollectionId>::try_convert_to::<FromCollectionId, _>), //stashing the collection ID we are adding the permission
 
@@ -144,7 +142,7 @@ mod tests {
                 // find collection ID for the TO collection
                 type_of_val(&With::<InterCollectionPermissionCreate>::extract::<ToCollectionName>),
                 type_of_val(&With::<ToCollectionName>::try_convert_to::<CollectionName, _>),
-                type_of_val(&By::<CollectionName>::select::<CollectionDB>),
+                type_of_val(&By::<CollectionName>::fetch_one::<CollectionDB>),
                 type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
                 type_of_val(&With::<CollectionId>::try_convert_to::<ToCollectionId, _>),
 
@@ -154,19 +152,19 @@ mod tests {
                 type_of_val(&assert_collection_and_to_collection_are_different),
 
                 // create permission DAO
-                type_of_val(&builder::<InterCollectionPermissionDBBuilder>),
+                type_of_val(&builder::<InterCollectionPermissionDB>),
                 type_of_val(&With::<RequestContext>::update::<InterCollectionPermissionDBBuilder, _>),
                 type_of_val(&With::<CollectionId>::set::<InterCollectionPermissionDBBuilder>),
                 type_of_val(&With::<ToCollectionId>::set::<InterCollectionPermissionDBBuilder>),
-                type_of_val(&With::<InterCollectionPermissionDBBuilder>::build::<InterCollectionPermissionDB, _>),
+                type_of_val(&With::<InterCollectionPermissionDBBuilder>::build::<InterCollectionPermissionDB>),
                 // insert DAO in DB
                 type_of_val(&insert::<InterCollectionPermissionDB>),
 
                 // Fetch DAO with Names and create DTO response
                 type_of_val(&With::<InterCollectionPermissionDB>::extract::<InterCollectionPermissionId>),
-                type_of_val(&By::<InterCollectionPermissionId>::select::<InterCollectionPermissionDBWithNames>),
+                type_of_val(&By::<InterCollectionPermissionId>::fetch_one::<InterCollectionPermissionDBWithNames>),
                 type_of_val(&With::<InterCollectionPermissionDBWithNames>::try_convert_to::<InterCollectionPermissionBuilder, _>),
-                type_of_val(&With::<InterCollectionPermissionBuilder>::build::<InterCollectionPermission, _>),
+                type_of_val(&With::<InterCollectionPermissionBuilder>::build::<InterCollectionPermission>),
 
                 // refresh the inter collections authz cache
                 type_of_val(&refresh_authz_context),
@@ -175,13 +173,15 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_create_permission_ok(db: DbPool) -> Result<(), TdError> {
-        let service = CreateInterCollectionPermissionService::with_defaults(db.clone())
-            .service()
-            .await;
+    async fn test_create_permission_ok(db: TdPool) -> Result<(), TdError> {
+        let service = CreateInterCollectionPermissionService::with_defaults(db.clone()).service();
 
-        let c0 = seed_collection(&db, &CollectionName::try_from("c0")?, &UserId::admin()).await;
-        let c1 = seed_collection(&db, &CollectionName::try_from("c1")?, &UserId::admin()).await;
+        let c0 = db
+            .seed_collection(&CollectionName::try_from("c0")?, &UserId::admin())
+            .await?;
+        let c1 = db
+            .seed_collection(&CollectionName::try_from("c1")?, &UserId::admin())
+            .await?;
 
         let create = InterCollectionPermissionCreate::builder()
             .try_to_collection("c1")?
@@ -194,7 +194,7 @@ mod tests {
         )
         .create(
             CollectionParam::builder()
-                .collection(CollectionIdName::try_from("c0")?)
+                .collection(CollectionIdName::from_str("c0")?)
                 .build()?,
             create,
         );
@@ -202,7 +202,7 @@ mod tests {
         let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
 
-        let found = get_inter_collection_permissions(&db, &c0.id).await?;
+        let found = db.fetch_all::<InterCollectionPermissionDB>(&c0.id).await?;
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].from_collection_id, c0.id);
         assert_eq!(found[0].to_collection_id, ToCollectionId::try_from(c1.id)?);
@@ -211,12 +211,11 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_create_permission_same_collection_err(db: DbPool) -> Result<(), TdError> {
-        let service = CreateInterCollectionPermissionService::with_defaults(db.clone())
-            .service()
-            .await;
+    async fn test_create_permission_same_collection_err(db: TdPool) -> Result<(), TdError> {
+        let service = CreateInterCollectionPermissionService::with_defaults(db.clone()).service();
 
-        seed_collection(&db, &CollectionName::try_from("c0")?, &UserId::admin()).await;
+        db.seed_collection(&CollectionName::try_from("c0")?, &UserId::admin())
+            .await?;
 
         let create = InterCollectionPermissionCreate::builder()
             .try_to_collection("c0")?
@@ -229,7 +228,7 @@ mod tests {
         )
         .create(
             CollectionParam::builder()
-                .collection(CollectionIdName::try_from("c0")?)
+                .collection(CollectionIdName::from_str("c0")?)
                 .build()?,
             create,
         );
@@ -244,13 +243,13 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_create_permission_authz_err(db: DbPool) -> Result<(), TdError> {
-        let service = CreateInterCollectionPermissionService::with_defaults(db.clone())
-            .service()
-            .await;
+    async fn test_create_permission_authz_err(db: TdPool) -> Result<(), TdError> {
+        let service = CreateInterCollectionPermissionService::with_defaults(db.clone()).service();
 
-        seed_collection(&db, &CollectionName::try_from("c0")?, &UserId::admin()).await;
-        seed_collection(&db, &CollectionName::try_from("c1")?, &UserId::admin()).await;
+        db.seed_collection(&CollectionName::try_from("c0")?, &UserId::admin())
+            .await?;
+        db.seed_collection(&CollectionName::try_from("c1")?, &UserId::admin())
+            .await?;
 
         let create = InterCollectionPermissionCreate::builder()
             .try_to_collection("c0")?
@@ -259,7 +258,7 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
                 CollectionParam::builder()
-                    .collection(CollectionIdName::try_from("c1")?)
+                    .collection(CollectionIdName::from_str("c1")?)
                     .build()?,
                 create,
             );
