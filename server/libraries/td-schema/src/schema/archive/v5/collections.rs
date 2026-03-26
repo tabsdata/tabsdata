@@ -7,8 +7,8 @@ use sea_query::{
     TableCreateStatement,
 };
 
-use crate::schema::backend::{Backend, ViewDef};
 use super::users::Users;
+use crate::schema::backend::{Backend, ViewDef};
 
 #[derive(Iden)]
 pub enum Collections {
@@ -84,17 +84,11 @@ pub fn views(b: &Backend) -> Vec<ViewDef> {
             Query::select()
                 .expr(Expr::col((collections_active.clone(), Asterisk)))
                 .expr_as(
-                    b.name_or_id(
-                        "created_by_user.name",
-                        "collections_active.created_by_id",
-                    ),
+                    b.name_or_id("created_by_user.name", "collections_active.created_by_id"),
                     Alias::new("created_by"),
                 )
                 .expr_as(
-                    b.name_or_id(
-                        "modified_by_user.name",
-                        "collections_active.modified_by_id",
-                    ),
+                    b.name_or_id("modified_by_user.name", "collections_active.modified_by_id"),
                     Alias::new("modified_by"),
                 )
                 .from(collections_active.clone())

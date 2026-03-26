@@ -1114,355 +1114,347 @@ pub fn tables() -> Vec<TableCreateStatement> {
 // ---------------------------------------------------------------------------
 
 pub fn views(b: &Backend) -> Vec<ViewDef> {
-    let mut v = Vec::new();
-
-    // functions__with_names
-    v.push(ViewDef::new(
-        "functions__with_names",
-        Query::select()
-            .expr(Expr::col((Functions::Table, Asterisk)))
-            .expr_as(
-                Expr::col((Collections::Table, Collections::Name)),
-                Alias::new("collection"),
-            )
-            .expr_as(
-                b.name_or_id("users.name", "functions.defined_by_id"),
-                Alias::new("defined_by"),
-            )
-            .from(Functions::Table)
-            .join(
-                JoinType::LeftJoin,
-                Collections::Table,
-                Expr::col((Functions::Table, Functions::CollectionId))
-                    .equals((Collections::Table, Collections::Id)),
-            )
-            .join(
-                JoinType::LeftJoin,
-                Users::Table,
-                Expr::col((Functions::Table, Functions::DefinedById))
-                    .equals((Users::Table, Users::Id)),
-            )
-            .to_owned(),
-    ));
-
-    // tables__with_names
-    v.push(ViewDef::new(
-        "tables__with_names",
-        Query::select()
-            .expr(Expr::col((Tables::Table, Asterisk)))
-            .expr_as(
-                Expr::col((Tables::Table, Tables::FunctionParamPos)).lt(0),
-                Alias::new("system"),
-            )
-            .expr_as(
-                b.name_or_id("users.name", "tables.defined_by_id"),
-                Alias::new("defined_by"),
-            )
-            .expr_as(
-                Expr::col((Collections::Table, Collections::Name)),
-                Alias::new("collection"),
-            )
-            .expr_as(
-                Expr::col((Functions::Table, Functions::Name)),
-                Alias::new("function"),
-            )
-            .from(Tables::Table)
-            .join(
-                JoinType::LeftJoin,
-                Collections::Table,
-                Expr::col((Tables::Table, Tables::CollectionId))
-                    .equals((Collections::Table, Collections::Id)),
-            )
-            .join(
-                JoinType::LeftJoin,
-                Functions::Table,
-                Expr::col((Tables::Table, Tables::FunctionVersionId))
+    let mut v = vec![
+        // functions__with_names
+        ViewDef::new(
+            "functions__with_names",
+            Query::select()
+                .expr(Expr::col((Functions::Table, Asterisk)))
+                .expr_as(
+                    Expr::col((Collections::Table, Collections::Name)),
+                    Alias::new("collection"),
+                )
+                .expr_as(
+                    b.name_or_id("users.name", "functions.defined_by_id"),
+                    Alias::new("defined_by"),
+                )
+                .from(Functions::Table)
+                .join(
+                    JoinType::LeftJoin,
+                    Collections::Table,
+                    Expr::col((Functions::Table, Functions::CollectionId))
+                        .equals((Collections::Table, Collections::Id)),
+                )
+                .join(
+                    JoinType::LeftJoin,
+                    Users::Table,
+                    Expr::col((Functions::Table, Functions::DefinedById))
+                        .equals((Users::Table, Users::Id)),
+                )
+                .to_owned(),
+        ),
+        // tables__with_names
+        ViewDef::new(
+            "tables__with_names",
+            Query::select()
+                .expr(Expr::col((Tables::Table, Asterisk)))
+                .expr_as(
+                    Expr::col((Tables::Table, Tables::FunctionParamPos)).lt(0),
+                    Alias::new("system"),
+                )
+                .expr_as(
+                    b.name_or_id("users.name", "tables.defined_by_id"),
+                    Alias::new("defined_by"),
+                )
+                .expr_as(
+                    Expr::col((Collections::Table, Collections::Name)),
+                    Alias::new("collection"),
+                )
+                .expr_as(
+                    Expr::col((Functions::Table, Functions::Name)),
+                    Alias::new("function"),
+                )
+                .from(Tables::Table)
+                .join(
+                    JoinType::LeftJoin,
+                    Collections::Table,
+                    Expr::col((Tables::Table, Tables::CollectionId))
+                        .equals((Collections::Table, Collections::Id)),
+                )
+                .join(
+                    JoinType::LeftJoin,
+                    Functions::Table,
+                    Expr::col((Tables::Table, Tables::FunctionVersionId))
+                        .equals((Functions::Table, Functions::Id)),
+                )
+                .join(
+                    JoinType::LeftJoin,
+                    Users::Table,
+                    Expr::col((Tables::Table, Tables::DefinedById))
+                        .equals((Users::Table, Users::Id)),
+                )
+                .to_owned(),
+        ),
+        // dependencies__with_names (collections joined twice: once for collection_id, once for table_collection_id)
+        ViewDef::new(
+            "dependencies__with_names",
+            Query::select()
+                .expr(Expr::col((Dependencies::Table, Asterisk)))
+                .expr_as(
+                    Expr::col((Collections::Table, Collections::Name)),
+                    Alias::new("collection"),
+                )
+                .expr_as(
+                    Expr::col((Alias::new("table_collection"), Collections::Name)),
+                    Alias::new("trigger_by_collection"),
+                )
+                .expr_as(
+                    Expr::col((Alias::new("table_collection"), Collections::Name)),
+                    Alias::new("table_collection"),
+                )
+                .from(Dependencies::Table)
+                .join(
+                    JoinType::LeftJoin,
+                    Collections::Table,
+                    Expr::col((Dependencies::Table, Dependencies::CollectionId))
+                        .equals((Collections::Table, Collections::Id)),
+                )
+                .join(
+                    JoinType::LeftJoin,
+                    Users::Table,
+                    Expr::col((Dependencies::Table, Dependencies::DefinedById))
+                        .equals((Users::Table, Users::Id)),
+                )
+                .join_as(
+                    JoinType::LeftJoin,
+                    Collections::Table,
+                    Alias::new("table_collection"),
+                    Expr::col((Dependencies::Table, Dependencies::TableCollectionId))
+                        .equals((Alias::new("table_collection"), Collections::Id)),
+                )
+                .to_owned(),
+        ),
+        // triggers__with_names (collections joined twice: once for collection_id, once for trigger_by_collection_id)
+        ViewDef::new(
+            "triggers__with_names",
+            Query::select()
+                .expr(Expr::col((Triggers::Table, Asterisk)))
+                .expr_as(
+                    Expr::col((Collections::Table, Collections::Name)),
+                    Alias::new("collection"),
+                )
+                .expr_as(
+                    Expr::col((Alias::new("trigger_by_collection"), Collections::Name)),
+                    Alias::new("trigger_by_collection"),
+                )
+                .from(Triggers::Table)
+                .join(
+                    JoinType::LeftJoin,
+                    Collections::Table,
+                    Expr::col((Triggers::Table, Triggers::CollectionId))
+                        .equals((Collections::Table, Collections::Id)),
+                )
+                .join(
+                    JoinType::LeftJoin,
+                    Users::Table,
+                    Expr::col((Triggers::Table, Triggers::DefinedById))
+                        .equals((Users::Table, Users::Id)),
+                )
+                .join_as(
+                    JoinType::LeftJoin,
+                    Collections::Table,
+                    Alias::new("trigger_by_collection"),
+                    Expr::col((Triggers::Table, Triggers::TriggerByCollectionId))
+                        .equals((Alias::new("trigger_by_collection"), Collections::Id)),
+                )
+                .to_owned(),
+        ),
+        // triggers__read
+        ViewDef::new(
+            "triggers__read",
+            Query::select()
+                .expr(Expr::col(Asterisk))
+                .from(Alias::new("triggers__with_names"))
+                .and_where(
+                    Expr::col((Alias::new("triggers__with_names"), Alias::new("system"))).eq(false),
+                )
+                .to_owned(),
+        ),
+        // executions__with_names
+        ViewDef::new(
+            "executions__with_names",
+            Query::select()
+                .expr(Expr::col((Executions::Table, Asterisk)))
+                .expr_as(
+                    Expr::col((Collections::Table, Collections::Name)),
+                    Alias::new("collection"),
+                )
+                .expr_as(
+                    Expr::col((Functions::Table, Functions::Name)),
+                    Alias::new("function"),
+                )
+                .expr_as(
+                    b.name_or_id("users.name", "executions.triggered_by_id"),
+                    Alias::new("triggered_by"),
+                )
+                .from(Executions::Table)
+                .join(
+                    JoinType::LeftJoin,
+                    Collections::Table,
+                    Expr::col((Executions::Table, Executions::CollectionId))
+                        .equals((Collections::Table, Collections::Id)),
+                )
+                .join(
+                    JoinType::LeftJoin,
+                    Functions::Table,
+                    Expr::col((Executions::Table, Executions::FunctionVersionId))
+                        .equals((Functions::Table, Functions::Id)),
+                )
+                .join(
+                    JoinType::LeftJoin,
+                    Users::Table,
+                    Expr::col((Executions::Table, Executions::TriggeredById))
+                        .equals((Users::Table, Users::Id)),
+                )
+                .to_owned(),
+        ),
+        // transactions__with_names
+        ViewDef::new(
+            "transactions__with_names",
+            Query::select()
+                .expr(Expr::col((Transactions::Table, Asterisk)))
+                .expr_as(
+                    Expr::col((Collections::Table, Collections::Name)),
+                    Alias::new("collection"),
+                )
+                .expr_as(
+                    Expr::col((Executions::Table, Executions::Name)),
+                    Alias::new("execution"),
+                )
+                .expr_as(
+                    b.name_or_id("users.name", "transactions.triggered_by_id"),
+                    Alias::new("triggered_by"),
+                )
+                .from(Transactions::Table)
+                .join(
+                    JoinType::LeftJoin,
+                    Collections::Table,
+                    Expr::col((Transactions::Table, Transactions::CollectionId))
+                        .equals((Collections::Table, Collections::Id)),
+                )
+                .join(
+                    JoinType::LeftJoin,
+                    Executions::Table,
+                    Expr::col((Transactions::Table, Transactions::ExecutionId))
+                        .equals((Executions::Table, Executions::Id)),
+                )
+                .join(
+                    JoinType::LeftJoin,
+                    Users::Table,
+                    Expr::col((Transactions::Table, Transactions::TriggeredById))
+                        .equals((Users::Table, Users::Id)),
+                )
+                .to_owned(),
+        ),
+        // function_runs__with_names
+        ViewDef::new(
+            "function_runs__with_names",
+            Query::select()
+                .expr(Expr::col((FunctionRuns::Table, Asterisk)))
+                .expr_as(
+                    Expr::col((Functions::Table, Functions::Name)),
+                    Alias::new("name"),
+                )
+                .expr_as(
+                    Expr::col((Collections::Table, Collections::Name)),
+                    Alias::new("collection"),
+                )
+                .expr_as(
+                    Expr::col((Executions::Table, Executions::Name)),
+                    Alias::new("execution"),
+                )
+                .expr_as(
+                    Expr::col((Executions::Table, Executions::FunctionVersionId)),
+                    Alias::new("execution_function_version_id"),
+                )
+                .expr_as(
+                    b.name_or_id("users.name", "function_runs.triggered_by_id"),
+                    Alias::new("triggered_by"),
+                )
+                .from(FunctionRuns::Table)
+                .join(
+                    JoinType::LeftJoin,
+                    Collections::Table,
+                    Expr::col((FunctionRuns::Table, FunctionRuns::CollectionId))
+                        .equals((Collections::Table, Collections::Id)),
+                )
+                .join(
+                    JoinType::LeftJoin,
+                    Functions::Table,
+                    Expr::col((FunctionRuns::Table, FunctionRuns::FunctionVersionId))
+                        .equals((Functions::Table, Functions::Id)),
+                )
+                .join(
+                    JoinType::LeftJoin,
+                    Executions::Table,
+                    Expr::col((FunctionRuns::Table, FunctionRuns::ExecutionId))
+                        .equals((Executions::Table, Executions::Id)),
+                )
+                .join(
+                    JoinType::LeftJoin,
+                    Users::Table,
+                    Expr::col((FunctionRuns::Table, FunctionRuns::TriggeredById))
+                        .equals((Users::Table, Users::Id)),
+                )
+                .to_owned(),
+        ),
+        // table_data_versions__with_function
+        ViewDef::new(
+            "table_data_versions__with_function",
+            Query::select()
+                .expr(Expr::col((TableDataVersions::Table, Asterisk)))
+                .expr_as(
+                    Expr::col((FunctionRuns::Table, FunctionRuns::TriggeredById)),
+                    Alias::new("triggered_by_id"),
+                )
+                .expr_as(
+                    Expr::col((FunctionRuns::Table, FunctionRuns::StartedOn)),
+                    Alias::new("started_on"),
+                )
+                .expr_as(
+                    Expr::col((FunctionRuns::Table, FunctionRuns::EndedOn)),
+                    Alias::new("ended_on"),
+                )
+                .expr_as(
+                    Expr::col((FunctionRuns::Table, FunctionRuns::Status)),
+                    Alias::new("status"),
+                )
+                .expr_as(
+                    Expr::col((Functions::Table, Functions::DataLocation)),
+                    Alias::new("data_location"),
+                )
+                .expr_as(
+                    Expr::col((Functions::Table, Functions::StorageVersion)),
+                    Alias::new("storage_version"),
+                )
+                .from(TableDataVersions::Table)
+                .join(
+                    JoinType::LeftJoin,
+                    Functions::Table,
+                    Expr::col((
+                        TableDataVersions::Table,
+                        TableDataVersions::FunctionVersionId,
+                    ))
                     .equals((Functions::Table, Functions::Id)),
-            )
-            .join(
-                JoinType::LeftJoin,
-                Users::Table,
-                Expr::col((Tables::Table, Tables::DefinedById)).equals((Users::Table, Users::Id)),
-            )
-            .to_owned(),
-    ));
-
-    // dependencies__with_names (collections joined twice: once for collection_id, once for table_collection_id)
-    v.push(ViewDef::new(
-        "dependencies__with_names",
-        Query::select()
-            .expr(Expr::col((Dependencies::Table, Asterisk)))
-            .expr_as(
-                Expr::col((Collections::Table, Collections::Name)),
-                Alias::new("collection"),
-            )
-            .expr_as(
-                Expr::col((Alias::new("table_collection"), Collections::Name)),
-                Alias::new("trigger_by_collection"),
-            )
-            .expr_as(
-                Expr::col((Alias::new("table_collection"), Collections::Name)),
-                Alias::new("table_collection"),
-            )
-            .from(Dependencies::Table)
-            .join(
-                JoinType::LeftJoin,
-                Collections::Table,
-                Expr::col((Dependencies::Table, Dependencies::CollectionId))
-                    .equals((Collections::Table, Collections::Id)),
-            )
-            .join(
-                JoinType::LeftJoin,
-                Users::Table,
-                Expr::col((Dependencies::Table, Dependencies::DefinedById))
-                    .equals((Users::Table, Users::Id)),
-            )
-            .join_as(
-                JoinType::LeftJoin,
-                Collections::Table,
-                Alias::new("table_collection"),
-                Expr::col((Dependencies::Table, Dependencies::TableCollectionId))
-                    .equals((Alias::new("table_collection"), Collections::Id)),
-            )
-            .to_owned(),
-    ));
-
-    // triggers__with_names (collections joined twice: once for collection_id, once for trigger_by_collection_id)
-    v.push(ViewDef::new(
-        "triggers__with_names",
-        Query::select()
-            .expr(Expr::col((Triggers::Table, Asterisk)))
-            .expr_as(
-                Expr::col((Collections::Table, Collections::Name)),
-                Alias::new("collection"),
-            )
-            .expr_as(
-                Expr::col((Alias::new("trigger_by_collection"), Collections::Name)),
-                Alias::new("trigger_by_collection"),
-            )
-            .from(Triggers::Table)
-            .join(
-                JoinType::LeftJoin,
-                Collections::Table,
-                Expr::col((Triggers::Table, Triggers::CollectionId))
-                    .equals((Collections::Table, Collections::Id)),
-            )
-            .join(
-                JoinType::LeftJoin,
-                Users::Table,
-                Expr::col((Triggers::Table, Triggers::DefinedById))
-                    .equals((Users::Table, Users::Id)),
-            )
-            .join_as(
-                JoinType::LeftJoin,
-                Collections::Table,
-                Alias::new("trigger_by_collection"),
-                Expr::col((Triggers::Table, Triggers::TriggerByCollectionId))
-                    .equals((Alias::new("trigger_by_collection"), Collections::Id)),
-            )
-            .to_owned(),
-    ));
-
-    // triggers__read
-    v.push(ViewDef::new(
-        "triggers__read",
-        Query::select()
-            .expr(Expr::col(Asterisk))
-            .from(Alias::new("triggers__with_names"))
-            .and_where(
-                Expr::col((Alias::new("triggers__with_names"), Alias::new("system"))).eq(false),
-            )
-            .to_owned(),
-    ));
-
-    // executions__with_names
-    v.push(ViewDef::new(
-        "executions__with_names",
-        Query::select()
-            .expr(Expr::col((Executions::Table, Asterisk)))
-            .expr_as(
-                Expr::col((Collections::Table, Collections::Name)),
-                Alias::new("collection"),
-            )
-            .expr_as(
-                Expr::col((Functions::Table, Functions::Name)),
-                Alias::new("function"),
-            )
-            .expr_as(
-                b.name_or_id("users.name", "executions.triggered_by_id"),
-                Alias::new("triggered_by"),
-            )
-            .from(Executions::Table)
-            .join(
-                JoinType::LeftJoin,
-                Collections::Table,
-                Expr::col((Executions::Table, Executions::CollectionId))
-                    .equals((Collections::Table, Collections::Id)),
-            )
-            .join(
-                JoinType::LeftJoin,
-                Functions::Table,
-                Expr::col((Executions::Table, Executions::FunctionVersionId))
-                    .equals((Functions::Table, Functions::Id)),
-            )
-            .join(
-                JoinType::LeftJoin,
-                Users::Table,
-                Expr::col((Executions::Table, Executions::TriggeredById))
-                    .equals((Users::Table, Users::Id)),
-            )
-            .to_owned(),
-    ));
-
-    // transactions__with_names
-    v.push(ViewDef::new(
-        "transactions__with_names",
-        Query::select()
-            .expr(Expr::col((Transactions::Table, Asterisk)))
-            .expr_as(
-                Expr::col((Collections::Table, Collections::Name)),
-                Alias::new("collection"),
-            )
-            .expr_as(
-                Expr::col((Executions::Table, Executions::Name)),
-                Alias::new("execution"),
-            )
-            .expr_as(
-                b.name_or_id("users.name", "transactions.triggered_by_id"),
-                Alias::new("triggered_by"),
-            )
-            .from(Transactions::Table)
-            .join(
-                JoinType::LeftJoin,
-                Collections::Table,
-                Expr::col((Transactions::Table, Transactions::CollectionId))
-                    .equals((Collections::Table, Collections::Id)),
-            )
-            .join(
-                JoinType::LeftJoin,
-                Executions::Table,
-                Expr::col((Transactions::Table, Transactions::ExecutionId))
-                    .equals((Executions::Table, Executions::Id)),
-            )
-            .join(
-                JoinType::LeftJoin,
-                Users::Table,
-                Expr::col((Transactions::Table, Transactions::TriggeredById))
-                    .equals((Users::Table, Users::Id)),
-            )
-            .to_owned(),
-    ));
-
-    // function_runs__with_names
-    v.push(ViewDef::new(
-        "function_runs__with_names",
-        Query::select()
-            .expr(Expr::col((FunctionRuns::Table, Asterisk)))
-            .expr_as(
-                Expr::col((Functions::Table, Functions::Name)),
-                Alias::new("name"),
-            )
-            .expr_as(
-                Expr::col((Collections::Table, Collections::Name)),
-                Alias::new("collection"),
-            )
-            .expr_as(
-                Expr::col((Executions::Table, Executions::Name)),
-                Alias::new("execution"),
-            )
-            .expr_as(
-                Expr::col((Executions::Table, Executions::FunctionVersionId)),
-                Alias::new("execution_function_version_id"),
-            )
-            .expr_as(
-                b.name_or_id("users.name", "function_runs.triggered_by_id"),
-                Alias::new("triggered_by"),
-            )
-            .from(FunctionRuns::Table)
-            .join(
-                JoinType::LeftJoin,
-                Collections::Table,
-                Expr::col((FunctionRuns::Table, FunctionRuns::CollectionId))
-                    .equals((Collections::Table, Collections::Id)),
-            )
-            .join(
-                JoinType::LeftJoin,
-                Functions::Table,
-                Expr::col((FunctionRuns::Table, FunctionRuns::FunctionVersionId))
-                    .equals((Functions::Table, Functions::Id)),
-            )
-            .join(
-                JoinType::LeftJoin,
-                Executions::Table,
-                Expr::col((FunctionRuns::Table, FunctionRuns::ExecutionId))
-                    .equals((Executions::Table, Executions::Id)),
-            )
-            .join(
-                JoinType::LeftJoin,
-                Users::Table,
-                Expr::col((FunctionRuns::Table, FunctionRuns::TriggeredById))
-                    .equals((Users::Table, Users::Id)),
-            )
-            .to_owned(),
-    ));
-
-    // table_data_versions__with_function
-    v.push(ViewDef::new(
-        "table_data_versions__with_function",
-        Query::select()
-            .expr(Expr::col((TableDataVersions::Table, Asterisk)))
-            .expr_as(
-                Expr::col((FunctionRuns::Table, FunctionRuns::TriggeredById)),
-                Alias::new("triggered_by_id"),
-            )
-            .expr_as(
-                Expr::col((FunctionRuns::Table, FunctionRuns::StartedOn)),
-                Alias::new("started_on"),
-            )
-            .expr_as(
-                Expr::col((FunctionRuns::Table, FunctionRuns::EndedOn)),
-                Alias::new("ended_on"),
-            )
-            .expr_as(
-                Expr::col((FunctionRuns::Table, FunctionRuns::Status)),
-                Alias::new("status"),
-            )
-            .expr_as(
-                Expr::col((Functions::Table, Functions::DataLocation)),
-                Alias::new("data_location"),
-            )
-            .expr_as(
-                Expr::col((Functions::Table, Functions::StorageVersion)),
-                Alias::new("storage_version"),
-            )
-            .from(TableDataVersions::Table)
-            .join(
-                JoinType::LeftJoin,
-                Functions::Table,
-                Expr::col((
-                    TableDataVersions::Table,
-                    TableDataVersions::FunctionVersionId,
-                ))
-                .equals((Functions::Table, Functions::Id)),
-            )
-            .join(
-                JoinType::LeftJoin,
-                FunctionRuns::Table,
-                Expr::col((TableDataVersions::Table, TableDataVersions::FunctionRunId))
-                    .equals((FunctionRuns::Table, FunctionRuns::Id)),
-            )
-            .to_owned(),
-    ));
-
-    // table_data_versions__active
-    v.push(ViewDef::new(
-        "table_data_versions__active",
-        Query::select()
-            .expr(Expr::col(Asterisk))
-            .from(Alias::new("table_data_versions__with_function"))
-            .and_where(Expr::col(Alias::new("status")).is_not_in(["Y", "X"]))
-            .to_owned(),
-    ));
+                )
+                .join(
+                    JoinType::LeftJoin,
+                    FunctionRuns::Table,
+                    Expr::col((TableDataVersions::Table, TableDataVersions::FunctionRunId))
+                        .equals((FunctionRuns::Table, FunctionRuns::Id)),
+                )
+                .to_owned(),
+        ),
+        // table_data_versions__active
+        ViewDef::new(
+            "table_data_versions__active",
+            Query::select()
+                .expr(Expr::col(Asterisk))
+                .from(Alias::new("table_data_versions__with_function"))
+                .and_where(Expr::col(Alias::new("status")).is_not_in(["Y", "X"]))
+                .to_owned(),
+        ),
+    ];
 
     // table_data_versions__with_names
     {

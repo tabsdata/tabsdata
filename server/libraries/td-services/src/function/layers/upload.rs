@@ -9,7 +9,7 @@ use td_objects::dxo::function_upload::FunctionUpload;
 use td_objects::types::basic::{BundleHash, BundleId, CollectionId, DataLocation, StorageVersion};
 use td_storage::location::StorageLocation;
 use td_storage::{Storage, StorageError};
-use td_tower::extractors::{Ref};
+use td_tower::extractors::Ref;
 use tokio::io::BufWriter;
 use tokio_util::io::StreamReader;
 

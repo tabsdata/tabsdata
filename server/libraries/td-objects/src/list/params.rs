@@ -215,7 +215,7 @@ where
         } else {
             (natural_order.invert().sea_order(), SeaOrder::Desc)
         };
-        vec![(order_col.clone(), primary_dir), (id_col.clone(), id_dir)]
+        vec![(*order_col, primary_dir), (*id_col, id_dir)]
     }
 }
 

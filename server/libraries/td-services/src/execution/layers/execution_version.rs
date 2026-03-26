@@ -3,12 +3,14 @@
 //
 
 use std::ops::Deref;
+use td_database::dynamic::DynamicConnection;
 use td_error::{ApiError, TdError, api_error};
 use td_objects::and;
 use td_objects::dxo::execution::{ExecutionDB, ExecutionResponse, ExecutionResponseInternal};
 use td_objects::dxo::function::FunctionDBWithNames;
 use td_objects::dxo::function_run::FunctionRunDB;
 use td_objects::types::basic::{FunctionRunStatus, FunctionVersionId, SkipIfRunning};
+use td_queries::BasicQueries;
 use td_tower::default_services::Condition;
 use td_tower::extractors::{MutRef, Ref};
 use tracing::debug;
@@ -37,7 +39,6 @@ pub async fn skip_if_running(
 ) -> Result<Condition, TdError> {
     let running = match latest_execution.as_ref() {
         Some(latest_execution) => {
-
             let function_run = conn
                 .fetch_one::<FunctionRunDB>(and!(function_version_id.deref(), &latest_execution.id))
                 .await?;

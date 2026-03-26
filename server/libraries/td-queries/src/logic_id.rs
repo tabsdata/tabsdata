@@ -108,16 +108,16 @@ mod tests {
         let db = td_database::test_utils::db().await?;
 
         let id = find_last_idl::<ExecutionDB, ExecutionId, EP>(&db).await?;
-        assert!(matches!(id, None));
+        assert!(id.is_none());
 
         let id = find_last_idl::<TransactionDB, TransactionId, TX>(&db).await?;
-        assert!(matches!(id, None));
+        assert!(id.is_none());
 
         let id = find_last_idl::<FunctionDB, FunctionVersionId, FV>(&db).await?;
-        assert!(matches!(id, None));
+        assert!(id.is_none());
 
         let id = find_last_idl::<TableDataVersionDB, TableDataVersionId, DV>(&db).await?;
-        assert!(matches!(id, None));
+        assert!(id.is_none());
         //
         Ok(())
     }

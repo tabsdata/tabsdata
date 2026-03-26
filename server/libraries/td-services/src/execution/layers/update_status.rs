@@ -4,6 +4,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
+use td_database::dynamic::DynamicConnection;
 use td_error::{TdError, td_error};
 use td_objects::dxo::function_requirement::FunctionRequirementDBWithNames;
 use td_objects::dxo::function_run::{CommitFunctionRunDB, FunctionRunDB, UpdateFunctionRunDB};
@@ -41,7 +42,6 @@ pub async fn update_worker_status(
     update: Ref<UpdateWorkerDB>,
     worker_id: Ref<WorkerId>,
 ) -> Result<(), TdError> {
-
     // Worker status update is never conditional, we want to know exactly what got reported,
     // as it doesn't affect execution flow, it's just informational.
     let _ = conn
@@ -57,7 +57,6 @@ pub async fn update_function_run_status(
     function_runs: Ref<Vec<FunctionRunDB>>,
     update: Ref<UpdateFunctionRunDB>,
 ) -> Result<(), TdError> {
-
     // Validate status transitions and filter out no-op transitions.
     let function_run_ids = function_runs
         .iter()
@@ -220,60 +219,60 @@ pub async fn update_table_data_version_status(
     function_run_id: Ref<FunctionRunId>,
     callback: Ref<CallbackRequest>,
 ) -> Result<(), TdError> {
-    if let Some(context) = &callback.context {
-        if let WorkerOutput::V2(output) | WorkerOutput::FunctionV2(output) = context {
-            for written in &output.output {
-                let (table_name, table_info) = match written {
-                    WrittenTable::NoData { table } => (table, None),
-                    WrittenTable::Data { table, info } => (table, Some(info)),
-                    // TODO partitions should be handled differently, creating partitions and setting
-                    // the table to has_data = true and partition = true.
-                    WrittenTable::Partitions { table, info, .. } => (table, Some(info)),
-                };
+    if let Some(context) = &callback.context
+        && let WorkerOutput::V2(output) | WorkerOutput::FunctionV2(output) = context
+    {
+        for written in &output.output {
+            let (table_name, table_info) = match written {
+                WrittenTable::NoData { table } => (table, None),
+                WrittenTable::Data { table, info } => (table, Some(info)),
+                // TODO partitions should be handled differently, creating partitions and setting
+                // the table to has_data = true and partition = true.
+                WrittenTable::Partitions { table, info, .. } => (table, Some(info)),
+            };
 
-                // one because single table data version per execution
-                let data_version = conn
-                    .fetch_one::<TableDataVersionDBWithNames>(and!(*function_run_id, table_name,))
-                    .await?;
+            // one because single table data version per execution
+            let data_version = conn
+                .fetch_one::<TableDataVersionDBWithNames>(and!(*function_run_id, table_name,))
+                .await?;
 
-                let update = if let Some(table_info) = table_info {
-                    UpdateTableDataVersionDB {
-                        has_data: Some(HasData::TRUE),
-                        column_count: Some(table_info.column_count),
-                        row_count: Some(table_info.row_count),
-                        schema_hash: Some(table_info.schema_hash.clone()),
-                        with_data_table_data_version_id: Some(data_version.id.clone()),
-                    }
-                } else {
-                    let latest_version_with_data = conn
+            let update = if let Some(table_info) = table_info {
+                UpdateTableDataVersionDB {
+                    has_data: Some(HasData::TRUE),
+                    column_count: Some(table_info.column_count),
+                    row_count: Some(table_info.row_count),
+                    schema_hash: Some(table_info.schema_hash.clone()),
+                    with_data_table_data_version_id: Some(data_version.id.clone()),
+                }
+            } else {
+                let latest_version_with_data = conn
                         .fetch_latest_before::<{ TableDataVersionDBWithNames::WithData }, TableDataVersionDBWithNames>(
                             and!(&data_version.table_id, lte!(&data_version.triggered_on)),
                             0,
                         )
                         .await?;
 
-                    if let Some(latest_version_with_data) = latest_version_with_data {
-                        UpdateTableDataVersionDB {
-                            has_data: Some(HasData::FALSE),
-                            column_count: latest_version_with_data.column_count,
-                            row_count: latest_version_with_data.row_count,
-                            schema_hash: latest_version_with_data.schema_hash.clone(),
-                            with_data_table_data_version_id: Some(latest_version_with_data.id),
-                        }
-                    } else {
-                        UpdateTableDataVersionDB {
-                            has_data: Some(HasData::FALSE),
-                            column_count: None,
-                            row_count: None,
-                            schema_hash: None,
-                            with_data_table_data_version_id: None,
-                        }
+                if let Some(latest_version_with_data) = latest_version_with_data {
+                    UpdateTableDataVersionDB {
+                        has_data: Some(HasData::FALSE),
+                        column_count: latest_version_with_data.column_count,
+                        row_count: latest_version_with_data.row_count,
+                        schema_hash: latest_version_with_data.schema_hash.clone(),
+                        with_data_table_data_version_id: Some(latest_version_with_data.id),
                     }
-                };
+                } else {
+                    UpdateTableDataVersionDB {
+                        has_data: Some(HasData::FALSE),
+                        column_count: None,
+                        row_count: None,
+                        schema_hash: None,
+                        with_data_table_data_version_id: None,
+                    }
+                }
+            };
 
-                conn.update::<_, TableDataVersionDB>(&update, &data_version.id)
-                    .await?;
-            }
+            conn.update::<_, TableDataVersionDB>(&update, &data_version.id)
+                .await?;
         }
     }
 

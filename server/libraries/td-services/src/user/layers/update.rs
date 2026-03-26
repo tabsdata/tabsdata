@@ -10,7 +10,7 @@ use td_objects::tower_service::with::With;
 use td_objects::types::basic::{AtTime, UserId};
 use td_security::config::PasswordHashingConfig;
 use td_security::password::create_password_hash;
-use td_tower::extractors::{Ref};
+use td_tower::extractors::Ref;
 
 pub async fn update_user_validate(update: Ref<UserUpdate>) -> Result<(), TdError> {
     if update.full_name.is_none()

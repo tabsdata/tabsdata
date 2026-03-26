@@ -4,17 +4,17 @@
 
 use crate::permission::PermissionError;
 use std::ops::Deref;
+use td_database::dynamic::DynamicConnection;
 use td_error::TdError;
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::permission::{
     PermissionCreate, PermissionDB, PermissionDBBuilder, PermissionDBWithNames,
 };
-use td_queries::BasicQueries;
 use td_objects::tower_service::with::With;
 use td_objects::types::basic::{CollectionName, EntityId, PermissionEntityType, RoleIdName};
+use td_queries::BasicQueries;
 use td_tower::default_services::Condition;
-use td_database::dynamic::DynamicConnection;
-use td_tower::extractors::{Ref, MutRef};
+use td_tower::extractors::{MutRef, Ref};
 
 pub trait PermissionBuildService {
     fn build_permission_db(
@@ -30,7 +30,6 @@ impl PermissionBuildService for With<PermissionDBBuilder> {
         input: Ref<PermissionDBBuilder>,
         permission_create: Ref<PermissionCreate>,
     ) -> Result<PermissionDB, TdError> {
-
         let permission_type = &permission_create.permission_type;
         let entity_name = &permission_create.entity_name;
         let entity_type = permission_type.on_entity_type();

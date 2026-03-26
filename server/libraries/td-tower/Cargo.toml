@@ -20,7 +20,13 @@ version = { workspace = true }
 
 [features]
 enterprise = []
-td-test = ["dummy", "mock-env", "test-utils"]
+td-test = [
+    "dummy",
+    "mock-env",
+    "test-utils",
+    "td-database/td-test",
+    "td-error/td-test",
+]
 dummy = []
 mock-env = []
 test_logging = []
@@ -28,7 +34,7 @@ test_tower_metadata = []
 test-utils = []
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "td-build", "strum", "thiserror", "toml"]
+ignored = ["openssl", "strum", "td-build", "td-tower", "thiserror", "toml"]
 
 # Build dependencies
 
@@ -53,7 +59,6 @@ td-error = { workspace = true }
 
 # External dependencies
 
-async-trait = { workspace = true }
 derive_builder = { workspace = true }
 futures-util = { workspace = true }
 getset = { workspace = true }
@@ -69,8 +74,7 @@ tracing = { workspace = true }
 utoipa = { workspace = true }
 
 [dev-dependencies]
-td-database = { workspace = true, features = ["td-test"] }
-td-schema = { workspace = true, features = ["td-test"] }
+td-tower = { workspace = true, features = ["td-test"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }

@@ -37,7 +37,7 @@ fn collection_set_condition<D: DaoCore>(
     let col = D::col_for_type(std::any::TypeId::of::<CollectionId>()).ok_or_else(|| {
         SqlError::TypeNotFound(
             std::any::type_name::<CollectionId>().to_string(),
-            D::table().into_table_ref(),
+            Box::new(D::table().into_table_ref()),
         )
     })?;
     if ids.is_empty() {
@@ -94,13 +94,13 @@ impl ListFilter for VisibleTablesCollections {
         let col = D::col_for_type(std::any::TypeId::of::<CollectionId>()).ok_or_else(|| {
             SqlError::TypeNotFound(
                 std::any::type_name::<CollectionId>().to_string(),
-                D::table().into_table_ref(),
+                Box::new(D::table().into_table_ref()),
             )
         })?;
         let private_col = D::col_for_type(std::any::TypeId::of::<Private>()).ok_or_else(|| {
             SqlError::TypeNotFound(
                 std::any::type_name::<Private>().to_string(),
-                D::table().into_table_ref(),
+                Box::new(D::table().into_table_ref()),
             )
         })?;
 

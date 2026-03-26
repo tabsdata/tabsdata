@@ -6,6 +6,7 @@ use crate::graph::layers::{FunctionOrTable, GraphConfig};
 use itertools::Itertools;
 use std::collections::HashMap;
 use std::ops::Deref;
+use td_database::dynamic::DynamicConnection;
 use td_error::TdError;
 use td_objects::States;
 use td_objects::dxo::dependency::DependencyDBWithNames;
@@ -13,11 +14,10 @@ use td_objects::dxo::function::{FunctionDB, FunctionDBWithNames};
 use td_objects::dxo::table::{TableDB, TableDBWithNames};
 use td_objects::dxo::trigger::TriggerDBWithNames;
 use td_objects::graph::{TdGraph, TdGraphBuilder};
-use td_queries::{OptionsBuilder, RecursiveQueries, VersionedQueries};
 use td_objects::types::basic::{AtTime, FunctionId, TableId};
 use td_objects::types::recursion::RecursionOptions;
-use td_database::dynamic::DynamicConnection;
-use td_tower::extractors::{Ref, MutRef};
+use td_queries::{OptionsBuilder, RecursiveQueries, VersionedQueries};
+use td_tower::extractors::{MutRef, Ref};
 
 pub struct GraphBuilder<
     C: GraphConfig<TRIGGER_STATE, DEPENDENCY_STATE, FUNCTION_STATE, TABLE_STATE>,
@@ -48,7 +48,6 @@ where
         function_or_table: Ref<FunctionOrTable>,
         recursion_options: Ref<RecursionOptions>,
     ) -> Result<Vec<TriggerDBWithNames>, TdError> {
-
         let trigger_graph = match function_or_table.deref() {
             FunctionOrTable::Function(function_id) => {
                 conn
@@ -96,7 +95,6 @@ where
         function_or_table: Ref<FunctionOrTable>,
         recursion_options: Ref<RecursionOptions>,
     ) -> Result<Vec<DependencyDBWithNames>, TdError> {
-
         let dep_graph = match function_or_table.deref() {
             FunctionOrTable::Function(function_id) =>{
                 conn
@@ -136,7 +134,6 @@ where
         function_or_table: Ref<FunctionOrTable>,
         at_time: Ref<AtTime>,
     ) -> Result<FunctionId, TdError> {
-
         let function_id = match function_or_table.deref() {
             FunctionOrTable::Function(function_id) => *function_id,
             FunctionOrTable::Table(table_id) => {
@@ -191,7 +188,6 @@ where
         at_time: Ref<AtTime>,
         triggered_functions: Ref<Vec<FunctionId>>,
     ) -> Result<Vec<DependencyDBWithNames>, TdError> {
-
         // TODO this should be chunked
         let dep_graph = conn
             .fetch_all_at::<DEPENDENCY_STATE, DependencyDBWithNames>(
@@ -208,7 +204,6 @@ where
         at_time: Ref<AtTime>,
         functions: Ref<Vec<FunctionId>>,
     ) -> Result<Vec<TableDBWithNames>, TdError> {
-
         // Find output tables for each triggered_function
         // TODO this should be chunked
         let output_tables = conn
@@ -228,7 +223,6 @@ where
         dep_graph: Ref<Vec<DependencyDBWithNames>>,
         output_tables: Ref<Vec<TableDBWithNames>>,
     ) -> Result<HashMap<TableId, TableDBWithNames>, TdError> {
-
         let trigger_table_ids = trigger_graph.iter().map(|t| t.trigger_by_table_id);
         let dep_table_ids = dep_graph.iter().map(|t| t.table_id);
         let output_table_ids = output_tables.iter().map(|t| t.table_id);
@@ -259,7 +253,6 @@ where
         dep_graph: Ref<Vec<DependencyDBWithNames>>,
         output_tables: Ref<Vec<TableDBWithNames>>,
     ) -> Result<HashMap<FunctionId, FunctionDBWithNames>, TdError> {
-
         let trigger_function_ids = trigger_graph
             .iter()
             .flat_map(|t| [t.trigger_by_function_id, t.function_id]);

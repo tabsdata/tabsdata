@@ -23,11 +23,16 @@ version = { workspace = true }
 enterprise = []
 dummy = []
 mock-env = []
-td-test = ["dummy", "mock-env", "test-utils"]
+td-test = [
+    "dummy",
+    "mock-env",
+    "test-utils",
+    "ta-system/td-test",
+]
 test-utils = []
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "td-build"]
+ignored = ["openssl", "td-build", "te-system"]
 
 [dependencies]
 
@@ -38,9 +43,10 @@ ta-system = { workspace = true }
 # External dependencies
 
 [build-dependencies]
-td-build = {workspace = true}
+td-build = { workspace = true }
 
 [dev-dependencies]
+te-system = { workspace = true, features = ["td-test"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }

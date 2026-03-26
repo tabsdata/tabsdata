@@ -20,7 +20,18 @@ version = { workspace = true }
 
 [features]
 enterprise = []
-td-test = ["dummy", "mock-env", "test-utils"]
+td-test = [
+    "dummy",
+    "mock-env",
+    "test-utils",
+    "ta-objects/td-test",
+    "td-common/td-test",
+    "td-database/td-test",
+    "td-error/td-test",
+    "td-objects/td-test",
+    "td-schema/td-test",
+    "td-tower/td-test",
+]
 dummy = []
 mock-env = []
 test_logging = []
@@ -28,12 +39,12 @@ test_tower_metadata = []
 test-utils = ["td-schema/test-utils"]
 
 # Backend support features
-sqlite = ["sqlx/sqlite", "td-database/sqlite", "ta-objects/sqlite"]
-postgres = ["sqlx/postgres", "td-database/postgres", "ta-objects/postgres"]
-mysql = ["sqlx/mysql", "td-database/mysql", "ta-objects/mysql"]
+sqlite = ["ta-objects/sqlite", "td-database/sqlite"]
+postgres = ["ta-objects/postgres", "td-database/postgres"]
+mysql = ["ta-objects/mysql", "td-database/mysql"]
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "td-build", "td-objects", "thiserror", "toml"]
+ignored = ["openssl", "regex", "serde", "sqlx", "strum", "td-build", "thiserror", "toml", "utoipa"]
 
 # Build dependencies
 
@@ -58,47 +69,26 @@ td-error = { workspace = true }
 td-objects = { workspace = true }
 td-security = { workspace = true }
 td-schema = { workspace = true }
-td-test = { workspace = true }
 td-tower = { workspace = true }
 
 # External dependencies
 
-aquamarine = { workspace = true }
-axum = { workspace = true }
-bytes = { workspace = true }
-constcat = { workspace = true }
-chrono = { workspace = true, features = ["serde"] }
-croner = { workspace = true }
 derive_builder = { workspace = true }
-derive-new = { workspace = true }
-futures = { workspace = true }
-getset = { workspace = true }
-http = { workspace = true }
-itertools = { workspace = true }
-nonempty = { workspace = true }
-paste = { workspace = true }
-petgraph = { workspace = true, features = ["serde-1"] }
-polars = { workspace = true }
-regex = { workspace = true }
 sea-query = { workspace = true, features = ["sqlx-utils"] }
-serde = { workspace = true, features = ["derive"] }
-serde_json = { workspace = true }
-serde_yaml = { workspace = true }
-serde_valid = { workspace = true }
-sqlx = { workspace = true, features = ["json"] }
 strum = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
-tower = { workspace = true }
 tracing = { workspace = true }
-url = { workspace = true }
-utoipa = { workspace = true, features = ["axum_extras", "chrono", "preserve_order", "url", "uuid"] }
 
 [dev-dependencies]
-td-database = { workspace = true, features = ["td-test"] }
-td-objects = { workspace = true, features = ["td-test"] }
-td-queries = { workspace = true, features = ["td-test"] }
-td-schema = { workspace = true, features = ["td-test"] }
+td-security = { workspace = true }
+td-test = { workspace = true }
+
+chrono = { workspace = true, features = ["serde"] }
+regex = { workspace = true }
+serde = { workspace = true }
+sqlx = { workspace = true }
+utoipa = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }

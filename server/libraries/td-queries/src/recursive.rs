@@ -257,7 +257,7 @@ where
         let starting_at = R::col_for_type(opts.options.direct_reference.as_type_id()).ok_or(
             SqlError::TypeNotFound(
                 format!("{:?}", opts.options.direct_reference),
-                R::table().into_table_ref(),
+                Box::new(R::table().into_table_ref()),
             ),
         )?;
         let override_cond = Condition::all()
@@ -267,7 +267,7 @@ where
     }
 
     Ok(versioned_ranked_cte::<R>(
-        opts.r_defined_on.as_deref(),
+        opts.r_defined_on,
         state_cond,
         Cte::ReferenceVersions,
     ))
@@ -287,7 +287,7 @@ where
     let state_cond = resolve_condition::<D>(D::state())?;
 
     Ok(versioned_ranked_cte::<D>(
-        opts.d_defined_on.as_deref(),
+        opts.d_defined_on,
         state_cond,
         Cte::RecursionVersions,
     ))
@@ -343,12 +343,12 @@ where
     let recursion_ref =
         R::col_for_type(std::any::TypeId::of::<D::Key>()).ok_or(SqlError::TypeNotFound(
             std::any::type_name::<D::Key>().to_string(),
-            R::table().into_table_ref(),
+            Box::new(R::table().into_table_ref()),
         ))?;
     let starting_at =
         R::col_for_type(direct_reference.as_type_id()).ok_or(SqlError::TypeNotFound(
             format!("{:?}", direct_reference),
-            R::table().into_table_ref(),
+            Box::new(R::table().into_table_ref()),
         ))?;
 
     // Base case — common chain (always present)
@@ -1754,7 +1754,7 @@ mod tests {
         // Downstream: BF0→BF1→BF2→(cycle back blocked)
         // Upstream: BF3(downstream=ref_bc0)→BF2(downstream=ref_bc3)→(cycle back blocked)
         assert!(result.len() <= 4);
-        assert!(result.len() > 0);
+        assert!(!result.is_empty());
         Ok(())
     }
 

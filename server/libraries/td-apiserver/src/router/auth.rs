@@ -56,11 +56,7 @@ mod secure_routes {
         Json(request): Json<RoleChange>,
     ) -> Result<RawStatus<TokenResponseX>, ErrorStatus> {
         let request = context.update((), request);
-        let response = state
-            .role_change
-            .service()
-            .raw_oneshot(request)
-            .await?;
+        let response = state.role_change.service().raw_oneshot(request).await?;
         Ok(RawStatus::OK(response))
     }
 
@@ -112,11 +108,7 @@ mod unsecure_routes {
         State(state): State<Arc<AuthServices>>,
         Json(request): Json<PasswordChange>,
     ) -> Result<UpdateStatus<NoContent>, ErrorStatus> {
-        let response = state
-            .password_change
-            .service()
-            .oneshot(request)
-            .await?;
+        let response = state.password_change.service().oneshot(request).await?;
         // incorrect_role
         // user disabled
         // unauthorized

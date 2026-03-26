@@ -80,11 +80,7 @@ mod routes {
         Query(query_params): Query<ListParams>,
     ) -> Result<ListStatus<Function>, ErrorStatus> {
         let request = context.list(collection_param, query_params);
-        let response = state
-            .list_by_collection
-            .service()
-            .oneshot(request)
-            .await?;
+        let response = state.list_by_collection.service().oneshot(request).await?;
         Ok(ListStatus::OK(response))
     }
 

@@ -71,11 +71,7 @@ mod routes {
         Json(request): Json<ExecutionRequestInternal>,
     ) -> Result<CreateStatus<ExecutionResponseInternal>, ErrorStatus> {
         let request = context.create(function_param, request);
-        let response = state
-            .execute_version
-            .service()
-            .oneshot(request)
-            .await?;
+        let response = state.execute_version.service().oneshot(request).await?;
         Ok(CreateStatus::CREATED(response))
     }
 
@@ -113,11 +109,7 @@ mod routes {
             at: at_param.at,
         };
         let request = context.read(param);
-        let response = state
-            .download_state
-            .service()
-            .raw_oneshot(request)
-            .await?;
+        let response = state.download_state.service().raw_oneshot(request).await?;
         Ok(ParquetFile(response))
     }
 }

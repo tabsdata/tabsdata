@@ -10,7 +10,7 @@ use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::transaction::{TransactionDB, TransactionValueBuilder};
 use td_objects::transaction::map::TransactionMap;
 use td_objects::types::recursion::RecursionOptions;
-use td_tower::extractors::{Ref};
+use td_tower::extractors::Ref;
 
 pub async fn with_existing_recursion_options(
     execution: Ref<ExecutionDB>,

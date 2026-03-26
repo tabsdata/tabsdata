@@ -424,43 +424,41 @@ pub fn typed_string(input: &ItemStruct, typed: Option<TypedString>) -> proc_macr
             let min_len = downcast_option!(t.min_len, usize);
             let max_len = downcast_option!(t.max_len, usize);
 
-            if let (Some(l), Some(mn)) = (len, min_len) {
-                if l < mn {
-                    return syn::Error::new_spanned(name, "len must be >= min_len")
-                        .to_compile_error();
-                }
+            if let (Some(l), Some(mn)) = (len, min_len)
+                && l < mn
+            {
+                return syn::Error::new_spanned(name, "len must be >= min_len").to_compile_error();
             }
-            if let (Some(l), Some(mx)) = (len, max_len) {
-                if l > mx {
-                    return syn::Error::new_spanned(name, "len must be <= max_len")
-                        .to_compile_error();
-                }
+            if let (Some(l), Some(mx)) = (len, max_len)
+                && l > mx
+            {
+                return syn::Error::new_spanned(name, "len must be <= max_len").to_compile_error();
             }
-            if let (Some(mn), Some(mx)) = (min_len, max_len) {
-                if mn > mx {
-                    return syn::Error::new_spanned(name, "min_len must be <= max_len")
-                        .to_compile_error();
-                }
+            if let (Some(mn), Some(mx)) = (min_len, max_len)
+                && mn > mx
+            {
+                return syn::Error::new_spanned(name, "min_len must be <= max_len")
+                    .to_compile_error();
             }
 
             if let Some(ref d) = downcast_option!(t.default, String) {
-                if let Some(l) = len {
-                    if d.len() != l {
-                        return syn::Error::new_spanned(name, "default length must equal len")
-                            .to_compile_error();
-                    }
+                if let Some(l) = len
+                    && d.len() != l
+                {
+                    return syn::Error::new_spanned(name, "default length must equal len")
+                        .to_compile_error();
                 }
-                if let Some(mn) = min_len {
-                    if d.len() < mn {
-                        return syn::Error::new_spanned(name, "default length must be >= min_len")
-                            .to_compile_error();
-                    }
+                if let Some(mn) = min_len
+                    && d.len() < mn
+                {
+                    return syn::Error::new_spanned(name, "default length must be >= min_len")
+                        .to_compile_error();
                 }
-                if let Some(mx) = max_len {
-                    if d.len() > mx {
-                        return syn::Error::new_spanned(name, "default length must be <= max_len")
-                            .to_compile_error();
-                    }
+                if let Some(mx) = max_len
+                    && d.len() > mx
+                {
+                    return syn::Error::new_spanned(name, "default length must be <= max_len")
+                        .to_compile_error();
                 }
             }
 
@@ -591,25 +589,25 @@ fn typed_numeric<T: FromStr + ToTokens + PartialOrd>(
         Some(t) => {
             let min = downcast_option!(t.min, T);
             let max = downcast_option!(t.max, T);
-            if let (Some(mn), Some(mx)) = (&min, &max) {
-                if mn > mx {
-                    return syn::Error::new_spanned(name, "min must be <= max").to_compile_error();
-                }
+            if let (Some(mn), Some(mx)) = (&min, &max)
+                && mn > mx
+            {
+                return syn::Error::new_spanned(name, "min must be <= max").to_compile_error();
             }
 
             let default = downcast_option!(t.default, T);
             if let Some(ref d) = default {
-                if let Some(mn) = &min {
-                    if d < mn {
-                        return syn::Error::new_spanned(name, "default must be >= min")
-                            .to_compile_error();
-                    }
+                if let Some(mn) = &min
+                    && d < mn
+                {
+                    return syn::Error::new_spanned(name, "default must be >= min")
+                        .to_compile_error();
                 }
-                if let Some(mx) = &max {
-                    if d > mx {
-                        return syn::Error::new_spanned(name, "default must be <= max")
-                            .to_compile_error();
-                    }
+                if let Some(mx) = &max
+                    && d > mx
+                {
+                    return syn::Error::new_spanned(name, "default must be <= max")
+                        .to_compile_error();
                 }
             }
 

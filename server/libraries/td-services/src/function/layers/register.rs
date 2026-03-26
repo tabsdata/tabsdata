@@ -5,6 +5,7 @@
 use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
+use td_database::dynamic::DynamicConnection;
 use td_error::DisplayVec;
 use td_error::{ApiError, TdError, api_error, td_error};
 use td_execution::VersionResolver;
@@ -65,7 +66,6 @@ pub async fn validate_tables_do_not_exist(
     new_tables: Ref<Option<Vec<TableNameDto>>>,
     at_time: Ref<AtTime>,
 ) -> Result<(), TdError> {
-
     if let Some(new_tables) = new_tables.as_ref() {
         // First, validate there are no duplicates in the new tables.
         let duplicates = new_tables
@@ -247,7 +247,6 @@ pub async fn build_tables_trigger_versions(
     at_time: Ref<AtTime>,
     new_table_versions: Ref<Vec<TableDB>>,
 ) -> Result<Vec<TriggerDB>, TdError> {
-
     // Find existing downstream triggers (using table ids)
     let table_ids = new_table_versions
         .iter()
@@ -317,7 +316,6 @@ pub async fn build_dependency_versions(
     dependency_version_builder: Ref<DependencyDBBuilder>,
     at_time: Ref<AtTime>,
 ) -> Result<Vec<DependencyDB>, TdError> {
-
     let mut new_dependency_versions = HashMap::new();
 
     // Existing versions
@@ -382,13 +380,12 @@ pub async fn build_dependency_versions(
                 )
             })
             .collect();
-        let tables_found = conn
-            .fetch_all_at::<{ TableDBWithNames::Available }, TableDBWithNames>(
-                dependency_tables_lookup,
-                &at_time,
-            )
-            .await?;
-        tables_found
+
+        conn.fetch_all_at::<{ TableDBWithNames::Available }, TableDBWithNames>(
+            dependency_tables_lookup,
+            &at_time,
+        )
+        .await?
     };
 
     let tables_found: HashMap<_, _> = tables_found
@@ -512,7 +509,6 @@ pub async fn build_trigger_versions(
     trigger_version_builder: Ref<TriggerDBBuilder>,
     at_time: Ref<AtTime>,
 ) -> Result<Vec<TriggerDB>, TdError> {
-
     let mut new_trigger_versions = HashMap::new();
 
     // Fetch existing versions
@@ -563,13 +559,12 @@ pub async fn build_trigger_versions(
             .collect();
 
         // Here, even function created tables are already populated in the tables list.
-        let tables_found = conn
-            .fetch_all_at::<{ TableDBWithNames::Available }, TableDBWithNames>(
-                trigger_tables_lookup,
-                &at_time,
-            )
-            .await?;
-        tables_found
+
+        conn.fetch_all_at::<{ TableDBWithNames::Available }, TableDBWithNames>(
+            trigger_tables_lookup,
+            &at_time,
+        )
+        .await?
     };
 
     let tables_found: HashMap<_, _> = tables_found
@@ -658,7 +653,6 @@ pub async fn stop_current_workers(
     mut conn: MutRef<DynamicConnection<'static>>,
     function_version_id: Ref<Option<FunctionVersionId>>,
 ) -> Result<(), TdError> {
-
     if let Some(function_version_id) = function_version_id.deref() {
         // we cannot stop function workers
         let to_stop = and!(

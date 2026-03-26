@@ -7,10 +7,10 @@ use sea_query::{
     InsertStatement, JoinType, Keyword, Query, Table, TableCreateStatement,
 };
 
-use crate::schema::backend::{Backend, ViewDef};
 use super::collections::Collections;
 use super::roles::Roles;
 use super::users::Users;
+use crate::schema::backend::{Backend, ViewDef};
 
 #[derive(Iden)]
 pub enum Permissions {
@@ -140,10 +140,7 @@ pub fn views(b: &Backend) -> Vec<ViewDef> {
                     .finally(Expr::col((Permissions::Table, Permissions::EntityId))),
                     Alias::new("entity_id"),
                 )
-                .expr_as(
-                    Expr::col((Roles::Table, Roles::Name)),
-                    Alias::new("role"),
-                )
+                .expr_as(Expr::col((Roles::Table, Roles::Name)), Alias::new("role"))
                 .expr_as(
                     Expr::col((Collections::Table, Collections::Name)),
                     Alias::new("entity"),
@@ -179,10 +176,7 @@ pub fn views(b: &Backend) -> Vec<ViewDef> {
                 Query::select()
                     .expr(Expr::col((InterCollectionPermissions::Table, Asterisk)))
                     .expr_as(
-                        b.name_or_id(
-                            "users.name",
-                            "inter_collection_permissions.granted_by_id",
-                        ),
+                        b.name_or_id("users.name", "inter_collection_permissions.granted_by_id"),
                         Alias::new("granted_by"),
                     )
                     .expr_as(

@@ -43,9 +43,7 @@ pub trait CurrentQueries {
         <D as ListDto>::Dao: CurrentDao + States<S>;
 }
 
-fn select_current<const S: u8, D>(
-    condition: impl SqlCondition,
-) -> Result<SelectStatement, SqlError>
+fn select_current<const S: u8, D>(condition: impl SqlCondition) -> Result<SelectStatement, SqlError>
 where
     D: CurrentDao + States<S>,
 {

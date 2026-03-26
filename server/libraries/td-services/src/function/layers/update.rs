@@ -3,6 +3,7 @@
 //
 
 use std::ops::Deref;
+use td_database::dynamic::DynamicConnection;
 use td_error::{TdError, td_error};
 use td_objects::and;
 use td_objects::dxo::function::{FunctionDBBuilder, FunctionDBWithNames, FunctionUpdate};
@@ -28,7 +29,6 @@ pub async fn assert_function_name_not_exists(
     if let Some(name) = &function_update.name
         && *name != function.name
     {
-
         let found = conn
             .fetch_optional_current::<{ FunctionDBWithNames::Available }, FunctionDBWithNames>(
                 and!(*collection_id, name),

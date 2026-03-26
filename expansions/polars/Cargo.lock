@@ -6662,7 +6662,6 @@ dependencies = [
  "openssl",
  "strum",
  "td-build",
- "thiserror 2.0.18",
  "tm-error",
  "toml",
  "tower",

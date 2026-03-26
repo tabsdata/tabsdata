@@ -1,11 +1,8 @@
 //
-// Copyright 2026. Tabs Data Inc.
+// Copyright 2026 Tabs Data Inc.
 //
 
 //! A generic task runner for executing tasks with optional start/end times and heartbeats.
-//
-// Copyright 2026. Tabs Data Inc.
-//
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};

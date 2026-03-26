@@ -5,11 +5,11 @@
 #![allow(private_bounds, non_camel_case_types)]
 
 use td_authz::Authz;
+use td_authz::tower::InterColl;
 use td_error::TdError;
 use td_objects::dxo::inter_collection_access::{
     InterCollectionAccess, InterCollectionAccessBuilder,
 };
-use td_authz::tower::InterColl;
 use td_objects::tower_service::with::With;
 use td_tower::from_fn::from_fn;
 use td_tower::{layer, layers};

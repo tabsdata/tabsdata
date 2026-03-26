@@ -18,7 +18,7 @@ pub trait SeaQuerySqlxBuild {
     fn build_sea_query(self, db: impl DatabaseKind) -> (String, SqlxValues);
 }
 
-impl<'a, T> SeaQuerySqlxBuild for &'a mut T
+impl<T> SeaQuerySqlxBuild for &mut T
 where
     T: QueryStatementWriter,
 {

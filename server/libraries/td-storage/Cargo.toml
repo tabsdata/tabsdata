@@ -20,7 +20,14 @@ version = { workspace = true }
 
 [features]
 enterprise = []
-td-test = ["dummy", "mock-env", "test-utils"]
+td-test = [
+    "dummy",
+    "mock-env",
+    "test-utils",
+    "td-common/td-test",
+    "td-error/td-test",
+    "td-objects/td-test",
+]
 dummy = []
 mock-env = []
 test_logging = []
@@ -28,7 +35,7 @@ test_tower_metadata = []
 test-utils = []
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "td-build", "thiserror", "toml"]
+ignored = ["openssl", "td-build", "td-storage", "thiserror", "toml"]
 
 # Build dependencies
 
@@ -66,6 +73,9 @@ thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 tracing = { workspace = true }
 url = { workspace = true, features = ["serde"] }
+
+[dev-dependencies]
+td-storage = { workspace = true, features = ["td-test"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }

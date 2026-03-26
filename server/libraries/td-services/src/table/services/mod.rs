@@ -7,10 +7,10 @@ mod download;
 mod download_state;
 mod flow;
 mod list;
-mod list_history;
-mod list_history_by_collection;
 pub mod list_by_collection;
 mod list_data_versions;
+mod list_history;
+mod list_history_by_collection;
 mod sample;
 mod schema;
 
@@ -19,10 +19,10 @@ use crate::table::services::download::TableDownloadService;
 use crate::table::services::download_state::TableStateDownloadService;
 use crate::table::services::flow::TableFlowGraphService;
 use crate::table::services::list::TableListService;
-use crate::table::services::list_history::TableListHistoryService;
-use crate::table::services::list_history_by_collection::TableListHistoryByCollectionService;
 use crate::table::services::list_by_collection::TableListByCollectionService;
 use crate::table::services::list_data_versions::TableListDataVersionsService;
+use crate::table::services::list_history::TableListHistoryService;
+use crate::table::services::list_history_by_collection::TableListHistoryByCollectionService;
 use crate::table::services::sample::TableSampleService;
 use crate::table::services::schema::TableSchemaService;
 use ta_services::factory::ServiceFactory;
@@ -50,9 +50,9 @@ pub(crate) mod tests {
     use td_objects::dxo::dependency::DependencyDB;
     use td_objects::dxo::function::FunctionDB;
     use td_objects::dxo::table::TableDB;
-    use td_queries::CurrentQueries;
-    use td_queries::BasicQueries;
     use td_objects::types::basic::{FunctionStatus, TableName, TableStatus, UserId};
+    use td_queries::BasicQueries;
+    use td_queries::CurrentQueries;
 
     pub async fn assert_delete(
         db: &TdPool,
@@ -63,8 +63,7 @@ pub(crate) mod tests {
         // Assert current table version is deleted
         let table_versions: Vec<TableDB> = db
             .fetch_all_current::<{ TableDB::All }, TableDB>(&table_name)
-            .await
-            ?;
+            .await?;
         assert_eq!(table_versions.len(), 1);
         assert_eq!(table_versions[0].name, *table_name);
         assert_eq!(table_versions[0].collection_id, collection.id);
@@ -74,10 +73,7 @@ pub(crate) mod tests {
         let deleted_table = &table_versions[0];
 
         // Assert previous table versions exists (first active, then frozen, then deleted)
-        let table_versions: Vec<TableDB> = db
-            .fetch_all(&table_name)
-            .await
-            ?;
+        let table_versions: Vec<TableDB> = db.fetch_all(&table_name).await?;
         assert_eq!(table_versions.len(), 3);
         for table_version in &table_versions {
             assert_eq!(table_version.name, *table_name);
@@ -94,36 +90,26 @@ pub(crate) mod tests {
 
         // And that the function version is still active
         let function: FunctionDB = db
-            .fetch_one_current::<{ FunctionDB::All }, FunctionDB>(
-                &deleted_table.function_id,
-            )
-            .await
-            ?;
+            .fetch_one_current::<{ FunctionDB::All }, FunctionDB>(&deleted_table.function_id)
+            .await?;
         assert_eq!(function.status, FunctionStatus::Active);
 
         // And assert that all dependant function versions are also frozen
         let dependency_versions: Vec<DependencyDB> = db
-            .fetch_all_current::<{ DependencyDB::All }, DependencyDB>(
-                &table_versions[0].table_id,
-            )
-            .await
-            ?;
+            .fetch_all_current::<{ DependencyDB::All }, DependencyDB>(&table_versions[0].table_id)
+            .await?;
 
         for dependency_version in &dependency_versions {
             let function: FunctionDB = db
                 .fetch_one_current::<{ FunctionDB::All }, FunctionDB>(
                     &dependency_version.function_id,
                 )
-                .await
-                ?;
+                .await?;
             assert_eq!(function.status, FunctionStatus::Frozen);
 
             // Note that the function version in the dependency still points to the active function version
             // thus being active itself.
-            let function_version: FunctionDB = db
-                .fetch_one(&function.id)
-                .await
-                ?;
+            let function_version: FunctionDB = db.fetch_one(&function.id).await?;
             assert_eq!(function_version.status, FunctionStatus::Frozen);
         }
 
@@ -140,15 +126,11 @@ pub(crate) mod tests {
         // Assert table does exist
         let table: Option<TableDB> = db
             .fetch_optional_current::<{ TableDB::All }, TableDB>(&table_name)
-            .await
-            ?;
+            .await?;
         assert!(table.is_some());
 
         // Assert previous table versions exists, always active
-        let table_versions: Vec<TableDB> = db
-            .fetch_all(&table_name)
-            .await
-            ?;
+        let table_versions: Vec<TableDB> = db.fetch_all(&table_name).await?;
         for table_version in &table_versions {
             assert_eq!(table_version.name, *table_name);
             assert_eq!(table_version.collection_id, collection.id);

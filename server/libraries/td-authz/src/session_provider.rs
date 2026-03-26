@@ -6,7 +6,7 @@ use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use td_common::provider::{CachedProvider, Provider};
-use td_database::dynamic::DynamicConnection;
+use td_database::sea_query::executor::SeaExecutor;
 use td_error::{TdError, td_error};
 use td_objects::dxo::auth::SessionDBWithNames;
 use td_objects::types::basic::{AccessTokenId, SessionStatus};
@@ -19,9 +19,6 @@ pub type Sessions = CachedProvider<HashMap<AccessTokenId, Arc<Session>>, SqlSess
 pub enum SessionError {
     #[error("Session not found: {0}")]
     NotFound(AccessTokenId) = 4000,
-
-    #[error("Session not found: {0}")]
-    CouldNotGetDbConn(sqlx::Error) = 5000,
 }
 
 pub struct SqlSessionProvider {
@@ -50,14 +47,11 @@ impl SqlSessionProvider {
     }
 }
 
-impl<'a, 'c> Provider<HashMap<AccessTokenId, Arc<Session>>, &'a mut DynamicConnection<'c>>
+impl<E: SeaExecutor + Send> Provider<HashMap<AccessTokenId, Arc<Session>>, E>
     for SqlSessionProvider
 {
-    async fn get(
-        &self,
-        conn: &'a mut DynamicConnection<'c>,
-    ) -> Result<Arc<HashMap<AccessTokenId, Arc<Session>>>, TdError> {
-        let sessions = conn.fetch_all::<Session>(&SessionStatus::Active).await?;
+    async fn get(&self, conn: E) -> Result<Arc<HashMap<AccessTokenId, Arc<Session>>>, TdError> {
+        let sessions = BasicQueries::fetch_all::<Session>(conn, &SessionStatus::Active).await?;
         let sessions = sessions
             .into_iter()
             .map(|s| (s.access_token_id, Arc::new(s)))
@@ -65,7 +59,7 @@ impl<'a, 'c> Provider<HashMap<AccessTokenId, Arc<Session>>, &'a mut DynamicConne
         Ok(Arc::new(sessions))
     }
 
-    async fn purge(&self, conn: &'a mut DynamicConnection<'c>) -> Result<(), TdError> {
+    async fn purge(&self, conn: E) -> Result<(), TdError> {
         if self.time_to_purge() {
             conn.purge_sessions().await?;
         }

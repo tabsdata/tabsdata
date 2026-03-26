@@ -113,10 +113,7 @@ pub fn check_cargo_features() -> Result<(), Box<dyn Error>> {
                 })
                 .unwrap_or_default();
             let allow_extra = all_subfeatures.contains(&"*".to_string());
-            let subfeatures = all_subfeatures
-                .into_iter()
-                .filter(|s| s != "*")
-                .collect();
+            let subfeatures = all_subfeatures.into_iter().filter(|s| s != "*").collect();
             (key.clone(), (subfeatures, allow_extra))
         })
         .collect();
@@ -155,7 +152,8 @@ pub fn check_cargo_features() -> Result<(), Box<dyn Error>> {
             ))
             .expect("⛔️ Failed to extract metadata from member Cargo.toml");
 
-        for (descriptor_feature, (descriptor_subfeatures, allow_extra)) in &descriptor_features_map {
+        for (descriptor_feature, (descriptor_subfeatures, allow_extra)) in &descriptor_features_map
+        {
             if !member_features.contains_key(descriptor_feature) {
                 missing_features_report.push(format!(
                     "⛔️ Crate '{workspace_member:?}' is missing feature '{descriptor_feature}'"

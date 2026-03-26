@@ -154,7 +154,7 @@ where
             let col = D::col_for_type(id.as_type_id()).ok_or_else(|| {
                 SqlError::TypeNotFound(
                     std::any::type_name_of_val(id).to_string(),
-                    D::table().into_table_ref(),
+                    Box::new(D::table().into_table_ref()),
                 )
             })?;
             Ok(Expr::col(col).eq(id.as_sea_value()))
@@ -174,7 +174,7 @@ where
     let col = D::col_for_type(id.as_type_id()).ok_or_else(|| {
         SqlError::TypeNotFound(
             std::any::type_name_of_val(id).to_string(),
-            D::table().into_table_ref(),
+            Box::new(D::table().into_table_ref()),
         )
     })?;
     let sub = Query::select()

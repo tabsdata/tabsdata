@@ -149,40 +149,34 @@ impl TdPool {
                                 to = td_schema::schema::archive::MIN_ARCHIVE,
                                 "Applying legacy SQLite migrations"
                             );
-                            for v in (current + 1)
-                                ..=td_schema::schema::archive::MIN_ARCHIVE
-                            {
+                            for v in (current + 1)..=td_schema::schema::archive::MIN_ARCHIVE {
                                 debug!(delta = v, "Applying historic SQLite migration");
-                                let stmts =
-                                    td_schema::schema::archive::historic::get(v);
-                                tx.as_mut_conn().execute_batch(&stmts).await.map_err(
-                                    DbError::FailedToCreateOrUpgradeDatabaseSchema,
-                                )?;
+                                let stmts = td_schema::schema::archive::historic::get(v);
+                                tx.as_mut_conn()
+                                    .execute_batch(&stmts)
+                                    .await
+                                    .map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
                                 debug!(delta = v, "Historic migration applied");
                             }
 
                             // Normalize schema types and indices to match the
                             // programmatic v5 archive.
                             debug!("Normalizing schema to match v5 archive");
-                            let stmts =
-                                td_schema::schema::archive::historic::normalize();
-                            tx.as_mut_conn().execute_batch(&stmts).await.map_err(
-                                DbError::FailedToCreateOrUpgradeDatabaseSchema,
-                            )?;
+                            let stmts = td_schema::schema::archive::historic::normalize();
+                            tx.as_mut_conn()
+                                .execute_batch(&stmts)
+                                .await
+                                .map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
 
                             // Clean up the legacy sqlx migrations tracking table.
-                            tx.as_mut_conn().execute_batch(&[
-                                "DROP TABLE IF EXISTS _sqlx_migrations".to_string(),
-                            ])
-                            .await
-                            .map_err(
-                                DbError::FailedToCreateOrUpgradeDatabaseSchema,
-                            )?;
+                            tx.as_mut_conn()
+                                .execute_batch(&[
+                                    "DROP TABLE IF EXISTS _sqlx_migrations".to_string()
+                                ])
+                                .await
+                                .map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
                             current = td_schema::schema::archive::MIN_ARCHIVE;
-                            info!(
-                                version = current,
-                                "Legacy SQLite migrations complete"
-                            );
+                            info!(version = current, "Legacy SQLite migrations complete");
                         }
                         _ => {
                             return Err(DbError::DatabaseCorrupted(format!(
@@ -198,7 +192,8 @@ impl TdPool {
                 for v in (current + 1)..=CURRENT_VERSION {
                     debug!(delta = v, "Applying schema delta");
                     let stmts = td_schema::schema::deltas::get(v, self.kind());
-                    tx.as_mut_conn().execute_batch(&stmts)
+                    tx.as_mut_conn()
+                        .execute_batch(&stmts)
                         .await
                         .map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
                     debug!(delta = v, "Schema delta applied");
@@ -231,7 +226,8 @@ impl TdPool {
                     .await
                     .map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
                 let stmts = td_schema::schema::current::Schema::build(self.kind());
-                tx.as_mut_conn().execute_batch(&stmts)
+                tx.as_mut_conn()
+                    .execute_batch(&stmts)
                     .await
                     .map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
                 tx.commit()

@@ -9,7 +9,6 @@ use std::future::Future;
 pub mod reqs;
 pub mod sqlx;
 
-#[cfg(feature = "test-utils")]
 pub mod file;
 
 pub enum TestSetupExecution<T> {

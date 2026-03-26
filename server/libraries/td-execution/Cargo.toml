@@ -20,7 +20,16 @@ version = { workspace = true }
 
 [features]
 enterprise = []
-td-test = ["dummy", "mock-env", "test-utils"]
+td-test = [
+    "dummy",
+    "mock-env",
+    "test-utils",
+    "td-database/td-test",
+    "td-error/td-test",
+    "td-objects/td-test",
+    "td-queries/td-test",
+    "te-execution/td-test",
+]
 dummy = []
 mock-env = []
 test_logging = []
@@ -28,7 +37,7 @@ test_tower_metadata = []
 test-utils = []
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "strum", "thiserror"]
+ignored = ["openssl", "strum", "td-execution", "thiserror"]
 
 # Build dependencies
 
@@ -58,7 +67,6 @@ td-test = { workspace = true }
 derive_builder = { workspace = true }
 itertools = { workspace = true }
 petgraph = { workspace = true }
-sqlx = { workspace = true }
 strum = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
@@ -66,9 +74,8 @@ tokio = { workspace = true, features = ["full"] }
 # Development dependencies
 
 [dev-dependencies]
-td-objects = { workspace = true, features = ["td-test"] }
-td-queries = { workspace = true, features = ["td-test"] }
-td-security = { workspace = true, features = ["td-test"] }
+td-execution = { workspace = true, features = ["td-test"] }
+td-security = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }

@@ -43,7 +43,7 @@ mod tests {
     #[test]
     fn test_unit() {
         assert_eq!(sql(()), "TRUE");
-        assert_eq!(sql(&()), "TRUE");
+        assert_eq!(sql(()), "TRUE");
     }
 
     // ----- leaf types ---------------------------------------------------------
@@ -59,7 +59,7 @@ mod tests {
     #[test]
     fn test_ref_delegation() {
         let v = VCol::try_from("ref_coll").unwrap();
-        assert_eq!(sql(&&v), r#""v" = 'ref_coll'"#);
+        assert_eq!(sql(&v), r#""v" = 'ref_coll'"#);
     }
 
     // ----- and! ---------------------------------------------------------------
@@ -67,14 +67,14 @@ mod tests {
     #[test]
     fn test_all1() {
         let v = VCol::try_from("a").unwrap();
-        assert_eq!(sql(&and!(v)), r#""v" = 'a'"#);
+        assert_eq!(sql(and!(v)), r#""v" = 'a'"#);
     }
 
     #[test]
     fn test_all2() {
         let a = VCol::try_from("c").unwrap();
         let b = VCol::try_from("t").unwrap();
-        assert_eq!(sql(&and!(a, b)), r#""v" = 'c' AND "v" = 't'"#);
+        assert_eq!(sql(and!(a, b)), r#""v" = 'c' AND "v" = 't'"#);
     }
 
     #[test]
@@ -83,7 +83,7 @@ mod tests {
         let b = VCol::try_from("t").unwrap();
         let c = VCol::try_from("col").unwrap();
         assert_eq!(
-            sql(&and!(a, b, c)),
+            sql(and!(a, b, c)),
             r#""v" = 'c' AND "v" = 't' AND "v" = 'col'"#
         );
     }
@@ -95,7 +95,7 @@ mod tests {
         let c = VCol::try_from("t1").unwrap();
         let d = VCol::try_from("t2").unwrap();
         assert_eq!(
-            sql(&and!(a, b, c, d)),
+            sql(and!(a, b, c, d)),
             r#""v" = 'c1' AND "v" = 'c2' AND "v" = 't1' AND "v" = 't2'"#
         );
     }
@@ -105,14 +105,14 @@ mod tests {
     #[test]
     fn test_any1() {
         let v = VCol::try_from("b").unwrap();
-        assert_eq!(sql(&or!(v)), r#""v" = 'b'"#);
+        assert_eq!(sql(or!(v)), r#""v" = 'b'"#);
     }
 
     #[test]
     fn test_any2() {
         let a = VCol::try_from("c1").unwrap();
         let b = VCol::try_from("c2").unwrap();
-        assert_eq!(sql(&or!(a, b)), r#""v" = 'c1' OR "v" = 'c2'"#);
+        assert_eq!(sql(or!(a, b)), r#""v" = 'c1' OR "v" = 'c2'"#);
     }
 
     #[test]
@@ -121,7 +121,7 @@ mod tests {
         let b = VCol::try_from("c2").unwrap();
         let c = VCol::try_from("c3").unwrap();
         assert_eq!(
-            sql(&or!(a, b, c)),
+            sql(or!(a, b, c)),
             r#""v" = 'c1' OR "v" = 'c2' OR "v" = 'c3'"#
         );
     }
@@ -133,7 +133,7 @@ mod tests {
         let c = VCol::try_from("c3").unwrap();
         let d = VCol::try_from("c4").unwrap();
         assert_eq!(
-            sql(&or!(a, b, c, d)),
+            sql(or!(a, b, c, d)),
             r#""v" = 'c1' OR "v" = 'c2' OR "v" = 'c3' OR "v" = 'c4'"#
         );
     }
@@ -170,7 +170,7 @@ mod tests {
         let b = VCol::try_from("t1").unwrap();
         let c = VCol::try_from("t2").unwrap();
         assert_eq!(
-            sql(&and!(a, or!(b, c))),
+            sql(and!(a, or!(b, c))),
             r#""v" = 'c' AND ("v" = 't1' OR "v" = 't2')"#
         );
     }
@@ -182,7 +182,7 @@ mod tests {
         let c = VCol::try_from("c2").unwrap();
         let d = VCol::try_from("t2").unwrap();
         assert_eq!(
-            sql(&or!(and!(a, b), and!(c, d))),
+            sql(or!(and!(a, b), and!(c, d))),
             r#"("v" = 'c1' AND "v" = 't1') OR ("v" = 'c2' AND "v" = 't2')"#
         );
     }
@@ -194,7 +194,7 @@ mod tests {
         let c = VCol::try_from("t1").unwrap();
         let d = VCol::try_from("t2").unwrap();
         assert_eq!(
-            sql(&and!(or!(a, b), or!(c, d))),
+            sql(and!(or!(a, b), or!(c, d))),
             r#"("v" = 'c1' OR "v" = 'c2') AND ("v" = 't1' OR "v" = 't2')"#
         );
     }
@@ -204,13 +204,13 @@ mod tests {
     #[test]
     fn test_all1_vec() {
         let v = vec![VCol::try_from("a").unwrap(), VCol::try_from("b").unwrap()];
-        assert_eq!(sql(&and!(v)), r#""v" = 'a' OR "v" = 'b'"#);
+        assert_eq!(sql(and!(v)), r#""v" = 'a' OR "v" = 'b'"#);
     }
 
     #[test]
     fn test_any1_vec() {
         let v = vec![VCol::try_from("a").unwrap(), VCol::try_from("b").unwrap()];
-        assert_eq!(sql(&or!(v)), r#""v" = 'a' OR "v" = 'b'"#);
+        assert_eq!(sql(or!(v)), r#""v" = 'a' OR "v" = 'b'"#);
     }
 
     // ----- Type-position macros -----------------------------------------------

@@ -55,11 +55,13 @@ fn user_indices() -> Vec<IndexCreateStatement> {
 }
 
 fn collection_indices() -> Vec<IndexCreateStatement> {
-    vec![Index::create()
-        .name("collections___name___idx")
-        .table(Collections::Table)
-        .col(Collections::Name)
-        .to_owned()]
+    vec![
+        Index::create()
+            .name("collections___name___idx")
+            .table(Collections::Table)
+            .col(Collections::Name)
+            .to_owned(),
+    ]
 }
 
 fn function_indices() -> Vec<IndexCreateStatement> {
@@ -313,11 +315,13 @@ fn triggers_current_indices() -> Vec<IndexCreateStatement> {
 }
 
 fn bundle_indices() -> Vec<IndexCreateStatement> {
-    vec![Index::create()
-        .name("bundles___collection_id___idx")
-        .table(Bundles::Table)
-        .col(Bundles::CollectionId)
-        .to_owned()]
+    vec![
+        Index::create()
+            .name("bundles___collection_id___idx")
+            .table(Bundles::Table)
+            .col(Bundles::CollectionId)
+            .to_owned(),
+    ]
 }
 
 fn dependency_indices() -> Vec<IndexCreateStatement> {

@@ -3057,18 +3057,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "td-type"
-version = "1.9.0"
-dependencies = [
- "darling 0.23.0",
- "openssl",
- "proc-macro2",
- "quote",
- "syn",
- "td-shared",
-]
-
-[[package]]
 name = "tempfile"
 version = "3.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3159,6 +3147,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "tm-objects"
+version = "1.9.0"
+dependencies = [
+ "darling 0.23.0",
+ "heck",
+ "openssl",
+ "proc-macro2",
+ "quote",
+ "syn",
+ "td-shared",
+]
+
+[[package]]
 name = "tm-pyo3"
 version = "1.9.0"
 dependencies = [
@@ -3172,16 +3173,6 @@ name = "tm-services"
 version = "1.9.0"
 dependencies = [
  "openssl",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "tm-sql"
-version = "1.9.0"
-dependencies = [
- "openssl",
- "proc-macro2",
  "quote",
  "syn",
 ]

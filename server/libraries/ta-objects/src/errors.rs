@@ -29,7 +29,7 @@ pub enum SqlError {
     #[error("[{0}] SQL error: {1}")]
     AnySqlxError(String, #[source] sqlx::Error) = 5000,
     #[error("Type with name '{0}' was not found in '{1:?}'")]
-    TypeNotFound(String, TableRef) = 5001,
+    TypeNotFound(String, Box<TableRef>) = 5001,
     #[error("Error building SQL Query: {0}")]
     QueryError(#[from] sea_query::error::Error) = 5002,
     #[error(
@@ -112,7 +112,7 @@ fn parse_db_error_info(db_err: &dyn sqlx::error::DatabaseError) -> DbErrorInfo {
             return DbErrorInfo {
                 columns: after
                     .split(", ")
-                    .filter_map(|part| part.split('.').last())
+                    .filter_map(|part| part.split('.').next_back())
                     .map(|s| s.to_string())
                     .collect(),
                 table,
@@ -126,14 +126,14 @@ fn parse_db_error_info(db_err: &dyn sqlx::error::DatabaseError) -> DbErrorInfo {
     #[cfg(feature = "mysql")]
     {
         let msg = db_err.message();
-        if let Some(rest) = msg.strip_prefix("Column '") {
-            if let Some(col) = rest.split('\'').next() {
-                return DbErrorInfo {
-                    columns: vec![col.to_string()],
-                    table,
-                    detail,
-                };
-            }
+        if let Some(rest) = msg.strip_prefix("Column '")
+            && let Some(col) = rest.split('\'').next()
+        {
+            return DbErrorInfo {
+                columns: vec![col.to_string()],
+                table,
+                detail,
+            };
         }
     }
 

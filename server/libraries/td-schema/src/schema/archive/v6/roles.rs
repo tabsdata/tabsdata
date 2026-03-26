@@ -7,8 +7,8 @@ use sea_query::{
     JoinType, Keyword, Query, Table, TableCreateStatement,
 };
 
-use crate::schema::backend::{Backend, ViewDef};
 use super::users::Users;
+use crate::schema::backend::{Backend, ViewDef};
 
 #[derive(Iden)]
 pub enum Roles {
@@ -49,7 +49,12 @@ pub fn tables() -> Vec<TableCreateStatement> {
             .to_owned(),
         Table::create()
             .table(UsersRoles::Table)
-            .col(ColumnDef::new(UsersRoles::Id).text().not_null().primary_key())
+            .col(
+                ColumnDef::new(UsersRoles::Id)
+                    .text()
+                    .not_null()
+                    .primary_key(),
+            )
             .col(ColumnDef::new(UsersRoles::UserId).text().not_null())
             .col(ColumnDef::new(UsersRoles::RoleId).text().not_null())
             .col(ColumnDef::new(UsersRoles::AddedOn).timestamp().not_null())
@@ -164,8 +169,16 @@ const ADMIN_USER_NAME: &str = "admin";
 
 pub fn seed() -> Vec<InsertStatement> {
     let role_inserts = [
-        ("00000000000000000000000008", "sys_admin", "System Administrator Role"),
-        ("0000000000000000000000000C", "sec_admin", "Security Administrator Role"),
+        (
+            "00000000000000000000000008",
+            "sys_admin",
+            "System Administrator Role",
+        ),
+        (
+            "0000000000000000000000000C",
+            "sec_admin",
+            "Security Administrator Role",
+        ),
         ("0000000000000000000000000G", "user", "User Role"),
     ];
 
