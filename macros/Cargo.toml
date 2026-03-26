@@ -34,11 +34,10 @@ members = [
     "helpers/td-shared",
     "facets/td-apiforge",
     "facets/td-attach",
-    "facets/td-type",
     "facets/tm-error",
+    "facets/tm-objects",
     "facets/tm-pyo3",
     "facets/tm-services",
-    "facets/tm-sql",
     "facets/tm-test",
     "facets/tm-tower",
     "facets/tm-workspace"
@@ -99,6 +98,9 @@ version = "0.23.0"
 
 [workspace.dependencies.duct]
 version = "1.1.1"
+
+[workspace.dependencies.heck]
+version = "0.5.0"
 
 [workspace.dependencies.openssl]
 version = "0.10.76"

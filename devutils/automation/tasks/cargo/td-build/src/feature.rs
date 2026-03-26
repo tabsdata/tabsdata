@@ -101,10 +101,10 @@ pub fn check_cargo_features() -> Result<(), Box<dyn Error>> {
         .and_then(|f| f.as_table())
         .ok_or(format!("⛔️ No [{TAG_FEATURES}] section in Manifest.toml"))
         .expect("⛔️ Failed to extract metadata from Manifest.toml");
-    let descriptor_features_map: HashMap<String, Vec<String>> = descriptor_features
+    let descriptor_features_map: HashMap<String, (Vec<String>, bool)> = descriptor_features
         .iter()
         .map(|(key, value)| {
-            let subfeatures = value
+            let all_subfeatures: Vec<String> = value
                 .as_array()
                 .map(|arr| {
                     arr.iter()
@@ -112,7 +112,12 @@ pub fn check_cargo_features() -> Result<(), Box<dyn Error>> {
                         .collect()
                 })
                 .unwrap_or_default();
-            (key.clone(), subfeatures)
+            let allow_extra = all_subfeatures.contains(&"*".to_string());
+            let subfeatures = all_subfeatures
+                .into_iter()
+                .filter(|s| s != "*")
+                .collect();
+            (key.clone(), (subfeatures, allow_extra))
         })
         .collect();
 
@@ -150,7 +155,7 @@ pub fn check_cargo_features() -> Result<(), Box<dyn Error>> {
             ))
             .expect("⛔️ Failed to extract metadata from member Cargo.toml");
 
-        for (descriptor_feature, descriptor_subfeatures) in &descriptor_features_map {
+        for (descriptor_feature, (descriptor_subfeatures, allow_extra)) in &descriptor_features_map {
             if !member_features.contains_key(descriptor_feature) {
                 missing_features_report.push(format!(
                     "⛔️ Crate '{workspace_member:?}' is missing feature '{descriptor_feature}'"
@@ -158,7 +163,7 @@ pub fn check_cargo_features() -> Result<(), Box<dyn Error>> {
                 continue;
             }
 
-            let member_subfeatures: Vec<_> = member_features
+            let member_subfeatures: Vec<String> = member_features
                 .get(descriptor_feature)
                 .and_then(|f| f.as_array())
                 .map(|arr| {
@@ -168,9 +173,23 @@ pub fn check_cargo_features() -> Result<(), Box<dyn Error>> {
                 })
                 .unwrap_or_default();
 
-            if member_subfeatures != *descriptor_subfeatures {
+            let missing: Vec<_> = descriptor_subfeatures
+                .iter()
+                .filter(|s| !member_subfeatures.contains(s))
+                .collect();
+            let unexpected: Vec<_> = member_subfeatures
+                .iter()
+                .filter(|s| !descriptor_subfeatures.contains(s))
+                .collect();
+
+            if !missing.is_empty() {
                 missing_features_report.push(format!(
-                    "⛔️ Crate '{workspace_member:?}': Feature '{descriptor_feature}' has mismatched subfeatures. Expected: {descriptor_subfeatures:?}, Found: {member_subfeatures:?}"
+                    "⛔️ Crate '{workspace_member:?}': Feature '{descriptor_feature}' is missing required subfeatures: {missing:?}. Found: {member_subfeatures:?}"
+                ));
+            }
+            if !*allow_extra && !unexpected.is_empty() {
+                missing_features_report.push(format!(
+                    "⛔️ Crate '{workspace_member:?}': Feature '{descriptor_feature}' has unexpected subfeatures: {unexpected:?}. Expected: {descriptor_subfeatures:?}"
                 ));
             }
         }

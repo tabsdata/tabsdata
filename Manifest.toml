@@ -3,6 +3,7 @@
 #
 
 [features]
+# Required features and subfeatures for all crates. "*" is a subfeature marker that means "any other subfeatures".
 
 # Test compound feature for all features than should normally be always activated when running tests.
 td-test = ["dummy", "mock-env", "test-utils"]
@@ -16,4 +17,4 @@ mock-env = []
 
 # Some crates require extra functionalities in order to be tested in other crates. It is exposed through this
 # feature.
-test-utils = []
+test-utils = ["*"]
