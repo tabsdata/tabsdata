@@ -53,10 +53,20 @@ impl ToTokens for DaoArguments {
             args.push(quote! { order_by(col = #col, dir = #dir) });
         }
         if let Some(versioned) = &self.versioned {
-            let pk = &versioned.pk;
-            let version_by = &versioned.version_by;
-            let partition_by = &versioned.partition_by;
-            args.push(quote! { versioned(pk = #pk, version_by = #version_by, partition_by = #partition_by) });
+            let mut v_args = Vec::new();
+            if let Some(pk) = &versioned.pk {
+                v_args.push(quote! { pk = #pk });
+            }
+            if let Some(version_by) = &versioned.version_by {
+                v_args.push(quote! { version_by = #version_by });
+            }
+            if let Some(partition_by) = &versioned.partition_by {
+                v_args.push(quote! { partition_by = #partition_by });
+            }
+            if let Some(current) = &versioned.current {
+                v_args.push(quote! { current = #current });
+            }
+            args.push(quote! { versioned(#(#v_args),*) });
         }
         if let Some(recursive) = &self.recursive {
             let up = &recursive.up;
@@ -92,7 +102,10 @@ impl DaoArguments {
         DaoArguments {
             sql_table: other.sql_table.or(self.sql_table),
             order_by: other.order_by.or(self.order_by),
-            versioned: other.versioned.or(self.versioned),
+            versioned: match (self.versioned, other.versioned) {
+                (Some(base), Some(child)) => Some(base.override_with(child)),
+                (base, child) => child.or(base),
+            },
             recursive: other.recursive.or(self.recursive),
             data_version: if other.data_version.is_present() {
                 other.data_version
@@ -122,9 +135,21 @@ fn default_order_dir() -> String {
 
 #[derive(Debug, FromMeta)]
 struct VersionedArguments {
-    pk: String,
-    version_by: String,
-    partition_by: String,
+    pk: Option<String>,
+    version_by: Option<String>,
+    partition_by: Option<String>,
+    current: Option<String>,
+}
+
+impl VersionedArguments {
+    fn override_with(self, other: VersionedArguments) -> VersionedArguments {
+        VersionedArguments {
+            pk: other.pk.or(self.pk),
+            version_by: other.version_by.or(self.version_by),
+            partition_by: other.partition_by.or(self.partition_by),
+            current: other.current.or(self.current),
+        }
+    }
 }
 
 #[derive(Debug, FromMeta)]
@@ -259,6 +284,7 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
     };
 
     // ---- DaoCore -----------------------------------------------------------
+    let display_name = struct_name_to_display_name(&ident.to_string());
     let dao_core = quote! {
         impl #impl_generics ta_objects::DaoCore for #ident #ty_generics #where_clause {
             fn table() -> Self::Iden {
@@ -276,6 +302,20 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
             fn order_by() -> impl IntoIterator<Item = (Self::Iden, sea_query::Order)>
             {
                 [(#table_iden::#order_col_variant, #order_dir)]
+            }
+            fn display_name() -> &'static str {
+                #display_name
+            }
+            fn column_display_values(&self) -> Vec<(String, String)> {
+                use ta_objects::SeaValue;
+                vec![
+                    #(
+                        (
+                            sea_query::Iden::to_string(&#table_iden::#field_iden_variants),
+                            self.#field_names.display_value(),
+                        ),
+                    )*
+                ]
             }
         }
     };
@@ -344,12 +384,54 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
     let access_trait = match (&parsed.versioned, parsed.data_version.is_present()) {
         (None, false) => dao_impl,
         (Some(v), is_data_version) => {
-            let version_variant = iden_variant_from_str(&v.version_by);
-            let partition_variant = iden_variant_from_str(&v.partition_by);
-            let pk_variant = iden_variant_from_str(&v.pk);
-            let pk_type = require_field!(fields, &v.pk, "versioned", ident);
-            let version_type = require_field!(fields, &v.version_by, "versioned", ident);
-            let partition_type = require_field!(fields, &v.partition_by, "versioned", ident);
+            let pk_str = match &v.pk {
+                Some(s) => s,
+                None => {
+                    return syn::Error::new_spanned(ident, "versioned: `pk` is required")
+                        .to_compile_error()
+                        .into();
+                }
+            };
+            let version_by_str = match &v.version_by {
+                Some(s) => s,
+                None => {
+                    return syn::Error::new_spanned(
+                        ident,
+                        "versioned: `version_by` is required",
+                    )
+                    .to_compile_error()
+                    .into();
+                }
+            };
+            let partition_by_str = match &v.partition_by {
+                Some(s) => s,
+                None => {
+                    return syn::Error::new_spanned(
+                        ident,
+                        "versioned: `partition_by` is required",
+                    )
+                    .to_compile_error()
+                    .into();
+                }
+            };
+            let version_variant = iden_variant_from_str(version_by_str);
+            let partition_variant = iden_variant_from_str(partition_by_str);
+            let pk_variant = iden_variant_from_str(pk_str);
+            let pk_type = require_field!(fields, pk_str, "versioned", ident);
+            let version_type = require_field!(fields, version_by_str, "versioned", ident);
+            let partition_type = require_field!(fields, partition_by_str, "versioned", ident);
+
+            let current_impl = v.current.as_ref().map(|current_table| {
+                quote! {
+                    impl #impl_generics ta_objects::CurrentDao
+                        for #ident #ty_generics #where_clause
+                    {
+                        fn current_table_name() -> &'static str {
+                            #current_table
+                        }
+                    }
+                }
+            });
 
             let versioned_impl = quote! {
                 impl #impl_generics ta_objects::VersionedDao
@@ -370,6 +452,7 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
                         #table_iden::#version_variant
                     }
                 }
+                #current_impl
             };
 
             if is_data_version {
@@ -541,6 +624,34 @@ fn is_sqlx_skip(f: &syn::Field) -> bool {
             .map(|ident| ident == "skip")
             .unwrap_or(false)
     })
+}
+
+/// Convert a DAO struct name to a human-readable display name.
+/// Strips from the first `DB` occurrence onwards, then inserts spaces
+/// before uppercase-to-lowercase transitions (CamelCase word boundaries).
+/// `UserDB` → `"User"`, `FunctionRunDB` → `"Function Run"`,
+/// `FunctionDBWithNames` → `"Function"`.
+fn struct_name_to_display_name(name: &str) -> String {
+    let name = match name.find("DB") {
+        Some(pos) if pos > 0 => &name[..pos],
+        _ => name,
+    };
+    let mut result = String::new();
+    let chars: Vec<char> = name.chars().collect();
+    for (i, &c) in chars.iter().enumerate() {
+        if i > 0 && c.is_uppercase() {
+            // Only add a space at a real word boundary:
+            // uppercase followed by lowercase (e.g. "Run" in "FunctionRun")
+            // or preceded by lowercase (e.g. "R" after "function")
+            let prev_lower = chars[i - 1].is_lowercase();
+            let next_lower = chars.get(i + 1).is_some_and(|c| c.is_lowercase());
+            if prev_lower || next_lower {
+                result.push(' ');
+            }
+        }
+        result.push(c);
+    }
+    result
 }
 
 fn is_dao_immutable(f: &syn::Field) -> bool {

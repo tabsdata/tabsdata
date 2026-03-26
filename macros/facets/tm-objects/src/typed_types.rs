@@ -128,6 +128,10 @@ fn impl_sql_condition(name: &Ident) -> proc_macro2::TokenStream {
             fn resolve<D: ta_objects::DaoCore>(&self) -> Result<sea_query::Condition, ta_objects::errors::SqlError> {
                 ta_objects::sql_condition::resolve_leaf_eq::<D>(self)
             }
+
+            fn display_values<D: ta_objects::DaoCore>(&self) -> Vec<(String, String)> {
+                ta_objects::sql_condition::leaf_display_values::<D>(self)
+            }
         }
     }
 }
@@ -985,6 +989,10 @@ pub fn typed_composed(input: &ItemStruct, typed: ComposedTyped) -> proc_macro2::
             fn resolve<D: ta_objects::DaoCore>(&self) -> Result<sea_query::Condition, ta_objects::errors::SqlError> {
                 ta_objects::sql_condition::resolve_leaf_eq::<D>(self)
             }
+
+            fn display_values<D: ta_objects::DaoCore>(&self) -> Vec<(String, String)> {
+                ta_objects::sql_condition::leaf_display_values::<D>(self)
+            }
         }
 
         impl std::ops::Deref for #name {
@@ -1199,6 +1207,10 @@ pub fn typed_tag(args: TokenStream, item: TokenStream) -> TokenStream {
             fn resolve<D: ta_objects::DaoCore>(&self) -> Result<sea_query::Condition, ta_objects::errors::SqlError> {
                 ta_objects::sql_condition::resolve_leaf_eq::<D>(self)
             }
+
+            fn display_values<D: ta_objects::DaoCore>(&self) -> Vec<(String, String)> {
+                ta_objects::sql_condition::leaf_display_values::<D>(self)
+            }
         }
 
         impl ta_objects::ListFilterStr for #name {
@@ -1312,6 +1324,10 @@ pub fn typed_enum(args: TokenStream, item: TokenStream) -> TokenStream {
         impl ta_objects::sql_condition::SqlCondition for #name {
             fn resolve<D: ta_objects::DaoCore>(&self) -> Result<sea_query::Condition, ta_objects::errors::SqlError> {
                 ta_objects::sql_condition::resolve_leaf_eq::<D>(self)
+            }
+
+            fn display_values<D: ta_objects::DaoCore>(&self) -> Vec<(String, String)> {
+                ta_objects::sql_condition::leaf_display_values::<D>(self)
             }
         }
 
