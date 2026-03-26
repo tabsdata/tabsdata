@@ -2,8 +2,8 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use crate::dxo::graph::{GraphEdge, GraphNode};
 use crate::graph::TdGraph;
-use crate::types::graph::{GraphEdge, GraphNode};
 use petgraph::prelude::EdgeRef;
 use petgraph::visit::IntoNodeReferences;
 use std::collections::HashMap;
