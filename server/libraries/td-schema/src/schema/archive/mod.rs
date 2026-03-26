@@ -21,6 +21,7 @@
 //!
 //! See the project README for a full guide and example.
 
+pub mod historic;
 pub(crate) mod v5;
 pub(crate) mod v6;
 

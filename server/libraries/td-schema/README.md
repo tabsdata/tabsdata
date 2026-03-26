@@ -26,7 +26,11 @@ src/schema/
 │   └── indices.rs      # All secondary indices
 ├── archive/            # Frozen snapshots of previous versions
 │   ├── mod.rs          # build(version, backend), MIN_ARCHIVE
-│   └── v5/             # Schema (impl SchemaVersion) — frozen copy at v5
+│   ├── v5/             # Schema (impl SchemaVersion) — frozen copy at v5
+│   └── historic/       # Legacy sqlx migration SQL files (v0–v5, SQLite-only)
+│       ├── mod.rs      # get(), initial_v0_schema(), normalize()
+│       ├── live/       # Frozen .up.sql / .down.sql migration files
+│       └── README.md   # Documentation — DO NOT MODIFY the SQL files
 ├── deltas/             # Incremental migration scripts
 │   ├── mod.rs          # get(target_version, backend)
 │   └── v5_to_v6.rs     # Migration (impl SchemaDelta) — v5 to v6
@@ -69,9 +73,13 @@ pub trait SchemaDelta {
 | `deltas::get(target, backend)` | Dispatches to the `SchemaDelta` that upgrades from `target - 1` to `target`. |
 
 **Fresh installs** run `current::Schema::build()`.
-**Existing databases** apply deltas **incrementally**: going from v2 to v5
-runs deltas 3, 4, then 5 in order (see `TdPool::upgrade_db_version` in
-td-database).
+**Existing databases (v6+)** apply deltas **incrementally**: going from v6 to
+v7 runs delta 7 (see `TdPool::upgrade_db_version` in td-database).
+**Legacy databases (v0–v5)** are upgraded via the `archive/historic/` module:
+the frozen sqlx SQL files bring the database to v5, then `normalize()`
+rebuilds all tables using the v5 archive to ensure type and index parity with
+a fresh install, then programmatic deltas continue to CURRENT. The entire
+upgrade runs in a single transaction.
 
 ## Changing the schema
 
@@ -241,6 +249,9 @@ Both should pass. The key tests are:
 | `test_migration_guard_deltas_exist` | A delta exists for every version from `MIN_ARCHIVE + 1` to `Schema::VERSION`. |
 | `test_migration_guard_backend_consistency` | Archives and deltas produce the same number of statements across all backends. |
 | `test_migration_invariant` *(td-database)* | `archive(N) + deltas(N+1..=current)` produces a schema identical to a fresh install, validated against a real SQLite database. |
+| `test_historic_migration_invariant` *(td-database)* | `v0 + historic + normalize + deltas` produces a schema identical to a fresh install (full parity: tables, views, indices, column types). |
+| `test_historic_upgrade_end_to_end` *(td-database)* | Production `upgrade_db_version()` path from v0 to CURRENT succeeds and cleans up `_sqlx_migrations`. |
+| `test_upgrade_rollback_on_failure` *(td-database)* | A failed upgrade rolls back — database stays at its original version. |
 
 ## Example: the v5 to v6 showcase migration
 

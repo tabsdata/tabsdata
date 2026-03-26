@@ -114,27 +114,6 @@ impl DynamicPool {
             }
         }
     }
-
-    /// Execute a batch of SQL statements on the read-write pool.
-    pub async fn execute_batch(&self, stmts: &[String]) -> Result<(), Error> {
-        for stmt in stmts {
-            match self {
-                #[cfg(feature = "sqlite")]
-                DynamicPool::Sqlite { rw, .. } => {
-                    sqlx::query(stmt).execute(rw).await?;
-                }
-                #[cfg(feature = "postgres")]
-                DynamicPool::Postgres { rw, .. } => {
-                    sqlx::query(stmt).execute(rw).await?;
-                }
-                #[cfg(feature = "mysql")]
-                DynamicPool::MySql { rw, .. } => {
-                    sqlx::query(stmt).execute(rw).await?;
-                }
-            }
-        }
-        Ok(())
-    }
 }
 
 // Connection
@@ -213,6 +192,27 @@ impl<'c> DynamicConnection<'c> {
         }
     }
 
+    /// Execute a batch of SQL statements on this connection.
+    pub async fn execute_batch(&mut self, stmts: &[String]) -> Result<(), Error> {
+        for stmt in stmts {
+            match self {
+                #[cfg(feature = "sqlite")]
+                Self::Sqlite(h) => {
+                    sqlx::query(stmt).execute(&mut **h).await?;
+                }
+                #[cfg(feature = "postgres")]
+                Self::Postgres(h) => {
+                    sqlx::query(stmt).execute(&mut **h).await?;
+                }
+                #[cfg(feature = "mysql")]
+                Self::MySql(h) => {
+                    sqlx::query(stmt).execute(&mut **h).await?;
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Try to extract the embedded transaction from this connection.
     /// Returns `Some(DynamicTransaction)` if this connection was created via
     /// `DynamicTransaction::into_connection()`, otherwise returns `None`.
@@ -247,7 +247,7 @@ pub enum DynamicTransaction<'c> {
     MySql(Transaction<'c, MySql>),
 }
 
-impl DynamicTransaction<'_> {
+impl<'c> DynamicTransaction<'c> {
     /// Commit the transaction
     pub async fn commit(self) -> Result<(), Error> {
         match self {
@@ -284,9 +284,7 @@ impl DynamicTransaction<'_> {
             Self::MySql(tx) => DynamicConnection::MySql(ConnectionHolder::Borrowed(tx.as_mut())),
         }
     }
-}
 
-impl<'c> DynamicTransaction<'c> {
     /// Convert this transaction into a `DynamicConnection` by embedding the
     /// transaction inside the `OwnedTransaction` variant of `ConnectionHolder`.
     pub fn into_connection(self) -> DynamicConnection<'c> {

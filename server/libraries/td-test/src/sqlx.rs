@@ -39,7 +39,9 @@ impl TestSetup<TdPool> for SqlxTestSetup {
                 .iter()
                 .flat_map(|f| f(backend))
                 .collect();
-            db.pool.execute_batch(&stmts).await.unwrap();
+            let mut tx = db.pool.begin().await.unwrap();
+            tx.as_mut_conn().execute_batch(&stmts).await.unwrap();
+            tx.commit().await.unwrap();
         }
 
         TestSetupExecution::Run(db)

@@ -596,9 +596,9 @@ mod tests {
 
     /// Migration invariant: for each archived version N,
     /// archive(N) + deltas(N+1..=CURRENT) must produce a schema identical to
-    /// a fresh install via TdPool::create().
+    /// a fresh installation via TdPool::create().
     ///
-    /// Both paths go through the real DynamicPool::execute_batch().
+    /// Both paths go through DynamicConnection::execute_batch().
     #[tokio::test]
     async fn test_migration_invariant() {
         use td_schema::schema::{archive, current, deltas};
@@ -608,21 +608,22 @@ mod tests {
         let fresh_fp = capture_schema_fingerprint(&fresh_db).await;
 
         for archive_version in archive::MIN_ARCHIVE..current::Schema::VERSION {
-            // Build migrated DB: archive + deltas via DynamicPool::execute_batch.
+            // Build migrated DB: archive + deltas.
             let config = crate::test_utils::test_config();
             let migrated_db = TdPool::connect(&config).await.unwrap();
 
+            let mut tx = migrated_db.pool.begin().await.unwrap();
             let archive_stmts = archive::build(archive_version, migrated_db.kind());
-            migrated_db
-                .pool
+            tx.as_mut_conn()
                 .execute_batch(&archive_stmts)
                 .await
                 .unwrap();
 
             for delta_target in (archive_version + 1)..=current::Schema::VERSION {
                 let delta_stmts = deltas::get(delta_target, migrated_db.kind());
-                migrated_db.pool.execute_batch(&delta_stmts).await.unwrap();
+                tx.as_mut_conn().execute_batch(&delta_stmts).await.unwrap();
             }
+            tx.commit().await.unwrap();
 
             let migrated_fp = capture_schema_fingerprint(&migrated_db).await;
 
@@ -647,5 +648,154 @@ mod tests {
                 "db_version mismatch: archive v{archive_version} + deltas vs fresh"
             );
         }
+    }
+
+    /// Historic migration invariant: applying the initial v0 schema, then
+    /// historic migrations (→v5) with normalization, then programmatic deltas
+    /// (→CURRENT) must produce a schema **identical** to a fresh install —
+    /// same tables, views, indices, column definitions, and db_version.
+    #[tokio::test]
+    async fn test_historic_migration_invariant() {
+        use td_schema::schema::archive::historic;
+        use td_schema::schema::current;
+        use td_schema::schema::deltas;
+
+        // Fresh-install fingerprint via production path.
+        let fresh_db = crate::test_utils::db().await.unwrap();
+        let fresh_fp = capture_schema_fingerprint(&fresh_db).await;
+
+        // Build a v0 database, apply historic migrations + normalize + deltas.
+        let config_historic = crate::test_utils::test_config();
+        let db_historic = TdPool::connect(&config_historic).await.unwrap();
+
+        let mut tx = db_historic.pool.begin().await.unwrap();
+
+        let v0_stmts = historic::initial_v0_schema();
+        tx.as_mut_conn().execute_batch(&v0_stmts).await.unwrap();
+
+        for v in 1..=historic::MAX_VERSION {
+            let stmts = historic::get(v);
+            tx.as_mut_conn().execute_batch(&stmts).await.unwrap();
+        }
+
+        // Normalize schema to match the v5 archive exactly.
+        let stmts = historic::normalize();
+        tx.as_mut_conn().execute_batch(&stmts).await.unwrap();
+
+        for v in (historic::MAX_VERSION + 1)..=current::Schema::VERSION {
+            let stmts = deltas::get(v, db_historic.kind());
+            tx.as_mut_conn().execute_batch(&stmts).await.unwrap();
+        }
+        tx.commit().await.unwrap();
+
+        let historic_fp = capture_schema_fingerprint(&db_historic).await;
+
+        assert_eq!(
+            fresh_fp.tables, historic_fp.tables,
+            "Table set mismatch: historic v0→CURRENT vs fresh"
+        );
+        assert_eq!(
+            fresh_fp.views, historic_fp.views,
+            "View set mismatch: historic v0→CURRENT vs fresh"
+        );
+        assert_eq!(
+            fresh_fp.indices, historic_fp.indices,
+            "Index set mismatch: historic v0→CURRENT vs fresh"
+        );
+        assert_eq!(
+            fresh_fp.columns, historic_fp.columns,
+            "Column definitions mismatch: historic v0→CURRENT vs fresh"
+        );
+        assert_eq!(
+            fresh_fp.db_version, historic_fp.db_version,
+            "db_version mismatch: historic v0→CURRENT vs fresh"
+        );
+    }
+
+    /// End-to-end test: upgrade a v0 database all the way to CURRENT_VERSION
+    /// using the production `upgrade_db_version()` path.
+    #[tokio::test]
+    async fn test_historic_upgrade_end_to_end() {
+        use td_schema::schema::archive::historic;
+
+        // Create a v0 database manually.
+        let config = crate::test_utils::test_config();
+        let db = TdPool::connect(&config).await.unwrap();
+        let mut tx = db.pool.begin().await.unwrap();
+        let v0_stmts = historic::initial_v0_schema();
+        tx.as_mut_conn().execute_batch(&v0_stmts).await.unwrap();
+
+        // Also create the _sqlx_migrations table to simulate a real old database.
+        tx.as_mut_conn()
+            .execute_batch(
+                &["CREATE TABLE _sqlx_migrations (version TEXT PRIMARY KEY)".to_string()],
+            )
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+
+        // Run the production upgrade path.
+        db.upgrade_db_version().await.unwrap();
+
+        // Verify we reached CURRENT_VERSION.
+        let version = schema_db_version(&db).await;
+        assert_eq!(
+            version,
+            td_schema::CURRENT_VERSION.to_string(),
+            "db_version should be CURRENT_VERSION after historic upgrade"
+        );
+
+        // Verify _sqlx_migrations was cleaned up.
+        let res: Vec<crate::dynamic::DynamicRow> = raw_query!(
+            db,
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = '_sqlx_migrations'"
+        )
+        .build_query()
+        .fetch_all(&db)
+        .await
+        .unwrap();
+        assert!(
+            res.is_empty(),
+            "_sqlx_migrations table should have been dropped"
+        );
+    }
+
+    /// Verify that a failed upgrade rolls back — the database stays at its
+    /// original version.
+    #[tokio::test]
+    async fn test_upgrade_rollback_on_failure() {
+        // Create a fresh database at CURRENT_VERSION.
+        let config = crate::test_utils::test_config();
+        let db = TdPool::connect(&config).await.unwrap();
+        db.upgrade().await.unwrap();
+
+        // Manually set version to an intermediate value that would trigger
+        // deltas, but corrupt a table the delta depends on so it fails.
+        raw_query!(
+            db,
+            "UPDATE tabsdata_system SET value = '5' WHERE name = 'db_version'"
+        )
+        .build_query()
+        .execute(&db)
+        .await
+        .unwrap();
+
+        // Drop a table that v6_to_v7 delta needs, causing the upgrade to fail.
+        raw_query!(db, "DROP TABLE functions")
+            .build_query()
+            .execute(&db)
+            .await
+            .unwrap();
+
+        // The upgrade should fail.
+        let result = db.upgrade_db_version().await;
+        assert!(result.is_err(), "Upgrade should fail on corrupted schema");
+
+        // db_version should still read '5' because the transaction rolled back.
+        let version = schema_db_version(&db).await;
+        assert_eq!(
+            version, "5",
+            "db_version should remain at 5 after failed upgrade (rollback)"
+        );
     }
 }
