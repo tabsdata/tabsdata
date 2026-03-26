@@ -2,7 +2,6 @@
 //  Copyright 2024 Tabs Data Inc.
 //
 
-use crate::error::FromHandlerError;
 use crate::extractors::{FromHandler, Input};
 use crate::handler::Handler;
 use std::collections::HashSet;
@@ -187,23 +186,16 @@ impl MetadataMutex {
         MetadataMutex(Mutex::new(Metadata::with_initial_types(created)))
     }
 
-    // This is different from the other FromHandler implementations because it's not sync, as we
-    // do not allow random fns to get it. It's only used for testing.
-    pub fn from_handler(handler: &Handler) -> Result<Input<MetadataMutex>, FromHandlerError> {
-        Input::<MetadataMutex>::from_handler(handler)
-    }
-
-    /// Consumes the `Metadata` instance and returns the inner `MetadataFields`.
+    /// Consumes the `MetadataMutex` and returns the inner `Metadata`.
     pub fn get(self) -> Metadata {
         self.0.into_inner()
     }
 
-    /// Adds a function name to the metadata.
-    pub async fn add_fn_name(&self, fn_name: impl Into<String>) {
+    pub(crate) async fn add_fn_name(&self, fn_name: impl Into<String>) {
         self.0.lock().await.fn_types.push(fn_name.into());
     }
 
-    pub async fn created_type(&self, fn_name: impl Into<String>, ty: impl Into<String>) {
+    pub(crate) async fn created_type(&self, fn_name: impl Into<String>, ty: impl Into<String>) {
         let ty = ty.into();
         if ty == type_of::<Input<()>>() {
             // We don't care about unit types
@@ -223,7 +215,7 @@ impl MetadataMutex {
         this.unused_types.insert(metadata_type.clone());
     }
 
-    pub async fn used_type(&self, fn_name: impl Into<String>, ty: impl Into<String>) {
+    pub(crate) async fn used_type(&self, fn_name: impl Into<String>, ty: impl Into<String>) {
         let ty = ty.into();
         if ty == type_of::<Input<()>>() {
             // We don't care about unit types
@@ -242,14 +234,47 @@ impl MetadataMutex {
         }
     }
 
-    // Very special case. It only happens in a transaction commit.
-    pub async fn remove_created(&self, fn_name: impl Into<String>, ty: impl Into<String>) {
+    pub(crate) async fn remove_created(&self, fn_name: impl Into<String>, ty: impl Into<String>) {
         let mut this = self.0.lock().await;
         let metadata_type = MetadataType {
             fn_type: fn_name.into(),
             ty: ty.into(),
         };
         this.created_types.remove(&metadata_type);
+    }
+
+    // --- Centralized recording methods ---
+    // These encapsulate common metadata collection patterns so that each service
+    // call site only needs a one-liner instead of a multi-line #[cfg] block.
+    // All callers are behind #[cfg(feature = "test_tower_metadata")], so the
+    // MetadataMutex is guaranteed to be in the handler (inserted by InitService).
+
+    /// Returns the `MetadataMutex` from the handler.
+    ///
+    /// Panics if not found — all callers are behind `#[cfg(feature = "test_tower_metadata")]`
+    /// where `InitService` guarantees its presence.
+    pub fn extract(handler: &Handler) -> std::sync::Arc<MetadataMutex> {
+        let Input(metadata) = Input::<MetadataMutex>::from_handler(handler).expect(
+            "MetadataMutex missing from handler — is InitService (ServiceEntry) in the tower?",
+        );
+        metadata
+    }
+
+    /// Record a `from_fn` layer's metadata: function name, used types, and
+    /// the created output type.
+    pub async fn record_from_fn<Out: 'static>(
+        handler: &Handler,
+        fn_name: &str,
+        used_types: &[String],
+    ) {
+        let metadata = Self::extract(handler);
+        metadata.add_fn_name(fn_name.to_string()).await;
+        for ty in used_types {
+            metadata.used_type(fn_name.to_string(), ty.clone()).await;
+        }
+        metadata
+            .created_type(fn_name.to_string(), type_of::<Input<Out>>())
+            .await;
     }
 }
 
