@@ -2,9 +2,9 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-pub mod display_vec;
+mod display_vec;
 
-pub use tm_error::td_error;
+pub use {display_vec::DisplayVec, display_vec_macro as display_vec, tm_error::td_error};
 
 use derive_builder::UninitializedFieldError;
 use std::error::Error;
@@ -114,6 +114,18 @@ impl TdError {
     pub fn domain_err<E: TdDomainError + 'static>(&self) -> &E {
         self.source().unwrap().downcast_ref::<E>().unwrap()
     }
+
+    /// Returns a user-safe error message suitable for API responses.
+    /// - For InternalError / Unexpected / NotImplemented: returns a generic message.
+    /// - For all other error classes: returns the domain error's Display message.
+    pub fn user_message(&self) -> String {
+        match self.api_error {
+            ApiError::InternalError | ApiError::Unexpected | ApiError::NotImplemented => {
+                "An internal error occurred".to_string()
+            }
+            _ => self.td_error.to_string(),
+        }
+    }
 }
 
 impl Display for TdError {
@@ -207,7 +219,7 @@ impl TdDomainError for InlineError {
 /// The `assert_error` function is called with service invocation [`TdDomainError`] error.
 /// The function should assert the error variant.
 pub async fn assert_service_error<Req, Res, Err: TdDomainError + 'static>(
-    service: tower::util::BoxService<Req, Res, TdError>,
+    service: tower::util::BoxCloneSyncService<Req, Res, TdError>,
     request: Req,
     assert_error: impl Fn(&Err),
 ) {

@@ -81,9 +81,9 @@ pico-args = { workspace = true }
 rand = { workspace = true }
 regex = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
-serde_json = { workspace = true}
+serde_json = { workspace = true }
 serde_yaml = { workspace = true }
-sqlx = { workspace = true, features = ["sqlite", "macros"] }
+sqlx = { workspace = true, features = ["postgres"] }
 strum = { workspace = true, features = ["derive"] }
 supports-color = { workspace = true }
 sysinfo = { workspace = true }
@@ -96,6 +96,9 @@ url = { workspace = true, features = ["serde"] }
 utoipa = { workspace = true, features = ["url"] }
 uuid = { workspace = true }
 whoami = { workspace = true }
+
+[dev-dependencies]
+td-common = { workspace = true, features = ["td-test"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }

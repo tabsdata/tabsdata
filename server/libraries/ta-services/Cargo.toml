@@ -55,8 +55,6 @@ td-tower = { workspace = true }
 
 # External dependencies
 
-async-trait = { workspace = true }
-
 [dev-dependencies]
 
 [target.'cfg(target_os = "linux")'.dependencies]
