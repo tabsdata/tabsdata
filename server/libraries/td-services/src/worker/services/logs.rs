@@ -4,16 +4,15 @@
 
 use crate::worker::layers::logs::{get_worker_logs, resolve_worker_log_path};
 use ta_services::factory::service_factory;
+use td_authz::tower::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead};
 use td_authz::{Authz, AuthzContext};
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
 use td_objects::dxo::worker::WorkerDB;
 use td_objects::rest_urls::{LogsExtension, WorkerLogsParams};
-use td_objects::sql::DaoQueries;
-use td_objects::stream::BoxedSyncStream;
-use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead};
-use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
-use td_objects::tower_service::sql::{By, SqlSelectService};
+use td_objects::tower_service::with::With;
 use td_objects::types::basic::{CollectionId, LogsCastNumber, WorkerIdName};
+use td_objects::types::stream::BoxedSyncStream;
+use td_queries::By;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -23,7 +22,6 @@ use td_tower::layers;
     request = ReadRequest<WorkerLogsParams>,
     response = BoxedSyncStream,
     connection = ConnectionProvider,
-    context = DaoQueries,
     context = AuthzContext,
 )]
 fn service() {
@@ -33,7 +31,7 @@ fn service() {
         from_fn(With::<ReadRequest<WorkerLogsParams>>::extract_name::<WorkerLogsParams>),
         // find collection ID
         from_fn(With::<WorkerLogsParams>::extract::<WorkerIdName>),
-        from_fn(By::<WorkerIdName>::select::<WorkerDB>),
+        from_fn(By::<WorkerIdName>::fetch_one::<WorkerDB>),
         from_fn(With::<WorkerDB>::extract::<CollectionId>),
         // check requester has collection permissions
         from_fn(AuthzOn::<CollectionId>::set),
@@ -53,29 +51,25 @@ mod tests {
     use crate::worker::layers::tests::create_log_files;
     use bytes::Bytes;
     use futures_util::TryStreamExt;
+    use std::str::FromStr;
     use ta_services::service::TdService;
     use td_common::server::WORKSPACE_URI_ENV;
-
-    use td_database::sql::DbPool;
+    use td_database::pool::TdPool;
     use td_error::TdError;
+    use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::FunctionRegister;
-    use td_objects::test_utils::seed_collection::seed_collection;
-    use td_objects::test_utils::seed_execution::seed_execution;
-    use td_objects::test_utils::seed_function::seed_function;
-    use td_objects::test_utils::seed_function_run::seed_function_run;
-    use td_objects::test_utils::seed_transaction::seed_transaction;
-    use td_objects::test_utils::seed_worker::seed_function_runner_worker;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionRunStatus, RoleId,
         TransactionKey, UserId, WorkerMessageStatus,
     };
+    use td_queries::test_utils::SeedQueries;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_tower_metadata_read_workers_logs(db: DbPool) {
+    async fn test_tower_metadata_read_workers_logs(db: TdPool) {
         use td_tower::metadata::type_of_val;
 
         WorkerLogService::with_defaults(db)
@@ -89,7 +83,7 @@ mod tests {
                 ),
                 // find collection ID
                 type_of_val(&With::<WorkerLogsParams>::extract::<WorkerIdName>),
-                type_of_val(&By::<WorkerIdName>::select::<WorkerDB>),
+                type_of_val(&By::<WorkerIdName>::fetch_one::<WorkerDB>),
                 type_of_val(&With::<WorkerDB>::extract::<CollectionId>),
                 // check requester has collection permissions
                 type_of_val(&AuthzOn::<CollectionId>::set),
@@ -105,13 +99,10 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_read_workers_logs(db: DbPool) -> Result<(), TdError> {
-        let collection = seed_collection(
-            &db,
-            &CollectionName::try_from("collection")?,
-            &UserId::admin(),
-        )
-        .await;
+    async fn test_read_workers_logs(db: TdPool) -> Result<(), TdError> {
+        let collection = db
+            .seed_collection(&CollectionName::try_from("collection")?, &UserId::admin())
+            .await?;
 
         let dependencies = None;
         let triggers = None;
@@ -129,38 +120,36 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let function_version = seed_function(&db, &collection, &create).await;
-        let execution = seed_execution(&db, &function_version).await;
+        let function_version = db.seed_function(&collection, &create).await?;
+        let execution = db.seed_execution(&function_version).await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
-        let transaction = seed_transaction(&db, &execution, &transaction_key).await;
+        let transaction = db.seed_transaction(&execution, &transaction_key).await?;
 
-        let function_run = seed_function_run(
-            &db,
-            &collection,
-            &function_version,
-            &execution,
-            &transaction,
-            &FunctionRunStatus::Scheduled,
-        )
-        .await;
+        let function_run = db
+            .seed_function_run(
+                &collection,
+                &function_version,
+                &execution,
+                &transaction,
+                &FunctionRunStatus::Scheduled,
+            )
+            .await?;
 
         let workers = [
-            seed_function_runner_worker(
-                &db,
+            db.seed_function_runner_worker(
                 &execution,
                 &transaction,
                 &function_run,
                 &WorkerMessageStatus::Locked,
             )
-            .await,
-            seed_function_runner_worker(
-                &db,
+            .await?,
+            db.seed_function_runner_worker(
                 &execution,
                 &transaction,
                 &function_run,
                 &WorkerMessageStatus::Locked,
             )
-            .await,
+            .await?,
         ];
 
         let test_dir = td_common::tdtestdir!();
@@ -171,7 +160,7 @@ mod tests {
                     // as the content.
                     create_log_files(&workers[0], 1, 1).await;
 
-                    let service = WorkerLogService::with_defaults(db.clone()).service().await;
+                    let service = WorkerLogService::with_defaults(db.clone()).service();
 
                     let request = RequestContext::with(
                         AccessTokenId::default(),
@@ -180,7 +169,7 @@ mod tests {
                     )
                     .read(
                         WorkerLogsParams::builder()
-                            .try_worker(workers[0].id.to_string())?
+                            .worker(WorkerIdName::from_str(&workers[0].id.to_string())?)
                             .extension(vec![LogsExtension::All])
                             .retry(vec![])
                             .build()?,

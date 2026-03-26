@@ -15,9 +15,9 @@ use td_common::server::{
 use td_error::{TdError, td_error};
 use td_objects::dxo::worker::WorkerDB;
 use td_objects::rest_urls::LogsExtension;
-use td_objects::stream::BoxedSyncStream;
 use td_objects::types::basic::{LogsCastNumber, WorkerType};
-use td_tower::extractors::Input;
+use td_objects::types::stream::BoxedSyncStream;
+use td_tower::extractors::Ref;
 use tokio::fs::File;
 use tokio_util::codec::{BytesCodec, FramedRead};
 
@@ -40,9 +40,9 @@ const PATH_SEPARATOR: &str = "-";
 const LOG_SEPARATOR: &str = "=";
 
 pub async fn resolve_worker_log_path(
-    Input(worker): Input<WorkerDB>,
-    Input(extensions): Input<Vec<LogsExtension>>,
-    Input(casts): Input<Vec<LogsCastNumber>>,
+    worker: Ref<WorkerDB>,
+    extensions: Ref<Vec<LogsExtension>>,
+    casts: Ref<Vec<LogsCastNumber>>,
 ) -> Result<Vec<PathBuf>, TdError> {
     let worker_path = env::var(WORKSPACE_URI_ENV).map_err(ReadWorkerLogsError::EnvVar)?;
     let worker_name = match worker.worker_type {
@@ -126,7 +126,7 @@ fn sort_log_paths(paths: &mut [PathBuf]) {
 }
 
 pub async fn get_worker_logs(
-    Input(paths): Input<Vec<PathBuf>>,
+    paths: Ref<Vec<PathBuf>>,
 ) -> Result<BoxedSyncStream, TdError> {
     let mut ordered_stream = FuturesOrdered::new();
 
@@ -325,12 +325,12 @@ mod tests {
                 async move {
                     create_log_files(&worker, iterations, rotations).await;
                     let paths = resolve_worker_log_path(
-                        Input::new(worker),
-                        Input::new(logs_extensions),
-                        Input::new(casts),
+                        Ref::new(worker),
+                        Ref::new(logs_extensions),
+                        Ref::new(casts),
                     )
                     .await?;
-                    let stream = get_worker_logs(Input::new(paths.clone())).await?;
+                    let stream = get_worker_logs(Ref::new(paths.clone())).await?;
                     Ok::<_, TdError>((paths, stream))
                 }
             })

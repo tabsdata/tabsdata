@@ -15,11 +15,11 @@ use td_objects::dxo::function_run::{FunctionRunDB, FunctionRunToExecuteDB, Updat
 use td_objects::dxo::worker::{
     UpdateWorkerDB, UpdateWorkerMessageStatusDB, WorkerDB, WorkerDBWithNames,
 };
-use td_objects::sql::DaoQueries;
-use td_objects::tower_service::from::{ExtractVecService, With};
-use td_objects::tower_service::sql::{By, SqlSelectAllService, SqlUpdateService, insert_vec};
+use td_objects::tower_service::with::With;
 use td_objects::types::addresses::InternalServerAddresses;
-use td_objects::types::basic::{Enabled, FunctionRunId, WorkerId, WorkerStatus, WorkerType};
+use td_objects::types::basic::{FunctionRunId, WorkerId};
+use td_queries::By;
+use td_queries::insert_vec;
 use td_storage::Storage;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
@@ -30,7 +30,6 @@ use td_tower::{layer, layers};
     request = (),
     response = (),
     connection = TransactionProvider,
-    context = DaoQueries,
     context = Storage,
     context = FileWorkerMessageQueue,
     context = InternalServerAddresses,
@@ -52,7 +51,6 @@ fn service() {
 
 // Requires:
 // - Transaction connection
-// - DaoQueries
 // - Storage
 // - T(MessageQueue)
 // - ServerUrl
@@ -64,21 +62,20 @@ where
     layers!(
         // Get all function runs that are ready to execute.
         // This is, with status scheduled and with all requirements done.
-        from_fn(By::<()>::select_all::<FunctionRunToExecuteDB>),
+        from_fn(By::<()>::fetch_all::<FunctionRunToExecuteDB>),
         // Create a locked message for each function run.
         from_fn(create_locked_function_runner_workers_start_request::<T>),
         // And insert generated messages.
         from_fn(insert_vec::<WorkerDB>),
         // Update statuses.
-        from_fn(With::<FunctionRunToExecuteDB>::extract_vec::<FunctionRunId>),
+        from_fn(With::<Vec<FunctionRunToExecuteDB>>::extract::<Vec<FunctionRunId>>),
         from_fn(UpdateFunctionRunDB::run_requested),
-        from_fn(By::<FunctionRunId>::update_all::<UpdateFunctionRunDB, FunctionRunDB>),
+        from_fn(By::<Vec<FunctionRunId>>::update::<UpdateFunctionRunDB, FunctionRunDB>),
     )
 }
 
 // Requires:
 // - Transaction connection
-// - DaoQueries
 // - T(MessageQueue)
 // - ServerUrl
 #[layer]
@@ -87,21 +84,24 @@ where
     T: WorkerMessageQueue,
 {
     layers!(
-        from_fn(WorkerDBWithNames::cron_trigger_to_schedule),
-        from_fn(By::<(Enabled, WorkerType, WorkerStatus)>::select_all::<WorkerDBWithNames>),
+        from_fn(
+            By::<()>::fetch_all_in::<
+                { WorkerDBWithNames::CronTriggersToSchedule },
+                WorkerDBWithNames,
+            >
+        ),
         from_fn(create_locked_cron_trigger_workers_start_request::<T>),
         // Update statuses.
-        from_fn(With::<WorkerDBWithNames>::extract_vec::<WorkerId>),
+        from_fn(With::<Vec<WorkerDBWithNames>>::extract::<Vec<WorkerId>>),
         from_fn(UpdateWorkerDB::run_requested),
-        from_fn(By::<WorkerId>::update_all::<UpdateWorkerDB, WorkerDB>),
+        from_fn(By::<Vec<WorkerId>>::update::<UpdateWorkerDB, WorkerDB>),
         from_fn(UpdateWorkerMessageStatusDB::locked),
-        from_fn(By::<WorkerId>::update_all::<UpdateWorkerMessageStatusDB, WorkerDB>),
+        from_fn(By::<Vec<WorkerId>>::update::<UpdateWorkerMessageStatusDB, WorkerDB>),
     )
 }
 
 // Requires:
 // - Transaction connection
-// - DaoQueries
 // - T(MessageQueue)
 // - ServerUrl
 #[layer]
@@ -110,21 +110,21 @@ where
     T: WorkerMessageQueue,
 {
     layers!(
-        from_fn(WorkerDBWithNames::cron_trigger_to_stop),
-        from_fn(By::<(Enabled, WorkerType, WorkerStatus)>::select_all::<WorkerDBWithNames>),
+        from_fn(
+            By::<()>::fetch_all_in::<{ WorkerDBWithNames::CronTriggersToStop }, WorkerDBWithNames>
+        ),
         from_fn(create_locked_cron_trigger_workers_stop_request::<T>),
         // Update statuses.
-        from_fn(With::<WorkerDBWithNames>::extract_vec::<WorkerId>),
+        from_fn(With::<Vec<WorkerDBWithNames>>::extract::<Vec<WorkerId>>),
         from_fn(UpdateWorkerDB::stop_requested),
-        from_fn(By::<WorkerId>::update_all::<UpdateWorkerDB, WorkerDB>),
+        from_fn(By::<Vec<WorkerId>>::update::<UpdateWorkerDB, WorkerDB>),
         from_fn(UpdateWorkerMessageStatusDB::locked),
-        from_fn(By::<WorkerId>::update_all::<UpdateWorkerMessageStatusDB, WorkerDB>),
+        from_fn(By::<Vec<WorkerId>>::update::<UpdateWorkerMessageStatusDB, WorkerDB>),
     )
 }
 
 // Requires:
 // - Transaction connection
-// - DaoQueries
 // - Storage
 // - T(MessageQueue)
 // - ServerUrl
@@ -134,21 +134,24 @@ where
     T: WorkerMessageQueue,
 {
     layers!(
-        from_fn(WorkerDBWithNames::stage_trigger_to_schedule),
-        from_fn(By::<(Enabled, WorkerType, WorkerStatus)>::select_all::<WorkerDBWithNames>),
+        from_fn(
+            By::<()>::fetch_all_in::<
+                { WorkerDBWithNames::StageTriggersToSchedule },
+                WorkerDBWithNames,
+            >
+        ),
         from_fn(create_locked_stage_trigger_workers_start_request::<T>),
         // Update statuses.
-        from_fn(With::<WorkerDBWithNames>::extract_vec::<WorkerId>),
+        from_fn(With::<Vec<WorkerDBWithNames>>::extract::<Vec<WorkerId>>),
         from_fn(UpdateWorkerDB::run_requested),
-        from_fn(By::<WorkerId>::update_all::<UpdateWorkerDB, WorkerDB>),
+        from_fn(By::<Vec<WorkerId>>::update::<UpdateWorkerDB, WorkerDB>),
         from_fn(UpdateWorkerMessageStatusDB::locked),
-        from_fn(By::<WorkerId>::update_all::<UpdateWorkerMessageStatusDB, WorkerDB>),
+        from_fn(By::<Vec<WorkerId>>::update::<UpdateWorkerMessageStatusDB, WorkerDB>),
     )
 }
 
 // Requires:
 // - Transaction connection
-// - DaoQueries
 // - T(MessageQueue)
 // - ServerUrl
 #[layer]
@@ -157,15 +160,16 @@ where
     T: WorkerMessageQueue,
 {
     layers!(
-        from_fn(WorkerDBWithNames::stage_trigger_to_stop),
-        from_fn(By::<(Enabled, WorkerType, WorkerStatus)>::select_all::<WorkerDBWithNames>),
+        from_fn(
+            By::<()>::fetch_all_in::<{ WorkerDBWithNames::StageTriggersToStop }, WorkerDBWithNames>
+        ),
         from_fn(create_locked_stage_trigger_workers_stop_request::<T>),
         // Update statuses.
-        from_fn(With::<WorkerDBWithNames>::extract_vec::<WorkerId>),
+        from_fn(With::<Vec<WorkerDBWithNames>>::extract::<Vec<WorkerId>>),
         from_fn(UpdateWorkerDB::stop_requested),
-        from_fn(By::<WorkerId>::update_all::<UpdateWorkerDB, WorkerDB>),
+        from_fn(By::<Vec<WorkerId>>::update::<UpdateWorkerDB, WorkerDB>),
         from_fn(UpdateWorkerMessageStatusDB::locked),
-        from_fn(By::<WorkerId>::update_all::<UpdateWorkerMessageStatusDB, WorkerDB>),
+        from_fn(By::<Vec<WorkerId>>::update::<UpdateWorkerMessageStatusDB, WorkerDB>),
     )
 }
 
@@ -174,26 +178,28 @@ mod tests {
     use super::*;
     use crate::execution::services::execute::ExecuteFunctionService;
     use crate::scheduler::services::SchedulerContext;
+    use std::str::FromStr;
     use ta_services::factory::ServiceFactory;
     use ta_services::service::TdService;
     use td_common::server::SupervisorMessagePayload;
-    use td_database::sql::DbPool;
+    use td_database::pool::TdPool;
     use td_error::TdError;
-    use td_objects::dxo::crudl::{RequestContext, handle_sql_err};
+    use td_objects::Buildable;
+    use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::execution::ExecutionRequest;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::table_data_version::TableDataVersionDBWithNames;
     use td_objects::dxo::yaml::WorkerInput;
     use td_objects::dxo::yaml::function_runner::v2::{InputTable, OutputTable};
     use td_objects::rest_urls::FunctionParam;
-    use td_objects::sql::SelectBy;
-    use td_objects::test_utils::seed_collection::seed_collection;
-    use td_objects::test_utils::seed_function::seed_function;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, Decorator, EnvPrefix, ExecutionName,
-        FunctionRuntimeValues, RoleId, TableName, TableNameDto, UserId, WorkerMessageStatus,
+        AccessTokenId, BundleId, CollectionIdName, CollectionName, Decorator, EnvPrefix,
+        ExecutionName, FunctionIdName, FunctionRuntimeValues, RoleId, TableName, TableNameDto,
+        UserId, WorkerMessageStatus,
     };
     use td_objects::types::composed::TableDependencyDto;
+    use td_queries::BasicQueries;
+    use td_queries::test_utils::SeedQueries;
     use td_storage::SPath;
     use td_tower::ctx_service::RawOneshot;
     use tower::ServiceExt;
@@ -201,7 +207,7 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_tower_metadata_schedule_request(db: DbPool) -> Result<(), TdError> {
+    async fn test_tower_metadata_schedule_request(db: TdPool) -> Result<(), TdError> {
         use td_tower::metadata::type_of_val;
 
         RequestService::with_defaults(db)
@@ -211,7 +217,7 @@ mod tests {
                 // Function
                 // Get all function runs that are ready to execute.
                 // This is, with status scheduled and with all requirements done.
-                type_of_val(&By::<()>::select_all::<FunctionRunToExecuteDB>),
+                type_of_val(&By::<()>::fetch_all::<FunctionRunToExecuteDB>),
                 // Create a locked message for each function run.
                 type_of_val(
                     &create_locked_function_runner_workers_start_request::<FileWorkerMessageQueue>,
@@ -219,76 +225,88 @@ mod tests {
                 // And insert generated messages.
                 type_of_val(&insert_vec::<WorkerDB>),
                 // Update statuses.
-                type_of_val(&With::<FunctionRunToExecuteDB>::extract_vec::<FunctionRunId>),
+                type_of_val(&With::<Vec<FunctionRunToExecuteDB>>::extract::<Vec<FunctionRunId>>),
                 type_of_val(&UpdateFunctionRunDB::run_requested),
-                type_of_val(&By::<FunctionRunId>::update_all::<UpdateFunctionRunDB, FunctionRunDB>),
+                type_of_val(
+                    &By::<Vec<FunctionRunId>>::update::<UpdateFunctionRunDB, FunctionRunDB>,
+                ),
                 // CronTrigger
                 // Stop
-                type_of_val(&WorkerDBWithNames::cron_trigger_to_stop),
                 type_of_val(
-                    &By::<(Enabled, WorkerType, WorkerStatus)>::select_all::<WorkerDBWithNames>,
+                    &By::<()>::fetch_all_in::<
+                        { WorkerDBWithNames::CronTriggersToStop },
+                        WorkerDBWithNames,
+                    >,
                 ),
                 type_of_val(
                     &create_locked_cron_trigger_workers_stop_request::<FileWorkerMessageQueue>,
                 ),
                 // Update statuses.
-                type_of_val(&With::<WorkerDBWithNames>::extract_vec::<WorkerId>),
+                type_of_val(&With::<Vec<WorkerDBWithNames>>::extract::<Vec<WorkerId>>),
                 type_of_val(&UpdateWorkerDB::stop_requested),
-                type_of_val(&By::<WorkerId>::update_all::<UpdateWorkerDB, WorkerDB>),
+                type_of_val(&By::<Vec<WorkerId>>::update::<UpdateWorkerDB, WorkerDB>),
                 type_of_val(&UpdateWorkerMessageStatusDB::locked),
-                type_of_val(&By::<WorkerId>::update_all::<UpdateWorkerMessageStatusDB, WorkerDB>),
+                type_of_val(&By::<Vec<WorkerId>>::update::<UpdateWorkerMessageStatusDB, WorkerDB>),
                 // Start
-                type_of_val(&WorkerDBWithNames::cron_trigger_to_schedule),
                 type_of_val(
-                    &By::<(Enabled, WorkerType, WorkerStatus)>::select_all::<WorkerDBWithNames>,
+                    &By::<()>::fetch_all_in::<
+                        { WorkerDBWithNames::CronTriggersToSchedule },
+                        WorkerDBWithNames,
+                    >,
                 ),
                 type_of_val(
                     &create_locked_cron_trigger_workers_start_request::<FileWorkerMessageQueue>,
                 ),
                 // Update statuses.
-                type_of_val(&With::<WorkerDBWithNames>::extract_vec::<WorkerId>),
+                type_of_val(&With::<Vec<WorkerDBWithNames>>::extract::<Vec<WorkerId>>),
                 type_of_val(&UpdateWorkerDB::run_requested),
-                type_of_val(&By::<WorkerId>::update_all::<UpdateWorkerDB, WorkerDB>),
+                type_of_val(&By::<Vec<WorkerId>>::update::<UpdateWorkerDB, WorkerDB>),
                 type_of_val(&UpdateWorkerMessageStatusDB::locked),
-                type_of_val(&By::<WorkerId>::update_all::<UpdateWorkerMessageStatusDB, WorkerDB>),
+                type_of_val(&By::<Vec<WorkerId>>::update::<UpdateWorkerMessageStatusDB, WorkerDB>),
                 // StageTrigger
                 // Stop
-                type_of_val(&WorkerDBWithNames::stage_trigger_to_stop),
                 type_of_val(
-                    &By::<(Enabled, WorkerType, WorkerStatus)>::select_all::<WorkerDBWithNames>,
+                    &By::<()>::fetch_all_in::<
+                        { WorkerDBWithNames::StageTriggersToStop },
+                        WorkerDBWithNames,
+                    >,
                 ),
                 type_of_val(
                     &create_locked_stage_trigger_workers_stop_request::<FileWorkerMessageQueue>,
                 ),
                 // Update statuses.
-                type_of_val(&With::<WorkerDBWithNames>::extract_vec::<WorkerId>),
+                type_of_val(&With::<Vec<WorkerDBWithNames>>::extract::<Vec<WorkerId>>),
                 type_of_val(&UpdateWorkerDB::stop_requested),
-                type_of_val(&By::<WorkerId>::update_all::<UpdateWorkerDB, WorkerDB>),
+                type_of_val(&By::<Vec<WorkerId>>::update::<UpdateWorkerDB, WorkerDB>),
                 type_of_val(&UpdateWorkerMessageStatusDB::locked),
-                type_of_val(&By::<WorkerId>::update_all::<UpdateWorkerMessageStatusDB, WorkerDB>),
+                type_of_val(&By::<Vec<WorkerId>>::update::<UpdateWorkerMessageStatusDB, WorkerDB>),
                 // Start
-                type_of_val(&WorkerDBWithNames::stage_trigger_to_schedule),
                 type_of_val(
-                    &By::<(Enabled, WorkerType, WorkerStatus)>::select_all::<WorkerDBWithNames>,
+                    &By::<()>::fetch_all_in::<
+                        { WorkerDBWithNames::StageTriggersToSchedule },
+                        WorkerDBWithNames,
+                    >,
                 ),
                 type_of_val(
                     &create_locked_stage_trigger_workers_start_request::<FileWorkerMessageQueue>,
                 ),
                 // Update statuses.
-                type_of_val(&With::<WorkerDBWithNames>::extract_vec::<WorkerId>),
+                type_of_val(&With::<Vec<WorkerDBWithNames>>::extract::<Vec<WorkerId>>),
                 type_of_val(&UpdateWorkerDB::run_requested),
-                type_of_val(&By::<WorkerId>::update_all::<UpdateWorkerDB, WorkerDB>),
+                type_of_val(&By::<Vec<WorkerId>>::update::<UpdateWorkerDB, WorkerDB>),
                 type_of_val(&UpdateWorkerMessageStatusDB::locked),
-                type_of_val(&By::<WorkerId>::update_all::<UpdateWorkerMessageStatusDB, WorkerDB>),
+                type_of_val(&By::<Vec<WorkerId>>::update::<UpdateWorkerMessageStatusDB, WorkerDB>),
             ]);
         Ok(())
     }
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_schedule_request(db: DbPool) -> Result<(), TdError> {
+    async fn test_schedule_request(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
-        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
+        let collection = db
+            .seed_collection(&collection_name, &UserId::admin())
+            .await?;
 
         // Setup
         let create = FunctionRegister::builder()
@@ -307,29 +325,26 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let _ = seed_function(&db, &collection, &create).await;
+        let _ = db.seed_function(&collection, &create).await?;
 
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
                 FunctionParam::builder()
-                    .try_collection(format!("{}", collection.name))?
-                    .try_function("function_1")?
+                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
+                    .function(FunctionIdName::from_str("function_1")?)
                     .build()?,
                 ExecutionRequest::builder()
                     .name(Some(ExecutionName::try_from("test_execution")?))
                     .build()?,
             );
 
-        let service = ExecuteFunctionService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = ExecuteFunctionService::with_defaults(db.clone()).service();
         let execution = service.raw_oneshot(request).await?;
 
         // Actual test
         let context = SchedulerContext::with_defaults(db.clone());
         RequestService::build(&context)
             .service()
-            .await
             .oneshot(())
             .await?;
 
@@ -349,15 +364,11 @@ mod tests {
         };
 
         // V2 assertions
-        let queries = DaoQueries::default();
         // Info
         let info = &message.info;
-        let function_runs: Vec<FunctionRunDB> = queries
-            .select_by::<FunctionRunDB>(&(&execution.manual_trigger))?
-            .build_query_as()
-            .fetch_all(&db)
-            .await
-            .map_err(handle_sql_err)?;
+        let function_runs: Vec<FunctionRunDB> = db
+            .fetch_all::<FunctionRunDB>(&(&execution.manual_trigger))
+            .await?;
         assert_eq!(function_runs.len(), 1);
         let function_run = &function_runs[0];
 
@@ -417,12 +428,9 @@ mod tests {
         for (index, output_table) in message.output.iter().enumerate() {
             match output_table {
                 OutputTable::Table(output) => {
-                    let table_data_version: TableDataVersionDBWithNames = queries
-                        .select_by::<TableDataVersionDBWithNames>(&(output.table_data_version_id))?
-                        .build_query_as()
-                        .fetch_one(&db)
-                        .await
-                        .map_err(handle_sql_err)?;
+                    let table_data_version: TableDataVersionDBWithNames = db
+                        .fetch_one::<TableDataVersionDBWithNames>(&(output.table_data_version_id))
+                        .await?;
 
                     assert_eq!(output.name, table_data_version.name);
                     assert_eq!(output.collection_id, collection.id);
@@ -451,12 +459,7 @@ mod tests {
             }
         }
 
-        let message: WorkerDB = queries
-            .select_by::<WorkerDB>(&Some(function_run.id))?
-            .build_query_as()
-            .fetch_one(&db)
-            .await
-            .map_err(handle_sql_err)?;
+        let message: WorkerDB = db.fetch_one::<WorkerDB>(&Some(function_run.id)).await?;
         assert_eq!(message.collection_id, collection.id);
         assert_eq!(message.execution_id, Some(execution.id));
         assert_eq!(message.function_run_id, Some(function_run.id));

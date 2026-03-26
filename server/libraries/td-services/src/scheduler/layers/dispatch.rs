@@ -5,38 +5,32 @@
 //! These layers should not fail for single messages errors, only for wider errors (system, connection, etc.).
 //! All errors parsing or processing messages should be logged and the message should be removed from the queue.
 
-use sqlx::SqliteConnection;
 use std::ops::Deref;
 use std::str::FromStr;
 use td_common::server::{
     MessageAction, RequestMessagePayload, SupervisorMessagePayload, WorkerMessageQueue, WorkerName,
 };
+use td_database::dynamic::DynamicConnection;
 use td_error::{ApiError, TdError, api_error};
-use td_objects::dxo::crudl::handle_sql_err;
 use td_objects::dxo::function_run::{FunctionRunDB, UpdateFunctionRunDB};
 use td_objects::dxo::worker::{UpdateWorkerMessageStatusDB, WorkerDB};
 use td_objects::dxo::yaml::function_runner::v2::FunctionInput;
-use td_objects::sql::{DaoQueries, SelectBy, UpdateBy};
+use td_queries::BasicQueries;
 use td_objects::types::basic::{FunctionRunId, FunctionRunStatus, WorkerId};
-use td_tower::extractors::{Connection, IntoMutSqlConnection, SrvCtx};
+use td_tower::extractors::{MutRef, Ref};
 use tracing::{error, trace, warn};
 
 pub async fn unlock_workers_request<T: WorkerMessageQueue>(
-    message_queue: SrvCtx<T>,
-    queries: SrvCtx<DaoQueries>,
-    Connection(connection): Connection,
+    message_queue: Ref<T>,
+    mut conn: MutRef<DynamicConnection<'static>>,
 ) -> Result<(), TdError> {
-    let mut conn = connection.lock().await;
-    let conn = conn.get_mut_connection()?;
-
-    unlock_workers_request_infallible(message_queue, queries, conn).await;
+    unlock_workers_request_infallible(message_queue, &mut conn).await;
     Ok(())
 }
 
 async fn unlock_workers_request_infallible<T: WorkerMessageQueue>(
-    SrvCtx(message_queue): SrvCtx<T>,
-    SrvCtx(queries): SrvCtx<DaoQueries>,
-    conn: &mut SqliteConnection,
+    message_queue: Ref<T>,
+    conn: &mut DynamicConnection<'_>,
 ) {
     let messages = message_queue.locked_messages::<serde_yaml::Value>().await;
 
@@ -48,7 +42,6 @@ async fn unlock_workers_request_infallible<T: WorkerMessageQueue>(
             let res = match WorkerName::from_str(&payload.worker) {
                 Ok(WorkerName::Function) => {
                     unlock_function_runner_worker(
-                        queries.deref(),
                         &mut *conn,
                         message_queue.deref(),
                         worker_id,
@@ -58,7 +51,6 @@ async fn unlock_workers_request_infallible<T: WorkerMessageQueue>(
                 }
                 Ok(WorkerName::CronTrigger) => {
                     unlock_cron_trigger_workers(
-                        queries.deref(),
                         &mut *conn,
                         message_queue.deref(),
                         worker_id,
@@ -68,7 +60,6 @@ async fn unlock_workers_request_infallible<T: WorkerMessageQueue>(
                 }
                 Ok(WorkerName::StageTrigger) => {
                     unlock_stage_trigger_workers(
-                        queries.deref(),
                         &mut *conn,
                         message_queue.deref(),
                         worker_id,
@@ -99,8 +90,7 @@ async fn unlock_workers_request_infallible<T: WorkerMessageQueue>(
 }
 
 pub async fn unlock_function_runner_worker<T: WorkerMessageQueue>(
-    queries: &DaoQueries,
-    conn: &mut SqliteConnection,
+    conn: &mut DynamicConnection<'_>,
     message_queue: &T,
     worker_id: WorkerId,
     payload: &RequestMessagePayload,
@@ -111,17 +101,13 @@ pub async fn unlock_function_runner_worker<T: WorkerMessageQueue>(
                 match serde_yaml::from_value::<FunctionInput>(context.clone()) {
                     Ok(context) => {
                         // Look for the function run
-                        let function_run: FunctionRunDB = queries
-                            .select_by::<FunctionRunDB>(&context.info.function_run_id)?
-                            .build_query_as()
-                            .fetch_one(&mut *conn)
-                            .await
-                            .map_err(handle_sql_err)?;
+                        let function_run: FunctionRunDB = conn
+                            .fetch_one::<FunctionRunDB>(&context.info.function_run_id)
+                            .await?;
 
                         // Discard if unexpected status found
                         if !matches!(function_run.status, FunctionRunStatus::RunRequested) {
-                            rollback_function_run_db(queries, conn, &worker_id, &function_run.id)
-                                .await?;
+                            rollback_function_run_db(conn, &worker_id, &function_run.id).await?;
                             Err(api_error!(
                                 ApiError::InternalError,
                                 "Start function locked message [{}] for function run [{}] is not in RR state: {}",
@@ -133,12 +119,7 @@ pub async fn unlock_function_runner_worker<T: WorkerMessageQueue>(
 
                         // Unlock
                         let update = UpdateWorkerMessageStatusDB::unlocked().await?;
-                        match queries
-                            .update_by::<_, WorkerDB>(&update, &worker_id)?
-                            .build()
-                            .execute(&mut *conn)
-                            .await
-                        {
+                        match conn.update::<_, WorkerDB>(&update, &worker_id).await {
                             Ok(_) => match message_queue.commit(&worker_id.to_string()).await {
                                 Ok(_) => {
                                     trace!(
@@ -148,13 +129,8 @@ pub async fn unlock_function_runner_worker<T: WorkerMessageQueue>(
                                     Ok(())
                                 }
                                 Err(e) => {
-                                    rollback_function_run_db(
-                                        queries,
-                                        conn,
-                                        &worker_id,
-                                        &function_run.id,
-                                    )
-                                    .await?;
+                                    rollback_function_run_db(conn, &worker_id, &function_run.id)
+                                        .await?;
                                     Err(api_error!(
                                         ApiError::InternalError,
                                         "Start function locked message [{}] for function run [{}] dispatch failed: {}",
@@ -165,13 +141,8 @@ pub async fn unlock_function_runner_worker<T: WorkerMessageQueue>(
                                 }
                             },
                             Err(e) => {
-                                rollback_function_run_db(
-                                    queries,
-                                    conn,
-                                    &worker_id,
-                                    &function_run.id,
-                                )
-                                .await?;
+                                rollback_function_run_db(conn, &worker_id, &function_run.id)
+                                    .await?;
                                 Err(api_error!(
                                     ApiError::InternalError,
                                     "Start function locked message [{}] for function run [{}] dispatch failed: {}",
@@ -202,16 +173,13 @@ pub async fn unlock_function_runner_worker<T: WorkerMessageQueue>(
 }
 
 async fn rollback_function_run_db(
-    queries: &DaoQueries,
-    conn: &mut SqliteConnection,
+    conn: &mut DynamicConnection<'_>,
     message_id: &WorkerId,
     function_run_id: &FunctionRunId,
 ) -> Result<(), TdError> {
     let update = UpdateFunctionRunDB::scheduled()?;
-    match queries
-        .update_by::<_, FunctionRunDB>(&update, &function_run_id)?
-        .build()
-        .execute(&mut *conn)
+    match conn
+        .update::<_, FunctionRunDB>(&update, function_run_id)
         .await
     {
         Ok(_) => {
@@ -230,20 +198,14 @@ async fn rollback_function_run_db(
 }
 
 pub async fn unlock_cron_trigger_workers<T: WorkerMessageQueue>(
-    queries: &DaoQueries,
-    conn: &mut SqliteConnection,
+    conn: &mut DynamicConnection<'_>,
     message_queue: &T,
     worker_id: WorkerId,
     _payload: &RequestMessagePayload,
 ) -> Result<(), TdError> {
     // TODO add validation
     let update = UpdateWorkerMessageStatusDB::unlocked().await?;
-    match queries
-        .update_by::<_, WorkerDB>(&update, &worker_id)?
-        .build()
-        .execute(&mut *conn)
-        .await
-    {
+    match conn.update::<_, WorkerDB>(&update, &worker_id).await {
         Ok(_) => match message_queue.commit(&worker_id.to_string()).await {
             Ok(_) => {
                 trace!("CronTrigger locked message [{}] is dispatched", worker_id);
@@ -266,20 +228,14 @@ pub async fn unlock_cron_trigger_workers<T: WorkerMessageQueue>(
 }
 
 pub async fn unlock_stage_trigger_workers<T: WorkerMessageQueue>(
-    queries: &DaoQueries,
-    conn: &mut SqliteConnection,
+    conn: &mut DynamicConnection<'_>,
     message_queue: &T,
     worker_id: WorkerId,
     _payload: &RequestMessagePayload,
 ) -> Result<(), TdError> {
     // TODO add validation
     let update = UpdateWorkerMessageStatusDB::unlocked().await?;
-    match queries
-        .update_by::<_, WorkerDB>(&update, &worker_id)?
-        .build()
-        .execute(&mut *conn)
-        .await
-    {
+    match conn.update::<_, WorkerDB>(&update, &worker_id).await {
         Ok(_) => match message_queue.commit(&worker_id.to_string()).await {
             Ok(_) => {
                 trace!("StageTrigger locked message [{}] is dispatched", worker_id);
