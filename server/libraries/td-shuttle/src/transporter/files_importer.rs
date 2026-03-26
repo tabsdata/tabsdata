@@ -278,6 +278,7 @@ mod tests {
     use std::collections::HashMap;
     use td_common::id::id;
 
+    use crate::transporter::args::FileInfo;
     use td_test::reqs::{
         AzureStorageWithAccountKeyReqs, GcpStorageWithServiceAccountKeyReqs,
         S3WithAccessKeySecretKeyReqs,
@@ -1395,8 +1396,11 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_import_file_info_uri_csv() {
-        test_import_with_file_info(&ImportFormat::Csv(ImportCsvOptions::default()), Some(FileInfo::Uri))
-            .await;
+        test_import_with_file_info(
+            &ImportFormat::Csv(ImportCsvOptions::default()),
+            Some(FileInfo::Uri),
+        )
+        .await;
     }
 
     #[tokio::test(flavor = "multi_thread")]
