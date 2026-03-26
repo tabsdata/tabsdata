@@ -108,7 +108,8 @@ where
             .values(dao.insert_values())?
             .build_query()
             .execute(self)
-            .await?;
+            .await
+            .map_err(|e| SqlError::on_write::<D>(e, &dao.column_display_values()))?;
         Ok(r)
     }
 
@@ -120,7 +121,8 @@ where
             .limit(1)
             .build_query_as()
             .fetch_one(self)
-            .await?;
+            .await
+            .map_err(SqlError::on_read::<D>)?;
         Ok(r)
     }
 
@@ -132,7 +134,8 @@ where
             .limit(1)
             .build_query_as()
             .fetch_optional(self)
-            .await?;
+            .await
+            .map_err(SqlError::on_read::<D>)?;
         Ok(r)
     }
 
@@ -143,7 +146,8 @@ where
         let r = select::<D>(condition)?
             .build_query_as()
             .fetch_all(self)
-            .await?;
+            .await
+            .map_err(SqlError::on_read::<D>)?;
         Ok(r)
     }
 
@@ -162,7 +166,8 @@ where
             .cond_where(resolve_condition::<D>(condition)?)
             .build_query()
             .execute(self)
-            .await?;
+            .await
+            .map_err(|e| SqlError::on_write::<U>(e, &dao.column_display_values()))?;
         Ok(r)
     }
 
@@ -175,7 +180,8 @@ where
             .cond_where(resolve_condition::<D>(condition)?)
             .build_query()
             .execute(self)
-            .await?;
+            .await
+            .map_err(SqlError::on_read::<D>)?;
         Ok(r)
     }
 
@@ -195,7 +201,11 @@ where
             .cond_where(filter.condition::<<D as ListDto>::Dao>()?)
             .take();
         let mut query = params.apply_to(base);
-        let daos: Vec<<D as ListDto>::Dao> = query.build_query_as().fetch_all(self).await?;
+        let daos: Vec<<D as ListDto>::Dao> = query
+            .build_query_as()
+            .fetch_all(self)
+            .await
+            .map_err(SqlError::on_read::<<D as ListDto>::Dao>)?;
         daos.iter()
             .map(|dao| D::from_dao(dao).map_err(SqlError::DtoConversionError))
             .collect()
@@ -212,7 +222,8 @@ where
             .cond_where(resolve_condition::<D>(D::state())?)
             .build_query_as()
             .fetch_all(self)
-            .await?;
+            .await
+            .map_err(SqlError::on_read::<D>)?;
         Ok(r)
     }
 
@@ -231,7 +242,11 @@ where
         if offset > 0 {
             query.offset(offset);
         }
-        let r = query.build_query_as().fetch_optional(self).await?;
+        let r = query
+            .build_query_as()
+            .fetch_optional(self)
+            .await
+            .map_err(SqlError::on_read::<D>)?;
         Ok(r)
     }
 }
